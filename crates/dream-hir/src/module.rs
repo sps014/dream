@@ -44,7 +44,15 @@ pub struct Hir {
     pub interfaces: InterfaceTable,
     /// C-style enum members for debug decode: `TypeId` → `(enum name, [(member, disc), …])`.
     pub enums: EnumDebugTable,
+    /// Source-level display name of every tagged nominal type (`Map<string, object>`, not the
+    /// C-safe `Map_string_object` of [`crate::TypeLayout::name`]), for the backend's
+    /// `typeof` tag router. The backend has the `TypeInterner` but no `DefTable`, so it cannot
+    /// reconstruct these itself.
+    pub type_names: TypeNameTable,
 }
+
+/// Source-level display names of tagged nominal types, keyed by interned `TypeId`.
+pub type TypeNameTable = indexmap::IndexMap<TypeId, String>;
 
 /// Debug metadata for C-style enums: `TypeId` → `(enum name, [(member name, discriminant), …])`.
 pub type EnumDebugTable = indexmap::IndexMap<TypeId, (String, Vec<(String, i32)>)>;

@@ -347,6 +347,18 @@ fn rewrite_expr<'a>(
             ty.clone(),
             b.clone(),
         ),
+        ExpressionNode::TypeOf(kw, x) => ExpressionNode::TypeOf(
+            kw.clone(),
+            arena.alloc(rewrite_expr(
+                arena,
+                x,
+                by_site,
+                diagnostics,
+                changed,
+                file,
+                file_contents,
+            )?),
+        ),
         ExpressionNode::IndexAccess(a, i) => ExpressionNode::IndexAccess(
             arena.alloc(rewrite_expr(
                 arena,
@@ -1109,6 +1121,9 @@ fn shift_expr<'a>(map: &SpanMap, arena: &'a Bump, e: &ExpressionNode<'a>) -> Exp
             ty.clone(),
             bind.as_ref().map(|t| map.token(t)),
         ),
+        ExpressionNode::TypeOf(kw, x) => {
+            ExpressionNode::TypeOf(map.token(kw), arena.alloc(shift_expr(map, arena, x)))
+        }
         ExpressionNode::MethodCall(x, t, tys, args) => ExpressionNode::MethodCall(
             arena.alloc(shift_expr(map, arena, x)),
             map.token(t),

@@ -400,9 +400,10 @@ pub const KEYWORDS: &[&str] = &[
 ];
 
 /// Soft specials: identifiers that are *not* reserved words, but parse as dedicated forms when
-/// followed by `(` (`sizeof(T)`, `nameof(path)`). Listed here for LSP completion / highlighting
-/// without making them lexer keywords (a user may still declare a function named `sizeof`).
-pub const SOFT_SPECIALS: &[&str] = &["sizeof", "nameof"];
+/// followed by `(` (`sizeof(T)`, `nameof(path)`, `typeof(expr)`). Listed here for LSP completion /
+/// highlighting without making them lexer keywords (a user may still declare a function named
+/// `sizeof`).
+pub const SOFT_SPECIALS: &[&str] = &["sizeof", "nameof", "typeof"];
 
 /// Contextual keywords: identifiers that are reserved *only* in specific grammar positions (a
 /// property accessor, a method name, `this` as a receiver) and so remain a plain `IdentifierToken`

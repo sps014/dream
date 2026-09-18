@@ -349,6 +349,12 @@ pub enum HExprKind {
         value: Box<HExpr>,
         target: TypeId,
     },
+    /// `typeof(value)` on an `object`/interface/class operand (typed `string`): reads the display
+    /// name of `value`'s runtime heap tag. Statically concrete operands are folded to a
+    /// `StringLit` in the analyzer instead.
+    TypeName {
+        value: Box<HExpr>,
+    },
     /// The `print`/`println` builtins (`System.print`/`System.println`), lowered to the host
     /// `print_*` imports. Void-typed; only valid in statement position. `newline` appends a `\n`.
     Print {
@@ -438,6 +444,7 @@ mod tests {
             intrinsics: vec![],
             interfaces: InterfaceTable::default(),
             enums: indexmap::IndexMap::new(),
+            type_names: indexmap::IndexMap::new(),
         };
         assert_eq!(hir.functions.len(), 1);
         assert_eq!(hir.functions[0].params.len(), 2);

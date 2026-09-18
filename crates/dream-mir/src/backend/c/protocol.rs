@@ -7,6 +7,32 @@ use super::types::{c_ident, elem_size, load_cast};
 use crate::backend::shared::func_symbol;
 use dream_types::{PrimTy, TyKind, TypeId};
 
+/// Display name the `typeof` tag router returns for each built-in (non-nominal) tag. Shared with
+/// `tables.rs`, which must intern every one of these before codegen reaches `Cx::str_sym`.
+///
+/// `TAG_ARRAY`, `TAG_FUNCBOX`, and `TAG_FUTURE` are shared by every instantiation of their shape,
+/// so those names are deliberately coarse — the element/signature/payload type is not recoverable
+/// from the heap header.
+pub(super) const BUILTIN_TYPE_NAMES: &[(&str, &str)] = &[
+    ("TAG_INT", "int"),
+    ("TAG_UINT", "uint"),
+    ("TAG_LONG", "long"),
+    ("TAG_ULONG", "ulong"),
+    ("TAG_BYTE", "byte"),
+    ("TAG_BOOL", "bool"),
+    ("TAG_CHAR", "char"),
+    ("TAG_FLOAT", "float"),
+    ("TAG_DOUBLE", "double"),
+    ("TAG_STRING", "string"),
+    ("TAG_ARRAY", "array"),
+    ("TAG_FUNCBOX", "function"),
+    ("TAG_FUTURE", "future"),
+];
+
+/// Returned by the `typeof` router for a null reference and for a tag with no registered name.
+pub(super) const NULL_TYPE_NAME: &str = "null";
+pub(super) const UNKNOWN_TYPE_NAME: &str = "object";
+
 pub(super) fn emit_protocol(m: &mut ModuleBuilder, cx: &Cx<'_>, reach: &ProtocolReach) {
     let mut array_elems: Vec<_> = cx
         .mir
@@ -113,11 +139,55 @@ pub(super) fn emit_protocol(m: &mut ModuleBuilder, cx: &Cx<'_>, reach: &Protocol
             emit_union_hash_code(m, cx, *ty, layout);
         }
     }
+    if cx.mir.uses_type_name {
+        emit_object_type_name_router(m, cx);
+    }
     if !reach.dynamic {
         return;
     }
     emit_object_to_string_router(m, cx);
     emit_object_hash_code_router(m, cx);
+}
+
+/// `dream_object_type_name(p)` — maps a value's runtime heap tag to its type's display name, which
+/// is what `typeof` reports for an operand whose static type cannot pin the concrete one. Every
+/// arm returns an immortal string constant, so the result needs no retain and is never freed.
+fn emit_object_type_name_router(m: &mut ModuleBuilder, cx: &Cx<'_>) {
+    let mut b = FuncBuilder::new(CTy::Ptr, "dream_object_type_name");
+    b.param(CTy::Ptr, "p");
+    b.stmt(Stmt::decl(CTy::I32, "tag", None));
+    b.stmt(Stmt::if_(
+        Expr::unary(UnOp::Not, Expr::id("p")),
+        Stmt::Return(Some(Expr::id(cx.str_sym(NULL_TYPE_NAME)))),
+    ));
+    b.assign(
+        Expr::id("tag"),
+        Expr::call("dream_object_tag", vec![Expr::id("p")]),
+    );
+    let mut arms: Vec<SwitchArm> = BUILTIN_TYPE_NAMES
+        .iter()
+        .map(|&(tag, name)| arm_ret(tag, Expr::id(cx.str_sym(name))))
+        .collect();
+    let mut tagged: Vec<_> = cx.tags.iter().collect();
+    tagged.sort_by_key(|(_, t)| **t);
+    for (ty, tag) in tagged {
+        let Some(name) = cx.mir.type_names.get(ty) else {
+            continue;
+        };
+        arms.push(SwitchArm {
+            keys: vec![CaseKey::Int(*tag as i64)],
+            body: vec![Stmt::Return(Some(Expr::id(cx.str_sym(name))))],
+        });
+    }
+    arms.push(SwitchArm {
+        keys: vec![],
+        body: vec![Stmt::Return(Some(Expr::id(cx.str_sym(UNKNOWN_TYPE_NAME))))],
+    });
+    b.stmt(Stmt::Switch {
+        expr: Expr::id("tag"),
+        arms,
+    });
+    m.push_func(b);
 }
 
 /// `dream_sb sb = {0, 0, 0};`

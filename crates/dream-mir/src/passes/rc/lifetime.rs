@@ -154,7 +154,8 @@ fn rvalue_borrow(rv: &Rvalue, holds: &HashSet<DefId>) -> StmtBorrow {
         | Rvalue::Cast(_, _, _)
         | Rvalue::Discriminant { .. }
         | Rvalue::UnionField { .. }
-        | Rvalue::IsType(_, _) => StmtBorrow::Ends,
+        | Rvalue::IsType(_, _)
+        | Rvalue::TypeName(_) => StmtBorrow::Ends,
     }
 }
 

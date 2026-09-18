@@ -271,7 +271,7 @@ A timing sample (UI tree swap + particles): `dream --release run sample/defer_de
 - Prefer `StringBuilder` (and `append` / `append_utf8_slice`) over repeated `string` `+` when building text in a loop.
 - Use `byte_size` / `byte_at` for the raw UTF-16 bytes; `char_at` / `substring` index UTF-16 code units. `substring` is a cheap slice of the parent; `string.clone` copies.
 - `List` / `Map` / `Set` `clear()` keeps capacity. Prefer `clear` + refill over allocating a new collection each batch.
-- `ScratchArena<T : unmanaged>` is for short-lived scratch (`reset()` rewinds without returning memory to the OS) — parse/match/fill, not long-lived graphs. [`sizeof`](operators.md#sizeof-and-nameof) gives the byte size of an unmanaged element type.
+- `ScratchArena<T : unmanaged>` is for short-lived scratch (`reset()` rewinds without returning memory to the OS) — parse/match/fill, not long-lived graphs. [`sizeof`](operators.md#sizeof-nameof-and-typeof) gives the byte size of an unmanaged element type.
 - Unmarked parameters sink into the callee (see [Ownership](ownership.md)); mark readers `borrow`.
 - Prefer `struct` / scalars / `Span` / dense `int[]` on hot paths.
 

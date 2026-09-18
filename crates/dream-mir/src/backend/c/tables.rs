@@ -50,6 +50,9 @@ pub(super) fn intern_strings(
     for s in protocol_strings(mir) {
         found.push(s);
     }
+    for s in type_name_strings(mir) {
+        found.push(s);
+    }
     for base in crate::backend::shared::panic_msgs::ALL {
         found.push(base.to_string());
     }
@@ -74,6 +77,28 @@ fn scan_func(f: &crate::MirFunction, found: &mut Vec<String>) {
         }
         strings_in_term(&b.terminator, found);
     }
+}
+
+/// Every name `dream_object_type_name` can return. `Cx::str_sym` is an ICE on an uninterned
+/// literal, so this must stay in lockstep with `protocol::emit_object_type_name_router`.
+fn type_name_strings(mir: &Mir) -> Vec<String> {
+    if !mir.uses_type_name {
+        return Vec::new();
+    }
+    let mut v: Vec<String> = super::protocol::BUILTIN_TYPE_NAMES
+        .iter()
+        .map(|(_, name)| (*name).to_string())
+        .collect();
+    v.push(super::protocol::NULL_TYPE_NAME.to_string());
+    v.push(super::protocol::UNKNOWN_TYPE_NAME.to_string());
+    // Keyed off the layout tables rather than `type_names` directly, so the interned set matches
+    // the arms the router emits (which come from `struct_tags`) even if layouts were pruned.
+    for ty in mir.layouts.structs.keys().chain(mir.layouts.unions.keys()) {
+        if let Some(name) = mir.type_names.get(ty) {
+            v.push(name.clone());
+        }
+    }
+    v
 }
 
 fn protocol_strings(mir: &Mir) -> Vec<String> {
@@ -247,7 +272,8 @@ fn strings_in_rv(rv: &Rvalue, out: &mut Vec<String>) {
         | Rvalue::ToString(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::Discriminant { base: o, .. }
-        | Rvalue::IsType(o, _) => strings_in_op(o, out),
+        | Rvalue::IsType(o, _)
+        | Rvalue::TypeName(o) => strings_in_op(o, out),
         Rvalue::Select {
             cond,
             then_val,

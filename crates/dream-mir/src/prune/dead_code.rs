@@ -286,6 +286,9 @@ fn collect_rvalue_types(rv: &Rvalue, seed: &mut impl FnMut(TypeId)) {
         | Rvalue::FromBytes { ty, .. }
         | Rvalue::UnionField { ty, .. }
         | Rvalue::IsType(_, ty) => seed(*ty),
+        // The tag router only returns string constants, so it keeps no type alive beyond the
+        // operand's own local declaration.
+        Rvalue::TypeName(_) => {}
         Rvalue::ArrayNew { elem_ty, .. }
         | Rvalue::ArrayLit { elem_ty, .. }
         | Rvalue::ArrayRealloc { elem_ty, .. } => seed(*elem_ty),
@@ -676,6 +679,7 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
         | Rvalue::StrByteSize(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
+        | Rvalue::TypeName(o)
         | Rvalue::Discriminant { base: o, .. }
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)

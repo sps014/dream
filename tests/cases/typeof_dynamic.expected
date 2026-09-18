@@ -1,0 +1,10 @@
+int
+long
+float
+double
+bool
+string
+array
+Circle
+Square
+Map<string, int>

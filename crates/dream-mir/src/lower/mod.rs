@@ -146,6 +146,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
             ty: g.ty,
         })
         .collect();
+    let uses_type_name = functions.iter().chain(polls.iter()).any(func_reads_type_name);
     Mir {
         functions,
         polls,
@@ -154,9 +155,18 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         imports: hir.imports.clone(),
         intrinsics: hir.intrinsics.clone(),
         uses_defer: hir.functions.iter().any(|f| stmts_have_defer(&f.body)),
+        uses_type_name,
         interfaces: hir.interfaces.clone(),
         enums: hir.enums.clone(),
+        type_names: hir.type_names.clone(),
     }
+}
+
+fn func_reads_type_name(f: &MirFunction) -> bool {
+    f.blocks
+        .iter()
+        .flat_map(|b| b.stmts.iter())
+        .any(|s| matches!(s, Statement::Assign(_, Rvalue::TypeName(_))))
 }
 
 fn stmts_have_defer(stmts: &[HStmt]) -> bool {

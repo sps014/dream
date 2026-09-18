@@ -95,6 +95,7 @@ pub(crate) fn is_pure(rvalue: &Rvalue) -> bool {
             | Rvalue::ToString(_)
             | Rvalue::Cast(..)
             | Rvalue::IsType(..)
+            | Rvalue::TypeName(..)
             | Rvalue::Discriminant { .. }
             | Rvalue::UnionField { .. }
             | Rvalue::FuncRef(_)
@@ -238,6 +239,7 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
         | Rvalue::StrByteSize(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
+        | Rvalue::TypeName(o)
         | Rvalue::Discriminant { base: o, .. }
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)

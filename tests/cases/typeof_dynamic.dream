@@ -1,0 +1,50 @@
+// `typeof(x)` on an `object` or interface operand reads the value's runtime heap tag, so a boxed
+// dynamic reports what it actually holds and an interface slot reports the implementing class.
+import system;
+
+interface Shape {
+    fun area(): int;
+}
+
+class Circle : Shape {
+    public fun area(): int { return 3; }
+}
+
+class Square : Shape {
+    public fun area(): int { return 4; }
+}
+
+fun main() {
+    // A boxed primitive reports its payload type, not "object".
+    let n: object = 5;
+    let g: long = 9;
+    let big: object = g;
+    let f: object = 2.5;
+    let dbl: double = 2.5;
+    let wide: object = dbl;
+    let flag: object = true;
+    let text: object = "hello";
+    System.println(typeof(n));
+    System.println(typeof(big));
+    System.println(typeof(f));
+    System.println(typeof(wide));
+    System.println(typeof(flag));
+    System.println(typeof(text));
+
+    // Arrays share one runtime tag, so the element type is not recoverable.
+    let arr: object = [1, 2, 3];
+    System.println(typeof(arr));
+
+    // A class instance held as `object` reports its own name.
+    let boxed: object = Circle();
+    System.println(typeof(boxed));
+
+    // An interface-typed slot reports the implementing class.
+    let s: Shape = Square();
+    System.println(typeof(s));
+
+    // A generic instantiation held as `object` reports its source spelling.
+    let m: Map<string, int> = { "a": 1 };
+    let anymap: object = m;
+    System.println(typeof(anymap));
+}

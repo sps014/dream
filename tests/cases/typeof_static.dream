@@ -1,0 +1,50 @@
+// `typeof(x)` on an operand whose static type already pins the concrete type folds to a compile-
+// time string — no allocation, no runtime tag read.
+import system;
+
+struct Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+enum Color { Red, Green }
+
+fun main() {
+    let i: int = 7;
+    let l: long = 7;
+    let d: double = 1.5;
+    let b: bool = true;
+    let c: char = 'z';
+    let s: string = "hi";
+    System.println(typeof(i));
+    System.println(typeof(l));
+    System.println(typeof(d));
+    System.println(typeof(b));
+    System.println(typeof(c));
+    System.println(typeof(s));
+
+    let nums: int[] = [1, 2, 3];
+    System.println(typeof(nums));
+
+    let p: Point = Point(1, 2);
+    System.println(typeof(p));
+
+    let col: Color = Color.Green;
+    System.println(typeof(col));
+
+    // Generic instantiations report their source spelling, not the mangled symbol name.
+    let m: Map<string, object> = { "ok": "ko" };
+    System.println(typeof(m));
+
+    let list: List<int> = [1, 2];
+    System.println(typeof(list));
+
+    // Expressions, not just variables.
+    System.println(typeof(i + 1));
+    System.println(typeof(s.length));
+}

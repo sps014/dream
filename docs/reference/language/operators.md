@@ -259,9 +259,11 @@ An explicit `(T)expr` cast accepts either `implicit` or `explicit` — implicit
 conversions are always also spellable explicitly. Implicit conversions themselves are currently
 recognized at typed `let x: T = expr;` bindings; elsewhere, cast explicitly.
 
-## `sizeof` and `nameof`
+## `sizeof`, `nameof`, and `typeof`
 
-Neither name is a reserved keyword. Written as a call, they are compile-time forms:
+None of these names is a reserved keyword — each takes on its meaning only immediately before `(`,
+so you can still declare a variable or function called `typeof`. Written as a call, they are
+meta forms:
 
 ```dream
 struct Point { public x: int; public y: int; }
@@ -269,6 +271,7 @@ struct Point { public x: int; public y: int; }
 let bytes: int = sizeof(Point);     // 8 — byte size of the struct
 let ptr_w: int = sizeof(string);    // 4 — heap refs / classes / arrays are handles
 let name: string = nameof(Point.x); // "x" — last path segment; operand is not evaluated
+let kind: string = typeof(bytes);   // "int"
 ```
 
 - **`sizeof(T)`** yields an `int` equal to Dream's storage size for `T`: primitives and value
@@ -276,6 +279,40 @@ let name: string = nameof(Point.x); // "x" — last path segment; operand is not
   The result is a compile-time constant.
 - **`nameof(a.b.c)`** yields a `string` of the last identifier in a dotted path. The path is not
   type-checked or evaluated (you can write `nameof(future_api)`).
+- **`typeof(expr)`** yields a `string` naming the operand's concrete type. See below.
+
+### `typeof`
+
+`typeof` answers "what did I actually get?", which is most useful when a value has been widened to
+`object` or to an interface:
+
+```dream
+let d: Map<string, object> = { "ok": "ko" };
+System.println(typeof(d));        // "Map<string, object>" — the source spelling, not a mangled name
+
+let boxed: object = 5;
+System.println(typeof(boxed));    // "int" — the payload type, not "object"
+
+let shape: Shape = Circle();
+System.println(typeof(shape));    // "Circle" — the implementing class
+```
+
+There are two resolution paths, and which one applies is decided at compile time:
+
+| Operand's static type | How it resolves |
+|---|---|
+| `object`, or an interface | Reads the value's runtime heap tag |
+| everything else | Folds to a compile-time string constant |
+
+The folded path costs nothing at runtime and, like `nameof`, **does not evaluate its operand** —
+`typeof(f())` will not call `f`. The runtime path is a single tag load plus a jump table returning
+a static string, so it neither allocates nor affects reference counts.
+
+Three runtime tags are shared across every instantiation of their shape, so `typeof` reports a
+coarse name for them when the static type was erased: an array reports `"array"`, a lambda or
+function value reports `"function"`, and a `Future<T>` reports `"future"`. A statically typed
+operand of those shapes still reports precisely (`typeof(nums)` on an `int[]` is `"int[]"`). A null
+reference reports `"null"`.
 
 ### GPU shaders (`@compute` / `@vertex` / `@fragment` / `@gpu`)
 
@@ -285,6 +322,7 @@ These forms work differently inside shader bodies:
 |------|------------|
 | `sizeof(T)` | Becomes a number (same sizes as host `sizeof` for scalars and `GpuVec*` / `GpuMat*` / `GpuId3`). Useful for strides and byte offsets inside a kernel. |
 | `nameof(...)` | **Compile error.** It produces a `string`, and strings are forbidden in GPU code — keep `nameof` on the CPU (or hard-code a constant in the shader if you only need a fixed name). |
+| `typeof(...)` | **Compile error**, for the same reason as `nameof` — keep it on the CPU host. |
 
 ## Precedence
 

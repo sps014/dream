@@ -172,11 +172,12 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         //parse identifiers
         else if self.current_token().kind == IdentifierToken {
-            // Soft specials (not reserved keywords): `sizeof(T)` / `nameof(a.b)`.
+            // Soft specials (not reserved keywords): `sizeof(T)` / `nameof(a.b)` / `typeof(x)`.
             if self.peek_token(1).kind == TokenKind::OpenParenthesisToken {
                 match self.current_token().text.as_str() {
                     "sizeof" => return self.parse_sizeof_expression(),
                     "nameof" => return self.parse_nameof_expression(),
+                    "typeof" => return self.parse_typeof_expression(),
                     _ => {}
                 }
             }
@@ -285,6 +286,16 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         self.match_token(TokenKind::CloseParenthesisToken);
         Ok(ExpressionNode::NameOf(kw, parts))
+    }
+
+    /// `typeof(expr)` — soft special (not a keyword). Operand is a value expression, unlike
+    /// `sizeof`, which takes a type.
+    pub(crate) fn parse_typeof_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
+        let kw = self.match_token(TokenKind::IdentifierToken);
+        self.match_token(TokenKind::OpenParenthesisToken);
+        let operand = self.parse_expression(0)?;
+        self.match_token(TokenKind::CloseParenthesisToken);
+        Ok(ExpressionNode::TypeOf(kw, self.arena.alloc(operand)))
     }
 
     fn parse_nameof_segment(&mut self) -> Result<SyntaxToken, Error> {

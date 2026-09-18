@@ -117,4 +117,47 @@ impl<'a> Analyzer<'a> {
         self.hir_set_last(Some(HExpr::new(ty_id, HExprKind::StringLit(name))));
         Ok(string_ty)
     }
+
+    /// `typeof(expr)` → `string` naming the operand's concrete type.
+    ///
+    /// An `object` or interface operand resolves at runtime from the value's heap tag, so a boxed
+    /// dynamic reports what it actually holds and an interface slot reports the implementing class.
+    /// Every other operand's static type already *is* its concrete type (Dream has no class
+    /// inheritance), so it folds to a string literal and — like `nameof` — is not evaluated.
+    pub(in crate::analyzer) fn analyze_typeof(
+        &mut self,
+        operand: &ExpressionNode<'a>,
+        parent_function: &FunctionNode<'a>,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<Type, SemanticError> {
+        let operand_type =
+            self.analyze_expression(operand, parent_function, symbol_table, diagnostics)?;
+        if operand_type.is_unknown() {
+            self.hir_none();
+            return Ok(Type::Unknown);
+        }
+
+        let type_name = operand_type.get_type();
+        if type_name == "void" {
+            self.hir_none();
+            report(
+                diagnostics,
+                "typeof requires a value, got 'void'".to_string(),
+                operand.position(),
+            );
+            return Ok(Type::Unknown);
+        }
+
+        let string_ty = Self::type_from_name("string");
+        if type_name == "object" || self.is_interface_name(&type_name) {
+            let value = self.hir_take();
+            self.hir_set_type_name(value);
+        } else {
+            let display = self.ty_display(&operand_type);
+            let ty_id = self.type_ctx.interner.string();
+            self.hir_set_last(Some(HExpr::new(ty_id, HExprKind::StringLit(display))));
+        }
+        Ok(string_ty)
+    }
 }

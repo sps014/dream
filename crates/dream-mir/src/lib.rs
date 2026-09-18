@@ -75,11 +75,18 @@ pub struct Mir {
     pub intrinsics: Vec<(DefId, String)>,
     /// True when any function contains `defer` (so last-ref helpers may enqueue).
     pub uses_defer: bool,
+    /// True when any function reads a runtime type name (`typeof` on an `object`/interface/class),
+    /// so the backend emits the `dream_object_type_name` tag router. Tracked separately from the
+    /// protocol routers, which additionally force every tagged type's `to_string`/`hash_code`.
+    pub uses_type_name: bool,
     /// Interface dispatch metadata: ordered interfaces (index = `iface_id`) + per-class concrete
     /// method symbols. Drives the itable data + dispatch trampolines emitted by the backend.
     pub interfaces: dream_hir::InterfaceTable,
     /// C-style enum members for debug decode (see [`dream_hir::Hir::enums`]).
     pub enums: dream_hir::EnumDebugTable,
+    /// Display name of every tagged nominal type (see [`dream_hir::Hir::type_names`]), which the
+    /// `typeof` tag router returns.
+    pub type_names: dream_hir::TypeNameTable,
 }
 
 /// A module-level variable slot (declared as one mutable WASM global `$g{id}`).
@@ -615,6 +622,9 @@ pub enum Rvalue {
     /// A runtime type test `value is T`: compares the boxed value's `$object_tag` against the tag of
     /// `TypeId`. Yields `bool`.
     IsType(Operand, TypeId),
+    /// `typeof(value)` on a value whose static type cannot pin the concrete one: maps the runtime
+    /// `$object_tag` to that type's display name. Yields a (static, immortal) `string`.
+    TypeName(Operand),
     /// A dynamic `js` call marshaled through the shadow stack: the emitter reserves `argc * 16` bytes
     /// below `$__sp`, writes one tagged 16-byte slot per argument (tag + aux + 8-byte payload),
     /// invokes `callee` with `(target, [viaPtr,] [namePtr,] argsPtr, argc)`, then restores `$__sp`.

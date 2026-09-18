@@ -276,6 +276,29 @@ impl<'a> Analyzer<'a> {
         layouts
     }
 
+    /// Maps every tagged nominal type to its source-level display name (`Map<string, object>`),
+    /// which `typeof` reports at runtime. [`dream_hir::TypeLayout::name`] cannot serve: it is the
+    /// C-safe mangled spelling used to name generated symbols.
+    pub(in crate::analyzer) fn hir_build_type_names(
+        &mut self,
+        layouts: &dream_hir::LayoutTable,
+    ) -> dream_hir::TypeNameTable {
+        let tagged: Vec<TypeId> = layouts
+            .structs
+            .keys()
+            .chain(layouts.unions.keys())
+            .copied()
+            .collect();
+        tagged
+            .into_iter()
+            .map(|ty| {
+                let name =
+                    dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, ty);
+                (ty, name)
+            })
+            .collect()
+    }
+
     /// Collects the module's host/interop imports: every non-intrinsic `extern fun` (top-level or a
     /// class/`extend` static member) becomes an [`HImport`] the backend emits as `(import ...)`.
     /// Overloaded externs share one imported field, so entries are de-duplicated by name.

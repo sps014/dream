@@ -222,7 +222,7 @@
       "patterns": [
         {
           "name": "keyword.operator.dream",
-          "match": "\\b(sizeof|nameof)\\b"
+          "match": "\\b(sizeof|nameof|typeof)\\b"
         },
         {
           "name": "keyword.operator.dream",

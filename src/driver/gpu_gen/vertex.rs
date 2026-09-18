@@ -9,7 +9,7 @@ use super::layout::{
     assign_locations_from, build_struct_field_tys, build_vertex_layout, dream_ty_to_wgsl_vec,
     emit_interface_struct_wgsl, find_struct, has_position_gpuvec4, struct_name_of,
 };
-use super::stmt::{emit_stmts, reject_gpu_nameof};
+use super::stmt::{emit_stmts, reject_gpu_string_meta};
 use super::types::GpuShaderInfo;
 use dream_abi::attributes::has_named_attr;
 use dream_diagnostics::DiagnosticBag;
@@ -158,7 +158,7 @@ pub(super) fn emit_vertex(
             kernel: &func.name.text,
             diagnostics: RefCell::new(diagnostics),
         };
-        reject_gpu_nameof(func.body, &ctx);
+        reject_gpu_string_meta(func.body, &ctx);
         emit_stmts(func.body, &mut body, &mut workgroup_decls, 1, &ctx);
     }
 

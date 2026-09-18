@@ -258,6 +258,9 @@ impl<'a> Emitter<'a> {
                 variant,
                 field,
             } => union_field(self.cx, *ty, *variant, *field, self.operand(base)),
+            Rvalue::TypeName(o) => {
+                Expr::call("dream_object_type_name", vec![self.operand(o)])
+            }
             Rvalue::IsType(o, ty) => {
                 let tag = runtime_tag(self.cx, *ty);
                 Expr::eq(

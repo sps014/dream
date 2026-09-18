@@ -183,6 +183,7 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
         | K::Discriminant(x)
         | K::UnionField { base: x, .. }
         | K::IsType { value: x, .. }
+        | K::TypeName { value: x }
         | K::ForceFree(x) => hir_expr_edges(x, out),
         K::Cast(x) | K::HashCode(x) | K::ToString(x) | K::Print { arg: x, .. } => {
             out.needs_format = true;

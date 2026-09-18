@@ -162,6 +162,7 @@ impl Lowerer<'_> {
             HExprKind::IsType { value, target } => {
                 Rvalue::IsType(self.lower_operand(value), *target)
             }
+            HExprKind::TypeName { value } => Rvalue::TypeName(self.lower_operand(value)),
             HExprKind::UnionField {
                 base,
                 union_ty,

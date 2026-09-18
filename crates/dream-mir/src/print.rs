@@ -288,6 +288,7 @@ fn rvalue(r: &Rvalue) -> String {
             format!("discriminant<{}>({})", ty.0, operand(base))
         }
         Rvalue::IsType(o, ty) => format!("{} is ty{}", operand(o), ty.0),
+        Rvalue::TypeName(o) => format!("typeof({})", operand(o)),
         Rvalue::UnionField {
             base,
             variant,

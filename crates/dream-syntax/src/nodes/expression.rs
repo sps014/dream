@@ -66,6 +66,11 @@ pub enum ExpressionNode<'a> {
     /// The `SyntaxToken` is the `nameof` identifier; the `Vec` is the dotted path (length ≥ 1).
     /// Not a reserved keyword; the operand is not evaluated.
     NameOf(SyntaxToken, Vec<SyntaxToken>),
+    /// `typeof(expr)` — the name of `expr`'s concrete type as a `string`. The `SyntaxToken` is the
+    /// `typeof` identifier. Not a reserved keyword. An `object`/interface/class operand is read
+    /// from its runtime heap tag (so a boxed value or a subclass reports what it actually is);
+    /// every other operand folds to a compile-time string and is *not* evaluated.
+    TypeOf(SyntaxToken, &'a ExpressionNode<'a>),
     MemberAccess(&'a ExpressionNode<'a>, SyntaxToken),
     /// `expr is Type` — a runtime type check. The optional trailing `SyntaxToken` is an
     /// `is`-with-binding name (`expr is Type name`): when present, the analyzer introduces a new
@@ -217,6 +222,7 @@ impl<'a> ExpressionNode<'a> {
             | ExpressionNode::Cast(open, _, _)
             | ExpressionNode::SizeOf(open, _)
             | ExpressionNode::NameOf(open, _)
+            | ExpressionNode::TypeOf(open, _)
             | ExpressionNode::Switch(open, _, _)
             | ExpressionNode::RefArgument(open, _) => Some(open.position),
             ExpressionNode::Try(inner) | ExpressionNode::IsExpression(inner, _, _) => {

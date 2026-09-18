@@ -184,6 +184,7 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
         | Rvalue::StrByteSize(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
+        | Rvalue::TypeName(o)
         | Rvalue::Discriminant { base: o, .. }
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)

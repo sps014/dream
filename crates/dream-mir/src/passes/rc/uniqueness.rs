@@ -253,6 +253,7 @@ fn rvalue_local_reads(rv: &Rvalue, local: u32) -> u32 {
         | Rvalue::StrByteSize(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
+        | Rvalue::TypeName(o)
         | Rvalue::Discriminant { base: o, .. }
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)

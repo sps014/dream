@@ -1053,6 +1053,7 @@ impl<'a> Analyzer<'a> {
         // Built before the borrow-immutable `SemanticInfo` literal below, since lowering field types
         // needs `&mut self.type_ctx`.
         let layouts = self.hir_build_layouts();
+        let type_names = self.hir_build_type_names(&layouts);
         let imports = self.hir_build_imports(node);
         let intrinsics = self.hir_build_intrinsics(node);
         let interfaces = self.hir_build_interfaces();
@@ -1092,6 +1093,7 @@ impl<'a> Analyzer<'a> {
                 intrinsics,
                 interfaces,
                 enums: hir_enums,
+                type_names,
             },
         })
     }

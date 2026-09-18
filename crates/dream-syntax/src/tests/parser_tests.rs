@@ -1495,6 +1495,44 @@ fn test_parse_class_implements_generic_interface() {
 }
 
 #[test]
+fn test_parse_typeof_expression() {
+    let code = "fun f(o: object): void { print(typeof(o)); }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::FunctionInvocation(_, _, args) = &func.body[0] else {
+        panic!("expected a print invocation");
+    };
+    let ExpressionNode::TypeOf(kw, operand) = &args[0] else {
+        panic!("expected a TypeOf argument");
+    };
+    assert_eq!(kw.text, "typeof");
+    assert!(matches!(operand, ExpressionNode::Identifier(t) if t.text == "o"));
+}
+
+/// `typeof` is a soft special, not a reserved word: it only takes on its meaning immediately
+/// before `(`, so a user may still declare and reference a value named `typeof`.
+#[test]
+fn test_typeof_is_not_a_reserved_word() {
+    let code = "fun f(): int { let typeof: int = 1; return typeof; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    assert!(matches!(
+        &func.body[0],
+        StatementNode::Declaration(name, _, _, _) if name.text == "typeof"
+    ));
+    assert!(matches!(
+        &func.body[1],
+        StatementNode::Return(Some(ExpressionNode::Identifier(t))) if t.text == "typeof"
+    ));
+}
+
+#[test]
 fn test_parse_is_with_binding() {
     let code = "fun f(o: object): void { if (o is int a) { print(a); } }";
     let arena = bumpalo::Bump::new();

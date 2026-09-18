@@ -116,6 +116,25 @@ impl<'a> Analyzer<'a> {
         });
     }
 
+    /// Records a runtime type-name read `typeof(value)` (typed `string`) for an operand whose
+    /// static type cannot pin the concrete type: the backend reads the value's heap tag. Fails if
+    /// `value` was dropped.
+    pub(in crate::analyzer) fn hir_set_type_name(&mut self, value: Option<HExpr>) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        let string_ty = self.type_ctx.interner.string();
+        self.hir.last = value.map(|v| {
+            HExpr::new(
+                string_ty,
+                HExprKind::TypeName {
+                    value: Box::new(v),
+                },
+            )
+        });
+    }
+
     /// Records string concatenation `a + b` (typed `string`): each non-string operand is first run
     /// through its `to_string` (a C-style enum renders its variant name; everything else uses the
     /// object protocol), then the two string pointers are joined by the runtime `$concat_strings`.

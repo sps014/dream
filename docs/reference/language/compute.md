@@ -239,8 +239,8 @@ code is also a compile error — helpers are WGSL-only; stages dispatch via `Com
 `GpuRenderPipeline.create`.
 
 `sizeof(T)` is allowed and becomes a WGSL integer literal (see
-[`sizeof` / `nameof`](operators.md#sizeof-and-nameof)). `nameof(...)` is not — it yields
-`string`, which is forbidden on the GPU.
+[`sizeof` / `nameof` / `typeof`](operators.md#sizeof-nameof-and-typeof)). `nameof(...)` and
+`typeof(...)` are not — they yield `string`, which is forbidden on the GPU.
 
 See [`@gpu` helpers](shaders.md#gpu-helpers).
 

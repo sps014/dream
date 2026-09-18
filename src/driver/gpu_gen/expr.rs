@@ -829,7 +829,9 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
             coerce_expr_to_wgsl_ty(e, &wty, ctx)
         }
         ExpressionNode::SizeOf(_, ty) => format!("{}", gpu_sizeof_bytes(ty, ctx)),
-        ExpressionNode::NameOf(_, _) => "0".into(),
+        // Both are already rejected by `reject_gpu_string_meta` before emission; the placeholder
+        // only keeps the match total.
+        ExpressionNode::NameOf(_, _) | ExpressionNode::TypeOf(_, _) => "0".into(),
         ExpressionNode::NamedArg(_, inner) | ExpressionNode::RefArgument(_, inner) => {
             emit_expr(inner, ctx)
         }

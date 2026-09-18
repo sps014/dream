@@ -380,6 +380,7 @@ fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
         | Rvalue::StrByteSize(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
+        | Rvalue::TypeName(o)
         | Rvalue::Discriminant { base: o, .. }
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)

@@ -3,7 +3,7 @@
 use super::context::EmitCtx;
 use super::ident::escape_wgsl_ident;
 use super::layout::{build_struct_field_tys, find_struct};
-use super::stmt::{emit_stmts, reject_gpu_nameof};
+use super::stmt::{emit_stmts, reject_gpu_string_meta};
 use super::ty::dream_ty_to_wgsl;
 use dream_abi::attributes::{has_compute_attr, has_fragment_attr, has_vertex_attr};
 use dream_diagnostics::DiagnosticBag;
@@ -502,7 +502,7 @@ fn emit_one_helper(
     };
     let mut body = String::new();
     let mut wg = String::new();
-    reject_gpu_nameof(func.body, &ctx);
+    reject_gpu_string_meta(func.body, &ctx);
     emit_stmts(func.body, &mut body, &mut wg, 1, &ctx);
     if !wg.is_empty() {
         ctx.report_error(

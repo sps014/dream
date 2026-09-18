@@ -478,6 +478,7 @@ fn soft_specials_and_lock_in_keyword_completions() {
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(names.contains(&"sizeof"), "missing sizeof, got subset");
     assert!(names.contains(&"nameof"), "missing nameof");
+    assert!(names.contains(&"typeof"), "missing typeof");
     assert!(names.contains(&"lock"), "missing lock");
     assert!(names.contains(&"borrow"), "missing borrow");
 }

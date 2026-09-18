@@ -99,6 +99,7 @@ fn report_unexpanded_syntax_blocks(acc: &ProgramAccumulator<'_>, diagnostics: &m
             | ExpressionNode::Try(x)
             | ExpressionNode::Cast(_, _, x)
             | ExpressionNode::IsExpression(x, _, _)
+            | ExpressionNode::TypeOf(_, x)
             | ExpressionNode::MemberAccess(x, _)
             | ExpressionNode::RefArgument(_, x)
             | ExpressionNode::NamedArg(_, x) => walk_expr(x, diagnostics),

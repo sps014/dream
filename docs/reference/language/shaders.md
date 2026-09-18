@@ -355,8 +355,9 @@ own `@compute` kernel with its own binding.
 - `@fragment` first parameter is usually that interface struct; return `GpuVec4` or an output struct.
 - When names passed to `create` / `create_ex` are **string literals**, Dream checks stages
   and matching interface types.
-- `sizeof(T)` becomes a number in the shader; `nameof(...)` is not available in shader bodies
-  (it produces `string`). Details: [Operators — sizeof and nameof](operators.md#sizeof-and-nameof).
+- `sizeof(T)` becomes a number in the shader; `nameof(...)` and `typeof(...)` are not available in
+  shader bodies (they produce `string`). Details:
+  [Operators — sizeof, nameof, and typeof](operators.md#sizeof-nameof-and-typeof).
 
 ## Related
 

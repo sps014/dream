@@ -88,99 +88,99 @@ pub(super) fn emit_stmts(
     ctx.pop_scope();
 }
 
-/// Report `nameof(...)` in GPU shader bodies (`string` is illegal in WGSL).
-pub(super) fn reject_gpu_nameof(stmts: &[StatementNode<'_>], ctx: &EmitCtx<'_>) {
+/// Report `nameof(...)` / `typeof(...)` in GPU shader bodies (`string` is illegal in WGSL).
+pub(super) fn reject_gpu_string_meta(stmts: &[StatementNode<'_>], ctx: &EmitCtx<'_>) {
     for s in stmts {
-        scan_stmt_nameof(s, ctx);
+        scan_stmt_string_meta(s, ctx);
     }
 }
 
-fn scan_stmt_nameof(stmt: &StatementNode<'_>, ctx: &EmitCtx<'_>) {
+fn scan_stmt_string_meta(stmt: &StatementNode<'_>, ctx: &EmitCtx<'_>) {
     match stmt {
         StatementNode::ExpressionStatement(e)
         | StatementNode::AwaitStmt(e)
         | StatementNode::Return(Some(e))
         | StatementNode::Assignment(_, e)
         | StatementNode::Declaration(_, _, e, _)
-        | StatementNode::TupleDeclaration { init: e, .. } => scan_expr_nameof(e, ctx),
+        | StatementNode::TupleDeclaration { init: e, .. } => scan_expr_string_meta(e, ctx),
         StatementNode::IndexAssignment(a, i, v) => {
-            scan_expr_nameof(a, ctx);
-            scan_expr_nameof(i, ctx);
-            scan_expr_nameof(v, ctx);
+            scan_expr_string_meta(a, ctx);
+            scan_expr_string_meta(i, ctx);
+            scan_expr_string_meta(v, ctx);
         }
         StatementNode::MemberAssignment(r, _, v) => {
-            scan_expr_nameof(r, ctx);
-            scan_expr_nameof(v, ctx);
+            scan_expr_string_meta(r, ctx);
+            scan_expr_string_meta(v, ctx);
         }
         StatementNode::FunctionInvocation(_, _, args) => {
             for a in args {
-                scan_expr_nameof(a, ctx);
+                scan_expr_string_meta(a, ctx);
             }
         }
         StatementNode::MethodInvocation(r, _, _, args) => {
-            scan_expr_nameof(r, ctx);
+            scan_expr_string_meta(r, ctx);
             for a in args {
-                scan_expr_nameof(a, ctx);
+                scan_expr_string_meta(a, ctx);
             }
         }
         StatementNode::IfElse(cond, then_b, elifs, else_b) => {
-            scan_expr_nameof(cond, ctx);
-            reject_gpu_nameof(then_b, ctx);
+            scan_expr_string_meta(cond, ctx);
+            reject_gpu_string_meta(then_b, ctx);
             for (c, body) in elifs {
-                scan_expr_nameof(c, ctx);
-                reject_gpu_nameof(body, ctx);
+                scan_expr_string_meta(c, ctx);
+                reject_gpu_string_meta(body, ctx);
             }
             if let Some(eb) = else_b {
-                reject_gpu_nameof(eb, ctx);
+                reject_gpu_string_meta(eb, ctx);
             }
         }
         StatementNode::While(cond, body) => {
-            scan_expr_nameof(cond, ctx);
-            reject_gpu_nameof(body, ctx);
+            scan_expr_string_meta(cond, ctx);
+            reject_gpu_string_meta(body, ctx);
         }
         StatementNode::DoWhile(body, cond) => {
-            reject_gpu_nameof(body, ctx);
-            scan_expr_nameof(cond, ctx);
+            reject_gpu_string_meta(body, ctx);
+            scan_expr_string_meta(cond, ctx);
         }
         StatementNode::For(init, cond, step, body) => {
             if let Some(i) = init {
-                scan_stmt_nameof(i, ctx);
+                scan_stmt_string_meta(i, ctx);
             }
             if let Some(c) = cond {
-                scan_expr_nameof(c, ctx);
+                scan_expr_string_meta(c, ctx);
             }
             if let Some(s) = step {
-                scan_stmt_nameof(s, ctx);
+                scan_stmt_string_meta(s, ctx);
             }
-            reject_gpu_nameof(body, ctx);
+            reject_gpu_string_meta(body, ctx);
         }
         StatementNode::Switch(subj, cases, default) => {
-            scan_expr_nameof(subj, ctx);
+            scan_expr_string_meta(subj, ctx);
             for (labels, body) in cases {
                 for lit in labels {
-                    scan_expr_nameof(lit, ctx);
+                    scan_expr_string_meta(lit, ctx);
                 }
-                reject_gpu_nameof(body, ctx);
+                reject_gpu_string_meta(body, ctx);
             }
             if let Some(db) = default {
-                reject_gpu_nameof(db, ctx);
+                reject_gpu_string_meta(db, ctx);
             }
         }
         StatementNode::Lock(e, body) => {
-            scan_expr_nameof(e, ctx);
-            reject_gpu_nameof(body, ctx);
+            scan_expr_string_meta(e, ctx);
+            reject_gpu_string_meta(body, ctx);
         }
         StatementNode::Defer(budget, body) => {
             if let Some(q) = budget {
-                scan_expr_nameof(q, ctx);
+                scan_expr_string_meta(q, ctx);
             }
-            reject_gpu_nameof(body, ctx);
+            reject_gpu_string_meta(body, ctx);
         }
         StatementNode::ForEach(_, e, _, _, body) => {
-            scan_expr_nameof(e, ctx);
-            reject_gpu_nameof(body, ctx);
+            scan_expr_string_meta(e, ctx);
+            reject_gpu_string_meta(body, ctx);
         }
-        StatementNode::Labeled(_, inner) => scan_stmt_nameof(inner, ctx),
+        StatementNode::Labeled(_, inner) => scan_stmt_string_meta(inner, ctx),
         StatementNode::WorkgroupDecl(..)
         | StatementNode::Return(None)
         | StatementNode::Break(_)
@@ -188,7 +188,7 @@ fn scan_stmt_nameof(stmt: &StatementNode<'_>, ctx: &EmitCtx<'_>) {
     }
 }
 
-fn scan_expr_nameof(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) {
+fn scan_expr_string_meta(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) {
     match expr {
         ExpressionNode::NameOf(tok, _) => {
             ctx.report_error(
@@ -199,14 +199,23 @@ fn scan_expr_nameof(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) {
                 Some(tok.position),
             );
         }
+        ExpressionNode::TypeOf(tok, _) => {
+            ctx.report_error(
+                format!(
+                    "GPU shader '{}' cannot use typeof(...); typeof yields string, which is not allowed in shaders — keep it on the CPU host",
+                    ctx.kernel
+                ),
+                Some(tok.position),
+            );
+        }
         ExpressionNode::Binary(l, _, r) | ExpressionNode::IndexAccess(l, r) => {
-            scan_expr_nameof(l, ctx);
-            scan_expr_nameof(r, ctx);
+            scan_expr_string_meta(l, ctx);
+            scan_expr_string_meta(r, ctx);
         }
         ExpressionNode::Ternary(c, t, e) => {
-            scan_expr_nameof(c, ctx);
-            scan_expr_nameof(t, ctx);
-            scan_expr_nameof(e, ctx);
+            scan_expr_string_meta(c, ctx);
+            scan_expr_string_meta(t, ctx);
+            scan_expr_string_meta(e, ctx);
         }
         ExpressionNode::Unary(_, e)
         | ExpressionNode::IncDec { target: e, .. }
@@ -217,48 +226,48 @@ fn scan_expr_nameof(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) {
         | ExpressionNode::Await(_, e)
         | ExpressionNode::Try(e)
         | ExpressionNode::NamedArg(_, e)
-        | ExpressionNode::RefArgument(_, e) => scan_expr_nameof(e, ctx),
+        | ExpressionNode::RefArgument(_, e) => scan_expr_string_meta(e, ctx),
         ExpressionNode::FunctionCall(_, _, args)
         | ExpressionNode::ArrayLiteral(_, args)
         | ExpressionNode::TupleLiteral(_, args)
         | ExpressionNode::SetLiteral(_, args) => {
             for a in args {
-                scan_expr_nameof(a, ctx);
+                scan_expr_string_meta(a, ctx);
             }
         }
         ExpressionNode::Call(c, _, args) | ExpressionNode::MethodCall(c, _, _, args) => {
-            scan_expr_nameof(c, ctx);
+            scan_expr_string_meta(c, ctx);
             for a in args {
-                scan_expr_nameof(a, ctx);
+                scan_expr_string_meta(a, ctx);
             }
         }
         ExpressionNode::ArrayRepeat(_, v, n) => {
-            scan_expr_nameof(v, ctx);
-            scan_expr_nameof(n, ctx);
+            scan_expr_string_meta(v, ctx);
+            scan_expr_string_meta(n, ctx);
         }
         ExpressionNode::MapLiteral(_, entries) => {
             for (k, v) in entries {
-                scan_expr_nameof(k, ctx);
-                scan_expr_nameof(v, ctx);
+                scan_expr_string_meta(k, ctx);
+                scan_expr_string_meta(v, ctx);
             }
         }
         ExpressionNode::Switch(_, subj, arms) => {
-            scan_expr_nameof(subj, ctx);
+            scan_expr_string_meta(subj, ctx);
             for arm in arms {
                 if let Some(g) = &arm.guard {
-                    scan_expr_nameof(g, ctx);
+                    scan_expr_string_meta(g, ctx);
                 }
                 match &arm.body {
-                    dream_syntax::nodes::SwitchArmBody::Expr(e) => scan_expr_nameof(e, ctx),
+                    dream_syntax::nodes::SwitchArmBody::Expr(e) => scan_expr_string_meta(e, ctx),
                     dream_syntax::nodes::SwitchArmBody::Block(stmts) => {
-                        reject_gpu_nameof(stmts, ctx)
+                        reject_gpu_string_meta(stmts, ctx)
                     }
                 }
             }
         }
         ExpressionNode::Lambda(l) => match &l.body {
-            dream_syntax::nodes::LambdaBody::Expr(e) => scan_expr_nameof(e, ctx),
-            dream_syntax::nodes::LambdaBody::Block(stmts) => reject_gpu_nameof(stmts, ctx),
+            dream_syntax::nodes::LambdaBody::Expr(e) => scan_expr_string_meta(e, ctx),
+            dream_syntax::nodes::LambdaBody::Block(stmts) => reject_gpu_string_meta(stmts, ctx),
         },
         ExpressionNode::Literal(_)
         | ExpressionNode::Identifier(_)

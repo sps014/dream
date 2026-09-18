@@ -548,7 +548,7 @@ fn collect_collections_from_expr(
         ExpressionNode::MemberAccess(a, _) => {
             collect_collections_from_expr(a, jsonable, out, locals)
         }
-        ExpressionNode::IsExpression(a, _, _) => {
+        ExpressionNode::IsExpression(a, _, _) | ExpressionNode::TypeOf(_, a) => {
             collect_collections_from_expr(a, jsonable, out, locals)
         }
         ExpressionNode::Ternary(a, b, c) => {

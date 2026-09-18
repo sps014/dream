@@ -290,6 +290,7 @@ fn rvalue_region_safe(cx: &mut SafeCx<'_>, rv: &Rvalue) -> bool {
         | Rvalue::Discriminant { .. }
         | Rvalue::UnionField { .. }
         | Rvalue::IsType(_, _)
+        | Rvalue::TypeName(_)
         | Rvalue::Tuple { .. }
         | Rvalue::EnumName { .. } => true,
         Rvalue::Call { callee, .. } => callee_safe(cx, callee),

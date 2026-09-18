@@ -6,7 +6,7 @@ use super::bind::{
 use super::context::EmitCtx;
 use super::ident::escape_wgsl_ident;
 use super::layout::{build_struct_field_tys, emit_value_struct_wgsl, find_struct};
-use super::stmt::{emit_stmts, reject_gpu_nameof};
+use super::stmt::{emit_stmts, reject_gpu_string_meta};
 use super::ty::dream_ty_to_wgsl;
 use super::types::{GpuBinding, GpuKernelInfo};
 use dream_abi::attributes::{compute_workgroup_size, has_readonly_attr};
@@ -206,7 +206,7 @@ pub(super) fn emit_kernel(
 
     let mut workgroup_decls = String::new();
     let mut body = String::new();
-    reject_gpu_nameof(func.body, &ctx);
+    reject_gpu_string_meta(func.body, &ctx);
     emit_stmts(func.body, &mut body, &mut workgroup_decls, 1, &ctx);
 
     let helpers = super::helpers::emit_helpers_wgsl(func.body, program, &value_structs, diagnostics);

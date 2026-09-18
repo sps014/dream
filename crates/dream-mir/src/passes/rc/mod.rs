@@ -114,6 +114,7 @@ pub(crate) fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
         | Rvalue::StrByteSize(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
+        | Rvalue::TypeName(o)
         | Rvalue::Discriminant { base: o, .. }
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)

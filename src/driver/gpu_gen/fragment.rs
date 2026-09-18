@@ -9,7 +9,7 @@ use super::layout::{
     fragment_color_target_count, has_position_gpuvec4, struct_name_of,
 };
 use super::bind::{emit_resource_param, finalize_uniforms, BindingAlloc};
-use super::stmt::{emit_stmts, reject_gpu_nameof};
+use super::stmt::{emit_stmts, reject_gpu_string_meta};
 use super::types::GpuShaderInfo;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::function::FunctionNode;
@@ -179,7 +179,7 @@ pub(super) fn emit_fragment(
             kernel: &func.name.text,
             diagnostics: RefCell::new(diagnostics),
         };
-        reject_gpu_nameof(func.body, &ctx);
+        reject_gpu_string_meta(func.body, &ctx);
         emit_stmts(func.body, &mut body, &mut workgroup_decls, 1, &ctx);
     }
 

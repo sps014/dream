@@ -657,7 +657,7 @@ fn is_positional_field_name(name: &str) -> bool {
 
 /// Language keywords offered as completion proposals: every reserved word (`KEYWORDS`) plus the
 /// contextual keywords that are only reserved in specific positions (`CONTEXTUAL_KEYWORDS`, e.g.
-/// `this`/`get`/`set`/`constructor`/`del`). Soft specials (`sizeof`/`nameof`) are included so
+/// `this`/`get`/`set`/`constructor`/`del`). Soft specials (`sizeof`/`nameof`/`typeof`) are included so
 /// they appear in the keyword dump without becoming reserved lexer tokens. `borrow` and `ref`
 /// are full keywords in `KEYWORDS`. Re-exported from `dream-syntax` rather than hand-duplicated.
 pub fn keywords() -> impl Iterator<Item = &'static str> {

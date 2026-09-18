@@ -3,11 +3,16 @@ module system.gpu;
 // Render pipeline linking a `@vertex` + `@fragment` pair.
 public class GpuRenderPipeline {
     _id: int;
+    _depth_enabled: bool;
 
     internal constructor() {}
 
     public get id(): int {
         return this._id;
+    }
+
+    public get depth_enabled(): bool {
+        return this._depth_enabled;
     }
 
     // Compiles and caches a render pipeline for the named Dream shaders.
@@ -47,6 +52,7 @@ public class GpuRenderPipeline {
         }
         let p = GpuRenderPipeline();
         p._id = id;
+        p._depth_enabled = desc.depth_enabled;
         return Result.Ok(p);
     }
 

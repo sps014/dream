@@ -50,6 +50,7 @@ public class GpuRenderPass {
 
     static fun surface_target(
         surface: GpuSurface,
+        pipeline: GpuRenderPipeline,
         clear: GpuVec4,
         depth: Option<GpuTexture>,
         load_op: GpuLoadOp
@@ -58,7 +59,13 @@ public class GpuRenderPass {
         if load_op == GpuLoadOp.Load { t.load(); } else { t.clear(clear); }
         switch (depth) {
             Some(d) => { t.depth(d, load_op); },
-            None => { t.surface_depth(load_op); },
+            // Overlay / `defaults()` pipelines have no depth target. Attaching the window's
+            // depth buffer anyway is a native validation error (pass Depth24Plus vs pipeline None).
+            None => {
+                if pipeline.depth_enabled {
+                    t.surface_depth(load_op);
+                }
+            },
         }
         return t;
     }
@@ -130,7 +137,7 @@ public class GpuRenderPass {
     ): Result<bool, GpuError> {
         let no_indices: Option<GpuBuffer<int>> = Option.None;
         return GpuRenderPass.submit_one(
-            GpuRenderPass.surface_target(surface, clear, depth, load_op),
+            GpuRenderPass.surface_target(surface, pipeline, clear, depth, load_op),
             pipeline,
             vertices,
             no_indices,
@@ -212,7 +219,7 @@ public class GpuRenderPass {
         token: Option<CancellationToken> = Option.None
     ): Result<bool, GpuError> {
         return GpuRenderPass.submit_one(
-            GpuRenderPass.surface_target(surface, clear, depth, load_op),
+            GpuRenderPass.surface_target(surface, pipeline, clear, depth, load_op),
             pipeline,
             vertices,
             Option.Some(indices),

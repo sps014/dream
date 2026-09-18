@@ -137,6 +137,13 @@ impl Printer {
         self.insert_blank_lines(kind);
         self.emit_leading_trivia(token);
 
+        if kind == TokenKind::DotToken
+            && Self::should_break_before_dot(self.prev_kind)
+            && !self.layout.at_line_start()
+        {
+            self.layout.break_line();
+        }
+
         if self.layout.at_line_start() {
             self.layout.write_indent(self.current_indent(kind));
         } else {
@@ -340,7 +347,25 @@ impl Printer {
         {
             level += 1;
         }
+        // Continuation indent for a postfix chain that rustfmt would wrap: `foo()\n    .await`.
+        if kind == TokenKind::DotToken && self.layout.at_line_start() {
+            level += 1;
+        }
         level
+    }
+
+    /// Rust-style chain wrap: break before `.await` / `.method(` when the receiver already ended
+    /// (`foo().bar()`, `foo().await`, `foo().await?.ok()`).
+    fn should_break_before_dot(prev: Option<TokenKind>) -> bool {
+        matches!(
+            prev,
+            Some(
+                TokenKind::CloseParenthesisToken
+                    | TokenKind::CloseBracketToken
+                    | TokenKind::AwaitToken
+                    | TokenKind::QuestionMarkToken
+            )
+        )
     }
 
     /// Indent for standalone comment lines — block level, without case-body bonus.

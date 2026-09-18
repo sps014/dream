@@ -21,7 +21,11 @@
     "configurationDefaults": {
       "[dream]": {
         "editor.defaultFormatter": "dream-lang.dream-lang",
-        "editor.formatOnSave": false
+        "editor.formatOnSave": false,
+        "editor.autoIndent": "full",
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.detectIndentation": false
       }
     },
     "configuration": {
@@ -258,6 +262,7 @@
         "extensions": [
           ".dream"
         ],
+        "configuration": "./language-configuration.json",
         "icon": {
           "light": "./icons/dream.svg",
           "dark": "./icons/dream.svg"

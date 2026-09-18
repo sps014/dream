@@ -284,12 +284,12 @@ fn compute_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnostic> {
     analysis::collect_diagnostics(file_path, text)
         .into_iter()
         .map(|d| Diagnostic {
+            source: Some("dream".to_string()),
             range: map_range(d.range),
-            severity: match d.severity {
-                "error" => Some(DiagnosticSeverity::ERROR),
-                "warning" => Some(DiagnosticSeverity::WARNING),
-                _ => Some(DiagnosticSeverity::INFORMATION),
-            },
+            severity: Some(match d.severity {
+                "warning" => DiagnosticSeverity::WARNING,
+                _ => DiagnosticSeverity::ERROR,
+            }),
             message: d.message,
             code: d.code.map(|c| NumberOrString::String(c.to_string())),
             ..Default::default()

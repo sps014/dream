@@ -3,7 +3,7 @@ use dream::driver::compiler::{Compiler, Target};
 use dream::driver::js_runtime::JsRuntimeTarget;
 use dream::driver::ui::{ConsoleReporter, Ui};
 use dream::driver::wasm_opt::OptLevel;
-use dream::execution::native_c::{compile_native_c, run_native_bin};
+use dream::execution::native_c::{compile_native_c, run_native_bin, GuestAborted};
 use dream_abi::attributes::CompileTargets;
 use dream_sema::analyzer::CrateType;
 use std::path::{Path, PathBuf};
@@ -407,6 +407,10 @@ fn main() -> ExitCode {
                     match run_native_bin(&bin, &out_path, &program_args) {
                         Ok(0) => {}
                         Ok(code) => return ExitCode::from(code.clamp(1, 255) as u8),
+                        Err(e) if e.downcast_ref::<GuestAborted>().is_some() => {
+                            // `dream_panic` / `abort()` already printed the crash on stderr.
+                            return ExitCode::FAILURE;
+                        }
                         Err(e) => {
                             ui.error(&format!("execution failed: {e}"));
                             return ExitCode::FAILURE;

@@ -170,7 +170,28 @@ class Empty {}
 #[test]
 fn chained_calls_have_no_spaces_around_dots() {
     let out = format("let s:string=list.map(f).filter(g).join(\", \");");
-    assert!(out.contains("list.map(f).filter(g).join"), "got:\n{}", out);
+    assert!(
+        out.contains("list.map(f)\n    .filter(g)\n    .join"),
+        "got:\n{}",
+        out
+    );
+}
+
+#[test]
+fn postfix_await_chain_breaks_like_rust() {
+    let out = format(
+        "async fun f():void{let x=xyz().mzk().await.mka();let y=Time.sleep(1).await?;}",
+    );
+    assert!(
+        out.contains("xyz()\n        .mzk()\n        .await\n        .mka()"),
+        "got:\n{}",
+        out
+    );
+    assert!(
+        out.contains("Time.sleep(1)\n        .await?;"),
+        "got:\n{}",
+        out
+    );
 }
 
 #[test]
@@ -222,10 +243,14 @@ fn postfix_await_binds_tight() {
     let out = format(
         "async fun f():void{let b=g().await;let c=g().await?;let d=g().await[0];let e=g().await+1;}",
     );
-    assert!(out.contains("let b = g().await;"), "got:\n{}", out);
-    assert!(out.contains("let c = g().await?;"), "got:\n{}", out);
-    assert!(out.contains("let d = g().await[0];"), "got:\n{}", out);
-    assert!(out.contains("let e = g().await + 1;"), "got:\n{}", out);
+    assert!(out.contains("let b = g()\n        .await;"), "got:\n{}", out);
+    assert!(out.contains("let c = g()\n        .await?;"), "got:\n{}", out);
+    assert!(out.contains("let d = g()\n        .await[0];"), "got:\n{}", out);
+    assert!(
+        out.contains("let e = g()\n        .await + 1;"),
+        "got:\n{}",
+        out
+    );
 }
 
 #[test]

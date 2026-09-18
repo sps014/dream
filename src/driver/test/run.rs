@@ -162,6 +162,9 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
     match crate::execution::native_c::run_native_bin(&bin, &c_str, &[]) {
         Ok(0) => {}
         Ok(code) => return Err(format!("'{}' failed (exit code {code})", path.display())),
+        Err(e) if e.downcast_ref::<crate::execution::native_c::GuestAborted>().is_some() => {
+            return Err(format!("'{}' aborted", path.display()));
+        }
         Err(e) => return Err(format!("'{}' failed: {}", path.display(), e)),
     }
     Ok(tests.len())

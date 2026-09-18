@@ -37,24 +37,79 @@ Encoding is decided at compile time, so every value type must be one the generat
 
 ## Unknown payloads (`JsonValue`)
 
-When a server returns JSON you do not have a class for:
+When you do not have a class for the JSON (an API body, a config blob, mixed values), parse to `JsonValue`. That is the string-keyed dict of mixed values — **not** `Map<string, object>`, which cannot be serialized.
+
+### Parse
 
 ```dream
 switch (Json.deserialize<JsonValue>(text)) {
-    Ok(v) => {
-        System.println(v.get("key").unwrap_or(JsonValue.none()).as_string().unwrap_or(""));
-    },
+    Ok(v) => walk(v),
     Err(e) => System.println(e.message()),
 }
 
-// HTTP:
+// HTTP already returns a tree:
 switch (r.json()) {
-    Ok(v) => System.println(Json.serialize(v)),
+    Ok(v) => walk(v),
     Err(e) => System.println(e.message()),
 }
 ```
 
-`JsonValue` also nests inside typed data, which is how you model "mostly known, one open field" payloads or a map whose values have no single type:
+### Read one field
+
+Every `as_*` returns `Option`: missing keys and wrong types become `None`, they do not panic. Prefer `get` over `at` (`at` panics if the key is missing).
+
+```dream
+let name = v.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+let n = v.get("count").unwrap_or(JsonValue.none()).as_int().unwrap_or(0);
+if v.has("error") {
+    System.println(v.get_or("error", JsonValue.none()).as_string().unwrap_or(""));
+}
+```
+
+### Walk an object (the dict)
+
+`is_object()` is true for `{...}`. Keys stay in insertion order. Values are still `JsonValue`, so nested objects and arrays walk the same way.
+
+```dream
+if v.is_object() {
+    let i = 0;
+    while i < v.length {
+        let key = v.key_at(i).unwrap_or("");
+        let child = v.value_at(i).unwrap_or(JsonValue.none());
+        System.println(key + " = " + Json.serialize(child));
+        i = i + 1;
+    }
+}
+
+// Same data as a Map, if you want Map APIs:
+let dict: Map<string, JsonValue> = v.as_map().unwrap_or(Map<string, JsonValue>());
+```
+
+`Json.serialize(dict)` round-trips that map.
+
+### Walk an array
+
+```dream
+if v.is_array() {
+    let i = 0;
+    while i < v.length {
+        let item = v.at(i).unwrap_or(JsonValue.none());
+        System.println(Json.serialize(item));
+        i = i + 1;
+    }
+}
+```
+
+### Nested values
+
+```dream
+let nested = v.get("meta").unwrap_or(JsonValue.none());
+if nested.is_object() {
+    System.println(nested.get("id").unwrap_or(JsonValue.none()).as_int().unwrap_or(0));
+}
+```
+
+### Known shape with one open field
 
 ```dream
 @json
@@ -70,7 +125,13 @@ let mixed: Map<string, JsonValue> = {
 System.println(Json.serialize(mixed));   // {"n":42,"s":"text"}
 ```
 
-Accessors: `as_bool` / `as_int` / `as_double` / `as_string` / `as_array` / `as_map`, `is_null` / `is_array` / `is_object`, `get` / `get_or` / `has` / `set` / `remove` / `keys` on objects, `at` / `push` / `.length` on arrays.
+### Accessors
+
+| Kind | Test | Read | Build |
+| --- | --- | --- | --- |
+| object `{...}` | `is_object` | `get` / `get_or` / `has` / `keys` / `key_at` / `value_at` / `as_map` | `JsonValue.dict()`, then `set` |
+| array `[...]` | `is_array` | `at(index)` / `as_array` / `.length` | `JsonValue.array()`, then `push` |
+| string / number / bool / null | `is_null` | `as_string` / `as_int` / `as_double` / `as_bool` | `from_string` / `from_int` / `number` / `boolean` / `none` |
 
 ## `GenResult`
 

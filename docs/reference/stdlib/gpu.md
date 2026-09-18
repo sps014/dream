@@ -24,7 +24,8 @@ async fun main(): void {
 | --- | --- |
 | `Gpu.is_available` | adapter present? |
 | `await Gpu.try_init()` | request device (call once) |
-| `Gpu.ready` | init succeeded |
+| `Gpu.ready` | init succeeded (false after device-lost until `try_init` again) |
+| `Gpu.check()` | pending uncaptured error or device-lost, else `Ok` |
 | `await Gpu.frame()` | wait a display frame |
 | `await Gpu.timestamp()` | GPU timestamp |
 | `Gpu.capabilities()` | optional features and limits the device got |
@@ -65,7 +66,7 @@ stays at the portable WebGPU default, so a program developed against a large GPU
 small one. Creating a `Bc*` / `Etc2*` / `Astc*` texture without the matching flag fails with
 `GpuError.unsupported`.
 
-`GpuError` implements [`Error`](option-result.md). Headless machines often have no adapter. Async GPU methods take an optional last `token`; cancelled `Result` calls return `GpuError` `ECANCELLED`.
+`GpuError` implements [`Error`](option-result.md). Headless machines often have no adapter. Async GPU methods take an optional last `token`; cancelled `Result` calls return `GpuError` `ECANCELLED`. A lost device (`DEVICE_LOST`) is distinct from `VALIDATION`: recover with `await Gpu.try_init()` and recreate GPU resources. `Gpu.check()` drains a pending lost / uncaptured event without waiting for the next submit.
 
 ## Buffers
 
@@ -77,7 +78,7 @@ small one. Creating a `Bc*` / `Etc2*` / `Astc*` texture without the matching fla
 
 ## Textures, surfaces, draw
 
-`GpuTexture.rgba8` (and depth / float / cube variants), `await GpuTexture.from_image_bytes(png_or_jpeg)` for PNG/JPEG decode, `GpuSampler.linear()` / `nearest()`. `GpuSurface.create` / `from_canvas`, `present()`, input helpers, `GpuRenderPass.draw` / `blit`. Vertex path: `GpuRenderPipeline.create_ex`, `GpuVec2` / `GpuVec4`, `@builtin("position")`.
+`GpuTexture.rgba8` (and depth / float / cube variants), `await GpuTexture.from_image_bytes(png_or_jpeg)` for PNG/JPEG decode, `GpuSampler.linear()` / `nearest()`. `GpuSurface.create` / `from_canvas`, `configure(w, h)` or `configure(GpuSurfaceDesc)` (`present_mode`, `alpha_mode`, `color_space`), `present()`, input helpers, `GpuRenderPass.draw` / `blit`. Vertex path: `GpuRenderPipeline.create_ex`, `GpuVec2` / `GpuVec4`, `@builtin("position")`.
 
 Kernel-only: `GpuMath`, `Gpu.workgroup_barrier` / `storage_barrier`, `Gpu.atomic_*` (`atomic_load`, `atomic_store`, `atomic_add`, `atomic_sub`, `atomic_min`, `atomic_max`, `atomic_and`, `atomic_or`, `atomic_xor`, `atomic_exchange`), `Gpu.dpdx` / `dpdy` / `fwidth` (derivatives), `Gpu.texture_*` (`texture_dimensions`, `texture_sample_cube`, `texture_load`, `texture_store`, `texture_sample`).
 

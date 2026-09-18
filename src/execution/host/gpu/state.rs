@@ -196,6 +196,9 @@ pub struct SurfaceEntry {
     /// Acquired swapchain frame drawn into by the last render pass; presented by `present`.
     pub pending_frame: Option<wgpu::SurfaceTexture>,
     pub input: super::input::InputState,
+    pub present_mode: wgpu::PresentMode,
+    pub alpha_mode: wgpu::CompositeAlphaMode,
+    pub color_space: i32,
 }
 
 pub struct BlitPipe {
@@ -301,6 +304,38 @@ impl GpuState {
     pub fn set_last_error(&mut self, msg: String) {
         self.last_error = Some(msg);
     }
+
+    /// Drops the wgpu device and every GPU-side cache, keeping CPU mirrors, windows, and ABI
+    /// metadata so `try_init` can recover without forgetting what the program already allocated.
+    pub fn drop_gpu_device(&mut self) {
+        self.ready = false;
+        self.device = None;
+        self.queue = None;
+        self.blit = None;
+        self.compute_pipes.clear();
+        self.render_pipes.clear();
+        self.bind_groups.clear();
+        self.render_bg_cache.clear();
+        self.uniform_ring = super::uniform_ring::UniformRing::default();
+        for buf in self.buffers.values_mut() {
+            buf.gpu = None;
+            buf.created_usage = wgpu::BufferUsages::empty();
+        }
+        for tex in self.textures.values_mut() {
+            tex.gpu = None;
+            tex.view = None;
+        }
+        for samp in self.samplers.values_mut() {
+            samp.gpu = None;
+        }
+        for surf in self.surfaces.values_mut() {
+            surf.color = None;
+            surf.msaa = None;
+            surf.depth = None;
+            surf.pending_frame = None;
+            surf.config = None;
+        }
+    }
 }
 
 fn states() -> &'static Mutex<HashMap<ThreadId, GpuState>> {
@@ -346,3 +381,6 @@ pub const ERR_OTHER: i32 = 4;
 /// block-compressed format on a device without that family, say. Distinct from `ERR_VALIDATION`
 /// because the fix is to pick a different resource, not to correct the call.
 pub const ERR_UNSUPPORTED: i32 = 5;
+/// The GPU device was lost (driver reset, tab discarded, thermal kill). `try_init` again to
+/// recover; previously created GPU resources are gone.
+pub const ERR_DEVICE_LOST: i32 = 6;

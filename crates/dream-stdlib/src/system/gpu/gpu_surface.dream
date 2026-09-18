@@ -38,7 +38,16 @@ public class GpuSurface {
     // Sets the window client size (logical) and rebuilds the drawable swapchain.
     @web @native
     public fun configure(width: int, height: int): void {
-        Gpu.surface_configure(this.id, width, height);
+        Gpu.surface_configure(this.id, width, height, 2, 1, 0);
+    }
+
+    // Like `configure(w, h)`, with present mode, alpha, and color space.
+    @web @native
+    public fun configure(desc: GpuSurfaceDesc): void {
+        let present: int = desc.present_mode;
+        let alpha: int = desc.alpha_mode;
+        let space: int = desc.color_space;
+        Gpu.surface_configure(this.id, desc.width, desc.height, present, alpha, space);
     }
 
     // Drawable width in pixels (`canvas.width` on web; create/configure size on native —

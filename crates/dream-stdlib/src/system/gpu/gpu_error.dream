@@ -50,6 +50,12 @@ public class GpuError : Error {
         return GpuError("UNSUPPORTED", message);
     }
 
+    // The GPU device is gone (driver reset, tab discarded, thermal kill). Recover by calling
+    // `Gpu.try_init` again; previously created GPU resources are invalid.
+    public static fun device_lost(message: string): GpuError {
+        return GpuError("DEVICE_LOST", message);
+    }
+
     // Cooperative cancellation (`CancellationToken`).
     public static fun cancelled(): GpuError {
         return GpuError("ECANCELLED", "operation cancelled");
@@ -67,6 +73,7 @@ public class GpuError : Error {
         if code == 2 { return GpuError.timeout(msg); }
         if code == 3 { return GpuError.validation(msg); }
         if code == 5 { return GpuError.unsupported(msg); }
+        if code == 6 { return GpuError.device_lost(msg); }
         return GpuError.other(msg);
     }
 

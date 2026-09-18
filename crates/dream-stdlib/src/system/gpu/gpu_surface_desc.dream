@@ -1,0 +1,21 @@
+module system.gpu;
+
+// Size and presentation options for `GpuSurface.configure`.
+public struct GpuSurfaceDesc {
+    public width: int;
+    public height: int;
+    public present_mode: GpuPresentMode;
+    public alpha_mode: GpuAlphaMode;
+    public color_space: GpuColorSpace;
+
+    // `width`×`height` with vsync (`Fifo`), opaque compositing, sRGB.
+    public static fun of(width: int, height: int): GpuSurfaceDesc {
+        let d = GpuSurfaceDesc();
+        d.width = width;
+        d.height = height;
+        d.present_mode = GpuPresentMode.Fifo;
+        d.alpha_mode = GpuAlphaMode.Opaque;
+        d.color_space = GpuColorSpace.Srgb;
+        return d;
+    }
+}

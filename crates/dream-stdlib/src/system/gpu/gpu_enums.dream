@@ -158,3 +158,29 @@ public enum GpuVertexFormat {
     Sint32x3 = 28,
     Sint32x4 = 29,
 }
+
+// Swapchain presentation pacing. Native wgpu honors this; the browser canvas vsyncs with the
+// compositor and ignores it. Unknown codes fall back to `Fifo`.
+public enum GpuPresentMode {
+    AutoVsync = 0,
+    AutoNoVsync = 1,
+    // Traditional vsync — the default, and the only mode guaranteed everywhere.
+    Fifo = 2,
+    FifoRelaxed = 3,
+    Immediate = 4,
+    Mailbox = 5,
+}
+
+// How the swapchain alpha channel composites with whatever is behind the window / canvas.
+public enum GpuAlphaMode {
+    Auto = 0,
+    Opaque = 1,
+    Premultiplied = 2,
+}
+
+// Canvas color space. `DisplayP3` is a browser `configure({ colorSpace })` hint; native wgpu
+// 24 has no matching surface field, so it stays sRGB there.
+public enum GpuColorSpace {
+    Srgb = 0,
+    DisplayP3 = 1,
+}

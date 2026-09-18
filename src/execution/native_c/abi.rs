@@ -180,6 +180,11 @@ pub extern "C" fn gpuLastError() -> usize {
 }
 
 #[no_mangle]
+pub extern "C" fn gpuCheck() -> i32 {
+    error::poll_status()
+}
+
+#[no_mangle]
 pub extern "C" fn gpuTryInit() -> i32 {
     ensure_abi();
     device::try_init()
@@ -293,8 +298,15 @@ pub unsafe extern "C" fn gpuSurfaceCreate(title: usize, w: i32, h: i32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn gpuSurfaceConfigure(id: i32, w: i32, h: i32) {
-    surface::configure(id, w, h);
+pub extern "C" fn gpuSurfaceConfigure(
+    id: i32,
+    w: i32,
+    h: i32,
+    present_mode: i32,
+    alpha_mode: i32,
+    color_space: i32,
+) {
+    surface::configure(id, w, h, present_mode, alpha_mode, color_space);
 }
 
 #[no_mangle]

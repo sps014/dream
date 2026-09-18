@@ -21,19 +21,38 @@ fn surface_config(
     format: wgpu::TextureFormat,
     width: u32,
     height: u32,
+    present_mode: wgpu::PresentMode,
+    alpha_mode: wgpu::CompositeAlphaMode,
 ) -> wgpu::SurfaceConfiguration {
     wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
         format,
         width: width.max(1),
         height: height.max(1),
-        // FIFO vsync (browser canvas default). Do not also sleep in `Gpu.frame` — that
-        // double-paces against swapchain acquire and stutters on Metal.
-        present_mode: wgpu::PresentMode::Fifo,
+        present_mode,
         // Latency 1 thrashing nextDrawable causes hitching; 2 matches typical browser buffering.
         desired_maximum_frame_latency: 2,
-        alpha_mode: wgpu::CompositeAlphaMode::Auto,
+        alpha_mode,
         view_formats: vec![],
+    }
+}
+
+pub(crate) fn present_mode_from_code(code: i32) -> wgpu::PresentMode {
+    match code {
+        0 => wgpu::PresentMode::AutoVsync,
+        1 => wgpu::PresentMode::AutoNoVsync,
+        3 => wgpu::PresentMode::FifoRelaxed,
+        4 => wgpu::PresentMode::Immediate,
+        5 => wgpu::PresentMode::Mailbox,
+        _ => wgpu::PresentMode::Fifo,
+    }
+}
+
+pub(crate) fn alpha_mode_from_code(code: i32) -> wgpu::CompositeAlphaMode {
+    match code {
+        0 => wgpu::CompositeAlphaMode::Auto,
+        2 => wgpu::CompositeAlphaMode::PreMultiplied,
+        _ => wgpu::CompositeAlphaMode::Opaque,
     }
 }
 
@@ -121,7 +140,10 @@ fn reconfigure_surface(st: &mut super::state::GpuState, id: i32, width: u32, hei
         return;
     };
     let format = st.render_format;
-    let config = surface_config(format, w, h);
+    let Some(surf) = st.surfaces.get(&id) else {
+        return;
+    };
+    let config = surface_config(format, w, h, surf.present_mode, surf.alpha_mode);
     if let Some(surface) = st.surfaces.get(&id).and_then(|s| s.surface.as_ref()) {
         surface.configure(&device, &config);
     }
@@ -407,9 +429,11 @@ pub fn create(name: &str, width: i32, height: i32) -> i32 {
     let format = st.render_format;
     let client_w = w;
     let client_h = h;
+    let present_mode = wgpu::PresentMode::Fifo;
+    let alpha_mode = wgpu::CompositeAlphaMode::Opaque;
     // Match web canvas backing store: use the requested create size, not Retina physical
     // pixels. Ocean at 2560×1440 was ~14 FPS (acquire ~49ms); 1280×720 matches browser work.
-    let config = surface_config(format, client_w, client_h);
+    let config = surface_config(format, client_w, client_h, present_mode, alpha_mode);
     surface.configure(&device, &config);
 
     let id = st.alloc_id();
@@ -430,6 +454,9 @@ pub fn create(name: &str, width: i32, height: i32) -> i32 {
             config: Some(config),
             pending_frame: None,
             input: Default::default(),
+            present_mode,
+            alpha_mode,
+            color_space: 0,
         },
     );
     id
@@ -456,16 +483,28 @@ pub fn destroy(id: i32) {
     }
 }
 
-pub fn configure(id: i32, width: i32, height: i32) {
+pub fn configure(
+    id: i32,
+    width: i32,
+    height: i32,
+    present_mode: i32,
+    alpha_mode: i32,
+    color_space: i32,
+) {
     let mut st = lock_state();
     if st.surfaces.get(&id).is_none() {
         return;
     }
     let cw = width.max(1) as u32;
     let ch = height.max(1) as u32;
+    let pm = present_mode_from_code(present_mode);
+    let am = alpha_mode_from_code(alpha_mode);
     if let Some(surf) = st.surfaces.get_mut(&id) {
         surf.client_width = cw;
         surf.client_height = ch;
+        surf.present_mode = pm;
+        surf.alpha_mode = am;
+        surf.color_space = color_space;
     }
     if let Some(window) = st.surfaces.get(&id).and_then(|s| s.window.clone()) {
         let _ = window.request_inner_size(winit::dpi::LogicalSize::new(cw as f64, ch as f64));
@@ -970,4 +1009,25 @@ pub fn poll_events_bytes(id: i32) -> Vec<u8> {
         .get_mut(&id)
         .map(|s| s.input.drain_events_packed())
         .unwrap_or_else(|| vec![0u8; 4])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn present_mode_codes_match_the_enum() {
+        assert_eq!(present_mode_from_code(0), wgpu::PresentMode::AutoVsync);
+        assert_eq!(present_mode_from_code(1), wgpu::PresentMode::AutoNoVsync);
+        assert_eq!(present_mode_from_code(2), wgpu::PresentMode::Fifo);
+        assert_eq!(present_mode_from_code(4), wgpu::PresentMode::Immediate);
+        assert_eq!(present_mode_from_code(99), wgpu::PresentMode::Fifo);
+    }
+
+    #[test]
+    fn alpha_mode_codes_match_the_enum() {
+        assert_eq!(alpha_mode_from_code(0), wgpu::CompositeAlphaMode::Auto);
+        assert_eq!(alpha_mode_from_code(1), wgpu::CompositeAlphaMode::Opaque);
+        assert_eq!(alpha_mode_from_code(2), wgpu::CompositeAlphaMode::PreMultiplied);
+    }
 }

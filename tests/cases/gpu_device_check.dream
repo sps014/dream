@@ -1,0 +1,33 @@
+// Device-lost is a distinct GpuError, not VALIDATION. `Gpu.check` is clean after a successful
+// init; `from_code(6)` and `GpuError.device_lost` share the same stable code string.
+import system;
+import system.gpu;
+
+async fun main(): void {
+    let lost = GpuError.device_lost("gpu process crashed");
+    System.println("lost=" + lost.code());
+    System.println("from_code=" + GpuError.from_code(6, "reset").code());
+    System.println("validation=" + GpuError.validation("bad bind").code());
+
+    let init = await Gpu.try_init();
+    if init.is_err() {
+        System.println("gpu unavailable");
+        return;
+    }
+    let chk = Gpu.check();
+    System.println("check_ok=" + chk.is_ok().to_int().to_string());
+    System.println("ready=" + Gpu.ready.to_int().to_string());
+
+    let d = GpuSurfaceDesc.of(128, 64);
+    let present: int = d.present_mode;
+    let alpha: int = d.alpha_mode;
+    System.println("present=" + present.to_string());
+    System.println("alpha=" + alpha.to_string());
+    d.present_mode = GpuPresentMode.Immediate;
+    d.alpha_mode = GpuAlphaMode.Premultiplied;
+    d.color_space = GpuColorSpace.DisplayP3;
+    let immediate: int = d.present_mode;
+    let p3: int = d.color_space;
+    System.println("immediate=" + immediate.to_string());
+    System.println("p3=" + p3.to_string());
+}

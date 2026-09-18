@@ -479,6 +479,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/gpu/gpu_capabilities.dream"),
             ),
             (
+                "<std>/system/gpu/gpu_surface_desc.dream",
+                include_str!("system/gpu/gpu_surface_desc.dream"),
+            ),
+            (
                 "<std>/system/gpu/gpu_surface.dream",
                 include_str!("system/gpu/gpu_surface.dream"),
             ),

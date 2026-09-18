@@ -12,6 +12,10 @@ public static class Gpu {
     static extern fun ready_host(): bool;
 
     @web @native
+    @runtime("gpuCheck")
+    static extern fun check_host(): int;
+
+    @web @native
     @runtime("gpuCapabilities")
     static extern fun capabilities_host(): byte[];
 
@@ -29,6 +33,15 @@ public static class Gpu {
     // True after a successful `try_init`.
     public static get ready(): bool {
         return Gpu.ready_host();
+    }
+
+    // 0 when the device is alive. A non-zero code is a pending uncaptured error or a device-lost
+    // event — pass it to `GpuError.from_code`. Call this after a submit if you need to know
+    // before the next fallible API, and after a backgrounding pause on mobile.
+    public static fun check(): Result<bool, GpuError> {
+        let code = Gpu.check_host();
+        if code == 0 { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "Gpu.check failed"));
     }
 
     // Optional features and limits the device was created with. Everything reads as unavailable
@@ -198,7 +211,14 @@ public static class Gpu {
 
     @web @native
     @runtime("gpuSurfaceConfigure")
-    static extern fun surface_configure(id: int, width: int, height: int): void;
+    static extern fun surface_configure(
+        id: int,
+        width: int,
+        height: int,
+        present_mode: int,
+        alpha_mode: int,
+        color_space: int
+    ): void;
 
     @web @native
     @runtime("gpuSurfacePresent")

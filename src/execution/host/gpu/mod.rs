@@ -26,6 +26,9 @@ use std::path::Path;
 use state::lock_state;
 
 pub(crate) fn is_ready() -> bool {
+    if error::lost_pending() {
+        return false;
+    }
     lock_state().ready
 }
 

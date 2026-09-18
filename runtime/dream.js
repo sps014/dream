@@ -1940,12 +1940,14 @@ function makeGpuHost(getInstance) {
   let blitBindLayout = null;
 
   let lastError = "";
+  let deviceLost = false;
 
   const ERR_UNAVAILABLE = 1;
   const ERR_TIMEOUT = 2;
   const ERR_VALIDATION = 3;
   const ERR_OTHER = 4;
   const ERR_UNSUPPORTED = 5;
+  const ERR_DEVICE_LOST = 6;
 
   // Optional WebGPU features Dream opts into whenever the adapter offers them. A shader or resource
   // may only touch a feature the *device* asked for — reaching for an un-requested one is
@@ -2078,6 +2080,7 @@ function makeGpuHost(getInstance) {
   function classifyErr(err) {
     const msg = String(err && err.message ? err.message : err);
     lastError = msg;
+    if (/device lost|lost device|parent device is lost/i.test(msg)) return ERR_DEVICE_LOST;
     if (/unsupported/i.test(msg)) return ERR_UNSUPPORTED;
     if (/not available|no WebGPU|no WebGPU adapter/i.test(msg)) return ERR_UNAVAILABLE;
     if (/timed out|timeout/i.test(msg)) return ERR_TIMEOUT;
@@ -2107,6 +2110,7 @@ function makeGpuHost(getInstance) {
         }
         device = await adapter.requestDevice({ requiredFeatures, requiredLimits });
         gpuAdapter = adapter;
+        attachDeviceWatchers(device);
         return device;
       })().catch((err) => {
         devicePromise = null;
@@ -2114,6 +2118,37 @@ function makeGpuHost(getInstance) {
       });
     }
     return devicePromise;
+  }
+
+  function markDeviceLost(msg) {
+    deviceLost = true;
+    lastError = msg;
+    device = null;
+    devicePromise = null;
+    gpuAdapter = null;
+  }
+
+  function attachDeviceWatchers(dev) {
+    if (dev.lost && typeof dev.lost.then === "function") {
+      dev.lost.then((info) => {
+        const reason = info && info.reason ? info.reason : "unknown";
+        const message = info && info.message ? info.message : "";
+        markDeviceLost(`device lost (${reason}): ${message}`);
+      }).catch(() => {
+        markDeviceLost("device lost");
+      });
+    }
+    if (typeof dev.addEventListener === "function") {
+      dev.addEventListener("uncapturederror", (ev) => {
+        if (ev && ev.preventDefault) ev.preventDefault();
+        const err = ev && ev.error;
+        const msg = String(err && err.message ? err.message : err || "uncaptured GPU error");
+        lastError = msg;
+        if (/device lost|lost device|parent device is lost/i.test(msg)) {
+          markDeviceLost(msg);
+        }
+      });
+    }
   }
 
   function attachFromAbi(abi, sourceHint) {
@@ -3200,6 +3235,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         device: dev,
         format: navigator.gpu.getPreferredCanvasFormat(),
         alphaMode: s.alphaMode || "opaque",
+        colorSpace: s.colorSpace || "srgb",
       });
       s.configured = true;
     }
@@ -3529,7 +3565,12 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     __attachGpuAbi: attachFromAbi,
 
     gpuIsAvailable: () => !!(globalThis.navigator && globalThis.navigator.gpu),
-    gpuReady: () => device != null,
+    gpuReady: () => device != null && !deviceLost,
+    gpuCheck: () => {
+      if (deviceLost) return ERR_DEVICE_LOST;
+      if (!device) return ERR_UNAVAILABLE;
+      return 0;
+    },
     // All-zero before `gpuTryInit`, so callers see "nothing available" rather than an optimistic
     // answer drawn from an adapter no device was ever requested from.
     gpuCapabilities: () => {
@@ -3574,6 +3615,10 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
     },
     gpuTryInit: async () => {
       try {
+        if (deviceLost) {
+          deviceLost = false;
+          lastError = "";
+        }
         await ensureDevice();
         return 0;
       } catch (e) {
@@ -4246,19 +4291,25 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         configured: false,
         lastTexture: null,
         input: makeInputState(),
+        alphaMode: "opaque",
+        colorSpace: "srgb",
+        presentMode: 2,
       };
       surfaces.set(id, surface);
       attachSurfaceInput(surface);
       syncSurfaceClientSize(surface);
       return id;
     },
-    gpuSurfaceConfigure: (id, width, height) => {
+    gpuSurfaceConfigure: (id, width, height, presentMode, alphaMode, colorSpace) => {
       const s = surfaces.get(id);
       if (!s) throw new Error(`unknown GpuSurface ${id}`);
       s.width = Math.max(1, width | 0);
       s.height = Math.max(1, height | 0);
       s.canvas.width = s.width;
       s.canvas.height = s.height;
+      s.presentMode = presentMode | 0;
+      s.alphaMode = (alphaMode | 0) === 2 ? "premultiplied" : "opaque";
+      s.colorSpace = (colorSpace | 0) === 1 ? "display-p3" : "srgb";
       s.configured = false;
     },
     gpuSurfacePresent: async (id) => {
@@ -4344,7 +4395,8 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
           s.context.configure({
             device: dev,
             format: navigator.gpu.getPreferredCanvasFormat(),
-            alphaMode: "opaque",
+            alphaMode: s.alphaMode || "opaque",
+            colorSpace: s.colorSpace || "srgb",
           });
           s.configured = true;
         }

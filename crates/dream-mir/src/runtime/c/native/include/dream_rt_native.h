@@ -846,7 +846,6 @@ DREAM_ALWAYS_INLINE void dream_str_fini(dream_ptr p) {
     dream_release(parent);
 }
 
-int32_t dream_hash_value(dream_ptr p);
 dream_ptr dream_string_alloc(int32_t units);
 dream_ptr dream_array_new(int32_t len, int32_t esize);
 dream_ptr dream_array_new_shared(int32_t len, int32_t esize);

@@ -58,8 +58,6 @@ int32_t dream_hash_double(double v) {
     return dream_hash_long(bits);
 }
 
-int32_t dream_hash_value(dream_ptr p) { return dream_object_hash_code(p); }
-
 dream_ptr dream_array_to_string(dream_ptr arr) {
     dream_ptr r = dream_string_alloc(1);
     uint16_t *u;

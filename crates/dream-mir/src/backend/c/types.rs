@@ -188,7 +188,6 @@ pub(super) fn runtime_c_name(sym: &str) -> String {
         "from_bytes" => "dream_from_bytes".into(),
         "char_at" => "dream_char_at".into(),
         "byte_at" => "dream_byte_at".into(),
-        "hash_value" => "dream_hash_value".into(),
         "dream_panic" => "dream_panic".into(),
         "print_object" => "dream_print_object".into(),
         "object_to_string" => "dream_object_to_string".into(),

@@ -4,7 +4,7 @@
 //! module only mirrors it; it resolves no GPU resources so the replay step can pre-scan a pass
 //! (it needs the pipeline's sample count before it can build attachments).
 
-pub const STREAM_VERSION: i32 = 1;
+pub const STREAM_VERSION: i32 = 2;
 
 pub struct ColorAttachmentDesc {
     /// `0` the surface swapchain, `1` an offscreen texture.
@@ -26,6 +26,10 @@ pub struct PassDesc {
     pub stencil_load: i32,
     pub stencil_store: i32,
     pub stencil_clear: i32,
+    /// `-1` means no timestamp writes.
+    pub query_set: i32,
+    pub ts_begin: i32,
+    pub ts_end: i32,
 }
 
 pub enum Record {
@@ -84,6 +88,10 @@ pub enum Record {
     DrawIndexedIndirect {
         buffer: i32,
         offset: u64,
+    },
+    WriteTimestamp {
+        query_set: i32,
+        index: i32,
     },
 }
 
@@ -158,6 +166,9 @@ pub fn parse(stream: &[u8]) -> Result<Vec<Record>, String> {
                 let stencil_load = r.i32()?;
                 let stencil_store = r.i32()?;
                 let stencil_clear = r.i32()?;
+                let query_set = r.i32()?;
+                let ts_begin = r.i32()?;
+                let ts_end = r.i32()?;
                 let mut colors = Vec::with_capacity(color_count);
                 for _ in 0..color_count {
                     colors.push(ColorAttachmentDesc {
@@ -178,6 +189,9 @@ pub fn parse(stream: &[u8]) -> Result<Vec<Record>, String> {
                     stencil_load,
                     stencil_store,
                     stencil_clear,
+                    query_set,
+                    ts_begin,
+                    ts_end,
                 })
             }
             2 => Record::EndPass,
@@ -234,6 +248,10 @@ pub fn parse(stream: &[u8]) -> Result<Vec<Record>, String> {
                 buffers: r.i32_array()?,
                 textures: r.i32_array()?,
                 samplers: r.i32_array()?,
+            },
+            15 => Record::WriteTimestamp {
+                query_set: r.i32()?,
+                index: r.i32()?,
             },
             other => return Err(format!("unknown command stream opcode {other}")),
         });

@@ -59,6 +59,17 @@ enum Step {
 struct Pass {
     attachments: Attachments,
     steps: Vec<Step>,
+    query_set: Option<wgpu::QuerySet>,
+    ts_begin: i32,
+    ts_end: i32,
+}
+
+enum FrameOp {
+    Pass(Pass),
+    WriteTimestamp {
+        query_set: wgpu::QuerySet,
+        index: u32,
+    },
 }
 
 fn index_format(fmt: i32) -> wgpu::IndexFormat {
@@ -219,9 +230,23 @@ fn plan_pass(
             Record::BeginPass(_) | Record::EndPass => {
                 return Err("nested render passes are not supported".into())
             }
+            Record::WriteTimestamp { .. } => {
+                return Err("write_timestamp inside a render pass".into())
+            }
         }
     }
-    Ok(Pass { attachments, steps })
+    let query_set = if desc.query_set >= 0 {
+        Some(super::super::queries::gpu_query_set(st, desc.query_set)?)
+    } else {
+        None
+    };
+    Ok(Pass {
+        attachments,
+        steps,
+        query_set,
+        ts_begin: desc.ts_begin,
+        ts_end: desc.ts_end,
+    })
 }
 
 fn draw_step(
@@ -279,6 +304,9 @@ fn run_pass(encoder: &mut wgpu::CommandEncoder, pass: &Pass) {
             })
         })
         .collect();
+    let writes = pass.query_set.as_ref().and_then(|qs| {
+        super::super::queries::render_timestamp_writes(qs, pass.ts_begin, pass.ts_end)
+    });
     let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("dream-rpass"),
         color_attachments: &colors,
@@ -292,7 +320,7 @@ fn run_pass(encoder: &mut wgpu::CommandEncoder, pass: &Pass) {
                 stencil_ops: d.stencil.map(|(load, store)| wgpu::Operations { load, store }),
             }
         }),
-        timestamp_writes: None,
+        timestamp_writes: writes,
         occlusion_query_set: None,
     });
 
@@ -359,35 +387,61 @@ fn uniform_bytes_needed(st: &GpuState, device: &wgpu::Device, records: &[Record]
     total
 }
 
-/// Splits the flat record list into passes, planning each one as it goes.
+/// Splits the flat record list into encoder-level ops (timestamp writes and render passes).
 fn plan_all(
     st: &mut GpuState,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     records: Vec<Record>,
-) -> Result<Vec<Pass>, String> {
-    let mut passes = Vec::new();
-    let mut iter = records.into_iter().peekable();
+) -> Result<(Vec<FrameOp>, Vec<i32>), String> {
+    let mut items = Vec::new();
+    let mut resolve_ids = Vec::new();
+    let mut iter = records.into_iter();
     while let Some(rec) = iter.next() {
-        let desc = match rec {
-            Record::BeginPass(d) => d,
-            _ => return Err("command outside of a render pass".into()),
-        };
-        let mut body = Vec::new();
-        let mut closed = false;
-        for inner in iter.by_ref() {
-            if matches!(inner, Record::EndPass) {
-                closed = true;
-                break;
+        match rec {
+            Record::WriteTimestamp { query_set, index } => {
+                if !device
+                    .features()
+                    .contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS)
+                {
+                    return Err(
+                        "timestamp-query-inside-encoders is not available on this device".into(),
+                    );
+                }
+                if index < 0 {
+                    return Err("write_timestamp index must be >= 0".into());
+                }
+                let qs = super::super::queries::gpu_query_set(st, query_set)?;
+                if !resolve_ids.contains(&query_set) {
+                    resolve_ids.push(query_set);
+                }
+                items.push(FrameOp::WriteTimestamp {
+                    query_set: qs,
+                    index: index as u32,
+                });
             }
-            body.push(inner);
+            Record::BeginPass(desc) => {
+                if desc.query_set >= 0 && !resolve_ids.contains(&desc.query_set) {
+                    resolve_ids.push(desc.query_set);
+                }
+                let mut body = Vec::new();
+                let mut closed = false;
+                for inner in iter.by_ref() {
+                    if matches!(inner, Record::EndPass) {
+                        closed = true;
+                        break;
+                    }
+                    body.push(inner);
+                }
+                if !closed {
+                    return Err("render pass was never ended".into());
+                }
+                items.push(FrameOp::Pass(plan_pass(st, device, queue, &desc, &body)?));
+            }
+            _ => return Err("command outside of a render pass".into()),
         }
-        if !closed {
-            return Err("render pass was never ended".into());
-        }
-        passes.push(plan_pass(st, device, queue, &desc, &body)?);
     }
-    Ok(passes)
+    Ok((items, resolve_ids))
 }
 
 /// Replays a recorded stream: one command encoder, one queue submit.
@@ -413,12 +467,22 @@ pub fn submit(stream: &[u8]) -> Result<(), String> {
     }
 
     let encode = super::super::profile::Span::start();
-    let passes = plan_all(&mut st, &device, &queue, records)?;
+    let (items, resolve_ids) = plan_all(&mut st, &device, &queue, records)?;
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("dream-frame"),
     });
-    for pass in &passes {
-        run_pass(&mut encoder, pass);
+    for item in &items {
+        match item {
+            FrameOp::Pass(pass) => run_pass(&mut encoder, pass),
+            FrameOp::WriteTimestamp { query_set, index } => {
+                encoder.write_timestamp(query_set, *index);
+            }
+        }
+    }
+    for id in &resolve_ids {
+        if let Some(entry) = st.query_sets.get(id) {
+            super::super::queries::encode_resolve(&mut encoder, entry)?;
+        }
     }
     queue.submit(std::iter::once(encoder.finish()));
     if let Some(s) = encode {
@@ -427,11 +491,15 @@ pub fn submit(stream: &[u8]) -> Result<(), String> {
 
     // Offscreen surface mirrors and render-target textures now hold fresh GPU content, so any
     // cached blit bind group and CPU mirror are stale.
-    let touched: Vec<i32> = passes
+    let touched: Vec<i32> = items
         .iter()
-        .flat_map(|p| p.attachments.textures.iter().copied())
+        .filter_map(|item| match item {
+            FrameOp::Pass(p) => Some(p.attachments.textures.iter().copied()),
+            FrameOp::WriteTimestamp { .. } => None,
+        })
+        .flatten()
         .collect();
-    drop(passes);
+    drop(items);
     for id in touched {
         if let Some(t) = st.textures.get_mut(&id) {
             t.dirty_cpu = false;

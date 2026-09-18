@@ -3271,7 +3271,7 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
   // --- Recorded command streams ---------------------------------------------------------------
   // Wire format is documented once, in `crates/dream-stdlib/src/system/gpu/gpu_cmd.dream`.
 
-  const CMD_VERSION = 1;
+  const CMD_VERSION = 2;
 
   function decodeStream(bytes) {
     const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -3321,6 +3321,9 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
             stencilLoad: i32(),
             stencilStore: i32(),
             stencilClear: i32(),
+            querySet: i32(),
+            tsBegin: i32(),
+            tsEnd: i32(),
             colors: [],
           };
           for (let i = 0; i < colorCount; i++) {
@@ -3366,6 +3369,9 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         case 13: records.push({ op: "drawIndexedIndirect", buffer: i32(), offset: i32() }); break;
         case 14:
           records.push({ op: "setBindList", buffers: arr(), textures: arr(), samplers: arr() });
+          break;
+        case 15:
+          records.push({ op: "writeTimestamp", querySet: i32(), index: i32() });
           break;
         default: throw new Error(`unknown command stream opcode ${op}`);
       }
@@ -3528,6 +3534,15 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         depthStoreOp: desc.depthStore === 1 ? "discard" : "store",
       };
     }
+    const qsId = desc.querySet | 0;
+    if (qsId >= 0) {
+      const qs = querySets.get(qsId);
+      if (!qs?.querySet) throw new Error(`unknown query set ${qsId}`);
+      const writes = { querySet: qs.querySet };
+      if (desc.tsBegin >= 0) writes.beginningOfPassWriteIndex = desc.tsBegin | 0;
+      if (desc.tsEnd >= 0) writes.endingOfPassWriteIndex = desc.tsEnd | 0;
+      passDesc.timestampWrites = writes;
+    }
     return { passDesc, format, touched };
   }
 
@@ -3686,21 +3701,46 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
 
     const encoder = dev.createCommandEncoder();
     const touched = [];
+    const resolveIds = [];
+    const noteResolve = (id) => {
+      if (id >= 0 && !resolveIds.includes(id)) resolveIds.push(id);
+    };
     let i = 0;
     while (i < records.length) {
-      if (records[i].op !== "beginPass") {
-        throw new Error(`command '${records[i].op}' outside of a render pass`);
+      const rec = records[i];
+      if (rec.op === "writeTimestamp") {
+        if (!dev.features?.has("timestamp-query-inside-encoders")) {
+          throw new Error("timestamp-query-inside-encoders is not available on this device");
+        }
+        const qs = querySets.get(rec.querySet);
+        if (!qs?.querySet) throw new Error(`unknown query set ${rec.querySet}`);
+        if ((rec.index | 0) < 0) throw new Error("write_timestamp index must be >= 0");
+        encoder.writeTimestamp(qs.querySet, rec.index | 0);
+        noteResolve(rec.querySet | 0);
+        i++;
+        continue;
+      }
+      if (rec.op !== "beginPass") {
+        throw new Error(`command '${rec.op}' outside of a render pass`);
       }
       const desc = records[i++].desc;
+      noteResolve(desc.querySet | 0);
       const body = [];
       let closed = false;
       while (i < records.length) {
-        const rec = records[i++];
-        if (rec.op === "endPass") { closed = true; break; }
-        body.push(rec);
+        const inner = records[i++];
+        if (inner.op === "endPass") { closed = true; break; }
+        body.push(inner);
       }
       if (!closed) throw new Error("render pass was never ended");
       touched.push(...await replayPass(dev, encoder, desc, body));
+    }
+    for (const id of resolveIds) {
+      const qs = querySets.get(id);
+      if (qs?.querySet && qs.resolve && qs.readback) {
+        encoder.resolveQuerySet(qs.querySet, 0, qs.count, qs.resolve, 0);
+        encoder.copyBufferToBuffer(qs.resolve, 0, qs.readback, 0, qs.count * 8);
+      }
     }
     dev.queue.submit([encoder.finish()]);
     await dev.queue.onSubmittedWorkDone();

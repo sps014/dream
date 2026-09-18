@@ -35,6 +35,14 @@ public class GpuEncoder {
         return p;
     }
 
+    // Writes a GPU timestamp between passes. Requires `timestamp_query_inside_encoders`.
+    public fun write_timestamp(queries: GpuQuerySet, index: int): GpuEncoder {
+        this._s.op(GpuCmdOp.WriteTimestamp);
+        this._s.i32(queries.id);
+        this._s.i32(index);
+        return this;
+    }
+
     // Replays every recorded pass into a single host command buffer and submits it.
     @web @native
     public async fun submit(token: Option<CancellationToken> = Option.None): Result<bool, GpuError> {

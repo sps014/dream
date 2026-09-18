@@ -1,5 +1,6 @@
 // GPU timestamp queries: creating a query set matches `Gpu.capabilities().timestamp_query`.
-// When the feature is present, a timed compute pass yields two nanosecond stamps (end >= begin).
+// When the feature is present, a timed compute pass, encoder `write_timestamp`, and a timed
+// render pass each yield two nanosecond stamps (end >= begin).
 import system;
 import system.gpu;
 
@@ -9,6 +10,38 @@ fun ts_nop(out: GpuBuffer<float>, n: int): void {
     if i < n {
         out[i] = out[i] + 1.0;
     }
+}
+
+struct Vertex {
+    public pos: GpuVec2;
+}
+
+struct VsOut {
+    public position: GpuVec4;
+    public color: GpuVec4;
+}
+
+fun make_vert(x: float, y: float): Vertex {
+    let v = Vertex();
+    v.pos = GpuVec2.of(x, y);
+    return v;
+}
+
+@vertex
+fun ts_vs(v: Vertex): VsOut {
+    let o = VsOut();
+    o.position = GpuVec4.of(v.pos.x, v.pos.y, 0.0, 1.0);
+    o.color = GpuVec4.of(1.0, 0.0, 0.0, 1.0);
+    return o;
+}
+
+@fragment
+fun ts_fs(v: VsOut): GpuVec4 {
+    return v.color;
+}
+
+fun stamps_ok(stamps: long[]): bool {
+    return stamps.length >= 2 && stamps[1] >= stamps[0];
 }
 
 async fun main(): void {
@@ -24,6 +57,8 @@ async fun main(): void {
 
     if created.is_err() {
         System.println("timed=0");
+        System.println("encoder_ok=0");
+        System.println("render_ok=0");
         return;
     }
     let qs = created.unwrap();
@@ -33,11 +68,49 @@ async fun main(): void {
     let sub = await pass.submit();
     if sub.is_err() {
         System.println("timed=0");
+        System.println("encoder_ok=0");
+        System.println("render_ok=0");
         return;
     }
     let stamps = qs.read();
     System.println("n=" + stamps.length.to_string());
-    let ordered = stamps.length >= 2 && stamps[1] >= stamps[0];
-    System.println("timed=" + ordered.to_int().to_string());
+    System.println("timed=" + stamps_ok(stamps).to_int().to_string());
     qs.destroy();
+
+    let encoder_ok = !c.timestamp_query_inside_encoders;
+    if c.timestamp_query_inside_encoders {
+        let qs_e = GpuQuerySet.timestamps(2).unwrap();
+        let enc = GpuEncoder.begin();
+        enc.write_timestamp(qs_e, 0);
+        enc.write_timestamp(qs_e, 1);
+        let esub = await enc.submit();
+        encoder_ok = esub.is_ok() && stamps_ok(qs_e.read());
+        qs_e.destroy();
+    }
+    System.println("encoder_ok=" + encoder_ok.to_int().to_string());
+
+    let verts = GpuBuffer<Vertex>.vertex_from([
+        make_vert(-1.0, -1.0),
+        make_vert(3.0, -1.0),
+        make_vert(-1.0, 3.0),
+    ]);
+    let pipe_r = await GpuRenderPipeline.create_ex("ts_vs", "ts_fs", GpuRenderPipelineDesc.defaults());
+    if pipe_r.is_err() {
+        System.println("render_ok=0");
+        return;
+    }
+    let pipe = pipe_r.unwrap();
+    let target = GpuTexture.rgba8(4, 4);
+    let qs_r = GpuQuerySet.timestamps(2).unwrap();
+    let renc = GpuEncoder.begin();
+    let rpass = renc.render_pass(
+        GpuRenderTarget.texture(target).clear(GpuVec4.of(0.0, 0.0, 0.0, 1.0)).timestamps(qs_r, 0, 1)
+    );
+    rpass.set_pipeline(pipe);
+    rpass.set_vertex_buffer(0, verts);
+    rpass.draw(3, 1, 0, 0);
+    rpass.end();
+    let rsub = await renc.submit();
+    System.println("render_ok=" + (rsub.is_ok() && stamps_ok(qs_r.read())).to_int().to_string());
+    qs_r.destroy();
 }

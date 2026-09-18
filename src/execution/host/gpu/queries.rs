@@ -85,6 +85,28 @@ pub fn compute_timestamp_writes<'a>(
     })
 }
 
+pub fn render_timestamp_writes<'a>(
+    qs: &'a wgpu::QuerySet,
+    begin: i32,
+    end: i32,
+) -> Option<wgpu::RenderPassTimestampWrites<'a>> {
+    if begin < 0 && end < 0 {
+        return None;
+    }
+    Some(wgpu::RenderPassTimestampWrites {
+        query_set: qs,
+        beginning_of_pass_write_index: idx(begin),
+        end_of_pass_write_index: idx(end),
+    })
+}
+
+pub fn gpu_query_set(st: &super::state::GpuState, id: i32) -> Result<wgpu::QuerySet, String> {
+    st.query_sets
+        .get(&id)
+        .and_then(|q| q.gpu.clone())
+        .ok_or_else(|| format!("unknown query set {id}"))
+}
+
 /// Resolve the whole set into its staging buffers on `encoder`.
 pub fn encode_resolve(
     encoder: &mut wgpu::CommandEncoder,

@@ -29,6 +29,9 @@ public class GpuRenderTarget {
     _stencil_load: GpuLoadOp;
     _stencil_store: GpuStoreOp;
     _stencil_clear: int;
+    _query_set: int;
+    _ts_begin: int;
+    _ts_end: int;
 
     static fun empty(): GpuRenderTarget {
         let t = GpuRenderTarget();
@@ -41,6 +44,9 @@ public class GpuRenderTarget {
         t._stencil_load = GpuLoadOp.Clear;
         t._stencil_store = GpuStoreOp.Store;
         t._stencil_clear = 0;
+        t._query_set = -1;
+        t._ts_begin = -1;
+        t._ts_end = -1;
         return t;
     }
 
@@ -150,6 +156,15 @@ public class GpuRenderTarget {
         return this;
     }
 
+    // Writes GPU timestamps at `begin_index` / `end_index` of `queries` for this pass.
+    // Pass `-1` for an index to skip that write. Requires `timestamp_query`.
+    public fun timestamps(queries: GpuQuerySet, begin_index: int, end_index: int): GpuRenderTarget {
+        this._query_set = queries.id;
+        this._ts_begin = begin_index;
+        this._ts_end = end_index;
+        return this;
+    }
+
     internal fun record(s: GpuCmdStream): void {
         s.op(GpuCmdOp.BeginRenderPass);
         s.i32(this._n);
@@ -160,6 +175,9 @@ public class GpuRenderTarget {
         s.load_op(this._stencil_load);
         s.store_op(this._stencil_store);
         s.i32(this._stencil_clear);
+        s.i32(this._query_set);
+        s.i32(this._ts_begin);
+        s.i32(this._ts_end);
         for (let i = 0; i < this._n; i = i + 1) {
             let a = this._colors[i];
             s.i32(a.kind);

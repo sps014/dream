@@ -1,8 +1,9 @@
 module system.gpu;
 
 // GPU timestamp query set. Requires `Gpu.capabilities().timestamp_query`.
-// Write begin/end stamps by passing the set to `ComputePass.begin_timed`, then `read()` after
-// `submit`. Values are nanoseconds (`tick * Gpu.timestamp_period()`).
+// Write begin/end stamps via `ComputePass.begin_timed`, `GpuRenderTarget.timestamps`, or
+// `GpuEncoder.write_timestamp`, then `read()` after submit. Values are nanoseconds
+// (`tick * Gpu.timestamp_period()`).
 public struct GpuQuerySet {
     _id: int;
     _count: int;

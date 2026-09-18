@@ -16,12 +16,14 @@ module system.gpu;
 //                      depth_tex:i32      (-1 none, -2 the surface's own depth, else texture id)
 //                      depth_load:i32 depth_store:i32 depth_clear:f32
 //                      stencil_load:i32 stencil_store:i32 stencil_clear:i32
+//                      query_set:i32 ts_begin:i32 ts_end:i32  (-1 skips that write)
 //                      then color_count x [ kind:i32 (0 surface, 1 texture)
 //                                           id:i32
 //                                           resolve:i32 (-1 none, else texture id)
 //                                           load:i32 store:i32
 //                                           clear_r:f32 clear_g:f32 clear_b:f32 clear_a:f32 ]
 //   EndPass            -
+//   WriteTimestamp     query_set:i32 index:i32   (encoder, between passes)
 //   SetPipeline        pipeline:i32
 //   SetBindGroup       group:i32 bind_group:i32
 //   SetBindList        3 x [ count:i32, count x id:i32 ] — buffers, textures, samplers
@@ -50,11 +52,12 @@ internal enum GpuCmdOp {
     DrawIndirect = 12,
     DrawIndexedIndirect = 13,
     SetBindList = 14,
+    WriteTimestamp = 15,
 }
 
 // Current stream format version. Hosts reject anything else rather than mis-decoding.
 internal static class GpuCmdVersion {
-    public static fun current(): int { return 1; }
+    public static fun current(): int { return 2; }
 }
 
 // Growable little-endian writer for the format above.

@@ -48,10 +48,14 @@ impl<'a> Analyzer<'a> {
         self.hir_emit_entry_tail_return(function, diagnostics);
         self.hir_finish_function(diagnostics, errors_before);
         // Unused `let`/`const` bindings (warnings only — do not fail the compile).
-        param_table
-            .as_ref()
-            .borrow()
-            .report_unused_locals(diagnostics);
+        // Synthesized extend methods have no source file; skip so generated locals do not
+        // surface as location-less warnings.
+        if function.file_path.is_some() {
+            param_table
+                .as_ref()
+                .borrow()
+                .report_unused_locals(diagnostics);
+        }
         // check return
         let mut graph = FunctionControlGraph::new(function, diagnostics);
         graph.build();

@@ -1,6 +1,6 @@
 module system.json;
 
-// The public JSON API.
+// The public JSON API: one pair of names for text <-> value.
 
 public static class Json {
     @intrinsic("json_serialize")
@@ -13,26 +13,26 @@ public static class Json {
     @intrinsic("json_from_value")
     static extern fun from_value<T>(borrow value: JsonValue): T;
 
-    // Compact stringify of a dynamic `JsonValue` tree.
-    public static fun stringify(borrow value: JsonValue): string {
-        let sb = StringBuilder();
-        Json._json_stringify_into(sb, value);
-        return sb.build();
-    }
-
-    // Pretty-prints `value` with newlines and `indent` spaces per nesting level (e.g. 2 or 4).
-    // Pass 0 to fall back to compact output.
-    public static fun stringify_pretty(borrow value: JsonValue, indent: int): string {
+    // Pretty-prints a `JsonValue` with newlines and `indent` spaces per nesting level.
+    // Pass 0 to fall back to compact `_stringify`.
+    public static fun serialize_pretty(borrow value: JsonValue, indent: int): string {
         if indent <= 0 {
-            return Json.stringify(value);
+            return Json._stringify(value);
         }
         let sb = StringBuilder();
         Json._json_stringify_pretty_into(sb, value, indent, 0);
         return sb.build();
     }
 
-    // Parses `text` into a dynamic `JsonValue` tree (no intermediate byte[] copy).
-    public static fun parse(borrow text: string): Result<JsonValue, ParseError> {
+    // Compact JSON text of a dynamic `JsonValue` tree (used by `serialize` for `JsonValue`).
+    public static fun _stringify(borrow value: JsonValue): string {
+        let sb = StringBuilder();
+        Json._json_stringify_into(sb, value);
+        return sb.build();
+    }
+
+    // Parses `text` into a dynamic `JsonValue` tree (used by `deserialize<JsonValue>`).
+    public static fun _parse(borrow text: string): Result<JsonValue, ParseError> {
         if text.is_empty() {
             return Result.Err(ParseError.invalid("empty JSON input"));
         }

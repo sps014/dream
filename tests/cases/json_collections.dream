@@ -97,4 +97,11 @@ fun main(): void {
         Ok(xs) => System.println(xs.get(0)),
         Err(e) => System.println(e.message()),
     }
+
+    System.println(Json.serialize(top_list));
+    System.println(Json.serialize(top_set));
+    System.println(Json.serialize(top_map));
+
+    let data: Map<string, string> = {"key": "value"};
+    System.println(Json.serialize(data));
 }

@@ -21,7 +21,7 @@
     "configurationDefaults": {
       "[dream]": {
         "editor.defaultFormatter": "dream-lang.dream-lang",
-        "editor.formatOnSave": false,
+        "editor.formatOnSave": true,
         "editor.autoIndent": "full",
         "editor.tabSize": 4,
         "editor.insertSpaces": true,

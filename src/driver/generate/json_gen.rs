@@ -8,7 +8,7 @@ use dream_syntax::nodes::expression::ExpressionNode;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::EnumDeclarationNode;
 #[cfg(feature = "native")]
-use dream_syntax::nodes::Type;
+use dream_syntax::nodes::{FunctionNode, Type};
 #[cfg(feature = "native")]
 use std::collections::BTreeSet;
 use std::collections::HashSet;
@@ -439,99 +439,163 @@ fn collect_collections_from_type(
 }
 
 #[cfg(feature = "native")]
+fn is_json_codec_method(name: &str) -> bool {
+    matches!(name, "serialize" | "deserialize" | "from_value")
+}
+
+/// Reconstructs a collection type from an AST expression when `Json.serialize` has no type args.
+#[cfg(feature = "native")]
+fn infer_expr_type(expr: &ExpressionNode<'_>, locals: &[(String, Type)]) -> Option<Type> {
+    match expr {
+        ExpressionNode::Identifier(tok) => locals
+            .iter()
+            .rev()
+            .find(|(n, _)| n == &tok.text)
+            .map(|(_, t)| t.clone()),
+        ExpressionNode::Parenthesized(_, inner) => infer_expr_type(inner, locals),
+        ExpressionNode::Cast(_, ty, _) => Some(ty.clone()),
+        ExpressionNode::FunctionCall(name, type_args, _) => match name.text.as_str() {
+            "List" | "Set" | "Map" | "SortedMap" => {
+                Some(Type::Struct(name.clone(), type_args.clone()))
+            }
+            _ => None,
+        },
+        ExpressionNode::NamedArg(_, inner) | ExpressionNode::RefArgument(_, inner) => {
+            infer_expr_type(inner, locals)
+        }
+        _ => None,
+    }
+}
+
+#[cfg(feature = "native")]
+fn collect_json_codec_call(
+    receiver: &ExpressionNode<'_>,
+    method: &str,
+    type_args: &Option<Vec<Type>>,
+    args: &[ExpressionNode<'_>],
+    jsonable: &HashSet<String>,
+    locals: &[(String, Type)],
+    out: &mut BTreeSet<CollectionSpec>,
+) {
+    if !is_json_static_receiver(receiver) || !is_json_codec_method(method) {
+        return;
+    }
+    if let Some(types) = type_args {
+        for ty in types {
+            collect_collections_from_type(ty, jsonable, out);
+        }
+        return;
+    }
+    if method == "serialize" || method == "serialize_pretty" {
+        if let Some(arg) = args.first() {
+            if let Some(ty) = infer_expr_type(arg, locals) {
+                collect_collections_from_type(&ty, jsonable, out);
+            }
+        }
+    }
+}
+
+#[cfg(feature = "native")]
 fn collect_collections_from_expr(
     expr: &ExpressionNode<'_>,
     jsonable: &HashSet<String>,
     out: &mut BTreeSet<CollectionSpec>,
+    locals: &[(String, Type)],
 ) {
     match expr {
         ExpressionNode::MethodCall(receiver, method, type_args, args) => {
-            collect_collections_from_expr(receiver, jsonable, out);
+            collect_collections_from_expr(receiver, jsonable, out, locals);
             for arg in args {
-                collect_collections_from_expr(arg, jsonable, out);
+                collect_collections_from_expr(arg, jsonable, out, locals);
             }
-            // Only `Json.serialize` / `deserialize` / `from_value` type args need top-level
-            // collection adapters — not every `List<T>()` constructor or array annotation.
-            if is_json_static_receiver(receiver)
-                && (method.text == "serialize"
-                    || method.text == "deserialize"
-                    || method.text == "from_value")
-            {
-                if let Some(types) = type_args {
-                    for ty in types {
-                        collect_collections_from_type(ty, jsonable, out);
-                    }
-                }
-            }
+            collect_json_codec_call(
+                receiver,
+                &method.text,
+                type_args,
+                args,
+                jsonable,
+                locals,
+                out,
+            );
         }
         ExpressionNode::FunctionCall(_, _, args) => {
             for arg in args {
-                collect_collections_from_expr(arg, jsonable, out);
+                collect_collections_from_expr(arg, jsonable, out, locals);
             }
         }
         ExpressionNode::Call(callee, _, args) => {
-            collect_collections_from_expr(callee, jsonable, out);
+            collect_collections_from_expr(callee, jsonable, out, locals);
             for arg in args {
-                collect_collections_from_expr(arg, jsonable, out);
+                collect_collections_from_expr(arg, jsonable, out, locals);
             }
         }
         ExpressionNode::Binary(a, _, b) => {
-            collect_collections_from_expr(a, jsonable, out);
-            collect_collections_from_expr(b, jsonable, out);
+            collect_collections_from_expr(a, jsonable, out, locals);
+            collect_collections_from_expr(b, jsonable, out, locals);
         }
-        ExpressionNode::Unary(_, a) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::Unary(_, a) => collect_collections_from_expr(a, jsonable, out, locals),
         ExpressionNode::IncDec { target, .. } => {
-            collect_collections_from_expr(target, jsonable, out)
+            collect_collections_from_expr(target, jsonable, out, locals)
         }
-        ExpressionNode::Parenthesized(_, a) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::Parenthesized(_, a) => {
+            collect_collections_from_expr(a, jsonable, out, locals)
+        }
         ExpressionNode::IndexAccess(a, b) => {
-            collect_collections_from_expr(a, jsonable, out);
-            collect_collections_from_expr(b, jsonable, out);
+            collect_collections_from_expr(a, jsonable, out, locals);
+            collect_collections_from_expr(b, jsonable, out, locals);
         }
-        ExpressionNode::Cast(_, _, a) => collect_collections_from_expr(a, jsonable, out),
-        ExpressionNode::MemberAccess(a, _) => collect_collections_from_expr(a, jsonable, out),
-        ExpressionNode::IsExpression(a, _, _) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::Cast(_, _, a) => collect_collections_from_expr(a, jsonable, out, locals),
+        ExpressionNode::MemberAccess(a, _) => {
+            collect_collections_from_expr(a, jsonable, out, locals)
+        }
+        ExpressionNode::IsExpression(a, _, _) => {
+            collect_collections_from_expr(a, jsonable, out, locals)
+        }
         ExpressionNode::Ternary(a, b, c) => {
-            collect_collections_from_expr(a, jsonable, out);
-            collect_collections_from_expr(b, jsonable, out);
-            collect_collections_from_expr(c, jsonable, out);
+            collect_collections_from_expr(a, jsonable, out, locals);
+            collect_collections_from_expr(b, jsonable, out, locals);
+            collect_collections_from_expr(c, jsonable, out, locals);
         }
-        ExpressionNode::Await(_, a) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::Await(_, a) => collect_collections_from_expr(a, jsonable, out, locals),
         ExpressionNode::Switch(_, a, arms) => {
-            collect_collections_from_expr(a, jsonable, out);
+            collect_collections_from_expr(a, jsonable, out, locals);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
-                    collect_collections_from_expr(guard, jsonable, out);
+                    collect_collections_from_expr(guard, jsonable, out, locals);
                 }
                 match &arm.body {
                     dream_syntax::nodes::expression::SwitchArmBody::Expr(e) => {
-                        collect_collections_from_expr(e, jsonable, out);
+                        collect_collections_from_expr(e, jsonable, out, locals);
                     }
                     dream_syntax::nodes::expression::SwitchArmBody::Block(stmts) => {
+                        let mut nested = locals.to_vec();
                         for stmt in *stmts {
-                            collect_collections_from_stmts(stmt, jsonable, out);
+                            collect_collections_from_stmts(stmt, jsonable, out, &mut nested);
                         }
                     }
                 }
             }
         }
-        ExpressionNode::Try(a) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::Try(a) => collect_collections_from_expr(a, jsonable, out, locals),
         ExpressionNode::Lambda(lambda) => match &lambda.body {
             dream_syntax::nodes::expression::LambdaBody::Expr(e) => {
-                collect_collections_from_expr(e, jsonable, out);
+                collect_collections_from_expr(e, jsonable, out, locals);
             }
             dream_syntax::nodes::expression::LambdaBody::Block(stmts) => {
+                let mut nested = locals.to_vec();
                 for stmt in *stmts {
-                    collect_collections_from_stmts(stmt, jsonable, out);
+                    collect_collections_from_stmts(stmt, jsonable, out, &mut nested);
                 }
             }
         },
-        ExpressionNode::NamedArg(_, a) => collect_collections_from_expr(a, jsonable, out),
-        ExpressionNode::RefArgument(_, a) => collect_collections_from_expr(a, jsonable, out),
+        ExpressionNode::NamedArg(_, a) => collect_collections_from_expr(a, jsonable, out, locals),
+        ExpressionNode::RefArgument(_, a) => {
+            collect_collections_from_expr(a, jsonable, out, locals)
+        }
         ExpressionNode::SyntaxBlock(block) => {
             for part in &block.parts {
                 if let dream_syntax::nodes::expression::SyntaxBlockPart::Splice(e) = part {
-                    collect_collections_from_expr(e, jsonable, out);
+                    collect_collections_from_expr(e, jsonable, out, locals);
                 }
             }
         }
@@ -539,17 +603,17 @@ fn collect_collections_from_expr(
         | ExpressionNode::TupleLiteral(_, elems)
         | ExpressionNode::SetLiteral(_, elems) => {
             for elem in elems {
-                collect_collections_from_expr(elem, jsonable, out);
+                collect_collections_from_expr(elem, jsonable, out, locals);
             }
         }
         ExpressionNode::ArrayRepeat(_, v, n) => {
-            collect_collections_from_expr(v, jsonable, out);
-            collect_collections_from_expr(n, jsonable, out);
+            collect_collections_from_expr(v, jsonable, out, locals);
+            collect_collections_from_expr(n, jsonable, out, locals);
         }
         ExpressionNode::MapLiteral(_, pairs) => {
             for (k, v) in pairs {
-                collect_collections_from_expr(k, jsonable, out);
-                collect_collections_from_expr(v, jsonable, out);
+                collect_collections_from_expr(k, jsonable, out, locals);
+                collect_collections_from_expr(v, jsonable, out, locals);
             }
         }
         ExpressionNode::Literal(_)
@@ -560,126 +624,159 @@ fn collect_collections_from_expr(
 }
 
 #[cfg(feature = "native")]
+fn bind_local(locals: &mut Vec<(String, Type)>, name: &str, ty: Type) {
+    locals.push((name.to_string(), ty));
+}
+
+#[cfg(feature = "native")]
 fn collect_collections_from_stmts(
     stmt: &dream_syntax::nodes::StatementNode<'_>,
     jsonable: &HashSet<String>,
     out: &mut BTreeSet<CollectionSpec>,
+    locals: &mut Vec<(String, Type)>,
 ) {
     use dream_syntax::nodes::StatementNode;
     match stmt {
         StatementNode::ExpressionStatement(expr) | StatementNode::AwaitStmt(expr) => {
-            collect_collections_from_expr(expr, jsonable, out)
+            collect_collections_from_expr(expr, jsonable, out, locals)
         }
-        StatementNode::Declaration(_, _, init, _)
-        | StatementNode::TupleDeclaration { init, .. } => {
-            collect_collections_from_expr(init, jsonable, out);
+        StatementNode::Declaration(name, ty, init, _) => {
+            collect_collections_from_expr(init, jsonable, out, locals);
+            if let Some(t) = ty {
+                bind_local(locals, &name.text, t.clone());
+            } else if let Some(t) = infer_expr_type(init, locals) {
+                bind_local(locals, &name.text, t);
+            }
+        }
+        StatementNode::TupleDeclaration { init, .. } => {
+            collect_collections_from_expr(init, jsonable, out, locals);
         }
         StatementNode::Return(expr) => {
             if let Some(e) = expr {
-                collect_collections_from_expr(e, jsonable, out);
+                collect_collections_from_expr(e, jsonable, out, locals);
             }
         }
         StatementNode::IfElse(cond, then_body, else_ifs, else_body) => {
-            collect_collections_from_expr(cond, jsonable, out);
+            collect_collections_from_expr(cond, jsonable, out, locals);
+            let mark = locals.len();
             for s in *then_body {
-                collect_collections_from_stmts(s, jsonable, out);
+                collect_collections_from_stmts(s, jsonable, out, locals);
             }
+            locals.truncate(mark);
             for (c, body) in else_ifs {
-                collect_collections_from_expr(c, jsonable, out);
+                collect_collections_from_expr(c, jsonable, out, locals);
+                let mark = locals.len();
                 for s in *body {
-                    collect_collections_from_stmts(s, jsonable, out);
+                    collect_collections_from_stmts(s, jsonable, out, locals);
                 }
+                locals.truncate(mark);
             }
             if let Some(body) = else_body {
+                let mark = locals.len();
                 for s in *body {
-                    collect_collections_from_stmts(s, jsonable, out);
+                    collect_collections_from_stmts(s, jsonable, out, locals);
                 }
+                locals.truncate(mark);
             }
         }
         StatementNode::While(cond, body) | StatementNode::DoWhile(body, cond) => {
-            collect_collections_from_expr(cond, jsonable, out);
+            collect_collections_from_expr(cond, jsonable, out, locals);
+            let mark = locals.len();
             for s in *body {
-                collect_collections_from_stmts(s, jsonable, out);
+                collect_collections_from_stmts(s, jsonable, out, locals);
             }
+            locals.truncate(mark);
         }
         StatementNode::For(init, cond, step, body) => {
+            let mark = locals.len();
             if let Some(i) = init {
-                collect_collections_from_stmts(i, jsonable, out);
+                collect_collections_from_stmts(i, jsonable, out, locals);
             }
             if let Some(c) = cond {
-                collect_collections_from_expr(c, jsonable, out);
+                collect_collections_from_expr(c, jsonable, out, locals);
             }
             if let Some(s) = step {
-                collect_collections_from_stmts(s, jsonable, out);
+                collect_collections_from_stmts(s, jsonable, out, locals);
             }
             for st in *body {
-                collect_collections_from_stmts(st, jsonable, out);
+                collect_collections_from_stmts(st, jsonable, out, locals);
             }
+            locals.truncate(mark);
         }
         StatementNode::ForEach(_, iterable, _, _, body) => {
-            collect_collections_from_expr(iterable, jsonable, out);
+            collect_collections_from_expr(iterable, jsonable, out, locals);
+            let mark = locals.len();
             for s in *body {
-                collect_collections_from_stmts(s, jsonable, out);
+                collect_collections_from_stmts(s, jsonable, out, locals);
             }
+            locals.truncate(mark);
         }
-        StatementNode::Labeled(_, inner) => collect_collections_from_stmts(inner, jsonable, out),
+        StatementNode::Labeled(_, inner) => {
+            collect_collections_from_stmts(inner, jsonable, out, locals)
+        }
         StatementNode::Switch(subject, arms, default_body) => {
-            collect_collections_from_expr(subject, jsonable, out);
+            collect_collections_from_expr(subject, jsonable, out, locals);
             for (labels, body) in arms {
                 for label in labels {
-                    collect_collections_from_expr(label, jsonable, out);
+                    collect_collections_from_expr(label, jsonable, out, locals);
                 }
+                let mark = locals.len();
                 for s in *body {
-                    collect_collections_from_stmts(s, jsonable, out);
+                    collect_collections_from_stmts(s, jsonable, out, locals);
                 }
+                locals.truncate(mark);
             }
             if let Some(body) = default_body {
+                let mark = locals.len();
                 for s in *body {
-                    collect_collections_from_stmts(s, jsonable, out);
+                    collect_collections_from_stmts(s, jsonable, out, locals);
                 }
+                locals.truncate(mark);
             }
         }
         StatementNode::Lock(target, body) => {
-            collect_collections_from_expr(target, jsonable, out);
+            collect_collections_from_expr(target, jsonable, out, locals);
+            let mark = locals.len();
             for s in *body {
-                collect_collections_from_stmts(s, jsonable, out);
+                collect_collections_from_stmts(s, jsonable, out, locals);
             }
+            locals.truncate(mark);
         }
         StatementNode::Defer(budget, body) => {
             if let Some(q) = budget {
-                collect_collections_from_expr(q, jsonable, out);
+                collect_collections_from_expr(q, jsonable, out, locals);
             }
+            let mark = locals.len();
             for s in *body {
-                collect_collections_from_stmts(s, jsonable, out);
+                collect_collections_from_stmts(s, jsonable, out, locals);
             }
+            locals.truncate(mark);
         }
         StatementNode::Assignment(_, rhs) | StatementNode::MemberAssignment(_, _, rhs) => {
-            collect_collections_from_expr(rhs, jsonable, out);
+            collect_collections_from_expr(rhs, jsonable, out, locals);
         }
         StatementNode::IndexAssignment(a, b, rhs) => {
-            collect_collections_from_expr(a, jsonable, out);
-            collect_collections_from_expr(b, jsonable, out);
-            collect_collections_from_expr(rhs, jsonable, out);
+            collect_collections_from_expr(a, jsonable, out, locals);
+            collect_collections_from_expr(b, jsonable, out, locals);
+            collect_collections_from_expr(rhs, jsonable, out, locals);
         }
         StatementNode::FunctionInvocation(_, _, args) => {
             for arg in args {
-                collect_collections_from_expr(arg, jsonable, out);
+                collect_collections_from_expr(arg, jsonable, out, locals);
             }
         }
         StatementNode::MethodInvocation(receiver, method, type_args, args) => {
-            if is_json_static_receiver(receiver)
-                && (method.text == "serialize"
-                    || method.text == "deserialize"
-                    || method.text == "from_value")
-            {
-                if let Some(types) = type_args {
-                    for ty in types {
-                        collect_collections_from_type(ty, jsonable, out);
-                    }
-                }
-            }
+            collect_json_codec_call(
+                receiver,
+                &method.text,
+                type_args,
+                args,
+                jsonable,
+                locals,
+                out,
+            );
             for arg in args {
-                collect_collections_from_expr(arg, jsonable, out);
+                collect_collections_from_expr(arg, jsonable, out, locals);
             }
         }
         StatementNode::Break(_)
@@ -701,8 +798,25 @@ fn is_user_source(path: Option<&std::rc::Rc<str>>) -> bool {
     }
 }
 
-/// Top-level collection adapters are only needed for `Json.serialize` / `deserialize` /
-/// `from_value` type arguments. `@json` field collections are inlined in generated `to_json`.
+/// Top-level collection adapters for `Json.serialize` / `deserialize` / `from_value` /
+/// `serialize_pretty`. `@json` field collections are inlined in generated `to_json`.
+#[cfg(feature = "native")]
+fn collect_from_function(
+    f: &FunctionNode<'_>,
+    jsonable: &HashSet<String>,
+    out: &mut BTreeSet<CollectionSpec>,
+) {
+    let mut locals = Vec::new();
+    for p in &f.parameters {
+        if p.name.text != "this" {
+            locals.push((p.name.text.clone(), p.type_.clone()));
+        }
+    }
+    for stmt in f.body {
+        collect_collections_from_stmts(stmt, jsonable, out, &mut locals);
+    }
+}
+
 #[cfg(feature = "native")]
 fn collect_all_collections(
     acc: &ProgramAccumulator<'_>,
@@ -713,14 +827,28 @@ fn collect_all_collections(
         if !is_user_source(g.file_path.as_ref()) {
             continue;
         }
-        collect_collections_from_expr(&g.initializer, jsonable, &mut out);
+        collect_collections_from_expr(&g.initializer, jsonable, &mut out, &[]);
     }
     for f in &acc.all_functions {
         if !is_user_source(f.file_path.as_ref()) {
             continue;
         }
-        for stmt in f.body {
-            collect_collections_from_stmts(stmt, jsonable, &mut out);
+        collect_from_function(f, jsonable, &mut out);
+    }
+    for s in &acc.all_structs {
+        if !is_user_source(s.file_path.as_ref()) {
+            continue;
+        }
+        for m in &s.methods {
+            collect_from_function(m, jsonable, &mut out);
+        }
+    }
+    for e in &acc.all_extends {
+        if e.is_synthesized || !is_user_source(e.file_path.as_ref()) {
+            continue;
+        }
+        for m in &e.methods {
+            collect_from_function(m, jsonable, &mut out);
         }
     }
     out.into_iter().collect()

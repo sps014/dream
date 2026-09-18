@@ -2266,6 +2266,36 @@ fn bootstrap_symbol_has_no_auto_import() {
 }
 
 #[test]
+fn system_missing_method_auto_import() {
+    use dream_lsp::analysis::analyze_document;
+    use dream_lsp::code_actions::{
+        auto_import_actions, unresolved_names_from_message,
+    };
+    use tower_lsp::lsp_types::Url;
+
+    let src = "fun main(): void {\n    System.println(\"hi\");\n}\n";
+    let outcome = analyze_document(None, src);
+    let diag = outcome
+        .diagnostics
+        .iter()
+        .find(|d| d.message.contains("println") || d.message.contains("System"))
+        .expect("missing System.println diagnostic");
+    let names = unresolved_names_from_message(&diag.message);
+    assert!(
+        names.iter().any(|n| n == "System"),
+        "expected System from {:?}, message {:?}",
+        names,
+        diag.message
+    );
+    let uri = Url::parse("file:///tmp/main.dream").unwrap();
+    let actions = auto_import_actions(&uri, src, "System", None);
+    assert!(
+        !actions.is_empty(),
+        "System.println without import system should offer Import 'system'"
+    );
+}
+
+#[test]
 fn completion_additional_edits_for_list() {
     use dream_lsp::code_actions::{import_text_edits, unloaded_stdlib_completions};
 

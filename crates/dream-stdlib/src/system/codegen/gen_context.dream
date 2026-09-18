@@ -99,7 +99,7 @@ public class GenContext {
     static fun parse_snapshot(text_res: Result<string, IoError>): Result<GenContext, string> {
         switch (text_res) {
             Ok(text) => {
-                let parsed = Json.parse(text);
+                let parsed = Json._parse(text);
                 switch (parsed) {
                     Ok(root) => {
                         let arr = root.get("blocks").unwrap_or(JsonValue.array());

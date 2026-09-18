@@ -1449,7 +1449,7 @@ public static class JsonGenerator {
             }
 
             if field.is_type_param {
-                to_cb.line("__o.set(\"" + json_key + "\", Json.parse(Json.serialize(this." + fname + ")).unwrap_or(JsonValue.none()));");
+                to_cb.line("__o.set(\"" + json_key + "\", Json._parse(Json.serialize(this." + fname + ")).unwrap_or(JsonValue.none()));");
                 JsonGenerator.write_object_key(write_cb, json_key);
                 write_cb.line("sb.append(Json.serialize(this." + fname + "));");
                 first_field = JsonGenerator.comma_append(
@@ -1580,7 +1580,7 @@ public static class JsonGenerator {
                 if field.json_ignore {
                     // skip serialize
                 } else if (field.is_type_param) {
-                    to_cb.line("__o.set(\"" + fname + "\", Json.parse(Json.serialize(" + fname + ")).unwrap_or(JsonValue.none()));");
+                    to_cb.line("__o.set(\"" + fname + "\", Json._parse(Json.serialize(" + fname + ")).unwrap_or(JsonValue.none()));");
                     write_cb.line("sb.append_char(',');");
                     write_cb.line("sb.append(\"\\\"" + fname + "\\\":\");");
                     write_cb.line("sb.append(Json.serialize(" + fname + "));");

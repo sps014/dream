@@ -739,22 +739,26 @@ fn emit_extend(
     s.push_str(
         "    public static async fun generated_dispatch(borrow ctx: RequestContext): HttpOutgoing {\n",
     );
-    s.push_str("        let method = ctx.incoming.method;\n");
-    s.push_str("        let path = ctx.incoming.path;\n");
-    for (i, r) in routes.iter().enumerate() {
-        s.push_str(&format!(
-            "        let __m{i} = WebApp.match_path(\"{}\", path);\n",
-            escape_path(&r.path)
-        ));
-        s.push_str(&format!(
-            "        if method == \"{}\" && __m{i}.is_some() {{\n",
-            r.method
-        ));
-        s.push_str(&format!("            let __params{i} = __m{i}.unwrap();\n"));
-        emit_handler_body(&mut s, r, i, acc);
-        s.push_str("        }\n");
+    if routes.is_empty() {
+        s.push_str("        return HttpOutgoing.not_found();\n");
+    } else {
+        s.push_str("        let method = ctx.incoming.method;\n");
+        s.push_str("        let path = ctx.incoming.path;\n");
+        for (i, r) in routes.iter().enumerate() {
+            s.push_str(&format!(
+                "        let __m{i} = WebApp.match_path(\"{}\", path);\n",
+                escape_path(&r.path)
+            ));
+            s.push_str(&format!(
+                "        if method == \"{}\" && __m{i}.is_some() {{\n",
+                r.method
+            ));
+            s.push_str(&format!("            let __params{i} = __m{i}.unwrap();\n"));
+            emit_handler_body(&mut s, r, i, acc);
+            s.push_str("        }\n");
+        }
+        s.push_str("        return HttpOutgoing.not_found();\n");
     }
-    s.push_str("        return HttpOutgoing.not_found();\n");
     s.push_str("    }\n");
     s
 }

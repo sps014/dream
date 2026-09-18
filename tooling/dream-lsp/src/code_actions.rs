@@ -121,30 +121,59 @@ pub fn import_text_edits(text: &str, package: &str) -> Option<Vec<TextEdit>> {
     }])
 }
 
-/// Pull a likely identifier from a diagnostic message / cursor word.
-pub fn unresolved_name_from_message(message: &str) -> Option<String> {
-    // "variable X does not exist at: ..."
+/// Names to try for auto-import, ordered by how likely they name an importable type.
+pub fn unresolved_names_from_message(message: &str) -> Vec<String> {
+    let mut names = Vec::new();
     if let Some(rest) = message.strip_prefix("variable ") {
         let name: String = rest
             .chars()
             .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
             .collect();
         if !name.is_empty() {
-            return Some(name);
+            names.push(name);
         }
     }
-    // "Struct 'X' not found"
-    if let Some(start) = message.find('\'') {
-        let rest = &message[start + 1..];
-        if let Some(end) = rest.find('\'') {
-            let name = &rest[..end];
-            if !name.is_empty() {
-                return Some(name.to_string());
+    // `Type 'System' has no static method 'println'` — import the package that extends System.
+    if let Some(ty) = quoted_after(message, "Type '") {
+        names.push(ty);
+    }
+    if let Some(ty) = quoted_after(message, "class '") {
+        names.push(ty);
+    }
+    if let Some(ty) = quoted_after(message, "Struct '") {
+        names.push(ty);
+    }
+    // Quoted identifiers as a fallback (`Struct 'X' not found`).
+    if names.is_empty() {
+        if let Some(start) = message.find('\'') {
+            let rest = &message[start + 1..];
+            if let Some(end) = rest.find('\'') {
+                let name = &rest[..end];
+                if !name.is_empty() {
+                    names.push(name.to_string());
+                }
             }
         }
     }
-    // "Function does not exist"
-    None
+    names
+}
+
+fn quoted_after(message: &str, marker: &str) -> Option<String> {
+    let rest = message.split_once(marker)?.1;
+    let name: String = rest
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+        .collect();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name)
+    }
+}
+
+/// Pull a likely identifier from a diagnostic message / cursor word.
+pub fn unresolved_name_from_message(message: &str) -> Option<String> {
+    unresolved_names_from_message(message).into_iter().next()
 }
 
 /// Maps public top-level symbols in installed `dream_packages/` to their import path

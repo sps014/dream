@@ -33,6 +33,17 @@ fn tuple_element_completions() {
 }
 
 #[test]
+fn future_call_offers_await() {
+    let comps = completion_names(
+        "async fun g(): int { return 1; }\nasync fun main(): void {\n    g().|\n}\n",
+    );
+    assert!(
+        comps.contains(&"await".to_string()),
+        "expected .await on a Future, got {comps:?}"
+    );
+}
+
+#[test]
 fn tuple_destructure_binds_element_types() {
     // `text` is bound to the *string* element, so `.|` offers string methods (length etc.),
     // not tuple elements.

@@ -91,6 +91,20 @@ fn minified_decls_get_separated_by_one_blank_line() {
 }
 
 #[test]
+fn consecutive_imports_stay_packed() {
+    assert_format(
+        "import system;\nimport system.json;\nimport system.net;\nfun main(): void {}",
+        "\
+import system;
+import system.json;
+import system.net;
+
+fun main(): void {}
+",
+    );
+}
+
+#[test]
 fn generics_are_not_spaced_like_comparisons() {
     let out = format("let m:Map<string,int> = Map.new<string,int>();");
     assert!(

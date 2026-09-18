@@ -72,17 +72,17 @@ async fun main(): void {
         Err(e) => System.println(e.message()),
     }
 
-    switch (c.post_json("/json", Json.parse("{\"name\":\"dream\",\"n\":42}").unwrap_or(JsonValue.none())).await) {
+    switch (c.post_json("/json", Json.deserialize<JsonValue>("{\"name\":\"dream\",\"n\":42}").unwrap_or(JsonValue.none())).await) {
         Ok(r) => System.println(r.text()),
         Err(e) => System.println(e.message()),
     }
 
-    switch (c.put_json("/json", Json.parse("{\"name\":\"dream\",\"n\":42}").unwrap_or(JsonValue.none())).await) {
+    switch (c.put_json("/json", Json.deserialize<JsonValue>("{\"name\":\"dream\",\"n\":42}").unwrap_or(JsonValue.none())).await) {
         Ok(r) => System.println(r.text()),
         Err(e) => System.println(e.message()),
     }
 
-    switch (c.patch_json("/json", Json.parse("{\"n\":43}").unwrap_or(JsonValue.none())).await) {
+    switch (c.patch_json("/json", Json.deserialize<JsonValue>("{\"n\":43}").unwrap_or(JsonValue.none())).await) {
         Ok(r) => System.println(r.text()),
         Err(e) => System.println(e.message()),
     }

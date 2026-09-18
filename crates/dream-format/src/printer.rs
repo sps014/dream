@@ -315,6 +315,7 @@ impl Printer {
                 Some(TokenKind::SemicolonToken) | Some(TokenKind::CurlyCloseBracketToken)
             )
             && is_decl_starter(kind)
+            && kind != TokenKind::ImportToken
         {
             self.layout.blank_line();
         }

@@ -566,6 +566,14 @@ impl<'a> Analyzer<'a> {
                 .map(|s| s.trim_end_matches('?').to_string())
                 .unwrap_or_default();
             let value = arg_hirs.into_iter().next().flatten();
+            if struct_name == "JsonValue" {
+                self.hir_set_call(
+                    &method_fn("Json", "_stringify"),
+                    vec![value],
+                    &named("string"),
+                );
+                return Ok(named("string"));
+            }
             let sb_ty = named("StringBuilder");
             let string_ty = named("string");
             let sb_local = self.hir_alloc_local("__json_sb", &sb_ty);
@@ -653,6 +661,11 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             );
 
+            if struct_name == "JsonValue" {
+                self.hir_set_call(&method_fn("Json", "_parse"), vec![text], &result_ty);
+                return Ok(result_ty);
+            }
+
             if typed_parser {
                 self.hir_set_call(
                     &method_fn(&struct_name, "from_json_parser_text"),
@@ -662,7 +675,7 @@ impl<'a> Analyzer<'a> {
                 return Ok(result_ty);
             }
 
-            self.hir_set_call("Json_parse", vec![text], &parse_result_ty);
+            self.hir_set_call(&method_fn("Json", "_parse"), vec![text], &parse_result_ty);
             let parse_hir = self.hir_take();
 
             let parse_mangled = parse_result_ty.get_type();
@@ -843,6 +856,10 @@ impl<'a> Analyzer<'a> {
             };
             let struct_name = t_type.get_type().trim_end_matches('?').to_string();
             let value = arg_hirs.into_iter().next().flatten();
+            if struct_name == "JsonValue" {
+                self.hir_set_last(value);
+                return Ok(t_type);
+            }
             let from_json_call = json_collection_de_fn(&struct_name)
                 .unwrap_or_else(|| method_fn(&struct_name, "from_json"));
             self.hir_set_call(&from_json_call, vec![value], &t_type);

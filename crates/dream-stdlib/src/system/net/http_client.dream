@@ -183,7 +183,7 @@ public class HttpClient {
     public async fun post_json(path: string, body: JsonValue, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
         let headers = HttpHeaders();
         headers.set("Content-Type", "application/json");
-        return this.request("POST", path, Json.stringify(body), headers, token).await;
+        return this.request("POST", path, Json._stringify(body), headers, token).await;
     }
 
     // Encodes a `Map` as an `application/x-www-form-urlencoded` body
@@ -232,7 +232,7 @@ public class HttpClient {
     public async fun put_json(path: string, body: JsonValue, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
         let headers = HttpHeaders();
         headers.set("Content-Type", "application/json");
-        return this.request("PUT", path, Json.stringify(body), headers, token).await;
+        return this.request("PUT", path, Json._stringify(body), headers, token).await;
     }
 
     // Performs a PATCH request.
@@ -248,7 +248,7 @@ public class HttpClient {
     public async fun patch_json(path: string, body: JsonValue, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
         let headers = HttpHeaders();
         headers.set("Content-Type", "application/json");
-        return this.request("PATCH", path, Json.stringify(body), headers, token).await;
+        return this.request("PATCH", path, Json._stringify(body), headers, token).await;
     }
 
     // Performs a DELETE request.

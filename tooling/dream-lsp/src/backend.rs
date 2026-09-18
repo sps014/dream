@@ -378,6 +378,7 @@ impl LanguageServer for Backend {
                 document_symbol_provider: Some(OneOf::Left(true)),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
+                document_range_formatting_provider: Some(OneOf::Left(true)),
                 inlay_hint_provider: Some(OneOf::Left(true)),
                 signature_help_provider: Some(SignatureHelpOptions {
                     trigger_characters: Some(vec!["(".to_string(), ",".to_string()]),
@@ -1180,14 +1181,21 @@ impl LanguageServer for Backend {
             let is_unresolved = diag
                 .code
                 .as_ref()
-                .map(|c| matches!(c, NumberOrString::String(s) if s == "unresolved-name"))
+                .map(|c| {
+                    matches!(
+                        c,
+                        NumberOrString::String(s) if s == "unresolved-name" || s == "missing-member"
+                    )
+                })
                 .unwrap_or(false)
                 || diag.message.contains("does not exist")
-                || diag.message.contains("not found");
+                || diag.message.contains("not found")
+                || diag.message.contains("has no method")
+                || diag.message.contains("has no static method");
             if !is_unresolved {
                 continue;
             }
-            if let Some(name) = crate::code_actions::unresolved_name_from_message(&diag.message) {
+            for name in crate::code_actions::unresolved_names_from_message(&diag.message) {
                 actions.extend(crate::code_actions::auto_import_actions(
                     &uri,
                     &text,
@@ -1276,6 +1284,17 @@ impl LanguageServer for Backend {
     }
 
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
+        let key = params.text_document.uri.to_string();
+        let Some(text) = self.document_text(&key) else {
+            return Ok(None);
+        };
+        Ok(crate::format::formatting_edits(&text))
+    }
+
+    async fn range_formatting(
+        &self,
+        params: DocumentRangeFormattingParams,
+    ) -> Result<Option<Vec<TextEdit>>> {
         let key = params.text_document.uri.to_string();
         let Some(text) = self.document_text(&key) else {
             return Ok(None);

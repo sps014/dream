@@ -24,7 +24,7 @@ fun main(): void {
     let rng = Random(1u);
     let bytes = rng.next_bytes(4);
     System.println(bytes.length);
-    let j = Json.parse("{\"k\":[1]}").unwrap();
+    let j = Json.deserialize<JsonValue>("{\"k\":[1]}").unwrap();
     System.println(j.as_map().is_some());
     switch (j.get("k")) {
         Some(arr) => System.println(arr.as_array().unwrap().length),

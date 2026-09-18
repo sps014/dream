@@ -989,9 +989,41 @@ pub fn symbol_to_package() -> std::collections::HashMap<String, &'static str> {
             for name in public_top_level_names(src) {
                 map.entry(name).or_insert(pkg.name);
             }
+            // `extend System` in `system` (not `public`) still means `System.print` needs that
+            // import; bootstrap defines the type, the package adds the methods.
+            for name in top_level_extend_targets(src) {
+                map.entry(name).or_insert(pkg.name);
+            }
         }
     }
     map
+}
+
+/// Column-0 `extend Type` targets (with or without `public`), for auto-import of package
+/// extensions on bootstrap types (`System`, …).
+fn top_level_extend_targets(src: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for line in src.lines() {
+        if line.starts_with(' ') || line.starts_with('\t') {
+            continue;
+        }
+        let t = line.trim_start();
+        if t.starts_with("//") || t.starts_with("module ") || t.starts_with("import ") {
+            continue;
+        }
+        let rest = t.strip_prefix("public ").unwrap_or(t).trim_start();
+        let Some(after) = rest.strip_prefix("extend ") else {
+            continue;
+        };
+        let name: String = after
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        if !name.is_empty() {
+            names.push(name);
+        }
+    }
+    names
 }
 
 /// Public top-level declaration names in a Dream source string (for LSP auto-import).

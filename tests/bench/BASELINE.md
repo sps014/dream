@@ -110,7 +110,7 @@ like RyuJIT).
 
 Same host as `./scripts/run-microbenches.sh`. Owning `Vector<T>` is a WASM `v128` local
 (`v128.load` / lane op / `v128.store`; inlined `this` included). `json_deserialize<T>`
-fills `T` from `JsonParser` (`from_json_parser_text`); `Json.parse` / `from_json` stay for
+fills `T` from `JsonParser` (`from_json_parser_text`); `Json.deserialize<JsonValue>` / `from_json` stay for
 the dynamic tree. `regex_find` is still Pike `[a-z]+\d+` (ASCII byte skip when the hint is
 kind 5/7). `"hello" + i.to_string() + "world"` is `$concat_str_int_str`.
 

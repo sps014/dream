@@ -79,11 +79,18 @@ pub fn receiver_ref_at(snapshot: &IdeSnapshot, text: &str, offset: usize) -> Opt
 }
 
 fn member_sym_kind(m: &MemberInfo) -> SymKind {
+    if m.name == "await" {
+        return SymKind::Keyword;
+    }
     match m.kind {
         MemberKind::Field | MemberKind::Property => SymKind::Field,
         MemberKind::Method => SymKind::Method,
         MemberKind::EnumVariant | MemberKind::UnionVariant => SymKind::EnumMember,
     }
+}
+
+fn is_future_key(key: &str) -> bool {
+    key == "Future" || key.starts_with("Future_") || key.starts_with("Future<")
 }
 
 /// One completion proposal, mirroring the AST-index query output shape.
@@ -114,7 +121,19 @@ pub fn member_completions(
         }
         TypeSummary::Named { key, .. } => {
             let key = key.as_deref()?;
-            snapshot.members_of(key)
+            let mut members = snapshot.members_of(key);
+            if is_future_key(key) {
+                members.insert(
+                    0,
+                    MemberInfo {
+                        kind: MemberKind::Property,
+                        name: "await".to_string(),
+                        detail: "await".to_string(),
+                        is_static: false,
+                    },
+                );
+            }
+            members
         }
         TypeSummary::Unknown => return None,
     };

@@ -6,9 +6,10 @@ use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
 use dream_diagnostics::DiagnosticBag;
 use dream_hir::HExpr;
-use dream_syntax::nodes::types::is_numeric_primitive;
+use dream_syntax::nodes::types::{is_numeric_primitive, mangle_with_suffixes};
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_text::text_span::TextSpan;
+use dream_types::{TyKind, TypeId};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -127,18 +128,11 @@ impl<'a> Analyzer<'a> {
             return Ok(());
         }
 
-        // Directional assignability over interned types: `right` (value) must be assignable to
-        // `left` (target). Covers identity, `object` widening, enum/int, and numeric widening via
-        // the structured rules.
+        // Directional assignability: `right` (value) must be assignable to `left` (target),
+        // including class → interface and covariant `Result`/`Option` type arguments.
         let l = self.type_ctx.lower(left);
         let r = self.type_ctx.lower(right);
-        if dream_types::assignable(&self.type_ctx.interner, l, r) {
-            return Ok(());
-        }
-
-        // Implicit upcast to an interface: a value whose concrete class implements the interface
-        // `left` is assignable to it (`let a: Animal = cat;`).
-        if self.value_assignable_to_interface(left, right, diagnostics) {
+        if self.value_type_assignable(l, r, diagnostics) {
             return Ok(());
         }
 
@@ -151,6 +145,107 @@ impl<'a> Analyzer<'a> {
             Some(*position),
         );
         Ok(())
+    }
+
+    /// Directional assignability: interned rules, class → interface, then covariant `Result` /
+    /// `Option` when each type argument is assignable and layout-compatible.
+    pub(in crate::analyzer) fn value_type_assignable(
+        &mut self,
+        target: TypeId,
+        value: TypeId,
+        diagnostics: &mut DiagnosticBag,
+    ) -> bool {
+        if dream_types::assignable(&self.type_ctx.interner, target, value) {
+            return true;
+        }
+        if self.type_id_assignable_to_interface(target, value, diagnostics) {
+            return true;
+        }
+        self.covariant_option_result(target, value, diagnostics)
+    }
+
+    pub(in crate::analyzer) fn type_id_assignable_to_interface(
+        &mut self,
+        target: TypeId,
+        value: TypeId,
+        diagnostics: &mut DiagnosticBag,
+    ) -> bool {
+        if !matches!(self.type_ctx.interner.kind(target), TyKind::Interface(..)) {
+            return false;
+        }
+        let iface = self.type_id_identity(target);
+        let val = self.type_id_identity(value);
+        self.implements_as_interface_ref(&val, &iface, diagnostics)
+    }
+
+    /// `Result`/`Option` are covariant in their type arguments when a bitcast of the heap box is
+    /// sound: each changed argument is either identical or both RC heap references (class →
+    /// interface). A value-struct payload vs an interface pointer is rejected here; `?` still
+    /// accepts that case because it rebuilds the wrapper.
+    fn covariant_option_result(
+        &mut self,
+        target: TypeId,
+        value: TypeId,
+        diagnostics: &mut DiagnosticBag,
+    ) -> bool {
+        let (def, t_args, v_args) = match (
+            self.type_ctx.interner.kind(target),
+            self.type_ctx.interner.kind(value),
+        ) {
+            (TyKind::Union(td, ta), TyKind::Union(vd, va)) if td == vd => {
+                (*td, ta.clone(), va.clone())
+            }
+            _ => return false,
+        };
+        let name = self.type_ctx.defs.name(def);
+        if name != "Result" && name != "Option" {
+            return false;
+        }
+        if t_args.len() != v_args.len() {
+            return false;
+        }
+        for (t, v) in t_args.iter().zip(v_args.iter()) {
+            if !self.payload_layout_compatible(*t, *v) {
+                return false;
+            }
+            if !self.value_type_assignable(*t, *v, diagnostics) {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn payload_layout_compatible(&self, target: TypeId, value: TypeId) -> bool {
+        target == value
+            || (self.type_ctx.interner.is_reference(target)
+                && self.type_ctx.interner.is_reference(value))
+    }
+
+    /// Mangled identity spelling matching [`Type::get_type`], used to probe `implements`.
+    fn type_id_identity(&self, id: TypeId) -> String {
+        match self.type_ctx.interner.kind(id).clone() {
+            TyKind::Prim(p) => p.name().to_string(),
+            TyKind::Object => "object".to_string(),
+            TyKind::Void => "void".to_string(),
+            TyKind::Error => dream_types::UNKNOWN_TYPE_NAME.to_string(),
+            TyKind::Js => "js".to_string(),
+            TyKind::Array(elem) => format!("{}[]", self.type_id_identity(elem)),
+            TyKind::Enum(def) => self.type_ctx.defs.name(def).to_string(),
+            TyKind::Struct(def, args) | TyKind::Union(def, args) | TyKind::Interface(def, args) => {
+                let base = self.type_ctx.defs.name(def).to_string();
+                let arg_names: Vec<String> =
+                    args.iter().map(|a| self.type_id_identity(*a)).collect();
+                mangle_with_suffixes(&base, arg_names)
+            }
+            TyKind::Func(params, ret) => {
+                let ps: Vec<String> = params.iter().map(|p| self.type_id_identity(*p)).collect();
+                format!("fun({}):{}", ps.join(","), self.type_id_identity(ret))
+            }
+            TyKind::Tuple(elems) => {
+                let inner: Vec<String> = elems.iter().map(|e| self.type_id_identity(*e)).collect();
+                format!("({})", inner.join(","))
+            }
+        }
     }
 
     /// If `value` (of static type `from`) has a registered `@cast("implicit")` method converting

@@ -1000,6 +1000,63 @@ fn test_interface_implemented_ok() {
 }
 
 #[test]
+fn test_result_error_interface_covariance() {
+    // A `Result` whose `E` is a class implementing `Error` is assignable to `Result<T, Error>`,
+    // including through `?` (which rebuilds `Err` at the function's Result type).
+    let code = "
+        enum Result<T, E> {
+            Ok(T),
+            Err(E),
+        }
+        interface Error {
+            fun message(): string;
+            fun code(): string;
+        }
+        class MyError : Error {
+            public fun message(): string { return \"x\"; }
+            public fun code(): string { return \"X\"; }
+        }
+        fun inner(): Result<bool, MyError> {
+            return Result.Err(MyError());
+        }
+        fun by_return(): Result<bool, Error> {
+            return inner();
+        }
+        fun by_try(): Result<bool, Error> {
+            let v = inner()?;
+            return Result.Ok(v);
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_no_type_errors(&diagnostics);
+}
+
+#[test]
+fn test_result_string_not_assignable_to_error() {
+    let code = "
+        enum Result<T, E> {
+            Ok(T),
+            Err(E),
+        }
+        interface Error {
+            fun message(): string;
+            fun code(): string;
+        }
+        fun inner(): Result<bool, string> {
+            return Result.Err(\"nope\");
+        }
+        fun outer(): Result<bool, Error> {
+            return inner();
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics.diagnostics.iter().any(|d| d
+        .message
+        .contains("cannot convert from Result<bool, string> to Result<bool, Error>")));
+}
+
+#[test]
 fn test_interface_missing_method_errors() {
     // Declaring `: Animal` obliges the class to implement every method of the interface.
     let code = "

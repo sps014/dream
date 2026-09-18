@@ -73,12 +73,13 @@ impl<'a> Analyzer<'a> {
             ));
         };
 
-        // The error type must match exactly between the operand and the function's return type
-        // (`Result<T, E>` propagates its `E` unchanged; only the success payload type may differ).
+        // Operand `E` must be assignable to the function's `E`. `?` rebuilds `Err` at the
+        // function's Result type, so a class that implements the function's error interface
+        // (e.g. `GpuError` → `Error`) is allowed; there is still no general `From`.
         if op_base == "Result" {
             self.compare_data_type(
-                &op_args[1],
                 &ret_args[1],
+                &op_args[1],
                 &position.unwrap_or_else(empty_span),
                 diagnostics,
             )?;

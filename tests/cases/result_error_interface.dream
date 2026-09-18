@@ -1,0 +1,60 @@
+// `Result<T, MyError>` is assignable to `Result<T, Error>` when `MyError : Error`.
+// `?` rebuilds `Err` at the function's Result type; interface dispatch on `E` still works.
+
+import system;
+
+class MyError : Error {
+    _m: string;
+
+    public constructor(m: string) {
+        this._m = m;
+    }
+
+    public fun message(): string {
+        return this._m;
+    }
+
+    public fun code(): string {
+        return "EMINE";
+    }
+}
+
+fun fail(): Result<bool, MyError> {
+    return Result.Err(MyError("boom"));
+}
+
+fun ok(): Result<bool, MyError> {
+    return Result.Ok(true);
+}
+
+fun via_try(): Result<bool, Error> {
+    let v = fail()?;
+    return Result.Ok(v);
+}
+
+fun via_return(): Result<bool, Error> {
+    return fail();
+}
+
+fun main() {
+    let r: Result<bool, Error> = via_return();
+    switch (r) {
+        Ok(_) => { System.println("unexpected ok"); }
+        Err(e) => {
+            System.println(e.code());
+            System.println(e.message());
+        }
+    }
+
+    let t = via_try();
+    switch (t) {
+        Ok(_) => { System.println("unexpected try ok"); }
+        Err(e) => { System.println(e.code()); }
+    }
+
+    let lifted: Result<bool, Error> = ok();
+    switch (lifted) {
+        Ok(v) => { System.println(v); }
+        Err(_) => { System.println("unexpected err"); }
+    }
+}

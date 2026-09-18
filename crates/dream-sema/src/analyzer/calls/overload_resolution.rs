@@ -59,22 +59,11 @@ impl<'a> Analyzer<'a> {
         {
             return true;
         }
-        // Directional assignability over interned types: `given` (value) must be assignable to
-        // `expected` (target). Covers identity, `object` widening, enum/int, and numeric widening
-        // via the structured rules.
         let e = self.type_ctx.lower_str(expected);
         let g = self.type_ctx.lower_str(given);
-        if dream_types::assignable(&self.type_ctx.interner, e, g) {
-            return true;
-        }
-        // Implicit upcast to an interface parameter: the argument's concrete class implements it.
-        let iface = expected;
-        if self.is_interface_name(iface) {
-            let given_class = given;
-            let mut sink = dream_diagnostics::DiagnosticBag::new(None);
-            return self.implements_as_interface_ref(given_class, iface, &mut sink);
-        }
-        false
+        // Argument checking must not emit follow-on diagnostics (e.g. array-collection attach).
+        let mut sink = dream_diagnostics::DiagnosticBag::new(None);
+        self.value_type_assignable(e, g, &mut sink)
     }
 
     pub(crate) fn validate_arguments(

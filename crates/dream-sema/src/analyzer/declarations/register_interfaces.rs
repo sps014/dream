@@ -413,22 +413,6 @@ impl<'a> Analyzer<'a> {
             .is_some_and(|ifaces| ifaces.iter().any(|i| i == iface_name))
     }
 
-    /// True when a value of type `value` may be implicitly converted to interface-typed `target`
-    /// (an upcast): `target` names an interface and `value`'s concrete class implements it.
-    pub(in crate::analyzer) fn value_assignable_to_interface(
-        &mut self,
-        target: &Type,
-        value: &Type,
-        diagnostics: &mut DiagnosticBag,
-    ) -> bool {
-        let iface = target.get_type();
-        if !self.is_interface_name(&iface) {
-            return false;
-        }
-        let val = value.get_type();
-        self.implements_as_interface_ref(&val, &iface, diagnostics)
-    }
-
     /// True when `class_name` may be implicitly/explicitly widened to an interface *reference*
     /// (`iface_name`). A reference class upcasts by identity (same tagged pointer); a value
     /// (`struct`) type is *boxed* into a fresh tagged heap object at the upcast site (see the value

@@ -594,25 +594,22 @@ impl<'a> Analyzer<'a> {
                 } else {
                     method_fn(&struct_name, "write_json")
                 };
-                // The `@json` generator only emits a writer for types it can encode at compile
-                // time. Without this check the missing callee would surface as "no code was
-                // generated for 'main'", which says nothing about the offending type.
-                if self
-                    .type_ctx
-                    .defs
-                    .lookup(DefKind::Function, &write_call)
-                    .is_none()
-                {
-                    diagnostics.report_error(
-                        format!(
-                            "'{}' cannot be serialized to JSON: its values have no compile-time JSON encoding. Use 'JsonValue' for heterogeneous data, or mark the type '@json'",
-                            self.ty_str_display(&struct_name),
-                        ),
-                        Some(method.position),
-                    );
-                    self.hir_fail();
-                    self.hir_none();
-                    return Ok(string_ty);
+                // Diagnose from the *type*, not from whether the generator has already emitted a
+                // writer. LSP analysis skips generators, so `Map<string, string>` has no adapter
+                // DefId even though a real compile will produce one.
+                if let Some(arg) = value.as_ref() {
+                    if !self.json_type_encodable(arg.ty) {
+                        diagnostics.report_error(
+                            format!(
+                                "'{}' cannot be serialized to JSON: it has no compile-time JSON encoding. Use 'JsonValue' for mixed or unknown data, or mark a named type '@json'",
+                                self.ty_str_display(&struct_name),
+                            ),
+                            Some(method.position),
+                        );
+                        self.hir_fail();
+                        self.hir_none();
+                        return Ok(string_ty);
+                    }
                 }
                 self.hir_set_call(&write_call, vec![value, Some(sb_read)], &Type::Void);
                 let write_hir = self.hir_take();

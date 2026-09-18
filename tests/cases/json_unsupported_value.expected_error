@@ -1,1 +1,1 @@
-'Map<string, object>' cannot be serialized to JSON: its values have no compile-time JSON encoding. Use 'JsonValue' for heterogeneous data, or mark the type '@json'
+'Map<string, object>' cannot be serialized to JSON: it has no compile-time JSON encoding. Use 'JsonValue' for mixed or unknown data, or mark a named type '@json'

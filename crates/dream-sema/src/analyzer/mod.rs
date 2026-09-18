@@ -913,6 +913,81 @@ impl<'a> Analyzer<'a> {
         primitive_type(name, token.clone()).unwrap_or(Type::Struct(token, None))
     }
 
+    /// True when `@json` derive (or a built-in JSON leaf / collection of those) can encode `ty`.
+    /// Used by `Json.serialize` so analysis without the generator (LSP) still accepts
+    /// `Map<string, string>` and still rejects `object`.
+    pub(in crate::analyzer) fn json_type_encodable(&self, ty: dream_types::TypeId) -> bool {
+        use dream_types::{PrimTy, TyKind};
+        match self.type_ctx.interner.kind(ty) {
+            TyKind::Error => true,
+            TyKind::Prim(p) => matches!(
+                p,
+                PrimTy::Int
+                    | PrimTy::UInt
+                    | PrimTy::Long
+                    | PrimTy::ULong
+                    | PrimTy::Byte
+                    | PrimTy::Float
+                    | PrimTy::Double
+                    | PrimTy::Bool
+                    | PrimTy::String
+            ),
+            TyKind::Array(elem) => self.json_type_encodable(*elem),
+            TyKind::Tuple(elems) => elems.iter().all(|e| self.json_type_encodable(*e)),
+            TyKind::Struct(def, args) | TyKind::Union(def, args) => {
+                let name = self.type_ctx.defs.name(*def);
+                if name == "JsonValue" {
+                    return true;
+                }
+                if matches!(name, "List" | "Set" | "Option") {
+                    return args.len() == 1 && self.json_type_encodable(args[0]);
+                }
+                if matches!(name, "Map" | "SortedMap") {
+                    return args.len() == 2
+                        && matches!(
+                            self.type_ctx.interner.kind(args[0]),
+                            TyKind::Prim(PrimTy::String)
+                        )
+                        && self.json_type_encodable(args[1]);
+                }
+                self.json_decl_has_attr(name)
+            }
+            TyKind::Enum(def) => self.json_decl_has_attr(self.type_ctx.defs.name(*def)),
+            _ => false,
+        }
+    }
+
+    fn json_decl_has_attr(&self, name: &str) -> bool {
+        let is_json = |attrs: &[dream_syntax::nodes::AttributeNode]| {
+            attrs.iter().any(|a| a.name.text == "json")
+        };
+        let pgm = self.syntax_tree.get_root();
+        if pgm
+            .structs
+            .iter()
+            .any(|s| s.name.text == name && is_json(&s.attributes))
+        {
+            return true;
+        }
+        if pgm
+            .enums
+            .iter()
+            .any(|e| e.name.text == name && is_json(&e.attributes))
+        {
+            return true;
+        }
+        if self
+            .generic_structs
+            .get(name)
+            .is_some_and(|s| is_json(&s.attributes))
+        {
+            return true;
+        }
+        self.generic_unions
+            .get(name)
+            .is_some_and(|e| is_json(&e.attributes))
+    }
+
     /// Pretty-prints an AST type for diagnostics via the interned type graph.
     /// Use this (or [`Self::ty_str_display`]) in every user-facing message; [`Type::get_type`]
     /// is the mangled identity spelling (`List_List_Point`) and must not appear in diagnostics.

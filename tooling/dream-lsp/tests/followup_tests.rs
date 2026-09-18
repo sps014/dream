@@ -157,3 +157,47 @@ fn foreign_file_refs_are_excluded_from_primary_doc() {
         assert_eq!(slice, "push", "non-primary span leaked into results");
     }
 }
+
+#[test]
+fn json_serialize_string_map_is_encodable_without_generator() {
+    // LSP analysis never runs `@json` generators, so Map adapters are absent. A string map
+    // is still JSON-encodable and must not be diagnosed as unserializable.
+    let src = r#"
+import system;
+import system.json;
+
+fun main() {
+    let data: Map<string, string> = { "a": "b" };
+    System.println(Json.serialize(data));
+}
+"#;
+    let diags = analyze_document(None, src).diagnostics;
+    assert!(
+        !diags
+            .iter()
+            .any(|d| d.message.contains("cannot be serialized to JSON")),
+        "false unserializable diagnostic: {:?}",
+        diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn json_serialize_object_map_is_rejected_without_generator() {
+    let src = r#"
+import system;
+import system.json;
+
+fun main() {
+    let data: Map<string, object> = { "key": "value" };
+    System.println(Json.serialize(data));
+}
+"#;
+    let diags = analyze_document(None, src).diagnostics;
+    assert!(
+        diags
+            .iter()
+            .any(|d| d.message.contains("'Map<string, object>' cannot be serialized to JSON")),
+        "expected object-map serialize error, got {:?}",
+        diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+    );
+}

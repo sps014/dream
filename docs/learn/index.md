@@ -6,6 +6,6 @@ This path assumes little programming experience. Read in order:
 2. [Language tour](tour.md) — variables, control flow, functions, lists
 3. [Next steps](next-steps.md) — where to go after the tour
 
-Dream programs are `.dream` files. `fun main()` is where execution starts. `import system;` brings in `System.println` so you can print to the console.
+Dream programs are `.dream` files. `fun main()` is where execution starts. `import system;` brings in `System.println` so you can print.
 
-When you want a lookup table instead of a lesson, open [Reference](../reference/language/variables.md). When you want a finished snippet, open the [Cookbook](../cookbook/index.md).
+For a lookup table, open [Reference](../reference/language/variables.md). For finished snippets, open the [Cookbook](../cookbook/index.md).

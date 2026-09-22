@@ -16,19 +16,41 @@ fun main() {
 
 ## Build
 
-`DateTime.now()`, `DateTime.utc_now()`, `DateTime.of(year, month, day, …)`, and `now_in(tz)` / `of_in(..., tz)` when you pass a [`TimeZone`](#timezone).
+| Call | Meaning |
+| --- | --- |
+| `DateTime.now()` | current local time |
+| `DateTime.utc_now()` | current UTC |
+| `DateTime.of(year, month, day, …)` | build from calendar fields |
+| `now_in(tz)` | current time in a [`TimeZone`](#timezone) |
+| `of_zoned(..., tz)` / `of_local(...)` | build in a named zone or the machine local zone |
+| `from_epoch_millis` / `from_epoch_seconds` | from Unix epoch |
 
 ## Read
 
-Calendar fields such as `.year`, `.month`, `.day`, `.hour`, `.minute`, `.second`, plus helpers for weekday and day-of-year.
+| Field / call | Meaning |
+| --- | --- |
+| `.year` / `.month` / `.day` | calendar date |
+| `.hour` / `.minute` / `.second` / `.millisecond` | time of day |
+| `.day_of_week` | weekday (`0` = Sunday) |
+| `.day_of_year` | day of year (1-based) |
+| `decompose()` | year/month/day as `DateTimeYmd` |
 
 ## Change
 
-Convert with `.to_utc()` / zone methods. Add or subtract with arithmetic helpers. Compare with `==`, `<`, and friends.
+| Call | Meaning |
+| --- | --- |
+| `to_utc()` / `to_local()` / `to_zone(zone)` | convert zone |
+| `add_millis` / `add_seconds` / `add_minutes` / `add_hours` / `add_days` | arithmetic |
+| `add(d)` / `until(other)` | with a `Duration` |
+| `start_of_day()` | midnight of that calendar day |
+| `is_before` / `is_after` / `equals` / `compare_to` | compare |
+| `==`, `<`, and friends | operators |
 
 ## Format and parse
 
-`to_string()` for a default rendering; `parse` (ISO-8601) returns `Result`. `Duration` is a millisecond span (`from_seconds`, `as_millis`, `add` / `sub`); `DateTime.add(d)` and `until(other)` use it.
+`to_string()` for a default rendering; `to_iso8601()` for ISO text. `parse` (ISO-8601) returns `Result`.
+
+`Duration` is a millisecond span (`from_seconds`, `from_millis`, `as_millis`, `as_seconds`, `add` / `sub`); `DateTime.add(d)` and `until(other)` use it.
 
 ## `TimeZone`
 

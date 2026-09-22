@@ -17,7 +17,7 @@ fun main(): void {
 
 ## How `js` values work
 
-`js` is a real static type, but the compiler does **no member resolution** on it. Any `.name`,
+`js` is a real static type, but Dream does **no member resolution** on it. Any `.name`,
 `.name(...)`, `[key]`, or call type-checks; whether the member exists is decided at runtime by the
 JS host. Dynamic operations return `js`, so chains like `el.classList.add(...)` just work.
 
@@ -74,6 +74,11 @@ el.children[0] = replacement;
 | a `struct` / `class` | a **deep copy** into a plain JS object |
 
 A `union` or `List<T>` is not marshalable directly — convert to an array or struct field first.
+
+```dream
+// js.global.send(my_list);   // error: List is not passed to js
+// js.global.send(my_union);  // error: union is not passed to js
+```
 
 ### Structs and classes
 

@@ -2,7 +2,7 @@
 
 **Import:** `import system.text;`
 
-Compile a pattern once, then test, replace, or extract matches. Patterns use the usual Perl-style syntax (`\d`, groups, lookaround). An invalid pattern never matches.
+Compile a pattern once, then test, replace, or extract matches. Patterns use familiar regex syntax (`\d`, groups, lookaround). An invalid pattern never matches.
 
 ```dream
 import system;

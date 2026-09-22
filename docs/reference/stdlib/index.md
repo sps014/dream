@@ -32,7 +32,7 @@ The standard library ships with the compiler. Import each package you need — t
 | [DateTime](datetime.md) | `import system;` |
 | [Logging](logging.md) | `import system.logging;` |
 | [Testing](testing.md) | `import system.testing;` |
-| [Process](process.md) | `import system;` |
+| [Process](process.md) | `import system.process;` |
 | [WebView](webview.md) | `import system.webview;` |
 | [Crypto](crypto.md) | `import system.crypto;` |
 

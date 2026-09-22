@@ -7,7 +7,7 @@ hide:
 <div class="dream-hero">
   <h1 class="dream-gradient-text">Dream</h1>
   <p class="dream-hero-subtitle">
-    A typed language with familiar <code>fun</code> / <code>let</code> syntax.
+    A typed language. You declare functions with <code>fun</code> and variables with <code>let</code>.
     Write once, run on your computer, in the browser, or in Node.
     Memory is automatic.
   </p>
@@ -40,7 +40,7 @@ fun main() {
 -   :material-toolbox-outline: **Lists, files, HTTP, JSON, GPU, crypto in the stdlib**
 -   :material-language-javascript: **Talk to JavaScript when you need the DOM**
 -   :material-language-c: **Talk to C on the native host**
--   :material-sync: **`async` / WebWorkers for concurrency**
+-   :material-sync: **`async` / Tasks for concurrency**
 
 </div>
 
@@ -120,7 +120,7 @@ fun main() {
     ---
 
     [Generics](reference/language/generics.md) · [Interfaces](reference/language/interfaces.md) ·
-    [Async](reference/language/async.md) · [WebWorkers](reference/language/webworkers.md) ·
+    [Async](reference/language/async.md) · [Tasks](reference/language/tasks.md) ·
     [Compute](reference/language/compute.md) · [Shaders](reference/language/shaders.md) ·
     [Memory](reference/language/memory.md) · [Ownership](reference/language/ownership.md)
 

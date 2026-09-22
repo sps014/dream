@@ -52,7 +52,7 @@ dreamer run
 dream run sample/generators/quote/app.dream
 ```
 
-- `@syntax_block("quote")` — the compiler hands you every `quote { … }` site.
-- `ctx.replace` — swap that site for ordinary Dream source **before** type-checking.
+- `@syntax_block("quote")` — Dream finds every `quote { … }` block.
+- `ctx.replace` — swap that site for ordinary Dream source **before** the rest of the file is checked.
 
 Bigger samples: [`html`](https://github.com/sps014/dream/tree/main/sample/generators/html), [`dto`](https://github.com/sps014/dream/tree/main/sample/generators/dto). Reference: [Source generators](../reference/language/generators.md), [CodeBuilder](../reference/stdlib/codegen.md).

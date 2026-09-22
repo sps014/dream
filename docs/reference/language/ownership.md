@@ -1,8 +1,8 @@
 # Ownership
 
-You never call `free`. Dream counts how many names still point at a heap value and frees it when the last one is gone ([Memory](memory.md)).
+You never call `free`. Dream frees a heap value when nothing still points at it ([Memory](memory.md)).
 
-This page is only about **who owns that count** when you pass or assign something. There is no `move` keyword. The compiler moves for you when it can see you are done with a name.
+This page is only about **who owns that value** when you pass or assign something. There is no `move` keyword. Dream moves for you when it can see you are done with a name.
 
 ## Two kinds of values
 
@@ -35,11 +35,11 @@ b.x = 9;
 println(a.x);   // 1
 ```
 
-Automatic **move** (the rest of this page) applies to **share** types. A `struct` always copies its bytes; on last use of a struct **local**, nested share fields are not retained again (the destination inherits those counts). A still-live local, or a field/index, still retains nested share fields.
+Automatic **move** (the rest of this page) applies to **share** types. A `struct` always copies its bytes. On the last use of a struct local, the copy keeps the nested heap values; they are not counted a second time. A struct that is still used later, or a field or index, still counts them again.
 
 ## Passing to a function
 
-Write nothing extra on a parameter and the callee **takes** the value (a **sink**). If you still need the name afterward, the compiler **copies** (bumps the count) instead of moving.
+Write nothing extra on a parameter and the callee **takes** the value (a **sink**). If you still need the name afterward, Dream **copies** instead of moving.
 
 Mark a parameter `borrow` when the function only **looks** — you keep the value.
 
@@ -91,10 +91,10 @@ A method’s implicit `this` is **never** a sink. Calling `obj.foo()` does not c
 
 ## Last-use move (no keyword)
 
-The compiler looks **forward**: after this line, is this name still read?
+Dream looks **forward**: after this line, is this name still read?
 
-- **No** → **move**: hand the existing count to the destination. The old name is cleared so it cannot free the object twice.
-- **Yes** → **copy**: bump the count; both names stay valid.
+- **No** → **move**: hand the value to the destination. The old name is cleared so it cannot free the object twice.
+- **Yes** → **copy**: both names stay valid.
 
 That is the same rule for:
 
@@ -129,38 +129,10 @@ Giving a new value to the same name (`items = List<int>();`) makes the name usab
 
 ## Receiver modes: inferred borrow and unique
 
-Every non-static method's implicit `this` receiver has a **mutation contract** the compiler infers from the body:
+Every non-static method's implicit `this` has a **mutation contract** Dream infers from the body:
 
 - **Borrow**: reads `this` without mutating it. Always safe to call.
 - **Unique**: may mutate instance state (field writes, calls to other Unique methods).
-
-You never write these — they are inferred. Two rules are enforced:
-
-1. A method declared `borrow fun` cannot mutate `this`.
-2. When a class implements an interface, implementor modes must match.
-
-To pin a contract explicitly:
-```dream
-class Counter {
-    count: int;
-    borrow fun value(): int { return this.count; }
-    unique fun increment(): void { this.count += 1; }
-}
-```
-
-## What is *not* a move
-
-- Last **read**, then the function does other work: the value is still released at the **end** of the function, not the moment you finish reading it.
-- `struct` assign or pass: always a byte copy. Last use of a struct **local** does not retain nested share fields; a field or `list[i]` still does.
-- Reading `obj.field` or `xs[i]` into a sink: always a copy; the object/array still owns its slot.
-- `borrow` / `ref` arguments: never consumed.
-
-## Receiver modes: inferred borrow and unique
-
-Every non-static method's implicit `this` has a **mutation contract** the compiler infers from the body:
-
-- **Borrow**: reads `this` without mutating it. Always safe to call.
-- **Unique**: may mutate instance state (field writes, calls to mutating methods).
 
 You never write these — they are inferred from what the method does:
 
@@ -177,10 +149,26 @@ class Counter {
 ```
 
 Two rules are enforced:
+
 1. A method declared `borrow fun` cannot mutate `this` (the declaration is a contract).
 2. When a class implements an interface, implementor modes must match.
 
-Pin a contract explicitly with `[borrow | unique] fun` when inference isn't what you want.
+Pin a contract explicitly with `borrow fun` / `unique fun` when inference isn't what you want:
+
+```dream
+class Counter {
+    count: int;
+    borrow fun value(): int { return this.count; }
+    unique fun increment(): void { this.count += 1; }
+}
+```
+
+## What is *not* a move
+
+- Last **read**, then the function does other work: the value is still released at the **end** of the function, not the moment you finish reading it.
+- `struct` assign or pass: always a byte copy. On the last use of a struct local, the copy keeps the nested heap values; they are not counted a second time. A field or `list[i]` still counts them again.
+- Reading `obj.field` or `xs[i]` into a sink: always a copy; the object/array still owns its slot.
+- `borrow` / `ref` arguments: never consumed.
 
 ## What to write in practice
 
@@ -188,6 +176,6 @@ Pin a contract explicitly with `[borrow | unique] fun` when inference isn't what
 - Parameters that **store** or **consume** the value (`push`, constructors, builders): leave unmarked.
 - After `this.field = param`, use `this.field`, not `param`.
 
-That is enough. The compiler inserts the retains and the last-use moves.
+That is enough. Dream copies when needed and moves on last use.
 
 See also [Memory](memory.md) (when `del` runs, cycles, `weak`) and [Classes & structs](classes-structs.md) (share vs copy).

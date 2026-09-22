@@ -1,6 +1,6 @@
 # Strings
 
-`string` is UTF-16 text in memory (C#/JS-style code units). Files, JSON on the wire, and `Encoding.utf8_*` still use UTF-8. `+` and `$"hi {name}"` need no import. Extra helpers: `import system.text;` (also pulled in by `import system;`).
+`string` indexes UTF-16 code units. Files, JSON on the wire, and `Encoding.utf8_*` still use UTF-8. `+` and `$"hi {name}"` need no import. Extra helpers: `import system.text;` (also pulled in by `import system;`).
 
 ```dream
 import system;

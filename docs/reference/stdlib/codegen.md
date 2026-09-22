@@ -26,7 +26,7 @@ fun snippet(): string {
 
 ## GenContext
 
-A `@generator` function receives `GenContext`.
+`GenContext` is the compile-time handle a `@generator` function receives — find syntax sites, replace them, and report errors. Full walkthrough: [Source generators](../language/generators.md).
 
 ## GenSyntaxBlock
 
@@ -40,7 +40,7 @@ Each `quote { … }` (or other `@syntax_block`) site is a `GenSyntaxBlock` (`.na
 
 ## `GenFieldInfo`
 
-One field on a snapshotted declaration type — used by emit-style generators.
+`GenFieldInfo` is one field on a snapshotted declaration type (`.name`, `.type_name`) — used by emit-style generators.
 
 `@json` is a compiler builtin, not a `GenContext` generator — see [JSON](json.md).
 

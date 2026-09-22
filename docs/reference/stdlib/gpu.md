@@ -34,13 +34,10 @@ async fun main(): void {
 
 ## Capabilities
 
-WebGPU only lets a shader or resource touch a feature the *device* opted into when it was created;
-reaching for an un-requested one is device-loss-grade rather than a recoverable validation error.
-Dream requests every optional feature the adapter offers, so `Gpu.capabilities()` is the
-authoritative answer to "may I use this?" — gate on it rather than trying and recovering.
-
-Everything reads as `false` / `0` until `try_init` succeeds, since capabilities describe the
-negotiated device rather than the raw adapter.
+- WebGPU only lets a shader or resource touch a feature the *device* opted into when it was created.
+- Reaching for an un-requested one is device-loss-grade rather than a recoverable validation error.
+- Dream requests every optional feature the adapter offers, so `Gpu.capabilities()` is the authoritative answer to "may I use this?" — gate on it rather than trying and recovering.
+- Everything reads as `false` / `0` until `try_init` succeeds, since capabilities describe the negotiated device rather than the raw adapter.
 
 ```dream
 let caps = Gpu.capabilities();
@@ -66,16 +63,22 @@ let tile = caps.max_invocations_per_workgroup;
 | `max_invocations_per_workgroup`, `max_workgroup_size_x/y/z` | `@workgroup_size` ceilings |
 | `max_workgroups_per_dimension` | per-dimension dispatch ceiling |
 
-Buffer sizes and the compute workgroup limits are raised to the adapter maximum; every other limit
-stays at the portable WebGPU default, so a program developed against a large GPU still runs on a
-small one. Creating a `Bc*` / `Etc2*` / `Astc*` texture without the matching flag fails with
-`GpuError.unsupported`.
+- Buffer sizes and the compute workgroup limits are raised to the adapter maximum.
+- Every other limit stays at the portable WebGPU default, so a program developed against a large GPU still runs on a small one.
+- Creating a `Bc*` / `Etc2*` / `Astc*` texture without the matching flag fails with `GpuError.unsupported`.
 
 `GpuError` implements [`Error`](option-result.md). Headless machines often have no adapter. Async GPU methods take an optional last `token`; cancelled `Result` calls return `GpuError` `ECANCELLED`. A lost device (`DEVICE_LOST`) is distinct from `VALIDATION`: recover with `Gpu.try_init().await` and recreate GPU resources. `Gpu.check()` drains a pending lost / uncaptured event without waiting for the next submit.
 
-`Gpu.try_init(GpuPowerPreference.LowPower)` (or `Default`) is only consulted when no device is alive yet; after a loss, a different preference re-picks the adapter. `try_init()` keeps high-performance.
+- `Gpu.try_init(GpuPowerPreference.LowPower)` (or `Default`) is only consulted when no device is alive yet; after a loss, a different preference re-picks the adapter.
+- `try_init()` keeps high-performance.
 
-Swapchain drawable size is CSS/logical pixels unless `GpuSurfaceDesc.max_pixel_ratio` is greater than `1`: then `width`/`height` become `client × min(devicePixelRatio, max_pixel_ratio)` (typical game clamp is `2`). Read the used scale with `surface.pixel_ratio` and the uncapped window/DPR with `surface.scale_factor`. `request_pointer_lock()` feeds relative `dx`/`dy` for FPS cameras; `request_fullscreen()` is borderless. Both need a user gesture in the browser. `pointers()` is the multi-touch list (`pointer()` stays the primary latch). Gamepad sticks still poll via `gamepad_axis`; `poll_events` also yields `GamepadAxis` when a value changes.
+### Surfaces and input
+
+- Swapchain drawable size is CSS/logical pixels unless `GpuSurfaceDesc.max_pixel_ratio` is greater than `1`: then `width`/`height` become `client × min(devicePixelRatio, max_pixel_ratio)` (typical game clamp is `2`).
+- Read the used scale with `surface.pixel_ratio` and the uncapped window/DPR with `surface.scale_factor`.
+- `request_pointer_lock()` feeds relative `dx`/`dy` for FPS cameras; `request_fullscreen()` is borderless. Both need a user gesture in the browser.
+- `pointers()` is the multi-touch list (`pointer()` stays the primary latch).
+- Gamepad sticks still poll via `gamepad_axis`; `poll_events` also yields `GamepadAxis` when a value changes.
 
 ## Buffers
 
@@ -134,4 +137,4 @@ same operators work in `@compute` / `@vertex` / `@fragment` and on the CPU:
 Near-zero `normalize` on the CPU returns a unit axis (`(1,0)`, `(0,1,0)`, or `(0,0,0,1)`);
 shaders use WGSL `normalize`.
 
-Native `dream run` uses wgpu; the browser uses `navigator.gpu`. More samples: [`life/`](https://github.com/sps014/dream/tree/main/sample/compute/life), [`fluid/`](https://github.com/sps014/dream/tree/main/sample/fluid), [`ocean/`](https://github.com/sps014/dream/tree/main/sample/graphics/ocean), [`elevated/`](https://github.com/sps014/dream/tree/main/sample/graphics/elevated).
+`dream run` uses the machine's GPU. The browser uses the page's GPU. More samples: [`life/`](https://github.com/sps014/dream/tree/main/sample/compute/life), [`fluid/`](https://github.com/sps014/dream/tree/main/sample/fluid), [`ocean/`](https://github.com/sps014/dream/tree/main/sample/graphics/ocean), [`elevated/`](https://github.com/sps014/dream/tree/main/sample/graphics/elevated).

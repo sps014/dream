@@ -1,9 +1,7 @@
 # Vertex & fragment shaders (`@vertex` / `@fragment`)
 
-Dream can compile ordinary-looking functions into **WebGPU vertex and fragment
-shaders** (WGSL), the same way [`@compute`](compute.md) becomes a compute kernel.
-Mark top-level functions with `@vertex` / `@fragment`, link them with
-`GpuRenderPipeline.create` / `create_ex`, and draw through `GpuRenderPass`.
+Dream can turn ordinary-looking functions into **WebGPU vertex and fragment shaders** (WGSL), the same way [`@compute`](compute.md) becomes a compute kernel.
+Mark top-level functions with `@vertex` / `@fragment`, link them with `GpuRenderPipeline.create` / `create_ex`, and draw through `GpuRenderPass`.
 
 ## Execution model
 
@@ -83,11 +81,11 @@ let _ = GpuRenderPass.draw_instanced(
 | `GpuTexture` binding | sampled `texture_2d<f32>` | `@storage` for a writable storage texture; `@cube` for `texture_cube<f32>` |
 | `GpuBuffer<T>` binding | `read_write` storage | `@readonly` for read-only storage |
 
-`@interpolate` takes an optional second argument choosing where the varying is sampled, which
-only matters under MSAA. `"centroid"` samples inside the covered part of the fragment, which
-stops values being extrapolated past the edge of a partially covered triangle; `"sample"`
-additionally shades once per sample. For `"flat"` the second argument is `"first"` or `"either"`,
-selecting which vertex provides the value:
+`@interpolate` takes an optional second argument choosing where the varying is sampled, which only matters under MSAA:
+
+- `"centroid"` — samples inside the covered part of the fragment (stops values being extrapolated past the edge of a partially covered triangle)
+- `"sample"` — shades once per sample
+- For `"flat"`: `"first"` or `"either"`, selecting which vertex provides the value
 
 ```dream
 struct VsOut {
@@ -99,10 +97,9 @@ struct VsOut {
 
 ## Vertex buffers
 
-Every leading struct parameter of a `@vertex` function is one vertex buffer slot, in declaration
-order, matching `set_vertex_buffer(slot, …)`. Attribute locations run across all of them, so a
-second buffer continues where the first stopped. Mark a parameter `@instance` to step its buffer
-once per instance instead of once per vertex:
+Every leading struct parameter of a `@vertex` function is one vertex buffer slot, in declaration order, matching `set_vertex_buffer(slot, …)`.
+Attribute locations run across all of them, so a second buffer continues where the first stopped.
+Mark a parameter `@instance` to step its buffer once per instance instead of once per vertex:
 
 ```dream
 struct Vertex { public pos: GpuVec3; public uv: GpuVec2; }
@@ -116,17 +113,14 @@ struct Instance {
 fun mesh_vs(v: Vertex, @instance inst: Instance, mvp: GpuMat4): VsOut { /* … */ }
 ```
 
-`@format` sets the *wire* format only: the buffer stores the packed bytes while the shader still
-reads the field's declared type, so `unorm8x4` turns a `GpuVec4` tint from 16 bytes into 4. The
-format's shader type has to be the field's own type, which rules out reading `unorm8x4` as anything
-but a `GpuVec4`. Attributes are otherwise packed tightly in declaration order.
+`@format` sets the *wire* format only: the buffer stores the packed bytes while the shader still reads the field's declared type, so `unorm8x4` turns a `GpuVec4` tint from 16 bytes into 4.
+The format's shader type has to be the field's own type, which rules out reading `unorm8x4` as anything but a `GpuVec4`.
+Attributes are otherwise packed tightly in declaration order.
 
 ## Resource bindings
 
-Resource parameters (`GpuTexture`, `GpuSampler`, `GpuBuffer<T>`, and anything else, which becomes a
-uniform) get `@group(0)` and an auto-incrementing binding index per group. Both can be named
-explicitly, which is what a material system needs — one group per update frequency, built once and
-reused across frames:
+Resource parameters (`GpuTexture`, `GpuSampler`, `GpuBuffer<T>`, and anything else, which becomes a uniform) get `@group(0)` and an auto-incrementing binding index per group.
+Both can be named explicitly — one group per update frequency, built once and reused across frames:
 
 ```dream
 @fragment
@@ -141,12 +135,9 @@ fun pbr_fs(
 }
 ```
 
-All uniform parameters of one shader collapse into a single WGSL uniform block, so `@group` /
-`@binding` on any of them places the whole block; two uniform parameters asking for different slots
-is an error.
+All uniform parameters of one shader collapse into a single uniform block, so `@group` / `@binding` on any of them places the whole block; two uniform parameters asking for different slots is an error.
 
-App-side, textures, samplers, and storage buffers are supplied with a `GpuBindList` in the same
-order the shader declares them (ascending group, then binding, separately per kind):
+App-side, textures, samplers, and storage buffers are supplied with a `GpuBindList` in the same order the shader declares them (ascending group, then binding, separately per kind):
 
 ```dream
 let binds = GpuBindList.begin().texture(albedo).sampler(samp);
@@ -157,8 +148,8 @@ let _ = GpuRenderPass.draw_ex(
 
 ## Sampling textures
 
-`Gpu.texture_sample(tex, samp, u, v)` is the everyday filtered read, and every one of these returns
-all four channels as a `GpuVec4` (except the depth comparisons, which return a single fraction):
+`Gpu.texture_sample(tex, samp, u, v)` is the everyday filtered read.
+Every one of these returns all four channels as a `GpuVec4` (except the depth comparisons, which return a single fraction):
 
 | Call | WGSL | Notes |
 |---|---|---|
@@ -172,12 +163,11 @@ all four channels as a `GpuVec4` (except the depth comparisons, which return a s
 | `texture_load` / `_level` / `_layer` | `textureLoad` | unfiltered texel fetch by integer coordinate |
 | `texture_num_levels` / `_num_layers` | `textureNumLevels` / `Layers` | `_num_layers` needs an array texture |
 
-`texture_gather` needs a literal `0`–`3` for its component, because WGSL requires a constant there.
+`texture_gather` needs a literal `0`–`3` for its component.
 
 ### Shadow maps
 
-A `@depth` texture read through a `@compare` sampler does the depth test in hardware and filters
-the four results, so one call returns how much of the texel neighbourhood the fragment is lit by:
+A `@depth` texture read through a `@compare` sampler does the depth test in hardware and filters the four results, so one call returns how much of the texel neighbourhood the fragment is lit by:
 
 ```dream
 @fragment
@@ -191,8 +181,7 @@ fun lit_fs(
 }
 ```
 
-`texture_sample_compare` is `@fragment` only; `texture_sample_compare_level` pins mip level 0 and
-works from `@compute` too.
+`texture_sample_compare` is `@fragment` only; `texture_sample_compare_level` pins mip level 0 and works from `@compute` too.
 
 ## Fragment outputs (MRT)
 
@@ -214,15 +203,11 @@ fun fs(v: VsOut): FsOut {
 ## Builtins
 
 - Vertex: `vertex_index`, `instance_index`
-- Fragment: `frag_coord`, `front_facing`; `sample_index` / `primitive_index` / `sample_mask` when
-  referenced (`primitive_index` emits `enable primitive_index;`)
+- Fragment: `frag_coord`, `front_facing`; `sample_index` / `primitive_index` / `sample_mask` when referenced
 
-`sample_mask` is the incoming coverage mask: bit *N* is set when sample *N* of this fragment is
-covered, so `GpuMath.count_one_bits(sample_mask)` counts covered samples.
+`sample_mask` is the incoming coverage mask: bit *N* is set when sample *N* of this fragment is covered, so `GpuMath.count_one_bits(sample_mask)` counts covered samples.
 
-An output struct can also **write** `@builtin("sample_mask")` as an `int` field, which is how
-alpha-to-coverage and custom MSAA masking work — clearing a bit discards that sample, and
-clearing every bit discards the fragment:
+An output struct can also **write** `@builtin("sample_mask")` as an `int` field — clearing a bit discards that sample, and clearing every bit discards the fragment:
 
 ```dream
 struct FsOut {
@@ -234,16 +219,13 @@ struct FsOut {
 ## Control flow
 
 `if` / `while` / `do`-`while` / `for` / `switch` all work, including `break` and `continue`.
-Two limits come from WGSL:
 
-- **No loop labels.** `break outer;` / `continue outer;` are rejected, because WGSL's `break` and
-  `continue` always apply to the innermost loop. Use a flag local, or move the inner loop into a
-  [`@gpu` helper](#gpu-helpers) and `return` from it.
-- **`switch` subjects are evaluated once** and case labels must be constant — a literal or a
-  C-style enum member. Cases do not fall through, and a `break` inside a case body belongs to the
-  enclosing loop, not to the `switch`.
+Limits:
 
-C-style enums are usable in shaders; members fold to their integer value:
+- **No loop labels.** `break outer;` / `continue outer;` are rejected — `break` and `continue` always apply to the innermost loop. Use a flag local, or move the inner loop into a [`@gpu` helper](#gpu-helpers) and `return` from it.
+- **`switch` subjects are evaluated once.** Case labels must be constants: a literal or a simple enum member. Cases do not fall through. A `break` inside a case belongs to the enclosing loop, not to the `switch`.
+
+Simple enums work in shaders. Each member is its integer value:
 
 ```dream
 enum Mode { Add = 0, Mul = 1, Sub = 2 }
@@ -260,9 +242,8 @@ fun apply(mode: int, a: float, b: float): float {
 
 ## Packing
 
-`GpuMath` packs normalized vectors into a 32-bit `int` and back, matching the WGSL builtins of
-the same name. These run on the CPU too, so a mesh packed on the host unpacks in a shader to the
-same bits — useful for halving the size of vertex colours and normals, or for compact G-buffers:
+`GpuMath` packs normalized vectors into a 32-bit `int` and back.
+These run on the CPU too, so a mesh packed on the host unpacks in a shader to the same bits — useful for halving the size of vertex colours and normals, or for compact G-buffers:
 
 | Pack | Unpack | Component range |
 |---|---|---|
@@ -275,25 +256,20 @@ Components are clamped before scaling, and `x` occupies the low bits.
 
 ## Vector math
 
-`GpuVec2` / `GpuVec3` / `GpuVec4` support WGSL-shaped arithmetic inside shaders
-(and the same expressions on the CPU):
+`GpuVec2` / `GpuVec3` / `GpuVec4` support arithmetic inside shaders (and the same expressions on the CPU):
 
 - `v + w`, `v - w`, `v * w`, `v / w` (component-wise)
 - `v * s`, `v / s`, `s * v` (and `s + v`, `v + s`, …)
 - `-v`
 - `GpuMatN * GpuVecN` and `GpuMatN * GpuMatN`
 
-`GpuMath.mix` / `min` / `max` / `abs` / `clamp` / `saturate` / `sign` / `floor` /
-`ceil` / `fract` / `sqrt` / `exp` / `pow` take `float` or `GpuVecN`. `normalize` /
-`length` / `dot` use the same name for vec2/3/4. `GpuVecN.splat(s)` is WGSL `vecN(s)`.
-`GpuMat2.of(c0, c1)` becomes WGSL `mat2x2<f32>(c0, c1)`. `GpuMath.transpose` maps to WGSL
-`transpose` (overloaded for `GpuMat2` / `GpuMat3` / `GpuMat4`), and `GpuMath.inverse` /
-`GpuMath.determinant` cover all three sizes. Shader `let` is inferred from the initializer —
-`let s = GpuMath.sin(t)` needs no `: float`.
+`GpuMath.mix` / `min` / `max` / `abs` / `clamp` / `saturate` / `sign` / `floor` / `ceil` / `fract` / `sqrt` / `exp` / `pow` take `float` or `GpuVecN`. `normalize` / `length` / `dot` use the same name for vec2/3/4. `GpuVecN.splat(s)` builds a vector of all `s`.
+
+`GpuMat2.of(c0, c1)` builds a matrix from columns. `GpuMath.transpose` / `GpuMath.inverse` / `GpuMath.determinant` cover `GpuMat2` / `GpuMat3` / `GpuMat4`. Shader `let` is inferred from the initializer — `let s = GpuMath.sin(t)` needs no `: float`.
 
 ### Swizzles
 
-Reading two to four components at once gives a smaller (or reordered) vector, as in WGSL:
+Reading two to four components at once gives a smaller (or reordered) vector:
 
 ```dream
 let rgb  = color.xyz;   // GpuVec3
@@ -302,21 +278,19 @@ let flip = p.wzyx;      // GpuVec4, reversed
 let grey = c.xxx;       // GpuVec3, broadcast
 ```
 
-`rgba` is an interchangeable spelling for `xyzw` (`color.rgb` is `color.xyz`), but the two cannot
-be mixed in one name. Components past the end of the source are an error: `.xyz` on a `GpuVec2`
-does not compile.
+`rgba` is an interchangeable spelling for `xyzw` (`color.rgb` is `color.xyz`), but the two cannot be mixed in one name.
+Components past the end of the source are an error: `.xyz` on a `GpuVec2` does not compile.
 
-The same expressions work on the CPU, where a swizzle builds a new `GpuVecN` and so reads its
-receiver once per component. On the CPU the receiver therefore has to be something re-readable — a
-local or a field path. Bind anything else to a local first:
+The same expressions work on the CPU, where a swizzle builds a new `GpuVecN` and so reads its receiver once per component.
+On the CPU the receiver therefore has to be something re-readable — a local or a field path.
+Bind anything else to a local first:
 
 ```dream
 let n = GpuMath.normalize(v);   // on the CPU, `GpuMath.normalize(v).xyz` is an error
 let dir = n.xyz;
 ```
 
-Inside shaders there is no such restriction, because the swizzle becomes a native WGSL one that
-evaluates its receiver a single time.
+Inside shaders there is no such restriction — the swizzle evaluates its receiver a single time.
 
 ```dream
 @gpu
@@ -327,8 +301,8 @@ fun shade(a: GpuVec3, b: GpuVec3, t: float): GpuVec3 {
 
 ## `@gpu` helpers
 
-Shaders may only call other GPU stages / `@gpu` helpers and `GpuMath` / `GpuVec*` /
-`GpuMat*` builtins. Helpers are emitted as WGSL `fn`s and are **not** callable from CPU code.
+Shaders may only call other GPU stages / `@gpu` helpers and `GpuMath` / `GpuVec*` / `GpuMat*` builtins.
+Helpers are **not** callable from CPU code.
 
 ```dream
 @gpu
@@ -337,27 +311,27 @@ fun sea_octave(ux: float, uz: float, choppy: float): float {
 }
 ```
 
-Rules: top-level only; not generic/async/extern; explicit non-void return type. Parameters carry
-values, so a `GpuBuffer` / `GpuTexture` / `GpuSampler` cannot be one — those are bound to a stage,
-not passed. Index the resource in the stage function and pass the element, or make the helper its
-own `@compute` kernel with its own binding.
+Rules:
+
+- Top-level only
+- Not generic / async / extern
+- Explicit non-void return type
+- Parameters carry values, so a `GpuBuffer` / `GpuTexture` / `GpuSampler` cannot be one — those are bound to a stage, not passed
+- Index the resource in the stage function and pass the element, or make the helper its own `@compute` kernel with its own binding
 
 ## Matrices
 
-`GpuMat2` / `GpuMat3` / `GpuMat4` (column-major). Prefer `m * v` / `m * n` in shaders;
-`GpuMath.mul` is the named form (mat×vec or mat×mat). `GpuMath.transpose` maps to WGSL
-`transpose`.
+`GpuMat2` / `GpuMat3` / `GpuMat4` (column-major).
+Prefer `m * v` / `m * n` in shaders; `GpuMath.mul` is the named form (mat×vec or mat×mat).
+`GpuMath.transpose` is available.
 
 ## Rules
 
-- Top-level only; not async, generic, or extern; the body becomes a WGSL shader.
+- Top-level only; not async, generic, or extern.
 - `@vertex` returns a value struct with a position builtin plus varyings.
 - `@fragment` first parameter is usually that interface struct; return `GpuVec4` or an output struct.
-- When names passed to `create` / `create_ex` are **string literals**, Dream checks stages
-  and matching interface types.
-- `sizeof(T)` becomes a number in the shader; `nameof(...)` and `typeof(...)` are not available in
-  shader bodies (they produce `string`). Details:
-  [Operators — sizeof, nameof, and typeof](operators.md#sizeof-nameof-and-typeof).
+- When names passed to `create` / `create_ex` are **string literals**, Dream checks stages and matching interface types.
+- `sizeof(T)` becomes a number in the shader; `nameof(...)` and `typeof(...)` are not available in shader bodies (they produce `string`). Details: [Operators — sizeof, nameof, and typeof](operators.md#sizeof-nameof-and-typeof).
 
 ## Related
 

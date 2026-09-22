@@ -2,7 +2,11 @@
 
 Functions cross the Dream/JavaScript boundary in both directions: hand a Dream function to JS, or call a JS function from Dream. The runtime wraps Dream function values as ordinary callable JS functions.
 
-**Only non-capturing functions may cross into JS.** A capturing lambda would lose its captured state at the boundary. The compiler rejects capturing callbacks — use a top-level `fun`, a captureless lambda, or module-level state instead (see the [music player sample](https://github.com/sps014/dream/blob/main/sample/music_player/music_player.dream)).
+**Only non-capturing functions may cross into JS.** A capturing lambda would lose its captured state at the boundary. Dream rejects capturing callbacks — use a top-level `fun`, a captureless lambda, or module-level state instead (see the [music player sample](https://github.com/sps014/dream/blob/main/sample/music_player/music_player.dream)).
+
+```dream
+// el.addEventListener("click", (ev) => { println(name); }); // error: capturing callback rejected
+```
 
 ## Dream to JS
 
@@ -34,7 +38,7 @@ await run("callbacks.wasm", {
 
 ## Registering DOM handlers
 
-Passing a Dream function directly into a dynamic [`js`](js-type.md) call wraps it automatically — so event handlers read just like JavaScript:
+Passing a Dream function directly into a dynamic [`js`](js-type.md) call wraps it automatically:
 
 ```dream
 fun on_click(ev: js): void {
@@ -51,7 +55,7 @@ The wrapper has **stable identity per function**, so a handler registered with `
 
 ## JS to Dream
 
-A JavaScript function handed to Dream is just a [`js`](js-type.md) value — call it with native syntax, and its arguments auto-convert on the way in:
+A JavaScript function handed to Dream is just a [`js`](js-type.md) value — call it with ordinary Dream syntax, and its arguments auto-convert on the way in:
 
 ```dream
 fun main(): void {

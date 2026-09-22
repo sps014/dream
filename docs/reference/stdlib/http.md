@@ -15,7 +15,18 @@ async fun main(): void {
 }
 ```
 
-Native uses the host HTTP client (reqwest in `libdream`); browser and Node use `fetch`. Buffered `get`/`post` and streaming `get_stream`/`request_stream` share that path. Calls are `async` and return `Result`. To **serve** HTTP, see [`system.webapi`](webapi.md) (`WebApp`). A convenient public mock API for experiments is [JSONPlaceholder](https://jsonplaceholder.typicode.com/guide/).
+Native talks to the network on your machine; browser and Node use `fetch`. Buffered `get`/`post` and streaming `get_stream`/`request_stream` share that path. Calls are `async` and return `Result`. To **serve** HTTP, see [`system.webapi`](webapi.md) (`WebApp`). A convenient public mock API for experiments is [JSONPlaceholder](https://jsonplaceholder.typicode.com/guide/).
+
+```dream
+import system.json;
+
+let body = JsonValue.dict();
+body.set("title", JsonValue.from_string("hi"));
+switch (api.post_json("/posts", body).await) {
+    Ok(res) => System.println(res.status()),
+    Err(e) => System.println(e.message()),
+}
+```
 
 ## Client
 

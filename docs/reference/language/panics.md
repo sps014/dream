@@ -1,10 +1,10 @@
 # Panics
 
-A **panic** is a fatal, non-recoverable runtime error: the program prints a message and halts immediately. There is no `try`/`catch` for panics (Dream has no exception mechanism at all) — a panic is closer to a Rust `panic!`/`abort` than a C#/Java exception. If you can anticipate a failure and want to handle it, use [`Option<T>`/`Result<T, E>`](../stdlib/option-result.md) instead; reach for a panic only for "this should never happen" conditions.
+A **panic** is a fatal, non-recoverable runtime error: the program prints a message and halts immediately. There is no `try`/`catch` for panics — Dream has no exception mechanism at all. If you can anticipate a failure and want to handle it, use [`Option<T>`/`Result<T, E>`](../stdlib/option-result.md) instead; reach for a panic only for "this should never happen" conditions.
 
 ## What triggers a panic
 
-The compiler inserts automatic checks for the operations below. Each prints a message and halts the instant the bad condition is detected:
+Dream inserts automatic checks for the operations below. Each prints a message and halts the instant the bad condition is detected:
 
 | Situation | Example |
 | --- | --- |
@@ -23,7 +23,7 @@ System.panic("unreachable: config was never validated");
 
 ## What a panic looks like
 
-A panic prints its message to standard error, then halts the program — diagnostics stay out of the program's own output, so piping stdout is unaffected. The automatic checks' messages are located with the failing source file, line, and declaring function, Rust-style, e.g.:
+A panic prints its message to standard error, then halts the program — diagnostics stay out of the program's own output, so piping stdout is unaffected. The automatic checks' messages include the failing source file, line, and declaring function, e.g.:
 
 ```
 panic: index out of bounds (at /path/to/program.dream:6, in main)
@@ -32,7 +32,7 @@ panic: index out of bounds (at /path/to/program.dream:6, in main)
 `System.panic(message)` prints exactly the `message` you pass — no automatic location is appended, so include whatever context is useful yourself.
 
 !!! note "Precision notes"
-    The line is the checked construct's own source line whenever the compiler can determine it (`?` otherwise). A check inside a small inlined callee may report the caller's line instead — still diagnosable, not a wrong file.
+    The line is the checked construct's own source line whenever Dream can determine it (`?` otherwise). A check inside a small function that was copied into the caller may show the caller's line — still diagnosable, not a wrong file.
 
 ## Why panics, not undefined behavior
 

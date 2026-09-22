@@ -38,23 +38,23 @@ import system;
 fun main() {
     let score = 85;
 
-    if score >= 90 {         // (1)
+    if score >= 90 {           // (1)
         System.println("A");
-    } else if (score >= 70) {
+    } else if score >= 70 {
         System.println("B");
     } else {
         System.println("C");
     }
 
     let i = 0;
-    while i < 3 {            // (2)
+    while i < 3 {              // (2)
         System.println(i);
         i = i + 1;             // (3)
     }
 }
 ```
 
-1. `if` needs parentheses. The condition must be `true` or `false`.
+1. Parentheses around the condition are optional. The condition must be a `bool` (`true` or `false`).
 2. `while` repeats the block as long as the condition is true.
 3. Change `i` or the loop never ends.
 

@@ -1,10 +1,14 @@
 # Interfaces
 
-An interface is a contract — a named set of method signatures that a type promises to provide. A value typed as an interface can hold *any* type that implements it, and calls dispatch to the concrete implementation at runtime. That is how Dream does polymorphism.
+An interface is a contract — a named set of method signatures that a type promises to provide. A value typed as an interface can hold *any* type that implements it. Calls go to the concrete implementation at runtime.
+
+That is how Dream does polymorphism.
 
 ## Declaring an interface
 
-List method signatures (return type and parameters). A signature with no body ends in a semicolon. Interfaces declare methods only — no fields:
+List method signatures (return type and parameters).
+A signature with no body ends in a semicolon.
+Interfaces declare methods only — no fields:
 
 ```dream
 interface Animal {
@@ -29,15 +33,17 @@ class Dog : Animal {
 }
 ```
 
-A class can implement several at once (`class Robot : Animal, Serializable { ... }`). Omitting a method, or declaring it with the wrong signature, is a compile error.
+A class can implement several at once (`class Robot : Animal, Serializable { ... }`).
+Omitting a method, or declaring it with the wrong signature, is a compile error.
 
 ## Using an interface-typed value
 
-A class value is accepted wherever its interface is expected — this **upcast** is implicit and free. The static type becomes the interface, but the value remembers its concrete class:
+A class value is accepted wherever its interface is expected — this **upcast** is implicit and free.
+The static type becomes the interface, but the value remembers its concrete class:
 
 ```dream
 fun describe(a: Animal): void {
-    println(a.speak());   // dispatches to Cat.speak or Dog.speak at runtime
+    println(a.speak());   // runs Cat.speak or Dog.speak
     println(a.legs());
 }
 
@@ -76,7 +82,9 @@ interface ReadWrite : Readable + Writable {
 }
 ```
 
-A type that implements the child is a subtype of every parent — `List<T>` only needs to declare `IndexedCollection<T>` and is still usable as `Collection<T>`. Inherited methods (and their defaults) become part of the child's method set; a child method with the same name overrides the parent. Cycles among parents are a compile error. Ambiguous defaults from two parents (same method name, both with a default body, no override on the child) are rejected.
+A type that implements the child is a subtype of every parent — `List<T>` only needs to declare `IndexedCollection<T>` and is still usable as `Collection<T>`. Inherited methods (and their defaults) become part of the child's method set; a child method with the same name overrides the parent. Cycles among parents are a compile error.
+
+Ambiguous defaults from two parents (same method name, both with a default body, no override on the child) are rejected.
 
 Class `implements` lists stay comma-separated (`class Foo : A, B`); only interface parents use `+`.
 
@@ -97,11 +105,13 @@ extend Collection<T> {
 }
 ```
 
-After `import system.collections;`, those methods are available on the interface type and on every implementer (`list.to_list()`, `(Collection<int>)xs.to_list()`). Implementers do not need to override them.
+After `import system.collections;`, those methods are available on the interface type and on every implementer (`list.to_list()`, `(Collection<int>)xs.to_list()`).
+Implementers do not need to override them.
 
 ## Default methods
 
-A method may carry a **default body** that implementers inherit unless they override it. A default can call the interface's other methods on `this`, which still dispatch to the concrete type:
+A method may carry a **default body** that implementers inherit unless they override it.
+A default can call the interface's other methods on `this`, which still go to the concrete type:
 
 ```dream
 interface Greeter {
@@ -135,7 +145,8 @@ if a is Cat {
 
 ### `is` with binding
 
-`is` can narrow and bind in one step — `expr is Type name` scopes `name: Type` to the guarded branch, with no separate cast. It works for any target type, unboxing value types held in an `object`:
+`is` can narrow and bind in one step — `expr is Type name` scopes `name: Type` to the guarded branch, with no separate cast.
+It works for any target type, unboxing value types held in an `object`:
 
 ```dream
 let a: Animal = Cat();
@@ -165,11 +176,13 @@ extend int : Comparable<int> {
 }
 ```
 
-This is exactly how the prelude makes primitives `Comparable` so `List<int>().sort()` works. The type then satisfies [generic constraints](generics.md#generic-constraints) like `T : Comparable<T>`.
+This is exactly how the prelude makes primitives `Comparable` so `List<int>().sort()` works.
+The type then satisfies [generic constraints](generics.md#generic-constraints) like `T : Comparable<T>`.
 
 ### Generic interfaces
 
-An interface can be generic. A class implements a concrete or generic instance of it; when a generic class implements a generic interface, its type parameter flows in:
+An interface can be generic.
+A class implements a concrete or generic instance of it; when a generic class implements a generic interface, its type parameter flows in:
 
 ```dream
 interface Container<T> {
@@ -184,7 +197,8 @@ class Box<T> : Container<T> {
 }
 ```
 
-Each concrete use is specialized: `Box<int>` implements `Container<int>`. Dispatch uses that concrete interface type:
+Each concrete use is specialized: `Box<int>` implements `Container<int>`.
+Calls use that concrete interface type:
 
 ```dream
 fun describe(c: Container<int>): void {
@@ -199,7 +213,8 @@ let d = (Container<int>)b;     // explicit upcast to a generic interface
 
 ### Async interface methods
 
-An interface method may be `async`. Calling it through an interface receiver dispatches dynamically to the concrete async implementation, which returns a `Future<T>` to `await`:
+An interface method may be `async`.
+Calling it through an interface receiver goes to the concrete async implementation, which returns a `Future<T>` to `await`:
 
 ```dream
 interface Fetcher {
@@ -215,12 +230,12 @@ class Remote : Fetcher {
 }
 
 async fun run(f: Fetcher): void {
-    let v = f.fetch().await;   // dynamic dispatch; await the Future<int>
+    let v = f.fetch().await;   // await the Future<int>
     println(v);
 }
 ```
 
-An `async` interface method must be implemented by an `async` method (and non-async by non-async) — the two compile to different shapes, so a mismatch is a compile error.
+An `async` interface method must be implemented by an `async` method (and non-async by non-async) — a mismatch is a compile error.
 
 ### Built-in `Equatable` and `Comparable`
 
@@ -231,7 +246,8 @@ interface Equatable<T> { fun equals(other: T): bool; }
 interface Comparable<T> { fun compare(other: T): int; }
 ```
 
-A type implements them against itself (`class Money : Comparable<Money>, Equatable<Money>`). By convention `compare` returns a negative number, zero, or a positive number when `this` is ordered before, equal to, or after `other`.
+A type implements them against itself (`class Money : Comparable<Money>, Equatable<Money>`).
+By convention `compare` returns a negative number, zero, or a positive number when `this` is ordered before, equal to, or after `other`.
 
 Every numeric primitive plus `char` and `string` already implements `Comparable` (via prelude `extend` blocks), so with `import system.collections;` — `List<int>().sort()`, `binary_search`, and comparisons in generic code work with no extra code.
 
@@ -239,10 +255,12 @@ Every numeric primitive plus `char` and `string` already implements `Comparable`
 - **`<` / `<=` / `>` / `>=` use `compare`** when the left operand's type implements `Comparable<Self>` (`a < b` means `a.compare(b) < 0`). A more specific [`@operator("...")`](operators.md#operator-overloading) for a different symbol is unaffected.
 - **`compare` powers sorting** via `List<T : Comparable<T>>.sort()` and `List<T>.sort_by(cmp)`. See [List sorting](../stdlib/collections.md#sorting-and-search).
 
-Both interfaces work with [value structs](classes-structs.md). When the concrete type is known, calls are direct. Assigning a value struct to a bare interface variable boxes it for dynamic dispatch:
+Both interfaces work with [value structs](classes-structs.md).
+When the concrete type is known, calls are direct.
+Assigning a value struct to a bare interface variable boxes it so the call can go to the right method at runtime:
 
 ```dream
-let a: Shape = Rect(3, 4);   // boxed; a.area() dispatches dynamically
+let a: Shape = Rect(3, 4);   // boxed; a.area() runs the Rect implementation
 ```
 
 ## See also

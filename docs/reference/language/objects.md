@@ -78,4 +78,4 @@ class Color {
 }
 ```
 
-Requirements: both `@override` and `public` are required; `to_string` returns `string` and `hash_code` returns `int`, and both take no parameters. Once overridden, `print`/`to_string` on a `Color` — even one stored in an `object` — uses your implementation.
+Requirements: both `@override` and `public` are required; `to_string` returns `string` and `hash_code` returns `int`, and both take no parameters. Once overridden, `print` / `to_string` on a `Color` — even one stored in an `object` — uses your implementation.

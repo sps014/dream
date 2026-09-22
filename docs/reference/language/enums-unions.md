@@ -1,10 +1,10 @@
 # Enums & Unions
 
-`enum` covers two related ideas: a plain enum is a set of named integer constants, and a *discriminated union* is an enum whose variants carry typed data. You take unions apart with a pattern-matching `switch`.
+`enum` covers two related ideas: a simple enum is a set of named integer constants, and a *discriminated union* is an enum whose variants carry typed data. You take unions apart with a pattern-matching `switch`.
 
 ## Enums
 
-A plain `enum` defines named integer constants. Members number from `0`; an explicit value shifts the ones that follow:
+A simple `enum` defines named integer constants. Members number from `0`; an explicit value shifts the ones that follow:
 
 ```dream
 enum Color { Red, Green, Blue }          // 0, 1, 2
@@ -19,7 +19,7 @@ println(c);              // 1
 println(c.to_string());  // Green
 ```
 
-C-style enums also take bitwise `&`, `|`, `^`, and prefix `~` (same as `int`). Combine flag variants with `|`; the result stays the enum type. Shifts (`<<`/`>>`) stay integer-only.
+Simple enums also take bitwise `&`, `|`, `^`, and prefix `~` (same as `int`). Combine flag variants with `|`; the result stays the enum type. Shifts (`<<` / `>>`) stay integer-only.
 
 ```dream
 enum Flags { None = 0, Read = 1, Write = 2, Exec = 4 }
@@ -117,7 +117,7 @@ switch (shape) {
 }
 ```
 
-A literal pattern over an ordered scalar subject (`int`/`long`/`uint`/`ulong`/`byte`/`char`/`float`/`double`) can be an inclusive range, `lo..hi`:
+A literal pattern over an ordered scalar subject (`int` / `long` / `uint` / `ulong` / `byte` / `char` / `float` / `double`) can be an inclusive range, `lo..hi`:
 
 ```dream
 fun grade(score: int): string {
@@ -146,13 +146,22 @@ let n: Option<int> = Option.None; // annotation needed for the unit variant
 
 ### Value unions
 
-Unions are heap-allocated and reference-counted by default. But if **every** variant's payload is a value type or primitive (`int`, `bool`, `float`, a value `struct`, ...), the union automatically becomes a **stack (value) union**: stored inline, copied by value, with zero heap allocation. This is decided per concrete instantiation, so `Option<int>` is a value union while `Option<string>` stays a heap union, even though they share one generic declaration.
+Unions are heap values by default.
+
+A union becomes a **value union** when every payload is a value (`int`, `bool`, `float`, a `struct`, and so on):
+
+- It is stored inline and copied on assignment.
+- It does not allocate on the heap.
+- This is decided for each concrete type. `Option<int>` is a value union. `Option<string>` stays on the heap.
 
 #### `enum struct`: a value union, plus a reference-payload relaxation
 
-`enum struct` is the value-type counterpart of a heap `enum`, the same split as `class` vs `struct`. It is a checked contract: the compiler reports an error if the union doesn't qualify as inline, instead of silently falling back to the heap. This catches a regression (e.g. someone later adds a self-referential payload) at the declaration site rather than as a silent performance cliff.
+`enum struct` is a value union you ask for, the same split as `class` vs `struct`.
 
-`enum struct` also unlocks a relaxation the automatic inference doesn't apply on its own: a union may still go inline with **any number** of reference-typed payload fields (a `string`, a `class`, an array, ...) across its variants — each is stored inline as a retained pointer, exactly like a reference field embedded in a value `struct` already is. A union that refers to itself still cannot be stored inline (an inline recursive value type would have infinite size); `enum struct` reports an error naming the offending field:
+- If it cannot be stored inline, that is an error. Dream does not silently put it on the heap.
+- Adding a payload that refers to the same union is an error, and the message names that field.
+- Reference payloads are allowed: `string`, `class`, arrays, and so on. Each is stored as a pointer inside the value, the same way a `struct` field holds one.
+- A union cannot contain itself inline. That value would have no finite size.
 
 ```dream
 enum struct Outcome {
@@ -166,24 +175,21 @@ enum struct Either {
 }
 ```
 
-This form is opt-in rather than automatic, because a union with several
-reference payloads across variants has no single niche to exploit. Unions with *exactly one*
-reference payload (see the next section) are handled automatically instead. `enum struct` on a
-C-style (payload-less) enum is an error — use `enum`.
+Write `enum struct` when you want this. Dream does not do it automatically when several variants hold references.
 
-#### Niche unions: `Option<Class>` is the pointer itself
+A union with exactly one reference payload is handled on its own. See the next section.
 
-A union with **exactly two variants — one empty, one carrying a single reference-typed
-payload** (`Option<TreeNode>`, `Option<string>`, ...) gets a third representation: the value
-*is* the payload pointer. `None` is null, `Some(x)` is `x` — no envelope block, no allocation,
-and no retain/release pair per edge beyond the payload's own refcount. Pattern matching still
-works unchanged (`switch` on the subject compiles to a null test), and `weak` fields typed
-`Option<Class>` store the raw pointer, reset to null when the referent dies.
+`enum struct` on a simple enum (no payloads) is an error. Use `enum`.
 
-Like value unions this is decided per concrete instantiation (`Option<int>` stays an inline
-value union; `Option<JsValue>`-style unions with more than two variants or extra payloads keep
-the heap representation). See the [nullable design note](../../internals/09-nullable-purge-design-note.md)
-for why this coexists with the "no `TyKind::Nullable`" rule from the purge.
+#### Niche unions
+
+Some `Option`-like unions store "none" without an extra flag.
+
+That happens when there are exactly two variants: one empty, and one with a single reference payload (`Option<TreeNode>`, `Option<string>`). `None` and `Some(x)` share that slot.
+
+- Pattern matching works the same.
+- A `weak` field typed `Option<Class>` becomes `None` when the object is gone.
+- This is chosen per concrete type. `Option<int>` stays a value union. Unions with more than two variants, or with extra payloads, stay on the heap.
 
 ### JSON with `@json`
 

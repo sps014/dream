@@ -30,13 +30,10 @@ let n = int.parse("42").unwrap_or(0);  // 42
 
 ### Integer overflow
 
-Every integer primitive **wraps** on overflow: two's-complement modulo its own bit width, with no
-trap and no promotion to a wider type.
+Every integer primitive **wraps** on overflow: two's-complement modulo its own bit width, with no trap and no promotion to a wider type.
 
-- `int`/`uint` wrap at 32 bits, `long`/`ulong` at 64 bits, `byte` at 8 bits (`+`, `-`, `*`, `<<`
-  all wrap; `byte` results stay in `[0, 255]`).
-- A binary op's result type is its **left operand's** type — `byte + byte` stays `byte`, it is
-  never promoted to `int` the way C promotes narrow integer types.
+- `int` / `uint` wrap at 32 bits, `long` / `ulong` at 64 bits, `byte` at 8 bits (`+`, `-`, `*`, `<<` all wrap; `byte` results stay in `[0, 255]`).
+- A binary op's result type is its **left operand's** type — `byte + byte` stays `byte`.
 - `/` and `%` by zero panic rather than wrapping.
 
 ```dream
@@ -47,15 +44,14 @@ let b: byte = 250b;
 let b2 = b + 10b;           // wraps to 4 (260 mod 256), stays byte
 ```
 
-There is no `checked`/`saturating` arithmetic mode; use `.min`/`.max`/`.clamp()` above, or check
-operands before an operation, if you need to guard against wraparound explicitly.
+There is no `checked` or saturating arithmetic mode. Use `.min` / `.max` / `.clamp()` above, or check operands before an operation, if you need to guard against wraparound explicitly.
 
 ## Floating point
 
 IEEE 754, in two widths:
 
-- `float` — 32-bit (`3.14f`).
-- `double` — 64-bit (`3.14` or `3.14d`).
+- `float` — 32-bit (`3.14f`). An unsuffixed `3.14` is also `float` unless the expected type is `double`.
+- `double` — 64-bit. Use `3.14d` for an always-double literal, or a bare `3.14` / `0` when the expected type is `double`.
 
 Common methods:
 
@@ -63,16 +59,23 @@ Common methods:
 - `.min(other)` / `.max(other)`.
 - `double.parse(str)` — static; parses a string into a `double`, returning `Result<double, ParseError>`.
 
+```dream
+println((3.14f).abs());                    // 3.14
+println((1.5f).min(2.0f));                 // 1.5
+let d = double.parse("2.5").unwrap_or(0.0d);
+```
+
 ## Booleans
 
 `bool` is `true` or `false`.
 
 - `.to_int()` — `1` for `true`, `0` for `false`.
-- `bool.parse(str)` — static; accepts exactly `true` or `false` (case-sensitive), returning `Result<bool, ParseError>`.
+- `bool.parse(str)` — static; accepts exactly `"true"` or `"false"` (case-sensitive), returning `Result<bool, ParseError>`.
 
 ```dream
 println(true.to_int());   // 1
-let b = bool.parse("true").unwrap_or(false);
+let b = bool.parse("true").unwrap_or(false);   // true
+let bad = bool.parse("True").unwrap_or(false); // false — not exact "true"
 ```
 
 ## Characters

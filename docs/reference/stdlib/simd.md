@@ -2,10 +2,10 @@
 
 **Import:** `import system.simd;`
 
-Dream has two SIMD stories on WASM `v128` (16 bytes):
+A plain loop can use vector math; `Vector` is for when you want lanes yourself.
 
-1. **Autovectorization** — a counted `c[i] = a[i] + b[i]` loop (ABC-proven `unchecked` indexes) is rewritten to `v128` loads/stores plus a scalar remainder when `n` is not a multiple of the lane count.
-2. **`Vector<T>`** — explicit portable SIMD, comparable to `System.Numerics.Vector<T>` in C#.
+1. **Autovectorization** — a counted loop like `c[i] = a[i] + b[i]`, when every index is in range, runs wide loads and stores. If `n` is not a multiple of the lane count, the leftover elements run one at a time.
+2. **`Vector<T>`** — explicit portable SIMD when you load, operate, and store lanes yourself.
 
 `T` must be `byte`, `int`, `long`, `float`, or `double`. `Vector<T>.lane_count()` is `16 / sizeof(T)` (16, 4, 2, 4, 2).
 
@@ -37,6 +37,4 @@ fun add(a: float[], b: float[], c: float[]): void {
 | `min` / `max` | lane-wise min/max |
 | `sum` | horizontal sum |
 
-Owning `Vector<T>` locals are WASM `v128` values (not four heap words or a 16-byte sret shadow slot). `load` / lane arithmetic / `store` are `v128.load`, `f32x4.add` (or the matching lane op), and `v128.store`. Cross-function `Vector` parameters and returns still use the value-struct sret pointer and are copied into a `v128` local at the callee prologue.
-
-Autovec does **not** require `Vector`. Users write ordinary indexed loops; the compiler emits `f32x4.add` / `i32x4.add` (and the other lane ops) when the loop is sound.
+A plain counted loop can use vector math on its own. You do not need `Vector` for that.

@@ -67,6 +67,11 @@ async fun main(): void {
 }
 ```
 
+- `struct Vertex` / `VsOut` — per-vertex data in, interpolated color out (clip position is `@builtin("position")`).
+- `@vertex` — runs once per vertex; builds clip space and passes color.
+- `@fragment` — runs per pixel; returns the final color.
+- `while !surface.close_requested` — draw, present, wait for the next frame until the window closes.
+
 Full sample (input, depth options): [`sample/graphics/triangle/`](https://github.com/sps014/dream/tree/main/sample/graphics/triangle).
 
 Compute instead of draw: [GPU SAXPY](gpu-saxpy.md). API: [shaders](../reference/language/shaders.md), [`system.gpu`](../reference/stdlib/gpu.md).

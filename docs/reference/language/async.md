@@ -2,17 +2,23 @@
 
 **Packages:** `Promise` / `Future` are bootstrap (`system.core`). `Time.sleep` needs `import system;`. HTTP examples need `import system.net;`.
 
-Dream has cooperative concurrency with `async`/`await`. The execution model is **lazy**, like Rust: calling an `async fun` constructs a `Future<T>` but does *not* run it. The body executes when the future is first **awaited**, passed to a combinator (`Promise.all` / `any` / `race`), or explicitly launched with `Promise.start`. A future that is never started never runs, and a cancelled-before-start future is simply discarded.
+Dream has cooperative concurrency with `async`/`await`.
+The model is **lazy**: calling an `async fun` builds a `Future<T>` but does *not* run it.
+The body runs when the future is first **awaited**, passed to a combinator (`Promise.all` / `any` / `race`), or launched with `Promise.start`.
+
+A future that is never started never runs, and a cancelled-before-start future is simply discarded.
 
 ## Declaring and awaiting
 
-Prefix a function with `async`. Its declared return type `T` becomes `Future<T>` at the call site. `e.await` suspends the current task until `e`'s future resolves, then yields its value:
+Prefix a function with `async`.
+Its declared return type `T` becomes `Future<T>` at the call site.
+`e.await` suspends the current task until `e`'s future resolves, then yields its value:
 
 ```dream
 import system;
 
 async fun fetchData(): string {
-    Time.sleep(100).await;   // suspends this task; the event loop keeps running
+    Time.sleep(100).await;   // suspends this task; other work can keep running
     return "data";
 }
 
@@ -22,7 +28,8 @@ async fun main(): void {
 }
 ```
 
-`f().await` is just the call composed with `.await`: `f()` produces a `Future<T>`, and `.await` suspends on it to get `T`. The only rule is that `.await` outside an `async` function is an error.
+`f().await` is just the call composed with `.await`: `f()` produces a `Future<T>`, and `.await` suspends on it to get `T`.
+The only rule is that `.await` outside an `async` function is an error.
 
 ### Where `.await` is allowed
 
@@ -54,7 +61,8 @@ Chaining works the same way — `.await` is an ordinary link in a postfix chain,
 
 ## Running work concurrently
 
-`.await` starts the future it awaits, so a plain `let x = work().await;` runs alone. To run several futures concurrently, hand them to a combinator (which starts every member) or launch them explicitly:
+`.await` starts the future it awaits, so a plain `let x = work().await;` runs alone.
+To run several futures concurrently, hand them to a combinator (which starts every member) or launch them explicitly:
 
 ```dream
 import system;
@@ -74,7 +82,8 @@ async fun main(): void {
 
 ### Fire-and-forget (`Promise.start`)
 
-`Promise.start(future)` schedules a future on the run loop without awaiting it. The runtime retains that future until it settles, so you do not need to keep a local after `start`:
+`Promise.start(future)` schedules a future without awaiting it.
+The runtime keeps that future until it settles, so you do not need to keep a local after `start`:
 
 ```dream
 let f = logLater();     // nothing runs yet
@@ -82,7 +91,8 @@ Promise.start(f);       // launches it; result is discarded
 Time.sleep(10).await;   // give it a chance to run
 ```
 
-A future that is neither started nor awaited never executes — dropping it just releases its captured state. `Promise.cancel(f)` before the first start means it never will.
+A future that is neither started nor awaited never executes — dropping it just releases its captured state.
+`Promise.cancel(f)` before the first start means it never will.
 
 ### Combinators (`Promise`)
 
@@ -98,7 +108,11 @@ Static methods on the built-in `Promise` class, over `Future<T>[]`:
 let first = Promise.any([work(10), work(20)]).await;
 ```
 
-`Time.sleep(ms: int, token: Option<CancellationToken> = None): Future<void>` is an awaitable timer backed by the runtime's timer queue (a virtual clock natively, `setTimeout` in the browser). With a token, sleep is sliced so cancellation is observed without changing the host timer ABI. It composes with the combinators like any other future.
+`Time.sleep(ms: int, token: Option<CancellationToken> = None): Future<void>` is an awaitable timer.
+On the native host it uses a virtual clock; in the browser it uses `setTimeout`.
+With a token, cancellation is noticed during the sleep.
+
+It composes with the combinators like any other future.
 
 ## Cancellation
 
@@ -111,15 +125,23 @@ src.cancel();
 System.println(tok.check().is_err()); // true → ECANCELLED
 ```
 
-Public stdlib async APIs take a trailing `token: Option<CancellationToken> = None` (omitted at existing call sites). `Result` methods return `Err` with machine code `ECANCELLED`; `void` / non-`Result` APIs panic via `throw_if_cancelled`. `Promise.cancel(future)` marks a future cancelled (unlinks pending timers via `$dream_cancel`). Cancelling a not-yet-started future means it never runs. Native in-flight host I/O remains best-effort (`HttpClient.with_cancellation` still sets a client-wide default used when the per-call token is omitted).
+Public stdlib async APIs take a trailing `token: Option<CancellationToken> = None` (omitted at existing call sites).
+`Result` methods return `Err` with machine code `ECANCELLED`; `void` / non-`Result` APIs panic via `throw_if_cancelled`.
+`Promise.cancel(future)` marks a future cancelled; pending sleeps are dropped when the token is cancelled.
+
+Cancelling a not-yet-started future means it never runs.
+Native in-flight host I/O remains best-effort (`HttpClient.with_cancellation` still sets a client-wide default used when the per-call token is omitted).
 
 ### Native deferred hosts (`@async_host`)
 
-On native, an `extern async fun` host blocks the whole run loop while it runs. Declaring it `@async_host` opts that import into true async: the runtime calls a `<host>Async` C symbol with the future as its leading argument, the work happens on another thread, and the future is completed there — so timers and other tasks keep interleaving while the host op is in flight. `HttpClient` request methods use this on native; wasm32 bridges are always deferred.
+On native, an `extern async fun` host blocks the whole run loop while it runs.
+Declaring it `@async_host` opts that import into true async: on the native host, the function runs off the main task and completes the future when it finishes — so timers and other tasks keep interleaving while the host op is in flight.
+`HttpClient` request methods use this on native; wasm32 bridges are always deferred.
 
 ## Async methods
 
-Instance and `static` class methods can be `async`, so a type can own its asynchronous behavior. The call types as `Future<T>` just like a free async call:
+Instance and `static` class methods can be `async`, so a type can own its asynchronous behavior.
+The call types as `Future<T>` just like a free async call:
 
 ```dream
 import system;
@@ -144,11 +166,15 @@ Async methods work on **generic** classes too: each concrete type gets its own a
 
 ### Async lambdas and `fun(...): Future<T>` values
 
-An `async (params) => …` arrow lambda is typed as `fun(...): Future<T>` — see [Functions](functions.md#async-lambdas). Calling the boxed value returns a `Future` just like calling a named `async fun`; `await` unwraps it. Named async functions used as first-class values (`let f: fun(int): Future<int> = delayed;`) use the same shape.
+An `async (params) => …` arrow lambda is typed as `fun(...): Future<T>` — see [Functions](functions.md#async-lambdas).
+Calling the boxed value returns a `Future` just like calling a named `async fun`; `await` unwraps it.
+Named async functions used as first-class values (`let f: fun(int): Future<int> = delayed;`) use the same shape.
 
 ## Awaiting JavaScript promises
 
-An `extern async fun` bridges to a host function that returns a Promise. Like every other future, the bridge is lazy: calling it does *not* invoke the host yet — the call happens when the returned future is first awaited, started, or passed to a combinator. Dream source never sees the Promise itself:
+An `extern async fun` bridges to a host function that returns a Promise.
+Like every other future, the bridge is lazy: calling it does *not* invoke the host yet — the call happens when the returned future is first awaited, started, or passed to a combinator.
+Dream source never sees the Promise itself:
 
 ```dream
 @js("api", "getUser")
@@ -175,4 +201,4 @@ A complete example: [`sample/interop/async_fetch.dream`](https://github.com/sps0
 ## Limitations
 
 - No `.then()` / callback chaining — use `async` / `await`.
-- Tasks interleave at `await` points on one thread. For real parallelism, see [WebWorkers](webworkers.md).
+- Tasks interleave at `await` points on one thread. For real parallelism, see [Tasks](tasks.md).

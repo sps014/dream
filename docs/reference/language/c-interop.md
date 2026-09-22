@@ -72,6 +72,8 @@ struct Point {
 
 @c("mylib", "point_distance")
 extern fun point_distance(a: Point, b: Point): double;
+
+// class Foo { ... } as a @c parameter  // error: classes rejected in @c
 ```
 
 Only `@unmanaged` value structs may appear in `@c` signatures — classes and unions are rejected,
@@ -105,7 +107,7 @@ sqlite3_exec(db, "SELECT 1", row_cb, 0L, ref err);
 
 ## Auto-linking libraries
 
-`dream run` **links** the `c_libs` list from the sibling `.abi.json` (`-L` / `-l` / `-rpath`). Search order:
+`dream run` links the libraries named by your `@c` externs (`-L` / `-l` / `-rpath`). Search order:
 
 1. `native/<lib>` **next to** the source (perfect for vendored copies).
 2. The directory containing the source.

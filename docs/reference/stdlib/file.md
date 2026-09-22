@@ -41,10 +41,16 @@ Async `File` / `FileHandle` methods take an optional last `token: Option<Cancell
 
 ## `FileHandle` / `FileStream`
 
-Open with a mode, then `read` / `write` / `seek` / `tell` / `seek_end` / `read_line` / `write_text` / `close` (sync, plus `*_async` variants except `close`). `FileStream` also has `read_all`, `has_more`, `position`, `.length`, `reset`.
+Open with a mode (`"r"`, `"w"`, `"a"`, `"r+"`, `"w+"`, `"a+"`), then `read` / `write` / `seek` / `tell` / `seek_end` / `read_line` / `write_text` / `close` (sync, plus `*_async` variants except `close`). `FileStream` also has `read_all`, `has_more`, `position`, `.length`, `reset`.
 
 ## `Path`
 
 `Path.join`, `Path.of(parts)`, `file_name`, `stem`, `extension`, `with_extension`, `with_file_name`, `parent`, `is_absolute` / `is_relative`, `has_extension`, `components`, `normalize`, `absolute`, `relative_to`, `separator`.
+
+```dream
+let p = Path.join("docs", "notes.txt");
+System.println(Path.file_name(p).unwrap_or(""));
+System.println(Path.extension(p).unwrap_or(""));
+```
 
 Errors are [`IoError`](option-result.md). Example: [`sample/interop/file_io.dream`](https://github.com/sps014/dream/blob/main/sample/interop/file_io.dream).

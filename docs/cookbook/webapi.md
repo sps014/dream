@@ -22,6 +22,11 @@ fun get_item(id: int): Item {
     return Item(id, "demo");
 }
 
+@post("/items")
+fun create_item(@body item: Item): Item {
+    return item;
+}
+
 async fun main(): void {
     WebApp.use(CORS(CorsOptions()));
     WebApp.run("127.0.0.1", 8080).await;

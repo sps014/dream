@@ -1,6 +1,6 @@
 # Types
 
-Dream is statically typed: every value has a type known at compile time. This page is the map of the type system — primitives, arrays, nullables, user types, aliases, and casting. Each area links to a deeper page.
+Dream is statically typed: every value has a type known at compile time. This page is the map of the type system — primitives, arrays, optionals, user types, aliases, and casting. Each area links to a deeper page.
 
 ## Primitives
 
@@ -22,7 +22,7 @@ See [Primitives](primitives.md) for the methods each one carries.
 
 ### Numeric literal suffixes
 
-A plain integer literal is `int`; a literal with a decimal point is `float`. A case-insensitive suffix picks another numeric type:
+A plain integer literal is `int`. A literal with a decimal point is `float`. A case-insensitive suffix picks another numeric type:
 
 | Suffix | Type | Example |
 |--------|------|---------|
@@ -33,13 +33,17 @@ A plain integer literal is `int`; a literal with a decimal point is `float`. A c
 | `f` / `F` | `float` | `3.14f` |
 | `d` / `D` | `double` | `3.0d` |
 
-Integer literals also accept `0x`/`0X` hex, `0b`/`0B` binary (needs at least one `0`/`1` digit, so `0b` alone stays byte `0`), and `0o`/`0O` octal. Decimal scientific notation (`1e-3`, `2.5e10`) is a `float` unless given a `d` suffix.
+Integer literals also accept:
 
-Bare decimal literals default to `float`. When the surrounding expected type is `double` (typed
-binding, parameter, return, field, …), an unsuffixed float or int literal is treated as `double`
-so `let x: double = 3.14` works without a `d` suffix.
+- `0x` / `0X` hex
+- `0b` / `0B` binary (needs at least one `0` / `1` digit, so `0b` alone stays byte `0`)
+- `0o` / `0O` octal
 
-`byte`, `uint`, and `ulong` are **unsigned** — division, remainder, comparisons, and right shift use unsigned semantics; `int` and `long` are signed. In memory, `byte`/`char` take 1 byte, `int`/`uint`/`float` take 4, and `long`/`ulong`/`double` take 8.
+Decimal scientific notation (`1e-3`, `2.5e10`) is a `float` unless given a `d` suffix.
+
+Bare decimal literals default to `float`. When the surrounding expected type is `double` (typed binding, parameter, return, field, …), an unsuffixed float or int literal is treated as `double`. So `let x: double = 3.14` works without a `d` suffix.
+
+`byte`, `uint`, and `ulong` are **unsigned** — division, remainder, comparisons, and right shift use unsigned semantics. `int` and `long` are signed. For storage sizes, use [`sizeof`](operators.md#sizeof-nameof-and-typeof).
 
 ### Implicit widening
 
@@ -86,26 +90,22 @@ System.println(t.0);
 t.1 = "bye";
 let (a, b) = t;         // destructure
 let (x, (y, z)) = (1, (2, 3));
-
 ```
 
-Nested tuples are allowed. There are no named tuple elements. Access is via `.0`, `.1`, … (not
-`t[i]`). Tuples are not iterable — use destructuring or fixed projections; there is no `foreach`
-or `t.length`.
+Nested tuples are allowed. There are no named tuple elements. Access is via `.0`, `.1`, … (not `t[i]`).
+
+There is no for-in over a tuple and no `t.length` — use destructuring or fixed projections.
 
 ## Optional values
 
-Absence is expressed with [`Option<T>`](../stdlib/option-result.md), not a nullable `T?` suffix.
-There is no `null` literal — use `None` / `Option.None`, and prefer `??` / `.unwrap_or(...)` for
-fallbacks (see [Operators](operators.md)).
+Absence is expressed with [`Option<T>`](../stdlib/option-result.md), not a nullable `T?` suffix. There is no `null` literal — use `None` / `Option.None`, and prefer `??` / `.unwrap_or(...)` for fallbacks (see [Operators](operators.md)).
 
 ```dream
 let node: Option<Node> = Option.None;
 node = Option.Some(Node(5, Option.None));
 ```
 
-Calling a method or reading a field through a value that might be absent is a type error until you
-unwrap or match on it; `.unwrap_or` / `??` supply a fallback without panicking on `None`.
+Calling a method or reading a field through a value that might be absent is a type error until you unwrap or match on it. `.unwrap_or` / `??` supply a fallback without panicking on `None`.
 
 ## User-defined types
 
@@ -129,7 +129,7 @@ fun add(a: Number, b: Number): Number {
 
 ## Type casting
 
-A C-style cast converts between numeric types or between a value and `object`:
+A cast converts between numeric types or between a value and `object`:
 
 ```dream
 let n = 7;

@@ -22,8 +22,7 @@ the binaries (the VS Code extension uses those settings).
 
 ## The manifest: `dream.toml`
 
-Every Dream project managed by `dreamer` has a `dream.toml` at its root, analogous to `Cargo.toml`
-or `pyproject.toml`:
+`dream.toml` is the project file at the root of every Dream project managed by `dreamer`:
 
 ```toml
 [package]
@@ -55,22 +54,27 @@ start = "dreamer run"
 default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
 ```
 
-- `[package].type` is `bin` (default) or `lib`. Libraries omit `entry`, are not runnable (`dreamer run` /
-  `dreamer pack` error), and are typechecked via the conventional `src/<import_segment>.dream` root
-  (`http-utils` → `src/http_utils.dream`, `foo.bar` → `src/foo_bar.dream`). Binaries require `entry` and a top-level `main`.
+- `[package].type` is `bin` (default) or `lib`.
+  - Libraries omit `entry`, are not runnable (`dreamer run` / `dreamer pack` error), and are
+    typechecked via the conventional `src/<import_segment>.dream` root
+    (`http-utils` → `src/http_utils.dream`, `foo.bar` → `src/foo_bar.dream`).
+  - Binaries require `entry` and a top-level `main`.
 - `[package].entry` is the file `dreamer build` / `dreamer run` compile (**bin only**).
 - Package builds emit wasm under `target/web/` (debug and `--release` share that folder) and native C
-  under `target/debug/` or `target/release/`. Bare `dream file.dream` (no enclosing `dream.toml`)
-  still uses `<source-dir>/target/web/` (wasm) or `target/debug|release/` (native C) — never siblings
-  next to the `.dream` file.
+  under `target/debug/` or `target/release/`.
+  - Bare `dream file.dream` (no enclosing `dream.toml`) still uses `<source-dir>/target/web/`
+    (wasm) or `target/debug|release/` (native C) — never siblings next to the `.dream` file.
 - **Node hosts** also get `target/node/` (copied from `target/web/` by `dreamer build` / `dreamer run`
-  when `targets` includes `node`). Scaffolded `index.html` / `run.mjs` import `target/web/` /
-  `target/node/` — no need to edit them when switching debug ↔ release. Existing projects that
-  hardcode `target/debug/…` should retarget once to `target/web/` / `target/node/`.
+  when `targets` includes `node`).
+  - Scaffolded `index.html` / `run.mjs` import `target/web/` / `target/node/` — no need to edit
+    them when switching debug ↔ release.
+  - Existing projects that hardcode `target/debug/…` should retarget once to `target/web/` /
+    `target/node/`.
 - `[package].targets` is an optional list of hosts this project supports: `native`
   (`dream run`), `web` (browser + `*.web.runtime.js`), and/or `node` (Node ≥ 18 + `*.node.runtime.js`).
-  Omit the field (or leave it empty) for today's free-choice behavior — `dreamer run` defaults to
-  native. Combinations are allowed; see `dreamer run` below for how the host is chosen.
+  - Omit the field (or leave it empty) for today's free-choice behavior — `dreamer run` defaults to
+    native.
+  - Combinations are allowed; see `dreamer run` below for how the host is chosen.
 - `[package].icon` is an optional path to a PNG (relative to the `dream.toml` directory).
   - **`dream run`**: loads the file from disk when a GPU window is created.
   - **`dreamer pack`**: copies the PNG into the single-file native executable so no `assets/`
@@ -78,12 +82,14 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
 - A dependency is either a bare semver requirement string, or a table with exactly one of
   `path`, `git`, or `version` (+ optional `registry`).
 - Package names must start with a letter and may contain ASCII letters, digits, `-`, `_`, and `.`.
-  The registry identity is always the full name string as written in `dream.toml` / `dream.lock`
-  (e.g. `json-tools`, `foo.bar`). On disk and in `import` statements, hyphens and dots map to
-  underscores: `json-tools` → `import json_tools;`, `foo.bar` → `import foo_bar;`. A dotted
-  `import` path still means a subpath inside a package (`import json_tools.parse;` →
-  `dream_packages/json_tools/src/parse.dream`), never a registry name with a dot — so the registry
-  package `foo.bar` is always imported as `import foo_bar;`, not `import foo.bar;`.
+  - The registry identity is always the full name string as written in `dream.toml` / `dream.lock`
+    (e.g. `json-tools`, `foo.bar`).
+  - On disk and in `import` statements, hyphens and dots map to underscores:
+    `json-tools` → `import json_tools;`, `foo.bar` → `import foo_bar;`.
+  - A dotted `import` path still means a subpath inside a package
+    (`import json_tools.parse;` → `dream_packages/json_tools/src/parse.dream`), never a registry
+    name with a dot — so the registry package `foo.bar` is always imported as `import foo_bar;`,
+    not `import foo.bar;`.
 - `[registries]` maps registry aliases to base URLs; a dependency's `registry = "..."` picks one,
   defaulting to the `default` alias.
 - `[scripts]` is currently informational project metadata — no `dreamer` subcommand executes it
@@ -92,8 +98,8 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
 ## The lockfile: `dream.lock`
 
 `dreamer install` (and every command that implies it) writes `dream.lock`: the exact, pinned
-dependency graph, analogous to `Cargo.lock`/`package-lock.json`. It should be committed to version
-control for applications so every checkout resolves to byte-identical dependency versions.
+dependency versions. It should be committed to version control for applications so every checkout
+resolves to the same dependency versions.
 
 ```toml
 version = 1

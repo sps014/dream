@@ -29,6 +29,12 @@ fun main() {
 
 Always available (no import): `all`, `any`, `none`, `count_where`, `find_where`, `for_each`, `is_empty`.
 
+```dream
+let nums: List<int> = [1, 2, 3, 4];
+let ok = nums.all(fun(n: int): bool => n > 0);
+System.println(ok);   // true
+```
+
 Need this package: `filter`, `map`, and related helpers that return a `List`.
 
 ## `List<T>`

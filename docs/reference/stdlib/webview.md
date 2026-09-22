@@ -4,7 +4,7 @@
 
 The public installer ships WebView on every OS. On Linux it installs WebKitGTK/GTK if those libraries are missing. A desktop display is required to open a window (`DISPLAY` / Wayland); headless Docker needs Xvfb or `-e DISPLAY`.
 
-Opens a desktop window (via wry) and talks to the page with typed JSON IPC. Do not mix with [`GpuSurface`](gpu.md) in the same process.
+Opens a desktop window and talks to the page with typed JSON IPC. Do not mix with [`GpuSurface`](gpu.md) in the same process.
 
 ```dream
 import system;
@@ -31,5 +31,12 @@ async fun main(): void {
 | `eval(js).await` | run JavaScript, get a string; optional `token` |
 
 Typed IPC uses `@json` types and `window.Dream` on the page (`on` / `serve` / `emit`). There is also a raw bytes path.
+
+```dream
+view.on<string>("ping", fun(msg: string): void => {
+    System.println(msg);
+});
+view.emit("ready", "ok");
+```
 
 Samples: [`hello.dream`](https://github.com/sps014/dream/tree/main/sample/webview/hello.dream), [`ipc.dream`](https://github.com/sps014/dream/tree/main/sample/webview/ipc.dream).

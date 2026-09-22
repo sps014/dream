@@ -18,4 +18,10 @@ fun main() {
 Hello, Ada!
 ```
 
-Change the argument, or use interpolation: `return $"Hello, {name}!";`
+Or with interpolation:
+
+```dream
+fun greet(name: string): string {
+    return $"Hello, {name}!";
+}
+```

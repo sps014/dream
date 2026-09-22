@@ -31,7 +31,7 @@ fun main() {
 
 Fields may be primitives, `string`, arrays, other `@json` types, tuples (JSON arrays), `List`/`Set`/`Map<string, V>`/`SortedMap<string, V>`, `JsonValue`, and `Option<T>` of supported types. JSON object keys are strings, so maps must be `Map<string, V>`. `@property_name("key")` renames a JSON key. Skip a field with the ignore attribute. [Unions](../language/enums-unions.md) serialize with a `"type"` tag.
 
-Encoding is decided at compile time, so every value type must be one the generator recognizes. `object` is not: `Json.serialize` on a `Map<string, object>` is rejected. Reach for `JsonValue` instead — it carries its own shape and is passed through untouched.
+Every field type must be one `@json` already knows. `object` is not: `Json.serialize` on a `Map<string, object>` is rejected. Reach for `JsonValue` instead — it carries its own shape and is passed through untouched.
 
 `Json.serialize(data)` infers `T` from `data` (including an annotated `let data: Map<string, string> = …`). `deserialize` still needs an explicit type argument because the JSON text does not name a Dream type.
 
@@ -134,4 +134,4 @@ System.println(Json.serialize(mixed));   // {"n":42,"s":"text"}
 
 ## `GenResult`
 
-Emit-style generators (including `@json` internals) report success or failure with `GenResult.success(source)` / `GenResult.failure(message)`. You rarely construct this by hand — [CodeBuilder](codegen.md) is the usual emit helper.
+`GenResult.success(source)` / `GenResult.failure(message)` report emit-style generator outcomes; you rarely construct this by hand — prefer [CodeBuilder](codegen.md).

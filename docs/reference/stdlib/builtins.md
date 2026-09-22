@@ -44,6 +44,8 @@ fun main() {
 
 ## Math (no import)
 
+Example: `Math.sqrt(9.0)` → `Some(3.0)`.
+
 `Math.abs`, `floor`, `ceil`, `round`, `sqrt` (returns `Option`), `pow`, `sin` / `cos` / `tan`, `asin` / `acos` / `atan` / `atan2`, `log` / `log10` / `exp` / `hypot`, `min` / `max` / `clamp`, and `Math.PI` / `Math.E`. Angles are radians.
 
 ## Timing

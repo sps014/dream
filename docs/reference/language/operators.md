@@ -26,7 +26,7 @@ policy and per-type wrap widths. `/` and `%` by zero panic instead of wrapping.
 
 ## String concatenation
 
-When either side of `+` is a `string`, the other side is converted through its [`to_string`](../stdlib/builtins.md). A C-style enum renders its variant *name*, not the number:
+When either side of `+` is a `string`, the other side is converted through its [`to_string`](../stdlib/builtins.md). A simple enum renders its variant *name*, not the number:
 
 ```dream
 let msg = "Hello, " + name + "!";
@@ -70,11 +70,16 @@ String `==` and `!=` compare **contents**, not addresses.
 
 `&&` (and), `||` (or), and `!` (not) operate on `bool`. `&&` and `||` **short-circuit**: the right operand runs only when it can still change the result.
 
+```dream
+false && boom();   // boom() never runs
+true || boom();    // boom() never runs
+```
+
 ## Bitwise
 
 `&` (and), `|` (or), `^` (xor), `<<` (shift left), `>>` (shift right), and prefix `~` (complement)
 work on any integer type: `int`, `uint`, `long`, `ulong`, `byte`. Both operands of a binary bitwise
-op must be the same type, same as arithmetic. C-style enums are integers at runtime, so `&`/`|`/`^`
+op must be the same type, same as arithmetic. Simple enums are integers at runtime, so `&`/`|`/`^`
 and prefix `~` also work on them and yield the same enum type (`Flags.Read | Flags.Write`). Shifts
 stay integer-only. `>>` is an *arithmetic* (sign-extending) shift on the
 signed types (`int`, `long`) and a *logical* (zero-filling) shift on the unsigned types (`uint`,
@@ -120,8 +125,8 @@ fun quarter(n: int): Result<int, string> {
 }
 ```
 
-Postfix `?` wins over ternary unless a matching `:` follows at the same nesting depth
-(`half(n)? + 1` is try-propagation; `cond ? a : b` is still the ternary).
+Postfix `?` wins over ternary unless a matching `:` follows at the same nesting depth.
+Example: `half(n)? + 1` is try-propagation; `cond ? a : b` is still the ternary.
 
 ## Assignment
 
@@ -269,14 +274,15 @@ meta forms:
 struct Point { public x: int; public y: int; }
 
 let bytes: int = sizeof(Point);     // 8 — byte size of the struct
-let ptr_w: int = sizeof(string);    // 4 — heap refs / classes / arrays are handles
+let ptr_w: int = sizeof(string);    // 4 — class, array, string, and other heap refs
 let name: string = nameof(Point.x); // "x" — last path segment; operand is not evaluated
 let kind: string = typeof(bytes);   // "int"
 ```
 
-- **`sizeof(T)`** yields an `int` equal to Dream's storage size for `T`: primitives and value
-  `struct`s use their layout size; class instances, arrays, `string`, and other heap refs are `4`.
-  The result is a compile-time constant.
+- **`sizeof(T)`** yields an `int`:
+  - primitives and value `struct`s → their storage size in bytes
+  - class instances, arrays, `string`, and other heap refs → `4`
+  - The result is a compile-time constant.
 - **`nameof(a.b.c)`** yields a `string` of the last identifier in a dotted path. The path is not
   type-checked or evaluated (you can write `nameof(future_api)`).
 - **`typeof(expr)`** yields a `string` naming the operand's concrete type. See below.
@@ -301,14 +307,13 @@ There are two resolution paths, and which one applies is decided at compile time
 
 | Operand's static type | How it resolves |
 |---|---|
-| `object`, or an interface | Reads the value's runtime heap tag |
+| `object`, or an interface | Reads the value's type tag and returns a string |
 | everything else | Folds to a compile-time string constant |
 
 The folded path costs nothing at runtime and, like `nameof`, **does not evaluate its operand** —
-`typeof(f())` will not call `f`. The runtime path is a single tag load plus a jump table returning
-a static string, so it neither allocates nor affects reference counts.
+`typeof(f())` will not call `f`. The runtime path does not allocate.
 
-Three runtime tags are shared across every instantiation of their shape, so `typeof` reports a
+Three type tags are shared across every instantiation of their shape, so `typeof` reports a
 coarse name for them when the static type was erased: an array reports `"array"`, a lambda or
 function value reports `"function"`, and a `Future<T>` reports `"future"`. A statically typed
 operand of those shapes still reports precisely (`typeof(nums)` on an `int[]` is `"int[]"`). A null

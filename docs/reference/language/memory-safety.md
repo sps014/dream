@@ -1,6 +1,7 @@
 # Memory Safety Guide
 
-Dream is designed so that **memory corruption is impossible in safe code** and **reference-cycle leaks are rejected at compile time**. This guide covers every safety feature the language provides, what it catches, and how to use it.
+Dream is designed so that **memory corruption is impossible in safe code** and **reference-cycle leaks are rejected at compile time**.
+This guide covers every safety feature the language provides, what it catches, and how to use it.
 
 ## Quick reference: what the compiler checks
 
@@ -15,17 +16,20 @@ Dream is designed so that **memory corruption is impossible in safe code** and *
 | Interface receiver-mode mismatch | error | implementor mode ≠ interface mode |
 | Iterator/Span invalidation (same function) | error | `xs.push(2)` while cursor live |
 | Cross-function stale view | error | view returned from method, then mutation |
-| Container rewind without release (managed) | warning → error | counter rewind without slot clearing |
+| Container rewind without clearing slots | safe | old elements stay until overwrite or drop |
 
 ## The core memory model
 
-ARC (automatic reference counting) reclaims objects deterministically. Three rules hold unconditionally:
+ARC (automatic reference counting) reclaims objects deterministically.
+Three rules hold unconditionally:
 
 1. **Slot overwrite releases** — writing into any array/field releases the old value.
 2. **Slot reads retain** — reading gives you a valid owned reference.
 3. **Array drop releases all slots** — even slots a counter abandoned.
 
-These mean raw buffers (`T[]` + manual counters) are always memory-safe. Rewinding a counter defers reclamation to array-drop but never corrupts memory.
+These mean raw buffers (`T[]` + manual counters) are always memory-safe.
+Rewinding a counter is safe — no error.
+Old elements stay until overwritten or the array is dropped.
 
 ## Receiver modes
 
@@ -47,6 +51,7 @@ class Counter {
 ```
 
 Pin explicitly when needed:
+
 ```dream
 borrow fun audit_only(): void { ... }     // compiler rejects mutations
 unique fun must_mutate(): void { ... }    // always allowed
@@ -56,7 +61,8 @@ Interface implementors must match the interface's declared mode.
 
 ## Borrow checking: views and cursors
 
-Iterators and `Span<T>` are *views* into a collection. Mutating the collection while a view is live is a compile error:
+Iterators and `Span<T>` are *views* into a collection.
+Mutating the collection while a view is live is a compile error:
 
 ```dream
 let xs = List<int>();
@@ -66,6 +72,7 @@ cur.next();                    // would read stale data
 ```
 
 Fix: finish with the cursor first, then mutate:
+
 ```dream
 cur.next();
 xs.push(2);                    // ✓ legal — cursor no longer referenced
@@ -75,9 +82,10 @@ This works through field chains (`this.items.iterator()`), local aliases, and cr
 
 ## Reference-cycle detection
 
-The compiler builds a strong-reference graph across all classes and rejects strongly-connected components:
+If class fields point at each other in a loop, that program is rejected.
 
 ### Direct and indirect field cycles
+
 ```dream
 // Direct self-reference
 class Node { next: Option<Node>; }                        // ✗ cycle
@@ -94,20 +102,26 @@ class C { h: Holder; }                                    // ✗ detected
 ```
 
 ### Interface-typed fields (conservative)
-When a field references an interface, the graph includes edges to every implementing class. This may report cycles that are only potential at runtime — use `weak` on one direction if the pattern is safe.
+
+When a field references an interface, the graph includes edges to every implementing class.
+This may report cycles that are only potential at runtime — use `weak` on one direction if the pattern is safe.
 
 ### Breaking cycles
+
 Mark one direction as non-owning:
+
 ```dream
 class Node {
     weak next: Option<Node>;       // weak: does not keep target alive
 }
 ```
+
 Or annotate `@allow_cycle` on every class in the loop.
 
 ## Closure capture safety
 
-Lambdas that outlive their capturing scope can leak. The compiler catches the most dangerous pattern:
+Lambdas that outlive their capturing scope can leak.
+The compiler catches the most dangerous pattern:
 
 ```dream
 class Button {
@@ -120,6 +134,7 @@ fun wire(b: Button): void {
 ```
 
 Fix by capturing only the data you need:
+
 ```dream
 b.onClick = () => "clicked";      // ✓ captures nothing
 ```
@@ -128,7 +143,8 @@ For cases where you need object access, use `Weak<T>` (below).
 
 ## Weak handles
 
-`Weak<T>` is a non-owning handle for breaking cycles that static analysis cannot prove away:
+`Weak<T>` is a non-owning handle for breaking cycles that static analysis cannot prove away.
+It is distinct from a field marked `weak`:
 
 ```dream
 import system;
@@ -155,26 +171,33 @@ public class Engine {
 ## Container safety
 
 ### Rewinding counters
-Pure rewinding (`count = 0`) without clearing slots is safe — dead elements stay retained until overwritten or until the container drops. No compile error, no leak.
+
+Pure rewinding (`count = 0`) without clearing slots is safe — dead elements stay retained until overwritten or until the container drops.
+No compile error, no leak.
 
 ### Eager reclamation
+
 Use `Buffer.clear(arr)` / `Buffer.truncate(arr, n)` to release elements immediately:
+
 ```dream
 Buffer.clear(this.entries);          // release all managed elements now
 this.count = 0;
 ```
 
 ### Buffer.realloc shrinkage
+
 Shrinking via `Buffer.realloc` automatically releases dropped tail slots — truncation never strands retained elements.
 
 ## Debugging retention
 
 Debug builds (including `-g`) always print heap counters at exit:
+
 ```
 [dream] leak check: live=0 total_allocations=6
 ```
 
 Use `Debug.live_objects` deltas to assert balance in tests:
+
 ```dream
 let before = Debug.live_objects;
 churn();
@@ -192,6 +215,6 @@ These are documented limitations, not silent unsoundness:
 |---|---|
 | Cycles through `object`-typed loose references | Deferred: requires runtime type introspection |
 | JS↔Dream interop cycles | Interop boundary is weak-by-convention |
-| Data races across threads | Conventional locks; compiler-proven freedom deferred |
+| Data races across threads | Use a lock. Dream does not yet reject races for you |
 
 Every other pattern is either rejected at compile time or safely handled by ARC.

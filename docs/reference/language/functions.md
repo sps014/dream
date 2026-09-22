@@ -25,7 +25,7 @@ fun greet(): void { println("hi"); }
 
 ## Returning a value
 
-Use `return`. The compiler checks that every path returns when the return type is not `void`:
+Use `return`. Dream checks that every path returns when the return type is not `void`:
 
 ```dream
 fun clamp(value: int, lo: int, hi: int): int {
@@ -250,8 +250,7 @@ Rules:
   an ordinary `let`/parameter (see [Capturing closures](#capturing-closures)). A `ref`
   parameter's storage is only guaranteed to live for the duration of the call it came from; a
   capturing lambda could outlive that call (e.g. by being returned), which would leave it holding
-  a dangling reference. This is a compile-time error, mirroring C#'s rule against capturing
-  `ref`/`out` parameters.
+  a dangling reference. This is a compile-time error.
 
 ### `ref` and closures {#ref-and-closures}
 
@@ -280,9 +279,10 @@ fun main(): void {
 
 ## Public functions and entry point
 
-Functions are **file-private by default**. Mark one `public` to import it from other files and export it to the WebAssembly host (see [Imports](imports.md#visibility)). A `public` function cannot expose a non-`public` class.
+Functions are **file-private by default**. Mark one `public` to import it from other files and export it to the WebAssembly host (see [Imports](imports.md#visibility)). A `public` function cannot expose a non-`public` class:
 
 ```dream
+// public fun make(): Secret { ... }   // error if Secret is not public
 public fun compute(n: int): int {
     return n * n;
 }
@@ -300,7 +300,8 @@ fun main() {
 
 ### Generic functions
 
-Add `<TypeParam>` after the name. The compiler emits a separate copy per concrete type used — no runtime cost. See [Generics](generics.md).
+Add `<TypeParam>` after the name. A generic function works for each concrete type you use, with no
+extra cost when the program runs. See [Generics](generics.md).
 
 ```dream
 fun identity<T>(value: T): T {
@@ -352,7 +353,7 @@ nums.push(2);
 nums.sort_by((a, b) => a - b);   // `a`/`b` inferred as `int` from `sort_by`'s `cmp: fun(int, int): int`
 ```
 
-A lambda written with an untyped parameter and no surrounding `fun(...)` context cannot have its type inferred and is rejected with an error asking for one. A lambda may declare its own type parameters (`<T>(x: T) => x`), which get a separate copy per type — from a `fun(...)` context or by binding a generic item and using it at each site.
+A lambda written with an untyped parameter and no surrounding `fun(...)` context cannot have its type inferred and is rejected with an error asking for one. A lambda may declare its own type parameters (`<T>(x: T) => x`), which work for each concrete type you use — from a `fun(...)` context or by binding a generic item and using it at each site.
 
 #### Async lambdas
 
@@ -399,7 +400,7 @@ println(inc());   // 2
 
 Each call to a function that returns a capturing lambda creates its own independent storage — two counters from separate `make_counter()` calls do not interfere with each other.
 
-Capturing closures are ordinary ARC-managed `fun(...)` values: the funcbox owns a retain on the captured environment, and that environment is released when the last reference to the closure drops. A self-capturing closure (a `fun` that stores itself into its own environment) can still form a reference cycle and leak, just like mutually-referencing classes — break such cycles deliberately or avoid them.
+Capturing closures are ordinary `fun(...)` values. The closure keeps the values it captured until nothing uses the closure anymore. A self-capturing closure (a `fun` that stores itself into its own environment) can still form a reference cycle and leak, just like mutually-referencing classes — break such cycles deliberately or avoid them.
 
 Capturing closures **cannot** be passed to JavaScript APIs — the JS bridges drop the closure environment. See [Callbacks](callbacks.md).
 

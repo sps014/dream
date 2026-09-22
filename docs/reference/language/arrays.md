@@ -19,7 +19,7 @@ nums[2] = 99;          // [1, 2, 99, 4, 5]
 
 ## Size
 
-`.length` returns the element count. It is the same `size()` that `List` and `Map` expose, so every collection is measured the same way:
+`.length` returns the element count. It is the same idea as the `size()` that `List` and `Map` expose, so every collection is measured the same way:
 
 ```dream
 let count = nums.length;   // 5
@@ -74,7 +74,7 @@ grid[0][1] = 42;
 println(grid[1][1]);      // still 0
 ```
 
-A zero-like value (`0`, `0.0`, `false`) on a scalar element type skips the fill loop entirely and lowers straight to a zero-initialized allocation.
+A zero value (`0`, `0.0`, `false`) fills the array with zeros.
 
 ## Fixed-size buffers
 
@@ -124,7 +124,7 @@ let owned = mid.to_array();        // copies into a fresh, independently-owned a
 
 ## `Pointer<T>`: manual allocation (`@unsafe`)
 
-`Pointer<T>` is a manually-managed handle to a `T[]` block, allocated, resized, and released through the allocator directly (`Buffer.alloc`/`Buffer.realloc`/`Buffer.free`) rather than through [automatic reference counting](memory.md). Every operation that touches the block's lifetime is [`@unsafe`](memory.md#unsafe-manual-memory-management): the compiler cannot verify the block has exactly one owner, that `free()` runs at most once, or that no access happens after a `free()`.
+`Pointer<T>` is a manually-managed handle to a `T[]` block, allocated, resized, and released through the allocator directly (`Buffer.alloc` / `Buffer.realloc` / `Buffer.free`) rather than through [automatic reference counting](memory.md). Every operation that touches the block's lifetime is [`@unsafe`](memory.md#unsafe-manual-memory-management): the compiler cannot verify the block has exactly one owner, that `free()` runs at most once, or that no access happens after a `free()`.
 
 ```dream
 @unsafe
@@ -140,7 +140,7 @@ fun scratch(): void {
 }
 ```
 
-Prefer `Span<T>` unless a value specifically needs to outlive the callee's stack frame, or the workload needs C-style manual alloc/realloc/free (e.g. a long-lived off-heap buffer). See [Memory Management](memory.md) for the full `@unsafe` contract.
+Prefer `Span<T>` unless a value specifically needs to outlive the callee's stack frame, or the workload needs manual alloc / realloc / free (e.g. a long-lived off-heap buffer). See [Memory Management](memory.md) for the full `@unsafe` contract.
 
 ## Advanced: growable arrays
 
@@ -159,7 +159,7 @@ System.println(xs.length);                // 2
 System.println(xs.get(0));  // 10
 ```
 
-`List<T>` offers `push`, `pop`, `@get_indexer`/`@set_indexer` (so `xs[i]` / `xs.get(i)` return `T` and panic if out of range; `xs[i] = v` writes through), `contains`, `index_of`, `remove_at`, `clear`, and `@iterator` (so `for (let x in xs)` works). Nested lists support `list[i][j]`. When the element type is `Comparable`, `sort()` and `binary_search()` are also available:
+`List<T>` offers `push`, `pop`, `@get_indexer` / `@set_indexer` (so `xs[i]` / `xs.get(i)` return `T` and panic if out of range; `xs[i] = v` writes through), `contains`, `index_of`, `remove_at`, `clear`, and `@iterator` (so `for (let x in xs)` works). Nested lists support `list[i][j]`. When the element type is `Comparable`, `sort()` and `binary_search()` are also available:
 
 ```dream
 let ys = List<int>();
@@ -173,12 +173,12 @@ System.println(ys.binary_search(2).unwrap_or(-1));  // 1
 `Iterator<T>`, `Collection<T>`, and `IndexedCollection<T>` live in bootstrap `system.core`.
 
 - `Collection<T>` — `size()` and `iterator()` (plus default `is_empty()` and query helpers like `all` / `any`). Implemented by `List`, `Set`, `Map`, `Queue`, `Stack`, and every `T[]`.
-- `IndexedCollection<T>` — extends `Collection<T>` with ordered indexable access (`get(index)`, defaults `first`/`last`). Implemented by `List` and by arrays (`extend T[]` in bootstrap).
+- `IndexedCollection<T>` — extends `Collection<T>` with ordered indexable access (`get(index)`, defaults `first` / `last`). Implemented by `List` and by arrays (`extend T[]` in bootstrap).
 - `for (let x in xs)` works for arrays (native index loop), concrete `@iterator` types, and interface-typed `Collection` / `IndexedCollection` / `Iterator`.
 
 ```dream
 fun total_size(xs: Collection<string>): int {
-    return xs.length;
+    return xs.size();
 }
 
 fun sum(xs: Collection<int>): int {

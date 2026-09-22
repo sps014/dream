@@ -1,12 +1,10 @@
 # Compute shaders (`@compute`)
 
-Dream can compile ordinary-looking functions into **WebGPU compute shaders** (WGSL). Mark a
-top-level function with `@compute` and dispatch it through `system.gpu` — no bind-group
-boilerplate for the common case.
+Dream can turn ordinary-looking functions into **WebGPU compute shaders** (WGSL).
+Mark a top-level function with `@compute` and dispatch it through `system.gpu` — no bind-group boilerplate for the common case.
 
-You can start with a one-kernel SAXPY, build a reaction–diffusion sim, or study the full
-fluid demo. Native `dream run` and the browser both execute WGSL via wgpu / WebGPU
-when a GPU adapter is available (see [stdlib GPU](../stdlib/gpu.md)).
+You can start with a one-kernel SAXPY, build a reaction–diffusion sim, or study the full fluid demo.
+Native `dream run` and the browser both run WGSL via wgpu / WebGPU when a GPU adapter is available (see [stdlib GPU](../stdlib/gpu.md)).
 Headless environments without an adapter print `gpu unavailable` from `Gpu.try_init`.
 
 ## Quick start
@@ -164,21 +162,19 @@ dream run sample/fluid/fluid.dream
 | `@compute(x, y)` | `(x, y, 1)` |
 | `@compute(x, y, z)` | Full 3D workgroup |
 
-Only **top-level** `fun`s may carry `@compute`. Kernels must return `void`, cannot be
-`async`/`extern`/generic, and are **not** callable as CPU functions — use
-`Compute.run_1d` / `Compute.run_2d` with the kernel **name**.
+Only **top-level** `fun`s may carry `@compute`.
+Kernels must return `void`, cannot be `async`/`extern`/generic, and are **not** callable as CPU functions — use `Compute.run_1d` / `Compute.run_2d` with the kernel **name**.
 
 ## Storage parameters
 
-Kernel storage buffers are **`GpuBuffer<T>`** (not bare `T[]`). Inside a kernel you can
-index them (`a[i]`) and read **`a.length`** (WGSL `arrayLength`). Scalars and unmanaged
-value structs become uniforms, laid out by WGSL's uniform rules in declaration order —
-`Uniforms.pack_i32` / `pack_f32` must match that layout. `Compute.run_1d` / `run_2d` pack
-their extents as the uniform blob, so a kernel whose only uniform is a bound (`n: int`)
-gets the grid size for free; use `run_3d` to supply uniforms yourself. The grid is also
-always readable in-kernel through `num_workgroups`.
+Kernel storage buffers are **`GpuBuffer<T>`** (not bare `T[]`).
+Inside a kernel you can index them (`a[i]`) and read **`a.length`**.
 
-Prefix a buffer with **`@readonly`** for WGSL `var<storage, read>` instead of `read_write`:
+- Scalars and unmanaged value structs become uniforms, laid out in declaration order — `Uniforms.pack_i32` / `pack_f32` must match that layout.
+- `Compute.run_1d` / `run_2d` pack their extents as the uniform blob, so a kernel whose only uniform is a bound (`n: int`) gets the grid size for free; use `run_3d` to supply uniforms yourself.
+- The grid is also always readable in-kernel through `num_workgroups`.
+
+Prefix a buffer with **`@readonly`** for a read-only storage buffer instead of read/write:
 
 ```dream
 @compute(64)
@@ -188,16 +184,16 @@ fun scale(@readonly a: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
 }
 ```
 
-A `GpuTexture` parameter is a **sampled** `texture_2d<f32>` by default. Add **`@storage`** to bind
-it as a writable `texture_storage_2d<rgba8unorm, write>` (what `Gpu.texture_store` needs), or
-**`@cube`** for `texture_cube<f32>`.
+A `GpuTexture` parameter is a **sampled** `texture_2d<f32>` by default:
 
-Bindings land in `@group(0)` with auto-assigned indices; **`@group(N)`** / **`@binding(N)`** name
-them explicitly. See [Shaders → Resource bindings](shaders.md#resource-bindings).
+- **`@storage`** — writable `texture_storage_2d<rgba8unorm, write>` (what `Gpu.texture_store` needs)
+- **`@cube`** — `texture_cube<f32>`
+
+Bindings land in `@group(0)` with auto-assigned indices; **`@group(N)`** / **`@binding(N)`** name them explicitly.
+See [Shaders → Resource bindings](shaders.md#resource-bindings).
 
 Host dispatch still passes `GpuBuffer` instances to `Compute.run_*` in binding order.
-Kernels may also take `GpuTexture` / `GpuSampler`; use `Compute.run_resources` or
-`ComputePass.dispatch_resources` to supply their host ids.
+Kernels may also take `GpuTexture` / `GpuSampler`; use `Compute.run_resources` or `ComputePass.dispatch_resources` to supply their host ids.
 
 ## Builtins
 
@@ -207,40 +203,47 @@ Inside a kernel, these locals are in scope (typed as `GpuId3` with `.x`/`.y`/`.z
 - `local_id` — local invocation id
 - `workgroup_id` — workgroup id
 - `num_workgroups` — dispatch size in workgroups
-- `local_invocation_index` — `local_id` flattened to a single `int`, the natural index into
-  workgroup memory
+- `local_invocation_index` — `local_id` flattened to a single `int`, the natural index into workgroup memory
 
 ## Language surface
 
-Allowed: `if`/`else`, `while`/`do`/`for`, `break`/`continue`, early
-`return`, ternary, integer `switch` (including over C-style enum members), arithmetic/bitwise,
-`GpuMath.pack*` / `unpack*`, `GpuBuffer` indexing / `.length`,
-unmanaged value structs, calls to **`@gpu` helpers** (and other `@compute` kernels),
-`Gpu.workgroup_barrier` / `Gpu.storage_barrier`, `Gpu.atomic_*`, `Gpu.texture_*`, `GpuMath.*`.
-Shifts (`<<`, `>>`) count as arithmetic; the right operand is taken as unsigned, matching WGSL.
+Allowed:
 
-`Gpu.atomic_compare_exchange(buf, i, cmp, v)` stores `v` only if `buf[i]` holds `cmp`, and reports
-the value that was there beforehand — so the store happened exactly when the result equals `cmp`.
+- `if`/`else`, `while`/`do`/`for`, `break`/`continue`, early `return`, ternary
+- Integer `switch` (including simple enum members)
+- Arithmetic/bitwise (shifts count as arithmetic; the right operand is unsigned)
+- `GpuMath.pack*` / `unpack*`, `GpuBuffer` indexing / `.length`
+- Unmanaged value structs
+- Calls to **`@gpu` helpers** (and other `@compute` kernels)
+- `Gpu.workgroup_barrier` / `Gpu.storage_barrier`, `Gpu.atomic_*`, `Gpu.texture_*`, `GpuMath.*`
+
+`Gpu.atomic_compare_exchange(buf, i, cmp, v)` stores `v` only if `buf[i]` holds `cmp`, and reports the value that was there beforehand — so the store happened exactly when the result equals `cmp`.
 It may also fail spuriously, which is why it belongs in a retry loop.
 
-Texture reads from a kernel need an explicit mip level, since there are no derivatives to infer one
-from: `Gpu.texture_load` fetches a texel unfiltered and `Gpu.texture_sample_level` filters at a
-level you name. See [sampling textures](shaders.md#sampling-textures) for the full set.
+Texture reads from a kernel need an explicit mip level:
 
-A `switch` evaluates its subject once, and its case labels must be constants. Cases do not fall
-through, so a `break` in a case body leaves the enclosing loop rather than the `switch`.
+- `Gpu.texture_load` — unfiltered texel fetch
+- `Gpu.texture_sample_level` — filtered at a level you name
 
-Forbidden: labelled `break`/`continue` (WGSL has no loop labels, so both always apply to the
-innermost loop — use a flag local or move the inner loop into a `@gpu` helper and `return`),
-bare `T[]` as a kernel param, `string`/`List`/`class`/`js`/`async`, `for..in`,
-union pattern-match `switch`, `lock`, recursion, calling ordinary CPU functions that are
-**not** marked `@gpu`. Calling `@gpu` / `@compute` / `@vertex` / `@fragment` from normal CPU
-code is also a compile error — helpers are WGSL-only; stages dispatch via `Compute.run` /
-`GpuRenderPipeline.create`.
+See [sampling textures](shaders.md#sampling-textures) for the full set.
 
-`sizeof(T)` is allowed and becomes a WGSL integer literal (see
-[`sizeof` / `nameof` / `typeof`](operators.md#sizeof-nameof-and-typeof)). `nameof(...)` and
-`typeof(...)` are not — they yield `string`, which is forbidden on the GPU.
+A `switch` evaluates its subject once, and its case labels must be constants.
+Cases do not fall through, so a `break` in a case body leaves the enclosing loop rather than the `switch`.
+
+Forbidden:
+
+- Labelled `break`/`continue` (always apply to the innermost loop — use a flag local or move the inner loop into a `@gpu` helper and `return`)
+- Bare `T[]` as a kernel param
+- `string` / `List` / `class` / `js` / `async`
+- `for..in`
+- Union pattern-match `switch`
+- `lock`
+- Recursion
+- Calling ordinary CPU functions that are **not** marked `@gpu`
+- Calling `@gpu` / `@compute` / `@vertex` / `@fragment` from normal CPU code (stages dispatch via `Compute.run` / `GpuRenderPipeline.create`)
+
+`sizeof(T)` is allowed and becomes an integer literal (see [`sizeof` / `nameof` / `typeof`](operators.md#sizeof-nameof-and-typeof)).
+`nameof(...)` and `typeof(...)` are not — they yield `string`, which is forbidden on the GPU.
 
 See [`@gpu` helpers](shaders.md#gpu-helpers).
 
@@ -257,19 +260,20 @@ fun reduce(data: GpuBuffer<float>, out: GpuBuffer<float>): void {
 }
 ```
 
-`@workgroup(N) let name: T;` becomes WGSL `var<workgroup> name: array<T, N>`.
+`@workgroup(N) let name: T;` declares workgroup-shared scratch of length `N` of type `T`.
 
 ### `@shared` is not GPU shared memory
 
-Dream's `@shared` attribute marks **CPU / WebWorker** classes that can be shared across threads.
-It is illegal inside `@compute`. GPU scratch uses `@workgroup`, not `@shared`.
+Dream's `@shared` attribute marks **CPU / `Task`** classes that can be shared across threads.
+It is illegal inside `@compute`.
+GPU scratch uses `@workgroup`, not `@shared`.
 
 ## Multi-pass sync
 
-WebGPU has **no** global barrier across workgroups. Algorithms that need one (e.g. Jacobi
-pressure solve) issue multiple dispatches; host queue order provides happens-before.
+WebGPU has **no** global barrier across workgroups.
+Algorithms that need one (e.g. Jacobi pressure solve) issue multiple dispatches; host queue order provides happens-before.
 
-Prefer **`ComputePass`** to batch several dispatches into one `queue.submit`:
+Prefer **`ComputePass`** to batch several dispatches into one submit:
 
 ```dream
 let pass = ComputePass.begin();
@@ -278,8 +282,7 @@ pass.dispatch("divergence", [vx, vy, div], n, n, 1);
 let _ = pass.submit().await;
 ```
 
-For GPU-written workgroup counts, pack three i32s with `GpuDispatchIndirect` and call
-`Compute.dispatch_indirect` (or `pass.dispatch_indirect`).
+For GPU-written workgroup counts, pack three i32s with `GpuDispatchIndirect` and call `Compute.dispatch_indirect` (or `pass.dispatch_indirect`).
 
 ## Escape hatch
 

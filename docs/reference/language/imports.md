@@ -17,9 +17,10 @@ import system.encoding;        // Encoding (UTF-8 / hex / Base64)
 import system.logging;         // Logger, LogLevel, handlers
 import system.crypto;          // Sha256, HmacSha256, SecureRandom
 import system.gpu;             // Gpu, GpuBuffer, shaders (also auto-imported with @compute/@vertex/@fragment)
+import system.task;            // Task, TaskPool (real threads)
 ```
 
-Always available without an import (bootstrap): `Option`, `Result`, `Error`, `ParseError`, `Buffer`, `Bytes`, `Span`, `Pointer`, `Promise`, `WebWorker`, `Math`, `js`, comparison/`Collection` interfaces, and primitive `extend` methods (`int.parse`, `bool.parse`, …). Low-level `string.alloc` / `string.set` are also bootstrap; higher-level string helpers require `import system.text;` (or `import system;`, which depends on text).
+Always available without an import (bootstrap): `Option`, `Result`, `Error`, `ParseError`, `Buffer`, `Bytes`, `Span`, `Pointer`, `Promise`, `Math`, `js`, comparison/`Collection` interfaces, and primitive `extend` methods (`int.parse`, `bool.parse`, …). Low-level `string.alloc` / `string.set` are also bootstrap; higher-level string helpers require `import system.text;` (or `import system;`, which depends on text).
 
 There is no `import system.*;` wildcard — import each package you need (the editor offers an auto-import quick fix when you type an unresolved stdlib name).
 
@@ -34,9 +35,7 @@ import math_lib;
 - The path is a dotted module path ending in a semicolon.
 - Each `.` maps to a directory separator, and `.dream` is added automatically: `import utils.math_lib;` resolves to `utils/math_lib.dream`, relative to the importing file.
 - Imported declarations are usable directly — there is no namespace prefix.
-- If no matching file exists relative to the importing file, resolution falls back to a
-  `dream_packages/` dependency directory installed by the [`dreamer` package manager](../tooling/dreamer.md) — so `import json_tools;` can resolve to a project dependency
-  once `dreamer install` has run, with no different syntax required.
+- If no matching file exists relative to the importing file, resolution falls back to a `dream_packages/` dependency directory installed by the [`dreamer` package manager](../tooling/dreamer.md) — so `import json_tools;` can resolve to a project dependency once `dreamer install` has run, with no different syntax required.
 - Names that match a stdlib package (`system`, `system.net`, …) never fall through to the filesystem.
 
 ```dream
@@ -116,7 +115,7 @@ The two `import` forms are told apart by the trailing `as` clause, not by a diff
 
 The aliased item must be `public` or `internal`; importing a `private` declaration this way is always an error, regardless of which module the importing file belongs to. If `<alias>` collides with another name already in scope in the importing file, that's a normal "already defined" diagnostic — pick a different alias.
 
-There is no wildcard `import pkg.*;` in this version — only single-item aliased imports. This affects convenience, not reachability: it just means one `import ... as` line per name you want to consume unqualified from another module (mirroring Rust/Go's general avoidance of star-imports).
+There is no wildcard `import pkg.*;` in this version — only single-item aliased imports. This affects convenience, not reachability: it just means one `import ... as` line per name you want to consume unqualified from another module.
 
 ## Visibility
 
@@ -127,7 +126,7 @@ Dream has three visibility levels — `private` (the default, no keyword), `inte
 A top-level declaration (function, class, interface, enum, or global) is **private by default** — usable anywhere in its own file but invisible to any other file, even one that imports it.
 
 - `internal` — visible from any file that shares the same declaring `module` (or, for undeclared files, the shared unnamed root module), but not from a file in a different module.
-- `public` — visible everywhere the file is reachable from (and, for functions, exposed to the host).
+- `public` — visible everywhere the file is reachable from (and, for functions, visible to the host that runs the program).
 
 ```dream
 // lib.dream
@@ -160,12 +159,9 @@ fun main() {
 
 ### Class member visibility
 
-A class member (field, method, static method, accessor, or **constructor**) is **class-private by
-default** — reachable only from that class's own methods, regardless of file. `static` never implies
-visibility; a `static` member must still be `internal`/`public` to be called from outside the class.
-Constructors follow the same rule: mark them `public` (or `internal`) to allow `Type(...)` from
-outside the type. An implicit zero-arg default (no `constructor` declared) is public. Destructors
-(`del`) are always private.
+A class member (field, method, static method, accessor, or **constructor**) is **class-private by default** — reachable only from that class's own methods, regardless of file. `static` never implies visibility; a `static` member must still be `internal` / `public` to be called from outside the class.
+
+Constructors follow the same rule: mark them `public` (or `internal`) to allow `Type(...)` from outside the type. An implicit zero-arg default (no `constructor` declared) is public. Destructors (`del`) are always private.
 
 - `internal` — reachable from anywhere in the declaring class's module (not just the class's own methods), but not outside the module.
 - `public` — reachable from anywhere the type itself is reachable.
@@ -200,4 +196,4 @@ There is no `protected` modifier. Dream has [no class inheritance](classes-struc
 
 ## Importing from JavaScript
 
-Pulling in functions from the JavaScript host (rather than another `.dream` file) uses `extern fun`. See [JS Interop](interop.md).
+Pulling in functions from the host (rather than another `.dream` file) uses `extern fun`. See [JS Interop](interop.md).

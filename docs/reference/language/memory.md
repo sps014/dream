@@ -1,6 +1,7 @@
 # Memory Management
 
-Dream manages heap memory with **automatic reference counting (ARC)**. You never call `free` — memory is reclaimed the moment the last reference to an object drops.
+Dream manages heap memory with **automatic reference counting (ARC)**.
+You never call `free` — memory is reclaimed the moment the last reference to an object drops.
 
 ## What lives on the heap
 
@@ -30,31 +31,23 @@ When these guarantees are not enough, the `@unsafe` tier (`Pointer<T>`, `Buffer.
 
 ## Raw buffers and custom containers
 
-`T[]` is always safe to use directly — including as the backing storage of your own data
-structure. Three guarantees hold for any array, no matter how you track its contents:
+`T[]` is always safe to use directly — including as the backing storage of your own data structure.
+Three guarantees hold for any array, no matter how you track its contents:
 
 1. **Overwriting a slot releases the old element** immediately.
-2. **Reading a slot retains the element** — both the array and your variable are valid owners,
-   so there is no way to create a dangling or double-freed reference through reads.
-3. **Freeing an array releases every slot**, including slots a counter has already "left
-   behind".
+2. **Reading a slot retains the element** — both the array and your variable are valid owners, so there is no way to create a dangling or double-freed reference through reads.
+3. **Freeing an array releases every slot**, including slots a counter has already "left behind".
 
-The practical consequence: if you hand-roll a container (`entries: string[]` plus a `count:
-int`), rewinding the counter **without clearing slots is safe**. Old elements stay referenced
-from dead capacity only until they are overwritten or until the array is dropped, then they are
-reclaimed deterministically. Nothing leaks permanently and nothing is freed early — there is no
-rule to remember.
+The practical consequence: if you hand-roll a container (`entries: string[]` plus a `count: int`), rewinding the counter **without clearing slots is safe**. Old elements stay until they are overwritten or the array is dropped. There is no error.
+
+Eager clear is optional.
 
 Two opt-ins exist for people writing performance-sensitive containers:
 
-- `Buffer.clear<T>(arr)` / `Buffer.truncate<T>(arr, n)` release elements eagerly (normal ARC
-  store semantics per slot). Use them when one long-lived container churns through many
-  elements and peak memory matters more than microsecond-level cost.
-- Zeroing a vacated slot after moving an element out (`items[i] = Buffer.alloc<T>(1)[0]`,
-  like [`List.pop`](../stdlib/collections.md)) reclaims immediately instead of at overwrite/drop.
+- `Buffer.clear<T>(arr)` / `Buffer.truncate<T>(arr, n)` release elements eagerly (normal ARC store semantics per slot). Use them when one long-lived container churns through many elements and peak memory matters more than microsecond-level cost.
+- Zeroing a vacated slot after moving an element out (`items[i] = Buffer.alloc<T>(1)[0]`, like [`List.pop`](../stdlib/collections.md)) reclaims immediately instead of at overwrite/drop.
 
-The genuinely unsafe tier stays behind [`@unsafe`](memory.md#unsafe-manual-memory-management):
-`Pointer<T>`, `Buffer.realloc`, and `Buffer.free` bypass ARC entirely.
+The genuinely unsafe tier stays behind [`@unsafe`](memory.md#unsafe-manual-memory-management): `Pointer<T>`, `Buffer.realloc`, and `Buffer.free` bypass ARC entirely.
 
 ## How it works
 
@@ -62,7 +55,7 @@ Every heap object tracks how many names still point at it.
 
 - When a variable goes out of scope, that count goes down.
 - Reassigning a variable drops the value it held before. Module-level `let` names follow the same retain/release rules as a field store (a still-live local copied into a global is retained; the previous occupant is released).
-- When the count reaches zero, the object is freed immediately (its `del` destructor runs first, if it has one).
+- When the count reaches zero, the object is freed (its `del` destructor runs first, if it has one).
 - Passing and assigning heap values uses [ownership](ownership.md): unmarked parameters sink, `borrow` shares, and a last use **moves** instead of copying.
 
 ```dream
@@ -74,23 +67,26 @@ fun make_list(): int[] {
 fun main() {
     let result = make_list();
     println(result[0]);
-} // result leaves scope -> count 0 -> freed instantly
+} // result leaves scope -> count 0 -> freed
 ```
+
+When you compile for the browser or Node, memory is freed as soon as the last use ends.
+`dream run` may wait until the end of the block.
 
 ## Known boundaries
 
-The following are documented limitations, not silent unsoundness — each degrades to a
-detectable pattern or an explicit opt-out rather than memory corruption:
+The following are documented limitations, not silent unsoundness — each degrades to a detectable pattern or an explicit opt-out rather than memory corruption:
 
 | Boundary | Status |
 |---|---|
 | Cycles routed through `object`-typed loose references | Deferred: requires runtime type introspection to trace |
 | JS↔Dream cross-collector cycles | Interop boundary is weak-by-convention; use id-based protocols |
-| Data races across threads | Conventional locks (`@shared` + `Lock`); compiler-proven freedom deferred |
+| Data races across threads | Use `Lock` on a `@shared` class. Dream does not yet reject races for you |
 
 ## Advanced: reference cycles
 
-ARC cannot collect a **cycle**. If `A` references `B` and `B` references `A`, neither count ever reaches zero — a leak:
+ARC cannot collect a **cycle**.
+If `A` references `B` and `B` references `A`, neither count ever reaches zero — a leak:
 
 ```dream
 class Node {
@@ -113,7 +109,9 @@ objects can ever be freed; mark one field 'weak' or 'unowned' to break it, or an
 class in the cycle with '@allow_cycle' if the cycle is intentional
 ```
 
-This is a **type** check, not a value check: it flags "these classes *could* form a cycle," not "this program creates one." It follows strong fields through `Option<T>`, `T[]`, `List<T>`, `Map<K, V>`, and `Set<T>`. It cannot see cycles assembled dynamically through `object` or callbacks; those still require care.
+This is a **type** check, not a value check: it flags "these classes *could* form a cycle," not "this program creates one."
+It follows strong fields through `Option<T>`, `T[]`, `List<T>`, `Map<K, V>`, and `Set<T>`.
+It cannot see cycles assembled dynamically through `object` or callbacks; those still require care.
 
 ### Breaking a cycle: `weak` and `unowned`
 
@@ -167,7 +165,8 @@ Neither modifier keeps the other object alive:
 A render tree is two graphs that Dream does **not** treat as the same:
 
 1. **Dream classes** — `parent` + `children: List<Node>` is a strong cycle unless `parent` is `weak` / `unowned`. A `List<Node>` field on `Node` is also a cycle through the collection; mark the class `@allow_cycle` if you keep strong children. Dropping the root then reclaims the tree.
-2. **`js` DOM nodes** — `createElement` / `appendChild` keep the real JS object alive until the last Dream `js` handle is gone. `innerHTML = ""` or `removeChild` only drops the **browser** ref. A `js` temp that is never read after `appendChild` is released at that last use (not at `}`). If you keep a `List<js>` of every created node across frames, clear it (or drop the list) or the handles stay pinned even after the DOM is empty.
+2. **`js` DOM nodes** — `createElement` / `appendChild` keep the real JS object alive until the last Dream `js` handle is gone. `innerHTML = ""` or `removeChild` only drops the **browser** ref.
+   A `js` temp that is never read after `appendChild` is released at that last use (not at `}`). If you keep a `List<js>` of every created node across frames, clear it (or drop the list) or the handles stay pinned even after the DOM is empty.
 
 ```dream
 @allow_cycle
@@ -202,7 +201,8 @@ class Node {
 
 ## `@unsafe`: manual memory management
 
-A handful of low-level primitives step outside ARC: `Buffer.realloc` / `Buffer.free` and [`Pointer<T>`](arrays.md#pointert-manual-allocation-unsafe) manage a block's lifetime yourself. Every function or method that touches one of these must be marked `@unsafe`:
+A handful of low-level primitives step outside ARC: `Buffer.realloc` / `Buffer.free` and [`Pointer<T>`](arrays.md#pointert-manual-allocation-unsafe) manage a block's lifetime yourself.
+Every function or method that touches one of these must be marked `@unsafe`:
 
 ```dream
 @unsafe
@@ -218,15 +218,19 @@ fun caller(): void {
 }
 ```
 
-Calling an `@unsafe` function from ordinary code is a compile-time error. Marking your own function `@unsafe` means *its* callers must be `@unsafe` too — the attribute has to be threaded all the way up to wherever the unsafe operation is justified.
+Calling an `@unsafe` function from ordinary code is a compile-time error.
+Marking your own function `@unsafe` means *its* callers must be `@unsafe` too — the attribute has to be threaded all the way up to wherever the unsafe operation is justified.
 
-`@unsafe` does **not** insert runtime checks, and it does not verify the contract of the operation you're calling (e.g. that a freed `Pointer<T>` is never read again). It is a documented promise from the author, not a proof.
+`@unsafe` does **not** insert runtime checks, and it does not verify the contract of the operation you're calling (e.g. that a freed `Pointer<T>` is never read again).
+It is a documented promise from the author, not a proof.
 
 ## `defer`: wait until after the important work to run destructors
 
-Normally, when nothing points at an object anymore, Dream runs its `del` (if any) and frees it **right then**. That is what you want almost everywhere.
+Normally, when nothing points at an object anymore, Dream runs its `del` (if any) and frees it **right then**.
+That is what you want almost everywhere.
 
-Sometimes that “right then” is a bad moment: you drop last year’s UI tree or a particle buffer, and the destructor storm runs **before** you finish drawing or simulating this frame. `defer { … }` keeps the objects logically gone (nothing can use them), but **runs the actual cleanup at `}`** — after the work you care about.
+Sometimes that “right then” is a bad moment: you drop last year’s UI tree or a particle buffer, and the destructor storm runs **before** you finish drawing or simulating this frame.
+`defer { … }` keeps the objects logically gone (nothing can use them), but **runs the actual cleanup at `}`** — after the work you care about.
 
 ```dream
 defer {
@@ -237,9 +241,13 @@ defer {
 
 **Use it** when there is a deadline in the middle of a tick (paint, simulate, submit a frame) and a large graph dies in the same tick.
 
-**Skip it** when you are just allocating and dropping in a loop with nothing urgent in between. Cleanup is not cheaper with `defer` — it is only **later** (and can use a bit more memory until `}`). Needless `defer` is extra bookkeeping.
+**Skip it** when you are just allocating and dropping in a loop with nothing urgent in between.
+Cleanup is not cheaper with `defer` — it is only **later** (and can use a bit more memory until `}`).
+Needless `defer` is extra bookkeeping.
 
-Braces are required. `await` is not allowed inside `defer`. GPU shaders do not support it.
+Braces are required.
+`await` is not allowed inside `defer`.
+GPU shaders do not support it.
 
 ```dream
 class Tracked {
@@ -261,7 +269,7 @@ fun main() {
 - `defer { … }` — clean a batch at `}` (256 objects), then **finish the rest** if this is the outermost `defer`, so work does not sit until the program exits.
 - `defer(q) { … }` — `q` is a `uint` (plain `256` is fine). That many objects are cleaned at this `}`. `defer(0)` means “don’t clean on this `}`” — useful around a game loop so inner `defer(256)` slices can spread cleanup across frames.
 - Nested `defer` share one cleanup list. While you are still inside some `defer`, leftover work can wait for the next one, but the list is capped (16 384 objects) so memory cannot grow without bound.
-- `dream run` (native) is where this queue is real. Compiling to WebAssembly still frees immediately today.
+- When you compile for the browser or Node, memory is freed as soon as the last use ends. `dream run` may wait until the end of the block.
 - On native, a last-ref **string** that the compiler releases is queued like other last-refs (the free waits for `}`). Helpers such as in-place concat still free string temps immediately.
 
 A timing sample (UI tree swap + particles): `dream --release run sample/defer_destroy_bench.dream`.
@@ -277,10 +285,13 @@ A timing sample (UI tree swap + particles): `dream --release run sample/defer_de
 
 ## Call stack (`dream run`)
 
-Deep recursion and large `struct` frames need enough call stack. For `dream run`, set **`DREAM_STACK_SIZE`** (e.g. `32M`, `32MiB`, or a byte count). The default is 16 MiB. Values below 64 KiB are rejected. The same variable also sizes the wasm32 guest stack (`dream --wasm` links with `-z stack-size`).
+Deep recursion and large `struct` frames need enough call stack. For `dream run`, set **`DREAM_STACK_SIZE`** (e.g. `32M`, `32MiB`, or a byte count). The default is 16 MiB.
+
+Values below 64 KiB are rejected. The same variable also sizes the wasm32 guest stack (`dream --wasm` links with `-z stack-size`).
 
 ```bash
 DREAM_STACK_SIZE=32M dream run path/to/file.dream
 ```
 
-This only affects native `dream run`. Browser and Node use the engine's own stack limits.
+This only affects native `dream run`.
+Browser and Node use the engine's own stack limits.

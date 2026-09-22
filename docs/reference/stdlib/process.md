@@ -16,6 +16,13 @@ async fun main(): void {
 }
 ```
 
+Spawn and keep a handle:
+
+```dream
+let child = (Process.spawn("echo", ["hi"]).await).unwrap();
+child.wait().await;
+```
+
 | Call | Meaning |
 | --- | --- |
 | `Process.run(cmd, args).await` | run to completion, capture output |

@@ -17,7 +17,9 @@ println(p1.x);  // 10
 
 Classes are managed by automatic reference counting (ARC) — no manual frees. Define a `del()` destructor and it runs right before the object is destroyed. See [Memory Management](memory.md).
 
-Header parameters become **public** fields and a synthesized `constructor`. Write `internal` on a parameter to narrow it. Extra overloads in the body are also named `constructor`. Call sites stay `Point(3, 4)`.
+Header parameters become **public** fields and a synthesized `constructor`. Write `internal` on a parameter to narrow it. Extra overloads in the body are also named `constructor`.
+
+Call sites stay `Point(3, 4)`.
 
 ### Overloaded constructors
 
@@ -85,7 +87,7 @@ A `ref struct` value behaves exactly like an ordinary `struct` as a local variab
 - **Storing it in a field** of any `class` or `struct` — that would keep it alive past the frame that created it.
 - **Using it as a generic type argument** (`List<Pair>`, `Option<Pair>`, ...) — a container's backing storage is heap-allocated.
 - **Capturing it in a lambda** — a capturing lambda's environment is a heap-allocated cell.
-- **Using it as a parameter of an `async` function** — an `await` suspend point spills the coroutine's live locals into heap-allocated state.
+- **Using it as a parameter of an `async` function** — values must stay on the stack across `await`, and an async parameter would outlive that frame.
 
 `ref` may only precede `struct`, never `class` (a `class` is already a heap-allocated reference type, so "stack-only class" is meaningless and rejected at parse time).
 
@@ -100,11 +102,9 @@ Both classes and structs support all of the following.
 
 ### Visibility
 
-Members (fields, methods, static members, accessors, constructors) are **class-private by
-default** — reachable only from the type's own methods, regardless of file. Mark a member
-`internal` (module-wide) or `public` (everywhere the type is reachable) to expose it. `static`
-never implies visibility. Separately, the type itself is **file-private by default** and needs
-`public` (or `internal`) to be used from another file. Full rules: [Imports > Visibility](imports.md#visibility).
+Members (fields, methods, static members, accessors, constructors) are **class-private by default** — reachable only from the type's own methods, regardless of file. Mark a member `internal` (module-wide) or `public` (everywhere the type is reachable) to expose it. `static` never implies visibility.
+
+Separately, the type itself is **file-private by default** and needs `public` (or `internal`) to be used from another file. Full rules: [Imports > Visibility](imports.md#visibility).
 
 ```dream
 module utils.math;
@@ -116,9 +116,7 @@ public class Counter {
 }
 ```
 
-A field may also carry `weak` or `unowned` (combinable with visibility in any order) to opt a
-strong-reference-cycle-prone field out of the compiler's cycle check — see
-[Memory > Reference cycles](memory.md#advanced-reference-cycles).
+A field may also carry `weak` or `unowned` (combinable with visibility in any order) to opt a strong-reference-cycle-prone field out of the compiler's cycle check — see [Memory > Reference cycles](memory.md#advanced-reference-cycles).
 
 ### Methods
 
@@ -133,9 +131,7 @@ class Counter {
 
 ### Properties
 
-Computed properties use TypeScript-style `get` / `set` accessors. Reading `obj.name` calls the
-getter; assigning `obj.name = v` calls the setter. They take the same visibility modifiers as
-methods (`public` / `internal` / private) and may be `static`:
+Computed properties use `get` / `set` accessors. Reading `obj.name` calls the getter; assigning `obj.name = v` calls the setter. They take the same visibility modifiers as methods (`public` / `internal` / private) and may be `static`:
 
 ```dream
 class Temperature {
@@ -155,12 +151,11 @@ class App {
 }
 ```
 
-A getter-only property is fine; a setter without a getter is allowed but unusual. These are
-distinct from bracket indexers (`fun this[...]`) below.
+A getter-only property is fine; a setter without a getter is allowed but unusual. These are distinct from bracket indexers (`fun this[...]`) below.
 
 ### Indexers and enumerators
 
-Opt into `obj[i]` / `obj[i] = v` with C#-style indexers. Opt into `for let x in obj` with methods named `iterator` (zero args, returning an enumerator object) and `next` (zero args, returning `Option<T>`):
+Opt into `obj[i]` / `obj[i] = v` with indexers. Opt into `for let x in obj` with methods named `iterator` (zero args, returning an enumerator object) and `next` (zero args, returning `Option<T>`):
 
 ```dream
 class Grid {
@@ -174,7 +169,7 @@ class GridIter {
 }
 ```
 
-A method named `get`/`set` is ordinary and does **not** enable bracket sugar. `iterator` / `next` are the enumerator protocol when they have the shapes above.
+A method named `get` / `set` is ordinary and does **not** enable bracket sugar. `iterator` / `next` are the enumerator protocol when they have the shapes above.
 
 ## Advanced: sealed types
 
@@ -203,7 +198,9 @@ public static class Util {
 System.println(Util.twice(3));   // 6
 ```
 
-A static class cannot have instance fields, instance methods, constructors, or an `implements` clause. Members must be marked `static`. It cannot be instantiated (`Util()`), used as a type (`let x: Util`, `List<Util>`), or grow instance methods via `extend`. A later `extend Util { public static fun … }` may still add more static helpers (stdlib splits `GpuMath` this way). `static` cannot modify `struct`, `enum`, or `interface`.
+A static class cannot have instance fields, instance methods, constructors, or an `implements` clause. Members must be marked `static`. It cannot be instantiated (`Util()`), used as a type (`let x: Util`, `List<Util>`), or grow instance methods via `extend`.
+
+A later `extend Util { public static fun … }` may still add more static helpers (stdlib splits `GpuMath` this way). `static` cannot modify `struct`, `enum`, or `interface`.
 
 ```dream
 // error: cannot instantiate static class 'Util'
@@ -212,12 +209,9 @@ let u = Util();
 
 ## Advanced: `shared` classes
 
-Prefix a `class` with `shared` to make it a **shared** reference type — Dream's analogue of Swift `Sendable` for classes. A `shared class` pays two costs, and only when opted in:
+Prefix a `class` with `shared` to make it a **shared** reference type that is safe to use across tasks. Counting stays correct from more than one task, and each instance has room for a lock.
 
-- **Atomic refcounting.** Retain/release use atomic instructions instead of the ordinary fast path, since a shared instance's refcount can be touched from more than one thread.
-- **An extra header word** reserved for a reentrant lock, used by [`lock (obj) { ... }`](webworkers.md#sharing-state-safely) and the instance's own implicit locking.
-
-A type is **`shared`** (and may be captured by a [`WebWorker`](webworkers.md) body, or stored in a `shared class`) when it is unmanaged / blittable, `string`, a value struct whose fields are all `shared`, or a `shared class`. Constrain generics with `T : shared`.
+A type is **`shared`** (and may be captured by a [`Task`](tasks.md) body, or stored in a `shared class`) when it is unmanaged / blittable, `string`, a value struct whose fields are all `shared`, or a `shared class`. Constrain generics with `T : shared`.
 
 ```dream
 shared class Counter {
@@ -256,7 +250,9 @@ shared class Bad {
 }
 ```
 
-`shared struct` is not allowed — value structs become `shared` automatically when their fields are. Wrap a reference graph in a `shared class` if it needs to be shared by pointer. `lock (x)` still requires a `shared class` (a lock word), not every `shared` type.
+`shared struct` is not allowed — value structs become `shared` automatically when their fields are. Wrap a reference graph in a `shared class` if it needs to be shared by pointer.
+
+`lock (x)` still requires a `shared class` (a lock word), not every `shared` type. See [`lock (obj) { ... }`](tasks.md#sharing-state-safely).
 
 ## Advanced: boxing a struct
 

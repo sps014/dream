@@ -1,31 +1,31 @@
 # Control Flow
 
-Control flow decides which code runs and how often. Dream has the usual `if`, loops, and `switch`, plus labeled loops for the tricky cases.
+Control flow decides which code runs and how often. Dream has `if`, loops, and `switch`, plus labeled loops for nested cases.
 
 ## if / else
 
-Bodies may be a braced block or a single statement:
+Conditions must be `bool`. Parentheses around the condition are optional. Bodies may be a braced block or a single statement:
 
 ```dream
 if score >= 90 {
     print("A\n");
-} else if (score >= 70) {
+} else if score >= 70 {
     print("B\n");
 } else {
     print("F\n");
 }
 
-if (ok) return;
-if (flag) print("yes\n"); else print("no\n");
+if ok return;
+if flag print("yes\n"); else print("no\n");
 ```
 
-Conditions are parenthesized and must be `bool`. For selecting a *value*, the ternary `cond ? a : b` is often cleaner — see [Operators](operators.md).
+For selecting a *value*, the ternary `cond ? a : b` is often cleaner — see [Operators](operators.md).
 
 ## Loops
 
 ### while
 
-Runs the body while the condition holds:
+Runs the body while the condition holds. Parentheses around the condition are optional:
 
 ```dream
 let i = 0;
@@ -33,7 +33,7 @@ while i < 10 {
     println(i);
     i++;
 }
-while (done) break;
+while done break;
 ```
 
 ### do / while
@@ -45,7 +45,7 @@ let i = 0;
 do {
     println(i);
     i = i + 1;
-} while (i < 3);
+} while i < 3;
 ```
 
 ### for
@@ -96,18 +96,19 @@ for (let i = 0; i < 10; i = i + 1) {
     }
     println(i);
 }
+// break; continue;   // error: only allowed inside a loop
 ```
-
-Using either outside a loop is a compile error.
 
 ## switch
 
 `switch` has two forms, and the parser picks based on the body:
 
-- A **C-style** switch (below) starts with `case`/`default` and matches against constant labels.
+- A **label switch** (below) starts with `case`/`default` and matches against constant labels.
 - A **pattern-matching** switch uses `pattern => body` arms to destructure [discriminated unions](enums-unions.md).
 
-The C-style form has **no fallthrough** — each `case` runs only its own block. A case may list comma-separated labels, and `default` is optional:
+### Label switch
+
+A label switch has **no fallthrough** — each `case` runs only its own block. A case may list comma-separated labels, and `default` is optional:
 
 ```dream
 switch (code) {
@@ -132,6 +133,17 @@ switch (c) {
 }
 ```
 
+### Pattern switch
+
+For payload enums and unions, use pattern arms. Full rules live on [Enums & unions](enums-unions.md):
+
+```dream
+switch (opt) {
+    Option.Some(v) => println(v),
+    Option.None => println("empty"),
+}
+```
+
 ## Advanced: labeled loops
 
 Give a loop a label so `break`/`continue` can target an outer loop from inside a nested one:
@@ -150,4 +162,4 @@ outer: for (let i = 0; i < 3; i = i + 1) {
 }
 ```
 
-Targeting a label that is not an enclosing loop is a compile error.
+The label must enclose this loop — targeting a label that is not an enclosing loop is a compile error.

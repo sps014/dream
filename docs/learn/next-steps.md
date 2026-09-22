@@ -10,6 +10,17 @@ You can install Dream and print a line. Here is a sensible order from here:
 6. [Cookbook](../cookbook/index.md) — lists, GPU, source generators
 7. [Package manager](../reference/tooling/dreamer.md) — `dreamer add` and registries
 
+Ownership is not in the tour. A sink parameter takes the value; `borrow` only looks:
+
+```dream
+fun take(s: string): void { /* owns s */ }
+fun peek(borrow s: string): void {
+    System.println(s);
+}
+```
+
+See the [Ownership](../reference/language/ownership.md) page for the full rules.
+
 When you need the browser or Node, read [JavaScript interop](../reference/language/interop.md). When you need a native C library, read [C interop](../reference/language/c-interop.md). The rest of the language and every stdlib package live under [Reference](../reference/stdlib/index.md).
 
 ## Community
@@ -18,4 +29,4 @@ When you need the browser or Node, read [JavaScript interop](../reference/langua
 - Discussions: coming soon
 - Discord: coming soon
 
-Changing Dream itself: [Internals](../internals/README.md).
+People changing the compiler can read [Internals](../internals/README.md).

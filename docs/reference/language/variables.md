@@ -1,12 +1,12 @@
 # Variables
 
-Variables hold values. In Dream you declare them with `let` (mutable) or `const` (immutable), and the compiler usually figures out the type for you.
+Variables hold values. Declare them with `let` (mutable) or `const` (immutable). Dream usually figures out the type for you.
 
 Console examples elsewhere use `System.println` after `import system;` — see [Imports](imports.md#standard-library-packages). Short language snippets sometimes omit that import for brevity.
 
 ## Declaring a variable
 
-Use `let`. The type is inferred from the value on the right:
+Use `let`. The type comes from the value on the right:
 
 ```dream
 let x = 42;          // int
@@ -15,7 +15,7 @@ let ratio = 3.14;    // float
 let done = false;    // bool
 ```
 
-Write the type explicitly when the value alone is ambiguous, or when you want a different type than inference would pick:
+Write the type when the value alone is ambiguous, or when you want a different type than inference would pick:
 
 ```dream
 let score: double = 99.5d;
@@ -44,7 +44,7 @@ const pi: int = 3;
 
 ## Scope
 
-A variable lives until the end of the block it was declared in. When a reference-typed value (string, array, class) leaves scope, its reference count drops automatically — see [Memory Management](memory.md).
+A variable lives until the end of the block it was declared in. When a reference-typed value (string, array, class) leaves scope, Dream frees it if nothing else still uses it — see [Memory Management](memory.md).
 
 ```dream
 fun main(): void {
@@ -90,21 +90,15 @@ fun main(): void {
 
 ### Visibility
 
-Top-level variables are **file-private by default**: readable anywhere in their own `.dream` file, but not visible to files that `import` it and not exported. Three modifiers adjust this:
+Top-level variables are **file-private by default**: readable anywhere in their own `.dream` file, but not visible to files that `import` it and not exported. Two modifiers widen this:
 
 - `public` — importable from other files and exported to the WebAssembly host.
 - `internal` — importable from any other file that declares the **same [`module`](imports.md) path**, but not exported to the host.
-- `static` — kept file-local (the default for a non-public variable, made explicit).
-
-`static` is the opposite of both sharing modifiers, so it cannot be combined with either:
 
 ```dream
 public let version: int = 1;   // exported to the host
 internal let budget: int = 64; // shared within `module app`, not exported
-static let cache: int = 0;     // file-local
-
-// public static let x = 1;    // error: cannot be both 'public' and 'static'
-// internal static let y = 1;  // error: cannot be both 'internal' and 'static'
+let cache: int = 0;            // file-private (the default)
 ```
 
 `internal` needs a declared module on **both** sides. A file with no `module` declaration has no module to share, so its `internal` globals stay file-private:
@@ -119,4 +113,8 @@ module app;                    // same module, so `budget` resolves
 import lib;
 ```
 
-Note that `static` here carries the C meaning — file-scope internal linkage — not the C#/Java "one shared instance" meaning. A top-level `let` is already a single value initialized once at module load, so `public let` is what `public static` denotes in those languages.
+`static` is not a top-level variable modifier — it declares [class members](classes-structs.md) only. A top-level `let` is already a single value initialized once at module load.
+
+```dream
+// static let cache = 0;   // error: 'static' cannot modify a top-level variable
+```

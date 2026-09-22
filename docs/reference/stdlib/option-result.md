@@ -49,14 +49,14 @@ File, HTTP, GPU, and parse APIs return `Result`. In an `async` function (or any 
 
 `expr?` unwraps `Ok` or returns `Err` from the current function. The function’s return type must be a `Result`.
 
-`Option` and `Result` do not mix, exactly as in Rust: `?` on an `Option` needs the enclosing function to return a matching `Option`. `?` on a `Result` rebuilds `Err` at the function’s `Result` type: `E` may widen when the operand’s error implements the function’s error interface (`GpuError` → `Error`), but there is no general `From` conversion between unrelated error types. Bridge those explicitly:
+`Option` and `Result` do not mix: `?` on an `Option` needs the enclosing function to return a matching `Option`. `?` on a `Result` rebuilds `Err` at the function’s `Result` type: `E` may widen when the operand’s error implements the function’s error interface (`GpuError` → `Error`), but there is no general conversion between unrelated error types. Bridge those explicitly:
 
 ```dream
 let first = first_line(text).ok_or(ParseError.invalid("empty input"))?;   // Option → Result
 let n = int.parse(text).map_err(fun(e: ParseError): ConfigError => ConfigError.from_parse(e))?;
 ```
 
-A `Result<T, ConcreteError>` is also assignable to `Result<T, Error>` when `ConcreteError` implements `Error` (the heap box has the same layout: discriminant plus a reference payload). Use `map_err` when the payload would change representation (a value struct boxed into an interface).
+A `Result<T, ConcreteError>` is also assignable to `Result<T, Error>` when `ConcreteError` implements `Error`. Use `map_err` when the payload would change representation (a value struct boxed into an interface).
 
 ## `?` in `main`
 
@@ -93,7 +93,7 @@ async fun main(): Result<bool, IoError> {
 }
 ```
 
-An `Option` main is rejected — bridge it with `ok_or` as above. `main(): int` is also allowed, and returns the process exit code directly, as in C; falling off the end means `return 0`.
+An `Option` main is rejected — bridge it with `ok_or` as above. `main(): int` is also allowed, and returns the process exit code directly; falling off the end means `return 0`.
 
 ## Errors
 

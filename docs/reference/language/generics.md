@@ -1,10 +1,14 @@
 # Generics
 
-Generics let you write code once and use it for many types. Dream resolves them at compile time: for each concrete type you use, the compiler emits a separate, fully optimized copy. There is no boxing and no runtime cost.
+Generics let you write code once and use it for many types.
+Dream picks a concrete type at compile time for each use.
+There is no boxing and no extra runtime cost.
 
 ## Generic functions
 
-Add `<T>` after the function name. The type argument is usually inferred from the call, but explicit `<Type>` always works:
+Add `<T>` after the function name.
+Dream usually infers `T` from the call.
+You can also write the type explicitly with `<Type>`:
 
 ```dream
 fun first<T>(arr: T[]): T {
@@ -21,7 +25,8 @@ Multiple type parameters are allowed: `fun swap<A, B>(a: A, b: B): A { ... }`.
 
 ## Generic classes
 
-Classes and structs can be generic. Type arguments can themselves be generic or arrays, so generics nest freely:
+Classes and structs can be generic.
+Type arguments can themselves be generic or arrays, so generics nest freely:
 
 ```dream
 class Pair<A, B> {
@@ -56,7 +61,9 @@ println(b.get());   // 100
 
 ### Generic constraints
 
-Constrain a type parameter to one or more interfaces with `T : Iface`. Inside the body, the constrained parameter exposes that interface's methods. Constraints apply to functions, classes, structs, interfaces, and `extend` blocks:
+Constrain a type parameter to one or more interfaces with `T : Iface`.
+Inside the body, that interface's methods are available.
+Constraints apply to functions, classes, structs, interfaces, and `extend` blocks:
 
 ```dream
 fun max_of<T : Comparable<T>>(a: T, b: T): T {
@@ -71,17 +78,24 @@ Combine bounds with `+`:
 struct Sorted<T : Comparable<T> + Equatable<T>> { /* ... */ }
 ```
 
-Kind constraints include `struct`, `class`, `unmanaged`, and `shared` (Sendable analogue: blittable, `string`, structs of shared fields, or `@shared class`):
+Kind constraints include `struct`, `class`, `unmanaged`, and `shared`.
+A `shared` type is a blittable value, `string`, a struct of shared fields, or an `@shared class`:
 
 ```dream
 fun send<T : shared>(value: T): void { /* … */ }
 ```
 
-At each instantiation Dream checks the concrete type satisfies the constraint, reporting an error otherwise (e.g. `List<int>().sort()` needs `int : Comparable<int>`). Each type gets its own copy of the generic, so a constrained call binds to the concrete method with **no boxing** — even for [value structs](classes-structs.md).
+At each use, Dream checks that the concrete type satisfies the constraint.
+Otherwise you get a compile error (for example `List<int>().sort()` needs `int : Comparable<int>`).
+Each type gets its own copy of the generic, so a constrained call binds to the concrete method with **no boxing** — even for [value structs](classes-structs.md).
+
+There is no extra runtime wrapper for value structs.
 
 ### Static methods on a generic class
 
-If the class type parameters appear in the static method's parameters, they are inferred from the call — the same rule as generic functions (`first(words)`). Write `List.from_array(items)` or `WebWorker.spawn(() => n * n)` (`TOut` is a method type argument). Explicit `Class<Args>.method(...)` always works, and is required when a parameter does not appear in the arguments (`Cache.make` below):
+If the class type parameters appear in the static method's parameters, they are inferred from the call — the same rule as generic functions (`first(words)`).
+Write `List.from_array(items)` or `Task.spawn(() => n * n)` (`TOut` is a method type argument).
+Explicit `Class<Args>.method(...)` always works, and is required when a parameter does not appear in the arguments (`Cache.make` below):
 
 ```dream
 class Cache<T> {
@@ -100,10 +114,9 @@ As with any static member, the method must be `public` to be called from another
 
 ### Generic functions as first-class values
 
-A generic function can become a [first-class function value](functions.md). With a concrete
-`fun(...)` type at the use site, its type arguments are inferred and a separate copy is used
-for that type. A bare binding stays generic and picks a type independently at each
-later use (typed assignment, typed argument, or call):
+A generic function can become a [first-class function value](functions.md).
+With a concrete `fun(...)` type at the use site, its type arguments are inferred and a separate copy is used for that type.
+A bare binding stays generic and picks a type independently at each later use (typed assignment, typed argument, or call):
 
 ```dream
 fun natural_order<T : Comparable<T>>(a: T, b: T): int {
@@ -118,7 +131,8 @@ let g: fun(int, int): int = f;                 // instantiates from the annotati
 
 ### Type checking inside generic bodies
 
-Use `is` to branch on the concrete type. The compiler eliminates the dead branches:
+Use `is` to branch on the concrete type.
+The compiler eliminates the dead branches:
 
 ```dream
 fun describe<T>(v: T): void {
@@ -134,4 +148,5 @@ fun describe<T>(v: T): void {
 
 ### How it works
 
-Every unique combination of type arguments creates a new instantiation. `Box<int>` and `Box<string>` are entirely separate types in the output — no boxing, no virtual dispatch, no overhead versus hand-written type-specific code.
+Every unique combination of type arguments creates a new copy.
+`Box<int>` and `Box<string>` are entirely separate types — no boxing, no overhead versus writing the type-specific code by hand.

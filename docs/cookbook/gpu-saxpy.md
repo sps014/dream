@@ -44,7 +44,7 @@ dream run saxpy.dream
 dream run sample/compute/saxpy.dream
 ```
 
-- `@compute(64)` — workgroup size 64; the body becomes WGSL.
+- `@compute(64)` — workgroup size 64; the body runs on the GPU.
 - `global_id.x` — this thread’s index.
 - `Compute.run_1d("saxpy", buffers, 4)` — run 4 threads; the name must match the function.
 

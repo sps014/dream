@@ -9,7 +9,7 @@ use crate::Mir;
 use dream_abi::{js_abi, runtime_hosts};
 use dream_types::TypeInterner;
 
-/// True when this module needs WASM shared memory + atomics: `WebWorker` / pool host imports, or a
+/// True when this module needs WASM shared memory + atomics: `Task` / pool host imports, or a
 /// remaining `@shared class` layout (`Lock` / `Semaphore` / user shared types).
 pub fn module_needs_threads(mir: &Mir, interner: &TypeInterner) -> bool {
     if mir.imports.iter().any(|imp| {

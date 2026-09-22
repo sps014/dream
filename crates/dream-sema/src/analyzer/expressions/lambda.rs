@@ -533,8 +533,8 @@ impl<'a> Analyzer<'a> {
         }
 
         let mut move_captures: Vec<String> = Vec::new();
-        if self.is_webworker_body_call() {
-            // Worker bodies run on another thread sharing linear memory. A non-shared capture
+        if self.is_task_body_call() {
+            // Task bodies run on another thread sharing linear memory. A non-shared capture
             // cannot be aliased across that boundary unless it is *transferred*: a managed heap
             // value (`Job`, `int[]`, `List<Job>`, …) moves by pointer hand-off and its sender-side
             // binding dies here. Anything else that isn't `shared` stays rejected.
@@ -554,7 +554,7 @@ impl<'a> Analyzer<'a> {
                 let who = self
                     .current_call_target_name
                     .clone()
-                    .unwrap_or_else(|| "WebWorker".to_string());
+                    .unwrap_or_else(|| "Task".to_string());
                 let pretty = self.ty_display(bad_ty);
                 return Err(report(
                     diagnostics,
@@ -703,23 +703,19 @@ impl<'a> Analyzer<'a> {
         Ok(func_ty)
     }
 
-    // True when the lambda/function-value being analyzed is a `WebWorker.spawn` /
-    // `WebWorker.spawn_async` / `WebWorker.map` / `WebWorkerPool.dispatch` body argument.
-    pub(in crate::analyzer) fn is_webworker_body_call(&self) -> bool {
+    // True when the lambda/function-value being analyzed is a `Task.spawn` /
+    // `Task.spawn_async` / `Task.map` / `TaskPool.dispatch` body argument.
+    pub(in crate::analyzer) fn is_task_body_call(&self) -> bool {
         match self.current_call_target_name.as_deref() {
-            Some("WebWorker") => true,
+            Some("Task") => true,
             Some(name) => match name.split_once('.') {
                 Some((recv, "spawn"))
                 | Some((recv, "spawn_async"))
                 | Some((recv, "spawn_mapped"))
                 | Some((recv, "spawn_mapped_async"))
                 | Some((recv, "map"))
-                | Some((recv, "map_async")) => {
-                    recv == "WebWorker" || recv.starts_with("WebWorker_")
-                }
-                Some((recv, "dispatch")) | Some((recv, "dispatch_async")) => {
-                    recv == "WebWorkerPool"
-                }
+                | Some((recv, "map_async")) => recv == "Task" || recv.starts_with("Task_"),
+                Some((recv, "dispatch")) | Some((recv, "dispatch_async")) => recv == "TaskPool",
                 _ => false,
             },
             None => false,

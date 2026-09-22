@@ -1,8 +1,0 @@
-// `public` (host-exported + module-visible) and `static` (file-local) are mutually exclusive
-// on a top-level variable.
-import system;
-public static let flag: int = 1;
-
-fun main(): void {
-    System.println(flag);
-}

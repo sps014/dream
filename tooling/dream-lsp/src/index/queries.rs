@@ -1157,7 +1157,7 @@ fn partial_ident_before(text: &str, offset: usize) -> String {
 }
 
 /// True when a method detail declares type parameters before `(`, e.g.
-/// `async WebWorkerPool.dispatch<TIn, TOut>(…)`.
+/// `async TaskPool.dispatch<TIn, TOut>(…)`.
 fn method_detail_has_type_params(detail: &str) -> bool {
     let Some(paren) = detail.find('(') else {
         return false;

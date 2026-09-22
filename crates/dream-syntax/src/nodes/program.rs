@@ -21,8 +21,6 @@ pub struct GlobalVariableNode<'a> {
     pub is_const: bool,
     /// Accessibility of the variable (`public`/`internal`/private, the default).
     pub visibility: Visibility,
-    /// `static` pins the variable to file/module-internal linkage (it can never be `public`).
-    pub is_static: bool,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.
     pub file_path: Option<Rc<str>>,

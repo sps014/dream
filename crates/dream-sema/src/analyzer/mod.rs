@@ -300,7 +300,6 @@ pub struct GlobalSymbol {
     pub type_str: String,
     pub is_const: bool,
     pub visibility: dream_syntax::nodes::Visibility,
-    pub is_static: bool,
     /// Source file this global was declared in, for file/module-level visibility. `None` for
     /// synthesized globals (always visible).
     pub file_path: Option<Rc<str>>,
@@ -359,7 +358,7 @@ pub struct Analyzer<'a> {
     /// Arrow-lambdas (capturing or not) lowered to synthesized top-level functions (`__lambda_0`,
     /// ...), keyed by their synthesized name, paired with the generic bindings active at the
     /// lambda literal's own use site (e.g. `TOut` -> `int` for a lambda written inside a
-    /// `WebWorker.spawn<TOut>` method) so its body is re-checked under the same substitution when
+    /// `Task.spawn<TOut>` method) so its body is re-checked under the same substitution when
     /// analyzed. Bodies are analyzed in the same deferred fixpoint pass as `instantiated_generics`
     /// (see `analyze_pending_instantiations`), since a function's body cannot be analyzed while
     /// another function's analysis is already in progress. The lambda literal itself is never
@@ -486,8 +485,8 @@ pub struct Analyzer<'a> {
     /// type parameters that appear inside a body (e.g. the `T` in `array_new<T>(...)`).
     current_generic_bindings: GenericBindings,
     /// The callee name (function/constructor) whose arguments are currently being analyzed, or
-    /// `None` outside of any call. Consulted by `analyze_lambda` to apply `WebWorker`-specific
-    /// capture restrictions (see `WEBWORKER_CTOR_CLASS`) without threading a dedicated parameter
+    /// `None` outside of any call. Consulted by `analyze_lambda` to apply `Task`-specific
+    /// capture restrictions (see `is_task_body_call`) without threading a dedicated parameter
     /// through every call-argument-analysis helper.
     current_call_target_name: Option<String>,
     /// Stack of loop labels currently in scope, so `break label;`/`continue label;` can be

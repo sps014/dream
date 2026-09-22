@@ -309,7 +309,7 @@ export class DreamInstance {
       return wasmToJs(this, result, out);
     };
     // Expose the raw table index so callers that need the portable funcref value itself (e.g.
-    // `WebWorker` shipping a body to another instance of the same module) can recover it.
+    // a `Task` body on another thread, in another instance of the same module) can recover it.
     wrapper.__dreamFuncIndex = index;
     this._callbackWrappers.set(cacheKey, wrapper);
     return wrapper;

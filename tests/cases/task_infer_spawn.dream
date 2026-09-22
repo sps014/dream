@@ -1,0 +1,20 @@
+// Class/method type arguments on `Task.spawn` / `.map` are inferred.
+import system;
+import system.task;
+
+fun shout(msg: string): string {
+    return msg + "!";
+}
+
+async fun main(): void {
+    System.println(Task.spawn(() => shout("hello")).await);
+
+    let n = 6;
+    System.println((Task.spawn(() => n * n).await).to_string());
+
+    let items = ["1", "2"];
+    let results = Task.map(items, shout).await;
+    for (let r in results) {
+        System.println(r);
+    }
+}

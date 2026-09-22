@@ -251,7 +251,7 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
             }
         }
         K::StringLit(s) => out.strings.push(s.clone()),
-        // Taking a function as a first-class value (e.g. `WebWorker(shout)` or passing `foo` to a
+        // Taking a function as a first-class value (e.g. `Task.spawn(shout)` or passing `foo` to a
         // `fun(...)` parameter) lowers to `Var(Binding::Func(callee))`. In a *sync* body the MIR
         // walk keeps it alive via `Rvalue::FuncRef`, but an `async` body's reachability comes only
         // from these HIR edges, so record the callee here or it would be pruned and its funcref

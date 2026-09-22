@@ -32,12 +32,12 @@ npx serve sample/music_player
 If the selective runtime is missing, the page falls back to `../../runtime/dream.js`, which
 requires serving the repository root (`npx serve .`).
 
-If you later add [`WebWorker`](../../docs/reference/language/webworkers.md) calls to a browser sample, the
+If you later add [`Task`](../../docs/reference/language/tasks.md) calls to a browser sample, the
 host page needs [Cross-Origin Isolation](https://developer.mozilla.org/en-US/docs/Web/API/crossOriginIsolated)
 headers so Dream can allocate a shared `WebAssembly.Memory` (`SharedArrayBuffer`). With a static
 file server such as `npx serve`, add response headers like
 `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` (see
-the WebWorkers doc). This music player does not spawn workers today, so the default serve command
+the Tasks doc). This music player does not spawn threads today, so the default serve command
 above is enough.
 
 ## How it works

@@ -1,0 +1,20 @@
+// Finished spawn must join and drop env/funcbox; live_objects must not grow with N.
+
+import system;
+import system.task;
+
+fun work(): int {
+    return 1;
+}
+
+async fun main(): void {
+    let _ = Task.spawn(() => work()).await;
+    let _ = Task.spawn(() => work()).await;
+    let base = Debug.live_objects;
+    let i = 0;
+    while i < 20 {
+        let _ = Task.spawn(() => work()).await;
+        i = i + 1;
+    }
+    System.println((Debug.live_objects - base).to_string());
+}

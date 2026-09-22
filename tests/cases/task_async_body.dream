@@ -1,0 +1,14 @@
+import system;
+import system.task;
+async fun tick(): void {
+    Time.sleep(1).await;
+}
+
+async fun work(): string {
+    tick().await;
+    return "hi!";
+}
+
+async fun main(): void {
+    System.println(Task.spawn_async(work).await);
+}

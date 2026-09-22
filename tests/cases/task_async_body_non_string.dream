@@ -1,0 +1,10 @@
+import system;
+import system.task;
+async fun computeInt(): int {
+    Time.sleep(1).await;
+    return 21 * 2;
+}
+
+async fun main(): void {
+    System.println((Task.spawn_async(computeInt).await).to_string());
+}

@@ -99,7 +99,7 @@ nav:
         - Generics: reference/language/generics.md
         - Interfaces: reference/language/interfaces.md
         - Async/Await: reference/language/async.md
-        - WebWorkers: reference/language/webworkers.md
+        - Tasks: reference/language/tasks.md
         - Compute shaders: reference/language/compute.md
         - Vertex & fragment shaders: reference/language/shaders.md
         - Memory Management: reference/language/memory.md

@@ -2,9 +2,10 @@
 // classes). The object's whole reachable graph is treated as shared once inside, so all
 // fields are accessed under the same `lock` discipline — no per-field move rules.
 //
-// Non-`@shared` objects themselves move WHOLE into worker bodies by pointer hand-off:
-// see `webworker_move_array.dream`.
+// Non-`@shared` objects themselves move WHOLE into task bodies by pointer hand-off:
+// see `task_move_array.dream`.
 import system;
+import system.task;
 
 class Job {
     public name: string;
@@ -27,7 +28,7 @@ shared class JobQueue {
 async fun main(): void {
     let q = JobQueue();
 
-    let producer = WebWorker.spawn(() => {
+    let producer = Task.spawn(() => {
         lock (q) {
             q.head = Option.Some(Job("build"));
             q.count = q.count + 1;
@@ -38,7 +39,7 @@ async fun main(): void {
 
     System.println(q.count);
 
-    let consumer = WebWorker.spawn(() => {
+    let consumer = Task.spawn(() => {
         lock (q) {
             if q.head.is_some() {
                 System.println(q.head.unwrap().name);

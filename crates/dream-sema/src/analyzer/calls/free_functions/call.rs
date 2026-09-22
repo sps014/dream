@@ -177,13 +177,13 @@ impl<'a> Analyzer<'a> {
                             .collect()
                     })
             } else if let Some(args) = generic_args.as_ref().filter(|a| !a.is_empty()) {
-                // A generic constructor call (`WebWorker<int, int>(body)`). The struct isn't
+                // A generic constructor call (`Cell<int>(v)`). The struct isn't
                 // instantiated yet at this point (that happens inside `analyze_constructor_call`,
                 // after arguments are analyzed below), so its constructor's parameter types are looked
                 // up straight from the *template* AST and substituted by hand here — deliberately not
                 // via `ensure_struct_instantiated`, which would fully analyze every method's body
-                // (including ones a self-referential generic, like `WebWorker<TIn, TOut>` constructing
-                // itself inside its own `map`, would recurse back into before it's registered).
+                // (including ones a self-referential generic constructing itself inside its own
+                // methods would recurse back into before it's registered).
                 let concrete_generic_args: Vec<Type> = args
                     .iter()
                     .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings))
@@ -197,7 +197,7 @@ impl<'a> Analyzer<'a> {
                         }
                         // If the template declares more than one `constructor` overload, prefer the one
                         // whose `fun(...)` parameter matches an async vs sync lambda argument (Future-
-                        // returning vs plain). Same-arity sync/`Future` pairs are common (`WebWorker`).
+                        // returning vs plain). Same-arity sync/`Future` pairs are common.
                         let ctors: Vec<_> = template
                             .methods
                             .iter()

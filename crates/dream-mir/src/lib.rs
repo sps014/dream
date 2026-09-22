@@ -213,7 +213,7 @@ pub enum Statement {
     /// dropped if any — see [`Rvalue::IndirectCall`]). Exists as its own statement (rather than
     /// always materializing `Rvalue::IndirectCall` into a temp) for the same reason
     /// [`Statement::Call`] does: a `void`-returning boxed `fun(...)` value called at statement
-    /// position (e.g. a capturing closure passed to `WebWorker`/a method-group value) has no
+    /// position (e.g. a capturing closure passed to `Task.spawn`/a method-group value) has no
     /// result to assign, and materializing one anyway would emit a `local.set`/`drop` with nothing
     /// on the stack.
     IndirectCall {

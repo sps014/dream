@@ -1,7 +1,7 @@
 module system.core;
 
 // `Bytes` - raw byte-blit conversions between a blittable value and a `byte[]` buffer, backing two
-// compiler intrinsics. These underpin the value-copy WebWorker boundary: a value is flattened to a
+// compiler intrinsics. These underpin the value-copy `Task` boundary: a value is flattened to a
 // byte buffer on one side and rebuilt from an identical buffer on the other, with no marshalling.
 //
 // Only blittable values (`T : unmanaged`, recursively free of reference fields) are safe to copy
@@ -19,7 +19,7 @@ public static class Bytes {
     // Encodes `bytes` as a `string` with one codepoint (0-255) per byte - lossless, since every
     // byte value is a valid standalone Unicode codepoint, and the inverse of `fromWireString`.
     // Used to carry an arbitrary byte buffer over a channel that only understands `string`s (the
-    // `WebWorker` wire), without needing a second, binary-native transport.
+    // `Task` wire), without needing a second, binary-native transport.
     public static fun toWireString(borrow bytes: byte[]): string {
         let n = bytes.length;
         let s = string.alloc(n);
@@ -43,10 +43,10 @@ public static class Bytes {
         return out;
     }
 
-    // Encodes a `WebWorker`-safe value of type `T` as the `string` the worker wire carries:
+    // Encodes a `Task`-safe value of type `T` as the `string` the worker wire carries:
     // identity when `T` is `string` itself, otherwise a raw byte-blit (`T` must be `unmanaged`)
-    // re-encoded via `toWireString`. Used by `WebWorker`/`WebWorker.map`/
-    // `WebWorkerPool.dispatch` to marshal an arbitrary wire value without a second wire format.
+    // re-encoded via `toWireString`. Used by `Task.spawn`/`Task.map`/
+    // `TaskPool.dispatch` to marshal an arbitrary wire value without a second wire format.
     @intrinsic("wire_encode")
     static extern fun toWire<T>(borrow value: T): string;
 

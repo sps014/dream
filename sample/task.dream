@@ -1,0 +1,30 @@
+// Real parallel threads — capture-only spawn over a shared heap.
+//
+// Run natively:   dream run sample/task.dream
+
+import system;
+import system.task;
+import system.text;
+import system.json;
+fun greet(name: string): string {
+    return "hello, " + name + "!";
+}
+
+fun work(input: string): string {
+    let i = 0;
+    while i < 5000000 {
+        i = i + 1;
+    }
+    return input.to_upper();
+}
+
+async fun main(): void {
+    System.println(Task.spawn(() => greet("dream")).await);
+
+    let w1 = Task.spawn(() => work("alpha"));
+    let w2 = Task.spawn(() => work("beta"));
+    let w3 = Task.spawn(() => work("gamma"));
+    System.println(w1.await);
+    System.println(w2.await);
+    System.println(w3.await);
+}

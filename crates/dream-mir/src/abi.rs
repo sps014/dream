@@ -138,7 +138,7 @@ pub const HEAP_PTR_ADDR: u32 = 48;
 
 /// A monotonically increasing counter (`i32.atomic.rmw.add`) handing out a small, dense, unique id
 /// to each thread that ever calls `$__thread_id` (see `runtime/sync.wat`) — the owner instance and
-/// every `WebWorker` instance draw from this one shared word, so ids never collide across threads.
+/// every `Task` thread draw from this one shared word, so ids never collide across threads.
 /// Each thread caches its own id in the ordinary (per-*instance*) WASM global `$__tid` after the
 /// first call, so every later call is a single `global.get`, not a repeat atomic RMW. Backs the
 /// owner-thread-id half of the reentrant lock word (`@shared class`'s embedded lock, `lock (obj)
@@ -384,7 +384,7 @@ pub const EXPORT_NEW_FUTURE: &str = "__dream_new_future";
 /// exports this so `load()` and worker instances can run it without calling `main`.
 pub const EXPORT_RUNTIME_INIT: &str = "__runtime_init";
 
-/// Worker-thread trampoline export (see `src/stdlib/core/webworker.dream`). The *native* host
+/// Worker-thread trampoline export (see `crates/dream-stdlib/src/system/task/task.dream`). The *native* host
 /// worker driver (`execution/host/worker.rs`) calls this with a body funcref index and a message
 /// string pointer; it performs one `call_indirect` on the `fun(string): string` body — driving an
 /// async body's constructor to completion in place if the call_indirect result turns out to be an

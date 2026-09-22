@@ -133,14 +133,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/core/promise.dream"),
             ),
             (
-                "<std>/system/core/webworker.dream",
-                include_str!("system/core/webworker.dream"),
-            ),
-            (
-                "<std>/system/core/webworker_pool.dream",
-                include_str!("system/core/webworker_pool.dream"),
-            ),
-            (
                 "<std>/system/core/lock.dream",
                 include_str!("system/core/lock.dream"),
             ),
@@ -278,6 +270,20 @@ pub const STD_PACKAGES: &[StdPackage] = &[
         name: "system.simd",
         deps: &["system.core"],
         files: &[("<std>/system/simd.dream", include_str!("system/simd.dream"))],
+    },
+    StdPackage {
+        name: "system.task",
+        deps: &["system.core"],
+        files: &[
+            (
+                "<std>/system/task/task.dream",
+                include_str!("system/task/task.dream"),
+            ),
+            (
+                "<std>/system/task/task_pool.dream",
+                include_str!("system/task/task_pool.dream"),
+            ),
+        ],
     },
     StdPackage {
         name: "system.text",

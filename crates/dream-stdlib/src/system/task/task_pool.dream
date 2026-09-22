@@ -1,0 +1,58 @@
+module system.task;
+
+// Reuse a fixed set of threads when you dispatch many short jobs. Work goes out round-robin.
+public class TaskPool {
+    ids: int[];
+    next: int;
+
+    public constructor(size: int) {
+        this.ids = Buffer.alloc<int>(size);
+        for (let i = 0; i < size; i = i + 1) {
+            this.ids[i] = TaskPool.spawn_host();
+        }
+        this.next = 0;
+    }
+
+    // Run `body` on the next pool member. Capture rules match `Task.spawn`.
+    public async fun dispatch<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): TOut {
+        CancellationToken.throw_if_opt(token);
+        let wrapped: fun(string): string = (_raw: string) => Bytes.toWire<TOut>(body());
+        let id = this.ids[this.next];
+        this.next = (this.next + 1) % this.ids.length;
+        let funcidx = Task.funcidx(wrapped);
+        let env = Task.env(wrapped);
+        let wire = TaskPool.dispatch_host(id, funcidx, env, "").await;
+        CancellationToken.throw_if_opt(token);
+        return Bytes.fromWire<TOut>(wire);
+    }
+
+    public async fun dispatch_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut {
+        CancellationToken.throw_if_opt(token);
+        let wrapped: fun(string): Future<string> = async (_raw: string) => {
+            return Bytes.toWire<TOut>(body().await);
+        };
+        let id = this.ids[this.next];
+        this.next = (this.next + 1) % this.ids.length;
+        let funcidx = Task.funcidx_async(wrapped);
+        let env = Task.env_async(wrapped);
+        let wire = TaskPool.dispatch_host(id, funcidx, env, "").await;
+        CancellationToken.throw_if_opt(token);
+        return Bytes.fromWire<TOut>(wire);
+    }
+
+    public fun shutdown(): void {
+        for (let i = 0; i < this.ids.length; i = i + 1) {
+            Task.terminate_host(this.ids[i]);
+        }
+    }
+
+    del() {
+        this.shutdown();
+    }
+
+    @runtime("workerPoolSpawn")
+    static extern fun spawn_host(): int;
+
+    @runtime("workerPoolDispatch")
+    static extern async fun dispatch_host(id: int, funcidx: int, env: long, borrow msg: string): string;
+}

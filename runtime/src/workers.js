@@ -103,7 +103,7 @@ self.onmessage = (e) => {
 
 /**
  * Builds the `Dream`-module worker host functions (`workerSpawn`/`workerPost`/`workerRecv`/
- * `workerTerminate`/`workerPoolSpawn`/`workerPoolDispatch`) behind `src/stdlib/core/webworker.dream`.
+ * `workerTerminate`/`workerPoolSpawn`/`workerPoolDispatch`) behind `system.task`'s `Task`/`TaskPool`.
  * Each worker is a real browser `Worker` or Node `worker_threads.Worker` running a fresh instance
  * of the same module, importing the parent's shared `WebAssembly.Memory`.
  * `workerRecv`/`workerPoolDispatch` are `extern async`, so they return Promises bridged into
@@ -219,7 +219,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       finishSpawn(new Worker(url, { type: "module" }));
     } else {
       throw new Error(
-        "WebWorker requires a browser Worker or Node worker_threads; neither is available in this environment",
+        "Task needs a thread runtime (browser Worker or Node worker_threads); neither is available in this environment",
       );
     }
 

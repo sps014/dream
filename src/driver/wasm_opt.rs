@@ -176,7 +176,7 @@ pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
         Feature::RelaxedSimd,
         Feature::TailCall,
         Feature::ExtendedConst,
-        // Threads proposal: modules with `WebWorker` emit shared memory + atomics; others emit
+        // Threads proposal: modules with `Task` emit shared memory + atomics; others emit
         // a private memory. Binaryen still needs the feature enabled to parse either form.
         Feature::Atomics,
     ]);

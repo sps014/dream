@@ -1,0 +1,15 @@
+import system;
+import system.task;
+async fun fetchLike(url: string): string {
+    Time.sleep(1).await;
+    return "resp:" + url;
+}
+
+async fun main(): void {
+    let pool = TaskPool(2);
+    let a = pool.dispatch_async(() => fetchLike("x"));
+    let b = pool.dispatch_async(() => fetchLike("y"));
+    System.println(a.await);
+    System.println(b.await);
+    pool.shutdown();
+}

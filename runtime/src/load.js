@@ -111,7 +111,7 @@ function moduleWantsSharedMemory(wasmModule, desc) {
   if (desc && desc.shared) {
     return true;
   }
-  // `Module.imports()[].type` is missing in some browsers. Shared-memory modules (WebWorker)
+  // `Module.imports()[].type` is missing in some browsers. Shared-memory modules (`Task`)
   // still import the worker hosts; use either signal.
   return WebAssembly.Module.imports(wasmModule).some(
     (i) =>

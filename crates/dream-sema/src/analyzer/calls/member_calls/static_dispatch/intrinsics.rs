@@ -424,7 +424,7 @@ impl<'a> Analyzer<'a> {
             return Ok(target);
         }
 
-        // `Bytes.toWire<T>(v)` / `Bytes.fromWire<T>(s)`: the `WebWorker` wire marshal. `T = string`
+        // `Bytes.toWire<T>(v)` / `Bytes.fromWire<T>(s)`: the `Task` wire marshal. `T = string`
         // is an identity passthrough (the wire already is a `string`); any other `T` must be
         // `unmanaged` and goes through a raw byte-blit (`Bytes.of`/`to`) re-encoded as a
         // codepoint-per-byte `string` (`Bytes.toWireString`/`fromWireString`).

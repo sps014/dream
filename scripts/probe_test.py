@@ -28,7 +28,7 @@ USAGE = """\
 Usage: probe_test.py [--node] [case-stem ...]
 
   --node     compile wasm32 C and run with Node (not native `dream run`)
-  stems      optional filter (e.g. arithmetic webworker_basic)
+  stems      optional filter (e.g. arithmetic task_basic)
 """
 
 # Hosts that exist on native C only (files, sockets, GPU, interactive stdin).

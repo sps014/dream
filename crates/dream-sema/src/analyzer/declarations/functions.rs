@@ -386,7 +386,7 @@ impl<'a> Analyzer<'a> {
 
             // Arrow-lambdas lowered to synthesized top-level functions (see `expressions::lambda`).
             // The lambda literal itself is never generic in v1, but the *enclosing* method it was
-            // written in might be (e.g. a lambda inside a `WebWorker<TIn, TOut>` method) - re-apply
+            // written in might be (e.g. a lambda inside a `Task.map<T, TOut>` method) - re-apply
             // the bindings captured at its use site so its body sees the same substitution.
             let pending_lambdas: Vec<String> = self
                 .pending_lambdas

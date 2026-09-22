@@ -1,0 +1,19 @@
+import system;
+import system.task;
+fun square(x: string): string {
+    let n = int.parse(x).unwrap_or(0);
+    return (n * n).to_string();
+}
+
+async fun main(): void {
+    let pool = TaskPool(2);
+    let a = pool.dispatch(() => square("3"));
+    let b = pool.dispatch(() => square("4"));
+    let c = pool.dispatch(() => square("5"));
+    let d = pool.dispatch(() => square("6"));
+    System.println(a.await);
+    System.println(b.await);
+    System.println(c.await);
+    System.println(d.await);
+    pool.shutdown();
+}

@@ -72,9 +72,9 @@ const SMOKE_CASES: &[&str] = &[
     "class_export_option",
     "class_export_enum",
     "panic_div_zero",
-    "webworker_basic",
-    "webworker_local_alloc",
-    "webworker_spawn_no_leak",
+    "task_basic",
+    "task_local_alloc",
+    "task_spawn_no_leak",
     "promise_start_no_leak",
     "hello_println",
     "stdio_streams",
@@ -514,7 +514,7 @@ fn wasm_js_success_stems() -> Vec<String> {
                 }
                 let jsonish =
                     stem.contains("json") || stem == "struct_json" || stem == "tuple_json";
-                if stem.starts_with("webworker_") || jsonish {
+                if stem.starts_with("task_") || jsonish {
                     Some(stem)
                 } else {
                     None
@@ -559,7 +559,7 @@ fn run_wasm_js_smoke_e2e() {
 #[test]
 fn wasm_js_compile_errors_match_native() {
     for stem in [
-        "webworker_value_struct_capture_violation",
+        "task_value_struct_capture_violation",
         "js_capturing_lambda_func",
         "js_capturing_lambda_slot",
     ] {

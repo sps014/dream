@@ -1,0 +1,28 @@
+// Worker-local string churn: private slab + non-atomic RC (not the shared subheap).
+
+import system;
+import system.task;
+fun churn(): string {
+    let n = 0;
+    let i = 0;
+    while i < 100 {
+        let s = i.to_string() + "x";
+        n = n + s.length;
+        i = i + 1;
+    }
+    return n.to_string();
+}
+
+async fun main(): void {
+    let base = Debug.live_objects;
+    let a = Task.spawn(() => churn());
+    let b = Task.spawn(() => churn());
+    System.println(a.await);
+    System.println(b.await);
+    let delta = Debug.live_objects - base;
+    if delta < 0 {
+        System.println("live_objects_went_negative");
+    } else {
+        System.println("live_ok");
+    }
+}

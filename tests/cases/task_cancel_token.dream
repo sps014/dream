@@ -1,0 +1,21 @@
+// Cooperative cancel: capture an `@shared` CancellationToken into a spawn body and poll it.
+import system;
+import system.task;
+
+async fun main(): void {
+    let src = CancellationSource();
+    let tok = src.token;
+    let w = Task.spawn(() => {
+        let n = 0;
+        while !tok.is_cancelled {
+            n = n + 1;
+            if n > 1000000 {
+                break;
+            }
+        }
+        return n;
+    });
+    src.cancel();
+    let n = w.await;
+    System.println(n > 0 || tok.is_cancelled);
+}

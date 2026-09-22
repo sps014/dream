@@ -442,7 +442,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// Returns the kind of the first token at or after the cursor that is not a leading
     /// declaration modifier (`public`, `static`, `async`). Used to classify a top-level
     /// declaration regardless of the order/number of modifiers preceding its core keyword
-    /// (e.g. `public static let`, `public async fun`).
+    /// (e.g. `public static class`, `public async fun`).
     fn first_keyword_after_modifiers(&self) -> TokenKind {
         let mut i = 0;
         loop {

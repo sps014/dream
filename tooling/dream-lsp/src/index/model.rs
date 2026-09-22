@@ -139,7 +139,7 @@ pub(crate) fn signature(func: &FunctionNode) -> String {
 /// Renders a method/field-owner detail for the index, e.g.
 /// `static ComputePass.begin(): ComputePass`,
 /// `ComputePass.dispatch(kernel: string, …): void`, or
-/// `async WebWorkerPool.dispatch<TOut>(body: fun(): TOut): TOut`.
+/// `async TaskPool.dispatch<TOut>(body: fun(): TOut): TOut`.
 pub(crate) fn method_detail(owner: &str, func: &FunctionNode) -> String {
     let params = param_list(func);
     let ret = return_type_str(func);
@@ -258,7 +258,7 @@ pub(crate) fn split_comma_type_list(inner: &str) -> Vec<String> {
     out
 }
 
-/// `static async WebWorker.spawn<TOut>(body: fun(): TOut): TOut` → `["TOut"]`.
+/// `static async Task.spawn<TOut>(body: fun(): TOut): TOut` → `["TOut"]`.
 pub(crate) fn method_generic_param_names(detail: &str) -> Vec<String> {
     let Some(paren) = detail.find('(') else {
         return Vec::new();
@@ -282,7 +282,7 @@ pub(crate) fn method_generic_param_names(detail: &str) -> Vec<String> {
 }
 
 /// Parameter types and return type from a method detail such as
-/// `static WebWorker.spawn(body: fun(): TOut): TOut`.
+/// `static Task.spawn(body: fun(): TOut): TOut`.
 pub(crate) fn parse_method_signature(detail: &str) -> Option<MethodSignature> {
     let bytes = detail.as_bytes();
     let mut angle = 0i32;
@@ -535,7 +535,7 @@ pub(crate) fn substitute_named_type_params(ty: &str, params: &[String], args: &[
 }
 
 /// Substitutes method type parameters in a detail string when call-site type args are known.
-/// `detail` looks like `async WebWorkerPool.dispatch<TOut>(body: fun(): TOut): TOut`;
+/// `detail` looks like `async TaskPool.dispatch<TOut>(body: fun(): TOut): TOut`;
 /// `type_args` are the call-site args (`["int"]`).
 pub(crate) fn substitute_method_type_args(detail: &str, type_args: &[String]) -> String {
     if type_args.is_empty() {

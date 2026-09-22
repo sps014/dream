@@ -9,7 +9,7 @@ pub const WORKER_TERMINATE: &str = "workerTerminate";
 pub const WORKER_POOL_SPAWN: &str = "workerPoolSpawn";
 pub const WORKER_POOL_DISPATCH: &str = "workerPoolDispatch";
 
-/// Host fields that require imported shared linear memory (owner + `WebWorker` instances).
+/// Host fields that require imported shared linear memory (owner + `Task` thread instances).
 pub const WORKER_IMPORT_FIELDS: &[&str] = &[
     WORKER_SPAWN,
     WORKER_POST,

@@ -385,7 +385,7 @@ class DreamInstance {
       return wasmToJs(this, result, out);
     };
     // Expose the raw table index so callers that need the portable funcref value itself (e.g.
-    // `WebWorker` shipping a body to another instance of the same module) can recover it.
+    // a `Task` body on another thread, in another instance of the same module) can recover it.
     wrapper.__dreamFuncIndex = index;
     this._callbackWrappers.set(cacheKey, wrapper);
     return wrapper;
@@ -5946,7 +5946,7 @@ self.onmessage = (e) => {
 
 /**
  * Builds the `Dream`-module worker host functions (`workerSpawn`/`workerPost`/`workerRecv`/
- * `workerTerminate`/`workerPoolSpawn`/`workerPoolDispatch`) behind `src/stdlib/core/webworker.dream`.
+ * `workerTerminate`/`workerPoolSpawn`/`workerPoolDispatch`) behind `system.task`'s `Task`/`TaskPool`.
  * Each worker is a real browser `Worker` or Node `worker_threads.Worker` running a fresh instance
  * of the same module, importing the parent's shared `WebAssembly.Memory`.
  * `workerRecv`/`workerPoolDispatch` are `extern async`, so they return Promises bridged into
@@ -6062,7 +6062,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       finishSpawn(new Worker(url, { type: "module" }));
     } else {
       throw new Error(
-        "WebWorker requires a browser Worker or Node worker_threads; neither is available in this environment",
+        "Task needs a thread runtime (browser Worker or Node worker_threads); neither is available in this environment",
       );
     }
 
@@ -6224,7 +6224,7 @@ function moduleWantsSharedMemory(wasmModule, desc) {
   if (desc && desc.shared) {
     return true;
   }
-  // `Module.imports()[].type` is missing in some browsers. Shared-memory modules (WebWorker)
+  // `Module.imports()[].type` is missing in some browsers. Shared-memory modules (`Task`)
   // still import the worker hosts; use either signal.
   return WebAssembly.Module.imports(wasmModule).some(
     (i) =>

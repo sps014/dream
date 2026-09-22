@@ -149,7 +149,7 @@ pub const ATTR_ARRAY_ELEMS_FILL: &str = "array_elems_fill";
 /// `Buffer.free<T>(arr)` — unconditional `$free` of an array's backing block, bypassing
 /// reference counting.
 pub const ATTR_FORCE_FREE: &str = "force_free";
-/// `Bytes.toWire<T>(v)` — encode a `WebWorker`-safe value as a `string` for the (string-typed)
+/// `Bytes.toWire<T>(v)` — encode a `Task`-safe value as a `string` for the (string-typed)
 /// worker wire: identity for `string`, otherwise a byte-blit of an unmanaged `T` re-encoded as a
 /// codepoint-per-byte `string` (see `Bytes.toWireString`).
 pub const ATTR_WIRE_ENCODE: &str = "wire_encode";
@@ -289,7 +289,7 @@ pub enum IntrinsicOp {
     ArrayElemsFill,
     /// `Buffer.free<T>(arr)` (`@unsafe`) — unconditional `$free`, bypassing reference counting.
     ForceFree,
-    /// `Bytes.toWire<T>(v)` — encode a `WebWorker`-safe `T` (a `string`, or an `unmanaged` value)
+    /// `Bytes.toWire<T>(v)` — encode a `Task`-safe `T` (a `string`, or an `unmanaged` value)
     /// as the `string` the worker wire actually carries.
     WireEncode,
     /// `Bytes.fromWire<T>(s)` — the inverse of [`IntrinsicOp::WireEncode`].

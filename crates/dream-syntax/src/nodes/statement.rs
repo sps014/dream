@@ -76,7 +76,7 @@ pub enum StatementNode<'a> {
         Option<&'a [StatementNode<'a>]>,
     ),
     /// `lock (target) { body }` — mutual exclusion on `target` (must be `@shared class`-typed, or
-    /// `Lock`), reentrant per-thread. See `docs/language` webworkers/concurrency notes.
+    /// `Lock`), reentrant per-thread. See `docs/language` tasks/concurrency notes.
     Lock(ExpressionNode<'a>, &'a [StatementNode<'a>]),
     /// `defer { body }` / `defer(q) { body }` — opt-in deferred last-ref destroy. `q` is a `uint`
     /// drain budget (omitted: one chunk). See `docs/reference/language/memory.md`.

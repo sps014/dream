@@ -1,0 +1,17 @@
+// Capturing plain unmanaged/value locals into a `Task` body is allowed.
+
+import system;
+import system.task;
+async fun main(): void {
+    let scale = 3;
+    let offset = 3;
+    let prefix = "result=";
+
+    System.println(Task.spawn(() => {
+        let result = scale + offset;
+        if result == 6 {
+            return prefix + "ok";
+        }
+        return prefix + "bad";
+    }).await);
+}

@@ -1,0 +1,21 @@
+// Real parallel threads. Capture-only spawn; then `.await` the Future.
+
+import system;
+import system.task;
+fun shout(msg: string): string {
+    return msg + "!";
+}
+
+fun twice(msg: string): string {
+    return msg + msg;
+}
+
+async fun main(): void {
+    System.println(Task.spawn(() => shout("hello")).await);
+    System.println(Task.spawn(() => shout("world")).await);
+
+    let a = Task.spawn(() => shout("A"));
+    let b = Task.spawn(() => twice("B"));
+    System.println(a.await);
+    System.println(b.await);
+}

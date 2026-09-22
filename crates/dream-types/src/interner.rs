@@ -23,7 +23,7 @@ pub struct TypeInterner {
     ref_struct_defs: HashSet<DefId>,
     /// `DefId`s of `@shared class` types — classes carrying an extra header lock word (past the
     /// last field, see `src/mir/abi.rs`) and atomic (not plain) reference-count mutation, so they
-    /// can be safely captured across `WebWorker` threads via `lock (obj) { ... }`. Consulted from
+    /// can be safely captured across `Task` threads via `lock (obj) { ... }`. Consulted from
     /// the interner (not `DefTable`) for the same reason `value_defs` is — layout/codegen only has
     /// a `TypeId`/`DefId`, not the full analyzer state.
     shared_defs: HashSet<DefId>,

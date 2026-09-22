@@ -653,7 +653,7 @@ fun main(): void {
 }
 
 #[test]
-fn compute_pass_dispatch_not_webworker_pool() {
+fn compute_pass_dispatch_not_task_pool() {
     let harness = TestHarness::new(
         r#"
 import system.gpu;
@@ -673,8 +673,8 @@ async fun main(): void {
         hover.contents
     );
     assert!(
-        !hover.contents.contains("WebWorkerPool"),
-        "must not show WebWorkerPool.dispatch: {}",
+        !hover.contents.contains("TaskPool"),
+        "must not show TaskPool.dispatch: {}",
         hover.contents
     );
     assert!(
@@ -697,7 +697,7 @@ async fun main(): void {
         .signature_help(&sig_harness.src, sig_harness.offset)
         .expect("signature help");
     assert!(
-        sig.detail.contains("ComputePass.dispatch") && !sig.detail.contains("WebWorkerPool"),
+        sig.detail.contains("ComputePass.dispatch") && !sig.detail.contains("TaskPool"),
         "signature help must be ComputePass.dispatch, got {}",
         sig.detail
     );
@@ -707,9 +707,9 @@ async fun main(): void {
 fn method_generic_args_expanded_on_hover() {
     let harness = TestHarness::new(
         r#"
-import system;
+import system.task;
 async fun main(): void {
-    let pool = WebWorkerPool(2);
+    let pool = TaskPool(2);
     pool.dispa|tch<int>(() => 9);
 }
 "#,
@@ -719,7 +719,7 @@ async fun main(): void {
         .hover(&harness.src, harness.offset)
         .expect("hover on dispatch");
     assert!(
-        hover.contents.contains("WebWorkerPool.dispatch")
+        hover.contents.contains("TaskPool.dispatch")
             && hover.contents.contains("fun(): int")
             && hover.contents.contains(": int"),
         "expected TOut substituted, got {}",
@@ -1694,12 +1694,13 @@ fun main(): void {
 }
 
 #[test]
-fn webworker_spawn_inlay_infers_class_type_args() {
+fn task_spawn_inlay_infers_class_type_args() {
     use dream_lsp::index::{Index, InlayKind};
     let src = "
+import system.task;
 fun k(x: string): string { return x; }
 fun main(): void {
-    let w = WebWorker.spawn(() => k(\"h\"));
+    let w = Task.spawn(() => k(\"h\"));
 }
 ";
     let index = Index::build(None, src);
@@ -1711,17 +1712,18 @@ fun main(): void {
         .collect();
     assert!(
         labels.contains(&": Future<string>"),
-        "`let w = WebWorker.spawn(() => k(\"h\"))` should show `: Future<string>`; got {:?}",
+        "`let w = Task.spawn(() => k(\"h\"))` should show `: Future<string>`; got {:?}",
         labels
     );
 }
 
 #[test]
-fn webworker_spawn_lambda_inlay_infers_class_type_args() {
+fn task_spawn_lambda_inlay_infers_class_type_args() {
     use dream_lsp::index::{Index, InlayKind};
     let src = "
+import system.task;
 fun main(): void {
-    let squarer = WebWorker.spawn(() => 6 * 6);
+    let squarer = Task.spawn(() => 6 * 6);
 }
 ";
     let index = Index::build(None, src);
@@ -1733,7 +1735,7 @@ fun main(): void {
         .collect();
     assert!(
         labels.contains(&": Future<int>"),
-        "`let squarer = WebWorker.spawn(() => 6 * 6)` should show `: Future<int>`; got {:?}",
+        "`let squarer = Task.spawn(() => 6 * 6)` should show `: Future<int>`; got {:?}",
         labels
     );
 }

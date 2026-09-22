@@ -1,0 +1,10 @@
+// Arrays are not `shared`, but a managed heap value can be *moved* into a worker body:
+// the pointer is handed off and the sender-side binding cannot be used afterwards.
+import system;
+import system.task;
+
+async fun main(): void {
+    let nums = [1, 2, 3];
+    let result = Task.spawn(() => nums.length);
+    System.println(result.await);
+}

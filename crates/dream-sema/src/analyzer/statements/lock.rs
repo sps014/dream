@@ -1,5 +1,5 @@
 //! `lock (target) { body }` — mutual exclusion on an `@shared class` instance (see
-//! `docs/language` concurrency notes and the shared-memory-WebWorkers plan). Type-checks `target`,
+//! `docs/language` concurrency notes and the shared-memory `Task` plan). Type-checks `target`,
 //! then lowers to `HStmt::Lock`; the acquire/release-on-every-exit-path lowering itself happens in
 //! `src/mir/lower/control_flow.rs::lower_lock`, since MIR is where "every exit path" (fallthrough,
 //! `return`, `break`, `continue`) is a concrete set of block edges to instrument.

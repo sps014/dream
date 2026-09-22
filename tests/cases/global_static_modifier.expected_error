@@ -1,0 +1,1 @@
+'static' cannot modify a top-level variable; it declares class members. Top-level variables are file-private by default — use 'internal' or 'public' to widen

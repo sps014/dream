@@ -1,0 +1,14 @@
+import system;
+import system.task;
+async fun fetchLike(url: string): string {
+    Time.sleep(1).await;
+    return "resp:" + url;
+}
+
+async fun main(): void {
+    let urls = ["a", "b", "c"];
+    let results = Task.map_async(urls, fetchLike).await;
+    for (let r in results) {
+        System.println(r);
+    }
+}

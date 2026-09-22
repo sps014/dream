@@ -1,0 +1,12 @@
+import system;
+import system.task;
+async fun main(): void {
+    let urls = ["a", "b"];
+    let results = Task.map_async(urls, async (url) => {
+        Time.sleep(1).await;
+        return "resp:" + url;
+    }).await;
+    for (let r in results) {
+        System.println(r);
+    }
+}

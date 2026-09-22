@@ -394,7 +394,7 @@ impl<'a> Analyzer<'a> {
 
     /// Resolves `receiver.method` (no call) as an instance "method group" value: a bound
     /// reference to `struct_name`'s instance method `member.text`, usable as a first-class
-    /// `fun(...)` value (e.g. `WebWorker(counter.increment)`) exactly like `() =>
+    /// `fun(...)` value (e.g. `Task.spawn(counter.increment)`) exactly like `() =>
     /// counter.increment()` today. Lowers to the same `[funcidx, env]` closure-box shape a
     /// capturing lambda produces (see `expressions::lambda`): `receiver_hir`'s already-analyzed
     /// value is snapshotted into a fresh `CaptureCell<T>` (permanently retained, mirroring a real

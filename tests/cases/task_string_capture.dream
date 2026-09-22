@@ -1,0 +1,7 @@
+import system;
+import system.task;
+
+async fun main(): void {
+    let name = "dream";
+    System.println(Task.spawn(() => "hello, " + name).await);
+}

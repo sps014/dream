@@ -4,7 +4,7 @@ use crate::token::token_kind::TokenKind;
 use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
-    /// Parses a top-level variable declaration: an optional `public`/`static` modifier pair,
+    /// Parses a top-level variable declaration: an optional `public`/`internal` modifier,
     /// then `let`/`const`, a name, an optional `: type` annotation, a required initializer, and a
     /// terminating `;`. Returns the assembled [`GlobalVariableNode`].
     pub(crate) fn parse_global_variable(
@@ -12,17 +12,20 @@ impl<'a, 'b> Parser<'a, 'b> {
     ) -> Result<crate::nodes::GlobalVariableNode<'a>, Error> {
         let first_trivia = self.current_token().leading_trivia.clone();
 
-        // `public`/`internal` and `static` may appear in either order before `let`/`const`.
         let mut visibility = Visibility::Private;
-        let mut is_static = false;
         loop {
             if self.try_consume_visibility(&mut visibility) {
                 continue;
             }
             match self.current_token().kind {
+                // `static` is a class-member modifier. A top-level `let` is already a single value
+                // initialized once at module load, and file-private is the default visibility.
                 TokenKind::StaticToken => {
+                    self.diagnostics.report_error(
+                        "'static' cannot modify a top-level variable; it declares class members. Top-level variables are file-private by default — use 'internal' or 'public' to widen".to_string(),
+                        Some(self.current_token().position),
+                    );
                     self.match_token(TokenKind::StaticToken);
-                    is_static = true;
                 }
                 _ => break,
             }
@@ -55,7 +58,6 @@ impl<'a, 'b> Parser<'a, 'b> {
             initializer,
             is_const,
             visibility,
-            is_static,
             file_path: None,
         })
     }

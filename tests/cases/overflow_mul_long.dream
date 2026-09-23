@@ -1,6 +1,6 @@
-// Integer overflow panics by default.
+// Integer overflow panics inside `checked { }`.
 import system;
-fun f(a: long, b: long): long { return a * b; }
+fun f(a: long, b: long): long { checked { return a * b; } }
 fun main(): void {
     System.println("start");
     System.println(f(4611686018427387904L, 2L));

@@ -1,0 +1,11 @@
+// A lambda written inside `checked { }` keeps checking when it is called outside the block.
+import system;
+fun main(): void {
+    let times: fun(int): int = (v) => v;
+    checked {
+        times = (v) => v * 1000000000;
+    }
+    System.println("start");
+    System.println(times(7));
+    System.println("unreachable");
+}

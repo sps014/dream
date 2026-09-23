@@ -50,7 +50,11 @@ fn test_hir_emission_arithmetic_function() {
         c
     );
     let body = c_func_body(&c, "add");
-    assert!(body.contains("__builtin_add_overflow"), "missing arithmetic:\n{}", c);
+    assert!(
+        body.contains("(uint32_t)a + (uint32_t)b"),
+        "missing wrapping arithmetic:\n{}",
+        c
+    );
 }
 
 #[test]
@@ -142,7 +146,11 @@ fn test_hir_emission_for_loop() {
         c
     );
     let body = c_func_body(&c, "sum");
-    assert!(body.contains("__builtin_add_overflow"), "missing arithmetic:\n{}", c);
+    assert!(
+        body.contains("(uint32_t)acc + (uint32_t)i"),
+        "missing wrapping arithmetic:\n{}",
+        c
+    );
 }
 
 #[test]
@@ -1496,7 +1504,7 @@ fn test_hir_emission_global_read_and_write() {
     // at `g1`.
     let tick = c_func_body(&c, "tick");
     assert!(
-        tick.contains("__builtin_add_overflow((int32_t)g1, (int32_t)1") && tick.contains("g1 = t1"),
+        tick.contains("g1 = (int32_t)((uint32_t)g1 + (uint32_t)1)"),
         "missing global read+write:\n{}",
         c
     );

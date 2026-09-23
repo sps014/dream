@@ -1,6 +1,6 @@
-// Integer overflow panics by default.
+// Integer overflow panics inside `checked { }`.
 import system;
-fun f(a: int): int { return -a; }
+fun f(a: int): int { checked { return -a; } }
 fun main(): void {
     System.println("start");
     System.println(f(-2147483647 - 1));

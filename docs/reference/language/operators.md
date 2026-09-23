@@ -20,9 +20,9 @@ let x = 7 / (float)2;   // 3.5
 
 Prefix `-` negates a number: `let neg = -x;`.
 
-Integer arithmetic (`+`, `-`, `*`, `/`, `%`, `<<`, `>>`, and unary `-`) **panics** on overflow
-rather than wrapping or widening; `/` and `%` also panic on a zero divisor. Inside an
-`unchecked { }` block the same operators wrap at the type's bit width — see
+Integer arithmetic (`+`, `-`, `*`, `/`, `%`, `<<`, `>>`, and unary `-`) **wraps** at the type's
+bit width on overflow rather than widening; `/` and `%` panic on a zero divisor. Inside a
+`checked { }` block the same operators panic on overflow instead — see
 [Primitives § Integer overflow](primitives.md#integer-overflow) for the full policy.
 
 ## String concatenation

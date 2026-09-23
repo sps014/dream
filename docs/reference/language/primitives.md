@@ -30,33 +30,41 @@ let n = int.parse("42").unwrap_or(0);  // 42
 
 ### Integer overflow
 
-Integer arithmetic is **checked**: an operation whose mathematical result does not fit its type [panics](panics.md), in debug and release builds alike. Nothing is silently promoted to a wider type.
+Integer arithmetic **wraps** by default: an operation whose mathematical result does not fit its type wraps modulo the type's bit width (two's complement), in debug and release builds alike. Nothing is silently promoted to a wider type.
 
-- A binary op's result type is its **left operand's** type — `byte + byte` stays `byte`, and overflows past 255.
-- `+`, `-`, `*`, and unary `-` panic when the result is outside the type (`uint` `0u - 1u` panics, as does negating `-2147483648`).
-- `/` and `%` panic on a zero divisor, and on `-2147483648 / -1` (the minimum signed value divided by `-1`, likewise for `%`).
-- `<<` and `>>` panic when the shift count is negative or at least the type's bit width. Bits shifted out of the value are discarded, not an overflow: `1 << 31` is `-2147483648`.
+- A binary op's result type is its **left operand's** type — `byte + byte` stays `byte`, so `250b + 10b` is `4b`.
+- `+`, `-`, `*`, and unary `-` wrap: `2147483647 + 1` is `-2147483648`, and `uint` `0u - 1u` is `4294967295u`.
+- `/` and `%` [panic](panics.md) on a zero divisor. `-2147483648 / -1` (the minimum signed value divided by `-1`) wraps to `-2147483648`, and the matching `%` is `0`.
+- Shift counts are masked to the type's bit width: `1 << 33` on an `int` is `1 << 1`. Bits shifted out of the value are discarded: `1 << 31` is `-2147483648`.
 
 ```dream
 let i: int = 2147483647;   // the largest int
-let j = i + 1;              // panic: attempt to add with overflow
+let j = i + 1;              // -2147483648
 ```
 
-Wrap an `unchecked { }` block around code that wants two's-complement wraparound (hashing, PRNGs, checksums). Every integer op lexically inside wraps modulo its bit width, divides the minimum value by `-1` to itself, and masks shift counts to the width. `checked { }` restores the default inside an `unchecked` region:
+Wrap a `checked { }` block around code where an overflow is a bug you want to catch (sizes, offsets, money). Inside it, every integer op lexically in the block panics instead of wrapping:
+
+- `+`, `-`, `*`, and unary `-` panic when the result is outside the type.
+- `/` and `%` also panic on the minimum signed value divided by `-1`.
+- `<<` and `>>` panic when the shift count is negative or at least the type's bit width.
+
+`unchecked { }` restores wrapping inside a `checked` region:
 
 ```dream
+let count = 100000;
+let size = 100000;
 let h = 2166136261u;
-unchecked {
-    h = (h ^ 97u) * 16777619u;   // FNV-1a step: wraps at 32 bits
-    checked {
-        let n = len + 1;         // back to panicking on overflow
+checked {
+    let total = count * size;        // panic: attempt to multiply with overflow
+    unchecked {
+        h = (h ^ 97u) * 16777619u;   // FNV-1a step: wraps at 32 bits
     }
 }
 ```
 
 The mode is lexical: it applies to the statements written inside the block (including lambdas written there), not to functions they call. `checked` and `unchecked` are only keywords directly before `{`, so they stay usable as identifiers. GPU shader code always wraps, and rejects `checked` blocks.
 
-The optimizer removes checks it can prove never fire — a loop counter bounded by `i < n`, a masked `x & 255`, an array length — so counted loops pay nothing.
+Inside `checked` blocks, the optimizer removes checks it can prove never fire — a loop counter bounded by `i < n`, a masked `x & 255`, an array length.
 
 `Type.parse(str)` reports out-of-range text as `Err(ParseError)` rather than panicking.
 

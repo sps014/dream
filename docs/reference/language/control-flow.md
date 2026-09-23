@@ -101,17 +101,13 @@ for (let i = 0; i < 10; i = i + 1) {
 
 ## checked and unchecked blocks
 
-`unchecked { ... }` runs its statements with wrapping integer arithmetic; `checked { ... }` restores the default overflow panics inside it. Both are ordinary blocks otherwise — they open a scope, and `return`/`break`/`continue` pass through them:
+Integer arithmetic wraps by default. `checked { ... }` runs its statements with overflow panics; `unchecked { ... }` restores wrapping inside it. Both are ordinary blocks otherwise — they open a scope, and `return`/`break`/`continue` pass through them:
 
 ```dream
-fun fnv1a(bytes: byte[]): uint {
-    let h = 2166136261u;
-    for (let b in bytes) {
-        unchecked {
-            h = (h ^ (uint)b) * 16777619u;
-        }
+fun buffer_bytes(count: int, size: int): int {
+    checked {
+        return count * size;   // panics instead of returning a wrapped size
     }
-    return h;
 }
 ```
 

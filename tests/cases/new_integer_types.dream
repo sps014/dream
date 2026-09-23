@@ -16,9 +16,7 @@ fun main() {
     // Width-specific arithmetic.
     System.println(l * 2L);
     System.println(u / 3u);
-    unchecked {
-        System.println((byte)(200b + 100b));
-    }
+    System.println((byte)(200b + 100b));
 
     // Implicit widening (int->long, long->double, uint->ulong).
     let w: long = 5;

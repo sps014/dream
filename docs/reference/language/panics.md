@@ -10,7 +10,7 @@ Dream inserts automatic checks for the operations below. Each prints a message a
 | --- | --- |
 | Array or string index out of range (including negative) | `arr[arr.length]`, `"abc"[-1]` |
 | Integer division or remainder by zero | `10 / 0`, `10 % 0` |
-| Integer overflow outside an `unchecked { }` block (see [Primitives](primitives.md#integer-overflow)) | `2147483647 + 1`, `0u - 1u`, `1 << 32` |
+| Integer overflow inside a `checked { }` block (see [Primitives](primitives.md#integer-overflow)) | `checked { 2147483647 + 1; }`, `0u - 1u`, `1 << 32` |
 | Casting an `object` to the wrong concrete type | `let o: object = "hi"; (int)o;` |
 | Reading an `unowned` field after its referent was freed | see [Memory > `weak`/`unowned`](memory.md#advanced-reference-cycles) |
 

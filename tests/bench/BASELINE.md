@@ -243,6 +243,28 @@ arrays use `List.take_array`. Serialize starts `StringBuilder` at 256 bytes; `wr
 | vec_add | 259 | 77 | ~260 (WASM 4-wide vs AVX `Vector.Count` often 8; C# 3.4×) |
 | string_builder | 23 | 15 | ~24 → 23 (C# 1.5×) |
 
+### After (wrap-by-default integer arithmetic, Sep 2026)
+
+Integer arithmetic wraps by default; `checked { }` opts in to overflow panics. With checked-by-default,
+every `+ - *` emitted `__builtin_*_overflow` plus a panic branch, which blocked LICM, ABC and
+vectorization in counted loops. The `--release` C for the suite now has no overflow builtins, and
+`matmul_64` hoists `i*n` / `k*n` out of the inner loop again. Native C vs C# on the same host
+(load was high for this run, so C# numbers are ~30% above the previous run — compare ratios):
+
+| Bench | checked default (Dream / C#) | wrap default (Dream / C#) |
+|-------|-----------------------------:|--------------------------:|
+| matmul_64 | 542k / 181k (C# 3.0×) | 343k / 250k (C# 1.4×) |
+| sieve | 8.7k / 4.6k (C# 1.9×) | 10.1k / 6.5k (C# 1.6×) |
+| byte_scan | 66 / 26 (C# 2.6×) | 74 / 36 (C# 2.1×) |
+| char_scan | 31 / 21 (C# 1.5×) | 37 / 31 (C# 1.2×) |
+| wordcount | 22 / 13 (C# 1.7×) | 24 / 25 (even) |
+| string_builder | 14 / 8 (C# 1.8×) | 16 / 52 (Dream 3.4×) |
+
+Still open: `byte_scan` / `char_scan` / `sieve` do not vectorize (integer locals are `int64_t` in C
+and every op narrows through `int32_t`); `matmul_64` / `sieve` keep `dream_array_at` bounds checks
+on `i*n + j` and `m += i` indices; `linked_walk` keeps 2 retains + 2 releases per hop because the
+switch-arm binding is a plain copy, which `rc-hop-elision` does not match.
+
 Native C is the default `dream run` path: see
 [`docs/internals/14-dual-backend-plan.md`](../../docs/internals/14-dual-backend-plan.md).
 Do not revive the abandoned LLVM branch for this scoreboard.

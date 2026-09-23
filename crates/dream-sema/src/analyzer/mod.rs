@@ -607,7 +607,7 @@ impl<'a> Analyzer<'a> {
             compile_targets: CompileTargets::native_only(),
             current_function_is_compute: false,
             current_function_is_gpu: false,
-            overflow: dream_hir::Overflow::Checked,
+            overflow: dream_hir::Overflow::Wrapping,
             current_file: None,
             file_modules: HashMap::new(),
             aliased_imports: Vec::new(),

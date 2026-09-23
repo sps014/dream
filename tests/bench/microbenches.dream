@@ -27,9 +27,7 @@ class BenchSink {
     }
     public fun add(x: int): int {
         // Sink only: the total is not the measurement, and it wraps across the suite.
-        unchecked {
-            this.v = this.v + x;
-        }
+        this.v = this.v + x;
         return x;
     }
 }
@@ -51,9 +49,7 @@ fun report(name: string, nanos: long, iters: int): void {
 // Sinks must be externally observable or the optimizer deletes the timed loop outright
 // (inlined-and-discarded pure results get DCE'd, reporting `ns_total=0`).
 fun sink_int(x: int): int {
-    unchecked {
-        bench_sink.v = bench_sink.v + x;
-    }
+    bench_sink.v = bench_sink.v + x;
     return x;
 }
 
@@ -697,10 +693,8 @@ fun bench_quicksort(iters: int): void {
     while r < iters {
         let t = 0;
         while t < n {
-            // Same LCG as the C# bench (`unchecked` multiply). The product does not fit in `int`.
-            unchecked {
-                seed = seed * 1103515245 + 12345;
-            }
+            // Same LCG as the C# bench; the product wraps past `int`.
+            seed = seed * 1103515245 + 12345;
             a[t] = (seed >> 16) & 1023;
             t = t + 1;
         }
@@ -782,9 +776,7 @@ fun tco_sum(n: int, acc: int): int {
         return acc;
     }
     // 5e6-deep sentinel, not a timed bench. The running total wraps past `int`.
-    unchecked {
-        return tco_sum(n - 1, acc + n);
-    }
+    return tco_sum(n - 1, acc + n);
 }
 
 interface BenchOp {
@@ -952,9 +944,7 @@ fun bench_parse_ints(iters: int): void {
         let v = bias;
         let j = 0;
         while j < n {
-            unchecked {
-                v = v * 10 + ((int)src.char_at(j) - 48);
-            }
+            v = v * 10 + ((int)src.char_at(j) - 48);
             j = j + 1;
         }
         acc = acc + (long)v;

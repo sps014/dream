@@ -580,10 +580,10 @@ impl<'a> Analyzer<'a> {
         };
         // The lifted body is analyzed later as its own function, so carry the lexical overflow
         // mode of the creation site into it.
-        let body: &'a [StatementNode<'a>] = if self.overflow == dream_hir::Overflow::Wrapping {
+        let body: &'a [StatementNode<'a>] = if self.overflow == dream_hir::Overflow::Checked {
             self.arena.alloc_slice_clone(&[StatementNode::Overflow(
-                dream_syntax::nodes::OverflowMode::Unchecked,
-                synthetic_token(TokenKind::IdentifierToken, "unchecked"),
+                dream_syntax::nodes::OverflowMode::Checked,
+                synthetic_token(TokenKind::IdentifierToken, "checked"),
                 body,
             )])
         } else {

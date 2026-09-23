@@ -93,9 +93,7 @@ extend long : Comparable<long> {
         }
         if neg {
             // The magnitude of long.MIN is not a long, so negate in wrapping ulong arithmetic.
-            unchecked {
-                return Result.Ok((long)(0uL - result));
-            }
+            return Result.Ok((long)(0uL - result));
         }
         return Result.Ok((long)result);
     }

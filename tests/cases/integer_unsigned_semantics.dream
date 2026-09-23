@@ -9,9 +9,7 @@ fun main(): void {
     System.println(u / 2u);
     System.println(u % 10u);
     System.println(u >> 28u);
-    unchecked {
-        System.println(u + 1u == 0u);
-    }
+    System.println(u + 1u == 0u);
 
     let l = ulong_max();
     System.println(l > 1uL);

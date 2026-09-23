@@ -5,9 +5,9 @@ use crate::token::syntax_token::SyntaxToken;
 /// Integer overflow behavior selected by a `checked { }` / `unchecked { }` block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OverflowMode {
-    /// Overflow panics (the default outside any block).
+    /// Overflow panics.
     Checked,
-    /// Arithmetic wraps modulo the type's width.
+    /// Arithmetic wraps modulo the type's width (the default outside any block).
     Unchecked,
 }
 

@@ -435,18 +435,14 @@ public class JsonParser {
         while this.pos < this.len() {
             let c = this.b();
             if (c >= 48) && (c <= 57) {
-                unchecked {
-                    value = value * 10 + (c - 48);
-                }
+                value = value * 10 + (c - 48);
                 this.pos = this.pos + 1;
             } else {
                 break;
             }
         }
         this.consume_number_tail();
-        unchecked {
-            return sign * value;
-        }
+        return sign * value;
     }
 
     public fun parse_double(): double {

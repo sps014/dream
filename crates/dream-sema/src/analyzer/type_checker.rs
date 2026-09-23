@@ -26,14 +26,7 @@ impl<'a> Analyzer<'a> {
             || dream_abi::attributes::has_gpu_helper_attr(&function.attributes);
         let runtime_support =
             dream_abi::attributes::RuntimeSupport::from_attributes(&function.attributes);
-        let saved_overflow = std::mem::replace(
-            &mut self.overflow,
-            if is_gpu {
-                dream_hir::Overflow::Wrapping
-            } else {
-                dream_hir::Overflow::Checked
-            },
-        );
+        let saved_overflow = std::mem::replace(&mut self.overflow, dream_hir::Overflow::Wrapping);
         let body = self.with_runtime_flag(runtime_support, |s| {
             s.with_unsafe_flag(is_unsafe, |s| {
                 s.with_gpu_flags(is_compute, is_gpu, |s| {

@@ -1,14 +1,14 @@
-// Under `unchecked`, runtime integer arithmetic wraps at the type's own width (not the host
-// register's), shift counts are masked to the width, and `MIN / -1` wraps instead of trapping.
+// Runtime integer arithmetic wraps at the type's own width (not the host register's), shift counts
+// are masked to the width, and `MIN / -1` wraps instead of trapping.
 import system;
-fun add(a: int, b: int): int { unchecked { return a + b; } }
-fun addb(a: byte, b: byte): byte { unchecked { return a + b; } }
-fun mull(a: long, b: long): long { unchecked { return a * b; } }
-fun shl(a: int, n: int): int { unchecked { return a << n; } }
-fun neg(a: int): int { unchecked { return -a; } }
-fun sdiv(a: int, b: int): int { unchecked { return a / b; } }
-fun srem(a: int, b: int): int { unchecked { return a % b; } }
-fun notb(a: byte): byte { unchecked { return ~a; } }
+fun add(a: int, b: int): int { return a + b; }
+fun addb(a: byte, b: byte): byte { return a + b; }
+fun mull(a: long, b: long): long { return a * b; }
+fun shl(a: int, n: int): int { return a << n; }
+fun neg(a: int): int { return -a; }
+fun sdiv(a: int, b: int): int { return a / b; }
+fun srem(a: int, b: int): int { return a % b; }
+fun notb(a: byte): byte { return ~a; }
 fun main(args: string[]): void {
     let n = args.length;
     let big = add(2147483647, n + 1);

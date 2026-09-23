@@ -260,10 +260,34 @@ vectorization in counted loops. The `--release` C for the suite now has no overf
 | wordcount | 22 / 13 (C# 1.7×) | 24 / 25 (even) |
 | string_builder | 14 / 8 (C# 1.8×) | 16 / 52 (Dream 3.4×) |
 
-Still open: `byte_scan` / `char_scan` / `sieve` do not vectorize (integer locals are `int64_t` in C
-and every op narrows through `int32_t`); `matmul_64` / `sieve` keep `dream_array_at` bounds checks
-on `i*n + j` and `m += i` indices; `linked_walk` keeps 2 retains + 2 releases per hop because the
-switch-arm binding is a plain copy, which `rc-hop-elision` does not match.
+### After (int32 locals, affine ABC, niche-option hop, Sep 2026)
+
+Native `int`/`uint` locals are `int32_t` again, except locals that are assigned a pointer-sized
+value (closure env, task id), which stay `int64_t` so the bits are not truncated. ABC treats
+`i << 6 + k` (the algebraic form of `i * 64 + k`, including a loop latch that increments `k`)
+and `i * i < len` as in-range. Hop elision cancels the arm-binding retain on a niche
+`Option` copy (`tmp = curr#field; node = tmp`), including the loop-carried release.
+
+`--release` C for the suite:
+
+- `bench_matmul` inner `j` loop and `a[i * n + k]` are `dream_p(arr) + 4 + idx * 8`. The only
+  `dream_array_at` left is the `c[0]` sink.
+- `bench_sieve` marking loop has no `dream_array_at`.
+- `bench_linked_walk` arm has no `dream_retain(node)`. Each hop releases the previous `curr`
+  after loading `node.next`, then retains the successor (that retain is the cursor's own hold).
+
+Same host, `REPS=5`. Load was high: most rows are flagged `!`, and C# `matmul_64` landed far
+above its previous ~180–250k, so compare Dream's own deltas as well as the ratio.
+
+| Bench | wrap-default Dream | this run Dream min / median | C# min / median |
+|-------|-------------------:|----------------------------:|----------------:|
+| matmul_64 | 343k | 100k / 109k | 428k / 741k |
+| sieve | 10.1k | 2.9k / 3.7k | 7.9k / 10.0k |
+| linked_walk | (2 retains + 2 releases / hop) | 3.1k / 3.3k | 2.5k / 3.1k |
+
+Dream's matmul and sieve mins are ahead of this run's C# and ahead of the previous Dream.
+`linked_walk` is about even on the median (C# min still ~1.25×). `byte_scan` and
+`binary_trees` were not the target of this pass and still favor C# on this host.
 
 Native C is the default `dream run` path: see
 [`docs/internals/14-dual-backend-plan.md`](../../docs/internals/14-dual-backend-plan.md).

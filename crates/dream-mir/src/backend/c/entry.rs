@@ -124,7 +124,7 @@ pub(super) fn emit_guest_entry(
         entry.call("main_dream", main_args);
     } else {
         entry.stmt(Stmt::decl(
-            main_value_cty(cx, exit),
+            main_value_cty(exit),
             "__mv",
             Some(Expr::call("main_dream", main_args)),
         ));
@@ -172,10 +172,9 @@ pub(super) fn emit_guest_entry(
 }
 
 /// C type of `main_dream`'s return value.
-fn main_value_cty(cx: &Cx<'_>, exit: EntryExit) -> CTy {
+fn main_value_cty(exit: EntryExit) -> CTy {
     match exit {
-        // `int` widens to 64 bits on native (see `local_c_ty`); the entry returns `int32_t`.
-        EntryExit::Code if !cx.target.is_wasm32() => CTy::I64,
+        // `main(): int` returns `int32_t` (`c_ty` / `local_c_ty`).
         EntryExit::Code => CTy::I32,
         _ => CTy::Ptr,
     }
@@ -189,7 +188,7 @@ fn future_result(cx: &Cx<'_>, exit: EntryExit, fut: Expr) -> Expr {
         FutureLayout::native()
     };
     let slot = Expr::ptr_add(fut, Expr::i(layout.result as i64));
-    Expr::load(main_value_cty(cx, exit), slot)
+    Expr::load(main_value_cty(exit), slot)
 }
 
 /// The exit status for a finished `main` value.

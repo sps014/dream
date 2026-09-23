@@ -1,17 +1,19 @@
 use super::builder::FuncBuilder;
 use super::ctx::Cx;
-use super::types::array_elem_ty;
+use super::types::{array_elem_ty, wide_int_locals};
 use crate::{Operand, Place};
 
 pub(super) struct Emitter<'a> {
     pub cx: &'a Cx<'a>,
     pub f: &'a crate::MirFunction,
     pub b: &'a mut FuncBuilder,
+    pub(super) wide_int: Vec<bool>,
 }
 
 impl<'a> Emitter<'a> {
     pub fn new(cx: &'a Cx<'a>, f: &'a crate::MirFunction, b: &'a mut FuncBuilder) -> Self {
-        Self { cx, f, b }
+        let wide_int = wide_int_locals(cx, f);
+        Self { cx, f, b, wide_int }
     }
 
     pub fn operand_ty(&self, o: &Operand) -> dream_types::TypeId {

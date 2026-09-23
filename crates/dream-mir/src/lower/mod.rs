@@ -97,8 +97,9 @@ fn is_pure_place(p: &HPlace) -> bool {
 pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
     let mut functions = Vec::new();
     let mut polls = Vec::new();
+    let const_ints = const_int_globals(hir);
     for f in &hir.functions {
-        let (stub, poll_opt) = lower_function(f, interner, &hir.layouts);
+        let (stub, poll_opt) = lower_function_with(f, interner, &hir.layouts, &const_ints);
         functions.push(stub);
         if let Some(poll) = poll_opt {
             polls.push(poll);
@@ -129,7 +130,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
             file: None,
             prefer_inline: false,
         };
-        let (stub, _) = lower_function(&init_fn, interner, &hir.layouts);
+        let (stub, _) = lower_function_with(&init_fn, interner, &hir.layouts, &const_ints);
         functions.push(stub);
     }
     for f in &mut functions {
@@ -251,12 +252,36 @@ pub fn lower_function(
     interner: &TypeInterner,
     layouts: &dream_hir::LayoutTable,
 ) -> (MirFunction, Option<MirFunction>) {
+    lower_function_with(func, interner, layouts, &HashMap::new())
+}
+
+fn const_int_globals(hir: &Hir) -> HashMap<u32, i64> {
+    let mut m = HashMap::new();
+    for g in &hir.globals {
+        if !g.is_const {
+            continue;
+        }
+        if let Some(init) = &g.init {
+            if let HExprKind::IntLit(v) = &init.kind {
+                m.insert(g.id.0, *v);
+            }
+        }
+    }
+    m
+}
+
+fn lower_function_with(
+    func: &HFunction,
+    interner: &TypeInterner,
+    layouts: &dream_hir::LayoutTable,
+    const_ints: &HashMap<u32, i64>,
+) -> (MirFunction, Option<MirFunction>) {
     if func.is_async {
         let stub = lower_async_stub(func);
-        let poll = lower_async_poll_body(func, interner, layouts);
+        let poll = lower_async_poll_body_with(func, interner, layouts, const_ints);
         return (stub, Some(poll));
     }
-    (lower_sync_function(func, interner), None)
+    (lower_sync_function(func, interner, const_ints), None)
 }
 
 /// Creates a [`FunctionBuilder`] for `func` (return type, def, source file, async flag) and registers
@@ -298,12 +323,17 @@ fn lower_async_stub(func: &HFunction) -> MirFunction {
     f
 }
 
-fn lower_sync_function(func: &HFunction, interner: &TypeInterner) -> MirFunction {
+fn lower_sync_function(
+    func: &HFunction,
+    interner: &TypeInterner,
+    const_ints: &HashMap<u32, i64>,
+) -> MirFunction {
     let (b, locals) = init_builder(func, func.is_async);
 
     let mut lo = Lowerer {
         b,
         interner,
+        const_ints,
         locals,
         loops: Vec::new(),
         locks: Vec::new(),
@@ -331,10 +361,20 @@ pub fn lower_async_poll_body(
     interner: &TypeInterner,
     layouts: &dream_hir::LayoutTable,
 ) -> MirFunction {
+    lower_async_poll_body_with(func, interner, layouts, &HashMap::new())
+}
+
+fn lower_async_poll_body_with(
+    func: &HFunction,
+    interner: &TypeInterner,
+    layouts: &dream_hir::LayoutTable,
+    const_ints: &HashMap<u32, i64>,
+) -> MirFunction {
     let (b, locals) = init_builder(func, true);
     let mut lo = Lowerer {
         b,
         interner,
+        const_ints,
         locals,
         loops: Vec::new(),
         locks: Vec::new(),
@@ -367,6 +407,9 @@ struct LoopCtx {
 struct Lowerer<'a> {
     b: FunctionBuilder,
     interner: &'a TypeInterner,
+    /// `const` integer globals with a literal initializer, substituted at each read so later passes
+    /// see a constant instead of a global load (`MAT_N` in a counted loop).
+    const_ints: &'a HashMap<u32, i64>,
     locals: HashMap<u32, Local>,
     loops: Vec<LoopCtx>,
     /// Addresses (as MIR locals) of every `lock (obj) { ... }` currently entered, outermost first —

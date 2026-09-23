@@ -50,7 +50,11 @@ impl Lowerer<'_> {
             HExprKind::EnumValue(v) => Operand::Const(Const::Int(*v)),
             HExprKind::Var(Binding::Local(l)) => Operand::Copy(Place::Local(self.mir_local(*l))),
             HExprKind::Var(Binding::Global(g)) => {
-                Operand::Copy(Place::Global(super::super::Global(g.0)))
+                if let Some(v) = self.const_ints.get(&g.0) {
+                    Operand::Const(self.int_const(e.ty, *v))
+                } else {
+                    Operand::Copy(Place::Global(super::super::Global(g.0)))
+                }
             }
             HExprKind::Binary { op, .. } if op.is_logical() => self.lower_short_circuit(e),
             HExprKind::Ternary { .. } => self.lower_ternary(e),

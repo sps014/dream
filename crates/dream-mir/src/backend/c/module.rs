@@ -6,7 +6,7 @@ use super::localnames;
 use super::protocol::{emit_iface_init, emit_iface_trampolines, emit_protocol};
 use super::release::emit_release_helpers;
 use super::target::CTarget;
-use super::types::{c_ident, c_ty, fn_ptr_abi, local_c_ty};
+use super::types::{c_ident, c_ty, emitted_local_ty, fn_ptr_abi, local_c_ty, wide_int_locals};
 use crate::backend::shared::func_symbol;
 use crate::{Mir, MirFunction, Rvalue, Statement};
 use dream_abi::js_abi;
@@ -969,13 +969,18 @@ fn future_frame_debug_view(cx: &Cx<'_>, body: &MirFunction, offs: &[i32]) -> Vec
         let off = offs[i] as u32;
         let sz = super::types::native_scalar_size(cx, decl.ty).0.max(8);
         fields.extend(pad_to(&mut cursor, off, &mut pad, uchar()));
+        let natural = local_c_ty(cx, decl.ty);
         let ty = if cx.interner.is_value_type(decl.ty) {
             CTy::Array {
                 elem: Box::new(uchar()),
                 len: sz as usize,
             }
+        } else if sz >= 8 && matches!(natural, CTy::I32) {
+            // The slot is 8 bytes (`layout_async_slots` rounds scalars up). The debug
+            // lens has to occupy that width or later fields land on the wrong offset.
+            CTy::I64
         } else {
-            local_c_ty(cx, decl.ty)
+            natural
         };
         let fname = decl
             .name
@@ -1037,6 +1042,7 @@ fn build_async_pair(
         return (build_sync(cx, stub), poll, drop);
     }
     let body = pre_lowered_poll;
+    let wide = wide_int_locals(cx, body);
     let fut = cx.target.abi().future;
     let slots = crate::async_emit::layout_async_slots(
         body,
@@ -1120,7 +1126,7 @@ fn build_async_pair(
                 )),
             ));
         } else {
-            let ty = local_c_ty(cx, decl.ty);
+            let ty = emitted_local_ty(cx, body, crate::Local(i as u32), &wide);
             poll.stmt(Stmt::decl(
                 ty.clone(),
                 format!("l{i}"),
@@ -1206,7 +1212,7 @@ fn build_async_pair(
                     ),
                 ]));
             } else {
-                let ty = local_c_ty(cx, dest_ty);
+                let ty = emitted_local_ty(cx, body, crate::Local(d), &wide);
                 let value = match cx.interner.kind(dest_ty) {
                     TyKind::Prim(dream_types::PrimTy::Long | dream_types::PrimTy::ULong) => {
                         Expr::load(
@@ -1279,7 +1285,7 @@ fn build_async_pair(
         }
         for i in dirty {
             poll.stmt(Stmt::store(
-                local_c_ty(cx, body.local_ty(crate::Local(i))),
+                emitted_local_ty(cx, body, crate::Local(i), &wide),
                 Expr::ptr_add(Expr::id("__self"), Expr::i(offs[i as usize] as i64)),
                 Expr::local(i),
             ));
@@ -1393,6 +1399,7 @@ fn emit_drop_globals(m: &mut ModuleBuilder, cx: &Cx<'_>) {
 }
 
 fn build_sync(cx: &Cx<'_>, f: &MirFunction) -> FuncBuilder {
+    let wide = wide_int_locals(cx, f);
     let (ret, name, params, attr) = proto_parts(cx, f);
     let mut b = FuncBuilder::new(ret, name);
     b.attr = attr;
@@ -1462,7 +1469,7 @@ fn build_sync(cx: &Cx<'_>, f: &MirFunction) -> FuncBuilder {
             ));
         } else {
             b.stmt(Stmt::decl(
-                local_c_ty(cx, decl.ty),
+                emitted_local_ty(cx, f, crate::Local(i as u32), &wide),
                 format!("l{i}"),
                 Some(Expr::i(0)),
             ));

@@ -1,6 +1,6 @@
 use super::ast::{CTy, Expr, Stmt, UnOp};
 use super::emit::Emitter;
-use super::types::{array_elem_ty, elem_size, load_cast, local_c_ty};
+use super::types::{array_elem_ty, elem_size, emitted_local_ty, load_cast};
 use crate::{Operand, Place};
 use dream_types::TypeInterner;
 
@@ -140,14 +140,15 @@ impl<'a> Emitter<'a> {
             }
         };
         match place {
-            // Locals are register-width (`int` is i64, `char` is i32). `load_cast` is the
-            // in-memory packed layout and would truncate UTF-16 chars and native pointers.
+            // `int` locals are `int32_t` unless they carry a pointer-sized bit pattern
+            // (`wide_int`). `load_cast` is the packed in-memory layout and would truncate
+            // UTF-16 chars and native pointers.
             Place::Local(l) => {
                 let ty = self.f.local_ty(*l);
                 if self.cx.interner.is_value_type(ty) {
                     CTy::Ptr
                 } else {
-                    local_c_ty(self.cx, ty)
+                    emitted_local_ty(self.cx, self.f, *l, &self.wide_int)
                 }
             }
             Place::Global(g) => {

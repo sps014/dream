@@ -51,50 +51,11 @@ impl<'a> Analyzer<'a> {
             }
             Err(e) => {
                 // A bare identifier that names a top-level function is a first-class function value.
-                if let Ok(sig) = self.function_table.get_function(&id.text) {
-                    // A boxed `fun(...)` value is invoked through synchronous `call_indirect`. An
-                    // `async fun`'s constructor returns an untagged `Future` frame pointer, so boxing
-                    // it as `fun(...): Future<T>` matches the WASM result and lets the caller
-                    // `f(...).await` like a direct async call. Worker bodies use the same shape
-                    // (`spawn_async` / `map_async` / `dispatch_async`).
-                    if sig.is_async {
-                        let params = sig
-                            .parameters
-                            .iter()
-                            .map(|p| Self::type_from_name(p))
-                            .collect();
-                        let box_ret = Self::async_return_type(true, sig.return_type.clone());
-                        let func_ty = Type::Function(params, Box::new(box_ret.clone()));
-                        self.hir_set_func_value(&id.text, &func_ty, &box_ret);
-                        let summary = self.ide_summary(&func_ty);
-                        self.record_ide_ref(
-                            id.position,
-                            ide::IdeTarget::Callee {
-                                key: id.text.clone(),
-                                label: id.text.clone(),
-                            },
-                            summary,
-                        );
-                        return Ok(func_ty);
-                    }
-                    let params = sig
-                        .parameters
-                        .iter()
-                        .map(|p| Self::type_from_name(p))
-                        .collect();
-                    let ret = sig.return_type.clone().unwrap_or(Type::Void);
-                    let func_ty = Type::Function(params, Box::new(ret.clone()));
-                    self.hir_set_func_value(&id.text, &func_ty, &ret);
-                    let summary = self.ide_summary(&func_ty);
-                    self.record_ide_ref(
-                        id.position,
-                        ide::IdeTarget::Callee {
-                            key: id.text.clone(),
-                            label: id.text.clone(),
-                        },
-                        summary,
-                    );
-                    return Ok(func_ty);
+                if self.function_table.get_function(&id.text).is_ok() {
+                    return Ok(self.function_value(id, &id.text));
+                }
+                if self.function_table.is_overloaded(&id.text) {
+                    return Ok(self.overloaded_function_value(id, diagnostics));
                 }
                 // A generic function used as a value: with a `fun(...)` context, instantiate now;
                 // otherwise bind a polymorphic item that instantiates at each later use.
@@ -181,6 +142,79 @@ impl<'a> Analyzer<'a> {
         self.record_ide_ref(id.position, target, summary);
         self.hir_set_var(&id.text);
         Ok(r)
+    }
+
+    /// The boxed `fun(...)` value of the function registered under `key`, invoked through
+    /// synchronous `call_indirect`. An `async fun`'s constructor returns an untagged `Future` frame
+    /// pointer, so boxing it as `fun(...): Future<T>` matches the WASM result and lets the caller
+    /// `f(...).await` like a direct async call. Worker bodies use the same shape (`spawn_async` /
+    /// `map_async` / `dispatch_async`).
+    fn function_value(&mut self, id: &SyntaxToken, key: &str) -> Type {
+        let Ok(sig) = self.function_table.get_function(key) else {
+            self.hir_fail();
+            return Type::Unknown;
+        };
+        let params = sig
+            .parameters
+            .iter()
+            .map(|p| Self::type_from_name(p))
+            .collect();
+        let ret = if sig.is_async {
+            Self::async_return_type(true, sig.return_type.clone())
+        } else {
+            sig.return_type.clone().unwrap_or(Type::Void)
+        };
+        let func_ty = Type::Function(params, Box::new(ret.clone()));
+        self.hir_set_func_value(key, &func_ty, &ret);
+        let summary = self.ide_summary(&func_ty);
+        self.record_ide_ref(
+            id.position,
+            ide::IdeTarget::Callee {
+                key: key.to_string(),
+                label: id.text.clone(),
+            },
+            summary,
+        );
+        func_ty
+    }
+
+    /// An overloaded function taken as a value: the `fun(...)` expected type's parameter list
+    /// picks the overload, since there is no argument list to resolve against.
+    fn overloaded_function_value(
+        &mut self,
+        id: &SyntaxToken,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Type {
+        let expected = self
+            .current_expected_type
+            .as_ref()
+            .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings));
+        let message = match &expected {
+            Some(Type::Function(params, _)) => {
+                let names: Vec<String> = params.iter().map(Type::get_type).collect();
+                if let Some(key) = self.function_table.overload_with_params(&id.text, &names) {
+                    let key = key.to_string();
+                    return self.function_value(id, &key);
+                }
+                format!(
+                    "No overload of '{}' takes parameters ({})",
+                    id.text,
+                    names.join(", ")
+                )
+            }
+            _ => format!(
+                "'{}' is overloaded; give it a fun(...) type to select an overload",
+                id.text
+            ),
+        };
+        report_with_code(
+            diagnostics,
+            message,
+            Some(id.position),
+            "ambiguous-overload",
+        );
+        self.hir_fail();
+        Type::Unknown
     }
 
     /// Reconstructs a `Type` from its canonical type-name string (as stored in function-table

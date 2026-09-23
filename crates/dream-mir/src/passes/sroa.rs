@@ -431,7 +431,12 @@ fn zero_for(interner: &TypeInterner, ty: TypeId) -> Const {
 fn is_pure_field_store(rv: &Rvalue) -> bool {
     matches!(
         rv,
-        Rvalue::Use(_) | Rvalue::Select { .. } | Rvalue::Binary(..) | Rvalue::Unary(..)
+        Rvalue::Use(_)
+            | Rvalue::Select { .. }
+            | Rvalue::Binary(..)
+            | Rvalue::Unary(..)
+            | Rvalue::CheckedBinary(..)
+            | Rvalue::CheckedNeg(_)
     )
 }
 
@@ -452,8 +457,10 @@ fn operand_ty(func: &MirFunction, interner: &TypeInterner, op: &Operand) -> Type
 /// Field-local type inferred from a pure store rvalue.
 fn rvalue_store_ty(func: &MirFunction, interner: &TypeInterner, rv: &Rvalue) -> TypeId {
     match rv {
-        Rvalue::Use(op) | Rvalue::Unary(_, op) => operand_ty(func, interner, op),
-        Rvalue::Binary(_, a, _) => operand_ty(func, interner, a),
+        Rvalue::Use(op) | Rvalue::Unary(_, op) | Rvalue::CheckedNeg(op) => {
+            operand_ty(func, interner, op)
+        }
+        Rvalue::Binary(_, a, _) | Rvalue::CheckedBinary(_, a, _) => operand_ty(func, interner, a),
         Rvalue::Select { then_val, .. } => operand_ty(func, interner, then_val),
         _ => interner.int(),
     }
@@ -472,8 +479,10 @@ fn operand_mentions(op: &Operand, o: Local) -> bool {
 
 fn rvalue_mentions(rv: &Rvalue, o: Local) -> bool {
     match rv {
-        Rvalue::Use(op) | Rvalue::Unary(_, op) => operand_mentions(op, o),
-        Rvalue::Binary(_, a, b) => operand_mentions(a, o) || operand_mentions(b, o),
+        Rvalue::Use(op) | Rvalue::Unary(_, op) | Rvalue::CheckedNeg(op) => operand_mentions(op, o),
+        Rvalue::Binary(_, a, b) | Rvalue::CheckedBinary(_, a, b) => {
+            operand_mentions(a, o) || operand_mentions(b, o)
+        }
         Rvalue::Select {
             cond,
             then_val,

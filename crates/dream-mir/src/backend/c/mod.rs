@@ -8,6 +8,7 @@ mod ctx;
 mod debugviews;
 mod emit;
 mod entry;
+mod int_ops;
 mod js_marshal;
 mod localnames;
 mod module;

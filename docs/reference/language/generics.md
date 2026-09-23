@@ -17,8 +17,8 @@ fun first<T>(arr: T[]): T {
 
 let nums = [10, 20, 30];
 let words = ["a", "b", "c"];
-println(first<int>(nums));      // 10
-println(first(words));          // "a" (inferred)
+System.println(first<int>(nums));      // 10
+System.println(first(words));          // "a" (inferred)
 ```
 
 Multiple type parameters are allowed: `fun swap<A, B>(a: A, b: B): A { ... }`.
@@ -35,10 +35,10 @@ class Pair<A, B> {
 }
 
 let p = Pair<int, string>(1, "one");
-println(p.first);   // 1
+System.println(p.first);   // 1
 
 let nested = Pair<Box<int>, int>(Box<int>(7), 5);
-println(nested.first.v);   // 7
+System.println(nested.first.v);   // 7
 ```
 
 ## Generic methods
@@ -54,7 +54,7 @@ class Box<T> {
 
 let b = Box<int>(42);
 b.set(100);
-println(b.get());   // 100
+System.println(b.get());   // 100
 ```
 
 ## Advanced
@@ -79,7 +79,7 @@ struct Sorted<T : Comparable<T> + Equatable<T>> { /* ... */ }
 ```
 
 Kind constraints include `struct`, `class`, `unmanaged`, and `shared`.
-A `shared` type is a blittable value, `string`, a struct of shared fields, or an `@shared class`:
+A `shared` type is a blittable value, `string`, a struct of shared fields, or a `shared class`:
 
 ```dream
 fun send<T : shared>(value: T): void { /* … */ }
@@ -107,7 +107,7 @@ class Cache<T> {
 }
 
 let c = Cache<int>.make(5);   // T is not in make's parameters — write it on the class
-println(c.seed);              // 5
+System.println(c.seed);              // 5
 ```
 
 As with any static member, the method must be `public` to be called from another file, and the generic class itself must be `public` to be referenced across files. See [visibility](imports.md).
@@ -125,7 +125,7 @@ fun natural_order<T : Comparable<T>>(a: T, b: T): int {
 
 let cmp: fun(int, int): int = natural_order;   // inferred as natural_order<int>
 let f = natural_order;                         // polymorphic until used
-println(f(3, 1));                              // instantiates from argument types
+System.println(f(3, 1));                              // instantiates from argument types
 let g: fun(int, int): int = f;                 // instantiates from the annotation
 ```
 
@@ -137,11 +137,11 @@ The compiler eliminates the dead branches:
 ```dream
 fun describe<T>(v: T): void {
     if v is int {
-        print("it's an int: ");
-        println(v);
+        System.print("it's an int: ");
+        System.println(v);
     } else if (v is string) {
-        print("it's a string: ");
-        println(v);
+        System.print("it's a string: ");
+        System.println(v);
     }
 }
 ```

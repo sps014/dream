@@ -18,7 +18,7 @@ pub use program::{
     EnumDeclarationNode, EnumVariantNode, ExtendNode, GlobalVariableNode, ImportNode,
     ModuleDeclNode, ProgramNode,
 };
-pub use statement::StatementNode;
+pub use statement::{OverflowMode, StatementNode};
 pub use struct_node::{StructDeclarationNode, StructFieldNode};
 pub use types::Type;
 
@@ -140,7 +140,7 @@ pub struct AttributeNode {
 /// type (a `struct` or a non-`string` primitive) that *may* still contain reference-typed fields;
 /// `T : unmanaged` requires a *blittable* value type (recursively only value fields, no inner heap
 /// pointers - a strict subset of `struct`); `T : shared` is the Sendable analogue (`unmanaged`,
-/// `string`, value structs of `shared` fields, or `@shared class`); `T : class` requires a
+/// `string`, value structs of `shared` fields, or `shared class`); `T : class` requires a
 /// reference type. Orthogonal to the interface `bounds` and combinable with them via `+`
 /// (e.g. `T : unmanaged + Comparable<T>`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

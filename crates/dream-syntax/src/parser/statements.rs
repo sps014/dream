@@ -1,5 +1,5 @@
 use super::Parser;
-use crate::nodes::{ExpressionNode, StatementNode, Type};
+use crate::nodes::{ExpressionNode, OverflowMode, StatementNode, Type};
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::token_kind::TokenKind;
 use std::io::Error;
@@ -284,6 +284,12 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::DoToken => Ok(self.parse_do_while()?),
             TokenKind::LockToken => Ok(self.parse_lock()?),
             TokenKind::DeferToken => Ok(self.parse_defer()?),
+            TokenKind::IdentifierToken
+                if matches!(cur.text.as_str(), "checked" | "unchecked")
+                    && self.peek_token(1).kind == TokenKind::CurlyOpenBracketToken =>
+            {
+                Ok(self.parse_overflow_block()?)
+            }
             TokenKind::ForToken => Ok(self.parse_for()?),
             TokenKind::SwitchToken => Ok(self.parse_switch()?),
             TokenKind::BreakToken => Ok(self.parse_break()?),
@@ -605,7 +611,20 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(StatementNode::Defer(budget, body))
     }
 
-    /// Parses `lock (target) { body }` — mutual exclusion on `target` (an `@shared class` instance
+    /// Parses `checked { body }` / `unchecked { body }`. The keywords are contextual: the caller
+    /// only dispatches here when the identifier is directly followed by `{`.
+    pub(super) fn parse_overflow_block(&mut self) -> Result<StatementNode<'a>, Error> {
+        let keyword = self.match_token(TokenKind::IdentifierToken);
+        let mode = if keyword.text == "checked" {
+            OverflowMode::Checked
+        } else {
+            OverflowMode::Unchecked
+        };
+        let body = self.parse_block()?;
+        Ok(StatementNode::Overflow(mode, keyword, body))
+    }
+
+    /// Parses `lock (target) { body }` — mutual exclusion on `target` (a `shared class` instance
     /// or `Lock`), reentrant per-thread. Same shape as `while`, minus the loop-back edge.
     pub(super) fn parse_lock(&mut self) -> Result<StatementNode<'a>, Error> {
         self.match_token(TokenKind::LockToken);

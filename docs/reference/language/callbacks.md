@@ -5,7 +5,7 @@ Functions cross the Dream/JavaScript boundary in both directions: hand a Dream f
 **Only non-capturing functions may cross into JS.** A capturing lambda would lose its captured state at the boundary. Dream rejects capturing callbacks — use a top-level `fun`, a captureless lambda, or module-level state instead (see the [music player sample](https://github.com/sps014/dream/blob/main/sample/music_player/music_player.dream)).
 
 ```dream
-// el.addEventListener("click", (ev) => { println(name); }); // error: capturing callback rejected
+// el.addEventListener("click", (ev) => { System.println(name); }); // error: capturing callback rejected
 ```
 
 ## Dream to JS
@@ -14,7 +14,7 @@ Declare an `extern` parameter with a function type, then pass a Dream function w
 
 ```dream
 fun on_tick(n: int): void {
-    println("tick " + n);
+    System.println("tick " + n);
 }
 
 extern fun run_callback(cb: fun(int): void, times: int): void;
@@ -42,7 +42,7 @@ Passing a Dream function directly into a dynamic [`js`](js-type.md) call wraps i
 
 ```dream
 fun on_click(ev: js): void {
-    println("clicked: " + ev.type.to_str());
+    System.println("clicked: " + ev.type.to_str());
 }
 
 fun main(): void {

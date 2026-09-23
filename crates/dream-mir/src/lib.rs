@@ -11,6 +11,7 @@ pub mod abi;
 pub mod async_emit;
 pub mod backend;
 pub mod build;
+pub mod int_ty;
 pub mod lower;
 pub mod passes;
 pub mod print;
@@ -481,8 +482,15 @@ pub enum Rvalue {
         then_val: Operand,
         else_val: Operand,
     },
+    /// Integer or float arithmetic, comparison, or bitwise op. Integer arithmetic wraps at the
+    /// operation's width (see [`int_ty`]); integer division by zero panics.
     Binary(BinOp, Operand, Operand),
     Unary(UnOp, Operand),
+    /// Integer `+ - * / % << >>` that panics on overflow (a result outside the type, or a shift
+    /// count outside `0..bits`). Only emitted for ops that can overflow for the type.
+    CheckedBinary(BinOp, Operand, Operand),
+    /// Integer negation that panics on overflow.
+    CheckedNeg(Operand),
     /// `string.len()` via a runtime `$str_scalar_len` call (UTF-16 code-unit count).
     StrLen(Operand),
     /// `string.byte_size()` via a runtime `$str_byte_size` call (`unit_len * 2`).
@@ -708,6 +716,7 @@ mod tests {
                     op: dream_hir::BinOp::Add,
                     lhs: Box::new(HExpr::new(int, HExprKind::Var(Binding::Local(LocalId(0))))),
                     rhs: Box::new(HExpr::new(int, HExprKind::Var(Binding::Local(LocalId(1))))),
+                    overflow: dream_hir::Overflow::Checked,
                 },
             )))],
         };
@@ -726,7 +735,11 @@ mod tests {
         let c = super::backend::c::emit_c_module(&program, &ctx.interner).into_bytes();
         let c = String::from_utf8(c).expect("C module is UTF-8");
         assert!(c.contains("add"), "pipeline output:\n{}", c);
-        assert!(c.contains('+'), "pipeline output:\n{}", c);
+        assert!(
+            c.contains("__builtin_add_overflow"),
+            "pipeline output:\n{}",
+            c
+        );
         assert!(c.contains("return"), "pipeline output:\n{}", c);
     }
 }

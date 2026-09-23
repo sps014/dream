@@ -301,8 +301,13 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
 
     let f = &mut mir.functions[fi];
     for (i, decl) in g_locals.iter().enumerate() {
-        f.locals
-            .push(remap_local_decl(decl, callee_frame.kind(Local(i as u32))));
+        let mut d = remap_local_decl(decl, callee_frame.kind(Local(i as u32)));
+        // A borrow parameter owns nothing; once spliced in it is no longer a param, so without the
+        // cursor mark later RC passes would treat it as an owned local and release it.
+        if g_params.iter().any(|p| p.0 as usize == i) && !decl.is_take {
+            d.is_cursor = true;
+        }
+        f.locals.push(d);
     }
     let block_base = f.blocks.len() as u32;
     let cont_id = BlockId(block_base + g_blocks.len() as u32);

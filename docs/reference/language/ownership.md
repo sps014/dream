@@ -20,7 +20,7 @@ class Point {
 let p = Point(1);
 let q = p;      // same Point
 q.x = 9;
-println(p.x);   // 9
+System.println(p.x);   // 9
 ```
 
 ```dream
@@ -32,7 +32,7 @@ struct Vec2 {
 let a = Vec2(1, 2);
 let b = a;      // copy
 b.x = 9;
-println(a.x);   // 1
+System.println(a.x);   // 1
 ```
 
 Automatic **move** (the rest of this page) applies to **share** types. A `struct` always copies its bytes. On the last use of a struct local, the copy keeps the nested heap values; they are not counted a second time. A struct that is still used later, or a field or index, still counts them again.
@@ -51,11 +51,11 @@ Mark a parameter `borrow` when the function only **looks** — you keep the valu
 
 ```dream
 fun take(s: string): void {
-    println(s);
+    System.println(s);
 }
 
 fun peek(borrow s: string): void {
-    println(s);
+    System.println(s);
 }
 
 fun demo() {

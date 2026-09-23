@@ -463,30 +463,42 @@ public static class Gpu {
     @runtime("gpuPassSubmit")
     static extern async fun pass_submit(pass_id: int): int;
 
-    // Workgroup barrier (no-op on CPU; WGSL emitter maps this inside `@compute`).
+    // Workgroup barrier (WGSL; shader-only).
+    @shader_only
     public static fun workgroup_barrier(): void {}
-    // Storage memory barrier (no-op on CPU; WGSL emitter maps this inside `@compute`).
+    // Storage memory barrier (WGSL; shader-only).
+    @shader_only
     public static fun storage_barrier(): void {}
 
-    // WGSL `atomicLoad` on a storage-buffer element; CPU stub returns `0`.
+    // WGSL `atomicLoad` on a storage-buffer element.
+    @shader_only
     public static fun atomic_load(buf: GpuBuffer<int>, i: int): int { return 0; }
-    // WGSL `atomicStore` to write a 32-bit integer into a storage buffer; CPU stub is a no-op.
+    // WGSL `atomicStore` to write a 32-bit integer into a storage buffer.
+    @shader_only
     public static fun atomic_store(buf: GpuBuffer<int>, i: int, v: int): void {}
     // WGSL `atomicAdd` to atomically add `v` to `buf[i]`; returns the old value.
+    @shader_only
     public static fun atomic_add(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
     // WGSL `atomicSub` to atomically subtract `v` from `buf[i]`; returns the old value.
+    @shader_only
     public static fun atomic_sub(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
     // WGSL `atomicMin` to atomically compute the minimum of `v` and `buf[i]`; returns the old value.
+    @shader_only
     public static fun atomic_min(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
     // WGSL `atomicMax` to atomically compute the maximum of `v` and `buf[i]`; returns the old value.
+    @shader_only
     public static fun atomic_max(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
     // WGSL `atomicAnd` to atomically perform a bitwise AND with `v` on `buf[i]`; returns the old value.
+    @shader_only
     public static fun atomic_and(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
     // WGSL `atomicOr` to atomically perform a bitwise OR with `v` on `buf[i]`; returns the old value.
+    @shader_only
     public static fun atomic_or(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
     // WGSL `atomicXor` to atomically perform a bitwise XOR with `v` on `buf[i]`; returns the old value.
+    @shader_only
     public static fun atomic_xor(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
     // WGSL `atomicExchange` to atomically swap `v` into `buf[i]`; returns the old value.
+    @shader_only
     public static fun atomic_exchange(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
     // WGSL `atomicCompareExchangeWeak`: stores `v` into `buf[i]` only if it currently holds
     // `cmp`. Returns the old value either way, so the store happened exactly when the result
@@ -494,6 +506,7 @@ public static class Gpu {
     //
     //     let old = Gpu.atomic_compare_exchange(buf, i, seen, next);
     //     if old == seen { break; }   // won; otherwise re-read and try again
+    @shader_only
     public static fun atomic_compare_exchange(
         buf: GpuBuffer<int>,
         i: int,
@@ -502,42 +515,56 @@ public static class Gpu {
     ): int { return 0; }
 
     // Screen-space partial derivative with respect to window X coordinate (WGSL `dpdx`); `@fragment` stage only.
+    @shader_only
     public static fun dpdx(v: float): float { return 0.0; }
     // Component-wise screen-space X derivative of a 2D vector (`dpdx(v.x)`, `dpdx(v.y)`); `@fragment` stage only.
+    @shader_only
     public static fun dpdx(v: GpuVec2): GpuVec2 { return GpuVec2(); }
     // Component-wise screen-space X derivative of a 3D vector (e.g. world position); `@fragment` stage only.
+    @shader_only
     public static fun dpdx(v: GpuVec3): GpuVec3 { return GpuVec3(); }
     // Component-wise screen-space X derivative of a 4D vector; `@fragment` stage only.
+    @shader_only
     public static fun dpdx(v: GpuVec4): GpuVec4 { return GpuVec4(); }
 
     // Screen-space partial derivative with respect to window Y coordinate (WGSL `dpdy`); `@fragment` stage only.
+    @shader_only
     public static fun dpdy(v: float): float { return 0.0; }
     // Component-wise screen-space Y derivative of a 2D vector (`dpdy(v.x)`, `dpdy(v.y)`); `@fragment` stage only.
+    @shader_only
     public static fun dpdy(v: GpuVec2): GpuVec2 { return GpuVec2(); }
     // Component-wise screen-space Y derivative of a 3D vector (e.g. world position); `@fragment` stage only.
+    @shader_only
     public static fun dpdy(v: GpuVec3): GpuVec3 { return GpuVec3(); }
     // Component-wise screen-space Y derivative of a 4D vector; `@fragment` stage only.
+    @shader_only
     public static fun dpdy(v: GpuVec4): GpuVec4 { return GpuVec4(); }
 
     // Screen-space derivative magnitude `abs(dpdx(v)) + abs(dpdy(v))` (WGSL `fwidth`) for procedural antialiasing; `@fragment` only.
+    @shader_only
     public static fun fwidth(v: float): float { return 0.0; }
     // Component-wise derivative magnitude for 2D coordinates (e.g. UV gradients, grid lines); `@fragment` only.
+    @shader_only
     public static fun fwidth(v: GpuVec2): GpuVec2 { return GpuVec2(); }
     // Component-wise derivative magnitude for 3D coordinates (e.g. world-space normal estimation); `@fragment` only.
+    @shader_only
     public static fun fwidth(v: GpuVec3): GpuVec3 { return GpuVec3(); }
     // Component-wise derivative magnitude for 4D coordinates; `@fragment` only.
+    @shader_only
     public static fun fwidth(v: GpuVec4): GpuVec4 { return GpuVec4(); }
 
     // Returns the texture's `(width, height)` in texels as a float vector (WGSL `textureDimensions`).
     public static fun texture_dimensions(tex: GpuTexture): GpuVec2 {
         return GpuVec2.of((float)tex.width, (float)tex.height);
     }
-    // WGSL `textureLoad` (texel fetch, no filtering) for `@compute`; CPU stub returns zeros.
+    // WGSL `textureLoad` (texel fetch, no filtering) for `@compute`.
     // Reads mip level 0; use `texture_load_level` for a specific level.
+    @shader_only
     public static fun texture_load(tex: GpuTexture, x: int, y: int): GpuVec4 {
         return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
     }
-    // WGSL `textureLoad` at an explicit mip `level`; CPU stub returns zeros.
+    // WGSL `textureLoad` at an explicit mip `level`.
+    @shader_only
     public static fun texture_load_level(
         tex: GpuTexture,
         x: int,
@@ -546,7 +573,8 @@ public static class Gpu {
     ): GpuVec4 {
         return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
     }
-    // WGSL `textureLoad` from one `layer` of a `@view("2d-array")` texture; CPU stub returns zeros.
+    // WGSL `textureLoad` from one `layer` of a `@view("2d-array")` texture.
+    @shader_only
     public static fun texture_load_layer(
         tex: GpuTexture,
         x: int,
@@ -556,11 +584,14 @@ public static class Gpu {
     ): GpuVec4 {
         return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
     }
-    // Mip level count of `tex` (WGSL `textureNumLevels`); CPU stub returns `1`.
+    // Mip level count of `tex` (WGSL `textureNumLevels`).
+    @shader_only
     public static fun texture_num_levels(tex: GpuTexture): int { return 1; }
-    // Array layer count of `tex` (WGSL `textureNumLayers`); CPU stub returns `1`.
+    // Array layer count of `tex` (WGSL `textureNumLayers`).
+    @shader_only
     public static fun texture_num_layers(tex: GpuTexture): int { return 1; }
-    // WGSL `textureStore` for `@compute`; CPU stub is a no-op.
+    // WGSL `textureStore` for `@compute`.
+    @shader_only
     public static fun texture_store(
         tex: GpuTexture,
         x: int,
@@ -571,7 +602,8 @@ public static class Gpu {
         a: float
     ): void {}
     // WGSL `textureSampleLevel` — filtered sample at an explicit mip `level`, so it is usable
-    // from `@compute` where there are no implicit derivatives. CPU stub returns zeros.
+    // from `@compute` where there are no implicit derivatives.
+    @shader_only
     public static fun texture_sample_level(
         tex: GpuTexture,
         samp: GpuSampler,
@@ -581,7 +613,8 @@ public static class Gpu {
     ): GpuVec4 {
         return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
     }
-    // WGSL `textureSample` for `@fragment`; CPU stub returns zeros.
+    // WGSL `textureSample` for `@fragment`.
+    @shader_only
     public static fun texture_sample(
         tex: GpuTexture,
         samp: GpuSampler,
@@ -591,6 +624,7 @@ public static class Gpu {
         return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
     }
     // Samples a cubemap texture along the 3D direction vector `dir` (WGSL `textureSample`).
+    @shader_only
     public static fun texture_sample_cube(
         tex: GpuTexture,
         samp: GpuSampler,
@@ -599,6 +633,7 @@ public static class Gpu {
         return GpuVec4.of(0.0, 0.0, 0.0, 0.0);
     }
     // Samples one `layer` of a `@view("2d-array")` texture (WGSL `textureSample`); `@fragment` only.
+    @shader_only
     public static fun texture_sample_layer(
         tex: GpuTexture,
         samp: GpuSampler,
@@ -610,6 +645,7 @@ public static class Gpu {
     }
     // WGSL `textureSampleBias` — like `texture_sample` with `bias` added to the computed mip
     // level, to sharpen or blur relative to what the derivatives chose. `@fragment` only.
+    @shader_only
     public static fun texture_sample_bias(
         tex: GpuTexture,
         samp: GpuSampler,
@@ -621,6 +657,7 @@ public static class Gpu {
     }
     // WGSL `textureSampleGrad` — samples with explicit derivatives instead of the implicit ones,
     // which is what lets a `@fragment` shader filter correctly across a discontinuous mapping.
+    @shader_only
     public static fun texture_sample_grad(
         tex: GpuTexture,
         samp: GpuSampler,
@@ -633,6 +670,7 @@ public static class Gpu {
     // WGSL `textureGather` — the single component `component` (0..3) of the four texels that
     // bilinear filtering would blend, which is how a shader hand-rolls its own filter kernel.
     // `component` must be a literal.
+    @shader_only
     public static fun texture_gather(
         component: int,
         tex: GpuTexture,
@@ -646,6 +684,7 @@ public static class Gpu {
     // filtered fraction of the four neighbouring texels that pass. This is the shadow-map lookup:
     // `tex` must be `@depth` and `samp` must be `@compare`. `@fragment` only, since it uses
     // implicit derivatives; `texture_sample_compare_level` is the any-stage form.
+    @shader_only
     public static fun texture_sample_compare(
         tex: GpuTexture,
         samp: GpuSampler,
@@ -655,6 +694,7 @@ public static class Gpu {
     ): float { return 0.0; }
     // WGSL `textureSampleCompareLevel` — as `texture_sample_compare`, but pinned to mip level 0
     // and so callable from `@compute` as well.
+    @shader_only
     public static fun texture_sample_compare_level(
         tex: GpuTexture,
         samp: GpuSampler,

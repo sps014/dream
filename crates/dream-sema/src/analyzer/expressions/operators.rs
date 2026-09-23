@@ -56,9 +56,15 @@ impl<'a> Analyzer<'a> {
                     .push((name.text.clone(), ty.clone(), operand));
             }
         }
+        // An unsuffixed integer literal on the right takes the left operand's integer type, so the
+        // parser's `x++` / `x += 1` desugaring (`x = x + 1`) type-checks for `byte`/`uint`/`ulong`.
+        if matches!(right, ExpressionNode::Literal(Type::Integer(_))) && left_value.is_integer() {
+            self.current_expected_type = Some(left_value.clone());
+        }
         let right_value =
             self.analyze_expression(right, parent_function, symbol_table, diagnostics)?;
         let right_hir = self.hir_take();
+        self.current_expected_type = None;
         self.is_binding_aliases.truncate(alias_mark);
         self.current_expected_type = saved_expected;
 

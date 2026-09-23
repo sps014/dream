@@ -149,7 +149,7 @@ pub(super) fn statement_line(statement: &dream_syntax::nodes::StatementNode) -> 
         | StatementNode::IfElse(e, _, _, _)
         | StatementNode::Switch(e, _, _) => line(e.position()),
         StatementNode::Defer(Some(e), _) => line(e.position()),
-        StatementNode::Defer(None, _) => None,
+        StatementNode::Defer(None, _) | StatementNode::Overflow(..) => None,
         StatementNode::For(_, Some(cond), _, _) => line(cond.position()),
         StatementNode::Labeled(_, inner) => statement_line(inner),
         StatementNode::Return(None)
@@ -510,6 +510,9 @@ pub struct Analyzer<'a> {
     current_function_is_compute: bool,
     /// True while analyzing `@vertex` / `@fragment` / `@compute` (GPU shader body).
     current_function_is_gpu: bool,
+    /// Overflow behavior stamped on integer arithmetic, set lexically by `checked`/`unchecked`
+    /// blocks and reset at each function body.
+    overflow: dream_hir::Overflow,
     /// The source file of the function whose body is currently being analyzed, used for
     /// file/module-level visibility checks at sites that do not thread `parent_function` (e.g.
     /// bare-identifier global reads). `None` outside any function body.
@@ -604,6 +607,7 @@ impl<'a> Analyzer<'a> {
             compile_targets: CompileTargets::native_only(),
             current_function_is_compute: false,
             current_function_is_gpu: false,
+            overflow: dream_hir::Overflow::Checked,
             current_file: None,
             file_modules: HashMap::new(),
             aliased_imports: Vec::new(),
@@ -916,12 +920,7 @@ impl<'a> Analyzer<'a> {
     /// real adapter is absent even for encodable types; a stub DefId keeps `main` emittable
     /// instead of falling through to the generic "no code was generated" diagnostic.
     pub(in crate::analyzer) fn ensure_json_callee(&mut self, name: &str) {
-        if self
-            .type_ctx
-            .defs
-            .lookup(DefKind::Function, name)
-            .is_none()
-        {
+        if self.type_ctx.defs.lookup(DefKind::Function, name).is_none() {
             self.type_ctx.register(DefKind::Function, name, vec![]);
         }
     }

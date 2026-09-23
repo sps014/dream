@@ -284,10 +284,7 @@ impl<'a> Analyzer<'a> {
                 if field_type.get_type() == "string" {
                     let obj_tid = self.type_ctx.lower(&obj_type);
                     if self.type_ctx.interner.is_shared_type(obj_tid)
-                        && self
-                            .function_table
-                            .get_function(&"string_clone".to_string())
-                            .is_ok()
+                        && self.function_table.get_function("string_clone").is_ok()
                     {
                         let string_ty = field_type.clone();
                         self.hir_set_call("string_clone", vec![value_hir], &string_ty);

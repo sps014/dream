@@ -117,6 +117,7 @@ fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut HashSet<String>) {
             }
             walk_stmts_for_ref_targets(body, out);
         }
+        StatementNode::Overflow(_, _, body) => walk_stmts_for_ref_targets(body, out),
         StatementNode::For(init, cond, step, body) => {
             if let Some(i) = init {
                 walk_stmt_for_ref_targets(i, out);
@@ -313,6 +314,7 @@ fn walk_stmt_for_lambdas(stmt: &StatementNode, out: &mut HashSet<String>) {
             }
             walk_stmts_for_lambdas(body, out);
         }
+        StatementNode::Overflow(_, _, body) => walk_stmts_for_lambdas(body, out),
         StatementNode::For(init, cond, step, body) => {
             if let Some(i) = init {
                 walk_stmt_for_lambdas(i, out);
@@ -582,6 +584,7 @@ fn collect_names_stmt(
             }
             collect_names_block(body, scopes, referenced);
         }
+        StatementNode::Overflow(_, _, body) => collect_names_block(body, scopes, referenced),
         StatementNode::For(init, cond, step, body) => {
             push_scope(scopes);
             if let Some(i) = init {

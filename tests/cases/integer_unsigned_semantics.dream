@@ -1,0 +1,21 @@
+// `uint`/`ulong` values above the signed range must compare, divide, and shift as unsigned, even
+// when the operands only become known at runtime.
+import system;
+fun uint_max(): uint { return 4294967295u; }
+fun ulong_max(): ulong { return 18446744073709551615uL; }
+fun main(): void {
+    let u = uint_max();
+    System.println(u > 1u);
+    System.println(u / 2u);
+    System.println(u % 10u);
+    System.println(u >> 28u);
+    unchecked {
+        System.println(u + 1u == 0u);
+    }
+
+    let l = ulong_max();
+    System.println(l > 1uL);
+    System.println(l / 2uL);
+    System.println(l % 10uL);
+    System.println(l >> 60uL);
+}

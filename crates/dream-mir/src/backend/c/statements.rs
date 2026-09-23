@@ -183,7 +183,8 @@ impl<'a> Emitter<'a> {
                 {
                     return;
                 }
-                let rhs = self.rvalue(rv);
+                let dest = self.operand_ty(&crate::Operand::Copy(place.clone()));
+                let rhs = self.rvalue(rv, Some(dest));
                 let stored = self.store(place, rv, rhs);
                 self.b.expr_stmt(stored);
             }
@@ -552,7 +553,7 @@ impl<'a> Emitter<'a> {
             return false;
         };
         let size = super::types::native_scalar_size(self.cx, *ty).0.max(1);
-        let src = self.rvalue(rv);
+        let src = self.rvalue(rv, None);
         let boxed = self.b.temp(CTy::Ptr, Some(src));
         self.b.call(
             "memcpy",

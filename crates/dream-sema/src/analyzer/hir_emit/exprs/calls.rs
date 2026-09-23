@@ -783,6 +783,7 @@ impl<'a> Analyzer<'a> {
                 HExprKind::Unary {
                     op: dream_hir::UnOp::Not,
                     operand: Box::new(expr),
+                    overflow: dream_hir::Overflow::Wrapping,
                 },
             ));
         }

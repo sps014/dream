@@ -271,6 +271,16 @@ impl<'a> Analyzer<'a> {
         position: TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
+        if callee.is_shader_only && !self.current_function_is_gpu {
+            let display = callee.name.replacen('_', ".", 1);
+            diagnostics.report_error(
+                format!(
+                    "'{display}' only exists inside GPU shaders; call it from a @compute/@vertex/@fragment/@gpu function"
+                ),
+                Some(position),
+            );
+            return;
+        }
         if callee.is_gpu_helper && !self.current_function_is_gpu {
             diagnostics.report_error(
                 format!(

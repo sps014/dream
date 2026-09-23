@@ -23,28 +23,42 @@ Common methods:
 - `Type.parse(str)` — static; parses a string into that integer type, returning `Result<Type, ParseError>`.
 
 ```dream
-println(15.clamp(0, 10));              // 10
-println((-5).abs());                   // 5
+System.println(15.clamp(0, 10));              // 10
+System.println((-5).abs());                   // 5
 let n = int.parse("42").unwrap_or(0);  // 42
 ```
 
 ### Integer overflow
 
-Every integer primitive **wraps** on overflow: two's-complement modulo its own bit width, with no trap and no promotion to a wider type.
+Integer arithmetic is **checked**: an operation whose mathematical result does not fit its type [panics](panics.md), in debug and release builds alike. Nothing is silently promoted to a wider type.
 
-- `int` / `uint` wrap at 32 bits, `long` / `ulong` at 64 bits, `byte` at 8 bits (`+`, `-`, `*`, `<<` all wrap; `byte` results stay in `[0, 255]`).
-- A binary op's result type is its **left operand's** type — `byte + byte` stays `byte`.
-- `/` and `%` by zero panic rather than wrapping.
+- A binary op's result type is its **left operand's** type — `byte + byte` stays `byte`, and overflows past 255.
+- `+`, `-`, `*`, and unary `-` panic when the result is outside the type (`uint` `0u - 1u` panics, as does negating `-2147483648`).
+- `/` and `%` panic on a zero divisor, and on `-2147483648 / -1` (the minimum signed value divided by `-1`, likewise for `%`).
+- `<<` and `>>` panic when the shift count is negative or at least the type's bit width. Bits shifted out of the value are discarded, not an overflow: `1 << 31` is `-2147483648`.
 
 ```dream
-let i: int = 2147483647;   // int.max
-let j = i + 1;              // wraps to -2147483648, not a panic or a wider type
-
-let b: byte = 250b;
-let b2 = b + 10b;           // wraps to 4 (260 mod 256), stays byte
+let i: int = 2147483647;   // the largest int
+let j = i + 1;              // panic: attempt to add with overflow
 ```
 
-There is no `checked` or saturating arithmetic mode. Use `.min` / `.max` / `.clamp()` above, or check operands before an operation, if you need to guard against wraparound explicitly.
+Wrap an `unchecked { }` block around code that wants two's-complement wraparound (hashing, PRNGs, checksums). Every integer op lexically inside wraps modulo its bit width, divides the minimum value by `-1` to itself, and masks shift counts to the width. `checked { }` restores the default inside an `unchecked` region:
+
+```dream
+let h = 2166136261u;
+unchecked {
+    h = (h ^ 97u) * 16777619u;   // FNV-1a step: wraps at 32 bits
+    checked {
+        let n = len + 1;         // back to panicking on overflow
+    }
+}
+```
+
+The mode is lexical: it applies to the statements written inside the block (including lambdas written there), not to functions they call. `checked` and `unchecked` are only keywords directly before `{`, so they stay usable as identifiers. GPU shader code always wraps, and rejects `checked` blocks.
+
+The optimizer removes checks it can prove never fire — a loop counter bounded by `i < n`, a masked `x & 255`, an array length — so counted loops pay nothing.
+
+`Type.parse(str)` reports out-of-range text as `Err(ParseError)` rather than panicking.
 
 ## Floating point
 
@@ -60,8 +74,8 @@ Common methods:
 - `double.parse(str)` — static; parses a string into a `double`, returning `Result<double, ParseError>`.
 
 ```dream
-println((3.14f).abs());                    // 3.14
-println((1.5f).min(2.0f));                 // 1.5
+System.println((3.14f).abs());                    // 3.14
+System.println((1.5f).min(2.0f));                 // 1.5
 let d = double.parse("2.5").unwrap_or(0.0d);
 ```
 
@@ -73,7 +87,7 @@ let d = double.parse("2.5").unwrap_or(0.0d);
 - `bool.parse(str)` — static; accepts exactly `"true"` or `"false"` (case-sensitive), returning `Result<bool, ParseError>`.
 
 ```dream
-println(true.to_int());   // 1
+System.println(true.to_int());   // 1
 let b = bool.parse("true").unwrap_or(false);   // true
 let bad = bool.parse("True").unwrap_or(false); // false — not exact "true"
 ```
@@ -89,8 +103,8 @@ let bad = bool.parse("True").unwrap_or(false); // false — not exact "true"
 - `char.parse(str)` — static; requires exactly one Unicode scalar in `str`; returns `Result<char, ParseError>`.
 
 ```dream
-println('A'.is_alpha());   // true
-println('A'.to_lower());   // 'a'
+System.println('A'.is_alpha());   // true
+System.println('A'.to_lower());   // 'a'
 let s = 'H'.as_string();   // "H"
 let c = char.parse("é").unwrap_or('?');  // 'é'
 ```

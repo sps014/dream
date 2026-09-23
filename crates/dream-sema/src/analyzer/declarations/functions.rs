@@ -112,7 +112,7 @@ impl<'a> Analyzer<'a> {
         // or `main(args: string[])`, but not overloaded or given any other signature.
         // Library crates reject a top-level `main` in the primary compilation file.
         if self.crate_type == CrateType::Lib {
-            if let Ok(info) = self.function_table.get_function(&"main".to_string()) {
+            if let Ok(info) = self.function_table.get_function("main") {
                 let in_primary = match (&info.declaring_file, &self.primary_file) {
                     (Some(decl), Some(primary)) => paths_equal(decl.as_ref(), primary),
                     _ => true,
@@ -128,7 +128,7 @@ impl<'a> Analyzer<'a> {
             }
         } else if self.function_table.is_overloaded("main") {
             diagnostics.report_error("'main' cannot be overloaded".to_string(), None);
-        } else if let Ok(info) = self.function_table.get_function(&"main".to_string()) {
+        } else if let Ok(info) = self.function_table.get_function("main") {
             let ok = info.parameters.is_empty()
                 || (info.parameters.len() == 1 && info.parameters[0] == "string[]");
             if !ok {

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace DreamBench;
@@ -9,9 +10,11 @@ namespace DreamBench;
 /// <summary>
 /// 1:1 C# port of tests/bench/microbenches.dream for side-by-side ns/op comparison.
 /// Pass --dream-scores path/to/native.txt (from run-microbenches.sh) for live ratios.
-/// Dream runs under Wasm/c + ARC; this is native JIT + GC — substrate differs.
+/// Dream runs as native C + ARC; this is Release JIT + GC — substrate differs.
+/// Regex and JSON use compile-time source generators, matching Dream's compiled
+/// regex and `@json` codegen rather than reflection.
 /// </summary>
-public static class Program
+public static partial class Program
 {
     static readonly Dictionary<string, long> DreamScores = new();
     static bool IsWarmup = true;
@@ -271,10 +274,13 @@ public static class Program
         Sink = acc;
     }
 
+    // Source-generated, same pattern as Dream's Pike VM (not bare \d+).
+    [GeneratedRegex(@"[a-z]+\d+", RegexOptions.CultureInvariant)]
+    private static partial Regex FindPattern();
+
     static void BenchRegexFind(int iters)
     {
-        // Same as Dream: not bare \d+ (Dream has a digit-run fast path for that).
-        var re = new Regex(@"[a-z]+\d+", RegexOptions.Compiled);
+        var re = FindPattern();
         string hay = "abc123def456ghi789xyz";
         var sw = Stopwatch.StartNew();
         int acc = 0;
@@ -289,13 +295,13 @@ public static class Program
         Sink = acc;
     }
 
-    sealed class BenchAddress
+    internal sealed class BenchAddress
     {
         public string city { get; set; } = "";
         public string zip { get; set; } = "";
     }
 
-    sealed class BenchUser
+    internal sealed class BenchUser
     {
         public string name { get; set; } = "";
         public int age { get; set; }
@@ -318,11 +324,12 @@ public static class Program
     static void BenchJsonSerialize(int iters)
     {
         var u = MakeBenchUser();
+        var userInfo = BenchJsonContext.Default.BenchUser;
         var sw = Stopwatch.StartNew();
         int acc = 0;
         for (int i = 0; i < iters; i++)
         {
-            string text = JsonSerializer.Serialize(u);
+            string text = JsonSerializer.Serialize(u, userInfo);
             acc += text.Length;
         }
         sw.Stop();
@@ -332,12 +339,13 @@ public static class Program
 
     static void BenchJsonDeserialize(int iters)
     {
-        string text = JsonSerializer.Serialize(MakeBenchUser());
+        var userInfo = BenchJsonContext.Default.BenchUser;
+        string text = JsonSerializer.Serialize(MakeBenchUser(), userInfo);
         var sw = Stopwatch.StartNew();
         int acc = 0;
         for (int i = 0; i < iters; i++)
         {
-            var back = JsonSerializer.Deserialize<BenchUser>(text)!;
+            var back = JsonSerializer.Deserialize(text, userInfo)!;
             acc += back.age + back.scores[2];
         }
         sw.Stop();
@@ -825,3 +833,7 @@ public static class Program
         return Sink == int.MinValue ? 1 : 0;
     }
 }
+
+/// Compile-time JSON for BenchUser, the counterpart of Dream's `@json` codegen.
+[JsonSerializable(typeof(Program.BenchUser))]
+internal partial class BenchJsonContext : JsonSerializerContext;

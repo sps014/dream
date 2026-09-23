@@ -13,8 +13,9 @@
 use super::const_fold::fold as fold_rvalue;
 use super::prop::{subst_stmt_reads, subst_terminator_reads};
 use super::MirPass;
+use crate::int_ty::IntTy;
 use crate::{BlockId, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
-use dream_types::{PrimTy, TyKind, TypeInterner};
+use dream_types::TypeInterner;
 use std::collections::{BTreeMap, HashMap};
 
 pub struct Sccp;
@@ -101,9 +102,7 @@ fn solve(func: &MirFunction, interner: &TypeInterner) -> (Vec<bool>, BTreeMap<cr
             }
             for stmt in &block.stmts {
                 if let Statement::Assign(Place::Local(l), rv) = stmt {
-                    let is_byte =
-                        matches!(interner.kind(func.local_ty(*l)), TyKind::Prim(PrimTy::Byte));
-                    let v = eval_rvalue(rv, &lat, is_byte);
+                    let v = eval_rvalue(rv, &lat, IntTy::of(interner, func.local_ty(*l)));
                     let merged = meet(next.get(l).cloned().unwrap_or(Lat::Top), v);
                     next.insert(*l, merged);
                 }
@@ -148,37 +147,31 @@ fn eval_operand(op: &Operand, lat: &BTreeMap<crate::Local, Lat>) -> Lat {
 }
 
 /// The lattice value of an rvalue: constant-foldable arithmetic over constant inputs stays constant;
-/// anything touching memory / calls is over-defined. `is_byte` mirrors [`const_fold::fold`]'s
-/// masking requirement for the destination local — see its doc comment for why folding must mask
-/// `byte` results itself rather than leaving it to a later pass.
-fn eval_rvalue(rv: &Rvalue, lat: &BTreeMap<crate::Local, Lat>, is_byte: bool) -> Lat {
+/// anything touching memory / calls is over-defined. `dest` is the destination's integer type,
+/// which fixes how [`const_fold::fold`] wraps the result.
+fn eval_rvalue(rv: &Rvalue, lat: &BTreeMap<crate::Local, Lat>, dest: Option<IntTy>) -> Lat {
+    let fold = |rv: Rvalue| match fold_rvalue(&rv, dest) {
+        Some(c) => Lat::Const(c),
+        None => Lat::Bottom,
+    };
+    let binary = |a: &Operand, b: &Operand, build: &dyn Fn(Operand, Operand) -> Rvalue| {
+        match (eval_operand(a, lat), eval_operand(b, lat)) {
+            (Lat::Bottom, _) | (_, Lat::Bottom) => Lat::Bottom,
+            (Lat::Const(x), Lat::Const(y)) => fold(build(Operand::Const(x), Operand::Const(y))),
+            // At least one operand is still Top: delay.
+            _ => Lat::Top,
+        }
+    };
+    let unary = |a: &Operand, build: &dyn Fn(Operand) -> Rvalue| match eval_operand(a, lat) {
+        Lat::Const(x) => fold(build(Operand::Const(x))),
+        other => other,
+    };
     match rv {
         Rvalue::Use(o) => eval_operand(o, lat),
-        Rvalue::Binary(op, a, b) => {
-            let (la, lb) = (eval_operand(a, lat), eval_operand(b, lat));
-            match (la, lb) {
-                (Lat::Bottom, _) | (_, Lat::Bottom) => Lat::Bottom,
-                (Lat::Const(x), Lat::Const(y)) => {
-                    match fold_rvalue(
-                        &Rvalue::Binary(*op, Operand::Const(x), Operand::Const(y)),
-                        is_byte,
-                    ) {
-                        Some(c) => Lat::Const(c),
-                        None => Lat::Bottom,
-                    }
-                }
-                // At least one operand is still Top: delay.
-                _ => Lat::Top,
-            }
-        }
-        Rvalue::Unary(op, a) => match eval_operand(a, lat) {
-            Lat::Const(x) => match fold_rvalue(&Rvalue::Unary(*op, Operand::Const(x)), is_byte) {
-                Some(c) => Lat::Const(c),
-                None => Lat::Bottom,
-            },
-            Lat::Top => Lat::Top,
-            Lat::Bottom => Lat::Bottom,
-        },
+        Rvalue::Binary(op, a, b) => binary(a, b, &|x, y| Rvalue::Binary(*op, x, y)),
+        Rvalue::CheckedBinary(op, a, b) => binary(a, b, &|x, y| Rvalue::CheckedBinary(*op, x, y)),
+        Rvalue::Unary(op, a) => unary(a, &|x| Rvalue::Unary(*op, x)),
+        Rvalue::CheckedNeg(a) => unary(a, &Rvalue::CheckedNeg),
         _ => Lat::Bottom,
     }
 }

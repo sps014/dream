@@ -1,0 +1,57 @@
+import system;
+import system.json;
+
+@json
+class Address {
+    public city: string;
+    public zip: string;
+    public constructor(city: string, zip: string) { this.city = city; this.zip = zip; }
+}
+
+@json
+class User {
+    public name: string;
+    public age: int;
+    public address: Address;
+    public scores: int[];
+    public constructor(name: string, age: int, address: Address, scores: int[]) {
+        this.name = name; this.age = age; this.address = address; this.scores = scores;
+    }
+}
+
+fun make_user(): User {
+    return User("Ada", 36, Address("London", "NW1"), [10, 20, 30]);
+}
+
+fun serialize_loop(iters: int): int {
+    let u = make_user();
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while i < iters {
+        acc = acc + Json.serialize(u).byte_size();
+        i = i + 1;
+    }
+    sw.stop();
+    return acc;
+}
+
+fun deserialize_loop(iters: int): int {
+    let text = Json.serialize(make_user());
+    let fallback = make_user();
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while i < iters {
+        let back = Json.deserialize<User>(text).unwrap_or(fallback);
+        acc = acc + back.age + back.scores[2];
+        i = i + 1;
+    }
+    sw.stop();
+    System.println(text);
+    return acc;
+}
+
+fun main(): void {
+    System.println(serialize_loop(500) + deserialize_loop(500) + serialize_loop(500));
+}

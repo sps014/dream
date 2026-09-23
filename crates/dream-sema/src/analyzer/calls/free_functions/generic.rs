@@ -72,6 +72,7 @@ impl<'a> Analyzer<'a> {
                 is_vertex: dream_abi::attributes::has_vertex_attr(&template.attributes),
                 is_fragment: dream_abi::attributes::has_fragment_attr(&template.attributes),
                 is_gpu_helper: dream_abi::attributes::has_gpu_helper_attr(&template.attributes),
+                is_shader_only: dream_abi::attributes::has_shader_only_attr(&template.attributes),
                 visibility: template.visibility,
                 intrinsic_name: intrinsics::intrinsic_key(&template.attributes),
                 declaring_file: template.file_path.clone(),

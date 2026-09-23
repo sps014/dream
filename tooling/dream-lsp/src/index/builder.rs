@@ -1090,6 +1090,7 @@ impl Builder {
                 }
                 self.walk_block(body, scope);
             }
+            StatementNode::Overflow(_, _, body) => self.walk_block(body, scope),
             StatementNode::WorkgroupDecl(_, _, _) => {}
         }
     }

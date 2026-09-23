@@ -193,10 +193,12 @@ fn mark_rvalue(
     bi: usize,
 ) -> bool {
     match rv {
-        Rvalue::Use(o) | Rvalue::Unary(_, o) | Rvalue::ArrayLen(o) => {
+        Rvalue::Use(o) | Rvalue::Unary(_, o) | Rvalue::CheckedNeg(o) | Rvalue::ArrayLen(o) => {
             mark_operand(o, arr_facts, bi)
         }
-        Rvalue::Binary(_, a, b) => mark_operand(a, arr_facts, bi) | mark_operand(b, arr_facts, bi),
+        Rvalue::Binary(_, a, b) | Rvalue::CheckedBinary(_, a, b) => {
+            mark_operand(a, arr_facts, bi) | mark_operand(b, arr_facts, bi)
+        }
         Rvalue::Select {
             cond,
             then_val,
@@ -418,7 +420,7 @@ fn nonnegative_locals(func: &MirFunction) -> HashSet<u32> {
                 let ok = match rv {
                     Rvalue::Use(Operand::Const(Const::Int(v))) if *v >= 0 => true,
                     Rvalue::Use(Operand::Copy(Place::Local(s))) => nonneg.contains(&s.0),
-                    Rvalue::Binary(BinOp::Add, a, b) => {
+                    Rvalue::Binary(BinOp::Add, a, b) | Rvalue::CheckedBinary(BinOp::Add, a, b) => {
                         (as_local(a).is_some_and(|l| nonneg.contains(&l.0))
                             || matches!(a, Operand::Const(Const::Int(v)) if *v >= 0))
                             && (as_local(b).is_some_and(|l| nonneg.contains(&l.0))

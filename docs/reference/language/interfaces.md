@@ -43,8 +43,8 @@ The static type becomes the interface, but the value remembers its concrete clas
 
 ```dream
 fun describe(a: Animal): void {
-    println(a.speak());   // runs Cat.speak or Dog.speak
-    println(a.legs());
+    System.println(a.speak());   // runs Cat.speak or Dog.speak
+    System.println(a.legs());
 }
 
 describe(Cat());   // meow / 4
@@ -139,7 +139,7 @@ Test what an interface value (or `object`) actually holds at runtime:
 ```dream
 let a: Animal = Cat();
 if a is Cat {
-    println("it's a cat");
+    System.println("it's a cat");
 }
 ```
 
@@ -151,7 +151,7 @@ It works for any target type, unboxing value types held in an `object`:
 ```dream
 let a: Animal = Cat();
 if a is Cat cat {
-    println(cat.speak());   // `cat` aliases the same object
+    System.println(cat.speak());   // `cat` aliases the same object
 }
 ```
 
@@ -202,8 +202,8 @@ Calls use that concrete interface type:
 
 ```dream
 fun describe(c: Container<int>): void {
-    println(c.get());
-    println(c.length);
+    System.println(c.get());
+    System.println(c.length);
 }
 
 let b = Box<int>(7);
@@ -231,7 +231,7 @@ class Remote : Fetcher {
 
 async fun run(f: Fetcher): void {
     let v = f.fetch().await;   // await the Future<int>
-    println(v);
+    System.println(v);
 }
 ```
 

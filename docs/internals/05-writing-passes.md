@@ -52,7 +52,7 @@ Debug-info builds call `optimize_module_opts(.., inline = false)`: RC insertion 
 
 ```mermaid
 flowchart LR
-    p1[CopyConstProp] --> p2[GlobalProp] --> p3[Sccp] --> p4[ConstFold] --> p5[Algebraic] --> p6[Gvn]
+    p1[CopyConstProp] --> p2[GlobalProp] --> p3[Sccp] --> p4[ConstFold] --> p5[Algebraic] --> p5b[OverflowElim] --> p6[Gvn]
     p6 --> p7[Licm] --> p8[LoopUnroll] --> p9[Sroa] --> p10[Dse] --> p11[SimplifyCfg] --> p12[Tco] --> p13[Dce] --> p14[RcElision]
     p14 -.fixpoint: repeat while any changed.-> p1
 ```
@@ -68,8 +68,9 @@ Function-local `MirPass`es:
 - **`CopyConstProp` (`prop.rs`)** — intra-block copy/constant propagation. Within a block, if `x = <const|local>` and `x` is not reassigned before a use, the use is rewritten to the source. Shrinks live ranges and feeds `ConstFold`.
 - **`GlobalProp` (`global_prop.rs`)** — propagation across block boundaries.
 - **`Sccp` (`sccp.rs`)** — sparse conditional constant propagation.
-- **`ConstFold` (`const_fold.rs`)** — evaluates `Binary`/`Unary` rvalues whose operands are all `Const`. Integer ops use `wrapping_*`; division/modulo by zero is **left for the runtime to trap** (the fold returns `None`). The canonical "simplest pass" — read it first.
+- **`ConstFold` (`const_fold.rs`)** — evaluates `Binary`/`Unary`/`CheckedBinary`/`CheckedNeg` rvalues whose operands are all `Const`, at the destination's integer type (`int_ty.rs`). Wrapping ops wrap at that width; a checked op folds only when the result fits, and division/modulo by zero is **left for the runtime to trap** (the fold returns `None`). The canonical "simplest pass" — read it first.
 - **`Algebraic` (`algebraic.rs`)** — algebraic identities (`x + 0 → x`, `x * 1 → x`, `x * 0 → 0`, …).
+- **`OverflowElim` (`overflow_elim.rs`)** — rewrites `CheckedBinary`/`CheckedNeg` to wrapping `Binary`/`Unary` when an interval analysis proves the result fits: single dominating definitions (constants, lengths, masks, remainders, narrowing casts) plus dominating `x < y` branch edges for loop counters not redefined since the branch.
 - **`Gvn` (`gvn.rs`)** — global value numbering, removing redundant computation.
 - **`Licm` (`licm.rs`)** — loop-invariant code motion.
 - **`LoopUnroll` (`loop_unroll.rs`)** — unrolls small counted loops.

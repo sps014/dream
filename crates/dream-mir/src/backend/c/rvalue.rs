@@ -5,7 +5,8 @@ use crate::{Rvalue, UnOp as MirUnOp};
 use dream_types::{PrimTy, TyKind};
 
 impl<'a> Emitter<'a> {
-    pub(super) fn rvalue(&mut self, rv: &Rvalue) -> Expr {
+    /// `dest` is the destination's type when known; integer arithmetic is performed at it.
+    pub(super) fn rvalue(&mut self, rv: &Rvalue, dest: Option<dream_types::TypeId>) -> Expr {
         match rv {
             Rvalue::Use(o) => self.operand(o),
             // The value is just the source local; what makes this a `Move` is that the store site
@@ -37,28 +38,25 @@ impl<'a> Emitter<'a> {
                         Expr::unary(UnOp::Not, eq)
                     };
                 }
-                if matches!(op, crate::BinOp::Div | crate::BinOp::Rem) && self.is_integer_operand(a)
-                {
-                    let lhs = self.operand(a);
-                    let rhs = self.operand(b);
-                    let symbol = Expr::id(self.cx.str_sym("panic: attempt to divide by zero"));
-                    return self.b.expr_block(move |b| {
-                        let t = b.temp(CTy::I64, Some(Expr::cast(CTy::I64, rhs.clone())));
-                        Expr::ternary(
-                            Expr::eq(t.clone(), Expr::i(0)),
-                            Expr::comma(
-                                Expr::call("dream_panic", vec![symbol.clone()]),
-                                Expr::i(0),
-                            ),
-                            Expr::bin(*op, lhs.clone(), t),
-                        )
-                    });
+                match self.binary_int_ty(*op, a, b, dest) {
+                    Some(ty) => self.int_binary(*op, ty, a, b),
+                    None => Expr::bin(*op, self.operand(a), self.operand(b)),
                 }
-                Expr::bin(*op, self.operand(a), self.operand(b))
             }
-            Rvalue::Unary(MirUnOp::Neg, a) => Expr::unary(UnOp::Neg, self.operand(a)),
+            Rvalue::CheckedBinary(op, a, b) => match self.binary_int_ty(*op, a, b, dest) {
+                Some(ty) => self.checked_binary(*op, ty, a, b),
+                None => crate::internal_error!("checked {op:?} on a non-integer operand"),
+            },
+            Rvalue::CheckedNeg(a) => match self.unary_int_ty(a, dest) {
+                Some(ty) => self.checked_neg(ty, a),
+                None => crate::internal_error!("checked negation of a non-integer operand"),
+            },
             Rvalue::Unary(MirUnOp::Not, a) => Expr::unary(UnOp::Not, self.operand(a)),
-            Rvalue::Unary(MirUnOp::BitNot, a) => Expr::unary(UnOp::BitNot, self.operand(a)),
+            Rvalue::Unary(op, a) => match self.unary_int_ty(a, dest) {
+                Some(ty) => self.int_unary(*op, ty, a),
+                None if *op == MirUnOp::Neg => Expr::unary(UnOp::Neg, self.operand(a)),
+                None => Expr::unary(UnOp::BitNot, self.operand(a)),
+            },
             Rvalue::StrLen(s) => Expr::call("dream_str_len", vec![self.operand(s)]),
             Rvalue::StrByteSize(s) => Expr::call("dream_str_byte_size", vec![self.operand(s)]),
             Rvalue::CharAt(s, i, _) => Expr::cast(
@@ -258,9 +256,7 @@ impl<'a> Emitter<'a> {
                 variant,
                 field,
             } => union_field(self.cx, *ty, *variant, *field, self.operand(base)),
-            Rvalue::TypeName(o) => {
-                Expr::call("dream_object_type_name", vec![self.operand(o)])
-            }
+            Rvalue::TypeName(o) => Expr::call("dream_object_type_name", vec![self.operand(o)]),
             Rvalue::IsType(o, ty) => {
                 let tag = runtime_tag(self.cx, *ty);
                 Expr::eq(
@@ -288,21 +284,6 @@ impl<'a> Emitter<'a> {
             }
             _ => None,
         }
-    }
-
-    fn is_integer_operand(&self, o: &crate::Operand) -> bool {
-        if matches!(
-            o,
-            crate::Operand::Const(crate::Const::Int(_) | crate::Const::Long(_))
-        ) {
-            return true;
-        }
-        matches!(
-            self.operand_kind(o),
-            Some(TyKind::Prim(
-                PrimTy::Int | PrimTy::UInt | PrimTy::Long | PrimTy::ULong | PrimTy::Byte
-            )) | Some(TyKind::Enum(_))
-        )
     }
 
     fn emit_new(

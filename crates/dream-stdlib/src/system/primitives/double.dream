@@ -107,7 +107,9 @@ extend double : Comparable<double> {
                     if (c < '0') || (c > '9') {
                         break;
                     }
-                    exp = exp * 10 + ((int)c - 48);
+                    if exp < 100000 {
+                        exp = exp * 10 + ((int)c - 48);
+                    }
                     i = i + 1;
                 }
                 let factor = 1.0d;

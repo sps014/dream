@@ -354,6 +354,20 @@ impl FunctionTable {
             .unwrap_or(false)
     }
 
+    /// The key of the non-variadic overload of `base` whose parameter type names are exactly
+    /// `params` — how a `fun(...)` expected type selects an overloaded function taken as a value.
+    pub fn overload_with_params(&self, base: &str, params: &[String]) -> Option<&str> {
+        self.overloads
+            .get(base)?
+            .iter()
+            .find(|key| {
+                self.functions
+                    .get(*key)
+                    .is_some_and(|info| !info.is_variadic && info.parameters == params)
+            })
+            .map(String::as_str)
+    }
+
     /// The emitted name of the declaration of `base` whose parameter list is `parameter_types`:
     /// the bare base when `base` is not overloaded, otherwise the signature-mangled key.
     pub fn resolve_emitted_name(
@@ -522,7 +536,7 @@ impl FunctionTable {
         Some(score)
     }
 
-    pub fn get_function(&self, name: &String) -> Result<FunctionTableInfo, SymbolError> {
+    pub fn get_function(&self, name: &str) -> Result<FunctionTableInfo, SymbolError> {
         if !self.functions.contains_key(name) {
             return Err(SymbolError::new(format!(
                 "Function does not exist ({})",
@@ -596,6 +610,8 @@ pub struct FunctionTableInfo {
     pub is_fragment: bool,
     /// True when the declaration carries `@gpu` (callable from shaders as a WGSL helper).
     pub is_gpu_helper: bool,
+    /// True when the declaration carries `@shader_only`: only callable from GPU code.
+    pub is_shader_only: bool,
     pub intrinsic_name: Option<String>,
     /// Accessibility of the declaration. For methods this gates external calls (private methods
     /// may only be called from within their declaring type; `internal` ones from anywhere in the
@@ -641,6 +657,7 @@ impl FunctionTableInfo {
             is_vertex: false,
             is_fragment: false,
             is_gpu_helper: false,
+            is_shader_only: false,
             intrinsic_name: None,
             visibility: Visibility::Public,
             declaring_file: None,
@@ -696,6 +713,7 @@ impl FunctionTableInfo {
         info.is_vertex = dream_abi::attributes::has_vertex_attr(&func.attributes);
         info.is_fragment = dream_abi::attributes::has_fragment_attr(&func.attributes);
         info.is_gpu_helper = dream_abi::attributes::has_gpu_helper_attr(&func.attributes);
+        info.is_shader_only = dream_abi::attributes::has_shader_only_attr(&func.attributes);
         info.intrinsic_name = intrinsic_name;
         // `extern` functions/methods are interop entry points (WASM imports): they cannot be
         // host-exported and privacy is meaningless for them, so they are always call-visible.

@@ -20,6 +20,7 @@ impl<'a> Analyzer<'a> {
             dream_hir::HExprKind::Unary {
                 op: dream_hir::UnOp::Neg,
                 operand,
+                ..
             } => {
                 if let dream_hir::HExprKind::IntLit(0) = operand.kind {
                     Some("0".to_string())

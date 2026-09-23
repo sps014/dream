@@ -1,42 +1,59 @@
 #include "dream_rt_wasm32.h"
 
+static int32_t *word(dream_ptr p) {
+    return (int32_t *)(uintptr_t)(uint32_t)p;
+}
+
 #ifndef DREAM_WASM32_THREADS
 
-void dream_lock_acquire(dream_ptr lock_addr) { (void)lock_addr; }
+/* A module without Tasks runs on one thread, so nothing can contend. The words still count:
+ * a reentrant lock is always acquirable, but a semaphore at zero can only be refilled by this
+ * same thread, so an acquire that would wait is a guaranteed deadlock and panics instead. */
 
-void dream_lock_release(dream_ptr lock_addr) { (void)lock_addr; }
+void dream_lock_acquire(dream_ptr lock_addr) { *word(lock_addr) += 1; }
+
+void dream_lock_release(dream_ptr lock_addr) {
+    int32_t *w = word(lock_addr);
+    if (*w <= 0) {
+        dream_panic(dream_utf8_to_string("panic: lock released while not held"));
+    }
+    *w -= 1;
+}
 
 int32_t dream_lock_try_acquire(dream_ptr lock_addr) {
-    (void)lock_addr;
+    dream_lock_acquire(lock_addr);
     return 1;
 }
 
 int32_t dream_lock_try_acquire_for(dream_ptr lock_addr, int32_t timeout_ms) {
-    (void)lock_addr;
     (void)timeout_ms;
-    return 1;
+    return dream_lock_try_acquire(lock_addr);
 }
-
-void dream_semaphore_acquire(dream_ptr semaphore) { (void)semaphore; }
-
-void dream_semaphore_release(dream_ptr semaphore) { (void)semaphore; }
 
 int32_t dream_semaphore_try_acquire(dream_ptr semaphore) {
-    (void)semaphore;
+    int32_t *w = word(semaphore);
+    if (*w <= 0) {
+        return 0;
+    }
+    *w -= 1;
     return 1;
 }
 
+void dream_semaphore_acquire(dream_ptr semaphore) {
+    if (!dream_semaphore_try_acquire(semaphore)) {
+        dream_panic(dream_utf8_to_string(
+            "panic: semaphore acquire would block forever (no other thread can release it)"));
+    }
+}
+
+void dream_semaphore_release(dream_ptr semaphore) { *word(semaphore) += 1; }
+
 int32_t dream_semaphore_try_acquire_for(dream_ptr semaphore, int32_t timeout_ms) {
-    (void)semaphore;
     (void)timeout_ms;
-    return 1;
+    return dream_semaphore_try_acquire(semaphore);
 }
 
 #else
-
-static int32_t *word(dream_ptr p) {
-    return (int32_t *)(uintptr_t)(uint32_t)p;
-}
 
 static int32_t thread_id(void) { return dream_instance_tid(); }
 

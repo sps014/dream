@@ -173,8 +173,8 @@ fn stmt_read_locals(stmt: &Statement) -> Vec<u32> {
 fn rvalue_operands(rv: &Rvalue) -> Vec<&Operand> {
     let mut out = Vec::new();
     match rv {
-        Rvalue::Use(o) | Rvalue::Unary(_, o) => out.push(o),
-        Rvalue::Binary(_, a, b) => {
+        Rvalue::Use(o) | Rvalue::Unary(_, o) | Rvalue::CheckedNeg(o) => out.push(o),
+        Rvalue::Binary(_, a, b) | Rvalue::CheckedBinary(_, a, b) => {
             out.push(a);
             out.push(b);
         }

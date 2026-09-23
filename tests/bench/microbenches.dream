@@ -10,9 +10,11 @@ import system.text;
 // Output lines: `bench <name> ns_total=<n> iters=<n> ns_per_op=<n>`
 //
 // Notes vs C# (`tests/bench/csharp`):
-// - Dream executes under Wasm/c + ARC; C# is native JIT + GC.
+// - Dream is native C + ARC (`dream --release run`); C# is Release JIT + GC.
 // - `char_scan` is a `char_at` loop over UTF-16 units; `byte_scan` walks UTF-16 LE payload bytes.
 // - `substring(start, end)` is start/end indices; C# uses (start, length).
+// - `regex_find` is the Pike VM; C# uses a source-generated compiled regex.
+// - `json_*` is `@json` codegen; C# uses System.Text.Json source generation.
 
 let measuring: bool = true;
 
@@ -24,7 +26,10 @@ class BenchSink {
         this.v = 0;
     }
     public fun add(x: int): int {
-        this.v = this.v + x;
+        // Sink only: the total is not the measurement, and it wraps across the suite.
+        unchecked {
+            this.v = this.v + x;
+        }
         return x;
     }
 }
@@ -46,7 +51,9 @@ fun report(name: string, nanos: long, iters: int): void {
 // Sinks must be externally observable or the optimizer deletes the timed loop outright
 // (inlined-and-discarded pure results get DCE'd, reporting `ns_total=0`).
 fun sink_int(x: int): int {
-    bench_sink.v = bench_sink.v + x;
+    unchecked {
+        bench_sink.v = bench_sink.v + x;
+    }
     return x;
 }
 
@@ -690,7 +697,10 @@ fun bench_quicksort(iters: int): void {
     while r < iters {
         let t = 0;
         while t < n {
-            seed = seed * 1103515245 + 12345;
+            // Same LCG as the C# bench (`unchecked` multiply). The product does not fit in `int`.
+            unchecked {
+                seed = seed * 1103515245 + 12345;
+            }
             a[t] = (seed >> 16) & 1023;
             t = t + 1;
         }
@@ -771,7 +781,10 @@ fun tco_sum(n: int, acc: int): int {
     if n == 0 {
         return acc;
     }
-    return tco_sum(n - 1, acc + n);
+    // 5e6-deep sentinel, not a timed bench. The running total wraps past `int`.
+    unchecked {
+        return tco_sum(n - 1, acc + n);
+    }
 }
 
 interface BenchOp {
@@ -928,23 +941,28 @@ fun bench_wordcount(iters: int): void {
 fun bench_parse_ints(iters: int): void {
     let src = "1234567890";
     let n = src.length;
+    // Clock bit keeps the digit loop opaque so SCCP cannot delete it. The
+    // product does not fit in `int` when the bit is set; C# runs this loop unchecked
+    // and accumulates into a 64-bit sink.
     let bias = (int)(Time.nano_time() & 1L);
     let sw = Stopwatch();
-    let acc = 0;
+    let acc: long = 0;
     let i = 0;
     while i < iters {
         let v = bias;
         let j = 0;
         while j < n {
-            v = v * 10 + ((int)src.char_at(j) - 48);
+            unchecked {
+                v = v * 10 + ((int)src.char_at(j) - 48);
+            }
             j = j + 1;
         }
-        acc = acc + v;
+        acc = acc + (long)v;
         i = i + 1;
     }
     sw.stop();
     report("parse_ints", sw.elapsed_nanos, iters);
-    sink_int(acc);
+    sink_int((int)acc);
 }
 
 // One op = two discriminated-union matches (Some hit + None hit).

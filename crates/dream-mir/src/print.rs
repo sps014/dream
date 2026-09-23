@@ -213,6 +213,10 @@ fn rvalue(r: &Rvalue) -> String {
         ),
         Rvalue::Binary(op, a, b) => format!("{:?}({}, {})", op, operand(a), operand(b)),
         Rvalue::Unary(op, a) => format!("{:?}({})", op, operand(a)),
+        Rvalue::CheckedBinary(op, a, b) => {
+            format!("Checked{:?}({}, {})", op, operand(a), operand(b))
+        }
+        Rvalue::CheckedNeg(a) => format!("CheckedNeg({})", operand(a)),
         Rvalue::Call { callee, args } => format!("call def{}({})", callee.def.0, ops(args)),
         Rvalue::IndirectCall { target, args, .. } => {
             format!("call_indirect {}({})", operand(target), ops(args))

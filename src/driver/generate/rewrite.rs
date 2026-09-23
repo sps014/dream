@@ -848,6 +848,11 @@ fn rewrite_stmt<'a>(
             )?,
             rewrite_function_body(arena, body, by_site, diagnostics, file, file_contents)?,
         ),
+        StatementNode::Overflow(mode, keyword, body) => StatementNode::Overflow(
+            *mode,
+            keyword.clone(),
+            rewrite_function_body(arena, body, by_site, diagnostics, file, file_contents)?,
+        ),
         StatementNode::Defer(budget, body) => StatementNode::Defer(
             match budget {
                 Some(q) => Some(rewrite_expr(
@@ -1343,6 +1348,9 @@ fn shift_stmt<'a>(map: &SpanMap, arena: &'a Bump, st: &StatementNode<'a>) -> Sta
             q.as_ref().map(|x| shift_expr(map, arena, x)),
             shift_stmts(map, arena, body),
         ),
+        StatementNode::Overflow(mode, keyword, body) => {
+            StatementNode::Overflow(*mode, map.token(keyword), shift_stmts(map, arena, body))
+        }
         StatementNode::WorkgroupDecl(t, ty, n) => {
             StatementNode::WorkgroupDecl(map.token(t), ty.clone(), *n)
         }

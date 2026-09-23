@@ -74,18 +74,29 @@ extend long : Comparable<long> {
         if i >= n {
             return Result.Err(ParseError.invalid("cannot parse long: no digits"));
         }
-        let result = 0L;
+        let limit = 9223372036854775807uL;
+        if neg {
+            limit = 9223372036854775808uL;
+        }
+        let result = 0uL;
         while i < n {
             let c = text.char_at(i);
             if (c < '0') || (c > '9') {
                 return Result.Err(ParseError.invalid("cannot parse long: invalid digit"));
             }
-            result = result * 10L + (long)((int)c - 48);
+            let d = (ulong)((int)c - 48);
+            if result > (limit - d) / 10uL {
+                return Result.Err(ParseError.invalid("cannot parse long: value out of range"));
+            }
+            result = result * 10uL + d;
             i = i + 1;
         }
-        if neg == true {
-            return Result.Ok(0L - result);
+        if neg {
+            // The magnitude of long.MIN is not a long, so negate in wrapping ulong arithmetic.
+            unchecked {
+                return Result.Ok((long)(0uL - result));
+            }
         }
-        return Result.Ok(result);
+        return Result.Ok((long)result);
     }
 }

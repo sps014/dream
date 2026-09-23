@@ -26,6 +26,7 @@ mod conditionals;
 mod defer_stmt;
 mod lock;
 mod loops;
+mod overflow_block;
 
 impl<'a> Analyzer<'a> {
     /// Reports a diagnostic when a control-flow condition is not `bool`. Already-`Unknown` conditions

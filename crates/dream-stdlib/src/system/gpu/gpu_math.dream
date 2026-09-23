@@ -2,7 +2,7 @@ module system.gpu;
 
 // Math helpers for GPU shaders (`@compute` / `@vertex` / `@fragment`).
 // Inside shaders the WGSL emitter maps these method names to WGSL builtins
-// (`sin`, `normalize`, `cross`, …). On the CPU they use host `Math` (stubs for some vec/mat ops).
+// (`sin`, `normalize`, `cross`, …). On the CPU they compute the same result with host `Math`.
 public static class GpuMath {
     // Smaller of two floats (WGSL `min`).
     public static fun min(a: float, b: float): float {
@@ -73,11 +73,9 @@ public static class GpuMath {
     public static fun atan2(y: float, x: float): float {
         return (float)Math.atan2((double)y, (double)x);
     }
-    // Natural log (WGSL `log`). CPU body is a stub — use only inside shaders.
+    // Natural log (WGSL `log`).
     public static fun log(x: float): float {
-        // CPU stub — shaders map to WGSL `log`. Host Math has no ln.
-        if x <= 0.0 { return 0.0; }
-        return GpuMath.pow(x, 0.0) - 1.0; // 0 for positive x; shader path uses real log
+        return (float)Math.log((double)x);
     }
     // Sign of `x`: −1, 0, or 1 (WGSL `sign`).
     public static fun sign(x: float): float {

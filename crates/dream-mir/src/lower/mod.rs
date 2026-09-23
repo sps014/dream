@@ -146,7 +146,10 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
             ty: g.ty,
         })
         .collect();
-    let uses_type_name = functions.iter().chain(polls.iter()).any(func_reads_type_name);
+    let uses_type_name = functions
+        .iter()
+        .chain(polls.iter())
+        .any(func_reads_type_name);
     Mir {
         functions,
         polls,
@@ -639,6 +642,7 @@ fn const_int_value(e: &HExpr) -> Option<i64> {
         HExprKind::Unary {
             op: dream_hir::UnOp::Neg,
             operand,
+            ..
         } => const_int_value(operand).map(|v| -v),
         _ => None,
     }

@@ -26,14 +26,14 @@ async fun main(): void {
 There is no spawn message and no `join()`.
 Each task has its own **private memory** (ordinary `new`, strings, lists, and private globals).
 
-`@shared class` instances, `Lock` / `Semaphore`, and `CancellationToken` live in **one shared place** both sides can see, so pointers and `lock` still work across tasks.
+`shared class` instances, `Lock` / `Semaphore`, and `CancellationToken` live in **one shared place** both sides can see, so pointers and `lock` still work across tasks.
 
-Captures and the body's return type must be **`shared`**: a blittable value, `string`, a value struct of `shared` fields, or an `@shared class`.
+Captures and the body's return type must be **`shared`**: a blittable value, `string`, a value struct of `shared` fields, or a `shared class`.
 Ordinary classes, arrays, and `List` may **move** into the task (exclusive ownership; the sender cannot use the binding afterwards).
 Capturing them by shared reference is a compile error.
 
 !!! note "Browser status"
-    The browser runtime (`runtime/dream.js`) shares memory across every spawned `Worker`, matching native — but the host page must be served with the [Cross-Origin Isolation](https://developer.mozilla.org/en-US/docs/Web/API/crossOriginIsolated) headers (`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, or `credentialless`) or shared memory allocation fails silently in some browsers. `@shared` capture across tasks needs those headers.
+    The browser runtime (`runtime/dream.js`) shares memory across every spawned `Worker`, matching native — but the host page must be served with the [Cross-Origin Isolation](https://developer.mozilla.org/en-US/docs/Web/API/crossOriginIsolated) headers (`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, or `credentialless`) or shared memory allocation fails silently in some browsers. `shared` capture across tasks needs those headers.
 
 ## The model
 
@@ -53,7 +53,7 @@ Capturing them by shared reference is a compile error.
                                  ▼
                 ┌────────────────────────────────────────┐
                 │  Shared objects (one place both can    │
-                │  see): @shared / lock / moved values   │
+                │  see): shared / lock / moved values    │
                 └────────────────────────────────────────┘
 ```
 
@@ -73,7 +73,7 @@ public class Task {
 
 `TOut` is inferred from the body.
 Cancelling or dropping the spawn Future hard-aborts the task (`Promise.cancel`).
-Prefer a captured `@shared` `CancellationToken` for cooperative cancel.
+Prefer a captured `shared` `CancellationToken` for cooperative cancel.
 
 ## Spawn
 
@@ -147,7 +147,7 @@ A task body may be a **capturing lambda** — as long as everything it captures 
 - a blittable / unmanaged local,
 - a `string`,
 - a value struct of `shared` fields,
-- an **`@shared class`** instance (captured by reference, guarded by its lock word), or
+- a **`shared class`** instance (captured by reference, guarded by its lock word), or
 - a **managed heap value moved by pointer hand-off** — an ordinary class instance, an array (`int[]`, `Job[]`), `List<T>`, … Tasks share the parent's memory, so the move is zero-copy: the object's ownership transfers and **the sender's binding cannot be used afterwards** (a use after the move is a compile error until it is reassigned).
 
 What stays rejected: anything that would copy a non-shared *reference* across the boundary without transferring ownership — e.g. a value struct embedding an ordinary class field.
@@ -162,8 +162,7 @@ async fun main(): void {
 ```
 
 ```dream
-@shared
-class Counter {
+shared class Counter {
     public value: int;
     public constructor() { this.value = 0; }
 
@@ -187,14 +186,14 @@ async fun main(): void {
 }
 ```
 
-`lock (obj) { ... }` is a reentrant mutual-exclusion block and requires an `@shared class` (a lock word), not every `shared` type.
-An `@shared class`'s fields must themselves be `shared` (the closed-graph rule).
+`lock (obj) { ... }` is a reentrant mutual-exclusion block and requires a `shared class` (a lock word), not every `shared` type.
+A `shared class`'s fields must be `shared` or managed heap references whose graph joins the object's shared region — see the [closed-graph field rule](classes-structs.md).
 
 ## Cancellation
 
 Two layers:
 
-**Cooperative (preferred):** capture an `@shared` `CancellationToken` and poll it; the owner calls `CancellationSource.cancel()`.
+**Cooperative (preferred):** capture a `shared` `CancellationToken` and poll it; the owner calls `CancellationSource.cancel()`.
 
 ```dream
 let src = CancellationSource();
@@ -207,7 +206,7 @@ src.cancel();
 let _ = w.await;
 ```
 
-**Hard abort:** `Promise.cancel(w)` (or dropping the Future) stops the task immediately. The browser terminates the worker; native `dream run` detaches the OS thread if the body is still running. Hard abort does **not** run Dream `finally` and may abandon that task's private memory — prefer the token when `@shared` state must stay consistent.
+**Hard abort:** `Promise.cancel(w)` (or dropping the Future) stops the task immediately. The browser terminates the worker; native `dream run` detaches the OS thread if the body is still running. Hard abort does **not** unwind the task — its pending releases and `del` destructors never run, and its private memory may be abandoned — prefer the token when `shared` state must stay consistent.
 
 A task that has already finished its body is joined and its env is released (`Debug.live_objects` stays flat across repeated `spawn`).
 
@@ -247,8 +246,8 @@ Async bodies use `dispatch_async`.
 
 | Runtime | Notes |
 |---------|--------|
-| Native (`dream run`) | One OS thread per task; private memory per task plus shared objects for `@shared`. |
-| Browser | One `Worker` per task; private memory per task; `@shared` needs `Cross-Origin-Opener-Policy` / `Cross-Origin-Embedder-Policy` (shared memory). |
+| Native (`dream run`) | One OS thread per task; private memory per task plus shared objects for `shared`. |
+| Browser | One `Worker` per task; private memory per task; `shared` needs `Cross-Origin-Opener-Policy` / `Cross-Origin-Embedder-Policy` (shared memory). |
 | Node | One `worker_threads.Worker` per task; same private-vs-shared memory model. |
 
 ## Notes and limits
@@ -261,7 +260,7 @@ Async bodies use `dispatch_async`.
 ## See also
 
 - [Lock & Semaphore](../stdlib/sync.md) — standalone synchronization primitives.
-- [Classes & Structs](classes-structs.md) — `@shared class` and the closed-graph field rule.
-- [Memory Management](memory.md) — ARC, including the path `@shared` classes use.
+- [Classes & Structs](classes-structs.md) — `shared class` and the closed-graph field rule.
+- [Memory Management](memory.md) — ARC, including the path `shared` classes use.
 - [Async](async.md) — cooperative `CancellationToken` / `Promise.cancel`.
 - [Generics](generics.md) — `T : shared`.

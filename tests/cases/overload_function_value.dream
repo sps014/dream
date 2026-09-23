@@ -1,0 +1,17 @@
+import system;
+
+fun add(a: int, b: int): int { return a + b; }
+fun add(a: double, b: double): double { return a + b + 0.5d; }
+fun add(a: string, b: string): string { return a + b; }
+
+fun apply(f: fun(int, int): int, x: int, y: int): int { return f(x, y); }
+
+fun main(): void {
+    let fi: fun(int, int): int = add;
+    let fd: fun(double, double): double = add;
+    let fs: fun(string, string): string = add;
+    System.println(fi(2, 3));
+    System.println(fd(1.0d, 2.0d));
+    System.println(fs("a", "b"));
+    System.println(apply(add, 4, 5));
+}

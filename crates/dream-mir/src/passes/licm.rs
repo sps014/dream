@@ -385,7 +385,10 @@ fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => operand_reads(o, f),
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b, _) | Rvalue::ByteAt(a, b, _) => {
+        Rvalue::Binary(_, a, b)
+        | Rvalue::CheckedBinary(_, a, b)
+        | Rvalue::CharAt(a, b, _)
+        | Rvalue::ByteAt(a, b, _) => {
             operand_reads(a, f);
             operand_reads(b, f);
         }
@@ -412,7 +415,7 @@ fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
             operand_reads(array, f);
             operand_reads(new_len, f);
         }
-        Rvalue::Unary(_, a) => operand_reads(a, f),
+        Rvalue::Unary(_, a) | Rvalue::CheckedNeg(a) => operand_reads(a, f),
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }
         | Rvalue::UnionNew { args, .. }

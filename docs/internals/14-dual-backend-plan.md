@@ -5,9 +5,9 @@
 > (pretty-printed to `.wat` via wasmprinter). Kept as a historical decision record; CLI details
 > below (`--backend wasm`, `Target::Wasm`, `runtime/*.wat`) reflect the plan, not the current tree.
 
-Same MIR, two emitters. There is **no LLVM backend**. `dream run` / `test` / `debug-adapter` compile MIR → C → `cc` → `.bin`. WAT/WASM is for `--runtime --web` / `--node` (and explicit `--backend wasm` compile-only).
+The plan as written (historical): same MIR, two emitters, and **no LLVM backend**. `dream run` / `test` / `debug-adapter` compile MIR → C → `cc` → `.bin`. WAT/WASM is for `--runtime --web` / `--node` (and explicit `--backend wasm` compile-only).
 
-## What ships
+## What the plan proposed (historical)
 
 | | Native C (`Target::NativeC`, default run) | Wasm (`Target::Wasm`) |
 |---|---|---|
@@ -27,7 +27,7 @@ Numeric ABI (`TAG_*`, string header, future slots) is shared in
 `crates/dream-mir/src/abi.rs` and `crates/dream-mir/src/runtime/c/include/dream_abi.h`
 (lockstep test `dream_abi_h_matches_abi_rs`).
 
-## Layout
+## Layout at the time (historical)
 
 - Wasm helpers: authored WAT under `crates/dream-mir/src/runtime/*.wat`.
 - Native helpers: `crates/dream-mir/src/runtime/c/native/`.
@@ -35,8 +35,8 @@ Numeric ABI (`TAG_*`, string header, future slots) is shared in
 - Catalog (link lists, PCRE2 sources, `--global-base`): `crates/dream-mir/src/runtime/modules.rs`.
 - Rebuild `regex.wat` only: `dreamer toolchain install wasi-sdk` then `scripts/build-runtime.sh` (not cargo / Windows CI).
 
-## Non-goals
+## Non-goals at the time
 
 - LLVM IR, libLLVM, or merging branch `llvm`.
-- Deleting the Wasm backend (browser still needs it).
+- Deleting the Wasm backend (browser still needed it — later superseded by C → wasi-sdk).
 - c as a native runner.

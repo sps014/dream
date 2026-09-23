@@ -1,6 +1,6 @@
 # Lock and Semaphore
 
-Coordinate [Task](../language/tasks.md) threads that share objects. Both types are `@shared class`, so a worker body can capture them.
+Coordinate [Task](../language/tasks.md) threads that share objects. Both types are `shared class`, so a worker body can capture them.
 
 ```dream
 import system;

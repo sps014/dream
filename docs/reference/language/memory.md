@@ -66,7 +66,7 @@ fun make_list(): int[] {
 
 fun main() {
     let result = make_list();
-    println(result[0]);
+    System.println(result[0]);
 } // result leaves scope -> count 0 -> freed
 ```
 
@@ -81,7 +81,7 @@ The following are documented limitations, not silent unsoundness — each degrad
 |---|---|
 | Cycles routed through `object`-typed loose references | Deferred: requires runtime type introspection to trace |
 | JS↔Dream cross-collector cycles | Interop boundary is weak-by-convention; use id-based protocols |
-| Data races across threads | Use `Lock` on a `@shared` class. Dream does not yet reject races for you |
+| Data races across threads | Use `Lock` on a `shared class`. Dream does not yet reject races for you |
 
 ## Advanced: reference cycles
 

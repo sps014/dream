@@ -11,7 +11,7 @@ fun main(): void {
     el.classList.add("a", "b", "c");
 
     let n: int = el.childNodes.length;
-    println("children: " + n);
+    System.println("children: " + n);
 }
 ```
 
@@ -139,9 +139,9 @@ async fun load(): void {
     switch (resp) {
         Some(r) => {
             let ok: bool = r.ok;
-            println("ok = " + ok);
+            System.println("ok = " + ok);
         }
-        None => println("request failed"),
+        None => System.println("request failed"),
     }
 }
 ```

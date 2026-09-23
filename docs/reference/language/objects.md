@@ -20,13 +20,13 @@ Check the runtime type before casting:
 ```dream
 fun describe(o: object): void {
     if o is int {
-        print("int: ");
-        println((int)o);
+        System.print("int: ");
+        System.println((int)o);
     } else if (o is string) {
-        print("string: ");
-        println((string)o);
+        System.print("string: ");
+        System.println((string)o);
     } else {
-        println("something else");
+        System.println("something else");
     }
 }
 ```
@@ -40,9 +40,9 @@ On a non-`object` variable, `is` is resolved at compile time — a matching bran
 ```dream
 fun describe(o: object): void {
     if o is int n {
-        println(n + 1);   // `n` is an int, unboxed from `o`
+        System.println(n + 1);   // `n` is an int, unboxed from `o`
     } else if (o is string s) {
-        println(s);       // `s` is a string
+        System.println(s);       // `s` is a string
     }
 }
 ```

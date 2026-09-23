@@ -21,12 +21,11 @@ impl<'a> Analyzer<'a> {
         };
         // Live branches of the chain in source order, each `(condition HIR, body)`. An `is` condition
         // on a concrete (non-`object`) operand folds to a compile-time constant: a `false` branch is
-        // dead (skipped entirely, so its body — valid only under other instantiations — is never
-        // type-checked), and a `true` branch is unconditionally taken, becoming the terminal `else`
-        // and ending the chain. Regular conditions are analyzed normally and keep their HIR.
+        // dead and emits no HIR, and a `true` branch is unconditionally taken, becoming the terminal
+        // `else` and ending the chain. Dead branches are still type-checked outside generic
+        // instantiations (see `check_dead_branch`). Regular conditions keep their HIR.
         let mut arms: Vec<(HExpr, Vec<HStmt>)> = Vec::new();
         let mut terminal: Vec<HStmt> = Vec::new();
-        let mut terminated = false;
 
         // Every branch of the chain (primary, then each `else if`) as `(condition, position, body)`.
         let branches = std::iter::once((condition, condition.position(), if_body))
@@ -35,7 +34,8 @@ impl<'a> Analyzer<'a> {
         let mut branch_moved: Vec<std::collections::HashSet<String>> = Vec::new();
         let before_if = self.snapshot_moved();
 
-        for (cond_expr, cond_pos, body) in branches {
+        let mut taken_index: Option<usize> = None;
+        for (index, (cond_expr, cond_pos, body)) in branches.enumerate() {
             self.restore_moved(before_if.clone());
             // An `is`-with-binding condition declares a narrowed local `name: T` scoped to the taken
             // branch only. This covers a bare `if (x is T name)` and every `is`-binding reachable
@@ -49,7 +49,11 @@ impl<'a> Analyzer<'a> {
             // at compile time, so a branch is either taken unconditionally or is dead. An `object` or
             // interface operand needs a runtime tag check, so it falls through to the general
             // (runtime-`IsType`) path below.
-            if let ExpressionNode::IsExpression(left, right_type, _) = cond_expr {
+            let mut folded = cond_expr;
+            while let ExpressionNode::Parenthesized(_, inner) = folded {
+                folded = inner;
+            }
+            if let ExpressionNode::IsExpression(left, right_type, _) = folded {
                 let left_t = self
                     .analyze_expression(left, ctx.parent_function, ctx.symbol_table, diagnostics)
                     .unwrap_or(Type::Unknown);
@@ -72,10 +76,17 @@ impl<'a> Analyzer<'a> {
                         )?;
                         terminal = self.hir_close_block();
                         branch_moved.push(self.snapshot_moved());
-                        terminated = true;
+                        taken_index = Some(index);
                         break;
                     } else {
-                        // Dead branch: skip it entirely (do not analyze its body).
+                        self.check_dead_branch(
+                            None,
+                            &bindings,
+                            body,
+                            ctx,
+                            has_parent_while,
+                            diagnostics,
+                        )?;
                         continue;
                     }
                 }
@@ -109,7 +120,26 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        if !terminated {
+        if let Some(taken) = taken_index {
+            let rest = std::iter::once((condition, if_body))
+                .chain(else_if.iter().map(|i| (&i.0, &i.1)))
+                .skip(taken + 1);
+            for (cond_expr, body) in rest {
+                let mut bindings = Vec::new();
+                Self::collect_is_bindings(cond_expr, &mut bindings);
+                self.check_dead_branch(
+                    Some(cond_expr),
+                    &bindings,
+                    body,
+                    ctx,
+                    has_parent_while,
+                    diagnostics,
+                )?;
+            }
+            if let Some(body) = else_body {
+                self.check_dead_branch(None, &[], body, ctx, has_parent_while, diagnostics)?;
+            }
+        } else {
             self.restore_moved(before_if.clone());
             if let Some(body) = else_body {
                 self.hir_open_block();
@@ -146,5 +176,53 @@ impl<'a> Analyzer<'a> {
             self.hir_push_stmt(stmt);
         }
         Ok(())
+    }
+
+    /// Type-checks a branch the `is` fold proved dead, without emitting HIR for it. Inside a generic
+    /// instantiation the branch is skipped instead: it is typically only valid for *other* type
+    /// arguments (`if (x is int) { x + 1 }` under `T = string`), so checking it would report errors
+    /// the author cannot fix. Narrowed `is` bindings are declared without the cast validation the
+    /// live path performs, because the cast is exactly what the fold proved impossible.
+    fn check_dead_branch(
+        &mut self,
+        cond: Option<&ExpressionNode<'a>>,
+        bindings: &[(&SyntaxToken, &Type, &ExpressionNode<'a>)],
+        body: &[StatementNode<'a>],
+        ctx: &super::super::AnalyzerContext<'a, '_>,
+        has_parent_while: bool,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<(), SemanticError> {
+        if !self.current_generic_bindings.is_empty()
+            || ctx.parent_function.generic_parameters.is_some()
+        {
+            return Ok(());
+        }
+        let moved = self.snapshot_moved();
+        let (collecting, ok) = self.hir_pause_collection();
+        let result = (|| {
+            if let Some(cond) = cond {
+                self.analyze_expression(cond, ctx.parent_function, ctx.symbol_table, diagnostics)?;
+            }
+            let branch_scope = self.branch_scope(ctx.symbol_table);
+            for &(name, target_ty, _) in bindings {
+                self.check_reserved_name(name, "variable", diagnostics);
+                if let Err(e) = (*branch_scope)
+                    .borrow_mut()
+                    .add_symbol(name.text.clone(), target_ty.clone())
+                {
+                    diagnostics.report_error(e.to_string(), Some(name.position));
+                }
+            }
+            self.analyze_body(
+                body,
+                ctx.parent_function,
+                Some(&branch_scope),
+                has_parent_while,
+                diagnostics,
+            )
+        })();
+        self.hir_resume_collection(collecting, ok);
+        self.restore_moved(moved);
+        result
     }
 }

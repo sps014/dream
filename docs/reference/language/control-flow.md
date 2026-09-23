@@ -8,15 +8,15 @@ Conditions must be `bool`. Parentheses around the condition are optional. Bodies
 
 ```dream
 if score >= 90 {
-    print("A\n");
+    System.print("A\n");
 } else if score >= 70 {
-    print("B\n");
+    System.print("B\n");
 } else {
-    print("F\n");
+    System.print("F\n");
 }
 
 if ok return;
-if flag print("yes\n"); else print("no\n");
+if flag System.print("yes\n"); else System.print("no\n");
 ```
 
 For selecting a *value*, the ternary `cond ? a : b` is often cleaner — see [Operators](operators.md).
@@ -30,7 +30,7 @@ Runs the body while the condition holds. Parentheses around the condition are op
 ```dream
 let i = 0;
 while i < 10 {
-    println(i);
+    System.println(i);
     i++;
 }
 while done break;
@@ -43,7 +43,7 @@ Same as `while`, but the condition is checked at the end, so the body always run
 ```dream
 let i = 0;
 do {
-    println(i);
+    System.println(i);
     i = i + 1;
 } while i < 3;
 ```
@@ -54,7 +54,7 @@ A three-part loop: initializer, condition, increment. All three parts are option
 
 ```dream
 for (let i = 0; i < 5; i++) {
-    println(i);
+    System.println(i);
 }
 ```
 
@@ -65,7 +65,7 @@ Iterate a collection's elements directly with `for (let x in ...)`. The loop var
 ```dream
 let xs: int[] = [10, 20, 30];
 for (let value in xs) {
-    println(value);
+    System.println(value);
 }
 ```
 
@@ -73,7 +73,7 @@ for (let value in xs) {
 
 ```dream
 for (let c in "abc") {
-    println(c);   // 'a', 'b', 'c'
+    System.println(c);   // 'a', 'b', 'c'
 }
 
 fun sum(xs: Collection<int>): int {
@@ -94,10 +94,28 @@ for (let i = 0; i < 10; i = i + 1) {
     if i % 2 == 0 {
         continue;   // skip even numbers
     }
-    println(i);
+    System.println(i);
 }
 // break; continue;   // error: only allowed inside a loop
 ```
+
+## checked and unchecked blocks
+
+`unchecked { ... }` runs its statements with wrapping integer arithmetic; `checked { ... }` restores the default overflow panics inside it. Both are ordinary blocks otherwise — they open a scope, and `return`/`break`/`continue` pass through them:
+
+```dream
+fun fnv1a(bytes: byte[]): uint {
+    let h = 2166136261u;
+    for (let b in bytes) {
+        unchecked {
+            h = (h ^ (uint)b) * 16777619u;
+        }
+    }
+    return h;
+}
+```
+
+See [Primitives § Integer overflow](primitives.md#integer-overflow) for exactly which operations check.
 
 ## switch
 
@@ -113,11 +131,11 @@ A label switch has **no fallthrough** — each `case` runs only its own block. A
 ```dream
 switch (code) {
     case 1, 2:
-        print("low\n");
+        System.print("low\n");
     case 3:
-        print("three\n");
+        System.print("three\n");
     default:
-        print("other\n");
+        System.print("other\n");
 }
 ```
 
@@ -127,9 +145,9 @@ Labels must be constants (integers, strings, booleans, or enum members) that mat
 enum Color { Red, Green, Blue }
 
 switch (c) {
-    case Color.Red:   print("red\n");
-    case Color.Green: print("green\n");
-    default:          print("other\n");
+    case Color.Red:   System.print("red\n");
+    case Color.Green: System.print("green\n");
+    default:          System.print("other\n");
 }
 ```
 
@@ -139,8 +157,8 @@ For payload enums and unions, use pattern arms. Full rules live on [Enums & unio
 
 ```dream
 switch (opt) {
-    Option.Some(v) => println(v),
-    Option.None => println("empty"),
+    Option.Some(v) => System.println(v),
+    Option.None => System.println("empty"),
 }
 ```
 
@@ -157,7 +175,7 @@ outer: for (let i = 0; i < 3; i = i + 1) {
         if i == 2 {
             break outer;      // exit both loops
         }
-        println(i * 10 + j);
+        System.println(i * 10 + j);
     }
 }
 ```

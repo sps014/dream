@@ -12,7 +12,7 @@ class Point(x: int, y: int);
 let p1 = Point(3, 4);
 let p2 = p1;    // shares the same object
 p2.x = 10;
-println(p1.x);  // 10
+System.println(p1.x);  // 10
 ```
 
 Classes are managed by automatic reference counting (ARC) — no manual frees. Define a `del()` destructor and it runs right before the object is destroyed. See [Memory Management](memory.md).
@@ -61,7 +61,7 @@ struct Vec2(x: int, y: int);
 let v1 = Vec2(3, 4);
 let v2 = v1;    // full copy
 v2.x = 10;
-println(v1.x);  // 3 (unaffected)
+System.println(v1.x);  // 3 (unaffected)
 ```
 
 Structs need no heap allocation and no retain/release, so a struct held by value is never absent and cannot recursively contain itself by value. Use `Option<S>` when a struct slot may be empty.
@@ -237,7 +237,7 @@ shared class Holder {
     public p: Option<Plain>;
     public xs: int[];
 
-    fun new() { this.p = Option.None; this.xs = []; }
+    public constructor() { this.p = Option.None; this.xs = []; }
 }
 
 struct Wrap {

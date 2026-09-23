@@ -1,0 +1,16 @@
+// Inside a generic instantiation a dead `is` branch is only valid for other type arguments,
+// so it must stay unchecked: `x * 2` is fine for `T = int` and skipped for `T = string`.
+import system;
+
+fun describe<T>(x: T): void {
+    if (x is int) {
+        System.println(x * 2);
+    } else {
+        System.println("not an int");
+    }
+}
+
+fun main(): void {
+    describe<int>(21);
+    describe<string>("hi");
+}

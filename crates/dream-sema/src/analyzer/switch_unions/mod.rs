@@ -90,6 +90,7 @@ impl<'a> Analyzer<'a> {
                 op,
                 lhs: Box::new(a),
                 rhs: Box::new(b),
+                overflow: dream_hir::Overflow::Wrapping,
             },
         )
     }
@@ -99,6 +100,7 @@ impl<'a> Analyzer<'a> {
             dream_hir::HExprKind::Unary {
                 op: dream_hir::UnOp::Not,
                 operand: Box::new(a),
+                overflow: dream_hir::Overflow::Wrapping,
             },
         )
     }

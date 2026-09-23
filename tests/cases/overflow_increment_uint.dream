@@ -1,0 +1,8 @@
+// Integer overflow panics by default.
+import system;
+fun f(a: uint): uint { let x = a; x++; return x; }
+fun main(): void {
+    System.println("start");
+    System.println(f(4294967295u));
+    System.println("unreachable");
+}

@@ -19,8 +19,8 @@ let result = add(3, 4);
 The return type is optional for functions that return nothing, so these are equivalent:
 
 ```dream
-fun greet() { println("hi"); }
-fun greet(): void { println("hi"); }
+fun greet() { System.println("hi"); }
+fun greet(): void { System.println("hi"); }
 ```
 
 ## Returning a value
@@ -40,7 +40,7 @@ In a `void` function a bare `return;` exits early:
 ```dream
 fun log_positive(n: int): void {
     if n < 0 { return; }
-    println(n);
+    System.println(n);
 }
 ```
 
@@ -61,7 +61,7 @@ A parameter can supply a default with `= <literal>`; callers may then omit it:
 fun greet(name: string, times: int = 1): void {
     let i = 0;
     while i < times {
-        println("hi " + name);
+        System.println("hi " + name);
         i = i + 1;
     }
 }
@@ -86,8 +86,8 @@ class Greeter {
 }
 
 let g = Greeter();        // factor = 3
-println(g.scale(4));      // 4 * 2 * 3 = 24
-println(g.scale(4, 5));   // 4 * 5 * 3 = 60
+System.println(g.scale(4));      // 4 * 2 * 3 = 24
+System.println(g.scale(4, 5));   // 4 * 5 * 3 = 60
 ```
 
 ## Named arguments
@@ -136,7 +136,7 @@ class Rect {
 }
 
 let r = Rect(width: 3, height: 4);
-println(r.area(offset: 5));   // scale keeps its default (1): 3*4*1 + 5 = 17
+System.println(r.area(offset: 5));   // scale keeps its default (1): 3*4*1 + 5 = 17
 ```
 
 ## Variadic parameters
@@ -211,8 +211,8 @@ fun swap(ref a: int, ref b: int): void {
 let p: int = 1;
 let q: int = 2;
 swap(ref p, ref q);
-println(p);   // 2
-println(q);   // 1
+System.println(p);   // 2
+System.println(q);   // 1
 ```
 
 `ref` works the same way on instance and static methods (the implicit `this` is unaffected — `ref`
@@ -228,7 +228,7 @@ struct Doubler {
 let d: Doubler = Doubler();
 let n: int = 5;
 d.apply(ref n);
-println(n);   // 10
+System.println(n);   // 10
 ```
 
 Rules:
@@ -244,7 +244,7 @@ Rules:
   let inc: fun(ref int): void = (ref n: int) => { n = n + 1; };
   let a: int = 5;
   inc(ref a);
-  println(a); // 6
+  System.println(a); // 6
   ```
 - A lambda **cannot capture** an enclosing function's `ref` parameter, even though it can capture
   an ordinary `let`/parameter (see [Capturing closures](#capturing-closures)). A `ref`
@@ -268,12 +268,12 @@ fun main(): void {
         increment(ref counter);   // ref-passes the closure's own captured storage
         return counter;
     };
-    println(inc());     // 1
-    println(inc());     // 2
-    println(counter);   // 2 — visible to the enclosing scope too
+    System.println(inc());     // 1
+    System.println(inc());     // 2
+    System.println(counter);   // 2 — visible to the enclosing scope too
 
     increment(ref counter);   // and the enclosing scope's writes are visible to the closure
-    println(inc());           // 4
+    System.println(inc());           // 4
 }
 ```
 
@@ -292,7 +292,7 @@ The runtime starts a program by calling `main`. Every runnable program needs one
 
 ```dream
 fun main() {
-    println("hello");
+    System.println("hello");
 }
 ```
 
@@ -308,8 +308,8 @@ fun identity<T>(value: T): T {
     return value;
 }
 
-println(identity<int>(42));
-println(identity<string>("hello"));
+System.println(identity<int>(42));
+System.println(identity<string>("hello"));
 
 fun pair_first<A, B>(a: A, b: B): A { return a; }
 ```
@@ -326,8 +326,8 @@ fun apply(f: fun(int): int, value: int): int {
 }
 
 let g: fun(int): int = twice;
-println(g(5));            // 10
-println(apply(twice, 8)); // 16
+System.println(g(5));            // 10
+System.println(apply(twice, 8)); // 16
 ```
 
 A [generic function used as a first-class value](generics.md#generic-functions-as-first-class-values) needs a `fun(...)`-typed context so its type arguments can be inferred — e.g. `let cmp: fun(int, int): int = natural_order;` — a bare `let f = natural_order;` is an error.
@@ -338,13 +338,13 @@ An anonymous function can be written inline with arrow syntax, `(params) => expr
 
 ```dream
 let add: fun(int, int): int = (x, y) => x + y;   // x, y inferred as int from the `let` annotation
-println(add(2, 3));   // 5
+System.println(add(2, 3));   // 5
 
 let square: fun(int): int = (x) => {
     let r = x * x;
     return r;
 };
-println(square(5));   // 25
+System.println(square(5));   // 25
 
 let nums: List<int> = List<int>();
 nums.push(3);
@@ -366,7 +366,7 @@ async fun main(): void {
         return x * 2;
     };
     let n = twice(21).await;   // twice(21) : Future<int>
-    println(n);                // 42
+    System.println(n);                // 42
 }
 ```
 
@@ -382,8 +382,8 @@ fun make_adder(n: int): fun(int): int {
 }
 
 let add5: fun(int): int = make_adder(5);
-println(add5(10));   // 15
-println(add5(20));   // 25
+System.println(add5(10));   // 15
+System.println(add5(20));   // 25
 
 fun make_counter(): fun(): int {
     let count: int = 0;
@@ -394,8 +394,8 @@ fun make_counter(): fun(): int {
 }
 
 let inc: fun(): int = make_counter();
-println(inc());   // 1
-println(inc());   // 2
+System.println(inc());   // 1
+System.println(inc());   // 2
 ```
 
 Each call to a function that returns a capturing lambda creates its own independent storage — two counters from separate `make_counter()` calls do not interfere with each other.
@@ -412,7 +412,7 @@ Capturing more than one variable, and reaching past an immediate parent lambda t
 let a: int = 1;
 let b: int = 2;
 let f: fun(): int = () => a + b;   // captures both `a` and `b`
-println(f());   // 3
+System.println(f());   // 3
 
 fun make(a: int, b: int): fun(): fun(): int {
     let c: int = 100;
@@ -428,8 +428,8 @@ fun make(a: int, b: int): fun(): fun(): int {
 
 let l1: fun(): fun(): int = make(1, 2);
 let l2: fun(): int = l1();
-println(l2());   // 104
-println(l2());   // 105
+System.println(l2());   // 104
+System.println(l2());   // 105
 ```
 
 ### Overloading

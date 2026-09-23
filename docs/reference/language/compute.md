@@ -262,11 +262,11 @@ fun reduce(data: GpuBuffer<float>, out: GpuBuffer<float>): void {
 
 `@workgroup(N) let name: T;` declares workgroup-shared scratch of length `N` of type `T`.
 
-### `@shared` is not GPU shared memory
+### `shared` is not GPU shared memory
 
-Dream's `@shared` attribute marks **CPU / `Task`** classes that can be shared across threads.
+Dream's `shared` class modifier marks **CPU / `Task`** classes that can be shared across threads.
 It is illegal inside `@compute`.
-GPU scratch uses `@workgroup`, not `@shared`.
+GPU scratch uses `@workgroup`, not `shared`.
 
 ## Multi-pass sync
 

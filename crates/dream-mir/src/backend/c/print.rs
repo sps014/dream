@@ -222,6 +222,7 @@ fn print_ty(out: &mut String, ty: &CTy) {
         CTy::U32 => out.push_str("uint32_t"),
         CTy::Unsigned => out.push_str("unsigned"),
         CTy::I64 => out.push_str("int64_t"),
+        CTy::U64 => out.push_str("uint64_t"),
         CTy::F32 => out.push_str("float"),
         CTy::F64 => out.push_str("double"),
         CTy::Ptr => out.push_str("dream_ptr"),

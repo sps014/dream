@@ -1,0 +1,8 @@
+// Integer overflow panics by default.
+import system;
+fun f(a: int, n: int): int { return a << n; }
+fun main(): void {
+    System.println("start");
+    System.println(f(1, 32));
+    System.println("unreachable");
+}

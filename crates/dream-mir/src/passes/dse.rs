@@ -165,8 +165,10 @@ fn stmt_rvalue(stmt: &Statement) -> &Rvalue {
 fn rvalue_touches_memory(rv: &Rvalue) -> bool {
     match rv {
         Rvalue::Use(o) | Rvalue::Cast(o, _, _) => operand_touches_memory(o),
-        Rvalue::Binary(_, a, b) => operand_touches_memory(a) || operand_touches_memory(b),
-        Rvalue::Unary(_, a) => operand_touches_memory(a),
+        Rvalue::Binary(_, a, b) | Rvalue::CheckedBinary(_, a, b) => {
+            operand_touches_memory(a) || operand_touches_memory(b)
+        }
+        Rvalue::Unary(_, a) | Rvalue::CheckedNeg(a) => operand_touches_memory(a),
         Rvalue::FuncRef(_) => false,
         _ => true,
     }

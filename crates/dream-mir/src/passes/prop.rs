@@ -189,9 +189,10 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => subst_operand(o, known),
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b, _) | Rvalue::ByteAt(a, b, _) => {
-            subst_operand(a, known) | subst_operand(b, known)
-        }
+        Rvalue::Binary(_, a, b)
+        | Rvalue::CheckedBinary(_, a, b)
+        | Rvalue::CharAt(a, b, _)
+        | Rvalue::ByteAt(a, b, _) => subst_operand(a, known) | subst_operand(b, known),
         Rvalue::Concat(parts) => parts
             .iter_mut()
             .fold(false, |acc, p| acc | subst_operand(p, known)),
@@ -212,7 +213,7 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
         Rvalue::ArrayRealloc { array, new_len, .. } => {
             subst_operand(array, known) | subst_operand(new_len, known)
         }
-        Rvalue::Unary(_, a) => subst_operand(a, known),
+        Rvalue::Unary(_, a) | Rvalue::CheckedNeg(a) => subst_operand(a, known),
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }
         | Rvalue::UnionNew { args, .. }

@@ -156,7 +156,9 @@ public class Regex {
             if ch.is_digit() == false {
                 all_digits = false;
             } else {
-                v = v * 10 + (ch.to_int() - '0'.to_int());
+                unchecked {
+                    v = v * 10 + (ch.to_int() - '0'.to_int());
+                }
             }
             i = i + 1;
         }

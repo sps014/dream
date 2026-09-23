@@ -1,0 +1,10 @@
+// `GpuMath.log` on the CPU used to be a stub that returned 0; it must agree with `Math.log`
+// (and with WGSL `log` inside shaders).
+import system;
+import system.gpu;
+
+fun main(): void {
+    let e = GpuMath.log(2.7182817f);
+    System.println(e > 0.999f && e < 1.001f);
+    System.println(GpuMath.log(1.0f) == 0.0f);
+}

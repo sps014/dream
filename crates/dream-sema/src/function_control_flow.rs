@@ -190,7 +190,9 @@ impl<'a, 'd> FunctionControlGraph<'a, 'd> {
                 }
             }
             StatementNode::Labeled(_, inner) => self.visit_stmt(inner),
-            StatementNode::Lock(_, body) => self.visit_block(body),
+            StatementNode::Lock(_, body) | StatementNode::Overflow(_, _, body) => {
+                self.visit_block(body)
+            }
             StatementNode::Defer(_, body) => {
                 // Walk for nested unreachable warnings, but defer runs on scope exit so it
                 // must not count as the enclosing function returning or stopping fallthrough.
@@ -231,6 +233,7 @@ fn stmt_position(stmt: &StatementNode) -> Option<dream_text::text_span::TextSpan
         StatementNode::Lock(e, _) => e.position(),
         StatementNode::Defer(Some(budget), _) => budget.position(),
         StatementNode::Defer(None, _) => None,
+        StatementNode::Overflow(_, keyword, _) => Some(keyword.position),
         StatementNode::Break(_) | StatementNode::Continue(_) => None,
         StatementNode::Labeled(_, s) => stmt_position(s),
         StatementNode::WorkgroupDecl(t, _, _) => Some(t.position),

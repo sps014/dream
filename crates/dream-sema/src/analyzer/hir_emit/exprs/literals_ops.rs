@@ -106,6 +106,7 @@ impl<'a> Analyzer<'a> {
                         op,
                         lhs: Box::new(lhs),
                         rhs: Box::new(rhs),
+                        overflow: self.overflow,
                     },
                 ));
             }
@@ -134,6 +135,7 @@ impl<'a> Analyzer<'a> {
                 op,
                 lhs: Box::new(expr),
                 rhs: Box::new(zero),
+                overflow: dream_hir::Overflow::Wrapping,
             },
         ));
     }
@@ -170,6 +172,7 @@ impl<'a> Analyzer<'a> {
                 HExprKind::Unary {
                     op,
                     operand: Box::new(operand),
+                    overflow: self.overflow,
                 },
             )
         });

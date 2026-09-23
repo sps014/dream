@@ -456,6 +456,14 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         repeatable: false,
         doc: "Marks a helper callable from GPU shaders; body is also emitted as WGSL when referenced.",
     },
+    // Stdlib shader builtin with no CPU meaning (atomics, derivatives, texture reads/writes).
+    AttributeSpec {
+        name: "shader_only",
+        targets: &[AttributeTarget::StaticMethod],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Marks a builtin that the WGSL emitter maps to a shader intrinsic and that has no CPU implementation; calls from CPU code are rejected.",
+    },
     // Optional vertex/varying location remap; default is declaration order.
     AttributeSpec {
         name: "location",
@@ -1283,6 +1291,11 @@ pub fn has_fragment_attr(attributes: &[AttributeNode]) -> bool {
 /// True when the declaration carries `@gpu` (shader-callable helper).
 pub fn has_gpu_helper_attr(attributes: &[AttributeNode]) -> bool {
     attributes.iter().any(|a| a.name.text == "gpu")
+}
+
+/// True when the declaration carries `@shader_only` (a WGSL builtin with no CPU implementation).
+pub fn has_shader_only_attr(attributes: &[AttributeNode]) -> bool {
+    has_named_attr(attributes, "shader_only")
 }
 
 /// True when an extern declaration carries `@async_host`: on native, its host function accepts

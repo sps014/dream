@@ -31,6 +31,7 @@ fn stmt_span(stmt: &StatementNode<'_>) -> Option<TextSpan> {
         | StatementNode::Switch(e, _, _) => e.position(),
         StatementNode::Defer(Some(e), _) => e.position(),
         StatementNode::Defer(None, _) => None,
+        StatementNode::Overflow(_, keyword, _) => Some(keyword.position),
         StatementNode::For(_, Some(cond), _, _) => cond.position(),
         StatementNode::Labeled(_, inner) => stmt_span(inner),
         StatementNode::Return(None)
@@ -176,6 +177,7 @@ fn scan_stmt_string_meta(stmt: &StatementNode<'_>, ctx: &EmitCtx<'_>) {
             }
             reject_gpu_string_meta(body, ctx);
         }
+        StatementNode::Overflow(_, _, body) => reject_gpu_string_meta(body, ctx),
         StatementNode::ForEach(_, e, _, _, body) => {
             scan_expr_string_meta(e, ctx);
             reject_gpu_string_meta(body, ctx);
@@ -431,6 +433,11 @@ fn emit_stmt(
                 emit_stmts(eb, out, wg, indent + 1, ctx);
                 out.push_str(&format!("{}}}\n", p));
             }
+        }
+        StatementNode::Overflow(_, _, body) => {
+            out.push_str(&format!("{}{{\n", p));
+            emit_stmts(body, out, wg, indent + 1, ctx);
+            out.push_str(&format!("{}}}\n", p));
         }
         StatementNode::While(cond, body) => {
             out.push_str(&format!("{}loop {{\n", p));

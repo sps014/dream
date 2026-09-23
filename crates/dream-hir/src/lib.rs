@@ -13,4 +13,4 @@ pub mod ops;
 pub use layout::{scalar_size, FieldLayout, LayoutTable, TypeLayout, UnionLayout, UnionVariant};
 pub use module::*;
 pub use nodes::*;
-pub use ops::{BinOp, UnOp};
+pub use ops::{BinOp, Overflow, UnOp};

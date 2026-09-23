@@ -53,7 +53,11 @@ extend ulong : Comparable<ulong> {
             if (c < '0') || (c > '9') {
                 return Result.Err(ParseError.invalid("cannot parse ulong: invalid digit"));
             }
-            result = result * 10uL + (ulong)((int)c - 48);
+            let d = (ulong)((int)c - 48);
+            if result > (18446744073709551615uL - d) / 10uL {
+                return Result.Err(ParseError.invalid("cannot parse ulong: value out of range"));
+            }
+            result = result * 10uL + d;
             i = i + 1;
         }
         return Result.Ok(result);

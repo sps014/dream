@@ -41,6 +41,16 @@ impl BinOp {
     }
 }
 
+/// Integer overflow behavior of an arithmetic node, fixed lexically by the enclosing
+/// `checked { }` / `unchecked { }` block (checked outside any block). Non-integer operands ignore it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Overflow {
+    /// Overflow panics.
+    Checked,
+    /// Arithmetic wraps modulo the type's width.
+    Wrapping,
+}
+
 /// Unary operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnOp {

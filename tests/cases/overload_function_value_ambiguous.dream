@@ -1,0 +1,9 @@
+import system;
+
+fun add(a: int, b: int): int { return a + b; }
+fun add(a: double, b: double): double { return a + b; }
+
+fun main(): void {
+    let f = add;
+    let g: fun(bool, bool): bool = add;
+}

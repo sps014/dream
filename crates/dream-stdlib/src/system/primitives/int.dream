@@ -89,18 +89,25 @@ extend int : Comparable<int> {
         if i >= n {
             return Result.Err(ParseError.invalid("cannot parse int: no digits"));
         }
-        let result = 0;
+        let limit = 2147483647L;
+        if neg {
+            limit = 2147483648L;
+        }
+        let result = 0L;
         while i < n {
             let c = text.char_at(i);
             if (c < '0') || (c > '9') {
                 return Result.Err(ParseError.invalid("cannot parse int: invalid digit"));
             }
-            result = result * 10 + ((int)c - 48);
+            result = result * 10L + (long)((int)c - 48);
+            if result > limit {
+                return Result.Err(ParseError.invalid("cannot parse int: value out of range"));
+            }
             i = i + 1;
         }
-        if neg == true {
-            return Result.Ok(0 - result);
+        if neg {
+            return Result.Ok((int)(0L - result));
         }
-        return Result.Ok(result);
+        return Result.Ok((int)result);
     }
 }

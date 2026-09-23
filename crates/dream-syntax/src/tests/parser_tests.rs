@@ -44,6 +44,37 @@ fn test_parse_function_declaration() {
 }
 
 #[test]
+fn test_parse_overflow_blocks() {
+    let code = "fun f(): void { unchecked { let a = 1; checked { let b = 2; } } }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let body = program.functions[0].body;
+    let StatementNode::Overflow(crate::nodes::OverflowMode::Unchecked, _, outer) = &body[0] else {
+        panic!("expected unchecked block, got {:?}", body[0]);
+    };
+    assert_eq!(outer.len(), 2);
+    assert!(matches!(
+        outer[1],
+        StatementNode::Overflow(crate::nodes::OverflowMode::Checked, _, _)
+    ));
+}
+
+#[test]
+fn test_checked_is_still_an_identifier() {
+    let code = "fun f(): void { let checked = 1; checked = checked + 1; unchecked(checked); }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let body = program.functions[0].body;
+    assert!(matches!(body[0], StatementNode::Declaration(..)));
+    assert!(matches!(body[1], StatementNode::Assignment(..)));
+    assert!(matches!(body[2], StatementNode::FunctionInvocation(..)));
+}
+
+#[test]
 fn test_parse_repeat_array_literal() {
     let code = "fun test(): void { let a = [7; 5]; let m = [[0; 3]; 2]; }";
     let arena = bumpalo::Bump::new();
@@ -1205,10 +1236,7 @@ fn test_parse_prefix_await_is_rejected() {
     let code = "async fun f(): int { await sleep(1); return 0; }";
     let arena = bumpalo::Bump::new();
     let (_program, diagnostics) = parse_code(code, &arena);
-    assert!(
-        diagnostics.has_errors(),
-        "prefix await must not parse"
-    );
+    assert!(diagnostics.has_errors(), "prefix await must not parse");
 }
 
 #[test]
@@ -1248,7 +1276,9 @@ fn test_parse_postfix_await_chains() {
         StatementNode::Declaration(_, _, e, _) => e,
         other => panic!("expected declaration, got {:?}", other),
     };
-    assert!(matches!(init(0), ExpressionNode::Try(inner) if matches!(**inner, ExpressionNode::Await(_, _))));
+    assert!(
+        matches!(init(0), ExpressionNode::Try(inner) if matches!(**inner, ExpressionNode::Await(_, _)))
+    );
     assert!(
         matches!(init(1), ExpressionNode::MethodCall(recv, ..) if matches!(**recv, ExpressionNode::Await(_, _)))
     );

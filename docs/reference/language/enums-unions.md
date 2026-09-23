@@ -15,8 +15,8 @@ Access a member with `Enum.Member`. Enum values are integers at runtime, so they
 
 ```dream
 let c: Color = Color.Green;
-println(c);              // 1
-println(c.to_string());  // Green
+System.println(c);              // 1
+System.println(c.to_string());  // Green
 ```
 
 Simple enums also take bitwise `&`, `|`, `^`, and prefix `~` (same as `int`). Combine flag variants with `|`; the result stays the enum type. Shifts (`<<` / `>>`) stay integer-only.
@@ -61,9 +61,9 @@ let area = switch (s) {
 
 // statement position: arms may be blocks
 switch (s) {
-    Circle(r)  => { println(r); }
-    Rect(w, h) => println(w * h),
-    Empty      => println("empty"),
+    Circle(r)  => { System.println(r); }
+    Rect(w, h) => System.println(w * h),
+    Empty      => System.println("empty"),
 }
 ```
 
@@ -71,8 +71,8 @@ A pattern `switch` must be **exhaustive**. Cover every variant, or add a catch-a
 
 ```dream
 switch (s) {
-    Circle(r) => println("Circle"),
-    _         => println("Other"),
+    Circle(r) => System.println("Circle"),
+    _         => System.println("Other"),
 }
 ```
 
@@ -95,9 +95,9 @@ Guards (`if <bool>`) narrow an arm further:
 
 ```dream
 switch (opt) {
-    Some(n) if n > 10 => println("big"),
-    Some(n)           => println(n),
-    None              => println("none"),
+    Some(n) if n > 10 => System.println("big"),
+    Some(n)           => System.println(n),
+    None              => System.println("none"),
 }
 ```
 
@@ -107,13 +107,13 @@ An arm's pattern may be several alternatives separated by `|` — the arm runs i
 
 ```dream
 switch (c) {
-    'a' | 'e' | 'i' | 'o' | 'u' => println("vowel"),
-    _                           => println("consonant"),
+    'a' | 'e' | 'i' | 'o' | 'u' => System.println("vowel"),
+    _                           => System.println("consonant"),
 }
 
 switch (shape) {
-    Square | Triangle | Empty => println("no curves"),
-    Circle(_)                 => println("curved"),
+    Square | Triangle | Empty => System.println("no curves"),
+    Circle(_)                 => System.println("curved"),
 }
 ```
 
@@ -152,7 +152,7 @@ A union becomes a **value union** when every payload is a value (`int`, `bool`, 
 
 - It is stored inline and copied on assignment.
 - It does not allocate on the heap.
-- This is decided for each concrete type. `Option<int>` is a value union. `Option<string>` stays on the heap.
+- This is decided for each concrete type. `Option<int>` is a value union. `Option<string>` holds a reference payload, so it is a [niche union](#niche-unions) instead.
 
 #### `enum struct`: a value union, plus a reference-payload relaxation
 
@@ -199,5 +199,7 @@ Mark a union `@json` to derive `to_json` / `from_json`. Each value serializes to
 @json
 enum Shape { Circle(int), Rect(width: int, height: int), Empty }
 
-let text = Json.serialize(Shape.Circle(7));   // {"type":"Circle","radius":7}
+let text = Json.serialize(Shape.Circle(7));   // {"type":"Circle","_0":7}
 ```
+
+Named payload fields serialize under their names (`Rect` gives `"width"` / `"height"`); positional ones use `_0`, `_1`, … in order.

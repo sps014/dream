@@ -1,0 +1,10 @@
+// Shader builtins with no CPU meaning (derivatives, atomics, texture reads) used to return zeros
+// when called from ordinary code. They are now compile errors outside GPU functions.
+import system;
+import system.gpu;
+
+fun main(): void {
+    let d = Gpu.dpdx(1.0);
+    Gpu.workgroup_barrier();
+    System.println(d);
+}

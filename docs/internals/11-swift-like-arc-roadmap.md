@@ -19,13 +19,13 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - Value `struct` / plain `enum` off-heap (shadow stack); classes / arrays / strings / collections
   on the heap with a 12-byte `[size][tag][ref_count]` header.
 - `weak` / `unowned` + structural cycle check; weak teardown via a global registration list
-  (planned C runtime unit under `crates/dream-mir/src/runtime/c/`).
+  (`runtime/c/native/weak.c`, ported for wasm32 in `runtime/c/wasm32/weak_stub.c`).
 - `RcElision` over Goto chains, transparent diamonds, transparent natural loops, postdom regions
   (never under-retain); `RcInsertion` is CFG **ownership-token** dataflow plus a **Unique/Shared**
   lattice (last-use **move**, last-use **destroy**, split-edge release when a token is dead on one
   successor). Sharing still emits `Retain`. Unique last-use destroy of a class/array/union is
   `ReleaseUnique` (typed `$destroy_*` / C `destroy_*`: `del` + nested release + `free`, no RC RMW).
-  `js`, `@shared`, and strings stay on ordinary `Release`. Last-use field/index/global stores of a
+  `js`, `shared`, and strings stay on ordinary `Release`. Last-use field/index/global stores of a
   unique local transfer the +1 (both Wasm and C emitters skip retain). Rebind of an owned local
   through a call/`New` evaluates the RHS into a temp, then `Release`s the old occupant
   (`tmp = f(x); Release(x); x = tmp`) so `x = f(x)` cannot UAF. Loop headers of loop-carried owned
@@ -36,7 +36,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
   `held_defs`). Sink/take params still drop at callee return so inlining cannot copy-prop an early
   `= null` onto a caller argument that is still live. After inlining, `RcElision` can cancel
   retain/release pairs that a call barrier would have kept.
-- `@shared class` atomic retain/release; silent SROA for non-escaping class instances.
+- `shared class` atomic retain/release; silent SROA for non-escaping class instances.
 - `ref name: T` parameters for mutable place / value-struct aliasing.
 - Flow-sensitive use-after-move diagnostics after a sink parameter is stored into a field or index.
 

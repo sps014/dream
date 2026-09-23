@@ -3,8 +3,24 @@
 //! private `Lowerer`.
 
 use super::*;
+use crate::int_ty::IntTy;
+use crate::{BinOp, UnOp};
+use dream_hir::Overflow;
 
 impl Lowerer<'_> {
+    /// True when `op` at result type `ty` has inputs it cannot represent, so a checked op needs
+    /// a runtime check. Unsigned division cannot overflow.
+    fn can_overflow(&self, op: BinOp, ty: TypeId) -> bool {
+        let Some(int) = IntTy::of_prim(self.interner, ty) else {
+            return false;
+        };
+        match op {
+            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Shl | BinOp::Shr => true,
+            BinOp::Div | BinOp::Rem => int.signed(),
+            _ => false,
+        }
+    }
+
     /// Selects the integer constant width from the literal's static type: `long`/`ulong` lower to a
     /// 64-bit [`Const::Long`], everything else (`int`/`uint`/`byte`) to a 32-bit [`Const::Int`].
     fn int_const(&self, ty: TypeId, v: i64) -> Const {
@@ -59,14 +75,34 @@ impl Lowerer<'_> {
     /// Lowers an expression into an rvalue (the form usable on an assignment RHS).
     pub(super) fn lower_rvalue(&mut self, e: &HExpr) -> Rvalue {
         match &e.kind {
-            HExprKind::Binary { op, lhs, rhs } if !op.is_logical() => {
+            HExprKind::Binary {
+                op,
+                lhs,
+                rhs,
+                overflow,
+            } if !op.is_logical() => {
                 let l = self.lower_operand(lhs);
                 let r = self.lower_operand(rhs);
-                Rvalue::Binary(*op, l, r)
+                if *overflow == Overflow::Checked && self.can_overflow(*op, e.ty) {
+                    Rvalue::CheckedBinary(*op, l, r)
+                } else {
+                    Rvalue::Binary(*op, l, r)
+                }
             }
-            HExprKind::Unary { op, operand } => {
+            HExprKind::Unary {
+                op,
+                operand,
+                overflow,
+            } => {
                 let o = self.lower_operand(operand);
-                Rvalue::Unary(*op, o)
+                if *op == UnOp::Neg
+                    && *overflow == Overflow::Checked
+                    && IntTy::of_prim(self.interner, e.ty).is_some()
+                {
+                    Rvalue::CheckedNeg(o)
+                } else {
+                    Rvalue::Unary(*op, o)
+                }
             }
             HExprKind::Call { callee, args } => {
                 let lowered = args.iter().map(|a| self.lower_operand(a)).collect();
@@ -308,7 +344,7 @@ impl Lowerer<'_> {
     /// `a && b` / `a || b`: evaluate `b` only on the deciding branch, joining into one bool temp.
     fn lower_short_circuit(&mut self, e: &HExpr) -> Operand {
         let (op, lhs, rhs) = match &e.kind {
-            HExprKind::Binary { op, lhs, rhs } => (*op, lhs, rhs),
+            HExprKind::Binary { op, lhs, rhs, .. } => (*op, lhs, rhs),
             _ => unreachable!("lower_short_circuit on non-binary"),
         };
         let result = self.b.new_temp(e.ty);

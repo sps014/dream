@@ -1,0 +1,2 @@
+'add' is overloaded; give it a fun(...) type to select an overload
+No overload of 'add' takes parameters (bool, bool)

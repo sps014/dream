@@ -46,16 +46,19 @@ extend uint : Comparable<uint> {
         if n == 0 {
             return Result.Err(ParseError.invalid("cannot parse uint from empty string"));
         }
-        let result = 0u;
+        let result = 0L;
         let i = 0;
         while i < n {
             let c = text.char_at(i);
             if (c < '0') || (c > '9') {
                 return Result.Err(ParseError.invalid("cannot parse uint: invalid digit"));
             }
-            result = result * 10u + (uint)((int)c - 48);
+            result = result * 10L + (long)((int)c - 48);
+            if result > 4294967295L {
+                return Result.Err(ParseError.invalid("cannot parse uint: value out of range"));
+            }
             i = i + 1;
         }
-        return Result.Ok(result);
+        return Result.Ok((uint)result);
     }
 }

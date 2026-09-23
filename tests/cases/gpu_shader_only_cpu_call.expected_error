@@ -1,0 +1,2 @@
+'Gpu.dpdx' only exists inside GPU shaders; call it from a @compute/@vertex/@fragment/@gpu function
+'Gpu.workgroup_barrier' only exists inside GPU shaders; call it from a @compute/@vertex/@fragment/@gpu function

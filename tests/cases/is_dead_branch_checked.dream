@@ -1,0 +1,15 @@
+// A concrete `is` test folds at compile time, but the branch it proves dead is still
+// type-checked outside generic code: both errors below must be reported, not silently dropped.
+import system;
+
+fun main(): void {
+    let x: int = 5;
+    if x is string {
+        undefined_in_dead_branch(1);
+    }
+    if (x is bool) {
+        let bad: int = "not an int";
+    } else {
+        System.println(x);
+    }
+}

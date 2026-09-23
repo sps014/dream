@@ -294,6 +294,11 @@ impl SyntaxTreeView {
                     self.walk_stmt(s, parent);
                 }
             }
+            StatementNode::Overflow(_, _, body) => {
+                for s in *body {
+                    self.walk_stmt(s, parent);
+                }
+            }
             StatementNode::Defer(budget, body) => {
                 if let Some(q) = budget {
                     self.walk_expr(q, parent);

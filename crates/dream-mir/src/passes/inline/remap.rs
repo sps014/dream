@@ -109,6 +109,7 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
         }
         Rvalue::Use(o)
         | Rvalue::Unary(_, o)
+        | Rvalue::CheckedNeg(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)
@@ -119,7 +120,10 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => remap_operand(o, base),
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b, _) | Rvalue::ByteAt(a, b, _) => {
+        Rvalue::Binary(_, a, b)
+        | Rvalue::CheckedBinary(_, a, b)
+        | Rvalue::CharAt(a, b, _)
+        | Rvalue::ByteAt(a, b, _) => {
             remap_operand(a, base);
             remap_operand(b, base);
         }

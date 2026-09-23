@@ -437,7 +437,33 @@ pub fn compile_c_to_wasm32(
     for o in &objs {
         cmd.arg(o);
     }
+    cmd.arg(compiler_rt_builtins(&clang, threads)?);
     run_captured(&mut cmd, "wasm-ld")
+}
+
+/// wasi-sdk's compiler-rt archive (e.g. `__multi3`, which clang calls for a 64-bit
+/// `__builtin_mul_overflow`). `--allow-undefined` would otherwise turn a missing builtin into a
+/// host import that fails at instantiation. As an archive after the objects, only referenced
+/// members are linked.
+fn compiler_rt_builtins(clang: &Path, threads: bool) -> Result<PathBuf, String> {
+    let target = if threads {
+        "--target=wasm32-wasip1-threads"
+    } else {
+        "--target=wasm32-wasip1"
+    };
+    let out = Command::new(clang)
+        .args([target, "-print-libgcc-file-name"])
+        .output()
+        .map_err(|e| format!("failed to query {}: {e}", clang.display()))?;
+    let path = PathBuf::from(String::from_utf8_lossy(&out.stdout).trim());
+    if path.is_file() {
+        Ok(path)
+    } else {
+        Err(format!(
+            "wasi-sdk compiler-rt builtins not found at {}; reinstall with `dreamer toolchain install wasi-sdk`",
+            path.display()
+        ))
+    }
 }
 
 fn compile_unit(

@@ -1,0 +1,8 @@
+// Integer overflow panics by default.
+import system;
+fun f(a: long, b: long): long { return a * b; }
+fun main(): void {
+    System.println("start");
+    System.println(f(4611686018427387904L, 2L));
+    System.println("unreachable");
+}

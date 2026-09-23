@@ -1,0 +1,30 @@
+// Under `unchecked`, runtime integer arithmetic wraps at the type's own width (not the host
+// register's), shift counts are masked to the width, and `MIN / -1` wraps instead of trapping.
+import system;
+fun add(a: int, b: int): int { unchecked { return a + b; } }
+fun addb(a: byte, b: byte): byte { unchecked { return a + b; } }
+fun mull(a: long, b: long): long { unchecked { return a * b; } }
+fun shl(a: int, n: int): int { unchecked { return a << n; } }
+fun neg(a: int): int { unchecked { return -a; } }
+fun sdiv(a: int, b: int): int { unchecked { return a / b; } }
+fun srem(a: int, b: int): int { unchecked { return a % b; } }
+fun notb(a: byte): byte { unchecked { return ~a; } }
+fun main(args: string[]): void {
+    let n = args.length;
+    let big = add(2147483647, n + 1);
+    System.println(big);
+    System.println(big < 0);
+
+    let b = addb(250b, 10b);
+    System.println(b);
+    System.println(b == 4b);
+    System.println(b < 100b);
+
+    System.println(mull(9223372036854775807L, 2L));
+    System.println(shl(1, 33));
+    let min = -2147483647 - 1;
+    System.println(neg(min));
+    System.println(sdiv(min, -1));
+    System.println(srem(min, -1));
+    System.println(notb(0b));
+}

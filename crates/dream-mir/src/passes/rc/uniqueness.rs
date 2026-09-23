@@ -248,6 +248,7 @@ fn rvalue_local_reads(rv: &Rvalue, local: u32) -> u32 {
         Rvalue::Move { src, .. } => u32::from(src.0 == local),
         Rvalue::Use(o)
         | Rvalue::Unary(_, o)
+        | Rvalue::CheckedNeg(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)
@@ -258,9 +259,10 @@ fn rvalue_local_reads(rv: &Rvalue, local: u32) -> u32 {
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => operand_local_reads(o, local),
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b, _) | Rvalue::ByteAt(a, b, _) => {
-            operand_local_reads(a, local) + operand_local_reads(b, local)
-        }
+        Rvalue::Binary(_, a, b)
+        | Rvalue::CheckedBinary(_, a, b)
+        | Rvalue::CharAt(a, b, _)
+        | Rvalue::ByteAt(a, b, _) => operand_local_reads(a, local) + operand_local_reads(b, local),
         Rvalue::Select {
             cond,
             then_val,

@@ -1,7 +1,7 @@
 //! HIR expression, statement, place, binding, and callee nodes.
 
 use crate::module::{GlobalId, LocalId};
-use crate::ops::{BinOp, UnOp};
+use crate::ops::{BinOp, Overflow, UnOp};
 use dream_types::{DefId, TypeId};
 
 /// A resolved reference to a variable or function.
@@ -176,10 +176,12 @@ pub enum HExprKind {
         op: BinOp,
         lhs: Box<HExpr>,
         rhs: Box<HExpr>,
+        overflow: Overflow,
     },
     Unary {
         op: UnOp,
         operand: Box<HExpr>,
+        overflow: Overflow,
     },
     /// A direct function call to a resolved callee.
     Call {
@@ -404,6 +406,7 @@ mod tests {
                 op: BinOp::Add,
                 lhs: Box::new(HExpr::new(int, HExprKind::Var(Binding::Local(LocalId(0))))),
                 rhs: Box::new(HExpr::new(int, HExprKind::Var(Binding::Local(LocalId(1))))),
+                overflow: Overflow::Checked,
             },
         )))];
 

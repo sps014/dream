@@ -15,6 +15,7 @@ mod inline;
 mod iv;
 mod licm;
 mod loop_unroll;
+mod overflow_elim;
 mod prop;
 pub(crate) mod rc;
 mod sccp;
@@ -38,6 +39,7 @@ pub use inline::Inliner;
 pub use iv::IvCanon;
 pub use licm::Licm;
 pub use loop_unroll::LoopUnroll;
+pub use overflow_elim::OverflowElim;
 pub use prop::CopyConstProp;
 pub(crate) use rc::{container_move_locals, rvalue_reads_local, stmt_reads_local};
 pub use rc::{HopElision, RcElision, RcInsertion, RcLastUseRepair};
@@ -81,7 +83,7 @@ impl PassManager {
     }
 
     /// The default optimization pipeline, ordered so cheap simplifications expose work for the
-    /// later ones (prop -> fold -> algebraic -> gvn -> simplify-cfg -> dce, then RC elision).
+    /// later ones (prop -> fold -> algebraic -> overflow-elim -> gvn -> simplify-cfg -> dce, then RC elision).
     pub fn default_pipeline() -> Self {
         let mut pm = PassManager::new();
         pm.add(CopyConstProp);
@@ -89,6 +91,7 @@ impl PassManager {
         pm.add(Sccp);
         pm.add(ConstFold);
         pm.add(Algebraic);
+        pm.add(OverflowElim);
         pm.add(Gvn);
         pm.add(Licm);
         pm.add(Abc);
@@ -125,6 +128,7 @@ impl PassManager {
         pm.add(Sccp);
         pm.add(ConstFold);
         pm.add(Algebraic);
+        pm.add(OverflowElim);
         pm.add(Gvn);
         pm.add(Licm);
         pm.add(Abc);
@@ -149,6 +153,7 @@ impl PassManager {
         pm.add(Sccp);
         pm.add(ConstFold);
         pm.add(Algebraic);
+        pm.add(OverflowElim);
         pm.add(Gvn);
         pm.add(Licm);
         pm.add(Abc);

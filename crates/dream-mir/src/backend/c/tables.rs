@@ -266,6 +266,7 @@ fn strings_in_rv(rv: &Rvalue, out: &mut Vec<String>) {
         Rvalue::Move { .. } => {}
         Rvalue::Use(o)
         | Rvalue::Unary(_, o)
+        | Rvalue::CheckedNeg(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)
         | Rvalue::HashCode(o)
@@ -283,7 +284,10 @@ fn strings_in_rv(rv: &Rvalue, out: &mut Vec<String>) {
             strings_in_op(then_val, out);
             strings_in_op(else_val, out);
         }
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b, _) | Rvalue::ByteAt(a, b, _) => {
+        Rvalue::Binary(_, a, b)
+        | Rvalue::CheckedBinary(_, a, b)
+        | Rvalue::CharAt(a, b, _)
+        | Rvalue::ByteAt(a, b, _) => {
             strings_in_op(a, out);
             strings_in_op(b, out);
         }

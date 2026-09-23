@@ -237,7 +237,9 @@ public class JsonParser {
                 while this.pos < this.len() {
                     let c = this.b();
                     if (c >= 48) && (c <= 57) {
-                        exp = exp * 10 + (c - 48);
+                        if exp < 100000 {
+                            exp = exp * 10 + (c - 48);
+                        }
                         this.pos = this.pos + 1;
                     } else {
                         break;
@@ -433,14 +435,18 @@ public class JsonParser {
         while this.pos < this.len() {
             let c = this.b();
             if (c >= 48) && (c <= 57) {
-                value = value * 10 + (c - 48);
+                unchecked {
+                    value = value * 10 + (c - 48);
+                }
                 this.pos = this.pos + 1;
             } else {
                 break;
             }
         }
         this.consume_number_tail();
-        return sign * value;
+        unchecked {
+            return sign * value;
+        }
     }
 
     public fun parse_double(): double {
@@ -498,7 +504,9 @@ public class JsonParser {
                 while this.pos < this.len() {
                     let c = this.b();
                     if (c >= 48) && (c <= 57) {
-                        exp = exp * 10 + (c - 48);
+                        if exp < 100000 {
+                            exp = exp * 10 + (c - 48);
+                        }
                         this.pos = this.pos + 1;
                     } else {
                         break;

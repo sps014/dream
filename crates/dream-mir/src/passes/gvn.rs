@@ -22,6 +22,10 @@ pub struct Gvn;
 enum Key {
     Binary(BinOp, OpKey, OpKey),
     Unary(UnOp, OpKey),
+    /// Kept apart from `Binary`: a wrapped result must not stand in for a checked op, which has to
+    /// panic where the wrapped one silently wrapped.
+    Checked(BinOp, OpKey, OpKey),
+    CheckedNeg(OpKey),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone)]
@@ -145,8 +149,8 @@ fn invalidate(avail: &mut Vec<(Key, u32)>, dest: u32) {
 fn key_mentions(k: &Key, local: u32) -> bool {
     let mentions = |o: &OpKey| matches!(o, OpKey::Local(l) if *l == local);
     match k {
-        Key::Binary(_, a, b) => mentions(a) || mentions(b),
-        Key::Unary(_, a) => mentions(a),
+        Key::Binary(_, a, b) | Key::Checked(_, a, b) => mentions(a) || mentions(b),
+        Key::Unary(_, a) | Key::CheckedNeg(a) => mentions(a),
     }
 }
 
@@ -154,6 +158,8 @@ fn key_of(rvalue: &Rvalue) -> Option<Key> {
     match rvalue {
         Rvalue::Binary(op, a, b) => Some(Key::Binary(*op, op_key(a)?, op_key(b)?)),
         Rvalue::Unary(op, a) => Some(Key::Unary(*op, op_key(a)?)),
+        Rvalue::CheckedBinary(op, a, b) => Some(Key::Checked(*op, op_key(a)?, op_key(b)?)),
+        Rvalue::CheckedNeg(a) => Some(Key::CheckedNeg(op_key(a)?)),
         _ => None,
     }
 }

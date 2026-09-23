@@ -26,7 +26,15 @@ impl<'a> Analyzer<'a> {
             || dream_abi::attributes::has_gpu_helper_attr(&function.attributes);
         let runtime_support =
             dream_abi::attributes::RuntimeSupport::from_attributes(&function.attributes);
-        self.with_runtime_flag(runtime_support, |s| {
+        let saved_overflow = std::mem::replace(
+            &mut self.overflow,
+            if is_gpu {
+                dream_hir::Overflow::Wrapping
+            } else {
+                dream_hir::Overflow::Checked
+            },
+        );
+        let body = self.with_runtime_flag(runtime_support, |s| {
             s.with_unsafe_flag(is_unsafe, |s| {
                 s.with_gpu_flags(is_compute, is_gpu, |s| {
                     s.with_async_flag(function.is_async, |s| {
@@ -44,7 +52,9 @@ impl<'a> Analyzer<'a> {
                     })
                 })
             })
-        })?;
+        });
+        self.overflow = saved_overflow;
+        body?;
         self.hir_emit_entry_tail_return(function, diagnostics);
         self.hir_finish_function(diagnostics, errors_before);
         // Unused `let`/`const` bindings (warnings only — do not fail the compile).
@@ -235,6 +245,15 @@ impl<'a> Analyzer<'a> {
             )?,
             StatementNode::Defer(budget, body) => self.analyze_defer(
                 budget,
+                body,
+                parent_function,
+                symbol_table,
+                has_parent_while,
+                diagnostics,
+            )?,
+            StatementNode::Overflow(mode, keyword, body) => self.analyze_overflow_block(
+                *mode,
+                keyword,
                 body,
                 parent_function,
                 symbol_table,

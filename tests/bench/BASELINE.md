@@ -27,8 +27,8 @@ ratios are not an ARC-only scoreboard.
 | `byte_scan` | `byte_at` walk of UTF-16 LE payload | UTF-16 code-unit indexer (ASCII-fair) |
 | `substring` | `substring(start, end)` | `Substring(start, length)` |
 | `scratch_arena` | `bump` / `set_at` / `at` (no Span RC) | same index API |
-| `regex_find` | Global `[a-z]+\d+` via Pike VM (not bare `\d+`) | same pattern, `Compiled` |
-| `json_serialize` / `json_deserialize` | Nested `@json` User+Address, payload built once; deserialize text outside timer; scale `/10` | `System.Text.Json` (no source-gen) |
+| `regex_find` | Global `[a-z]+\d+` via Pike VM (not bare `\d+`) | same pattern, source-generated regex |
+| `json_serialize` / `json_deserialize` | Nested `@json` User+Address, payload built once; deserialize text outside timer; scale `/10` | `System.Text.Json` source generation |
 | `arr_add` | Scalar `c[i]=a[i]+b[i]` (`float[]`+`int[]`, n=256); Dream autovecs to `v128` | same scalar `for` (RyuJIT autovec) |
 | `vec_add` | `Vector<float>` stride + scalar tail (`count()` lanes; WASM `v128` locals) | `System.Numerics.Vector<float>` |
 

@@ -803,6 +803,7 @@ impl<'s> Extractor<'s> {
                 self.walk_expr(target, field_types, class_fields);
                 self.walk_block(body, field_types, class_fields);
             }
+            StatementNode::Overflow(_, _, body) => self.walk_block(body, field_types, class_fields),
             StatementNode::ExpressionStatement(e) => self.walk_expr(e, field_types, class_fields),
             _ => {}
         }

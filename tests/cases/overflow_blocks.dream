@@ -1,0 +1,40 @@
+// `unchecked { }` wraps, `checked { }` re-enables checks inside it, and the mode is lexical: it
+// covers lambdas written in the block but not functions called from it.
+import system;
+fun bump(x: int): int { return x + 1; }
+fun mul_long(a: long, b: long): long { return a * b; }
+fun mul_ulong(a: ulong, b: ulong): ulong { return a * b; }
+fun hash(data: byte[]): uint {
+    let h: uint = 2166136261u;
+    unchecked {
+        for (let b in data) {
+            h = (h ^ (uint)b) * 16777619u;
+        }
+    }
+    return h;
+}
+fun main(): void {
+    let big: int = 2147483647;
+    unchecked {
+        System.println(big + 1);
+        let b: byte = 250b;
+        b += 10b;
+        System.println(b);
+        let times: fun(int): int = (v) => v * 1000000000;
+        System.println(times(7));
+        checked {
+            System.println(bump(1));
+        }
+        let u: uint = 0u;
+        u--;
+        System.println(u);
+    }
+    System.println(hash([100b, 114b, 101b, 97b, 109b]));
+    let sum = 0;
+    for (let i = 0; i < 10; i++) {
+        sum += i;
+    }
+    System.println(sum);
+    System.println(mul_long(-3000000000L, 3000000000L));
+    System.println(mul_ulong(4000000000uL, 4000000000uL));
+}

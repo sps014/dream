@@ -19,7 +19,7 @@ nums[2] = 99;          // [1, 2, 99, 4, 5]
 
 ## Size
 
-`.length` returns the element count. It is the same idea as the `size()` that `List` and `Map` expose, so every collection is measured the same way:
+`.length` returns the element count. `List`, `Map`, `Set`, and every other `Collection` expose the same `length` property, so every collection is measured the same way:
 
 ```dream
 let count = nums.length;   // 5
@@ -47,12 +47,12 @@ The element type can be a class, or another array for multi-dimensional data:
 class Point { x: int; y: int; }
 
 let pts: Point[] = [ Point(0, 0), Point(1, 2) ];
-println(pts[1].x);   // 1
+System.println(pts[1].x);   // 1
 
 let grid: int[][] = [[1, 2, 3], [4, 5, 6]];
-println(grid.length);      // 2  (rows)
-println(grid[0].length);   // 3  (columns)
-println(grid[1][2]);       // 6
+System.println(grid.length);      // 2  (rows)
+System.println(grid[0].length);   // 3  (columns)
+System.println(grid[1][2]);       // 6
 ```
 
 ## Repeat arrays: `[value; len]`
@@ -71,7 +71,7 @@ The value expression is evaluated **once**, and every slot shares the result —
 ```dream
 let grid = [[0; 3]; 5];   // int[][] — five *distinct* rows of three zeros
 grid[0][1] = 42;
-println(grid[1][1]);      // still 0
+System.println(grid[1][1]);      // still 0
 ```
 
 A zero value (`0`, `0.0`, `false`) fills the array with zeros.
@@ -113,9 +113,9 @@ let xs = [1, 2, 3, 4, 5];
 let whole = Span.of(xs);           // inferred Span<int> — a span over all of xs
 let mid = whole.slice(1, 3);       // [2, 3, 4] — still a view, no copy
 
-println(mid.get(0));               // 2
+System.println(mid.get(0));               // 2
 mid.set(0, 20);                    // writes through to xs[1]
-println(xs[1]);                    // 20
+System.println(xs[1]);                    // 20
 
 let owned = mid.to_array();        // copies into a fresh, independently-owned array
 ```
@@ -131,10 +131,10 @@ let owned = mid.to_array();        // copies into a fresh, independently-owned a
 fun scratch(): void {
     let p = Pointer<int>.alloc(4);   // zero-initialized, 4 elements
     p.set(0, 10);
-    println(p.get(0));               // 10
+    System.println(p.get(0));               // 10
 
     p.realloc(8);                    // grow in place; [0..4) preserved, [4..8) zeroed
-    println(p.length);                // 8
+    System.println(p.length);                // 8
 
     p.free();                        // returns the block to the allocator immediately
 }
@@ -172,13 +172,13 @@ System.println(ys.binary_search(2).unwrap_or(-1));  // 1
 
 `Iterator<T>`, `Collection<T>`, and `IndexedCollection<T>` live in bootstrap `system.core`.
 
-- `Collection<T>` — `size()` and `iterator()` (plus default `is_empty()` and query helpers like `all` / `any`). Implemented by `List`, `Set`, `Map`, `Queue`, `Stack`, and every `T[]`.
+- `Collection<T>` — `length` and `iterator()` (plus default `is_empty()` and query helpers like `all` / `any`). Implemented by `List`, `Set`, `Map`, `Queue`, `Stack`, and every `T[]`.
 - `IndexedCollection<T>` — extends `Collection<T>` with ordered indexable access (`get(index)`, defaults `first` / `last`). Implemented by `List` and by arrays (`extend T[]` in bootstrap).
 - `for (let x in xs)` works for arrays (native index loop), concrete `@iterator` types, and interface-typed `Collection` / `IndexedCollection` / `Iterator`.
 
 ```dream
 fun total_size(xs: Collection<string>): int {
-    return xs.size();
+    return xs.length;
 }
 
 fun sum(xs: Collection<int>): int {

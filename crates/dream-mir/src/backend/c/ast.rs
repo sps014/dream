@@ -11,6 +11,7 @@ pub enum CTy {
     U32,
     Unsigned,
     I64,
+    U64,
     F32,
     F64,
     Ptr,

@@ -374,7 +374,8 @@ impl<'a> Analyzer<'a> {
                 | StatementNode::DoWhile(body, _)
                 | StatementNode::ForEach(_, _, _, _, body)
                 | StatementNode::Lock(_, body)
-                | StatementNode::Defer(_, body) => {
+                | StatementNode::Defer(_, body)
+                | StatementNode::Overflow(_, _, body) => {
                     self.collect_return_types(
                         body,
                         parent_function,
@@ -576,6 +577,17 @@ impl<'a> Analyzer<'a> {
                 let stmt = StatementNode::Return(Some((**expr).clone()));
                 self.arena.alloc_slice_clone(&[stmt])
             }
+        };
+        // The lifted body is analyzed later as its own function, so carry the lexical overflow
+        // mode of the creation site into it.
+        let body: &'a [StatementNode<'a>] = if self.overflow == dream_hir::Overflow::Wrapping {
+            self.arena.alloc_slice_clone(&[StatementNode::Overflow(
+                dream_syntax::nodes::OverflowMode::Unchecked,
+                synthetic_token(TokenKind::IdentifierToken, "unchecked"),
+                body,
+            )])
+        } else {
+            body
         };
 
         let func_node = FunctionNode {

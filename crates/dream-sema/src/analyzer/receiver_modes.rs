@@ -784,6 +784,14 @@ fn walk_statement(
                 raw_calls,
             );
         }
+        StatementNode::Overflow(_, _, body) => walk_statements(
+            body,
+            field_names,
+            aliases,
+            direct_unique,
+            first_mutate_span,
+            raw_calls,
+        ),
         StatementNode::ExpressionStatement(e) | StatementNode::AwaitStmt(e) => walk_expression(
             e,
             field_names,

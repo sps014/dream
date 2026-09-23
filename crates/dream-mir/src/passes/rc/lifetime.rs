@@ -129,7 +129,9 @@ fn rvalue_borrow(rv: &Rvalue, holds: &HashSet<DefId>) -> StmtBorrow {
         | Rvalue::Move { .. }
         | Rvalue::Select { .. }
         | Rvalue::Binary(_, _, _)
+        | Rvalue::CheckedBinary(_, _, _)
         | Rvalue::Unary(_, _)
+        | Rvalue::CheckedNeg(_)
         | Rvalue::StrLen(_)
         | Rvalue::StrByteSize(_)
         | Rvalue::CharAt(_, _, _)

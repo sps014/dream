@@ -3,10 +3,12 @@
 //! driver runs, so it both proves the pipeline composes and pins its determinism contract
 //! (byte-identical output).
 
-use dream_hir::{BinOp, Binding, HExpr, HExprKind, HFunction, HParam, HPlace, HStmt, Hir, LocalId};
+use dream_hir::{
+    BinOp, Binding, HExpr, HExprKind, HFunction, HParam, HPlace, HStmt, Hir, LocalId, Overflow,
+};
 use dream_mir::lower::lower_program;
 use dream_mir::passes::{
-    ConstFold, CopyConstProp, Dce, PassManager, RcElision, RcInsertion, SimplifyCfg,
+    ConstFold, CopyConstProp, Dce, OverflowElim, PassManager, RcElision, RcInsertion, SimplifyCfg,
 };
 use dream_types::{DefKind, TypeCtx};
 
@@ -80,6 +82,7 @@ fn compile_sum_to() -> String {
                         op: BinOp::Lt,
                         lhs: Box::new(var(i)),
                         rhs: Box::new(var(n)),
+                        overflow: Overflow::Checked,
                     },
                 ),
                 body: vec![
@@ -91,6 +94,7 @@ fn compile_sum_to() -> String {
                                 op: BinOp::Add,
                                 lhs: Box::new(var(acc)),
                                 rhs: Box::new(var(i)),
+                                overflow: Overflow::Checked,
                             },
                         ),
                     },
@@ -102,6 +106,7 @@ fn compile_sum_to() -> String {
                                 op: BinOp::Add,
                                 lhs: Box::new(var(i)),
                                 rhs: Box::new(HExpr::new(int, HExprKind::IntLit(1))),
+                                overflow: Overflow::Checked,
                             },
                         ),
                     },
@@ -126,6 +131,7 @@ fn compile_sum_to() -> String {
     let mut pm = PassManager::new();
     pm.add(CopyConstProp);
     pm.add(ConstFold);
+    pm.add(OverflowElim);
     pm.add(SimplifyCfg);
     pm.add(Dce);
     pm.add(RcInsertion);
@@ -144,6 +150,13 @@ fn hir_to_c_pipeline_emits_expected_shape() {
     assert!(c.contains("sum_to"), "missing function:\n{}", c);
     // The loop body's two additions survive optimization (they are live).
     assert!(c.contains('+'), "missing arithmetic:\n{}", c);
+    // `acc + i` is unbounded and keeps its check; `i + 1` is bounded by `i < n` and does not.
+    assert_eq!(
+        c.matches("__builtin_add_overflow").count(),
+        1,
+        "expected only the accumulator add to stay checked:\n{}",
+        c
+    );
     // The loop comparison lowers to a less-than.
     assert!(c.contains('<'), "missing loop comparison:\n{}", c);
     // Relooper shapes emit structured control flow, so the back edge is a `for (;;)` with a

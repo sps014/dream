@@ -2,6 +2,15 @@ use super::expression::ExpressionNode;
 use super::types::Type;
 use crate::token::syntax_token::SyntaxToken;
 
+/// Integer overflow behavior selected by a `checked { }` / `unchecked { }` block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OverflowMode {
+    /// Overflow panics (the default outside any block).
+    Checked,
+    /// Arithmetic wraps modulo the type's width.
+    Unchecked,
+}
+
 /// Represents a statement node in the AST
 #[derive(Debug, Clone)]
 pub enum StatementNode<'a> {
@@ -75,12 +84,15 @@ pub enum StatementNode<'a> {
         Vec<(Vec<ExpressionNode<'a>>, &'a [StatementNode<'a>])>,
         Option<&'a [StatementNode<'a>]>,
     ),
-    /// `lock (target) { body }` — mutual exclusion on `target` (must be `@shared class`-typed, or
+    /// `lock (target) { body }` — mutual exclusion on `target` (must be `shared class`-typed, or
     /// `Lock`), reentrant per-thread. See `docs/language` tasks/concurrency notes.
     Lock(ExpressionNode<'a>, &'a [StatementNode<'a>]),
     /// `defer { body }` / `defer(q) { body }` — opt-in deferred last-ref destroy. `q` is a `uint`
     /// drain budget (omitted: one chunk). See `docs/reference/language/memory.md`.
     Defer(Option<ExpressionNode<'a>>, &'a [StatementNode<'a>]),
+    /// `checked { body }` / `unchecked { body }` — integer overflow behavior for arithmetic written
+    /// lexically inside `body`. The token is the `checked`/`unchecked` keyword.
+    Overflow(OverflowMode, SyntaxToken, &'a [StatementNode<'a>]),
     /// `@workgroup(N) let name: T;` — GPU workgroup-shared array of `N` elements of `T`.
     /// No initializer; storage is zero-initialized by WGSL.
     WorkgroupDecl(SyntaxToken, Type, u32),

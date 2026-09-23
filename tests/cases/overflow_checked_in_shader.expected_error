@@ -1,0 +1,1 @@
+'checked' cannot be used in GPU code: shader arithmetic always wraps

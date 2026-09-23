@@ -51,7 +51,7 @@ fun main(): void {
     let a = 10;
     {
         let b = 20;    // only alive inside these braces
-        println(a + b);
+        System.println(a + b);
     }
     // b is gone here; a is still fine
 }

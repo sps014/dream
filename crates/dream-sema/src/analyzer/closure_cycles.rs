@@ -166,6 +166,7 @@ impl<'d, 'a> SelfCaptureWalker<'d, 'a> {
                 self.walk_expression(target);
                 self.walk_statements(body);
             }
+            StatementNode::Overflow(_, _, body) => self.walk_statements(body),
             StatementNode::ExpressionStatement(e) | StatementNode::AwaitStmt(e) => {
                 self.walk_expression(e)
             }

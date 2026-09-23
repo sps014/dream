@@ -742,6 +742,13 @@ fn collect_collections_from_stmts(
             }
             locals.truncate(mark);
         }
+        StatementNode::Overflow(_, _, body) => {
+            let mark = locals.len();
+            for s in *body {
+                collect_collections_from_stmts(s, jsonable, out, locals);
+            }
+            locals.truncate(mark);
+        }
         StatementNode::Defer(budget, body) => {
             if let Some(q) = budget {
                 collect_collections_from_expr(q, jsonable, out, locals);

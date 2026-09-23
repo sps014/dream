@@ -92,7 +92,9 @@ let tile = caps.max_invocations_per_workgroup;
 
 `GpuTexture.rgba8` (and depth / float / cube variants), `GpuTexture.from_image_bytes(png_or_jpeg).await` for PNG/JPEG decode, `GpuSampler.linear()` / `nearest()`. `GpuSurface.create` / `from_canvas`, `configure(w, h)` or `configure(GpuSurfaceDesc)` (`present_mode`, `alpha_mode`, `color_space`, `max_pixel_ratio`), `present()`, input helpers (`pointer()`, `pointers()`, pointer lock, fullscreen, gamepad axes), `GpuRenderPass.draw` / `blit`. Vertex path: `GpuRenderPipeline.create_ex`, `GpuVec2` / `GpuVec4`, `@builtin("position")`. GPU pass timing: `GpuQuerySet.timestamps(n)` then `ComputePass.begin_timed(qs, 0, 1)`, `GpuRenderTarget.timestamps(qs, 0, 1)`, `GpuEncoder.write_timestamp(qs, i)` (`timestamp_query_inside_encoders`), or `pass.write_timestamp(qs, i)` (`timestamp_query_inside_passes`); `qs.read()` after submit.
 
-Kernel-only: `GpuMath`, `Gpu.workgroup_barrier` / `storage_barrier`, `Gpu.atomic_*` (`atomic_load`, `atomic_store`, `atomic_add`, `atomic_sub`, `atomic_min`, `atomic_max`, `atomic_and`, `atomic_or`, `atomic_xor`, `atomic_exchange`), `Gpu.dpdx` / `dpdy` / `fwidth` (derivatives), `Gpu.texture_*` (`texture_dimensions`, `texture_sample_cube`, `texture_load`, `texture_store`, `texture_sample`).
+Shader-only (calling them from CPU code is a compile error): `Gpu.workgroup_barrier` / `storage_barrier`, `Gpu.atomic_*` (`atomic_load`, `atomic_store`, `atomic_add`, `atomic_sub`, `atomic_min`, `atomic_max`, `atomic_and`, `atomic_or`, `atomic_xor`, `atomic_exchange`, `atomic_compare_exchange`), `Gpu.dpdx` / `dpdy` / `fwidth` (derivatives), and every `Gpu.texture_*` read or write except `texture_dimensions` (`texture_load*`, `texture_store`, `texture_sample*`, `texture_gather`, `texture_num_levels` / `texture_num_layers`).
+
+`GpuMath` works in shaders and on the CPU, where it computes the same result with host `Math`.
 
 ## Vector math
 

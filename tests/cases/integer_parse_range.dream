@@ -1,0 +1,18 @@
+import system;
+fun main(): void {
+    System.println(int.parse("2147483647").unwrap_or(0));
+    System.println(int.parse("-2147483648").unwrap_or(0));
+    System.println(int.parse("2147483648").is_err());
+    System.println(int.parse("-2147483649").is_err());
+    System.println(int.parse("99999999999999999999999").is_err());
+    System.println(uint.parse("4294967295").unwrap_or(0u));
+    System.println(uint.parse("4294967296").is_err());
+    System.println(long.parse("9223372036854775807").unwrap_or(0L));
+    System.println(long.parse("-9223372036854775808").unwrap_or(0L));
+    System.println(long.parse("9223372036854775808").is_err());
+    System.println(long.parse("-9223372036854775809").is_err());
+    System.println(ulong.parse("18446744073709551615").unwrap_or(0uL));
+    System.println(ulong.parse("18446744073709551616").is_err());
+    System.println(byte.parse("256").is_err());
+    System.println(double.parse("1e99999999999").unwrap_or(0.0d) > 1.0d);
+}

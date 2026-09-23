@@ -208,6 +208,11 @@ fn report_unexpanded_syntax_blocks(acc: &ProgramAccumulator<'_>, diagnostics: &m
                     walk_stmt(s, diagnostics);
                 }
             }
+            StatementNode::Overflow(_, _, body) => {
+                for s in *body {
+                    walk_stmt(s, diagnostics);
+                }
+            }
             StatementNode::Defer(budget, body) => {
                 if let Some(q) = budget {
                     walk_expr(q, diagnostics);

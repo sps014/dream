@@ -3,7 +3,7 @@
 //! pass manager (one removal can expose another).
 
 use super::MirPass;
-use crate::{BlockId, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use crate::{BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
 use std::collections::HashSet;
 
@@ -75,8 +75,15 @@ fn remove_dead_assignments(func: &mut MirFunction) -> bool {
 }
 
 /// An rvalue with no observable effect beyond producing its value; safe to drop if the result is
-/// unused. Calls and allocations are conservatively impure.
+/// unused. Calls and allocations are conservatively impure, as are checked arithmetic and a division
+/// whose divisor is not a known non-zero constant, since both can panic.
 pub(crate) fn is_pure(rvalue: &Rvalue) -> bool {
+    if let Rvalue::Binary(crate::BinOp::Div | crate::BinOp::Rem, _, divisor) = rvalue {
+        return matches!(
+            divisor,
+            Operand::Const(Const::Int(v) | Const::Long(v)) if *v != 0
+        ) || matches!(divisor, Operand::Const(Const::Float(_) | Const::F32(_)));
+    }
     matches!(
         rvalue,
         Rvalue::Use(_)
@@ -244,7 +251,10 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => read_operand(o, read),
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b, _) | Rvalue::ByteAt(a, b, _) => {
+        Rvalue::Binary(_, a, b)
+        | Rvalue::CheckedBinary(_, a, b)
+        | Rvalue::CharAt(a, b, _)
+        | Rvalue::ByteAt(a, b, _) => {
             read_operand(a, read);
             read_operand(b, read);
         }
@@ -271,7 +281,7 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
             read_operand(array, read);
             read_operand(new_len, read);
         }
-        Rvalue::Unary(_, a) => read_operand(a, read),
+        Rvalue::Unary(_, a) | Rvalue::CheckedNeg(a) => read_operand(a, read),
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }
         | Rvalue::UnionNew { args, .. }

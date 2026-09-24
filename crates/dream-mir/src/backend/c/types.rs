@@ -185,6 +185,9 @@ fn rvalue_is_wide(
         | crate::Rvalue::CheckedBinary(_, a, b)
         | crate::Rvalue::CharAt(a, b, _)
         | crate::Rvalue::ByteAt(a, b, _) => op(a) || op(b),
+        // The address is a widened pointer. The loaded unit is an `int`.
+        crate::Rvalue::LoadU8(_, _) | crate::Rvalue::LoadU16(_, _) => false,
+        crate::Rvalue::StrBytes(_) => true,
         crate::Rvalue::Select {
             cond,
             then_val,

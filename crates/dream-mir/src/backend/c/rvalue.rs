@@ -5,6 +5,10 @@ use crate::{Rvalue, UnOp as MirUnOp};
 use dream_types::{PrimTy, TyKind};
 
 impl<'a> Emitter<'a> {
+    fn ptr_bits(&mut self, p: &crate::Operand) -> Expr {
+        Expr::cast(CTy::Named("uintptr_t"), self.operand(p))
+    }
+
     /// `dest` is the destination's type when known; integer arithmetic is performed at it.
     pub(super) fn rvalue(&mut self, rv: &Rvalue, dest: Option<dream_types::TypeId>) -> Expr {
         match rv {
@@ -71,6 +75,27 @@ impl<'a> Emitter<'a> {
                 Expr::call(
                     "dream_byte_at_u",
                     vec![self.operand(s), Expr::cast(CTy::I32, self.operand(i))],
+                ),
+            ),
+            Rvalue::StrBytes(s) => Expr::cast(
+                CTy::I64,
+                Expr::cast(
+                    CTy::Named("uintptr_t"),
+                    Expr::call("dream_str_bytes", vec![self.operand(s)]),
+                ),
+            ),
+            Rvalue::LoadU8(p, i) => Expr::cast(
+                CTy::I32,
+                Expr::index(
+                    Expr::cast(CTy::ptr_to(CTy::U8), self.ptr_bits(p)),
+                    Expr::cast(CTy::I32, self.operand(i)),
+                ),
+            ),
+            Rvalue::LoadU16(p, i) => Expr::cast(
+                CTy::I32,
+                Expr::index(
+                    Expr::cast(CTy::ptr_to(CTy::U16), self.ptr_bits(p)),
+                    Expr::cast(CTy::I32, self.operand(i)),
                 ),
             ),
             Rvalue::ArrayNew { elem_ty, len } => {

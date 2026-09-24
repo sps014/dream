@@ -269,6 +269,7 @@ fn strings_in_rv(rv: &Rvalue, out: &mut Vec<String>) {
         | Rvalue::CheckedNeg(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)
+        | Rvalue::StrBytes(o)
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::ArrayLen(o)
@@ -287,7 +288,9 @@ fn strings_in_rv(rv: &Rvalue, out: &mut Vec<String>) {
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
-        | Rvalue::ByteAt(a, b, _) => {
+        | Rvalue::ByteAt(a, b, _)
+        | Rvalue::LoadU8(a, b)
+        | Rvalue::LoadU16(a, b) => {
             strings_in_op(a, out);
             strings_in_op(b, out);
         }

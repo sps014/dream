@@ -1055,43 +1055,58 @@ fun bench_sum_options(iters: int): void {
 }
 
 fun run_suite(scale: int): void {
+    // Counts are sized so each timed region lasts a few milliseconds. A 10µs
+    // sample is one scheduling tick and moves tens of percent between runs.
     // ---- compute kernels (double/float pressure, branching, vectorization) ----
-    bench_nbody(scale / 10);
+    bench_nbody(scale * 4);
     bench_mandelbrot(scale / 100);
     bench_matmul(scale / 50);
     bench_quicksort(scale / 20);
-    bench_sieve(scale / 50);
+    bench_sieve(scale / 12);
     // ---- call/dispatch/recursion ----
     bench_fib_rec(scale / 20);
-    bench_iface_dispatch(scale / 5);
+    bench_iface_dispatch(scale * 12);
     // ---- ARC / allocator reality at scale ----
     bench_binary_trees(scale / 200);
     bench_linked_walk(scale / 5);
     bench_weak_tree(scale / 200);
     // ---- collections / strings / enums ----
-    bench_wordcount(scale / 5);
-    bench_parse_ints(scale);
-    bench_sum_options(scale);
+    bench_wordcount(scale);
+    bench_parse_ints(scale * 50);
+    bench_sum_options(scale * 400);
 
-    bench_arc_locals(scale);
-    bench_string_concat(scale);
-    bench_string_eq(scale * 5);
-    bench_char_scan(scale / 10);
-    bench_byte_scan(scale / 10);
-    bench_substring(scale);
-    bench_list_push(scale);
-    bench_list_insert_mid(scale);
-    bench_map_get_set(scale);
-    bench_map_clear_reuse(scale);
-    bench_list_clear_reuse(scale);
-    bench_alloc_churn(scale);
-    bench_scratch_arena(scale);
-    bench_regex_find(scale / 10);
-    bench_string_builder(scale / 5);
-    bench_json_serialize(scale / 10);
-    bench_json_deserialize(scale / 10);
-    bench_arr_add(scale / 10);
-    bench_vec_add(scale / 10);
+    bench_arc_locals(scale * 25);
+    bench_string_concat(scale * 20);
+    bench_string_eq(scale * 100);
+    bench_char_scan(scale * 10);
+    bench_byte_scan(scale * 20);
+    bench_substring(scale * 160);
+    bench_list_push(scale * 400);
+    bench_list_insert_mid(scale * 40);
+    bench_map_get_set(scale * 35);
+    bench_map_clear_reuse(scale * 70);
+    bench_list_clear_reuse(scale * 500);
+    bench_alloc_churn(scale * 30);
+    bench_scratch_arena(scale * 400);
+    bench_regex_find(scale / 2);
+    bench_string_builder(scale * 20);
+    bench_json_serialize(scale * 2);
+    bench_json_deserialize(scale / 2);
+    bench_arr_add(scale * 5);
+    bench_vec_add(scale * 10);
+}
+
+fun bench_passes(): int {
+    // Several measured passes in one process. The median of those passes is what a
+    // single process start is worth; one 10µs sample is a timer tick.
+    let n = int.parse(System.env_or("DREAM_BENCH_PASSES", "1")).unwrap_or(1);
+    if n < 1 {
+        return 1;
+    }
+    if n > 30 {
+        return 30;
+    }
+    return n;
 }
 
 fun main(): void {
@@ -1102,7 +1117,12 @@ fun main(): void {
     measuring = false;
     run_suite(scale);
     measuring = true;
-    run_suite(scale);
+    let p = 0;
+    let passes = bench_passes();
+    while p < passes {
+        run_suite(scale);
+        p = p + 1;
+    }
     // Observing the sink keeps every `bench_sink` store live across the whole suite.
     System.println("sink " + sink_total().to_string());
 }

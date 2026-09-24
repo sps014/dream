@@ -811,45 +811,52 @@ public static partial class Program
         Sink = (int)acc;
     }
 
+    // Several measured passes in one process. One 10µs sample is a timer tick.
+    static int BenchPasses()
+    {
+        string? raw = Environment.GetEnvironmentVariable("DREAM_BENCH_PASSES");
+        if (string.IsNullOrEmpty(raw) || !int.TryParse(raw, out int n) || n < 1)
+            return 1;
+        return Math.Min(n, 30);
+    }
+
     static void RunSuite()
     {
         int scale = 20000;
-        // compute kernels
-        BenchNbody(scale / 10);
+        // Counts match tests/bench/microbenches.dream: each timed region lasts a few
+        // milliseconds, so one scheduling tick is not a large fraction of the sample.
+        BenchNbody(scale * 4);
         BenchMandelbrot(scale / 100);
         BenchMatmul(scale / 50);
         BenchQuicksort(scale / 20);
-        BenchSieve(scale / 50);
-        // call / dispatch / recursion
+        BenchSieve(scale / 12);
         BenchFibRec(scale / 20);
-        BenchIfaceDispatch(scale / 5);
-        // ARC / allocator reality
+        BenchIfaceDispatch(scale * 12);
         BenchBinaryTrees(scale / 200);
         BenchLinkedWalk(scale / 5);
         BenchWeakTree(scale / 200);
-        // collections / strings / enums
-        BenchWordcount(scale / 5);
-        BenchParseInts(scale);
-        BenchSumOptions(scale);
-        BenchArcLocals(scale);
-        BenchStringConcat(scale);
-        BenchStringEq(scale * 5);
-        BenchCharScan(scale / 10);
-        BenchByteScan(scale / 10);
-        BenchSubstring(scale);
-        BenchListPush(scale);
-        BenchListInsertMid(scale);
-        BenchMapGetSet(scale);
-        BenchMapClearReuse(scale);
-        BenchListClearReuse(scale);
-        BenchAllocChurn(scale);
-        BenchScratchArena(scale);
-        BenchRegexFind(scale / 10);
-        BenchStringBuilder(scale / 5);
-        BenchJsonSerialize(scale / 10);
-        BenchJsonDeserialize(scale / 10);
-        BenchArrAdd(scale / 10);
-        BenchVecAdd(scale / 10);
+        BenchWordcount(scale);
+        BenchParseInts(scale * 50);
+        BenchSumOptions(scale * 400);
+        BenchArcLocals(scale * 25);
+        BenchStringConcat(scale * 20);
+        BenchStringEq(scale * 100);
+        BenchCharScan(scale * 10);
+        BenchByteScan(scale * 20);
+        BenchSubstring(scale * 160);
+        BenchListPush(scale * 400);
+        BenchListInsertMid(scale * 40);
+        BenchMapGetSet(scale * 35);
+        BenchMapClearReuse(scale * 70);
+        BenchListClearReuse(scale * 500);
+        BenchAllocChurn(scale * 30);
+        BenchScratchArena(scale * 400);
+        BenchRegexFind(scale / 2);
+        BenchStringBuilder(scale * 20);
+        BenchJsonSerialize(scale * 2);
+        BenchJsonDeserialize(scale / 2);
+        BenchArrAdd(scale * 5);
+        BenchVecAdd(scale * 10);
     }
 
     static void LoadDreamScores(string path)
@@ -888,7 +895,14 @@ public static partial class Program
         GC.Collect();
 
         IsWarmup = false;
-        RunSuite();
+        int passes = BenchPasses();
+        for (int p = 0; p < passes; p++)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            RunSuite();
+        }
         return Sink == int.MinValue ? 1 : 0;
     }
 }

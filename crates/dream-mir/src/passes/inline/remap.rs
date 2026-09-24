@@ -113,6 +113,7 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)
+        | Rvalue::StrBytes(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
         | Rvalue::TypeName(o)
@@ -123,7 +124,9 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
-        | Rvalue::ByteAt(a, b, _) => {
+        | Rvalue::ByteAt(a, b, _)
+        | Rvalue::LoadU8(a, b)
+        | Rvalue::LoadU16(a, b) => {
             remap_operand(a, base);
             remap_operand(b, base);
         }

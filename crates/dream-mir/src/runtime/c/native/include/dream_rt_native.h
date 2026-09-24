@@ -160,8 +160,22 @@ DREAM_ALWAYS_INLINE uint16_t dream_char_at_u(dream_ptr str, int32_t i) {
     return u ? u[i] : 0;
 }
 
+/* Payload bytes of `s` (the slice's units pointer, or the inline units). One header load;
+ * callers that scan hoist this out of the loop and index the pointer. */
+DREAM_ALWAYS_INLINE const uint8_t *dream_str_bytes(dream_ptr s) {
+    const uint8_t *d;
+    if (!s) {
+        return NULL;
+    }
+    if (dream_i32(s)[1] == DREAM_STR_SLICE) {
+        memcpy(&d, (char *)dream_p(s) + STRING_UNITS_OFFSET + sizeof(dream_ptr), sizeof(d));
+        return d;
+    }
+    return (const uint8_t *)((char *)dream_p(s) + STRING_UNITS_OFFSET);
+}
+
 DREAM_ALWAYS_INLINE uint8_t dream_byte_at_u(dream_ptr str, int32_t i) {
-    return ((const uint8_t *)dream_str_units(str))[i];
+    return dream_str_bytes(str)[i];
 }
 
 DREAM_ALWAYS_INLINE void dream_mem_copy(dream_ptr dst, dream_ptr src, size_t n) {

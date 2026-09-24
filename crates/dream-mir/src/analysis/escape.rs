@@ -384,6 +384,9 @@ fn rvalue_uses(
         | Rvalue::StrByteSize(_)
         | Rvalue::CharAt(..)
         | Rvalue::ByteAt(..)
+        | Rvalue::StrBytes(_)
+        | Rvalue::LoadU8(..)
+        | Rvalue::LoadU16(..)
         | Rvalue::ArrayNew { .. }
         | Rvalue::Concat(_)
         | Rvalue::ConcatInt { .. }

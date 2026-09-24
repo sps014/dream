@@ -507,6 +507,13 @@ pub enum Rvalue {
     CharAt(Operand, Operand, bool),
     /// `string.byte_at(i)`: string, payload-byte index, and ABC `unchecked` (same as [`Self::CharAt`]).
     ByteAt(Operand, Operand, bool),
+    /// Address of the string's UTF-16 payload bytes (slice parent or inline units). The bits are a
+    /// host pointer stored in an `int` local, widened to pointer size on native.
+    StrBytes(Operand),
+    /// Byte load `ptr[index]`. `ptr` is a [`Self::StrBytes`] result.
+    LoadU8(Operand, Operand),
+    /// UTF-16 code-unit load `ptr[index]`. `ptr` is a [`Self::StrBytes`] result.
+    LoadU16(Operand, Operand),
     /// `Buffer.alloc<T>(len)` — allocate a zero-initialized `T[]` block of a runtime length.
     ArrayNew {
         elem_ty: TypeId,

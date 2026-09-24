@@ -434,6 +434,9 @@ impl FnPrinter<'_> {
                 let op = if *unchecked { "byte_at_u" } else { "byte_at" };
                 format!("{}({}, {})", op, self.operand(s), self.operand(i))
             }
+            Rvalue::StrBytes(s) => format!("str_bytes({})", self.operand(s)),
+            Rvalue::LoadU8(p, i) => format!("load_u8({}, {})", self.operand(p), self.operand(i)),
+            Rvalue::LoadU16(p, i) => format!("load_u16({}, {})", self.operand(p), self.operand(i)),
             Rvalue::ArrayNew { elem_ty, len } => {
                 format!("array_new::<{}>({})", self.cx.ty(*elem_ty), self.operand(len))
             }

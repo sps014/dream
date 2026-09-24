@@ -252,6 +252,7 @@ fn rvalue_local_reads(rv: &Rvalue, local: u32) -> u32 {
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)
+        | Rvalue::StrBytes(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
         | Rvalue::TypeName(o)
@@ -262,7 +263,9 @@ fn rvalue_local_reads(rv: &Rvalue, local: u32) -> u32 {
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
-        | Rvalue::ByteAt(a, b, _) => operand_local_reads(a, local) + operand_local_reads(b, local),
+        | Rvalue::ByteAt(a, b, _)
+        | Rvalue::LoadU8(a, b)
+        | Rvalue::LoadU16(a, b) => operand_local_reads(a, local) + operand_local_reads(b, local),
         Rvalue::Select {
             cond,
             then_val,

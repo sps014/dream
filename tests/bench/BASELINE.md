@@ -380,7 +380,7 @@ Notes, honestly:
   sub-ns rows (`sum_options`, `list_push`, `list_clear_reuse`, `scratch_arena`) move in 0.05 ns
   timer steps. C# rows swung widely between reps under this load; treat the C# column as
   indicative only.
-- The `byte_scan` C# cell in the table above (20.9 ns) walked code units (`s[j]` over `s.Length`), half of Dream's payload-byte trip count, so the ~3× gap was the bench. C# now walks the UTF-16 LE bytes (`MemoryMarshal.AsBytes`), the same accesses as Dream `byte_at`. One Release run of that loop reported 39 ns/op against Dream's 62 ns min above, about 1.6× rather than 3×. Not an interleaved min; re-run `./scripts/run-microbenches.sh` before treating it as a baseline.
+- The `byte_scan` C# cell in the table above (20.9 ns) walked code units (`s[j]` over `s.Length`), half of Dream's payload-byte trip count, so the ~3× gap was the bench. C# now walks the UTF-16 LE bytes (`MemoryMarshal.AsBytes`), the same accesses as Dream `byte_at`. One Release run of that loop reported 39 ns/op against Dream's 62 ns min above. The scan now hoists the payload pointer (`dream_str_bytes` once per outer iteration, then a raw byte load). A matching loop with the sink call timed 15 ns/op. Re-run `./scripts/run-microbenches.sh` before replacing the table cell.
 
 Native C is the default `dream run` path: see
 [`docs/internals/14-dual-backend-plan.md`](../../docs/internals/14-dual-backend-plan.md).

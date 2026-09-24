@@ -234,6 +234,7 @@ fn add_rvalue_reads(rv: &Rvalue, live: &mut HashSet<u32>) {
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)
+        | Rvalue::StrBytes(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
         | Rvalue::TypeName(o)
@@ -244,7 +245,9 @@ fn add_rvalue_reads(rv: &Rvalue, live: &mut HashSet<u32>) {
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
-        | Rvalue::ByteAt(a, b, _) => {
+        | Rvalue::ByteAt(a, b, _)
+        | Rvalue::LoadU8(a, b)
+        | Rvalue::LoadU16(a, b) => {
             add(a);
             add(b);
         }

@@ -318,6 +318,9 @@ fn collect_rvalue_types(rv: &Rvalue, seed: &mut impl FnMut(TypeId)) {
         | Rvalue::StrByteSize(_)
         | Rvalue::CharAt(_, _, _)
         | Rvalue::ByteAt(_, _, _)
+        | Rvalue::StrBytes(_)
+        | Rvalue::LoadU8(_, _)
+        | Rvalue::LoadU16(_, _)
         | Rvalue::HashCode(_)
         | Rvalue::ToString(_)
         | Rvalue::Concat(_)
@@ -680,6 +683,7 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)
+        | Rvalue::StrBytes(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
         | Rvalue::TypeName(o)
@@ -698,7 +702,9 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
-        | Rvalue::ByteAt(a, b, _) => {
+        | Rvalue::ByteAt(a, b, _)
+        | Rvalue::LoadU8(a, b)
+        | Rvalue::LoadU16(a, b) => {
             collect_global_reads_operand(a, out);
             collect_global_reads_operand(b, out);
         }

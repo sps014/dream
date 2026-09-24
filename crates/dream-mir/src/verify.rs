@@ -243,6 +243,9 @@ fn single_token_locals(f: &MirFunction) -> BTreeSet<u32> {
                     | Rvalue::StrByteSize(_)
                     | Rvalue::CharAt(..)
                     | Rvalue::ByteAt(..)
+                    | Rvalue::StrBytes(_)
+                    | Rvalue::LoadU8(..)
+                    | Rvalue::LoadU16(..)
                     | Rvalue::HashCode(_)
                     | Rvalue::EnumName { .. } => {}
                     _ => shared.extend(rvalue_local_operands(rv)),
@@ -302,6 +305,7 @@ fn rvalue_local_operands(rv: &Rvalue) -> Vec<u32> {
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)
+        | Rvalue::StrBytes(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
         | Rvalue::TypeName(o)
@@ -322,6 +326,8 @@ fn rvalue_local_operands(rv: &Rvalue) -> Vec<u32> {
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
         | Rvalue::ByteAt(a, b, _)
+        | Rvalue::LoadU8(a, b)
+        | Rvalue::LoadU16(a, b)
         | Rvalue::ArrayRealloc {
             array: a,
             new_len: b,

@@ -24,6 +24,7 @@ mod overflow_elim;
 mod prop;
 pub(crate) mod rc;
 mod sccp;
+mod str_cursor;
 mod simplify_cfg;
 mod sroa;
 mod tco;
@@ -55,6 +56,7 @@ pub use rc::{HopElision, RcElision, RcInsertion, RcLastUseRepair};
 pub use sccp::Sccp;
 pub use simplify_cfg::SimplifyCfg;
 pub use sroa::{ExpandSimpleCtors, Sroa, SroaManaged};
+pub use str_cursor::StrCursor;
 pub use tco::Tco;
 pub use unique_region::UniqueRegion;
 
@@ -114,6 +116,7 @@ impl PassManager {
         pm.add(Dce);
         pm.add(HopElision);
         pm.add(RcElision);
+        pm.add(StrCursor);
         // RC *insertion* is a module-wide phase that must run once before inlining (see
         // `optimize_module`); the per-function pipeline only *elides* redundant RC. Running
         // RcInsertion here would double-insert retains/releases, so guard against that regression.
@@ -149,6 +152,7 @@ impl PassManager {
         pm.add(Dce);
         pm.add(HopElision);
         pm.add(RcElision);
+        pm.add(StrCursor);
         debug_assert!(pm.passes.iter().all(|p| p.name() != "autovec"));
         pm
     }
@@ -171,6 +175,7 @@ impl PassManager {
         pm.add(Dse);
         pm.add(Dce);
         pm.add(HopElision);
+        pm.add(StrCursor);
         pm
     }
 

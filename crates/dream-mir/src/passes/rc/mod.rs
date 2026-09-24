@@ -125,6 +125,7 @@ pub(crate) fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)
+        | Rvalue::StrBytes(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
         | Rvalue::TypeName(o)
@@ -135,7 +136,9 @@ pub(crate) fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
-        | Rvalue::ByteAt(a, b, _) => {
+        | Rvalue::ByteAt(a, b, _)
+        | Rvalue::LoadU8(a, b)
+        | Rvalue::LoadU16(a, b) => {
             check(a);
             check(b);
         }

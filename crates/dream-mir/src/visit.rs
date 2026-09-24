@@ -94,6 +94,7 @@ pub(crate) fn rvalue_operands_mut(rv: &mut Rvalue, f: &mut impl FnMut(&mut Opera
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)
+        | Rvalue::StrBytes(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
         | Rvalue::TypeName(o)
@@ -111,6 +112,8 @@ pub(crate) fn rvalue_operands_mut(rv: &mut Rvalue, f: &mut impl FnMut(&mut Opera
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
         | Rvalue::ByteAt(a, b, _)
+        | Rvalue::LoadU8(a, b)
+        | Rvalue::LoadU16(a, b)
         | Rvalue::ArrayRealloc {
             array: a,
             new_len: b,

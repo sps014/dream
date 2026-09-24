@@ -1,0 +1,40 @@
+import system;
+import system.text;
+
+fun sum_bytes(s: string): int {
+    let n = s.byte_size();
+    let j = 0;
+    let acc = 0;
+    while j < n {
+        acc = acc + (int)s.byte_at(j);
+        j = j + 1;
+    }
+    return acc;
+}
+
+fun sum_chars(s: string): int {
+    let n = s.length;
+    let j = 0;
+    let acc = 0;
+    while j < n {
+        acc = acc + (int)s.char_at(j);
+        j = j + 1;
+    }
+    return acc;
+}
+
+fun main(): void {
+    let lit = "ab";
+    System.println(sum_bytes(lit));
+    System.println(sum_bytes(lit.substring(0, 2)));
+    System.println(sum_chars(lit.substring(0, 2)));
+    let s = "ab";
+    let i = 0;
+    let acc = 0;
+    while i < 2 {
+        acc = acc + (int)s.byte_at(0);
+        s = "cd";
+        i = i + 1;
+    }
+    System.println(acc);
+}

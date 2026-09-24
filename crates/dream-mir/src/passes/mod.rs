@@ -24,6 +24,7 @@ mod overflow_elim;
 mod prop;
 pub(crate) mod rc;
 mod sccp;
+mod slice_measure;
 mod str_cursor;
 mod simplify_cfg;
 mod sroa;
@@ -303,6 +304,8 @@ pub fn optimize_module_opts(
     dump.module(rc::held::STAGE, mir, interner);
     let _ = SroaManaged.run(mir, interner);
     dump.module(SroaManaged.name(), mir, interner);
+    let _ = slice_measure::run(mir, interner);
+    dump.module(slice_measure::STAGE, mir, interner);
 }
 
 /// Runs `pipeline` over every function and `poll_pipeline` over every async poll body, then

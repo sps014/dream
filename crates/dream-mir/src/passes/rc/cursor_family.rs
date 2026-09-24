@@ -445,6 +445,9 @@ impl FamilyCx<'_> {
                     fields.contains(&(ty, field)) || unions.contains(&ty)
                 }
                 Effect::Call(callee) => self.stores_hit(&self.modref.call(callee), fields, unions),
+                Effect::Iface(id, slot) => {
+                    self.stores_hit(&self.modref.iface(id, slot), fields, unions)
+                }
                 Effect::Ctor(def) => self.stores_hit(&self.modref.ctor(def), fields, unions),
             };
             ok &= !hit;

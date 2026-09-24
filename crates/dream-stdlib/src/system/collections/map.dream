@@ -136,13 +136,30 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         }
     }
 
+    // The first probe hits an empty or matching slot on the usual insert. That case stays in the
+    // caller; collisions fall through to the full probe.
+    @inline
     public fun this[key: K] = value: V {
         if (this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num() {
             this.rehash();
         }
-        this.insert_no_grow(key, value);
+        let idx = key.hash_code() & (this.cap - 1);
+        let slot_state = this.slots[idx].state;
+        let epoch = this.epoch;
+        if slot_state == epoch && this.slots[idx].key == key {
+            this.slots[idx].value = value;
+        } else if slot_state != epoch && slot_state != (0 - epoch) {
+            this.slots[idx].key = key;
+            this.slots[idx].value = value;
+            this.slots[idx].state = epoch;
+            this.count = this.count + 1;
+            this.used = this.used + 1;
+        } else {
+            this.insert_no_grow(key, value);
+        }
     }
 
+    @inline
     public fun set(key: K, value: V): void {
         this[key] = value;
     }

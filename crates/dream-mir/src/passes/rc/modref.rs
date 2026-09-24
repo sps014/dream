@@ -83,6 +83,17 @@ impl ModRef {
             ModRef::Known(k) => k.observes_rc,
         }
     }
+
+    /// No stores and no calls that store. Cannot run a `del`: there is nothing it releases
+    /// except a borrowed parameter, and those are not freed by the callee.
+    pub(crate) fn is_quiet(&self) -> bool {
+        match self {
+            ModRef::Top => false,
+            ModRef::Known(k) => {
+                k.fields.is_empty() && k.slots.is_empty() && !k.any_slot && !k.observes_rc
+            }
+        }
+    }
 }
 
 /// Module-wide summaries. A lookup that misses (an empty table in unit tests, a pruned callee)
@@ -97,6 +108,8 @@ pub(crate) struct ModRefTable {
     intrinsics: IndexMap<DefId, ModRef>,
     /// Union of every `del` body: what may run inside any `Release` that frees an object.
     del: ModRef,
+    /// `(iface id, method slot)` → join of the concrete methods. Missing slots are [`ModRef::Top`].
+    ifaces: IndexMap<(usize, usize), ModRef>,
     /// Layout names with a `<Name>_del`; `None` (an uncomputed table) means any type may.
     del_types: Option<BTreeSet<String>>,
 }
@@ -125,6 +138,7 @@ impl ModRefTable {
             ctors: IndexMap::new(),
             intrinsics,
             del: ModRef::default(),
+            ifaces: IndexMap::new(),
             del_types: Some(
                 mir.functions
                     .iter()
@@ -165,12 +179,65 @@ impl ModRefTable {
             }
         }
         table.del = del;
+        table.close_ifaces(mir, &locals);
         table
+    }
+
+    /// Interface calls are edges to a closed set of methods. The direct-call fixpoint above treats
+    /// those edges as a no-op so a slot summary can be built from the methods, then folded back
+    /// into callers. An implementor that itself dispatches is re-joined until the slot stops moving.
+    fn close_ifaces(&mut self, mir: &Mir, locals: &[LocalSummary]) {
+        let by_name: IndexMap<&str, &MirFunction> =
+            mir.functions.iter().map(|f| (f.name.as_str(), f)).collect();
+        loop {
+            let mut iface: IndexMap<(usize, usize), ModRef> = IndexMap::new();
+            for imp in &mir.interfaces.impls {
+                for (iface_id, slots) in &imp.entries {
+                    for (slot, sym) in slots.iter().enumerate() {
+                        let summary = match by_name.get(sym.as_str()) {
+                            Some(f) => self.call_def(f.def, &f.instance),
+                            None => ModRef::Top,
+                        };
+                        iface.entry((*iface_id, slot)).or_default().join(&summary);
+                    }
+                }
+            }
+            for s in locals {
+                for edge in &s.edges {
+                    if let Edge::Iface(id, slot) = edge {
+                        iface.entry((*id, *slot)).or_insert(ModRef::Top);
+                    }
+                }
+            }
+            let iface_changed = iface != self.ifaces;
+            self.ifaces = iface;
+            let mut grew = false;
+            for (f, s) in mir.functions.iter().zip(locals) {
+                let mut extra = ModRef::default();
+                for edge in &s.edges {
+                    if let Edge::Iface(id, slot) = edge {
+                        extra.join(&self.iface(*id, *slot));
+                    }
+                }
+                let key = (f.def, f.instance.clone());
+                if let Some(cur) = self.fns.get_mut(&key) {
+                    grew |= cur.join(&extra);
+                }
+            }
+            if !grew && !iface_changed {
+                break;
+            }
+            if !grew {
+                break;
+            }
+        }
     }
 
     fn edge(&self, edge: &Edge) -> ModRef {
         match edge {
             Edge::Call(def, args) => self.call_def(*def, args),
+            // Filled in by [`Self::close_ifaces`] after the direct-call fixpoint.
+            Edge::Iface(_, _) => ModRef::default(),
             Edge::Ctor(def) => self.ctor(*def),
         }
     }
@@ -188,6 +255,13 @@ impl ModRefTable {
 
     pub(crate) fn ctor(&self, def: DefId) -> ModRef {
         self.ctors.get(&def).cloned().unwrap_or(ModRef::Top)
+    }
+
+    pub(crate) fn iface(&self, iface_id: usize, slot: usize) -> ModRef {
+        self.ifaces
+            .get(&(iface_id, slot))
+            .cloned()
+            .unwrap_or(ModRef::Top)
     }
 
     /// What any `del` may do; a `Release` anywhere may run one.
@@ -256,6 +330,7 @@ pub(crate) fn strong_children(
 
 enum Edge {
     Call(DefId, Vec<TypeId>),
+    Iface(usize, usize),
     Ctor(DefId),
 }
 
@@ -317,6 +392,7 @@ impl LocalSummary {
                 }
             },
             Effect::Call(callee) => s.edges.push(Edge::Call(callee.def, callee.args.clone())),
+            Effect::Iface(id, slot) => s.edges.push(Edge::Iface(id, slot)),
             Effect::Ctor(def) => s.edges.push(Edge::Ctor(def)),
         };
         for block in &f.blocks {
@@ -347,6 +423,9 @@ pub(crate) enum Effect<'a> {
     SlotStore(TypeId),
     GlobalStore(Global),
     Call(&'a Callee),
+    /// Interface slot. The summary is the join of every implementor's method, not [`Effect::Top`],
+    /// when that set is closed.
+    Iface(usize, usize),
     Ctor(DefId),
 }
 
@@ -374,10 +453,14 @@ pub(crate) fn stmt_effects<'a>(
             }
         }
         Statement::Call { callee, .. } => out(Effect::Call(callee)),
-        Statement::JsCall { .. }
-        | Statement::InterfaceCall { .. }
-        | Statement::IndirectCall { .. }
-        | Statement::ForceFree(_) => out(Effect::Top),
+        Statement::InterfaceCall {
+            iface_id,
+            method_slot,
+            ..
+        } => out(Effect::Iface(*iface_id, *method_slot)),
+        Statement::JsCall { .. } | Statement::IndirectCall { .. } | Statement::ForceFree(_) => {
+            out(Effect::Top)
+        }
         Statement::Print { ty, .. } if !protocol_is_builtin(*ty, interner) => out(Effect::Top),
         Statement::ArrayElemsCopy { elem_ty, .. } | Statement::ArrayElemsFill { elem_ty, .. }
             if interner.is_rc_tracked(*elem_ty) =>
@@ -394,9 +477,12 @@ fn rvalue_effect<'a>(rv: &'a Rvalue, f: &MirFunction, interner: &TypeInterner) -
         Rvalue::New {
             ctor: Some(ctor), ..
         } => Effect::Ctor(ctor.def),
-        Rvalue::IndirectCall { .. } | Rvalue::InterfaceCall { .. } | Rvalue::JsCall { .. } => {
-            Effect::Top
-        }
+        Rvalue::InterfaceCall {
+            iface_id,
+            method_slot,
+            ..
+        } => Effect::Iface(*iface_id, *method_slot),
+        Rvalue::IndirectCall { .. } | Rvalue::JsCall { .. } => Effect::Top,
         Rvalue::ArrayRealloc { elem_ty, .. } if interner.is_rc_tracked(*elem_ty) => {
             Effect::SlotStore(*elem_ty)
         }

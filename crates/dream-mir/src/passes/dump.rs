@@ -32,6 +32,7 @@ const MODULE_STAGES: &[&str] = &[
     "unique-region",
     super::rc::held::STAGE,
     "sroa-managed",
+    super::slice_measure::STAGE,
     STAGE_FIXPOINT,
     STAGE_LATE,
     super::frame_alloc::STAGE,

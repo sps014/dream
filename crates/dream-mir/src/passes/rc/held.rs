@@ -86,7 +86,10 @@ pub(crate) fn run_function(
         if ready.is_empty() {
             break;
         }
-        let ignored: HashSet<u32> = pending.keys().copied().collect();
+        let mut ignored: HashSet<u32> = pending.keys().copied().collect();
+        for c in pending.values() {
+            ignored.extend(c.class.iter().copied());
+        }
         let live_out = liveness::live_out(&without_rc_on(f, &ignored));
         let accepted: Vec<u32> = ready
             .iter()
@@ -105,14 +108,18 @@ pub(crate) fn run_function(
                 .holds(&live_out)
             })
             .collect();
+        let classes: Vec<BTreeSet<u32>> = accepted.iter().map(|&x| pending[&x].class.clone()).collect();
         for x in &ready {
             pending.remove(x);
         }
-        for &x in &accepted {
+        for class in &classes {
             for b in &mut f.blocks {
-                b.stmts.retain(|s| rc_target(s) != Some(x));
+                b.stmts
+                    .retain(|s| rc_target(s).is_none_or(|l| !class.contains(&l)));
             }
-            f.locals[x as usize].is_cursor = true;
+            for &m in class {
+                f.locals[m as usize].is_cursor = true;
+            }
             changed = true;
         }
     }
@@ -207,10 +214,12 @@ fn candidates(
                 if class.contains(&y) || !srcs.iter().any(|s| class.contains(s)) {
                     continue;
                 }
-                // An alias holding a count of its own, or fed from elsewhere, is not ours.
+                // An alias that retained for itself holds a second count. A release with no
+                // retain is the snapshot's count, moved into the alias (`op = elem`).
+                let own_retain = rc_ops.get(&y).is_some_and(|r| r.0 != 0);
                 if params.contains(&y)
                     || other_defs.contains(&y)
-                    || rc_ops.contains_key(&y)
+                    || own_retain
                     || !srcs.iter().all(|s| class.contains(s))
                 {
                     ok = false;
@@ -363,8 +372,16 @@ impl Check<'_> {
         let base = self.snap.base;
         let pinned =
             self.f.params.iter().any(|p| p.0 == base) && !self.f.locals[base as usize].is_take;
+        let pins = self.owner_pins();
+        let owner_pinned = pins.iter().any(|&owner| {
+            self.f.params.iter().any(|p| p.0 == owner) && !self.f.locals[owner as usize].is_take
+        });
         let base_ok = |live: &HashSet<u32>| {
-            !self.class.iter().any(|m| live.contains(m)) || pinned || live.contains(&base)
+            !self.class.iter().any(|m| live.contains(m))
+                || pinned
+                || live.contains(&base)
+                || owner_pinned
+                || pins.iter().any(|owner| live.contains(owner))
         };
         for (bi, block) in self.f.blocks.iter().enumerate() {
             let mut live = live_out[bi].clone();
@@ -397,12 +414,25 @@ impl Check<'_> {
     /// `stmt` runs while `x` is in use.
     fn stmt_ok(&self, stmt: &Statement) -> bool {
         let base = self.snap.base;
+        let pins = self.owner_pins();
         let mut base_given = false;
-        for_each_given_away(stmt, |l| base_given |= l == base);
+        for_each_given_away(stmt, |l| {
+            base_given |= l == base || pins.contains(&l)
+        });
         let base_dropped = match stmt {
-            Statement::Assign(Place::Local(d), _) => d.0 == base,
-            Statement::Release(op) => local_of(op) == Some(base),
-            Statement::ValueDrop(l) | Statement::ValueKill(l) => l.0 == base,
+            // Reloading the array pointer from the same field does not free the buffer.
+            Statement::Assign(Place::Local(d), rv) if d.0 == base => {
+                !self.field_pin().is_some_and(|(owner, field)| {
+                    matches!(
+                        rv,
+                        Rvalue::Use(Operand::Copy(Place::Field { base: o, field: f }))
+                            if o.0 == owner && *f as u32 == field
+                    )
+                })
+            }
+            Statement::Assign(Place::Local(d), _) => pins.contains(&d.0),
+            Statement::Release(op) => local_of(op).is_some_and(|l| l == base || pins.contains(&l)),
+            Statement::ValueDrop(l) | Statement::ValueKill(l) => l.0 == base || pins.contains(&l.0),
             _ => false,
         };
         if base_given || base_dropped || matches!(stmt, Statement::RegionLeave) {
@@ -430,11 +460,22 @@ impl Check<'_> {
                 Effect::Top => false,
                 Effect::Store(b, field) => {
                     self.snap.slot != Slot::Field(self.f.local_ty(b), field)
+                        && !self
+                            .field_pin()
+                            .is_some_and(|(owner, f)| b.0 == owner && field == f)
                 }
                 Effect::SlotStore(ty) => !self.hits_elem(ty),
                 // A callee may also release anything, running any `del`.
                 Effect::Call(c) => {
                     !self.summary_hits(&self.modref.call(c)) && !self.summary_hits(self.modref.del())
+                }
+                Effect::Iface(id, slot) => {
+                    let summary = self.modref.iface(id, slot);
+                    if summary.is_quiet() {
+                        true
+                    } else {
+                        !self.summary_hits(&summary) && !self.summary_hits(self.modref.del())
+                    }
                 }
                 Effect::Ctor(def) => {
                     !self.summary_hits(&self.modref.ctor(def))
@@ -443,6 +484,86 @@ impl Check<'_> {
             };
         });
         ok
+    }
+
+    /// The field-load owner and every local it is copied from. Any one of them being live keeps
+    /// the object alive; the immediate owner is often dead at a block edge that only forwards
+    /// the loaded element.
+    fn owner_pins(&self) -> Vec<u32> {
+        let Some((owner, _)) = self.field_pin() else {
+            return Vec::new();
+        };
+        let mut out = vec![owner];
+        let mut cur = owner;
+        for _ in 0..8 {
+            let Some(src) = self.copy_src(cur) else {
+                break;
+            };
+            if out.contains(&src) {
+                break;
+            }
+            out.push(src);
+            cur = src;
+        }
+        out
+    }
+
+    fn copy_src(&self, local: u32) -> Option<u32> {
+        let mut src = None;
+        let mut saw = false;
+        for block in &self.f.blocks {
+            for stmt in &block.stmts {
+                let Statement::Assign(Place::Local(d), rv) = stmt else {
+                    continue;
+                };
+                if d.0 != local || matches!(rv, Rvalue::Use(Operand::Const(Const::Null))) {
+                    continue;
+                }
+                let Rvalue::Use(Operand::Copy(Place::Local(s))) = rv else {
+                    return None;
+                };
+                if src.is_some_and(|p| p != s.0) {
+                    return None;
+                }
+                src = Some(s.0);
+                saw = true;
+            }
+        }
+        if saw { src } else { None }
+    }
+
+    /// Array pointer loaded only from one field of one object. The element stays alive while
+    /// that object does, even when the pointer local itself is dead between reloads.
+    fn field_pin(&self) -> Option<(u32, u32)> {
+        if !matches!(self.snap.slot, Slot::Elem(_)) {
+            return None;
+        }
+        let base = self.snap.base;
+        let mut pin: Option<(u32, u32)> = None;
+        let mut saw = false;
+        for block in &self.f.blocks {
+            for stmt in &block.stmts {
+                let Statement::Assign(Place::Local(d), rv) = stmt else {
+                    continue;
+                };
+                if d.0 != base {
+                    continue;
+                }
+                if matches!(rv, Rvalue::Use(Operand::Const(Const::Null))) {
+                    continue;
+                }
+                let Rvalue::Use(Operand::Copy(Place::Field { base: owner, field })) = rv else {
+                    return None;
+                };
+                let pair = (owner.0, *field as u32);
+                if pin.is_some_and(|p| p != pair) {
+                    return None;
+                }
+                pin = Some(pair);
+                saw = true;
+            }
+        }
+        if saw { pin } else { None }
     }
 
     fn hits_elem(&self, elem: TypeId) -> bool {

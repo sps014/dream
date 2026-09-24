@@ -7,8 +7,8 @@
 //!   through `Use` / reference `Cast` / `Move` chains). Runs between inliner rounds, so allocations
 //!   exposed by inlining a factory are seen too.
 //!
-//! Receivers with a small, statically known implementor set still dispatch through the itable in
-//! MIR; the C backend emits tag-guarded direct calls for those (`backend/c/iface_guard.rs`).
+//! Receivers with up to four statically known implementors still dispatch through the itable in
+//! MIR; the C backend emits a tag switch to direct calls for those (`backend/c/iface_guard.rs`).
 
 use super::cfg::reverse_postorder;
 use super::ModulePass;

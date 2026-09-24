@@ -28,7 +28,7 @@ ratios are not an ARC-only scoreboard.
 | `byte_scan` | `byte_at` walk of UTF-16 LE payload (`byte_size` = 2 × `length`) | same payload, `MemoryMarshal.AsBytes` (two bytes per code unit) |
 | `substring` | `substring(start, end)` | `Substring(start, length)` |
 | `scratch_arena` | `bump` / `set_at` / `at` (no Span RC) | same index API |
-| `regex_find` | Global `[a-z]+\d+` via Pike VM (not bare `\d+`) | same pattern, source-generated regex |
+| `regex_find` | Global `[a-z]+\d+` via Pike VM (not bare `\d+`) | same pattern, interpreted `Regex` (not source-generated or `Compiled`) |
 | `json_serialize` / `json_deserialize` | Nested `@json` User+Address, payload built once; deserialize text outside timer; scale `/10` | `System.Text.Json` source generation |
 | `arr_add` | Scalar `c[i]=a[i]+b[i]` (`float[]`+`int[]`, n=256); Dream autovecs to `v128` | same scalar `for` (RyuJIT autovec) |
 | `vec_add` | `Vector<float>` stride + scalar tail (`count()` lanes; WASM `v128` locals) | `System.Numerics.Vector<float>` |
@@ -308,17 +308,17 @@ What changed (compiler internals: [`05-writing-passes.md`](../../docs/internals/
   access through `Buffer.*_unchecked`, loop versioning for loops bounded by a non-length, and
   `foreach` over `List` lowered as an index loop.
 - **Dispatch:** exact-type devirtualization between inliner rounds; tag-guarded direct calls for
-  interface slots with ≤2 implementors.
+  interface slots with ≤4 implementors (a `switch` once there are more than two).
 - **RC / allocation:** borrow inference for read-only sink params, type-level mod-ref summaries,
   loop-carried cursor families, post-inline `rc-held-by-owner`, escape analysis +
   `frame-alloc` (stack-built objects with an immortal count), `sroa-managed`.
 - **Tooling:** clang PGO (`--profile` / `--use-profile`) — not used for the table below.
 
-Bench changes, so older tables are not comparable on these rows: `iface_dispatch` now calls
-through a 1024-entry list of **four** implementors in LCG order (one op = one call), so neither
-exact-type nor guarded devirt applies and the itable path is measured; `weak_tree` is new (build
-and drop a 1023-node tree with `weak` parent pointers). The HEAD column was built from the
-same, new bench source.
+Bench changes, so older tables are not comparable on these rows: `iface_dispatch` calls
+through a 1024-entry list of **four** implementors in LCG order (one op = one call), so
+exact-type devirt does not apply. That closed set is now a tag switch to the direct methods
+rather than an itable call; `weak_tree` is new (build and drop a 1023-node tree with `weak`
+parent pointers). The HEAD column was built from the same, new bench source.
 
 Method: HEAD (8175f4e3) and this tree built side by side (HEAD in a `git worktree`), `--release`
 native C with zig cc (`-O3`, no LTO on macOS), **7 interleaved reps each** (HEAD, new, HEAD, …)

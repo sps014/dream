@@ -13,7 +13,7 @@ import system.text;
 // - Dream is native C + ARC (`dream --release run`); C# is Release JIT + GC.
 // - `char_scan` is a `char_at` loop over UTF-16 units; `byte_scan` walks UTF-16 LE payload bytes.
 // - `substring(start, end)` is start/end indices; C# uses (start, length).
-// - `regex_find` is the Pike VM; C# uses a source-generated compiled regex.
+// - `regex_find` is the Pike VM; C# uses the interpreted `Regex`, not a compiled one.
 // - `json_*` is `@json` codegen; C# uses System.Text.Json source generation.
 
 let measuring: bool = true;
@@ -810,8 +810,8 @@ class XorOp : BenchOp {
 let IFACE_OPS: int = 1024;
 
 // One op = one interface call. Receivers come from a list of four implementors in LCG order,
-// built outside the timer, so the dynamic type varies call to call: exact-type devirt has
-// nothing to prove and the >2-implementor dispatch path is what gets measured.
+// built outside the timer, so the dynamic type varies call to call. Exact-type devirt has
+// nothing to prove; the closed set of four is a tag switch to the direct methods.
 fun bench_iface_dispatch(iters: int): void {
     let ops = List<BenchOp>();
     let seed = 12345;

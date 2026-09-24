@@ -1,9 +1,16 @@
-use super::ast::{CTy, Expr, Stmt};
+use super::ast::{CTy, CaseKey, Expr, Stmt, SwitchArm};
 use super::emit::Emitter;
 use super::types::{c_ident, runtime_c_name};
 use crate::{Callee, Const, Operand};
 use dream_abi::js_abi;
 use dream_types::TypeId;
+
+fn direct_call(td: &str, cname: &str, args: &[Expr]) -> Expr {
+    Expr::IndirectCall {
+        callee: Box::new(Expr::cast(CTy::Ident(td.to_string()), Expr::id(cname))),
+        args: args.to_vec(),
+    }
+}
 
 impl<'a> Emitter<'a> {
     pub(super) fn call_expr(&mut self, callee: &Callee, args: &[Operand]) -> Expr {
@@ -132,21 +139,23 @@ impl<'a> Emitter<'a> {
             self.retain_rc_global_sink(true, a);
             call_args.push(self.operand(a));
         }
-        let (td, _, _) = super::types::fn_ptr_abi(self.cx.interner, sig);
+        let (td, ret, _) = super::types::fn_ptr_abi(self.cx.interner, sig);
         let mut all = vec![Expr::id(format!("dream_iface_{iface_id}_{method_slot}"))];
         all.extend(call_args.iter().cloned());
-        let mut e = Expr::call(c_ident(&format!("__iface_dispatch_{td}")), all);
-        for (tag, cname) in self
+        let itable = Expr::call(c_ident(&format!("__iface_dispatch_{td}")), all);
+        let arms: Vec<(i32, String)> = self
             .cx
             .iface_guard(iface_id, method_slot)
             .unwrap_or_default()
-            .iter()
-            .rev()
-        {
-            let direct = Expr::IndirectCall {
-                callee: Box::new(Expr::cast(CTy::Ident(td.clone()), Expr::id(cname.clone()))),
-                args: call_args.clone(),
-            };
+            .to_vec();
+        // A two-arm ternary is a cheap predicted test. Three or four equal-likelihood
+        // tags are a switch: one tag load, then a jump table whose arms clang can inline.
+        if arms.len() > 2 && !matches!(ret, CTy::Void) {
+            return self.guard_switch(recv, td, ret, call_args, itable, &arms);
+        }
+        let mut e = itable;
+        for (tag, cname) in arms.iter().rev() {
+            let direct = direct_call(&td, cname, &call_args);
             let is_tag = Expr::eq(
                 Expr::call("dream_object_tag", vec![recv.clone()]),
                 Expr::i(*tag as i64),
@@ -154,6 +163,43 @@ impl<'a> Emitter<'a> {
             e = Expr::ternary(is_tag, direct, e);
         }
         e
+    }
+
+    fn guard_switch(
+        &mut self,
+        recv: Expr,
+        td: String,
+        ret: CTy,
+        call_args: Vec<Expr>,
+        itable: Expr,
+        arms: &[(i32, String)],
+    ) -> Expr {
+        self.b.expr_block(move |b| {
+            let tag = b.temp(
+                CTy::I32,
+                Some(Expr::call("dream_object_tag", vec![recv])),
+            );
+            let dest = b.temp(ret, None);
+            let mut switch_arms: Vec<SwitchArm> = arms
+                .iter()
+                .map(|(tag_v, cname)| SwitchArm {
+                    keys: vec![CaseKey::Int(*tag_v as i64)],
+                    body: vec![
+                        Stmt::assign(dest.clone(), direct_call(&td, cname, &call_args)),
+                        Stmt::Break,
+                    ],
+                })
+                .collect();
+            switch_arms.push(SwitchArm {
+                keys: Vec::new(),
+                body: vec![Stmt::assign(dest.clone(), itable), Stmt::Break],
+            });
+            b.stmt(Stmt::Switch {
+                expr: tag,
+                arms: switch_arms,
+            });
+            dest
+        })
     }
 
     pub(super) fn js_call_expr(

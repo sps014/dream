@@ -12,10 +12,10 @@ namespace DreamBench;
 /// 1:1 C# port of tests/bench/microbenches.dream for side-by-side ns/op comparison.
 /// Pass --dream-scores path/to/native.txt (from run-microbenches.sh) for live ratios.
 /// Dream runs as native C + ARC; this is Release JIT + GC — substrate differs.
-/// Regex and JSON use compile-time source generators, matching Dream's compiled
-/// regex and `@json` codegen rather than reflection.
+/// JSON uses the compile-time source generator, matching Dream's `@json` codegen.
+/// Regex is the interpreted matcher, matching Dream's Pike VM.
 /// </summary>
-public static partial class Program
+public static class Program
 {
     static readonly Dictionary<string, long> DreamScores = new();
     static bool IsWarmup = true;
@@ -278,13 +278,12 @@ public static partial class Program
         Sink = acc;
     }
 
-    // Source-generated, same pattern as Dream's Pike VM (not bare \d+).
-    [GeneratedRegex(@"[a-z]+\d+", RegexOptions.CultureInvariant)]
-    private static partial Regex FindPattern();
-
+    // Interpreted matcher. Dream's `regex_find` is the Pike VM, not a compiled
+    // automaton, so this is `new Regex` and not `[GeneratedRegex]` / `RegexOptions.Compiled`.
+    // The pattern is intentionally not bare `\d+` (that hits a digit-run fast path).
     static void BenchRegexFind(int iters)
     {
-        var re = FindPattern();
+        var re = new Regex(@"[a-z]+\d+", RegexOptions.CultureInvariant);
         string hay = "abc123def456ghi789xyz";
         var sw = Stopwatch.StartNew();
         int acc = 0;

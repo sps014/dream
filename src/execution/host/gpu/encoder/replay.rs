@@ -503,12 +503,25 @@ pub fn submit(stream: &[u8]) -> Result<(), String> {
             }
         }
     }
-    for id in &resolve_ids {
-        if let Some(entry) = st.query_sets.get(id) {
-            super::super::queries::encode_resolve(&mut encoder, entry)?;
-        }
-    }
     queue.submit(std::iter::once(encoder.finish()));
+    // Render-pass timestamp writes are not visible to a resolve in the same command buffer
+    // once the GPU is busy (the end stamp stays 0, so end < begin). Resolve after the pass
+    // submission has finished.
+    if !resolve_ids.is_empty() {
+        let _ = device.poll(wgpu::Maintain::Wait);
+        if let Some(err) = super::super::error::drain_uncaptured() {
+            return Err(err);
+        }
+        let mut resolve_enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("dream-ts-resolve"),
+        });
+        for id in &resolve_ids {
+            if let Some(entry) = st.query_sets.get(id) {
+                super::super::queries::encode_resolve(&mut resolve_enc, entry)?;
+            }
+        }
+        queue.submit(std::iter::once(resolve_enc.finish()));
+    }
     if let Some(s) = encode {
         super::super::profile::note_encode(s.elapsed());
     }

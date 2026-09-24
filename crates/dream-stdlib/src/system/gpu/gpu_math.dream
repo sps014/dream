@@ -35,9 +35,13 @@ public static class GpuMath {
     public static fun ceil(x: float): float {
         return (float)Math.ceil((double)x);
     }
-    // Square root; non-finite inputs become `0` on CPU (WGSL `sqrt`).
+    // Square root. A negative input is `0` here (WGSL `sqrt` is undefined for x < 0);
+    // `Math.sqrt` itself returns NaN.
     public static fun sqrt(x: float): float {
-        return (float)(Math.sqrt((double)x).unwrap_or(0.0d));
+        if x < 0.0 {
+            return 0.0;
+        }
+        return (float)Math.sqrt((double)x);
     }
     // Reciprocal square root; returns `0` when `sqrt(x)` is zero (WGSL `inverseSqrt`).
     public static fun inversesqrt(x: float): float {

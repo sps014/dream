@@ -22,12 +22,9 @@ public static class Math {
     @js("env", "sqrt")
     static extern fun sqrt_host(x: double): double;
 
-    // Returns the square root of `x` or None.
-    public static fun sqrt(x: double): Option<double> {
-        if x < 0.0d {
-            return Option.None;
-        }
-        return Option.Some(Math.sqrt_host(x));
+    // Square root. A negative input is NaN, same as `log` / `asin` and as libm.
+    public static fun sqrt(x: double): double {
+        return Math.sqrt_host(x);
     }
 
     @js("env", "pow")

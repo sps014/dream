@@ -121,7 +121,7 @@ public static class Program
         Sink = hits;
     }
 
-    // Linear UTF-16 scan — fair counterpart to Dream's chars() iterator (not O(n²) char_at).
+    // Indexed UTF-16 walk, same shape as Dream `char_at`.
     static void BenchCharScan(int iters)
     {
         string s = "The quick brown fox jumps over the lazy dog. 0123456789";
@@ -129,8 +129,8 @@ public static class Program
         int acc = 0;
         for (int i = 0; i < iters; i++)
         {
-            foreach (char ch in s)
-                acc += (int)ch;
+            for (int j = 0; j < s.Length; j++)
+                acc += (int)s[j];
         }
         sw.Stop();
         Report("char_scan", ElapsedNs(sw), iters);
@@ -163,8 +163,9 @@ public static class Program
         int acc = 0;
         for (int i = 0; i < iters; i++)
         {
-            // Dream substring(5, 40) is start/end → length 35.
-            string sub = s.Substring(5, 35);
+            // Dream substring(5, 40) is an O(1) slice (start, end). Span is that slice;
+            // String.Substring would copy 35 chars.
+            ReadOnlySpan<char> sub = s.AsSpan(5, 35);
             acc += sub.Length;
         }
         sw.Stop();
@@ -509,7 +510,6 @@ public static class Program
                         k++;
                     }
                     acc += k;
-                    Sink = (int)acc;
                 }
             }
         }
@@ -597,7 +597,8 @@ public static class Program
         long acc = 0;
         for (int r = 0; r < iters; r++)
         {
-            Array.Fill(flags, 1);
+            for (int t = 0; t < n; t++)
+                flags[t] = 1;
             for (int i = 2; (long)i * i < n; i++)
             {
                 if (flags[i] == 1)

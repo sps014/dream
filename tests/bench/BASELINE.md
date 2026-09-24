@@ -24,9 +24,10 @@ ratios are not an ARC-only scoreboard.
 
 | Bench | Dream | C# |
 |-------|-------|-----|
-| `char_scan` | `char_at` loop over UTF-16 code units | `foreach` over UTF-16 chars |
+| `char_scan` | indexed `char_at` over UTF-16 code units | indexed `s[j]` over the same units |
 | `byte_scan` | `byte_at` walk of UTF-16 LE payload (`byte_size` = 2 × `length`) | same payload, `MemoryMarshal.AsBytes` (two bytes per code unit) |
-| `substring` | `substring(start, end)` | `Substring(start, length)` |
+| `substring` | `substring(start, end)`, an O(1) slice | `AsSpan(start, length)`, the same slice (not `Substring`, which copies) |
+| `sieve` | scalar loop writes `flags[t] = 1` | same scalar fill (not `Array.Fill`) |
 | `scratch_arena` | `bump` / `set_at` / `at` (no Span RC) | same index API |
 | `regex_find` | Global `[a-z]+\d+` via Pike VM (not bare `\d+`) | same pattern, interpreted `Regex` (not source-generated or `Compiled`) |
 | `json_serialize` / `json_deserialize` | Nested `@json` User+Address, payload built once; deserialize text outside timer; scale `/10` | `System.Text.Json` source generation |

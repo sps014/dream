@@ -7,7 +7,8 @@ hide:
 <div class="dream-hero">
   <h1 class="dream-gradient-text">Dream</h1>
   <p class="dream-hero-subtitle">
-    A typed language. You declare functions with <code>fun</code> and variables with <code>let</code>.
+    A fast, general-purpose language compiled ahead of time (AOT) to a single native or
+    WebAssembly binary. Familiar <code>fun</code> / <code>let</code> syntax.
     Write once, run on your computer, in the browser, or in Node.
     Memory is automatic.
   </p>
@@ -34,6 +35,7 @@ fun main() {
 
 <div class="dream-highlights" markdown>
 
+-   :material-rocket-launch: **Ahead-of-time (AOT) to a single binary**
 -   :material-shield-check: **Types checked before you run**
 -   :material-memory: **No manual memory**
 -   :material-web: **Runs in the browser and on your machine**

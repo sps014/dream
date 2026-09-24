@@ -1,6 +1,7 @@
 # Dream
 
-Dream is a blazing fast, typed programming language with familiar `fun` / `let` syntax. You write one program; it compiles to WebAssembly and can run on your computer, in the browser, or in Node. Memory is automatic reference counting (ARC) — no manual `free`. 
+Dream is a general-purpose, ahead-of-time (AOT) language: statically typed, fast by default, and compiled to a single native or WebAssembly binary. Familiar `fun` / `let` syntax. One program runs on your computer, in the browser, or in Node. Memory is automatic reference counting (ARC) — no manual `free`.
+
 
 **[Docs](https://sps014.github.io/dream/)** · [Quickstart](https://sps014.github.io/dream/learn/quickstart/) · [Language tour](https://sps014.github.io/dream/learn/tour/) · [Cookbook](https://sps014.github.io/dream/cookbook/)
 

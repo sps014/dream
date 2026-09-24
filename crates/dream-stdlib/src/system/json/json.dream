@@ -97,7 +97,7 @@ public static class Json {
 
     // Appends a quoted, escaped JSON string to `sb`.
     // Safe ASCII / UTF-8 runs are bulk-copied; only `"`, `\`, and controls take the slow path.
-    public static fun _json_escape_into(borrow sb: StringBuilder, borrow s: string): void {
+    internal static fun _json_escape_into(borrow sb: StringBuilder, borrow s: string): void {
         sb.append_char('"');
         let n = s.length;
         let i = 0;

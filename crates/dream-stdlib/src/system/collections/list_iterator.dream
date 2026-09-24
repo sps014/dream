@@ -6,7 +6,7 @@ public class ListIterator<T> : Iterator<T> {
     idx: int;
 
     // Starts at the beginning of `list`.
-    public constructor(list: List<T>) {
+    internal constructor(list: List<T>) {
         this.list = list;
         this.idx = 0;
     }

@@ -7,7 +7,7 @@ public class ArrayIterator<T> : Iterator<T> {
     idx: int;
 
     // Starts at the beginning of `items`.
-    public constructor(items: T[]) {
+    internal constructor(items: T[]) {
         this.items = items;
         this.idx = 0;
     }

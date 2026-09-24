@@ -6,7 +6,7 @@ public class SetIterator<T> : Iterator<T> {
     index: int;
 
     // Starts at slot 0 of `set`.
-    public constructor(set: Set<T>) {
+    internal constructor(set: Set<T>) {
         this.set = set;
         this.index = 0;
     }

@@ -109,7 +109,7 @@ public class HttpResponse {
     }
 
     // Response head (status + headers) for cookie parsing.
-    public fun head_text_for_cookies(): string {
+    internal fun head_text_for_cookies(): string {
         return this.head_text();
     }
 

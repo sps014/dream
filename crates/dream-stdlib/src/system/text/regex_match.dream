@@ -3,24 +3,24 @@ module system.text;
 // The result of a successful `RegexVM.find`: every capturing group's `[start, end)` offsets, flat
 // pairs indexed `2*i`/`2*i + 1` (group 0 is the overall match). `-1` marks a group that never
 // participated in the match (e.g. an alternative that wasn't taken).
-public class RegexMatch {
-    public groups: int[];
-    public ngroup: int;
+internal class RegexMatch {
+    internal groups: int[];
+    internal ngroup: int;
 
-    public constructor(groups: int[], ngroup: int) {
+    internal constructor(groups: int[], ngroup: int) {
         this.groups = groups;
         this.ngroup = ngroup;
     }
 
-    public fun start(): int {
+    internal fun start(): int {
         return this.groups[0];
     }
 
-    public fun end(): int {
+    internal fun end(): int {
         return this.groups[1];
     }
 
-    public fun group_start(i: int): int {
+    internal fun group_start(i: int): int {
         let idx = 2 * i;
         if (idx < 0) || (idx + 1 >= this.groups.length) {
             return 0 - 1;
@@ -28,7 +28,7 @@ public class RegexMatch {
         return this.groups[idx];
     }
 
-    public fun group_end(i: int): int {
+    internal fun group_end(i: int): int {
         let idx = (2 * i) + 1;
         if (idx < 0) || (idx >= this.groups.length) {
             return 0 - 1;
@@ -37,7 +37,7 @@ public class RegexMatch {
     }
 
     // The text captured by group `i` (0 is the whole match), or "" if it didn't participate.
-    public fun group_text(borrow input: string, i: int): string {
+    internal fun group_text(borrow input: string, i: int): string {
         let s = this.group_start(i);
         let e = this.group_end(i);
         if (s < 0) || (e < 0) {

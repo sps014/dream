@@ -1,6 +1,6 @@
 module system.json;
 
-// Discriminant for `JsonValue.kind()`. Prefer this over the raw `kind_of()` integer.
+// Discriminant for `JsonValue.kind()`.
 public enum JsonKind {
     Null,
     Bool,
@@ -104,11 +104,6 @@ public class JsonValue {
             Option.Some(List<JsonValue>()),
             Option.Some(Map<string, JsonValue>())
         );
-    }
-
-    // The kind of JSON value as a raw discriminant (`0` null … `5` object).
-    public fun kind_of(): int {
-        return this.kind;
     }
 
     // The kind of JSON value, for `switch (v.kind()) { case JsonKind.Object: … }`.

@@ -13,7 +13,7 @@ public class LogRecord {
     public timestamp_ms: long;
 
     // Builds a record from its fields.
-    public constructor(level: LogLevel, name: string, message: string, timestamp_ms: long) {
+    internal constructor(level: LogLevel, name: string, message: string, timestamp_ms: long) {
         this.level = level;
         this.name = name;
         this.message = message;

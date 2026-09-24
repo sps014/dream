@@ -11,7 +11,7 @@ public class GenResult {
     public error_field: string;
 
     // Builds a raw result; prefer `success` / `failure` / `failure_at`.
-    public constructor(ok: bool, source: string, error: string, error_type: string, error_field: string) {
+    internal constructor(ok: bool, source: string, error: string, error_type: string, error_field: string) {
         this.ok = ok;
         this.source = source;
         this.error = error;

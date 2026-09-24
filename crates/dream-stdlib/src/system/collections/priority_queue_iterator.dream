@@ -7,7 +7,7 @@ public class PriorityQueueIterator<T> : Iterator<T> {
     items: T[];
     offset: int;
 
-    public constructor(snapshot: T[]) {
+    internal constructor(snapshot: T[]) {
         this.items = snapshot;
         this.offset = 0;
     }

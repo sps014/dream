@@ -24,7 +24,7 @@ internal class ProcessWireReader {
     }
 
     // Reads and consumes everything up to the next '\n' (exclusive), then skips the '\n'.
-    public fun read_line(): string {
+    internal fun read_line(): string {
         let n = this.data.length;
         let start = this.pos;
         let i = start;
@@ -37,7 +37,7 @@ internal class ProcessWireReader {
     }
 
     // Reads and consumes the next `count` raw bytes (clamped to what remains).
-    public fun read_bytes(count: int): byte[] {
+    internal fun read_bytes(count: int): byte[] {
         let n = this.data.length;
         let start = this.pos;
         let take = count;
@@ -59,7 +59,7 @@ internal class ProcessWireReader {
     }
 
     // Reads and consumes every remaining byte.
-    public fun read_remaining_bytes(): byte[] {
+    internal fun read_remaining_bytes(): byte[] {
         return this.read_bytes(this.data.length - this.pos);
     }
 }

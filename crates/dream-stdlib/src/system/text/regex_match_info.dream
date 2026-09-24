@@ -10,7 +10,7 @@ public class RegexMatchInfo {
     names: string[];
     name_numbers: int[]; // 1-based group numbers, parallel to `names`
 
-    public constructor(full: string, groups: string[], names: string[], name_numbers: int[]) {
+    internal constructor(full: string, groups: string[], names: string[], name_numbers: int[]) {
         this.full = full;
         this.groups = groups;
         this.names = names;

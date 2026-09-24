@@ -3,40 +3,40 @@ module system.webview;
 // Native desktop WebView (wry). `@native` only — other hosts report unsupported.
 
 internal class WebViewOnEntry {
-    public channel: string;
-    public fire: fun(string): void;
+    internal channel: string;
+    internal fire: fun(string): void;
 
-    public constructor(channel: string, fire: fun(string): void) {
+    internal constructor(channel: string, fire: fun(string): void) {
         this.channel = channel;
         this.fire = fire;
     }
 }
 
 internal class WebViewServeEntry {
-    public channel: string;
-    public fire: fun(string): string;
+    internal channel: string;
+    internal fire: fun(string): string;
 
-    public constructor(channel: string, fire: fun(string): string) {
+    internal constructor(channel: string, fire: fun(string): string) {
         this.channel = channel;
         this.fire = fire;
     }
 }
 
 internal class WebViewOnBytesEntry {
-    public channel: string;
-    public fire: fun(byte[]): void;
+    internal channel: string;
+    internal fire: fun(byte[]): void;
 
-    public constructor(channel: string, fire: fun(byte[]): void) {
+    internal constructor(channel: string, fire: fun(byte[]): void) {
         this.channel = channel;
         this.fire = fire;
     }
 }
 
 internal class WebViewServeBytesEntry {
-    public channel: string;
-    public fire: fun(byte[]): byte[];
+    internal channel: string;
+    internal fire: fun(byte[]): byte[];
 
-    public constructor(channel: string, fire: fun(byte[]): byte[]) {
+    internal constructor(channel: string, fire: fun(byte[]): byte[]) {
         this.channel = channel;
         this.fire = fire;
     }
@@ -45,13 +45,13 @@ internal class WebViewServeBytesEntry {
 // Generic method bodies cannot emit nested lambdas into HIR; wrap the typed handler
 // so `on`/`serve` pass a method-group `fire` instead of an inline closure.
 internal class WebViewJsonOn<T> {
-    public handler: fun(T): void;
+    internal handler: fun(T): void;
 
-    public constructor(handler: fun(T): void) {
+    internal constructor(handler: fun(T): void) {
         this.handler = handler;
     }
 
-    public fun fire(body: string): void {
+    internal fun fire(body: string): void {
         let handler = this.handler;
         switch (Json.deserialize<T>(body)) {
             Ok(value) => handler(value),
@@ -61,13 +61,13 @@ internal class WebViewJsonOn<T> {
 }
 
 internal class WebViewJsonServe<Req, Res> {
-    public handler: fun(Req): Res;
+    internal handler: fun(Req): Res;
 
-    public constructor(handler: fun(Req): Res) {
+    internal constructor(handler: fun(Req): Res) {
         this.handler = handler;
     }
 
-    public fun fire(body: string): string {
+    internal fun fire(body: string): string {
         let handler = this.handler;
         return switch (Json.deserialize<Req>(body)) {
             Ok(req) => Json.serialize(handler(req)),
@@ -77,7 +77,7 @@ internal class WebViewJsonServe<Req, Res> {
 }
 
 public class WebView {
-    public id: int;
+    internal id: int;
     _on: List<WebViewOnEntry>;
     _serve: List<WebViewServeEntry>;
     _on_bytes: List<WebViewOnBytesEntry>;

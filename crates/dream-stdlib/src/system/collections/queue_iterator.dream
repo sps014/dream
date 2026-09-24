@@ -6,7 +6,7 @@ public class QueueIterator<T> : Iterator<T> {
     offset: int;
 
     // Starts at the front of `queue`.
-    public constructor(queue: Queue<T>) {
+    internal constructor(queue: Queue<T>) {
         this.queue = queue;
         this.offset = 0;
     }

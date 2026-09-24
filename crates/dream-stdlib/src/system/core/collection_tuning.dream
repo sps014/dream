@@ -16,14 +16,6 @@ module system.core;
 // constructed with a smaller explicit capacity).
 public fun sequence_min_capacity(): int { return 4; }
 
-// A hash-table probe slot has never been occupied. Also the sentinel value that ends a probe
-// sequence in `find`/`add`/`set` (searching stops at the first empty slot).
-public fun hash_slot_empty(): int { return 0; }
-// A hash-table probe slot currently holds a live key/value.
-public fun hash_slot_occupied(): int { return 1; }
-// A hash-table probe slot held a key/value that was since removed: probing must continue past it
-// (unlike an empty slot), but the slot is available for reuse by a future insert.
-public fun hash_slot_tombstone(): int { return 2; }
 // Smallest hash-table backing-array capacity (already a power of 2). `Map`/`Set.clear` keep the
 // current capacity and reuse buffers rather than shrinking back to this floor.
 public fun hash_min_capacity(): int { return 8; }

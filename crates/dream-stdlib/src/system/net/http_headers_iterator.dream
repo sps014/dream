@@ -5,7 +5,7 @@ public class HttpHeadersIterator : Iterator<KeyValuePair<string, string>> {
     headers: HttpHeaders;
     idx: int;
 
-    public constructor(headers: HttpHeaders) {
+    internal constructor(headers: HttpHeaders) {
         this.headers = headers;
         this.idx = 0;
     }

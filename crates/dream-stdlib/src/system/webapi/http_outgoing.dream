@@ -6,8 +6,8 @@ public class HttpOutgoing {
     public headers: HttpHeaders;
     public body: string;
     public body_bytes: byte[];
-    public use_bytes: bool;
-    public skip_send: bool;
+    internal use_bytes: bool;
+    internal skip_send: bool;
 
     public constructor(status: int, body: string = "") {
         this.status = status;

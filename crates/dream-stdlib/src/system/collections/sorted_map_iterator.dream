@@ -6,7 +6,7 @@ public class SortedMapIterator<K : Comparable<K>, V> : Iterator<KeyValuePair<K, 
     idx: int;
 
     // Starts before the first (smallest-key) entry of `map`.
-    public constructor(map: SortedMap<K, V>) {
+    internal constructor(map: SortedMap<K, V>) {
         this.map = map;
         this.idx = 0;
     }

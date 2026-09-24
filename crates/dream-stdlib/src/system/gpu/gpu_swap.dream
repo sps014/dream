@@ -3,11 +3,11 @@ module system.gpu;
 // Ping-pong pair of storage buffers.
 public class GpuSwap<T : unmanaged> {
     // First storage buffer of the pair.
-    public a: GpuBuffer<T>;
+    internal a: GpuBuffer<T>;
     // Second storage buffer of the pair.
-    public b: GpuBuffer<T>;
+    internal b: GpuBuffer<T>;
     // When true, `front()` is `a` and `back()` is `b`.
-    public use_a: bool;
+    internal use_a: bool;
 
     // Allocates two buffers of `n` elements; `front()` starts as `a`.
     public static fun alloc(n: int): GpuSwap<T> {

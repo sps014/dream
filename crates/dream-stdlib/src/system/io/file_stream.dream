@@ -5,7 +5,7 @@ public class FileStream {
     handle: FileHandle;
     pos: int;
 
-    public constructor(handle: FileHandle) {
+    internal constructor(handle: FileHandle) {
         this.handle = handle;
         this.pos = 0;
     }

@@ -26,7 +26,7 @@ public class Seq<T> {
 
     // Wraps a list (base node). Does not copy — the view reads `items` live until a terminal
     // step materializes.
-    public constructor(items: List<T>) {
+    internal constructor(items: List<T>) {
         this.items = items;
         this.start = 0;
         // `items` is a sink param — read length from the field after the move.

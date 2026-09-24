@@ -108,7 +108,7 @@ public class WebApp {
         webapi_middlewares.push(mw);
     }
 
-    public static fun begin_generated_middleware(): bool {
+    internal static fun begin_generated_middleware(): bool {
         if webapi_gen_mw_done {
             return false;
         }
@@ -119,7 +119,7 @@ public class WebApp {
     // `split` / `List` of path segments retain each substring into a hidden-borrow
     // `string[]`. Those temps skip mid-function destroy, so every `match_path` leaked
     // the arrays plus every segment. Walk both strings in place instead.
-    public static fun match_path(borrow pattern: string, borrow path: string): Option<Map<string, string>> {
+    internal static fun match_path(borrow pattern: string, borrow path: string): Option<Map<string, string>> {
         let params = Map<string, string>();
         let pi = WebApp.skip_slash(pattern, 0);
         let si = WebApp.skip_slash(path, 0);
@@ -144,7 +144,7 @@ public class WebApp {
         return Option.Some(params);
     }
 
-    public static fun query_value(borrow query: string, borrow name: string): Option<string> {
+    internal static fun query_value(borrow query: string, borrow name: string): Option<string> {
         if query.is_empty() {
             let none: Option<string> = Option.None;
             return none;
@@ -182,7 +182,7 @@ public class WebApp {
         return none2;
     }
 
-    public static fun cookie_value(borrow header: string, borrow name: string): Option<string> {
+    internal static fun cookie_value(borrow header: string, borrow name: string): Option<string> {
         let n = header.length;
         let i = 0;
         while i <= n {
@@ -273,7 +273,7 @@ public class WebApp {
         return Option.Some(UploadedFile(filename, ctype, reader.read_remaining_bytes()));
     }
 
-    public static fun json_escape(borrow s: string): string {
+    internal static fun json_escape(borrow s: string): string {
         let sb = StringBuilder();
         sb.append_char('"');
         let i = 0;
@@ -296,7 +296,7 @@ public class WebApp {
         return sb.build();
     }
 
-    public static fun swagger_html(borrow title: string, borrow openapi_url: string): string {
+    internal static fun swagger_html(borrow title: string, borrow openapi_url: string): string {
         return "<!DOCTYPE html><html><head><title>"
             + title
             + "</title><link rel=\"stylesheet\" href=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui.css\"></head><body><div id=\"swagger-ui\"></div><script src=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js\"></script><script>window.onload=function(){window.ui=SwaggerUIBundle({url:"
@@ -304,7 +304,7 @@ public class WebApp {
             + ",dom_id:'#swagger-ui'});};</script></body></html>";
     }
 
-    public static fun redoc_html(borrow title: string, borrow openapi_url: string): string {
+    internal static fun redoc_html(borrow title: string, borrow openapi_url: string): string {
         return "<!DOCTYPE html><html><head><title>"
             + title
             + "</title></head><body><redoc spec-url="
@@ -436,7 +436,7 @@ public class WebApp {
         WebApp.send_outgoing(req.req_id, res);
     }
 
-    public static async fun run_middleware(
+    internal static async fun run_middleware(
         borrow ctx: RequestContext,
         index: int,
         leaf: fun(): Future<HttpOutgoing>
@@ -451,7 +451,7 @@ public class WebApp {
         return mw.invoke(ctx, next).await;
     }
 
-    public static async fun run_local_middleware(
+    internal static async fun run_local_middleware(
         borrow ctx: RequestContext,
         chain: List<Middleware>,
         index: int,
@@ -578,7 +578,7 @@ public class WebApp {
         }
     }
 
-    public static fun openapi_document(borrow options: WebAppOptions): string {
+    internal static fun openapi_document(borrow options: WebAppOptions): string {
         let paths = WebApp.generated_openapi_paths();
         return "{\"openapi\":\"3.0.3\",\"info\":{\"title\":"
             + WebApp.json_escape(options.title)

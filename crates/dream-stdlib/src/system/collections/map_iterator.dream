@@ -6,7 +6,7 @@ public class MapIterator<K, V> : Iterator<KeyValuePair<K, V>> {
     idx: int;
 
     // Starts at slot 0 of `map`.
-    public constructor(map: Map<K, V>) {
+    internal constructor(map: Map<K, V>) {
         this.map = map;
         this.idx = 0;
     }

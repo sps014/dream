@@ -1,0 +1,18 @@
+// A loop whose bound exceeds the array length must still trap: the unchecked loop clone
+// only runs when the bound is proven within the length.
+import system;
+
+fun sum_prefix(a: int[], n: int): int {
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+        total = total + a[i];
+    }
+    return total;
+}
+
+fun main(): void {
+    let a: int[] = [1, 2, 3];
+    System.println(sum_prefix(a, 3));
+    System.println(sum_prefix(a, 4));
+    System.println("after");
+}

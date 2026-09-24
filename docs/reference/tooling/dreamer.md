@@ -215,8 +215,8 @@ registry version selection. Conflicting requirements produce a clear error namin
 | `dreamer remove <name> [-p <name>]` | Remove a dependency from `dream.toml` and `dream_packages/`, then re-resolve. |
 | `dreamer install` | Resolve `dream.toml` (respecting `dream.lock` where still compatible) and materialize `dream_packages/`. In a `[workspace]`, installs all members into the root lock/`dream_packages/`. |
 | `dreamer update [<name>]` | Re-resolve to the latest compatible version(s); with a name, only that package is allowed to move. |
-| `dreamer build [--release] [-p <name>]` | Install, then compile the package. Wasm lands in `target/web/`; native C in `target/debug` or `target/release`. When `targets` includes `node`, also copies into `target/node/`. |
-| `dreamer run [--release] [--port <n>] [--target native\|web\|node] [-p <name>] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile. Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
+| `dreamer build [--release] [--profile \| --use-profile[=<path>]] [-p <name>]` | Install, then compile the package. Wasm lands in `target/web/`; native C in `target/debug` or `target/release`. When `targets` includes `node`, also copies into `target/node/`. PGO flags: see [Profile-guided native builds](#profile-guided-native-builds). |
+| `dreamer run [--release] [--profile \| --use-profile[=<path>]] [--port <n>] [--target native\|web\|node] [-p <name>] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile. Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
 | `dreamer test [--release] [--filter <substr>] [-p <name>]` | Install (incl. dev-deps), then run `dream test tests/` — discovers `@test` functions under the project's `tests/` directory. |
 | `dreamer pack [--release] [-O<lvl>] [--target <os>-<arch>\|all]… [-p <name>]` | Build a **bin** package into a single native executable → `target/pack/<name>-<os>-<arch>[.exe]`. Default is `--release` (cc `-O3`); `-O` / `--optimize` override like `dreamer run`. Default target is the host OS/arch. Distinct from registry `publish`. |
 | `dreamer publish [--registry <url>] [--token <tok>] [-p <name>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). Rejects path-only dependencies. |
@@ -264,6 +264,25 @@ Per host:
 
 Use `dreamer run --release` (optionally with `--target`) so release artifacts feed the same stable
 alias paths the scaffolds already reference.
+
+### Profile-guided native builds
+
+Native C builds can use clang profile-guided optimization in two steps. The same flags work on
+`dream build` / `dream run` directly; they are rejected for wasm, `test`, and the debug adapter.
+
+```bash
+dreamer run --release --profile        # 1. instrumented binary; each run records into <bin>.pgo/
+dreamer run --release --profile        #    (run as many representative workloads as you like)
+dreamer run --release --use-profile    # 2. merge <bin>.pgo/*.profraw → <bin>.profdata, rebuild with it
+dreamer build --release --use-profile=path/to/app.profdata   # or a .profraw / directory of them
+```
+
+`--profile` and `--use-profile` are mutually exclusive. Profiles accumulate across runs of the
+same instrumented binary; rebuilding it (changed source or flags) clears the old ones. PGO needs
+clang with its profile runtime: zig cc accepts the flags but never writes a profile, so the build
+falls back to `clang` on `PATH` (override with `DREAM_PGO_CC`). The merge uses
+`DREAM_LLVM_PROFDATA` if set, otherwise the `llvm-profdata` beside that clang, then
+`xcrun -f llvm-profdata`, then `PATH`.
 
 ## Workspaces (monorepos)
 

@@ -14,8 +14,9 @@ typedef struct dream_defer_chunk {
     struct dream_defer_chunk *next;
 } dream_defer_chunk;
 
-_Thread_local int32_t dream_defer_depth;
-_Thread_local int32_t dream_defer_busy;
+static _Thread_local int32_t dream_defer_depth;
+static _Thread_local int32_t dream_defer_busy;
+_Thread_local int32_t dream_defer_open;
 
 static _Thread_local dream_defer_chunk *defer_head;
 static _Thread_local dream_defer_chunk *defer_tail;
@@ -36,8 +37,13 @@ static dream_defer_chunk *chunk_new(void) {
     return c;
 }
 
+static void sync_open(void) {
+    dream_defer_open = dream_defer_depth > 0 && dream_defer_busy == 0;
+}
+
 void dream_defer_enter(void) {
     dream_defer_depth += 1;
+    sync_open();
 }
 
 int dream_defer_try_enqueue(dream_ptr p, void (*fn)(dream_ptr)) {
@@ -45,7 +51,7 @@ int dream_defer_try_enqueue(dream_ptr p, void (*fn)(dream_ptr)) {
     if (dream_defer_depth <= 0 || p == 0 || fn == NULL) {
         return 0;
     }
-    if (dream_weak_any) {
+    if (*dream_tag_word(p) & DREAM_TAG_WEAK_TARGET) {
         dream_weak_clear_all(p);
     }
     if (defer_tail == NULL || defer_tail->n == DREAM_DEFER_CHUNK) {
@@ -100,8 +106,10 @@ static void drain_one(void) {
     }
     if (fn) {
         dream_defer_busy += 1;
+        dream_defer_open = 0;
         fn(p);
         dream_defer_busy -= 1;
+        sync_open();
     }
 }
 
@@ -140,4 +148,5 @@ void dream_defer_leave(uint32_t q) {
     if (dream_defer_depth > 0) {
         dream_defer_depth -= 1;
     }
+    sync_open();
 }

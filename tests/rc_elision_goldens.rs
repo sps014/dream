@@ -261,6 +261,36 @@ fn rc_golden_js_rebuild_emits_js_release() {
 }
 
 #[test]
+fn rc_golden_local_object_is_scalarized() {
+    let code = r#"
+        class Box {
+            public n: int;
+            public tag: string;
+            public constructor(n: int) { this.n = n; this.tag = "box"; }
+        }
+        fun main(): void {
+            let b = Box(1);
+            let c = b;
+            c.tag = c.tag + "!";
+            System.println(b.n + c.tag.length);
+        }
+    "#;
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
+    let main = c_func_defs(&c)
+        .into_iter()
+        .find(|f| f.name == "main_dream")
+        .expect("main should be emitted");
+    for gone in ["dream_malloc(", "dream_frame_object(", "release_Box_into("] {
+        assert_eq!(
+            count_in(&main.body, gone),
+            0,
+            "a Box only read through locals becomes its fields:\n{}",
+            main.body
+        );
+    }
+}
+
+#[test]
 fn rc_golden_unique_class_no_retain() {
     let code = r#"
         class Box {
@@ -270,8 +300,11 @@ fn rc_golden_unique_class_no_retain() {
         fun main(): void {
             let b = Box(1);
             System.println(b.n);
+            b = Box(2);
+            System.println(b.n);
         }
     "#;
+    // Two allocations share `b`, so the object stays on the heap rather than being scalarized.
     let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
     assert_eq!(user_retains(&c), 0, "unique Box should not retain:\n{}", c);
     // The last use frees through `Box`'s own destroy tail rather than the generic `dream_release`

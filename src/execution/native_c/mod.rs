@@ -2,10 +2,13 @@
 
 pub mod abi;
 mod cc;
+mod pgo;
 pub mod webview;
 
 pub use cc::generator_cache_root;
+pub use pgo::Pgo;
 
+use crate::driver::rt_stamp;
 use crate::driver::wasm_opt::OptLevel;
 use crate::execution::host::{cc_link_flags, read_c_libs_from_abi, search_roots_for_artifact};
 use dream_mir::backend::c::{native_runtime_include_dir, native_runtime_units};
@@ -17,7 +20,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 pub fn compile_and_run(c_path: &str, opt: OptLevel) -> Result<(), Box<dyn std::error::Error>> {
-    let bin = compile_native_c(Path::new(c_path), opt, false)?;
+    let bin = compile_native_c(Path::new(c_path), opt, false, &Pgo::Off)?;
     run_native_bin_checked(&bin, c_path)
 }
 
@@ -44,7 +47,7 @@ pub fn compile_and_capture_ex(
     stdin: Option<&[u8]>,
     timeout_secs: u64,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let bin = compile_native_c(Path::new(c_path), opt, false)?;
+    let bin = compile_native_c(Path::new(c_path), opt, false, &Pgo::Off)?;
     let mut cmd = Command::new(&bin);
     apply_native_run_env(&mut cmd, c_path);
     for (k, v) in extra_env {
@@ -323,20 +326,23 @@ fn runtime_archive(
     let archive = dir.join("libdream_rt.a");
     let stamp = dir.join(".stamp");
     let units = native_runtime_units(need);
-    let newest = units
-        .iter()
-        .filter_map(|u| std::fs::metadata(&u.path).ok()?.modified().ok())
-        .max();
-    let stale = match (
-        newest,
-        std::fs::metadata(&stamp)
-            .ok()
-            .and_then(|m| m.modified().ok()),
-    ) {
-        (Some(src), Some(st)) => src > st,
-        _ => true,
-    };
-    if archive.exists() && !stale {
+    let headers: Vec<PathBuf> = [
+        native_runtime_include_dir(),
+        dream_mir::runtime::runtime_abi_include_dir(),
+    ]
+    .iter()
+    .filter_map(|d| std::fs::read_dir(d).ok())
+    .flatten()
+    .filter_map(|e| Some(e.ok()?.path()))
+    .collect();
+    let fingerprint = rt_stamp::fingerprint(
+        units
+            .iter()
+            .map(|u| u.path.clone())
+            .chain(headers)
+            .collect(),
+    );
+    if archive.exists() && rt_stamp::matches(&stamp, &fingerprint) {
         return Ok(archive);
     }
     let mut cflags: Vec<&str> = vec!["-std=gnu11", "-pthread", "-w", "-c"];
@@ -373,7 +379,7 @@ fn runtime_archive(
     for o in &objs {
         let _ = std::fs::remove_file(o);
     }
-    std::fs::write(&stamp, b"ok")?;
+    std::fs::write(&stamp, fingerprint)?;
     Ok(archive)
 }
 
@@ -381,6 +387,7 @@ pub fn compile_native_c(
     c_path: &Path,
     opt: OptLevel,
     debug: bool,
+    pgo: &Pgo,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let obj = c_path.with_extension("o");
     let bin = c_path.with_extension("bin");
@@ -394,11 +401,19 @@ pub fn compile_native_c(
     lock_file.lock()?;
     let src = std::fs::read_to_string(c_path)?;
     let need = runtime_need_from_c_source(&src);
-    let toolchain = cc::resolve_cc()?;
     let rt = runtime_archive(opt, need, debug)?;
-    if native_bin_fresh(&bin, c_path, &rt) {
+    let build = pgo::prepare(pgo, cc::resolve_cc()?, &bin)?;
+    let stamp_path = bin.with_extension("ccflags");
+    let stamp = format!("{:?}\n{}", build.cc, build.flags.join("\n"));
+    if native_bin_fresh(&bin, c_path, &rt, build.input.as_deref())
+        && std::fs::read_to_string(&stamp_path).is_ok_and(|s| s == stamp)
+    {
         return Ok(bin);
     }
+    if *pgo == Pgo::Generate {
+        pgo::clear_raw_profiles(&bin);
+    }
+    let toolchain = build.cc;
     let warn = [
         "-std=gnu11",
         "-pthread",
@@ -413,6 +428,7 @@ pub fn compile_native_c(
 
     let mut ccmd = toolchain.cc_command();
     ccmd.args(&opt_flags);
+    ccmd.args(&build.flags);
     ccmd.args(&san);
     ccmd.args(warn);
     ccmd.arg(&include);
@@ -425,6 +441,7 @@ pub fn compile_native_c(
 
     let mut lcmd = toolchain.cc_command();
     lcmd.args(&opt_flags);
+    lcmd.args(&build.flags);
     lcmd.args(&san);
     lcmd.args(warn);
     lcmd.arg(&obj);
@@ -456,6 +473,7 @@ pub fn compile_native_c(
         let _ = std::fs::remove_file(&bin);
         return Err(e.into());
     }
+    std::fs::write(&stamp_path, stamp)?;
     // Mach-O keeps only a stabs debug map in the linked binary; the DWARF itself stays in the
     // object file, so deleting it leaves the debugger with no line/variable info.
     if !debug {
@@ -468,7 +486,7 @@ fn mtime(path: &Path) -> Option<std::time::SystemTime> {
     std::fs::metadata(path).ok()?.modified().ok()
 }
 
-fn native_bin_fresh(bin: &Path, c_path: &Path, rt: &Path) -> bool {
+fn native_bin_fresh(bin: &Path, c_path: &Path, rt: &Path, profile: Option<&Path>) -> bool {
     let Ok(meta) = std::fs::metadata(bin) else {
         return false;
     };
@@ -482,7 +500,9 @@ fn native_bin_fresh(bin: &Path, c_path: &Path, rt: &Path) -> bool {
     let Some(bin_t) = mtime(bin) else {
         return false;
     };
-    mtime(c_path).is_some_and(|t| t <= bin_t) && mtime(rt).is_some_and(|t| t <= bin_t)
+    mtime(c_path).is_some_and(|t| t <= bin_t)
+        && mtime(rt).is_some_and(|t| t <= bin_t)
+        && profile.is_none_or(|p| mtime(p).is_some_and(|t| t <= bin_t))
 }
 
 #[cfg(test)]

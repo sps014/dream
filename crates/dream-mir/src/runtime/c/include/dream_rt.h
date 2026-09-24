@@ -91,25 +91,4 @@ static inline int32_t atomic_fetch_sub_i32(int32_t addr, int32_t v) {
     return __c11_atomic_fetch_sub((_Atomic int32_t *)(uintptr_t)(uint32_t)addr, v,
                                   __ATOMIC_SEQ_CST);
 }
-
-/* Owned strings store the UTF-16 address in the pad word (`ptr+8`). Slices point at a parent. */
-static inline int32_t str_data(int32_t p) {
-    int32_t d;
-    if (p == 0) {
-        return 0;
-    }
-    d = i32_load(p + (int32_t)STRING_SCALAR_LEN_OFFSET);
-    if (d == DREAM_STR_PAD_INLINE) {
-        return p + (int32_t)STRING_UNITS_OFFSET;
-    }
-    return d;
-}
-
-static inline void str_init_owned(int32_t p) {
-    if (p == 0) {
-        return;
-    }
-    i32_store(p + (int32_t)STRING_SCALAR_LEN_OFFSET, p + (int32_t)STRING_UNITS_OFFSET);
-}
-
 #endif

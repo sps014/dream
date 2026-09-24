@@ -1,0 +1,184 @@
+// Loop-carried traversal cursors (`curr = head; … curr = node.next`) walk without RC only while
+// nothing can free the chain under them. Each walk below frees part of the chain mid-walk and
+// then allocates same-sized nodes (so a dangling cursor would read recycled memory); the result
+// must match ordinary ARC semantics and every object must be reclaimed.
+import system;
+
+@allow_cycle
+class Node {
+    public value: int;
+    public next: Option<Node>;
+
+    public constructor(value: int, next: Option<Node>) {
+        this.value = value;
+        this.next = next;
+    }
+}
+
+class Holder {
+    public head: Option<Node>;
+
+    public constructor(head: Option<Node>) {
+        this.head = head;
+    }
+}
+
+fun chain(n: int, base: int): Option<Node> {
+    let head: Option<Node> = Option.None;
+    let i = 0;
+    while i < n {
+        head = Option.Some(Node(base + i, head));
+        i = i + 1;
+    }
+    return head;
+}
+
+fun sum(list: Option<Node>): int {
+    let acc = 0;
+    let curr = list;
+    let done = false;
+    while done == false {
+        switch (curr) {
+            Some(node) => {
+                acc = acc * 3 + node.value;
+                curr = node.next;
+            }
+            None => { done = true; }
+        }
+    }
+    return acc;
+}
+
+fun churn(base: int): int {
+    let junk = chain(8, base);
+    return sum(junk) - sum(junk);
+}
+
+fun cut(n: Node): void {
+    n.next = Option.None;
+}
+
+fun reset(h: Holder): void {
+    h.head = chain(3, 500);
+}
+
+// Store to the traversed `next` slot while `curr` points at the detached successor.
+fun walk_detach(): int {
+    let head = chain(8, 0);
+    let acc = 0;
+    let curr = head;
+    let done = false;
+    while done == false {
+        switch (curr) {
+            Some(node) => {
+                acc = acc * 3 + node.value;
+                curr = node.next;
+                node.next = Option.None;
+                acc = acc + churn(1000);
+            }
+            None => { done = true; }
+        }
+    }
+    return acc + sum(head);
+}
+
+// A callee overwrites the traversed slot.
+fun walk_cut_call(): int {
+    let head = chain(8, 50);
+    let acc = 0;
+    let curr = head;
+    let done = false;
+    while done == false {
+        switch (curr) {
+            Some(node) => {
+                acc = acc * 3 + node.value;
+                curr = node.next;
+                cut(node);
+                acc = acc + churn(2000);
+            }
+            None => { done = true; }
+        }
+    }
+    return acc + sum(head);
+}
+
+// A callee replaces the whole chain held by the walk's root object.
+fun walk_reset_call(): int {
+    let h = Holder(chain(6, 10));
+    let acc = 0;
+    let steps = 0;
+    let curr = h.head;
+    let done = false;
+    while done == false {
+        switch (curr) {
+            Some(node) => {
+                acc = acc * 3 + node.value;
+                steps = steps + 1;
+                if steps == 2 {
+                    reset(h);
+                    acc = acc + churn(3000);
+                }
+                curr = node.next;
+            }
+            None => { done = true; }
+        }
+    }
+    return acc + sum(h.head);
+}
+
+// The walk's root is rebound mid-walk, dropping the old chain's owner.
+fun walk_rebind_head(): int {
+    let head = chain(6, 20);
+    let acc = 0;
+    let steps = 0;
+    let curr = head;
+    let done = false;
+    while done == false {
+        switch (curr) {
+            Some(node) => {
+                acc = acc * 3 + node.value;
+                curr = node.next;
+                steps = steps + 1;
+                if steps == 2 {
+                    head = chain(2, 900);
+                    acc = acc + churn(4000);
+                }
+            }
+            None => { done = true; }
+        }
+    }
+    return acc + sum(head);
+}
+
+// Read-only walks rooted at a borrowed `this` field and at a loop-invariant local.
+fun walk_readonly(): int {
+    let h = Holder(chain(10, 7));
+    let acc = 0;
+    let i = 0;
+    while i < 3 {
+        acc = acc + sum(h.head);
+        let curr = h.head;
+        let done = false;
+        while done == false {
+            switch (curr) {
+                Some(node) => {
+                    acc = acc + node.value;
+                    curr = node.next;
+                }
+                None => { done = true; }
+            }
+        }
+        i = i + 1;
+    }
+    return acc;
+}
+
+fun main() {
+    let before = Debug.live_objects;
+    System.println(walk_detach());
+    System.println(walk_cut_call());
+    System.println(walk_reset_call());
+    System.println(walk_rebind_head());
+    System.println(walk_readonly());
+    System.println(Debug.live_objects - before);
+}

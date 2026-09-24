@@ -437,6 +437,66 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Records `Buffer.get_unchecked<T>(arr, i)`: an element read with no bounds check.
+    pub(in crate::analyzer) fn hir_set_array_get_unchecked(
+        &mut self,
+        elem_ty: &Type,
+        array: Option<HExpr>,
+        index: Option<HExpr>,
+    ) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        match (array, index) {
+            (Some(array), Some(index)) => {
+                let elem = match self.type_ctx.interner.unwrap_array(array.ty) {
+                    Some(e) => e,
+                    None => self.type_ctx.lower(elem_ty),
+                };
+                self.hir.last = Some(HExpr::new(
+                    elem,
+                    HExprKind::ArrayGetUnchecked {
+                        array: Box::new(array),
+                        index: Box::new(index),
+                    },
+                ));
+            }
+            _ => self.hir.last = None,
+        }
+    }
+
+    /// Records `Buffer.set_unchecked<T>(arr, i, v)`: an element store with no bounds check.
+    pub(in crate::analyzer) fn hir_set_array_set_unchecked(
+        &mut self,
+        array: Option<HExpr>,
+        index: Option<HExpr>,
+        value: Option<HExpr>,
+    ) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        match (array, index, value) {
+            (Some(array), Some(index), Some(value)) => {
+                let value = match self.type_ctx.interner.unwrap_array(array.ty) {
+                    Some(e) => self.coerce_to(value, e),
+                    None => value,
+                };
+                let void = self.type_ctx.interner.void();
+                self.hir.last = Some(HExpr::new(
+                    void,
+                    HExprKind::ArraySetUnchecked {
+                        array: Box::new(array),
+                        index: Box::new(index),
+                        value: Box::new(value),
+                    },
+                ));
+            }
+            _ => self.hir.last = None,
+        }
+    }
+
     /// Records `recv.byte_size()` (typed `int`): UTF-8 byte length via `StrByteSize`.
     pub(in crate::analyzer) fn hir_set_str_byte_size(&mut self, recv: Option<HExpr>) {
         if !self.active() {

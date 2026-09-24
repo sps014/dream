@@ -21,7 +21,7 @@ use crate::{
 use dream_types::{DefId, TypeId, TypeInterner};
 use std::collections::{HashMap, HashSet};
 
-mod graph;
+pub(crate) mod graph;
 mod remap;
 
 use graph::{address_taken, count_call_sites, recursive_set};

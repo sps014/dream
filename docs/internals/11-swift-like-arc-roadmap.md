@@ -14,12 +14,22 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - Call ABI: **unmarked RC params sink; `borrow` shares; caller owns the result (`+1`)**.
   Implicit `this` is never a sink. Call sites **move on last use**, otherwise **retain a copy**
   (Nim sink semantics).
-- Cursor locals: non-escaping field/index loads skip retain/release.
-  Union-field snapshots always own a retain (match payloads outlive the scrutinee).
+- Cursor locals: non-escaping field/index loads skip retain/release when no call before their
+  last read can overwrite the source slot (type-level `ModRefTable`, `rc/modref.rs`). Loop-carried
+  traversal variables (`curr = curr.next`) form **cursor families** (`rc/cursor_family.rs`) and
+  stay retain-free while their roots are live and no traversed `(type, field)` slot can be
+  stored. Union-field snapshots own a retain at insertion; post-inline `rc-held-by-owner`
+  (`rc/held.rs`) removes it when the owner provably outlives every read.
+- **Borrow inference** (`passes/param_modes.rs`): a sink parameter that is only read, with every
+  caller known, is flipped to `borrow` before `RcInsertion`, so neither side emits RC for it.
 - Value `struct` / plain `enum` off-heap (shadow stack); classes / arrays / strings / collections
-  on the heap with a 12-byte `[size][tag][ref_count]` header.
-- `weak` / `unowned` + structural cycle check; weak teardown via a global registration list
-  (`runtime/c/native/weak.c`, ported for wasm32 in `runtime/c/wasm32/weak_stub.c`).
+  on the heap with a `[size][tag][ref_count]` header (12 bytes on wasm32, 16 on native). The RC
+  word is one signed int: positive = thread-local count, sign bit = atomic count (`shared`),
+  `DREAM_RC_IMMORTAL` = never mutated or freed (interned strings, frame-allocated objects), so
+  every RC fast path is one load plus a sign test.
+- `weak` / `unowned` + structural cycle check; weak teardown via a target-indexed registry
+  (`runtime/c/native/weak.c`, shared by native and wasm32). Registered targets carry
+  `DREAM_TAG_WEAK_TARGET`, so frees of every other object never touch the registry.
 - `RcElision` over Goto chains, transparent diamonds, transparent natural loops, postdom regions
   (never under-retain); `RcInsertion` is CFG **ownership-token** dataflow plus a **Unique/Shared**
   lattice (last-use **move**, last-use **destroy**, split-edge release when a token is dead on one
@@ -47,7 +57,9 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 2. **Language surface uses `borrow` / `ref`** in the parameter modifier slot.
 3. **No OSSA / ownership-SSA rewrite of MIR.** Elision stays statement-level on the CFG.
 4. **CoW** (if ever) stays behind an explicit copy API; collections remain classes.
-5. **Weak teardown** may stay a global list until profiling shows it hot.
+5. **Weak teardown** is a target-indexed registry; only objects tagged `DREAM_TAG_WEAK_TARGET`
+   consult it on free (the old global list made the `weak_tree` bench ~58× slower than C#; the
+   registry is ~2× faster than C#).
 
 ## Non-goals
 
@@ -58,7 +70,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - CPU SIMD language surface / Dream-owned tiered JIT
 - `externref` for `js` (handles stay `i32` ids; `externref` cannot live in linear memory)
 - Extra per-type object freelists (size-class `$malloc` already exists)
-- Weak teardown header side-tables (global list until profiling says otherwise)
+- Weak teardown header side-tables (the target-indexed registry plus the header tag bit suffice)
 
 Opt-in `defer { }` / `defer(q) { }` (native destroy queue, bounded drain) is shipped; see
 [`memory.md`](../reference/language/memory.md#defer-wait-until-after-the-important-work-to-run-destructors). WASM last-ref
@@ -70,7 +82,9 @@ ARC alone removes RC *tax*; remaining cost is heap hits and `$malloc`. These are
 levers (no SSO / `@stack` class / value collections):
 
 1. **Silent SROA** — including post–simple-user-ctor expand (`ExpandSimpleCtors`): non-escaping
-   instances with only non-ref field accesses promote to locals (`crates/dream-mir/src/passes/sroa.rs`).
+   instances with only non-ref field accesses promote to locals (`crates/dream-mir/src/passes/sroa/mod.rs`).
+   Post-inline `SroaManaged` (`sroa/managed.rs`) also splits objects reached through several
+   locals or holding reference fields, using escape analysis (`analysis/escape.rs`).
 2. **Clear-and-reuse** — `List`/`Map`/`Set.clear` keep capacity and zero live slots in place
    (no capacity-sized realloc). Prefer `clear` + refill over `new` each batch.
 3. **ScratchArena** — bump `Span<T>` from one owned slab (`ScratchArena<T : unmanaged>`);
@@ -82,6 +96,14 @@ levers (no SSO / `@stack` class / value collections):
 6. **Inferred unique region** — a `x = f(); … ReleaseUnique x` graph whose callee only `New`s
    `del`-free classes is allocated from a TLS bump slab and rewound in O(1) (`dream_region_enter` /
    `leave`). Silent; not user `@stack`.
+7. **Frame allocation** (`passes/frame_alloc.rs`) — an instance whose alias class escapes at most
+   into non-retaining callee parameters, with a statically known count (`analysis/object_life.rs`),
+   is built in the C frame (`dream_frame_object`, immortal count) and its deaths release only its
+   strong fields. Refused for `del`, weak/unowned fields, `shared`, large objects, recursion,
+   region openers, and async. Also silent; the user-facing non-goal of `@stack` stands.
+8. **Allocator fast path** — native size classes are 16-byte steps to 256 then 8 per power of two
+   up to 64 KiB; the freelist pop/push is inline, alloc counters are per thread, and destroy glue
+   is iterative so long chains cannot overflow the C stack.
 
 Authoring rule: borrow + move + dense memory + clear/reuse → ARC can beat gen0 on the *same*
 shapes; `new` + share a class graph every iteration will not.

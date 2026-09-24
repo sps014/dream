@@ -25,6 +25,7 @@ pub(super) struct Cx<'a> {
     /// Lazily-computed release/destroy symbol canonicalization (types whose ARC glue
     /// bodies are byte-identical share one emitted function). See `release::canonical_maps`.
     pub canon: std::sync::OnceLock<super::release::CanonMaps>,
+    iface_guards: std::sync::OnceLock<super::iface_guard::GuardTable>,
 }
 
 impl<'a> Cx<'a> {
@@ -53,6 +54,7 @@ impl<'a> Cx<'a> {
             debug_syms,
             leak_checks: false,
             canon: std::sync::OnceLock::new(),
+            iface_guards: std::sync::OnceLock::new(),
         }
     }
 
@@ -70,6 +72,13 @@ impl<'a> Cx<'a> {
     pub(super) fn canon_maps(&self) -> &super::release::CanonMaps {
         self.canon
             .get_or_init(|| super::release::canonical_maps(self))
+    }
+
+    pub(super) fn iface_guard(&self, iface_id: usize, slot: usize) -> Option<&[(i32, String)]> {
+        self.iface_guards
+            .get_or_init(|| super::iface_guard::build_guards(self))
+            .get(&(iface_id, slot))
+            .map(Vec::as_slice)
     }
 
     pub(super) fn nstruct(&self, ty: TypeId) -> Option<&TypeLayout> {

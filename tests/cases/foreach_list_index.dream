@@ -1,0 +1,73 @@
+// `for (let x in list)` over a `List<T>`: control flow, reference elements, nesting, and
+// iterables that are expressions rather than locals.
+import system;
+import system.collections;
+
+class Box {
+    public items: List<string>;
+    public constructor() {
+        this.items = List<string>();
+    }
+}
+
+fun make(n: int): List<int> {
+    let xs = List<int>();
+    for (let i = 0; i < n; i++) {
+        xs.push(i);
+    }
+    return xs;
+}
+
+fun main(): void {
+    let total = 0;
+    for (let x in make(10)) {
+        if x == 2 {
+            continue;
+        }
+        if x == 7 {
+            break;
+        }
+        total = total + x;
+    }
+    System.println(total);
+
+    let words = List<string>();
+    words.push("alpha");
+    words.push("beta");
+    words.push("gamma");
+    let joined = "";
+    for (let w in words) {
+        joined = joined + w + ";";
+    }
+    System.println(joined);
+
+    let grid = List<List<string>>();
+    grid.push(words);
+    grid.push(List<string>());
+    let inner = List<string>();
+    inner.push("z");
+    grid.push(inner);
+    let count = 0;
+    outer: for (let row in grid) {
+        for (let cell in row) {
+            count = count + 1;
+            if cell == "z" {
+                break outer;
+            }
+        }
+    }
+    System.println(count);
+
+    let b = Box();
+    b.items.push("x");
+    b.items.push("y");
+    for (let s in b.items) {
+        System.println(s);
+    }
+
+    let empty = List<int>();
+    for (let e in empty) {
+        System.println(e);
+    }
+    System.println("done");
+}

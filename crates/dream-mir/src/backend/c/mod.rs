@@ -8,6 +8,7 @@ mod ctx;
 mod debugviews;
 mod emit;
 mod entry;
+mod iface_guard;
 mod int_ops;
 mod js_marshal;
 mod localnames;

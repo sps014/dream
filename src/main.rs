@@ -3,7 +3,7 @@ use dream::driver::compiler::{Compiler, Target};
 use dream::driver::js_runtime::JsRuntimeTarget;
 use dream::driver::ui::{ConsoleReporter, Ui};
 use dream::driver::wasm_opt::OptLevel;
-use dream::execution::native_c::{compile_native_c, run_native_bin, GuestAborted};
+use dream::execution::native_c::{compile_native_c, run_native_bin, GuestAborted, Pgo};
 use dream_abi::attributes::CompileTargets;
 use dream_sema::analyzer::CrateType;
 use std::path::{Path, PathBuf};
@@ -118,6 +118,37 @@ struct Cli {
         global = true
     )]
     crate_type: Option<CrateTypeArg>,
+
+    /// Compiler debugging: dump MIR to <output>.mir/<NN>-<pass>.mir
+    /// (`after:<pass>`, `after:<pass>,each`, or `all`)
+    #[arg(long = "emit-mir", value_name = "WHEN", global = true)]
+    emit_mir: Option<String>,
+
+    /// Limit --emit-mir to these functions (comma-separated exact names)
+    #[arg(
+        long = "emit-mir-fn",
+        value_name = "NAMES",
+        global = true,
+        requires = "emit_mir"
+    )]
+    emit_mir_fn: Option<String>,
+
+    /// Native PGO step 1: build a clang-instrumented binary; its runs record profiles into
+    /// <output>.pgo/ next to it
+    #[arg(long, global = true, conflicts_with = "use_profile")]
+    profile: bool,
+
+    /// Native PGO step 2: optimize with a profile (default: merge the --profile runs; or
+    /// --use-profile=<.profdata | .profraw | directory of .profraw files>)
+    #[arg(
+        long = "use-profile",
+        value_name = "PROFILE",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "",
+        global = true
+    )]
+    use_profile: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -216,6 +247,10 @@ fn main() -> ExitCode {
         );
         return ExitCode::FAILURE;
     }
+    if (!native_c || run_tests || debug_adapter) && (cli.profile || cli.use_profile.is_some()) {
+        ui.error("--profile / --use-profile apply to native `build` / `run` only");
+        return ExitCode::FAILURE;
+    }
 
     let optimize = match &cli.optimize {
         Some(level_str) => match level_str.parse::<OptLevel>() {
@@ -233,6 +268,18 @@ fn main() -> ExitCode {
         ui.help("rebuild `dream` with default features (cargo build --release)");
         return ExitCode::FAILURE;
     }
+
+    let emit_mir = match &cli.emit_mir {
+        Some(spec) => match dream_mir::passes::MirDumpSpec::parse(spec, cli.emit_mir_fn.as_deref())
+        {
+            Ok(spec) => Some(spec),
+            Err(e) => {
+                ui.error(&e);
+                return ExitCode::FAILURE;
+            }
+        },
+        None => None,
+    };
 
     let crate_type = match cli.crate_type.unwrap_or(CrateTypeArg::Bin) {
         CrateTypeArg::Lib => CrateType::Lib,
@@ -353,6 +400,7 @@ fn main() -> ExitCode {
     .with_compile_targets(compile_targets)
     .with_emit_abi(true)
     .with_crate_type(crate_type)
+    .with_emit_mir(emit_mir)
     .with_reporter(reporter.clone());
     if let Some(level) = optimize {
         compiler = compiler.with_optimize(Some(level));
@@ -386,7 +434,13 @@ fn main() -> ExitCode {
             "Compiling C",
             &format!("{} ({})", bin.display(), cc_opt.as_cli_flag()),
         );
-        match compile_native_c(Path::new(&out_path), cc_opt, debug_info) {
+        let pgo = match &cli.use_profile {
+            _ if cli.profile => Pgo::Generate,
+            Some(p) if p.is_empty() => Pgo::Use(None),
+            Some(p) => Pgo::Use(Some(PathBuf::from(p))),
+            None => Pgo::Off,
+        };
+        match compile_native_c(Path::new(&out_path), cc_opt, debug_info, &pgo) {
             Ok(bin) => {
                 artifacts.push(bin.clone());
                 ui.finish(elapsed, "", &artifacts);

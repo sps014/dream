@@ -24,11 +24,24 @@ struct OptFlags {
     /// Compile to a wasm32 module instead of a native host.
     #[arg(long)]
     wasm: bool,
+    /// Native PGO step 1: build a clang-instrumented binary that records profiles.
+    #[arg(long, conflicts_with = "use_profile")]
+    profile: bool,
+    /// Native PGO step 2: optimize with the recorded profiles (or `--use-profile=<path>`).
+    #[arg(
+        long = "use-profile",
+        value_name = "PROFILE",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = ""
+    )]
+    use_profile: Option<String>,
 }
 
 impl OptFlags {
     fn into_compile_flags(self) -> anyhow::Result<CompileFlags> {
-        CompileFlags::from_cli(self.release, self.optimize, self.wasm)
+        let flags = CompileFlags::from_cli(self.release, self.optimize, self.wasm)?;
+        Ok(flags.with_pgo(self.profile, self.use_profile))
     }
 }
 
@@ -271,13 +284,19 @@ fn main() -> ExitCode {
             opt,
             targets,
             package,
-        } => match CompileFlags::for_pack(opt.release, opt.optimize, opt.wasm) {
-            Ok(flags) => commands::pack::run(&cwd, &targets, package.as_deref(), flags),
-            Err(e) => {
-                print_error(e);
+        } => {
+            if opt.profile || opt.use_profile.is_some() {
+                print_error("pack does not support --profile / --use-profile");
                 return ExitCode::FAILURE;
             }
-        },
+            match CompileFlags::for_pack(opt.release, opt.optimize, opt.wasm) {
+                Ok(flags) => commands::pack::run(&cwd, &targets, package.as_deref(), flags),
+                Err(e) => {
+                    print_error(e);
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
         Cmd::Search { query } => commands::search::run(&cwd, &query),
         Cmd::Tree { package } => commands::tree::run(&cwd, package.as_deref()),
         Cmd::Toolchain { cmd } => match cmd {

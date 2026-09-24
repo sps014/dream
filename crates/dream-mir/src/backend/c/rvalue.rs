@@ -293,6 +293,18 @@ impl<'a> Emitter<'a> {
         ctor: Option<dream_types::DefId>,
         args: &[crate::Operand],
     ) -> Expr {
+        self.emit_new_in(def, ty, ctor, args, None)
+    }
+
+    /// `New` on the heap, or in the frame buffer `frame` (an immortal, never-freed block).
+    pub(super) fn emit_new_in(
+        &mut self,
+        def: dream_types::DefId,
+        ty: dream_types::TypeId,
+        ctor: Option<dream_types::DefId>,
+        args: &[crate::Operand],
+        frame: Option<String>,
+    ) -> Expr {
         let layout = self.cx.nstruct(ty).unwrap_or_else(|| {
             crate::internal_error!("missing layout for struct allocation {ty:?}")
         });
@@ -312,17 +324,29 @@ impl<'a> Emitter<'a> {
         };
         let ctor_name = ctor.map(|c| runtime_c_name(&self.cx.callee_c(c, &[])));
         self.b.expr_block(move |b| {
-            let o = b.temp(
-                CTy::Ptr,
-                Some(Expr::call(
-                    malloc,
-                    vec![Expr::i(size as i64), Expr::i(tag as i64)],
-                )),
-            );
-            b.call(
-                "memset",
-                vec![Expr::dream_p(o.clone()), Expr::i(0), Expr::i(size as i64)],
-            );
+            let o = match frame {
+                Some(buf) => b.temp(
+                    CTy::Ptr,
+                    Some(Expr::call(
+                        "dream_frame_object",
+                        vec![Expr::id(buf), Expr::i(size as i64), Expr::i(tag as i64)],
+                    )),
+                ),
+                None => {
+                    let o = b.temp(
+                        CTy::Ptr,
+                        Some(Expr::call(
+                            malloc,
+                            vec![Expr::i(size as i64), Expr::i(tag as i64)],
+                        )),
+                    );
+                    b.call(
+                        "memset",
+                        vec![Expr::dream_p(o.clone()), Expr::i(0), Expr::i(size as i64)],
+                    );
+                    o
+                }
+            };
             if let Some(name) = &ctor_name {
                 let mut call_args = vec![o.clone()];
                 call_args.extend(arg_es.iter().cloned());

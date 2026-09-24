@@ -163,6 +163,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         interfaces: hir.interfaces.clone(),
         enums: hir.enums.clone(),
         type_names: hir.type_names.clone(),
+        frame_objects: Default::default(),
     }
 }
 
@@ -428,6 +429,12 @@ impl Lowerer<'_> {
         self.locals[&hir_local.0]
     }
 
+    /// A discarded call result the caller must still drop: an owned reference, or a value type
+    /// (returned in a heap box and possibly holding nested references).
+    fn discarded_result_is_owned(&self, ty: dream_types::TypeId) -> bool {
+        self.interner.is_reference(ty) || self.interner.is_value_type(ty)
+    }
+
     fn lower_block(&mut self, stmts: &[HStmt]) {
         for s in stmts {
             if self.b.is_terminated() {
@@ -500,10 +507,10 @@ impl Lowerer<'_> {
             HStmt::Expr(e) | HStmt::Await { future: e, .. } => match &e.kind {
                 // A bare call keeps its `Call` statement form (return value discarded). This matters
                 // for void calls: materializing them into a temp (the fallback below) would emit a
-                // `local.set` with nothing on the stack. A call whose discarded result is an owned
-                // *reference*, however, must be materialized into a temp so RC insertion releases it at
-                // scope exit — otherwise the returned object (and anything it owns) leaks.
-                HExprKind::Call { callee, args } if !self.interner.is_reference(e.ty) => {
+                // `local.set` with nothing on the stack. A call whose discarded result is owned (see
+                // `discarded_result_is_owned`), however, must be materialized into a temp so RC
+                // insertion releases it at scope exit — otherwise the result (and anything it owns) leaks.
+                HExprKind::Call { callee, args } if !self.discarded_result_is_owned(e.ty) => {
                     let lowered: Vec<Operand> =
                         args.iter().map(|a| self.lower_operand(a)).collect();
                     self.b.push(Statement::Call {
@@ -517,7 +524,7 @@ impl Lowerer<'_> {
                     via,
                     method,
                     args,
-                } if !self.interner.is_reference(e.ty) => {
+                } if !self.discarded_result_is_owned(e.ty) => {
                     let target = self.lower_operand(target);
                     let via = via.as_ref().map(|v| self.lower_operand(v));
                     let method = method.as_ref().map(|m| self.lower_operand(m));
@@ -534,7 +541,7 @@ impl Lowerer<'_> {
                     receiver,
                     callee,
                     args,
-                } if !self.interner.is_reference(e.ty) => {
+                } if !self.discarded_result_is_owned(e.ty) => {
                     let mut lowered = vec![self.lower_operand(receiver)];
                     lowered.extend(args.iter().map(|a| self.lower_operand(a)));
                     self.b.push(Statement::Call {
@@ -548,7 +555,7 @@ impl Lowerer<'_> {
                     method_slot,
                     sig,
                     args,
-                } if !self.interner.is_reference(e.ty) => {
+                } if !self.discarded_result_is_owned(e.ty) => {
                     let recv = self.lower_operand(receiver);
                     let lowered = args.iter().map(|a| self.lower_operand(a)).collect();
                     self.b.push(Statement::InterfaceCall {
@@ -560,7 +567,7 @@ impl Lowerer<'_> {
                     });
                 }
                 HExprKind::IndirectCall { target, sig, args }
-                    if !self.interner.is_reference(e.ty) =>
+                    if !self.discarded_result_is_owned(e.ty) =>
                 {
                     let t = self.lower_operand(target);
                     let lowered = args.iter().map(|a| self.lower_operand(a)).collect();
@@ -575,6 +582,16 @@ impl Lowerer<'_> {
                 HExprKind::ForceFree(array) => {
                     let o = self.lower_operand(array);
                     self.b.push(Statement::ForceFree(o));
+                }
+                HExprKind::ArraySetUnchecked {
+                    array,
+                    index,
+                    value,
+                } => {
+                    let rv = self.lower_rvalue(value);
+                    let base = self.operand_into_local(array);
+                    let idx = self.lower_operand(index);
+                    self.b.assign(Place::index_unchecked(base, idx), rv);
                 }
                 // `Buffer.elems_copy<T>(…)` (`@unsafe`) — void bulk blit; same statement form.
                 HExprKind::ArrayElemsCopy {

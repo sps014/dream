@@ -1,0 +1,148 @@
+// Devirtualization shapes: exact receiver types from `new` (direct, after a factory is inlined,
+// and across an if/else join), tag-guarded dispatch for slots with two implementors (including
+// generic instances), and plain itable dispatch for a slot with three implementors.
+
+import system;
+import system.collections;
+
+interface Shape {
+    fun area(): int;
+    fun name(): string;
+}
+
+class Circle : Shape {
+    public r: int;
+    public constructor(r: int) {
+        this.r = r;
+    }
+    public fun area(): int {
+        return 3 * this.r * this.r;
+    }
+    public fun name(): string {
+        return "circle";
+    }
+}
+
+class Square : Shape {
+    public s: int;
+    public constructor(s: int) {
+        this.s = s;
+    }
+    public fun area(): int {
+        return this.s * this.s;
+    }
+    public fun name(): string {
+        return "square";
+    }
+}
+
+interface Op {
+    fun apply(x: int): int;
+}
+
+class AddOp : Op {
+    public fun apply(x: int): int {
+        return x + 10;
+    }
+}
+
+class MulOp : Op {
+    public fun apply(x: int): int {
+        return x * 10;
+    }
+}
+
+class NegOp : Op {
+    public fun apply(x: int): int {
+        return 0 - x;
+    }
+}
+
+interface Sized {
+    fun size(): int;
+}
+
+class Holder<T> : Sized {
+    public items: List<T>;
+    public constructor() {
+        this.items = List<T>();
+    }
+    public fun size(): int {
+        return this.items.length;
+    }
+}
+
+fun make_op(kind: int): Op {
+    if kind == 0 {
+        return AddOp();
+    }
+    if kind == 1 {
+        return MulOp();
+    }
+    return NegOp();
+}
+
+fun make_mul(): Op {
+    return MulOp();
+}
+
+fun total_area(shapes: List<Shape>): int {
+    let sum = 0;
+    let i = 0;
+    while i < shapes.length {
+        let s = shapes[i];
+        System.println(s.name() + " " + s.area().to_string());
+        sum = sum + s.area();
+        i = i + 1;
+    }
+    return sum;
+}
+
+fun total_size(items: List<Sized>): int {
+    let sum = 0;
+    let i = 0;
+    while i < items.length {
+        sum = sum + items[i].size();
+        i = i + 1;
+    }
+    return sum;
+}
+
+fun exercise_ops(): void {
+    let direct: Op = AddOp();
+    System.println(direct.apply(1));
+    System.println(make_mul().apply(2));
+
+    let flag = System.env("DREAM_DEVIRT_CASE_UNSET").is_some();
+    let joined: Op = AddOp();
+    if flag {
+        joined = NegOp();
+    }
+    System.println(joined.apply(3));
+
+    let k = 0;
+    while k < 3 {
+        System.println(make_op(k).apply(4));
+        k = k + 1;
+    }
+}
+
+fun main(): void {
+    exercise_ops();
+
+    let shapes = List<Shape>();
+    shapes.push(Circle(2));
+    shapes.push(Square(3));
+    shapes.push(Circle(1));
+    System.println(total_area(shapes));
+
+    let ints = Holder<int>();
+    ints.items.push(1);
+    ints.items.push(2);
+    let strs = Holder<string>();
+    strs.items.push("a");
+    let sized = List<Sized>();
+    sized.push(ints);
+    sized.push(strs);
+    System.println(total_size(sized));
+}

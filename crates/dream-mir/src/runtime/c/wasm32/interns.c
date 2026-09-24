@@ -9,20 +9,6 @@ extern int32_t debug_get_total_allocations(void);
 
 static dream_ptr interned[4]; /* empty, true, false, minus */
 
-extern int32_t live_objects;
-
-/* Callers release these strings through ordinary ARC, so cached singletons must be
- * immortal (rc == INT32_MAX is ignored by retain/release) or the first release frees
- * them out from under later readers. Immortals also leave the live-object counter. */
-static void pin_immortal(dream_ptr s) {
-    if (s) {
-        ((int32_t *)dream_p(s))[-1] = INT32_MAX;
-        if (live_objects > 0) {
-            live_objects -= 1;
-        }
-    }
-}
-
 static dream_ptr intern_latin1(const char *text) {
     dream_ptr s;
     int32_t n;
@@ -34,7 +20,7 @@ static dream_ptr intern_latin1(const char *text) {
     for (int32_t i = 0; i < n; i++) {
         units[i] = (uint16_t)(unsigned char)text[i];
     }
-    pin_immortal(s);
+    dream_pin_immortal(s);
     return s;
 }
 

@@ -1,0 +1,58 @@
+import system;
+
+class Label {
+    public text: string;
+    public constructor(text: string) {
+        this.text = text;
+    }
+}
+
+class Acc {
+    public name: string;
+    public label: Option<Label>;
+    public total: int;
+    public constructor(name: string) {
+        this.name = name;
+        this.total = 0;
+    }
+}
+
+// Too big to inline, so `acc` reaches it as an argument.
+fun describe(acc: Acc, rounds: int): int {
+    let s = 0;
+    for (let i = 0; i < rounds; i++) {
+        s = s + acc.name.length + acc.total;
+        if (s % 7 == 3) { s = s + 1; }
+        if (s % 11 == 5) { s = s + 2; }
+        if (s % 13 == 6) { s = s + 3; }
+        if (s % 17 == 7) { s = s + 4; }
+        if (s % 19 == 8) { s = s + 5; }
+        if (s % 23 == 9) { s = s + 6; }
+    }
+    switch (acc.label) {
+        Some(l) => { s = s + l.text.length; }
+        None => {}
+    }
+    return s;
+}
+
+fun run(n: int): int {
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+        let acc = Acc("acc" + i.to_string());
+        acc.total = i;
+        if (i % 2 == 0) {
+            acc.label = Option.Some(Label("even"));
+        }
+        acc.name = acc.name + "!";
+        total = total + describe(acc, 3);
+    }
+    return total;
+}
+
+fun main() {
+    let before = Debug.live_objects;
+    System.println(run(10).to_string());
+    System.println(run(1000).to_string());
+    System.println((Debug.live_objects - before).to_string());
+}

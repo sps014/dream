@@ -7,7 +7,7 @@ use crate::{
     Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
 };
 use dream_types::{DefId, TypeId, TypeInterner};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 pub struct UniqueRegion;
 
@@ -160,52 +160,61 @@ fn region_safe_body(cx: &mut SafeCx<'_>, f: &MirFunction) -> bool {
 }
 
 /// Every `Return` hands back memory this function allocated, directly or through copies of such a
-/// local. A niche `UnionNew` is excluded: it yields its payload's pointer rather than a new block.
+/// local, or null (a niche `None`: nothing for the caller's region to reclaim). A niche `UnionNew`
+/// is excluded: it yields its payload's pointer rather than a new block.
+///
+/// Must-analysis: a local is fresh only if *every* definition is an allocation, null, or a copy of
+/// a fresh local, so a local that is sometimes a borrowed occupant never qualifies. Parameters are
+/// never fresh.
 fn returns_fresh(interner: &TypeInterner, f: &MirFunction) -> bool {
-    let mut fresh: HashSet<u32> = HashSet::new();
+    let mut candidate: BTreeSet<u32> = BTreeSet::new();
+    let mut copies: Vec<(u32, u32)> = Vec::new();
+    let mut rejected: BTreeSet<u32> = f.params.iter().map(|p| p.0).collect();
     for b in &f.blocks {
+        if let Terminator::Await { dest: Some(d), .. } = &b.terminator {
+            rejected.insert(d.0);
+        }
         for s in &b.stmts {
             let Statement::Assign(Place::Local(d), rv) = s else {
                 continue;
             };
-            let allocates = match rv {
-                Rvalue::UnionNew { ty, .. } => !interner.is_niche_union(*ty),
+            candidate.insert(d.0);
+            match rv {
+                Rvalue::UnionNew { ty, .. } if interner.is_niche_union(*ty) => {
+                    rejected.insert(d.0);
+                }
                 Rvalue::New { .. }
+                | Rvalue::UnionNew { .. }
                 | Rvalue::ArrayNew { .. }
                 | Rvalue::ArrayLit { .. }
                 | Rvalue::Tuple { .. }
                 | Rvalue::Concat(_)
                 | Rvalue::ConcatInt { .. }
                 | Rvalue::ToString(_)
-                | Rvalue::ToBytes { .. } => true,
-                _ => false,
-            };
-            if allocates {
-                fresh.insert(d.0);
+                | Rvalue::ToBytes { .. }
+                | Rvalue::Use(Operand::Const(Const::Null)) => {}
+                Rvalue::Use(Operand::Copy(Place::Local(s)))
+                | Rvalue::Cast(Operand::Copy(Place::Local(s)), _, _) => copies.push((d.0, s.0)),
+                _ => {
+                    rejected.insert(d.0);
+                }
             }
         }
     }
+    let mut fresh: BTreeSet<u32> = candidate.difference(&rejected).copied().collect();
     let mut changed = true;
     while changed {
         changed = false;
-        for b in &f.blocks {
-            for s in &b.stmts {
-                let Statement::Assign(Place::Local(d), rv) = s else {
-                    continue;
-                };
-                let src = match rv {
-                    Rvalue::Use(Operand::Copy(Place::Local(s)))
-                    | Rvalue::Cast(Operand::Copy(Place::Local(s)), _, _) => s.0,
-                    _ => continue,
-                };
-                if fresh.contains(&src) && fresh.insert(d.0) {
-                    changed = true;
-                }
+        for (d, src) in &copies {
+            if fresh.contains(d) && !fresh.contains(src) {
+                fresh.remove(d);
+                changed = true;
             }
         }
     }
     f.blocks.iter().all(|b| match &b.terminator {
         Terminator::Return(Some(Operand::Copy(Place::Local(l)))) => fresh.contains(&l.0),
+        Terminator::Return(Some(Operand::Const(Const::Null))) => true,
         Terminator::Return(Some(_)) => false,
         _ => true,
     })
@@ -357,11 +366,11 @@ fn wrap_sites(
     memo: &mut HashMap<(DefId, Vec<TypeId>), bool>,
 ) -> Vec<WrapSite> {
     let f = &mir.functions[fi];
-    let mut births: HashMap<u32, (usize, usize, Callee)> = HashMap::new();
-    let mut deaths: HashMap<u32, (usize, usize)> = HashMap::new();
-    let mut retained = HashSet::new();
-    let mut from: HashMap<u32, HashSet<u32>> = HashMap::new();
-    let mut extra_death = HashSet::new();
+    let mut births: BTreeMap<u32, (usize, usize, Callee)> = BTreeMap::new();
+    let mut deaths: BTreeMap<u32, (usize, usize)> = BTreeMap::new();
+    let mut retained = BTreeSet::new();
+    let mut from: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
+    let mut extra_death = BTreeSet::new();
     for (bi, block) in f.blocks.iter().enumerate() {
         for (si, stmt) in block.stmts.iter().enumerate() {
             match stmt {
@@ -402,8 +411,8 @@ fn wrap_sites(
     }
     let mut visiting = HashSet::new();
     let mut out = Vec::new();
-    let mut used_birth = HashSet::new();
-    let mut used_death = HashSet::new();
+    let mut used_birth = BTreeSet::new();
+    let mut used_death = BTreeSet::new();
     for (local, (bbi, bsi, callee)) in births {
         let aliases = aliases_of(local, &from);
         if aliases.iter().any(|a| retained.contains(a)) {
@@ -455,8 +464,7 @@ fn wrap_sites(
             }
             used_birth.insert((bbi, bsi));
             used_death.insert((join, 0));
-            let mut null_locals: Vec<u32> = aliases.iter().copied().collect();
-            null_locals.sort_unstable();
+            let null_locals: Vec<u32> = aliases.iter().copied().collect();
             out.push(WrapSite {
                 birth_bi: bbi,
                 birth_si: bsi,
@@ -471,8 +479,8 @@ fn wrap_sites(
     out
 }
 
-fn aliases_of(root: u32, from: &HashMap<u32, HashSet<u32>>) -> HashSet<u32> {
-    let mut set = HashSet::from([root]);
+fn aliases_of(root: u32, from: &BTreeMap<u32, BTreeSet<u32>>) -> BTreeSet<u32> {
+    let mut set = BTreeSet::from([root]);
     let mut changed = true;
     while changed {
         changed = false;
@@ -529,7 +537,7 @@ fn postdom_death(f: &MirFunction, bbi: usize, bsi: usize, dbi: usize, dsi: usize
     dfs(f, bbi, bsi + 1, dbi, dsi, &mut Vec::new())
 }
 
-fn switch_join(f: &MirFunction, bbi: usize, bsi: usize, aliases: &HashSet<u32>) -> Option<usize> {
+fn switch_join(f: &MirFunction, bbi: usize, bsi: usize, aliases: &BTreeSet<u32>) -> Option<usize> {
     let sbi = find_switch_after(f, bbi, bsi + 1, aliases)?;
     let succs = f.blocks[sbi].terminator.successors();
     if succs.is_empty() {
@@ -555,7 +563,7 @@ fn payload_used_after_join(
     f: &MirFunction,
     join: usize,
     birth_bi: usize,
-    aliases: &HashSet<u32>,
+    aliases: &BTreeSet<u32>,
 ) -> bool {
     let mut seen = HashSet::new();
     let mut stack = vec![join];
@@ -581,7 +589,7 @@ fn payload_used_after_join(
     false
 }
 
-fn payload_use_stmt(stmt: &Statement, aliases: &HashSet<u32>) -> bool {
+fn payload_use_stmt(stmt: &Statement, aliases: &BTreeSet<u32>) -> bool {
     match stmt {
         Statement::Retain(_) | Statement::Release(_) | Statement::ReleaseUnique(_) => false,
         Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Const(Const::Null)))
@@ -595,7 +603,7 @@ fn payload_use_stmt(stmt: &Statement, aliases: &HashSet<u32>) -> bool {
     }
 }
 
-fn payload_use_term(term: &Terminator, aliases: &HashSet<u32>) -> bool {
+fn payload_use_term(term: &Terminator, aliases: &BTreeSet<u32>) -> bool {
     match term {
         Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => {
             operand_alias(o, aliases)
@@ -612,7 +620,7 @@ fn find_switch_after(
     f: &MirFunction,
     mut bi: usize,
     mut si: usize,
-    aliases: &HashSet<u32>,
+    aliases: &BTreeSet<u32>,
 ) -> Option<usize> {
     let mut seen = HashSet::new();
     let mut keys = aliases.clone();
@@ -644,7 +652,7 @@ fn find_switch_after(
     }
 }
 
-fn disc_of_alias(rv: &Rvalue, keys: &HashSet<u32>) -> bool {
+fn disc_of_alias(rv: &Rvalue, keys: &BTreeSet<u32>) -> bool {
     match rv {
         Rvalue::Discriminant { base, .. } => operand_alias(base, keys),
         Rvalue::Select {
@@ -662,7 +670,7 @@ fn disc_of_alias(rv: &Rvalue, keys: &HashSet<u32>) -> bool {
     }
 }
 
-fn operand_alias(op: &Operand, aliases: &HashSet<u32>) -> bool {
+fn operand_alias(op: &Operand, aliases: &BTreeSet<u32>) -> bool {
     matches!(op, Operand::Copy(Place::Local(l)) if aliases.contains(&l.0))
 }
 
@@ -738,7 +746,8 @@ fn strip_escaped_fn(f: &mut MirFunction, interner: &TypeInterner) -> bool {
                 Statement::RegionEnter => stack.push((bi, si)),
                 Statement::RegionLeave => {
                     if let Some(enter) = stack.pop() {
-                        if rc_use_after_leave(f, interner, bi, si) {
+                        let tainted = region_body_defs(f, interner, enter);
+                        if rc_use_after_leave(f, bi, si, &tainted) {
                             drop_at.insert(enter);
                             drop_at.insert((bi, si));
                         }
@@ -763,11 +772,61 @@ fn strip_escaped_fn(f: &mut MirFunction, interner: &TypeInterner) -> bool {
     true
 }
 
-fn rc_use_after_leave(
+/// RC locals assigned a non-null value somewhere between `enter` and the first `RegionLeave` on
+/// each path — the only locals that can hold region memory once the region rewinds. Locals
+/// defined solely outside the body (e.g. a loop's `Stopwatch` set up before the region) cannot.
+fn region_body_defs(
     f: &MirFunction,
     interner: &TypeInterner,
+    (enter_bi, enter_si): (usize, usize),
+) -> BTreeSet<u32> {
+    let mut defs = BTreeSet::new();
+    let mut seen = HashSet::new();
+    let mut stack = vec![(enter_bi, enter_si + 1)];
+    while let Some((bi, si0)) = stack.pop() {
+        if si0 == 0 && !seen.insert(bi) {
+            continue;
+        }
+        let Some(block) = f.blocks.get(bi) else {
+            continue;
+        };
+        let mut left = false;
+        for stmt in block.stmts.iter().skip(si0) {
+            match stmt {
+                Statement::RegionLeave => {
+                    left = true;
+                    break;
+                }
+                Statement::Assign(Place::Local(_), Rvalue::Use(Operand::Const(Const::Null))) => {}
+                Statement::Assign(Place::Local(d), _)
+                    if f
+                        .locals
+                        .get(d.0 as usize)
+                        .is_some_and(|l| interner.is_rc_tracked(l.ty)) =>
+                {
+                    defs.insert(d.0);
+                }
+                _ => {}
+            }
+        }
+        if left {
+            continue;
+        }
+        if let Terminator::Await { dest: Some(d), .. } = &block.terminator {
+            defs.insert(d.0);
+        }
+        for s in block.terminator.successors() {
+            stack.push((s.0 as usize, 0));
+        }
+    }
+    defs
+}
+
+fn rc_use_after_leave(
+    f: &MirFunction,
     leave_bi: usize,
     leave_si: usize,
+    tainted: &BTreeSet<u32>,
 ) -> bool {
     let mut seen = HashSet::from([leave_bi]);
     let mut stack = vec![(leave_bi, leave_si + 1, HashSet::new())];
@@ -779,14 +838,14 @@ fn rc_use_after_leave(
             continue;
         };
         for stmt in block.stmts.iter().skip(si0) {
-            if rc_stmt_escapes(f, interner, stmt, &killed) {
+            if rc_stmt_escapes(stmt, &killed, tainted) {
                 return true;
             }
             if let Statement::Assign(Place::Local(d), _) = stmt {
                 killed.insert(d.0);
             }
         }
-        if rc_term_escapes(f, interner, &block.terminator, &killed) {
+        if rc_term_escapes(&block.terminator, &killed, tainted) {
             return true;
         }
         for s in block.terminator.successors() {
@@ -800,31 +859,18 @@ fn rc_use_after_leave(
     false
 }
 
-fn rc_stmt_escapes(
-    f: &MirFunction,
-    interner: &TypeInterner,
-    stmt: &Statement,
-    killed: &HashSet<u32>,
-) -> bool {
+fn rc_stmt_escapes(stmt: &Statement, killed: &HashSet<u32>, tainted: &BTreeSet<u32>) -> bool {
     match stmt {
         Statement::Retain(_) | Statement::Release(_) | Statement::ReleaseUnique(_) => false,
         Statement::Assign(Place::Local(_), Rvalue::Use(Operand::Const(Const::Null))) => false,
         Statement::RegionEnter | Statement::RegionLeave => false,
-        _ => f.locals.iter().enumerate().any(|(i, loc)| {
-            let i = i as u32;
-            !killed.contains(&i)
-                && interner.is_rc_tracked(loc.ty)
-                && crate::passes::rc::stmt_reads_local(stmt, i)
-        }),
+        _ => tainted
+            .iter()
+            .any(|i| !killed.contains(i) && crate::passes::rc::stmt_reads_local(stmt, *i)),
     }
 }
 
-fn rc_term_escapes(
-    f: &MirFunction,
-    interner: &TypeInterner,
-    term: &Terminator,
-    killed: &HashSet<u32>,
-) -> bool {
+fn rc_term_escapes(term: &Terminator, killed: &HashSet<u32>, tainted: &BTreeSet<u32>) -> bool {
     let mut live = HashSet::new();
     match term {
         Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => {
@@ -840,12 +886,8 @@ fn rc_term_escapes(
         Terminator::Await { future, .. } => operand_locals(future, &mut live),
         _ => {}
     }
-    live.iter().any(|i| {
-        !killed.contains(i)
-            && f.locals
-                .get(*i as usize)
-                .is_some_and(|loc| interner.is_rc_tracked(loc.ty))
-    })
+    live.iter()
+        .any(|i| !killed.contains(i) && tainted.contains(i))
 }
 
 fn operand_locals(op: &Operand, live: &mut HashSet<u32>) {
@@ -1186,5 +1228,242 @@ mod tests {
             "{:?}",
             drop_fn.blocks[0].stmts
         );
+    }
+
+    /// `make_tree` from `bench_binary_trees`: the base case returns a niche `None`, which niche
+    /// canonicalization lowers to `none = null; return none`.
+    fn make_tree_module(ctx: &mut TypeCtx, base_returns_param: bool) -> Mir {
+        use crate::BinOp;
+
+        let node_def = ctx.register(DefKind::Struct, "TreeNode", vec![]);
+        let ty = ctx.interner.struct_ty(node_def, vec![]);
+        let int = ctx.interner.int();
+        let bool_ty = ctx.interner.bool();
+        let make_def = ctx.register(DefKind::Function, "make_tree", vec![]);
+        let bench_def = ctx.register(DefKind::Function, "bench_binary_trees", vec![]);
+        let layout = TypeLayout::from_fields(
+            &ctx.interner,
+            "TreeNode",
+            vec![
+                ("left".to_string(), ty, false, false),
+                ("right".to_string(), ty, false, false),
+            ],
+        );
+        let mut layouts = LayoutTable::default();
+        layouts.insert(ty, layout);
+        let callee = |arg_ty: TypeId| Callee {
+            def: make_def,
+            args: vec![],
+            ret: arg_ty,
+            take_params: vec![false],
+        };
+
+        let mut mk = FunctionBuilder::new("make_tree", ty);
+        mk.set_def(make_def, vec![]);
+        let depth = mk.new_param(int, Some("depth".into()));
+        let spare = if base_returns_param {
+            Some(mk.new_param(ty, Some("spare".into())))
+        } else {
+            None
+        };
+        let none = mk.new_local(ty, Some("none".into()));
+        let c = mk.new_temp(bool_ty);
+        let d1 = mk.new_temp(int);
+        let l = mk.new_temp(ty);
+        let r = mk.new_temp(ty);
+        let node = mk.new_temp(ty);
+        let some = mk.new_temp(ty);
+        mk.assign(
+            Place::Local(none),
+            Rvalue::Use(Operand::Const(Const::Null)),
+        );
+        mk.assign(
+            Place::Local(c),
+            Rvalue::Binary(
+                BinOp::Le,
+                Operand::Copy(Place::Local(depth)),
+                Operand::Const(Const::Int(0)),
+            ),
+        );
+        let base = mk.new_block();
+        let rec = mk.new_block();
+        mk.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(c)),
+            then_blk: base,
+            else_blk: rec,
+        });
+        mk.switch_to(base);
+        let base_ret = match spare {
+            Some(p) => p,
+            None => none,
+        };
+        mk.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(base_ret)))));
+        mk.switch_to(rec);
+        mk.assign(
+            Place::Local(d1),
+            Rvalue::Binary(
+                BinOp::Sub,
+                Operand::Copy(Place::Local(depth)),
+                Operand::Const(Const::Int(1)),
+            ),
+        );
+        let mut rec_args = vec![Operand::Copy(Place::Local(d1))];
+        if let Some(p) = spare {
+            rec_args.push(Operand::Copy(Place::Local(p)));
+        }
+        for dst in [l, r] {
+            mk.assign(
+                Place::Local(dst),
+                Rvalue::Call {
+                    callee: callee(ty),
+                    args: rec_args.clone(),
+                },
+            );
+        }
+        mk.assign(
+            Place::Local(node),
+            Rvalue::New {
+                def: node_def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        for (field, src) in [(0, l), (1, r)] {
+            mk.assign(
+                Place::Field { base: node, field },
+                Rvalue::Move { src, cast: None },
+            );
+        }
+        mk.assign(
+            Place::Local(some),
+            Rvalue::Use(Operand::Copy(Place::Local(node))),
+        );
+        mk.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(some)))));
+
+        let mut bench = FunctionBuilder::new("bench_binary_trees", ctx.interner.void());
+        bench.set_def(bench_def, vec![]);
+        let x = bench.new_local(ty, Some("x".into()));
+        let mut args = vec![Operand::Const(Const::Int(12))];
+        if base_returns_param {
+            args.push(Operand::Const(Const::Null));
+        }
+        bench.assign(
+            Place::Local(x),
+            Rvalue::Call {
+                callee: callee(ty),
+                args,
+            },
+        );
+        bench.push(Statement::ReleaseUnique(Operand::Copy(Place::Local(x))));
+        bench.terminate(Terminator::Return(None));
+
+        Mir {
+            functions: vec![mk.finish(), bench.finish()],
+            layouts,
+            ..Default::default()
+        }
+    }
+
+    fn has_region_enter(f: &MirFunction) -> bool {
+        f.blocks
+            .iter()
+            .any(|b| b.stmts.iter().any(|s| matches!(s, Statement::RegionEnter)))
+    }
+
+    #[test]
+    fn wraps_builder_whose_base_case_returns_niche_none() {
+        let mut ctx = TypeCtx::new();
+        let mut mir = make_tree_module(&mut ctx, false);
+        assert!(UniqueRegion.run(&mut mir, &ctx.interner));
+        let bench = &mir.functions[1];
+        assert!(
+            matches!(bench.blocks[0].stmts[0], Statement::RegionEnter),
+            "{:?}",
+            bench.blocks[0].stmts
+        );
+        assert!(
+            matches!(bench.blocks[0].stmts[2], Statement::RegionLeave),
+            "{:?}",
+            bench.blocks[0].stmts
+        );
+        assert!(!has_region_enter(&mir.functions[0]));
+    }
+
+    #[test]
+    fn does_not_wrap_builder_that_may_return_a_parameter() {
+        let mut ctx = TypeCtx::new();
+        let mut mir = make_tree_module(&mut ctx, true);
+        assert!(!UniqueRegion.run(&mut mir, &ctx.interner));
+        assert!(!has_region_enter(&mir.functions[1]));
+    }
+
+    #[test]
+    fn returns_fresh_requires_every_definition_fresh() {
+        let mut ctx = TypeCtx::new();
+        let node_def = ctx.register(DefKind::Struct, "Node", vec![]);
+        let ty = ctx.interner.struct_ty(node_def, vec![]);
+        let mut f = FunctionBuilder::new("pick", ty);
+        let p = f.new_param(ty, Some("p".into()));
+        let v = f.new_local(ty, Some("v".into()));
+        f.assign(
+            Place::Local(v),
+            Rvalue::New {
+                def: node_def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        f.assign(Place::Local(v), Rvalue::Use(Operand::Copy(Place::Local(p))));
+        f.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(v)))));
+        assert!(!returns_fresh(&ctx.interner, &f.finish()));
+    }
+
+    #[test]
+    fn strip_escaped_keeps_region_when_only_pre_region_locals_are_used_after() {
+        let mut ctx = TypeCtx::new();
+        let node_def = ctx.register(DefKind::Struct, "Node", vec![]);
+        let ty = ctx.interner.struct_ty(node_def, vec![]);
+        let alloc_def = ctx.register(DefKind::Function, "alloc_node", vec![]);
+        let mut f = FunctionBuilder::new("drop_it", ctx.interner.void());
+        let sw = f.new_local(ty, Some("sw".into()));
+        let x = f.new_local(ty, Some("x".into()));
+        let s = f.new_local(ctx.interner.string(), Some("s".into()));
+        f.assign(
+            Place::Local(sw),
+            Rvalue::New {
+                def: node_def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        f.push(Statement::RegionEnter);
+        f.assign(
+            Place::Local(x),
+            Rvalue::Call {
+                callee: Callee {
+                    def: alloc_def,
+                    args: vec![],
+                    ret: ty,
+                    take_params: vec![],
+                },
+                args: vec![],
+            },
+        );
+        f.push(Statement::RegionLeave);
+        f.assign(Place::Local(x), Rvalue::Use(Operand::Const(Const::Null)));
+        f.assign(
+            Place::Local(s),
+            Rvalue::ToString(Operand::Copy(Place::Local(sw))),
+        );
+        f.terminate(Terminator::Return(None));
+        let mut mir = Mir {
+            functions: vec![f.finish()],
+            ..Default::default()
+        };
+        assert!(!strip_escaped_regions(&mut mir, &ctx.interner));
+        assert!(has_region_enter(&mir.functions[0]));
     }
 }

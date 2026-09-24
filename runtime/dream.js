@@ -164,15 +164,12 @@ class DreamInstance {
   }
 
   /**
-   * Payload address of a Dream string. C owned strings store pad 0 (units at `ptr+8`);
-   * C slices store pad 1 and the units pointer at `ptr+8+4` on wasm32; WAT stores the
-   * absolute units address in pad.
+   * Payload address of a Dream string. Slices store pad 1 and the units pointer at `ptr+12`;
+   * any other pad (0 or the cached hash) means inline units at `ptr+8`.
    */
   stringUnitsStart(ptr) {
-    const pad = this.view.getInt32(ptr + 4, true);
-    if (pad === 0) return ptr + 8;
-    if (pad === 1) return this.view.getInt32(ptr + 12, true);
-    return pad;
+    if (this.view.getInt32(ptr + 4, true) === 1) return this.view.getInt32(ptr + 12, true);
+    return ptr + 8;
   }
 
   /**
@@ -215,7 +212,7 @@ class DreamInstance {
     const units = str.length;
     const ptr = this.guestMalloc(8 + units * 2, TAGS.STRING);
     this.view.setInt32(ptr, units, true);
-    this.view.setInt32(ptr + 4, ptr + 8, true);
+    this.view.setInt32(ptr + 4, 0, true);
     for (let i = 0; i < units; i++) {
       this.view.setUint16(ptr + 8 + i * 2, str.charCodeAt(i), true);
     }

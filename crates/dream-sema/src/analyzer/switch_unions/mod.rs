@@ -16,6 +16,7 @@ use super::*;
 
 mod exhaustiveness;
 mod foreach;
+mod foreach_list;
 mod lowering;
 mod patterns;
 mod try_propagation;

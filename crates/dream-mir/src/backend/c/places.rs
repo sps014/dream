@@ -1,6 +1,7 @@
 use super::ast::{CTy, Expr, Stmt, UnOp};
 use super::emit::Emitter;
 use super::types::{array_elem_ty, elem_size, emitted_local_ty, load_cast};
+use crate::rc_store::{boxes_into_object, rvalue_allocates};
 use crate::{Operand, Place};
 use dream_types::TypeInterner;
 
@@ -333,7 +334,7 @@ impl<'a> Emitter<'a> {
                     // The element is copied by value, so an allocating rvalue's box has no owner
                     // once the copy is made: its type is not reference-counted, so no scope exit
                     // covers it. The local, field, and global stores free it in `memcpy_value`.
-                    let frees = value_rvalue_allocates(rv);
+                    let frees = rvalue_allocates(rv);
                     return self.b.expr_block(|b| {
                         let v = b.temp(CTy::Ptr, Some(rhs.clone()));
                         b.call(
@@ -515,7 +516,7 @@ impl<'a> Emitter<'a> {
         let dest = Expr::dream_p(dest_ptr.clone());
         let cx = self.cx;
         let func = self.f;
-        if value_rvalue_allocates(rv) {
+        if rvalue_allocates(rv) {
             self.b.expr_block(move |b| {
                 if drop_old {
                     let mut e = Emitter::new(cx, func, b);
@@ -613,7 +614,7 @@ impl<'a> Emitter<'a> {
             .unwrap_or(8);
         let size = u.size.max(16);
         let slot = Expr::field_ptr(base.0, fld.offset);
-        let drop_src = if value_rvalue_allocates(rv) {
+        let drop_src = if rvalue_allocates(rv) {
             Some(crate::backend::c::release::release_sym(self.cx, fld.ty))
         } else {
             None
@@ -744,20 +745,7 @@ fn realloc_self_store(place: &Place, rv: &crate::Rvalue) -> bool {
 }
 
 fn borrowed_ref_store(interner: &TypeInterner, rv: &crate::Rvalue) -> bool {
-    !value_rvalue_allocates(rv) && !boxes_into_object(interner, rv)
-}
-
-/// `int` → `object` and friends allocate the box they yield (`dream_box_*`), so the slot they are
-/// stored into takes that fresh +1. Retaining instead would leave the box's original reference with
-/// no owner to drop it. A `string` → `object` cast is a no-op pun, not a box, and is excluded by the
-/// reference-counted check.
-fn boxes_into_object(interner: &TypeInterner, rv: &crate::Rvalue) -> bool {
-    let crate::Rvalue::Cast(_, from, to) = rv else {
-        return false;
-    };
-    matches!(interner.kind(*to), dream_types::TyKind::Object)
-        && matches!(interner.kind(*from), dream_types::TyKind::Prim(_))
-        && !interner.is_rc_tracked(*from)
+    !rvalue_allocates(rv) && !boxes_into_object(interner, rv)
 }
 
 /// The local whose reference-count token this store adopts, as recorded by `RcInsertion` or
@@ -770,32 +758,6 @@ fn unique_move_src(rv: &crate::Rvalue) -> Option<u32> {
     }
 }
 
-fn value_rvalue_allocates(rv: &crate::Rvalue) -> bool {
-    // Fewer than two parts never reaches `dream_concat_n`: one part lowers to the operand itself
-    // and zero to an interned literal, neither of which is a reference this store may adopt.
-    if let crate::Rvalue::Concat(parts) = rv {
-        return parts.len() >= 2;
-    }
-    matches!(
-        rv,
-        crate::Rvalue::New { .. }
-            | crate::Rvalue::Tuple { .. }
-            | crate::Rvalue::UnionNew { .. }
-            | crate::Rvalue::Call { .. }
-            | crate::Rvalue::InterfaceCall { .. }
-            | crate::Rvalue::IndirectCall { .. }
-            | crate::Rvalue::ArrayLit { .. }
-            | crate::Rvalue::ArrayNew { .. }
-            | crate::Rvalue::ArrayRealloc { .. }
-            // `dream_concat_str_int_str` mallocs its result. The in-place `_into` variants reuse
-            // their destination, but `emit_into` only targets locals, never a slot stored here.
-            | crate::Rvalue::ConcatInt { .. }
-            // `dream_from_bytes` hands back a heap box. A local or field destination copies out of
-            // it and frees it in `store_from_bytes_value`, but an array element reaches the generic
-            // store instead, and the box's type is not reference-counted so no scope exit covers it.
-            | crate::Rvalue::FromBytes { .. }
-    )
-}
 
 pub(super) fn is_alias_value_local(f: &crate::MirFunction, local: crate::Local) -> bool {
     if f.locals[local.0 as usize].name.is_some() {

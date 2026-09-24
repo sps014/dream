@@ -320,7 +320,7 @@ static void priv_class_push(int32_t idx, int32_t block) {
 
 static dream_ptr finish_block_ex(int32_t block, int32_t tag, int32_t account) {
     i32_put(block + (int32_t)HEADER_TAG_OFFSET, tag);
-    i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, 1);
+    i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, dream_rc_init(tag));
     if (account) {
         account_alloc();
     }
@@ -400,7 +400,7 @@ static dream_ptr region_malloc_locked(int32_t size, int32_t tag) {
     dream_region_off_set(off + total);
     i32_put(block, total);
     i32_put(block + (int32_t)HEADER_TAG_OFFSET, tag);
-    i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, 1);
+    i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, dream_rc_init(tag));
     account_alloc();
     dream_region_nalloc_set(dream_region_nalloc_get() + 1);
     return (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
@@ -497,7 +497,7 @@ static dream_ptr malloc_locked(int32_t size, int32_t tag) {
     }
 
     i32_put(block + (int32_t)HEADER_TAG_OFFSET, tag);
-    i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, 1);
+    i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, dream_rc_init(tag));
     account_alloc();
     return (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
 }
@@ -509,7 +509,31 @@ int32_t debug_get_total_allocations(void) {
     return __atomic_load_n(&total_allocations, __ATOMIC_RELAXED);
 }
 int32_t debug_get_ref_count(dream_ptr ptr) {
-    return ptr ? ((int32_t *)((char *)dream_p(ptr) - RC_FROM_DATA))[0] : 0;
+    return ptr ? dream_rc_count(ptr) : 0;
+}
+
+void dream_pin_immortal(dream_ptr s) {
+    if (s) {
+        *dream_rc_word(s) = DREAM_RC_IMMORTAL;
+        if (live_objects > 0) {
+            live_objects -= 1;
+        }
+    }
+}
+
+void dream_retain_slow(int32_t *rc) {
+    if (*rc == DREAM_RC_IMMORTAL) {
+        return;
+    }
+    __atomic_fetch_add(rc, 1, __ATOMIC_RELAXED);
+}
+
+int dream_rc_last_slow(int32_t *rc) {
+    int32_t v = *rc;
+    if (v == 0 || v == DREAM_RC_IMMORTAL) {
+        return 0;
+    }
+    return __atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL) == (DREAM_RC_SHARED_BIT | 1);
 }
 int32_t debug_get_heap_ptr(void) { return heap_ptr_get(); }
 /* Native parity: the probe exposes "most recent freed block" (a free-happened detector),
@@ -595,6 +619,9 @@ static void publish_rec(dream_ptr ptr, dream_ptr *seen, int *nseen) {
         return;
     }
     *tag |= TAG_SHARED;
+    if (*dream_rc_word(ptr) > 0) {
+        *dream_rc_word(ptr) |= DREAM_RC_SHARED_BIT;
+    }
     if (kind == TAG_STRING) {
         if (i32_at((int32_t)ptr + 4) == DREAM_STR_SLICE) {
             publish_rec((dream_ptr)i32_at((int32_t)ptr + 8), seen, nseen);
@@ -677,7 +704,7 @@ void dream_recycle(dream_ptr ptr) {
     if (!ptr) {
         return;
     }
-    if (dream_weak_any) {
+    if (*dream_tag_word(ptr) & DREAM_TAG_WEAK_TARGET) {
         dream_weak_clear_all(ptr);
     }
     if (region_owns(ptr)) {

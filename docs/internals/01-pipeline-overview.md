@@ -17,9 +17,11 @@ flowchart TD
 
     info --> hir["HIR emission\nlower AST+SemanticInfo → typed HIR"]
     hir --> mir["mir::lower\nHIR → CFG MIR"]
-    mir --> rc["ExpandSimpleCtors then RcInsertion\n(make ownership explicit)"]
-    rc --> opt["module optimize\ninline + prune, then per-function pipeline"]
-    opt --> emit["backend::c\nMIR → C99 (relooper-informed)"]
+    mir --> rc["ExpandSimpleCtors, ParamModes, RcInsertion\n(make ownership explicit)"]
+    rc --> opt["module optimize\ndevirt + inline rounds, post-inline RC,\nregions / sroa-managed"]
+    opt --> perfn["per-function pipeline (fixpoint)"]
+    perfn --> late["late module passes\nstrip-escaped-regions, frame-alloc,\n(debug compiler) MIR verifier"]
+    late --> emit["backend::c\nMIR → C99 (relooper-informed)"]
 
     emit --> cc["clang / wasm-ld (wasi-sdk)"]
     cc --> wasm[".wasm"]
@@ -75,12 +77,12 @@ Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-s
 
 - **In:** HIR.
 - **Out:** optimized MIR (a CFG per function).
-- **Steps:** `mir::lower` desugars structured control flow into blocks; `ExpandSimpleCtors` then `RcInsertion` make ownership explicit (module-wide, before inlining); `optimize_module` inlines, then `RcLastUseRepair` fixes last-use moves on fused bodies; the per-function `PassManager` runs to a fixpoint. See [04-mir.md](./04-mir.md) and [05-writing-passes.md](./05-writing-passes.md).
+- **Steps:** `mir::lower` desugars structured control flow into blocks; `ExpandSimpleCtors`, `ParamModes` (borrow inference), then `RcInsertion` make ownership explicit (module-wide, before inlining); `optimize_module_opts` alternates `Devirt` with inliner rounds, then runs the post-inline RC and placement stages (`RcLastUseRepair`, `UniqueRegion`, `rc-held-by-owner`, `SroaManaged`); the per-function `PassManager` runs to a fixpoint (including bounds-check elimination and loop versioning in `Abc`); `run_late_module_passes` strips unsafe regions, stack-allocates non-escaping objects (`frame-alloc`), and — in a debug build of the compiler — runs the MIR verifier. `--emit-mir` snapshots any of these stages. See [04-mir.md](./04-mir.md) and [05-writing-passes.md](./05-writing-passes.md).
 
 ### 7. Backend — `crates/dream-mir/src/relooper.rs` + `crates/dream-mir/src/backend/c/`
 
 - **In:** optimized MIR.
-- **Out:** C99 (`backend::c::emit_c_module_for`). For wasm32 targets the C is compiled by wasi-sdk clang/wasm-ld to `.wasm`, then pretty-printed to `.wat` via wasmprinter; native targets stop at the `.c` + host cc.
+- **Out:** C99 (`backend::c::emit_c_module_for`). For wasm32 targets the C is compiled by wasi-sdk clang/wasm-ld to `.wasm`, then pretty-printed to `.wat` via wasmprinter; native targets stop at the `.c` + host cc (optionally clang PGO via `--profile` / `--use-profile`, `src/execution/native_c/pgo.rs`). The prebuilt runtimes (native `libdream_rt.a`, wasm32 objects) are cached with a stamp listing every input's path, size, and mtime (`src/driver/rt_stamp.rs`), so switching between compiler checkouts rebuilds them instead of linking a stale archive.
 - **How:** relooper-informed C99 emission — the emitter walks MIR blocks into C statements (labels, `goto`, `switch`), and the guest runtime is C under `crates/dream-mir/src/runtime/c/`. See [06-relooper-and-backend.md](./06-relooper-and-backend.md).
 
 ### 8. Artifact emission — `src/driver/compiler.rs` / `src/driver/abi.rs`

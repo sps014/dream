@@ -99,7 +99,7 @@ flowchart TD
 | `If` | cur → `If{cond, then, else}`; both arms `Goto` a fresh join block |
 | `While` | header block tests cond → body / exit; body `Goto`s header (back-edge) |
 | `For` | init in cur; then a `While`-shaped header with the step appended to the body |
-| `Foreach` | desugars to an index local + bounds check + `Index` read into the elem local |
+| `Foreach` | desugars to an index local + bounds check + `Index` read into the elem local. `foreach` over a `List<T>` is desugared by sema (`switch_unions/foreach_list.rs`) into an index loop (`$i < $list.length`, re-read every step so mutation during iteration behaves like `ListIterator`) with `at_unchecked` element reads, so it gets the same shape. |
 | `Switch` | `Switch` terminator with `(value, block)` targets + default |
 | `&&` / `\|\|` | short-circuit: a branch that skips the rhs block |
 | `??` (`Coalesce`) | null-test branch choosing lhs or rhs |
@@ -118,8 +118,9 @@ flowchart LR
     A["x = New{..}\nRetain(x)\n... use x ...\nRelease(x)"] -->|RcElision sees adjacent pair| B["x = New{..}\n... use x ..."]
 ```
 
-- `ExpandSimpleCtors` then `RcInsertion` run module-wide *before* inlining. Insertion assigns each owned RC local a compile-time ownership token and emits `Retain` only on a real share and `Release` when that token dies.
-- After inlining, `RcLastUseRepair` turns last-use container stores on the fused CFG into moves (null the source; drop a `Retain` that only existed to share into a now-dead store). Re-running full insertion on inlined `generated_dispatch` is too expensive.
+- `ExpandSimpleCtors`, `ParamModes` (borrow inference for read-only sink parameters), then `RcInsertion` run module-wide *before* inlining. Insertion assigns each owned RC local a compile-time ownership token and emits `Retain` only on a real share and `Release` when that token dies. It consults a type-level mod-ref table (`rc/modref.rs`) so snapshots and loop-carried traversal variables (`rc/cursor_family.rs`) stay cursors when no call can overwrite the slot they came from.
+- After inlining, `RcLastUseRepair` turns last-use container stores on the fused CFG into moves (null the source; drop a `Retain` that only existed to share into a now-dead store). Re-running full insertion on inlined `generated_dispatch` is too expensive. `rc-held-by-owner` (`rc/held.rs`) then drops retain/release pairs on snapshots whose owner provably outlives every read, now that the intervening calls are inlined or summarized.
+- Allocation placement is decided on the post-inline module from escape analysis (`analysis/escape.rs`) and a static per-object count (`analysis/object_life.rs`): `UniqueRegion` (bump region for unique `del`-free graphs), `SroaManaged` (objects with reference fields become per-field locals), and late `frame-alloc` (non-escaping instances built in the C frame with an immortal count).
 - `RcElision` (in the per-function pipeline) cancels redundant `Retain`/`Release` pairs along Goto chains, transparent diamonds, and transparent natural loops (see [Nim-hard ARC](./11-swift-like-arc-roadmap.md)).
 
 See [05-writing-passes.md](./05-writing-passes.md) for the module-pass order.
@@ -128,9 +129,21 @@ See [05-writing-passes.md](./05-writing-passes.md) for the module-pass order.
 
 `FunctionBuilder` is the ergonomic constructor used by tests and anything that synthesizes MIR directly (e.g. compiler-generated trampolines). It hands out fresh `Local`s and `BlockId`s, lets you push statements into the current block, and finalizes a `MirFunction`. Use it instead of building the structs by hand — it keeps the locals/blocks vectors consistent.
 
-## Pretty-printing — `src/mir/print.rs`
+## Pretty-printing and `--emit-mir` — `crates/dream-mir/src/pretty.rs`, `passes/dump.rs`
 
-MIR has a textual dump for debugging and snapshot tests. When a pass misbehaves, print the function before and after; the CFG dump is far easier to read than the WAT.
+`pretty.rs` prints MIR deterministically (functions, locals, and blocks in index order; names resolved by lookup, never by iterating a hash container), so dumps diff cleanly between compiles. The compiler exposes it through a global CLI flag:
+
+```bash
+dream --release --emit-mir=after:rc-insertion app.dream   # last snapshot after that stage
+dream --release --emit-mir=after:gvn,each app.dream       # every run of gvn that changed a function
+dream --release --emit-mir=all --emit-mir-fn=main,parse app.dream  # every module stage, two fns
+```
+
+Snapshots land in `<output>.mir/<NN>-<pass>.mir`, numbered so lexicographic order is pipeline order. `after:<pass>` accepts every module stage (`lower`, `expand-simple-ctors`, `funcbox-abi`, `param-modes`, `rc-insertion`, `devirt`, `inline`, `rc-last-use-repair`, `unique-region`, `rc-held-by-owner`, `sroa-managed`, `fixpoint`, `strip-escaped-regions`, `frame-alloc`) and every per-function pass name; an unknown name errors with the valid list. For a per-function pass without `each`, the file holds each function's body after that pass's last run in the fixpoint. When a pass misbehaves, dump before and after it; the CFG text is far easier to read than the C.
+
+## Verifier — `crates/dream-mir/src/verify.rs`
+
+When the compiler itself is built with `debug_assertions` (debug builds and `cargo test`), `run_late_module_passes` checks the final module and panics (an ICE) on: an RC op on a non-RC local, a read after `ReleaseUnique` on the same straight-line path, and a read or double release after `Release` for locals that provably hold a single token (never retained, stored, passed, or a parameter). The checks are conservative by design so they never fire on correct RC placement; a release build of the compiler skips them.
 
 ## Invariants MIR guarantees to the backend
 
@@ -138,4 +151,4 @@ MIR has a textual dump for debugging and snapshot tests. When a pass misbehaves,
 2. Operands are atomic (local/global/const) — no nested computation hides in an operand.
 3. Every `Local` has a `LocalDecl` with a valid `TypeId`.
 4. The CFG is **reducible** (Dream cannot express `goto` spaghetti), so the relooper always succeeds.
-5. RC is balanced (every retained reference is released on every path) after `RcInsertion`.
+5. RC is balanced (every retained reference is released on every path) after `RcInsertion`; debug compiler builds spot-check this with `verify.rs`.

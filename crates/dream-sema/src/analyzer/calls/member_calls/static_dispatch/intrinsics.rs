@@ -377,6 +377,59 @@ impl<'a> Analyzer<'a> {
             return Ok(Type::Void);
         }
 
+        // `Buffer.get_unchecked<T>(arr, i)` / `Buffer.set_unchecked<T>(arr, i, v)` (`@unsafe`):
+        // element access whose bounds the caller has already established.
+        if let Some(op @ (intrinsics::IntrinsicOp::ArrayGetUnchecked
+        | intrinsics::IntrinsicOp::ArraySetUnchecked)) =
+            intrinsics::IntrinsicOp::from_attributes(&template.attributes)
+        {
+            let is_set = op == intrinsics::IntrinsicOp::ArraySetUnchecked;
+            let name = if is_set {
+                "Buffer.set_unchecked"
+            } else {
+                "Buffer.get_unchecked"
+            };
+            self.check_unsafe_intrinsic_call(name, template, method.position, diagnostics);
+            let arity = if is_set { 3 } else { 2 };
+            if params_types.len() != arity {
+                diagnostics.report_error(
+                    format!(
+                        "'{}' expects exactly {} arguments, got {}",
+                        name,
+                        arity,
+                        params_types.len()
+                    ),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            }
+            let element = match params_types[0].strip_suffix("[]") {
+                Some(elem) => Self::concrete_type_from_str(elem),
+                None if is_unknown_type_name(&params_types[0]) => Type::Unknown,
+                None => {
+                    diagnostics.report_error(
+                        format!(
+                            "'{}' expects an array as its first argument, got {}",
+                            name,
+                            self.ty_str_display(&params_types[0])
+                        ),
+                        Some(method.position),
+                    );
+                    return Ok(Type::Unknown);
+                }
+            };
+            let mut args = arg_hirs.into_iter();
+            let array = args.next().flatten();
+            let index = args.next().flatten();
+            if is_set {
+                let value = args.next().flatten();
+                self.hir_set_array_set_unchecked(array, index, value);
+                return Ok(Type::Void);
+            }
+            self.hir_set_array_get_unchecked(&element, array, index);
+            return Ok(element);
+        }
+
         // `Bytes.of<T>(v)` / `Bytes.to<T>(bytes)`: raw byte-copy conversions between a blittable
         // value and a `byte[]` buffer (used by the worker-boundary adapter). `of` copies the
         // value's bytes out to a fresh buffer; `to` reconstructs a `T` from a buffer.

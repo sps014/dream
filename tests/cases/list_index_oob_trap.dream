@@ -1,0 +1,13 @@
+// List indexing past `length` must panic even though the backing storage has spare capacity.
+import system;
+import system.collections;
+
+fun main(): void {
+    let xs = List<int>();
+    xs.push(1);
+    xs.push(2);
+    xs.push(3);
+    System.println(xs[2]);
+    System.println(xs[3]);
+    System.println("after");
+}

@@ -1,6 +1,9 @@
 module system.collections;
 
 // FIFO queue backed by a ring buffer (`T[]` + head/count).
+//
+// Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any
+// `(head + k) % items.length` with `k >= 0` is a valid slot for `Buffer.get_unchecked`.
 public class Queue<T> : Collection<T> {
     items: T[];
     head: int;
@@ -47,7 +50,7 @@ public class Queue<T> : Collection<T> {
             this.grow();
         }
         let tail = (this.head + this.count) % this.items.length;
-        this.items[tail] = value;
+        Buffer.set_unchecked<T>(this.items, tail, value);
         this.count = this.count + 1;
     }
 
@@ -57,11 +60,11 @@ public class Queue<T> : Collection<T> {
         if this.count == 0 {
             return Option.None;
         }
-        let v = this.items[this.head];
+        let v = Buffer.get_unchecked<T>(this.items, this.head);
         let vacated = this.head;
         this.head = (this.head + 1) % this.items.length;
         this.count = this.count - 1;
-        this.items[vacated] = Buffer.alloc<T>(1)[0];
+        Buffer.set_unchecked<T>(this.items, vacated, Buffer.alloc<T>(1)[0]);
         return Option.Some(v);
     }
 
@@ -70,7 +73,7 @@ public class Queue<T> : Collection<T> {
         if this.count == 0 {
             return Option.None;
         }
-        return Option.Some(this.items[this.head]);
+        return Option.Some(Buffer.get_unchecked<T>(this.items, this.head));
     }
 
     // Removes every element. Live ring slots are overwritten with a zero value so managed
@@ -99,8 +102,8 @@ public class Queue<T> : Collection<T> {
         return QueueIterator<T>(this);
     }
 
-    // Slot access for `QueueIterator` (same-module).
+    // Slot access for `QueueIterator` (same-module; `offset >= 0`).
     internal fun at_offset(offset: int): T {
-        return this.items[(this.head + offset) % this.items.length];
+        return Buffer.get_unchecked<T>(this.items, (this.head + offset) % this.items.length);
     }
 }

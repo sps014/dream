@@ -135,7 +135,7 @@ mod contract_tests {
     ];
 
     const JS_HOST_INTERNAL_KEYS: &[&str] = &["__attachGpuAbi"];
-    // Satisfied by the runtime C archive (runtime/c/weak.c + wasm32/weak_stub.c), not by any
+    // Satisfied by the runtime C archive (runtime/c/native/weak.c), not by any
     // JS host or libdream ABI table — so they are exempt from the prelude/host parity check.
     const RUNTIME_ARCHIVE_KEYS: &[&str] = &["weakBind", "weakDead", "weakLoad", "weakReleaseRaw"];
     const COMPILER_EMITTED_JS_RC: &[&str] = &["jsRetain", "jsRelease"];

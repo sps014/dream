@@ -23,6 +23,9 @@
  * worker env/wire, foreign futures). Ordinary worker-local objects leave this clear. */
 #define TAG_SHARED 1073741824
 #define TAG_VALUE_MASK 1073741823
+/* Header tag sign bit: the object has (or had) weak/unowned registrations, so its free must
+ * clear them. Masked off by `TAG_VALUE_MASK` like `TAG_SHARED`. */
+#define DREAM_TAG_WEAK_TARGET (-2147483647 - 1)
 
 #define HEAP_HEADER_SIZE 12
 #define HEADER_TAG_OFFSET 4
@@ -39,6 +42,12 @@
 #define DREAM_UNOWNED_POISON (-165764356) /* 0xF601A0CC as i32 */
 #define RC_FROM_DATA 4
 #define TAG_FROM_DATA 8
+/* Refcount word encoding. `rc > 0`: plain thread-local count. Sign bit set: atomic count in the
+ * low 31 bits (`TAG_SHARED` objects and tag-0 futures, stamped at allocation / publish). Exactly
+ * `DREAM_RC_IMMORTAL` (the shared encoding of zero, never reached by a live shared object): never
+ * mutated or freed. Keeping all three in one word makes every RC fast path one load + a sign test. */
+#define DREAM_RC_SHARED_BIT (-2147483647 - 1)
+#define DREAM_RC_IMMORTAL (-2147483647 - 1)
 
 #define WASM_PAGE_SIZE 65536
 #define SHADOW_STACK_SIZE (16 * WASM_PAGE_SIZE)

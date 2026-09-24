@@ -95,6 +95,11 @@ impl DomTree {
         DomTree { idom, rpo_index }
     }
 
+    /// The immediate dominator of `b` (the entry maps to itself; unreachable blocks to `None`).
+    pub(crate) fn idom(&self, b: BlockId) -> Option<BlockId> {
+        self.idom[b.0 as usize]
+    }
+
     /// True if `a` dominates `b` (every path from entry to `b` passes through `a`). A block always
     /// dominates itself. Unreachable blocks dominate nothing but themselves.
     pub(crate) fn dominates(&self, a: BlockId, b: BlockId) -> bool {

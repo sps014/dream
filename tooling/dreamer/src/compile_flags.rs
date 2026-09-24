@@ -11,6 +11,10 @@ pub struct CompileFlags {
     pub optimize: Option<String>,
     /// `true` = native C (default). `false` = wasm32 module (`--wasm`).
     pub native_c: bool,
+    /// `--profile`: instrumented native build that records PGO profiles.
+    pub profile: bool,
+    /// `--use-profile[=<path>]`: `Some("")` merges the recorded `--profile` runs.
+    pub use_profile: Option<String>,
 }
 
 impl Default for CompileFlags {
@@ -19,6 +23,8 @@ impl Default for CompileFlags {
             release: false,
             optimize: None,
             native_c: true,
+            profile: false,
+            use_profile: None,
         }
     }
 }
@@ -34,7 +40,15 @@ impl CompileFlags {
             release,
             optimize: optimize.map(|s| s.to_ascii_lowercase()),
             native_c: !wasm,
+            profile: false,
+            use_profile: None,
         })
+    }
+
+    pub fn with_pgo(mut self, profile: bool, use_profile: Option<String>) -> Self {
+        self.profile = profile;
+        self.use_profile = use_profile;
+        self
     }
 
     /// Native pack: default `--release` (cc `-O3`). Explicit `-O` / `--release` match `dreamer run`.
@@ -64,6 +78,18 @@ impl CompileFlags {
         }
         if !self.native_c {
             cmd.arg("--wasm");
+        }
+        if self.profile {
+            cmd.arg("--profile");
+        }
+        match self.use_profile.as_deref() {
+            Some("") => {
+                cmd.arg("--use-profile");
+            }
+            Some(p) => {
+                cmd.arg(format!("--use-profile={p}"));
+            }
+            None => {}
         }
     }
 }
@@ -106,6 +132,30 @@ mod tests {
             .map(|a| a.to_string_lossy().into_owned())
             .collect();
         assert_eq!(args, ["-Os"]);
+    }
+
+    #[test]
+    fn apply_forwards_pgo_flags() {
+        let args = |flags: CompileFlags| -> Vec<String> {
+            let mut cmd = Command::new("dream");
+            flags.apply(&mut cmd);
+            cmd.get_args()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect()
+        };
+        let base = CompileFlags::from_cli(true, None, false).unwrap();
+        assert_eq!(
+            args(base.clone().with_pgo(true, None)),
+            ["--release", "--profile"]
+        );
+        assert_eq!(
+            args(base.clone().with_pgo(false, Some(String::new()))),
+            ["--release", "--use-profile"]
+        );
+        assert_eq!(
+            args(base.with_pgo(false, Some("run.profdata".into()))),
+            ["--release", "--use-profile=run.profdata"]
+        );
     }
 
     #[test]

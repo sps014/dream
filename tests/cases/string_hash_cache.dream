@@ -1,0 +1,62 @@
+// Map<string, _> keys reached through every string representation must agree on the hash:
+// static literals (precomputed), heap concat/builder/interpolation results, substring slices,
+// in-place `_into` reuse, and strings mutated through `s[i] = c` after being hashed.
+
+import system;
+import system.collections;
+import system.text;
+
+fun main() {
+    let m = Map<string, int>();
+    m.set("alpha", 1);
+    m.set("beta", 2);
+    m.set("", 3);
+
+    let a = "al" + "pha";
+    System.println(m.get_or(a, -1));
+
+    let text = "xx beta yy";
+    let slice = text.substring(3, 7);
+    System.println(m.get_or(slice, -1));
+    m.set(slice, 20);
+    System.println(m.get_or("beta", -1));
+
+    let parts = "alpha,beta,,gamma".split(',');
+    for (let p in parts) {
+        m.set(p, m.get_or(p, 0) + 100);
+    }
+    System.println(m.get_or("alpha", -1));
+    System.println(m.get_or("beta", -1));
+    System.println(m.get_or("", -1));
+    System.println(m.get_or("gamma", -1));
+
+    let sb = StringBuilder();
+    sb.append("gam");
+    sb.append("ma");
+    System.println(m.get_or(sb.to_string(), -1));
+
+    let n = 7;
+    System.println(m.get_or($"key{n}", -1));
+    m.set($"key{n}", 7);
+    System.println(m.get_or("key" + n.to_string(), -1));
+
+    let acc = "";
+    let i = 0;
+    while i < 3 {
+        acc = acc + "z";
+        m.set(acc, i);
+        i = i + 1;
+    }
+    System.println(m.get_or("z", -1));
+    System.println(m.get_or("zz", -1));
+    System.println(m.get_or("zzz", -1));
+
+    m.set("zzc", 9);
+    let s = "ab" + "c";
+    let before = m.get_or(s, -1);
+    s[0] = 'z';
+    s[1] = 'z';
+    System.println(before);
+    System.println(m.get_or(s, -1));
+    System.println(m.length);
+}

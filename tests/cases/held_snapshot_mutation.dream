@@ -1,0 +1,104 @@
+// A snapshot loaded out of a field or array element drops its own count after inlining only
+// while nothing can overwrite that slot or release its owner. Each case below replaces or
+// releases the owner while the snapshot is still read (then churns allocations so a dangling
+// snapshot would read recycled memory); results must match ordinary ARC semantics.
+import system;
+
+class Box {
+    public s: string;
+
+    public constructor(s: string) {
+        this.s = s;
+    }
+}
+
+fun churn(n: int): int {
+    let acc = 0;
+    let i = 0;
+    while i < n {
+        let t = "junk" + i.to_string();
+        acc = acc + t.length;
+        i = i + 1;
+    }
+    return acc;
+}
+
+fun replace(b: Box, i: int) {
+    b.s = "replaced" + i.to_string();
+}
+
+fun overwrite(a: string[], i: int) {
+    a[i] = "gone" + i.to_string();
+}
+
+fun read_only(b: Box): int {
+    return b.s.length;
+}
+
+fun field_replaced_by_callee(): int {
+    let b = Box("hello" + "!!");
+    let total = 0;
+    let i = 0;
+    while i < 3 {
+        let s = b.s;
+        replace(b, i);
+        total = total + churn(4);
+        total = total * 7 + s.length + s.char_at(0).to_int();
+        i = i + 1;
+    }
+    return total + b.s.length;
+}
+
+fun field_replaced_inline(): int {
+    let b = Box("world" + "??");
+    let s = b.s;
+    b.s = "x" + "y";
+    let t = churn(5);
+    return s.length * 100 + s.char_at(1).to_int() + t;
+}
+
+fun element_overwritten(): int {
+    let a = ["one" + "1", "two" + "2", "three" + "3"];
+    let total = 0;
+    let k = 0;
+    while k < a.length {
+        let w = a[k];
+        overwrite(a, k);
+        total = total + churn(3);
+        total = total * 5 + w.length + w.char_at(0).to_int();
+        k = k + 1;
+    }
+    return total + a[0].length;
+}
+
+fun owner_rebound(): int {
+    let b = Box("owner" + "1");
+    let s = b.s;
+    b = Box("other" + "2");
+    let t = churn(6);
+    return s.length * 1000 + s.char_at(4).to_int() + b.s.length + t;
+}
+
+fun read_only_walk(): int {
+    let b = Box("stable" + "text");
+    let a = ["a" + "b", "cd" + "e", "fgh" + "ij"];
+    let total = 0;
+    let i = 0;
+    while i < 4 {
+        let s = b.s;
+        let w = a[i % 3];
+        total = total + read_only(b) + s.length + w.length + churn(1);
+        i = i + 1;
+    }
+    return total;
+}
+
+fun main() {
+    let before = Debug.live_objects;
+    System.println(field_replaced_by_callee());
+    System.println(field_replaced_inline());
+    System.println(element_overwritten());
+    System.println(owner_rebound());
+    System.println(read_only_walk());
+    System.println(Debug.live_objects - before);
+}

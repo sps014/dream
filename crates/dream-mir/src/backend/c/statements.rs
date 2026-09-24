@@ -163,6 +163,12 @@ impl<'a> Emitter<'a> {
                     },
                 ) = (place, rv)
                 {
+                    if let Some(buf) = frame_buffer(self.cx, self.f, *l) {
+                        let e =
+                            self.emit_new_in(*def, *ty, ctor.as_ref().map(|c| c.def), args, Some(buf));
+                        self.b.assign(Expr::local(l.0), e);
+                        return;
+                    }
                     if self.cx.interner.is_value_type(self.f.local_ty(*l))
                         && !is_value_place_alias(self.f, *l, rv)
                     {
@@ -811,4 +817,12 @@ impl<'a> Emitter<'a> {
             self.b.call("print_char", vec![Expr::i(10)]);
         }
     }
+}
+
+/// The frame buffer `local`'s `New` is built in (see `passes::frame_alloc`).
+pub(super) fn frame_buffer(cx: &super::ctx::Cx<'_>, f: &crate::MirFunction, local: crate::Local) -> Option<String> {
+    cx.mir
+        .frame_objects
+        .contains(&(f.def, f.instance.clone(), local))
+        .then(|| format!("__fo{}", local.0))
 }

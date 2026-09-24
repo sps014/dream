@@ -1,0 +1,14 @@
+// Facts from a loop guard hold only inside the loop: indexing with the counter after the
+// loop exits must stay checked.
+import system;
+
+fun main(): void {
+    let a: int[] = [10, 20, 30];
+    let i = 0;
+    while i < a.length {
+        System.println(a[i]);
+        i = i + 1;
+    }
+    System.println(a[i]);
+    System.println("after");
+}

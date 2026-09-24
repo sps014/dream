@@ -62,6 +62,8 @@ pub struct Compiler {
     crate_type: dream_sema::analyzer::CrateType,
     /// Progress/artifact sink (silent by default; the CLI installs [`ConsoleReporter`](crate::driver::ui::ConsoleReporter)).
     reporter: Arc<dyn BuildReporter>,
+    /// CLI `--emit-mir`: MIR snapshots written to `<out>.mir/<NN>-<pass>.mir`.
+    emit_mir: Option<dream_mir::passes::MirDumpSpec>,
 }
 
 impl Compiler {
@@ -77,6 +79,7 @@ impl Compiler {
             emit_abi: true,
             crate_type: dream_sema::analyzer::CrateType::Bin,
             reporter: Arc::new(SilentReporter),
+            emit_mir: None,
         }
     }
 
@@ -171,6 +174,13 @@ impl Compiler {
     /// Builder: `lib` rejects a top-level `main` in the primary file; `bin` is the default.
     pub fn with_crate_type(mut self, crate_type: dream_sema::analyzer::CrateType) -> Self {
         self.crate_type = crate_type;
+        self
+    }
+
+    /// Builder: dump MIR snapshots selected by `spec` into a `<out>.mir/` directory next to the
+    /// output (`None` disables).
+    pub fn with_emit_mir(mut self, spec: Option<dream_mir::passes::MirDumpSpec>) -> Self {
+        self.emit_mir = spec;
         self
     }
 
@@ -283,6 +293,11 @@ impl Compiler {
         let target = &self.target;
         let debug_info = self.debug_info;
         let debug = self.debug;
+        let mut dump = match &self.emit_mir {
+            Some(spec) => dream_mir::passes::MirDump::new(spec.clone()),
+            None => dream_mir::passes::MirDump::disabled(),
+        };
+        let dump_ref = &mut dump;
         let pipeline_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let symbol_info = match analyzer.analyze(&mut diagnostics) {
                 Ok(info) => info,
@@ -303,12 +318,13 @@ impl Compiler {
             let dream_sema::analyzer::SemanticInfo { hir, .. } = symbol_info;
             let interner = analyzer.interner();
             let mut mir = dream_mir::lower::lower_program(&hir, interner);
+            dump_ref.module(dream_mir::passes::STAGE_LOWER, &mir, interner);
             // Whole-module optimization: simple-ctor expand, RC insertion, inlining, last-use RC
             // repair on fused bodies (see `mir::passes::optimize_module`). Per-function only elides pairs.
             // Debug-info builds skip inlining and use a value-preserving per-function pipeline so
             // user variables and per-function call frames survive for the debugger; release builds
             // use the full optimizing pipeline.
-            dream_mir::passes::optimize_module_opts(&mut mir, interner, !debug_info);
+            dream_mir::passes::optimize_module_opts(&mut mir, interner, !debug_info, dump_ref);
             let pipeline = if debug_info {
                 dream_mir::passes::PassManager::debug_pipeline()
             } else {
@@ -320,13 +336,14 @@ impl Compiler {
                 dream_mir::passes::PassManager::async_poll_pipeline()
             };
 
-            for f in &mut mir.functions {
-                pipeline.run(f, interner);
-            }
-            for p in &mut mir.polls {
-                poll_pipeline.run(p, interner);
-            }
-            dream_mir::passes::run_late_module_passes(&mut mir, interner);
+            dream_mir::passes::run_function_pipelines(
+                &mut mir,
+                interner,
+                &pipeline,
+                &poll_pipeline,
+                dump_ref,
+            );
+            dream_mir::passes::run_late_module_passes(&mut mir, interner, dump_ref);
             let live_imports: Vec<(String, String)> = mir
                 .imports
                 .iter()
@@ -353,6 +370,10 @@ impl Compiler {
             };
             Ok((bytes, live_imports, threads, need, gpu))
         }));
+
+        if self.emit_mir.is_some() {
+            self.write_mir_dump(out_path, dump)?;
+        }
 
         let (bytes, live_imports, threads, need, gpu) = match pipeline_result {
             Ok(Ok(tuple)) => tuple,
@@ -457,6 +478,34 @@ impl Compiler {
             }
         }
 
+        Ok(())
+    }
+}
+
+impl Compiler {
+    /// Replaces `<out>.mir/` with this compile's snapshots (stale files from an earlier dump
+    /// would otherwise interleave with the new numbering).
+    fn write_mir_dump(
+        &self,
+        out_path: &str,
+        dump: dream_mir::passes::MirDump,
+    ) -> Result<(), CompileError> {
+        let dir = Path::new(out_path).with_extension("mir");
+        if dir.is_dir() {
+            fs::remove_dir_all(&dir)?;
+        }
+        let files = dump.finish();
+        if files.is_empty() {
+            self.reporter.warning(
+                "--emit-mir: the requested pass did not run (or matched no function) in this pipeline",
+            );
+            return Ok(());
+        }
+        fs::create_dir_all(&dir)?;
+        for f in &files {
+            fs::write(dir.join(&f.name), &f.contents)?;
+        }
+        self.reporter.artifact(&dir);
         Ok(())
     }
 }

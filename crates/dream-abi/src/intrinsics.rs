@@ -149,6 +149,10 @@ pub const ATTR_ARRAY_ELEMS_FILL: &str = "array_elems_fill";
 /// `Buffer.free<T>(arr)` — unconditional `$free` of an array's backing block, bypassing
 /// reference counting.
 pub const ATTR_FORCE_FREE: &str = "force_free";
+/// `Buffer.get_unchecked<T>(arr, i)` — element read with no bounds check.
+pub const ATTR_ARRAY_GET_UNCHECKED: &str = "array_get_unchecked";
+/// `Buffer.set_unchecked<T>(arr, i, v)` — element store with no bounds check.
+pub const ATTR_ARRAY_SET_UNCHECKED: &str = "array_set_unchecked";
 /// `Bytes.toWire<T>(v)` — encode a `Task`-safe value as a `string` for the (string-typed)
 /// worker wire: identity for `string`, otherwise a byte-blit of an unmanaged `T` re-encoded as a
 /// codepoint-per-byte `string` (see `Bytes.toWireString`).
@@ -205,6 +209,8 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_ARRAY_ELEMS_COPY,
     ATTR_ARRAY_ELEMS_FILL,
     ATTR_FORCE_FREE,
+    ATTR_ARRAY_GET_UNCHECKED,
+    ATTR_ARRAY_SET_UNCHECKED,
     ATTR_WIRE_ENCODE,
     ATTR_WIRE_DECODE,
     ATTR_REGEX_COMPILE,
@@ -289,6 +295,10 @@ pub enum IntrinsicOp {
     ArrayElemsFill,
     /// `Buffer.free<T>(arr)` (`@unsafe`) — unconditional `$free`, bypassing reference counting.
     ForceFree,
+    /// `Buffer.get_unchecked<T>(arr, i)` (`@unsafe`) — `arr[i]` without the bounds check.
+    ArrayGetUnchecked,
+    /// `Buffer.set_unchecked<T>(arr, i, v)` (`@unsafe`) — `arr[i] = v` without the bounds check.
+    ArraySetUnchecked,
     /// `Bytes.toWire<T>(v)` — encode a `Task`-safe `T` (a `string`, or an `unmanaged` value)
     /// as the `string` the worker wire actually carries.
     WireEncode,
@@ -341,6 +351,8 @@ impl IntrinsicOp {
             ATTR_ARRAY_ELEMS_COPY => IntrinsicOp::ArrayElemsCopy,
             ATTR_ARRAY_ELEMS_FILL => IntrinsicOp::ArrayElemsFill,
             ATTR_FORCE_FREE => IntrinsicOp::ForceFree,
+            ATTR_ARRAY_GET_UNCHECKED => IntrinsicOp::ArrayGetUnchecked,
+            ATTR_ARRAY_SET_UNCHECKED => IntrinsicOp::ArraySetUnchecked,
             ATTR_WIRE_ENCODE => IntrinsicOp::WireEncode,
             ATTR_WIRE_DECODE => IntrinsicOp::WireDecode,
             ATTR_REGEX_COMPILE

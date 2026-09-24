@@ -1,0 +1,87 @@
+// Ownership of reference payloads inside inline (`enum struct`) unions: pattern bindings keep the
+// union alive, a switch over an inlined call result, a moved-on-one-path `take` parameter, and a
+// discarded call result must neither free early nor leak.
+import system;
+
+class Note {
+    public text: string;
+    public constructor(text: string) {
+        this.text = text;
+    }
+    public fun shout(): string {
+        return this.text + "!";
+    }
+}
+
+enum struct Res {
+    Ok(int),
+    Err(Note),
+}
+
+enum struct Tag {
+    Named(string),
+    Boxed(Note),
+    Blank,
+}
+
+fun fail(): Res {
+    return Res.Err(Note("boom" + 1.to_string()));
+}
+
+fun pass(): Res {
+    return Res.Ok(7);
+}
+
+fun describe_fail(): string {
+    return switch (fail()) {
+        Ok(v) => v.to_string(),
+        Err(n) => n.text,
+    };
+}
+
+fun describe_pass(): string {
+    return switch (pass()) {
+        Ok(v) => v.to_string(),
+        Err(n) => n.text,
+    };
+}
+
+fun wrap(ok: bool, t: Tag): Result<Tag, string> {
+    if ok {
+        return Result.Ok(t);
+    }
+    return Result.Err("no");
+}
+
+fun countdown(n: int): Res {
+    if n <= 0 {
+        return Res.Err(Note("done" + n.to_string()));
+    }
+    return countdown(n - 1);
+}
+
+fun main(): void {
+    let r = fail();
+    switch (r) {
+        Ok(_) => { System.println("unexpected"); }
+        Err(n) => {
+            let filler = Note("filler" + 2.to_string());
+            System.println(n.shout());
+            System.println(filler.text);
+            System.println(n.shout());
+        }
+    }
+
+    System.println(describe_fail());
+    System.println(describe_pass());
+
+    let a = Tag.Named("a" + 3.to_string());
+    let a2 = wrap(true, a).unwrap_or(Tag.Blank);
+    System.println(a2);
+    let b = Tag.Boxed(Note("b" + 4.to_string()));
+    let b2 = wrap(false, b).unwrap_or(Tag.Blank);
+    System.println(b2);
+
+    countdown(3);
+    System.println("end");
+}

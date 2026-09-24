@@ -244,8 +244,16 @@ impl Lowerer<'_> {
                 array: self.lower_operand(array),
                 new_len: self.lower_operand(new_len),
             },
+            HExprKind::ArrayGetUnchecked { array, index } => {
+                let base = self.operand_into_local(array);
+                let idx = self.lower_operand(index);
+                Rvalue::Use(Operand::Copy(Place::index_unchecked(base, idx)))
+            }
             HExprKind::ForceFree(_) => {
                 unreachable!("HExprKind::ForceFree is void-typed and only ever lowered as a bare statement in lower_stmt")
+            }
+            HExprKind::ArraySetUnchecked { .. } => {
+                unreachable!("HExprKind::ArraySetUnchecked is void-typed and only ever lowered as a bare statement in lower_stmt")
             }
             HExprKind::ArrayElemsCopy { .. } => {
                 unreachable!("HExprKind::ArrayElemsCopy is void-typed and only ever lowered as a bare statement in lower_stmt")

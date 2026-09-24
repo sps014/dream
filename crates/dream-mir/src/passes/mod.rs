@@ -8,10 +8,15 @@ mod const_fold;
 mod dce;
 mod devirt;
 mod dse;
+mod dump;
+mod frame_alloc;
 mod funcbox_abi;
+mod param_modes;
+#[cfg(test)]
+mod param_modes_tests;
 mod global_prop;
 mod gvn;
-mod inline;
+pub(crate) mod inline;
 mod iv;
 mod licm;
 mod loop_unroll;
@@ -32,7 +37,11 @@ pub(crate) use dce::is_pure;
 pub use dce::Dce;
 pub use devirt::Devirt;
 pub use dse::Dse;
+pub use dump::{
+    dumpable_pass_names, MirDump, MirDumpFile, MirDumpSpec, STAGE_FIXPOINT, STAGE_LATE, STAGE_LOWER,
+};
 pub use funcbox_abi::FuncboxAbi;
+pub use param_modes::ParamModes;
 pub use global_prop::GlobalProp;
 pub use gvn::Gvn;
 pub use inline::Inliner;
@@ -45,7 +54,7 @@ pub(crate) use rc::{container_move_locals, rvalue_reads_local, stmt_reads_local}
 pub use rc::{HopElision, RcElision, RcInsertion, RcLastUseRepair};
 pub use sccp::Sccp;
 pub use simplify_cfg::SimplifyCfg;
-pub use sroa::{ExpandSimpleCtors, Sroa};
+pub use sroa::{ExpandSimpleCtors, Sroa, SroaManaged};
 pub use tco::Tco;
 pub use unique_region::UniqueRegion;
 
@@ -182,10 +191,19 @@ impl PassManager {
 
     /// Runs every pass repeatedly until none reports a change (or the iteration cap is hit).
     pub fn run(&self, func: &mut MirFunction, interner: &TypeInterner) {
-        for _ in 0..self.max_iterations {
+        self.run_dumped(func, interner, &mut MirDump::disabled());
+    }
+
+    /// [`Self::run`], reporting every pass run to `dump` (`--emit-mir=after:<pass>[,each]`).
+    pub fn run_dumped(&self, func: &mut MirFunction, interner: &TypeInterner, dump: &mut MirDump) {
+        for iteration in 0..self.max_iterations {
             let mut changed = false;
             for pass in &self.passes {
-                changed |= pass.run(func, interner);
+                let pass_changed = pass.run(func, interner);
+                if dump.is_active() {
+                    dump.function_pass(pass.as_ref(), iteration, pass_changed, func, interner);
+                }
+                changed |= pass_changed;
             }
             if !changed {
                 break;
@@ -216,58 +234,100 @@ impl Default for PassManager {
 /// container stores of owned RC values on the fused CFG (inlined `split` temps). Then
 /// [`crate::driver`] runs the per-function [`PassManager`].
 pub fn optimize_module(mir: &mut Mir, interner: &TypeInterner) {
-    optimize_module_opts(mir, interner, true)
+    optimize_module_opts(mir, interner, true, &mut MirDump::disabled())
 }
 
 /// Like [`optimize_module`], but `inline` can be disabled. Debug-info builds turn inlining off so
 /// each user function keeps its own body (and thus its own call-stack frame + local variables),
 /// which the interactive debugger relies on. Reference-counting insertion + dead-function pruning
-/// still run in both modes since they are correctness-relevant, not just optimizations.
-pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool) {
+/// still run in both modes since they are correctness-relevant, not just optimizations. Every
+/// module stage is reported to `dump` under its pass name.
+pub fn optimize_module_opts(
+    mir: &mut Mir,
+    interner: &TypeInterner,
+    inline: bool,
+    dump: &mut MirDump,
+) {
     const MAX_ROUNDS: usize = 8;
     crate::prune_module(mir, interner);
     let _ = ExpandSimpleCtors.run(mir, interner);
+    dump.module(ExpandSimpleCtors.name(), mir, interner);
     // Before RC insertion: address-taken functions move their parameter retains to the callee so a
     // funcbox call site can pass at +0 (see `funcbox_abi`).
     let _ = FuncboxAbi.run(mir, interner);
     crate::prune_module(mir, interner);
+    dump.module(FuncboxAbi.name(), mir, interner);
+    let _ = ParamModes.run(mir, interner);
+    dump.module(ParamModes.name(), mir, interner);
     let layouts = mir.layouts.clone();
     let holds = rc::lifetime::held_defs(&mir.intrinsics, &mir.imports);
+    let modref = rc::modref::ModRefTable::compute(mir, interner);
     for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
-        RcInsertion::run_with_layouts(f, interner, &layouts, &holds);
+        RcInsertion::run_with_layouts(f, interner, &layouts, &holds, &modref);
     }
+    dump.module(MirPass::name(&RcInsertion), mir, interner);
     // Correctness invariant: RC must be inserted (above) *before* any inlining (below), or callee
     // scope-exit releases won't be baked into bodies for inlining to copy. The `rc_inserted` flag
     // makes a future reordering that hoists the inliner above this point fail loudly in dev.
     let _rc_inserted = true;
     debug_assert!(_rc_inserted, "RcInsertion must run before the inliner");
-    if !inline {
-        for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
-            RcLastUseRepair::run_with_layouts(f, interner, &layouts);
-        }
-        let _ = UniqueRegion.run(mir, interner);
-        return;
-    }
-    let _ = Devirt.run(mir, interner);
-    let inliner = Inliner;
-    for _ in 0..MAX_ROUNDS {
-        let changed = inliner.run(mir, interner);
-        // Drop callees left with no remaining call sites after inlining (plus their transitively
-        // dead callees), then loop: the smaller module may expose more inlining.
-        crate::prune_module(mir, interner);
-        if !changed {
-            break;
-        }
+    if inline {
         let _ = Devirt.run(mir, interner);
+        dump.module(Devirt.name(), mir, interner);
+        let inliner = Inliner;
+        for _ in 0..MAX_ROUNDS {
+            let changed = inliner.run(mir, interner);
+            // Drop callees left with no remaining call sites after inlining (plus their transitively
+            // dead callees), then loop: the smaller module may expose more inlining.
+            crate::prune_module(mir, interner);
+            dump.module(inliner.name(), mir, interner);
+            if !changed {
+                break;
+            }
+            let _ = Devirt.run(mir, interner);
+            dump.module(Devirt.name(), mir, interner);
+        }
     }
     for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
         RcLastUseRepair::run_with_layouts(f, interner, &layouts);
     }
+    dump.module(MirPass::name(&RcLastUseRepair), mir, interner);
     let _ = UniqueRegion.run(mir, interner);
+    dump.module(UniqueRegion.name(), mir, interner);
+    let _ = rc::held::run(mir, interner);
+    dump.module(rc::held::STAGE, mir, interner);
+    let _ = SroaManaged.run(mir, interner);
+    dump.module(SroaManaged.name(), mir, interner);
+}
+
+/// Runs `pipeline` over every function and `poll_pipeline` over every async poll body, then
+/// reports the [`STAGE_FIXPOINT`] snapshot.
+pub fn run_function_pipelines(
+    mir: &mut Mir,
+    interner: &TypeInterner,
+    pipeline: &PassManager,
+    poll_pipeline: &PassManager,
+    dump: &mut MirDump,
+) {
+    for f in &mut mir.functions {
+        pipeline.run_dumped(f, interner, dump);
+    }
+    for p in &mut mir.polls {
+        poll_pipeline.run_dumped(p, interner, dump);
+    }
+    dump.module(STAGE_FIXPOINT, mir, interner);
 }
 
 /// After per-function opts, drop inferred regions whose leave is followed by a still-live
-/// ref use (CFG simplify can merge a join with JSON `as_string` / `unwrap` after wrap).
-pub fn run_late_module_passes(mir: &mut Mir, interner: &TypeInterner) {
+/// ref use (CFG simplify can merge a join with JSON `as_string` / `unwrap` after wrap), then give
+/// objects that never outlive their frame stack storage ([`frame_alloc`]). In debug builds of the
+/// compiler, the final MIR is then checked by [`crate::verify`].
+pub fn run_late_module_passes(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirDump) {
     let _ = unique_region::strip_escaped_regions(mir, interner);
+    dump.module(STAGE_LATE, mir, interner);
+    let _ = frame_alloc::run(mir, interner);
+    dump.module(frame_alloc::STAGE, mir, interner);
+    if cfg!(debug_assertions) {
+        crate::verify::assert_module(mir, interner);
+    }
 }

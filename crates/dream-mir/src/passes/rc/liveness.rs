@@ -92,7 +92,7 @@ fn transfer_block(stmts: &[Statement], term: &Terminator, live: &mut HashSet<u32
     }
 }
 
-fn transfer_stmt(stmt: &Statement, live: &mut HashSet<u32>) {
+pub(crate) fn transfer_stmt(stmt: &Statement, live: &mut HashSet<u32>) {
     match stmt {
         Statement::Assign(Place::Local(d), rv) => {
             live.remove(&d.0);
@@ -202,7 +202,7 @@ fn transfer_stmt_reads_only(stmt: &Statement, live: &mut HashSet<u32>) {
     }
 }
 
-fn add_terminator_reads(term: &Terminator, live: &mut HashSet<u32>) {
+pub(crate) fn add_terminator_reads(term: &Terminator, live: &mut HashSet<u32>) {
     match term {
         Terminator::If { cond, .. } => add_operand_reads(cond, live),
         Terminator::Switch { value, .. } => add_operand_reads(value, live),

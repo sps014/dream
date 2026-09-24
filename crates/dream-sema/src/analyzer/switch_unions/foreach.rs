@@ -291,6 +291,17 @@ impl<'a> Analyzer<'a> {
         use crate::analyzer::declarations::protocol_hooks::ProtocolRole;
         use dream_hir::{BinOp, HExpr, HExprKind, HStmt};
 
+        if let Some(acc) = self.stdlib_list_accessors(iterable_type, diagnostics) {
+            return self.analyze_foreach_list(
+                element,
+                iter_hir,
+                acc,
+                body,
+                ctx,
+                diagnostics,
+            );
+        }
+
         // 1. `@iterator`: an eligible 0-arg instance method returning an enumerator object.
         let pretty_iterable = self.ty_display(iterable_type);
         let (_iterator_hook, iterator_info) = match self.resolve_hook_or_diagnose(

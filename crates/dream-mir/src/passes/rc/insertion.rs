@@ -1,6 +1,7 @@
 //! [`RcInsertion`]: make reference ownership explicit in MIR via compile-time tokens.
 
 use super::is_borrowed_copy;
+use super::modref::ModRefTable;
 use super::liveness::{self, live_after_stmt, stmt_reads_local};
 use super::tokens::{
     apply_stmt_tokens, assigns_local, dest_holds_token, funcbox_env_rc_roots, is_owned_local,
@@ -18,7 +19,7 @@ use crate::{
     Const, Global, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
 };
 use dream_types::{DefId, TypeInterner};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 pub struct RcInsertion;
 
@@ -49,8 +50,9 @@ impl RcInsertion {
         interner: &TypeInterner,
         layouts: &dream_hir::LayoutTable,
         holds: &HashSet<DefId>,
+        modref: &ModRefTable,
     ) -> bool {
-        RcInsertion.run_inner(func, interner, layouts, holds)
+        RcInsertion.run_inner(func, interner, layouts, holds, modref)
     }
 
     fn run_inner(
@@ -59,15 +61,16 @@ impl RcInsertion {
         interner: &TypeInterner,
         layouts: &dream_hir::LayoutTable,
         holds: &HashSet<DefId>,
+        modref: &ModRefTable,
     ) -> bool {
-        super::cursor::infer_cursors(func, interner, layouts);
+        super::cursor::infer_cursors(func, interner, layouts, modref);
 
         let local_is_ref: Vec<bool> = func
             .locals
             .iter()
             .map(|d| interner.is_rc_tracked(d.ty))
             .collect();
-        let analysis = TokenAnalysis::analyze(func, interner, layouts, holds);
+        let analysis = TokenAnalysis::analyze(func, interner, layouts, holds, modref);
         let leftover_parent = leftover_alias_parent(func, interner, true);
         let env_defer = funcbox_env_rc_roots(func, interner);
         let start_keep: Vec<HashSet<u32>> = analysis
@@ -640,6 +643,7 @@ impl MirPass for RcInsertion {
             interner,
             &dream_hir::LayoutTable::default(),
             &HashSet::new(),
+            &ModRefTable::default(),
         )
     }
 }
@@ -825,10 +829,15 @@ fn insert_value_struct_moves(func: &mut MirFunction, interner: &TypeInterner, ch
     for (bi, si, local) in retain_after {
         after_by.entry(bi).or_default().push((si, local));
     }
+    let mut newly_killed: BTreeSet<u32> = BTreeSet::new();
     for (bi, si, local) in kill_after {
+        if !func.locals[local as usize].manual_drop {
+            newly_killed.insert(local);
+        }
         func.locals[local as usize].manual_drop = true;
         kill_by.entry(bi).or_default().push((si, local));
     }
+    insert_killed_value_exit_drops(func, &newly_killed, changed);
     let mut blocks: Vec<usize> = before_by
         .keys()
         .chain(after_by.keys())
@@ -869,14 +878,46 @@ fn insert_value_struct_moves(func: &mut MirFunction, interner: &TypeInterner, ch
     }
 }
 
+/// A kill hands the value's nested refs away on *one* path, but `manual_drop` opts the local out
+/// of frame teardown on every path. `ValueKill` zeroes the storage, so dropping at each `Return`
+/// is a no-op where it was moved and releases it where it was not.
+fn insert_killed_value_exit_drops(
+    func: &mut MirFunction,
+    killed: &BTreeSet<u32>,
+    changed: &mut bool,
+) {
+    if killed.is_empty() {
+        return;
+    }
+    for block in &mut func.blocks {
+        let Terminator::Return(ret) = &block.terminator else {
+            continue;
+        };
+        let returned = match ret {
+            Some(Operand::Copy(Place::Local(l))) => Some(l.0),
+            _ => None,
+        };
+        for &local in killed {
+            if Some(local) != returned {
+                block.stmts.push(Statement::ValueDrop(Local(local)));
+                *changed = true;
+            }
+        }
+    }
+}
+
 fn value_arg_locals(
     func: &MirFunction,
     stmt: &Statement,
     interner: &TypeInterner,
     is_value_src: &dyn Fn(usize) -> bool,
 ) -> Vec<u32> {
-    let Some((take_params, args)) = sink_call_args(stmt) else {
-        return Vec::new();
+    let (take_params, args) = match (sink_call_args(stmt), stmt) {
+        (Some(sink), _) => sink,
+        (None, Statement::Assign(_, Rvalue::UnionNew { args, .. })) => {
+            (vec![true; args.len()], args.as_slice())
+        }
+        _ => return Vec::new(),
     };
     let mut out = Vec::new();
     for (i, arg) in args.iter().enumerate() {
@@ -962,10 +1003,30 @@ fn is_owning_value_local(func: &MirFunction, interner: &TypeInterner, idx: usize
     if idx < func.params.len() {
         return false;
     }
-    if decl.name.is_some() {
-        return true;
+    decl.name.is_some() || defined_only_by_calls(func, idx as u32)
+}
+
+/// An unnamed temp holding a call result owns it; once the call is inlined the temp is defined by
+/// a plain copy, which frame teardown treats as an alias, so its drop must be placed here.
+fn defined_only_by_calls(func: &MirFunction, local: u32) -> bool {
+    let mut seen = false;
+    for stmt in func.blocks.iter().flat_map(|b| &b.stmts) {
+        if let Statement::Assign(Place::Local(d), rv) = stmt {
+            if d.0 != local {
+                continue;
+            }
+            if !matches!(
+                rv,
+                Rvalue::Call { .. } | Rvalue::IndirectCall { .. } | Rvalue::InterfaceCall { .. }
+            ) {
+                return false;
+            }
+            seen = true;
+        } else if assigns_local(stmt, local) {
+            return false;
+        }
     }
-    false
+    seen
 }
 
 /// Early `ValueDrop` after the last use of an owning value local. Whole-value copy-out (`dest = src`)
@@ -1014,6 +1075,7 @@ fn insert_early_value_drops(
     if owning.is_empty() {
         return;
     }
+    let borrowers = payload_borrowers(func, &owning);
     let mut drop_at: Vec<(usize, usize, u32)> = Vec::new();
     for (bi, block) in func.blocks.iter().enumerate() {
         if skip_await_blocks && matches!(block.terminator, Terminator::Await { .. }) {
@@ -1021,6 +1083,13 @@ fn insert_early_value_drops(
         }
         for (si, stmt) in block.stmts.iter().enumerate() {
             for &local in &owning {
+                let deps = borrowers.get(&local).map_or(&[][..], |v| v.as_slice());
+                if deps
+                    .iter()
+                    .any(|&c| live_after_stmt(func, &live_out, bi, si, c))
+                {
+                    continue;
+                }
                 if matches!(
                     stmt,
                     Statement::ValueDrop(l) | Statement::ValueKill(l) | Statement::ValueRetain(l)
@@ -1036,7 +1105,9 @@ fn insert_early_value_drops(
                 if whole_copy_out {
                     continue;
                 }
-                let used = stmt_reads_local(stmt, local) || assigns_local(stmt, local);
+                let used = stmt_reads_local(stmt, local)
+                    || assigns_local(stmt, local)
+                    || deps.iter().any(|&c| stmt_reads_local(stmt, c));
                 if !used || live_after_stmt(func, &live_out, bi, si, local) {
                     continue;
                 }
@@ -1065,6 +1136,37 @@ fn insert_early_value_drops(
         }
         func.blocks[bi].stmts = out;
     }
+}
+
+/// Cursor locals bound (unretained) to a reference inside an owning value local — a union payload
+/// or a struct field. The value local owns that reference, so it must outlive every borrower.
+fn payload_borrowers(func: &MirFunction, owning: &[u32]) -> BTreeMap<u32, Vec<u32>> {
+    let mut out: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            let Statement::Assign(Place::Local(d), rv) = stmt else {
+                continue;
+            };
+            if !func.locals[d.0 as usize].is_cursor {
+                continue;
+            }
+            let base = match rv {
+                Rvalue::UnionField {
+                    base: Operand::Copy(Place::Local(b)),
+                    ..
+                } => *b,
+                Rvalue::Use(Operand::Copy(Place::Field { base, .. })) => *base,
+                _ => continue,
+            };
+            if owning.contains(&base.0) {
+                let deps = out.entry(base.0).or_default();
+                if !deps.contains(&d.0) {
+                    deps.push(d.0);
+                }
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -1130,6 +1232,79 @@ mod tests {
             .iter()
             .any(|st| matches!(st, Statement::ValueRetain(l) if l.0 == t.0));
         assert!(has_retain_t, "still-live dest=src should ValueRetain dest");
+    }
+
+    #[test]
+    fn value_drop_waits_for_payload_borrower() {
+        let mut ctx = TypeCtx::new();
+        let point = point_ty(&mut ctx);
+        let string = ctx.interner.string();
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let s = b.new_local(point, Some("s".into()));
+        let c = b.new_local(string, Some("c".into()));
+        let n = b.new_temp(ctx.interner.int());
+        b.assign(
+            Place::Local(c),
+            Rvalue::Use(Operand::Copy(Place::Field { base: s, field: 0 })),
+        );
+        b.assign(
+            Place::Local(n),
+            Rvalue::StrLen(Operand::Copy(Place::Local(c))),
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        func.locals[c.0 as usize].is_cursor = true;
+        RcInsertion.run(&mut func, &ctx.interner);
+        let stmts = &func.blocks[0].stmts;
+        let drop_at = stmts
+            .iter()
+            .position(|st| matches!(st, Statement::ValueDrop(l) if l.0 == s.0))
+            .expect("owning value local is dropped");
+        let read_at = stmts
+            .iter()
+            .position(|st| matches!(st, Statement::Assign(Place::Local(d), _) if d.0 == n.0))
+            .unwrap();
+        assert!(drop_at > read_at, "drop must follow the borrower's last read");
+    }
+
+    #[test]
+    fn value_moved_on_one_path_is_dropped_on_the_other() {
+        let mut ctx = TypeCtx::new();
+        let point = point_ty(&mut ctx);
+        let take_def = ctx.register(DefKind::Function, "take", vec![]);
+        let mut b = FunctionBuilder::new("f", ctx.interner.void());
+        let flag = b.new_param(ctx.interner.bool(), Some("flag".into()));
+        let s = b.new_local(point, Some("s".into()));
+        let moved = b.new_block();
+        let kept = b.new_block();
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(flag)),
+            then_blk: moved,
+            else_blk: kept,
+        });
+        b.switch_to(moved);
+        b.push(Statement::Call {
+            callee: Callee {
+                def: take_def,
+                args: vec![],
+                ret: ctx.interner.void(),
+                take_params: vec![true],
+            },
+            args: vec![Operand::Copy(Place::Local(s))],
+        });
+        b.terminate(Terminator::Return(None));
+        b.switch_to(kept);
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        RcInsertion.run(&mut func, &ctx.interner);
+        assert!(func.locals[s.0 as usize].manual_drop);
+        let drops_in = |blk: crate::BlockId| {
+            func.blocks[blk.0 as usize]
+                .stmts
+                .iter()
+                .any(|st| matches!(st, Statement::ValueDrop(l) if l.0 == s.0))
+        };
+        assert!(drops_in(kept), "the path that keeps `s` must drop it");
     }
 
     #[test]
@@ -1845,7 +2020,13 @@ mod tests {
         let mut func = b.finish();
         let mut holds = HashSet::new();
         holds.insert(peek);
-        RcInsertion::run_with_layouts(&mut func, &i, &dream_hir::LayoutTable::default(), &holds);
+        RcInsertion::run_with_layouts(
+            &mut func,
+            &i,
+            &dream_hir::LayoutTable::default(),
+            &holds,
+            &ModRefTable::default(),
+        );
         let stmts = &func.blocks[0].stmts;
         let call_at = stmts
             .iter()

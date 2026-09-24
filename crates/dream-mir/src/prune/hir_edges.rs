@@ -193,6 +193,19 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
             hir_expr_edges(array, out);
             hir_expr_edges(new_len, out);
         }
+        K::ArrayGetUnchecked { array, index } => {
+            hir_expr_edges(array, out);
+            hir_expr_edges(index, out);
+        }
+        K::ArraySetUnchecked {
+            array,
+            index,
+            value,
+        } => {
+            hir_expr_edges(array, out);
+            hir_expr_edges(index, out);
+            hir_expr_edges(value, out);
+        }
         K::ArrayElemsCopy {
             dst,
             dst_off,

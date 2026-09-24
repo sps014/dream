@@ -14,23 +14,23 @@
 #include <unistd.h>
 #endif
 
-#define NCLASS 13
+#define NCLASS DREAM_NCLASS
 #define CHUNK (1u << 22)
-#define MAGIC_LIVE 0x4c495645u
-#define MAGIC_FREE 0x46524545u
+#define MAGIC_LIVE DREAM_MAGIC_LIVE
+#define MAGIC_FREE DREAM_MAGIC_FREE
 
 static dream_ptr freelist[NCLASS];
 /* First-fit list for blocks larger than the biggest size class (64KiB), matching
  * wasm `$malloc`'s huge list. Oversized HTTP bodies / `byte[]`s must not be stuffed
- * into class 12 or bump-allocated past a 4MiB mmap. */
+ * into the top class or bump-allocated past a 4MiB mmap. */
 static dream_ptr large_freelist;
 static char *arena;
 static size_t arena_off;
 static size_t arena_len;
-/* Global (mirrors wasm32): immortal singletons in strings.c/format.c adjust it when pinning. */
-int32_t live_objects;
-static int32_t total_allocations;
-static int32_t last_freed;
+/* Registry of every thread's counters (see `dream_heap_counters`); guarded by `heap_mu`.
+ * `pinned` counts immortal singletons that left `Debug.live_objects` without being freed. */
+static dream_heap_counters *counters_head;
+static uint32_t pinned;
 static char *chunks[32];
 static int nchunks;
 /* Every mmap used as a heap (process bump, TLS bump, unique-region). `dream_publish`
@@ -41,29 +41,36 @@ static int nheap_maps;
 static pthread_mutex_t heap_mu = PTHREAD_MUTEX_INITIALIZER;
 int dream_rt_mt;
 
-/* Per-thread LIFO of exact size-class blocks. Tree/array churn stays off the process-wide
- * list (the old one-slot TLS overflowed after the first free of each class). */
-static _Thread_local char *tls_free[NCLASS];
-static _Thread_local char *tls_arena;
-static _Thread_local size_t tls_arena_off;
-static _Thread_local size_t tls_arena_len;
+/* Per-thread LIFO of exact size-class blocks (`dream_heap.free`) plus the fast-path gate.
+ * Tree/array churn stays off the process-wide list. */
+_Thread_local dream_heap_tls dream_heap;
 
 /* Unique-graph bump region: mallocs while depth > 0 come from a rewindable TLS slab so
  * `dream_region_leave` reclaims the whole graph in O(1). Independent of the process arena so
  * workers cannot rewind each other's bump pointer. */
 #define REGION_MAX_DEPTH 8
 #define REGION_CHUNK (1u << 23)
-static _Thread_local int region_depth;
-static _Thread_local char *region_base;
-static _Thread_local size_t region_len;
-static _Thread_local size_t region_off;
-static _Thread_local int32_t region_nalloc;
-static _Thread_local size_t region_off_mark[REGION_MAX_DEPTH];
-static _Thread_local int32_t region_nalloc_mark[REGION_MAX_DEPTH];
+
+/* Slow-path thread state in one block: region-heavy code runs every alloc/free through here,
+ * and each distinct `_Thread_local` is its own TLV lookup on macOS. */
+typedef struct {
+    dream_heap_counters *counters;
+    char *arena;
+    size_t arena_off;
+    size_t arena_len;
+    int region_depth;
+    char *region_base;
+    size_t region_len;
+    size_t region_off;
+    int32_t region_nalloc;
+    size_t region_off_mark[REGION_MAX_DEPTH];
+    int32_t region_nalloc_mark[REGION_MAX_DEPTH];
+} heap_thread;
+static _Thread_local heap_thread th;
 
 static int region_owns_block(char *block) {
-    return region_depth > 0 && region_base != NULL && block >= region_base
-        && (size_t)(block - region_base) < region_len;
+    return th.region_depth > 0 && th.region_base != NULL && block >= th.region_base
+        && (size_t)(block - th.region_base) < th.region_len;
 }
 
 static void heap_lock(void) {
@@ -74,19 +81,70 @@ static void heap_unlock(void) {
     pthread_mutex_unlock(&heap_mu);
 }
 
+/* Class index for a block of `size` total bytes, or NCLASS when it is a large block. */
 static int size_class(int32_t size) {
-    int32_t s = size;
-    if (s < 16) {
-        s = 16;
+    if ((uint32_t)(size - 1) >= (uint32_t)DREAM_MAX_CLASS_BYTES) {
+        return NCLASS;
     }
-    return 28 - __builtin_clz((unsigned)(s - 1));
+    return dream_size_class((uint32_t)size);
 }
 
 static int32_t class_bytes(int idx) {
-    if (idx > 12) {
+    return dream_class_bytes(idx);
+}
+
+static dream_heap_counters *thread_counters(void) {
+    dream_heap_counters *c = th.counters;
+    if (c != NULL) {
+        return c;
+    }
+    c = (dream_heap_counters *)calloc(1, sizeof(*c));
+    if (c == NULL) {
+        abort();
+    }
+    heap_lock();
+    c->next = counters_head;
+    counters_head = c;
+    heap_unlock();
+    th.counters = c;
+    return c;
+}
+
+static void heap_sums(uint32_t *allocs, uint32_t *frees) {
+    dream_heap_counters *c;
+    uint32_t a = 0;
+    uint32_t f = 0;
+    heap_lock();
+    for (c = counters_head; c != NULL; c = c->next) {
+        a += __atomic_load_n(&c->allocs, __ATOMIC_RELAXED);
+        f += __atomic_load_n(&c->frees, __ATOMIC_RELAXED);
+    }
+    f += __atomic_load_n(&pinned, __ATOMIC_RELAXED);
+    heap_unlock();
+    *allocs = a;
+    *frees = f;
+}
+
+void dream_pin_immortal(dream_ptr s) {
+    if (s) {
+        *dream_rc_word(s) = DREAM_RC_IMMORTAL;
+        __atomic_fetch_add(&pinned, 1u, __ATOMIC_RELAXED);
+    }
+}
+
+void dream_retain_slow(int32_t *rc) {
+    if (*rc == DREAM_RC_IMMORTAL) {
+        return;
+    }
+    __atomic_fetch_add(rc, 1, __ATOMIC_RELAXED);
+}
+
+int dream_rc_last_slow(int32_t *rc) {
+    int32_t v = *rc;
+    if (v == 0 || v == DREAM_RC_IMMORTAL) {
         return 0;
     }
-    return 1 << (idx + 4);
+    return __atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL) == (DREAM_RC_SHARED_BIT | 1);
 }
 
 static void note_heap_map_locked(char *p, size_t n) {
@@ -159,39 +217,18 @@ static void class_set_next(char *block, void *next) {
     memcpy(block + 8, &next, sizeof(next));
 }
 
-static void account_alloc(void) {
-    __atomic_fetch_add(&live_objects, 1, __ATOMIC_RELAXED);
-    __atomic_fetch_add(&total_allocations, 1, __ATOMIC_RELAXED);
-}
-
-static void live_objects_sub(int32_t n) {
-    int32_t v;
-    int32_t next;
-    if (n <= 0) {
-        return;
-    }
-    for (;;) {
-        v = __atomic_load_n(&live_objects, __ATOMIC_RELAXED);
-        next = v > n ? v - n : 0;
-        if (__atomic_compare_exchange_n(
-                &live_objects, &v, next, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED
-            )) {
-            return;
-        }
-    }
-}
-
-static void account_free(void) {
-    __atomic_fetch_add(&last_freed, 1, __ATOMIC_RELAXED);
-    live_objects_sub(1);
-}
-
 static void activate(char *block, int32_t tag) {
-    ((uint32_t *)block)[1] = MAGIC_LIVE;
-    ((int32_t *)block)[2] = tag;
-    ((int32_t *)block)[3] = 1;
-    account_alloc();
+    dream_block_activate(block, tag);
+    dream_heap_count(&thread_counters()->allocs);
 }
+
+static void account_frees(uint32_t n) {
+    dream_heap_counters *c = thread_counters();
+    __atomic_store_n(&c->frees, c->frees + n, __ATOMIC_RELAXED);
+}
+
+/* Re-arm the inline fast path once the thread is registered and no region is open. */
+static void heap_refresh_fast(void);
 
 static char *large_try_take(int32_t need) {
     dream_ptr prev = 0;
@@ -215,19 +252,19 @@ static char *large_try_take(int32_t need) {
 
 static char *tls_bump(size_t n) {
     size_t aligned = (n + 15u) & ~15u;
-    if (tls_arena == NULL || aligned > tls_arena_len || tls_arena_off > tls_arena_len - aligned) {
+    if (th.arena == NULL || aligned > th.arena_len || th.arena_off > th.arena_len - aligned) {
         size_t map_len = aligned > (size_t)CHUNK ? aligned : (size_t)CHUNK;
-        tls_arena = (char *)map_chunk(map_len);
-        tls_arena_off = 0;
-        tls_arena_len = map_len;
-        if (tls_arena == NULL) {
+        th.arena = (char *)map_chunk(map_len);
+        th.arena_off = 0;
+        th.arena_len = map_len;
+        if (th.arena == NULL) {
             abort();
         }
-        note_heap_map(tls_arena, map_len);
+        note_heap_map(th.arena, map_len);
     }
     {
-        char *p = tls_arena + tls_arena_off;
-        tls_arena_off += aligned;
+        char *p = th.arena + th.arena_off;
+        th.arena_off += aligned;
         return p;
     }
 }
@@ -257,52 +294,59 @@ static char *bump(size_t n) {
 static dream_ptr region_malloc(int32_t alloc_size, int32_t tag) {
     char *block;
     size_t n = (size_t)alloc_size;
-    if (region_base == NULL) {
-        region_base = (char *)map_chunk(REGION_CHUNK);
-        if (region_base == NULL) {
+    if (th.region_base == NULL) {
+        th.region_base = (char *)map_chunk(REGION_CHUNK);
+        if (th.region_base == NULL) {
             abort();
         }
-        note_heap_map(region_base, REGION_CHUNK);
-        region_len = REGION_CHUNK;
-        region_off = 0;
+        note_heap_map(th.region_base, REGION_CHUNK);
+        th.region_len = REGION_CHUNK;
+        th.region_off = 0;
     }
-    if (region_off > region_len || n > region_len - region_off) {
+    if (th.region_off > th.region_len || n > th.region_len - th.region_off) {
         abort();
     }
-    block = region_base + region_off;
-    region_off += n;
+    block = th.region_base + th.region_off;
+    th.region_off += n;
     ((int32_t *)block)[0] = alloc_size;
     activate(block, tag);
-    region_nalloc += 1;
+    th.region_nalloc += 1;
     return (dream_ptr)(block + 16);
 }
 
 void dream_region_enter(void) {
-    if (region_depth >= REGION_MAX_DEPTH) {
+    if (th.region_depth >= REGION_MAX_DEPTH) {
         abort();
     }
-    region_off_mark[region_depth] = region_off;
-    region_nalloc_mark[region_depth] = region_nalloc;
-    region_depth += 1;
+    th.region_off_mark[th.region_depth] = th.region_off;
+    th.region_nalloc_mark[th.region_depth] = th.region_nalloc;
+    th.region_depth += 1;
+    dream_heap.fast = NULL;
 }
 
 void dream_region_leave(void) {
     int32_t n;
-    if (region_depth <= 0) {
+    if (th.region_depth <= 0) {
         return;
     }
-    region_depth -= 1;
-    n = region_nalloc - region_nalloc_mark[region_depth];
+    th.region_depth -= 1;
+    n = th.region_nalloc - th.region_nalloc_mark[th.region_depth];
     if (n < 0) {
         n = 0;
     }
-    __atomic_fetch_add(&last_freed, n, __ATOMIC_RELAXED);
-    live_objects_sub(n);
-    region_nalloc = region_nalloc_mark[region_depth];
-    region_off = region_off_mark[region_depth];
+    account_frees((uint32_t)n);
+    th.region_nalloc = th.region_nalloc_mark[th.region_depth];
+    th.region_off = th.region_off_mark[th.region_depth];
+    heap_refresh_fast();
 }
 
-dream_ptr dream_malloc(int32_t size, int32_t tag) {
+static void heap_refresh_fast(void) {
+    if (dream_heap.fast == NULL && th.region_depth == 0) {
+        dream_heap.fast = thread_counters();
+    }
+}
+
+dream_ptr dream_malloc_slow(int32_t size, int32_t tag) {
     int32_t total;
     int idx;
     char *block = NULL;
@@ -310,19 +354,17 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
     if (size < 0 || size > (INT32_MAX - 31)) {
         abort();
     }
+    heap_refresh_fast();
     total = ((size + 15) & -16) + 16;
     idx = size_class(total);
-    alloc_size = total;
-    if (idx >= 0 && idx <= 12) {
-        alloc_size = class_bytes(idx);
-    }
-    if (region_depth > 0) {
+    alloc_size = idx < NCLASS ? class_bytes(idx) : total;
+    if (th.region_depth > 0) {
         return region_malloc(alloc_size, tag);
     }
-    if (idx >= 0 && idx <= 12) {
-        block = tls_free[idx];
+    if (idx < NCLASS) {
+        block = dream_heap.free[idx];
         if (block != NULL) {
-            tls_free[idx] = class_next(block);
+            dream_heap.free[idx] = class_next(block);
             activate(block, tag);
             return (dream_ptr)(block + 16);
         }
@@ -343,17 +385,14 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
     }
     total = ((size + 15) & -16) + 16;
     idx = size_class(total);
-    alloc_size = total;
-    if (idx >= 0 && idx <= 12) {
-        alloc_size = class_bytes(idx);
-    }
+    alloc_size = idx < NCLASS ? class_bytes(idx) : total;
     if (tag != 0) {
         tag |= TAG_SHARED;
     }
     heap_lock();
-    if (idx > 12) {
+    if (idx >= NCLASS) {
         block = large_try_take(alloc_size);
-    } else if (idx >= 0 && idx <= 12) {
+    } else {
         while (freelist[idx] != 0) {
             block = (char *)dream_p(freelist[idx]);
             if (((uint32_t *)block)[1] != MAGIC_FREE) {
@@ -372,8 +411,8 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
         block = bump((size_t)alloc_size);
         ((int32_t *)block)[0] = alloc_size;
     }
-    activate(block, tag);
     heap_unlock();
+    activate(block, tag);
     return (dream_ptr)(block + 16);
 }
 
@@ -433,6 +472,9 @@ static void publish_rec(dream_ptr ptr, dream_ptr *seen, int *nseen) {
         return;
     }
     *tag |= TAG_SHARED;
+    if (*dream_rc_word(ptr) > 0) {
+        *dream_rc_word(ptr) |= DREAM_RC_SHARED_BIT;
+    }
     if (kind == TAG_STRING) {
         if (dream_i32(ptr)[1] == DREAM_STR_SLICE) {
             dream_ptr parent = 0;
@@ -453,10 +495,18 @@ void dream_publish(dream_ptr ptr) {
 }
 
 int32_t debug_get_live_objects(void) {
-    return __atomic_load_n(&live_objects, __ATOMIC_RELAXED);
+    uint32_t a;
+    uint32_t f;
+    int32_t live;
+    heap_sums(&a, &f);
+    live = (int32_t)(a - f);
+    return live > 0 ? live : 0;
 }
 int32_t debug_get_total_allocations(void) {
-    return __atomic_load_n(&total_allocations, __ATOMIC_RELAXED);
+    uint32_t a;
+    uint32_t f;
+    heap_sums(&a, &f);
+    return (int32_t)a;
 }
 
 __attribute__((weak)) const char *dream_tag_name(int32_t tag) {
@@ -538,9 +588,9 @@ static void dump_scan_map(char *base, size_t len, DumpHist *h, int *nh, DumpStr 
             p += 16;
             continue;
         }
-        // Pinned singletons (`pin_immortal_obj`) are never freed by design and already left
+        // Pinned singletons (`dream_pin_immortal`) are never freed by design and already left
         // `live_objects`, so counting them here would report a leak the accounting denies.
-        if (mag == MAGIC_LIVE && ((int32_t *)p)[3] != INT32_MAX) {
+        if (mag == MAGIC_LIVE && ((int32_t *)p)[3] != DREAM_RC_IMMORTAL) {
             int32_t tag = ((int32_t *)p)[2] & TAG_VALUE_MASK;
             dump_hist_add(h, nh, tag);
             if (tag == TAG_STRING) {
@@ -602,19 +652,25 @@ void debug_dump_live(void) {
     }
 }
 int32_t debug_get_ref_count(dream_ptr ptr) {
-    return ptr ? __atomic_load_n((int32_t *)((char *)dream_p(ptr) - 4), __ATOMIC_RELAXED) : 0;
+    return ptr ? dream_rc_count(ptr) : 0;
 }
 int32_t debug_get_heap_ptr(void) { return (int32_t)arena_off; }
-int32_t debug_get_free_list_head(void) { return last_freed; }
+int32_t debug_get_free_list_head(void) {
+    uint32_t a;
+    uint32_t f;
+    heap_sums(&a, &f);
+    return (int32_t)(f - __atomic_load_n(&pinned, __ATOMIC_RELAXED));
+}
 
-void dream_recycle(dream_ptr ptr) {
+void dream_recycle_slow(dream_ptr ptr) {
     char *block;
     int32_t sz;
     int idx;
     if (ptr == 0) {
         return;
     }
-    if (dream_weak_any) {
+    heap_refresh_fast();
+    if (*dream_tag_word(ptr) & DREAM_TAG_WEAK_TARGET) {
         dream_weak_clear_all(ptr);
     }
     block = (char *)dream_p(ptr) - 16;
@@ -627,10 +683,10 @@ void dream_recycle(dream_ptr ptr) {
     }
     idx = size_class(sz);
     ((uint32_t *)block)[1] = MAGIC_FREE;
-    account_free();
-    if (dream_tag_shared(ptr) || idx > 12) {
+    account_frees(1);
+    if (dream_tag_shared(ptr) || idx >= NCLASS) {
         heap_lock();
-        if (idx > 12) {
+        if (idx >= NCLASS) {
             large_set_next(block, dream_p(large_freelist));
             large_freelist = (dream_ptr)block;
         } else {
@@ -640,8 +696,8 @@ void dream_recycle(dream_ptr ptr) {
         heap_unlock();
         return;
     }
-    class_set_next(block, tls_free[idx]);
-    tls_free[idx] = block;
+    class_set_next(block, dream_heap.free[idx]);
+    dream_heap.free[idx] = block;
 }
 
 void dream_free(dream_ptr ptr) {

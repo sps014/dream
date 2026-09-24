@@ -59,16 +59,17 @@ static inline int32_t dream_str_len(dream_ptr s) {
     return s ? i32_load(s) : 0;
 }
 
+/* Pad word: `DREAM_STR_SLICE` = units pointer after the parent; otherwise the (possibly cached
+ * hash) pad of an inline payload. */
 static inline const uint16_t *dream_str_units(dream_ptr s) {
-    int32_t d;
     if (s == 0) {
         return NULL;
     }
-    d = i32_load(s + (int32_t)STRING_SCALAR_LEN_OFFSET);
-    if (d == DREAM_STR_PAD_INLINE) {
-        return (const uint16_t *)(uintptr_t)(uint32_t)(s + (int32_t)STRING_UNITS_OFFSET);
+    if (i32_load(s + (int32_t)STRING_SCALAR_LEN_OFFSET) == DREAM_STR_SLICE) {
+        return (const uint16_t *)(uintptr_t)(uint32_t)i32_load(s + (int32_t)STRING_UNITS_OFFSET
+                                                               + 4);
     }
-    return (const uint16_t *)(uintptr_t)(uint32_t)d;
+    return (const uint16_t *)(uintptr_t)(uint32_t)(s + (int32_t)STRING_UNITS_OFFSET);
 }
 
 static inline dream_ptr dream_str_from_units(const uint16_t *u, int32_t n) {
@@ -78,7 +79,7 @@ static inline dream_ptr dream_str_from_units(const uint16_t *u, int32_t n) {
     }
     p = dream_alloc(n * 2 + (int32_t)STRING_HEADER_SIZE, TAG_STRING);
     i32_store(p, n);
-    i32_store(p + (int32_t)STRING_SCALAR_LEN_OFFSET, p + (int32_t)STRING_UNITS_OFFSET);
+    i32_store(p + (int32_t)STRING_SCALAR_LEN_OFFSET, DREAM_STR_PAD_INLINE);
     mem_copy(p + (int32_t)STRING_UNITS_OFFSET, (int32_t)(uintptr_t)u, n * 2);
     return p;
 }

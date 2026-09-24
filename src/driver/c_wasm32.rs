@@ -4,8 +4,8 @@ use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
-use std::time::SystemTime;
 
+use crate::driver::rt_stamp;
 use crate::driver::wasm_opt::OptLevel;
 
 /// True when clang/ld should emit colored diagnostics (we capture their output, so their own
@@ -123,36 +123,16 @@ fn rt_cache_dir(
     )
 }
 
-/// Newest source mtime over the always-on units, their headers, and the linked-library
-/// catalog sources.
-fn runtime_input_mtimes(
+/// The always-on units, the linked-library catalog sources, and every header one directory deep
+/// under `includes` (a runtime-unit rebuild must trigger when only an include changed).
+fn runtime_inputs(
     sources: &[PathBuf],
     includes: &[&Path],
     linked: &[dream_mir::runtime::Wasm32LinkedUnit],
-) -> Option<SystemTime> {
+) -> Vec<PathBuf> {
     let mut paths: Vec<PathBuf> = sources.to_vec();
-    for u in linked {
-        paths.push(u.path.clone());
-    }
-    newest_mtime(&paths, includes)
-}
-
-fn newest_mtime(paths: &[PathBuf], dirs: &[&Path]) -> Option<SystemTime> {
-    let mut newest: Option<SystemTime> = None;
-    let mut consider = |p: &Path| {
-        if let Ok(m) = std::fs::metadata(p) {
-            if let Ok(t) = m.modified() {
-                if newest.is_none_or(|n| t > n) {
-                    newest = Some(t);
-                }
-            }
-        }
-    };
-    for p in paths {
-        consider(p);
-    }
-    // Headers too: a runtime-unit rebuild must trigger when only an include changed.
-    for dir in dirs {
+    paths.extend(linked.iter().map(|u| u.path.clone()));
+    for dir in includes {
         let Ok(rd) = std::fs::read_dir(dir) else {
             continue;
         };
@@ -160,16 +140,14 @@ fn newest_mtime(paths: &[PathBuf], dirs: &[&Path]) -> Option<SystemTime> {
             let p = e.path();
             if p.is_dir() {
                 if let Ok(sub) = std::fs::read_dir(&p) {
-                    for e2 in sub.flatten() {
-                        consider(&e2.path());
-                    }
+                    paths.extend(sub.flatten().map(|e2| e2.path()));
                 }
             } else {
-                consider(&p);
+                paths.push(p);
             }
         }
     }
-    newest
+    paths
 }
 
 fn compile_runtime_units(
@@ -199,7 +177,7 @@ fn compile_runtime_units(
 }
 
 /// Compiled wasm32 runtime units, cached across compiles (mirrors the native `runtime_archive`):
-/// mtime staleness over the runtime sources *and* their headers, a cross-process flock so parallel
+/// an [`rt_stamp`] fingerprint of the runtime sources *and* their headers, a cross-process flock so parallel
 /// `dream` invocations cannot race the rebuild, and a per-process mutex for in-process parallelism.
 /// Falls back to compiling next to the output when no HOME is available.
 #[allow(clippy::too_many_arguments)]
@@ -262,16 +240,8 @@ fn cached_runtime_objects(
         .collect();
     objs.extend((0..linked.len()).map(|i| cache.join(format!("lib{i}.o"))));
     let stamp = cache.join(".stamp");
-    let stale = match (
-        runtime_input_mtimes(&sources, includes, &linked),
-        std::fs::metadata(&stamp)
-            .ok()
-            .and_then(|m| m.modified().ok()),
-    ) {
-        (Some(src), Some(st)) => src > st,
-        _ => true,
-    };
-    if !stale && objs.iter().all(|o| o.is_file()) {
+    let fingerprint = rt_stamp::fingerprint(runtime_inputs(&sources, includes, &linked));
+    if rt_stamp::matches(&stamp, &fingerprint) && objs.iter().all(|o| o.is_file()) {
         return Ok(objs);
     }
     let mut built = compile_runtime_units(
@@ -292,7 +262,7 @@ fn cached_runtime_objects(
         |i| format!("lib{i}.o"),
         &cache,
     )?);
-    std::fs::write(&stamp, b"ok").map_err(|e| e.to_string())?;
+    std::fs::write(&stamp, fingerprint).map_err(|e| e.to_string())?;
     debug_assert_eq!(built.len(), objs.len());
     Ok(built)
 }

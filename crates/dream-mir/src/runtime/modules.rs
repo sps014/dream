@@ -177,7 +177,7 @@ const WASM32_CORE_C: &[&str] = &[
     "wasm32/g0.c",
     "wasm32/g0.s",
     "wasm32/sync_stub.c",
-    "wasm32/weak_stub.c",
+    "native/weak.c",
     "wasm32/interns.c",
     "native/strings.c",
     "native/object.c",

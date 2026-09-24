@@ -1,0 +1,103 @@
+// Read-only sink parameters are inferred as borrowed (no caller retain / callee release). Each
+// case below is a shape where a wrong inference would change destruction timing or free an
+// argument the callee still reads; results must match ordinary ARC semantics.
+import system;
+
+@allow_cycle
+class Node {
+    public value: int;
+    public next: Option<Node>;
+
+    public constructor(value: int, next: Option<Node>) {
+        this.value = value;
+        this.next = next;
+    }
+}
+
+class Holder {
+    public node: Node;
+
+    public constructor(node: Node) {
+        this.node = node;
+    }
+}
+
+class Noisy {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.println("del " + this.id.to_string());
+    }
+}
+
+fun churn(): int {
+    let a = Node(7, Option.None);
+    let b = Node(8, Option.Some(a));
+    return b.value;
+}
+
+fun value_of(n: Node): int {
+    return n.value;
+}
+
+// Forwarded at its last use: both frames must agree on the mode.
+fun twice(n: Node): int {
+    return value_of(n) + value_of(n);
+}
+
+fun outer(n: Node): int {
+    return twice(n);
+}
+
+// Overwrites the slot that owns the argument before reading it.
+fun replace_then_read(h: Holder, n: Node): int {
+    h.node = Node(100, Option.None);
+    let x = churn();
+    return n.value + x;
+}
+
+fun noisy_id(n: Noisy): int {
+    return n.id;
+}
+
+fun label(s: string): int {
+    return s.length;
+}
+
+fun main() {
+    let before = Debug.live_objects;
+
+    // A fresh temporary handed over at its last use is freed by the callee's exit.
+    let v = value_of(Node(5, Option.None));
+    System.println(Debug.live_objects - before);
+    System.println(v);
+
+    let n = Node(3, Option.None);
+    System.println(outer(n));
+    System.println(outer(Node(4, Option.None)));
+    System.println(Debug.live_objects - before);
+
+    let h = Holder(Node(9, Option.None));
+    System.println(replace_then_read(h, h.node));
+    System.println(h.node.value);
+
+    // `del` runs when the sink parameter dies, before the caller's next statement.
+    System.println(noisy_id(Noisy(1)));
+    System.println("after 1");
+    let keep = Noisy(2);
+    System.println(noisy_id(keep));
+    System.println("after 2");
+
+    let s = "hello";
+    let total = 0;
+    let i = 0;
+    while i < 3 {
+        total = total + label(s) + label("abc");
+        i = i + 1;
+    }
+    System.println(total);
+}

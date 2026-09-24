@@ -5,31 +5,18 @@
 
 static dream_ptr empty_string_singleton;
 
-extern int32_t live_objects;
-
-/* Mark a shared singleton immortal: rc == INT32_MAX is ignored by retain/release, and
- * the block leaves Debug.live_objects accounting (it will never be freed). */
-static void pin_immortal_obj(dream_ptr s) {
-    if (s) {
-        ((int32_t *)dream_p(s))[-1] = INT32_MAX;
-        if (live_objects > 0) {
-            live_objects -= 1;
-        }
-    }
-}
-
 
 dream_ptr dream_string_alloc(int32_t units) {
     dream_ptr p;
     if (units <= 0) {
         /* Immortal shared empty string: callers release through ordinary ARC, so the
-         * cached block is pinned (rc == INT32_MAX is ignored by retain/release).
+         * cached block is pinned (rc == DREAM_RC_IMMORTAL is ignored by retain/release).
          * Immutable + zero units means sharing is invisible. */
         if (!empty_string_singleton) {
             p = dream_malloc(8, TAG_STRING);
             dream_i32(p)[0] = 0;
             dream_str_init_owned(p);
-            pin_immortal_obj(p);
+            dream_pin_immortal(p);
             empty_string_singleton = p;
         }
         return empty_string_singleton;
@@ -191,6 +178,17 @@ void string_set(dream_ptr ptr, int32_t i, int32_t c) {
         return;
     }
     ((uint16_t *)dream_str_units(ptr))[i] = u;
+    /* A slice writes through to its parents' units; drop every cached hash on the chain. */
+    while (ptr != 0) {
+        int32_t *slot = dream_str_hash_slot(ptr);
+        if (slot != NULL) {
+            *slot = 0;
+        }
+        if (dream_i32(ptr)[1] != DREAM_STR_SLICE) {
+            break;
+        }
+        memcpy(&ptr, (char *)dream_p(ptr) + 8, sizeof(ptr));
+    }
 }
 
 dream_ptr string_substring_raw(dream_ptr ptr, int32_t start, int32_t end) {

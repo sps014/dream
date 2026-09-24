@@ -10,6 +10,9 @@ fun compare_ascending<T : Comparable<T>>(borrow a: T, borrow b: T): int {
 }
 
 // Growable random-access sequence backed by a resizable buffer.
+//
+// Invariant: `0 <= count <= items.length`. Every mutation of `items`/`count` preserves it, which is
+// what makes the `Buffer.get_unchecked`/`set_unchecked` accesses on `[0, count)` sound.
 public class List<T> : IndexedCollection<T> {
     items: T[];
     count: int;
@@ -64,7 +67,7 @@ public class List<T> : IndexedCollection<T> {
         if this.count == this.items.length {
             this.grow();
         }
-        this.items[this.count] = value;
+        Buffer.set_unchecked<T>(this.items, this.count, value);
         this.count = this.count + 1;
     }
 
@@ -96,7 +99,7 @@ public class List<T> : IndexedCollection<T> {
         let out = Buffer.alloc<T>(n);
         let i = 0;
         while i < n {
-            out[i] = this.items[i];
+            out[i] = Buffer.get_unchecked<T>(this.items, i);
             i = i + 1;
         }
         this.items = Buffer.alloc<T>(0);
@@ -109,7 +112,7 @@ public class List<T> : IndexedCollection<T> {
         if (index < 0) || (index >= this.count) {
             System.panic("List index out of range");
         }
-        return this.items[index];
+        return Buffer.get_unchecked<T>(this.items, index);
     }
 
     // Overwrites the element at `index`. Panics if `index` is out of range.
@@ -117,7 +120,7 @@ public class List<T> : IndexedCollection<T> {
         if (index < 0) || (index >= this.count) {
             System.panic("List index out of range");
         }
-        this.items[index] = value;
+        Buffer.set_unchecked<T>(this.items, index, value);
     }
 
     public fun set(index: int, value: T): void {
@@ -130,11 +133,11 @@ public class List<T> : IndexedCollection<T> {
             return Option.None;
         }
         let i = this.count - 1;
-        let last = this.items[i];
+        let last = Buffer.get_unchecked<T>(this.items, i);
         // Zero the slot after copying out. Needed for value structs with reference fields: a bare
         // `count--` would leave a second owner in dead capacity and double-release on the next
         // overwrite or when the backing array is dropped.
-        this.items[i] = Buffer.alloc<T>(1)[0];
+        Buffer.set_unchecked<T>(this.items, i, Buffer.alloc<T>(1)[0]);
         this.count = i;
         return Option.Some(last);
     }
@@ -143,7 +146,7 @@ public class List<T> : IndexedCollection<T> {
     public fun contains(borrow value: T): bool {
         let i = 0;
         while i < this.count {
-            if this.items[i] == value {
+            if Buffer.get_unchecked<T>(this.items, i) == value {
                 return true;
             }
             i = i + 1;
@@ -155,7 +158,7 @@ public class List<T> : IndexedCollection<T> {
     public fun index_of(borrow value: T): Option<int> {
         let i = 0;
         while i < this.count {
-            if this.items[i] == value {
+            if Buffer.get_unchecked<T>(this.items, i) == value {
                 return Option.Some(i);
             }
             i = i + 1;
@@ -187,9 +190,9 @@ public class List<T> : IndexedCollection<T> {
         let lo = 0;
         let hi = this.count - 1;
         while lo < hi {
-            let a = this.items[lo];
-            this.items[lo] = this.items[hi];
-            this.items[hi] = a;
+            let a = Buffer.get_unchecked<T>(this.items, lo);
+            Buffer.set_unchecked<T>(this.items, lo, Buffer.get_unchecked<T>(this.items, hi));
+            Buffer.set_unchecked<T>(this.items, hi, a);
             lo = lo + 1;
             hi = hi - 1;
         }
@@ -211,7 +214,7 @@ public class List<T> : IndexedCollection<T> {
         let result = List<T>(hi - lo);
         let i = lo;
         while i < hi {
-            result.push(this.items[i]);
+            result.push(Buffer.get_unchecked<T>(this.items, i));
             i = i + 1;
         }
         return result;
@@ -222,7 +225,7 @@ public class List<T> : IndexedCollection<T> {
         let result = List<T>(this.count + other.length);
         let i = 0;
         while i < this.count {
-            result.push(this.items[i]);
+            result.push(Buffer.get_unchecked<T>(this.items, i));
             i = i + 1;
         }
         i = 0;
@@ -247,7 +250,7 @@ public class List<T> : IndexedCollection<T> {
             if i > 0 {
                 sb.append(sep);
             }
-            sb.append(this.items[i].to_string());
+            sb.append(Buffer.get_unchecked<T>(this.items, i).to_string());
             i = i + 1;
         }
         return sb.build();
@@ -262,7 +265,7 @@ public class List<T> : IndexedCollection<T> {
             let z = Buffer.alloc<T>(1);
             let i = 0;
             while i < this.count {
-                this.items[i] = z[0];
+                Buffer.set_unchecked<T>(this.items, i, z[0]);
                 i = i + 1;
             }
         }
@@ -306,7 +309,7 @@ public class List<T> : IndexedCollection<T> {
         if n > 0 {
             Buffer.elems_copy<T>(items, index + 1, items, index, n);
         }
-        items[index] = value;
+        Buffer.set_unchecked<T>(items, index, value);
         this.count = this.count + 1;
         return true;
     }
@@ -324,7 +327,7 @@ public class List<T> : IndexedCollection<T> {
         this.count = this.count - 1;
         // Zero the vacated tail slot: it still holds a second reference to the last shifted
         // element and would retain it past the next overwrite.
-        this.items[this.count] = Buffer.alloc<T>(1)[0];
+        Buffer.set_unchecked<T>(this.items, this.count, Buffer.alloc<T>(1)[0]);
         return true;
     }
 
@@ -341,9 +344,11 @@ public class List<T> : IndexedCollection<T> {
         return ListIterator<T>(this);
     }
 
-    // Unchecked element access for `ListIterator` (same-module; index already validated).
+    // Unchecked element access for `ListIterator` and for-each (index already validated against
+    // `count`).
+    @inline
     internal fun at_unchecked(index: int): T {
-        return this.items[index];
+        return Buffer.get_unchecked<T>(this.items, index);
     }
 
     // Sorts the list in place with the supplied comparator.
@@ -435,7 +440,7 @@ public class List<T> : IndexedCollection<T> {
             if i > 0 {
                 sb.append(", ");
             }
-            sb.append(this.items[i].to_string());
+            sb.append(Buffer.get_unchecked<T>(this.items, i).to_string());
             i = i + 1;
         }
         sb.append("]");

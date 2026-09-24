@@ -102,7 +102,7 @@ fn stmt_rvalue_keys(rv: &Rvalue, out: &mut Vec<FnKey>) {
 
 /// Iterative Tarjan strongly-connected-components (iterative to avoid deep recursion on large call
 /// graphs). Returns one `Vec<usize>` per SCC.
-fn tarjan_scc(adj: &[Vec<usize>]) -> Vec<Vec<usize>> {
+pub(crate) fn tarjan_scc(adj: &[Vec<usize>]) -> Vec<Vec<usize>> {
     let n = adj.len();
     let mut index_of = vec![usize::MAX; n];
     let mut lowlink = vec![0usize; n];

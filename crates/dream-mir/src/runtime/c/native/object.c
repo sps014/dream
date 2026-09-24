@@ -26,18 +26,21 @@ int64_t dream_unbox_long(dream_ptr p) { return p ? *(int64_t *)dream_p(p) : 0; }
 int64_t dream_unbox_ulong(dream_ptr p) { return p ? *(int64_t *)dream_p(p) : 0; }
 int32_t dream_unbox_byte(dream_ptr p) { return p ? *(int32_t *)dream_p(p) : 0; }
 
-int32_t dream_string_hash(dream_ptr p) {
+/* Must match `abi::string_hash`, which precomputes the pad word of static literals. */
+int32_t dream_string_hash_slow(dream_ptr p, int32_t *slot) {
     uint32_t hash = 2166136261u;
     int32_t i;
     int32_t len = dream_str_len(p);
-    const uint16_t *units;
-    if (!p) {
-        return 0;
-    }
-    units = dream_str_units(p);
+    const uint16_t *units = dream_str_units(p);
     for (i = 0; i < len; i++) {
         hash ^= units[i];
         hash *= 16777619u;
+    }
+    if (hash <= 1u) {
+        hash += 2u;
+    }
+    if (slot != NULL) {
+        __atomic_store_n(slot, (int32_t)hash, __ATOMIC_RELAXED);
     }
     return (int32_t)hash;
 }

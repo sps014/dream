@@ -375,16 +375,28 @@ fn emit_union_to_string(m: &mut ModuleBuilder, cx: &Cx<'_>, ty: TypeId, name: &s
         m.push_func(b);
         return;
     };
+    let niche = cx.niche_variant_discriminants(ty);
     b.stmt(sb_decl());
     b.stmt(Stmt::decl(CTy::I32, "d", None));
-    b.stmt(Stmt::if_(
-        Expr::unary(UnOp::Not, Expr::id("p")),
-        Stmt::Return(Some(Expr::id(cx.str_sym("null")))),
-    ));
-    b.assign(
-        Expr::id("d"),
-        Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))),
-    );
+    if let Some((some_disc, none_disc)) = niche {
+        b.assign(
+            Expr::id("d"),
+            Expr::ternary(
+                Expr::id("p"),
+                Expr::i(some_disc as i64),
+                Expr::i(none_disc as i64),
+            ),
+        );
+    } else {
+        b.stmt(Stmt::if_(
+            Expr::unary(UnOp::Not, Expr::id("p")),
+            Stmt::Return(Some(Expr::id(cx.str_sym("null")))),
+        ));
+        b.assign(
+            Expr::id("d"),
+            Expr::load(CTy::I32, Expr::dream_p(Expr::id("p"))),
+        );
+    }
     let mut arms = Vec::new();
     for variant in &layout.variants {
         let (prefix, labels, suffix) = union_variant_pieces(variant);
@@ -397,7 +409,11 @@ fn emit_union_to_string(m: &mut ModuleBuilder, cx: &Cx<'_>, ty: TypeId, name: &s
                 "dream_strb_append",
                 vec![sb_addr(), Expr::id(cx.str_sym(&labels[i]))],
             ));
-            let value = field_value(cx, f);
+            let value = if niche.is_some() {
+                Expr::id("p")
+            } else {
+                field_value(cx, f)
+            };
             let text = to_string_fn(cx, f.ty);
             body.push(sb_append_conv(&text, value));
         }
@@ -850,7 +866,7 @@ pub(super) fn emit_iface_init(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     m.push_func(b);
 }
 
-fn interface_tag(cx: &Cx<'_>, ty: TypeId) -> Option<i32> {
+pub(super) fn interface_tag(cx: &Cx<'_>, ty: TypeId) -> Option<i32> {
     match cx.interner.kind(ty) {
         TyKind::Array(_) => Some(crate::abi::TAG_ARRAY),
         _ => cx.tags.get(&ty).copied(),

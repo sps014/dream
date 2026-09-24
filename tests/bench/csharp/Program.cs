@@ -632,17 +632,35 @@ public static partial class Program
     sealed class AddOp : BenchOp { public int Apply(int x) => x + 3; }
     sealed class MulOp : BenchOp { public int Apply(int x) => x * 3; }
     sealed class SubOp : BenchOp { public int Apply(int x) => x - 3; }
+    sealed class XorOp : BenchOp { public int Apply(int x) => x ^ 3; }
 
+    const int IfaceOps = 1024;
+
+    // One op = one interface call over four implementors in LCG order (mirrors the Dream twin).
     static void BenchIfaceDispatch(int iters)
     {
-        BenchOp a = new AddOp(), b = new MulOp(), c = new SubOp();
+        var ops = new List<BenchOp>(IfaceOps);
+        int seed = 12345;
+        for (int k = 0; k < IfaceOps; k++)
+        {
+            seed = unchecked(seed * 1103515245 + 12345);
+            switch ((seed >> 16) & 3)
+            {
+                case 0: ops.Add(new AddOp()); break;
+                case 1: ops.Add(new MulOp()); break;
+                case 2: ops.Add(new SubOp()); break;
+                default: ops.Add(new XorOp()); break;
+            }
+        }
+        int rounds = Math.Max(1, iters * 3 / IfaceOps);
         var sw = Stopwatch.StartNew();
-        long acc = 0;
-        for (int i = 0; i < iters; i++)
-            acc += a.Apply(i) + b.Apply(i) + c.Apply(i);
+        int acc = 0;
+        for (int r = 0; r < rounds; r++)
+            foreach (var op in ops)
+                acc += op.Apply(r);
         sw.Stop();
-        Report("iface_dispatch", ElapsedNs(sw), iters);
-        Sink = (int)acc;
+        Report("iface_dispatch", ElapsedNs(sw), rounds * IfaceOps);
+        Sink = acc;
     }
 
     // =====================================================================
@@ -698,6 +716,42 @@ public static partial class Program
         }
         sw.Stop();
         Report("linked_walk", ElapsedNs(sw), iters);
+        Sink = (int)acc;
+    }
+
+    sealed class WeakTreeNode
+    {
+        public WeakTreeNode? Left, Right;
+        public WeakReference<WeakTreeNode>? Parent;
+    }
+
+    static WeakTreeNode MakeWeakTree(int depth)
+    {
+        var node = new WeakTreeNode();
+        if (depth > 1)
+        {
+            var l = MakeWeakTree(depth - 1);
+            l.Parent = new WeakReference<WeakTreeNode>(node);
+            var r = MakeWeakTree(depth - 1);
+            r.Parent = new WeakReference<WeakTreeNode>(node);
+            node.Left = l;
+            node.Right = r;
+        }
+        return node;
+    }
+
+    static void BenchWeakTree(int iters)
+    {
+        var sw = Stopwatch.StartNew();
+        long acc = 0;
+        for (int i = 0; i < iters; i++)
+        {
+            var root = MakeWeakTree(10);
+            if (root.Left != null) acc++;
+            else acc--;
+        }
+        sw.Stop();
+        Report("weak_tree", ElapsedNs(sw), iters);
         Sink = (int)acc;
     }
 
@@ -768,6 +822,7 @@ public static partial class Program
         // ARC / allocator reality
         BenchBinaryTrees(scale / 200);
         BenchLinkedWalk(scale / 5);
+        BenchWeakTree(scale / 200);
         // collections / strings / enums
         BenchWordcount(scale / 5);
         BenchParseInts(scale);

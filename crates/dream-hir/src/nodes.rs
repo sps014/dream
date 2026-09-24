@@ -321,6 +321,19 @@ pub enum HExprKind {
     /// block is left dangling; safe only when the caller holds the sole reference. Node type is
     /// `void`.
     ForceFree(Box<HExpr>),
+    /// `Buffer.get_unchecked<T>(arr, i)` (`@unsafe`) — `arr[i]` without the bounds check. The
+    /// caller proves `0 <= i < arr.length` (e.g. `List<T>`'s `count <= items.length` invariant).
+    ArrayGetUnchecked {
+        array: Box<HExpr>,
+        index: Box<HExpr>,
+    },
+    /// `Buffer.set_unchecked<T>(arr, i, v)` (`@unsafe`) — `arr[i] = v` without the bounds check,
+    /// with ordinary element-store ARC semantics. Node type is `void`.
+    ArraySetUnchecked {
+        array: Box<HExpr>,
+        index: Box<HExpr>,
+        value: Box<HExpr>,
+    },
     /// An explicit or implicit numeric/object coercion to `ty`.
     Cast(Box<HExpr>),
     /// `cond ? then : else_`.

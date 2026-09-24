@@ -65,7 +65,7 @@ def wait_event(name, timeout=8):
             return e
     raise TimeoutError(f"no event {name}")
 
-s = send("initialize", {"adapterID": "dream"}); wait_response(s)
+s = send("initialize", {"adapterID": "dream", "pathFormat": "path"}); wait_response(s)
 wait_event("initialized")
 s = send("launch", {"program": SRC}); wait_response(s)
 s = send("setBreakpoints", {"source": {"path": SRC},

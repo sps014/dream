@@ -265,10 +265,6 @@ pub(super) fn len_prefix() -> super::ast::Expr {
     super::ast::Expr::i(crate::abi::LEN_PREFIX_SIZE as i64)
 }
 
-pub(super) fn rc_delta() -> super::ast::Expr {
-    super::ast::Expr::i(-(crate::abi::RC_FROM_DATA as i64))
-}
-
 pub(super) fn native_scalar_size(cx: &Cx<'_>, ty: TypeId) -> (u32, u32) {
     let ptr = cx.target.abi().ptr_size;
     if cx.interner.is_value_type(ty) {

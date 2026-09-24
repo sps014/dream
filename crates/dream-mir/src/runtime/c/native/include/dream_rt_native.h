@@ -104,10 +104,55 @@ DREAM_ALWAYS_INLINE const uint16_t *dream_str_units(dream_ptr s) {
     return (const uint16_t *)((char *)dream_p(s) + STRING_UNITS_OFFSET);
 }
 
+/* Resets the pad word, which on owned strings doubles as the lazily cached hash
+ * (`DREAM_STR_PAD_INLINE` = not computed yet). Anything that rewrites units in place must
+ * come back through here. */
 DREAM_ALWAYS_INLINE void dream_str_init_owned(dream_ptr p) {
     if (p) {
         dream_i32(p)[1] = DREAM_STR_PAD_INLINE;
     }
+}
+
+/* Slices keep their cached hash after the units pointer. Native slices get the word from
+ * size-class slack; wasm32 slices would grow a class, so they recompute instead. */
+#ifdef DREAM_WASM32
+#define DREAM_SLICE_HASH_BYTES 0
+#else
+#define DREAM_SLICE_HASH_BYTES 4
+#endif
+#define DREAM_SLICE_BYTES (8 + 2 * (int32_t)sizeof(dream_ptr) + DREAM_SLICE_HASH_BYTES)
+
+DREAM_ALWAYS_INLINE int32_t *dream_str_hash_slot(dream_ptr s) {
+    if (dream_i32(s)[1] != DREAM_STR_SLICE) {
+        return dream_i32(s) + 1;
+    }
+#if DREAM_SLICE_HASH_BYTES
+    return (int32_t *)((char *)dream_p(s) + 8 + 2 * sizeof(dream_ptr));
+#else
+    return NULL;
+#endif
+}
+
+int32_t dream_string_hash_slow(dream_ptr p, int32_t *slot);
+
+/* FNV-1a over UTF-16 units, folded away from the pad markers (0 = uncached, 1 = slice) so
+ * the result can live in the pad word. Static literals carry it precomputed by the emitter
+ * (their blocks are never written); `@shared` strings race only on storing the same value,
+ * hence relaxed atomics. */
+DREAM_ALWAYS_INLINE int32_t dream_string_hash(dream_ptr p) {
+    int32_t *slot;
+    int32_t h;
+    if (!p) {
+        return 0;
+    }
+    slot = dream_str_hash_slot(p);
+    if (DREAM_LIKELY(slot != NULL)) {
+        h = __atomic_load_n(slot, __ATOMIC_RELAXED);
+        if (DREAM_LIKELY(h != 0)) {
+            return h;
+        }
+    }
+    return dream_string_hash_slow(p, slot);
 }
 
 DREAM_ALWAYS_INLINE uint16_t dream_char_at_u(dream_ptr str, int32_t i) {
@@ -126,6 +171,10 @@ DREAM_ALWAYS_INLINE void dream_mem_copy(dream_ptr dst, dream_ptr src, size_t n) 
     memcpy(dream_p(dst), dream_p(src), n);
 }
 
+DREAM_ALWAYS_INLINE int32_t *dream_tag_word(dream_ptr ptr) {
+    return (int32_t *)((char *)dream_p(ptr) - TAG_FROM_DATA);
+}
+
 DREAM_ALWAYS_INLINE int dream_tag_shared(dream_ptr ptr) {
     int32_t t = ((int32_t *)((char *)dream_p(ptr) - TAG_FROM_DATA))[0];
     /* Tag 0 is Future / untyped frames — concurrently refcounted, bit left clear so JS
@@ -136,29 +185,170 @@ DREAM_ALWAYS_INLINE int dream_tag_shared(dream_ptr ptr) {
     return (t & TAG_SHARED) != 0;
 }
 
+/* Initial rc word for a fresh block: the shared encoding for anything `dream_tag_shared`
+ * would report, so RC ops never consult the tag. */
+DREAM_ALWAYS_INLINE int32_t dream_rc_init(int32_t tag) {
+    return ((tag & TAG_VALUE_MASK) == 0 || (tag & TAG_SHARED) != 0) ? (DREAM_RC_SHARED_BIT | 1) : 1;
+}
+
+DREAM_ALWAYS_INLINE int32_t *dream_rc_word(dream_ptr ptr) {
+    return (int32_t *)((char *)dream_p(ptr) - RC_FROM_DATA);
+}
+
+void dream_retain_slow(int32_t *rc);
+int dream_rc_last_slow(int32_t *rc);
+
 DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
     int32_t *rc;
+    int32_t v;
     if (ptr == 0) {
         return;
     }
-    rc = (int32_t *)((char *)dream_p(ptr) - RC_FROM_DATA);
-    if (*rc == INT32_MAX) {
+    rc = dream_rc_word(ptr);
+    v = *rc;
+    if (DREAM_LIKELY(v >= 0)) {
+        *rc = v + 1;
         return;
     }
-    if (!dream_tag_shared(ptr)) {
-        *rc += 1;
-        return;
-    }
-    __atomic_fetch_add(rc, 1, __ATOMIC_RELAXED);
+    dream_retain_slow(rc);
 }
 
 void dream_free(dream_ptr ptr);
+dream_ptr dream_malloc_shared(int32_t size, int32_t tag);
+/* Mark a singleton immortal: its rc word is never mutated again and it leaves
+ * `Debug.live_objects` accounting (it will never be freed). */
+void dream_pin_immortal(dream_ptr s);
+
+#ifdef DREAM_WASM32
+dream_ptr dream_malloc(int32_t size, int32_t tag);
 /* Recycle a live block without `dream_str_fini`. Typed `destroy_*` for classes/arrays/unions
  * uses this; string destroy still goes through `dream_free`. */
 void dream_recycle(dream_ptr ptr);
+#else
+/* Native size classes: 16-byte steps up to 256, then 8 per power of two up to 64KiB, so a
+ * class rounds a request up by at most 12.5%. Every class size is a multiple of 16. */
+#define DREAM_NCLASS 80
+#define DREAM_MAX_CLASS_BYTES 65536
+#define DREAM_MAGIC_LIVE 0x4c495645u
+#define DREAM_MAGIC_FREE 0x46524545u
 
-extern _Thread_local int32_t dream_defer_depth;
-extern _Thread_local int32_t dream_defer_busy;
+/* Per-thread alloc/free tallies behind `Debug.live_objects`. Heap-allocated and never freed so
+ * the process-wide sum stays valid after a worker exits; plain (non-RMW) updates by the owner. */
+typedef struct dream_heap_counters {
+    uint32_t allocs;
+    uint32_t frees;
+    struct dream_heap_counters *next;
+} dream_heap_counters;
+
+/* All hot allocator TLS in one block: one TLV address per function on macOS. `fast` is NULL
+ * until the thread registers its counters and while a unique region is open, which routes
+ * every alloc/free through the out-of-line slow path with a single test. */
+typedef struct dream_heap_tls {
+    dream_heap_counters *fast;
+    char *free[DREAM_NCLASS];
+} dream_heap_tls;
+extern _Thread_local dream_heap_tls dream_heap;
+
+dream_ptr dream_malloc_slow(int32_t size, int32_t tag);
+void dream_recycle_slow(dream_ptr ptr);
+
+DREAM_ALWAYS_INLINE int dream_size_class(uint32_t total) {
+    uint32_t k;
+    if (total <= 256u) {
+        return total <= 16u ? 0 : (int)((total - 1u) >> 4);
+    }
+    k = 31u - (uint32_t)__builtin_clz(total - 1u);
+    return (int)(16u + (k - 8u) * 8u + ((total - 1u) >> (k - 3u)) - 8u);
+}
+
+DREAM_ALWAYS_INLINE int32_t dream_class_bytes(int idx) {
+    uint32_t j;
+    if (idx < 16) {
+        return (idx + 1) << 4;
+    }
+    j = (uint32_t)idx - 16u;
+    return (int32_t)((9u + (j & 7u)) << (5u + (j >> 3)));
+}
+
+DREAM_ALWAYS_INLINE void dream_block_activate(char *block, int32_t tag) {
+    ((uint32_t *)block)[1] = DREAM_MAGIC_LIVE;
+    ((int32_t *)block)[2] = tag;
+    ((int32_t *)block)[3] = dream_rc_init(tag);
+}
+
+DREAM_ALWAYS_INLINE void dream_heap_count(uint32_t *c) {
+    __atomic_store_n(c, *c + 1u, __ATOMIC_RELAXED);
+}
+
+DREAM_ALWAYS_INLINE dream_ptr dream_malloc(int32_t size, int32_t tag) {
+    dream_heap_tls *h = &dream_heap;
+    dream_heap_counters *c = h->fast;
+    if (DREAM_LIKELY(c != NULL && (uint32_t)size <= (uint32_t)(DREAM_MAX_CLASS_BYTES - 16))) {
+        int idx = dream_size_class((((uint32_t)size + 15u) & ~15u) + 16u);
+        char *block = h->free[idx];
+        if (DREAM_LIKELY(block != NULL)) {
+            char *next;
+            memcpy(&next, block + 8, sizeof(next));
+            h->free[idx] = next;
+            dream_block_activate(block, tag);
+            dream_heap_count(&c->allocs);
+            return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
+        }
+    }
+    return dream_malloc_slow(size, tag);
+}
+
+/* Recycle a live block without `dream_str_fini`. Typed `destroy_*` for classes/arrays/unions
+ * uses this; string destroy still goes through `dream_free`. */
+DREAM_ALWAYS_INLINE void dream_recycle(dream_ptr ptr) {
+    dream_heap_tls *h;
+    dream_heap_counters *c;
+    char *block;
+    int32_t sz;
+    int32_t tag;
+    int idx;
+    if (ptr == 0) {
+        return;
+    }
+    h = &dream_heap;
+    c = h->fast;
+    block = (char *)dream_p(ptr) - NATIVE_HEAP_HEADER_SIZE;
+    sz = ((int32_t *)block)[0];
+    tag = ((int32_t *)block)[2];
+    if (DREAM_UNLIKELY(c == NULL || ((uint32_t *)block)[1] != DREAM_MAGIC_LIVE
+                       || (uint32_t)(sz - 1) >= (uint32_t)DREAM_MAX_CLASS_BYTES
+                       || (tag & (DREAM_TAG_WEAK_TARGET | TAG_SHARED)) != 0
+                       || (tag & TAG_VALUE_MASK) == 0)) {
+        dream_recycle_slow(ptr);
+        return;
+    }
+    idx = dream_size_class((uint32_t)sz);
+    ((uint32_t *)block)[1] = DREAM_MAGIC_FREE;
+    dream_heap_count(&c->frees);
+    memcpy(block + 8, &h->free[idx], sizeof(char *));
+    h->free[idx] = block;
+}
+#endif
+
+/* A class instance the compiler proved never outlives its function, built in a frame buffer of
+ * `DREAM_BLOCK_HEADER + size` bytes (16-aligned): a live header with an immortal count, so
+ * retains and releases on it are no-ops and nothing frees it. The compiler releases its strong
+ * fields where its count would have reached zero. */
+DREAM_ALWAYS_INLINE dream_ptr dream_frame_object(void *block, int32_t size, int32_t tag) {
+    char *b = (char *)block;
+    memset(b, 0, (size_t)DREAM_BLOCK_HEADER + (size_t)size);
+    ((int32_t *)b)[0] = (int32_t)DREAM_BLOCK_HEADER + size;
+#ifndef DREAM_WASM32
+    ((uint32_t *)b)[1] = DREAM_MAGIC_LIVE;
+#endif
+    *(int32_t *)(b + DREAM_BLOCK_HEADER - TAG_FROM_DATA) = tag;
+    *(int32_t *)(b + DREAM_BLOCK_HEADER - RC_FROM_DATA) = DREAM_RC_IMMORTAL;
+    return (dream_ptr)(uintptr_t)(b + DREAM_BLOCK_HEADER);
+}
+
+/* Nonzero while a `defer` scope is open on this thread and no drain is running: the only
+ * state in which release glue hands a dying object to `dream_defer_try_enqueue`. */
+extern _Thread_local int32_t dream_defer_open;
 void dream_defer_enter(void);
 void dream_defer_leave(uint32_t q);
 void dream_region_enter(void);
@@ -166,73 +356,58 @@ void dream_region_leave(void);
 int dream_defer_try_enqueue(dream_ptr p, void (*fn)(dream_ptr));
 void dream_defer_drain_all(void);
 
+/* Decrement `p`'s refcount; true when the caller must run destroy glue and free
+ * (this was the last reference). `rc == 0` (mid-destroy) never re-frees. */
+DREAM_ALWAYS_INLINE int dream_rc_last(dream_ptr p) {
+    int32_t *rc = dream_rc_word(p);
+    int32_t v = *rc;
+    if (DREAM_LIKELY(v > 0)) {
+        *rc = v - 1;
+        return v == 1;
+    }
+    return dream_rc_last_slow(rc);
+}
+
 DREAM_ALWAYS_INLINE void dream_release(dream_ptr ptr) {
-    int32_t *rc;
-    int32_t old;
     if (ptr == 0) {
         return;
     }
-    rc = (int32_t *)((char *)dream_p(ptr) - RC_FROM_DATA);
-    if (*rc == INT32_MAX) {
-        return;
-    }
-    if (!dream_tag_shared(ptr)) {
-        old = *rc;
-        *rc = old - 1;
-        if (old == 1) {
-            dream_free(ptr);
-        }
-        return;
-    }
-    old = __atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL);
-    if (old == 1) {
+    if (dream_rc_last(ptr)) {
         dream_free(ptr);
     }
 }
 
 DREAM_ALWAYS_INLINE void dream_destroy(dream_ptr ptr) {
-    int32_t *rc;
     if (ptr == 0) {
         return;
     }
-    rc = (int32_t *)((char *)dream_p(ptr) - RC_FROM_DATA);
-    if (*rc == INT32_MAX) {
+    if (*dream_rc_word(ptr) == DREAM_RC_IMMORTAL) {
         return;
     }
     dream_free(ptr);
 }
 
-/* Decrement `p`'s refcount; true when the caller must run destroy glue and free
- * (this was the last reference). Mirrors dream_release's immortal/mt handling so
- * the generated per-type `release_*` helpers collapse to one call + branch. */
-DREAM_ALWAYS_INLINE int dream_rc_last(dream_ptr p) {
-    int32_t *rc = (int32_t *)((char *)dream_p(p) - RC_FROM_DATA);
-    int32_t old;
-    if (*rc == INT32_MAX) {
-        return 0;
-    }
-    if (!dream_tag_shared(p)) {
-        old = *rc;
-        if (old <= 0) {
-            return 0;
-        }
-        *rc = old - 1;
-        return old == 1;
-    }
-    return __atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL) == 1;
-}
-
-/* True when `p` is an immortal/shared block (`INT32_MAX` rc): never mutate or free. */
+/* True when `p` is an immortal block: never mutate or free. */
 DREAM_ALWAYS_INLINE int dream_rc_immortal(dream_ptr p) {
-    return ((int32_t *)((char *)dream_p(p) - RC_FROM_DATA))[0] == INT32_MAX;
+    return *dream_rc_word(p) == DREAM_RC_IMMORTAL;
 }
 
-/* Peek: this pointer is the unique remaining holder (`rc == 1`). Destroy glue uses this
- * to skip the decrement and call `destroy_*` on uniquely owned fields. */
+/* Peek: this pointer is the unique remaining holder (count 1, local or shared). Destroy
+ * glue uses this to skip the decrement and call `destroy_*` on uniquely owned fields. */
 DREAM_ALWAYS_INLINE int dream_rc_one(dream_ptr p) {
-    int32_t *rc = (int32_t *)((char *)dream_p(p) - RC_FROM_DATA);
-    int32_t v = dream_tag_shared(p) ? __atomic_load_n(rc, __ATOMIC_RELAXED) : *rc;
-    return v == 1;
+    return (__atomic_load_n(dream_rc_word(p), __ATOMIC_RELAXED) & INT32_MAX) == 1;
+}
+
+/* `del` runs with the object observably alive (count 1), keeping its local/shared encoding. */
+DREAM_ALWAYS_INLINE void dream_rc_revive(dream_ptr p) {
+    int32_t *rc = dream_rc_word(p);
+    *rc = *rc < 0 ? (DREAM_RC_SHARED_BIT | 1) : 1;
+}
+
+/* User-visible count (`Debug.ref_count`): immortal reads as `INT32_MAX`. */
+DREAM_ALWAYS_INLINE int32_t dream_rc_count(dream_ptr p) {
+    int32_t v = __atomic_load_n(dream_rc_word(p), __ATOMIC_RELAXED);
+    return v == DREAM_RC_IMMORTAL ? INT32_MAX : (v & INT32_MAX);
 }
 
 /* Bounds-checked element address for a length-prefixed array block. One call
@@ -243,15 +418,12 @@ void dream_panic(dream_ptr msg);
 DREAM_ALWAYS_INLINE char *dream_array_at(dream_ptr p, int64_t i, int32_t esize,
                                          dream_ptr panic_msg) {
     int32_t len = p ? dream_i32(p)[0] : 0;
-    int32_t t = (int32_t)i;
-    if ((int64_t)i == (int64_t)t && (uint32_t)t >= (uint32_t)len) {
+    if (DREAM_UNLIKELY((uint64_t)i >= (uint64_t)(uint32_t)len)) {
         dream_panic(panic_msg);
     }
-    return (char *)dream_p(p) + 4 + (int64_t)t * esize;
+    return (char *)dream_p(p) + 4 + i * esize;
 }
 
-dream_ptr dream_malloc(int32_t size, int32_t tag);
-dream_ptr dream_malloc_shared(int32_t size, int32_t tag);
 void dream_publish(dream_ptr ptr);
 dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag);
 #ifdef DREAM_WASM32
@@ -599,6 +771,9 @@ DREAM_ALWAYS_INLINE void dream_slice_fill(dream_ptr p, dream_ptr s, int32_t n,
     dream_i32(p)[1] = DREAM_STR_SLICE;
     memcpy((char *)dream_p(p) + 8, &s, sizeof(s));
     memcpy((char *)dream_p(p) + 8 + sizeof(dream_ptr), &data, sizeof(data));
+#if DREAM_SLICE_HASH_BYTES
+    *(int32_t *)((char *)dream_p(p) + 8 + 2 * sizeof(dream_ptr)) = 0;
+#endif
 }
 
 DREAM_ALWAYS_INLINE int dream_slice_unique(dream_ptr p) {
@@ -625,7 +800,7 @@ DREAM_ALWAYS_INLINE dream_ptr dream_substring(dream_ptr s, int32_t start, int32_
     if (n <= 0) {
         return dream_string_alloc(0); /* immortal shared empty */
     }
-    p = dream_malloc((int32_t)(8 + 2 * (int32_t)sizeof(dream_ptr)), TAG_STRING);
+    p = dream_malloc(DREAM_SLICE_BYTES, TAG_STRING);
     data = dream_str_units(s) + start;
     dream_slice_fill(p, s, n, data);
     dream_slice_retain_parent(s);
@@ -972,7 +1147,6 @@ DREAM_ALWAYS_INLINE void dream_sb_push_long(dream_ptr sb, int64_t v) {
 dream_ptr dream_array_to_string(dream_ptr arr);
 dream_ptr dream_to_bytes(dream_ptr value, int32_t size);
 dream_ptr dream_from_bytes(dream_ptr bytes, int32_t size, int32_t tag);
-int32_t dream_string_hash(dream_ptr p);
 int32_t dream_object_hash_code(dream_ptr p);
 int32_t dream_bitcast_f32(float v);
 int32_t dream_hash_double(double v);
@@ -1056,15 +1230,9 @@ int32_t dream_semaphore_try_acquire(dream_ptr semaphore);
 int32_t dream_semaphore_try_acquire_for(dream_ptr semaphore, int32_t timeout_ms);
 dream_ptr dream_js_call(dream_ptr target, dream_ptr via, dream_ptr method, int32_t argc);
 void dream_weak_clear_all(dream_ptr obj);
-extern int dream_weak_any;
 void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, dream_ptr extra);
 void dream_weak_unregister(dream_ptr target, dream_ptr slot);
 
-/* Weak-handle slots (Weak stdlib class). */
-dream_ptr dream_weak_slot_make(dream_ptr value);
-dream_ptr dream_weak_slot_load(dream_ptr slot_box);
-int32_t dream_weak_slot_dead(dream_ptr slot_box);
-void dream_weak_slot_release(dream_ptr target, dream_ptr slot_box);
 
 int64_t regex_compile(dream_ptr pattern, int32_t flags);
 void regex_free(int64_t h);

@@ -801,20 +801,50 @@ class SubOp : BenchOp {
     }
 }
 
-// One op = three interface calls through distinct implementors (devirt/vtable check).
+class XorOp : BenchOp {
+    public fun apply(x: int): int {
+        return x ^ 3;
+    }
+}
+
+let IFACE_OPS: int = 1024;
+
+// One op = one interface call. Receivers come from a list of four implementors in LCG order,
+// built outside the timer, so the dynamic type varies call to call: exact-type devirt has
+// nothing to prove and the >2-implementor dispatch path is what gets measured.
 fun bench_iface_dispatch(iters: int): void {
-    let a: BenchOp = AddOp();
-    let b: BenchOp = MulOp();
-    let c: BenchOp = SubOp();
+    let ops = List<BenchOp>();
+    let seed = 12345;
+    let k = 0;
+    while k < IFACE_OPS {
+        seed = seed * 1103515245 + 12345;
+        let pick = (seed >> 16) & 3;
+        if pick == 0 {
+            ops.push(AddOp());
+        } else if pick == 1 {
+            ops.push(MulOp());
+        } else if pick == 2 {
+            ops.push(SubOp());
+        } else {
+            ops.push(XorOp());
+        }
+        k = k + 1;
+    }
+    let rounds = iters * 3 / IFACE_OPS;
+    if rounds < 1 {
+        rounds = 1;
+    }
     let sw = Stopwatch();
     let acc = 0;
-    let i = 0;
-    while i < iters {
-        acc = acc + a.apply(i) + b.apply(i) + c.apply(i);
-        i = i + 1;
+    let r = 0;
+    while r < rounds {
+        for (let op in ops) {
+            acc = acc + op.apply(r);
+        }
+        r = r + 1;
     }
     sw.stop();
-    report("iface_dispatch", sw.elapsed_nanos, iters);
+    report("iface_dispatch", sw.elapsed_nanos, rounds * IFACE_OPS);
     sink_int(acc);
 }
 
@@ -901,6 +931,51 @@ fun bench_linked_walk(iters: int): void {
     }
     sw.stop();
     report("linked_walk", sw.elapsed_nanos, iters);
+    sink_int(acc);
+}
+
+@allow_cycle
+class WeakTreeNode {
+    public left: Option<WeakTreeNode>;
+    public right: Option<WeakTreeNode>;
+    public weak parent: Option<WeakTreeNode>;
+
+    public constructor() {
+        this.left = Option.None;
+        this.right = Option.None;
+        this.parent = Option.None;
+    }
+}
+
+fun make_weak_tree(depth: int): WeakTreeNode {
+    let node = WeakTreeNode();
+    if depth > 1 {
+        let l = make_weak_tree(depth - 1);
+        l.parent = Option.Some(node);
+        let r = make_weak_tree(depth - 1);
+        r.parent = Option.Some(node);
+        node.left = Option.Some(l);
+        node.right = Option.Some(r);
+    }
+    return node;
+}
+
+// One op = build a depth-10 tree (1023 nodes) whose children hold `weak` parent back-pointers,
+// then drop it (1022 live weak registrations torn down while unrelated frees keep happening).
+fun bench_weak_tree(iters: int): void {
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while i < iters {
+        let root = make_weak_tree(10);
+        switch (root.left) {
+            Some(l) => { acc = acc + 1; }
+            None    => { acc = acc - 1; }
+        }
+        i = i + 1;
+    }
+    sw.stop();
+    report("weak_tree", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -992,6 +1067,7 @@ fun run_suite(scale: int): void {
     // ---- ARC / allocator reality at scale ----
     bench_binary_trees(scale / 200);
     bench_linked_walk(scale / 5);
+    bench_weak_tree(scale / 200);
     // ---- collections / strings / enums ----
     bench_wordcount(scale / 5);
     bench_parse_ints(scale);

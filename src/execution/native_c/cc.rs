@@ -78,7 +78,7 @@ fn classify_program(p: PathBuf) -> Cc {
     }
 }
 
-fn env_program(key: &str) -> Option<PathBuf> {
+pub(super) fn env_program(key: &str) -> Option<PathBuf> {
     let v = std::env::var(key).ok()?;
     if v.is_empty() {
         return None;
@@ -178,7 +178,7 @@ pub fn generator_cache_root() -> PathBuf {
     user_dream_dir().join("cache").join("generators")
 }
 
-fn find_on_path(name: &str) -> Option<PathBuf> {
+pub(super) fn find_on_path(name: &str) -> Option<PathBuf> {
     let path_var = std::env::var_os("PATH")?;
     let exe_name = if cfg!(windows) && !name.ends_with(".exe") && !name.contains('/') {
         format!("{name}.exe")

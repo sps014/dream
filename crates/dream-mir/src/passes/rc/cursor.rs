@@ -1,6 +1,7 @@
 //! Cursor inference: mark non-escaping field/index loads as non-owning aliases.
 
 use super::liveness::{self, live_after_stmt, stmt_reads_local};
+use super::modref::ModRefTable;
 use crate::{Callee, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_hir::LayoutTable;
 use dream_types::TypeInterner;
@@ -12,6 +13,7 @@ pub(crate) fn infer_cursors(
     func: &mut MirFunction,
     interner: &TypeInterner,
     layouts: &LayoutTable,
+    modref: &ModRefTable,
 ) {
     let n = func.locals.len();
     let params: HashSet<u32> = func.params.iter().map(|p| p.0).collect();
@@ -262,6 +264,7 @@ pub(crate) fn infer_cursors(
             }
         }
     }
+    super::cursor_family::infer_cursor_families(func, interner, layouts, modref);
 }
 
 fn snapshot_base(rvalue: &Rvalue) -> Option<u32> {
@@ -309,7 +312,7 @@ fn borrow_field_snapshot(
     }
 }
 
-fn is_null_init(rvalue: &Rvalue) -> bool {
+pub(super) fn is_null_init(rvalue: &Rvalue) -> bool {
     matches!(rvalue, Rvalue::Use(Operand::Const(Const::Null)))
 }
 
@@ -624,7 +627,7 @@ fn operand_mentions_local(op: &Operand, local: u32) -> bool {
     }
 }
 
-fn mark_stmt_escapes(stmt: &Statement, escaped: &mut HashSet<u32>) {
+pub(super) fn mark_stmt_escapes(stmt: &Statement, escaped: &mut HashSet<u32>) {
     match stmt {
         Statement::Assign(Place::Field { .. }, rvalue)
         | Statement::Assign(Place::Index { .. }, rvalue)
@@ -655,7 +658,7 @@ fn mark_stmt_escapes(stmt: &Statement, escaped: &mut HashSet<u32>) {
     }
 }
 
-fn mark_term_escapes(term: &Terminator, escaped: &mut HashSet<u32>) {
+pub(super) fn mark_term_escapes(term: &Terminator, escaped: &mut HashSet<u32>) {
     match term {
         Terminator::Return(Some(op)) | Terminator::AsyncComplete(Some(op)) => {
             escape_operand(op, escaped);

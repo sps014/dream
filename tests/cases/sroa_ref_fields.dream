@@ -1,0 +1,47 @@
+import system;
+
+class Label {
+    public text: string;
+    public constructor(text: string) {
+        this.text = text;
+    }
+}
+
+class Pair {
+    public name: string;
+    public label: Option<Label>;
+    public n: int;
+    public constructor(name: string) {
+        this.name = name;
+        this.n = 0;
+    }
+}
+
+fun run(k: int): int {
+    let total = 0;
+    for (let i = 0; i < k; i++) {
+        let p = Pair("p" + i.to_string());
+        let q = p;
+        q.n = i;
+        if (i % 3 == 0) {
+            q.label = Option.Some(Label("third"));
+        }
+        p.name = p.name + "!";
+        if (i % 5 == 0) {
+            p.label = Option.None;
+        }
+        total = total + q.name.length + p.n;
+        switch (q.label) {
+            Some(l) => { total = total + l.text.length; }
+            None => {}
+        }
+    }
+    return total;
+}
+
+fun main() {
+    let before = Debug.live_objects;
+    System.println(run(10).to_string());
+    System.println(run(1000).to_string());
+    System.println((Debug.live_objects - before).to_string());
+}

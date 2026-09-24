@@ -19,6 +19,7 @@ pub mod interface_defaults;
 pub mod js_runtime;
 pub mod prelude;
 pub mod quiet_panic;
+pub mod rt_stamp;
 pub mod source_loader;
 #[cfg(feature = "native")]
 pub mod test;

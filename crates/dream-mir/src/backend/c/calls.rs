@@ -126,14 +126,34 @@ impl<'a> Emitter<'a> {
         sig: TypeId,
         args: &[Operand],
     ) -> Expr {
-        let mut all = vec![Expr::id(format!("dream_iface_{iface_id}_{method_slot}"))];
-        all.push(self.operand(receiver));
+        let recv = self.operand(receiver);
+        let mut call_args = vec![recv.clone()];
         for a in args {
             self.retain_rc_global_sink(true, a);
-            all.push(self.operand(a));
+            call_args.push(self.operand(a));
         }
         let (td, _, _) = super::types::fn_ptr_abi(self.cx.interner, sig);
-        Expr::call(c_ident(&format!("__iface_dispatch_{td}")), all)
+        let mut all = vec![Expr::id(format!("dream_iface_{iface_id}_{method_slot}"))];
+        all.extend(call_args.iter().cloned());
+        let mut e = Expr::call(c_ident(&format!("__iface_dispatch_{td}")), all);
+        for (tag, cname) in self
+            .cx
+            .iface_guard(iface_id, method_slot)
+            .unwrap_or_default()
+            .iter()
+            .rev()
+        {
+            let direct = Expr::IndirectCall {
+                callee: Box::new(Expr::cast(CTy::Ident(td.clone()), Expr::id(cname.clone()))),
+                args: call_args.clone(),
+            };
+            let is_tag = Expr::eq(
+                Expr::call("dream_object_tag", vec![recv.clone()]),
+                Expr::i(*tag as i64),
+            );
+            e = Expr::ternary(is_tag, direct, e);
+        }
+        e
     }
 
     pub(super) fn js_call_expr(

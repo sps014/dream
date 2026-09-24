@@ -63,15 +63,29 @@ pub const LEN_PREFIX_SIZE: u32 = 4;
 pub const STRING_HEADER_SIZE: u32 = 8;
 /// Offset of UTF-16 LE units from the string data pointer when the pad word is inline (`0`).
 pub const STRING_UNITS_OFFSET: u32 = 8;
-/// Pad word at `ptr + 4`. WASM: `0` = units at [`STRING_UNITS_OFFSET`]; nonzero = i32 payload
-/// address. Native: [`DREAM_STR_PAD_INLINE`] = inline units; [`DREAM_STR_SLICE`] = fat slice
-/// (`parent:dream_ptr` at +8, `units:*u16` at +8+ptr_size).
+/// Pad word at `ptr + 4`. [`DREAM_STR_SLICE`] = fat slice (`parent:dream_ptr` at +8,
+/// `units:*u16` at +8+ptr_size); anything else = inline units at [`STRING_UNITS_OFFSET`], with
+/// the pad caching [`string_hash`] ([`DREAM_STR_PAD_INLINE`] = not computed yet).
 pub const STRING_SCALAR_LEN_OFFSET: u32 = 4;
-/// Native/WASM pad value for an owned inline UTF-16 payload.
+/// Pad value for an owned inline UTF-16 payload whose hash has not been cached.
 pub const DREAM_STR_PAD_INLINE: i32 = 0;
-/// Native-only pad value: fat slice (parent + external units pointer). Never used as a WASM
-/// payload address (those are interned `mapped_ptr + STRING_UNITS_OFFSET`, always `>= STRING_BASE`).
+/// Pad value marking a fat slice (parent + external units pointer).
 pub const DREAM_STR_SLICE: i32 = 1;
+
+/// Runtime string hash (`dream_string_hash_slow`): FNV-1a over UTF-16 units, folded away from
+/// the pad markers so it can be cached in the pad word. The emitter stores it into static
+/// literal blocks so the runtime never has to write them.
+pub fn string_hash(units: &[u16]) -> i32 {
+    let mut h: u32 = 2_166_136_261;
+    for &u in units {
+        h ^= u32::from(u);
+        h = h.wrapping_mul(16_777_619);
+    }
+    if h <= 1 {
+        h += 2;
+    }
+    h as i32
+}
 /// Native malloc header `[size:i32][magic:i32][tag:i32][rc:i32]`. WASM uses [`HEAP_HEADER_SIZE`].
 pub const NATIVE_HEAP_HEADER_SIZE: u32 = 16;
 /// `data_ptr - RC_FROM_DATA` is the refcount word ([`HEADER_REFCOUNT_OFFSET`] from block start).
@@ -438,6 +452,20 @@ mod abi_h_lockstep {
             }
         }
         panic!("missing #define {} in dream_abi.h", name);
+    }
+
+    #[test]
+    fn string_hash_is_fnv1a_folded_off_pad_markers() {
+        assert_eq!(string_hash(&[]) as u32, 0x811c_9dc5);
+        assert_eq!(string_hash(&[u16::from(b'a')]) as u32, 0xe40c_292c);
+        let obj = include_str!("runtime/c/native/object.c");
+        assert!(obj.contains("2166136261u") && obj.contains("16777619u"));
+        for units in [&[][..], &[1, 2, 3], &[0xffff; 9]] {
+            assert!(!matches!(
+                string_hash(units),
+                DREAM_STR_PAD_INLINE | DREAM_STR_SLICE
+            ));
+        }
     }
 
     #[test]

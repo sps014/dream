@@ -190,6 +190,10 @@ fn emit_string_table(m: &mut ModuleBuilder, cx: &Cx<'_>) {
     for (s, sym) in &cx.strings {
         let units: Vec<u16> = s.encode_utf16().collect();
         let n = units.len();
+        let hash = Expr::id(format!(
+            "(int32_t){:#010x}u",
+            crate::abi::string_hash(&units) as u32
+        ));
         let init_units: Vec<Expr> = if units.is_empty() {
             vec![Expr::i(0)]
         } else {
@@ -214,9 +218,9 @@ fn emit_string_table(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                 vec![
                     Expr::i(0),
                     Expr::id("TAG_STRING"),
-                    Expr::id("INT32_MAX"),
+                    Expr::id("DREAM_RC_IMMORTAL"),
                     Expr::i(n as i64),
-                    Expr::i(0),
+                    hash,
                     Expr::Compound(init_units),
                 ],
             )
@@ -241,9 +245,9 @@ fn emit_string_table(m: &mut ModuleBuilder, cx: &Cx<'_>) {
                     Expr::i(0),
                     Expr::i(0),
                     Expr::id("TAG_STRING"),
-                    Expr::id("INT32_MAX"),
+                    Expr::id("DREAM_RC_IMMORTAL"),
                     Expr::i(n as i64),
-                    Expr::i(0),
+                    hash,
                     Expr::Compound(init_units),
                 ],
             )
@@ -1474,6 +1478,23 @@ fn build_sync(cx: &Cx<'_>, f: &MirFunction) -> FuncBuilder {
                 Some(Expr::i(0)),
             ));
         }
+    }
+    for (i, decl) in f.locals.iter().enumerate() {
+        let Some(buf) = super::statements::frame_buffer(cx, f, crate::Local(i as u32)) else {
+            continue;
+        };
+        let size = cx.nstruct(decl.ty).map_or(0, |l| l.size);
+        b.stmt(Stmt::Decl {
+            align: Some(16),
+            static_: false,
+            const_: false,
+            ty: CTy::Array {
+                elem: Box::new(CTy::Named("unsigned char")),
+                len: (cx.target.abi().heap_header_size + size) as usize,
+            },
+            name: buf,
+            init: None,
+        });
     }
     for s in super::debugviews::local_debug_views(cx, f) {
         b.stmt(s);

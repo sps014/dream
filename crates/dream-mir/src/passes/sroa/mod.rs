@@ -10,6 +10,10 @@
 //! *accessed* field is a non-reference type, so field stores cannot under-retain a heap value that
 //! lived only as a field of the eliminated object.
 
+mod managed;
+
+pub use managed::SroaManaged;
+
 use super::licm::{stmt_reads, terminator_reads};
 use super::{MirPass, ModulePass};
 use crate::{

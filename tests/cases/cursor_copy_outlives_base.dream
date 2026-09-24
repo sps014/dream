@@ -1,0 +1,43 @@
+import system;
+
+class Label {
+    public text: string;
+    public constructor(text: string) {
+        this.text = text;
+    }
+}
+
+class Pair {
+    public name: string;
+    public label: Option<Label>;
+    public n: int;
+    public constructor(name: string) {
+        this.name = name;
+        this.n = 0;
+    }
+}
+
+// `peek` is called through a closure, so `p` escapes and stays a heap object whose only
+// count is `p`'s; `q` is a cursor of it that is read after `p`'s last use.
+fun run(k: int, peek: fun(Pair): int): int {
+    let total = 0;
+    for (let i = 0; i < k; i++) {
+        let p = Pair("p" + i.to_string());
+        let q = p;
+        q.label = Option.Some(Label("l" + i.to_string()));
+        total = total + peek(p);
+        total = total + p.n;
+        total = total + q.name.length;
+        switch (q.label) {
+            Some(l) => { total = total + l.text.length; }
+            None => {}
+        }
+    }
+    return total;
+}
+
+fun main() {
+    let before = Debug.live_objects;
+    System.println(run(100, (x: Pair) => x.n + 1).to_string());
+    System.println((Debug.live_objects - before).to_string());
+}

@@ -6,15 +6,22 @@
 //! diamonds, transparent natural loops). See `docs/internals/11-swift-like-arc-roadmap.md`.
 
 mod cursor;
+mod cursor_family;
 mod elision;
+pub(crate) mod held;
 mod hop;
 mod insertion;
 pub(crate) mod lifetime;
 pub(crate) mod liveness;
+pub(crate) mod modref;
 mod repair;
 mod tokens;
 mod uniqueness;
 
+#[cfg(test)]
+mod cursor_family_tests;
+#[cfg(test)]
+mod held_tests;
 #[cfg(test)]
 mod cursor_tests;
 #[cfg(test)]

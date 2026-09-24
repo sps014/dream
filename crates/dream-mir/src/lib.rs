@@ -8,17 +8,21 @@
 //! flow from this CFG via a relooper (sync functions); async polls keep a program-counter dispatch.
 
 pub mod abi;
+pub(crate) mod analysis;
+mod rc_store;
+mod visit;
 pub mod async_emit;
 pub mod backend;
 pub mod build;
 pub mod int_ty;
 pub mod lower;
 pub mod passes;
-pub mod print;
+pub mod pretty;
 mod prune;
 pub mod relooper;
 pub mod runtime;
 mod simd;
+pub mod verify;
 
 pub use simd::SimdLane;
 
@@ -88,6 +92,9 @@ pub struct Mir {
     /// Display name of every tagged nominal type (see [`dream_hir::Hir::type_names`]), which the
     /// `typeof` tag router returns.
     pub type_names: dream_hir::TypeNameTable,
+    /// `(function def, instance, local)` whose `New` is built in the function's C frame (see
+    /// `passes::frame_alloc`).
+    pub frame_objects: std::collections::BTreeSet<(DefId, Vec<TypeId>, Local)>,
 }
 
 /// A module-level variable slot (declared as one mutable WASM global `$g{id}`).

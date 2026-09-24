@@ -185,7 +185,7 @@ fn dap_breakpoint_stack_variables_step_continue() {
 
     client.request(
         "initialize",
-        serde_json::json!({ "adapterID": "dream", "linesStartAt1": true }),
+        serde_json::json!({ "adapterID": "dream", "linesStartAt1": true, "pathFormat": "path" }),
     );
     client.wait_response("initialize");
 
@@ -286,7 +286,7 @@ fn run_to_breakpoint(source_path: &str, line: u32) -> DapClient {
     let mut client = DapClient::spawn(source_path);
     client.request(
         "initialize",
-        serde_json::json!({ "adapterID": "dream", "linesStartAt1": true }),
+        serde_json::json!({ "adapterID": "dream", "linesStartAt1": true, "pathFormat": "path" }),
     );
     client.wait_response("initialize");
     client.request("launch", serde_json::json!({ "program": source_path }));

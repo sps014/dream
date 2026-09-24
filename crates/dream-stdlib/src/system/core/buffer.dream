@@ -76,6 +76,18 @@ public static class Buffer {
         }
     }
 
+    // `arr[index]` without the bounds check. `@unsafe` because the caller must already have
+    // established `0 <= index < arr.length` (e.g. `List<T>` keeps `count <= items.length`).
+    @intrinsic("array_get_unchecked")
+    @unsafe
+    static extern fun get_unchecked<T>(borrow arr: T[], index: int): T;
+
+    // `arr[index] = value` without the bounds check (ordinary element-store ARC semantics).
+    // `@unsafe` for the same reason as `get_unchecked`.
+    @intrinsic("array_set_unchecked")
+    @unsafe
+    static extern fun set_unchecked<T>(borrow arr: T[], index: int, value: T): void;
+
     // Writes a UTF-16 code unit as little-endian `i32.store16` at byte offset `off`.
     @intrinsic("array_store16")
     static extern fun store16(borrow arr: byte[], off: int, unit: int): void;

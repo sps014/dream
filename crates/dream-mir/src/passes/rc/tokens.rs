@@ -96,6 +96,7 @@ impl TokenAnalysis {
         interner: &TypeInterner,
         layouts: &dream_hir::LayoutTable,
         holds: &HashSet<DefId>,
+        modref: &super::modref::ModRefTable,
     ) -> TokenAnalysis {
         let n = func.blocks.len();
         let nloc = func.locals.len();
@@ -159,7 +160,15 @@ impl TokenAnalysis {
         // last-refs a value still stored in the parent. Sinks are already in `transferred`.
         let rc_snaps = rc_snapshots_of(func, interner);
         let snapshot_locals: HashSet<u32> = rc_snaps.values().flatten().copied().collect();
+        let riders = cursor_riders(func);
         let mut die_after: HashSet<(usize, usize, u32)> = HashSet::new();
+        let site = DestroySite {
+            func,
+            interner,
+            layouts,
+            holds,
+            modref,
+        };
         for (bi, block) in func.blocks.iter().enumerate() {
             let kept_await = call_args_kept_across_await(block, nloc);
             for (si, stmt) in block.stmts.iter().enumerate() {
@@ -193,10 +202,25 @@ impl TokenAnalysis {
                     }) {
                         continue;
                     }
-                    if !last_use_destroy_site(stmt, local, func, interner, holds) {
+                    if riders.get(&local).is_some_and(|cs| {
+                        cs.iter()
+                            .any(|&c| live_after_stmt(func, &live_out, bi, si, c))
+                    }) {
                         continue;
                     }
-                    die_after.insert((bi, source_line_end(block, si), local));
+                    if !site.allows(stmt, local) {
+                        continue;
+                    }
+                    // The release lands at the end of the source line; a rebind before then would
+                    // have it drop the new value.
+                    let end = source_line_end(block, si);
+                    if block.stmts[si + 1..=end]
+                        .iter()
+                        .any(|s| assigns_local(s, local))
+                    {
+                        continue;
+                    }
+                    die_after.insert((bi, end, local));
                 }
             }
         }
@@ -1041,26 +1065,83 @@ fn rc_snapshots_of(func: &MirFunction, interner: &TypeInterner) -> HashMap<u32, 
     m
 }
 
-fn last_use_destroy_site(
-    stmt: &Statement,
-    local: u32,
-    func: &MirFunction,
-    interner: &TypeInterner,
-    holds: &HashSet<DefId>,
-) -> bool {
-    if !may_die_after(stmt, holds) {
-        return false;
+/// Cursors whose borrow rides, through copies and slot loads, on each local's count.
+fn cursor_riders(func: &MirFunction) -> HashMap<u32, Vec<u32>> {
+    let mut direct: HashMap<u32, Vec<u32>> = HashMap::new();
+    for stmt in func.blocks.iter().flat_map(|b| &b.stmts) {
+        let Statement::Assign(Place::Local(d), rv) = stmt else {
+            continue;
+        };
+        if !func.locals[d.0 as usize].is_cursor {
+            continue;
+        }
+        let src = match rv {
+            Rvalue::Use(Operand::Copy(p)) | Rvalue::Cast(Operand::Copy(p), _, _) => match p {
+                Place::Local(s) => s.0,
+                Place::Field { base, .. } | Place::Index { base, .. } => base.0,
+                _ => continue,
+            },
+            Rvalue::UnionField {
+                base: Operand::Copy(Place::Local(b)),
+                ..
+            } => b.0,
+            _ => continue,
+        };
+        if src != d.0 {
+            direct.entry(src).or_default().push(d.0);
+        }
     }
-    match stmt {
-        Statement::Print { .. } => true,
-        Statement::Assign(Place::Local(dest), rv) => match rv {
-            Rvalue::Use(Operand::Copy(Place::Field { base, .. })) if base.0 == local => func
-                .locals
-                .get(dest.0 as usize)
-                .is_some_and(|d| !interner.is_rc_tracked(d.ty)),
+    let mut out: HashMap<u32, Vec<u32>> = HashMap::new();
+    for &root in direct.keys() {
+        let mut seen: HashSet<u32> = HashSet::new();
+        let mut stack = vec![root];
+        while let Some(x) = stack.pop() {
+            for &c in direct.get(&x).into_iter().flatten() {
+                if seen.insert(c) {
+                    stack.push(c);
+                }
+            }
+        }
+        out.insert(root, seen.into_iter().collect());
+    }
+    out
+}
+
+struct DestroySite<'a> {
+    func: &'a MirFunction,
+    interner: &'a TypeInterner,
+    layouts: &'a dream_hir::LayoutTable,
+    holds: &'a HashSet<DefId>,
+    modref: &'a super::modref::ModRefTable,
+}
+
+impl DestroySite<'_> {
+    fn allows(&self, stmt: &Statement, local: u32) -> bool {
+        if !may_die_after(stmt, self.holds) {
+            return false;
+        }
+        match stmt {
+            Statement::Print { .. } => true,
+            // Only borrowed by the callee: die when it returns, as a sink would have in its
+            // frame. A `del` keeps the declared-`borrow` rule of dying at the block end.
+            Statement::Call { callee, args }
+            | Statement::Assign(_, Rvalue::Call { callee, args }) => {
+                !self.modref.may_run_del(self.func.local_ty(Local(local)), self.interner, self.layouts)
+                    && args.iter().enumerate().all(|(i, a)| {
+                        !matches!(a, Operand::Copy(Place::Local(l)) if l.0 == local)
+                            || !callee.take_params.get(i).copied().unwrap_or(false)
+                    })
+            }
+            Statement::Assign(Place::Local(dest), rv) => match rv {
+                Rvalue::Use(Operand::Copy(Place::Field { base, .. })) if base.0 == local => self
+                    .func
+                    .locals
+                    .get(dest.0 as usize)
+                    .is_some_and(|d| !self.interner.is_rc_tracked(d.ty)),
+                _ => false,
+            },
             _ => false,
-        },
-        _ => false,
+        }
     }
 }
 

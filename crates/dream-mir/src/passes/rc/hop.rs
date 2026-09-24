@@ -126,7 +126,14 @@ impl MirPass for HopElision {
                             )
                         })
                     });
-                    let cancel = last_read.is_some() && rel_n.is_some();
+                    let no_late_use = block.stmts[k + 1..].iter().all(|s| {
+                        !super::stmt_reads_local(s, n.0)
+                            || matches!(
+                                s,
+                                Statement::Release(Operand::Copy(Place::Local(l2))) if *l2 == n
+                            )
+                    }) && !super::tokens::terminator_reads_local(&block.terminator, n.0);
+                    let cancel = last_read.is_some() && rel_n.is_some() && no_late_use;
                     if cancel {
                         block.stmts[j] = Statement::Nop;
                     }
@@ -527,6 +534,51 @@ mod tests {
             })
             .expect("next-pointer load");
         assert!(load < rel, "next pointer is loaded before the previous node is released");
+    }
+
+    /// `node = curr; retain node; …; release curr; curr = node.next; node.next = null`: the
+    /// store through `node` runs after `curr`'s drop, so `node`'s own count must keep it alive.
+    #[test]
+    fn keeps_bracket_when_binding_is_used_after_holder_release() {
+        let mut i = TypeInterner::new();
+        let node_ty = i.struct_ty(dream_types::DefId(7), vec![]);
+        let mut b = FunctionBuilder::new("walk", i.void());
+        let curr = b.new_local(node_ty, Some("curr".into()));
+        let node = b.new_temp(node_ty);
+        b.assign(
+            Place::Local(node),
+            Rvalue::Use(Operand::Copy(Place::Local(curr))),
+        );
+        b.push(Statement::Retain(Operand::Copy(Place::Local(node))));
+        b.push(Statement::Release(Operand::Copy(Place::Local(curr))));
+        b.assign(
+            Place::Local(curr),
+            Rvalue::Use(Operand::Copy(Place::Field {
+                base: node,
+                field: 1,
+            })),
+        );
+        b.push(Statement::Retain(Operand::Copy(Place::Local(curr))));
+        b.assign(
+            Place::Field {
+                base: node,
+                field: 1,
+            },
+            Rvalue::Use(Operand::Const(crate::Const::Null)),
+        );
+        b.push(Statement::Release(Operand::Copy(Place::Local(node))));
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        HopElision.run(&mut func, &i);
+        let stmts = &func.blocks[0].stmts;
+        assert!(
+            stmts.iter().any(|s| matches!(
+                s,
+                Statement::Retain(Operand::Copy(Place::Local(l))) if *l == node
+            )),
+            "binding stored through after the holder's release must keep its retain: {:?}",
+            stmts
+        );
     }
 
     #[test]

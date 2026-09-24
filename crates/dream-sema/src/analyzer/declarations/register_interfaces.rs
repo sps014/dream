@@ -346,11 +346,12 @@ impl<'a> Analyzer<'a> {
             });
         }
 
-        let class_impls: Vec<(String, Vec<String>)> = self
+        let mut class_impls: Vec<(String, Vec<String>)> = self
             .implements
             .iter()
             .map(|(class, ifaces)| (class.clone(), ifaces.clone()))
             .collect();
+        class_impls.sort();
         let mut impls = Vec::new();
         for (class, ifaces) in class_impls {
             let class_ty = self.type_ctx.lower_str(&class);

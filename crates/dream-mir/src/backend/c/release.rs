@@ -231,10 +231,7 @@ fn redirects(cands: Vec<(String, TypeId, String)>) -> std::collections::HashMap<
 }
 
 fn has_del(cx: &Cx<'_>, name: &str) -> bool {
-    cx.mir
-        .functions
-        .iter()
-        .any(|f| f.name == format!("{name}_del"))
+    find_del(cx, name).is_some()
 }
 
 /// Body key for a struct's glue: everything the emitted code can depend on
@@ -325,9 +322,103 @@ fn maybe_defer(b: &mut FuncBuilder, destroy: &str, uses_defer: bool) {
         vec![Expr::id("p"), Expr::id(destroy)],
     );
     b.stmt(Stmt::if_(
-        Expr::and(Expr::unary(UnOp::Not, Expr::id("dream_defer_busy")), enq),
+        Expr::and(
+            Expr::call("DREAM_UNLIKELY", vec![Expr::id("dream_defer_open")]),
+            enq,
+        ),
         Stmt::Return(None),
     ));
+}
+
+fn emit_del_call(b: &mut FuncBuilder, cx: &Cx<'_>, name: &str) {
+    if let Some(del) = find_del(cx, name) {
+        b.call("dream_rc_revive", vec![Expr::id("p")]);
+        b.call(c_ident(&func_symbol(del)), vec![Expr::id("p")]);
+    }
+}
+
+fn find_del<'m>(cx: &Cx<'m>, name: &str) -> Option<&'m crate::MirFunction> {
+    let del = format!("{name}_del");
+    cx.mir.functions.iter().find(|f| f.name == del)
+}
+
+fn field_load(offset: u32) -> Expr {
+    Expr::load(
+        CTy::Ptr,
+        Expr::ptr_add(Expr::id("p"), Expr::i(offset as i64)),
+    )
+}
+
+/// `c` is non-null and this holder now owns its last reference (unique already, or the
+/// decrement just hit zero): the caller must tear it down.
+fn unique_or_last(c: Expr) -> Expr {
+    Expr::and(
+        c.clone(),
+        Expr::bin(
+            crate::BinOp::Or,
+            Expr::call("dream_rc_one", vec![c.clone()]),
+            Expr::call("dream_rc_last", vec![c]),
+        ),
+    )
+}
+
+/// Per-field teardown statements for a struct's last drop, index-aligned with
+/// `layout.fields` (empty when the field owns nothing).
+fn struct_field_drops(cx: &Cx<'_>, layout: &dream_hir::TypeLayout) -> Vec<Vec<Stmt>> {
+    let mut tmp = 0u32;
+    layout
+        .fields
+        .iter()
+        .map(|f| {
+            if f.is_weak {
+                return Vec::new();
+            }
+            let at = Expr::cast(
+                CTy::Ptr,
+                Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
+            );
+            if f.is_unowned {
+                // Unowned fields live in the weak registry (registered on store, see
+                // `unowned_store`). Destroying the holder without unregistering leaves a
+                // (target, slot) entry whose slot points into this freed block — a later
+                // clear of the target would then write into freed memory.
+                let cur = Expr::load(CTy::Ptr, at.clone());
+                return vec![Stmt::if_(
+                    cur.clone(),
+                    Stmt::call("dream_weak_unregister", vec![cur, at]),
+                )];
+            }
+            if cx.interner.is_value_type(f.ty) {
+                value_ref_stmts(cx, f.ty, at, false)
+            } else if cx.interner.is_rc_tracked(f.ty) {
+                vec![drop_rc_slot(cx, f.ty, field_load(f.offset), &mut tmp)]
+            } else {
+                Vec::new()
+            }
+        })
+        .collect()
+}
+
+/// The field a destroy loop can continue into: the last field with any teardown, when it is
+/// a strong reference whose unique destroy is `destroy` itself. Types with `del` keep plain
+/// recursion so a child's `del` still runs before its parent's block is recycled.
+fn self_tail_field(
+    cx: &Cx<'_>,
+    layout: &dream_hir::TypeLayout,
+    drops: &[Vec<Stmt>],
+    destroy: &str,
+) -> Option<usize> {
+    if has_del(cx, &layout.name) {
+        return None;
+    }
+    let i = drops.iter().rposition(|d| !d.is_empty())?;
+    let f = &layout.fields[i];
+    let self_typed = !f.is_unowned
+        && !cx.interner.is_value_type(f.ty)
+        && cx.interner.is_rc_tracked(f.ty)
+        && destroy_sym(cx, f.ty) == destroy
+        && release_sym(cx, f.ty) != destroy;
+    self_typed.then_some(i)
 }
 
 fn collect_array_elems(
@@ -534,64 +625,32 @@ pub(super) fn emit_release_helpers(m: &mut ModuleBuilder, cx: &Cx<'_>) {
             &c_ident(&format!("destroy_{}", layout.name)),
             cx.mir.uses_defer,
         );
-        if let Some(del) = cx
-            .mir
-            .functions
-            .iter()
-            .find(|f| f.name == format!("{}_del", layout.name))
-        {
-            b.stmt(Stmt::store(
-                CTy::I32,
-                Expr::add(Expr::char_p(Expr::id("p")), super::types::rc_delta()),
-                Expr::i(1),
-            ));
-            b.call(c_ident(&func_symbol(del)), vec![Expr::id("p")]);
-        }
-        let mut tmp = 0u32;
-        for f in &layout.fields {
-            if f.is_weak {
-                continue;
-            }
-            if f.is_unowned {
-                // Unowned fields live in the weak registry (registered on store, see
-                // `unowned_store`). Destroying the holder without unregistering leaves a
-                // (target, slot) entry whose slot points into this freed block — a later
-                // clear of the target would then write into freed memory.
-                let slot = Expr::cast(
-                    CTy::Ptr,
-                    Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
-                );
-                let cur = Expr::load(CTy::Ptr, slot.clone());
-                b.stmt(Stmt::if_(
-                    cur.clone(),
-                    Stmt::call(
-                        "dream_weak_unregister",
-                        vec![cur, Expr::cast(CTy::Ptr, slot)],
-                    ),
-                ));
-                continue;
-            }
-            if interner.is_value_type(f.ty) {
-                let at = Expr::cast(
-                    CTy::Ptr,
-                    Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
-                );
-                for s in value_ref_stmts(cx, f.ty, at, false) {
-                    b.stmt(s);
+        emit_del_call(&mut b, cx, &layout.name);
+        let destroy_name = destroy_sym(cx, *ty);
+        let drops = struct_field_drops(cx, layout);
+        let tail = self_tail_field(cx, layout, &drops, &destroy_name);
+        for (i, s) in drops.into_iter().enumerate() {
+            if Some(i) != tail {
+                for st in s {
+                    b.stmt(st);
                 }
-            } else if interner.is_rc_tracked(f.ty) {
-                b.stmt(drop_rc_slot(
-                    cx,
-                    f.ty,
-                    Expr::load(
-                        CTy::Ptr,
-                        Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
-                    ),
-                    &mut tmp,
-                ));
             }
         }
-        b.call("dream_recycle", vec![Expr::id("p")]);
+        match tail {
+            Some(i) => {
+                b.stmt(Stmt::decl(
+                    CTy::Ptr,
+                    "next",
+                    Some(field_load(layout.fields[i].offset)),
+                ));
+                b.call("dream_recycle", vec![Expr::id("p")]);
+                b.stmt(Stmt::if_(
+                    unique_or_last(Expr::id("next")),
+                    Stmt::call(destroy_name, vec![Expr::id("next")]),
+                ));
+            }
+            None => b.call("dream_recycle", vec![Expr::id("p")]),
+        }
         m.push_func(b);
         // Wrapper keeps the classic contract (null-check + decrement + tail call).
         let wrap_name = c_ident(&format!("release_{}", layout.name));
@@ -814,70 +873,43 @@ fn emit_destroy_helpers(
         let mut b = FuncBuilder::new(CTy::Void, name.clone());
         b.static_ = true;
         b.param(CTy::Ptr, "p");
+        let drops = struct_field_drops(cx, layout);
+        let tail = self_tail_field(cx, layout, &drops, &name);
+        if tail.is_some() {
+            b.stmt(Stmt::decl(CTy::Ptr, "next", None));
+            b.label("again");
+        }
         b.stmt(Stmt::if_(
             Expr::unary(UnOp::Not, Expr::id("p")),
             Stmt::Return(None),
         ));
         b.stmt(unique_header());
         maybe_defer(&mut b, &name, cx.mir.uses_defer);
-        if let Some(del) = cx
-            .mir
-            .functions
-            .iter()
-            .find(|f| f.name == format!("{}_del", layout.name))
-        {
-            b.stmt(Stmt::store(
-                CTy::I32,
-                Expr::add(Expr::char_p(Expr::id("p")), super::types::rc_delta()),
-                Expr::i(1),
-            ));
-            b.call(c_ident(&func_symbol(del)), vec![Expr::id("p")]);
-        }
-        let mut tmp = 0u32;
-        for f in &layout.fields {
-            if f.is_weak {
-                continue;
-            }
-            if f.is_unowned {
-                // Unowned fields live in the weak registry (registered on store, see
-                // `unowned_store`). Destroying the holder without unregistering leaves a
-                // (target, slot) entry whose slot points into this freed block — a later
-                // clear of the target would then write into freed memory.
-                let slot = Expr::cast(
-                    CTy::Ptr,
-                    Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
-                );
-                let cur = Expr::load(CTy::Ptr, slot.clone());
-                b.stmt(Stmt::if_(
-                    cur.clone(),
-                    Stmt::call(
-                        "dream_weak_unregister",
-                        vec![cur, Expr::cast(CTy::Ptr, slot)],
-                    ),
-                ));
-                continue;
-            }
-            if interner.is_value_type(f.ty) {
-                let at = Expr::cast(
-                    CTy::Ptr,
-                    Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
-                );
-                for s in value_ref_stmts(cx, f.ty, at, false) {
-                    b.stmt(s);
+        emit_del_call(&mut b, cx, &layout.name);
+        for (i, s) in drops.into_iter().enumerate() {
+            if Some(i) != tail {
+                for st in s {
+                    b.stmt(st);
                 }
-            } else if interner.is_rc_tracked(f.ty) {
-                b.stmt(drop_rc_slot(
-                    cx,
-                    f.ty,
-                    Expr::load(
-                        CTy::Ptr,
-                        Expr::ptr_add(Expr::id("p"), Expr::i(f.offset as i64)),
-                    ),
-                    &mut tmp,
-                ));
             }
         }
-        b.call("dream_recycle", vec![Expr::id("p")]);
+        match tail {
+            // A self-typed chain (`next: Option<Self>` as the last owning field) is torn down
+            // by looping instead of recursing, so dropping a long list uses O(1) C stack.
+            // Dropping the tail last in field order keeps every `del` in its original order.
+            Some(i) => {
+                b.assign(Expr::id("next"), field_load(layout.fields[i].offset));
+                b.call("dream_recycle", vec![Expr::id("p")]);
+                b.stmt(Stmt::if_(
+                    unique_or_last(Expr::id("next")),
+                    Stmt::Block(vec![
+                        Stmt::assign(Expr::id("p"), Expr::id("next")),
+                        Stmt::Goto("again".into()),
+                    ]),
+                ));
+            }
+            None => b.call("dream_recycle", vec![Expr::id("p")]),
+        }
         m.push_func(b);
     }
     for (ty, layout) in &cx.native.unions {

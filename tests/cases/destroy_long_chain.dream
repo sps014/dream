@@ -1,0 +1,87 @@
+// Dropping a million-node singly linked list must not recurse once per node on the C stack.
+// Also covers a chain whose tail is still shared (teardown stops there) and a node type with
+// an owning field before `next` (dropped before its successor, preserving field order).
+import system;
+
+@allow_cycle
+class Node {
+    public value: int;
+    public next: Option<Node>;
+
+    public constructor(value: int, next: Option<Node>) {
+        this.value = value;
+        this.next = next;
+    }
+}
+
+@allow_cycle
+class Labeled {
+    public label: string;
+    public next: Option<Labeled>;
+
+    public constructor(label: string, next: Option<Labeled>) {
+        this.label = label;
+        this.next = next;
+    }
+}
+
+fun build(n: int, tail: Option<Node>): Option<Node> {
+    let head = tail;
+    let i = 0;
+    while i < n {
+        head = Option.Some(Node(i, head));
+        i = i + 1;
+    }
+    return head;
+}
+
+fun sum(list: Option<Node>): long {
+    let acc: long = 0;
+    let curr = list;
+    let done = false;
+    while done == false {
+        switch (curr) {
+            Some(node) => {
+                acc = acc + node.value;
+                curr = node.next;
+            }
+            None => { done = true; }
+        }
+    }
+    return acc;
+}
+
+fun drop_plain(): void {
+    let list = build(1000000, Option.None);
+    System.println(sum(list));
+}
+
+fun drop_shared_tail(): void {
+    let kept = build(1000, Option.None);
+    switch (build(1000000, kept)) {
+        Some(node) => { System.println(node.value); }
+        None => {}
+    }
+    System.println(sum(kept));
+}
+
+fun drop_labeled(): void {
+    let head: Option<Labeled> = Option.None;
+    let i = 0;
+    while i < 1000000 {
+        head = Option.Some(Labeled("n" + i.to_string(), head));
+        i = i + 1;
+    }
+    switch (head) {
+        Some(node) => { System.println(node.label); }
+        None => {}
+    }
+}
+
+fun main() {
+    let before = Debug.live_objects;
+    drop_plain();
+    drop_shared_tail();
+    drop_labeled();
+    System.println(Debug.live_objects - before);
+}

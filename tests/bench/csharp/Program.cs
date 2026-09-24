@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -136,16 +137,19 @@ public static partial class Program
         Sink = acc;
     }
 
-    // Raw code-unit / byte walk — fair ASCII counterpart to Dream byte_scan.
+    // UTF-16 LE payload bytes. Same trip count as Dream `byte_at` over `byte_size`
+    // (two bytes per code unit). The span is built once, outside the timer, matching
+    // Dream's substring built once before `Stopwatch`.
     static void BenchByteScan(int iters)
     {
         string s = "The quick brown fox jumps over the lazy dog. 0123456789";
+        ReadOnlySpan<byte> bytes = MemoryMarshal.AsBytes(s.AsSpan());
         var sw = Stopwatch.StartNew();
         int acc = 0;
         for (int i = 0; i < iters; i++)
         {
-            for (int j = 0; j < s.Length; j++)
-                acc += (int)s[j];
+            for (int j = 0; j < bytes.Length; j++)
+                acc += bytes[j];
         }
         sw.Stop();
         Report("byte_scan", ElapsedNs(sw), iters);

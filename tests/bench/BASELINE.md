@@ -25,7 +25,7 @@ ratios are not an ARC-only scoreboard.
 | Bench | Dream | C# |
 |-------|-------|-----|
 | `char_scan` | `char_at` loop over UTF-16 code units | `foreach` over UTF-16 chars |
-| `byte_scan` | `byte_at` walk of UTF-16 LE payload | UTF-16 code-unit indexer (ASCII-fair) |
+| `byte_scan` | `byte_at` walk of UTF-16 LE payload (`byte_size` = 2 × `length`) | same payload, `MemoryMarshal.AsBytes` (two bytes per code unit) |
 | `substring` | `substring(start, end)` | `Substring(start, length)` |
 | `scratch_arena` | `bump` / `set_at` / `at` (no Span RC) | same index API |
 | `regex_find` | Global `[a-z]+\d+` via Pike VM (not bare `\d+`) | same pattern, source-generated regex |
@@ -380,7 +380,7 @@ Notes, honestly:
   sub-ns rows (`sum_options`, `list_push`, `list_clear_reuse`, `scratch_arena`) move in 0.05 ns
   timer steps. C# rows swung widely between reps under this load; treat the C# column as
   indicative only.
-- `byte_scan` still favors C# ~3×; untouched by this round.
+- The `byte_scan` C# cell in the table above (20.9 ns) walked code units (`s[j]` over `s.Length`), half of Dream's payload-byte trip count, so the ~3× gap was the bench. C# now walks the UTF-16 LE bytes (`MemoryMarshal.AsBytes`), the same accesses as Dream `byte_at`. One Release run of that loop reported 39 ns/op against Dream's 62 ns min above, about 1.6× rather than 3×. Not an interleaved min; re-run `./scripts/run-microbenches.sh` before treating it as a baseline.
 
 Native C is the default `dream run` path: see
 [`docs/internals/14-dual-backend-plan.md`](../../docs/internals/14-dual-backend-plan.md).

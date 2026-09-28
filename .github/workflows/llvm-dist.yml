@@ -72,7 +72,8 @@ jobs:
 
       - name: Check pinned version
         shell: bash
-        run: grep -q "LLVM_VERSION: &str = \"${LLVM_VERSION}\"" src/execution/llvm/tools.rs
+        run: |
+          grep -q "LLVM_VERSION: &str = \"${LLVM_VERSION}\"" src/execution/llvm/tools.rs
 
       - uses: actions/cache@v4
         id: cache

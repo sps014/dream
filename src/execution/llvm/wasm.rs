@@ -206,7 +206,12 @@ pub(super) fn build_wasm_runtime(
 
     let check = |src: &Path| {
         let mut cmd = unit_command(&clang, &sysroot, src, &includes, &[], &[], threads, opt, "anchor.c");
-        cmd.args(["-fsyntax-only", "-w", "-ferror-limit=0"])
+        cmd.args([
+            "-fsyntax-only",
+            "-w",
+            "-ferror-limit=0",
+            "-fno-color-diagnostics",
+        ])
             .arg(src)
             .output()
             .map(|o| String::from_utf8_lossy(&o.stderr).into_owned())

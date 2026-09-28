@@ -360,7 +360,8 @@ fn build_anchor(clang: &Path, dir: &Path, flags: &[&str]) -> Result<PathBuf, Str
 /// A unit that takes the address of every header-declared function, so functions only the
 /// generated code calls (host exports from `libdream`, wasm host imports) still appear with clang's
 /// lowering. Some header names are macros or builtins; `check` (a syntax-only compile returning
-/// its stderr) finds their lines, which are dropped before `compile` builds the bitcode.
+/// its stderr, uncoloured so its `file:line:` prefixes parse) finds their lines, which are dropped
+/// before `compile` builds the bitcode.
 pub(super) fn anchor_unit(
     dir: &Path,
     header: &str,
@@ -381,14 +382,17 @@ pub(super) fn anchor_unit(
         std::fs::write(&src, text)
     };
     write(&|_| true).map_err(|e| e.to_string())?;
-    let stderr = check(&src)?;
     let prefix = format!("{}:", src.display());
-    let bad: std::collections::BTreeSet<usize> = stderr
+    let bad: std::collections::BTreeSet<usize> = check(&src)?
         .lines()
         .filter(|l| l.contains(": error:"))
         .filter_map(|l| l.strip_prefix(&prefix)?.split(':').next()?.parse().ok())
         .collect();
     write(&|line| !bad.contains(&line)).map_err(|e| e.to_string())?;
+    let rest = check(&src)?;
+    if rest.contains("error:") {
+        return Err(format!("runtime anchor unit still fails to compile:\n{rest}"));
+    }
     let obj = dir.join("anchor.bc");
     compile(&src, &obj)?;
     Ok(obj)

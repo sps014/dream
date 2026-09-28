@@ -3,14 +3,14 @@
 use anyhow::{bail, Result};
 use std::process::Command;
 
-/// `--release`, `-O`/`--optimize`, and `--wasm` (native C is the default).
+/// `--release`, `-O`/`--optimize`, and `--wasm` (native is the default).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompileFlags {
     pub release: bool,
     /// `0`–`4`, `s`, or `z`. Bare `-O` is `"s"` (`-Os`).
     pub optimize: Option<String>,
-    /// `true` = native C (default). `false` = wasm32 module (`--wasm`).
-    pub native_c: bool,
+    /// `true` = native binary (default). `false` = wasm32 module (`--wasm`).
+    pub native: bool,
     /// `--profile`: instrumented native build that records PGO profiles.
     pub profile: bool,
     /// `--use-profile[=<path>]`: `Some("")` merges the recorded `--profile` runs.
@@ -22,7 +22,7 @@ impl Default for CompileFlags {
         Self {
             release: false,
             optimize: None,
-            native_c: true,
+            native: true,
             profile: false,
             use_profile: None,
         }
@@ -39,7 +39,7 @@ impl CompileFlags {
         Ok(Self {
             release,
             optimize: optimize.map(|s| s.to_ascii_lowercase()),
-            native_c: !wasm,
+            native: !wasm,
             profile: false,
             use_profile: None,
         })
@@ -76,7 +76,7 @@ impl CompileFlags {
         if let Some(lvl) = &self.optimize {
             cmd.arg(format!("-O{lvl}"));
         }
-        if !self.native_c {
+        if !self.native {
             cmd.arg("--wasm");
         }
         if self.profile {

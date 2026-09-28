@@ -4,7 +4,7 @@ class Ledger {
     balance: int;
     public constructor() { this.balance = 0; }
 
-    borrow fun audit(): void {
+    public borrow fun audit(): void {
         this.balance = this.balance + 999;
     }
 }

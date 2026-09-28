@@ -3,7 +3,7 @@ use anyhow::Result;
 
 pub fn install(component: Option<String>) -> Result<()> {
     let components = match component.as_deref() {
-        None => toolchain::Component::all().to_vec(),
+        None => toolchain::available_components()?,
         Some(name) => vec![Component::parse_name(name)?],
     };
     toolchain::install(&components)

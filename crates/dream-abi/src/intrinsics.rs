@@ -69,7 +69,7 @@ pub const BYTE_AT: &str = "byte_at";
 pub const ARRAY_NEW: &str = "array_new";
 
 /// Synthetic local holding a capturing closure's `object[]` env (`hir_set_multi_capturing_func_value`).
-/// The C backend allocates it with `TAG_CLOSURE_ENV` so funcbox last-drop runs typed `release_array_*`.
+/// The backend allocates it with `TAG_CLOSURE_ENV` so funcbox last-drop runs typed `release_array_*`.
 pub const CLOSURE_ENV_ARRAY_LOCAL: &str = "__closure_env_array";
 
 // --- Builtin pseudo-methods on language types -----------------------------------------------

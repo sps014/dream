@@ -1,13 +1,27 @@
-//! Backend pieces shared by the C targets (not target-specific).
+//! Codegen policy the LLVM writers consume: layouts, symbol and string tables, ABI value
+//! classes, ARC glue naming, entry-exit and protocol reachability. The writers only decide how to
+//! print what this layer decides.
 
-pub(crate) mod names;
+pub(crate) mod abi_types;
+pub(crate) mod cx;
+pub(crate) mod entry;
+pub(crate) mod glue;
+pub(crate) mod iface_guard;
+pub(crate) mod js_marshal;
+pub(crate) mod native_layout;
 pub(crate) mod panic_msgs;
+pub(crate) mod place_policy;
+pub(crate) mod protocol_names;
 mod print;
 pub(crate) mod rc_store;
+pub(crate) mod reach;
 mod symbols;
+pub(crate) mod tables;
+mod target;
 mod valuetype;
 
 pub use print::print_wasm;
 pub(crate) use rc_store::unique_container_move_local;
 pub(crate) use symbols::func_symbol;
+pub use target::Target;
 pub(crate) use valuetype::{ValueFrame, ValueLocalKind};

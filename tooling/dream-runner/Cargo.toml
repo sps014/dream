@@ -2,7 +2,7 @@
 name = "dream-runner"
 version = "0.1.0"
 edition = "2021"
-description = "Unused; dreamer pack copies the native C .bin"
+description = "Unused; dreamer pack copies the native .bin"
 publish = false
 
 [[bin]]

@@ -9,7 +9,7 @@ Dream runs in the browser and Node as WebAssembly. Talking to JavaScript uses th
 | function values | passing functions across the boundary in either direction | [Callbacks](callbacks.md) |
 | `@c(...)` | binds an extern to a native C library (`dream run` only) | [C Interop](c-interop.md) |
 
-`Js.*` is WASM/JS-host only: native C aborts if guest code tries to call into JavaScript. `system.webview` is native-only.
+`Js.*` is WASM/JS-host only: a native build aborts if guest code tries to call into JavaScript. `system.webview` is native-only.
 
 This page covers `extern` functions.
 

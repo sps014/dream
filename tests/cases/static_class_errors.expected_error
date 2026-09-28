@@ -1,1 +1,3 @@
-Compilation failed
+member 'n' of static class 'Util' must be static
+'Util' is a static class and cannot be used as a type
+cannot instantiate static class 'Util'

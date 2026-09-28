@@ -51,7 +51,7 @@ pub enum Terminator {
 }
 ```
 
-`Terminator::successors()` is the one place CFG edges are defined — every traversal (passes, DCE, relooper) goes through it, so adding a terminator variant means updating exactly one function.
+`Terminator::successors()` is the one place CFG edges are defined — every traversal (passes, DCE, the backend) goes through it, so adding a terminator variant means updating exactly one function.
 
 ### Places, operands, constants
 
@@ -120,7 +120,7 @@ flowchart LR
 
 - `ExpandSimpleCtors`, `ParamModes` (borrow inference for read-only sink parameters), then `RcInsertion` run module-wide *before* inlining. Insertion assigns each owned RC local a compile-time ownership token and emits `Retain` only on a real share and `Release` when that token dies. It consults a type-level mod-ref table (`rc/modref.rs`) so snapshots and loop-carried traversal variables (`rc/cursor_family.rs`) stay cursors when no call can overwrite the slot they came from.
 - After inlining, `RcLastUseRepair` turns last-use container stores on the fused CFG into moves (null the source; drop a `Retain` that only existed to share into a now-dead store). Re-running full insertion on inlined `generated_dispatch` is too expensive. `rc-held-by-owner` (`rc/held.rs`) then drops retain/release pairs on snapshots whose owner provably outlives every read, now that the intervening calls are inlined or summarized.
-- Allocation placement is decided on the post-inline module from escape analysis (`analysis/escape.rs`) and a static per-object count (`analysis/object_life.rs`): `UniqueRegion` (bump region for unique `del`-free graphs), `SroaManaged` (objects with reference fields become per-field locals), and late `frame-alloc` (non-escaping instances built in the C frame with an immortal count).
+- Allocation placement is decided on the post-inline module from escape analysis (`analysis/escape.rs`) and a static per-object count (`analysis/object_life.rs`): `UniqueRegion` (bump region for unique `del`-free graphs), `SroaManaged` (objects with reference fields become per-field locals), and late `frame-alloc` (non-escaping instances built in the stack frame with an immortal count).
 - `RcElision` (in the per-function pipeline) cancels redundant `Retain`/`Release` pairs along Goto chains, transparent diamonds, and transparent natural loops (see [Nim-hard ARC](./11-swift-like-arc-roadmap.md)).
 
 See [05-writing-passes.md](./05-writing-passes.md) for the module-pass order.
@@ -139,7 +139,7 @@ dream --release --emit-mir=after:gvn,each app.dream       # every run of gvn tha
 dream --release --emit-mir=all --emit-mir-fn=main,parse app.dream  # every module stage, two fns
 ```
 
-Snapshots land in `<output>.mir/<NN>-<pass>.mir`, numbered so lexicographic order is pipeline order. `after:<pass>` accepts every module stage (`lower`, `expand-simple-ctors`, `funcbox-abi`, `param-modes`, `rc-insertion`, `devirt`, `inline`, `rc-last-use-repair`, `unique-region`, `rc-held-by-owner`, `sroa-managed`, `fixpoint`, `strip-escaped-regions`, `frame-alloc`) and every per-function pass name; an unknown name errors with the valid list. For a per-function pass without `each`, the file holds each function's body after that pass's last run in the fixpoint. When a pass misbehaves, dump before and after it; the CFG text is far easier to read than the C.
+Snapshots land in `<output>.mir/<NN>-<pass>.mir`, numbered so lexicographic order is pipeline order. `after:<pass>` accepts every module stage (`lower`, `expand-simple-ctors`, `funcbox-abi`, `param-modes`, `rc-insertion`, `devirt`, `inline`, `rc-last-use-repair`, `unique-region`, `rc-held-by-owner`, `sroa-managed`, `fixpoint`, `strip-escaped-regions`, `frame-alloc`) and every per-function pass name; an unknown name errors with the valid list. For a per-function pass without `each`, the file holds each function's body after that pass's last run in the fixpoint. When a pass misbehaves, dump before and after it; the CFG text is far easier to read than the LLVM IR.
 
 ## Verifier — `crates/dream-mir/src/verify.rs`
 
@@ -150,5 +150,5 @@ When the compiler itself is built with `debug_assertions` (debug builds and `car
 1. Every block ends in exactly one terminator; `entry` is a valid block id.
 2. Operands are atomic (local/global/const) — no nested computation hides in an operand.
 3. Every `Local` has a `LocalDecl` with a valid `TypeId`.
-4. The CFG is **reducible** (Dream cannot express `goto` spaghetti), so the relooper always succeeds.
+4. The CFG is **reducible** (Dream cannot express `goto` spaghetti).
 5. RC is balanced (every retained reference is released on every path) after `RcInsertion`; debug compiler builds spot-check this with `verify.rs`.

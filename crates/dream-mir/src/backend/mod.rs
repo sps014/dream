@@ -1,9 +1,9 @@
-//! Codegen backends: C99 for wasm32 (`c` with [`CTarget::Wasm32`]) and native hosts.
+//! Codegen: textual LLVM IR (`llvm`) for native and wasm32 (see [`Target`]).
 
-pub mod c;
+pub mod llvm;
 pub(crate) mod shared;
 
-pub use shared::print_wasm;
+pub use shared::{print_wasm, Target};
 
 use crate::Mir;
 use dream_abi::{js_abi, runtime_hosts};

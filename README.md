@@ -136,7 +136,8 @@ More syntax: [Language tour](https://sps014.github.io/dream/learn/tour/).
 | --- | --- |
 | Installer / `dreamer run` | Nothing besides the [install script](#5-minute-quickstart) (no Rust) |
 | Build and test the compiler | [Rust](https://rustup.rs/) (stable `rustc` + `cargo`) |
-| `dream run` / native-C e2e | `dreamer toolchain install cc` (Zig) or a clang-compatible `CC` on `PATH` |
+| Any build (`dream run`, e2e tests) | `dreamer toolchain install llvm` (pinned LLVM; `use-toolchain.sh` installs it) |
+| `dream run` / native e2e | `dreamer toolchain install cc` (Zig) or a clang-compatible `CC` on `PATH` as the linker |
 | wasm32 output (`dream --wasm`) | `dreamer toolchain install wasi-sdk` — [runtime README](crates/dream-mir/src/runtime/README.md). Not used by `cargo test` or Windows CI |
 | `system.webview` on Linux from source | `libwebkit2gtk-4.1-dev` (the installer already installs the runtime `.so`s) |
 | JS runtime bundle | Node.js (`node scripts/bundle-runtime.mjs`) |
@@ -150,7 +151,7 @@ source ./use-toolchain.sh   # builds release dream / dream-lsp / dreamer into ~/
 
 ```bash
 cargo test --workspace                 # fast gate
-cargo test --workspace -- --ignored    # full corpus, DAP, wasm-opt, native-C goldens
+cargo test --workspace -- --ignored    # full corpus, DAP, wasm-opt, native goldens
 ```
 
 Compiler internals: [docs/internals](https://sps014.github.io/dream/internals/).

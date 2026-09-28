@@ -217,12 +217,12 @@ fn build_compiles_a_project_using_an_installed_dependency() {
     assert!(
         project_dir
             .join("target")
-            .join("web")
-            .join("main.wat")
+            .join("debug")
+            .join("main.bin")
             .is_file(),
-        "expected artifacts under target/web/"
+        "expected artifacts under target/debug/"
     );
-    assert!(!project_dir.join("src").join("main.wat").exists());
+    assert!(!project_dir.join("src").join("main.bin").exists());
 }
 
 #[test]
@@ -334,7 +334,7 @@ fn build_refreshes_web_and_node_aliases() {
 
 #[test]
 #[ignore = "invokes the full compiler; cargo test --workspace -- --ignored"]
-fn build_lib_writes_under_target_web() {
+fn build_lib_writes_under_target_debug() {
     prefer_workspace_dream();
     if dreamer::dream_bin::locate().is_err() {
         eprintln!("skipping: no `dream` compiler binary found on PATH or in target/");
@@ -346,8 +346,8 @@ fn build_lib_writes_under_target_web() {
     commands::build::run(&project_dir, false, None).unwrap();
     assert!(project_dir
         .join("target")
-        .join("web")
-        .join("mylib.wat")
+        .join("debug")
+        .join("mylib.ll")
         .is_file());
 }
 
@@ -451,7 +451,7 @@ fn workspace_install_shares_lock_and_packages_symlink() {
     assert!(commands::build::run(&root, false, None).is_err());
     if dreamer::dream_bin::locate().is_ok() {
         commands::build::run(&root, false, Some("cli")).unwrap();
-        assert!(cli.join("target").join("web").join("main.wat").is_file());
+        assert!(cli.join("target").join("debug").join("main.bin").is_file());
         commands::build::run(&cli, false, None).unwrap();
     }
 

@@ -453,7 +453,19 @@ impl<'a, 'b> Parser<'a, 'b> {
             });
         }
 
-        let identifier = self.match_token(TokenKind::IdentifierToken);
+        let identifier = if self.current_token().kind == TokenKind::DataTypeToken {
+            let token = self.next_token();
+            self.diagnostics.report_error(
+                format!(
+                    "'{}' is a reserved word and cannot be used as a variable name",
+                    token.text
+                ),
+                Some(token.position),
+            );
+            SyntaxToken::new(TokenKind::IdentifierToken, token.position, token.text)
+        } else {
+            self.match_token(TokenKind::IdentifierToken)
+        };
 
         // Optional type annotation
         let mut type_annotation = None;

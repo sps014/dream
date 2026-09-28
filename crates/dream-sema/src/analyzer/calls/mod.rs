@@ -272,7 +272,8 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) {
         if callee.is_shader_only && !self.current_function_is_gpu {
-            let display = callee.name.replacen('_', ".", 1);
+            let base = callee.name.split('.').next().unwrap_or(&callee.name);
+            let display = base.replacen('_', ".", 1);
             diagnostics.report_error(
                 format!(
                     "'{display}' only exists inside GPU shaders; call it from a @compute/@vertex/@fragment/@gpu function"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Parallel golden-corpus probe for `tests/cases/*.dream`.
 
-Default: `dream run` (native C).
+Default: `dream run` (native).
 `--node`: compile `--wasm` to `target/probe-wasm/{stem}/` and run via Node + `runtime/dream.js`.
 """
 import json
@@ -25,13 +25,14 @@ workers = int(os.environ.get("PROBE_JOBS", "8"))
 dream_js = root / "runtime" / "dream.js"
 
 USAGE = """\
-Usage: probe_test.py [--node] [case-stem ...]
+Usage: probe_test.py [--node] [--release] [case-stem ...]
 
-  --node     compile wasm32 C and run with Node (not native `dream run`)
+  --node          compile wasm32 and run with Node (not native `dream run`)
+  --release       optimized build
   stems      optional filter (e.g. arithmetic task_basic)
 """
 
-# Hosts that exist on native C only (files, sockets, GPU, interactive stdin).
+# Hosts that exist natively only (files, sockets, GPU, interactive stdin).
 _NODE_SKIP_PREFIXES = (
     "file_",
     "dir_",
@@ -56,15 +57,22 @@ _NODE_SKIP_STEMS = {
 }
 
 
+BUILD_FLAGS = []
+
+
 def parse_args(argv):
     only = []
     node = False
-    for arg in argv:
+    it = iter(argv)
+    for arg in it:
         if arg in ("-h", "--help"):
             sys.stdout.write(USAGE)
             sys.exit(0)
         if arg == "--node":
             node = True
+            continue
+        if arg == "--release":
+            BUILD_FLAGS.append("--release")
             continue
         if arg.startswith("-"):
             sys.stderr.write(f"unknown flag {arg}\n{USAGE}")
@@ -104,7 +112,7 @@ def leak_failure(*streams):
     """A guest ARC leak, if the runtime's leak checker reported one.
 
     The check prints to stderr and `dream run` passes it through without inspecting it (only the
-    captured-output path in `src/execution/native_c` fails on it), so the corpus has to look for
+    captured-output path in `src/execution/native` fails on it), so the corpus has to look for
     itself. A non-zero `live` count is a failure the same as a wrong stdout: every case is expected
     to end holding nothing.
     """
@@ -191,7 +199,7 @@ def spawn_http_mock():
 def spawn_tcp_echo():
     """Loopback echo server for `tcp_echo_local` (same contract as e2e `DREAM_E2E_TCP_PORT`).
 
-    The listener stays in the accept thread with no timeout: `dream run` compiles native C
+    The listener stays in the accept thread with no timeout: `dream run` compiles natively
     first, which can take longer than a short accept window when the probe is loaded.
     """
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -244,6 +252,7 @@ def one_node(f: Path):
     wat = dest_dir / f"{stem}.wat"
     compile_cmd = [
         str(dream),
+        *BUILD_FLAGS,
         "--wasm",
         "-o",
         str(wat),
@@ -299,12 +308,12 @@ def one(f: Path):
     exp = f.with_suffix(".expected")
     trap = f.with_suffix(".expected_trap")
     if err.exists():
-        code, _out, _err = run_group([str(dream), str(f)], 25)
+        code, _out, _err = run_group([str(dream), *BUILD_FLAGS, str(f)], 25)
         if code == 0:
             return stem, "fail", "compile should fail"
         return stem, "ok", ""
 
-    cmd = [str(dream), "run", str(f)]
+    cmd = [str(dream), *BUILD_FLAGS, "run", str(f)]
     stdin = None
     env = None
     if stem == "console_read_line":

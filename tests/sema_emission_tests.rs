@@ -1,4 +1,4 @@
-//! HIR->MIR->C emission and native execution tests.
+//! HIR->MIR->LLVM IR emission and native execution tests.
 //! Moved out of `dream-sema` so the analyzer crate has no `dream-mir` dependency.
 
 mod common;
@@ -9,49 +9,69 @@ use dream_syntax::lexer::Lexer;
 use dream_syntax::parser::Parser;
 use pretty_assertions::assert_eq;
 
-/// Extracts the body of the C function `name` (the definition whose signature line ends with '{'),
-/// up to its closing brace. Returns "" when no definition is found. Declarations (`;`) and
-/// same-prefix functions (`poll_work` when searching `work`) are skipped.
-fn c_func_body<'a>(c: &'a str, name: &str) -> &'a str {
-    let needle = format!("{name}(");
-    let mut from = 0;
-    while let Some(i) = c[from..].find(&needle) {
-        let hit = from + i;
-        let at_word_start = hit == 0 || {
-            let b = c.as_bytes()[hit - 1];
-            !(b.is_ascii_alphanumeric() || b == b'_')
+/// Whether `body` does `op` (`"load i32"` / `"store i32"`) through an address derived from a
+/// handle (`inttoptr`), a field offset (`getelementptr`), or a runtime address call — a real heap
+/// access rather than a local slot.
+fn heap_access(body: &str, op: &str) -> bool {
+    let mut derived = Vec::new();
+    for line in body.lines().map(str::trim) {
+        let (lhs, rhs) = match line.split_once(" = ") {
+            Some((l, r)) => (Some(l), r),
+            None => (None, line),
         };
-        let line_start = c[..hit].rfind('\n').map(|p| p + 1).unwrap_or(0);
-        let line_end = c[hit..].find('\n').map(|p| hit + p).unwrap_or(c.len());
-        if at_word_start && c[line_start..line_end].trim_end().ends_with('{') {
-            let rest = &c[line_end..];
-            return match rest.find("\n}") {
-                Some(e) => &rest[..e],
-                None => rest,
-            };
+        if let Some(l) = lhs {
+            if ["inttoptr ", "getelementptr ", "call ptr "]
+                .iter()
+                .any(|p| rhs.starts_with(p))
+            {
+                derived.push(l);
+            }
         }
-        from = hit + needle.len();
+        if !rhs.starts_with(op) {
+            continue;
+        }
+        let addr = rhs
+            .rsplit(", ptr ")
+            .next()
+            .and_then(|a| a.split(',').next());
+        if addr.is_some_and(|a| derived.contains(&a)) {
+            return true;
+        }
     }
-    ""
+    false
+}
+
+/// Whether some block label is branched to from a later block (a loop back-edge).
+fn has_back_edge(body: &str) -> bool {
+    let mut offset = 0;
+    for line in body.lines() {
+        offset += line.len() + 1;
+        if let Some(label) = line.strip_suffix(':') {
+            if body[offset.min(body.len())..].contains(&format!("label %{label}")) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[test]
 fn test_hir_emission_arithmetic_function() {
     // A plain free function over arithmetic on parameters is fully representable in HIR, so the
     // analyzer emits it and it survives the MIR backend pipeline.
-    let (c, count) = emit_hir_to_c("fun add(a: int, b: int): int { return a + b; }");
+    let (c, count) = emit_hir_to_ir("fun add(a: int, b: int): int { return a + b; }");
     assert_eq!(
         count, 1,
         "the single free function should be emitted as HIR"
     );
     assert!(
-        c.contains("int32_t add("),
+        c.contains("define internal i32 @add("),
         "missing emitted function:\n{}",
         c
     );
-    let body = c_func_body(&c, "add");
+    let body = ir_func_body(&c, "add");
     assert!(
-        body.contains("(uint32_t)a + (uint32_t)b"),
+        body.contains(" = add i32 ") && !body.contains("add nsw"),
         "missing wrapping arithmetic:\n{}",
         c
     );
@@ -61,10 +81,10 @@ fn test_hir_emission_arithmetic_function() {
 fn test_hir_emission_locals_and_assignment() {
     // `let` + assignment + return over locals: each statement is supported, so the function emits.
     let code = "fun calc(n: int): int { let x: int = n; let y: int = x + 1; y = y + n; return y; }";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(count, 1);
     assert!(
-        c.contains("int32_t calc("),
+        c.contains("define internal i32 @calc("),
         "missing emitted function:\n{}",
         c
     );
@@ -79,7 +99,7 @@ fn test_hir_emission_skips_unsupported_functions() {
         fun simple(a: int): int { return a; }
         fun gen<T>(x: T): T { return x; }
     ";
-    let (_, count) = emit_hir_to_c(code);
+    let (_, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 1,
         "only the fully-supported function should be emitted"
@@ -89,23 +109,22 @@ fn test_hir_emission_skips_unsupported_functions() {
 #[test]
 fn test_hir_emission_while_loop() {
     // `while` over locals is now fully representable; the whole function survives the pipeline.
-    // Control flow is plain C now (labelled blocks + gotos), so only the comparison shape and the
-    // presence of the back-edge are asserted.
+    // Only the comparison shape and the presence of the back-edge are asserted.
     let code = "fun count(n: int): int { let s: int = 0; while (s < n) { s = s + 1; } return s; }";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(count, 1, "the while function should be emitted as HIR");
     assert!(
-        c.contains("int32_t count("),
+        c.contains("define internal i32 @count("),
         "missing emitted function:\n{}",
         c
     );
-    let body = c_func_body(&c, "count");
-    assert!(body.contains('<'), "missing loop comparison:\n{}", c);
+    let body = ir_func_body(&c, "count");
     assert!(
-        body.contains("for (;;)"),
-        "while should emit a C for-loop:\n{}",
+        body.contains("icmp slt i32"),
+        "missing loop comparison:\n{}",
         c
     );
+    assert!(has_back_edge(body), "while should emit a back-edge:\n{}", c);
 }
 
 #[test]
@@ -116,13 +135,13 @@ fn test_hir_emission_if_else_chain() {
             if (n < 0) { return 0; } else if (n == 0) { return 1; } else { return 2; }
         }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 1,
         "the if/else-if/else function should be emitted as HIR"
     );
     assert!(
-        c.contains("int32_t classify("),
+        c.contains("define internal i32 @classify("),
         "missing emitted function:\n{}",
         c
     );
@@ -138,16 +157,16 @@ fn test_hir_emission_for_loop() {
             return acc;
         }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(count, 1, "the for-loop function should be emitted as HIR");
     assert!(
-        c.contains("int32_t sum("),
+        c.contains("define internal i32 @sum("),
         "missing emitted function:\n{}",
         c
     );
-    let body = c_func_body(&c, "sum");
+    let body = ir_func_body(&c, "sum");
     assert!(
-        body.contains("(uint32_t)acc + (uint32_t)i"),
+        body.contains(" = add i32 ") && !body.contains("add nsw"),
         "missing wrapping arithmetic:\n{}",
         c
     );
@@ -163,10 +182,10 @@ fn test_hir_emission_foreach_loop() {
             return acc;
         }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(count, 1, "the foreach function should be emitted as HIR");
     assert!(
-        c.contains("int32_t total("),
+        c.contains("define internal i32 @total("),
         "missing emitted function:\n{}",
         c
     );
@@ -180,13 +199,13 @@ fn test_hir_emission_logical_and_ternary() {
             return (a && b) ? x : y;
         }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 1,
         "the logical/ternary function should be emitted as HIR"
     );
     assert!(
-        c.contains("int32_t pick("),
+        c.contains("define internal i32 @pick("),
         "missing emitted function:\n{}",
         c
     );
@@ -206,7 +225,7 @@ fn test_hir_emission_coalesce() {
         }
         fun or_default(x: Option<string>): string { return x ?? \"d\"; }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 2,
         "unwrap_or and or_default should be emitted as HIR"
@@ -220,12 +239,12 @@ fn test_hir_emission_coalesce() {
 
 #[test]
 fn test_hir_emission_cast() {
-    // A numeric widening cast lowers to a concrete C cast expression.
+    // A numeric widening cast lowers to an int-to-float conversion.
     let code = "fun widen(x: int): double { return (double)x; }";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(count, 1, "the cast function should be emitted as HIR");
-    let body = c_func_body(&c, "widen");
-    assert!(body.contains("(double)"), "missing widening cast:\n{}", c);
+    let body = ir_func_body(&c, "widen");
+    assert!(body.contains("sitofp i32"), "missing widening cast:\n{}", c);
 }
 
 #[test]
@@ -236,18 +255,18 @@ fn test_hir_emission_index_and_array_literal() {
         fun first(xs: int[]): int { return xs[0]; }
         fun make(): int[] { return [1, 2, 3]; }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 2,
         "both the index and array-literal functions should be emitted"
     );
     assert!(
-        c.contains("int32_t first("),
+        c.contains("define internal i32 @first("),
         "missing index function:\n{}",
         c
     );
     assert!(
-        c.contains("make(void)"),
+        c.contains("define internal i64 @make()"),
         "missing array-literal function:\n{}",
         c
     );
@@ -273,14 +292,14 @@ fn test_empty_array_literal_infers_from_context() {
             return sink([]);
         }
     ";
-    let (c, _count) = emit_hir_to_c(code);
+    let (c, _count) = emit_hir_to_ir(code);
     assert!(
-        c.contains("make(void)"),
+        c.contains("define internal i64 @make()"),
         "return-context empty array should emit:\n{}",
         c
     );
     assert!(
-        c.contains("int32_t driver("),
+        c.contains("define internal i32 @driver("),
         "assignment/arg empty array should emit:\n{}",
         c
     );
@@ -307,9 +326,9 @@ fn test_nested_empty_array_infers_element_type() {
         "nested empty array should type-check: {:?}",
         diagnostics.diagnostics
     );
-    let (c, _count) = emit_hir_to_c(code);
+    let (c, _count) = emit_hir_to_ir(code);
     assert!(
-        c.contains("int32_t driver("),
+        c.contains("define internal i32 @driver("),
         "nested empty array should emit:\n{}",
         c
     );
@@ -337,16 +356,20 @@ fn test_ambiguous_empty_array_reports_clear_error() {
 
 #[test]
 fn test_hir_emission_direct_call() {
-    // A direct free-function call resolves to the callee's `DefId` and emits a direct C call.
+    // A direct free-function call resolves to the callee's `DefId` and emits a direct call.
     let code = "
         fun addup(a: int, b: int): int { return a + b; }
         fun driver(): int { return addup(1, 2); }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(count, 2, "both the callee and the caller should be emitted");
-    assert!(c.contains("int32_t driver("), "missing caller:\n{}", c);
     assert!(
-        c.contains("addup(1, 2)"),
+        c.contains("define internal i32 @driver("),
+        "missing caller:\n{}",
+        c
+    );
+    assert!(
+        c.contains("call i32 @addup(i32 1, i32 2)"),
         "call should resolve to the callee symbol:\n{}",
         c
     );
@@ -361,14 +384,14 @@ fn test_hir_emission_extend_nongeneric_class() {
         extend Point { public fun getx(): int { return this.x; } }
         fun use_ext(p: Point): int { return p.getx(); }
     ";
-    let (c, _count) = emit_hir_to_c(code);
+    let (c, _count) = emit_hir_to_ir(code);
     assert!(
-        c.contains("int32_t Point_getx("),
+        c.contains("define internal i32 @Point_getx("),
         "extend method body should emit:\n{}",
         c
     );
     assert!(
-        c.contains("Point_getx(p)"),
+        c.contains("call i32 @Point_getx(i64 "),
         "call should resolve to the extend method:\n{}",
         c
     );
@@ -383,14 +406,14 @@ fn test_hir_emission_extend_generic_class() {
         extend Box<T> { public fun peek(): T { return this.v; } }
         fun use_ext(b: Box<int>): int { return b.peek(); }
     ";
-    let (c, _count) = emit_hir_to_c(code);
+    let (c, _count) = emit_hir_to_ir(code);
     assert!(
-        c.contains("int32_t Box_int_peek("),
+        c.contains("define internal i32 @Box_int_peek("),
         "generic extend method should emit:\n{}",
         c
     );
     assert!(
-        c.contains("Box_int_peek(b)"),
+        c.contains("call i32 @Box_int_peek(i64 "),
         "call should resolve to the instance:\n{}",
         c
     );
@@ -409,9 +432,9 @@ fn test_hir_emission_destructor_body() {
         class Res { public h: int; del() { this.h = 0; } }
         fun mk(): Res { return Res(); }
     ";
-    let (c, _count) = emit_hir_to_c(code);
+    let (c, _count) = emit_hir_to_ir(code);
     assert!(
-        c.contains("void Res_del("),
+        c.contains("define internal void @Res_del("),
         "destructor body should emit:\n{}",
         c
     );
@@ -436,12 +459,12 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
     // `object` local forces a statically-untyped release, exercising the tag-dispatch router.
     let c = emit_hir_to_module_rc_only(&code);
     assert!(
-        c.contains("static void release_Node("),
+        c.contains("define internal void @release_Node("),
         "per-type release missing:\n{}",
         c
     );
     assert!(
-        c.contains("Node_del(p);"),
+        c.contains("call void @Node_del("),
         "destructor not invoked from release:\n{}",
         c
     );
@@ -452,12 +475,12 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
         c
     );
     assert!(
-        c.contains("static void destroy_object("),
+        c.contains("define internal void @destroy_object("),
         "tag-dispatch router missing:\n{}",
         c
     );
     assert!(
-        c.contains("dream_recycle(p);"),
+        c.contains("call void @dream_recycle("),
         "typed last-ref destroy recycles the block:\n{}",
         c
     );
@@ -475,14 +498,14 @@ fn test_hir_emission_user_constructor() {
         }
         fun make(): Point { return Point(1, 2); }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 2,
         "both the constructor body and make should be emitted:\n{}",
         c
     );
     assert!(
-        c.contains("void Point_constructor("),
+        c.contains("define internal void @Point_constructor("),
         "constructor body should emit:\n{}",
         c
     );
@@ -492,7 +515,7 @@ fn test_hir_emission_user_constructor() {
         c
     );
     assert!(
-        c.contains("Point_constructor(t0, 1, 2)"),
+        c.contains("call void @Point_constructor(") && c.contains("i32 1, i32 2)"),
         "construction should invoke the user constructor:\n{}",
         c
     );
@@ -508,7 +531,7 @@ fn test_hir_emission_generic_struct_construction_and_field() {
         fun make(): Box<int> { return Box<int>(7); }
         fun read(b: Box<int>): int { return b.v; }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 3,
         "make, read, and the constructor body should be emitted:\n{}",
@@ -520,13 +543,13 @@ fn test_hir_emission_generic_struct_construction_and_field() {
         c
     );
     assert!(
-        c.contains("void Box_int_constructor("),
+        c.contains("define internal void @Box_int_constructor("),
         "the monomorphized constructor should emit:\n{}",
         c
     );
-    let read = c_func_body(&c, "read");
+    let read = ir_func_body(&c, "read");
     assert!(
-        read.contains("*(int32_t *)"),
+        heap_access(read, "load i32"),
         "the field read should lower to a load:\n{}",
         c
     );
@@ -541,14 +564,14 @@ fn test_hir_emission_generic_struct_method_instance() {
         class Box<T> { public v: T; public fun get(): T { return this.v; } }
         fun use_box(b: Box<int>): int { return b.get(); }
     ";
-    let (c, _count) = emit_hir_to_c(code);
+    let (c, _count) = emit_hir_to_ir(code);
     assert!(
-        c.contains("int32_t Box_int_get("),
+        c.contains("define internal i32 @Box_int_get("),
         "generic-struct method body should emit under its mangled name:\n{}",
         c
     );
     assert!(
-        c.contains("Box_int_get(b)"),
+        c.contains("call i32 @Box_int_get(i64 "),
         "instance call should dispatch to the mangled method:\n{}",
         c
     );
@@ -582,23 +605,23 @@ fn test_hir_emission_global_initializer_runs_in_start() {
 
     let interner = analyzer.interner();
     let mir = dream_mir::lower::lower_program(&hir, interner);
-    let c = dream_mir::backend::c::emit_c_module(&mir, interner);
+    let c = emit_ll(&mir, interner);
     assert!(
-        c.contains("void __dream_init(void)"),
+        c.contains("define internal void @__dream_init()"),
         "missing init function:\n{}",
         c
     );
-    // `__dream_init` is itself invoked from `dream_runtime_init`, which the C `main` calls before
+    // `__dream_init` is itself invoked from `dream_runtime_init`, which `main` calls before
     // running any user code.
     assert!(
-        c.contains("__dream_init();"),
+        ir_func_body(&c, "dream_runtime_init").contains("call void @__dream_init()"),
         "init must be invoked from the runtime-init wrapper:\n{}",
         c
     );
     // `g0` is the synthetic `__closure_env` global; `counter` is the first user global, so it lands
     // at `g1`.
     assert!(
-        c.contains("g1 = 40"),
+        ir_func_body(&c, "__dream_init").contains("store i32 40, ptr @g1"),
         "init should store the global:\n{}",
         c
     );
@@ -615,12 +638,12 @@ fn test_hir_emission_extern_import_and_call() {
     ";
     let c = emit_hir_to_module(code);
     assert!(
-        c.contains("void log_it(int32_t a0);"),
+        c.contains("declare void @log_it(i32)"),
         "extern should declare its @js target:\n{}",
         c
     );
     assert!(
-        c.contains("log_it(7)"),
+        c.contains("call void @log_it(i32 7)"),
         "call should resolve to the import:\n{}",
         c
     );
@@ -643,19 +666,19 @@ fn test_hir_emission_runtime_import_and_call() {
 
 #[test]
 fn test_hir_emission_extern_import_with_result() {
-    // A defaulted extern (no `@js`) binds to a plain C symbol of the same name.
+    // A defaulted extern (no `@js`) binds to a plain symbol of the same name.
     let code = "
         extern fun now(): int;
         fun t(): int { return now(); }
     ";
     let c = emit_hir_to_module(code);
     assert!(
-        c.contains("int32_t now(void);"),
+        c.contains("declare i32 @now()"),
         "defaulted extern should declare its result-bearing symbol:\n{}",
         c
     );
     assert!(
-        c.contains("now()"),
+        c.contains("call i32 @now()"),
         "call should resolve to the symbol:\n{}",
         c
     );
@@ -674,12 +697,12 @@ fn test_hir_emission_print_int_and_println() {
     );
     let c = emit_hir_to_module(&code);
     assert!(
-        c.contains("print_int((int32_t)41)"),
+        c.contains("call void @print_int(i32 41)"),
         "print(int) should call print_int:\n{}",
         c
     );
     assert!(
-        c.contains("print_char(10)"),
+        c.contains("call void @print_char(i32 10)"),
         "println should append a newline via print_char:\n{}",
         c
     );
@@ -692,12 +715,12 @@ fn test_hir_emission_print_string_interns_literal() {
     let code = format!("{SYSTEM_STUB} fun run(): void {{ System.print(\"hi\"); }}");
     let c = emit_hir_to_module(&code);
     assert!(
-        c.contains("print_string(__ds"),
+        c.contains("call void @print_string(i64 ptrtoint (ptr getelementptr (i8, ptr @__ds"),
         "print(string) should call print_string:\n{}",
         c
     );
     assert!(
-        c.contains("{104, 105}"),
+        c.contains("[i16 104, i16 105]"),
         "the string literal should be interned:\n{}",
         c
     );
@@ -750,17 +773,17 @@ fn test_hir_emission_print_object_routes_to_print_object() {
     );
     let c = emit_hir_to_module(&code);
     assert!(
-        c.contains("void run("),
+        c.contains("define internal void @run("),
         "an object print should be covered now:\n{}",
         c
     );
     assert!(
-        c.contains("Box_to_string(b)"),
+        c.contains("call i64 @Box_to_string(i64 "),
         "object print routes through the generated to_string:\n{}",
         c
     );
     assert!(
-        c.contains("dream_ptr Box_to_string(dream_ptr p)"),
+        c.contains("define internal i64 @Box_to_string(i64 %a0)"),
         "a default struct to_string is generated:\n{}",
         c
     );
@@ -1088,24 +1111,24 @@ fn indirect_call_demo() -> (dream_mir::Mir, dream_types::TypeInterner) {
 #[test]
 fn test_indirect_call_emits_table_and_signature() {
     let (mir, interner) = indirect_call_demo();
-    let c = dream_mir::backend::c::emit_c_module(&mir, &interner);
+    let c = emit_ll(&mir, &interner);
     assert!(
-        c.contains("static void * dream_ft["),
+        c.contains("@dream_ft = internal constant ["),
         "function table missing:\n{}",
         c
     );
     assert!(
-        c.contains("(void *)add"),
+        c.contains("ptr @add"),
         "callee must be registered in the table:\n{}",
         c
     );
     assert!(
-        c.contains("dream_fn_i32_i32__i32"),
+        c.contains(" = call i32 %"),
         "indirect-call pointer signature missing:\n{}",
         c
     );
     assert!(
-        c.contains("dream_ft["),
+        c.contains("ptr @dream_ft, i64"),
         "indirect call through the table missing:\n{}",
         c
     );
@@ -1141,9 +1164,9 @@ fn test_hir_emission_first_class_function() {
         "function value not boxed:\n{}",
         c
     );
-    let main_body = c_func_body(&c, "main_dream");
+    let main_body = ir_func_body(&c, "main_dream");
     assert!(
-        main_body.contains("dream_ft["),
+        main_body.contains("ptr @dream_ft, i64"),
         "indirect call through the function table not emitted:\n{}",
         c
     );
@@ -1292,7 +1315,7 @@ fn test_hir_emission_generic_function_instances() {
         fun id<T>(x: T): T { return x; }
         fun driver(): int { let a: int = id(5); let b: bool = id(true); return a; }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 3,
         "two id instances + driver should be emitted:\n{}",
@@ -1304,7 +1327,7 @@ fn test_hir_emission_generic_function_instances() {
         c
     );
     assert!(
-        c.contains("id__0(5)") && c.contains("id__7(1)"),
+        c.contains("call i32 @id__0(i32 5)") && c.contains("call i32 @id__7(i32 1)"),
         "each generic call site should resolve to an instance symbol:\n{}",
         c
     );
@@ -1315,17 +1338,17 @@ fn test_hir_emission_string_literal() {
     // A string literal resolves to its interned static data block (`__ds<N>`), laid out after the
     // runtime's own constants.
     let code = "fun greet(): string { return \"hi\"; }";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 1,
         "the string-returning function should be emitted as HIR"
     );
     assert!(
-        c.contains("greet(void)"),
+        c.contains("define internal i64 @greet()"),
         "missing emitted function:\n{}",
         c
     );
-    let greet = c_func_body(&c, "greet");
+    let greet = ir_func_body(&c, "greet");
     assert!(
         greet.contains("__ds"),
         "string literal should resolve to an interned data pointer:\n{}",
@@ -1342,25 +1365,25 @@ fn test_hir_emission_field_read_and_constructor() {
         fun getx(p: Point): int { return p.x; }
         fun make(): Point { return Point(1, 2); }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 3,
         "the field-read, constructor, and constructor-body functions should be emitted"
     );
     assert!(
-        c.contains("int32_t getx("),
+        c.contains("define internal i32 @getx("),
         "missing field-read function:\n{}",
         c
     );
     assert!(
-        c.contains("make(void)"),
+        c.contains("define internal i64 @make()"),
         "missing constructor function:\n{}",
         c
     );
     // `p.x` (field 0) lowers to a real load now that the layout is threaded through.
-    let getx = c_func_body(&c, "getx");
+    let getx = ir_func_body(&c, "getx");
     assert!(
-        getx.contains("*(int32_t *)"),
+        heap_access(getx, "load i32"),
         "field read should lower to a load:\n{}",
         c
     );
@@ -1379,17 +1402,17 @@ fn test_hir_emission_field_assignment() {
         class Counter { public n: int; }
         fun bump(c: Counter): void { c.n = c.n + 1; }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(count, 1, "the field-assignment function should be emitted");
     assert!(
-        c.contains("void bump("),
+        c.contains("define internal void @bump("),
         "missing field-assignment function:\n{}",
         c
     );
     // `c.n = ...` lowers to a real store through the field address.
-    let bump = c_func_body(&c, "bump");
+    let bump = ir_func_body(&c, "bump");
     assert!(
-        bump.contains("*(int32_t *)"),
+        heap_access(bump, "store i32"),
         "field write should lower to a store:\n{}",
         c
     );
@@ -1399,17 +1422,17 @@ fn test_hir_emission_field_assignment() {
 fn test_hir_emission_index_assignment() {
     // Indexed assignment lowers to an `Assign` with an `Index` place.
     let code = "fun setfirst(xs: int[], v: int): void { xs[0] = v; }";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(count, 1, "the index-assignment function should be emitted");
     assert!(
-        c.contains("void setfirst("),
+        c.contains("define internal void @setfirst("),
         "missing index-assignment function:\n{}",
         c
     );
     // `xs[0] = v` computes the element address (base + 4 + i*stride) and stores.
-    let setfirst = c_func_body(&c, "setfirst");
+    let setfirst = ir_func_body(&c, "setfirst");
     assert!(
-        setfirst.contains("*(int32_t *)"),
+        heap_access(setfirst, "store i32"),
         "index write should lower to a store:\n{}",
         c
     );
@@ -1422,12 +1445,16 @@ fn test_hir_emission_enum_value() {
         enum Color { Red, Green, Blue }
         fun pick(): Color { return Color.Green; }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(count, 1, "the enum-returning function should be emitted");
-    assert!(c.contains("int32_t pick("), "missing enum function:\n{}", c);
+    assert!(
+        c.contains("define internal i32 @pick("),
+        "missing enum function:\n{}",
+        c
+    );
     // `Color.Green` is the second member, value 1.
-    let pick = c_func_body(&c, "pick");
-    assert!(pick.contains("return 1"), "missing enum constant:\n{}", c);
+    let pick = ir_func_body(&c, "pick");
+    assert!(pick.contains("ret i32 1"), "missing enum constant:\n{}", c);
 }
 
 #[test]
@@ -1438,24 +1465,24 @@ fn test_hir_emission_method_body_and_instance_call() {
         class Box { public v: int; public fun get(): int { return this.v; } }
         fun use_box(b: Box): int { return b.get(); }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 2,
         "both the method body and its caller should be emitted:\n{}",
         c
     );
     assert!(
-        c.contains("int32_t Box_get("),
+        c.contains("define internal i32 @Box_get("),
         "missing emitted method body:\n{}",
         c
     );
     assert!(
-        c.contains("int32_t use_box("),
+        c.contains("define internal i32 @use_box("),
         "missing instance-call function:\n{}",
         c
     );
     assert!(
-        c.contains("Box_get(b)"),
+        c.contains("call i32 @Box_get(i64 "),
         "instance call should dispatch to the method:\n{}",
         c
     );
@@ -1469,19 +1496,19 @@ fn test_hir_emission_static_call() {
         class M { public static fun id(n: int): int { return n; } }
         fun use_static(): int { return M.id(7); }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 2,
         "both the static method and its caller should be emitted:\n{}",
         c
     );
     assert!(
-        c.contains("int32_t M_id("),
+        c.contains("define internal i32 @M_id("),
         "missing emitted static method:\n{}",
         c
     );
     assert!(
-        c.contains("M_id(7)"),
+        c.contains("call i32 @M_id(i32 7)"),
         "static call should dispatch to the method:\n{}",
         c
     );
@@ -1489,12 +1516,12 @@ fn test_hir_emission_static_call() {
 
 #[test]
 fn test_hir_emission_global_read_and_write() {
-    // A module-global resolves to a C file-scope global for both reads and assignments.
+    // A module-global resolves to a module-scope global for both reads and assignments.
     let code = "
         let counter: int = 0;
         fun tick(): int { counter = counter + 1; return counter; }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 1,
         "the global-using function should be emitted:\n{}",
@@ -1502,13 +1529,16 @@ fn test_hir_emission_global_read_and_write() {
     );
     // `g0` is the synthetic `__closure_env` global; `counter` is the first user global, so it lands
     // at `g1`.
-    let tick = c_func_body(&c, "tick");
+    let tick = ir_func_body(&c, "tick");
     assert!(
-        tick.contains("g1 = (int32_t)((uint32_t)g1 + (uint32_t)1)"),
+        tick.contains("load i32, ptr @g1")
+            && tick.contains(" = add i32 ")
+            && tick
+                .lines()
+                .any(|l| l.trim().starts_with("store i32 %") && l.contains("ptr @g1")),
         "missing global read+write:\n{}",
         c
     );
-    assert!(tick.contains("return g1"), "missing global read:\n{}", c);
 }
 
 #[test]
@@ -1522,32 +1552,32 @@ fn test_hir_emission_union_construction() {
         fun mk(): Shape { return Shape.Circle(2); }
         fun nil(): Shape { return Shape.Empty; }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 2,
         "both union constructors should be emitted:\n{}",
         c
     );
     assert!(
-        c.contains("mk(void)"),
+        c.contains("define internal void @mk(ptr "),
         "missing data-variant constructor:\n{}",
         c
     );
     assert!(
-        c.contains("nil(void)"),
+        c.contains("define internal void @nil(ptr "),
         "missing unit-variant constructor:\n{}",
         c
     );
     // The first word of the union block is the variant discriminant.
-    let mk = c_func_body(&c, "mk");
-    let nil = c_func_body(&c, "nil");
+    let mk = ir_func_body(&c, "mk");
+    let nil = ir_func_body(&c, "nil");
     assert!(
-        mk.contains("= (int32_t)0"),
+        mk.contains("store i32 0, ptr %"),
         "data variant should store discriminant 0:\n{}",
         c
     );
     assert!(
-        nil.contains("= (int32_t)1"),
+        nil.contains("store i32 1, ptr %"),
         "unit variant should store discriminant 1:\n{}",
         c
     );
@@ -1567,10 +1597,10 @@ fn test_hir_emission_switch_statement() {
             return r;
         }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(count, 1, "the switch function should be emitted:\n{}", c);
     assert!(
-        c.contains("int32_t classify("),
+        c.contains("define internal i32 @classify("),
         "missing switch function:\n{}",
         c
     );
@@ -1591,10 +1621,10 @@ fn test_hir_emission_switch_statement_with_variant_binding() {
             return r;
         }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(count, 1, "the switch function should be emitted:\n{}", c);
     assert!(
-        c.contains("int32_t describe("),
+        c.contains("define internal i32 @describe("),
         "missing switch function:\n{}",
         c
     );
@@ -1608,27 +1638,27 @@ fn test_hir_emission_len_builtin() {
         fun count(xs: int[]): int { return xs.length; }
         fun slen(s: string): int { return s.length; }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(count, 2, "both size functions should be emitted:\n{}", c);
     assert!(
-        c.contains("int32_t count("),
+        c.contains("define internal i32 @count("),
         "missing array-len function:\n{}",
         c
     );
     assert!(
-        c.contains("int32_t slen("),
+        c.contains("define internal i32 @slen("),
         "missing string-len function:\n{}",
         c
     );
-    let slen = c_func_body(&c, "slen");
+    let slen = ir_func_body(&c, "slen");
     assert!(
         slen.contains("dream_str_len("),
         "string len should call dream_str_len:\n{}",
         c
     );
-    let count_body = c_func_body(&c, "count");
+    let count_body = ir_func_body(&c, "count");
     assert!(
-        count_body.contains("*(int32_t *)dream_p(xs)"),
+        heap_access(count_body, "load i32") && !count_body.contains("call "),
         "array len should be an inlined length-word load:\n{}",
         c
     );
@@ -1647,14 +1677,14 @@ fn test_hir_emission_switch_expression() {
             };
         }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(
         count, 1,
         "the switch-expression function should be emitted:\n{}",
         c
     );
     assert!(
-        c.contains("int32_t area("),
+        c.contains("define internal i32 @area("),
         "missing switch-expression function:\n{}",
         c
     );
@@ -1785,10 +1815,10 @@ fn test_hir_emission_async_await() {
         async fun delay(): void { }
         async fun work(n: int): int { delay().await; return n; }
     ";
-    let (c, count) = emit_hir_to_c(code);
+    let (c, count) = emit_hir_to_ir(code);
     assert_eq!(count, 2, "both async functions should be emitted:\n{}", c);
     assert!(
-        c.contains("dream_ptr work(") && c.contains("int32_t poll_work("),
+        c.contains("define internal i64 @work(") && c.contains("define internal i32 @poll_work("),
         "missing async function / poll companion:\n{}",
         c
     );
@@ -1803,7 +1833,11 @@ fn test_async_emits_scheduler_runtime_and_poll() {
     );
     let c = emit_hir_to_module(&code);
     assert!(c.contains("dream_run_loop"), "scheduler missing:\n{}", c);
-    assert!(c.contains("int32_t poll_delay("), "poll fn missing:\n{}", c);
+    assert!(
+        c.contains("define internal i32 @poll_delay("),
+        "poll fn missing:\n{}",
+        c
+    );
     assert!(
         c.contains("dream_new_future("),
         "constructor missing:\n{}",
@@ -1842,7 +1876,7 @@ fn test_interface_call_emits_dynamic_dispatch() {
         fun describe(a: Animal): string { return a.speak(); }
         fun run(): string { return describe(Cat()); }
     ";
-    let (c, _) = emit_hir_to_c(code);
+    let (c, _) = emit_hir_to_ir(code);
     assert!(
         c.contains("__iface_dispatch_"),
         "interface call should dispatch through a trampoline:\n{}",
@@ -1863,9 +1897,9 @@ fn test_js_desugars_to_host_bridges() {
             el.textContent = \"hello\";
         }}"
     );
-    let (c, _count) = emit_hir_to_c(&code);
+    let (c, _count) = emit_hir_to_ir(&code);
     assert!(c.contains("jsGlobal("), "js.global:\n{}", c);
-    let entry = c_func_body(&c, "entry");
+    let entry = ir_func_body(&c, "entry");
     assert!(
         entry.contains("dream_js_call("),
         "js.call / slot write:\n{}",
@@ -1887,8 +1921,8 @@ fn test_js_fuses_get_as_string_at_typed_boundary() {
             let title: string = config.title;
         }}"
     );
-    let (c, _count) = emit_hir_to_c(&code);
-    let entry = c_func_body(&c, "entry");
+    let (c, _count) = emit_hir_to_ir(&code);
+    let entry = ir_func_body(&c, "entry");
     assert!(entry.contains("jsGetAsString("), "fused get+unbox:\n{}", c);
     assert!(
         !entry.contains("jsGetV("),
@@ -1911,8 +1945,8 @@ fn test_js_fuses_get_call_chain() {
             let shout = config.title.toUpperCase();
         }}"
     );
-    let (c, _count) = emit_hir_to_c(&code);
-    let entry = c_func_body(&c, "entry");
+    let (c, _count) = emit_hir_to_ir(&code);
+    let entry = ir_func_body(&c, "entry");
     assert!(entry.contains("dream_js_call("), "fused get+call:\n{}", c);
     assert!(
         !entry.contains("jsGetV("),
@@ -1930,9 +1964,10 @@ fn test_js_fuses_get_call_as_string() {
             let shout: string = config.title.toUpperCase();
         }}"
     );
-    let (c, _count) = emit_hir_to_c(&code);
+    // Native routes every js call through `dream_js_call`; wasm32 calls the fused bridge by name.
+    let c = emit_hir_to_module_wasm32(&code);
     assert!(
-        c.contains("jsGetCallAsString("),
+        c.contains("@jsGetCallAsString("),
         "fused get+call+unbox:\n{}",
         c
     );
@@ -1954,9 +1989,9 @@ fn test_js_to_value_struct_fills_in_place() {
         }}"
     );
     let c = emit_hir_to_module(&code);
-    let entry = c_func_body(&c, "entry");
+    let entry = ir_func_body(&c, "entry");
     assert!(
-        entry.contains("memcpy(dream_p("),
+        entry.contains("@llvm.memcpy.p0.p0.i64("),
         "value-struct js_to must fill the destination in place:\n{}",
         c
     );

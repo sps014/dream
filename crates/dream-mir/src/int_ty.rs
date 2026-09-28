@@ -1,4 +1,4 @@
-//! Integer signedness and width, shared by constant folding and the C emitter so both agree on
+//! Integer signedness and width, shared by constant folding and the backend so both agree on
 //! how an operation wraps, divides, shifts, and compares.
 //!
 //! MIR constants do not record signedness: [`crate::Const::Int`] covers `int`/`uint`/`byte` and

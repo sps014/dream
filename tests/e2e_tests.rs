@@ -1,8 +1,8 @@
-//! Golden e2e: native C (`Target::NativeC` + cc). WAT determinism / JS runtime tests stay below.
+//! Golden e2e: native builds (`Target::Native`). WAT determinism / JS runtime tests stay below.
 
 use dream::driver::compiler::{Compiler, Target};
 use dream::driver::wasm_opt::OptLevel;
-use dream::execution::native_c::{compile_and_capture, compile_and_capture_ex};
+use dream::execution::native::{compile_and_capture, compile_and_capture_ex};
 use dream_abi::attributes::CompileTargets;
 use pretty_assertions::assert_eq;
 use rayon::prelude::*;
@@ -261,15 +261,15 @@ fn run_native_case(dream_file: &Path, release: bool) {
     let expected_trap_file = dream_file.with_extension("expected_trap");
     let stem = dream_file.file_stem().and_then(|s| s.to_str()).unwrap();
     let dest_dir = Path::new("target").join(if release {
-        "e2e-native-c-release"
+        "e2e-native-release"
     } else {
-        "e2e-native-c"
+        "e2e-native"
     });
     fs::create_dir_all(&dest_dir).unwrap();
-    let c_path = dest_dir.join(format!("{stem}.c"));
-    let compiler = Compiler::new(Target::NativeC).with_release(release);
+    let ll_path = dest_dir.join(format!("{stem}.ll"));
+    let compiler = Compiler::new(Target::Native).with_release(release);
     let src = dream_file.to_str().unwrap().to_string();
-    let dest = c_path.to_str().unwrap().to_string();
+    let dest = ll_path.to_str().unwrap().to_string();
     let compile_result = compiler.compile(&src, &dest);
 
     if expected_error_file.exists() {
@@ -280,8 +280,8 @@ fn run_native_case(dream_file: &Path, release: bool) {
         let rendered = err.diagnostic_text().unwrap_or("").to_string();
         let expected = fs::read_to_string(&expected_error_file).unwrap_or_default();
         assert_needles(&rendered, &expected, dream_file, "compile error");
-        let _ = fs::remove_file(&c_path);
-        let _ = fs::remove_file(c_path.with_extension("o"));
+        let _ = fs::remove_file(&ll_path);
+        let _ = fs::remove_file(ll_path.with_extension("o"));
         return;
     }
     compile_result.unwrap_or_else(|e| panic!("compile failed for {:?}: {}", dream_file, e));
@@ -296,7 +296,7 @@ fn run_native_case(dream_file: &Path, release: bool) {
     };
 
     let opt = if release { OptLevel::O3 } else { OptLevel::O0 };
-    let c_str = c_path.to_str().unwrap();
+    let ll_str = ll_path.to_str().unwrap();
     let tcp = if stem == "tcp_echo_local" {
         Some(spawn_tcp_echo())
     } else {
@@ -344,13 +344,13 @@ fn run_native_case(dream_file: &Path, release: bool) {
     let env_refs: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
     let run =
         if timeout_secs != 8 || !extra_args.is_empty() || stdin.is_some() || !env_refs.is_empty() {
-            compile_and_capture_ex(c_str, opt, &env_refs, extra_args, stdin, timeout_secs)
+            compile_and_capture_ex(ll_str, opt, &env_refs, extra_args, stdin, timeout_secs)
         } else {
-            compile_and_capture(c_str, opt)
+            compile_and_capture(ll_str, opt)
         };
-    let _ = fs::remove_file(&c_path);
-    let _ = fs::remove_file(c_path.with_extension("o"));
-    let _ = fs::remove_file(c_path.with_extension("bin"));
+    let _ = fs::remove_file(&ll_path);
+    let _ = fs::remove_file(ll_path.with_extension("o"));
+    let _ = fs::remove_file(ll_path.with_extension("bin"));
 
     if expects_trap {
         let err = match run {
@@ -396,7 +396,7 @@ fn run_corpus(release: bool, only: Option<&[&str]>) {
         .collect();
     assert!(
         failures.is_empty(),
-        "{} native-C e2e case(s) failed:\n{}",
+        "{} native e2e case(s) failed:\n{}",
         failures.len(),
         failures.join("\n")
     );
@@ -573,7 +573,7 @@ fn wasm_js_compile_errors_match_native() {
         let err = Compiler::new(Target::Wasm32).compile(&src_s, &dest_s);
         assert!(err.is_err(), "{} should fail to compile for wasm", stem);
         let _ = fs::remove_file(&dest);
-        let _ = fs::remove_file(dest.with_extension("c"));
+        let _ = fs::remove_file(dest.with_extension("ll"));
         let _ = fs::remove_file(dest.with_extension("wasm"));
     }
 }
@@ -599,12 +599,12 @@ fn wasm_compiles_js_interop_samples() {
         let dest_s = dest.to_str().unwrap().to_string();
         Compiler::new(Target::Wasm32)
             .compile(&src_s, &dest_s)
-            .unwrap_or_else(|e| panic!("{} should compile to wasm32 C: {}", rel, e));
+            .unwrap_or_else(|e| panic!("{} should compile to wasm32: {}", rel, e));
         let wasm = dest.with_extension("wasm");
         assert!(wasm.is_file(), "expected {}", wasm.display());
         let _ = fs::remove_file(&dest);
         let _ = fs::remove_file(&wasm);
-        let _ = fs::remove_file(dest.with_extension("c"));
+        let _ = fs::remove_file(dest.with_extension("ll"));
         let _ = fs::remove_file(dest.with_extension("abi.json"));
     }
 }
@@ -618,22 +618,22 @@ fn wasm32_js_option_struct_fields_are_marshaled() {
     Compiler::new(Target::Wasm32)
         .compile(&src_s, &dest_s)
         .unwrap_or_else(|e| panic!("option_fields should compile to wasm32: {}", e));
-    let c_path = dest.with_extension("c");
-    let c =
-        fs::read_to_string(&c_path).unwrap_or_else(|e| panic!("read {}: {e}", c_path.display()));
+    let ll_path = dest.with_extension("ll");
+    let ll =
+        fs::read_to_string(&ll_path).unwrap_or_else(|e| panic!("read {}: {e}", ll_path.display()));
     assert!(
-        c.contains("jsIsNull") && c.contains("jsNull"),
+        ll.contains("jsIsNull") && ll.contains("jsNull"),
         "Option fields must marshal None as JS null, got marshaler without jsIsNull/jsNull:\n{}",
-        c
+        ll
     );
     assert!(
-        c.contains("Profile_to_js"),
+        ll.contains("Profile_to_js"),
         "expected Profile_to_js marshaler:\n{}",
-        c
+        ll
     );
     let _ = fs::remove_file(&dest);
     let _ = fs::remove_file(dest.with_extension("wasm"));
-    let _ = fs::remove_file(&c_path);
+    let _ = fs::remove_file(&ll_path);
     let _ = fs::remove_file(dest.with_extension("abi.json"));
 }
 
@@ -678,12 +678,12 @@ fn wasm_compiles_webgpu_samples() {
         let dest_s = dest.to_str().unwrap().to_string();
         Compiler::new(Target::Wasm32)
             .compile(&src_s, &dest_s)
-            .unwrap_or_else(|e| panic!("{} should compile to wasm32 C: {}", rel, e));
+            .unwrap_or_else(|e| panic!("{} should compile to wasm32: {}", rel, e));
         let wasm = dest.with_extension("wasm");
         assert!(wasm.is_file(), "expected {}", wasm.display());
         let _ = fs::remove_file(&dest);
         let _ = fs::remove_file(&wasm);
-        let _ = fs::remove_file(dest.with_extension("c"));
+        let _ = fs::remove_file(dest.with_extension("ll"));
         let _ = fs::remove_file(dest.with_extension("abi.json"));
         let _ = fs::remove_file(dest.with_extension("wgsl"));
     }
@@ -742,7 +742,7 @@ fn run_all_e2e_cases() {
 }
 
 /// Native ASan/LSan on leak-sensitive goldens. Opt-in: `DREAM_NATIVE_SANITIZE=address,leak`
-/// (see `src/execution/native_c`). Guest `live=0` is still the heap-counter check.
+/// (see `src/execution/native`). Guest `live=0` is still the heap-counter check.
 #[test]
 #[ignore = "native sanitizer; DREAM_NATIVE_SANITIZE=address,leak cargo test --test e2e_tests native_asan_focused_goldens -- --ignored --exact"]
 fn native_asan_focused_goldens() {
@@ -762,16 +762,16 @@ fn native_asan_focused_goldens() {
 }
 
 #[test]
-#[ignore = "full native C release corpus; cargo test --workspace -- --ignored"]
+#[ignore = "full native release corpus; cargo test --workspace -- --ignored"]
 fn run_all_e2e_cases_release() {
     run_corpus(true, None);
 }
 
 /// Codegen must be reproducible: compiling the same program twice (each compile uses fresh,
-/// independently-seeded `HashMap`s within this process) must yield byte-identical guest C and
-/// (with `--runtime`) `*.web.runtime.js`. Linked `.wasm` is clang/wasm-ld output and is not
-/// required to be bit-identical. This guards the `IndexMap` conversion of the emission-driving
-/// tables against regressions that would reintroduce `HashMap`-iteration nondeterminism.
+/// independently-seeded `HashMap`s within this process) must yield byte-identical `.ll`, `.wasm`
+/// and (with `--runtime`) `*.web.runtime.js`. This guards the `IndexMap` conversion of the
+/// emission-driving tables against regressions that would reintroduce `HashMap`-iteration
+/// nondeterminism. Both runs write the same path: the output name is part of the module.
 #[test]
 fn codegen_is_deterministic() {
     let cases_dir = Path::new("tests/cases");
@@ -780,51 +780,50 @@ fn codegen_is_deterministic() {
     }
     // Two independent compiles of a couple of fixtures is enough to catch HashMap-order
     // regressions; the ignored full corpus still covers more shapes in CI `--ignored` runs.
-    let fixtures = ["classes", "async_basic"];
-    for name in fixtures {
+    for name in ["classes", "async_basic"] {
         let src = cases_dir.join(format!("{}.dream", name));
         if !src.exists() {
             continue;
         }
         let src_str = src.to_str().unwrap().to_string();
-        let mut prev_c: Option<String> = None;
-        let mut prev_rt: Option<String> = None;
+        let out = std::env::temp_dir().join(format!("dream_det_{}.wat", name));
+        let out_str = out.to_str().unwrap().to_string();
+        let artifacts = [
+            out.with_extension("ll"),
+            out.with_extension("wasm"),
+            out.with_extension("web.runtime.js"),
+        ];
+        let mut prev: Option<Vec<Vec<u8>>> = None;
         for run in 0..2 {
-            let out = std::env::temp_dir().join(format!("dream_det_{}_{}.wat", name, run));
-            let out_str = out.to_str().unwrap().to_string();
             Compiler::new(Target::Wasm32)
                 .with_release(true)
                 .with_optimize(None)
                 .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Web])
                 .compile(&src_str, &out_str)
                 .unwrap_or_else(|_| panic!("Compilation failed for {}", name));
-            let c_src = fs::read_to_string(out.with_extension("c")).unwrap();
-            let rt_path = out.with_extension("web.runtime.js");
-            let rt = fs::read_to_string(&rt_path)
-                .unwrap_or_else(|e| panic!("missing selective runtime for {}: {}", name, e));
-            let _ = fs::remove_file(&out);
-            let _ = fs::remove_file(&rt_path);
-            let _ = fs::remove_file(out.with_extension("wasm"));
-            let _ = fs::remove_file(out.with_extension("c"));
-            let _ = fs::remove_file(out.with_extension("abi.json"));
-            if let Some(ref first) = prev_c {
-                assert_eq!(
-                    first, &c_src,
-                    "Nondeterministic C for {} (run {})",
-                    name, run
-                );
+            let bytes: Vec<Vec<u8>> = artifacts
+                .iter()
+                .map(|p| fs::read(p).unwrap_or_else(|e| panic!("{}: {e}", p.display())))
+                .collect();
+            if let Some(first) = &prev {
+                for (i, p) in artifacts.iter().enumerate() {
+                    assert!(
+                        first[i] == bytes[i],
+                        "Nondeterministic {} for {} (run {})",
+                        p.display(),
+                        name,
+                        run
+                    );
+                }
             } else {
-                prev_c = Some(c_src);
+                prev = Some(bytes);
             }
-            if let Some(ref first) = prev_rt {
-                assert_eq!(
-                    first, &rt,
-                    "Nondeterministic selective runtime for {} (run {})",
-                    name, run
-                );
-            } else {
-                prev_rt = Some(rt);
-            }
+        }
+        for p in artifacts
+            .iter()
+            .chain([&out, &out.with_extension("abi.json")])
+        {
+            let _ = fs::remove_file(p);
         }
     }
 }

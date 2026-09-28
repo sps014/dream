@@ -5,9 +5,10 @@
 
 #![allow(dead_code)]
 
-use dream::driver::compiler::{Compiler, Target};
+use dream::driver::compiler::{Compiler, LlvmRuntimeRequest, LlvmToolchain, Target};
 use dream::driver::wasm_opt::OptLevel;
-use dream::execution::native_c::compile_and_capture;
+use dream::execution::llvm::Toolchain;
+use dream::execution::native::compile_and_capture;
 use dream_diagnostics::DiagnosticBag;
 use dream_hir::Hir;
 use dream_sema::analyzer::Analyzer;
@@ -51,10 +52,59 @@ pub fn compile_test_pipeline<R>(code: &str, emit: impl FnOnce(&Hir, &TypeInterne
     emit(&hir, interner)
 }
 
+/// The module's LLVM IR, typed against the pinned toolchain's native runtime signatures.
+pub fn emit_ll(mir: &dream_mir::Mir, interner: &TypeInterner) -> String {
+    emit_ll_for(mir, interner, dream_mir::backend::Target::Native)
+}
+
+/// Like [`emit_ll`] for an explicit target (wasm32 calls JS bridge imports by name).
+pub fn emit_ll_for(
+    mir: &dream_mir::Mir,
+    interner: &TypeInterner,
+    target: dream_mir::backend::Target,
+) -> String {
+    let req = LlvmRuntimeRequest {
+        need: dream_mir::runtime::runtime_need_from_mir(mir),
+        target,
+        threads: false,
+        wasm_opt: OptLevel::O0,
+    };
+    let toolchain = Toolchain {
+        opt: OptLevel::O0,
+        debug: false,
+    };
+    let text = toolchain
+        .runtime_sigs(&req)
+        .unwrap_or_else(|e| panic!("runtime signatures: {}", e));
+    let sigs = dream_mir::backend::llvm::RuntimeSigs::parse(&text)
+        .unwrap_or_else(|e| panic!("runtime signatures: {}", e));
+    dream_mir::backend::llvm::emit_llvm_module(mir, interner, &sigs, false, target)
+}
+
+/// Extracts the body of the function `name` (its `define ... @name(... {` line), up to its
+/// closing brace. Returns "" when no definition is found. Declarations and same-prefix functions
+/// (`poll_work` when searching `work`) are skipped.
+pub fn ir_func_body<'a>(ir: &'a str, name: &str) -> &'a str {
+    let needle = format!("@{name}(");
+    let mut offset = 0;
+    while let Some(len) = ir[offset..].find('\n') {
+        let line = &ir[offset..offset + len];
+        offset += len + 1;
+        if line.starts_with("define ") && line.contains(&needle) && line.ends_with('{') {
+            let rest = &ir[offset..];
+            return match rest.find("\n}") {
+                Some(e) => &rest[..e],
+                None => rest,
+            };
+        }
+    }
+    ""
+}
+
 /// Analyzes `code`, asserts it is error-free, and runs the *interleaved-emitted* HIR through
-/// MIR (`lower -> passes -> emit`), returning the emitted C and how many functions were emitted.
-/// Exercises HIR emission end-to-end: source -> analyzer-emitted HIR -> C.
-pub fn emit_hir_to_c(code: &str) -> (String, usize) {
+/// MIR (`lower -> passes -> emit`), returning the emitted IR and how many functions were emitted.
+/// Exercises HIR emission end-to-end: source -> analyzer-emitted HIR -> LLVM IR.
+pub fn emit_hir_to_ir(code: &str) -> (String, usize) {
     compile_test_pipeline(code, |hir, interner| {
         let count = hir.functions.len();
         let mut mir = dream_mir::lower::lower_program(hir, interner);
@@ -67,11 +117,11 @@ pub fn emit_hir_to_c(code: &str) -> (String, usize) {
         for f in &mut mir.functions {
             pm.run(f, interner);
         }
-        (dream_mir::backend::c::emit_c_module(&mir, interner), count)
+        (emit_ll(&mir, interner), count)
     })
 }
 
-/// Compiles `code` through the native C backend and returns stdout from `main`.
+/// Compiles `code` natively and returns stdout from `main`.
 pub fn run_and_capture(code: &str, _entry: &str) -> String {
     run_native_main(code)
 }
@@ -98,13 +148,13 @@ fn run_native_main(code: &str) -> String {
         format!("import system;\n{}", source)
     };
     std::fs::write(&src, &source).expect("write source");
-    let c = dir.join("t.c");
+    let ll = dir.join("t.ll");
     let src_s = src.to_string_lossy().into_owned();
-    let c_s = c.to_string_lossy().into_owned();
-    Compiler::new(Target::NativeC)
-        .compile(&src_s, &c_s)
-        .unwrap_or_else(|e| panic!("native C compile failed: {}", e));
-    compile_and_capture(&c_s, OptLevel::O0).unwrap_or_else(|e| panic!("native C run failed: {}", e))
+    let ll_s = ll.to_string_lossy().into_owned();
+    Compiler::new(Target::Native)
+        .compile(&src_s, &ll_s)
+        .unwrap_or_else(|e| panic!("native compile failed: {}", e));
+    compile_and_capture(&ll_s, OptLevel::O0).unwrap_or_else(|e| panic!("native run failed: {}", e))
 }
 
 fn dedent_dream_source(s: &str) -> String {
@@ -137,7 +187,7 @@ pub fn emit_hir_to_module_rc(code: &str) -> String {
 }
 
 /// Compiles through the production-like MIR pipeline: RC insertion, module optimize (inline), then
-/// the default per-function pass manager (includes `RcElision`). Returns full-module C.
+/// the default per-function pass manager (includes `RcElision`). Returns the full module.
 pub fn emit_hir_to_module_optimized(code: &str) -> String {
     compile_test_pipeline(code, |hir, interner| {
         let mut mir = dream_mir::lower::lower_program(hir, interner);
@@ -151,12 +201,20 @@ pub fn emit_hir_to_module_optimized(code: &str) -> String {
             interner,
             &mut dream_mir::passes::MirDump::disabled(),
         );
-        dream_mir::backend::c::emit_c_module(&mir, interner)
+        emit_ll(&mir, interner)
     })
 }
 
-/// Same pipeline as [`emit_hir_to_module_optimized`], native C text.
-pub fn emit_hir_to_c_optimized(code: &str) -> String {
+/// [`emit_hir_to_module`] for wasm32.
+pub fn emit_hir_to_module_wasm32(code: &str) -> String {
+    compile_test_pipeline(code, |hir, interner| {
+        let mir = dream_mir::lower::lower_program(hir, interner);
+        emit_ll_for(&mir, interner, dream_mir::backend::Target::Wasm32)
+    })
+}
+
+/// Same pipeline as [`emit_hir_to_module_optimized`].
+pub fn emit_hir_to_ir_optimized(code: &str) -> String {
     compile_test_pipeline(code, |hir, interner| {
         let mut mir = dream_mir::lower::lower_program(hir, interner);
         dream_mir::passes::optimize_module(&mut mir, interner);
@@ -169,16 +227,16 @@ pub fn emit_hir_to_c_optimized(code: &str) -> String {
             interner,
             &mut dream_mir::passes::MirDump::disabled(),
         );
-        dream_mir::backend::c::emit_c_module(&mir, interner)
+        emit_ll(&mir, interner)
     })
 }
 
-/// Like [`emit_hir_to_c`] but emits the full self-contained module (imports, memory, runtime,
+/// Like [`emit_hir_to_ir`] but emits the full self-contained module (imports, memory, runtime,
 /// exports), so import/scaffold concerns can be asserted and assembled.
 pub fn emit_hir_to_module(code: &str) -> String {
     compile_test_pipeline(code, |hir, interner| {
         let mir = dream_mir::lower::lower_program(hir, interner);
-        dream_mir::backend::c::emit_c_module(&mir, interner)
+        emit_ll(&mir, interner)
     })
 }
 
@@ -193,7 +251,7 @@ pub fn emit_hir_to_module_rc_only(code: &str) -> String {
         for f in &mut mir.functions {
             dream_mir::passes::RcInsertion.run(f, interner);
         }
-        dream_mir::backend::c::emit_c_module(&mir, interner)
+        emit_ll(&mir, interner)
     })
 }
 

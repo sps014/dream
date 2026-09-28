@@ -5,7 +5,7 @@
 #include "dream_rt_wasm32.h"
 
 /* `__builtin_memmove`/`__builtin_memset` lower to single `memory.copy` / `memory.fill`
- * instructions (the module is always compiled with -mbulk-memory; see c_wasm32.rs) — one
+ * instructions (the runtime is always compiled with -mbulk-memory; see src/driver/wasi.rs) — one
  * trap check instead of a byte loop per element. `memory.copy` has memmove semantics. */
 void *memcpy(void *dst, const void *src, size_t n) {
     if (n) {

@@ -369,7 +369,7 @@ async function interruptDreamTerminalIfBusy(): Promise<void> {
 
 /**
  * Run via `dreamer` when the workspace root has `dream.toml`; otherwise `dream run` /
- * compile-only for the open file. Debug stays native C + lldb-dap.
+ * compile-only for the open file. Debug stays native + lldb-dap.
  */
 async function runProgramInTerminal(
     filePath: string,
@@ -448,7 +448,7 @@ function registerDebugFileCommand(context: vscode.ExtensionContext): void {
                 }
 
                 const settings = readBuildSettings();
-                // DAP debugging is native C + lldb-dap.
+                // DAP debugging is native + lldb-dap.
 
                 const uri = vscode.Uri.file(filePath);
                 const modeLabel = settings.buildMode === 'release' ? 'Release' : 'Debug';
@@ -555,7 +555,7 @@ function registerDebugAdapter(context: vscode.ExtensionContext): void {
                 return undefined;
             }
 
-            // DAP / Debug: native C + lldb-dap (`dream debug-adapter`).
+            // DAP / Debug: native + lldb-dap (`dream debug-adapter`).
             return config;
         }
     };
@@ -758,7 +758,7 @@ async function pickRuntimeTarget(): Promise<void> {
             {
                 label: 'Native',
                 description: current === 'native' ? '(current)' : undefined,
-                detail: 'Run native C binary (dream run)',
+                detail: 'Run native binary (dream run)',
                 value: 'native' as RuntimeTarget
             },
             {

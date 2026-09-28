@@ -1,4 +1,4 @@
-//! Which container stores adopt their source's count instead of retaining it. The C backend's
+//! Which container stores adopt their source's count instead of retaining it. The backend's
 //! `rc_store` and passes that spell such a store out as explicit RC statements share this rule.
 
 use crate::Rvalue;

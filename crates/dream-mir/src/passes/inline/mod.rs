@@ -179,8 +179,7 @@ fn eligible(
         return false;
     }
     // Keep `main` a thin driver. Single-use inlining of benches/`run_suite` into it produces one
-    // multi-thousand-block `$__pc` dispatcher (relooper fallback) that Cranelift cannot turn into
-    // real loops — that dominated the old map/insert microbench profiles.
+    // multi-thousand-block function whose loops the optimizer no longer handles well.
     if caller.name == crate::abi::ENTRY_FN || caller.name == crate::lower::INIT_FN_NAME {
         return false;
     }

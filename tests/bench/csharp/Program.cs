@@ -11,7 +11,7 @@ namespace DreamBench;
 /// <summary>
 /// 1:1 C# port of tests/bench/microbenches.dream for side-by-side ns/op comparison.
 /// Pass --dream-scores path/to/native.txt (from run-microbenches.sh) for live ratios.
-/// Dream runs as native C + ARC; this is Release JIT + GC — substrate differs.
+/// Dream runs as native LLVM + ARC; this is Release JIT + GC — substrate differs.
 /// JSON uses the compile-time source generator, matching Dream's `@json` codegen.
 /// Regex is the interpreted matcher, matching Dream's Pike VM.
 /// </summary>

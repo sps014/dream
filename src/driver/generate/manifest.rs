@@ -23,7 +23,7 @@ pub fn find_project_root(entry_file: &str) -> Option<PathBuf> {
 /// the machine shares one compiled harness.
 #[cfg(feature = "native")]
 pub fn harness_cache_dir(kind: &str, fingerprint: u64) -> PathBuf {
-    crate::execution::native_c::generator_cache_root()
+    crate::execution::native::generator_cache_root()
         .join(format!("dream-{kind}-{fingerprint:x}"))
 }
 

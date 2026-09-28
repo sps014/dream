@@ -236,7 +236,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "cast method '{}' must not declare parameters",
-                        method.name.text
+                        kind_text
                     ),
                     Some(method.name.position),
                 );
@@ -246,7 +246,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "cast method '{}' must declare a return type (the cast's target type)",
-                        method.name.text
+                        kind_text
                     ),
                     Some(method.name.position),
                 );

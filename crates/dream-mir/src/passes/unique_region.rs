@@ -986,12 +986,6 @@ mod tests {
             .stmts
             .iter()
             .any(|s| matches!(s, Statement::ReleaseUnique(_))),);
-        let c = crate::backend::c::emit_c_module(&mir, &ctx.interner);
-        assert!(
-            c.contains("dream_region_enter") && c.contains("dream_region_leave"),
-            "{}",
-            c
-        );
     }
 
     #[test]

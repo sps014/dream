@@ -2,8 +2,8 @@
 
 The guest runtime is **C only** — there is no WAT runtime anymore. This directory holds:
 
-- **wasm32 guest** — [`wasm32/`](wasm32/) (heap, libc, g0, sync/weak stubs) plus shared units from [`native/`](native/). Compiled by wasi-sdk clang (`dreamer toolchain install wasi-sdk`); see `src/driver/c_wasm32.rs`.
-- **Native host runtime** — [`native/`](native/) for `dream run`.
+- **wasm32 guest** — [`wasm32/`](wasm32/) (heap, libc, g0, sync/weak stubs) plus shared units from [`native/`](native/). Compiled to bitcode by wasi-sdk clang (`dreamer toolchain install wasi-sdk`); see `src/execution/llvm/wasm.rs` and `src/driver/wasi.rs`.
+- **Native host runtime** — [`native/`](native/) for `dream run`, compiled to bitcode by the pinned clang (`src/execution/llvm/runtime.rs`).
 - **Linked libraries** — today PCRE2 ([`regex.c`](regex.c), [`regex_wasm_libc.c`](regex_wasm_libc.c), [`pcre2/`](pcre2/)), compiled per target when the catalog (`../modules.rs`) says `RuntimeNeed::REGEX`.
 
 ## Do

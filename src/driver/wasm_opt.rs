@@ -64,32 +64,6 @@ impl OptLevel {
         }
     }
 
-    /// clang flags for this level. Speed builds (`-O3`/`-O4`) use LTO + host ISA.
-    pub fn cc_flags(self) -> &'static [&'static str] {
-        match self {
-            Self::O0 => &[
-                "-O0",
-                "-pipe",
-                "-fno-asynchronous-unwind-tables",
-                "-fno-unwind-tables",
-            ],
-            Self::O1 => &["-O1"],
-            Self::O2 => &["-O2"],
-            // Hidden visibility + no semantic interposition let clang bind intra-module calls
-            // directly (no PLT indirection) — the emitted module is self-contained by design.
-            // Native Windows skips `-flto` (Zig 0.16 windows-gnu LTO / zigc.lib CRT holes).
-            Self::O3 | Self::O4 => &[
-                "-O3",
-                "-flto",
-                "-march=native",
-                "-fvisibility=hidden",
-                "-fno-semantic-interposition",
-            ],
-            Self::Size => &["-Os"],
-            Self::SizeAggressive => &["-Oz"],
-        }
-    }
-
     pub fn native_rt_subdir(self) -> &'static str {
         match self {
             Self::O0 => "O0",

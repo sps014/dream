@@ -179,14 +179,14 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum ToolchainCmd {
-    /// Download pinned Zig and/or wasi-sdk 33 for this OS/arch.
+    /// Download pinned Zig, wasi-sdk 33 and/or LLVM 22 for this OS/arch.
     Install {
-        /// `cc` (Zig) or `wasi-sdk`. Omit to install both.
+        /// `cc` (Zig), `wasi-sdk` or `llvm`. Omit to install every one this host supports.
         component: Option<String>,
     },
     /// Show which toolchain components are installed.
     List,
-    /// Remove a component (`cc` or `wasi-sdk`).
+    /// Remove a component (`cc`, `wasi-sdk` or `llvm`).
     Uninstall { component: String },
 }
 

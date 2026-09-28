@@ -1,0 +1,293 @@
+//! The LLVM backend at `-O0` and `-O3` on a feature-spanning slice of the golden corpus, runtime
+//! declarations in lockstep with `dream_rt.bc`, IR shapes, and byte-identical `.ll` across
+//! compiles. Skipped (with a message) when the pinned LLVM toolchain is not installed.
+
+use dream::driver::compiler::{Compiler, LlvmRuntimeRequest, LlvmToolchain, Target};
+use dream::driver::wasm_opt::OptLevel;
+use dream::execution::llvm::{compile_llvm, resolve_llvm, Toolchain};
+use dream::execution::native::{capture_native_bin, Pgo};
+use dream_mir::backend::llvm::RuntimeSigs;
+use rayon::prelude::*;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+/// One or more cases per plan area: arithmetic, recursion, loops, structs, arrays and a bounds
+/// trap, classes, retain/release, destruction through `del`, ownership transfer, borrowed and
+/// sink params, return ownership, interface dispatch, strings, List/Map, weak refs, async, tasks.
+const CASES: &[&str] = &[
+    "arithmetic",
+    "functions",
+    "for_each",
+    "struct_basic",
+    "struct_rc",
+    "arrays",
+    "array_alloc",
+    "abc_post_loop_trap",
+    "list_index_oob_trap",
+    "classes",
+    "class_methods",
+    "arc_param",
+    "arc_return",
+    "arc_factory",
+    "arc_same_arg_twice",
+    "arc_global_reassign",
+    "destroy_long_chain",
+    "struct_last_use_move",
+    "param_modes_borrow",
+    "async_generic_sink_reuse",
+    "interfaces",
+    "interface_default_method",
+    "generic_interfaces",
+    "value_struct_interface_box",
+    "strings",
+    "string_builder",
+    "string_interpolation",
+    "list_basics",
+    "map_basics",
+    "union_match",
+    "union_rc",
+    "closure_capture",
+    "closure_env_reclaim",
+    "weak_field_runtime",
+    "weak_handle_lifecycle",
+    "async_basic",
+    "async_value_struct_locals",
+    "async_wide_scalar_return",
+    "task_basic",
+    "task_map",
+];
+
+fn llvm_available() -> bool {
+    match resolve_llvm() {
+        Ok(_) => true,
+        Err(e) => {
+            eprintln!("skipping LLVM backend test: {e}");
+            false
+        }
+    }
+}
+
+fn case(stem: &str) -> PathBuf {
+    Path::new("tests/cases").join(format!("{stem}.dream"))
+}
+
+fn out_dir(tag: &str) -> PathBuf {
+    let dir = Path::new("target").join(tag);
+    fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn compile_ll(src: &Path, ll: &Path, opt: OptLevel) {
+    Compiler::new(Target::Native)
+        .with_release(opt != OptLevel::O0)
+        .with_llvm(std::sync::Arc::new(Toolchain { opt, debug: false }))
+        .compile(&src.display().to_string(), &ll.display().to_string())
+        .unwrap_or_else(|e| panic!("LLVM compile failed for {}: {}", src.display(), e));
+}
+
+fn run_llvm(src: &Path, opt: OptLevel) -> Result<String, String> {
+    let stem = src.file_stem().unwrap().to_str().unwrap();
+    let ll = out_dir(&format!("llvm-backend-{opt:?}")).join(format!("{stem}.ll"));
+    compile_ll(src, &ll, opt);
+    let bin = compile_llvm(&ll, opt, false, &Pgo::Off)
+        .unwrap_or_else(|e| panic!("LLVM build failed for {}: {}", stem, e));
+    capture_native_bin(&bin, ll.to_str().unwrap(), &[], &[], None, 60).map_err(|e| e.to_string())
+}
+
+fn check_case(stem: &str) -> Result<(), String> {
+    let src = case(stem);
+    let expected = fs::read_to_string(src.with_extension("expected")).ok();
+    let trap = fs::read_to_string(src.with_extension("expected_trap")).ok();
+    for opt in [OptLevel::O0, OptLevel::O3] {
+        match (run_llvm(&src, opt), &expected, &trap) {
+            (Ok(out), Some(want), None) => {
+                if out.trim() != want.trim() {
+                    return Err(format!("{stem} {opt:?}: stdout != .expected\n{out}"));
+                }
+            }
+            (Err(err), _, Some(needle)) => {
+                for line in needle.lines().map(str::trim).filter(|l| !l.is_empty()) {
+                    if !err.contains(line) {
+                        return Err(format!("{stem} {opt:?}: trap line `{line}` missing\n{err}"));
+                    }
+                }
+            }
+            (outcome, _, _) => {
+                return Err(format!("{stem} {opt:?}: unexpected outcome {outcome:?}"))
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn llvm_runs_feature_cases_at_o0_and_o3() {
+    if !llvm_available() {
+        return;
+    }
+    let failures: Vec<String> = CASES
+        .par_iter()
+        .filter_map(|s| check_case(s).err())
+        .collect();
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
+
+#[test]
+fn llvm_ir_is_deterministic() {
+    if !llvm_available() {
+        return;
+    }
+    for stem in ["classes", "async_basic", "interfaces", "union_rc"] {
+        let dir = out_dir("llvm-backend-det");
+        let texts: Vec<String> = (0..2)
+            .map(|run| {
+                let ll = dir.join(format!("{stem}_{run}.ll"));
+                compile_ll(&case(stem), &ll, OptLevel::O3);
+                fs::read_to_string(&ll).unwrap()
+            })
+            .collect();
+        assert!(texts[0] == texts[1], "nondeterministic .ll for {}", stem);
+    }
+}
+
+/// Every function the emitted module declares or exports that the runtime bitcode also has must
+/// carry the runtime's exact type; a mismatch would link silently and call through the wrong ABI.
+#[test]
+fn llvm_runtime_declarations_match_bitcode() {
+    if !llvm_available() {
+        return;
+    }
+    let toolchain = Toolchain {
+        opt: OptLevel::O2,
+        debug: false,
+    };
+    for stem in [
+        "strings",
+        "async_basic",
+        "task_basic",
+        "weak_handle_lifecycle",
+        "map_basics",
+    ] {
+        let ll = out_dir("llvm-backend-lockstep").join(format!("{stem}.ll"));
+        compile_ll(&case(stem), &ll, OptLevel::O2);
+        let text = fs::read_to_string(&ll).unwrap();
+        let need = dream_mir::runtime::runtime_need_from_module_text(&text);
+        let req = LlvmRuntimeRequest {
+            need,
+            target: dream_mir::backend::Target::Native,
+            threads: false,
+            wasm_opt: OptLevel::O2,
+        };
+        let rt = RuntimeSigs::parse(&toolchain.runtime_sigs(&req).unwrap()).unwrap();
+        let ours = RuntimeSigs::parse(&text).unwrap();
+        assert_eq!(ours.triple, rt.triple, "{stem}: target triple");
+        assert_eq!(ours.datalayout, rt.datalayout, "{stem}: datalayout");
+        let mut checked = 0;
+        for (name, f) in &ours.fns {
+            if let Some(r) = rt.fns.get(name) {
+                assert_eq!(f.fty, r.fty, "{stem}: `{name}` differs from dream_rt.bc");
+                checked += 1;
+            }
+        }
+        assert!(
+            checked > 10,
+            "{}: only {} runtime functions compared",
+            stem,
+            checked
+        );
+    }
+}
+
+fn function_body<'t>(ll: &'t str, name: &str) -> &'t str {
+    let head = format!(" @{name}(");
+    let start = ll
+        .lines()
+        .position(|l| l.starts_with("define ") && l.contains(&head))
+        .unwrap_or_else(|| panic!("no definition of @{}", name));
+    let from: usize = ll.lines().take(start).map(|l| l.len() + 1).sum();
+    let len = ll[from..].find("\n}\n").expect("unterminated function");
+    &ll[from..from + len]
+}
+
+/// Structural facts about the emitted module: constant
+/// dispatch tables, direct recursion, guarded devirtualized interface calls, the split-tail
+/// release, a switch-dispatched async poll, caller-buffer value-struct returns with a boxing
+/// wrapper for indirect callers, and no pointer attributes without a proof source.
+#[test]
+fn llvm_ir_shapes() {
+    if !llvm_available() {
+        return;
+    }
+    let ll_path = out_dir("llvm-backend-shapes").join("ir_shapes.ll");
+    compile_ll(
+        Path::new("tests/llvm/ir_shapes.dream"),
+        &ll_path,
+        OptLevel::O0,
+    );
+    let ll = fs::read_to_string(&ll_path).unwrap();
+
+    assert!(ll.contains("@dream_ft = internal constant ["));
+    assert!(ll.lines().any(|l| l.starts_with("@dream_iface_")
+        && l.contains("internal constant")
+        && l.contains("@Sq_area")
+        && l.contains("@Tri_area")));
+    assert!(!ll.contains("dream_init_ft") && !ll.contains("dream_init_itables"));
+
+    assert!(function_body(&ll, "fib").matches("call i32 @fib(").count() == 2);
+
+    let total = function_body(&ll, "total");
+    assert!(total.contains("call i32 @Sq_area(") && total.contains("call i32 @Tri_area("));
+    assert!(total.contains("@__iface_dispatch_"));
+    assert!(total.contains("call i32 @dream_rc_last(") && total.contains("_into("));
+
+    assert!(function_body(&ll, "poll_later").contains("switch i32"));
+
+    assert!(ll.contains("define internal void @mk(i32 %a0, ptr %a1)"));
+    assert!(function_body(&ll, "mk__boxed").contains("call void @mk("));
+    assert!(ll.contains("call void @mk(i32 4, ptr "));
+    assert!(ll
+        .lines()
+        .any(|l| l.starts_with("@dream_ft = ") && l.contains("ptr @mk__boxed")));
+
+    for l in ll.lines().filter(|l| l.starts_with("define ")) {
+        assert!(l.contains("nounwind"), "missing nounwind: {}", l);
+        for attr in [
+            "noalias",
+            "nonnull",
+            "dereferenceable",
+            "readonly",
+            "noundef",
+        ] {
+            assert!(!l.contains(attr), "unproven `{}` on: {}", attr, l);
+        }
+    }
+}
+
+/// `--profile` then `--use-profile` through the pinned toolchain: the instrumented build records
+/// a profile the pinned `llvm-profdata` merges, and the profile-optimized build behaves the same.
+#[test]
+#[ignore = "PGO round trip; cargo test --workspace -- --ignored"]
+fn llvm_pgo_round_trip() {
+    let Ok(tools) = resolve_llvm() else {
+        return;
+    };
+    if !tools.tool("llvm-profdata").is_file() {
+        eprintln!("skipping: pinned LLVM has no llvm-profdata");
+        return;
+    }
+    let src = case("for_each");
+    let ll = out_dir("llvm-backend-pgo").join("for_each.ll");
+    compile_ll(&src, &ll, OptLevel::O2);
+    let expected = fs::read_to_string(src.with_extension("expected")).unwrap();
+    let run =
+        |bin: &Path| capture_native_bin(bin, ll.to_str().unwrap(), &[], &[], None, 60).unwrap();
+    let gen = compile_llvm(&ll, OptLevel::O2, false, &Pgo::Generate).unwrap();
+    assert_eq!(run(&gen), expected);
+    let raw = gen.with_extension("pgo");
+    assert!(fs::read_dir(&raw)
+        .unwrap()
+        .flatten()
+        .any(|e| e.path().extension().is_some_and(|x| x == "profraw")));
+    let used = compile_llvm(&ll, OptLevel::O2, false, &Pgo::Use(None)).unwrap();
+    assert_eq!(run(&used), expected);
+}

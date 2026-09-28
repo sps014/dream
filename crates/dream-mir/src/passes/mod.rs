@@ -53,7 +53,7 @@ pub use loop_unroll::LoopUnroll;
 pub use overflow_elim::OverflowElim;
 pub use prop::CopyConstProp;
 pub(crate) use rc::{container_move_locals, rvalue_reads_local, stmt_reads_local};
-pub use rc::{HopElision, RcElision, RcInsertion, RcLastUseRepair};
+pub use rc::{HopElision, RcElision, RcInsertion, RcLastUseRepair, ReleaseSink};
 pub use sccp::Sccp;
 pub use simplify_cfg::SimplifyCfg;
 pub use sroa::{ExpandSimpleCtors, Sroa, SroaManaged};
@@ -117,6 +117,7 @@ impl PassManager {
         pm.add(Dce);
         pm.add(HopElision);
         pm.add(RcElision);
+        pm.add(ReleaseSink);
         pm.add(StrCursor);
         // RC *insertion* is a module-wide phase that must run once before inlining (see
         // `optimize_module`); the per-function pipeline only *elides* redundant RC. Running
@@ -132,9 +133,9 @@ impl PassManager {
         pm
     }
 
-    /// Native C emit: same as [`Self::default_pipeline`] without wasm `v128` autovec so clang
-    /// can vectorize scalar loops at `DREAM_F32_LANES` (AVX2 = 8).
-    pub fn native_c_pipeline() -> Self {
+    /// The per-function pipeline release builds run: [`Self::default_pipeline`] without the MIR
+    /// `v128` autovectorizer, so LLVM's loop vectorizer sees scalar loops.
+    pub fn release_pipeline() -> Self {
         let mut pm = PassManager::new();
         pm.add(CopyConstProp);
         pm.add(GlobalProp);
@@ -153,6 +154,7 @@ impl PassManager {
         pm.add(Dce);
         pm.add(HopElision);
         pm.add(RcElision);
+        pm.add(ReleaseSink);
         pm.add(StrCursor);
         debug_assert!(pm.passes.iter().all(|p| p.name() != "autovec"));
         pm

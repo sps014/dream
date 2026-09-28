@@ -1,48 +1,38 @@
-//! Track A ARC goldens: upper bounds on `dream_retain` / release traffic in optimized C.
+//! Track A ARC goldens: upper bounds on `dream_retain` / release traffic in the emitted LLVM IR.
 
 mod common;
 use common::*;
 
-/// A parsed C function definition: its symbol name and body text.
-struct CFunc {
+/// A parsed LLVM function definition: its symbol name and body text.
+struct IrFunc {
     name: String,
     body: String,
 }
 
-const C_KEYWORDS: [&str; 6] = ["if", "else", "while", "for", "switch", "return"];
-
-/// The symbol name if `line` is a function *definition* signature (`... name(params) {`),
-/// i.e. not a declaration (`;`), statement, or bare control-flow block.
+/// The symbol name if `line` opens a function definition (`define ... @name(...) ... {`).
 fn fn_def_name(line: &str) -> Option<&str> {
-    if !line.ends_with('{') || line.contains(';') || !line.contains('(') {
+    if !line.starts_with("define ") || !line.ends_with('{') {
         return None;
     }
-    let sig = line.trim_end_matches('{').trim();
-    let (header, _) = sig.split_once('(')?;
-    let mut tokens = header.split_whitespace();
-    let name = tokens.next_back()?;
-    tokens.next()?; // a return type must precede the name
-    if C_KEYWORDS.contains(&name) {
-        return None;
-    }
-    Some(name)
+    let after = &line[line.find('@')? + 1..];
+    Some(after.split('(').next()?.trim_matches('"'))
 }
 
-/// Parses every function definition out of the emitted C; bodies run from after the signature
-/// line to the closing brace at column zero.
-fn c_func_defs(c: &str) -> Vec<CFunc> {
+/// Parses every function definition out of the module; bodies run from after the `define` line
+/// to the closing brace at column zero.
+fn ir_func_defs(ir: &str) -> Vec<IrFunc> {
     let mut out = Vec::new();
     let mut offset = 0;
-    while let Some(line_end) = c[offset..].find('\n') {
-        let line = c[offset..offset + line_end].trim_end();
+    while let Some(line_end) = ir[offset..].find('\n') {
+        let line = ir[offset..offset + line_end].trim_end();
         if let Some(name) = fn_def_name(line) {
             let start = offset + line_end + 1;
-            let tail = &c[start..];
+            let tail = &ir[start..];
             let len = match tail.find("\n}") {
                 Some(e) => e,
                 None => tail.len(),
             };
-            out.push(CFunc {
+            out.push(IrFunc {
                 name: name.to_string(),
                 body: tail[..len].to_string(),
             });
@@ -70,28 +60,27 @@ fn count_in(body: &str, needle: &str) -> usize {
     body.matches(needle).count()
 }
 
-/// `dream_retain(` calls inside user functions only.
+/// `dream_retain` calls inside user functions only.
 fn user_retains(c: &str) -> usize {
-    c_func_defs(c)
+    ir_func_defs(c)
         .iter()
         .filter(|f| !is_generated_fn(&f.name))
-        .map(|f| count_in(&f.body, "dream_retain("))
+        .map(|f| count_in(&f.body, "@dream_retain("))
         .sum()
 }
 
-/// Release-side traffic (`dream_release(` plus per-type `release_*` / `destroy_*` calls) inside
+/// Release-side traffic (`dream_release` plus per-type `release_*` / `destroy_*` calls) inside
 /// user functions only.
 fn user_releases(c: &str) -> usize {
-    c_func_defs(c)
+    ir_func_defs(c)
         .iter()
         .filter(|f| !is_generated_fn(&f.name))
         .map(|f| {
-            count_in(&f.body, "dream_release(")
+            count_in(&f.body, "@dream_release(")
                 + f.body
                     .lines()
                     .filter(|l| {
-                        let t = l.trim_start();
-                        t.starts_with("release_") || t.starts_with("destroy_")
+                        l.contains("call void @release_") || l.contains("call void @destroy_")
                     })
                     .count()
         })
@@ -184,11 +173,11 @@ fn rc_golden_field_walk_near_zero_retains() {
         }
     "#;
     let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
-    let walk = c_func_defs(&c)
+    let walk = ir_func_defs(&c)
         .into_iter()
         .find(|f| f.name == "walk")
         .expect("walk should be emitted");
-    let retains = count_in(&walk.body, "dream_retain(");
+    let retains = count_in(&walk.body, "@dream_retain(");
     assert!(
         retains <= 1,
         "field-walk should be near retain-free inside walk (got {}):\n{}",
@@ -247,11 +236,11 @@ fn rc_golden_js_rebuild_emits_js_release() {
         }
     "#;
     let c = emit_hir_to_module_optimized(&format!("{}\n{}\n{}", SYSTEM_STUB, JS_STUB, code));
-    let rebuild = c_func_defs(&c)
+    let rebuild = ir_func_defs(&c)
         .into_iter()
         .find(|f| f.name == "rebuild")
         .expect("rebuild should be emitted");
-    let js_rel = count_in(&rebuild.body, "dream_release(");
+    let js_rel = count_in(&rebuild.body, "@dream_release(");
     assert!(
         js_rel >= 2,
         "rebuild should release its js temps at last use (got {}):\n{}",
@@ -276,11 +265,15 @@ fn rc_golden_local_object_is_scalarized() {
         }
     "#;
     let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
-    let main = c_func_defs(&c)
+    let main = ir_func_defs(&c)
         .into_iter()
         .find(|f| f.name == "main_dream")
         .expect("main should be emitted");
-    for gone in ["dream_malloc(", "dream_frame_object(", "release_Box_into("] {
+    for gone in [
+        "@dream_malloc(",
+        "@dream_frame_object(",
+        "@release_Box_into(",
+    ] {
         assert_eq!(
             count_in(&main.body, gone),
             0,
@@ -311,22 +304,22 @@ fn rc_golden_unique_class_no_retain() {
     // cascade. It stays guarded by `dream_rc_last`: the intra-procedural Unique lattice proves the
     // *local* holds the only owned reference, not that the object is unaliased, so the unguarded
     // `destroy_Box` form was removed after it caused a use-after-free (see `can_unique_destroy`).
-    let main = c_func_defs(&c)
+    let main = ir_func_defs(&c)
         .into_iter()
         .find(|f| f.name == "main_dream")
         .expect("main should be emitted");
     assert!(
-        main.body.contains("release_Box_into("),
+        main.body.contains("@release_Box_into("),
         "unique Box should destroy through its own tail:\n{}",
         main.body
     );
     assert!(
-        main.body.contains("dream_rc_last("),
+        main.body.contains("@dream_rc_last("),
         "the destroy must stay guarded by the last-reference check:\n{}",
         main.body
     );
     assert_eq!(
-        count_in(&main.body, "dream_release("),
+        count_in(&main.body, "@dream_release("),
         0,
         "unique Box must not fall back to the generic release cascade:\n{}",
         main.body

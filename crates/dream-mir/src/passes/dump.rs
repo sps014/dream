@@ -43,7 +43,7 @@ const MODULE_STAGES: &[&str] = &[
 pub fn dumpable_pass_names() -> Vec<&'static str> {
     let mut fn_passes: Vec<&'static str> = [
         PassManager::default_pipeline(),
-        PassManager::native_c_pipeline(),
+        PassManager::release_pipeline(),
         PassManager::async_poll_pipeline(),
         PassManager::debug_pipeline(),
     ]

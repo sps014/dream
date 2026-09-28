@@ -38,7 +38,7 @@ pub(crate) fn take_param_set(func: &MirFunction) -> HashSet<u32> {
 
 /// Rebind of an owned dest whose RHS may observe the old pointer (`x = f(x)`, `New`, calls).
 /// Lower as `tmp = rhs; Release(x); x = tmp` so the call cannot UAF.
-/// Concat / ConcatInt only read their operands; native C reuses `dest` in place when unique.
+/// Concat / ConcatInt only read their operands; the runtime reuses `dest` in place when unique.
 pub(crate) fn needs_rebind_temp(rvalue: &Rvalue, dest: u32) -> bool {
     if rvalue_reads_local(rvalue, dest) {
         return true;

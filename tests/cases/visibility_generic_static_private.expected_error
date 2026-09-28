@@ -1,1 +1,1 @@
-'locked' is private to 'OpenCache_int'
+'locked' is private to 'OpenCache<int>'

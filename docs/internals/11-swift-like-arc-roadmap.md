@@ -34,9 +34,9 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
   (never under-retain); `RcInsertion` is CFG **ownership-token** dataflow plus a **Unique/Shared**
   lattice (last-use **move**, last-use **destroy**, split-edge release when a token is dead on one
   successor). Sharing still emits `Retain`. Unique last-use destroy of a class/array/union is
-  `ReleaseUnique` (typed `$destroy_*` / C `destroy_*`: `del` + nested release + `free`, no RC RMW).
+  `ReleaseUnique` (typed `destroy_*`: `del` + nested release + `free`, no RC RMW).
   `js`, `shared`, and strings stay on ordinary `Release`. Last-use field/index/global stores of a
-  unique local transfer the +1 (both Wasm and C emitters skip retain). Rebind of an owned local
+  unique local transfer the +1 (the backend skips the retain). Rebind of an owned local
   through a call/`New` evaluates the RHS into a temp, then `Release`s the old occupant
   (`tmp = f(x); Release(x); x = tmp`) so `x = f(x)` cannot UAF. Loop headers of loop-carried owned
   locals start **Owned**/**Unique** so the first dataflow pass does not treat a back-edge as Empty.
@@ -98,7 +98,7 @@ levers (no SSO / `@stack` class / value collections):
    `leave`). Silent; not user `@stack`.
 7. **Frame allocation** (`passes/frame_alloc.rs`) — an instance whose alias class escapes at most
    into non-retaining callee parameters, with a statically known count (`analysis/object_life.rs`),
-   is built in the C frame (`dream_frame_object`, immortal count) and its deaths release only its
+   is built in the stack frame (`dream_frame_object`, immortal count) and its deaths release only its
    strong fields. Refused for `del`, weak/unowned fields, `shared`, large objects, recursion,
    region openers, and async. Also silent; the user-facing non-goal of `@stack` stands.
 8. **Allocator fast path** — native size classes are 16-byte steps to 256 then 8 per power of two
@@ -123,7 +123,7 @@ construction** — no lint, no annotation, any number of buffers or counters:
   full length prefix and releases every slot. Reclamation is deferred to free time for any
   shape; worst-case retention is bounded by live arrays' capacity.
 - Shrinking via `Buffer.realloc` releases dropped tail slots (`dream_array_realloc_rc`,
-  backend/c) so truncation never strands retained elements.
+  `runtime/c/native/strings.c`) so truncation never strands retained elements.
 - Ownership-transferring pops zero their vacated slot (List/Queue/PriorityQueue) purely to
   reclaim eagerly, not for safety.
 

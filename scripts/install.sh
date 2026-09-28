@@ -10,6 +10,7 @@
 #   DREAM_HOME      install prefix (default: ~/.dream). Re-runs replace bin/, lib/,
 #                   and leftover files; toolchains/ (Zig) is kept.
 #   DREAM_SKIP_CC=1 skip auto `dreamer toolchain install cc` when no compiler is found
+#   DREAM_SKIP_LLVM=1 skip auto `dreamer toolchain install llvm` (the pinned code generator)
 #   DREAM_SKIP_LIBS=1 skip auto-install of Linux WebKitGTK / GTK runtime libraries
 
 set -eu
@@ -327,6 +328,22 @@ ensure_linux_libs() {
   fi
 }
 
+LLVM_NOTE=
+ensure_llvm() {
+  if [ "${DREAM_SKIP_LLVM:-}" = "1" ]; then
+    LLVM_NOTE="Skipped LLVM install (DREAM_SKIP_LLVM=1)"
+  elif [ -n "${DREAM_LLVM:-}" ] || ls "${PREFIX}"/toolchains/llvm-*/bin/opt >/dev/null 2>&1; then
+    LLVM_NOTE="LLVM already found; skipped dreamer toolchain install llvm"
+  elif "${BIN_DIR}/dreamer${EXT}" toolchain install llvm; then
+    LLVM_NOTE="Installed LLVM via dreamer toolchain install llvm"
+  else
+    LLVM_NOTE="warning: could not install LLVM; later run: dreamer toolchain install llvm"
+    echo "${LLVM_NOTE}" >&2
+    return 0
+  fi
+  echo "${LLVM_NOTE}"
+}
+
 CC_NOTE=
 ensure_cc() {
   if [ "${DREAM_SKIP_CC:-}" = "1" ]; then
@@ -401,6 +418,7 @@ esac
 
 ensure_linux_libs
 ensure_cc
+ensure_llvm
 
 echo
 echo "Installed:"
@@ -412,6 +430,9 @@ if [ -n "${LIBS_NOTE}" ]; then
 fi
 if [ -n "${CC_NOTE}" ]; then
   echo "  ${CC_NOTE}"
+fi
+if [ -n "${LLVM_NOTE}" ]; then
+  echo "  ${LLVM_NOTE}"
 fi
 echo
 echo "Open a new terminal (or: . ${PREFIX}/env.sh), then:"

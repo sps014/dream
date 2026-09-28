@@ -23,7 +23,11 @@ typedef uintptr_t dream_ptr;
 /* 0 until `workerSpawn`; leftover for non-RC MT paths. RC uses `TAG_SHARED`. */
 extern int dream_rt_mt;
 
+/* `llvm_inline.c` redefines this to give every helper one external definition, so LLVM-emitted
+ * programs link against the same bodies C programs inline. */
+#ifndef DREAM_ALWAYS_INLINE
 #define DREAM_ALWAYS_INLINE static inline __attribute__((always_inline))
+#endif
 #define DREAM_LIKELY(x) __builtin_expect(!!(x), 1)
 #define DREAM_UNLIKELY(x) __builtin_expect(!!(x), 0)
 

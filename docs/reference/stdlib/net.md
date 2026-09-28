@@ -21,7 +21,7 @@ async fun main(): void {
 
 | Runtime | TCP | WebSocket |
 | --- | --- | --- |
-| Native C (`dream run`) | real socket | `ws://` and `wss://` |
+| Native (`dream run`) | real socket | `ws://` and `wss://` |
 | Node | real socket | `ws://` and `wss://` |
 | Browser | compile error | page `WebSocket` |
 

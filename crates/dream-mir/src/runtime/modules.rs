@@ -1,5 +1,5 @@
 //! Linked C libraries (today: PCRE2 regex) plus native compile file lists.
-//! Native C uses `runtime/c/native/`; the wasm32 guest uses `runtime/c/wasm32/` + shared `native/`
+//! Native builds use `runtime/c/native/`; the wasm32 guest uses `runtime/c/wasm32/` + shared `native/`
 //! units.
 
 use std::path::{Path, PathBuf};
@@ -244,10 +244,6 @@ pub fn wasm32_linked_units(need: RuntimeNeed) -> Vec<Wasm32LinkedUnit> {
     units
 }
 
-pub fn native_pcre2_include_dir() -> PathBuf {
-    runtime_c_dir().join("pcre2")
-}
-
 fn vendor_c_names_static(list_path: &str) -> Vec<&'static str> {
     match list_path {
         "pcre2/SOURCES" => include_str!("c/pcre2/SOURCES")
@@ -278,7 +274,7 @@ pub fn runtime_need_from_mir(mir: &crate::Mir) -> RuntimeNeed {
     runtime_need_from_keys(mir.intrinsics.iter().map(|(_, k)| k.as_str()))
 }
 
-pub fn runtime_need_from_c_source(src: &str) -> RuntimeNeed {
+pub fn runtime_need_from_module_text(src: &str) -> RuntimeNeed {
     let mut need = RuntimeNeed::CORE;
     for m in RUNTIME_MODULES {
         if m.need == RuntimeNeed::CORE {
@@ -351,13 +347,6 @@ pub fn native_runtime_units(need: RuntimeNeed) -> Vec<NativeCompileUnit> {
     units
 }
 
-pub fn native_runtime_c_files(need: RuntimeNeed) -> Vec<PathBuf> {
-    native_runtime_units(need)
-        .into_iter()
-        .map(|u| u.path)
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -398,6 +387,10 @@ mod tests {
         let core = runtime_need_from_keys(["print"]);
         assert!(core.contains(RuntimeNeed::CORE));
         assert!(!core.contains(RuntimeNeed::REGEX));
+    }
+
+    fn native_runtime_c_files(need: RuntimeNeed) -> Vec<PathBuf> {
+        native_runtime_units(need).into_iter().map(|u| u.path).collect()
     }
 
     #[test]

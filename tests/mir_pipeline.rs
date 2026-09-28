@@ -1,7 +1,9 @@
 //! End-to-end test of the backend pipeline: a hand-built typed HIR program is lowered to MIR, run
-//! through the full optimization pass pipeline, and emitted to C. This is the exact chain the
+//! through the full optimization pass pipeline, and emitted as LLVM IR. This is the exact chain the
 //! driver runs, so it both proves the pipeline composes and pins its determinism contract
 //! (byte-identical output).
+
+mod common;
 
 use dream_hir::{
     BinOp, Binding, HExpr, HExprKind, HFunction, HParam, HPlace, HStmt, Hir, LocalId, Overflow,
@@ -12,7 +14,7 @@ use dream_mir::passes::{
 };
 use dream_types::{DefKind, TypeCtx};
 
-/// Builds, lowers, optimizes, and emits the following program, returning the WAT text:
+/// Builds, lowers, optimizes, and emits the following program, returning the module text:
 ///
 /// ```text
 /// fun sum_to(n: int): int {
@@ -140,38 +142,40 @@ fn compile_sum_to() -> String {
         pm.run(f, &ctx.interner);
     }
 
-    dream_mir::backend::c::emit_c_module(&mir, &ctx.interner)
+    common::emit_ll(&mir, &ctx.interner)
 }
 
 #[test]
-fn hir_to_c_pipeline_emits_expected_shape() {
-    let c = compile_sum_to();
-
-    assert!(c.contains("sum_to"), "missing function:\n{}", c);
-    // The loop body's two additions survive optimization (they are live).
-    assert!(c.contains('+'), "missing arithmetic:\n{}", c);
+fn hir_to_ir_pipeline_emits_expected_shape() {
+    let ll = compile_sum_to();
+    let body = {
+        let start = ll.find("@sum_to(").expect("missing function");
+        let start = ll[..start].rfind("define ").expect("sum_to is not defined");
+        let len = ll[start..].find("\n}\n").expect("unterminated function");
+        &ll[start..start + len]
+    };
     // `acc + i` is unbounded and keeps its check; `i + 1` is bounded by `i < n` and does not.
     assert_eq!(
-        c.matches("__builtin_add_overflow").count(),
+        body.matches("@llvm.sadd.with.overflow.i32").count(),
         1,
         "expected only the accumulator add to stay checked:\n{}",
-        c
+        body
     );
-    // The loop comparison lowers to a less-than.
-    assert!(c.contains('<'), "missing loop comparison:\n{}", c);
-    // Relooper shapes emit structured control flow, so the back edge is a `for (;;)` with a
-    // conditional `break` rather than a `while` or a `goto`.
-    assert!(c.contains("for (;;)"), "missing loop:\n{}", c);
-    assert!(c.contains("break;"), "missing loop exit:\n{}", c);
     assert!(
-        !c.contains("goto"),
-        "loop must not fall back to goto:\n{}",
-        c
+        body.contains("add "),
+        "missing the unchecked add:\n{}",
+        body
     );
+    assert!(
+        body.contains("icmp slt"),
+        "missing loop comparison:\n{}",
+        body
+    );
+    assert!(body.contains("br i1 "), "missing loop exit:\n{}", body);
 }
 
 #[test]
-fn hir_to_c_pipeline_is_deterministic() {
+fn hir_to_ir_pipeline_is_deterministic() {
     let first = compile_sum_to();
     let second = compile_sum_to();
     assert_eq!(

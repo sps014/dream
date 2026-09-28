@@ -236,7 +236,7 @@ pub struct FutureLayout {
     pub next: u32,
     pub queued: u32,
     pub due: u32,
-    /// Native combinator element size. `0` on wasm32 (unused; combinators live in WAT).
+    /// Combinator element size.
     pub esize: u32,
     pub wide: u32,
     /// Start of saved locals. Host-allocated futures are exactly this many bytes.
@@ -345,12 +345,12 @@ pub fn elem_base(array_ptr: u32) -> u32 {
 // -- Runtime export / import symbol names --------------------------------------------------------
 //
 // The names below form the contract between the emitted module and every host (`execution/host`,
-// `runtime/dream.js`, native C) plus the passes that special-case the entry point. Keeping
+// `runtime/dream.js`, the native runtime) plus the passes that special-case the entry point. Keeping
 // them here means a rename is a single edit.
 
 /// The program entry point exported to, and invoked by, the host.
 pub const ENTRY_FN: &str = "main";
-/// Native C symbol that wraps [`ENTRY_FN`]; wasm32 exports [`ENTRY_FN`] as the function name.
+/// The symbol that wraps [`ENTRY_FN`]; wasm32 exports it under the name [`ENTRY_FN`].
 pub const GUEST_ENTRY_FN: &str = "dream_guest_entry";
 
 /// Host import module for the fixed `print_*` builtins.

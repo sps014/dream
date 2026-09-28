@@ -59,6 +59,18 @@ and value locals, the handle is the payload address); `mem2reg`/SROA turn the sl
 Async poll functions dispatch on the durable program counter stored in the `Future` frame, then
 continue in ordinary blocks.
 
+### Reading the IR
+
+The `.ll` next to a build is the frontend output, before any optimization, and reads like clang
+`-O0`: entry `alloca`s, a load and store around every use, almost no `phi`s, guard branches on
+constants, and one `abort` + `unreachable` block per MIR `Unreachable`. The build always runs
+`opt` next, which promotes the slots, folds the constant guards and merges the trap blocks.
+Building SSA in the printer would duplicate `mem2reg`, and replacing the `abort` with a bare
+`unreachable` would turn a MIR invariant into undefined behavior.
+
+Review performance on the optimized module instead: `dream --emit-llvm file.dream` writes
+`<stem>.opt.ll` (the whole program after `opt`, runtime included) and `<stem>.s`.
+
 ### Values and handles
 
 A reference is a `dream_ptr` handle: `i64` on native, `i32` on wasm32, converted with `inttoptr` at
@@ -68,7 +80,8 @@ Field and index access compute `base + offset` from the layouts in `Mir.layouts`
 
 Dream integer arithmetic wraps at its type's width, so the writers emit plain `add`/`mul`,
 never `nsw`/`nuw`. Unsigned types compare, divide and shift unsigned. Shift counts are masked,
-division by zero panics, and signed `MIN / -1` wraps. Checked ops use the
+division by zero panics, and signed `MIN / -1` wraps. A constant divisor skips whichever of those
+guards it rules out (non-zero, and not `-1` for signed types). Checked ops use the
 `llvm.*.with.overflow` intrinsics and panic. `mustprogress` is never emitted, because Dream loops
 may legitimately spin.
 

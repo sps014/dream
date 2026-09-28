@@ -150,10 +150,18 @@ impl<'l, 'a> Fx<'l, 'a> {
         let t = int_ll(ty);
         let x = self.at(lhs, ty);
         let y = self.at(rhs, ty);
-        let zero = self.w.icmp("eq", &y, &Value::zero(t.clone()));
-        self.panic_if(&zero, msgs::DIVIDE_BY_ZERO);
+        let width_mask = u128::MAX >> (128 - ty.bits());
+        let known = y.const_int().map(|v| v as u128 & width_mask);
+        if known.is_none_or(|v| v == 0) {
+            let zero = self.w.icmp("eq", &y, &Value::zero(t.clone()));
+            self.panic_if(&zero, msgs::DIVIDE_BY_ZERO);
+        }
         if !ty.signed() {
             let name = if op == BinOp::Div { "udiv" } else { "urem" };
+            return Self::int_result(self.w.bin(name, &x, &y), ty);
+        }
+        if known.is_some_and(|v| v != 0 && v != width_mask) {
+            let name = if op == BinOp::Div { "sdiv" } else { "srem" };
             return Self::int_result(self.w.bin(name, &x, &y), ty);
         }
         let m1 = self.w.icmp("eq", &y, &Value::int(t.clone(), -1));

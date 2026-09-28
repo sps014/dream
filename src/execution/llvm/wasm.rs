@@ -5,7 +5,7 @@
 //! Assembly units (`g0.s`: per-instance wasm globals) cannot be bitcode; they stay objects and
 //! join at `wasm-ld`.
 
-use super::build::{llc_level, pipeline};
+use super::build::{llc_level, pipeline, write_ir};
 use super::bundle::{clang_rt, prebuilt_file, rt_dir, ClangRt, RtDir};
 use super::runtime::{anchor_unit, disassemble, reduce_disassembly};
 use super::tools::LlvmTools;
@@ -250,6 +250,7 @@ pub fn link_wasm(
     tools: &LlvmTools,
     ll_path: &Path,
     wasm_path: &Path,
+    opt_ll: Option<&Path>,
     need: RuntimeNeed,
     threads: bool,
     opt: OptLevel,
@@ -278,6 +279,12 @@ pub fn link_wasm(
     let r = run_captured(&mut o, "opt");
     let _ = std::fs::remove_file(&linked);
     r?;
+    if let Some(out) = opt_ll {
+        if let Err(e) = write_ir(tools, &optimized, out) {
+            let _ = std::fs::remove_file(&optimized);
+            return Err(e);
+        }
+    }
     let obj = ll_path.with_extension("wasm.o");
     let mut llc = tools.command("llc");
     llc.arg(llc_level(opt, false))

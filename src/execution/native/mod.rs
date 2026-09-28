@@ -38,7 +38,7 @@ pub fn compile_and_capture_ex(
     stdin: Option<&[u8]>,
     timeout_secs: u64,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let bin = compile_llvm(Path::new(ll_path), opt, false, &Pgo::Off)?;
+    let bin = compile_llvm(Path::new(ll_path), None, opt, false, &Pgo::Off)?;
     capture_native_bin(&bin, ll_path, extra_env, extra_args, stdin, timeout_secs)
 }
 

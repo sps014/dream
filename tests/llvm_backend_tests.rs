@@ -89,7 +89,7 @@ fn run_llvm(src: &Path, opt: OptLevel) -> Result<String, String> {
     let stem = src.file_stem().unwrap().to_str().unwrap();
     let ll = out_dir(&format!("llvm-backend-{opt:?}")).join(format!("{stem}.ll"));
     compile_ll(src, &ll, opt);
-    let bin = compile_llvm(&ll, opt, false, &Pgo::Off)
+    let bin = compile_llvm(&ll, None, opt, false, &Pgo::Off)
         .unwrap_or_else(|e| panic!("LLVM build failed for {}: {}", stem, e));
     capture_native_bin(&bin, ll.to_str().unwrap(), &[], &[], None, 60).map_err(|e| e.to_string())
 }
@@ -289,13 +289,13 @@ fn llvm_pgo_round_trip() {
     let expected = fs::read_to_string(src.with_extension("expected")).unwrap();
     let run =
         |bin: &Path| capture_native_bin(bin, ll.to_str().unwrap(), &[], &[], None, 60).unwrap();
-    let gen = compile_llvm(&ll, OptLevel::O2, false, &Pgo::Generate).unwrap();
+    let gen = compile_llvm(&ll, None, OptLevel::O2, false, &Pgo::Generate).unwrap();
     assert_eq!(run(&gen), expected);
     let raw = gen.with_extension("pgo");
     assert!(fs::read_dir(&raw)
         .unwrap()
         .flatten()
         .any(|e| e.path().extension().is_some_and(|x| x == "profraw")));
-    let used = compile_llvm(&ll, OptLevel::O2, false, &Pgo::Use(None)).unwrap();
+    let used = compile_llvm(&ll, None, OptLevel::O2, false, &Pgo::Use(None)).unwrap();
     assert_eq!(run(&used), expected);
 }

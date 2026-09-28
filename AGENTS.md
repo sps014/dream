@@ -145,9 +145,9 @@ cargo build --release            # binary at target/release/dream
 
 # Run a program
 cargo run -- run path/to/file.dream        # compile natively + execute
-cargo run -- path/to/file.dream            # compile to .ll (then .bin) / .abi.json
-cargo run -- --emit-llvm path/to/file.dream    # stop at .ll + optimized .opt.ll + .s
-cargo run -- --wasm path/to/file.dream         # compile wasm32 (.ll + .wasm + .wat) only
+cargo run -- path/to/file.dream            # compile to .bin + optimized .opt.ll + .abi.json
+cargo run -- --emit-llvm path/to/file.dream    # stop at optimized .opt.ll + .s
+cargo run -- --wasm path/to/file.dream         # compile wasm32 (.opt.ll + .wasm + .wat) only
 cargo run -- -v run path/to/file.dream     # verbose
 
 # WASM guest stack for `dream run` / e2e (default from `[package.metadata.dream] stack-size`)

@@ -85,11 +85,11 @@ struct Cli {
     #[arg(short = 'o', long = "output", value_name = "PATH", global = true)]
     output: Option<String>,
 
-    /// Compile a wasm32 module (.ll + .wasm + .wat) instead of a native binary
+    /// Compile a wasm32 module (.opt.ll + .wasm + .wat) instead of a native binary
     #[arg(long, global = true)]
     wasm: bool,
 
-    /// Stop after the native module's LLVM IR: writes the .ll plus the optimized .opt.ll and .s
+    /// Stop after the native module's LLVM IR: writes the optimized .opt.ll and .s
     #[arg(long = "emit-llvm", global = true)]
     emit_llvm: bool,
 
@@ -433,6 +433,8 @@ fn main() -> ExitCode {
     .with_emit_abi(true)
     .with_crate_type(crate_type)
     .with_emit_mir(emit_mir)
+    // A native library's product is its unoptimized `.ll`; every other build links it away.
+    .with_opt_ir(!(native && matches!(crate_type, CrateType::Lib)))
     .with_reporter(reporter.clone());
     if let Some(level) = optimize {
         compiler = compiler.with_optimize(Some(level));
@@ -457,15 +459,23 @@ fn main() -> ExitCode {
 
     let elapsed = start.elapsed().as_secs_f64();
     let mut artifacts = reporter.take_artifacts();
+    let raw_ll = if native {
+        PathBuf::from(&out_path)
+    } else {
+        Path::new(&out_path).with_extension("ll")
+    };
+    let raw_ll = raw_ll.as_path();
+    let drop_raw_ll = || {
+        let _ = std::fs::remove_file(raw_ll);
+    };
     let unoptimized = !cli.release && optimize.is_none() && !debug_adapter;
 
     if cli.emit_llvm {
-        match emit_llvm_artifacts(
-            Path::new(&out_path),
-            cc_opt,
-            debug_info,
-        ) {
-            Ok(paths) => artifacts.extend(paths),
+        match emit_llvm_artifacts(raw_ll, cc_opt, debug_info) {
+            Ok(paths) => {
+                drop_raw_ll();
+                artifacts.extend(paths);
+            }
             Err(e) => {
                 ui.error(&e.to_string());
                 return ExitCode::FAILURE;
@@ -491,8 +501,11 @@ fn main() -> ExitCode {
             Some(p) => Pgo::Use(Some(PathBuf::from(p))),
             None => Pgo::Off,
         };
-        match compile_llvm(Path::new(&out_path), cc_opt, debug_info, &pgo) {
+        let opt_ll = raw_ll.with_extension("opt.ll");
+        match compile_llvm(raw_ll, Some(&opt_ll), cc_opt, debug_info, &pgo) {
             Ok(bin) => {
+                drop_raw_ll();
+                artifacts.push(opt_ll);
                 artifacts.push(bin.clone());
                 ui.finish(elapsed, "", &artifacts);
                 if unoptimized {
@@ -534,6 +547,7 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    drop_raw_ll();
     ui.finish(elapsed, "", &artifacts);
     if unoptimized {
         ui.debug_build_note(true);

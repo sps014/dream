@@ -117,6 +117,13 @@ fn run_llc(
     run_captured(&mut llc, "llc")
 }
 
+/// Disassembles bitcode `bc` to textual IR at `out`.
+pub(super) fn write_ir(tools: &LlvmTools, bc: &Path, out: &Path) -> Result<(), String> {
+    let mut dis = tools.command("llvm-dis");
+    dis.arg(bc).arg("-o").arg(out);
+    run_captured(&mut dis, "llvm-dis")
+}
+
 /// `--emit-llvm`: the optimized whole-program module as `<stem>.opt.ll` and its assembly as
 /// `<stem>.s`, next to the `.ll`.
 pub fn emit_llvm_artifacts(
@@ -129,17 +136,18 @@ pub fn emit_llvm_artifacts(
     let rt = llvm_runtime(&tools, opt, runtime_need_from_module_text(&src), debug)?;
     let optimized = link_and_optimize(&tools, ll_path, &rt.bc, opt, debug, &None)?;
     let opt_ll = ll_path.with_extension("opt.ll");
-    let mut dis = tools.command("llvm-dis");
-    dis.arg(&optimized).arg("-o").arg(&opt_ll);
-    run_captured(&mut dis, "llvm-dis")?;
+    write_ir(&tools, &optimized, &opt_ll)?;
     let asm = ll_path.with_extension("s");
     run_llc(&tools, &optimized, opt, debug, "asm", &asm)?;
     let _ = std::fs::remove_file(&optimized);
     Ok(vec![opt_ll, asm])
 }
 
+/// Links `ll_path` into `<stem>.bin`. With `opt_ll`, also writes the optimized whole-program module
+/// there as text.
 pub fn compile_llvm(
     ll_path: &Path,
+    opt_ll: Option<&Path>,
     opt: OptLevel,
     debug: bool,
     pgo: &Pgo,
@@ -172,6 +180,7 @@ pub fn compile_llvm(
         _ => None,
     };
     if native_bin_fresh(&bin, ll_path, &rt.bc, input)
+        && opt_ll.is_none_or(Path::exists)
         && std::fs::read_to_string(&stamp_path).is_ok_and(|s| s == stamp)
     {
         return Ok(bin);
@@ -181,6 +190,9 @@ pub fn compile_llvm(
     }
 
     let optimized = link_and_optimize(&tools, ll_path, &rt.bc, opt, debug, &profile)?;
+    if let Some(out) = opt_ll {
+        write_ir(&tools, &optimized, out)?;
+    }
     let obj = ll_path.with_extension("o");
     run_llc(&tools, &optimized, opt, debug, "obj", &obj)?;
 
@@ -274,9 +286,10 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
         &self,
         ll: &Path,
         wasm: &Path,
+        opt_ll: Option<&Path>,
         req: &crate::driver::compiler::LlvmRuntimeRequest,
     ) -> Result<(), String> {
         let tools = resolve_llvm()?;
-        super::wasm::link_wasm(&tools, ll, wasm, req.need, req.threads, req.wasm_opt)
+        super::wasm::link_wasm(&tools, ll, wasm, opt_ll, req.need, req.threads, req.wasm_opt)
     }
 }

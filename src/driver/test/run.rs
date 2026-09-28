@@ -158,6 +158,7 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
     let opt = OptLevel::from_cli(opts.release, opts.optimize);
     let bin = crate::execution::llvm::compile_llvm(
         &ll_path,
+        None,
         opt,
         false,
         &crate::execution::native::Pgo::Off,

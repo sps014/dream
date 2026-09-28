@@ -68,8 +68,10 @@ constants, and one `abort` + `unreachable` block per MIR `Unreachable`. The buil
 Building SSA in the printer would duplicate `mem2reg`, and replacing the `abort` with a bare
 `unreachable` would turn a MIR invariant into undefined behavior.
 
-Review performance on the optimized module instead: `dream --emit-llvm file.dream` writes
-`<stem>.opt.ll` (the whole program after `opt`, runtime included) and `<stem>.s`.
+Review performance on the optimized module instead: every build writes `<stem>.opt.ll` (the
+whole program after `opt`, runtime included) and deletes the unoptimized `.ll` once linked;
+`dream --emit-llvm file.dream` stops there and adds `<stem>.s`. Native `--crate-type lib` builds
+keep the unoptimized `.ll`, which is their product.
 
 ### Values and handles
 

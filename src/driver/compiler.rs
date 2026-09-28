@@ -43,7 +43,14 @@ pub trait LlvmToolchain: Send + Sync {
     /// The runtime signature table (`dream_rt.sigs` text) the backend types runtime calls from.
     fn runtime_sigs(&self, req: &LlvmRuntimeRequest) -> Result<String, String>;
     /// `.ll` → `.wasm`: whole-program link with the wasm runtime bitcode, `opt`, `llc`, `wasm-ld`.
-    fn link_wasm(&self, ll: &Path, wasm: &Path, req: &LlvmRuntimeRequest) -> Result<(), String>;
+    /// With `opt_ll`, also writes the optimized whole-program module there as text.
+    fn link_wasm(
+        &self,
+        ll: &Path,
+        wasm: &Path,
+        opt_ll: Option<&Path>,
+        req: &LlvmRuntimeRequest,
+    ) -> Result<(), String>;
 }
 
 /// Orchestrates the compilation pipeline: source loading (delegated to `source_loader`/`prelude`),
@@ -83,6 +90,9 @@ pub struct Compiler {
     reporter: Arc<dyn BuildReporter>,
     /// CLI `--emit-mir`: MIR snapshots written to `<out>.mir/<NN>-<pass>.mir`.
     emit_mir: Option<dream_mir::passes::MirDumpSpec>,
+    /// When `true`, the unoptimized `.ll` is an intermediate the caller deletes: it is not reported
+    /// as an artifact, and wasm32 builds write the optimized module as `<stem>.opt.ll` instead.
+    opt_ir: bool,
     llvm: Option<Arc<dyn LlvmToolchain>>,
 }
 
@@ -100,6 +110,7 @@ impl Compiler {
             crate_type: dream_sema::analyzer::CrateType::Bin,
             reporter: Arc::new(SilentReporter),
             emit_mir: None,
+            opt_ir: false,
             llvm: None,
         }
     }
@@ -230,6 +241,13 @@ impl Compiler {
     /// output (`None` disables).
     pub fn with_emit_mir(mut self, spec: Option<dream_mir::passes::MirDumpSpec>) -> Self {
         self.emit_mir = spec;
+        self
+    }
+
+    /// Builder: publish the optimized `<stem>.opt.ll` rather than the unoptimized `.ll`, which the
+    /// caller removes once linked.
+    pub fn with_opt_ir(mut self, on: bool) -> Self {
+        self.opt_ir = on;
         self
     }
 
@@ -477,7 +495,9 @@ impl Compiler {
         info!("finished code generation");
         if matches!(self.target, Target::Native) {
             fs::write(out_path, &bytes)?;
-            self.reporter.artifact(Path::new(out_path));
+            if !self.opt_ir {
+                self.reporter.artifact(Path::new(out_path));
+            }
             let abi_artifacts =
                 emit_wasm_and_abi(out_path, ast.get_root(), &gpu, &live_imports, self.emit_abi)?;
             for p in abi_artifacts {
@@ -488,7 +508,7 @@ impl Compiler {
         let wasm_path = std::path::Path::new(out_path).with_extension("wasm");
         let ll_path = std::path::Path::new(out_path).with_extension("ll");
         fs::write(&ll_path, &bytes)?;
-        self.reporter.artifact(&ll_path);
+        let opt_ll = self.opt_ir.then(|| ll_path.with_extension("opt.ll"));
         let req = LlvmRuntimeRequest {
             need,
             target: dream_mir::backend::Target::Wasm32,
@@ -497,8 +517,9 @@ impl Compiler {
         };
         llvm.as_ref()
             .ok_or_else(|| CompileError::Internal("no LLVM toolchain configured".into()))?
-            .link_wasm(&ll_path, &wasm_path, &req)
+            .link_wasm(&ll_path, &wasm_path, opt_ll.as_deref(), &req)
             .map_err(CompileError::Internal)?;
+        self.reporter.artifact(opt_ll.as_deref().unwrap_or(&ll_path));
         self.reporter.artifact(&wasm_path);
 
         // Post-process order matters: wasm-opt first (it drops unknown custom sections), then

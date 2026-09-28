@@ -88,7 +88,12 @@ jobs:
           set -euo pipefail
           curl -fsSL -o src.tar.xz \
             "https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/llvm-project-${LLVM_VERSION}.src.tar.xz"
-          tar -xJf src.tar.xz
+          # Only what the lld-only, tests-off build reads; the skipped trees hold symlinks that
+          # Git Bash's tar cannot create on Windows.
+          S="llvm-project-${LLVM_VERSION}.src"
+          tar -xJf src.tar.xz \
+            --exclude='*/test' --exclude='*/unittests' --exclude="$S/llvm/utils/mlgo-utils/*.py" \
+            "$S/llvm" "$S/lld" "$S/cmake" "$S/third-party" "$S/libunwind"
           NAME="dream-llvm-${LLVM_VERSION}-${{ matrix.target }}"
           LLVM_DIST_ARCH="${{ matrix.arch }}" BUILD_DIR="$PWD/build" \
             ./scripts/build-llvm-dist.sh "$PWD/llvm-project-${LLVM_VERSION}.src" "$PWD/stage/$NAME"

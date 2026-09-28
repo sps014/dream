@@ -196,7 +196,11 @@ fn plan_loop(
     }
     if const_int(&bound).is_some() && facts::sole_array_news(func, defs).iter().any(|(a, rv)| {
         arrays.contains(&Local(*a))
-            && matches!(rv, Rvalue::ArrayNew { len, .. } if defs.const_value(func, len).is_some())
+            && match rv {
+                Rvalue::ArrayNew { len, .. } => defs.const_value(func, len).is_some(),
+                Rvalue::ArrayLit { .. } => true,
+                _ => false,
+            }
     }) {
         return None;
     }

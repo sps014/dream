@@ -1157,3 +1157,101 @@ fn versioning_skips_accesses_after_the_increment() {
     assert_eq!(func.blocks.len(), before);
     assert_eq!(all_index_flags(&func), vec![false]);
 }
+
+/// `a = [..]; n = len(a); while i < n { a[i] } a[0]; a = null` (the RC inserter's clear): the
+/// loop index is below the literal's length and `0` is below its element count.
+fn literal_loop(second_def: bool) -> (MirFunction, BlockId, BlockId, bool) {
+    let mut i = TypeInterner::new();
+    let arr_ty = i.array(i.int());
+    let mut b = FunctionBuilder::new("f", i.int());
+    let arr = b.new_temp(arr_ty);
+    let idx = b.new_temp(i.int());
+    let len = b.new_temp(i.int());
+    let cmp = b.new_temp(i.bool());
+    let elem = b.new_temp(i.int());
+    let lit = |n: i64| Rvalue::ArrayLit {
+        elem_ty: i.int(),
+        elems: (0..n).map(|v| Operand::Const(Const::Int(v))).collect(),
+    };
+    b.assign(Place::Local(arr), lit(3));
+    b.assign(
+        Place::Local(len),
+        Rvalue::ArrayLen(Operand::Copy(Place::Local(arr))),
+    );
+    b.assign(
+        Place::Local(idx),
+        Rvalue::Use(Operand::Const(Const::Int(0))),
+    );
+    let cond = b.new_block();
+    let body = b.new_block();
+    let after = b.new_block();
+    b.terminate(Terminator::Goto(cond));
+    b.switch_to(cond);
+    b.assign(
+        Place::Local(cmp),
+        Rvalue::Binary(
+            BinOp::Lt,
+            Operand::Copy(Place::Local(idx)),
+            Operand::Copy(Place::Local(len)),
+        ),
+    );
+    b.terminate(Terminator::If {
+        cond: Operand::Copy(Place::Local(cmp)),
+        then_blk: body,
+        else_blk: after,
+    });
+    b.switch_to(body);
+    b.assign(
+        Place::Local(elem),
+        Rvalue::Use(Operand::Copy(Place::index(
+            arr,
+            Operand::Copy(Place::Local(idx)),
+        ))),
+    );
+    if second_def {
+        b.assign(Place::Local(arr), lit(1));
+    }
+    b.assign(
+        Place::Local(idx),
+        Rvalue::Binary(
+            BinOp::Add,
+            Operand::Copy(Place::Local(idx)),
+            Operand::Const(Const::Int(1)),
+        ),
+    );
+    b.terminate(Terminator::Goto(cond));
+    b.switch_to(after);
+    b.assign(
+        Place::Local(elem),
+        Rvalue::Use(Operand::Copy(Place::index(arr, Operand::Const(Const::Int(0))))),
+    );
+    b.assign(Place::Local(arr), Rvalue::Use(Operand::Const(Const::Null)));
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(elem)))));
+    let mut func = b.finish();
+    let changed = Abc.run(&mut func, &i);
+    (func, body, after, changed)
+}
+
+fn first_index_unchecked(func: &MirFunction, blk: BlockId) -> bool {
+    match &func.blocks[blk.0 as usize].stmts[0] {
+        Statement::Assign(_, Rvalue::Use(Operand::Copy(Place::Index { unchecked, .. }))) => {
+            *unchecked
+        }
+        other => panic!("expected an index read, got {:?}", other),
+    }
+}
+
+#[test]
+fn literal_cleared_after_last_use_is_unchecked() {
+    let (func, body, after, changed) = literal_loop(false);
+    assert!(changed);
+    assert!(first_index_unchecked(&func, body));
+    assert!(first_index_unchecked(&func, after));
+}
+
+#[test]
+fn literal_redefined_stays_checked() {
+    let (func, body, after, _) = literal_loop(true);
+    assert!(!first_index_unchecked(&func, body));
+    assert!(!first_index_unchecked(&func, after));
+}

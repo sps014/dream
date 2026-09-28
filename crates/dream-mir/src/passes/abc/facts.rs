@@ -75,6 +75,8 @@ pub(super) struct Defs {
     sole: Vec<Option<(usize, usize)>>,
     blocks: Vec<Vec<usize>>,
     params: BTreeSet<u32>,
+    /// `l = null` definitions per local (the RC inserter's clear after the final release).
+    nulls: Vec<u32>,
 }
 
 impl Defs {
@@ -83,6 +85,7 @@ impl Defs {
         let mut count = vec![0u32; n];
         let mut sole = vec![None; n];
         let mut blocks: Vec<Vec<usize>> = vec![Vec::new(); n];
+        let mut nulls = vec![0u32; n];
         let mut note = |l: usize, bi: usize, pos: Option<usize>, count: &mut Vec<u32>| {
             if l >= n {
                 return;
@@ -99,8 +102,13 @@ impl Defs {
         };
         for (bi, block) in func.blocks.iter().enumerate() {
             for (si, stmt) in block.stmts.iter().enumerate() {
-                if let Statement::Assign(Place::Local(d), _) = stmt {
+                if let Statement::Assign(Place::Local(d), rv) = stmt {
                     note(d.0 as usize, bi, Some(si), &mut count);
+                    if matches!(rv, Rvalue::Use(Operand::Const(Const::Null))) {
+                        if let Some(c) = nulls.get_mut(d.0 as usize) {
+                            *c += 1;
+                        }
+                    }
                 }
             }
             if let Terminator::Await { dest: Some(d), .. } = &block.terminator {
@@ -112,6 +120,7 @@ impl Defs {
             sole,
             blocks,
             params: func.params.iter().map(|p| p.0).collect(),
+            nulls,
         }
     }
 
@@ -130,6 +139,15 @@ impl Defs {
             1 => self.sole.get(l as usize).is_some_and(|s| s.is_some()),
             _ => false,
         }
+    }
+
+    /// The local holds one value wherever it is read: [`Self::stable`], or one definition plus
+    /// `l = null` clears, which the RC inserter only emits after the final use, so no read sees
+    /// them.
+    pub(super) fn stable_until_cleared(&self, l: u32) -> bool {
+        self.stable(l)
+            || (!self.params.contains(&l)
+                && self.count(l) == 1 + self.nulls.get(l as usize).copied().unwrap_or(0))
     }
 
     pub(super) fn sole_def<'f>(
@@ -164,6 +182,8 @@ impl Defs {
 pub(super) struct Globals {
     pub(super) nonneg: BTreeSet<u32>,
     pub(super) below: BTreeSet<(u32, Bound)>,
+    /// Arrays whose length is the same constant wherever they are read.
+    pub(super) array_len: BTreeMap<u32, i64>,
 }
 
 /// Facts at one program point: guard facts still alive here plus the global facts.
@@ -186,6 +206,10 @@ impl FactView<'_> {
 
     pub(super) fn nonneg(&self, i: u32) -> bool {
         self.holds(&Fact::NonNeg(i))
+    }
+
+    pub(super) fn const_below_len(&self, k: i64, arr: u32) -> bool {
+        k >= 0 && self.globals.array_len.get(&arr).is_some_and(|&len| k < len)
     }
 
     /// Drops every guard fact that mentions a local `stmt` (re)defines.
@@ -224,6 +248,7 @@ impl FactEngine {
         let mut globals = Globals {
             nonneg: global_nonneg(func, &defs, &bounded_incr),
             below: BTreeSet::new(),
+            array_len: const_len_arrays(func, &defs).into_iter().collect(),
         };
         globals.below = decreasing_below(func, &defs, &nonneg_decr);
         let affine = special::affine_facts(func, &defs, &entry, &globals);
@@ -534,7 +559,9 @@ fn link_local(
     if let Some((rv, pos)) = defs.sole_def(func, n) {
         let tied = |l: u32| defs.stable(l) || same_block_since(func, at, pos, l);
         match rv {
-            Rvalue::ArrayLen(Operand::Copy(Place::Local(a))) if tied(a.0) => {
+            Rvalue::ArrayLen(Operand::Copy(Place::Local(a)))
+                if defs.stable_until_cleared(a.0) || tied(a.0) =>
+            {
                 out.push(Bound::Arr(a.0));
             }
             Rvalue::StrLen(s) | Rvalue::StrByteSize(s) => {
@@ -596,39 +623,45 @@ fn same_block_since(
             .any(|s| matches!(s, Statement::Assign(Place::Local(d), _) if d.0 == l))
 }
 
-/// Arrays with exactly one `ArrayNew` definition. The RC inserter's `a = null` after the final
-/// release does not count: no access can follow it without passing a new definition.
+/// Arrays whose only non-null definition is an `ArrayNew` or array literal
+/// ([`Defs::stable_until_cleared`]).
 pub(super) fn sole_array_news<'f>(func: &'f MirFunction, defs: &Defs) -> Vec<(u32, &'f Rvalue)> {
-    let mut nulls: BTreeMap<u32, u32> = BTreeMap::new();
     let mut out = Vec::new();
     for block in &func.blocks {
         for stmt in &block.stmts {
-            match stmt {
-                Statement::Assign(Place::Local(a), rv @ Rvalue::ArrayNew { .. }) => {
-                    out.push((a.0, rv));
-                }
-                Statement::Assign(Place::Local(a), Rvalue::Use(Operand::Const(Const::Null))) => {
-                    *nulls.entry(a.0).or_default() += 1;
-                }
-                _ => {}
+            if let Statement::Assign(
+                Place::Local(a),
+                rv @ (Rvalue::ArrayNew { .. } | Rvalue::ArrayLit { .. }),
+            ) = stmt
+            {
+                out.push((a.0, rv));
             }
         }
     }
-    out.retain(|(a, _)| defs.count(*a) == 1 + nulls.get(a).copied().unwrap_or(0));
+    out.retain(|(a, _)| defs.stable_until_cleared(*a));
     out
+}
+
+/// Single-definition arrays with a constant length, paired with that length.
+fn const_len_arrays(func: &MirFunction, defs: &Defs) -> Vec<(u32, i64)> {
+    sole_array_news(func, defs)
+        .into_iter()
+        .filter_map(|(a, rv)| {
+            let len = match rv {
+                Rvalue::ArrayNew { len, .. } => defs.const_value(func, len)?,
+                Rvalue::ArrayLit { elems, .. } => elems.len() as i64,
+                _ => return None,
+            };
+            Some((a, len))
+        })
+        .collect()
 }
 
 /// Single-definition arrays allocated with a constant length of at least `k`.
 pub(super) fn arrays_len_at_least(func: &MirFunction, defs: &Defs, k: i64) -> Vec<Bound> {
-    sole_array_news(func, defs)
+    const_len_arrays(func, defs)
         .into_iter()
-        .filter_map(|(a, rv)| match rv {
-            Rvalue::ArrayNew { len, .. } => defs
-                .const_value(func, len)
-                .filter(|&v| v >= k)
-                .map(|_| Bound::Arr(a)),
-            _ => None,
-        })
+        .filter_map(|(a, len)| (len >= k).then_some(Bound::Arr(a)))
         .collect()
 }
 

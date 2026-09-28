@@ -438,8 +438,8 @@ void dream_run_loop(void) {
     }
 }
 
-dream_ptr dream_sleep(int32_t ms) {
-    dream_ptr f = dream_new_future((int32_t)F_SLOTS, HOST_POLL_INDEX, KIND_HOST);
+/* The timer holds `f` raw: the awaiter owns it, and `dream_cancel` unlinks the node. */
+static void timer_arm(dream_ptr f, int32_t ms) {
     Node *n = (Node *)calloc(1, sizeof(Node));
     Node **pp;
     n->f = f;
@@ -454,13 +454,23 @@ dream_ptr dream_sleep(int32_t ms) {
     }
     n->next = *pp;
     *pp = n;
+}
+
+dream_ptr dream_sleep(int32_t ms) {
+    dream_ptr f = dream_new_future((int32_t)F_SLOTS, HOST_POLL_INDEX, KIND_HOST);
+    timer_arm(f, ms);
     return f;
 }
 
 #ifndef DREAM_WASM32
-/* Native stand-in for the `@runtime("delayMs")` host field. On wasm32 that name belongs to the
- * JS import the emitter declares, with the async `(future, arg)` shape. */
-dream_ptr delayMs(int32_t ms) { return dream_sleep(ms); }
+/* Native `@async_host` side of `@runtime("delayMs")` (wasm32 imports JS `setTimeout`). The
+ * bridge future itself goes on the timer queue, so the await suspends until it is due; a
+ * blocking or future-returning host would complete the bridge inline and skip the wait. Returns
+ * 0 because nothing is deferred to another thread. */
+int32_t delayMsAsync(dream_ptr future, int32_t ms) {
+    timer_arm(future, ms);
+    return 0;
+}
 #endif
 
 static void combinator_progress(dream_ptr w, dream_ptr child) {

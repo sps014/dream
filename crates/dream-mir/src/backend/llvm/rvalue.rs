@@ -108,7 +108,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             }
             Rvalue::LoadU8(p, i) => self.load_unit(p, i, Ty::I8, 1),
             Rvalue::LoadU16(p, i) => self.load_unit(p, i, Ty::I16, 2),
-            Rvalue::ArrayNew { elem_ty, len } => {
+            Rvalue::ArrayNew { elem_ty, len, .. } => {
                 let es = elem_size(&self.l.cx, *elem_ty);
                 let n = self.operand(len);
                 self.call_v("dream_array_new", &[n, V::i32(es as i64)])

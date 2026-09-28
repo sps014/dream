@@ -259,6 +259,7 @@ mod tests {
             Rvalue::ArrayNew {
                 elem_ty: str_ty,
                 len: Operand::Const(crate::Const::Int(1)),
+                closure_env: false,
             },
         );
         b.assign(

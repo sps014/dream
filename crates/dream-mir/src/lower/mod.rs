@@ -648,7 +648,16 @@ impl Lowerer<'_> {
                 }
             },
             HStmt::Return(e) => {
-                let op = e.as_ref().map(|e| self.lower_operand(e));
+                // `return f()` in a void function (an expression-bodied `() => println(..)` lambda)
+                // carries a value-less expression that only the statement path can lower.
+                let op = match e {
+                    Some(e) if e.ty == self.interner.void() => {
+                        self.lower_stmt(&HStmt::Expr(e.clone()));
+                        None
+                    }
+                    Some(e) => Some(self.lower_operand(e)),
+                    None => None,
+                };
                 self.release_all_locks();
                 self.release_all_defers();
                 if self.async_coroutine {

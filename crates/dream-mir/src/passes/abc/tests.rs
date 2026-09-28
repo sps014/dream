@@ -82,6 +82,7 @@ fn alloc_len_bound_is_unchecked() {
         Rvalue::ArrayNew {
             elem_ty: i.float(),
             len: Operand::Copy(Place::Local(n)),
+            closure_env: false,
         },
     );
     b.assign(
@@ -151,6 +152,7 @@ fn const_alloc_len_survives_release_null_out() {
         Rvalue::ArrayNew {
             elem_ty: i.float(),
             len: Operand::Const(Const::Int(64)),
+            closure_env: false,
         },
     );
     b.assign(
@@ -353,6 +355,7 @@ fn affine_index_is_unchecked() {
         Rvalue::ArrayNew {
             elem_ty: i.float(),
             len: Operand::Const(Const::Int(4096)),
+            closure_env: false,
         },
     );
     b.assign(
@@ -476,6 +479,7 @@ fn shift_affine_index_with_latch_is_unchecked() {
         Rvalue::ArrayNew {
             elem_ty: i.float(),
             len: Operand::Const(Const::Int(4096)),
+            closure_env: false,
         },
     );
     b.assign(
@@ -597,6 +601,7 @@ fn square_bound_index_is_unchecked() {
         Rvalue::ArrayNew {
             elem_ty: i.int(),
             len: Operand::Const(Const::Int(4096)),
+            closure_env: false,
         },
     );
     b.assign(

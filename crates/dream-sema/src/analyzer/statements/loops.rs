@@ -153,6 +153,7 @@ impl<'a> Analyzer<'a> {
         let elem_slot = self.hir_alloc_local(&element.text, &element_type);
         let entry_moved = self.snapshot_moved();
         self.hir_open_block();
+        self.hir_box_captured_binding(&element.text, &element_type);
         self.analyze_body(
             body,
             ctx.parent_function,

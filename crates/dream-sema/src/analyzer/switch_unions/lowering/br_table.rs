@@ -193,6 +193,7 @@ impl<'a> Analyzer<'a> {
                     value: read,
                 });
             }
+            self.hir_box_arm_bindings(&arm.pattern, &shape, &union_info, &subject_type);
             self.analyze_switch_arm_result(
                 arm,
                 parent_function,

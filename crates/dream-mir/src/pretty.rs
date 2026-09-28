@@ -437,8 +437,13 @@ impl FnPrinter<'_> {
             Rvalue::StrBytes(s) => format!("str_bytes({})", self.operand(s)),
             Rvalue::LoadU8(p, i) => format!("load_u8({}, {})", self.operand(p), self.operand(i)),
             Rvalue::LoadU16(p, i) => format!("load_u16({}, {})", self.operand(p), self.operand(i)),
-            Rvalue::ArrayNew { elem_ty, len } => {
-                format!("array_new::<{}>({})", self.cx.ty(*elem_ty), self.operand(len))
+            Rvalue::ArrayNew {
+                elem_ty,
+                len,
+                closure_env,
+            } => {
+                let kind = if *closure_env { "closure_env_new" } else { "array_new" };
+                format!("{}::<{}>({})", kind, self.cx.ty(*elem_ty), self.operand(len))
             }
             Rvalue::ToBytes { value, ty } => {
                 format!("to_bytes::<{}>({})", self.cx.ty(*ty), self.operand(value))

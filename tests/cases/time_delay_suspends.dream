@@ -1,0 +1,33 @@
+// `Time.delay` must suspend on the scheduler's timer queue: tasks finish in delay order, not
+// start order, and racing `void` futures resolves with the first to finish.
+import system;
+
+class Log {
+    public text: string;
+    public constructor() {
+        this.text = "";
+    }
+}
+
+async fun after(log: Log, ms: int, name: string): void {
+    Time.delay(ms).await;
+    log.text = log.text + name + " ";
+}
+
+async fun main() {
+    let log = Log();
+    Promise.all([after(log, 60, "slow"), after(log, 5, "fast"), after(log, 30, "mid")]).await;
+    System.println(log.text);
+
+    let t0 = Time.nano_time();
+    Time.delay(40).await;
+    // Node's timer clock is coarser than `nano_time`, so leave headroom: the bug was 0ms.
+    let waited = (Time.nano_time() - t0) / 1000000;
+    System.println(waited >= 30);
+
+    let race = Log();
+    Promise.race([after(race, 50, "loser"), after(race, 5, "winner")]).await;
+    System.println(race.text);
+    Time.delay(80).await;
+    System.println(race.text);
+}

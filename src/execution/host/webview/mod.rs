@@ -3,7 +3,7 @@
 //! Registry and event loop are thread-local: `wry::WebView` / winit types are `!Send`/`!Sync`,
 //! and `dream run` is single-threaded on the main thread.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -23,7 +23,10 @@ use wry::dpi::{LogicalPosition, LogicalSize};
 use wry::http::Request;
 use wry::{Rect, WebViewBuilder};
 
+mod protocol;
+
 thread_local! {
+    static PUMPING: Cell<bool> = const { Cell::new(false) };
     static EVENT_LOOP: RefCell<Option<EventLoop<()>>> = const { RefCell::new(None) };
     static REGISTRY: RefCell<Registry> = RefCell::new(Registry {
         next_id: 1,
@@ -140,109 +143,22 @@ fn pump() {
     pump_for(Duration::ZERO);
 }
 
+/// `pump_app_events` must not nest: a platform callback that reaches a host fn which pumps
+/// again would re-enter AppKit / GTK mid-dispatch. The nested call only drains IPC.
 fn pump_for(timeout: Duration) {
-    let _ = with_event_loop(|el| {
-        let mut app = PumpApp;
-        let _ = el.pump_app_events(Some(timeout), &mut app);
-    });
+    if !PUMPING.with(|p| p.replace(true)) {
+        let _ = with_event_loop(|el| {
+            let mut app = PumpApp;
+            let _ = el.pump_app_events(Some(timeout), &mut app);
+        });
+        PUMPING.with(|p| p.set(false));
+    }
     drain_ipc_inbox();
 }
 
-/// Injected page bridge: `window.Dream.emit` / `invoke` / `on` (+ raw byte variants).
-const DREAM_BRIDGE: &str = r#"
-(function () {
-  if (window.Dream && window.Dream.__dream_webview) return;
-  var pending = {};
-  var nextId = 1;
-  var listeners = {};
-  var byteListeners = {};
-  function b64encode(u8) {
-    var s = '';
-    var CHUNK = 0x8000;
-    for (var i = 0; i < u8.length; i += CHUNK) {
-      s += String.fromCharCode.apply(null, u8.subarray(i, Math.min(i + CHUNK, u8.length)));
-    }
-    return btoa(s);
-  }
-  function b64decode(s) {
-    var bin = atob(s);
-    var out = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-  }
-  function toU8(body) {
-    if (body instanceof Uint8Array) return body;
-    if (body instanceof ArrayBuffer) return new Uint8Array(body);
-    if (ArrayBuffer.isView && ArrayBuffer.isView(body)) {
-      return new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
-    }
-    return new Uint8Array(0);
-  }
-  function post(obj) {
-    if (window.ipc && window.ipc.postMessage) {
-      window.ipc.postMessage(JSON.stringify(obj));
-    }
-  }
-  window.Dream = {
-    __dream_webview: true,
-    emit: function (channel, body) {
-      post({ k: "e", c: String(channel), t: "s", b: body == null ? "" : String(body) });
-    },
-    emitBytes: function (channel, body) {
-      post({ k: "e", c: String(channel), t: "b", b: b64encode(toU8(body)) });
-    },
-    invoke: function (channel, body) {
-      var id = nextId++;
-      return new Promise(function (resolve, reject) {
-        pending[id] = { resolve: resolve, reject: reject, bin: false };
-        post({ k: "i", id: id, c: String(channel), t: "s", b: body == null ? "" : String(body) });
-      });
-    },
-    invokeBytes: function (channel, body) {
-      var id = nextId++;
-      return new Promise(function (resolve, reject) {
-        pending[id] = { resolve: resolve, reject: reject, bin: true };
-        post({ k: "i", id: id, c: String(channel), t: "b", b: b64encode(toU8(body)) });
-      });
-    },
-    on: function (channel, handler) {
-      var c = String(channel);
-      if (!listeners[c]) listeners[c] = [];
-      listeners[c].push(handler);
-    },
-    onBytes: function (channel, handler) {
-      var c = String(channel);
-      if (!byteListeners[c]) byteListeners[c] = [];
-      byteListeners[c].push(handler);
-    },
-    __dispatch: function (channel, body) {
-      var list = listeners[String(channel)] || [];
-      for (var i = 0; i < list.length; i++) {
-        try { list[i](body); } catch (e) { console.error(e); }
-      }
-    },
-    __dispatchBytes: function (channel, b64) {
-      var bytes = b64decode(String(b64));
-      var list = byteListeners[String(channel)] || [];
-      for (var i = 0; i < list.length; i++) {
-        try { list[i](bytes); } catch (e) { console.error(e); }
-      }
-    },
-    __resolve: function (id, body) {
-      var p = pending[id];
-      if (p) { delete pending[id]; p.resolve(body); }
-    },
-    __resolveBytes: function (id, b64) {
-      var p = pending[id];
-      if (p) { delete pending[id]; p.resolve(b64decode(String(b64))); }
-    },
-    __reject: function (id, message) {
-      var p = pending[id];
-      if (p) { delete pending[id]; p.reject(new Error(message || "invoke failed")); }
-    }
-  };
-})();
-"#;
+/// Injected page bridge: `window.Dream.emit` / `invoke` / `on` over `postMessage`, and the
+/// byte variants over the `dream-ipc` scheme (see `protocol`).
+const DREAM_BRIDGE: &str = include_str!("bridge.js");
 
 /// Drive AppKit until wry reports page load. Until commit, `evaluate_script` only queues JS
 /// (callbacks dropped) so emit/reply look dead. After ready, re-inject the bridge.
@@ -269,68 +185,6 @@ fn ipc_inbox() -> &'static Mutex<VecDeque<(u32, IpcMessage)>> {
     INBOX.get_or_init(|| Mutex::new(VecDeque::new()))
 }
 
-fn b64_encode(data: &[u8]) -> String {
-    const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
-    let mut i = 0;
-    while i + 3 <= data.len() {
-        let n = ((data[i] as u32) << 16) | ((data[i + 1] as u32) << 8) | (data[i + 2] as u32);
-        out.push(TABLE[((n >> 18) & 63) as usize] as char);
-        out.push(TABLE[((n >> 12) & 63) as usize] as char);
-        out.push(TABLE[((n >> 6) & 63) as usize] as char);
-        out.push(TABLE[(n & 63) as usize] as char);
-        i += 3;
-    }
-    if data.len() - i == 1 {
-        let n = (data[i] as u32) << 16;
-        out.push(TABLE[((n >> 18) & 63) as usize] as char);
-        out.push(TABLE[((n >> 12) & 63) as usize] as char);
-        out.push('=');
-        out.push('=');
-    } else if data.len() - i == 2 {
-        let n = ((data[i] as u32) << 16) | ((data[i + 1] as u32) << 8);
-        out.push(TABLE[((n >> 18) & 63) as usize] as char);
-        out.push(TABLE[((n >> 12) & 63) as usize] as char);
-        out.push(TABLE[((n >> 6) & 63) as usize] as char);
-        out.push('=');
-    }
-    out
-}
-
-fn b64_decode(input: &str) -> Option<Vec<u8>> {
-    fn val(c: u8) -> Option<u8> {
-        match c {
-            b'A'..=b'Z' => Some(c - b'A'),
-            b'a'..=b'z' => Some(c - b'a' + 26),
-            b'0'..=b'9' => Some(c - b'0' + 52),
-            b'+' => Some(62),
-            b'/' => Some(63),
-            _ => None,
-        }
-    }
-    let bytes: Vec<u8> = input.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
-    if !bytes.len().is_multiple_of(4) {
-        return None;
-    }
-    let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
-    for chunk in bytes.chunks_exact(4) {
-        let (a, b, c, d) = (chunk[0], chunk[1], chunk[2], chunk[3]);
-        let av = val(a)?;
-        let bv = val(b)?;
-        let cv = if c == b'=' { 0 } else { val(c)? };
-        let dv = if d == b'=' { 0 } else { val(d)? };
-        let n = ((av as u32) << 18) | ((bv as u32) << 12) | ((cv as u32) << 6) | (dv as u32);
-        out.push(((n >> 16) & 255) as u8);
-        if c != b'=' {
-            out.push(((n >> 8) & 255) as u8);
-        }
-        if d != b'=' {
-            out.push((n & 255) as u8);
-        }
-    }
-    Some(out)
-}
-
 fn enqueue_ipc(id: u32, raw: &str) {
     let parsed: JsonValue = match serde_json::from_str(raw) {
         Ok(v) => v,
@@ -342,14 +196,12 @@ fn enqueue_ipc(id: u32, raw: &str) {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let ty = parsed.get("t").and_then(|v| v.as_str()).unwrap_or("s");
-    let body_field = parsed.get("b").and_then(|v| v.as_str()).unwrap_or("");
-    let binary = ty == "b";
-    let body = if binary {
-        b64_decode(body_field).unwrap_or_default()
-    } else {
-        body_field.as_bytes().to_vec()
-    };
+    let body = parsed
+        .get("b")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .as_bytes()
+        .to_vec();
     let (kind, reply_id) = match kind_s {
         "e" => (IpcKind::Event, 0),
         "i" => (
@@ -358,20 +210,24 @@ fn enqueue_ipc(id: u32, raw: &str) {
         ),
         _ => return,
     };
-    // IPC may arrive off the Dream thread; stage in a Sync inbox and drain on pump/poll.
+    stage_ipc(
+        id,
+        IpcMessage {
+            kind,
+            binary: false,
+            reply_id,
+            channel,
+            body,
+        },
+    );
+}
+
+/// IPC may arrive off the Dream thread; stage in a Sync inbox and drain on pump/poll.
+fn stage_ipc(id: u32, msg: IpcMessage) {
     ipc_inbox()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .push_back((
-            id,
-            IpcMessage {
-                kind,
-                binary,
-                reply_id,
-                channel,
-                body,
-            },
-        ));
+        .push_back((id, msg));
 }
 
 fn drain_ipc_inbox() {
@@ -509,6 +365,10 @@ pub(crate) fn create_webview(title: &str, width: i32, height: i32) -> i32 {
             .with_ipc_handler(move |req: Request<String>| {
                 enqueue_ipc(id_for_ipc, req.body());
             })
+            .with_asynchronous_custom_protocol(
+                protocol::SCHEME.to_string(),
+                move |_webview_id, req, responder| protocol::handle(id_for_ipc, req, responder),
+            )
             .with_on_page_load_handler(move |event, _url| {
                 // Wait until Finished so document scripts (and boot()) can run.
                 if matches!(event, wry::PageLoadEvent::Finished) {
@@ -567,6 +427,7 @@ fn with_entry_mut<R>(id: i32, f: impl FnOnce(&mut WebViewEntry) -> R) -> Option<
 
 pub(crate) fn load_url(id: i32, url: &str) -> i32 {
     pump();
+    release_page_requests(id);
     match with_entry_mut(id, |e| {
         e.page_ready.store(false, Ordering::SeqCst);
         let r = e.webview.load_url(url);
@@ -588,8 +449,16 @@ pub(crate) fn load_url(id: i32, url: &str) -> i32 {
     }
 }
 
+/// Fetches parked by the outgoing page can never be answered usefully after navigation.
+fn release_page_requests(id: i32) {
+    if id > 0 {
+        protocol::release(id as u32);
+    }
+}
+
 pub(crate) fn load_html(id: i32, html: &str) -> i32 {
     pump();
+    release_page_requests(id);
     match with_entry_mut(id, |e| {
         e.page_ready.store(false, Ordering::SeqCst);
         let r = e.webview.load_html(html);
@@ -650,6 +519,7 @@ pub(crate) fn close(id: i32) {
     if id <= 0 {
         return;
     }
+    protocol::release(id as u32);
     REGISTRY.with(|cell| {
         let mut reg = cell.borrow_mut();
         if let Some(entry) = reg.entries.swap_remove(&(id as u32)) {
@@ -693,17 +563,16 @@ pub(crate) fn reply(id: i32, reply_id: i32, body: &str) {
     let _ = with_entry_mut(id, |e| e.webview.evaluate_script(&script));
 }
 
-pub(crate) fn reply_bytes(id: i32, reply_id: i32, body: &[u8]) {
-    pump();
-    let script = format!(
-        "window.Dream && Dream.__resolveBytes({}, {});",
-        reply_id,
-        js_string(&b64_encode(body))
-    );
-    let _ = with_entry_mut(id, |e| e.webview.evaluate_script(&script));
+pub(crate) fn reply_bytes(id: i32, reply_id: i32, body: Vec<u8>) {
+    if id > 0 {
+        protocol::reply(id as u32, reply_id, body);
+    }
 }
 
 pub(crate) fn reply_err(id: i32, reply_id: i32, message: &str) {
+    if id > 0 && protocol::reject(id as u32, reply_id, message) {
+        return;
+    }
     pump();
     let script = format!(
         "window.Dream && Dream.__reject({}, {});",
@@ -724,13 +593,9 @@ pub(crate) fn emit(id: i32, channel: &str, body: &str) {
 }
 
 pub(crate) fn emit_bytes(id: i32, channel: &str, body: &[u8]) {
-    pump();
-    let script = format!(
-        "window.Dream && Dream.__dispatchBytes({}, {});",
-        js_string(channel),
-        js_string(&b64_encode(body))
-    );
-    let _ = with_entry_mut(id, |e| e.webview.evaluate_script(&script));
+    if id > 0 {
+        protocol::emit(id as u32, channel, body);
+    }
 }
 
 fn decode_eval_callback(result_json: &str) -> Result<String, String> {

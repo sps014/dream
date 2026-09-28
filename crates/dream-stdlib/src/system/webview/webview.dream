@@ -42,6 +42,16 @@ internal class WebViewServeBytesEntry {
     }
 }
 
+internal class WebViewServeBytesAsyncEntry {
+    internal channel: string;
+    internal fire: fun(byte[]): Future<byte[]>;
+
+    internal constructor(channel: string, fire: fun(byte[]): Future<byte[]>) {
+        this.channel = channel;
+        this.fire = fire;
+    }
+}
+
 // Generic method bodies cannot emit nested lambdas into HIR; wrap the typed handler
 // so `on`/`serve` pass a method-group `fire` instead of an inline closure.
 internal class WebViewJsonOn<T> {
@@ -82,6 +92,7 @@ public class WebView {
     _serve: List<WebViewServeEntry>;
     _on_bytes: List<WebViewOnBytesEntry>;
     _serve_bytes: List<WebViewServeBytesEntry>;
+    _serve_bytes_async: List<WebViewServeBytesAsyncEntry>;
 
     constructor(id: int) {
         this.id = id;
@@ -89,6 +100,7 @@ public class WebView {
         this._serve = List<WebViewServeEntry>();
         this._on_bytes = List<WebViewOnBytesEntry>();
         this._serve_bytes = List<WebViewServeBytesEntry>();
+        this._serve_bytes_async = List<WebViewServeBytesAsyncEntry>();
     }
 
     @native
@@ -251,6 +263,23 @@ public class WebView {
         }
     }
 
+    fun upsert_serve_bytes_async(channel: string, fire: fun(byte[]): Future<byte[]>): void {
+        let found = 0 - 1;
+        let i = 0;
+        while i < this._serve_bytes_async.length {
+            let entry = this._serve_bytes_async.get(i);
+            if entry.channel == channel {
+                found = i;
+            }
+            i = i + 1;
+        }
+        if found >= 0 {
+            this._serve_bytes_async.set(found, WebViewServeBytesAsyncEntry(channel, fire));
+        } else {
+            this._serve_bytes_async.push(WebViewServeBytesAsyncEntry(channel, fire));
+        }
+    }
+
     @native
     public fun on<T>(channel: string, handler: fun(T): void): void {
         this.upsert_on(channel, WebViewJsonOn<T>(handler).fire);
@@ -279,6 +308,13 @@ public class WebView {
     @native
     public fun serve_bytes(channel: string, handler: fun(byte[]): byte[]): void {
         this.upsert_serve_bytes(channel, handler);
+    }
+
+    // Like `serve_bytes`, but the handler may await (HTTP, files, timers). It runs on the same
+    // task scheduler as `run()`, so the window keeps pumping while the reply is pending.
+    @native
+    public fun serve_bytes_async(channel: string, handler: fun(byte[]): Future<byte[]>): void {
+        this.upsert_serve_bytes_async(channel, handler);
     }
 
     @native
@@ -405,6 +441,7 @@ public class WebView {
             let closed = int.parse(reader.read_line()).unwrap_or(1);
             this.dispatch_from(reader);
             if closed != 0 {
+                this.drop_handlers();
                 return;
             }
             Time.delay(0).await;
@@ -414,6 +451,17 @@ public class WebView {
     @native
     public fun close(): void {
         WebView.host_close(this.id);
+        this.drop_handlers();
+    }
+
+    // Handlers usually capture the view itself, so view -> list -> closure -> view is a cycle
+    // that ARC never frees. A closed view dispatches nothing, so its handlers can go.
+    fun drop_handlers(): void {
+        this._on = List<WebViewOnEntry>();
+        this._serve = List<WebViewServeEntry>();
+        this._on_bytes = List<WebViewOnBytesEntry>();
+        this._serve_bytes = List<WebViewServeBytesEntry>();
+        this._serve_bytes_async = List<WebViewServeBytesAsyncEntry>();
     }
 
     @native
@@ -448,6 +496,11 @@ public class WebView {
 
     static fun run_serve_bytes(fire: fun(byte[]): byte[], body: byte[]): byte[] {
         return fire(body);
+    }
+
+    static async fun reply_bytes_when_done(id: int, reply_id: int, fire: fun(byte[]): Future<byte[]>, body: byte[]): void {
+        let out = fire(body).await;
+        WebView.host_reply_bytes(id, reply_id, out);
     }
 
     fun dispatch(): void {
@@ -528,6 +581,16 @@ public class WebView {
                     } else {
                         hi = hi + 1;
                     }
+                }
+                let ai = 0;
+                while (found == false) && (ai < this._serve_bytes_async.length) {
+                    let entry = this._serve_bytes_async.get(ai);
+                    if entry.channel == channel {
+                        // Launched, not awaited: dispatch has to return so `run()` keeps pumping.
+                        Promise.start(WebView.reply_bytes_when_done(this.id, reply_id, entry.fire, body_bytes));
+                        found = true;
+                    }
+                    ai = ai + 1;
                 }
                 if found == false {
                     WebView.host_reply_err(this.id, reply_id, "no handler for channel: " + channel);

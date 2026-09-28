@@ -1201,6 +1201,7 @@ dependencies = [
  "oxc_parser",
  "oxc_semantic",
  "oxc_span",
+ "percent-encoding",
  "pollster",
  "pretty_assertions",
  "rayon",

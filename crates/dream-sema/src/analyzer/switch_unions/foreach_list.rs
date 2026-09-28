@@ -166,6 +166,7 @@ impl<'a> Analyzer<'a> {
             );
             self.hir_assign_local_id(idx_l, Some(next));
         }
+        self.hir_box_captured_binding(&element.text, &acc.element);
 
         self.analyze_body(
             body,

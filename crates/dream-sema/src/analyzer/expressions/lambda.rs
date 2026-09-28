@@ -493,7 +493,11 @@ impl<'a> Analyzer<'a> {
                 continue;
             }
             let tok = synthetic_token(TokenKind::IdentifierToken, &free_name);
-            if let Ok(ty) = (*symbol_table).as_ref().borrow().get_symbol(&tok) {
+            let captured = (*symbol_table).as_ref().borrow().get_symbol(&tok);
+            if let Ok(ty) = captured {
+                // The lifted body is analyzed as its own function, so its reads never reach this
+                // scope's unused-variable tracking.
+                (*symbol_table).borrow_mut().mark_used(&free_name);
                 captures.push((free_name, ty));
             }
         }

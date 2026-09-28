@@ -270,10 +270,12 @@ pub enum HExprKind {
         arms: Vec<(i64, String)>,
     },
     /// `Buffer.alloc<T>(len)` — a zero-initialized `T[]` of a runtime length. `elem_ty` is the element
-    /// type; `len` the element count.
+    /// type; `len` the element count. `closure_env` marks a multi-capture closure environment, which
+    /// is tagged so its last release drops the captured cells instead of shallow-freeing.
     ArrayNew {
         elem_ty: TypeId,
         len: Box<HExpr>,
+        closure_env: bool,
     },
     ArrayLit {
         elem_ty: TypeId,

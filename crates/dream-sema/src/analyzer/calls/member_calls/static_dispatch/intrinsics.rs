@@ -156,6 +156,7 @@ impl<'a> Analyzer<'a> {
             } else {
                 let newline = op == intrinsics::IntrinsicOp::Println;
                 self.hir_set_print(arg_hirs.into_iter().next().flatten(), newline);
+                return Ok(Type::Void);
             }
             return Ok(Type::Unknown);
         }
@@ -664,8 +665,43 @@ impl<'a> Analyzer<'a> {
                         return Ok(string_ty);
                     }
                 }
-                self.ensure_json_callee(&write_call);
-                self.hir_set_call(&write_call, vec![value, Some(sb_read)], &Type::Void);
+                let prim_writer = value.as_ref().and_then(|arg| {
+                    match self.type_ctx.interner.kind(arg.ty) {
+                        dream_types::TyKind::Prim(p) => Some(match p {
+                            dream_types::PrimTy::String => "write_string",
+                            dream_types::PrimTy::Bool => "write_bool",
+                            dream_types::PrimTy::Int => "write_int",
+                            dream_types::PrimTy::Double => "write_number",
+                            _ => "",
+                        }),
+                        _ => None,
+                    }
+                });
+                match prim_writer {
+                    Some("") => {
+                        diagnostics.report_error(
+                            format!(
+                                "'{}' cannot be the top-level type of 'Json.serialize': use int, double, bool, or string, or wrap it in a '@json' class",
+                                self.ty_str_display(&struct_name),
+                            ),
+                            Some(method.position),
+                        );
+                        self.hir_fail();
+                        self.hir_none();
+                        return Ok(string_ty);
+                    }
+                    Some(writer) => {
+                        self.hir_set_call(
+                            &method_fn("Json", writer),
+                            vec![Some(sb_read), value],
+                            &Type::Void,
+                        );
+                    }
+                    None => {
+                        self.ensure_json_callee(&write_call);
+                        self.hir_set_call(&write_call, vec![value, Some(sb_read)], &Type::Void);
+                    }
+                }
                 let write_hir = self.hir_take();
                 self.hir_expr_stmt(write_hir);
                 let sb_read2 = HExpr::new(sb_ty_id, HExprKind::Var(Binding::Local(local)));
@@ -748,6 +784,26 @@ impl<'a> Analyzer<'a> {
 
             if struct_name == "JsonValue" {
                 self.hir_set_call(&method_fn("Json", "_parse"), vec![text], &result_ty);
+                return Ok(result_ty);
+            }
+
+            // Only named `@json` types carry a generated top-level parser; a bare primitive is
+            // encodable as a field but has no `from_json_parser_text` of its own.
+            if typed_parser
+                && !matches!(
+                    self.type_ctx.interner.kind(t_ty_id),
+                    dream_types::TyKind::Struct(..)
+                )
+            {
+                diagnostics.report_error(
+                    format!(
+                        "'{}' cannot be the top-level type of 'Json.deserialize': wrap it in a '@json' class, or deserialize 'JsonValue' and read the value",
+                        self.ty_display(&t_type),
+                    ),
+                    Some(method.position),
+                );
+                self.hir_fail();
+                self.hir_none();
                 return Ok(result_ty);
             }
 

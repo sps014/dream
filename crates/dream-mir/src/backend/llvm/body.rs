@@ -334,7 +334,8 @@ impl<'l, 'a> Fx<'l, 'a> {
         let f = self.f;
         let mut dirty: Vec<u32> = Vec::new();
         if let Some(d) = resume_dest[bi] {
-            if !self.is_value(f.locals[d as usize].ty) {
+            let ty = f.locals[d as usize].ty;
+            if !matches!(self.interner.kind(ty), TyKind::Void) && !self.is_value(ty) {
                 dirty.push(d);
             }
         }

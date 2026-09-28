@@ -57,7 +57,7 @@ pub unsafe extern "C" fn webviewReplyErr(id: i32, reply_id: i32, message: usize)
 
 #[no_mangle]
 pub unsafe extern "C" fn webviewReplyBytes(id: i32, reply_id: i32, body: usize) {
-    webview::reply_bytes(id, reply_id, &read_bytes(body));
+    webview::reply_bytes(id, reply_id, read_bytes(body));
 }
 
 #[no_mangle]

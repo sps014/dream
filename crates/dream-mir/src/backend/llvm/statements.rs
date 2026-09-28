@@ -312,16 +312,20 @@ impl<'l, 'a> Fx<'l, 'a> {
         if self.simd_assign(place, rv) {
             return;
         }
-        if let (Place::Local(l), Rvalue::ArrayNew { elem_ty, len }) = (place, rv) {
-            if self.f.locals[l.0 as usize].name.as_deref()
-                == Some(dream_abi::intrinsics::CLOSURE_ENV_ARRAY_LOCAL)
-            {
-                let es = elem_size(&self.l.cx, *elem_ty);
-                let n = self.operand(len);
-                let r = self.call_v("dream_closure_env_array_new", &[n, V::i32(es as i64)]);
-                self.store(place, rv, r);
-                return;
-            }
+        if let (
+            Place::Local(_),
+            Rvalue::ArrayNew {
+                elem_ty,
+                len,
+                closure_env: true,
+            },
+        ) = (place, rv)
+        {
+            let es = elem_size(&self.l.cx, *elem_ty);
+            let n = self.operand(len);
+            let r = self.call_v("dream_closure_env_array_new", &[n, V::i32(es as i64)]);
+            self.store(place, rv, r);
+            return;
         }
         if let (
             Place::Local(l),

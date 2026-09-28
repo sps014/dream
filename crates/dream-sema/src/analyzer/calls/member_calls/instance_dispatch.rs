@@ -346,10 +346,9 @@ impl<'a> Analyzer<'a> {
                 .get_function(&mangled_name)
                 .ok()
                 .map(|info| {
-                    info.parameters
-                        .iter()
+                    Self::expected_param_types(&info)
+                        .into_iter()
                         .skip(1) // implicit `this`
-                        .map(|p| Self::type_from_name(p))
                         .collect()
                 })
         };

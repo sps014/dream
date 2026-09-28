@@ -287,6 +287,7 @@ impl<'a> Analyzer<'a> {
                     HExprKind::ArrayNew {
                         elem_ty: elem,
                         len: Box::new(len),
+                        closure_env: false,
                     },
                 ));
             }

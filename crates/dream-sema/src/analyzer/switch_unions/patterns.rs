@@ -97,6 +97,34 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Boxes the named bindings [`Self::hir_switch_pattern`] allocated for `shape`, once their raw
+    /// slots hold the arm's values (see `hir_box_captured_binding`). Call at the top of the arm body.
+    pub(super) fn hir_box_arm_bindings(
+        &mut self,
+        pattern: &PatternNode,
+        shape: &HirArmShape,
+        union_info: &Option<UnionInfo>,
+        subject_type: &Type,
+    ) {
+        match (pattern, shape) {
+            (PatternNode::Binding(name), HirArmShape::DefaultBind { .. }) => {
+                self.hir_box_captured_binding(&name.text, subject_type);
+            }
+            (PatternNode::Variant(_, vname, subs), HirArmShape::Variant { .. }) => {
+                let Some(v) = union_info.as_ref().and_then(|info| info.variant(&vname.text)) else {
+                    return;
+                };
+                let fields: Vec<Type> = v.fields.iter().map(|f| f.type_.clone()).collect();
+                for (sub, fty) in subs.iter().zip(fields.iter()) {
+                    if let PatternNode::Binding(bn) = sub {
+                        self.hir_box_captured_binding(&bn.text, fty);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Cap on inclusive literal range expansion onto multi-key `Switch` arms (`90..100` → 11 arms).
     /// Larger ranges stay on the if-chain path.
     const RANGE_EXPAND_MAX: i64 = 256;

@@ -1233,7 +1233,7 @@ dream_ptr dream_sleep(int32_t ms);
 dream_ptr dream_all(dream_ptr arr, int32_t esize);
 dream_ptr dream_any(dream_ptr arr);
 #ifndef DREAM_WASM32
-dream_ptr delayMs(int32_t ms);
+int32_t delayMsAsync(dream_ptr future, int32_t ms);
 #endif
 void *dream_ft_get(int32_t i);
 void *dream_fd_get(int32_t i);

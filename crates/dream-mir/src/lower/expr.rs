@@ -223,9 +223,14 @@ impl Lowerer<'_> {
             HExprKind::ByteAt(s, i) => {
                 Rvalue::ByteAt(self.lower_operand(s), self.lower_operand(i), false)
             }
-            HExprKind::ArrayNew { elem_ty, len } => Rvalue::ArrayNew {
+            HExprKind::ArrayNew {
+                elem_ty,
+                len,
+                closure_env,
+            } => Rvalue::ArrayNew {
                 elem_ty: *elem_ty,
                 len: self.lower_operand(len),
+                closure_env: *closure_env,
             },
             HExprKind::ToBytes(v) => Rvalue::ToBytes {
                 value: self.lower_operand(v),

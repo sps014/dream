@@ -514,9 +514,12 @@ pub enum Rvalue {
     /// UTF-16 code-unit load `ptr[index]`. `ptr` is a [`Self::StrBytes`] result.
     LoadU16(Operand, Operand),
     /// `Buffer.alloc<T>(len)` — allocate a zero-initialized `T[]` block of a runtime length.
+    /// `closure_env` allocates a `TAG_CLOSURE_ENV` block (see `HExprKind::ArrayNew`); it rides on the
+    /// rvalue so passes that move the allocation into a temp cannot drop the tag.
     ArrayNew {
         elem_ty: TypeId,
         len: Operand,
+        closure_env: bool,
     },
     /// The object-protocol `x.hash_code()` — dispatch on the operand's static type to a hash helper.
     HashCode(Operand),

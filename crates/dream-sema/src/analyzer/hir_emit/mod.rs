@@ -330,6 +330,22 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Boxes a binding whose raw slot is written by lowering rather than by a `let` (a switch-arm
+    /// payload or a `foreach` element): called as the first statement of the arm/loop body, it
+    /// rebinds `name` to a `CaptureCell<T>` (captured) or `RefBox<T>` (`ref`-passed only) copy of
+    /// the raw slot, exactly like a parameter at function entry. Without it a capturing lambda
+    /// would receive the raw value where its lifted body expects a cell.
+    pub(in crate::analyzer) fn hir_box_captured_binding(&mut self, name: &str, ty: &Type) {
+        if !self.active() {
+            return;
+        }
+        if self.boxed_locals.contains(name) {
+            self.box_captured_param(name, ty);
+        } else if self.ref_boxed_locals.contains(name) {
+            self.box_ref_only_param(name, ty);
+        }
+    }
+
     /// Rebinds parameter `name` (already registered with its ordinary raw slot above) to a fresh
     /// `CaptureCell<T>`-boxed copy, and records it in `self.hir.boxed` so subsequent reads/writes inside
     /// this function redirect through the cell — see the `hir_begin_function` call site.

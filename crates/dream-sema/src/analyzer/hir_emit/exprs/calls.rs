@@ -321,6 +321,7 @@ impl<'a> Analyzer<'a> {
             HExprKind::ArrayNew {
                 elem_ty: object_ty,
                 len: Box::new(len),
+                closure_env: true,
             },
         );
         let array_local = LocalId(self.hir.next_local);

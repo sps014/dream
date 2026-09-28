@@ -40,7 +40,7 @@ pub(crate) fn poll_messages(_id: i32) -> Vec<u8> {
 
 pub(crate) fn reply(_id: i32, _reply_id: i32, _body: &str) {}
 
-pub(crate) fn reply_bytes(_id: i32, _reply_id: i32, _body: &[u8]) {}
+pub(crate) fn reply_bytes(_id: i32, _reply_id: i32, _body: Vec<u8>) {}
 
 pub(crate) fn reply_err(_id: i32, _reply_id: i32, _message: &str) {}
 

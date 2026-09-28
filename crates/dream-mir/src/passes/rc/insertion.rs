@@ -2131,6 +2131,7 @@ mod tests {
             Rvalue::ArrayNew {
                 elem_ty: ch,
                 len: Operand::Const(Const::Int(0)),
+                closure_env: false,
             },
         );
         b.terminate(Terminator::Goto(header));
@@ -2146,6 +2147,7 @@ mod tests {
             Rvalue::ArrayNew {
                 elem_ty: ch,
                 len: Operand::Const(Const::Int(4)),
+                closure_env: false,
             },
         );
         b.terminate(Terminator::Goto(header));
@@ -2616,6 +2618,7 @@ mod tests {
             Rvalue::ArrayNew {
                 elem_ty: str_ty,
                 len: Operand::Const(Const::Int(1)),
+                closure_env: false,
             },
         );
         b.assign(
@@ -2674,6 +2677,7 @@ mod tests {
             Rvalue::ArrayNew {
                 elem_ty: str_ty,
                 len: Operand::Const(Const::Int(1)),
+                closure_env: false,
             },
         );
         b.terminate(Terminator::Goto(header));

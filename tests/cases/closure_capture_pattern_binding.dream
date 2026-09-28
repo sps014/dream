@@ -1,0 +1,63 @@
+// Switch-arm payload bindings and for-each elements are bound by lowering, not by a `let`, so a
+// capturing lambda must still receive them through a `CaptureCell` (here alongside a second
+// capture, so they travel in the multi-capture env array) and read them after the arm / iteration.
+
+import system;
+import system.collections;
+
+class Counter {
+    public count: int;
+    public constructor() {
+        this.count = 0;
+    }
+}
+
+class Named {
+    public name: string;
+    public constructor(name: string) {
+        this.name = name;
+    }
+}
+
+fun make(ok: bool): Result<Named, string> {
+    if ok {
+        return Result.Ok(Named("view"));
+    }
+    return Result.Err("nope");
+}
+
+fun main() {
+    let counter = Counter();
+    let fs: List<fun(): void> = List<fun(): void>();
+    switch (make(true)) {
+        Ok(named) => {
+            fs.push(() => {
+                counter.count = counter.count + 1;
+                System.println(named.name + " " + counter.count.to_string());
+            });
+        },
+        Err(e) => System.println(e),
+    }
+    switch (make(false)) {
+        Ok(named) => System.println(named.name),
+        Err(e) => {
+            fs.push(() => System.println("err " + e));
+        },
+    }
+    let names: string[] = ["a", "b"];
+    for (let n in names) {
+        fs.push(() => System.println("array " + n));
+    }
+    let list = List<Named>();
+    list.push(Named("x"));
+    list.push(Named("y"));
+    for (let item in list) {
+        fs.push(() => {
+            counter.count = counter.count + 1;
+            System.println("list " + item.name + " " + counter.count.to_string());
+        });
+    }
+    for (let f in fs) {
+        f();
+    }
+}

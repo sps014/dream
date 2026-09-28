@@ -246,6 +246,7 @@ impl<'a> Analyzer<'a> {
             );
             self.hir_assign_local_id(elem_l, Some(field_expr));
         }
+        self.hir_box_captured_binding(&element.text, &element_type);
 
         self.analyze_body(
             body,
@@ -464,6 +465,7 @@ impl<'a> Analyzer<'a> {
             );
             self.hir_assign_local_id(elem_l, Some(field_expr));
         }
+        self.hir_box_captured_binding(&element.text, &element_type);
 
         // The user body is analyzed inside the loop (so `break`/`continue` are valid and target it).
         self.analyze_body(

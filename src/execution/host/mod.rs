@@ -23,14 +23,14 @@ pub use gpu::{attach_abi_from_wat_path, set_packaged_app_icon};
 
 #[cfg(test)]
 mod contract_tests {
-    //! Native C ABI (`native_c/abi.rs` + `webview.rs`) vs stdlib `@runtime("…")` names.
+    //! Native C ABI (`native/abi.rs` + `webview.rs`) vs stdlib `@runtime("…")` names.
 
     use dream_abi::js_abi::HOST_MODULE;
     use std::collections::HashSet;
 
     const HOST_SOURCES: &[&str] = &[
-        include_str!("../native_c/abi.rs"),
-        include_str!("../native_c/webview.rs"),
+        include_str!("../native/abi.rs"),
+        include_str!("../native/webview.rs"),
     ];
 
     fn names_after_module(src: &str, module: &str) -> Vec<String> {

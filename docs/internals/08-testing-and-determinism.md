@@ -6,8 +6,8 @@ This chapter covers how the compiler is tested, the determinism contract the who
 
 ```mermaid
 flowchart TD
-    unit["Unit tests (per module)\ntypes::tests, hir::tests, mir::passes::*::tests, relooper::tests"]
-    integ["Integration tests\nmir hir_to_mir_to_optimized_c (HIR→MIR→passes→C)"]
+    unit["Unit tests (per module)\ntypes::tests, hir::tests, mir::passes::*::tests, backend::llvm::ir::tests"]
+    integ["Integration tests\nhir_to_optimized_mir, hir_to_ir_pipeline_emits_expected_shape (HIR→MIR→passes→LLVM IR)"]
     e2e["End-to-end tests (tests/)\ncompile a .dream program, run it, check output"]
     det["Determinism test\ncodegen_is_deterministic"]
     unit --> integ --> e2e
@@ -21,16 +21,16 @@ Each module tests its own logic with the smallest possible input. Passes use `Fu
 ```bash
 cargo test -p dream types::
 cargo test -p dream mir::passes::
-cargo test -p dream relooper::
+cargo test -p dream-mir backend::llvm::
 ```
 
 ### Integration test
 
-`crates/dream-mir/src/lib.rs::tests::hir_to_mir_to_optimized_c` exercises the whole middle/back end in one shot: build typed HIR by hand → `lower_function` → `PassManager::default_pipeline` → C emission. When you change lowering, passes, or emission, this is the fastest signal that the stages still compose.
+`crates/dream-mir/src/lib.rs::tests::hir_to_optimized_mir` builds typed HIR by hand → `lower_function` → `PassManager::default_pipeline` and asserts on the optimized MIR. `tests/mir_pipeline.rs::hir_to_ir_pipeline_emits_expected_shape` carries the same program through LLVM IR emission (typed against the pinned toolchain's runtime signatures). When you change lowering, passes, or emission, these are the fastest signals that the stages still compose. `tests/sema_emission_tests.rs` and `tests/rc_elision_goldens.rs` assert on the emitted IR of small source programs.
 
 ### End-to-end tests — `tests/`
 
-`tests/e2e_tests.rs` compiles real `.dream` programs through the full driver and checks behavior against each case's `.expected`. Default `cargo test --workspace` runs a smoke subset (`run_smoke_e2e_cases`). The full debug/release corpora, the duplicate `mir_e2e` ratchet, DAP, and Binaryen-every-level live behind `#[ignore]` — run them with `cargo test --workspace -- --ignored`.
+`tests/e2e_tests.rs` compiles real `.dream` programs through the full driver and checks behavior against each case's `.expected`. Default `cargo test --workspace` runs a smoke subset (`run_smoke_e2e_cases`). The full debug/release corpora, DAP, and Binaryen-every-level live behind `#[ignore]` — run them with `cargo test --workspace -- --ignored`.
 
 ### Determinism test — `codegen_is_deterministic` (`tests/e2e_tests.rs`)
 
@@ -38,7 +38,7 @@ Compiles the same input twice and asserts byte-identical output. This guards the
 
 ## The determinism contract
 
-> **Two compilations of the same source must produce byte-identical `.wat`/`.wasm`.**
+> **Two compilations of the same source to the same output path must produce byte-identical `.ll`/`.wasm`/`.wat`.**
 
 This is non-negotiable: it makes builds reproducible, caching sound, and diffs meaningful. The only realistic way to break it is **iteration order of a hash map**. Rules:
 
@@ -56,12 +56,13 @@ flowchart LR
 
 ## The pre-commit gate
 
-Before considering any change done, all three must pass:
+Before considering any change done, all four must pass:
 
 ```bash
 cargo build --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+./scripts/probe_test.sh    # golden corpus through native `dream run`
 ```
 
 Clippy runs with `-D warnings`: the project's stance is **fix the root cause, do not `#[allow]`**. The only surviving `#[allow]`s annotate *external* API constraints (e.g. an `lsp-types` field deprecated upstream) and carry a comment explaining why.
@@ -70,7 +71,7 @@ Clippy runs with `-D warnings`: the project's stance is **fix the root cause, do
 
 ### Comments
 
-Comments explain **intent, invariants, and trade-offs** — the *why*. They must not narrate the code. Delete `// increment counter` and `/// Builds X` stub banners. Good comments look like the module headers in `src/mir/mod.rs` (what the IR guarantees) or the back-edge note in `relooper.rs` (a subtle correctness reason).
+Comments explain **intent, invariants, and trade-offs** — the *why*. They must not narrate the code. Delete `// increment counter` and `/// Builds X` stub banners. Good comments look like the module headers in `src/mir/mod.rs` (what the IR guarantees) or the note in `src/execution/llvm/runtime.rs` on why debug builds link the runtime without DWARF (a subtle constraint).
 
 ### Errors
 

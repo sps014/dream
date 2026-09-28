@@ -1,4 +1,4 @@
-// Binary File.read_bytes / write_bytes on native C (NUL-safe, no string round-trip).
+// Binary File.read_bytes / write_bytes on native (NUL-safe, no string round-trip).
 import system;
 import system.io;
 

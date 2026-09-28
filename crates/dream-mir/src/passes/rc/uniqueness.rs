@@ -168,7 +168,7 @@ fn rvalue_allocates(interner: &TypeInterner, rv: &Rvalue) -> bool {
     }
 }
 
-/// Records in the store itself that it adopts `src`'s token, so the C backend reads the transfer off
+/// Records in the store itself that it adopts `src`'s token, so the backend reads the transfer off
 /// the statement rather than re-deriving it from the `src = null` that follows. The null stays: it
 /// keeps the dead pointer out of async frame spills and later reads, but it no longer carries the
 /// ownership meaning by itself.

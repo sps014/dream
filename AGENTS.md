@@ -1,18 +1,18 @@
 # AGENTS.md — Dream Compiler
 
-Read this fully before exploring the repo. It exists so agents don't burn tokens re-discovering structure that's already known. `docs/internals/` is the deep-dive engineering handbook (pipeline, type system, HIR, MIR, passes, relooper, adding a feature, testing/determinism) — read it before touching the middle/back end. Everything below is the fast-reference version.
+Read this fully before exploring the repo. It exists so agents don't burn tokens re-discovering structure that's already known. `docs/internals/` is the deep-dive engineering handbook (pipeline, type system, HIR, MIR, passes, LLVM backend, adding a feature, testing/determinism) — read it before touching the middle/back end. Everything below is the fast-reference version.
 
 ## Non-negotiable ground rules
 
 - **No backwards compatibility.** Dream is pre-1.0 with no external users to protect. Never add shims, deprecated aliases, dual code paths, or "legacy" fallbacks to preserve old behavior. When a design changes, migrate every call site and delete the old path outright — do not leave both.
-- **Prefer well-settled libraries over custom implementations.** Before hand-rolling something (arena allocation, ordered maps, tokenizing, CLI parsing, JSON, HTTP, terminal control, timezones, WASM text parsing), check `Cargo.toml` for an existing dependency, or reach for a mature crate instead of writing bespoke logic. Only hand-write something in-language when the project genuinely needs Dream-specific semantics that no crate can provide (e.g. the WAT emitter/relooper — the backend itself is intentionally custom).
+- **Prefer well-settled libraries over custom implementations.** Before hand-rolling something (arena allocation, ordered maps, tokenizing, CLI parsing, JSON, HTTP, terminal control, timezones, WASM text parsing), check `Cargo.toml` for an existing dependency, or reach for a mature crate instead of writing bespoke logic. Only hand-write something in-language when the project genuinely needs Dream-specific semantics that no crate can provide (e.g. the textual LLVM IR printer — the backend is intentionally custom and links no LLVM crate; the pinned LLVM tools run as subprocesses).
 - **Never panic on user input.** Lexer/parser/analyzer errors go through `DiagnosticBag`, never `panic!`/`unwrap`/`expect` on attacker- or user-controlled input.
 - **The backend (`dream-mir`) only runs on validated programs.** A backend panic is an ICE (compiler bug), acceptable and expected there — but it must never be reachable from unvalidated input.
-- **Determinism is non-negotiable.** Two compiles of the same source must produce byte-identical `.wat`/`.wasm`. Never iterate `std::collections::HashMap`/`HashSet` in anything that influences emitted output or its ordering — use `indexmap::IndexMap`/`IndexSet` (insertion order) or `BTreeMap` (sorted order) instead.
+- **Determinism is non-negotiable.** Two compiles of the same source to the same output path must produce byte-identical `.ll`/`.wasm`/`.wat`. Never iterate `std::collections::HashMap`/`HashSet` in anything that influences emitted output or its ordering — use `indexmap::IndexMap`/`IndexSet` (insertion order) or `BTreeMap` (sorted order) instead.
 - **No narrating comments.** Comments explain *why* (invariants, trade-offs, non-obvious constraints), never *what* the next line does. Don't add "explaining the diff" comments.
 - **Clippy is a hard gate at `-D warnings`.** Fix the root cause; don't `#[allow]` your way out except for genuine external-API constraints (with a comment saying why).
 - **Probe the golden corpus when implementing or fixing.** After language/runtime/codegen changes, run `./scripts/probe_test.sh` (filter by case stem while iterating; full probe before calling the work done). It rebuilds `dream` then parallel-runs `tests/cases`.
-- **The guest runtime is C only.** wasm32 units live under `runtime/c/wasm32/` + shared `runtime/c/native/` (list in `runtime/modules.rs::WASM32_CORE_C`, compiled by wasi-sdk via `src/driver/c_wasm32.rs`); native helpers under `runtime/c/native/`. Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`. There is no WAT runtime — do not reintroduce one.
+- **The guest runtime is C only.** wasm32 units live under `runtime/c/wasm32/` + shared `runtime/c/native/` (list in `runtime/modules.rs::WASM32_CORE_C`, compiled to bitcode by wasi-sdk clang via `src/execution/llvm/wasm.rs`); native helpers under `runtime/c/native/` (compiled to bitcode by the pinned clang via `src/execution/llvm/runtime.rs`). Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`. There is no WAT runtime — do not reintroduce one.
 
 ## What Dream is
 
@@ -33,13 +33,13 @@ Dream/
 │   ├── dream-abi/                  Shared constants: attributes, intrinsics, JS ABI names
 │   ├── dream-stdlib/               Embedded prelude .dream files + STD_PACKAGES registry
 │   ├── dream-sema/                 Semantic analyzer + tables + hir_emit (fused; no MIR dep)
-│   └── dream-mir/                  CFG MIR, passes, relooper, backend/c (C99 emitter), runtime/c
+│   └── dream-mir/                  CFG MIR, passes, backend/llvm (textual LLVM IR), runtime/c
 ├── src/                            Root `dream` crate — driver, CLI, execution only
 │   ├── main.rs                     CLI entry point
 │   ├── lib.rs                      Thin facade: driver + execution (+ debug_schema)
 │   ├── driver/                     Pipeline orchestration (parse → analyze → HIR → MIR → emit)
 │   │   ├── source_loader.rs, prelude.rs, generate/, error.rs, compiler.rs, …
-│   ├── execution/                  (feature "native") libdream C ABI, lldb-dap
+│   ├── execution/                  (feature "native") llvm/ (toolchain + link), native/ (libdream C ABI, run), lldb-dap
 │   └── debug_schema.rs             Debug info schema
 ├── tooling/
 │   ├── dream-lsp/                  LSP (depends on `dream` with default-features=false)
@@ -65,8 +65,8 @@ Dream/
 ```
 .dream source → Lexer (logos) → Parser (recursive descent, arena AST) → Semantic Analyzer
   → Typed HIR (types::TypeCtx feeds it) → MIR lowering (CFG) → Pass manager (opt passes)
-  → Relooper-informed C99 emission (`backend/c`) → clang/wasm-ld → `.c` + `.wasm`
-  → wasmprinter `.wat` + `.abi.json` sidecar (native targets stop at the `.c` + cc)
+  → textual LLVM IR (`backend/llvm`) → `.ll` → llvm-link with the C runtime bitcode → opt → llc
+  → native: host cc links `.bin` | wasm32: wasm-ld `.wasm` → wasmprinter `.wat` + `.abi.json` sidecar
 ```
 
 Each arrow is a **total** lowering: the producer records everything the consumer needs, so the consumer never looks backward. Types are interned once (`TypeId`), so equality is `==`, never string comparison/mangling (the old `"Box_int"`-style stringly-typed system is gone — do not reintroduce string-keyed types).
@@ -107,7 +107,7 @@ Root `dream` may re-export front-end leaves as `dream::{syntax,diagnostics,text}
 - **Lexer** (`crates/dream-syntax/src/lexer.rs`): tokens only. No syntactic rules, no diagnostics assumptions.
 - **Parser** (`crates/dream-syntax/src/parser/`): builds AST from tokens. No type-checking, no scope enforcement. **Recover-and-continue**: `match_token` synthesizes a placeholder + reports an error instead of bailing; `parse_program`/`parse_block` recover at declaration/statement boundaries. `parse()` *always* returns a `ProgramNode` no matter how malformed the input. Every token-consuming loop needs its `ensure_progress` guard so recovery can't spin forever. Fuzz/property tests in `crates/dream-syntax/src/tests/parser_tests.rs` (`fuzz_*`) lock in "never panics, always returns a ProgramNode" — keep green.
 - **Analyzer** (`crates/dream-sema/`): validates types/scopes/async constraints, emits HIR. Never mutates AST structure, never generates target code (WAT/WASM).
-- **Backend** (`crates/dream-mir/`): lowers typed HIR → MIR → C99 (`backend/c`; wasm32 output is then compiled by wasi-sdk, pretty-printed to `.wat` via wasmprinter). Expects a fully validated program with resolved symbols/types. Never type-checks, never emits a compile-time diagnostic. Runs *only* after zero errors were reported.
+- **Backend** (`crates/dream-mir/`): lowers typed HIR → MIR → textual LLVM IR (`backend/llvm`; the driver in `src/execution/llvm/` links it with the runtime bitcode and runs the pinned `opt`/`llc`). Expects a fully validated program with resolved symbols/types. Never type-checks, never emits a compile-time diagnostic. Runs *only* after zero errors were reported.
 
 ## Backend non-goals
 
@@ -119,7 +119,9 @@ Do not implement these (decision record: `docs/internals/10-stack-alloc-and-mono
 
 Swift-like ARC follow-ups (stronger elision shipped in Phase 1; CoW / ownership annotations / per-object weak tables planned): `docs/internals/11-swift-like-arc-roadmap.md`.
 
-Sync functions emit structured C control flow (`for (;;)` / `if` / `switch` from relooper shapes); async poll functions keep `$__pc` + dispatch (suspend/resume).
+Every MIR block becomes one LLVM block and every local an entry `alloca` (mem2reg promotes them); async poll functions switch on the `Future` state word to resume. Runtime calls are typed from the runtime bitcode's own signatures (`RuntimeSigs`) — never spell a runtime signature by hand. Ownership stays in MIR: each `Retain`/`Release` becomes exactly one call or glue sequence, and no LLVM attribute or metadata is added unless Dream semantics prove it (see `docs/internals/06-llvm-backend.md`).
+
+Every build needs the pinned LLVM (`LLVM_VERSION` in `src/execution/llvm/tools.rs`): `dreamer toolchain install llvm`, or `DREAM_LLVM` pointing at its `bin/`. Native builds also need a linker driver (`cc`, or Zig via `dreamer toolchain install cc`).
 
 ## Error handling model
 
@@ -142,9 +144,10 @@ Sync functions emit structured C control flow (`for (;;)` / `if` / `switch` from
 cargo build --release            # binary at target/release/dream
 
 # Run a program
-cargo run -- run path/to/file.dream        # compile native C + execute
-cargo run -- path/to/file.dream            # compile to .c (then .bin) / .abi.json
-cargo run -- --wasm path/to/file.dream         # compile wasm32 (.c + .wasm + .wat) only
+cargo run -- run path/to/file.dream        # compile natively + execute
+cargo run -- path/to/file.dream            # compile to .ll (then .bin) / .abi.json
+cargo run -- --emit-llvm path/to/file.dream    # stop at .ll + optimized .opt.ll + .s
+cargo run -- --wasm path/to/file.dream         # compile wasm32 (.ll + .wasm + .wat) only
 cargo run -- -v run path/to/file.dream     # verbose
 
 # WASM guest stack for `dream run` / e2e (default from `[package.metadata.dream] stack-size`)
@@ -160,7 +163,7 @@ node scripts/bundle-runtime.mjs            # writes runtime/dream.js
 node scripts/bundle-runtime.mjs --check    # fails if dream.js is stale
 
 # Fast default gate (unit tests + e2e smoke). Full golden corpus / DAP / wasm-opt:
-# Native C hotpath: scripts/bench-native-c.sh
+# C runtime hotpath: scripts/bench-runtime.sh; language benches: scripts/run-microbenches.sh
 
 cargo test --workspace
 cargo test --workspace -- --ignored
@@ -173,7 +176,7 @@ cargo test --workspace -- --ignored
 # Focused unit tests
 cargo test -p dream-types
 cargo test -p dream-mir -- passes::
-cargo test -p dream-mir -- relooper::
+cargo test -p dream-mir -- backend::llvm::
 cargo test -p dream-sema
 
 # LSP
@@ -214,8 +217,8 @@ When iterating on a feature or bugfix, prefer `./scripts/probe_test.sh <case-ste
 ## Testing conventions
 
 - **Golden e2e tests** live in `tests/cases/`: add `<name>.dream`, plus either `<name>.expected` (exact stdout for successful compile+run) or `<name>.expected_error` (expected compile-time failure). Default `cargo test --workspace` runs a smoke subset; the full corpus is `cargo test --workspace -- --ignored`. **Agents implementing or fixing behavior must run `./scripts/probe_test.sh`** (optionally filtered by case stem while iterating; full probe before done).
-- **Unit tests** live next to the code they test (`dream-types`, `dream-hir`, `dream-mir` passes/`relooper`). Passes use `FunctionBuilder` (`dream-mir`) to build a tiny `MirFunction` and assert on the pass output.
-- **Integration test** `dream-mir`'s `hir_to_mir_to_optimized_c` exercises HIR→MIR lowering→pass pipeline→C emission in one shot — fastest signal when touching lowering/passes/emission.
+- **Unit tests** live next to the code they test (`dream-types`, `dream-hir`, `dream-mir` passes / `backend::llvm::ir`). Passes use `FunctionBuilder` (`dream-mir`) to build a tiny `MirFunction` and assert on the pass output.
+- **Integration tests** `dream-mir`'s `hir_to_optimized_mir` (HIR→MIR→pass pipeline) and `tests/mir_pipeline.rs` (the same through LLVM IR emission) are the fastest signal when touching lowering/passes/emission. `tests/sema_emission_tests.rs` and `tests/rc_elision_goldens.rs` assert on emitted IR (`tests/common::emit_ll`, `ir_func_body`).
 - **Determinism test** `codegen_is_deterministic` (`tests/e2e_tests.rs`) compiles the same source twice and asserts byte-identical output. Never break this.
 
 ## Adding a language feature (checklist)
@@ -225,7 +228,7 @@ When iterating on a feature or bugfix, prefer `./scripts/probe_test.sh <case-ste
 3. `crates/dream-sema/`: type-check + validate; emit HIR via `hir_emit/`.
 4. `crates/dream-types/`: add/extend `TyKind` if a new type shape is needed.
 5. `crates/dream-mir/src/lower/`: lower the new HIR shape into MIR.
-6. `crates/dream-mir/src/backend/c/`: emit if new lowering is needed. New runtime helpers: wasm32 units under `runtime/c/wasm32/` (+ shared `native/`, registered in `runtime/modules.rs::WASM32_CORE_C`); native-only helpers under `runtime/c/native/`. Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`.
+6. `crates/dream-mir/src/backend/llvm/`: emit if new lowering is needed (IR text only through the `ir/` writers). New runtime helpers: wasm32 units under `runtime/c/wasm32/` (+ shared `native/`, registered in `runtime/modules.rs::WASM32_CORE_C`); native-only helpers under `runtime/c/native/`. Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`.
 7. `tests/cases/`: add a golden test (`.dream` + `.expected`/`.expected_error`).
 8. If it's a stdlib API: define the signature under `crates/dream-stdlib/system/…`, register the file in `STD_PACKAGES`, wire host/inline logic in root `execution/` if needed.
 9. Run `./scripts/probe_test.sh` (and the full pre-commit gate above). See `docs/internals/07-adding-a-language-feature.md` for a worked example.

@@ -1,4 +1,4 @@
-//! DAP e2e: `dream debug-adapter` compiles native C with `#line` and proxies `lldb-dap`.
+//! DAP e2e: `dream debug-adapter` builds with DWARF and proxies `lldb-dap`.
 
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -167,9 +167,22 @@ fn read_messages(stdout: ChildStdout, tx: mpsc::Sender<serde_json::Value>) {
     }
 }
 
+fn llvm_available() -> bool {
+    match dream::execution::llvm::tools::resolve_llvm() {
+        Ok(_) => true,
+        Err(e) => {
+            eprintln!("skipping debugger test: {e}");
+            false
+        }
+    }
+}
+
 #[test]
 #[ignore = "spawns debug-adapter; cargo test --workspace -- --ignored"]
 fn dap_breakpoint_stack_variables_step_continue() {
+    if !llvm_available() {
+        return;
+    }
     if !lldb_dap_available() {
         eprintln!("skipping: lldb-dap not on PATH");
         return;
@@ -334,8 +347,8 @@ async fun main(): void {
 #[test]
 #[ignore = "spawns debug-adapter; cargo test --workspace -- --ignored"]
 fn dap_async_breakpoint_on_branch_with_locals() {
-    if !lldb_dap_available() {
-        eprintln!("skipping: lldb-dap not on PATH");
+    if !llvm_available() || !lldb_dap_available() {
+        eprintln!("skipping: needs the pinned LLVM and lldb-dap");
         return;
     }
     let (dir, source_path) = write_temp_program("async", ASYNC_PROGRAM);
@@ -397,4 +410,69 @@ fn dap_async_breakpoint_on_branch_with_locals() {
     client.wait_event("terminated");
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+const VIEWS_PROGRAM: &str = r#"import system;
+
+enum Shape {
+    Circle(radius: int),
+    Rect(w: int, h: int),
+}
+
+fun main(): void {
+    let greeting = "hello";
+    let xs = [1, 2, 3];
+    let sh = Shape.Rect(3, 4);
+    System.println(greeting);
+    System.println(xs.length);
+    System.println(sh);
+}
+"#;
+
+/// Reference locals render through the DWARF views and the shipped lldb formatters: strings as
+/// quoted text, arrays as their elements, unions as the active variant.
+#[test]
+#[ignore = "spawns debug-adapter; cargo test --workspace -- --ignored"]
+fn dap_views_render_strings_arrays_unions() {
+    if !llvm_available() || !lldb_dap_available() {
+        eprintln!("skipping: needs the pinned LLVM and lldb-dap");
+        return;
+    }
+    let (dir, source_path) = write_temp_program("views", VIEWS_PROGRAM);
+    let mut client = run_to_breakpoint(&source_path, 12);
+    let stopped = client.wait_event("stopped");
+    assert_eq!(stopped["body"]["reason"], "breakpoint");
+    client.request(
+        "stackTrace",
+        serde_json::json!({ "threadId": stopped["body"]["threadId"] }),
+    );
+    let st = client.wait_response("stackTrace");
+    let frame_id = st["body"]["stackFrames"][0]["id"].clone();
+    client.request("scopes", serde_json::json!({ "frameId": frame_id }));
+    let scopes = client.wait_response("scopes");
+    let reference = scopes["body"]["scopes"][0]["variablesReference"].clone();
+    client.request(
+        "variables",
+        serde_json::json!({ "variablesReference": reference }),
+    );
+    let vars = client.wait_response("variables");
+    let shown = |want: &str| -> String {
+        vars["body"]["variables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["name"].as_str() == Some(want))
+            .and_then(|v| v["value"].as_str())
+            .unwrap_or_default()
+            .to_string()
+    };
+    assert!(shown("greeting").contains("\"hello\""), "{}", vars);
+    assert!(shown("xs").contains("[1, 2, 3]"), "{}", vars);
+    assert!(shown("sh").contains("Rect(w=3, h=4)"), "{}", vars);
+    client.request(
+        "continue",
+        serde_json::json!({ "threadId": stopped["body"]["threadId"] }),
+    );
+    drop(client);
+    let _ = std::fs::remove_dir_all(dir);
 }

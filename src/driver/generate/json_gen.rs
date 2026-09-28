@@ -1,5 +1,5 @@
 //! Builtin `@json` derive: builds a declaration snapshot, runs the Dream `JsonGenerator`
-//! harness (cached native C), and `emit_file`s the resulting `extend` source.
+//! harness (cached native build), and `emit_file`s the resulting `extend` source.
 
 use super::context::GeneratorContext;
 use dream_diagnostics::DiagnosticBag;
@@ -888,19 +888,18 @@ fn run_dream_json_generator(snapshot: &str) -> Result<String, JsonGenError> {
     static SNAPSHOT_GUARD: Mutex<()> = Mutex::new(());
     let _guard = SNAPSHOT_GUARD.lock().unwrap_or_else(|e| e.into_inner());
 
-    let c_path = cached_harness_c().map_err(|e| JsonGenError {
+    let ll_path = cached_harness_ll().map_err(|e| JsonGenError {
         message: e,
         type_name: None,
         field_name: None,
     })?;
-    let snap_path = write_unique_snapshot(&c_path, snapshot)?;
+    let snap_path = write_unique_snapshot(&ll_path, snapshot)?;
 
     std::env::set_var(SNAPSHOT_ENV, snap_path.as_os_str());
     // The harness is a throwaway code generator that runs for milliseconds on one small snapshot,
-    // so `cc` time dominates end to end: `-O3 -march=native` on its ~2 MB translation unit costs
-    // ~110s cold versus ~10s at `-O0`.
-    let output = crate::execution::native_c::compile_and_capture(
-        &c_path,
+    // so build time dominates end to end; it builds at `-O0`.
+    let output = crate::execution::native::compile_and_capture(
+        &ll_path,
         crate::driver::wasm_opt::OptLevel::O0,
     );
     std::env::remove_var(SNAPSHOT_ENV);
@@ -916,9 +915,9 @@ fn run_dream_json_generator(snapshot: &str) -> Result<String, JsonGenError> {
 }
 
 #[cfg(feature = "native")]
-fn write_unique_snapshot(c_path: &str, snapshot: &str) -> Result<std::path::PathBuf, JsonGenError> {
+fn write_unique_snapshot(module_path: &str, snapshot: &str) -> Result<std::path::PathBuf, JsonGenError> {
     static SEQ: AtomicU64 = AtomicU64::new(0);
-    let dir = std::path::Path::new(c_path)
+    let dir = std::path::Path::new(module_path)
         .parent()
         .unwrap_or_else(|| std::path::Path::new("."));
     let nanos = std::time::SystemTime::now()
@@ -1083,7 +1082,7 @@ fn fnv1a(parts: &[&str]) -> u64 {
 }
 
 #[cfg(feature = "native")]
-fn cached_harness_c() -> Result<String, String> {
+fn cached_harness_ll() -> Result<String, String> {
     let fingerprint = fnv1a(&[
         HARNESS_SOURCE,
         include_str!("../../../crates/dream-stdlib/src/system/json/json_generator.dream"),
@@ -1110,11 +1109,16 @@ fn cached_harness_c() -> Result<String, String> {
         include_str!("../../../crates/dream-mir/src/passes/rc/tokens.rs"),
         include_str!("../../../crates/dream-mir/src/passes/rc/lifetime.rs"),
         include_str!("../../../crates/dream-mir/src/passes/rc/cursor.rs"),
-        include_str!("../../../crates/dream-mir/src/backend/c/rvalue.rs"),
-        include_str!("../../../crates/dream-mir/src/backend/c/module.rs"),
-        include_str!("../../../crates/dream-mir/src/backend/c/print.rs"),
-        include_str!("../../../crates/dream-mir/src/backend/c/shape.rs"),
-        include_str!("../../../crates/dream-mir/src/backend/c/builder.rs"),
+        include_str!("../../../crates/dream-mir/src/backend/llvm/mod.rs"),
+        include_str!("../../../crates/dream-mir/src/backend/llvm/lcx.rs"),
+        include_str!("../../../crates/dream-mir/src/backend/llvm/body.rs"),
+        include_str!("../../../crates/dream-mir/src/backend/llvm/rvalue.rs"),
+        include_str!("../../../crates/dream-mir/src/backend/llvm/statements.rs"),
+        include_str!("../../../crates/dream-mir/src/backend/llvm/places.rs"),
+        include_str!("../../../crates/dream-mir/src/backend/llvm/calls.rs"),
+        include_str!("../../../crates/dream-mir/src/backend/llvm/terminator.rs"),
+        include_str!("../../../crates/dream-mir/src/backend/llvm/glue/release.rs"),
+        include_str!("../../../crates/dream-mir/src/backend/llvm/glue/entry.rs"),
         &format!(
             "{}:{}",
             dream_mir::abi::STRING_HEADER_SIZE,
@@ -1136,20 +1140,20 @@ fn cached_harness_c() -> Result<String, String> {
         .lock()
         .map_err(|e| format!("@json generator: lock harness dir: {e}"))?;
     let src_path = dir.join("harness.dream");
-    let c_path = dir.join("harness.c");
-    if !c_path.is_file() {
+    let ll_path = dir.join("harness.ll");
+    if !ll_path.is_file() {
         std::fs::write(&src_path, HARNESS_SOURCE)
             .map_err(|e| format!("@json generator: write harness source: {e}"))?;
         let src = src_path.to_string_lossy().into_owned();
-        let out = c_path.to_string_lossy().into_owned();
+        let out = ll_path.to_string_lossy().into_owned();
         let compiler =
-            crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::NativeC)
+            crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Native)
                 .with_skip_generators(true)
                 .with_release(true)
-                .with_optimize(None);
+                .with_optimize(Some(crate::driver::wasm_opt::OptLevel::O0));
         compiler
             .compile(&src, &out)
             .map_err(|_| "@json generator: failed to compile Dream harness".to_string())?;
     }
-    Ok(c_path.to_string_lossy().into_owned())
+    Ok(ll_path.to_string_lossy().into_owned())
 }

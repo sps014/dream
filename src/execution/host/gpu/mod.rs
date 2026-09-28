@@ -33,7 +33,7 @@ pub(crate) fn is_ready() -> bool {
     lock_state().ready
 }
 
-/// Load sibling `.abi.json` `gpu` section (`DREAM_NATIVE_C` path / compile artifact).
+/// Load sibling `.abi.json` `gpu` section (`DREAM_NATIVE_MODULE` path / compile artifact).
 pub fn attach_abi_from_wat_path(wat_path: &str) {
     let path = Path::new(wat_path);
     let abi_path = path.with_extension("abi.json");

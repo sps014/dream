@@ -35,6 +35,9 @@ jobs:
   #     - name: Build
   #       run: cargo build --workspace
   #
+  #     - name: Install pinned LLVM
+  #       run: cargo run -p dreamer -- toolchain install llvm
+  #
   #     - name: Test
   #       run: cargo test --workspace
 

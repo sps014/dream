@@ -4,8 +4,8 @@
 //! Where HIR keeps structured control flow, MIR desugars everything (if/while/for/foreach/switch/
 //! match/ternary/`&&`/`||`/async) into blocks joined by [`Terminator`]s. Reference-counting
 //! (`Retain`/`Release`) and allocation are explicit [`Statement`]s, which lets the optimization
-//! passes reason about them with ordinary dataflow. The C backend reconstructs structured control
-//! flow from this CFG via a relooper (sync functions); async polls keep a program-counter dispatch.
+//! passes reason about them with ordinary dataflow. The LLVM backend emits this CFG directly;
+//! async polls keep a program-counter dispatch.
 
 pub mod abi;
 pub(crate) mod analysis;
@@ -19,7 +19,6 @@ pub mod lower;
 pub mod passes;
 pub mod pretty;
 mod prune;
-pub mod relooper;
 pub mod runtime;
 mod simd;
 pub mod verify;
@@ -467,7 +466,7 @@ pub enum Rvalue {
     ///
     /// Two passes decide this and both record it here: [`passes::RcInsertion`] for field and global
     /// stores, and [`passes::RcLastUseRepair`] for the index stores that only become last-use once
-    /// inlining has fused the CFG. Previously neither recorded anything and the C backend re-derived
+    /// inlining has fused the CFG. Previously neither recorded anything and the backend re-derived
     /// the transfer by scanning for the store's `src = null`, which was wrong in both directions:
     /// copy propagation could rewrite the store's operand to the local it was copied from, splitting
     /// the pair so the container retained a second reference while the null still discarded the
@@ -690,10 +689,10 @@ mod tests {
     use dream_hir::{Binding, HExpr, HExprKind, HFunction, HParam, HStmt, LocalId};
     use dream_types::{DefKind, TypeCtx};
 
-    /// Exercises the whole middle/back-end: build typed HIR, lower to a MIR CFG, run the
-    /// optimization pipeline, and emit C.
+    /// Exercises the middle end: build typed HIR, lower to a MIR CFG and run the optimization
+    /// pipeline. Emission is covered by the root crate's LLVM tests, which need the toolchain.
     #[test]
-    fn hir_to_mir_to_optimized_c() {
+    fn hir_to_optimized_mir() {
         let mut ctx = TypeCtx::new();
         let def = ctx.register(DefKind::Function, "add", vec![]);
         let int = ctx.interner.int();
@@ -746,14 +745,20 @@ mod tests {
             polls: poll.into_iter().collect(),
             ..Default::default()
         };
-        let c = super::backend::c::emit_c_module(&program, &ctx.interner).into_bytes();
-        let c = String::from_utf8(c).expect("C module is UTF-8");
-        assert!(c.contains("add"), "pipeline output:\n{}", c);
+        let add = &program.functions[0];
+        let checked_add = add.blocks.iter().flat_map(|b| &b.stmts).any(|s| {
+            matches!(
+                s,
+                crate::Statement::Assign(_, crate::Rvalue::CheckedBinary(crate::BinOp::Add, ..))
+            )
+        });
+        assert!(checked_add, "{:?}", add.blocks);
         assert!(
-            c.contains("__builtin_add_overflow"),
-            "pipeline output:\n{}",
-            c
+            add.blocks
+                .iter()
+                .any(|b| matches!(b.terminator, crate::Terminator::Return(Some(_)))),
+            "{:?}",
+            add.blocks
         );
-        assert!(c.contains("return"), "pipeline output:\n{}", c);
     }
 }

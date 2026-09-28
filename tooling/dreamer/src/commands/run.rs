@@ -44,8 +44,8 @@ pub fn run_with(
         );
     }
     let host = resolve_run_target(&pkg.targets, target.as_deref())?;
-    if !flags.native_c && host == RunTarget::Native {
-        bail!("--wasm is only valid with web/node hosts (native run uses C)");
+    if !flags.native && host == RunTarget::Native {
+        bail!("--wasm is only valid with web/node hosts (native run builds a host binary)");
     }
 
     match host {

@@ -1,1 +1,1 @@
-Function 'add' is already defined in module 'dup.pkg'
+Duplicate overload: 'add' with the same parameter types is already defined

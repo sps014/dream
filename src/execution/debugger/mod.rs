@@ -1,5 +1,5 @@
-//! DAP stdio adapter for native C: compiles with DWARF (`#line` → `.dream`) and proxies
-//! the session to `lldb-dap`. VS Code keeps `type: dream` and does not switch to a C debugger.
+//! DAP stdio adapter for native builds: compiles with DWARF that points at the `.dream` sources and
+//! proxies the session to `lldb-dap`. VS Code keeps `type: dream`.
 
 mod protocol;
 
@@ -7,32 +7,17 @@ mod protocol;
 /// proxied session so Dream strings/arrays render as text in the debugger.
 const LLDB_FORMATTERS: &str = include_str!("dream_lldb_formatters.py");
 
-/// Extracts debugger-view typedef names from the generated C: lines shaped
-/// `typedef struct [...} Name;`. Function-pointer typedefs (containing `(`) are skipped.
-fn view_typedef_names(c_src: &str) -> Vec<String> {
-    let mut names = Vec::new();
-    for line in c_src.lines() {
-        let line = line.trim();
-        // Packed array views carry `__attribute__((packed))`, whose parens are not a function
-        // pointer; strip attributes before the fn-ptr exclusion.
-        let plain = match line.find("__attribute__") {
-            Some(i) => &line[..i],
-            None => line,
-        };
-        if !plain.starts_with("typedef struct") || plain.contains('(') {
-            continue;
-        }
-        if let Some(name) = line
-            .rsplit('}')
-            .next()
-            .and_then(|t| t.trim_end().strip_suffix(';'))
-        {
-            let name = name.trim();
-            if !name.is_empty() {
-                names.push(name.to_string());
-            }
-        }
-    }
+/// The debugger-view struct names the module's DWARF declares (`debug_views.rs` in the LLVM
+/// backend); the formatters attach summaries to pointers to these.
+fn view_type_names(ll: &str) -> Vec<String> {
+    const HEAD: &str = "!DICompositeType(tag: DW_TAG_structure_type, name: \"";
+    let mut names: Vec<String> = ll
+        .lines()
+        .filter_map(|line| {
+            let rest = &line[line.find(HEAD)? + HEAD.len()..];
+            Some(rest[..rest.find('"')?].to_string())
+        })
+        .collect();
     names.sort();
     names.dedup();
     names
@@ -50,7 +35,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 
 /// Speak DAP over stdin/stdout by driving `lldb-dap` on `bin` (guest + runtime built with `-g`).
-pub fn run_debug_adapter(bin: &Path, c_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_debug_adapter(bin: &Path, module: &str) -> Result<(), Box<dyn std::error::Error>> {
     let dap = find_lldb_dap()?;
     let mut child = Command::new(&dap)
         .stdin(Stdio::piped())
@@ -86,25 +71,25 @@ pub fn run_debug_adapter(bin: &Path, c_path: &str) -> Result<(), Box<dyn std::er
     });
 
     let bin_s = bin.to_string_lossy().into_owned();
-    let env_pairs = crate::execution::native_c::native_run_env_pairs(c_path);
+    let env_pairs = crate::execution::native::native_run_env_pairs(module);
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     // Presentation-only lldb formatters (strings as quoted text, array lengths), shipped next to
     // the other artifacts and imported at session start via `initCommands`. lldb forbids dots in
     // module names, so the stem joins with underscores rather than `with_extension`.
-    let c_path_p = Path::new(c_path);
-    let stem = c_path_p
+    let module_p = Path::new(module);
+    let stem = module_p
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("dream");
-    let formatters = c_path_p.with_file_name(format!("{stem}_lldb_dream.py"));
+    let formatters = module_p.with_file_name(format!("{stem}_lldb_dream.py"));
     std::fs::write(&formatters, LLDB_FORMATTERS)?;
-    // The import hook reads this generated list to know which typedef names get summaries.
-    let names: Vec<String> = std::fs::read_to_string(c_path)
-        .map(|src| view_typedef_names(&src))
+    // The import hook reads this generated list to know which view names get summaries.
+    let names: Vec<String> = std::fs::read_to_string(module)
+        .map(|src| view_type_names(&src))
         .unwrap_or_default();
     let list: Vec<String> = names.iter().map(|n| format!("\"{n}\"")).collect();
     std::fs::write(
-        c_path_p.with_file_name(format!("{stem}_lldb_names.py")),
+        module_p.with_file_name(format!("{stem}_lldb_names.py")),
         format!("NAMES = [{}]\n", list.join(", ")),
     )?;
 

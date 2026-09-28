@@ -45,7 +45,7 @@ fn concurrent_native_compiles_all_succeed() {
                 &PROGRAM.replace("xs.join(\"+\")", &format!("xs.join(\"+{i}\")")),
             );
             let out = dir.join(format!("out_{i}"));
-            let compiler = Compiler::new(Target::NativeC);
+            let compiler = Compiler::new(Target::Native);
             compiler
                 .compile(
                     &src.to_string_lossy().to_string(),

@@ -1,4 +1,4 @@
-//! Last-use unique local stored into a container transfers the +1 (no retain) on both backends.
+//! Last-use unique local stored into a container transfers the +1 (no retain).
 
 use crate::{Const, MirFunction, Operand, Place, Rvalue, Statement};
 use dream_types::TypeInterner;

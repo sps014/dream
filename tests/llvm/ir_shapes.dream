@@ -1,0 +1,54 @@
+import system;
+@allow_cycle
+class Node {
+    public v: int;
+    public next: Option<Node>;
+}
+interface Shape { fun area(): int; }
+class Sq : Shape {
+    public s: int;
+    public fun area(): int { return this.s * this.s; }
+}
+class Tri : Shape {
+    public b: int;
+    public fun area(): int { return this.b / 2; }
+}
+async fun later(x: int): int {
+    Time.sleep(1).await;
+    return x + 1;
+}
+fun total(xs: Shape[]): int {
+    let t = 0;
+    for (let x in xs) { t = t + x.area(); }
+    return t;
+}
+struct Pt {
+    public x: int;
+    public y: int;
+}
+fun mk(a: int): Pt {
+    let p = Pt();
+    p.x = a;
+    p.y = a * 2;
+    return p;
+}
+fun fib(n: int): int {
+    if (n < 2) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+async fun main(): void {
+    let n = Node();
+    n.v = 3;
+    n.next = Option.Some(Node());
+    System.println(n.v);
+    let a = Sq();
+    a.s = 3;
+    let b = Tri();
+    b.b = 8;
+    System.println(total([a, b]));
+    System.println(later(41).await);
+    System.println(fib(20));
+    System.println(mk(4).y);
+    let g: fun(int): Pt = mk;
+    System.println(g(5).x);
+}

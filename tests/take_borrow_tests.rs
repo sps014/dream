@@ -3,31 +3,6 @@
 mod common;
 use common::*;
 
-/// Extracts the body of the C function `name` (the definition whose signature line ends with '{'),
-/// up to its closing brace. Returns "" when no definition is found.
-fn c_func_body<'a>(c: &'a str, name: &str) -> &'a str {
-    let needle = format!("{name}(");
-    let mut from = 0;
-    while let Some(i) = c[from..].find(&needle) {
-        let hit = from + i;
-        let at_word_start = hit == 0 || {
-            let b = c.as_bytes()[hit - 1];
-            !(b.is_ascii_alphanumeric() || b == b'_')
-        };
-        let line_start = c[..hit].rfind('\n').map(|p| p + 1).unwrap_or(0);
-        let line_end = c[hit..].find('\n').map(|p| hit + p).unwrap_or(c.len());
-        if at_word_start && c[line_start..line_end].trim_end().ends_with('{') {
-            let rest = &c[line_end..];
-            return match rest.find("\n}") {
-                Some(e) => &rest[..e],
-                None => rest,
-            };
-        }
-        from = hit + needle.len();
-    }
-    ""
-}
-
 #[test]
 fn sink_param_unmarked_parses_and_typechecks() {
     let code = r#"
@@ -154,20 +129,20 @@ fn sink_store_skips_retain_vs_borrow() {
     };
     let sink_c = emit_hir_to_module_optimized(&code("value: string"));
     let borrow_c = emit_hir_to_module_optimized(&code("borrow value: string"));
-    // Count `dream_retain(` inside the constructor body only (the module scaffold's
+    // Count `dream_retain` inside the constructor body only (the module scaffold's
     // object-protocol retain is constant noise otherwise).
-    let sink_body = c_func_body(&sink_c, "Box_constructor");
-    let borrow_body = c_func_body(&borrow_c, "Box_constructor");
+    let sink_body = ir_func_body(&sink_c, "Box_constructor");
+    let borrow_body = ir_func_body(&borrow_c, "Box_constructor");
     // Guard the premise: an inlined-away constructor would leave both bodies empty and make the
     // retain comparison below vacuous.
     assert!(
-        sink_body.contains("dream_p(this)") && borrow_body.contains("dream_p(this)"),
+        !sink_body.is_empty() && !borrow_body.is_empty(),
         "constructor should survive inlining for the ABI to be observable\nsink:\n{}\nborrow:\n{}",
         sink_c,
         borrow_c
     );
-    let sink_retains = sink_body.matches("dream_retain(").count();
-    let borrow_retains = borrow_body.matches("dream_retain(").count();
+    let sink_retains = sink_body.matches("@dream_retain(").count();
+    let borrow_retains = borrow_body.matches("@dream_retain(").count();
     assert_eq!(
         sink_retains, 0,
         "sink constructor should transfer the +1, not retain:\n{}",

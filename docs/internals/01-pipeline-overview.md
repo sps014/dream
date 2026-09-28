@@ -21,11 +21,11 @@ flowchart TD
     rc --> opt["module optimize\ndevirt + inline rounds, post-inline RC,\nregions / sroa-managed"]
     opt --> perfn["per-function pipeline (fixpoint)"]
     perfn --> late["late module passes\nstrip-escaped-regions, frame-alloc,\n(debug compiler) MIR verifier"]
-    late --> emit["backend::c\nMIR → C99 (relooper-informed)"]
+    late --> emit["backend::llvm\nMIR → textual LLVM IR (.ll)"]
 
-    emit --> cc["clang / wasm-ld (wasi-sdk)"]
-    cc --> wasm[".wasm"]
-    cc --> nat[".c + host cc → native .bin"]
+    emit --> link["llvm-link + runtime bitcode\n→ opt → llc"]
+    link --> nat["host cc link → native .bin"]
+    link --> wasm["wasm-ld (wasi-sdk) → .wasm"]
     wasm --> wat["pretty-print .wat (wasmprinter)"]
     wasm --> abi["driver::abi sidecar\n.abi.json / .wgsl"]
 ```
@@ -79,11 +79,11 @@ Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-s
 - **Out:** optimized MIR (a CFG per function).
 - **Steps:** `mir::lower` desugars structured control flow into blocks; `ExpandSimpleCtors`, `ParamModes` (borrow inference), then `RcInsertion` make ownership explicit (module-wide, before inlining); `optimize_module_opts` alternates `Devirt` with inliner rounds, then runs the post-inline RC and placement stages (`RcLastUseRepair`, `UniqueRegion`, `rc-held-by-owner`, `SroaManaged`); the per-function `PassManager` runs to a fixpoint (including bounds-check elimination and loop versioning in `Abc`); `run_late_module_passes` strips unsafe regions, stack-allocates non-escaping objects (`frame-alloc`), and — in a debug build of the compiler — runs the MIR verifier. `--emit-mir` snapshots any of these stages. See [04-mir.md](./04-mir.md) and [05-writing-passes.md](./05-writing-passes.md).
 
-### 7. Backend — `crates/dream-mir/src/relooper.rs` + `crates/dream-mir/src/backend/c/`
+### 7. Backend — `crates/dream-mir/src/backend/llvm/` + `src/execution/llvm/`
 
 - **In:** optimized MIR.
-- **Out:** C99 (`backend::c::emit_c_module_for`). For wasm32 targets the C is compiled by wasi-sdk clang/wasm-ld to `.wasm`, then pretty-printed to `.wat` via wasmprinter; native targets stop at the `.c` + host cc (optionally clang PGO via `--profile` / `--use-profile`, `src/execution/native_c/pgo.rs`). The prebuilt runtimes (native `libdream_rt.a`, wasm32 objects) are cached with a stamp listing every input's path, size, and mtime (`src/driver/rt_stamp.rs`), so switching between compiler checkouts rebuilds them instead of linking a stale archive.
-- **How:** relooper-informed C99 emission — the emitter walks MIR blocks into C statements (labels, `goto`, `switch`), and the guest runtime is C under `crates/dream-mir/src/runtime/c/`. See [06-relooper-and-backend.md](./06-relooper-and-backend.md).
+- **Out:** a textual LLVM IR module (`backend::llvm::emit_llvm_module`). The driver links it with the C runtime compiled to bitcode, runs the pinned `opt` + `llc`, then links with the host `cc` (native `.bin`, optionally PGO via `--profile` / `--use-profile`, `src/execution/native/pgo.rs`) or wasi-sdk `wasm-ld` (`.wasm`, pretty-printed to `.wat` via wasmprinter). The runtime bitcode is cached with a stamp listing every input's path, size, and mtime (`src/driver/rt_stamp.rs`), so switching between compiler checkouts rebuilds it instead of linking a stale one.
+- **How:** every MIR block becomes one LLVM block and every local an entry `alloca`; runtime calls are typed from the runtime bitcode's own signatures. The guest runtime is C under `crates/dream-mir/src/runtime/c/`. See [06-llvm-backend.md](./06-llvm-backend.md).
 
 ### 8. Artifact emission — `src/driver/compiler.rs` / `src/driver/abi.rs`
 
@@ -111,5 +111,5 @@ flowchart LR
 1. **Analysis succeeded.** No poison types, every name resolved, every call has a callee.
 2. **Types are interned.** Equality is `TypeId == TypeId`; no string parsing of type names.
 3. **Generics are resolved.** Every generic use is recorded as a concrete `(DefId, args)` instance.
-4. **Control flow is reducible.** Dream's surface syntax cannot express irreducible CFGs, so the relooper always succeeds.
+4. **Control flow is reducible.** Dream's surface syntax cannot express irreducible CFGs.
 5. **Determinism.** Every map that influences emission preserves insertion order (`IndexMap`), so two compilations of the same input produce byte-identical output (guarded by the `codegen_is_deterministic` e2e test).

@@ -326,6 +326,17 @@ elif command -v dreamer >/dev/null 2>&1; then
   unset _dream_has_cc _cand
 fi
 
+if [ "${DREAM_SKIP_LLVM:-}" = "1" ]; then
+  echo "Skipped LLVM install (DREAM_SKIP_LLVM=1)"
+elif [ -n "${DREAM_LLVM:-}" ] || find "${_dream_user_dir}/toolchains" -maxdepth 3 -path '*/llvm-*/bin/opt' 2>/dev/null | grep -q .; then
+  echo "LLVM already found; skipped dreamer toolchain install llvm"
+elif command -v dreamer >/dev/null 2>&1; then
+  echo "No LLVM toolchain; installing via dreamer toolchain install llvm"
+  if ! dreamer toolchain install llvm; then
+    echo "warning: could not install LLVM; later run: dreamer toolchain install llvm" >&2
+  fi
+fi
+
 if [ "$_dream_sourced" -eq 0 ]; then
   echo >&2
   echo "warning: script was executed, not sourced — PATH only updated in this subprocess." >&2

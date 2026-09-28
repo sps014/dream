@@ -3,7 +3,9 @@ use dream::driver::compiler::{Compiler, Target};
 use dream::driver::js_runtime::JsRuntimeTarget;
 use dream::driver::ui::{ConsoleReporter, Ui};
 use dream::driver::wasm_opt::OptLevel;
-use dream::execution::native_c::{compile_native_c, run_native_bin, GuestAborted, Pgo};
+use dream::execution::llvm::build::{emit_llvm_artifacts, native_bin_path};
+use dream::execution::llvm::compile_llvm;
+use dream::execution::native::{run_native_bin, GuestAborted, Pgo};
 use dream_abi::attributes::CompileTargets;
 use dream_sema::analyzer::CrateType;
 use std::path::{Path, PathBuf};
@@ -24,8 +26,8 @@ Examples:
   dream run app.dream -- alpha beta     pass arguments to the program
   dream fmt src/                        format .dream files in place (--check for CI)
 
-Artifacts land under the enclosing project's target/: native C in target/debug (or
-target/release with --release), wasm32 modules in target/web/. Prefer `dreamer run`
+Artifacts land under the enclosing project's target/: native builds (.ll + binary) in
+target/debug (or target/release with --release), wasm32 modules in target/web/. Prefer `dreamer run`
 for packages (deps, web/node hosts). Use `dream run <file>` for a one-off source file.";
 
 #[derive(Copy, Clone, ValueEnum)]
@@ -60,11 +62,11 @@ struct Cli {
     #[arg(short, long, global = true)]
     verbose: bool,
 
-    /// Optimized release build (cc -O3; wasm-opt -O3, -Os for --web)
+    /// Optimized release build (LLVM -O3; wasm-opt -O3, -Os for --web)
     #[arg(long, global = true)]
     release: bool,
 
-    /// Emit C `#line` debug info + clang -g -O0 for lldb-dap (`debug-adapter` implies this)
+    /// Emit DWARF and build at -O0 for lldb-dap (`debug-adapter` implies this)
     #[arg(short = 'g', long = "debug-info", global = true)]
     debug_info: bool,
 
@@ -83,9 +85,13 @@ struct Cli {
     #[arg(short = 'o', long = "output", value_name = "PATH", global = true)]
     output: Option<String>,
 
-    /// Compile a wasm32 module (.c + .wasm + .wat) instead of a native binary
+    /// Compile a wasm32 module (.ll + .wasm + .wat) instead of a native binary
     #[arg(long, global = true)]
     wasm: bool,
+
+    /// Stop after the native module's LLVM IR: writes the .ll plus the optimized .opt.ll and .s
+    #[arg(long = "emit-llvm", global = true)]
+    emit_llvm: bool,
 
     /// Runtime availability target for semantic checks (default: native)
     #[arg(
@@ -133,7 +139,7 @@ struct Cli {
     )]
     emit_mir_fn: Option<String>,
 
-    /// Native PGO step 1: build a clang-instrumented binary; its runs record profiles into
+    /// Native PGO step 1: build an instrumented binary; its runs record profiles into
     /// <output>.pgo/ next to it
     #[arg(long, global = true, conflicts_with = "use_profile")]
     profile: bool,
@@ -239,15 +245,24 @@ fn main() -> ExitCode {
         ui.error("--runtime needs at least one host: pass --web and/or --node");
         return ExitCode::FAILURE;
     }
-    let native_c = !cli.wasm && runtimes.is_empty();
-    if !native_c && (run_after_compile || run_tests || debug_adapter) {
+    let native = !cli.wasm && runtimes.is_empty();
+    if cli.emit_llvm && !native {
+        ui.error("--emit-llvm writes the native whole-program module");
+        ui.help("drop --wasm/--web/--node; wasm32 builds keep the generated .ll anyway");
+        return ExitCode::FAILURE;
+    }
+    if cli.emit_llvm && (run_after_compile || run_tests) {
+        ui.error("--emit-llvm stops after writing the .ll; drop it to run");
+        return ExitCode::FAILURE;
+    }
+    if !native && (run_after_compile || run_tests || debug_adapter) {
         ui.error("`run`, `test`, and `debug-adapter` execute natively");
         ui.help(
             "drop --wasm/--web/--node here, or use `dream build --wasm <file>` for a wasm32 module",
         );
         return ExitCode::FAILURE;
     }
-    if (!native_c || run_tests || debug_adapter) && (cli.profile || cli.use_profile.is_some()) {
+    if (!native || run_tests || debug_adapter) && (cli.profile || cli.use_profile.is_some()) {
         ui.error("--profile / --use-profile apply to native `build` / `run` only");
         return ExitCode::FAILURE;
     }
@@ -263,7 +278,7 @@ fn main() -> ExitCode {
         None => None,
     };
 
-    if !native_c && (cli.release || optimize.is_some()) && !cfg!(feature = "wasm-opt") {
+    if !native && (cli.release || optimize.is_some()) && !cfg!(feature = "wasm-opt") {
         ui.error("--release / -O need the compiler built with its `wasm-opt` feature");
         ui.help("rebuild `dream` with default features (cargo build --release)");
         return ExitCode::FAILURE;
@@ -363,7 +378,7 @@ fn main() -> ExitCode {
 
     let out_path = match &cli.output {
         Some(path) => path.clone(),
-        None => match get_path_from_file_path(&file_name, cli.release, native_c) {
+        None => match get_path_from_file_path(&file_name, cli.release, native) {
             Some(path) => path,
             None => {
                 ui.error(&format!("invalid source file path: {}", file_name));
@@ -389,8 +404,9 @@ fn main() -> ExitCode {
     // `with_release` installs RELEASE_DEFAULT wasm-opt; an explicit `-O` overrides.
     // Always emit `.abi.json`: JS hosts need imports/exports, and native `run` /
     // `debug-adapter` load abi.gpu for `@compute` / shader metadata.
-    let mut compiler = Compiler::new(if native_c {
-        Target::NativeC
+    let cc_opt = OptLevel::from_cli(cli.release, optimize);
+    let mut compiler = Compiler::new(if native {
+        Target::Native
     } else {
         Target::Wasm32
     })
@@ -427,11 +443,30 @@ fn main() -> ExitCode {
     let mut artifacts = reporter.take_artifacts();
     let unoptimized = !cli.release && optimize.is_none() && !debug_adapter;
 
-    if native_c {
-        let cc_opt = OptLevel::from_cli(cli.release, optimize);
-        let bin = Path::new(&out_path).with_extension("bin");
+    if cli.emit_llvm {
+        match emit_llvm_artifacts(
+            Path::new(&out_path),
+            cc_opt,
+            debug_info,
+        ) {
+            Ok(paths) => artifacts.extend(paths),
+            Err(e) => {
+                ui.error(&e.to_string());
+                return ExitCode::FAILURE;
+            }
+        }
+        ui.finish(start.elapsed().as_secs_f64(), "", &artifacts);
+        return ExitCode::SUCCESS;
+    }
+    // A library has no `main` to link; its build is the checked `.ll` plus `.abi.json`.
+    if native && matches!(crate_type, CrateType::Lib) {
+        ui.finish(elapsed, "", &artifacts);
+        return ExitCode::SUCCESS;
+    }
+    if native {
+        let bin = native_bin_path(Path::new(&out_path));
         ui.step(
-            "Compiling C",
+            "Linking",
             &format!("{} ({})", bin.display(), cc_opt.as_cli_flag()),
         );
         let pgo = match &cli.use_profile {
@@ -440,7 +475,7 @@ fn main() -> ExitCode {
             Some(p) => Pgo::Use(Some(PathBuf::from(p))),
             None => Pgo::Off,
         };
-        match compile_native_c(Path::new(&out_path), cc_opt, debug_info, &pgo) {
+        match compile_llvm(Path::new(&out_path), cc_opt, debug_info, &pgo) {
             Ok(bin) => {
                 artifacts.push(bin.clone());
                 ui.finish(elapsed, "", &artifacts);
@@ -474,7 +509,7 @@ fn main() -> ExitCode {
             }
             Err(e) => {
                 report_tool_error(&ui, &e.to_string());
-                if let Some(hint) = dream::driver::c_wasm32::hint_for_failure(&e.to_string()) {
+                if let Some(hint) = dream::driver::wasi::hint_for_failure(&e.to_string()) {
                     ui.help(hint);
                 }
                 return ExitCode::FAILURE;
@@ -589,14 +624,14 @@ fn find_project_root(file_path: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Derives the output `.wat` / `.c` path under `target/`, never beside the source.
+/// Derives the output `.wat` / `.ll` path under `target/`, never beside the source.
 ///
 /// Wasm always uses `target/web/` so hosts do not switch on debug vs `--release`.
-/// Native C uses `target/debug/` or `target/release/`.
+/// Native builds use `target/debug/` or `target/release/`.
 ///
 /// Uses the enclosing `dream.toml` directory when one exists; otherwise the source file's
 /// directory.
-fn get_path_from_file_path(file_path: &str, release: bool, native_c: bool) -> Option<String> {
+fn get_path_from_file_path(file_path: &str, release: bool, native: bool) -> Option<String> {
     let path = Path::new(file_path);
     let file_stem = path.file_stem()?.to_str()?;
     let source_dir = path
@@ -604,7 +639,7 @@ fn get_path_from_file_path(file_path: &str, release: bool, native_c: bool) -> Op
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
     let root = find_project_root(path).unwrap_or_else(|| source_dir.to_path_buf());
-    let sub = if native_c {
+    let sub = if native {
         if release {
             "release"
         } else {
@@ -614,7 +649,7 @@ fn get_path_from_file_path(file_path: &str, release: bool, native_c: bool) -> Op
         "web"
     };
     let out_dir = root.join("target").join(sub);
-    let ext = if native_c { "c" } else { "wat" };
+    let ext = if native { "ll" } else { "wat" };
     let result = out_dir.join(format!("{file_stem}.{ext}"));
     Some(result.to_str()?.to_string())
 }

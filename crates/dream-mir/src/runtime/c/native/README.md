@@ -10,7 +10,7 @@ Not used by `cargo test` / WAT splice. Companion to wasm `../include/dream_rt.h`
 - Regex is vendored PCRE2-16 with JIT (`../regex.c` `-DDREAM_NATIVE` + [`../pcre2/README.md`](../pcre2/README.md)), linked only when the program uses `Regex`.
 - Core runtime: `heap.c`, `strings.c`, `object.c`, `format.c`, `panic.c`, `weak.c`, `closure.c`, `async.c`, `sync.c`.
 - Host print/math/file stubs: `host.c`. Linked by `dream run` and golden e2e.
-- Without a system `cc`, install Zig: `dreamer toolchain install cc`.
+- Compiled to bitcode by the pinned clang (`dreamer toolchain install llvm`); the system `cc` (or Zig via `dreamer toolchain install cc`) only links.
 
 ```bash
 cc -O3 -flto -march=native -o /tmp/dream-rt-bench \

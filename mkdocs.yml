@@ -161,11 +161,10 @@ nav:
     - HIR: internals/03-hir.md
     - MIR: internals/04-mir.md
     - Writing Passes: internals/05-writing-passes.md
-    - Relooper & Backend: internals/06-relooper-and-backend.md
+    - LLVM Backend: internals/06-llvm-backend.md
     - Adding a Feature: internals/07-adding-a-language-feature.md
     - Testing & Determinism: internals/08-testing-and-determinism.md
     - Design notes:
       - Nullable purge: internals/09-nullable-purge-design-note.md
       - Stack alloc & mono: internals/10-stack-alloc-and-mono-design-note.md
       - Swift-like ARC: internals/11-swift-like-arc-roadmap.md
-      - Dual backend (superseded): internals/14-dual-backend-plan.md

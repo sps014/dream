@@ -1,4 +1,4 @@
-//! Async/await frame layout shared by the C backend.
+//! Async/await frame layout the backend lowers against.
 //!
 //! An `async fun` compiles to a **constructor** (allocates a `Future` frame, stores params,
 //! enqueues the first poll, returns the frame pointer) and a **poll** function (resumable state

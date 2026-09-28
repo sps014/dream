@@ -3,7 +3,7 @@
 mod catalog;
 mod install;
 
-pub use catalog::{WASI_SDK_VERSION, ZIG_VERSION};
+pub use catalog::{LLVM_VERSION, WASI_SDK_VERSION, ZIG_VERSION};
 pub use install::{install, list, uninstall};
 
 use anyhow::{bail, Result};
@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 pub enum Component {
     Cc,
     WasiSdk,
+    Llvm,
 }
 
 impl Component {
@@ -20,7 +21,10 @@ impl Component {
         match name {
             "cc" | "zig" => Ok(Self::Cc),
             "wasi-sdk" | "wasi" => Ok(Self::WasiSdk),
-            other => bail!("unknown toolchain component '{other}' (expected `cc` or `wasi-sdk`)"),
+            "llvm" => Ok(Self::Llvm),
+            other => bail!(
+                "unknown toolchain component '{other}' (expected `cc`, `wasi-sdk` or `llvm`)"
+            ),
         }
     }
 
@@ -28,11 +32,12 @@ impl Component {
         match self {
             Self::Cc => "cc",
             Self::WasiSdk => "wasi-sdk",
+            Self::Llvm => "llvm",
         }
     }
 
-    pub fn all() -> [Self; 2] {
-        [Self::Cc, Self::WasiSdk]
+    pub fn all() -> [Self; 3] {
+        [Self::Cc, Self::WasiSdk, Self::Llvm]
     }
 }
 
@@ -141,6 +146,16 @@ pub fn wasi_sdk_dir(host: Host) -> PathBuf {
     toolchains_dir().join(catalog::wasi_extract_dir_name(host))
 }
 
+/// `~/.dream/toolchains/llvm-<version>`; `dream` resolves the backend tools from here.
+pub fn llvm_dir() -> PathBuf {
+    toolchains_dir().join(format!("llvm-{LLVM_VERSION}"))
+}
+
+pub fn llvm_opt() -> PathBuf {
+    let opt = if cfg!(windows) { "opt.exe" } else { "opt" };
+    llvm_dir().join("bin").join(opt)
+}
+
 pub fn zig_binary() -> PathBuf {
     let dir = zig_dir();
     if cfg!(windows) {
@@ -159,7 +174,17 @@ pub fn is_installed(component: Component, host: Host) -> bool {
     match component {
         Component::Cc => zig_binary().is_file(),
         Component::WasiSdk => wasi_clang(host).is_file(),
+        Component::Llvm => llvm_opt().is_file(),
     }
+}
+
+/// Every component with a pinned artifact for this host (LLVM has no macOS x86_64 build).
+pub fn available_components() -> Result<Vec<Component>> {
+    let host = detect_host()?;
+    Ok(Component::all()
+        .into_iter()
+        .filter(|c| catalog::artifact_for(*c, host).is_ok())
+        .collect())
 }
 
 pub fn toolchains_env_path() -> PathBuf {
@@ -178,7 +203,8 @@ mod tests {
             Component::parse_name("wasi-sdk").unwrap(),
             Component::WasiSdk
         );
-        assert!(Component::parse_name("llvm").is_err());
+        assert_eq!(Component::parse_name("llvm").unwrap(), Component::Llvm);
+        assert!(Component::parse_name("gcc").is_err());
     }
 
     #[test]

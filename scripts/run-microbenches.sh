@@ -30,6 +30,7 @@ mkdir -p "$OUT_DIR"
 REPS="${REPS:-5}"
 WARMUP="${WARMUP:-1}"
 PASSES="${PASSES:-5}"
+STEM="native"
 export DREAM_BENCH_PASSES="$PASSES"
 # No dream.toml above tests/bench, so `dream --release` writes next to the source.
 BIN="$ROOT/tests/bench/target/release/microbenches.bin"
@@ -41,7 +42,7 @@ if command -v caffeinate >/dev/null 2>&1; then
 fi
 
 echo "== Dream (compile once, warmup x$WARMUP, measure x$REPS, $PASSES passes each) =="
-rm -f "$OUT_DIR"/native.rep*.txt "$OUT_DIR"/native.rep*.raw "$OUT_DIR"/native.rep*.err
+rm -f "$OUT_DIR"/"$STEM".rep*.txt "$OUT_DIR"/"$STEM".rep*.raw "$OUT_DIR"/"$STEM".rep*.err
 if ! "${CAFF[@]}" "$DREAM" --release "$BENCH"; then
   echo "dream compile failed" >&2
   exit 1
@@ -57,10 +58,10 @@ for _ in $(seq 1 "$WARMUP"); do
     exit 1
   fi
 done
-: > "$OUT_DIR/native.txt"
+: > "$OUT_DIR/$STEM.txt"
 for i in $(seq 1 "$REPS"); do
-  raw="$OUT_DIR/native.rep$i.raw"
-  err="$OUT_DIR/native.rep$i.err"
+  raw="$OUT_DIR/$STEM.rep$i.raw"
+  err="$OUT_DIR/$STEM.rep$i.err"
   if ! "${CAFF[@]}" "$BIN" >"$raw" 2>"$err"; then
     echo "dream run failed on rep $i" >&2
     cat "$err" >&2
@@ -72,15 +73,15 @@ for i in $(seq 1 "$REPS"); do
     grep '^panic:' "$raw" "$err" >&2
     exit 1
   fi
-  grep '^bench ' "$raw" > "$OUT_DIR/native.rep$i.txt" || true
-  if [[ ! -s "$OUT_DIR/native.rep$i.txt" ]]; then
+  grep '^bench ' "$raw" > "$OUT_DIR/$STEM.rep$i.txt" || true
+  if [[ ! -s "$OUT_DIR/$STEM.rep$i.txt" ]]; then
     echo "rep $i produced no bench lines" >&2
     cat "$err" >&2
     tail -40 "$raw" >&2
     exit 1
   fi
 done
-python3 - "$OUT_DIR" native "$REPS" <<'PY'
+python3 - "$OUT_DIR" "$STEM" "$REPS" <<'PY'
 import sys
 from pathlib import Path
 out_dir = Path(sys.argv[1]); stem = sys.argv[2]; reps = int(sys.argv[3])
@@ -171,7 +172,7 @@ else
   echo "(dotnet / tests/bench/csharp not available; skipping C# compare)" | tee "$OUT_DIR/csharp.txt"
 fi
 
-python3 - "$OUT_DIR/native.txt" "$OUT_DIR/csharp.txt" "$REPS" <<'PY' | tee "$OUT_DIR/compare.txt"
+python3 - "$OUT_DIR/native.txt" "$OUT_DIR/csharp.txt" "$REPS" "$STEM" <<'PY' | tee "$OUT_DIR/compare.txt"
 import sys, statistics
 from pathlib import Path
 
@@ -266,7 +267,7 @@ def result(dream, csharp):
 reps = int(sys.argv[3])
 dream = load(sys.argv[1])
 csharp = load(sys.argv[2]) if len(sys.argv) > 2 else {}
-dream_spread = spreads("native", reps)
+dream_spread = spreads(sys.argv[4], reps)
 csharp_spread = spreads("csharp", reps)
 
 seen = set()

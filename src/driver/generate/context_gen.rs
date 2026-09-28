@@ -113,14 +113,14 @@ fn run_context_body(
     let temp =
         write_temp_harness(dir, &gen.name, &harness_source).map_err(HarnessError::General)?;
 
-    let c_path = compile_harness(&temp.path).map_err(HarnessError::General)?;
+    let ll_path = compile_harness(&temp.path).map_err(HarnessError::General)?;
     let snap_file = write_snapshot_tempfile(&gen.name, snapshot).map_err(HarnessError::General)?;
 
-    let c_path_str = c_path.to_string_lossy().into_owned();
+    let ll_path_str = ll_path.to_string_lossy().into_owned();
     let snap_arg = snap_file.to_string_lossy().into_owned();
-    // Same trade-off as the `@json` harness: generator run time is negligible next to `cc` time.
-    let output = crate::execution::native_c::compile_and_capture_ex(
-        &c_path_str,
+    // Same trade-off as the `@json` harness: generator run time is negligible next to build time.
+    let output = crate::execution::native::compile_and_capture_ex(
+        &ll_path_str,
         crate::driver::wasm_opt::OptLevel::O0,
         &[],
         &[snap_arg.as_str()],
@@ -134,7 +134,7 @@ fn run_context_body(
         ))
     });
     let _ = std::fs::remove_file(&snap_file);
-    let _ = std::fs::remove_file(&c_path);
+    let _ = std::fs::remove_file(&ll_path);
 
     parse_harness_output(&output?)
 }
@@ -187,25 +187,26 @@ fn write_snapshot_tempfile(gen_name: &str, snapshot: &str) -> Result<PathBuf, St
 
 #[cfg(feature = "native")]
 fn compile_harness(src_path: &Path) -> Result<PathBuf, String> {
-    let mut c_path = std::env::temp_dir();
+    let mut ll_path = std::env::temp_dir();
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    c_path.push(format!("dream-ctx-gen-{}-{}.c", std::process::id(), unique));
-    let compiler = crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::NativeC)
+    ll_path.push(format!("dream-ctx-gen-{}-{}.ll", std::process::id(), unique));
+    let compiler = crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Native)
         .with_skip_generators(true)
-        .with_release(true);
+        .with_release(true)
+        .with_optimize(Some(crate::driver::wasm_opt::OptLevel::O0));
     let src = src_path
         .to_str()
         .ok_or_else(|| "generator: non-UTF-8 auto-harness path".to_string())?
         .to_string();
-    let out = c_path
+    let out = ll_path
         .to_str()
-        .ok_or_else(|| "generator: non-UTF-8 c path".to_string())?
+        .ok_or_else(|| "generator: non-UTF-8 .ll path".to_string())?
         .to_string();
     compiler
         .compile(&src, &out)
         .map_err(|e| format!("generator: failed to compile auto-harness: {e:?}"))?;
-    Ok(c_path)
+    Ok(ll_path)
 }

@@ -383,9 +383,9 @@ Notes, honestly:
   indicative only.
 - The `byte_scan` C# cell in the table above (20.9 ns) walked code units (`s[j]` over `s.Length`), half of Dream's payload-byte trip count, so the ~3× gap was the bench. C# now walks the UTF-16 LE bytes (`MemoryMarshal.AsBytes`), the same accesses as Dream `byte_at`. One Release run of that loop reported 39 ns/op against Dream's 62 ns min above. The scan now hoists the payload pointer (`dream_str_bytes` once per outer iteration, then a raw byte load). A matching loop with the sink call timed 15 ns/op. Re-run `./scripts/run-microbenches.sh` before replacing the table cell.
 
-Native C is the default `dream run` path: see
-[`docs/internals/14-dual-backend-plan.md`](../../docs/internals/14-dual-backend-plan.md).
-Do not revive the abandoned LLVM branch for this scoreboard.
+The tables above predate the LLVM backend; `dream run` now builds through it (see
+[`docs/internals/06-llvm-backend.md`](../../docs/internals/06-llvm-backend.md)). Re-run
+`./scripts/run-microbenches.sh` before comparing against them.
 
 Raw logs: `out/native.txt`, `out/csharp.txt`, `out/compare.txt`.
 

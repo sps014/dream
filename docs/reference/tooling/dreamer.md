@@ -60,10 +60,10 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
     (`http-utils` → `src/http_utils.dream`, `foo.bar` → `src/foo_bar.dream`).
   - Binaries require `entry` and a top-level `main`.
 - `[package].entry` is the file `dreamer build` / `dreamer run` compile (**bin only**).
-- Package builds emit wasm under `target/web/` (debug and `--release` share that folder) and native C
-  under `target/debug/` or `target/release/`.
+- Package builds emit wasm under `target/web/` (debug and `--release` share that folder) and native
+  binaries under `target/debug/` or `target/release/`.
   - Bare `dream file.dream` (no enclosing `dream.toml`) still uses `<source-dir>/target/web/`
-    (wasm) or `target/debug|release/` (native C) — never siblings next to the `.dream` file.
+    (wasm) or `target/debug|release/` (native) — never siblings next to the `.dream` file.
 - **Node hosts** also get `target/node/` (copied from `target/web/` by `dreamer build` / `dreamer run`
   when `targets` includes `node`).
   - Scaffolded `index.html` / `run.mjs` import `target/web/` / `target/node/` — no need to edit
@@ -215,18 +215,18 @@ registry version selection. Conflicting requirements produce a clear error namin
 | `dreamer remove <name> [-p <name>]` | Remove a dependency from `dream.toml` and `dream_packages/`, then re-resolve. |
 | `dreamer install` | Resolve `dream.toml` (respecting `dream.lock` where still compatible) and materialize `dream_packages/`. In a `[workspace]`, installs all members into the root lock/`dream_packages/`. |
 | `dreamer update [<name>]` | Re-resolve to the latest compatible version(s); with a name, only that package is allowed to move. |
-| `dreamer build [--release] [--profile \| --use-profile[=<path>]] [-p <name>]` | Install, then compile the package. Wasm lands in `target/web/`; native C in `target/debug` or `target/release`. When `targets` includes `node`, also copies into `target/node/`. PGO flags: see [Profile-guided native builds](#profile-guided-native-builds). |
+| `dreamer build [--release] [--profile \| --use-profile[=<path>]] [-p <name>]` | Install, then compile the package. Wasm lands in `target/web/`; native binaries in `target/debug` or `target/release`. When `targets` includes `node`, also copies into `target/node/`. PGO flags: see [Profile-guided native builds](#profile-guided-native-builds). |
 | `dreamer run [--release] [--profile \| --use-profile[=<path>]] [--port <n>] [--target native\|web\|node] [-p <name>] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile. Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
 | `dreamer test [--release] [--filter <substr>] [-p <name>]` | Install (incl. dev-deps), then run `dream test tests/` — discovers `@test` functions under the project's `tests/` directory. |
-| `dreamer pack [--release] [-O<lvl>] [--target <os>-<arch>\|all]… [-p <name>]` | Build a **bin** package into a single native executable → `target/pack/<name>-<os>-<arch>[.exe]`. Default is `--release` (cc `-O3`); `-O` / `--optimize` override like `dreamer run`. Default target is the host OS/arch. Distinct from registry `publish`. |
+| `dreamer pack [--release] [-O<lvl>] [--target <os>-<arch>\|all]… [-p <name>]` | Build a **bin** package into a single native executable → `target/pack/<name>-<os>-<arch>[.exe]`. Default is `--release` (LLVM `-O3`); `-O` / `--optimize` override like `dreamer run`. Default target is the host OS/arch. Distinct from registry `publish`. |
 | `dreamer publish [--registry <url>] [--token <tok>] [-p <name>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). Rejects path-only dependencies. |
 | `dreamer search <query>` | Search the registry by name / description / keywords. |
 | `dreamer tree [-p <name>]` | Print the resolved dependency tree from `dream.lock`. |
-| `dreamer toolchain install [cc]` | Download a pinned C compiler (Zig) for native C builds into `~/.dream/toolchains/`. |
+| `dreamer toolchain install [llvm\|cc\|wasi-sdk]` | Download pinned host toolchains into `~/.dream/toolchains/`: `llvm` (the code generator every build needs), `cc` (Zig, the native linker driver when there is no system `cc`), `wasi-sdk` (wasm32 runtime and linker). With no argument, installs every component available for the host. |
 | `dreamer toolchain list` | Show which of those components are installed. |
-| `dreamer toolchain uninstall cc` | Remove that component. |
+| `dreamer toolchain uninstall <component>` | Remove that component. |
 
-`dreamer toolchain install` is **not** `dreamer install` (packages). `dream run` (native C) uses `DREAM_CC` / `CC`, then the installed Zig, then `cc` / `clang` on `PATH`. The public installer (`install.sh` / `install.ps1`) and `use-toolchain.sh` run `dreamer toolchain install cc` when none of those are found (`DREAM_SKIP_CC=1` skips it).
+`dreamer toolchain install` is **not** `dreamer install` (packages). Every build uses the pinned LLVM from `DREAM_LLVM`, then `~/.dream/toolchains/llvm-*`. Native builds link with `DREAM_CC` / `CC`, then the installed Zig, then `cc` / `clang` on `PATH`. The public installer (`install.sh` / `install.ps1`) and `use-toolchain.sh` run `dreamer toolchain install llvm` when LLVM is missing (`DREAM_SKIP_LLVM=1` skips it) and `dreamer toolchain install cc` when no C compiler is found (`DREAM_SKIP_CC=1` skips it).
 
 ### Native `dreamer pack`
 
@@ -267,7 +267,7 @@ alias paths the scaffolds already reference.
 
 ### Profile-guided native builds
 
-Native C builds can use clang profile-guided optimization in two steps. The same flags work on
+Native builds can use LLVM profile-guided optimization in two steps. The same flags work on
 `dream build` / `dream run` directly; they are rejected for wasm, `test`, and the debug adapter.
 
 ```bash
@@ -278,11 +278,9 @@ dreamer build --release --use-profile=path/to/app.profdata   # or a .profraw / d
 ```
 
 `--profile` and `--use-profile` are mutually exclusive. Profiles accumulate across runs of the
-same instrumented binary; rebuilding it (changed source or flags) clears the old ones. PGO needs
-clang with its profile runtime: zig cc accepts the flags but never writes a profile, so the build
-falls back to `clang` on `PATH` (override with `DREAM_PGO_CC`). The merge uses
-`DREAM_LLVM_PROFDATA` if set, otherwise the `llvm-profdata` beside that clang, then
-`xcrun -f llvm-profdata`, then `PATH`.
+same instrumented binary; rebuilding it (changed source or flags) clears the old ones. The
+instrumented binary links through the pinned clang (zig's linker corrupts the profile counters),
+and the merge uses the pinned `llvm-profdata`, so both come from `dreamer toolchain install llvm`.
 
 ## Workspaces (monorepos)
 

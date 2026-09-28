@@ -19,12 +19,31 @@ use dream_sema::analyzer::Analyzer;
 use dream_syntax::nodes::ProgramNode;
 use dream_syntax::syntax_tree::SyntaxTree;
 
-/// Output artifact kind for the single C codegen backend: a wasm32 module
-/// (`C→clang→.wasm`, pretty-printed via wasmprinter) or a native host C file.
+/// Output artifact kind. Both go MIR → textual LLVM IR (`dream_mir::backend::llvm`).
 pub enum Target {
+    /// The whole-program `.ll` the native build (`execution::llvm::compile_llvm`) links.
+    Native,
+    /// `.ll` → `.wasm` through the pinned `llc` and wasi-sdk `wasm-ld`, then `wasm-opt`, the
+    /// `.abi.json` sidecar and the `.wat` printed from the final binary.
     Wasm32,
-    /// MIR → C99 (`dream_mir::backend::c`). Default for `dream run` / `test` / `debug-adapter`.
-    NativeC,
+}
+
+/// The runtime a module links against: its needed catalog modules, target, and for wasm32 whether
+/// the module runs on shared memory and the guest optimization level.
+pub struct LlvmRuntimeRequest {
+    pub need: dream_mir::runtime::RuntimeNeed,
+    pub target: dream_mir::backend::Target,
+    pub threads: bool,
+    pub wasm_opt: OptLevel,
+}
+
+/// The pinned LLVM toolchain as the driver sees it. The native execution layer implements it and
+/// installs itself by default; the driver stays toolchain-free.
+pub trait LlvmToolchain: Send + Sync {
+    /// The runtime signature table (`dream_rt.sigs` text) the backend types runtime calls from.
+    fn runtime_sigs(&self, req: &LlvmRuntimeRequest) -> Result<String, String>;
+    /// `.ll` → `.wasm`: whole-program link with the wasm runtime bitcode, `opt`, `llc`, `wasm-ld`.
+    fn link_wasm(&self, ll: &Path, wasm: &Path, req: &LlvmRuntimeRequest) -> Result<(), String>;
 }
 
 /// Orchestrates the compilation pipeline: source loading (delegated to `source_loader`/`prelude`),
@@ -64,6 +83,7 @@ pub struct Compiler {
     reporter: Arc<dyn BuildReporter>,
     /// CLI `--emit-mir`: MIR snapshots written to `<out>.mir/<NN>-<pass>.mir`.
     emit_mir: Option<dream_mir::passes::MirDumpSpec>,
+    llvm: Option<Arc<dyn LlvmToolchain>>,
 }
 
 impl Compiler {
@@ -80,7 +100,36 @@ impl Compiler {
             crate_type: dream_sema::analyzer::CrateType::Bin,
             reporter: Arc::new(SilentReporter),
             emit_mir: None,
+            llvm: None,
         }
+    }
+
+    /// The native optimization level these settings build at.
+    pub fn native_opt(&self) -> OptLevel {
+        OptLevel::from_cli(!self.debug, self.optimize)
+    }
+
+    fn toolchain(&self) -> Option<Arc<dyn LlvmToolchain>> {
+        if let Some(t) = &self.llvm {
+            return Some(t.clone());
+        }
+        #[cfg(feature = "native")]
+        {
+            Some(Arc::new(crate::execution::llvm::Toolchain {
+                opt: self.native_opt(),
+                debug: self.debug_info,
+            }))
+        }
+        #[cfg(not(feature = "native"))]
+        {
+            None
+        }
+    }
+
+    /// Builder: replace the default LLVM toolchain (the pinned one, with the `native` feature).
+    pub fn with_llvm(mut self, toolchain: Arc<dyn LlvmToolchain>) -> Self {
+        self.llvm = Some(toolchain);
+        self
     }
 
     /// Builder: receive artifact paths and non-fatal warnings through `reporter` instead of
@@ -298,6 +347,16 @@ impl Compiler {
             None => dream_mir::passes::MirDump::disabled(),
         };
         let dump_ref = &mut dump;
+        let llvm = self.toolchain();
+        let llvm_ref = llvm.as_ref();
+        // The guest never compiles below -O1 (`-O0` only selects the Binaryen level): naive -O0
+        // codegen bloats both the toolchain's own work and the module; -O1 is near-free.
+        let guest_opt = match self.optimize {
+            None | Some(OptLevel::O0) => OptLevel::O1,
+            Some(level) => level,
+        };
+        let mut llvm_err: Option<String> = None;
+        let llvm_err_ref = &mut llvm_err;
         let pipeline_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let symbol_info = match analyzer.analyze(&mut diagnostics) {
                 Ok(info) => info,
@@ -328,7 +387,7 @@ impl Compiler {
             let pipeline = if debug_info {
                 dream_mir::passes::PassManager::debug_pipeline()
             } else {
-                dream_mir::passes::PassManager::native_c_pipeline()
+                dream_mir::passes::PassManager::release_pipeline()
             };
             let poll_pipeline = if debug_info {
                 dream_mir::passes::PassManager::new()
@@ -349,24 +408,36 @@ impl Compiler {
                 .iter()
                 .map(|imp| (imp.module.clone(), imp.field.clone()))
                 .collect();
-            let threads = matches!(target, Target::Wasm32)
-                && dream_mir::backend::module_needs_threads(&mir, interner);
+            let wasm = matches!(target, Target::Wasm32);
+            let threads = wasm && dream_mir::backend::module_needs_threads(&mir, interner);
             let need = dream_mir::runtime::runtime_need_from_mir(&mir);
-            let bytes: Vec<u8> = match target {
-                Target::Wasm32 => dream_mir::backend::c::emit_c_module_for(
+            let req = LlvmRuntimeRequest {
+                need,
+                target: if wasm {
+                    dream_mir::backend::Target::Wasm32
+                } else {
+                    dream_mir::backend::Target::Native
+                },
+                threads,
+                wasm_opt: guest_opt,
+            };
+            let sigs = llvm_ref
+                .ok_or_else(|| "no LLVM toolchain configured".to_string())
+                .and_then(|t| t.runtime_sigs(&req))
+                .and_then(|text| dream_mir::backend::llvm::RuntimeSigs::parse(&text));
+            let bytes: Vec<u8> = match sigs {
+                Ok(sigs) => dream_mir::backend::llvm::emit_llvm_module(
                     &mir,
                     interner,
-                    dream_mir::backend::c::CTarget::Wasm32,
-                    false,
+                    &sigs,
+                    debug && !wasm,
+                    req.target,
                 )
                 .into_bytes(),
-                Target::NativeC => dream_mir::backend::c::emit_c_module_for(
-                    &mir,
-                    interner,
-                    dream_mir::backend::c::CTarget::Native,
-                    debug,
-                )
-                .into_bytes(),
+                Err(e) => {
+                    *llvm_err_ref = Some(e);
+                    return Err("llvm");
+                }
             };
             Ok((bytes, live_imports, threads, need, gpu))
         }));
@@ -384,6 +455,11 @@ impl Compiler {
                     &acc.file_contents,
                 ));
             }
+            Ok(Err("llvm")) => {
+                return Err(CompileError::Internal(
+                    llvm_err.unwrap_or_else(|| "LLVM runtime unavailable".into()),
+                ));
+            }
             Ok(Err(_)) => {
                 return Err(fail_diagnostics(
                     CompileError::Generator,
@@ -399,7 +475,7 @@ impl Compiler {
         };
 
         info!("finished code generation");
-        if matches!(self.target, Target::NativeC) {
+        if matches!(self.target, Target::Native) {
             fs::write(out_path, &bytes)?;
             self.reporter.artifact(Path::new(out_path));
             let abi_artifacts =
@@ -409,20 +485,20 @@ impl Compiler {
             }
             return Ok(());
         }
-        let c_path = std::path::Path::new(out_path).with_extension("c");
-        fs::write(&c_path, &bytes)?;
-        self.reporter.artifact(&c_path);
         let wasm_path = std::path::Path::new(out_path).with_extension("wasm");
-        // Debug (no `-O`) builds still compile the guest at -O1: naive -O0 C codegen bloats
-        // both clang's own work and the module; -O1 is near-free and keeps iteration fast.
-        crate::driver::c_wasm32::compile_c_to_wasm32(
-            &c_path,
-            &wasm_path,
-            threads,
+        let ll_path = std::path::Path::new(out_path).with_extension("ll");
+        fs::write(&ll_path, &bytes)?;
+        self.reporter.artifact(&ll_path);
+        let req = LlvmRuntimeRequest {
             need,
-            self.optimize.unwrap_or(OptLevel::O1),
-        )
-        .map_err(CompileError::Internal)?;
+            target: dream_mir::backend::Target::Wasm32,
+            threads,
+            wasm_opt: guest_opt,
+        };
+        llvm.as_ref()
+            .ok_or_else(|| CompileError::Internal("no LLVM toolchain configured".into()))?
+            .link_wasm(&ll_path, &wasm_path, &req)
+            .map_err(CompileError::Internal)?;
         self.reporter.artifact(&wasm_path);
 
         // Post-process order matters: wasm-opt first (it drops unknown custom sections), then

@@ -1,1 +1,1 @@
-error: method
+method 'Ledger.audit' is declared 'borrow' but its body mutates the instance

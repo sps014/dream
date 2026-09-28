@@ -141,7 +141,7 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
     fs::write(&runner_path, &runner_source)
         .map_err(|e| format!("write {}: {}", runner_path.display(), e))?;
 
-    let mut compiler = Compiler::new(Target::NativeC)
+    let mut compiler = Compiler::new(Target::Native)
         .with_release(opts.release)
         .with_crate_type(CrateType::Bin)
         .with_emit_abi(false);
@@ -150,24 +150,24 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
     }
     let runner_str = runner_path.to_string_lossy().into_owned();
     debug!("running {} ({} test(s))", path.display(), tests.len());
-    let c_path = out_dir.join(format!("{stem}.c"));
-    let c_str = c_path.to_string_lossy().into_owned();
+    let ll_path = out_dir.join(format!("{stem}.ll"));
+    let ll_str = ll_path.to_string_lossy().into_owned();
     compiler
-        .compile(&runner_str, &c_str)
+        .compile(&runner_str, &ll_str)
         .map_err(|e| format!("compile '{}': {}", path.display(), e))?;
-    let cc_opt = OptLevel::from_cli(opts.release, opts.optimize);
-    let bin = crate::execution::native_c::compile_native_c(
-        &c_path,
-        cc_opt,
+    let opt = OptLevel::from_cli(opts.release, opts.optimize);
+    let bin = crate::execution::llvm::compile_llvm(
+        &ll_path,
+        opt,
         false,
-        &crate::execution::native_c::Pgo::Off,
+        &crate::execution::native::Pgo::Off,
     )
-    .map_err(|e| format!("cc '{}': {}", path.display(), e))?;
+    .map_err(|e| format!("link '{}': {}", path.display(), e))?;
     // A failing assertion exits non-zero (`Assert.fail`), which is how a suite reports failure.
-    match crate::execution::native_c::run_native_bin(&bin, &c_str, &[]) {
+    match crate::execution::native::run_native_bin(&bin, &ll_str, &[]) {
         Ok(0) => {}
         Ok(code) => return Err(format!("'{}' failed (exit code {code})", path.display())),
-        Err(e) if e.downcast_ref::<crate::execution::native_c::GuestAborted>().is_some() => {
+        Err(e) if e.downcast_ref::<crate::execution::native::GuestAborted>().is_some() => {
             return Err(format!("'{}' aborted", path.display()));
         }
         Err(e) => return Err(format!("'{}' failed: {}", path.display(), e)),

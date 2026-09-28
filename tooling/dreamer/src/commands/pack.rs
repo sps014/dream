@@ -53,7 +53,7 @@ pub fn run(
     for (dream_triple, rust_triple) in &triples {
         if rust_triple.as_str() != host_triple {
             bail!(
-                "cross-pack to {dream_triple} is not supported (native C pack is host-only; host is {host_triple})"
+                "cross-pack to {dream_triple} is not supported (native pack is host-only; host is {host_triple})"
             );
         }
         let out_name = if dream_triple.starts_with("windows-") {
@@ -100,7 +100,7 @@ fn resolve_pack_targets(args: &[String]) -> Result<Vec<(String, String)>> {
         return Ok(vec![(host, rust)]);
     }
     if args.iter().any(|a| a == "all") {
-        bail!("pack 'all' requires cross-compilation; native C pack is host-only");
+        bail!("pack 'all' requires cross-compilation; native pack is host-only");
     }
     let mut out = Vec::new();
     for a in args {

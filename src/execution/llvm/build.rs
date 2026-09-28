@@ -39,6 +39,19 @@ pub(super) fn llc_level(opt: OptLevel, debug: bool) -> &'static str {
     }
 }
 
+/// The CPU for the program and its runtime (whose bitcode carries none): the host's own at
+/// `-O3`/`-O4`, where the binary is built to run here; otherwise the target's baseline, which on
+/// Apple silicon is the M1 every arm64 Mac has.
+pub(super) fn cpu_args(opt: OptLevel, debug: bool) -> &'static [&'static str] {
+    if !debug && matches!(opt, OptLevel::O3 | OptLevel::O4) {
+        &["-mcpu=native"]
+    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        &["-mcpu=apple-m1"]
+    } else {
+        &[]
+    }
+}
+
 /// `opt`'s PGO pipeline kind and its profile file (see `pgo::llvm_pgo`).
 type PgoPipeline = Option<(&'static str, PathBuf)>;
 
@@ -53,6 +66,7 @@ fn optimize_linked(
     let out = linked.with_extension("opt.bc");
     let mut cmd = tools.command("opt");
     cmd.arg(format!("-passes={}", pipeline(opt, debug)))
+        .args(cpu_args(opt, debug))
         .arg("-internalize-public-api-list=main");
     if let Some((kind, file)) = pgo {
         cmd.arg(format!("-pgo-kind={kind}"))
@@ -94,6 +108,7 @@ fn run_llc(
 ) -> Result<(), String> {
     let mut llc = tools.command("llc");
     llc.arg(llc_level(opt, debug))
+        .args(cpu_args(opt, debug))
         .arg(format!("-filetype={filetype}"))
         .arg("-relocation-model=pic")
         .arg(input)
@@ -169,17 +184,15 @@ pub fn compile_llvm(
     let obj = ll_path.with_extension("o");
     run_llc(&tools, &optimized, opt, debug, "obj", &obj)?;
 
-    // zig's linker lays out the `__llvm_prf_*` sections so the profile runtime writes corrupt
-    // counters; the pinned clang driver links compiler-rt's profile runtime with the system linker.
     let mut lcmd = if *pgo == Pgo::Generate {
-        let mut c = tools.command("clang");
-        c.args(super::runtime::sysroot_args())
-            .arg("-fprofile-generate");
+        let mut c = std::process::Command::new(cc::resolve_system_cc().ok_or(PGO_NEEDS_CC)?);
+        c.arg(&obj).args(profile_link_args(&tools)?);
         c
     } else {
-        cc::resolve_cc()?.cc_command()
+        let mut c = cc::resolve_cc()?.cc_command();
+        c.arg(&obj);
+        c
     };
-    lcmd.arg(&obj);
     if let Some(a) = &rt.archive {
         lcmd.arg(a);
     }
@@ -213,6 +226,29 @@ pub fn compile_llvm(
     Ok(bin)
 }
 
+/// zig's linker lays out the `__llvm_prf_*` sections so the profile runtime writes corrupt
+/// counters, so instrumented binaries link with the platform linker.
+const PGO_NEEDS_CC: &str =
+    "--profile needs a system C compiler (cc or clang on PATH, or CC): the Zig toolchain \
+     cannot link profile-instrumented binaries";
+
+/// What `clang -fprofile-generate` adds at link time: compiler-rt's profile runtime, kept alive by
+/// its registration symbol (Linux) or with the counter sections page-aligned as its Mach-O
+/// writer expects (macOS).
+fn profile_link_args(tools: &LlvmTools) -> Result<Vec<String>, String> {
+    let rt = super::bundle::clang_rt(tools, super::bundle::ClangRt::Profile)?;
+    let mut args = Vec::new();
+    if cfg!(target_os = "macos") {
+        for section in ["__llvm_prf_cnts", "__llvm_prf_bits", "__llvm_prf_data"] {
+            args.push(format!("-Wl,-sectalign,__DATA,{section},0x4000"));
+        }
+    } else {
+        args.push("-Wl,-u,__llvm_profile_runtime".into());
+    }
+    args.push(rt.display().to_string());
+    Ok(args)
+}
+
 /// The pinned toolchain behind the driver's LLVM targets. `opt`/`debug` pick the native runtime
 /// flavor; wasm32 builds take the guest level from the compiler.
 pub struct Toolchain {
@@ -229,9 +265,7 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
         let sigs = if req.target.is_wasm32() {
             super::wasm::wasm_runtime(&tools, req.wasm_opt, req.need, req.threads)?.sigs
         } else {
-            llvm_runtime(&tools, self.opt, req.need, self.debug)
-                .map_err(|e| e.to_string())?
-                .sigs
+            llvm_runtime(&tools, self.opt, req.need, self.debug)?.sigs
         };
         std::fs::read_to_string(&sigs).map_err(|e| format!("{}: {e}", sigs.display()))
     }

@@ -50,8 +50,8 @@ impl OptFlags {
     name = "dreamer",
     version,
     about = "Package manager for the Dream language",
-    after_help = "Examples:\n  dreamer init my-app --runtime web\n  dreamer add system.testing\n  dreamer run --release\n  dreamer test --filter math\n  dreamer toolchain install wasi-sdk",
-    after_long_help = "Examples:\n  dreamer init my-app --runtime web     scaffold a new project\n  dreamer add system.testing            add a dependency from the registry\n  dreamer add ./local/pkg --path        add a path dependency\n  dreamer run --release                 install deps, build, and run\n  dreamer test --filter math            run @test suites under tests/\n  dreamer pack --target all             single-file native executables (default --release / -O3)\n  dreamer toolchain install wasi-sdk    WebAssembly toolchain for `dreamer build --wasm`"
+    after_help = "Examples:\n  dreamer init my-app --runtime web\n  dreamer add system.testing\n  dreamer run --release\n  dreamer test --filter math\n  dreamer toolchain install cc",
+    after_long_help = "Examples:\n  dreamer init my-app --runtime web     scaffold a new project\n  dreamer add system.testing            add a dependency from the registry\n  dreamer add ./local/pkg --path        add a path dependency\n  dreamer run --release                 install deps, build, and run\n  dreamer test --filter math            run @test suites under tests/\n  dreamer pack --target all             single-file native executables (default --release / -O3)\n  dreamer toolchain install cc          Zig linker for native builds when no system cc exists"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -170,7 +170,7 @@ enum Cmd {
         #[arg(short = 'p', long = "package", value_name = "NAME")]
         package: Option<String>,
     },
-    /// Install or manage optional compilers (Zig `cc`, wasi-sdk) under ~/.dream/toolchains/.
+    /// Install or manage the optional Zig linker (`cc`) under ~/.dream/toolchains/.
     Toolchain {
         #[command(subcommand)]
         cmd: ToolchainCmd,
@@ -179,14 +179,14 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum ToolchainCmd {
-    /// Download pinned Zig, wasi-sdk 33 and/or LLVM 22 for this OS/arch.
+    /// Download the pinned Zig for this OS/arch. `dream` does this itself when it finds no linker.
     Install {
-        /// `cc` (Zig), `wasi-sdk` or `llvm`. Omit to install every one this host supports.
+        /// `cc` (Zig). Omit to install every component.
         component: Option<String>,
     },
     /// Show which toolchain components are installed.
     List,
-    /// Remove a component (`cc`, `wasi-sdk` or `llvm`).
+    /// Remove a component (`cc`).
     Uninstall { component: String },
 }
 

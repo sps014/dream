@@ -1,0 +1,133 @@
+name: LLVM dist
+
+# Builds the minimal LLVM bundled into Dream releases (scripts/build-llvm-dist.sh) once per LLVM
+# version and publishes it under the `llvm-dist-<version>` release, which release.yml downloads.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - scripts/build-llvm-dist.sh
+      - .github/workflows/llvm-dist.yml
+
+permissions:
+  contents: write
+
+env:
+  # Must match `LLVM_VERSION` in src/execution/llvm/tools.rs.
+  LLVM_VERSION: "22.1.8"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Compressed budget: the shared-libLLVM hosts come to ~12 MB (macOS arm64); Windows
+          # links each tool statically.
+          - os: ubuntu-latest
+            target: linux-x64
+            arch: x86_64
+            max_mb: 25
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+            arch: aarch64
+            max_mb: 25
+          - os: macos-latest
+            target: macos-x64
+            arch: x86_64
+            max_mb: 25
+          - os: macos-latest
+            target: macos-arm64
+            arch: arm64
+            max_mb: 25
+          - os: windows-latest
+            target: windows-x64
+            arch: x86_64
+            max_mb: 90
+
+    runs-on: ${{ matrix.os }}
+    # Same glibc floor as the release binaries.
+    container: ${{ contains(matrix.target, 'linux') && 'debian:bookworm' || fromJSON('null') }}
+    steps:
+      - name: Install Linux build deps
+        if: runner.os == 'Linux'
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl git xz-utils \
+            build-essential cmake ninja-build python3
+
+      - name: Install macOS build deps
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: Install Windows build deps
+        if: runner.os == 'Windows'
+        run: choco install ninja -y
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+
+      - uses: actions/checkout@v4
+
+      - name: Check pinned version
+        shell: bash
+        run: grep -q "LLVM_VERSION: &str = \"${LLVM_VERSION}\"" src/execution/llvm/tools.rs
+
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: dist
+          key: llvm-dist-${{ env.LLVM_VERSION }}-${{ matrix.target }}-${{ hashFiles('scripts/build-llvm-dist.sh') }}
+
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL -o src.tar.xz \
+            "https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/llvm-project-${LLVM_VERSION}.src.tar.xz"
+          tar -xJf src.tar.xz
+          NAME="dream-llvm-${LLVM_VERSION}-${{ matrix.target }}"
+          LLVM_DIST_ARCH="${{ matrix.arch }}" BUILD_DIR="$PWD/build" \
+            ./scripts/build-llvm-dist.sh "$PWD/llvm-project-${LLVM_VERSION}.src" "$PWD/stage/$NAME"
+          mkdir -p dist
+          tar -C stage -cJf "dist/$NAME.tar.xz" "$NAME"
+
+      - name: Size gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -la dist
+          BYTES=$(wc -c < dist/*.tar.xz)
+          echo "archive: $((BYTES / 1024 / 1024)) MB (budget ${{ matrix.max_mb }} MB)"
+          test "$BYTES" -le $(( ${{ matrix.max_mb }} * 1024 * 1024 ))
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: llvm-dist-${{ matrix.target }}
+          path: dist/*.tar.xz
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Checksums
+        run: |
+          mkdir -p release
+          find artifacts -name '*.tar.xz' -exec cp {} release/ \;
+          cd release && sha256sum * > SHA256SUMS && cat SHA256SUMS
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: llvm-dist-${{ env.LLVM_VERSION }}
+          name: Dream LLVM ${{ env.LLVM_VERSION }} (bundled toolchain)
+          body: Minimal LLVM bundled into Dream releases; built by scripts/build-llvm-dist.sh.
+          prerelease: true
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

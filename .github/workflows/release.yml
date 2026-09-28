@@ -55,7 +55,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            ca-certificates curl git build-essential pkg-config \
+            ca-certificates curl git xz-utils build-essential pkg-config \
             cmake ninja-build python3 clang libclang-dev \
             libssl-dev libwebkit2gtk-4.1-dev libgtk-3-dev libudev-dev
 
@@ -75,6 +75,11 @@ jobs:
           else
             cargo build --release -p dream -p dreamer -p dream-lsp
           fi
+
+      # The official LLVM (clang) builds the runtime the archive ships prebuilt; it is not shipped.
+      - name: Fetch development LLVM
+        shell: bash
+        run: scripts/fetch-dev-llvm.sh
 
       - name: Package archive
         shell: bash
@@ -110,6 +115,17 @@ jobs:
           fi
           mkdir -p "$STAGE/lib/runtime"
           cp -R crates/dream-mir/src/runtime/c "$STAGE/lib/runtime/"
+          # lib/dream: the minimal LLVM from the llvm-dist release (.github/workflows/llvm-dist.yml)
+          # and the runtime prebuilt for every level, which `dream` finds beside itself.
+          LLVM_VERSION="$(sed -n 's/^pub const LLVM_VERSION: &str = "\(.*\)";/\1/p' src/execution/llvm/tools.rs)"
+          LLVM_DIST="dream-llvm-${LLVM_VERSION}-${{ matrix.target }}"
+          curl -fL --retry 3 -o "${LLVM_DIST}.tar.xz" \
+            "https://github.com/${{ github.repository }}/releases/download/llvm-dist-${LLVM_VERSION}/${LLVM_DIST}.tar.xz"
+          mkdir -p "$STAGE/lib/dream/llvm"
+          tar -xJf "${LLVM_DIST}.tar.xz" -C "$STAGE/lib/dream/llvm" --strip-components=1
+          DREAM_LLVM="${HOME}/.dream/toolchains/llvm-${LLVM_VERSION}/bin" \
+            "${BIN_DIR}/dream${EXT}" pack-runtime "$STAGE/lib/dream/rt"
+          du -sh "$STAGE" "$STAGE/lib/dream/llvm" "$STAGE/lib/dream/rt"
           mkdir -p dist
           if [[ "${{ matrix.archive }}" == "zip" ]]; then
             # Windows runners have no `zip`; use PowerShell Compress-Archive.
@@ -125,6 +141,23 @@ jobs:
           else
             tar -C dist -czf "dist/dream-${VERSION}-${{ matrix.target }}.tar.gz" "dream-${VERSION}-${{ matrix.target }}"
           fi
+
+      # The staged archive alone must build native and wasm32 programs: no DREAM_LLVM, and the
+      # development LLVM moved out of reach.
+      - name: Smoke test the staged archive
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          STAGE="$PWD/dist/dream-${TAG#v}-${{ matrix.target }}"
+          mv "${HOME}/.dream/toolchains" "${HOME}/.dream/toolchains.off"
+          trap 'mv "${HOME}/.dream/toolchains.off" "${HOME}/.dream/toolchains"' EXIT
+          cd "$(mktemp -d)"
+          cp "${GITHUB_WORKSPACE}/tests/cases/arithmetic.dream" .
+          env -u DREAM_LLVM DREAM_NO_AUTO_INSTALL=1 "$STAGE/dream" run arithmetic.dream
+          env -u DREAM_LLVM DREAM_NO_AUTO_INSTALL=1 "$STAGE/dream" --release run arithmetic.dream
+          env -u DREAM_LLVM "$STAGE/dream" --wasm arithmetic.dream
 
       - uses: actions/upload-artifact@v4
         with:

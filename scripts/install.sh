@@ -10,7 +10,6 @@
 #   DREAM_HOME      install prefix (default: ~/.dream). Re-runs replace bin/, lib/,
 #                   and leftover files; toolchains/ (Zig) is kept.
 #   DREAM_SKIP_CC=1 skip auto `dreamer toolchain install cc` when no compiler is found
-#   DREAM_SKIP_LLVM=1 skip auto `dreamer toolchain install llvm` (the pinned code generator)
 #   DREAM_SKIP_LIBS=1 skip auto-install of Linux WebKitGTK / GTK runtime libraries
 
 set -eu
@@ -146,7 +145,7 @@ else
 fi
 
 # Drop the previous compiler/runtime payload so leftover binaries and headers
-# cannot mix with this version. Keep `toolchains/` (Zig / wasi-sdk).
+# cannot mix with this version. Keep `toolchains/` (Zig).
 replace_previous_install() {
   [ -d "$PREFIX" ] || return 0
   echo "Removing previous Dream install under ${PREFIX} (keeping toolchains/)"
@@ -215,6 +214,16 @@ if [ -n "$RT_SRC" ] && [ -f "${RT_SRC}/native/include/dream_rt_native.h" ]; then
   rm -rf "${PREFIX}/lib/runtime/c"
   cp -R "$RT_SRC" "${PREFIX}/lib/runtime/c"
 fi
+
+# The bundled minimal LLVM and prebuilt runtime; `dream` finds them at ../lib/dream from bin/.
+BUNDLE="$(find "${WORK}/out" -type d -path '*/lib/dream' 2>/dev/null | head -n1 || true)"
+if [ -z "$BUNDLE" ] || [ ! -d "${BUNDLE}/llvm/bin" ] || [ ! -d "${BUNDLE}/rt" ]; then
+  echo "error: archive did not contain lib/dream (the bundled LLVM and runtime)" >&2
+  exit 1
+fi
+mkdir -p "${PREFIX}/lib"
+rm -rf "${PREFIX}/lib/dream"
+cp -R "$BUNDLE" "${PREFIX}/lib/dream"
 
 env_compiler() {
   _v="$1"
@@ -328,43 +337,6 @@ ensure_linux_libs() {
   fi
 }
 
-LLVM_NOTE=
-ensure_llvm() {
-  if [ "${DREAM_SKIP_LLVM:-}" = "1" ]; then
-    LLVM_NOTE="Skipped LLVM install (DREAM_SKIP_LLVM=1)"
-  elif [ -n "${DREAM_LLVM:-}" ] || ls "${PREFIX}"/toolchains/llvm-*/bin/opt >/dev/null 2>&1; then
-    LLVM_NOTE="LLVM already found; skipped dreamer toolchain install llvm"
-  elif "${BIN_DIR}/dreamer${EXT}" toolchain install llvm; then
-    LLVM_NOTE="Installed LLVM via dreamer toolchain install llvm"
-  else
-    LLVM_NOTE="warning: could not install LLVM; later run: dreamer toolchain install llvm"
-    echo "${LLVM_NOTE}" >&2
-    return 0
-  fi
-  echo "${LLVM_NOTE}"
-}
-
-CC_NOTE=
-ensure_cc() {
-  if [ "${DREAM_SKIP_CC:-}" = "1" ]; then
-    CC_NOTE="Skipped C compiler install (DREAM_SKIP_CC=1)"
-    echo "${CC_NOTE}"
-    return 0
-  fi
-  if has_cc; then
-    CC_NOTE="C compiler already found; skipped dreamer toolchain install cc"
-    echo "${CC_NOTE}"
-    return 0
-  fi
-  echo "No C compiler on PATH; installing via dreamer toolchain install cc"
-  if "${BIN_DIR}/dreamer${EXT}" toolchain install cc; then
-    CC_NOTE="Installed C compiler (Zig) via dreamer toolchain install cc"
-  else
-    CC_NOTE="warning: could not install a C compiler; later run: dreamer toolchain install cc"
-    echo "${CC_NOTE}" >&2
-  fi
-}
-
 cat > "${PREFIX}/toolchain.env" <<EOF
 DREAM_HOME=${BIN_DIR}
 DREAMER_HOME=${BIN_DIR}
@@ -418,7 +390,6 @@ esac
 
 ensure_linux_libs
 ensure_cc
-ensure_llvm
 
 echo
 echo "Installed:"
@@ -430,9 +401,6 @@ if [ -n "${LIBS_NOTE}" ]; then
 fi
 if [ -n "${CC_NOTE}" ]; then
   echo "  ${CC_NOTE}"
-fi
-if [ -n "${LLVM_NOTE}" ]; then
-  echo "  ${LLVM_NOTE}"
 fi
 echo
 echo "Open a new terminal (or: . ${PREFIX}/env.sh), then:"

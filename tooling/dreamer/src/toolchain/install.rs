@@ -1,7 +1,6 @@
 use super::catalog::{self, ArchiveKind, Artifact};
 use super::{
-    dream_prefix, is_installed, llvm_dir, toolchains_dir, toolchains_env_path, wasi_sdk_dir,
-    zig_binary, zig_dir, Component, Host,
+    dream_prefix, is_installed, toolchains_dir, toolchains_env_path, zig_binary, Component, Host,
 };
 use crate::fetch::cache_dir;
 use anyhow::{bail, Context, Result};
@@ -14,36 +13,26 @@ pub fn install(components: &[Component]) -> Result<()> {
     let host = super::detect_host()?;
     for component in components {
         catalog::ensure_host_supported(host)?;
-        if is_installed(*component, host) {
+        if is_installed(*component) {
             println!(
                 "{} already installed at {}",
                 component.id(),
-                match component {
-                    Component::Cc => zig_dir(),
-                    Component::WasiSdk => wasi_sdk_dir(host),
-                    Component::Llvm => llvm_dir(),
-                }
-                .display()
+                catalog::dest_dir(*component).display()
             );
             continue;
         }
         install_one(*component, host)?;
     }
-    write_toolchains_env(host)?;
+    write_toolchains_env()?;
     Ok(())
 }
 
 pub fn list() -> Result<()> {
-    let host = super::detect_host()?;
     println!("prefix: {}", dream_prefix().display());
     println!("toolchains: {}", toolchains_dir().display());
     for c in Component::all() {
-        let status = if is_installed(c, host) {
-            match c {
-                Component::Cc => format!("installed ({})", zig_dir().display()),
-                Component::WasiSdk => format!("installed ({})", wasi_sdk_dir(host).display()),
-                Component::Llvm => format!("installed ({})", llvm_dir().display()),
-            }
+        let status = if is_installed(c) {
+            format!("installed ({})", catalog::dest_dir(c).display())
         } else {
             "not installed".to_string()
         };
@@ -53,30 +42,25 @@ pub fn list() -> Result<()> {
 }
 
 pub fn uninstall(component: Component) -> Result<()> {
-    let host = super::detect_host()?;
-    let dir = catalog::dest_dir(component, host)?;
+    let dir = catalog::dest_dir(component);
     if dir.is_dir() {
         fs::remove_dir_all(&dir).with_context(|| format!("removing {}", dir.display()))?;
         println!("removed {}", dir.display());
     } else {
         println!("{} was not installed", component.id());
     }
-    write_toolchains_env(host)?;
+    write_toolchains_env()?;
     Ok(())
 }
 
 fn install_one(component: Component, host: Host) -> Result<()> {
     let artifact = catalog::artifact_for(component, host)?;
-    let dest = catalog::dest_dir(component, host)?;
+    let dest = catalog::dest_dir(component);
     println!("Downloading {} …", artifact.url);
     let cache = download_verified(&artifact)?;
     println!("Extracting to {} …", dest.display());
-    let keep: Option<fn(&Path) -> bool> = match component {
-        Component::Llvm => Some(catalog::llvm_keep),
-        _ => None,
-    };
-    extract_archive(&cache, artifact.kind, &dest, keep)?;
-    if !is_installed(component, host) {
+    extract_archive(&cache, artifact.kind, &dest)?;
+    if !is_installed(component) {
         bail!(
             "extracted {} but did not find the expected binary under {}",
             artifact.filename,
@@ -153,13 +137,7 @@ fn stream_copy_sha256(reader: &mut impl io::Read, writer: &mut impl Write) -> Re
     Ok(format!("sha256:{:x}", hasher.finalize()))
 }
 
-/// `keep` filters entries by their path below the archive's single root directory.
-fn extract_archive(
-    archive: &Path,
-    kind: ArchiveKind,
-    dest: &Path,
-    keep: Option<fn(&Path) -> bool>,
-) -> Result<()> {
+fn extract_archive(archive: &Path, kind: ArchiveKind, dest: &Path) -> Result<()> {
     let tmp_name = format!(
         "{}.tmp-extract",
         dest.file_name().and_then(|n| n.to_str()).unwrap_or("tc")
@@ -168,11 +146,7 @@ fn extract_archive(
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp)?;
     match kind {
-        ArchiveKind::TarGz => unpack_tar_gz(archive, &tmp)?,
-        ArchiveKind::TarXz => match keep {
-            Some(keep) => unpack_tar_xz_filtered(archive, &tmp, keep)?,
-            None => unpack_tar_xz(archive, &tmp)?,
-        },
+        ArchiveKind::TarXz => unpack_tar_xz(archive, &tmp)?,
         ArchiveKind::Zip => unpack_zip(archive, &tmp)?,
     }
     let unpacked = flatten_single_dir(&tmp)?;
@@ -202,14 +176,6 @@ fn flatten_single_dir(tmp: &Path) -> Result<PathBuf> {
     Ok(tmp.to_path_buf())
 }
 
-fn unpack_tar_gz(archive: &Path, dest: &Path) -> Result<()> {
-    let file = File::open(archive)?;
-    let decoder = flate2::read::GzDecoder::new(file);
-    let mut tar = tar::Archive::new(decoder);
-    tar.unpack(dest)?;
-    Ok(())
-}
-
 fn unpack_tar_xz(archive: &Path, dest: &Path) -> Result<()> {
     let compressed = File::open(archive)?;
     let mut compressed = io::BufReader::new(compressed);
@@ -223,37 +189,6 @@ fn unpack_tar_xz(archive: &Path, dest: &Path) -> Result<()> {
     tar.unpack(dest)?;
     let _ = fs::remove_file(&tar_path);
     Ok(())
-}
-
-/// Streams the xz decoder straight into the tar reader (no inner `.tar` on disk) and unpacks
-/// only the entries `keep` accepts.
-fn unpack_tar_xz_filtered(archive: &Path, dest: &Path, keep: fn(&Path) -> bool) -> Result<()> {
-    let compressed = io::BufReader::new(File::open(archive)?);
-    let (reader, mut writer) = io::pipe()?;
-    let decoder = std::thread::spawn(move || -> Result<()> {
-        let mut compressed = compressed;
-        lzma_rs::xz_decompress(&mut compressed, &mut writer)
-            .map_err(|e| anyhow::anyhow!("xz decompress: {e}"))
-    });
-    let mut tar = tar::Archive::new(io::BufReader::with_capacity(1 << 20, reader));
-    let mut unpack = || -> Result<()> {
-        for entry in tar.entries()? {
-            let mut entry = entry?;
-            let path = entry.path()?.into_owned();
-            let rel: PathBuf = path.components().skip(1).collect();
-            if !rel.as_os_str().is_empty() && keep(&rel) {
-                entry.unpack_in(dest)?;
-            }
-        }
-        Ok(())
-    };
-    let unpacked = unpack();
-    drop(tar);
-    let decoded = decoder
-        .join()
-        .map_err(|_| anyhow::anyhow!("xz decoder thread panicked"))?;
-    unpacked?;
-    decoded
 }
 
 fn unpack_zip(archive: &Path, dest: &Path) -> Result<()> {
@@ -310,7 +245,7 @@ fn copy_dir_all(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-fn write_toolchains_env(host: Host) -> Result<()> {
+fn write_toolchains_env() -> Result<()> {
     let path = toolchains_env_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -318,12 +253,6 @@ fn write_toolchains_env(host: Host) -> Result<()> {
     let mut body = String::from("# Written by `dreamer toolchain install`. Sourced from env.sh.\n");
     if zig_binary().is_file() {
         body.push_str(&format!("DREAM_ZIG={}\n", zig_binary().display()));
-    }
-    if super::wasi_clang(host).is_file() {
-        body.push_str(&format!("WASI_SDK_PATH={}\n", wasi_sdk_dir(host).display()));
-    }
-    if super::llvm_opt().is_file() {
-        body.push_str(&format!("DREAM_LLVM={}\n", llvm_dir().join("bin").display()));
     }
     fs::write(&path, body)?;
     println!("Wrote {}", path.display());
@@ -333,27 +262,27 @@ fn write_toolchains_env(host: Host) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flate2::write::GzEncoder;
-    use flate2::Compression;
 
     #[test]
-    fn extract_tar_gz_flattens_single_root() {
+    fn extract_tar_xz_flattens_single_root() {
         let tmp = tempfile::tempdir().unwrap();
-        let tar_path = tmp.path().join("sdk.tar.gz");
+        let mut tar_bytes = Vec::new();
         {
-            let file = File::create(&tar_path).unwrap();
-            let enc = GzEncoder::new(file, Compression::default());
-            let mut b = tar::Builder::new(enc);
+            let mut b = tar::Builder::new(&mut tar_bytes);
             let mut hdr = tar::Header::new_gnu();
             hdr.set_size(3);
             hdr.set_cksum();
-            b.append_data(&mut hdr, "sdk-1/bin/hello.txt", b"hi\n" as &[u8])
+            b.append_data(&mut hdr, "zig-1/bin/hello.txt", b"hi\n" as &[u8])
                 .unwrap();
-            b.into_inner().unwrap().finish().unwrap();
+            b.finish().unwrap();
         }
+        let archive = tmp.path().join("zig.tar.xz");
+        let mut xz = Vec::new();
+        lzma_rs::xz_compress(&mut tar_bytes.as_slice(), &mut xz).unwrap();
+        fs::write(&archive, xz).unwrap();
         let dest = tmp.path().join("out");
-        extract_archive(&tar_path, ArchiveKind::TarGz, &dest, None).unwrap();
+        extract_archive(&archive, ArchiveKind::TarXz, &dest).unwrap();
         assert!(dest.join("bin/hello.txt").is_file());
-        assert!(!dest.join("sdk-1").exists());
+        assert!(!dest.join("zig-1").exists());
     }
 }

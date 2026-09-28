@@ -1,8 +1,10 @@
 //! Resolve the system C compiler driver that links native binaries: env, `dreamer toolchain` Zig,
-//! then PATH.
+//! then PATH, and when none exists, install the Zig toolchain once (`DREAM_NO_AUTO_INSTALL=1`
+//! opts out).
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 
 const MISSING_CC: &str =
     "no linker driver found for native builds; run `dreamer toolchain install cc`, \
@@ -45,7 +47,49 @@ pub fn resolve_cc() -> Result<Cc, String> {
     if let Some(p) = find_on_path("clang") {
         return Ok(Cc::Program(p));
     }
-    Err(MISSING_CC.into())
+    auto_install_zig().map(Cc::Zig)
+}
+
+/// Runs `dreamer toolchain install cc` (the dreamer beside this binary, else on PATH) once per
+/// process, reporting its progress on stderr.
+fn auto_install_zig() -> Result<PathBuf, String> {
+    static INSTALLED: OnceLock<Result<PathBuf, String>> = OnceLock::new();
+    INSTALLED
+        .get_or_init(|| {
+            if std::env::var_os("DREAM_NO_AUTO_INSTALL").is_some_and(|v| !v.is_empty()) {
+                return Err(MISSING_CC.into());
+            }
+            let name = if cfg!(windows) { "dreamer.exe" } else { "dreamer" };
+            let beside = std::env::current_exe()
+                .ok()
+                .map(|e| std::fs::canonicalize(&e).unwrap_or(e))
+                .and_then(|e| Some(e.parent()?.join(name)))
+                .filter(|p| p.is_file());
+            let dreamer = beside
+                .or_else(|| find_on_path("dreamer"))
+                .ok_or_else(|| MISSING_CC.to_string())?;
+            eprintln!("no linker found; installing the Zig toolchain (set DREAM_NO_AUTO_INSTALL=1 to skip)");
+            let status = Command::new(&dreamer)
+                .args(["toolchain", "install", "cc"])
+                .stdout(Stdio::from(std::io::stderr()))
+                .status()
+                .map_err(|e| format!("running {}: {e}", dreamer.display()))?;
+            if !status.success() {
+                return Err(format!("`dreamer toolchain install cc` failed; {MISSING_CC}"));
+            }
+            find_toolchain_zig().ok_or_else(|| MISSING_CC.to_string())
+        })
+        .clone()
+}
+
+/// A C compiler driver that links with the platform's own linker, for binaries the Zig toolchain
+/// cannot link: `DREAM_CC`/`CC` unless they name zig, then `cc`/`clang` on PATH.
+pub fn resolve_system_cc() -> Option<PathBuf> {
+    env_program("DREAM_CC")
+        .or_else(|| env_program("CC"))
+        .filter(|p| matches!(classify_program(p.clone()), Cc::Program(_)))
+        .or_else(|| find_on_path("cc"))
+        .or_else(|| find_on_path("clang"))
 }
 
 fn classify_program(p: PathBuf) -> Cc {

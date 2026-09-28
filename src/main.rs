@@ -193,6 +193,12 @@ enum Command {
         #[arg(long)]
         check: bool,
     },
+    /// Build the prebuilt runtime tree a release ships as lib/dream/rt (needs a full LLVM)
+    #[command(hide = true)]
+    PackRuntime {
+        /// Output directory
+        out: PathBuf,
+    },
 }
 
 fn main() -> ExitCode {
@@ -214,6 +220,16 @@ fn main() -> ExitCode {
 
     let ui = Ui::new();
 
+    if let Some(Command::PackRuntime { out }) = &cli.command {
+        return match dream::execution::llvm::pack_runtime(out) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                ui.error(&e);
+                ExitCode::FAILURE
+            }
+        };
+    }
+
     let run_after_compile = matches!(cli.command, Some(Command::Run { .. }));
     let run_tests = matches!(cli.command, Some(Command::Test { .. }));
     let debug_adapter = matches!(cli.command, Some(Command::DebugAdapter { .. }));
@@ -225,7 +241,7 @@ fn main() -> ExitCode {
         | Some(Command::Run { file, .. })
         | Some(Command::Test { file, .. })
         | Some(Command::DebugAdapter { file }) => file.clone(),
-        Some(Command::Fmt { .. }) => None,
+        Some(Command::Fmt { .. }) | Some(Command::PackRuntime { .. }) => None,
         None => cli.file.clone(),
     };
     let program_args = match &cli.command {

@@ -1,19 +1,20 @@
-//! Resolve the pinned LLVM toolchain: `DREAM_LLVM` (a `bin/` directory or its parent), then
-//! `dreamer toolchain install llvm` under `~/.dream/toolchains/llvm-*`.
+//! Resolve the pinned LLVM toolchain: `DREAM_LLVM` (a `bin/` directory or its parent), then the
+//! minimal LLVM a release ships in `lib/dream/llvm`, then a development LLVM under
+//! `~/.dream/toolchains/llvm-*` (`scripts/fetch-dev-llvm.sh`).
 
 use crate::execution::native::cc::toolchains_dir;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-/// Must match `dreamer`'s `toolchain::LLVM_VERSION`. Textual IR is only guaranteed to parse with
+/// Must match `scripts/build-llvm-dist.sh`'s CI pin and `scripts/fetch-dev-llvm.sh`. Textual IR is only guaranteed to parse with
 /// the LLVM major it was written for, so any other major is rejected.
 pub const LLVM_VERSION: &str = "22.1.8";
 const LLVM_MAJOR: &str = "22.";
 
 const MISSING_LLVM: &str =
-    "building Dream programs needs LLVM 22; run `dreamer toolchain install llvm`, \
-     or set DREAM_LLVM to an LLVM 22 bin/ directory";
+    "LLVM 22 not found: a Dream release ships it in lib/dream/llvm next to the binary; \
+     for a development build run scripts/fetch-dev-llvm.sh, or set DREAM_LLVM to an LLVM 22 bin/";
 
 #[derive(Debug, Clone)]
 pub struct LlvmTools {
@@ -34,17 +35,26 @@ impl LlvmTools {
         Command::new(self.tool(name))
     }
 
-    /// A tool only some modes need (PGO's `llvm-profdata`), checked when first used.
+    /// A tool only some modes need (PGO's `llvm-profdata`, the linker's `wasm-ld`), checked when
+    /// first used.
     pub fn optional_tool(&self, name: &str) -> Result<PathBuf, String> {
         let p = self.tool(name);
         if p.is_file() {
             Ok(p)
         } else {
             Err(format!(
-                "LLVM toolchain at {} has no `{name}`; reinstall with `dreamer toolchain install llvm`",
+                "LLVM toolchain at {} has no `{name}`",
                 self.bin.display()
             ))
         }
+    }
+
+    /// clang builds the runtime from its C sources, which only a development toolchain does; a
+    /// release links the prebuilt runtime and ships no clang.
+    pub fn clang(&self) -> Result<PathBuf, String> {
+        self.optional_tool("clang").map_err(|e| {
+            format!("{e}; building the runtime from source needs a full LLVM (scripts/fetch-dev-llvm.sh)")
+        })
     }
 }
 
@@ -55,13 +65,14 @@ pub fn resolve_llvm() -> Result<LlvmTools, String> {
 
 fn resolve_uncached() -> Result<LlvmTools, String> {
     let bin = env_bin()
+        .or_else(|| super::bundle::bundled_llvm_bin().filter(|b| has_opt(b)))
         .or_else(installed_bin)
         .ok_or_else(|| MISSING_LLVM.to_string())?;
     let tools = LlvmTools { bin };
-    for t in ["opt", "llc", "llvm-link", "llvm-dis", "clang"] {
+    for t in ["opt", "llc", "llvm-link", "llvm-dis"] {
         if !tools.tool(t).is_file() {
             return Err(format!(
-                "LLVM toolchain at {} is missing `{t}`; reinstall with `dreamer toolchain install llvm`",
+                "LLVM toolchain at {} is missing `{t}`",
                 tools.bin.display()
             ));
         }
@@ -80,8 +91,7 @@ fn resolve_uncached() -> Result<LlvmTools, String> {
         .to_string();
     if !version.starts_with(LLVM_MAJOR) {
         return Err(format!(
-            "LLVM at {} is version `{version}`, the backend needs {LLVM_VERSION}; \
-             run `dreamer toolchain install llvm`",
+            "LLVM at {} is version `{version}`, the backend needs {LLVM_VERSION}",
             tools.bin.display()
         ));
     }

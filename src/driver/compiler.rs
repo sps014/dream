@@ -23,7 +23,7 @@ use dream_syntax::syntax_tree::SyntaxTree;
 pub enum Target {
     /// The whole-program `.ll` the native build (`execution::llvm::compile_llvm`) links.
     Native,
-    /// `.ll` → `.wasm` through the pinned `llc` and wasi-sdk `wasm-ld`, then `wasm-opt`, the
+    /// `.ll` → `.wasm` through the pinned `llc` and `wasm-ld`, then `wasm-opt`, the
     /// `.abi.json` sidecar and the `.wat` printed from the final binary.
     Wasm32,
 }

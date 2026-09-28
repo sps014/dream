@@ -326,15 +326,14 @@ elif command -v dreamer >/dev/null 2>&1; then
   unset _dream_has_cc _cand
 fi
 
+# A development build compiles the C runtime itself, so it needs the full official LLVM (plus the
+# wasm32 builtins and WASI headers); releases ship a minimal LLVM and the runtime prebuilt.
 if [ "${DREAM_SKIP_LLVM:-}" = "1" ]; then
-  echo "Skipped LLVM install (DREAM_SKIP_LLVM=1)"
-elif [ -n "${DREAM_LLVM:-}" ] || find "${_dream_user_dir}/toolchains" -maxdepth 3 -path '*/llvm-*/bin/opt' 2>/dev/null | grep -q .; then
-  echo "LLVM already found; skipped dreamer toolchain install llvm"
-elif command -v dreamer >/dev/null 2>&1; then
-  echo "No LLVM toolchain; installing via dreamer toolchain install llvm"
-  if ! dreamer toolchain install llvm; then
-    echo "warning: could not install LLVM; later run: dreamer toolchain install llvm" >&2
-  fi
+  echo "Skipped LLVM fetch (DREAM_SKIP_LLVM=1)"
+elif [ -n "${DREAM_LLVM:-}" ]; then
+  echo "DREAM_LLVM is set; skipped scripts/fetch-dev-llvm.sh"
+elif ! "${_dream_root}/scripts/fetch-dev-llvm.sh"; then
+  echo "warning: could not fetch LLVM; later run: scripts/fetch-dev-llvm.sh" >&2
 fi
 
 if [ "$_dream_sourced" -eq 0 ]; then

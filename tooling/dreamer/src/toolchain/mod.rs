@@ -1,9 +1,10 @@
-//! Optional host toolchains under `~/.dream/toolchains/` (`dreamer toolchain install`).
+//! Optional host toolchains under `~/.dream/toolchains/` (`dreamer toolchain install`). LLVM is
+//! not one: a release ships the minimal LLVM it needs in `lib/dream/llvm`.
 
 mod catalog;
 mod install;
 
-pub use catalog::{LLVM_VERSION, WASI_SDK_VERSION, ZIG_VERSION};
+pub use catalog::ZIG_VERSION;
 pub use install::{install, list, uninstall};
 
 use anyhow::{bail, Result};
@@ -12,32 +13,24 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Component {
     Cc,
-    WasiSdk,
-    Llvm,
 }
 
 impl Component {
     pub fn parse_name(name: &str) -> Result<Self> {
         match name {
             "cc" | "zig" => Ok(Self::Cc),
-            "wasi-sdk" | "wasi" => Ok(Self::WasiSdk),
-            "llvm" => Ok(Self::Llvm),
-            other => bail!(
-                "unknown toolchain component '{other}' (expected `cc`, `wasi-sdk` or `llvm`)"
-            ),
+            other => bail!("unknown toolchain component '{other}' (expected `cc`)"),
         }
     }
 
     pub fn id(self) -> &'static str {
         match self {
             Self::Cc => "cc",
-            Self::WasiSdk => "wasi-sdk",
-            Self::Llvm => "llvm",
         }
     }
 
-    pub fn all() -> [Self; 3] {
-        [Self::Cc, Self::WasiSdk, Self::Llvm]
+    pub fn all() -> [Self; 1] {
+        [Self::Cc]
     }
 }
 
@@ -142,20 +135,6 @@ pub fn zig_dir() -> PathBuf {
     toolchains_dir().join(format!("zig-{ZIG_VERSION}"))
 }
 
-pub fn wasi_sdk_dir(host: Host) -> PathBuf {
-    toolchains_dir().join(catalog::wasi_extract_dir_name(host))
-}
-
-/// `~/.dream/toolchains/llvm-<version>`; `dream` resolves the backend tools from here.
-pub fn llvm_dir() -> PathBuf {
-    toolchains_dir().join(format!("llvm-{LLVM_VERSION}"))
-}
-
-pub fn llvm_opt() -> PathBuf {
-    let opt = if cfg!(windows) { "opt.exe" } else { "opt" };
-    llvm_dir().join("bin").join(opt)
-}
-
 pub fn zig_binary() -> PathBuf {
     let dir = zig_dir();
     if cfg!(windows) {
@@ -165,20 +144,13 @@ pub fn zig_binary() -> PathBuf {
     }
 }
 
-pub fn wasi_clang(host: Host) -> PathBuf {
-    let clang = if cfg!(windows) { "clang.exe" } else { "clang" };
-    wasi_sdk_dir(host).join("bin").join(clang)
-}
-
-pub fn is_installed(component: Component, host: Host) -> bool {
+pub fn is_installed(component: Component) -> bool {
     match component {
         Component::Cc => zig_binary().is_file(),
-        Component::WasiSdk => wasi_clang(host).is_file(),
-        Component::Llvm => llvm_opt().is_file(),
     }
 }
 
-/// Every component with a pinned artifact for this host (LLVM has no macOS x86_64 build).
+/// Every component with a pinned artifact for this host.
 pub fn available_components() -> Result<Vec<Component>> {
     let host = detect_host()?;
     Ok(Component::all()
@@ -199,11 +171,7 @@ mod tests {
     fn parse_component_aliases() {
         assert_eq!(Component::parse_name("cc").unwrap(), Component::Cc);
         assert_eq!(Component::parse_name("zig").unwrap(), Component::Cc);
-        assert_eq!(
-            Component::parse_name("wasi-sdk").unwrap(),
-            Component::WasiSdk
-        );
-        assert_eq!(Component::parse_name("llvm").unwrap(), Component::Llvm);
+        assert!(Component::parse_name("llvm").is_err());
         assert!(Component::parse_name("gcc").is_err());
     }
 

@@ -32,6 +32,16 @@ impl RuntimeNeed {
         Self(self.0 | other.0)
     }
 
+    /// Every set a program can need: `CORE` with each combination of the optional modules.
+    pub fn all_sets() -> Vec<Self> {
+        let mut sets = vec![Self::CORE];
+        for m in RUNTIME_MODULES.iter().filter(|m| m.need != Self::CORE) {
+            let with: Vec<Self> = sets.iter().map(|s| s.union(m.need)).collect();
+            sets.extend(with);
+        }
+        sets
+    }
+
     pub fn name(self) -> &'static str {
         if self == Self::CORE {
             "core"
@@ -190,7 +200,7 @@ const WASM32_CORE_C: &[&str] = &[
     "native/ffi.c",
 ];
 
-/// Guest runtime C units for MIR → C → wasm32 (wasi-sdk). Skips native mmap heap, libc host, and pthreads.
+/// Guest runtime C units for wasm32. Skips native mmap heap, libc host, and pthreads.
 pub fn wasm32_runtime_c_files() -> Vec<PathBuf> {
     let c = runtime_c_dir();
     WASM32_CORE_C.iter().map(|rel| c.join(rel)).collect()

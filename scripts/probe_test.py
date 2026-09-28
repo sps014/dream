@@ -19,7 +19,8 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 _LEAK = re.compile(r"\[dream\] leak check: live=(\d+)")
 
 root = Path(__file__).resolve().parents[1]
-dream = root / "target/debug/dream"
+# DREAM_PROBE_BIN probes another build, e.g. a staged release archive's `dream`.
+dream = Path(os.environ.get("DREAM_PROBE_BIN") or root / "target/debug/dream")
 cases = sorted((root / "tests/cases").glob("*.dream"))
 workers = int(os.environ.get("PROBE_JOBS", "8"))
 dream_js = root / "runtime" / "dream.js"

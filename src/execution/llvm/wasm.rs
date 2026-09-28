@@ -1,19 +1,17 @@
-//! `.ll` → wasm32: the guest runtime as bitcode from wasi-sdk clang, one whole-program module
-//! through the pinned `llvm-link`/`opt`/`llc`, and wasi-sdk `wasm-ld`.
+//! `.ll` → wasm32: the guest runtime as bitcode (prebuilt in a release, else compiled by the dev
+//! LLVM's clang against Dream's own freestanding headers), one whole-program module through the
+//! pinned `llvm-link`/`opt`/`llc`, and LLVM's `wasm-ld`.
 //!
 //! Assembly units (`g0.s`: per-instance wasm globals) cannot be bitcode; they stay objects and
 //! join at `wasm-ld`.
 
 use super::build::{llc_level, pipeline};
-use super::runtime::{anchor_unit, reduce_disassembly};
+use super::bundle::{clang_rt, prebuilt_file, rt_dir, ClangRt, RtDir};
+use super::runtime::{anchor_unit, disassemble, reduce_disassembly};
 use super::tools::LlvmTools;
 use crate::driver::rt_stamp;
-use crate::driver::wasi::{
-    compiler_rt_builtins, guest_include_dirs, run_captured, unit_command, wasi_clang,
-    wasm_ld_command, wasm_ld_for,
-};
+use crate::driver::wasi::{guest_include_dirs, run_captured, unit_command, wasm_ld_command};
 use crate::driver::wasm_opt::OptLevel;
-use crate::execution::native::cc::native_rt_cache_root;
 use dream_mir::backend::llvm::RuntimeSigs;
 use dream_mir::runtime::RuntimeNeed;
 use std::fs::OpenOptions;
@@ -69,22 +67,78 @@ fn is_asm(p: &Path) -> bool {
     p.extension().and_then(|e| e.to_str()) == Some("s")
 }
 
+pub(super) fn flavor(threads: bool) -> &'static str {
+    if threads {
+        "wasm32-threads"
+    } else {
+        "wasm32"
+    }
+}
+
+/// Assembly unit objects keep their unit index, so a prebuilt tree lists them by name.
+fn asm_objs(dir: &Path, units: &[Unit]) -> Vec<PathBuf> {
+    units
+        .iter()
+        .enumerate()
+        .filter(|(_, u)| is_asm(&u.path))
+        .map(|(i, _)| dir.join(format!("{i}.o")))
+        .collect()
+}
+
+/// The WASI libc headers `scripts/fetch-dev-llvm.sh` unpacks beside the development LLVM.
+fn wasi_sysroot(clang: &Path) -> Result<PathBuf, String> {
+    let root = clang
+        .parent()
+        .and_then(Path::parent)
+        .unwrap_or(Path::new("."))
+        .join("share/wasi-sysroot");
+    if root.join("include/wasm32-wasip1").is_dir() {
+        Ok(root)
+    } else {
+        Err(format!(
+            "WASI headers not found at {}; run scripts/fetch-dev-llvm.sh",
+            root.display()
+        ))
+    }
+}
+
 pub fn wasm_runtime(
     tools: &LlvmTools,
     opt: OptLevel,
     need: RuntimeNeed,
     threads: bool,
 ) -> Result<WasmRuntime, String> {
+    match rt_dir(flavor(threads), opt, need) {
+        RtDir::Prebuilt(dir) => {
+            let mut objs: Vec<PathBuf> = std::fs::read_dir(&dir)
+                .map_err(|e| format!("{}: {e}", dir.display()))?
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("o"))
+                .collect();
+            objs.sort();
+            Ok(WasmRuntime {
+                bc: prebuilt_file(&dir, "dream_rt.bc")?,
+                sigs: prebuilt_file(&dir, "dream_rt.sigs")?,
+                objs,
+            })
+        }
+        RtDir::Cache(dir) => build_wasm_runtime(tools, opt, need, threads, &dir),
+    }
+}
+
+/// Compiles the guest runtime for `opt`/`need` into `dir`, unless its stamp says it is current.
+pub(super) fn build_wasm_runtime(
+    tools: &LlvmTools,
+    opt: OptLevel,
+    need: RuntimeNeed,
+    threads: bool,
+    dir: &Path,
+) -> Result<WasmRuntime, String> {
     static LOCK: Mutex<()> = Mutex::new(());
-    let clang = wasi_clang().ok_or_else(|| {
-        "wasi-sdk clang not found; run `dreamer toolchain install wasi-sdk`".to_string()
-    })?;
-    let dir = native_rt_cache_root()
-        .join(format!("llvm-{}", super::LLVM_VERSION))
-        .join(if threads { "wasm32-threads" } else { "wasm32" })
-        .join(opt.native_rt_subdir())
-        .join(format!("need_{:x}", need.bits()));
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let clang = tools.clang()?;
+    let sysroot = wasi_sysroot(&clang)?;
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let lock_file = OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -100,12 +154,7 @@ pub fn wasm_runtime(
     let includes: Vec<&Path> = include_dirs.iter().map(PathBuf::as_path).collect();
     let bc = dir.join("dream_rt.bc");
     let sigs = dir.join("dream_rt.sigs");
-    let objs: Vec<PathBuf> = units
-        .iter()
-        .enumerate()
-        .filter(|(_, u)| is_asm(&u.path))
-        .map(|(i, _)| dir.join(format!("{i}.o")))
-        .collect();
+    let objs = asm_objs(dir, &units);
     let stamp = dir.join(".stamp");
     let mut inputs: Vec<PathBuf> = units.iter().map(|u| u.path.clone()).collect();
     for d in include_dirs
@@ -118,6 +167,7 @@ pub fn wasm_runtime(
     }
     inputs.push(clang.clone());
     inputs.push(tools.tool("llvm-link"));
+    inputs.push(sysroot.join("include/wasm32-wasip1/string.h"));
     let fingerprint = rt_stamp::fingerprint(inputs);
     if bc.exists()
         && sigs.exists()
@@ -133,6 +183,7 @@ pub fn wasm_runtime(
         let out = dir.join(format!("{i}.{}", if asm { "o" } else { "bc" }));
         let mut cmd = unit_command(
             &clang,
+            &sysroot,
             &u.path,
             &includes,
             &u.include_dirs,
@@ -154,7 +205,7 @@ pub fn wasm_runtime(
     run_captured(&mut link, "llvm-link (wasm32 runtime)")?;
 
     let check = |src: &Path| {
-        let mut cmd = unit_command(&clang, src, &includes, &[], &[], threads, opt, "anchor.c");
+        let mut cmd = unit_command(&clang, &sysroot, src, &includes, &[], &[], threads, opt, "anchor.c");
         cmd.args(["-fsyntax-only", "-w", "-ferror-limit=0"])
             .arg(src)
             .output()
@@ -162,32 +213,16 @@ pub fn wasm_runtime(
             .map_err(|e| e.to_string())
     };
     let compile = |src: &Path, out: &Path| {
-        let mut cmd = unit_command(&clang, src, &includes, &[], &[], threads, opt, "anchor.c");
+        let mut cmd = unit_command(&clang, &sysroot, src, &includes, &[], &[], threads, opt, "anchor.c");
         run_captured(cmd.arg("-w").arg("-o").arg(out).arg(src), "clang (anchor)")
     };
-    let anchor = anchor_unit(&dir, "dream_rt_wasm32.h", &check, &compile)?;
+    let anchor = anchor_unit(dir, "dream_rt_wasm32.h", &check, &compile)?;
     let merged = dir.join("sigs.bc");
     let mut link = tools.command("llvm-link");
     link.arg(&bc).arg(&anchor).arg("-o").arg(&merged);
     run_captured(&mut link, "llvm-link (wasm32 runtime signatures)")?;
-    let out = tools
-        .command("llvm-dis")
-        .arg(&merged)
-        .arg("-o")
-        .arg("-")
-        .output()
+    std::fs::write(&sigs, reduce_disassembly(&disassemble(tools, &merged)?))
         .map_err(|e| e.to_string())?;
-    if !out.status.success() {
-        return Err(format!(
-            "llvm-dis failed: {}",
-            String::from_utf8_lossy(&out.stderr)
-        ));
-    }
-    std::fs::write(
-        &sigs,
-        reduce_disassembly(&String::from_utf8_lossy(&out.stdout)),
-    )
-    .map_err(|e| e.to_string())?;
     for p in parts.iter().chain([&anchor, &merged]) {
         let _ = std::fs::remove_file(p);
     }
@@ -249,12 +284,12 @@ pub fn link_wasm(
     let _ = std::fs::remove_file(&optimized);
     r?;
 
-    let clang = wasi_clang().ok_or_else(|| {
-        "wasi-sdk clang not found; run `dreamer toolchain install wasi-sdk`".to_string()
-    })?;
-    let mut cmd = wasm_ld_command(&wasm_ld_for(&clang)?, threads, opt);
-    cmd.arg("-o").arg(wasm_path).arg(&obj).args(&rt.objs);
-    cmd.arg(compiler_rt_builtins(&clang, threads)?);
+    // compiler-rt supplies builtins such as `__multi3` (a 64-bit `__builtin_mul_overflow`);
+    // `--allow-undefined` would otherwise turn a missing one into a host import that fails at
+    // instantiation. As an archive after the objects, only referenced members are linked.
+    let builtins = clang_rt(tools, ClangRt::WasmBuiltins { threads })?;
+    let mut cmd = wasm_ld_command(&tools.optional_tool("wasm-ld")?, threads, opt);
+    cmd.arg("-o").arg(wasm_path).arg(&obj).args(&rt.objs).arg(builtins);
     let r = run_captured(&mut cmd, "wasm-ld");
     let _ = std::fs::remove_file(&obj);
     r

@@ -1,5 +1,5 @@
-//! The wasi-sdk side of wasm32 builds: clang for the guest runtime's bitcode and `wasm-ld` for
-//! the final link.
+//! Tool invocations for wasm32 builds: clang for the guest runtime's bitcode (Dream's own
+//! freestanding headers, no WASI sysroot) and `wasm-ld` for the final link.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -37,64 +37,10 @@ pub(crate) fn run_captured(cmd: &mut Command, what: &str) -> Result<(), String> 
 
 /// Appends a concrete fix under common toolchain failure patterns.
 pub fn hint_for_failure(msg: &str) -> Option<&'static str> {
-    if msg.contains("not found") && msg.contains("clang") {
-        Some("run `dreamer toolchain install wasi-sdk` to get the WebAssembly toolchain")
-    } else if msg.contains("undefined symbol") || msg.contains("undefined reference") {
-        Some(
-            "your installed toolchain may be out of date — run `dreamer toolchain install` \
-             to refresh it",
-        )
+    if msg.contains("undefined symbol") || msg.contains("undefined reference") {
+        Some("your Dream install may be incomplete or out of date — reinstall it")
     } else {
         None
-    }
-}
-
-pub fn wasi_clang() -> Option<PathBuf> {
-    if let Ok(sdk) = std::env::var("WASI_SDK_PATH") {
-        if !sdk.is_empty() {
-            let clang = PathBuf::from(sdk).join("bin").join(clang_name());
-            if clang.is_file() && clang.parent().is_some_and(is_wasi_bin_dir) {
-                return Some(clang);
-            }
-        }
-    }
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    let root = PathBuf::from(home).join(".dream").join("toolchains");
-    let mut dirs: Vec<PathBuf> = Vec::new();
-    if let Ok(rd) = std::fs::read_dir(&root) {
-        for e in rd.flatten() {
-            let p = e.path();
-            if p.is_dir()
-                && p.file_name()
-                    .and_then(|s| s.to_str())
-                    .is_some_and(|n| n.starts_with("wasi-sdk-"))
-            {
-                dirs.push(p);
-            }
-        }
-    }
-    dirs.sort();
-    dirs.into_iter()
-        .rev()
-        .map(|d| d.join("bin").join(clang_name()))
-        .find(|p| p.is_file() && p.parent().is_some_and(is_wasi_bin_dir))
-}
-
-fn is_wasi_bin_dir(dir: &Path) -> bool {
-    dir.join(if cfg!(windows) {
-        "wasm-ld.exe"
-    } else {
-        "wasm-ld"
-    })
-    .is_file()
-        && dir.join("clang.cfg").is_file()
-}
-
-fn clang_name() -> &'static str {
-    if cfg!(windows) {
-        "clang.exe"
-    } else {
-        "clang"
     }
 }
 
@@ -135,23 +81,6 @@ pub(crate) fn wasm_ld_command(wasm_ld: &Path, threads: bool, opt: OptLevel) -> C
     cmd
 }
 
-/// `wasm-ld` next to the wasi-sdk `clang`.
-pub(crate) fn wasm_ld_for(clang: &Path) -> Result<PathBuf, String> {
-    let wasm_ld = clang
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join(if cfg!(windows) {
-            "wasm-ld.exe"
-        } else {
-            "wasm-ld"
-        });
-    if wasm_ld.is_file() {
-        Ok(wasm_ld)
-    } else {
-        Err(format!("wasm-ld missing next to {}", clang.display()))
-    }
-}
-
 /// The runtime include directories every guest unit compiles against.
 pub(crate) fn guest_include_dirs() -> Vec<PathBuf> {
     let inc_native = dream_mir::runtime::native_runtime_include_dir();
@@ -163,36 +92,13 @@ pub(crate) fn guest_include_dirs() -> Vec<PathBuf> {
     ]
 }
 
-/// wasi-sdk's compiler-rt archive (e.g. `__multi3`, which clang calls for a 64-bit
-/// `__builtin_mul_overflow`). `--allow-undefined` would otherwise turn a missing builtin into a
-/// host import that fails at instantiation. As an archive after the objects, only referenced
-/// members are linked.
-pub(crate) fn compiler_rt_builtins(clang: &Path, threads: bool) -> Result<PathBuf, String> {
-    let target = if threads {
-        "--target=wasm32-wasip1-threads"
-    } else {
-        "--target=wasm32-wasip1"
-    };
-    let out = Command::new(clang)
-        .args([target, "-print-libgcc-file-name"])
-        .output()
-        .map_err(|e| format!("failed to query {}: {e}", clang.display()))?;
-    let path = PathBuf::from(String::from_utf8_lossy(&out.stdout).trim());
-    if path.is_file() {
-        Ok(path)
-    } else {
-        Err(format!(
-            "wasi-sdk compiler-rt builtins not found at {}; reinstall with `dreamer toolchain install wasi-sdk`",
-            path.display()
-        ))
-    }
-}
-
-/// The wasi-sdk clang invocation for one guest runtime unit (output and input not yet added). C
-/// units become LLVM bitcode for the whole-program link; assembly units stay objects.
+/// The clang invocation for one guest runtime unit (output and input not yet added). C
+/// units become LLVM bitcode for the whole-program link; assembly units stay objects. `sysroot`
+/// supplies the libc headers (`string.h`, …) the guest libc implements itself.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn unit_command(
     clang: &Path,
+    sysroot: &Path,
     src: &Path,
     includes: &[&Path],
     extra_includes: &[PathBuf],
@@ -203,7 +109,8 @@ pub(crate) fn unit_command(
 ) -> Command {
     let is_asm = src.extension().and_then(|e| e.to_str()) == Some("s");
     let mut cmd = Command::new(clang);
-    cmd.args(["--target=wasm32-wasip1", "-nostdlib", "-c", "-g0"]);
+    cmd.args(["--target=wasm32-wasip1", "-nostdlib", "-c", "-g0"])
+        .arg(format!("--sysroot={}", sysroot.display()));
     if is_asm {
         cmd.arg("-Wno-unused-command-line-argument");
     } else {

@@ -1,16 +1,21 @@
-//! The C runtime as LLVM bitcode, built by the pinned clang and cached like `libdream_rt.a`.
+//! The C runtime as LLVM bitcode. A release reads it prebuilt from `lib/dream/rt/native`; a
+//! development build compiles it with the dev LLVM's clang into the same layout under the
+//! native runtime cache.
 //!
 //! `dream_rt.bc` holds the core units, `llvm_inline.c` (external definitions of the header's
 //! always-inline helpers) and each needed module's own wrapper (`regex.c`), so `opt` sees every
 //! runtime function the program calls. Vendored libraries (PCRE2) only call libc and stay in a
 //! native archive. `dream_rt.sigs` is the reduced disassembly the backend types runtime calls
 //! from.
+//!
+//! The bitcode carries no `target-cpu`/`target-features`: the machine that built it is not the
+//! one that runs it, so the program's `-mcpu` (see `build::cpu_args`) decides for both.
 
+use super::bundle::{prebuilt_file, rt_dir, RtDir};
 use super::tools::LlvmTools;
 use crate::driver::rt_stamp;
 use crate::driver::wasi::run_captured;
 use crate::driver::wasm_opt::OptLevel;
-use crate::execution::native::cc::native_rt_cache_root;
 use dream_mir::runtime::modules::runtime_c_dir;
 use dream_mir::runtime::{
     native_runtime_include_dir, runtime_abi_include_dir, RuntimeNeed, RUNTIME_MODULES,
@@ -27,6 +32,8 @@ pub struct LlvmRuntime {
     pub archive: Option<PathBuf>,
 }
 
+const VENDOR_ARCHIVE: &str = "libdream_rt_vendor.a";
+
 struct Unit {
     path: PathBuf,
     defines: Vec<String>,
@@ -38,14 +45,14 @@ fn clang_level_flags(opt: OptLevel) -> Vec<&'static str> {
         OptLevel::O0 => vec!["-O0"],
         OptLevel::O1 => vec!["-O1"],
         OptLevel::O2 => vec!["-O2"],
-        OptLevel::O3 | OptLevel::O4 => vec!["-O3", "-march=native"],
+        OptLevel::O3 | OptLevel::O4 => vec!["-O3"],
         OptLevel::Size => vec!["-Os"],
         OptLevel::SizeAggressive => vec!["-Oz"],
     }
 }
 
 /// `-isysroot` for the pinned clang on macOS, which (unlike Apple's) doesn't find the SDK itself.
-pub(crate) fn sysroot_args() -> &'static [String] {
+fn sysroot_args() -> &'static [String] {
     static ARGS: OnceLock<Vec<String>> = OnceLock::new();
     ARGS.get_or_init(|| {
         if !cfg!(target_os = "macos") {
@@ -63,6 +70,23 @@ pub(crate) fn sysroot_args() -> &'static [String] {
         sdk.map(|s| vec!["-isysroot".to_string(), s])
             .unwrap_or_default()
     })
+}
+
+/// The target of the running `dream`, not clang's default: a cross-built release (macOS x86_64 on
+/// an arm64 runner) packs its runtime by running its own `dream` with the runner's clang. macOS
+/// pins the oldest release the Rust toolchain supports so binaries run beyond the build machine's.
+fn native_target_args() -> &'static [&'static str] {
+    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        &["--target=arm64-apple-macosx11.0"]
+    } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+        &["--target=x86_64-apple-macosx11.0"]
+    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        &["--target=x86_64-unknown-linux-gnu"]
+    } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+        &["--target=aarch64-unknown-linux-gnu"]
+    } else {
+        &[]
+    }
 }
 
 fn bitcode_units(need: RuntimeNeed) -> (Vec<Unit>, Vec<Unit>) {
@@ -112,9 +136,10 @@ fn bitcode_units(need: RuntimeNeed) -> (Vec<Unit>, Vec<Unit>) {
     (bc, vendored)
 }
 
-fn clang_unit(tools: &LlvmTools, u: &Unit, flags: &[&str], out: &Path) -> Result<(), String> {
-    let mut cmd = tools.command("clang");
-    cmd.args(sysroot_args())
+fn clang_unit(clang: &Path, u: &Unit, flags: &[&str], out: &Path) -> Result<(), String> {
+    let mut cmd = Command::new(clang);
+    cmd.args(native_target_args())
+        .args(sysroot_args())
         .args(["-std=gnu11", "-pthread", "-w", "-c"])
         .args(flags);
     for inc in &u.include_dirs {
@@ -132,31 +157,46 @@ pub fn llvm_runtime(
     opt: OptLevel,
     need: RuntimeNeed,
     debug: bool,
-) -> Result<LlvmRuntime, Box<dyn std::error::Error>> {
-    static LOCK: Mutex<()> = Mutex::new(());
+) -> Result<LlvmRuntime, String> {
     // Debug builds link the plain O0 runtime without DWARF: the whole program becomes one object,
     // and lldb's Mach-O debug map reads one compile unit per object, so runtime units would hide
     // the Dream one.
     let opt = if debug { OptLevel::O0 } else { opt };
-    let sub = opt.native_rt_subdir();
-    let dir = native_rt_cache_root()
-        .join(format!("llvm-{}", super::LLVM_VERSION))
-        .join(sub)
-        .join(format!("need_{:x}", need.bits()));
-    std::fs::create_dir_all(&dir)?;
+    match rt_dir("native", opt, need) {
+        RtDir::Prebuilt(dir) => Ok(LlvmRuntime {
+            bc: prebuilt_file(&dir, "dream_rt.bc")?,
+            sigs: prebuilt_file(&dir, "dream_rt.sigs")?,
+            archive: Some(dir.join(VENDOR_ARCHIVE)).filter(|a| a.is_file()),
+        }),
+        RtDir::Cache(dir) => build_native_runtime(tools, opt, need, &dir),
+    }
+}
+
+/// Compiles the native runtime for `opt`/`need` into `dir`, unless its stamp says it is current.
+pub(super) fn build_native_runtime(
+    tools: &LlvmTools,
+    opt: OptLevel,
+    need: RuntimeNeed,
+    dir: &Path,
+) -> Result<LlvmRuntime, String> {
+    static LOCK: Mutex<()> = Mutex::new(());
+    let clang = tools.clang()?;
+    let io = |e: std::io::Error| format!("{}: {e}", dir.display());
+    std::fs::create_dir_all(dir).map_err(io)?;
     let lock_file = OpenOptions::new()
         .create(true)
         .truncate(false)
         .read(true)
         .write(true)
-        .open(dir.join(".lock"))?;
-    lock_file.lock()?;
+        .open(dir.join(".lock"))
+        .map_err(io)?;
+    lock_file.lock().map_err(io)?;
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
     let (bc_units, vendored) = bitcode_units(need);
     let bc = dir.join("dream_rt.bc");
     let sigs = dir.join("dream_rt.sigs");
-    let archive = (!vendored.is_empty()).then(|| dir.join("libdream_rt_vendor.a"));
+    let archive = (!vendored.is_empty()).then(|| dir.join(VENDOR_ARCHIVE));
     let stamp = dir.join(".stamp");
     let level = clang_level_flags(opt);
     let headers: Vec<PathBuf> = [native_runtime_include_dir(), runtime_abi_include_dir()]
@@ -171,11 +211,12 @@ pub fn llvm_runtime(
         .map(|u| u.path.clone())
         .chain(headers)
         .collect();
-    inputs.push(tools.tool("clang"));
+    inputs.push(clang.clone());
     let fingerprint = format!(
-        "{}{}\n{}\n",
+        "{}{}\n{}\n{}\n",
         rt_stamp::fingerprint(inputs),
         level.join(" "),
+        native_target_args().join(" "),
         sysroot_args().join(" ")
     );
     let fresh = bc.exists()
@@ -194,37 +235,27 @@ pub fn llvm_runtime(
     let mut parts = Vec::new();
     for (i, u) in bc_units.iter().enumerate() {
         let out = dir.join(format!("{i}.bc"));
-        clang_unit(tools, u, &bc_flags, &out)?;
+        clang_unit(&clang, u, &bc_flags, &out)?;
         parts.push(out);
     }
     let mut link = tools.command("llvm-link");
     link.args(&parts).arg("-o").arg(&bc);
     run_captured(&mut link, "llvm-link (runtime)")?;
+    strip_target_cpu(tools, &bc)?;
 
-    let anchor = build_anchor(tools, &dir, &bc_flags)?;
+    let anchor = build_anchor(&clang, dir, &bc_flags)?;
     let merged = dir.join("sigs.bc");
     let mut link = tools.command("llvm-link");
     link.arg(&bc).arg(&anchor).arg("-o").arg(&merged);
     run_captured(&mut link, "llvm-link (runtime signatures)")?;
-    let out = tools
-        .command("llvm-dis")
-        .arg(&merged)
-        .arg("-o")
-        .arg("-")
-        .output()?;
-    if !out.status.success() {
-        return Err(format!("llvm-dis failed: {}", String::from_utf8_lossy(&out.stderr)).into());
-    }
-    std::fs::write(
-        &sigs,
-        reduce_disassembly(&String::from_utf8_lossy(&out.stdout)),
-    )?;
+    let merged_ll = strip_cpu_attrs(&disassemble(tools, &merged)?);
+    std::fs::write(&sigs, reduce_disassembly(&merged_ll)).map_err(io)?;
 
     if let Some(archive) = &archive {
         let mut objs = Vec::new();
         for (i, u) in vendored.iter().enumerate() {
             let obj = dir.join(format!("v{i}.o"));
-            clang_unit(tools, u, &level, &obj)?;
+            clang_unit(&clang, u, &level, &obj)?;
             objs.push(obj);
         }
         let _ = std::fs::remove_file(archive);
@@ -238,15 +269,69 @@ pub fn llvm_runtime(
     for p in parts.iter().chain([&anchor, &merged]) {
         let _ = std::fs::remove_file(p);
     }
-    std::fs::write(&stamp, fingerprint)?;
+    std::fs::write(&stamp, fingerprint).map_err(io)?;
     Ok(LlvmRuntime { bc, sigs, archive })
 }
 
-fn build_anchor(tools: &LlvmTools, dir: &Path, flags: &[&str]) -> Result<PathBuf, String> {
+pub(super) fn disassemble(tools: &LlvmTools, bc: &Path) -> Result<String, String> {
+    let out = tools
+        .command("llvm-dis")
+        .arg(bc)
+        .arg("-o")
+        .arg("-")
+        .output()
+        .map_err(|e| format!("llvm-dis: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "llvm-dis failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Rewrites `bc` without the CPU clang tuned it for (textual IR round-trips through llvm-link).
+fn strip_target_cpu(tools: &LlvmTools, bc: &Path) -> Result<(), String> {
+    let ll = bc.with_extension("ll");
+    std::fs::write(&ll, strip_cpu_attrs(&disassemble(tools, bc)?))
+        .map_err(|e| format!("{}: {e}", ll.display()))?;
+    let mut link = tools.command("llvm-link");
+    link.arg(&ll).arg("-o").arg(bc);
+    let r = run_captured(&mut link, "llvm-link (runtime cpu strip)");
+    let _ = std::fs::remove_file(&ll);
+    r
+}
+
+const CPU_ATTRS: [&str; 3] = ["target-cpu", "target-features", "tune-cpu"];
+
+fn strip_cpu_attrs(ll: &str) -> String {
+    let mut out = String::with_capacity(ll.len());
+    for line in ll.lines() {
+        if line.starts_with("attributes #") {
+            let mut line = line.to_string();
+            for key in CPU_ATTRS {
+                let pat = format!(" \"{key}\"=\"");
+                if let Some(at) = line.find(&pat) {
+                    let value = at + pat.len();
+                    if let Some(len) = line[value..].find('"') {
+                        line.replace_range(at..value + len + 1, "");
+                    }
+                }
+            }
+            out.push_str(&line);
+        } else {
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    out
+}
+
+fn build_anchor(clang: &Path, dir: &Path, flags: &[&str]) -> Result<PathBuf, String> {
     let inc = format!("-I{}", native_runtime_include_dir().display());
     let check = |src: &Path| {
-        tools
-            .command("clang")
+        Command::new(clang)
+            .args(native_target_args())
             .args(sysroot_args())
             .args([
                 "-std=gnu11",
@@ -267,7 +352,7 @@ fn build_anchor(tools: &LlvmTools, dir: &Path, flags: &[&str]) -> Result<PathBuf
             defines: vec!["DREAM_NATIVE".into()],
             include_dirs: vec![native_runtime_include_dir()],
         };
-        clang_unit(tools, &unit, flags, out)
+        clang_unit(clang, &unit, flags, out)
     };
     anchor_unit(dir, "dream_rt_native.h", &check, &compile)
 }
@@ -348,6 +433,19 @@ mod tests {
         assert_eq!(sigs.function("dream_retain").fty.params, vec![Ty::I64]);
         assert_eq!(sigs.function("dream_malloc").fty.ret, Ty::I64);
         assert!(sigs.globals["g0"].thread_local);
-        assert!(sigs.target_attrs.iter().any(|(k, _)| k == "target-cpu"));
+        assert!(sigs.target_attrs.iter().all(|(k, _)| !CPU_ATTRS.contains(&k.as_str())));
+    }
+
+    #[test]
+    fn cpu_attrs_are_stripped_from_attribute_groups_only() {
+        let ll = "define void @f() #0 {\n\
+                  attributes #0 = { nounwind \"frame-pointer\"=\"non-leaf\" \"target-cpu\"=\"apple-m1\" \"target-features\"=\"+neon,+v8a\" \"tune-cpu\"=\"generic\" }\n\
+                  @s = constant [11 x i8] c\"target-cpu\\00\"\n";
+        assert_eq!(
+            strip_cpu_attrs(ll),
+            "define void @f() #0 {\n\
+             attributes #0 = { nounwind \"frame-pointer\"=\"non-leaf\" }\n\
+             @s = constant [11 x i8] c\"target-cpu\\00\"\n"
+        );
     }
 }

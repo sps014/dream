@@ -7,7 +7,6 @@
 #   $env:DREAM_HOME     install prefix (default: $HOME\.dream). Re-runs replace
 #                       bin/, lib/, and leftover files; toolchains/ (Zig) is kept.
 #   $env:DREAM_SKIP_CC=1 skip auto `dreamer toolchain install cc` when no compiler is found
-#   $env:DREAM_SKIP_LLVM=1 skip auto `dreamer toolchain install llvm` (the pinned code generator)
 
 $ErrorActionPreference = "Stop"
 $Repo = if ($env:DREAM_REPO) { $env:DREAM_REPO } else { "sps014/dream" }
@@ -116,6 +115,19 @@ try {
             if (Test-Path $destC) { Remove-Item -Recurse -Force $destC }
             Copy-Item $_.FullName -Destination $destC -Recurse -Force
         }
+    # The bundled minimal LLVM and prebuilt runtime; dream finds them at ..\lib\dream from bin\.
+    $bundle = Get-ChildItem -Path (Join-Path $Work "out") -Recurse -Directory |
+        Where-Object { $_.FullName -match '[\\/]lib[\\/]dream$' } |
+        Select-Object -First 1
+    if (-not $bundle -or -not (Test-Path (Join-Path $bundle.FullName "llvm\bin")) -or
+        -not (Test-Path (Join-Path $bundle.FullName "rt"))) {
+        throw "archive did not contain lib\dream (the bundled LLVM and runtime)"
+    }
+    $libDir = Join-Path $Prefix "lib"
+    New-Item -ItemType Directory -Force -Path $libDir | Out-Null
+    $destBundle = Join-Path $libDir "dream"
+    if (Test-Path $destBundle) { Remove-Item -Recurse -Force $destBundle }
+    Copy-Item $bundle.FullName -Destination $destBundle -Recurse -Force
 
     $Ext = if ($Target -like "windows-*") { ".exe" } else { "" }
     $dreamBin = Join-Path $BinDir "dream$Ext"
@@ -195,31 +207,6 @@ DREAM_BIN=$BinDir\dream$Ext
         }
     }
 
-    $LlvmNote = $null
-    $tc = Join-Path $Prefix "toolchains"
-    $hasLlvm = $env:DREAM_LLVM -or ((Test-Path $tc) -and (Get-ChildItem -Path $tc -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -like "llvm-*" -and (Test-Path (Join-Path $_.FullName "bin\opt.exe")) }))
-    if ($env:DREAM_SKIP_LLVM -eq "1") {
-        $LlvmNote = "Skipped LLVM install (DREAM_SKIP_LLVM=1)"
-    } elseif ($hasLlvm) {
-        $LlvmNote = "LLVM already found; skipped dreamer toolchain install llvm"
-    } else {
-        $dreamer = Join-Path $BinDir "dreamer$Ext"
-        $prevEap = $ErrorActionPreference
-        $ErrorActionPreference = "Continue"
-        try {
-            & $dreamer toolchain install llvm
-            if ($LASTEXITCODE -eq 0) {
-                $LlvmNote = "Installed LLVM via dreamer toolchain install llvm"
-            } else {
-                $LlvmNote = "warning: could not install LLVM; later run: dreamer toolchain install llvm"
-            }
-        } finally {
-            $ErrorActionPreference = $prevEap
-        }
-    }
-    Write-Host $LlvmNote
-
     Write-Host ""
     Write-Host "Installed:"
     Write-Host "  $BinDir\dream$Ext"
@@ -228,7 +215,6 @@ DREAM_BIN=$BinDir\dream$Ext
     if ($CcNote) {
         Write-Host "  $CcNote"
     }
-    Write-Host "  $LlvmNote"
     Write-Host ""
     Write-Host "Open a new terminal, then: dreamer init hello"
 } finally {

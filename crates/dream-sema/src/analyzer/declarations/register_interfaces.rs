@@ -186,10 +186,7 @@ impl<'a> Analyzer<'a> {
             return Some(key);
         }
 
-        let template = match self.interface_decls.get(base_name) {
-            Some(t) => *t,
-            None => return None,
-        };
+        let template = *self.interface_decls.get(base_name)?;
         let params = template.generic_parameters.as_deref().unwrap_or(&[]);
         let bindings = if params.is_empty() {
             Default::default()

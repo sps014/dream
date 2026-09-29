@@ -296,9 +296,16 @@ pub fn compile_llvm(
                 .into(),
         );
     };
-    lcmd.arg(format!("-L{}", dir.display()));
-    lcmd.arg("-ldream");
-    lcmd.arg(format!("-Wl,-rpath,{}", dir.display()));
+    if cfg!(windows) {
+        // `-ldream` resolves to the DLL itself; MSVC links against its import library. POSIX
+        // names (`read`, `getcwd`, …) the runtime calls live in oldnames.lib.
+        lcmd.arg(dir.join("dream.dll.lib"));
+        lcmd.arg("-loldnames");
+    } else {
+        lcmd.arg(format!("-L{}", dir.display()));
+        lcmd.arg("-ldream");
+        lcmd.arg(format!("-Wl,-rpath,{}", dir.display()));
+    }
     let c_libs = read_c_libs_from_abi(&abi_path);
     if !c_libs.is_empty() {
         let roots = search_roots_for_artifact(ll_path);

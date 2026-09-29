@@ -14,12 +14,23 @@
 #endif
 
 #ifdef _WIN32
+/* Full <windows.h> pulls in COM headers whose `#pragma comment(lib, "uuid.lib")` the Zig linker can't satisfy. */
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include <conio.h>
 #include <direct.h>
 #include <io.h>
 #include <psapi.h>
 #include <sys/stat.h>
+typedef intptr_t ssize_t;
+/* MSVC's off_t/lseek are 32-bit; use the 64-bit variants for file handles. */
+typedef __int64 dream_off_t;
+#define dream_lseek _lseeki64
 #else
 #include <dirent.h>
 #include <sys/resource.h>
@@ -27,13 +38,18 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <signal.h>
+typedef off_t dream_off_t;
+#define dream_lseek lseek
 #endif
 
 #include "include/dream_thread.h"
 
 __attribute__((constructor))
 static void dream_stdio_linebuf(void) {
+    /* The MSVC CRT has no line buffering and aborts on `setvbuf(..., _IOLBF, 0)`. */
+#ifndef _WIN32
     setvbuf(stdout, NULL, _IOLBF, 0);
+#endif
 }
 
 static char *dream_str_utf8(dream_ptr s) {
@@ -1071,16 +1087,16 @@ int64_t fileHandleWrite(int32_t fd, dream_ptr data) {
 }
 
 int32_t fileHandleSeek(int32_t fd, int64_t position) {
-    return lseek(fd, (off_t)position, SEEK_SET) < 0 ? -1 : 0;
+    return dream_lseek(fd, (dream_off_t)position, SEEK_SET) < 0 ? -1 : 0;
 }
 
 int64_t fileHandleTell(int32_t fd) {
-    off_t pos = lseek(fd, 0, SEEK_CUR);
+    dream_off_t pos = dream_lseek(fd, 0, SEEK_CUR);
     return pos < 0 ? -1 : (int64_t)pos;
 }
 
 int32_t fileHandleSeekEnd(int32_t fd, int64_t offset) {
-    return lseek(fd, (off_t)offset, SEEK_END) < 0 ? -1 : 0;
+    return dream_lseek(fd, (dream_off_t)offset, SEEK_END) < 0 ? -1 : 0;
 }
 
 void fileHandleClose(int32_t fd) {

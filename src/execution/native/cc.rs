@@ -22,7 +22,7 @@ impl Cc {
             Self::Program(p) => Command::new(p),
             Self::Zig(p) => {
                 let mut c = Command::new(p);
-                c.arg("cc");
+                c.arg("cc").args(zig_target_args());
                 c
             }
         }
@@ -34,7 +34,7 @@ impl Cc {
         match self {
             Self::Zig(p) => {
                 let mut c = Command::new(p);
-                c.arg("c++");
+                c.arg("c++").args(zig_target_args());
                 Ok(c)
             }
             Self::Program(_) => env_program("DREAM_CXX")
@@ -44,6 +44,17 @@ impl Cc {
                 .map(Command::new)
                 .ok_or_else(|| MISSING_CXX.to_string()),
         }
+    }
+}
+
+/// Zig defaults to the GNU ABI on Windows, but the runtime objects and `libdream` are MSVC-ABI.
+fn zig_target_args() -> &'static [&'static str] {
+    if cfg!(all(windows, target_env = "msvc", target_arch = "x86_64")) {
+        &["-target", "x86_64-windows-msvc"]
+    } else if cfg!(all(windows, target_env = "msvc", target_arch = "aarch64")) {
+        &["-target", "aarch64-windows-msvc"]
+    } else {
+        &[]
     }
 }
 

@@ -89,14 +89,9 @@ impl Workspace {
     fn from_package_dir(package_root: &Path) -> Result<Workspace> {
         let manifest = Manifest::load(&package_root.join(MANIFEST_FILE_NAME))?;
         let _ = manifest.package()?;
-        let workspace_root = Manifest::find_workspace_root(package_root).and_then(|ws| {
-            // Only attach when this package is listed as a member (or is the root package).
-            if package_is_workspace_member(&ws, package_root).unwrap_or(false) {
-                Some(ws)
-            } else {
-                None
-            }
-        });
+        // Only attach when this package is listed as a member (or is the root package).
+        let workspace_root = Manifest::find_workspace_root(package_root)
+            .filter(|ws| package_is_workspace_member(ws, package_root).unwrap_or(false));
         Ok(Workspace {
             root: package_root.to_path_buf(),
             manifest,

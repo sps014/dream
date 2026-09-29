@@ -338,7 +338,7 @@ fn apply(func: &mut MirFunction, interner: &TypeInterner, l: &NaturalLoop, plan:
         .enumerate()
         .map(|(k, b)| (b.0 as usize, base + k))
         .collect();
-    for (&old, _) in map.iter() {
+    for &old in map.keys() {
         let mut block = func.blocks[old].clone();
         remap_successors(&mut block.terminator, &map);
         for (si, stmt) in block.stmts.iter_mut().enumerate() {

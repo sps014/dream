@@ -2,7 +2,9 @@
 //! side of the runtime ABI).
 
 pub mod abi;
+pub mod app_icon;
 pub(crate) mod cc;
+pub mod desktop;
 pub(crate) mod pgo;
 pub mod webview;
 
@@ -38,7 +40,7 @@ pub fn compile_and_capture_ex(
     stdin: Option<&[u8]>,
     timeout_secs: u64,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let bin = compile_llvm(Path::new(ll_path), None, opt, false, &Pgo::Off)?;
+    let bin = compile_llvm(Path::new(ll_path), None, opt, false, &Pgo::Off, None)?;
     capture_native_bin(&bin, ll_path, extra_env, extra_args, stdin, timeout_secs)
 }
 

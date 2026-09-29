@@ -304,6 +304,7 @@ impl<'a> Analyzer<'a> {
                 };
                 self.push_stmt(HStmt::Return(Some(value)));
             }
+            None if self.take_void_emitted() => self.push_stmt(HStmt::Return(None)),
             None => self.hir.ok = false,
         }
     }
@@ -325,6 +326,7 @@ impl<'a> Analyzer<'a> {
                 self.push_stmt(HStmt::Expr(value));
                 self.hir_flush_ref_writebacks();
             }
+            None if self.take_void_emitted() => self.hir_flush_ref_writebacks(),
             None => self.hir.ok = false,
         }
     }

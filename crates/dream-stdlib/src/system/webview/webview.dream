@@ -52,6 +52,22 @@ internal class WebViewServeBytesAsyncEntry {
     }
 }
 
+internal class WebViewDropEntry {
+    internal fire: fun(List<string>): void;
+
+    internal constructor(fire: fun(List<string>): void) {
+        this.fire = fire;
+    }
+}
+
+internal class WebViewCloseEntry {
+    internal fire: fun(): bool;
+
+    internal constructor(fire: fun(): bool) {
+        this.fire = fire;
+    }
+}
+
 // Generic method bodies cannot emit nested lambdas into HIR; wrap the typed handler
 // so `on`/`serve` pass a method-group `fire` instead of an inline closure.
 internal class WebViewJsonOn<T> {
@@ -93,6 +109,10 @@ public class WebView {
     _on_bytes: List<WebViewOnBytesEntry>;
     _serve_bytes: List<WebViewServeBytesEntry>;
     _serve_bytes_async: List<WebViewServeBytesAsyncEntry>;
+    _on_drop: List<WebViewDropEntry>;
+    // Keyed by the host's window event name (`resized`, `focused`, ...).
+    _on_window: List<WebViewOnEntry>;
+    _on_close: List<WebViewCloseEntry>;
 
     constructor(id: int) {
         this.id = id;
@@ -101,6 +121,9 @@ public class WebView {
         this._on_bytes = List<WebViewOnBytesEntry>();
         this._serve_bytes = List<WebViewServeBytesEntry>();
         this._serve_bytes_async = List<WebViewServeBytesAsyncEntry>();
+        this._on_drop = List<WebViewDropEntry>();
+        this._on_window = List<WebViewOnEntry>();
+        this._on_close = List<WebViewCloseEntry>();
     }
 
     @native
@@ -122,10 +145,6 @@ public class WebView {
     @native
     @runtime("webviewClose")
     static extern fun host_close(id: int): void;
-
-    @native
-    @runtime("webviewCloseRequested")
-    static extern fun host_close_requested(id: int): bool;
 
     @native
     @runtime("webviewTick")
@@ -158,6 +177,282 @@ public class WebView {
     @native
     @runtime("webviewEval")
     static extern async fun host_eval(id: int, borrow js: string): char[];
+
+    // Window property op codes (see host `webview/window.rs`).
+    @native
+    @runtime("webviewGetWindow")
+    static extern fun host_get_window(id: int, prop: int): int;
+
+    @native
+    @runtime("webviewWindowOp")
+    static extern fun host_window_op(id: int, prop: int, a: int, b: int): int;
+
+    @native
+    @runtime("webviewGetString")
+    static extern fun host_get_string(id: int, prop: int): char[];
+
+    @native
+    @runtime("webviewSetString")
+    static extern fun host_set_string(id: int, prop: int, borrow value: string): int;
+
+    fun get_prop(prop: int): int {
+        return WebView.host_get_window(this.id, prop);
+    }
+
+    fun set_prop(prop: int, value: int): void {
+        WebView.host_window_op(this.id, prop, value, 0);
+    }
+
+    fun get_flag(prop: int): bool {
+        return WebView.host_get_window(this.id, prop) != 0;
+    }
+
+    fun set_flag(prop: int, value: bool): void {
+        let v = 0;
+        if value {
+            v = 1;
+        }
+        WebView.host_window_op(this.id, prop, v, 0);
+    }
+
+    fun get_text(prop: int): string {
+        let reader = WebViewWireReader(WebView.host_get_string(this.id, prop));
+        return Encoding.utf8_decode(reader.read_remaining_bytes());
+    }
+
+    // Pass to `FileDialog.parent` / `MessageDialog.parent` to attach a dialog to this window.
+    @native
+    public get window_id(): int {
+        return this.id;
+    }
+
+    @native
+    public get title(): string {
+        return this.get_text(0);
+    }
+
+    @native
+    public set title(value: string) {
+        WebView.host_set_string(this.id, 0, value);
+    }
+
+    // PNG path of the runtime icon; `""` while the compiled-in `[package].icon` is in use. An
+    // unreadable file is reported on stderr and the current icon stays.
+    @native
+    public get icon(): string {
+        return this.get_text(1);
+    }
+
+    @native
+    public set icon(path: string) {
+        WebView.host_set_string(this.id, 1, path);
+    }
+
+    // Inner size in logical pixels.
+    @native
+    public get width(): int {
+        return this.get_prop(0);
+    }
+
+    @native
+    public set width(value: int) {
+        this.set_prop(0, value);
+    }
+
+    @native
+    public get height(): int {
+        return this.get_prop(1);
+    }
+
+    @native
+    public set height(value: int) {
+        this.set_prop(1, value);
+    }
+
+    // Size limits in logical pixels; `0` means no limit.
+    @native
+    public get min_width(): int {
+        return this.get_prop(2);
+    }
+
+    @native
+    public set min_width(value: int) {
+        this.set_prop(2, value);
+    }
+
+    @native
+    public get min_height(): int {
+        return this.get_prop(3);
+    }
+
+    @native
+    public set min_height(value: int) {
+        this.set_prop(3, value);
+    }
+
+    @native
+    public get max_width(): int {
+        return this.get_prop(4);
+    }
+
+    @native
+    public set max_width(value: int) {
+        this.set_prop(4, value);
+    }
+
+    @native
+    public get max_height(): int {
+        return this.get_prop(5);
+    }
+
+    @native
+    public set max_height(value: int) {
+        this.set_prop(5, value);
+    }
+
+    // Outer position of the window on the desktop, in logical pixels.
+    @native
+    public get x(): int {
+        return this.get_prop(6);
+    }
+
+    @native
+    public set x(value: int) {
+        this.set_prop(6, value);
+    }
+
+    @native
+    public get y(): int {
+        return this.get_prop(7);
+    }
+
+    @native
+    public set y(value: int) {
+        this.set_prop(7, value);
+    }
+
+    @native
+    public get resizable(): bool {
+        return this.get_flag(8);
+    }
+
+    @native
+    public set resizable(value: bool) {
+        this.set_flag(8, value);
+    }
+
+    // Borderless fullscreen on the current monitor.
+    @native
+    public get fullscreen(): bool {
+        return this.get_flag(9);
+    }
+
+    @native
+    public set fullscreen(value: bool) {
+        this.set_flag(9, value);
+    }
+
+    @native
+    public get maximized(): bool {
+        return this.get_flag(10);
+    }
+
+    @native
+    public set maximized(value: bool) {
+        this.set_flag(10, value);
+    }
+
+    @native
+    public get minimized(): bool {
+        return this.get_flag(11);
+    }
+
+    @native
+    public set minimized(value: bool) {
+        this.set_flag(11, value);
+    }
+
+    @native
+    public get always_on_top(): bool {
+        return this.get_flag(12);
+    }
+
+    @native
+    public set always_on_top(value: bool) {
+        this.set_flag(12, value);
+    }
+
+    @native
+    public get visible(): bool {
+        return this.get_flag(13);
+    }
+
+    @native
+    public set visible(value: bool) {
+        this.set_flag(13, value);
+    }
+
+    // The web inspector for this page.
+    @native
+    public get devtools_open(): bool {
+        return this.get_flag(14);
+    }
+
+    @native
+    public set devtools_open(value: bool) {
+        this.set_flag(14, value);
+    }
+
+    // Lets page JS open native dialogs through `Dream.dialog.*`. Off by default, so remote
+    // pages loaded with `load_url` cannot open dialogs unless you opt in.
+    @native
+    public get page_dialogs(): bool {
+        return this.get_flag(15);
+    }
+
+    @native
+    public set page_dialogs(value: bool) {
+        this.set_flag(15, value);
+    }
+
+    @native
+    public get focused(): bool {
+        return this.get_flag(16);
+    }
+
+    // Physical pixels per logical pixel (2.0 on most Retina displays).
+    @native
+    public get scale_factor(): float {
+        return (float)this.get_prop(17) / 1000.0f;
+    }
+
+    @native
+    public get dark_mode(): bool {
+        return this.get_flag(18);
+    }
+
+    // Sets width and height together (one relayout).
+    @native
+    public fun resize(width: int, height: int): void {
+        WebView.host_window_op(this.id, 19, width, height);
+    }
+
+    // Centers the window on its current monitor.
+    @native
+    public fun center(): void {
+        WebView.host_window_op(this.id, 20, 0, 0);
+    }
+
+    @native
+    public fun focus(): void {
+        WebView.host_window_op(this.id, 21, 0, 0);
+    }
+
+    // Leaves fullscreen, minimized and maximized states.
+    @native
+    public fun restore(): void {
+        WebView.host_window_op(this.id, 22, 0, 0);
+    }
 
     @native
     public static fun create(title: string, width: int, height: int): Result<WebView, WebViewError> {
@@ -462,11 +757,123 @@ public class WebView {
         this._on_bytes = List<WebViewOnBytesEntry>();
         this._serve_bytes = List<WebViewServeBytesEntry>();
         this._serve_bytes_async = List<WebViewServeBytesAsyncEntry>();
+        this._on_drop = List<WebViewDropEntry>();
+        this._on_window = List<WebViewOnEntry>();
+        this._on_close = List<WebViewCloseEntry>();
+    }
+
+    // Files dropped onto the window, as absolute paths.
+    @native
+    public fun on_file_drop(handler: fun(List<string>): void): void {
+        this._on_drop.push(WebViewDropEntry(handler));
     }
 
     @native
-    public get close_requested(): bool {
-        return WebView.host_close_requested(this.id);
+    public fun on_resize(handler: fun(int, int): void): void {
+        this._on_window.push(WebViewOnEntry("resized", (body: string) => {
+            let parts = body.split('\n');
+            handler(WebView.part_int(parts, 0), WebView.part_int(parts, 1));
+        }));
+    }
+
+    @native
+    public fun on_move(handler: fun(int, int): void): void {
+        this._on_window.push(WebViewOnEntry("moved", (body: string) => {
+            let parts = body.split('\n');
+            handler(WebView.part_int(parts, 0), WebView.part_int(parts, 1));
+        }));
+    }
+
+    @native
+    public fun on_focus(handler: fun(bool): void): void {
+        this._on_window.push(WebViewOnEntry("focused", (body: string) => handler(body == "1")));
+    }
+
+    @native
+    public fun on_minimize(handler: fun(bool): void): void {
+        this._on_window.push(WebViewOnEntry("minimized", (body: string) => handler(body == "1")));
+    }
+
+    @native
+    public fun on_maximize(handler: fun(bool): void): void {
+        this._on_window.push(WebViewOnEntry("maximized", (body: string) => handler(body == "1")));
+    }
+
+    @native
+    public fun on_theme_change(handler: fun(bool): void): void {
+        this._on_window.push(WebViewOnEntry("theme", (body: string) => handler(body == "1")));
+    }
+
+    @native
+    public fun on_scale_change(handler: fun(float): void): void {
+        this._on_window.push(WebViewOnEntry("scale", (body: string) => {
+            handler(float.parse(body).unwrap_or(1.0));
+        }));
+    }
+
+    // Asked when the user closes the window; any handler returning `false` keeps it open.
+    // Without a handler the window closes straight away.
+    @native
+    public fun on_close_requested(handler: fun(): bool): void {
+        this._on_close.push(WebViewCloseEntry(handler));
+        WebView.host_window_op(this.id, 23, 1, 0);
+    }
+
+    internal static fun part_int(parts: string[], index: int): int {
+        if index >= parts.length {
+            return 0;
+        }
+        return int.parse(parts[index]).unwrap_or(0);
+    }
+
+    static fun run_drop(fire: fun(List<string>): void, paths: List<string>): void {
+        fire(paths);
+    }
+
+    static fun run_close(fire: fun(): bool): bool {
+        return fire();
+    }
+
+    fun dispatch_window(channel: string, body: string): void {
+        if channel == "close_requested" {
+            let close = true;
+            let ci = 0;
+            while ci < this._on_close.length {
+                if !WebView.run_close(this._on_close.get(ci).fire) {
+                    close = false;
+                }
+                ci = ci + 1;
+            }
+            if close {
+                WebView.host_window_op(this.id, 24, 1, 0);
+            }
+            return;
+        }
+        let hi = 0;
+        while hi < this._on_window.length {
+            let entry = this._on_window.get(hi);
+            if entry.channel == channel {
+                WebView.run_on(entry.fire, body);
+            }
+            hi = hi + 1;
+        }
+    }
+
+    fun dispatch_drop(body: string): void {
+        let paths = List<string>();
+        let parts = body.split('\n');
+        let pi = 0;
+        while pi < parts.length {
+            if !parts[pi].is_empty() {
+                paths.push(parts[pi]);
+            }
+            pi = pi + 1;
+        }
+        let hi = 0;
+        while hi < this._on_drop.length {
+            WebView.run_drop(this._on_drop.get(hi).fire, paths);
+            hi = hi + 1;
+        }
     }
 
     @native
@@ -595,6 +1002,12 @@ public class WebView {
                 if found == false {
                     WebView.host_reply_err(this.id, reply_id, "no handler for channel: " + channel);
                 }
+            }
+            if kind == 4 {
+                this.dispatch_drop(Encoding.utf8_decode(body_bytes));
+            }
+            if kind == 5 {
+                this.dispatch_window(channel, Encoding.utf8_decode(body_bytes));
             }
             i = i + 1;
         }

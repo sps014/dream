@@ -31,11 +31,6 @@ pub extern "C" fn webviewClose(id: i32) {
 }
 
 #[no_mangle]
-pub extern "C" fn webviewCloseRequested(id: i32) -> i32 {
-    i32::from(webview::close_requested(id))
-}
-
-#[no_mangle]
 pub extern "C" fn webviewTick(id: i32) -> usize {
     alloc_bytes(&webview::tick(id))
 }
@@ -68,6 +63,26 @@ pub unsafe extern "C" fn webviewEmit(id: i32, channel: usize, body: usize) {
 #[no_mangle]
 pub unsafe extern "C" fn webviewEmitBytes(id: i32, channel: usize, body: usize) {
     webview::emit_bytes(id, &read_string(channel), &read_bytes(body));
+}
+
+#[no_mangle]
+pub extern "C" fn webviewGetWindow(id: i32, prop: i32) -> i32 {
+    webview::get_window(id, prop)
+}
+
+#[no_mangle]
+pub extern "C" fn webviewWindowOp(id: i32, prop: i32, a: i32, b: i32) -> i32 {
+    webview::window_op(id, prop, a, b)
+}
+
+#[no_mangle]
+pub extern "C" fn webviewGetString(id: i32, prop: i32) -> usize {
+    alloc_bytes(webview::get_string(id, prop).as_bytes())
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn webviewSetString(id: i32, prop: i32, value: usize) -> i32 {
+    webview::set_string(id, prop, &read_string(value))
 }
 
 #[no_mangle]

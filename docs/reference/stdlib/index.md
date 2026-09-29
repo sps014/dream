@@ -34,6 +34,7 @@ The standard library ships with the compiler. Import each package you need — t
 | [Testing](testing.md) | `import system.testing;` |
 | [Process](process.md) | `import system.process;` |
 | [WebView](webview.md) | `import system.webview;` |
+| [Desktop](desktop.md) (dialogs, clipboard, open URLs) | `import system.desktop;` |
 | [Crypto](crypto.md) | `import system.crypto;` |
 
 ## I/O

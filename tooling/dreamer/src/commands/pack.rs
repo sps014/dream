@@ -1,5 +1,7 @@
-//! `dreamer pack`: compile a bin package and copy the native `.bin`.
+//! `dreamer pack`: compile a bin package and copy the native `.bin`, plus the OS bundle around it
+//! (a macOS `.app`, a Linux `.desktop` entry). The Windows `.exe` carries its icon already.
 
+use crate::app_icon;
 use crate::compile_flags::CompileFlags;
 use crate::manifest::PackageType;
 use crate::workspace::Workspace;
@@ -50,6 +52,7 @@ pub fn run(
 
     let host_triple = host_rustc_triple()?;
     let pkg_name = pkg.name.clone();
+    let icon = app_icon::resolve(&workspace)?;
     for (dream_triple, rust_triple) in &triples {
         if rust_triple.as_str() != host_triple {
             bail!(
@@ -64,14 +67,22 @@ pub fn run(
         let dest = pack_dir.join(&out_name);
         std::fs::copy(&bin_path, &dest)
             .with_context(|| format!("copy {} → {}", bin_path.display(), dest.display()))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut p = std::fs::metadata(&dest)?.permissions();
-            p.set_mode(0o755);
-            std::fs::set_permissions(&dest, p)?;
-        }
+        app_icon::make_executable(&dest)?;
         println!("packed {}", dest.display());
+        if dream_triple.starts_with("macos-") {
+            let app = app_icon::write_macos_app(
+                &pack_dir,
+                &pkg_name,
+                &pkg.version,
+                &bin_path,
+                icon.as_deref(),
+            )?;
+            println!("packed {}", app.display());
+        } else if dream_triple.starts_with("linux-") {
+            let entry =
+                app_icon::write_linux_desktop(&pack_dir, &pkg_name, &out_name, icon.as_deref())?;
+            println!("packed {}", entry.display());
+        }
     }
     Ok(())
 }

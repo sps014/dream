@@ -60,6 +60,9 @@ fn run_native(workspace: &Workspace, flags: &CompileFlags, extra_args: &[String]
     let entry = workspace.compile_root_path()?;
     let mut cmd = Command::new(&dream_bin);
     flags.apply(&mut cmd);
+    if let Some(icon) = crate::app_icon::resolve(workspace)? {
+        cmd.arg("--icon").arg(icon);
+    }
     cmd.arg("run")
         .arg("--crate-type")
         .arg("bin")

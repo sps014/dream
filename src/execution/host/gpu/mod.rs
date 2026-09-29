@@ -10,7 +10,6 @@ pub(crate) mod encoder;
 pub(crate) mod error;
 pub(crate) mod formats;
 mod gamepad;
-mod icon;
 mod input;
 pub(crate) mod profile;
 pub(crate) mod queries;
@@ -19,8 +18,6 @@ mod state;
 pub(crate) mod surface;
 pub(crate) mod textures;
 pub(crate) mod uniform_ring;
-
-pub use icon::set_packaged_app_icon;
 
 use std::path::Path;
 

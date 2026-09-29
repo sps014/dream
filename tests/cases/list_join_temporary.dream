@@ -1,0 +1,29 @@
+import system;
+import system.collections;
+
+// `join` on a temporary List<string>: the string elements' `to_string` must hand out an owned
+// reference, or freeing the temporary list double-frees its elements.
+fun make(): List<string> {
+    let out = List<string>();
+    out.push("a" + "1");
+    out.push("b" + "2");
+    return out;
+}
+
+class Box {
+    public static get items(): List<string> {
+        return make();
+    }
+}
+
+fun main(): void {
+    let i = 0;
+    while i < 3 {
+        System.println(make().join(","));
+        System.println(Box.items.join(";"));
+        i = i + 1;
+    }
+    let kept = make();
+    System.println(kept.join("+"));
+    System.println(kept.join("+"));
+}

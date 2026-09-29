@@ -132,6 +132,7 @@ nav:
         - Testing: reference/stdlib/testing.md
         - Process: reference/stdlib/process.md
         - WebView: reference/stdlib/webview.md
+        - Desktop: reference/stdlib/desktop.md
       - I/O:
         - File I/O: reference/stdlib/file.md
         - HTTP: reference/stdlib/http.md

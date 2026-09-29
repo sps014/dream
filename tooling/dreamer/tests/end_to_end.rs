@@ -367,6 +367,14 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
 
     let bin_dir = tmp.path().join("binpack");
     commands::init::run(&bin_dir, Some("binpack".to_string()), None, false).unwrap();
+    std::fs::create_dir_all(bin_dir.join("assets")).unwrap();
+    image::RgbaImage::from_pixel(256, 256, image::Rgba([30, 120, 200, 255]))
+        .save(bin_dir.join("assets/icon.png"))
+        .unwrap();
+    let manifest_path = bin_dir.join(dreamer::manifest::MANIFEST_FILE_NAME);
+    let mut manifest = Manifest::load(&manifest_path).unwrap();
+    manifest.package_mut().unwrap().icon = Some("assets/icon.png".into());
+    manifest.save(&manifest_path).unwrap();
     // Pack builds dream-runner via cargo; needs the Dream workspace (discovered from the dream bin).
     if let Err(e) = commands::pack::run(&bin_dir, &[], None, pack_flags) {
         eprintln!("pack skipped/failed (may need DREAM_REPO / full workspace): {e:#}");
@@ -382,6 +390,17 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
         "expected at least one packed binary under {}",
         pack_dir.display()
     );
+    if cfg!(target_os = "macos") {
+        let contents = pack_dir.join("binpack.app").join("Contents");
+        assert!(contents.join("MacOS").join("binpack").is_file());
+        assert!(contents.join("Resources").join("icon.icns").is_file());
+        let plist = std::fs::read_to_string(contents.join("Info.plist")).unwrap();
+        assert!(plist.contains("<string>dev.dream.binpack</string>"));
+    } else if cfg!(target_os = "linux") {
+        let entry = std::fs::read_to_string(pack_dir.join("binpack.desktop")).unwrap();
+        assert!(entry.contains("Icon=binpack"));
+        assert!(pack_dir.join("binpack.png").is_file());
+    }
 }
 
 #[test]

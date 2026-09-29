@@ -14,5 +14,7 @@ dream run ipc.dream
 
 - `hello.dream` — open a URL and wait until the window closes
 - `ipc.dream` — typed IPC counter with `ui/index.html` (path resolves from repo root or this folder)
+- `bytes.dream` — raw byte IPC (`invokeBytes` / `onBytes`)
+- `desktop.dream` — `system.desktop` dialogs, clipboard and `Shell.open`, page dialogs, window control, file drop and window events. `dreamer run` from this folder also embeds `ui/icon.png` (`[package].icon` in `dream.toml`) as the app icon.
 
 The host waits for page navigation to commit before `load_*` returns so `emit`/`reply` are not stuck in wry's pre-load script queue.

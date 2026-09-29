@@ -1,0 +1,24 @@
+module system.desktop;
+
+// Failure from a native desktop call (clipboard write, opening a URL or path).
+public class DesktopError : Error {
+    _code: string;
+    _message: string;
+
+    public constructor(code: string, message: string) {
+        this._code = code;
+        this._message = message;
+    }
+
+    public fun message(): string {
+        return this._message;
+    }
+
+    public fun code(): string {
+        return this._code;
+    }
+
+    public static fun failed(message: string): DesktopError {
+        return DesktopError("EFAILED", message);
+    }
+}

@@ -27,8 +27,87 @@ async fun main(): void {
 | `load_url` / `load_html` / `load_file` | set the document |
 | `run().await` | event loop until closed; optional `token` |
 | `close()` | close the window |
-| `close_requested()` | true after the user asked to close |
-| `eval(js).await` | run JavaScript, get a string; optional `token` |
+| `eval(js).await` | run a JavaScript function body (`return` a value), get a string; optional `token` |
+
+## Window
+
+Window state is exposed as properties. Getters read the live window, and on a closed view they return `0` / `false` / `""` while setters do nothing. Sizes and positions are logical pixels.
+
+| Property | Type | Notes |
+| --- | --- | --- |
+| `title` | `string` | |
+| `icon` | `string` | set a PNG path to change the icon; `""` means the one compiled in from `[package].icon` |
+| `width`, `height` | `int` | inner size |
+| `min_width`, `min_height`, `max_width`, `max_height` | `int` | `0` means no limit |
+| `x`, `y` | `int` | outer position |
+| `resizable`, `fullscreen`, `maximized`, `minimized`, `always_on_top`, `visible` | `bool` | |
+| `devtools_open` | `bool` | the web inspector |
+| `page_dialogs` | `bool` | lets page JS open native dialogs, see [Page dialogs](#page-dialogs) |
+| `focused`, `scale_factor`, `dark_mode` | `bool` / `float` / `bool` | read-only |
+| `window_id` | `int` | pass as `parent` to [desktop dialogs](desktop.md) |
+
+`resize(width, height)`, `center()`, `focus()` and `restore()` (leave fullscreen, minimized and maximized) are methods.
+
+```dream
+view.title = "Player";
+view.min_width = 480;
+view.min_height = 320;
+view.center();
+view.devtools_open = true;
+```
+
+The icon for every window and the macOS Dock comes from `[package].icon` in `dream.toml` (see [dreamer](../tooling/dreamer.md)).
+
+## Window events
+
+| Handler | Called with |
+| --- | --- |
+| `on_resize((w, h) => ...)` | new inner size |
+| `on_move((x, y) => ...)` | new position |
+| `on_focus((focused) => ...)` | `bool` |
+| `on_minimize((minimized) => ...)` / `on_maximize((maximized) => ...)` | `bool` |
+| `on_scale_change((scale) => ...)` | `float`, e.g. moving to a Retina screen |
+| `on_theme_change((dark) => ...)` | `bool`, the OS switched light/dark |
+| `on_close_requested(() => bool)` | the user clicked close: return `false` to keep the window open |
+
+Without an `on_close_requested` handler the window closes as soon as the user asks. Events fire for user actions and for changes made from Dream (`view.width = 800` fires `on_resize`), and a burst of resizes while dragging arrives as the latest size only.
+
+```dream
+view.on_resize((w, h) => System.println("size " + w + "x" + h));
+view.on_close_requested(() => !has_unsaved_changes);
+```
+
+The page gets the same events: `Dream.onWindowEvent((e) => ...)` receives `{ type: "resized", width, height }`, `{ type: "focused", focused }`, `{ type: "moved", x, y }`, `{ type: "minimized", minimized }`, `{ type: "maximized", maximized }`, `{ type: "scale", scale }`, `{ type: "theme", dark }` and `{ type: "close_requested" }`.
+
+## File drop
+
+Files dragged onto the window arrive as absolute paths, in Dream and on the page:
+
+```dream
+view.on_file_drop((paths) => System.println("dropped " + paths.length));
+```
+
+```js
+Dream.onFileDrop((paths) => console.log(paths));
+```
+
+## Page dialogs
+
+After `view.page_dialogs = true`, page JS can open native dialogs attached to the window. The flag is off by default so a remote page loaded with `load_url` cannot open them; while it is off, every call rejects.
+
+```js
+const path = await Dream.dialog.openFile({
+  title: "Open image",
+  filters: [{ name: "Images", extensions: ["png", "jpg"] }],
+});
+const paths = await Dream.dialog.openFiles({ directory: "/tmp" });
+const folder = await Dream.dialog.openFolder({});
+const folders = await Dream.dialog.openFolders({});
+const target = await Dream.dialog.saveFile({ fileName: "notes.txt" });
+const choice = await Dream.dialog.message({ title: "Delete?", text: "This cannot be undone.", level: "warning", buttons: "yesNo" });
+```
+
+Pickers resolve to a path, or an array for `openFiles` / `openFolders`, and to `null` when cancelled. `message` resolves to `"ok"`, `"cancel"`, `"yes"` or `"no"`; `level` is `"info"`, `"warning"` or `"error"`, and `buttons` is `"ok"`, `"okCancel"`, `"yesNo"` or `"yesNoCancel"`. Dream-side dialogs, the clipboard and `Shell.open` live in [`system.desktop`](desktop.md).
 
 ## Typed IPC
 
@@ -77,4 +156,4 @@ view.serve_bytes_async("track", async (body) => {
 
 Handlers often capture `view` itself. `close()`, or the user closing the window, drops every registered handler so those captures are freed.
 
-Samples: [`hello.dream`](https://github.com/sps014/dream/tree/main/sample/webview/hello.dream), [`ipc.dream`](https://github.com/sps014/dream/tree/main/sample/webview/ipc.dream), [`bytes.dream`](https://github.com/sps014/dream/tree/main/sample/webview/bytes.dream).
+Samples: [`hello.dream`](https://github.com/sps014/dream/tree/main/sample/webview/hello.dream), [`ipc.dream`](https://github.com/sps014/dream/tree/main/sample/webview/ipc.dream), [`bytes.dream`](https://github.com/sps014/dream/tree/main/sample/webview/bytes.dream), [`desktop.dream`](https://github.com/sps014/dream/tree/main/sample/webview/desktop.dream).

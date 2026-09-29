@@ -1,0 +1,149 @@
+// Desktop APIs next to a WebView: native dialogs (from Dream and from the page), the clipboard,
+// window control, file drop and window events. `[package].icon` in dream.toml sets the app icon.
+//
+//   cd sample/webview && dreamer run
+import system;
+import system.desktop;
+import system.json;
+import system.webview;
+
+@json
+class Action {
+    public name: string;
+
+    public constructor(name: string) {
+        this.name = name;
+    }
+}
+
+@json
+class Line {
+    public text: string;
+
+    public constructor(text: string) {
+        this.text = text;
+    }
+}
+
+let page: string = "<!DOCTYPE html><html><head><style>
+body { font: 14px system-ui; margin: 16px; }
+button { margin: 0 6px 6px 0; }
+#drop { border: 2px dashed #888; padding: 24px; margin: 8px 0; text-align: center; }
+#log { background: #f4f4f4; padding: 8px; height: 180px; overflow: auto; white-space: pre-wrap; }
+</style></head><body>
+<div id='buttons'></div>
+<div id='drop'>Drop files on the window</div>
+<pre id='log'></pre>
+<script>
+var actions = ['open file', 'pick folder', 'save', 'confirm', 'copy text', 'paste', 'fullscreen', 'devtools', 'open site'];
+function log(text) { var el = document.getElementById('log'); el.textContent += text + '\\n'; el.scrollTop = el.scrollHeight; }
+function boot(n) {
+  if (!window.Dream || !Dream.__dream_webview) { if (n < 40) setTimeout(function () { boot(n + 1); }, 50); return; }
+  var box = document.getElementById('buttons');
+  actions.forEach(function (name) {
+    var b = document.createElement('button');
+    b.textContent = name;
+    b.onclick = function () { Dream.emit('action', JSON.stringify({ name: name })); };
+    box.appendChild(b);
+  });
+  var pick = document.createElement('button');
+  pick.textContent = 'page: pick images';
+  pick.onclick = function () {
+    Dream.dialog.openFiles({ title: 'Pick images', filters: [{ name: 'Images', extensions: ['png', 'jpg'] }] })
+      .then(function (paths) { log('page picked ' + JSON.stringify(paths)); }, function (e) { log('page dialog: ' + e.message); });
+  };
+  box.appendChild(pick);
+  Dream.on('log', function (body) { log(JSON.parse(body).text); });
+  Dream.onFileDrop(function (paths) { document.getElementById('drop').textContent = paths.join('\\n'); });
+  Dream.onWindowEvent(function (e) { if (e.type !== 'moved') log('page event ' + JSON.stringify(e)); });
+}
+boot(0);
+</script></body></html>";
+
+fun say(view: WebView, text: string): void {
+    System.println(text);
+    view.emit<Line>("log", Line(text));
+}
+
+fun show(picked: Option<string>): string {
+    return switch (picked) {
+        Some(path) => path,
+        None => "(cancelled)",
+    };
+}
+
+async fun act(view: WebView, name: string): void {
+    if name == "open file" {
+        let dialog = FileDialog();
+        dialog.title = "Open a text file";
+        dialog.parent = view.window_id;
+        dialog.add_filter("Text", ["txt", "md"]);
+        say(view, "open file: " + show(dialog.pick_file().await));
+    } else if name == "pick folder" {
+        let dialog = FileDialog();
+        dialog.parent = view.window_id;
+        say(view, "folder: " + show(dialog.pick_folder().await));
+    } else if name == "save" {
+        let dialog = FileDialog();
+        dialog.parent = view.window_id;
+        dialog.file_name = "notes.txt";
+        say(view, "save to: " + show(dialog.save_file().await));
+    } else if name == "confirm" {
+        let ask = MessageDialog();
+        ask.parent = view.window_id;
+        ask.title = "Desktop sample";
+        ask.text = "Keep going?";
+        ask.level = MessageLevel.Warning;
+        ask.buttons = MessageButtons.YesNoCancel;
+        say(view, $"answer: {ask.show().await}");
+    } else if name == "copy text" {
+        Clipboard.text = "copied from Dream";
+        say(view, "clipboard formats: " + Clipboard.formats.join(", "));
+    } else if name == "paste" {
+        say(view, "clipboard text: " + Clipboard.text);
+    } else if name == "fullscreen" {
+        view.fullscreen = !view.fullscreen;
+    } else if name == "devtools" {
+        view.devtools_open = !view.devtools_open;
+    } else if name == "open site" {
+        switch (Shell.open("https://example.com")) {
+            Ok(_) => {},
+            Err(e) => say(view, e.message()),
+        }
+    }
+}
+
+async fun main() {
+    switch (WebView.create("Desktop", 720, 520)) {
+        Ok(view) => {
+            view.min_width = 480;
+            view.min_height = 360;
+            view.page_dialogs = true;
+            view.center();
+
+            view.on<Action>("action", (a) => Promise.start(act(view, a.name)));
+            view.on_file_drop((paths) => say(view, "dropped " + paths.join(", ")));
+            view.on_resize((w, h) => System.println($"resized {w}x{h}"));
+            view.on_move((x, y) => System.println($"moved {x},{y}"));
+            view.on_focus((focused) => System.println($"focused {focused}"));
+            view.on_minimize((minimized) => System.println($"minimized {minimized}"));
+            view.on_maximize((maximized) => System.println($"maximized {maximized}"));
+            view.on_scale_change((scale) => System.println($"scale {scale}"));
+            view.on_theme_change((dark) => System.println($"dark mode {dark}"));
+            view.on_close_requested(() => {
+                System.println("close requested");
+                return true;
+            });
+
+            switch (view.load_html(page)) {
+                Ok(_) => {},
+                Err(e) => {
+                    System.println(e.message());
+                    return;
+                },
+            }
+            view.run().await;
+        },
+        Err(e) => System.println(e.message()),
+    }
+}

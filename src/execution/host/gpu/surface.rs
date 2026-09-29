@@ -74,11 +74,16 @@ impl ApplicationHandler for WindowCreateApp {
                 self.width.max(1) as f64,
                 self.height.max(1) as f64,
             ));
-        if let Some(icon) = super::icon::load_window_icon() {
+        if let Some(icon) = crate::execution::host::app_icon::window_icon() {
             attrs = attrs.with_window_icon(Some(icon));
         }
         match event_loop.create_window(attrs) {
-            Ok(w) => self.window = Some(Arc::new(w)),
+            Ok(w) => {
+                if let Some(png) = crate::execution::host::app_icon::app_icon_png() {
+                    crate::execution::host::app_icon::apply_dock_icon(png);
+                }
+                self.window = Some(Arc::new(w));
+            }
             Err(e) => eprintln!("Dream gpuSurfaceCreate: window create failed: {e}"),
         }
     }

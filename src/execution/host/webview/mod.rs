@@ -23,7 +23,14 @@ use wry::dpi::{LogicalPosition, LogicalSize};
 use wry::http::Request;
 use wry::{Rect, WebViewBuilder};
 
+use crate::execution::host::{app_icon, desktop};
+
+mod events;
+mod page_dialogs;
 mod protocol;
+mod window;
+
+pub(crate) use window::{get_string, get_window, set_string, window_op};
 
 thread_local! {
     static PUMPING: Cell<bool> = const { Cell::new(false) };
@@ -35,10 +42,14 @@ thread_local! {
     });
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 enum IpcKind {
     Event,
     Invoke,
+    /// Files dropped on the window; body is one path per line.
+    FileDrop,
+    /// Window event; channel is the event name, body its values (see `events`).
+    Window,
 }
 
 struct IpcMessage {
@@ -57,6 +68,10 @@ struct WebViewEntry {
     /// Set by wry page-load callbacks once navigation has committed (pending eval queue flushed).
     page_ready: Arc<AtomicBool>,
     pending: VecDeque<IpcMessage>,
+    /// Window state winit does not report back.
+    chrome: window::Chrome,
+    state: events::WindowState,
+    dialogs: Vec<page_dialogs::Parked>,
 }
 
 struct Registry {
@@ -87,14 +102,23 @@ impl ApplicationHandler for WindowCreateApp {
         if self.window.is_some() {
             return;
         }
-        let attrs = Window::default_attributes()
+        let mut attrs = Window::default_attributes()
             .with_title(self.title.clone())
+            .with_theme(None)
             .with_inner_size(winit::dpi::LogicalSize::new(
                 self.width.max(1) as f64,
                 self.height.max(1) as f64,
             ));
+        if let Some(icon) = app_icon::window_icon() {
+            attrs = attrs.with_window_icon(Some(icon));
+        }
         match event_loop.create_window(attrs) {
-            Ok(w) => self.window = Some(w),
+            Ok(w) => {
+                if let Some(png) = app_icon::app_icon_png() {
+                    app_icon::apply_dock_icon(png);
+                }
+                self.window = Some(w);
+            }
             Err(e) => eprintln!("Dream webviewCreate: window create failed: {e}"),
         }
     }
@@ -107,40 +131,56 @@ struct PumpApp;
 impl ApplicationHandler for PumpApp {
     fn resumed(&mut self, _event_loop: &ActiveEventLoop) {}
 
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        desktop::dialog::open_queued();
+    }
+
     fn window_event(
         &mut self,
         _event_loop: &ActiveEventLoop,
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        match event {
-            WindowEvent::CloseRequested => {
-                REGISTRY.with(|cell| {
-                    let mut reg = cell.borrow_mut();
-                    if let Some(id) = reg.window_to_id.get(&window_id).copied() {
-                        if let Some(entry) = reg.entries.get_mut(&id) {
-                            entry.close_requested = true;
-                        }
-                    }
-                });
+        REGISTRY.with(|cell| {
+            let mut reg = cell.borrow_mut();
+            let Some(id) = reg.window_to_id.get(&window_id).copied() else {
+                return;
+            };
+            let Some(entry) = reg.entries.get_mut(&id) else {
+                return;
+            };
+            if matches!(
+                event,
+                WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. }
+            ) {
+                let _ = entry.webview.set_bounds(full_window_bounds(&entry.window));
             }
-            WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
-                REGISTRY.with(|cell| {
-                    let mut reg = cell.borrow_mut();
-                    if let Some(id) = reg.window_to_id.get(&window_id).copied() {
-                        if let Some(entry) = reg.entries.get_mut(&id) {
-                            let _ = entry.webview.set_bounds(full_window_bounds(&entry.window));
-                        }
-                    }
-                });
+            // Without an `on_close_requested` handler the window just closes; with one, Dream
+            // decides and confirms through `window::Prop::Close`.
+            if matches!(event, WindowEvent::CloseRequested) && !entry.chrome.intercept_close {
+                entry.close_requested = true;
+                return;
             }
-            _ => {}
-        }
+            for msg in events::translate(&entry.window, &mut entry.state, &event) {
+                events::deliver(entry, msg);
+            }
+        });
     }
 }
 
 fn pump() {
     pump_for(Duration::ZERO);
+}
+
+/// One non-blocking turn of the platform loop, for work that waits on AppKit (dialogs) without a
+/// `WebView.run` driving it. Creates the event loop (and NSApplication) on first use.
+pub(crate) fn pump_idle() {
+    pump();
+}
+
+/// The native window behind WebView `id`, e.g. to parent a dialog.
+pub(crate) fn with_window<R>(id: i32, f: impl FnOnce(&Window) -> R) -> Option<R> {
+    with_entry_mut(id, |e| f(&e.window))
 }
 
 /// `pump_app_events` must not nest: a platform callback that reaches a host fn which pumps
@@ -154,6 +194,18 @@ fn pump_for(timeout: Duration) {
         PUMPING.with(|p| p.set(false));
     }
     drain_ipc_inbox();
+    sync_window_state();
+}
+
+fn sync_window_state() {
+    REGISTRY.with(|cell| {
+        let mut reg = cell.borrow_mut();
+        for entry in reg.entries.values_mut() {
+            for msg in events::sync(&entry.window, &mut entry.state) {
+                events::deliver(entry, msg);
+            }
+        }
+    });
 }
 
 /// Injected page bridge: `window.Dream.emit` / `invoke` / `on` over `postMessage`, and the
@@ -239,26 +291,74 @@ fn drain_ipc_inbox() {
     if staged.is_empty() {
         return;
     }
+    // Opening a dialog re-enters the registry (parent window, pump), so it waits for the borrow.
+    let mut dialog_requests = Vec::new();
     REGISTRY.with(|cell| {
         let mut reg = cell.borrow_mut();
         for (id, msg) in staged {
             if let Some(entry) = reg.entries.get_mut(&id) {
+                if msg.kind == IpcKind::Invoke && msg.channel == page_dialogs::CHANNEL {
+                    let body = String::from_utf8_lossy(&msg.body).into_owned();
+                    dialog_requests.push((id as i32, msg.reply_id, body, entry.chrome.page_dialogs));
+                    continue;
+                }
+                if msg.kind == IpcKind::FileDrop {
+                    let paths: Vec<&str> = std::str::from_utf8(&msg.body)
+                        .unwrap_or("")
+                        .lines()
+                        .collect();
+                    let json = serde_json::to_string(&paths).unwrap_or_else(|_| "[]".into());
+                    dispatch_to_page(entry, "__dream.drop", &json);
+                }
                 entry.pending.push_back(msg);
             }
         }
     });
+    for (id, reply_id, body, enabled) in dialog_requests {
+        if !enabled {
+            reply_err(id, reply_id, page_dialogs::DISABLED);
+            continue;
+        }
+        match page_dialogs::start(&body, id, reply_id) {
+            Ok(parked) => {
+                let orphan = REGISTRY.with(|cell| match cell.borrow_mut().entries.get_mut(&(id as u32)) {
+                    Some(entry) => {
+                        entry.dialogs.push(parked);
+                        None
+                    }
+                    None => Some(parked),
+                });
+                if let Some(orphan) = orphan {
+                    page_dialogs::forget(&orphan);
+                }
+            }
+            Err(message) => reply_err(id, reply_id, &message),
+        }
+    }
+}
+
+/// Delivers `body` to page `Dream.on(channel, …)` listeners.
+fn dispatch_to_page(entry: &WebViewEntry, channel: &str, body: &str) {
+    let script = format!(
+        "window.Dream && Dream.__dispatch({}, {});",
+        js_string(channel),
+        js_string(body)
+    );
+    let _ = entry.webview.evaluate_script(&script);
 }
 
 fn encode_poll(messages: &[IpcMessage]) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(format!("{}\n", messages.len()).as_bytes());
     for msg in messages {
-        // 0/1 = UTF-8 string event/invoke; 2/3 = raw byte event/invoke.
+        // 0/1 = UTF-8 string event/invoke; 2/3 = raw byte event/invoke; 4 file drop; 5 window.
         let kind = match (&msg.kind, msg.binary) {
             (IpcKind::Event, false) => 0,
             (IpcKind::Invoke, false) => 1,
             (IpcKind::Event, true) => 2,
             (IpcKind::Invoke, true) => 3,
+            (IpcKind::FileDrop, _) => 4,
+            (IpcKind::Window, _) => 5,
         };
         let body = &msg.body;
         out.extend_from_slice(format!("{kind}\n").as_bytes());
@@ -362,6 +462,7 @@ pub(crate) fn create_webview(title: &str, width: i32, height: i32) -> i32 {
         // Skip a placeholder `with_html` — the first `load_*` is the only navigation.
         match WebViewBuilder::new()
             .with_initialization_script(DREAM_BRIDGE)
+            .with_devtools(true)
             .with_ipc_handler(move |req: Request<String>| {
                 enqueue_ipc(id_for_ipc, req.body());
             })
@@ -369,6 +470,27 @@ pub(crate) fn create_webview(title: &str, width: i32, height: i32) -> i32 {
                 protocol::SCHEME.to_string(),
                 move |_webview_id, req, responder| protocol::handle(id_for_ipc, req, responder),
             )
+            .with_drag_drop_handler(move |event| {
+                if let wry::DragDropEvent::Drop { paths, .. } = event {
+                    let body = paths
+                        .iter()
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    stage_ipc(
+                        id_for_ipc,
+                        IpcMessage {
+                            kind: IpcKind::FileDrop,
+                            binary: false,
+                            reply_id: 0,
+                            channel: String::new(),
+                            body: body.into_bytes(),
+                        },
+                    );
+                }
+                // Handled here: the page never navigates to a dropped file.
+                true
+            })
             .with_on_page_load_handler(move |event, _url| {
                 // Wait until Finished so document scripts (and boot()) can run.
                 if matches!(event, wry::PageLoadEvent::Finished) {
@@ -393,6 +515,7 @@ pub(crate) fn create_webview(title: &str, width: i32, height: i32) -> i32 {
     let (webview, page_ready) = webview;
 
     let window_id = window.id();
+    let state = events::WindowState::new(&window);
     REGISTRY.with(|cell| {
         let mut reg = cell.borrow_mut();
         reg.window_to_id.insert(window_id, id);
@@ -404,6 +527,9 @@ pub(crate) fn create_webview(title: &str, width: i32, height: i32) -> i32 {
                 close_requested: false,
                 page_ready,
                 pending: VecDeque::new(),
+                chrome: window::Chrome::default(),
+                state,
+                dialogs: Vec::new(),
             },
         );
     });
@@ -524,6 +650,9 @@ pub(crate) fn close(id: i32) {
         let mut reg = cell.borrow_mut();
         if let Some(entry) = reg.entries.swap_remove(&(id as u32)) {
             reg.window_to_id.swap_remove(&entry.window.id());
+            for parked in &entry.dialogs {
+                page_dialogs::forget(parked);
+            }
             drop(entry);
         }
     });
@@ -532,6 +661,7 @@ pub(crate) fn close(id: i32) {
 /// One `WebView.run` iteration: pump AppKit, then return `closed\n` + poll payload.
 pub(crate) fn tick(id: i32) -> Vec<u8> {
     pump_for(Duration::from_millis(16));
+    answer_page_dialogs(id);
     let closed = with_entry_mut(id, |e| e.close_requested).unwrap_or(true);
     let messages =
         with_entry_mut(id, |e| e.pending.drain(..).collect::<Vec<_>>()).unwrap_or_default();
@@ -541,9 +671,18 @@ pub(crate) fn tick(id: i32) -> Vec<u8> {
     out
 }
 
-pub(crate) fn close_requested(id: i32) -> bool {
-    pump_for(Duration::from_millis(16));
-    with_entry_mut(id, |e| e.close_requested).unwrap_or(true)
+fn answer_page_dialogs(id: i32) {
+    let parked = with_entry_mut(id, |e| std::mem::take(&mut e.dialogs)).unwrap_or_default();
+    let mut open = Vec::new();
+    for p in parked {
+        match page_dialogs::poll(&p) {
+            Some(json) => reply(id, p.reply_id, &json),
+            None => open.push(p),
+        }
+    }
+    if !open.is_empty() {
+        let _ = with_entry_mut(id, |e| e.dialogs.extend(open));
+    }
 }
 
 pub(crate) fn poll_messages(id: i32) -> Vec<u8> {

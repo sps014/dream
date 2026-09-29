@@ -1,6 +1,7 @@
 //! `.ll` → native binary: `llvm-link` with the runtime bitcode, `opt` (internalize to `main`, then
 //! the standard pipeline), `llc` to an object, and the system C compiler as the linker only.
 
+use super::icon;
 use super::runtime::llvm_runtime;
 use super::tools::{resolve_llvm, LlvmTools};
 use crate::driver::wasi::run_captured;
@@ -85,13 +86,14 @@ fn link_and_optimize(
     tools: &LlvmTools,
     ll_path: &Path,
     rt_bc: &Path,
+    icon_ll: Option<&Path>,
     opt: OptLevel,
     debug: bool,
     pgo: &PgoPipeline,
 ) -> Result<PathBuf, String> {
     let linked = ll_path.with_extension("linked.bc");
     let mut link = tools.command("llvm-link");
-    link.arg(ll_path).arg(rt_bc).arg("-o").arg(&linked);
+    link.arg(ll_path).arg(rt_bc).args(icon_ll).arg("-o").arg(&linked);
     run_captured(&mut link, &format!("llvm-link ({})", ll_path.display()))?;
     let optimized = optimize_linked(tools, &linked, opt, debug, pgo);
     let _ = std::fs::remove_file(&linked);
@@ -130,11 +132,28 @@ pub fn emit_llvm_artifacts(
     ll_path: &Path,
     opt: OptLevel,
     debug: bool,
+    icon: Option<&Path>,
 ) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     let tools = resolve_llvm()?;
     let src = std::fs::read_to_string(ll_path)?;
     let rt = llvm_runtime(&tools, opt, runtime_need_from_module_text(&src), debug)?;
-    let optimized = link_and_optimize(&tools, ll_path, &rt.bc, opt, debug, &None)?;
+    let icon_ll = match icon {
+        Some(icon) => Some(icon::write_icon_module(ll_path, &icon::read_png(icon)?, &src)?),
+        None => None,
+    };
+    let optimized = link_and_optimize(
+        &tools,
+        ll_path,
+        &rt.bc,
+        icon_ll.as_deref(),
+        opt,
+        debug,
+        &None,
+    );
+    if let Some(p) = &icon_ll {
+        let _ = std::fs::remove_file(p);
+    }
+    let optimized = optimized?;
     let opt_ll = ll_path.with_extension("opt.ll");
     write_ir(&tools, &optimized, &opt_ll)?;
     let asm = ll_path.with_extension("s");
@@ -144,13 +163,14 @@ pub fn emit_llvm_artifacts(
 }
 
 /// Links `ll_path` into `<stem>.bin`. With `opt_ll`, also writes the optimized whole-program module
-/// there as text.
+/// there as text. `icon` is a PNG compiled in as the app icon.
 pub fn compile_llvm(
     ll_path: &Path,
     opt_ll: Option<&Path>,
     opt: OptLevel,
     debug: bool,
     pgo: &Pgo,
+    icon: Option<&Path>,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let tools = resolve_llvm()?;
     let bin = native_bin_path(ll_path);
@@ -165,15 +185,17 @@ pub fn compile_llvm(
     let need = runtime_need_from_module_text(&src);
     let rt = llvm_runtime(&tools, opt, need, debug)?;
     let profile = llvm_pgo(pgo, &bin, || tools.optional_tool("llvm-profdata"))?;
+    let icon_png = icon.map(icon::read_png).transpose()?;
     let stamp_path = bin.with_extension("flags");
     let stamp = format!(
-        "{}\n{}\n{}\n{}\n{:?}\n{:?}",
+        "{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}",
         pipeline(opt, debug),
         debug,
         llc_level(opt, debug),
         tools.bin.display(),
         rt.archive,
-        profile
+        profile,
+        icon_png.as_deref().map(icon::fingerprint)
     );
     let input = match (pgo, &profile) {
         (Pgo::Use(_), Some((_, p))) => Some(p.as_path()),
@@ -189,7 +211,23 @@ pub fn compile_llvm(
         clear_raw_profiles(&bin);
     }
 
-    let optimized = link_and_optimize(&tools, ll_path, &rt.bc, opt, debug, &profile)?;
+    let icon_ll = match &icon_png {
+        Some(png) => Some(icon::write_icon_module(ll_path, png, &src)?),
+        None => None,
+    };
+    let optimized = link_and_optimize(
+        &tools,
+        ll_path,
+        &rt.bc,
+        icon_ll.as_deref(),
+        opt,
+        debug,
+        &profile,
+    );
+    if let Some(p) = &icon_ll {
+        let _ = std::fs::remove_file(p);
+    }
+    let optimized = optimized?;
     if let Some(out) = opt_ll {
         write_ir(&tools, &optimized, out)?;
     }
@@ -207,6 +245,10 @@ pub fn compile_llvm(
     };
     if let Some(a) = &rt.archive {
         lcmd.arg(a);
+    }
+    #[cfg(windows)]
+    if let Some(png) = &icon_png {
+        lcmd.arg(icon::windows_resource(&tools, ll_path, png)?);
     }
     lcmd.args(["-lm", "-lpthread"]);
     let Some(dir) = libdream_dir() else {

@@ -101,6 +101,33 @@
         pull();
       }
     },
+    // Paths of files dropped on the window.
+    onFileDrop: function (handler) {
+      window.Dream.on("__dream.drop", function (body) { handler(JSON.parse(body)); });
+    },
+    // `{ type: "resized", width, height }`, `{ type: "focused", focused }`, ... for the host window.
+    onWindowEvent: function (handler) {
+      window.Dream.on("__dream.window", function (body) { handler(JSON.parse(body)); });
+    },
+    // Native dialogs; only answered when Dream set `view.page_dialogs = true`.
+    // Pickers resolve to a path (or an array for openFiles/openFolders), or null when cancelled;
+    // message resolves to the chosen button: "ok", "cancel", "yes" or "no".
+    dialog: (function () {
+      function call(method) {
+        return function (opts) {
+          return window.Dream.invoke("__dream.dialog", JSON.stringify({ method: method, opts: opts || {} }))
+            .then(function (body) { return JSON.parse(body); });
+        };
+      }
+      return {
+        openFile: call("openFile"),
+        openFiles: call("openFiles"),
+        openFolder: call("openFolder"),
+        openFolders: call("openFolders"),
+        saveFile: call("saveFile"),
+        message: call("message")
+      };
+    })(),
     __dispatch: function (channel, body) {
       var list = listeners[String(channel)] || [];
       for (var i = 0; i < list.length; i++) {

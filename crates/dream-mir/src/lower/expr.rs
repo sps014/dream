@@ -267,6 +267,13 @@ impl Lowerer<'_> {
                 unreachable!("HExprKind::ArrayElemsFill is void-typed and only ever lowered as a bare statement in lower_stmt")
             }
             HExprKind::HashCode(e) => Rvalue::HashCode(self.lower_operand(e)),
+            // A string's `to_string` is the value itself; as a copy, RC insertion retains it like
+            // any other owned string (an identity `ToString` would hand out a +0 reference).
+            HExprKind::ToString(e)
+                if matches!(self.interner.kind(e.ty), TyKind::Prim(PrimTy::String)) =>
+            {
+                Rvalue::Use(self.lower_operand(e))
+            }
             HExprKind::ToString(e) => Rvalue::ToString(self.lower_operand(e)),
             HExprKind::Concat(a, b) => self.lower_concat(a, b),
             HExprKind::EnumName { value, arms } => Rvalue::EnumName {

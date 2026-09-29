@@ -93,6 +93,10 @@ struct Cli {
     #[arg(long = "emit-llvm", global = true)]
     emit_llvm: bool,
 
+    /// App icon PNG compiled into a native binary (dreamer passes `[package].icon`)
+    #[arg(long, value_name = "PNG", global = true, hide = true)]
+    icon: Option<PathBuf>,
+
     /// Runtime availability target for semantic checks (default: native)
     #[arg(
         long,
@@ -471,7 +475,7 @@ fn main() -> ExitCode {
     let unoptimized = !cli.release && optimize.is_none() && !debug_adapter;
 
     if cli.emit_llvm {
-        match emit_llvm_artifacts(raw_ll, cc_opt, debug_info) {
+        match emit_llvm_artifacts(raw_ll, cc_opt, debug_info, cli.icon.as_deref()) {
             Ok(paths) => {
                 drop_raw_ll();
                 artifacts.extend(paths);
@@ -502,7 +506,14 @@ fn main() -> ExitCode {
             None => Pgo::Off,
         };
         let opt_ll = raw_ll.with_extension("opt.ll");
-        match compile_llvm(raw_ll, Some(&opt_ll), cc_opt, debug_info, &pgo) {
+        match compile_llvm(
+            raw_ll,
+            Some(&opt_ll),
+            cc_opt,
+            debug_info,
+            &pgo,
+            cli.icon.as_deref(),
+        ) {
             Ok(bin) => {
                 drop_raw_ll();
                 artifacts.push(opt_ll);

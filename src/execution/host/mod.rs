@@ -2,8 +2,10 @@
 //! Guest file/console helpers live in `runtime/c/native/`; GPU/HTTP/net/process stay here so they are
 //! the same on every OS (`-ldream`).
 
+pub(crate) mod app_icon;
 mod c_link;
 pub(crate) mod crypto;
+pub(crate) mod desktop;
 pub(crate) mod gpu;
 pub(crate) mod http;
 pub(crate) mod http_server;
@@ -19,7 +21,7 @@ pub(crate) mod webview;
 pub use c_link::{
     cc_link_flags, find_library_path, read_c_libs_from_abi, search_roots_for_artifact,
 };
-pub use gpu::{attach_abi_from_wat_path, set_packaged_app_icon};
+pub use gpu::attach_abi_from_wat_path;
 
 #[cfg(test)]
 mod contract_tests {
@@ -31,6 +33,7 @@ mod contract_tests {
     const HOST_SOURCES: &[&str] = &[
         include_str!("../native/abi.rs"),
         include_str!("../native/webview.rs"),
+        include_str!("../native/desktop.rs"),
     ];
 
     fn names_after_module(src: &str, module: &str) -> Vec<String> {

@@ -162,6 +162,7 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
         opt,
         false,
         &crate::execution::native::Pgo::Off,
+        None,
     )
     .map_err(|e| format!("link '{}': {}", path.display(), e))?;
     // A failing assertion exits non-zero (`Assert.fail`), which is how a suite reports failure.

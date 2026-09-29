@@ -3,6 +3,7 @@
 
 pub mod build;
 pub mod bundle;
+mod icon;
 pub mod pack;
 pub mod runtime;
 pub mod tools;

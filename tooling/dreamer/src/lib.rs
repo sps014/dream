@@ -1,3 +1,4 @@
+pub mod app_icon;
 pub mod artifact_alias;
 pub mod commands;
 pub mod compile_flags;

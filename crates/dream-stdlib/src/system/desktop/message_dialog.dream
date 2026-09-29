@@ -1,0 +1,146 @@
+module system.desktop;
+
+public enum MessageLevel {
+    Info,
+    Warning,
+    Error,
+}
+
+public enum MessageButtons {
+    Ok,
+    OkCancel,
+    YesNo,
+    YesNoCancel,
+}
+
+public enum MessageResult {
+    Ok,
+    Cancel,
+    Yes,
+    No,
+}
+
+// Native alert / confirm box. Closing the box without choosing reads as `Cancel`.
+public class MessageDialog {
+    _title: string;
+    _text: string;
+    _level: MessageLevel;
+    _buttons: MessageButtons;
+    _parent: int;
+
+    public constructor() {
+        this._title = "";
+        this._text = "";
+        this._level = MessageLevel.Info;
+        this._buttons = MessageButtons.Ok;
+        this._parent = 0 - 1;
+    }
+
+    public get title(): string {
+        return this._title;
+    }
+
+    public set title(value: string) {
+        this._title = value;
+    }
+
+    public get text(): string {
+        return this._text;
+    }
+
+    public set text(value: string) {
+        this._text = value;
+    }
+
+    public get level(): MessageLevel {
+        return this._level;
+    }
+
+    public set level(value: MessageLevel) {
+        this._level = value;
+    }
+
+    public get buttons(): MessageButtons {
+        return this._buttons;
+    }
+
+    public set buttons(value: MessageButtons) {
+        this._buttons = value;
+    }
+
+    // `WebView.window_id` of the owning window; `-1` for none.
+    public get parent(): int {
+        return this._parent;
+    }
+
+    public set parent(value: int) {
+        this._parent = value;
+    }
+
+    fun level_code(): int {
+        if this._level == MessageLevel.Warning {
+            return 1;
+        }
+        if this._level == MessageLevel.Error {
+            return 2;
+        }
+        return 0;
+    }
+
+    fun buttons_code(): int {
+        if this._buttons == MessageButtons.OkCancel {
+            return 1;
+        }
+        if this._buttons == MessageButtons.YesNo {
+            return 2;
+        }
+        if this._buttons == MessageButtons.YesNoCancel {
+            return 3;
+        }
+        return 0;
+    }
+
+    @native
+    public async fun show(): MessageResult {
+        let chosen = DesktopDialogHost.run(
+            5,
+            this._title,
+            this._text,
+            "",
+            "",
+            "",
+            this.level_code(),
+            this.buttons_code(),
+            this._parent
+        ).await.unwrap_or("cancel");
+        if chosen == "ok" {
+            return MessageResult.Ok;
+        }
+        if chosen == "yes" {
+            return MessageResult.Yes;
+        }
+        if chosen == "no" {
+            return MessageResult.No;
+        }
+        return MessageResult.Cancel;
+    }
+}
+
+// One-line message boxes.
+public class Dialog {
+    @native
+    public static async fun alert(text: string): void {
+        let d = MessageDialog();
+        d.text = text;
+        d.show().await;
+    }
+
+    // True when the user picks Yes.
+    @native
+    public static async fun confirm(text: string): bool {
+        let d = MessageDialog();
+        d.text = text;
+        d.buttons = MessageButtons.YesNo;
+        return d.show().await == MessageResult.Yes;
+    }
+}

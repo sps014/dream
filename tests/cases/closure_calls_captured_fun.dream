@@ -1,0 +1,31 @@
+// A lambda that calls a captured `fun` value: the callee is read through its capture cell,
+// including `void` callees used as statements and expression bodies.
+
+import system;
+import system.collections;
+
+fun wrap_bool(handler: fun(bool): void): fun(string): void {
+    return (body: string) => handler(body == "1");
+}
+
+fun wrap_pair(handler: fun(int, int): void): fun(string): void {
+    return (body: string) => {
+        let parts = body.split('\n');
+        handler(int.parse(parts[0]).unwrap_or(0), int.parse(parts[1]).unwrap_or(0));
+    };
+}
+
+fun wrap_value(get: fun(): int): fun(): int {
+    return () => get() * 2;
+}
+
+fun main(): void {
+    let fired = List<fun(string): void>();
+    fired.push(wrap_bool((on: bool) => System.println("flag " + on)));
+    fired.push(wrap_pair((a: int, b: int) => System.println("pair " + (a + b))));
+    fired.get(0)("1");
+    fired.get(0)("0");
+    fired.get(1)("20\n22");
+    let doubled = wrap_value(() => 21);
+    System.println(doubled());
+}

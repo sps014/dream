@@ -36,7 +36,7 @@ entry = "src/main.dream"        # required for bin; forbidden for lib
 license = "MIT"
 keywords = ["http", "json"]         # optional; used by dreamer search / the registry site
 targets = ["native", "web"]     # optional hosts: native, web, node (omit = no preference)
-icon = "assets/icon.png"        # optional PNG; packed into single-file exe by `dreamer pack`
+icon = "assets/icon.png"        # optional PNG app icon for windows, the Dock and packed apps
 
 [dependencies]
 http-utils = "1.2"                                    # semver requirement, resolved from a registry
@@ -75,10 +75,15 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
   - Omit the field (or leave it empty) for today's free-choice behavior — `dreamer run` defaults to
     native.
   - Combinations are allowed; see `dreamer run` below for how the host is chosen.
-- `[package].icon` is an optional path to a PNG (relative to the `dream.toml` directory).
-  - **`dream run`**: loads the file from disk when a GPU window is created.
-  - **`dreamer pack`**: copies the PNG into the single-file native executable so no `assets/`
-    folder is required next to the `.exe`. Web still uses a static file / favicon link.
+- `[package].icon` is an optional path to a PNG (relative to the `dream.toml` directory). It is
+  the only place an app icon is configured.
+  - `dreamer build`, `run` and `pack` compile it into native binaries, so no file is read at run
+    time: WebView and GPU windows and the macOS Dock use it. A WebView can still change it at run
+    time with `view.icon = "other.png"`.
+  - `dreamer` checks that the file exists and is a PNG, and warns when it is not square or is
+    smaller than 256x256.
+  - `dreamer pack` also uses it for the OS bundle (see [Native `dreamer pack`](#native-dreamer-pack)).
+  - Web builds use it as the favicon that `dreamer run --target web` serves.
 - A dependency is either a bare semver requirement string, or a table with exactly one of
   `path`, `git`, or `version` (+ optional `registry`).
 - Package names must start with a letter and may contain ASCII letters, digits, `-`, `_`, and `.`.
@@ -218,7 +223,7 @@ registry version selection. Conflicting requirements produce a clear error namin
 | `dreamer build [--release] [--profile \| --use-profile[=<path>]] [-p <name>]` | Install, then compile the package. Wasm lands in `target/web/`; native binaries in `target/debug` or `target/release`. When `targets` includes `node`, also copies into `target/node/`. PGO flags: see [Profile-guided native builds](#profile-guided-native-builds). |
 | `dreamer run [--release] [--profile \| --use-profile[=<path>]] [--port <n>] [--target native\|web\|node] [-p <name>] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile. Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
 | `dreamer test [--release] [--filter <substr>] [-p <name>]` | Install (incl. dev-deps), then run `dream test tests/` — discovers `@test` functions under the project's `tests/` directory. |
-| `dreamer pack [--release] [-O<lvl>] [--target <os>-<arch>\|all]… [-p <name>]` | Build a **bin** package into a single native executable → `target/pack/<name>-<os>-<arch>[.exe]`. Default is `--release` (LLVM `-O3`); `-O` / `--optimize` override like `dreamer run`. Default target is the host OS/arch. Distinct from registry `publish`. |
+| `dreamer pack [--release] [-O<lvl>] [--target <os>-<arch>]… [-p <name>]` | Build a **bin** package into a native executable → `target/pack/<name>-<os>-<arch>[.exe]`, plus a macOS `.app` or Linux `.desktop` entry. Default is `--release` (LLVM `-O3`); `-O` / `--optimize` override like `dreamer run`. Only the host OS/arch can be packed. Distinct from registry `publish`. |
 | `dreamer publish [--registry <url>] [--token <tok>] [-p <name>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). Rejects path-only dependencies. |
 | `dreamer search <query>` | Search the registry by name / description / keywords. |
 | `dreamer tree [-p <name>]` | Print the resolved dependency tree from `dream.lock`. |
@@ -230,20 +235,29 @@ registry version selection. Conflicting requirements produce a clear error namin
 
 ### Native `dreamer pack`
 
-Produces a single native executable per selected platform and writes it to
-`target/pack/<name>-<os>-<arch>`. Browser and Node still load `.wasm`. No project `assets/`
-folder is required next to the packed binary.
+Builds the package natively and writes the executable to `target/pack/<name>-<os>-<arch>`
+(`.exe` on Windows). Browser and Node still load `.wasm`. The `[package].icon` is already compiled
+into the executable; around it, each OS gets what it needs to show the app with that icon:
+
+| Host | Output in `target/pack/` |
+|---|---|
+| macOS | `<name>-macos-<arch>` and `<name>.app/Contents/{MacOS/<name>, Info.plist, Resources/icon.icns}` |
+| Linux | `<name>-linux-<arch>`, `<name>.desktop`, and `<name>.png` when an icon is set |
+| Windows | `<name>-windows-<arch>.exe` with the icon as its Explorer/taskbar icon |
+
+`Info.plist` takes its name and version from `[package]`, and the bundle id is
+`dev.dream.<name>`. The `.desktop` entry names the executable and icon relative to the pack folder,
+so copy them into `~/.local/share/applications` and an icon theme folder to install the app.
 
 ```bash
-dreamer pack                         # --release / -O3; host → target/pack/<name>-<os>-<arch>
+dreamer pack                         # --release / -O3 for the host
 dreamer pack -O2                     # same `-O` / `--release` tokens as `dreamer run`
-dreamer pack --target linux-x64
-dreamer pack --target macos-arm64 --target windows-x64
-dreamer pack --target all            # linux/macos/windows × x64/arm64
+dreamer pack --target macos-arm64    # must name the host
 ```
 
-Cross-compiling to another OS/arch needs a working linker for that target; failures
-are reported (targets are never silently skipped). Libraries cannot be packed.
+Only the host OS/arch can be packed: naming another target (or `all`) is an error, never a
+silent skip. Libraries cannot be packed. A packed executable still loads `libdream` from the
+installed toolchain (through an rpath), so it runs on machines with the same Dream toolchain.
 
 ### How `dreamer run` picks a host
 
@@ -328,7 +342,7 @@ dreamer publish -p greeter           # one package at a time
 **Runtime host** vs **pack triple** (unchanged naming):
 
 - `package.targets` / `dreamer run --target native|web|node` — which host runs the app
-- `dreamer pack --target macos-arm64` — which OS/arch executable to embed
+- `dreamer pack --target macos-arm64` — which OS/arch executable to build
 
 ### LSP
 

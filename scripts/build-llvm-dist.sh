@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build the minimal LLVM that ships inside the Dream release archive: opt, llc, llvm-link,
-# llvm-dis, llvm-ar, llvm-profdata and lld (wasm-ld), for the host target plus WebAssembly only.
+# llvm-dis, llvm-ar, llvm-profdata and lld (wasm-ld), plus llvm-rc on Windows, for the host
+# target plus WebAssembly only.
 #
 # opt/llc/llvm-link/llvm-dis/llvm-profdata cannot join LLVM's multi-call `llvm` driver, so the
 # tools share one `libLLVM` instead (each tool binary is then a few hundred KB). MSVC cannot build
@@ -26,6 +27,8 @@ COMPONENTS="opt;llc;llvm-link;llvm-dis;llvm-ar;llvm-profdata;lld"
 EXTRA=()
 case "$(uname -s)" in
   MINGW* | MSYS* | CYGWIN*)
+    # llvm-rc compiles the `.exe` icon resource for `--icon`.
+    COMPONENTS="${COMPONENTS};llvm-rc"
     EXTRA+=(-DLLVM_BUILD_LLVM_DYLIB=OFF -DLLVM_LINK_LLVM_DYLIB=OFF
       -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded)
     ;;

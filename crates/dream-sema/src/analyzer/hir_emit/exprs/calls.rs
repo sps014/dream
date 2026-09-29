@@ -436,6 +436,14 @@ impl<'a> Analyzer<'a> {
         self.hir_set_indirect_call_expr(target, args, ret);
     }
 
+    fn is_place_read(e: &HExpr) -> bool {
+        match &e.kind {
+            HExprKind::Var(Binding::Local(_)) | HExprKind::Var(Binding::Global(_)) => true,
+            HExprKind::Field { obj, .. } => Self::is_place_read(obj),
+            _ => false,
+        }
+    }
+
     /// Shared unboxing logic for an indirect call through a boxed `fun(...)` value `boxed` — see
     /// [`hir_set_indirect_call`]. Used for both named locals and arbitrary `fun(...)`-typed
     /// expression callees.
@@ -465,7 +473,9 @@ impl<'a> Analyzer<'a> {
         let int_ty = self.type_ctx.interner.int();
         let box_ty = boxed.ty;
 
-        let (box_expr, scratch_local) = if matches!(boxed.kind, HExprKind::Var(Binding::Local(_))) {
+        // A place read (a local, or a captured name's `CaptureCell.value`) can be read twice. The
+        // scratch path cannot express a `void` call as a value, so it must stay for real temporaries.
+        let (box_expr, scratch_local) = if Self::is_place_read(&boxed) {
             (boxed, None)
         } else {
             let box_local = LocalId(self.hir.next_local);
@@ -546,6 +556,7 @@ impl<'a> Analyzer<'a> {
                     value: clear,
                 });
                 self.hir.last = None;
+                self.mark_void_emitted();
             } else {
                 let result_local = LocalId(self.hir.next_local);
                 self.hir.next_local += 1;

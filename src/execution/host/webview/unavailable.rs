@@ -30,10 +30,6 @@ pub(crate) fn tick(_id: i32) -> Vec<u8> {
     Vec::new()
 }
 
-pub(crate) fn close_requested(_id: i32) -> bool {
-    true
-}
-
 pub(crate) fn poll_messages(_id: i32) -> Vec<u8> {
     Vec::new()
 }
@@ -50,4 +46,20 @@ pub(crate) fn emit_bytes(_id: i32, _channel: &str, _body: &[u8]) {}
 
 pub(crate) fn eval_js(_id: i32, _js: &str) -> Vec<u8> {
     Vec::new()
+}
+
+pub(crate) fn get_window(_id: i32, _prop: i32) -> i32 {
+    0
+}
+
+pub(crate) fn window_op(_id: i32, _prop: i32, _a: i32, _b: i32) -> i32 {
+    1
+}
+
+pub(crate) fn get_string(_id: i32, _prop: i32) -> String {
+    String::new()
+}
+
+pub(crate) fn set_string(_id: i32, _prop: i32, _value: &str) -> i32 {
+    1
 }

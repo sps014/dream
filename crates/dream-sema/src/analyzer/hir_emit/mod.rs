@@ -59,6 +59,10 @@ pub(super) struct HirEmit {
     /// emitted, each entry writes `box.value` back into the original place (copy-in happened when
     /// the temporary `RefBox` was built). Cleared by [`Analyzer::hir_flush_ref_writebacks`].
     ref_writebacks: Vec<(HPlace, LocalId, TypeId, TypeId)>,
+    /// A `void` call that had to be emitted as statements (it has no value to leave in `last`),
+    /// keyed by the (block depth, block length) right after it. Its expression statement or
+    /// `return` accepts `last == None` only while nothing else was pushed since.
+    void_emitted_at: Option<(usize, usize)>,
     /// Stack of statement lists being built. The bottom is the function body; control-flow handlers
     /// push a frame for each nested block and pop it to attach to the enclosing statement.
     blocks: Vec<Vec<HStmt>>,
@@ -216,6 +220,7 @@ impl<'a> Analyzer<'a> {
         self.hir.local_decls.clear();
         self.hir.params.clear();
         self.hir.ref_writebacks.clear();
+        self.hir.void_emitted_at = None;
         self.hir.blocks.clear();
         self.hir.blocks.push(Vec::new());
         self.hir.def = def;
@@ -616,6 +621,22 @@ impl<'a> Analyzer<'a> {
                 block.push(stmt);
             }
         }
+    }
+
+    fn block_position(&self) -> (usize, usize) {
+        (
+            self.hir.blocks.len(),
+            self.hir.blocks.last().map_or(0, Vec::len),
+        )
+    }
+
+    fn mark_void_emitted(&mut self) {
+        self.hir.void_emitted_at = Some(self.block_position());
+    }
+
+    /// True when `last == None` stands for a `void` call already emitted as statements.
+    fn take_void_emitted(&mut self) -> bool {
+        self.hir.void_emitted_at.take() == Some(self.block_position())
     }
 
     /// Appends a fully-built statement to the current block (used by callers that assemble their own

@@ -1,0 +1,8 @@
+[package]
+name = "webview-desktop"
+version = "0.1.0"
+type = "bin"
+entry = "desktop.dream"
+targets = ["native"]
+icon = "ui/icon.png"
+description = "WebView + system.desktop sample (dialogs, clipboard, window events, file drop)"

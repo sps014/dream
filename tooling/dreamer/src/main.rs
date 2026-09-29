@@ -51,7 +51,7 @@ impl OptFlags {
     version,
     about = "Package manager for the Dream language",
     after_help = "Examples:\n  dreamer init my-app --runtime web\n  dreamer add system.testing\n  dreamer run --release\n  dreamer test --filter math\n  dreamer toolchain install cc",
-    after_long_help = "Examples:\n  dreamer init my-app --runtime web     scaffold a new project\n  dreamer add system.testing            add a dependency from the registry\n  dreamer add ./local/pkg --path        add a path dependency\n  dreamer run --release                 install deps, build, and run\n  dreamer test --filter math            run @test suites under tests/\n  dreamer pack --target all             single-file native executables (default --release / -O3)\n  dreamer toolchain install cc          Zig linker for native builds when no system cc exists"
+    after_long_help = "Examples:\n  dreamer init my-app --runtime web     scaffold a new project\n  dreamer add system.testing            add a dependency from the registry\n  dreamer add ./local/pkg --path        add a path dependency\n  dreamer run --release                 install deps, build, and run\n  dreamer test --filter math            run @test suites under tests/\n  dreamer pack                          native executable + OS app bundle (default --release / -O3)\n  dreamer toolchain install cc          Zig linker for native builds when no system cc exists"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -153,11 +153,11 @@ enum Cmd {
         #[arg(short = 'p', long = "package", value_name = "NAME")]
         package: Option<String>,
     },
-    /// Build a native single-file executable (default `--release` / cc `-O3`; `-O` overrides).
+    /// Build a native executable and its OS app bundle (default `--release` / `-O3`; `-O` overrides).
     Pack {
         #[command(flatten)]
         opt: OptFlags,
-        /// Pack triple (`linux-x64`, `macos-arm64`, …) or `all`. Repeatable; default = host.
+        /// Pack triple (`linux-x64`, `macos-arm64`, …); must be the host. Default = host.
         #[arg(long = "target", value_name = "TRIPLE")]
         targets: Vec<String>,
         #[arg(short = 'p', long = "package", value_name = "NAME")]

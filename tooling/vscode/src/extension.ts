@@ -167,6 +167,20 @@ function quotePath(filePath: string): string {
     return `"${filePath.replace(/"/g, '\\"')}"`;
 }
 
+function isPowerShellTerminal(): boolean {
+    return process.platform === 'win32' && /pwsh|powershell/i.test(vscode.env.shell);
+}
+
+/** PowerShell needs the call operator to run a quoted executable path. */
+function terminalInvocation(command: string): string {
+    return isPowerShellTerminal() ? `& ${command}` : command;
+}
+
+/** Windows PowerShell 5.1 has no `&&`; `;` is fine since `cd` failures are rare. */
+function terminalChain(first: string, second: string): string {
+    return `${first} ${isPowerShellTerminal() ? ';' : '&&'} ${second}`;
+}
+
 /** Derives the sibling `.wat` path that the compiler writes next to a `.dream` source file. */
 function watPathFor(filePath: string): string {
     const parsed = path.parse(filePath);
@@ -392,7 +406,9 @@ async function runProgramInTerminal(
         const terminal = ensureDreamTerminal(projectRoot);
         await interruptDreamTerminalIfBusy();
         const cmd = `${quotePath(dreamer.path)} run${picked.targetArg}`;
-        terminal.sendText(`cd ${quotePath(projectRoot)} && ${cmd}`);
+        terminal.sendText(
+            terminalChain(`cd ${quotePath(projectRoot)}`, terminalInvocation(cmd))
+        );
         if (picked.host === 'web') {
             vscode.window.showInformationMessage(
                 'Dream: serving at http://127.0.0.1:8787/index.html (see terminal).'
@@ -410,9 +426,13 @@ async function runProgramInTerminal(
     const flags = formatCliArgs(flagArgs);
 
     if (settings.runtimeTarget === 'native') {
-        terminal.sendText(`${dreamCmd} ${flags}run ${quotePath(filePath)}`);
+        terminal.sendText(
+            terminalInvocation(`${dreamCmd} ${flags}run ${quotePath(filePath)}`)
+        );
     } else {
-        terminal.sendText(`${dreamCmd} ${flags}${quotePath(filePath)}`);
+        terminal.sendText(
+            terminalInvocation(`${dreamCmd} ${flags}${quotePath(filePath)}`)
+        );
         const targetLabel = settings.runtimeTarget === 'web' ? 'browser' : 'Node';
         vscode.window.showInformationMessage(
             `Dream: compiled with ${targetLabel} runtime (use the generated *.${settings.runtimeTarget}.runtime.js host).`

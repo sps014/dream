@@ -1,4 +1,5 @@
-//! Opt-in GPU frame timing (`DREAM_GPU_PROFILE=1`). Logs a rolling average every N frames.
+//! Opt-in GPU frame timing (`DREAM_GPU_PROFILE=1`). Logs the chosen adapter once, then a rolling
+//! average every N frames.
 //! Also appends to `/tmp/dream-gpu-profile.log`.
 
 use std::cell::RefCell;
@@ -36,7 +37,7 @@ impl FrameProf {
     }
 }
 
-fn enabled() -> bool {
+pub(crate) fn enabled() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| {
         std::env::var_os("DREAM_GPU_PROFILE")

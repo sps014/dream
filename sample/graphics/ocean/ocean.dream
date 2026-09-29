@@ -19,17 +19,30 @@ struct VsOut {
 }
 
 @gpu
+fun sea_hash(px: float, pz: float): float {
+    return GpuMath.fract(GpuMath.sin(px * 127.1 + pz * 311.7) * 43758.5453123);
+}
+
+@gpu
 fun sea_noise(x: float, z: float): float {
-    let ix: float = GpuMath.floor(x);
-    let iz: float = GpuMath.floor(z);
+    // The hash amplifies its last rounding bit, so neighbouring cells must feed it the exact same
+    // corner value. Writing corners as `ix + 1.0` lets non-IEEE-strict compilers (wgpu's DX12 FXC)
+    // refold `(ix + 1.0) * k` into `ix * k + k`, which cracks every cell edge; an int round-trip
+    // gives each corner one opaque value no matter which cell computes it.
+    let ci: int = (int)GpuMath.floor(x);
+    let cz: int = (int)GpuMath.floor(z);
+    let ix0: float = (float)ci;
+    let ix1: float = (float)(ci + 1);
+    let iz0: float = (float)cz;
+    let iz1: float = (float)(cz + 1);
     let fx: float = GpuMath.fract(x);
     let fz: float = GpuMath.fract(z);
     let ux: float = fx * fx * (3.0 - 2.0 * fx);
     let uz: float = fz * fz * (3.0 - 2.0 * fz);
-    let h00: float = GpuMath.fract(GpuMath.sin(ix * 127.1 + iz * 311.7) * 43758.5453123);
-    let h10: float = GpuMath.fract(GpuMath.sin((ix + 1.0) * 127.1 + iz * 311.7) * 43758.5453123);
-    let h01: float = GpuMath.fract(GpuMath.sin(ix * 127.1 + (iz + 1.0) * 311.7) * 43758.5453123);
-    let h11: float = GpuMath.fract(GpuMath.sin((ix + 1.0) * 127.1 + (iz + 1.0) * 311.7) * 43758.5453123);
+    let h00: float = sea_hash(ix0, iz0);
+    let h10: float = sea_hash(ix1, iz0);
+    let h01: float = sea_hash(ix0, iz1);
+    let h11: float = sea_hash(ix1, iz1);
     return -1.0 + 2.0 * GpuMath.mix(GpuMath.mix(h00, h10, ux), GpuMath.mix(h01, h11, ux), uz);
 }
 

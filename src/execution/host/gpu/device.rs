@@ -28,10 +28,11 @@ pub fn try_init(power: i32) -> i32 {
         return 0;
     }
     if st.instance.is_none() {
-        st.instance = Some(wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
-            ..Default::default()
-        }));
+        // Honors `WGPU_BACKEND` / `WGPU_DX12_COMPILER` so backend-specific rendering
+        // differences (e.g. DX12 FXC vs Vulkan on Windows) can be A/B'd without a rebuild.
+        st.instance = Some(wgpu::Instance::new(
+            &wgpu::InstanceDescriptor::from_env_or_default(),
+        ));
     }
     if st.adapter.is_some() && st.power_preference != pref {
         st.adapter = None;
@@ -44,7 +45,16 @@ pub fn try_init(power: i32) -> i32 {
             compatible_surface: None,
             force_fallback_adapter: false,
         })) {
-            Some(a) => a,
+            Some(a) => {
+                if super::profile::enabled() {
+                    let info = a.get_info();
+                    eprintln!(
+                        "[dream-gpu] adapter: {} ({:?}, {:?}, driver: {} {})",
+                        info.name, info.backend, info.device_type, info.driver, info.driver_info
+                    );
+                }
+                a
+            }
             None => {
                 st.set_last_error("no GPU adapter".into());
                 return ERR_UNAVAILABLE;

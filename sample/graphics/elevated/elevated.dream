@@ -55,18 +55,26 @@ fun hash22(ix: float, iz: float): GpuVec2 {
 // Gradient noise in [0,1] + analytic derivatives (iq `noised` / Shadertoy 4dXBRH).
 @gpu
 fun noised(x: float, z: float): GpuVec3 {
-    let ix: float = GpuMath.floor(x);
-    let iz: float = GpuMath.floor(z);
+    // hash21 amplifies its last rounding bit, so neighbouring cells must feed it the exact same
+    // corner value. Writing corners as `ix + 1.0` lets non-IEEE-strict compilers (wgpu's DX12 FXC)
+    // refold the hash arithmetic differently per cell, which cracks every cell edge; an int
+    // round-trip gives each corner one opaque value no matter which cell computes it.
+    let ci: int = (int)GpuMath.floor(x);
+    let cz: int = (int)GpuMath.floor(z);
+    let ix0: float = (float)ci;
+    let ix1: float = (float)(ci + 1);
+    let iz0: float = (float)cz;
+    let iz1: float = (float)(cz + 1);
     let fx: float = GpuMath.fract(x);
     let fz: float = GpuMath.fract(z);
     let ux: float = fade5(fx);
     let uz: float = fade5(fz);
     let dux: float = fade5_d(fx);
     let duz: float = fade5_d(fz);
-    let ga = hash22(ix, iz);
-    let gb = hash22(ix + 1.0, iz);
-    let gc = hash22(ix, iz + 1.0);
-    let gd = hash22(ix + 1.0, iz + 1.0);
+    let ga = hash22(ix0, iz0);
+    let gb = hash22(ix1, iz0);
+    let gc = hash22(ix0, iz1);
+    let gd = hash22(ix1, iz1);
     let va: float = ga.x * fx + ga.y * fz;
     let vb: float = gb.x * (fx - 1.0) + gb.y * fz;
     let vc: float = gc.x * fx + gc.y * (fz - 1.0);
@@ -82,16 +90,21 @@ fun noised(x: float, z: float): GpuVec3 {
 
 @gpu
 fun noise2(x: float, z: float): float {
-    let ix: float = GpuMath.floor(x);
-    let iz: float = GpuMath.floor(z);
+    // Int lattice corners for the same reason as `noised`.
+    let ci: int = (int)GpuMath.floor(x);
+    let cz: int = (int)GpuMath.floor(z);
+    let ix0: float = (float)ci;
+    let ix1: float = (float)(ci + 1);
+    let iz0: float = (float)cz;
+    let iz1: float = (float)(cz + 1);
     let fx: float = GpuMath.fract(x);
     let fz: float = GpuMath.fract(z);
     let ux: float = fx * fx * (3.0 - 2.0 * fx);
     let uz: float = fz * fz * (3.0 - 2.0 * fz);
-    let a: float = hash21(ix, iz);
-    let b: float = hash21(ix + 1.0, iz);
-    let c: float = hash21(ix, iz + 1.0);
-    let d: float = hash21(ix + 1.0, iz + 1.0);
+    let a: float = hash21(ix0, iz0);
+    let b: float = hash21(ix1, iz0);
+    let c: float = hash21(ix0, iz1);
+    let d: float = hash21(ix1, iz1);
     return GpuMath.mix(GpuMath.mix(a, b, ux), GpuMath.mix(c, d, ux), uz);
 }
 

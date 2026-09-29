@@ -29,6 +29,8 @@
 #include <signal.h>
 #endif
 
+#include "include/dream_thread.h"
+
 __attribute__((constructor))
 static void dream_stdio_linebuf(void) {
     setvbuf(stdout, NULL, _IOLBF, 0);
@@ -1092,9 +1094,7 @@ int64_t dateNowMillis(void) {
 }
 
 int64_t timeNowNanos(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t)ts.tv_sec * 1000000000LL + (int64_t)ts.tv_nsec;
+    return dream_monotonic_ns();
 }
 
 int64_t Time_nano_time(void) { return timeNowNanos(); }

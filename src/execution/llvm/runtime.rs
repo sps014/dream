@@ -84,6 +84,10 @@ fn native_target_args() -> &'static [&'static str] {
         &["--target=x86_64-unknown-linux-gnu"]
     } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
         &["--target=aarch64-unknown-linux-gnu"]
+    } else if cfg!(all(windows, target_env = "msvc", target_arch = "x86_64")) {
+        &["--target=x86_64-pc-windows-msvc"]
+    } else if cfg!(all(windows, target_env = "msvc", target_arch = "aarch64")) {
+        &["--target=aarch64-pc-windows-msvc"]
     } else {
         &[]
     }
@@ -140,7 +144,8 @@ fn clang_unit(clang: &Path, u: &Unit, flags: &[&str], out: &Path) -> Result<(), 
     let mut cmd = Command::new(clang);
     cmd.args(native_target_args())
         .args(sysroot_args())
-        .args(["-std=gnu11", "-pthread", "-w", "-c"])
+        .args(["-std=gnu11", "-w", "-c"])
+        .args(if cfg!(windows) { &[][..] } else { &["-pthread"][..] })
         .args(flags);
     for inc in &u.include_dirs {
         cmd.arg(format!("-I{}", inc.display()));

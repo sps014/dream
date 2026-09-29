@@ -2,8 +2,7 @@
 #include "../wasm32/include/dream_rt_wasm32.h"
 #else
 #include "include/dream_rt_native.h"
-
-#include <pthread.h>
+#include "include/dream_thread.h"
 #endif
 
 /* Weak / unowned / `Weak<T>` registrations, indexed by target. A target carries
@@ -42,14 +41,14 @@ static void weak_lock(void) {}
 static void weak_unlock(void) {}
 #endif
 #else
-static pthread_mutex_t weak_mu = PTHREAD_MUTEX_INITIALIZER;
+static dream_mutex weak_mu = DREAM_MUTEX_INIT;
 
 static void weak_lock(void) {
-    pthread_mutex_lock(&weak_mu);
+    dream_mutex_lock(&weak_mu);
 }
 
 static void weak_unlock(void) {
-    pthread_mutex_unlock(&weak_mu);
+    dream_mutex_unlock(&weak_mu);
 }
 #endif
 

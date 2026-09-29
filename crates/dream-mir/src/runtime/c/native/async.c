@@ -4,7 +4,7 @@
 #include <time.h>
 
 #ifndef DREAM_WASM32
-#include <pthread.h>
+#include "include/dream_thread.h"
 #endif
 
 #define KIND_HOST FUTURE_KIND_HOST
@@ -111,24 +111,24 @@ static int64_t vclock;
  * the main loop drains this queue and routes the stored waker exactly like an inline
  * completion (plain enqueue, or combinator progress). While foreign work is outstanding and
  * nothing else is ready, dream_run_loop parks on the condvar instead of returning. */
-static pthread_mutex_t wake_mu = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t wake_cv = PTHREAD_COND_INITIALIZER;
+static dream_mutex wake_mu = DREAM_MUTEX_INIT;
+static dream_cond wake_cv = DREAM_COND_INIT;
 static Node *fq_head;
 static Node *fq_tail;
 static int32_t foreign_pending;
 
 void dream_foreign_work_begin(void) {
-    pthread_mutex_lock(&wake_mu);
+    dream_mutex_lock(&wake_mu);
     foreign_pending += 1;
-    pthread_mutex_unlock(&wake_mu);
+    dream_mutex_unlock(&wake_mu);
 }
 
 void dream_foreign_work_end(void) {
-    pthread_mutex_lock(&wake_mu);
+    dream_mutex_lock(&wake_mu);
     if (foreign_pending > 0) {
         foreign_pending -= 1;
     }
-    pthread_mutex_unlock(&wake_mu);
+    dream_mutex_unlock(&wake_mu);
 }
 
 static void fq_push_locked(Node *n) {
@@ -152,12 +152,12 @@ void dream_complete_foreign(dream_ptr f, dream_ptr res) {
     /* Foreign Future/result are published so host pthreads use atomic RC. */
     dream_publish(f);
     dream_publish(res);
-    pthread_mutex_lock(&wake_mu);
+    dream_mutex_lock(&wake_mu);
     /* Publish under the lock so a concurrent dream_await cannot set its waker between our
      * status flip and our waker read (lost-wakeup guard). */
     if (!__atomic_compare_exchange_n(i32_at(f, F_STATUS), &expected, 1, 0,
                                      __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
-        pthread_mutex_unlock(&wake_mu);
+        dream_mutex_unlock(&wake_mu);
         free(n);
         return; /* already completed or cancelled */
     }
@@ -169,10 +169,10 @@ void dream_complete_foreign(dream_ptr f, dream_ptr res) {
         had_waker = 1;
         n->f = f;
         fq_push_locked(n);
-        pthread_cond_signal(&wake_cv);
+        dream_cond_signal(&wake_cv);
         n = NULL; /* drained by the loop */
     }
-    pthread_mutex_unlock(&wake_mu);
+    dream_mutex_unlock(&wake_mu);
     free(n);
     if (!had_waker) {
         scheduler_drop_start_retain(f);
@@ -182,7 +182,7 @@ void dream_complete_foreign(dream_ptr f, dream_ptr res) {
 static void foreign_drain(void) {
     Node *n;
     for (;;) {
-        pthread_mutex_lock(&wake_mu);
+        dream_mutex_lock(&wake_mu);
         n = fq_head;
         if (n) {
             fq_head = n->next;
@@ -190,7 +190,7 @@ static void foreign_drain(void) {
                 fq_tail = NULL;
             }
         }
-        pthread_mutex_unlock(&wake_mu);
+        dream_mutex_unlock(&wake_mu);
         if (!n) {
             return;
         }
@@ -329,7 +329,7 @@ void dream_await(dream_ptr parent, dream_ptr child) {
      * completion cannot flip status between them (lost-wakeup guard). */
     {
         int32_t done;
-        pthread_mutex_lock(&wake_mu);
+        dream_mutex_lock(&wake_mu);
         ptr_at(child, F_WAKER)[0] = parent;
         done = __atomic_load_n(i32_at(child, F_STATUS), __ATOMIC_ACQUIRE);
         if (done) {
@@ -338,7 +338,7 @@ void dream_await(dream_ptr parent, dream_ptr child) {
             /* Awaiting a lazy future is what launches it. */
             dream_start(child);
         }
-        pthread_mutex_unlock(&wake_mu);
+        dream_mutex_unlock(&wake_mu);
     }
 #else
     ptr_at(child, F_WAKER)[0] = parent;
@@ -407,24 +407,20 @@ void dream_run_loop(void) {
             int64_t now = timeNowNanos();
             int64_t due = timer_head ? timer_head->due : 0;
             if (due > now) {
-                struct timespec ts;
-                int64_t ns = due - now;
-                ts.tv_sec = (time_t)(ns / 1000000000LL);
-                ts.tv_nsec = (long)(ns % 1000000000LL);
-                pthread_mutex_lock(&wake_mu);
+                dream_mutex_lock(&wake_mu);
                 /* Re-check under the lock: a foreign completion between the drain above and
                  * this wait must not be slept through. */
                 if (!fq_head) {
-                    pthread_cond_timedwait(&wake_cv, &wake_mu, &ts);
+                    dream_cond_wait_ns(&wake_cv, &wake_mu, due - now);
                 }
-                pthread_mutex_unlock(&wake_mu);
+                dream_mutex_unlock(&wake_mu);
             } else if (!timer_head) {
                 /* No timers: park until a foreign completion signals. */
-                pthread_mutex_lock(&wake_mu);
+                dream_mutex_lock(&wake_mu);
                 if (!fq_head) {
-                    pthread_cond_wait(&wake_cv, &wake_mu);
+                    dream_cond_wait(&wake_cv, &wake_mu);
                 }
-                pthread_mutex_unlock(&wake_mu);
+                dream_mutex_unlock(&wake_mu);
             }
             now = timeNowNanos();
 #endif

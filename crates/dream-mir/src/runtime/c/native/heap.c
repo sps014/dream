@@ -1,7 +1,7 @@
 #include "include/dream_rt_native.h"
+#include "include/dream_thread.h"
 
 #include <limits.h>
-#include <pthread.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,7 +38,7 @@ static int nchunks;
 static char *heap_maps[64];
 static size_t heap_map_lens[64];
 static int nheap_maps;
-static pthread_mutex_t heap_mu = PTHREAD_MUTEX_INITIALIZER;
+static dream_mutex heap_mu = DREAM_MUTEX_INIT;
 int dream_rt_mt;
 
 /* Per-thread LIFO of exact size-class blocks (`dream_heap.free`) plus the fast-path gate.
@@ -74,11 +74,11 @@ static int region_owns_block(char *block) {
 }
 
 static void heap_lock(void) {
-    pthread_mutex_lock(&heap_mu);
+    dream_mutex_lock(&heap_mu);
 }
 
 static void heap_unlock(void) {
-    pthread_mutex_unlock(&heap_mu);
+    dream_mutex_unlock(&heap_mu);
 }
 
 /* Class index for a block of `size` total bytes, or NCLASS when it is a large block. */

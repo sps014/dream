@@ -1,6 +1,6 @@
 #include "include/dream_rt_native.h"
+#include "include/dream_thread.h"
 
-#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -18,9 +18,9 @@ typedef struct Worker {
     int32_t id;
     int32_t fn;
     dream_ptr env;
-    pthread_t th;
-    pthread_mutex_t mu;
-    pthread_cond_t cv;
+    dream_thread th;
+    dream_mutex mu;
+    dream_cond cv;
     Job *head;
     Job *tail;
     dream_ptr reply;
@@ -32,23 +32,23 @@ typedef struct Worker {
 
 #define MAX_WORKERS 64
 static Worker *workers[MAX_WORKERS];
-static pthread_mutex_t reg_mu = PTHREAD_MUTEX_INITIALIZER;
+static dream_mutex reg_mu = DREAM_MUTEX_INIT;
 static int32_t next_id = 1;
 
 static Worker *find_worker(int32_t id);
 static void destroy_worker(Worker *w);
 
-static void *worker_main(void *arg) {
+static DREAM_THREAD_PROC(worker_main) {
     Worker *w = (Worker *)arg;
     dream_thread_attach();
     for (;;) {
-        pthread_mutex_lock(&w->mu);
+        dream_mutex_lock(&w->mu);
         while (!w->head && !w->dead) {
-            pthread_cond_wait(&w->cv, &w->mu);
+            dream_cond_wait(&w->cv, &w->mu);
         }
         if (w->dead && !w->head) {
             int abandoned = w->abandoned;
-            pthread_mutex_unlock(&w->mu);
+            dream_mutex_unlock(&w->mu);
             if (abandoned) {
                 destroy_worker(w);
             }
@@ -60,20 +60,20 @@ static void *worker_main(void *arg) {
             w->tail = NULL;
         }
         w->busy = 1;
-        pthread_mutex_unlock(&w->mu);
+        dream_mutex_unlock(&w->mu);
         dream_ptr r = dream_worker_invoke(j->fn, j->env, j->msg);
         /* Ownership of `j->msg` transferred to `dream_worker_invoke`, which releases it once the
          * body has run; releasing here too over-frees the posted wire string. */
         free(j);
-        pthread_mutex_lock(&w->mu);
+        dream_mutex_lock(&w->mu);
         dream_publish(r);
         w->reply = r;
         w->has_reply = 1;
         w->busy = 0;
-        pthread_cond_signal(&w->cv);
-        pthread_mutex_unlock(&w->mu);
+        dream_cond_signal(&w->cv);
+        dream_mutex_unlock(&w->mu);
     }
-    return NULL;
+    return 0;
 }
 
 static Worker *find_worker(int32_t id) {
@@ -94,9 +94,9 @@ int32_t workerSpawn(int32_t fn, int64_t env) {
     w->env = (dream_ptr)(uintptr_t)env;
     dream_publish(w->env);
     dream_retain(w->env);
-    pthread_mutex_init(&w->mu, NULL);
-    pthread_cond_init(&w->cv, NULL);
-    pthread_mutex_lock(&reg_mu);
+    dream_mutex_init(&w->mu);
+    dream_cond_init(&w->cv);
+    dream_mutex_lock(&reg_mu);
     w->id = next_id++;
     for (i = 0; i < MAX_WORKERS; i++) {
         if (!workers[i]) {
@@ -104,8 +104,8 @@ int32_t workerSpawn(int32_t fn, int64_t env) {
             break;
         }
     }
-    pthread_mutex_unlock(&reg_mu);
-    pthread_create(&w->th, NULL, worker_main, w);
+    dream_mutex_unlock(&reg_mu);
+    dream_thread_start(&w->th, worker_main, w);
     return w->id;
 }
 
@@ -114,9 +114,9 @@ int32_t workerPoolSpawn(void) { return workerSpawn(0, 0); }
 void workerPost(int32_t id, dream_ptr msg) {
     Worker *w;
     Job *j;
-    pthread_mutex_lock(&reg_mu);
+    dream_mutex_lock(&reg_mu);
     w = find_worker(id);
-    pthread_mutex_unlock(&reg_mu);
+    dream_mutex_unlock(&reg_mu);
     if (!w) {
         return;
     }
@@ -126,23 +126,23 @@ void workerPost(int32_t id, dream_ptr msg) {
     j->msg = msg;
     dream_publish(msg);
     dream_retain(msg);
-    pthread_mutex_lock(&w->mu);
+    dream_mutex_lock(&w->mu);
     if (w->tail) {
         w->tail->next = j;
     } else {
         w->head = j;
     }
     w->tail = j;
-    pthread_cond_signal(&w->cv);
-    pthread_mutex_unlock(&w->mu);
+    dream_cond_signal(&w->cv);
+    dream_mutex_unlock(&w->mu);
 }
 
 dream_ptr workerPoolDispatch(int32_t id, int32_t fn, int64_t env, dream_ptr msg) {
     Worker *w;
     Job *j;
-    pthread_mutex_lock(&reg_mu);
+    dream_mutex_lock(&reg_mu);
     w = find_worker(id);
-    pthread_mutex_unlock(&reg_mu);
+    dream_mutex_unlock(&reg_mu);
     if (!w) {
         return 0;
     }
@@ -153,35 +153,35 @@ dream_ptr workerPoolDispatch(int32_t id, int32_t fn, int64_t env, dream_ptr msg)
     dream_publish(j->env);
     dream_publish(msg);
     dream_retain(msg);
-    pthread_mutex_lock(&w->mu);
+    dream_mutex_lock(&w->mu);
     if (w->tail) {
         w->tail->next = j;
     } else {
         w->head = j;
     }
     w->tail = j;
-    pthread_cond_signal(&w->cv);
-    pthread_mutex_unlock(&w->mu);
+    dream_cond_signal(&w->cv);
+    dream_mutex_unlock(&w->mu);
     return worker_recv_blocking(id);
 }
 
 static dream_ptr worker_recv_blocking(int32_t id) {
     Worker *w;
     dream_ptr r;
-    pthread_mutex_lock(&reg_mu);
+    dream_mutex_lock(&reg_mu);
     w = find_worker(id);
-    pthread_mutex_unlock(&reg_mu);
+    dream_mutex_unlock(&reg_mu);
     if (!w) {
         return 0;
     }
-    pthread_mutex_lock(&w->mu);
+    dream_mutex_lock(&w->mu);
     while (!w->has_reply && !w->dead) {
-        pthread_cond_wait(&w->cv, &w->mu);
+        dream_cond_wait(&w->cv, &w->mu);
     }
     r = w->reply;
     w->reply = 0;
     w->has_reply = 0;
-    pthread_mutex_unlock(&w->mu);
+    dream_mutex_unlock(&w->mu);
     return r;
 }
 
@@ -190,7 +190,7 @@ dream_ptr workerRecv(int32_t id) { return worker_recv_blocking(id); }
 static Worker *take_worker(int32_t id) {
     Worker *w = NULL;
     int i;
-    pthread_mutex_lock(&reg_mu);
+    dream_mutex_lock(&reg_mu);
     for (i = 0; i < MAX_WORKERS; i++) {
         if (workers[i] && workers[i]->id == id) {
             w = workers[i];
@@ -198,7 +198,7 @@ static Worker *take_worker(int32_t id) {
             break;
         }
     }
-    pthread_mutex_unlock(&reg_mu);
+    dream_mutex_unlock(&reg_mu);
     return w;
 }
 
@@ -218,8 +218,8 @@ static void destroy_worker(Worker *w) {
         dream_release(w->reply);
     }
     dream_release_closure_env(w->env);
-    pthread_mutex_destroy(&w->mu);
-    pthread_cond_destroy(&w->cv);
+    dream_mutex_destroy(&w->mu);
+    dream_cond_destroy(&w->cv);
     free(w);
 }
 
@@ -230,20 +230,20 @@ void workerTerminate(int32_t id) {
     if (!w) {
         return;
     }
-    pthread_mutex_lock(&w->mu);
+    dream_mutex_lock(&w->mu);
     w->dead = 1;
     busy = w->busy;
     if (busy) {
         w->abandoned = 1;
     }
-    pthread_cond_signal(&w->cv);
-    pthread_mutex_unlock(&w->mu);
+    dream_cond_signal(&w->cv);
+    dream_mutex_unlock(&w->mu);
     if (busy) {
         /* Hard abort: the body is still running (e.g. Promise.cancel on a tight loop).
          * Detach so we do not hang `del()`; the thread self-frees if it ever exits. */
-        pthread_detach(w->th);
+        dream_thread_detach(w->th);
         return;
     }
-    pthread_join(w->th, NULL);
+    dream_thread_join(w->th);
     destroy_worker(w);
 }

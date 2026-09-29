@@ -286,7 +286,9 @@ pub fn compile_llvm(
     if let Some(png) = &icon_png {
         lcmd.arg(icon::windows_resource(&tools, ll_path, png)?);
     }
-    lcmd.args(["-lm", "-lpthread"]);
+    if !cfg!(windows) {
+        lcmd.args(["-lm", "-lpthread"]);
+    }
     let Some(dir) = libdream_dir() else {
         return Err(
             "libdream not found next to the dream binary (needed to link host functions). \

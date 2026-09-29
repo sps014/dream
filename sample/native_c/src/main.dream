@@ -1,0 +1,18 @@
+import system;
+import ticker;
+
+fun main(): void {
+    let t = Ticker("demo");
+    let calls = 0;
+    t.on_tick((tick: int) => {
+        calls = calls + 1;
+        return tick * 10;
+    });
+    System.println(t.name() + " total = " + t.run(3).to_string());
+    System.println(t.name() + " total = " + t.run(2).to_string());
+    System.println("callbacks = " + calls.to_string());
+    System.println(t.label(4).unwrap_or("(none)"));
+    System.println(t.label(9).unwrap_or("(none)"));
+    let data: byte[] = [100, 114, 101, 97, 109];
+    System.println("fingerprint = " + fingerprint(data).to_string());
+}

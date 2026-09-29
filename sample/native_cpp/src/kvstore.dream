@@ -1,0 +1,43 @@
+// The thin Dream wrapper over native/include/kv.hpp. Every member is a declaration; the compiler
+// generates the C++ shim that implements it, and the C++ compiler checks it against the header.
+module kvstore;
+
+@cpp("kv.hpp", "geom::Point")
+public struct Point {
+    public x: double;
+    public y: double;
+}
+
+@cpp("kv.hpp", "kv::Store")
+public class Store {
+    extern constructor(path: string);
+    extern fun put(key: string, value: string): void;
+    extern fun get(key: string): Option<string>;
+    // Borrowed `Entry*`: the Entry keeps this Store alive.
+    extern fun find(key: string): Option<Entry>;
+    // By-value `Entry`: owned; a thrown exception becomes `Err(e.what())`.
+    extern fun snapshot(key: string): Result<Entry, string>;
+    // `void` in C++; `Ok(true)` unless it throws.
+    extern fun compact(): Result<bool, string>;
+    // `std::function`: capturing closures are fine.
+    extern fun on_change(f: fun(string): void): void;
+    @cpp_name("get_as<int>") extern fun get_int(key: string): int;
+    extern fun count(): int;
+    extern fun count(prefix: string): int;
+    // C++ fills in the default `factor`.
+    extern fun scaled(): int;
+    extern fun sum(xs: int[]): long;
+    extern fun norm(p: Point): double;
+    extern fun origin(ref out: Point): void;
+    @owned static extern fun open_default(): Store;
+    static extern fun version(): string;
+}
+
+@cpp("kv.hpp", "kv::Entry")
+public class Entry {
+    @cpp_name("name") extern fun key(): string;
+    extern fun val(): string;
+}
+
+@cpp("kv.hpp", "kv::greet")
+extern fun greet(who: string): string;

@@ -1,0 +1,14 @@
+// `Option<string>` is a nullable `const char*`: a NULL result becomes `None`.
+import system;
+
+@c("c", "getenv")
+extern fun getenv(name: string): Option<string>;
+
+@c("c", "strlen")
+extern fun strlen(s: string): long;
+
+fun main(): void {
+    System.println(getenv("DREAM_SURELY_UNSET_VARIABLE").unwrap_or("(unset)"));
+    System.println(getenv("PATH").is_some());
+    System.println(strlen("dream"));
+}

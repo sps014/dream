@@ -1,0 +1,7 @@
+[package]
+name = "ticker"
+version = "0.1.0"
+type = "bin"
+entry = "src/main.dream"
+targets = ["native"]
+description = "@c sample: C sources in native/ behind a thin Dream wrapper"

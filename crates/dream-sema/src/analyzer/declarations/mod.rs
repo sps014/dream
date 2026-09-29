@@ -21,6 +21,7 @@
 
 use super::*;
 
+mod c_boundary;
 mod enums;
 pub(in crate::analyzer) mod functions;
 mod globals;

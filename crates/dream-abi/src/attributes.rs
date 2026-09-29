@@ -549,11 +549,44 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         targets: &[AttributeTarget::ExternFunction],
         args: ArgShape::Args {
             kinds: &[ArgKind::String, ArgKind::String],
-            min: 2,
+            min: 0,
             max: 2,
         },
         repeatable: false,
-        doc: "Binds an extern function to a native C ABI library/symbol: `@c(\"lib\", \"symbol\")`. Native-only (`@native` is optional; `@node`/`@web` are rejected).",
+        doc: "Binds an extern function to a native C ABI library/symbol: `@c(\"lib\", \"symbol\")`. `@c(\"lib\")` uses the Dream name as the symbol; bare `@c` also binds to the declaring package's `native/` sources. Native-only (`@native` is optional; `@node`/`@web` are rejected).",
+    },
+    AttributeSpec {
+        name: "cpp",
+        targets: &[
+            AttributeTarget::Struct,
+            AttributeTarget::ValueStruct,
+            AttributeTarget::ExternFunction,
+        ],
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String, ArgKind::String],
+            min: 1,
+            max: 2,
+        },
+        repeatable: false,
+        doc: "Binds a class, `@unmanaged` struct, or free extern function to C++: `@cpp(\"header.hpp\", \"ns::Name\")`. The header resolves against the declaring package's `native/include/`; the name defaults to the Dream name. The compiler generates the `extern \"C\"` shim. Native-only.",
+    },
+    AttributeSpec {
+        name: "cpp_name",
+        targets: &[AttributeTarget::ExternFunction],
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String],
+            min: 1,
+            max: 1,
+        },
+        repeatable: false,
+        doc: "The C++ member (or expression) a `@cpp` extern calls, for renames and template instantiations: `@cpp_name(\"get_as<int>\")`.",
+    },
+    AttributeSpec {
+        name: "owned",
+        targets: &[AttributeTarget::ExternFunction],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "A `@cpp` member returning `T*` transfers ownership: the Dream object deletes it.",
     },
     AttributeSpec {
         name: "c_call",
@@ -568,14 +601,14 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
     },
     AttributeSpec {
         name: "marshal",
-        targets: &[AttributeTarget::ExternFunction],
+        targets: &[AttributeTarget::ExternFunction, AttributeTarget::Parameter],
         args: ArgShape::Args {
             kinds: &[ArgKind::String],
             min: 1,
             max: 1,
         },
         repeatable: false,
-        doc: "String marshaling for `@c` externs: `@marshal(\"lpstr\")` or `@marshal(\"lpwstr\")`.",
+        doc: "`@c` marshaling: on the extern, string encoding (`@marshal(\"lpstr\")` / `@marshal(\"lpwstr\")`); on a `NativeCallback` parameter, `@marshal(\"user_data_last\")` passes `user_data` after the callback's own arguments.",
     },
     AttributeSpec {
         name: "packed",

@@ -2080,3 +2080,24 @@ fn test_receiver_mode_on_extern_method_parses() {
         Some(crate::nodes::function::ReceiverMode::Unique)
     ));
 }
+
+#[test]
+fn test_extern_constructor_parses_without_body() {
+    let code = "class C { extern constructor(path: string); extern fun get(): int; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+    let ctor = &program.structs[0].methods[0];
+    assert!(ctor.is_extern);
+    assert_eq!(ctor.name.text, crate::nodes::types::CONSTRUCTOR_NAME);
+    assert_eq!(ctor.parameters.len(), 1);
+    assert_eq!(program.structs[0].methods.len(), 2);
+}
+
+#[test]
+fn test_extern_del_is_rejected() {
+    let code = "class C { extern del(); }";
+    let arena = bumpalo::Bump::new();
+    let (_, diagnostics) = parse_code(code, &arena);
+    assert!(diagnostics.has_errors());
+}

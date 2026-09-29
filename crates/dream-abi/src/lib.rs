@@ -4,6 +4,7 @@
 //! without depending on the backend.
 
 pub mod attributes;
+pub mod c_abi;
 pub mod gpu_format;
 pub mod gpu_swizzle;
 pub mod intrinsics;

@@ -176,6 +176,14 @@ pub struct Manifest {
     /// `registry = "name"`. The `default` alias is used when a dependency omits `registry`.
     #[serde(default)]
     pub registries: BTreeMap<String, String>,
+    /// `[[generators]]` source-generator entries, read by the compiler; kept verbatim so `save`
+    /// round-trips them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub generators: Vec<toml::Value>,
+    /// `[native.<set>]` C/C++ source-set tables, read by the compiler; kept verbatim so `save`
+    /// round-trips them.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub native: BTreeMap<String, toml::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -209,6 +217,10 @@ pub struct PackageMeta {
     /// - `dreamer pack`: PNG bytes are copied into the single-file exe (no sidecar assets folder).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// Native library this package provides (`links = "sqlite3"`); at most one package in a
+    /// dependency graph may claim a given name, like Cargo's `links`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub links: Option<String>,
 }
 
 /// A dependency requirement: either a bare semver requirement string (`"^1.2"`) or a detailed
@@ -381,12 +393,15 @@ impl Manifest {
                 keywords: Vec::new(),
                 targets: Vec::new(),
                 icon: None,
+                links: None,
             }),
             workspace: None,
             dependencies: BTreeMap::new(),
             dev_dependencies: BTreeMap::new(),
             scripts: BTreeMap::new(),
             registries: BTreeMap::new(),
+            generators: Vec::new(),
+            native: BTreeMap::new(),
         }
     }
 
@@ -405,12 +420,15 @@ impl Manifest {
                 keywords: Vec::new(),
                 targets: Vec::new(),
                 icon: None,
+                links: None,
             }),
             workspace: None,
             dependencies: BTreeMap::new(),
             dev_dependencies: BTreeMap::new(),
             scripts: BTreeMap::new(),
             registries: BTreeMap::new(),
+            generators: Vec::new(),
+            native: BTreeMap::new(),
         }
     }
 
@@ -423,6 +441,8 @@ impl Manifest {
             dev_dependencies: BTreeMap::new(),
             scripts: BTreeMap::new(),
             registries: BTreeMap::new(),
+            generators: Vec::new(),
+            native: BTreeMap::new(),
         }
     }
 
@@ -712,6 +732,38 @@ mod tests {
         assert!(manifest.validate().is_err());
         manifest.package_mut().unwrap().icon = Some("".into());
         assert!(manifest.validate().is_err());
+    }
+
+    #[test]
+    fn round_trips_native_links_and_generators() {
+        let text = r#"
+[package]
+name = "kv"
+version = "0.1.0"
+type = "lib"
+links = "kv"
+
+[[generators]]
+path = "gen/a.dream"
+
+[native.kv]
+cflags = ["-O2"]
+
+[native.kv.macos]
+frameworks = ["Security"]
+"#;
+        let manifest: Manifest = toml::from_str(text).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join(MANIFEST_FILE_NAME);
+        manifest.save(&path).unwrap();
+        let saved = std::fs::read_to_string(&path).unwrap();
+        let loaded = Manifest::load(&path).unwrap();
+        assert_eq!(loaded.package().unwrap().links.as_deref(), Some("kv"));
+        assert_eq!(loaded.generators.len(), 1);
+        let kv = loaded.native.get("kv").unwrap();
+        assert_eq!(kv["cflags"][0].as_str(), Some("-O2"));
+        assert_eq!(kv["macos"]["frameworks"][0].as_str(), Some("Security"));
+        assert!(saved.contains("gen/a.dream"), "{saved}");
     }
 
     #[test]

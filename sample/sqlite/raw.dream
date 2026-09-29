@@ -8,38 +8,33 @@
 import system;
 
 @c("sqlite3", "sqlite3_open")
-extern fun sqlite3_open(path: string, ref db: long): int;
+extern fun sqlite3_open(path: string, ref db: CPtr): int;
 
 @c("sqlite3", "sqlite3_close")
-extern fun sqlite3_close(db: long): int;
+extern fun sqlite3_close(db: CPtr): int;
 
 // sqlite3_exec callback: int (*)(void*, int, char**, char**)
 @c("sqlite3", "sqlite3_exec")
 extern fun sqlite3_exec(
-    db: long,
+    db: CPtr,
     sql: string,
-    callback: fun(long, int, long, long): int,
-    arg: long,
-    ref errmsg: long
+    callback: fun(CPtr, int, CPtr, CPtr): int,
+    arg: Option<CPtr>,
+    ref errmsg: CPtr
 ): int;
 
-fun ignore_row(_arg: long, _argc: int, _argv: long, _cols: long): int {
+fun ignore_row(_arg: CPtr, _argc: int, _argv: CPtr, _cols: CPtr): int {
     return 0;
 }
 
-fun print_row(_arg: long, argc: int, argv: long, _cols: long): int {
+fun print_row(_arg: CPtr, argc: int, argv: CPtr, _cols: CPtr): int {
     let line = "";
     let i = 0;
     while i < argc {
         if i > 0 {
             line = line + "|";
         }
-        let p = Ffi.read_ptr(argv, i);
-        if p == 0L {
-            line = line + "NULL";
-        } else {
-            line = line + Ffi.read_cstring(p);
-        }
+        line = line + Ffi.read_cstring(Ffi.read_ptr(argv, i)).unwrap_or("NULL");
         i = i + 1;
     }
     System.println(line);
@@ -47,7 +42,7 @@ fun print_row(_arg: long, argc: int, argv: long, _cols: long): int {
 }
 
 fun main(): void {
-    let db: long = 0L;
+    let db = CPtr.null();
     let rc = sqlite3_open(":memory:", ref db);
     if rc != 0 {
         System.println("sqlite3_open failed: " + rc);
@@ -55,20 +50,20 @@ fun main(): void {
     }
     System.println("opened in-memory database");
 
-    let __errmsg: long = 0L;
+    let errmsg = CPtr.null();
     let ddl = "CREATE TABLE t(x INT); INSERT INTO t VALUES (1), (2);";
-    let ok = sqlite3_exec(db, ddl, ignore_row, 0L, ref __errmsg);
+    let ok = sqlite3_exec(db, ddl, ignore_row, Option.None, ref errmsg);
     if ok != 0 {
         System.println("exec failed with rc=" + ok);
     } else {
         System.println("exec ok");
     }
 
-    let qerr: long = 0L;
-    let qrc = sqlite3_exec(db, "SELECT x FROM t ORDER BY x;", print_row, 0L, ref qerr);
+    let qerr = CPtr.null();
+    let qrc = sqlite3_exec(db, "SELECT x FROM t ORDER BY x;", print_row, Option.None, ref qerr);
     System.println("SELECT rc=" + qrc);
     if qrc != 0 {
-        System.println("SELECT errmsg ptr=" + qerr);
+        System.println("SELECT error: " + Ffi.read_cstring(qerr).unwrap_or("?"));
     }
 
     let closed = sqlite3_close(db);

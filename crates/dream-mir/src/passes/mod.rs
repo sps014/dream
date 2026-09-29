@@ -10,7 +10,7 @@ mod devirt;
 mod dse;
 mod dump;
 mod frame_alloc;
-mod funcbox_abi;
+pub(crate) mod funcbox_abi;
 mod param_modes;
 #[cfg(test)]
 mod param_modes_tests;

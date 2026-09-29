@@ -1,6 +1,51 @@
 module system;
 
-// Host-address-space pointers from `@c` callbacks (`char**`, `char*`). Native-only.
+// An opaque C pointer (`void*`, `T*`). `@c` passes it by value; `ref p: CPtr` is a `T**` out-param
+// and `Option<CPtr>` a nullable pointer. Native-only.
+public struct CPtr {
+    raw: long;
+
+    public constructor(raw: long) {
+        this.raw = raw;
+    }
+
+    // The `NULL` pointer.
+    public static fun null(): CPtr {
+        return CPtr(0L);
+    }
+
+    // True when this is `NULL`.
+    public fun is_null(): bool {
+        return this.raw == 0L;
+    }
+
+    // The pointer as an integer address.
+    public fun address(): long {
+        return this.raw;
+    }
+
+    // The pointer `bytes` bytes past this one.
+    public fun offset(bytes: long): CPtr {
+        return CPtr(this.raw + bytes);
+    }
+
+    fun operator ==(other: CPtr): bool {
+        return this.raw == other.raw;
+    }
+}
+
+// A Dream `fun` (capturing or not) handed to a `@c` extern as a `(fn, void* user_data)` pair. C may
+// call it for as long as this object is alive: keep it in a field while C holds the pointer.
+// Calls from threads Dream did not start trap.
+public class NativeCallback<F> {
+    f: F;
+
+    public constructor(f: F) {
+        this.f = f;
+    }
+}
+
+// Reads through host-address-space pointers from `@c` callbacks (`char**`, `char*`). Native-only.
 public static class Ffi {
     @native
     @intrinsic("dream_ffi_read_ptr")
@@ -10,15 +55,48 @@ public static class Ffi {
     @intrinsic("dream_ffi_read_cstring")
     static extern fun host_read_cstring(ptr: long): string;
 
-    // `*((void**)base + index)`. `base == 0` returns `0`.
     @native
-    public static fun read_ptr(base: long, index: int): long {
-        return Ffi.host_read_ptr(base, index);
+    @intrinsic("dream_ffi_read_i32")
+    static extern fun host_read_i32(base: long, index: int): int;
+
+    @native
+    @intrinsic("dream_ffi_read_i64")
+    static extern fun host_read_i64(base: long, index: int): long;
+
+    @native
+    @intrinsic("dream_ffi_read_f64")
+    static extern fun host_read_f64(base: long, index: int): double;
+
+    // `((int32_t*)base)[index]`.
+    @native
+    public static fun read_int(base: CPtr, index: int): int {
+        return Ffi.host_read_i32(base.address(), index);
     }
 
-    // Copies a NUL-terminated UTF-8 C string at `ptr` into a Dream `string`. `ptr == 0` is empty.
+    // `((int64_t*)base)[index]`.
     @native
-    public static fun read_cstring(ptr: long): string {
-        return Ffi.host_read_cstring(ptr);
+    public static fun read_long(base: CPtr, index: int): long {
+        return Ffi.host_read_i64(base.address(), index);
+    }
+
+    // `((double*)base)[index]`.
+    @native
+    public static fun read_double(base: CPtr, index: int): double {
+        return Ffi.host_read_f64(base.address(), index);
+    }
+
+    // `((void**)base)[index]`. A `NULL` base reads `NULL`.
+    @native
+    public static fun read_ptr(base: CPtr, index: int): CPtr {
+        return CPtr(Ffi.host_read_ptr(base.address(), index));
+    }
+
+    // Copies the NUL-terminated UTF-8 C string at `ptr` into a Dream `string`; `None` for `NULL`.
+    @native
+    public static fun read_cstring(ptr: CPtr): Option<string> {
+        if ptr.is_null() {
+            return Option.None;
+        }
+        return Option.Some(Ffi.host_read_cstring(ptr.address()));
     }
 }

@@ -79,6 +79,7 @@ pub(crate) fn intern_strings(mir: &Mir) -> IndexMap<String, String> {
     for base in crate::backend::shared::panic_msgs::ALL {
         found.push(base.to_string());
     }
+    found.extend(crate::backend::shared::panic_msgs::c_boundary(mir));
     if entry_reports_error(mir) {
         found.push(ERROR_PREFIX.to_string());
     }

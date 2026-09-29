@@ -413,6 +413,9 @@ pub struct Analyzer<'a> {
     /// binding for each of a generic class's `extern`/`@intrinsic` methods, mangled per instance)
     /// consult this list instead of `node.structs` to find every instantiation that needs one.
     generic_struct_instances: Vec<(String, Vec<Type>)>,
+    /// `@c` externs (by registered name) whose listed `fun` parameters need a per-target C wrapper,
+    /// so a call site must pass a named function or a lambda literal there.
+    c_wrapped_fun_params: HashMap<String, Vec<usize>>,
     /// `@intrinsic` methods recorded at registration (`{Type}_{method}` DefId + key), including
     /// each generic monomorphization. [`hir_build_intrinsics`] merges this with free-function
     /// scan so codegen can dispatch by DefId.
@@ -578,6 +581,7 @@ impl<'a> Analyzer<'a> {
             is_binding_aliases: Vec::new(),
             generic_structs: HashMap::new(),
             generic_struct_instances: Vec::new(),
+            c_wrapped_fun_params: HashMap::new(),
             intrinsic_defs: Vec::new(),
             struct_methods: Vec::new(),
             enum_table: IndexMap::new(),

@@ -114,6 +114,23 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                     }
                 }
             }
+
+            if let Ok(mut graph) = dream::driver::native_sets::NativeGraph::load(path_str, &acc) {
+                graph
+                    .aliases
+                    .insert(MAIN_FILE.to_string(), path_str.to_string());
+                dream::driver::native_sets::resolve_bare_c_attrs(
+                    &mut acc,
+                    &graph,
+                    &mut diagnostics,
+                );
+                let _ = dream::driver::cpp_bridge::expand(
+                    &arena,
+                    &mut acc,
+                    &graph,
+                    &mut diagnostics,
+                );
+            }
         }
 
         if program_uses_json_attr(&acc) {

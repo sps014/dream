@@ -1,0 +1,50 @@
+// The thin Dream wrapper over native/include/ticker.h. Bare `@c` binds to this package's own
+// `native/` sources and uses the Dream name as the C symbol.
+module ticker;
+
+import system;
+
+@c extern fun ticker_new(name: string): CPtr;
+@c extern fun ticker_free(t: CPtr): void;
+@c extern fun ticker_name(t: CPtr): string;
+@c extern fun ticker_on_tick(t: CPtr, cb: NativeCallback<fun(int): int>): void;
+@c extern fun ticker_run(t: CPtr, ticks: int): int;
+@c extern fun ticker_label(t: CPtr, tick: int): Option<string>;
+@c extern fun checksum(data: byte[], len: long): int;
+
+public class Ticker {
+    handle: CPtr;
+    // C holds the callback between calls, so the Ticker keeps it alive.
+    listener: Option<NativeCallback<fun(int): int>>;
+
+    public constructor(name: string) {
+        this.handle = ticker_new(name);
+        this.listener = Option.None;
+    }
+
+    public fun name(): string {
+        return ticker_name(this.handle);
+    }
+
+    public fun on_tick(f: fun(int): int): void {
+        let cb = NativeCallback<fun(int): int>(f);
+        ticker_on_tick(this.handle, cb);
+        this.listener = Option.Some(cb);
+    }
+
+    public fun run(ticks: int): int {
+        return ticker_run(this.handle, ticks);
+    }
+
+    public fun label(tick: int): Option<string> {
+        return ticker_label(this.handle, tick);
+    }
+
+    del() {
+        ticker_free(this.handle);
+    }
+}
+
+public fun fingerprint(data: byte[]): int {
+    return checksum(data, data.length);
+}

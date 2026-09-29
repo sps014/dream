@@ -554,6 +554,7 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
         self.check_compute_call(&store_sig, name.position, diagnostics);
+        self.check_c_fun_args(&store_sig.name, params, symbol_table, diagnostics);
 
         self.validate_ref_arguments(
             &format!("function '{}'", function_name),

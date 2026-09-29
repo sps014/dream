@@ -1,0 +1,72 @@
+import system;
+import kvstore;
+
+fun point(x: double, y: double): Point {
+    let p = Point();
+    p.x = x;
+    p.y = y;
+    return p;
+}
+
+fun fill(s: Store): void {
+    let seen = List<string>();
+    s.on_change((k: string) => seen.push(k));
+    s.put("a", "1");
+    s.put("ab", "22");
+    s.put("b", "333");
+    System.println("changed: " + seen.join(","));
+}
+
+fun query(s: Store): void {
+    System.println("ab = " + s.get("ab").unwrap_or("?"));
+    System.println("zz = " + s.get("zz").unwrap_or("(none)"));
+    System.println("b as int = " + s.get_int("b").to_string());
+    System.println("count = " + s.count().to_string());
+    System.println("count(a) = " + s.count("a").to_string());
+    System.println("scaled = " + s.scaled().to_string());
+    System.println("sum = " + s.sum([1, 2, 3, 4]).to_string());
+    System.println("norm = " + s.norm(point(3.0, 4.0)).to_string());
+    let o = point(0.0, 0.0);
+    s.origin(ref o);
+    System.println("origin = " + o.x.to_string() + "," + o.y.to_string());
+}
+
+fun results(s: Store): void {
+    switch (s.compact()) {
+        Ok(v) => System.println("compact ok " + v.to_string()),
+        Err(e) => System.println("compact failed: " + e),
+    }
+    switch (s.snapshot("nope")) {
+        Ok(e) => System.println("snapshot " + e.key()),
+        Err(e) => System.println("snapshot failed"),
+    }
+    switch (s.snapshot("ab")) {
+        Ok(e) => System.println("snapshot " + e.key() + "=" + e.val()),
+        Err(e) => System.println(e),
+    }
+}
+
+fun borrowed(): Option<Entry> {
+    let s = Store("main.db");
+    fill(s);
+    query(s);
+    results(s);
+    return s.find("ab");
+}
+
+fun main(): void {
+    let e = borrowed();
+    System.println("store out of scope");
+    switch (e) {
+        Some(x) => System.println("borrowed entry " + x.key()),
+        None => System.println("no entry"),
+    }
+    let d = Store.open_default();
+    System.println(Store.version());
+    System.println(greet("dream"));
+    let empty = Store("empty");
+    switch (empty.compact()) {
+        Ok(v) => System.println("compact ok"),
+        Err(m) => System.println("compact failed: " + m),
+    }
+}

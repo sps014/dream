@@ -55,7 +55,7 @@ impl super::ModulePass for FuncboxAbi {
 /// interface vtable slot. Only these switch to +0; a function that is never address-taken keeps the
 /// caller-retains ABI, where a caller handing over a dying value nulls its slot instead of retaining
 /// at all — strictly cheaper, and still available because every such call site is known.
-fn address_taken(mir: &Mir) -> HashSet<FnKey> {
+pub(crate) fn address_taken(mir: &Mir) -> HashSet<FnKey> {
     let mut out = HashSet::new();
     for f in mir.functions.iter().chain(mir.polls.iter()) {
         for b in &f.blocks {

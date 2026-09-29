@@ -86,7 +86,7 @@ fn extract_tarball(tarball: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Packages `project_dir` (`dream.toml`, `src/`, and README if present) into a `.tar.gz` at
+/// Packages `project_dir` (`dream.toml`, `src/`, `native/`, and README if present) into a `.tar.gz` at
 /// `dest_tarball`, returning the raw bytes so the caller can compute a checksum before publishing.
 pub fn package_project(project_dir: &Path, dest_tarball: &Path) -> Result<Vec<u8>> {
     use flate2::write::GzEncoder;
@@ -102,9 +102,11 @@ pub fn package_project(project_dir: &Path, dest_tarball: &Path) -> Result<Vec<u8
     let manifest_path = project_dir.join(crate::manifest::MANIFEST_FILE_NAME);
     builder.append_path_with_name(&manifest_path, crate::manifest::MANIFEST_FILE_NAME)?;
 
-    let src_dir = project_dir.join("src");
-    if src_dir.is_dir() {
-        builder.append_dir_all("src", &src_dir)?;
+    for dir in ["src", "native"] {
+        let path = project_dir.join(dir);
+        if path.is_dir() {
+            builder.append_dir_all(dir, &path)?;
+        }
     }
 
     if let Some(readme_name) = find_readme_name(project_dir) {

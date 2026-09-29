@@ -1,0 +1,7 @@
+import system;
+
+@c("c", "puts")
+extern fun puts(lines: List<string>): int;
+
+fun main(): void {
+}

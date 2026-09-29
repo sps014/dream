@@ -1177,7 +1177,14 @@ char *dream_string_to_utf8(dream_ptr s);
 uint16_t *dream_string_to_utf16z(dream_ptr s);
 dream_ptr dream_utf8_to_string(const char *s);
 int64_t dream_ffi_read_ptr(int64_t base, int32_t index);
+int32_t dream_ffi_read_i32(int64_t base, int32_t index);
+int64_t dream_ffi_read_i64(int64_t base, int32_t index);
+double dream_ffi_read_f64(int64_t base, int32_t index);
 dream_ptr dream_ffi_read_cstring(int64_t ptr);
+void dream_thread_attach(void);
+void dream_callback_enter(void);
+void dream_callback_retain(dream_ptr obj);
+void dream_callback_release(dream_ptr obj);
 
 dream_ptr dream_int_to_string(int32_t v);
 dream_ptr dream_uint_to_string(int32_t v);

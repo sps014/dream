@@ -318,7 +318,24 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
                                       // Bind parameters to the argument operands, applying the same numeric widening the call ABI would
                                       // (a narrower argument passed to a wider parameter), then jump into the (renumbered) callee entry.
     let params: std::collections::HashSet<u32> = g_params.iter().map(|p| p.0).collect();
+    // A `ref` value parameter is the caller's storage itself; binding it by assignment would
+    // memcpy the value into a fresh buffer and drop the callee's writes.
+    let mut aliased: Vec<Option<Local>> = vec![None; g_locals.len()];
     for (i, p) in g_params.iter().enumerate() {
+        let decl = &g_locals[p.0 as usize];
+        if let Operand::Copy(Place::Local(src)) = &site.args[i] {
+            if decl.is_ref
+                && interner.is_value_type(decl.ty)
+                && mir.functions[fi].local_ty(*src) == decl.ty
+            {
+                aliased[p.0 as usize] = Some(*src);
+            }
+        }
+    }
+    for (i, p) in g_params.iter().enumerate() {
+        if aliased[p.0 as usize].is_some() {
+            continue;
+        }
         let dest_local = Local(local_base + p.0);
         let pty = g_locals[p.0 as usize].ty;
         let arg = site.args[i].clone();
@@ -354,7 +371,11 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
     // Append the renumbered callee blocks, turning `Return`s into jumps to `cont`.
     // Force call-result dests Owning so the return Assign deep-copies before ValueDrop frees sources.
     for mut bb in g_blocks {
-        remap_block(&mut bb, local_base, block_base);
+        remap_block(
+            &mut bb,
+            &|l: Local| aliased[l.0 as usize].unwrap_or(Local(local_base + l.0)),
+            block_base,
+        );
         match std::mem::replace(&mut bb.terminator, Terminator::Goto(cont_id)) {
             Terminator::Return(op) | Terminator::AsyncComplete(op) => {
                 if let (Some(dest), Some(o)) = (&site.dest, op) {

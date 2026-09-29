@@ -1,6 +1,7 @@
 //! Module-level functions with no MIR body: ARC glue, protocol routers, dispatch tables, the
 //! runtime hooks and the process entry.
 
+pub(super) mod c_marshal;
 pub(super) mod entry;
 pub(super) mod imports;
 pub(super) mod js_marshal;

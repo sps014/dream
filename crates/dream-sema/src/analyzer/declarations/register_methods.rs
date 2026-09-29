@@ -87,6 +87,10 @@ impl<'a> Analyzer<'a> {
             if bindings.is_empty() {
                 self.validate_protocol_override(method, diagnostics);
                 self.validate_accessor(method, diagnostics);
+                if method.is_extern && dream_abi::attributes::has_c_attr(&method.attributes) {
+                    let registered = method_fn(target_type_str, &member_name);
+                    self.validate_c_extern_signature(method, &registered, diagnostics);
+                }
             }
             // Property accessors (`get`/`set`) are registered under a `$`-tagged internal name that a
             // user identifier can never spell, so `obj.prop`/`obj.prop = v` resolve to them without a

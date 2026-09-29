@@ -1,0 +1,7 @@
+[package]
+name = "kvstore"
+version = "0.1.0"
+type = "bin"
+entry = "src/main.dream"
+targets = ["native"]
+description = "@cpp sample: a C++ key-value store behind a thin Dream wrapper"

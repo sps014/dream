@@ -1,0 +1,21 @@
+import system;
+public struct P {
+    public x: double;
+    public y: double;
+}
+fun set(ref p: P): void {
+    p.x = 1.5;
+    p.y = 2.5;
+    System.println("set");
+    System.println("set");
+    System.println("set");
+    System.println("set");
+}
+fun wrap(ref p: P): void {
+    set(ref p);
+}
+fun main(): void {
+    let p = P();
+    wrap(ref p);
+    System.println(p.x);
+}

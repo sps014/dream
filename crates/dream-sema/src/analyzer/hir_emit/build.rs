@@ -380,6 +380,11 @@ impl<'a> Analyzer<'a> {
                     _ => None,
                 }
             };
+            let (c_params, c_ret) = if dream_abi::attributes::has_c_attr(&func.attributes) {
+                self.c_shapes(func)
+            } else {
+                (Vec::new(), dream_hir::CShape::Void)
+            };
             imports.push(HImport {
                 def,
                 name: sym_name,
@@ -391,6 +396,8 @@ impl<'a> Analyzer<'a> {
                 is_async: func.is_async,
                 async_host,
                 c_wide_strings,
+                c_params,
+                c_ret,
             });
         }
         imports

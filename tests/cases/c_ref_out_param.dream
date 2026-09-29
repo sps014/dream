@@ -1,0 +1,16 @@
+import system;
+@c("m", "frexp") extern fun frexp(x: double, ref e: int): double;
+fun direct(): void {
+    let e: int = 0;
+    let m = frexp(8.0, ref e);
+    System.println(m.to_string() + " " + e.to_string());
+}
+fun via(ref e: int): double {
+    return frexp(8.0, ref e);
+}
+fun main(): void {
+    direct();
+    let e2: int = 0;
+    let m2 = via(ref e2);
+    System.println(m2.to_string() + " " + e2.to_string());
+}

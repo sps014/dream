@@ -7,37 +7,32 @@
 import system;
 
 @c("sqlite3", "sqlite3_open")
-extern fun sqlite3_open(path: string, ref db: long): int;
+extern fun sqlite3_open(path: string, ref db: CPtr): int;
 
 @c("sqlite3", "sqlite3_close")
-extern fun sqlite3_close(db: long): int;
+extern fun sqlite3_close(db: CPtr): int;
 
 @c("sqlite3", "sqlite3_exec")
 extern fun sqlite3_exec(
-    db: long,
+    db: CPtr,
     sql: string,
-    callback: fun(long, int, long, long): int,
-    arg: long,
-    ref errmsg: long
+    callback: fun(CPtr, int, CPtr, CPtr): int,
+    arg: Option<CPtr>,
+    ref errmsg: CPtr
 ): int;
 
-fun ignore_row(_arg: long, _argc: int, _argv: long, _cols: long): int {
+fun ignore_row(_arg: CPtr, _argc: int, _argv: CPtr, _cols: CPtr): int {
     return 0;
 }
 
-fun print_row(_arg: long, argc: int, argv: long, _cols: long): int {
+fun print_row(_arg: CPtr, argc: int, argv: CPtr, _cols: CPtr): int {
     let line = "";
     let i = 0;
     while i < argc {
         if i > 0 {
             line = line + "|";
         }
-        let p = Ffi.read_ptr(argv, i);
-        if p == 0L {
-            line = line + "NULL";
-        } else {
-            line = line + Ffi.read_cstring(p);
-        }
+        line = line + Ffi.read_cstring(Ffi.read_ptr(argv, i)).unwrap_or("NULL");
         i = i + 1;
     }
     System.println(line);
@@ -45,20 +40,20 @@ fun print_row(_arg: long, argc: int, argv: long, _cols: long): int {
 }
 
 class Database {
-    handle: long;
+    handle: CPtr;
     public is_open: bool;
 
-    constructor(handle: long, is_open: bool) {
+    constructor(handle: CPtr, is_open: bool) {
         this.handle = handle;
         this.is_open = is_open;
     }
 
     public static fun open(path: string): Database {
-        let handle: long = 0L;
+        let handle = CPtr.null();
         let rc = sqlite3_open(path, ref handle);
         if rc != 0 {
             System.println("sqlite3_open('" + path + "') failed with rc=" + rc);
-            return Database(0L, false);
+            return Database(CPtr.null(), false);
         }
         return Database(handle, true);
     }
@@ -67,17 +62,16 @@ class Database {
         if this.is_open == false {
             return -1;
         }
-        let __errmsg: long = 0L;
-        let rc = sqlite3_exec(this.handle, sql, ignore_row, 0L, ref __errmsg);
-        return rc;
+        let errmsg = CPtr.null();
+        return sqlite3_exec(this.handle, sql, ignore_row, Option.None, ref errmsg);
     }
 
     public fun query(sql: string): int {
         if this.is_open == false {
             return -1;
         }
-        let __errmsg: long = 0L;
-        return sqlite3_exec(this.handle, sql, print_row, 0L, ref __errmsg);
+        let errmsg = CPtr.null();
+        return sqlite3_exec(this.handle, sql, print_row, Option.None, ref errmsg);
     }
 
     public fun close(): void {

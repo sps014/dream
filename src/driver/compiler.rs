@@ -260,6 +260,16 @@ impl Compiler {
 
         parse_file_recursive(main_file_path, &mut acc, &arena, &mut diagnostics)?;
 
+        let native_graph = crate::driver::native_sets::NativeGraph::load(main_file_path, &acc)
+            .map_err(CompileError::Manifest)?;
+        crate::driver::native_sets::resolve_bare_c_attrs(&mut acc, &native_graph, &mut diagnostics);
+        let cpp_bridge = crate::driver::cpp_bridge::expand(
+            &arena,
+            &mut acc,
+            &native_graph,
+            &mut diagnostics,
+        )?;
+
         // Opt-in stdlib packages (`import system.net;`, etc.) plus always-on bootstrap
         // (`system.core` / `system.primitives`). `@json` types need `system.json` for derives.
         if program_uses_json_attr(&acc) {
@@ -427,6 +437,16 @@ impl Compiler {
                 .map(|imp| (imp.module.clone(), imp.field.clone()))
                 .collect();
             let wasm = matches!(target, Target::Wasm32);
+            if wasm
+                && report_wasm_c_imports(
+                    ast.get_root(),
+                    &live_imports,
+                    &cpp_bridge,
+                    &mut diagnostics,
+                )
+            {
+                return Err("semantic");
+            }
             let threads = wasm && dream_mir::backend::module_needs_threads(&mir, interner);
             let need = dream_mir::runtime::runtime_need_from_mir(&mir);
             let req = LlvmRuntimeRequest {
@@ -499,7 +519,15 @@ impl Compiler {
                 self.reporter.artifact(Path::new(out_path));
             }
             let abi_artifacts =
-                emit_wasm_and_abi(out_path, ast.get_root(), &gpu, &live_imports, self.emit_abi)?;
+                emit_wasm_and_abi(
+                out_path,
+                ast.get_root(),
+                &gpu,
+                &live_imports,
+                &native_graph,
+                &cpp_bridge,
+                self.emit_abi,
+            )?;
             for p in abi_artifacts {
                 self.reporter.artifact(&p);
             }
@@ -539,7 +567,15 @@ impl Compiler {
 
         // Sibling `.abi.json` for JS/`dream.js` interop, plus `.wgsl` when GPU kernels were emitted.
         let abi_artifacts =
-            emit_wasm_and_abi(out_path, ast.get_root(), &gpu, &live_imports, self.emit_abi)?;
+            emit_wasm_and_abi(
+                out_path,
+                ast.get_root(),
+                &gpu,
+                &live_imports,
+                &native_graph,
+                &cpp_bridge,
+                self.emit_abi,
+            )?;
         for p in abi_artifacts {
             self.reporter.artifact(&p);
         }
@@ -638,6 +674,54 @@ fn panic_message(payload: &Box<dyn std::any::Any + Send>) -> String {
 /// compiler error looks like the rest of the CLI's output rather than a raw Rust panic dump.
 fn render_internal_error(message: &str) {
     eprintln!("error: {}", message);
+}
+
+/// Reports every `@c` extern whose import survived MIR pruning on a wasm32 build: native C/C++
+/// only links into native binaries, so the call has no host to bind to. True when any was found.
+fn report_wasm_c_imports(
+    program: &ProgramNode<'_>,
+    live_imports: &[(String, String)],
+    cpp: &crate::driver::cpp_bridge::CppBridge,
+    diagnostics: &mut DiagnosticBag,
+) -> bool {
+    let live: std::collections::BTreeSet<(&str, &str)> = live_imports
+        .iter()
+        .filter(|(m, _)| m.starts_with("c/"))
+        .map(|(m, f)| (m.as_str(), f.as_str()))
+        .collect();
+    if live.is_empty() {
+        return false;
+    }
+    let methods = program.structs.iter().flat_map(|s| s.methods.iter());
+    let extends = program.extends.iter().flat_map(|e| e.methods.iter());
+    let mut reported = std::collections::BTreeSet::new();
+    for f in program.functions.iter().chain(methods).chain(extends) {
+        if !f.is_extern || !dream_abi::attributes::has_c_attr(&f.attributes) {
+            continue;
+        }
+        let (module, field) = dream_abi::attributes::extern_import_target(&f.attributes, &f.name.text);
+        if !live.contains(&(module.as_str(), field.as_str())) || !reported.insert((module, field)) {
+            continue;
+        }
+        let (what, at, file) = match cpp.origin(&f.name.text) {
+            Some(o) => (o.what.as_str(), o.at, Some(o.file.to_string())),
+            None if crate::driver::cpp_bridge::is_generated(&f.name.text) => continue,
+            None => (
+                f.name.text.as_str(),
+                f.name.position,
+                f.file_path.as_deref().map(str::to_string),
+            ),
+        };
+        diagnostics.report(dream_diagnostics::Diagnostic::new(
+            format!(
+                "'{what}' is a native C/C++ import and cannot be called from a wasm32 build; \
+                 bind the browser/Node equivalent with `@js` (or guard the call with `@native`)"
+            ),
+            Some(at),
+            file,
+        ));
+    }
+    true
 }
 
 /// True when any collected user type carries `@json` (derived converters need `system.json`).

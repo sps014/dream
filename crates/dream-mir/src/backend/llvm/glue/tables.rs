@@ -430,6 +430,7 @@ fn emit_runtime_init(l: &mut Lcx<'_>) {
     if fx.l.cx.target.is_wasm32() {
         fx.call("dream_heap_init", &[]);
     } else {
+        fx.call("dream_thread_attach", &[]);
         let fns: Vec<V> = [
             "dream_string_alloc",
             "dream_array_new_shared",

@@ -811,6 +811,7 @@ void dream_process_capture_args(int32_t argc, char **argv) {
     int32_t i;
     size_t total = 0;
     char *join;
+    dream_thread_attach();
     if (argc > 0 && argv && argv[0]) {
 #ifdef __APPLE__
         uint32_t n = sizeof(dream_exe_path_buf);

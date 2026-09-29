@@ -128,6 +128,24 @@ impl<'a, 'b> Parser<'a, 'b> {
                 );
             }
             let params = self.parse_formal_parameters()?;
+            if is_extern {
+                // `extern constructor(...)` binds a foreign constructor (`@cpp` classes); there is
+                // no foreign destructor to declare, since ownership decides whether one runs.
+                if is_dtor {
+                    self.diagnostics.report_error(
+                        "'del' cannot be 'extern'".to_string(),
+                        Some(ctor_name.position),
+                    );
+                }
+                self.match_token(TokenKind::SemicolonToken);
+                let empty: &'a [StatementNode<'a>] =
+                    self.arena.alloc_slice_fill_iter(std::iter::empty());
+                let mut node = FunctionNode::new(
+                    attributes, ctor_name, None, None, params, empty, visibility,
+                );
+                node.is_extern = true;
+                return Ok(node);
+            }
             let block = self.parse_block()?;
             let ctor_vis = if is_dtor {
                 Visibility::Private

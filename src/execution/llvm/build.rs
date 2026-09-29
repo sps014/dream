@@ -7,6 +7,7 @@ use super::tools::{resolve_llvm, LlvmTools};
 use crate::driver::wasi::run_captured;
 use crate::driver::wasm_opt::OptLevel;
 use crate::execution::host::{cc_link_flags, read_c_libs_from_abi, search_roots_for_artifact};
+use crate::execution::native::native_c::{compile_sets, read_c_sources_from_abi, NativeObjects};
 use crate::execution::native::pgo::{clear_raw_profiles, llvm_pgo};
 use crate::execution::native::{cc, libdream_dir, native_bin_fresh, Pgo};
 use dream_mir::runtime::runtime_need_from_module_text;
@@ -63,12 +64,13 @@ fn optimize_linked(
     opt: OptLevel,
     debug: bool,
     pgo: &PgoPipeline,
+    exports: &[String],
 ) -> Result<PathBuf, String> {
     let out = linked.with_extension("opt.bc");
     let mut cmd = tools.command("opt");
     cmd.arg(format!("-passes={}", pipeline(opt, debug)))
         .args(cpu_args(opt, debug))
-        .arg("-internalize-public-api-list=main");
+        .arg(public_api_list(exports));
     if let Some((kind, file)) = pgo {
         cmd.arg(format!("-pgo-kind={kind}"))
             .arg(format!("-profile-file={}", file.display()));
@@ -78,24 +80,32 @@ fn optimize_linked(
     Ok(out)
 }
 
+/// `main` plus the runtime functions compiled native sources call into.
+fn public_api_list(exports: &[String]) -> String {
+    let mut list = vec!["main"];
+    list.extend(exports.iter().map(String::as_str));
+    format!("-internalize-public-api-list={}", list.join(","))
+}
+
 pub fn native_bin_path(ll_path: &Path) -> PathBuf {
     ll_path.with_extension("bin")
 }
 
+/// Links `ll_path` with the extra bitcode/IR `modules` (runtime first), then optimizes.
 fn link_and_optimize(
     tools: &LlvmTools,
     ll_path: &Path,
-    rt_bc: &Path,
-    icon_ll: Option<&Path>,
+    modules: &[&Path],
     opt: OptLevel,
     debug: bool,
     pgo: &PgoPipeline,
+    exports: &[String],
 ) -> Result<PathBuf, String> {
     let linked = ll_path.with_extension("linked.bc");
     let mut link = tools.command("llvm-link");
-    link.arg(ll_path).arg(rt_bc).args(icon_ll).arg("-o").arg(&linked);
+    link.arg(ll_path).args(modules).arg("-o").arg(&linked);
     run_captured(&mut link, &format!("llvm-link ({})", ll_path.display()))?;
-    let optimized = optimize_linked(tools, &linked, opt, debug, pgo);
+    let optimized = optimize_linked(tools, &linked, opt, debug, pgo, exports);
     let _ = std::fs::remove_file(&linked);
     optimized
 }
@@ -144,11 +154,15 @@ pub fn emit_llvm_artifacts(
     let optimized = link_and_optimize(
         &tools,
         ll_path,
-        &rt.bc,
-        icon_ll.as_deref(),
+        &[Some(rt.bc.as_path()), icon_ll.as_deref()]
+            .iter()
+            .flatten()
+            .copied()
+            .collect::<Vec<_>>(),
         opt,
         debug,
         &None,
+        &[],
     );
     if let Some(p) = &icon_ll {
         let _ = std::fs::remove_file(p);
@@ -186,22 +200,39 @@ pub fn compile_llvm(
     let rt = llvm_runtime(&tools, opt, need, debug)?;
     let profile = llvm_pgo(pgo, &bin, || tools.optional_tool("llvm-profdata"))?;
     let icon_png = icon.map(icon::read_png).transpose()?;
+    let abi_path = ll_path.with_extension("abi.json");
+    let c_sources = read_c_sources_from_abi(&abi_path);
+    if !c_sources.is_empty() && *pgo != Pgo::Off {
+        return Err(PGO_NATIVE_SOURCES.into());
+    }
+    let native = if c_sources.is_empty() {
+        NativeObjects::default()
+    } else {
+        let cache = ll_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("native-c");
+        compile_sets(&cc::resolve_cc()?, &c_sources, &cache, debug)?
+    };
     let stamp_path = bin.with_extension("flags");
     let stamp = format!(
-        "{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}",
+        "{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
         pipeline(opt, debug),
         debug,
         llc_level(opt, debug),
         tools.bin.display(),
         rt.archive,
         profile,
-        icon_png.as_deref().map(icon::fingerprint)
+        icon_png.as_deref().map(icon::fingerprint),
+        native.objects,
+        native.link_args
     );
     let input = match (pgo, &profile) {
         (Pgo::Use(_), Some((_, p))) => Some(p.as_path()),
         _ => None,
     };
     if native_bin_fresh(&bin, ll_path, &rt.bc, input)
+        && native.objects.iter().all(|o| !newer_than(o, &bin))
         && opt_ll.is_none_or(Path::exists)
         && std::fs::read_to_string(&stamp_path).is_ok_and(|s| s == stamp)
     {
@@ -218,11 +249,15 @@ pub fn compile_llvm(
     let optimized = link_and_optimize(
         &tools,
         ll_path,
-        &rt.bc,
-        icon_ll.as_deref(),
+        &[Some(rt.bc.as_path()), icon_ll.as_deref()]
+            .iter()
+            .flatten()
+            .copied()
+            .collect::<Vec<_>>(),
         opt,
         debug,
         &profile,
+        &native.runtime_exports,
     );
     if let Some(p) = &icon_ll {
         let _ = std::fs::remove_file(p);
@@ -243,6 +278,7 @@ pub fn compile_llvm(
         c.arg(&obj);
         c
     };
+    lcmd.args(&native.objects);
     if let Some(a) = &rt.archive {
         lcmd.arg(a);
     }
@@ -261,12 +297,12 @@ pub fn compile_llvm(
     lcmd.arg(format!("-L{}", dir.display()));
     lcmd.arg("-ldream");
     lcmd.arg(format!("-Wl,-rpath,{}", dir.display()));
-    let abi_path = ll_path.with_extension("abi.json");
     let c_libs = read_c_libs_from_abi(&abi_path);
     if !c_libs.is_empty() {
         let roots = search_roots_for_artifact(ll_path);
         lcmd.args(cc_link_flags(&c_libs, &roots));
     }
+    lcmd.args(&native.link_args);
     lcmd.arg("-o").arg(&bin);
     if let Err(e) = run_captured(&mut lcmd, &format!("cc link ({})", obj.display())) {
         let _ = std::fs::remove_file(&bin);
@@ -278,6 +314,20 @@ pub fn compile_llvm(
         let _ = std::fs::remove_file(&obj);
     }
     Ok(bin)
+}
+
+/// PGO links with the system compiler, whose C++ standard library may differ from the one the
+/// package's native sources were compiled against.
+const PGO_NATIVE_SOURCES: &str =
+    "--profile is not supported for programs with `native/` C/C++ sources yet: profile builds \
+     link with the system compiler, whose C/C++ runtime may not match the Zig-built objects";
+
+fn newer_than(a: &Path, b: &Path) -> bool {
+    let t = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    match (t(a), t(b)) {
+        (Some(a), Some(b)) => a > b,
+        _ => true,
+    }
 }
 
 /// zig's linker lays out the `__llvm_prf_*` sections so the profile runtime writes corrupt

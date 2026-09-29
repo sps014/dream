@@ -403,6 +403,13 @@ pub(crate) fn runtime_c_name(sym: &str) -> String {
 }
 
 pub(crate) fn import_host_name(imp: &dream_hir::HImport) -> String {
+    if is_c_import(imp) {
+        return if imp.field.is_empty() {
+            imp.name.clone()
+        } else {
+            imp.field.clone()
+        };
+    }
     if imp.module == "dream_ffi" {
         let field = if imp.field.is_empty() {
             c_ident(&imp.name)
@@ -420,12 +427,9 @@ pub(crate) fn import_host_name(imp: &dream_hir::HImport) -> String {
 
 pub(crate) fn import_call_name(imp: &dream_hir::HImport) -> String {
     let base = if imp.module.starts_with("c/") {
-        let field = if imp.field.is_empty() {
-            c_ident(&imp.name)
-        } else {
-            c_ident(&imp.field)
-        };
-        format!("dream_c_{field}")
+        // Keyed by the Dream extern rather than the C symbol: several externs may bind one
+        // symbol with different Dream-side types (`free` for two handle classes).
+        format!("dream_c_{}", c_ident(&imp.name))
     } else {
         import_host_name(imp)
     };

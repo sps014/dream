@@ -40,6 +40,7 @@ static void destroy_worker(Worker *w);
 
 static void *worker_main(void *arg) {
     Worker *w = (Worker *)arg;
+    dream_thread_attach();
     for (;;) {
         pthread_mutex_lock(&w->mu);
         while (!w->head && !w->dead) {

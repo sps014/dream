@@ -27,7 +27,29 @@ impl Cc {
             }
         }
     }
+
+    /// The C++ driver paired with this C driver, so C++ objects and the final link agree on one
+    /// C++ standard library: `zig c++` for Zig, else `DREAM_CXX` / `CXX`, else `clang++` / `c++`.
+    pub fn cxx_command(&self) -> Result<Command, String> {
+        match self {
+            Self::Zig(p) => {
+                let mut c = Command::new(p);
+                c.arg("c++");
+                Ok(c)
+            }
+            Self::Program(_) => env_program("DREAM_CXX")
+                .or_else(|| env_program("CXX"))
+                .or_else(|| find_on_path("clang++"))
+                .or_else(|| find_on_path("c++"))
+                .map(Command::new)
+                .ok_or_else(|| MISSING_CXX.to_string()),
+        }
+    }
 }
+
+const MISSING_CXX: &str = "this package has C++ sources but no C++ compiler was found; run \
+     `dreamer toolchain install cc` (Zig compiles and links C++ everywhere), or set DREAM_CXX \
+     to a clang++-compatible compiler";
 
 pub fn resolve_cc() -> Result<Cc, String> {
     if let Some(p) = env_program("DREAM_CC").or_else(|| env_program("CC")) {

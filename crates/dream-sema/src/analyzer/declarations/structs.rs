@@ -12,6 +12,17 @@ impl<'a> Analyzer<'a> {
         node: &'a ProgramNode<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
+        // Every struct name must lower to its own type before any method registers: overloaded
+        // methods are keyed by their parameter `TypeId`s, and a struct declared later in the
+        // merged program (a stdlib `CPtr` parameter on a user overload) would otherwise key as
+        // the poison type at registration but as the real struct when its body is emitted.
+        for struct_decl in node.structs.iter() {
+            self.type_ctx.register(
+                DefKind::Struct,
+                &struct_decl.name.text,
+                generic_param_names(&struct_decl.generic_parameters),
+            );
+        }
         for struct_decl in node.structs.iter() {
             diagnostics.file_path = file_path_string(&struct_decl.file_path);
             // Static classes are implicitly `sealed` on the AST so they cannot grow an instance

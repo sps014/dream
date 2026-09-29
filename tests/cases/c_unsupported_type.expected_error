@@ -1,0 +1,1 @@
+'@c' extern 'puts' parameter 'lines': type 'List<string>' has no C representation here

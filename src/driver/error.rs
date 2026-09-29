@@ -15,6 +15,8 @@ pub enum CompileError {
     Generator(String),
     /// An I/O failure during the pipeline (reading sources, writing artifacts).
     Io(std::io::Error),
+    /// A malformed or conflicting `dream.toml` (native sets, `links`).
+    Manifest(String),
     /// Code generation hit an internal invariant violation (see `crate::internal_error!`) - a
     /// compiler bug on an otherwise-valid program, not a problem with the user's source. Caught
     /// around analysis and code generation in [`crate::driver::compiler::Compiler::compile`] so it
@@ -41,7 +43,7 @@ impl fmt::Display for CompileError {
                 Ok(())
             }
             CompileError::Io(e) => write!(f, "{}", e),
-            CompileError::Internal(msg) => write!(f, "{}", msg),
+            CompileError::Manifest(msg) | CompileError::Internal(msg) => write!(f, "{}", msg),
         }
     }
 }

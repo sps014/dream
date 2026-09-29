@@ -5,6 +5,7 @@ pub mod abi;
 pub mod app_icon;
 pub(crate) mod cc;
 pub mod desktop;
+pub(crate) mod native_c;
 pub(crate) mod pgo;
 pub mod webview;
 

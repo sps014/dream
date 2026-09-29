@@ -326,6 +326,13 @@ impl<'l, 'a> Fx<'l, 'a> {
     /// Calls a named function (generated, host or runtime) with C argument conversions.
     pub fn call(&mut self, name: &str, args: &[V]) -> Option<V> {
         let sig = self.l.sig(name);
+        if args.len() != sig.fty.params.len() && !sig.fty.varargs {
+            crate::internal_error!(
+                "call to `{name}` passes {} arguments; its LLVM signature is {}",
+                args.len(),
+                sig.fty
+            );
+        }
         let vals = self.coerce_args(&sig, args);
         let unsigned = sig.ret_unsigned();
         self.call_sig(name, &sig, vals).map(|v| V { v, unsigned })

@@ -6,14 +6,14 @@
 use super::super::fx::V;
 use super::super::ir::{FnTy, Ty, Value};
 use super::super::lcx::{FnSig, Lcx};
-use super::super::types::{is_unsigned, ll_ty};
-use super::{glue, register};
+use super::super::types::ll_ty;
+use super::{c_marshal, glue, register};
 use crate::backend::shared::abi_types::{
     import_call_name, import_host_name, is_c_import, native_header_declares,
 };
 use dream_abi::js_abi;
 use dream_hir::HImport;
-use dream_types::{PrimTy, TyKind};
+use dream_types::TyKind;
 
 fn by_ref(imp: &HImport, i: usize) -> bool {
     imp.param_by_ref.get(i).copied().unwrap_or(false)
@@ -49,16 +49,6 @@ fn async_host_ret(l: &Lcx<'_>, imp: &HImport) -> Ty {
             None => Ty::I32,
         },
         _ => Ty::I32,
-    }
-}
-
-fn c_abi_ty(l: &Lcx<'_>, imp: &HImport, i: usize) -> Ty {
-    if by_ref(imp, i) {
-        return Ty::Ptr;
-    }
-    match l.interner.kind(imp.params[i]) {
-        TyKind::Prim(PrimTy::String) | TyKind::Func(..) => Ty::Ptr,
-        _ => ll_ty(l.interner, imp.params[i], &l.h()),
     }
 }
 
@@ -121,23 +111,12 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
         register_wasm(l, &imports);
         return;
     }
+    c_marshal::register_reverse(l);
     for imp in &imports {
         let host = import_host_name(imp);
         let name = import_call_name(imp);
         if is_c_import(imp) {
-            let abi: Vec<Ty> = (0..imp.params.len()).map(|i| c_abi_ty(l, imp, i)).collect();
-            let ret = match imp.ret.map(|t| l.interner.kind(t)) {
-                Some(TyKind::Prim(PrimTy::String)) => Ty::Ptr,
-                _ => dream_ret(l, imp),
-            };
-            l.host(&host, FnSig::plain(FnTy::new(ret, abi)));
-            l.host("free", FnSig::plain(FnTy::new(Ty::Void, vec![Ty::Ptr])));
-            let params = imp
-                .params
-                .iter()
-                .map(|t| ll_ty(l.interner, *t, &l.h()))
-                .collect();
-            register(l, &name, dream_ret(l, imp), params);
+            c_marshal::register_import(l, imp);
             continue;
         }
         let params = host_params(l, imp);
@@ -168,11 +147,14 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
 
 pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
     let imports = l.mir.imports.clone();
+    if !l.cx.target.is_wasm32() {
+        c_marshal::emit_reverse(l);
+    }
     let mut poll_i = 0usize;
     for imp in &imports {
         if is_c_import(imp) {
             if !l.cx.target.is_wasm32() {
-                c_trampoline(l, imp);
+                c_marshal::trampoline(l, imp);
             }
         } else if imp.is_async {
             let idx = l.cx.import_poll_base() + poll_i;
@@ -180,64 +162,6 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
             async_bridge(l, imp, idx);
         }
     }
-}
-
-fn c_trampoline(l: &mut Lcx<'_>, imp: &HImport) {
-    let real = import_host_name(imp);
-    let wrap = import_call_name(imp);
-    let ret_string = matches!(
-        imp.ret.map(|t| l.interner.kind(t)),
-        Some(TyKind::Prim(PrimTy::String))
-    );
-    let mut fx = glue(l, &wrap);
-    let mut args = Vec::new();
-    let mut frees = Vec::new();
-    for (i, ty) in imp.params.iter().enumerate() {
-        let a = V {
-            v: fx.w.param(i),
-            unsigned: is_unsigned(fx.interner, *ty),
-        };
-        if by_ref(imp, i) {
-            args.push(V::s(fx.ptr(&a)));
-            continue;
-        }
-        match fx.interner.kind(*ty) {
-            TyKind::Prim(PrimTy::String) => {
-                let conv = if imp.c_wide_strings {
-                    "dream_string_to_utf16z"
-                } else {
-                    "dream_string_to_utf8"
-                };
-                let s = fx.call_v(conv, &[a]);
-                let s = V::s(fx.ptr(&s));
-                frees.push(s.clone());
-                args.push(s);
-            }
-            TyKind::Func(..) => {
-                let idx = fx.call_v("dream_funcbox_funcidx", &[a]);
-                let f = fx.call_v("dream_ft_get", &[idx]);
-                args.push(V::s(fx.ptr(&f)));
-            }
-            _ => args.push(a),
-        }
-    }
-    let r = fx.call(&real, &args);
-    let r = match (r, ret_string) {
-        (Some(r), true) => Some(fx.call_v("dream_utf8_to_string", &[r])),
-        (r, _) => r,
-    };
-    for f in frees {
-        fx.call("free", &[f]);
-    }
-    match r {
-        Some(r) if !fx.w.ret.is_void() => {
-            let t = fx.w.ret.clone();
-            let r = fx.conv(&r, &t);
-            fx.w.ret(Some(&r));
-        }
-        _ => fx.w.ret(None),
-    }
-    fx.finish();
 }
 
 /// Calling the extern builds an unstarted future carrying the arguments; its first poll performs

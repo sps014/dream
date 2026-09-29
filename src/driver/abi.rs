@@ -3,7 +3,9 @@ use std::fs;
 use std::io::Error;
 use std::path::Path;
 
+use crate::driver::cpp_bridge::{CppBridge, WrittenShim, SHIM_RUNTIME_EXPORTS};
 use crate::driver::gpu_gen::{self, GpuEmitResult};
+use crate::driver::native_sets::{NativeGraph, NativeSet};
 use dream_abi::attributes::{
     c_import_target, c_marshal_charset, extern_import_target, has_c_attr, has_packed_attr,
 };
@@ -77,6 +79,8 @@ pub(crate) fn emit_wasm_and_abi(
     program: &ProgramNode,
     gpu: &GpuEmitResult,
     live_imports: &[LiveImport],
+    native: &NativeGraph,
+    cpp: &CppBridge,
     emit_abi: bool,
 ) -> Result<Vec<std::path::PathBuf>, Error> {
     let base = Path::new(wat_path);
@@ -90,7 +94,16 @@ pub(crate) fn emit_wasm_and_abi(
 
     if emit_abi {
         let abi_path = base.with_extension("abi.json");
-        fs::write(&abi_path, build_abi_json(program, gpu, live_imports))?;
+        let native_root = base
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("native-c");
+        let live = live_set_names(live_imports);
+        let shims = cpp.write(&native_root, |set| live.contains(set))?;
+        fs::write(
+            &abi_path,
+            build_abi_json(program, gpu, live_imports, native, &shims),
+        )?;
         written.push(abi_path);
     }
     Ok(written)
@@ -138,6 +151,8 @@ pub(crate) fn build_abi_json(
     program: &ProgramNode,
     gpu: &GpuEmitResult,
     live_imports: &[LiveImport],
+    native: &NativeGraph,
+    shims: &BTreeMap<String, WrittenShim>,
 ) -> String {
     let live: BTreeSet<(&str, &str)> = live_imports
         .iter()
@@ -280,6 +295,13 @@ pub(crate) fn build_abi_json(
         format!(",\n  \"gpu\": {{ {} }}", gpu_gen::gpu_abi_json(gpu))
     };
 
+    let live_sets: Vec<&NativeSet> = live_set_names(live_imports)
+        .into_iter()
+        .filter_map(|lib| native.sets.get(lib))
+        .collect();
+    c_lib_set.retain(|lib| !native.sets.contains_key(lib));
+    let c_sources_section = c_sources_json(&live_sets, shims);
+
     let c_libs_section = if c_lib_set.is_empty() {
         String::new()
     } else {
@@ -295,13 +317,65 @@ pub(crate) fn build_abi_json(
     let structs_section = build_c_structs_section(program, &externs);
 
     format!(
-        "{{\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}]{}{}{}\n}}\n",
+        "{{\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}]{}{}{}{}\n}}\n",
         externs.join(",\n"),
         exports.join(", "),
         gpu_section,
         c_libs_section,
+        c_sources_section,
         structs_section,
     )
+}
+
+/// Libraries named by live `@c` imports (`c/<lib>` modules); native set names among them.
+fn live_set_names(live_imports: &[LiveImport]) -> BTreeSet<&str> {
+    live_imports
+        .iter()
+        .filter_map(|(m, _)| m.strip_prefix("c/"))
+        .collect()
+}
+
+/// `"c_sources"`: every live native source set with absolute paths, compiled and linked by the
+/// native build (`execution::native::native_c`). A set with `@cpp` declarations also compiles its
+/// generated shim and keeps the runtime entry points the shim calls exported.
+fn c_sources_json(sets: &[&NativeSet], shims: &BTreeMap<String, WrittenShim>) -> String {
+    if sets.is_empty() {
+        return String::new();
+    }
+    fn list<I: IntoIterator<Item = String>>(items: I) -> String {
+        let quoted: Vec<String> = items
+            .into_iter()
+            .map(|s| format!("\"{}\"", json_escape(&s)))
+            .collect();
+        format!("[{}]", quoted.join(", "))
+    }
+    let path_list =
+        |ps: &[std::path::PathBuf]| list(ps.iter().map(|p| p.to_string_lossy().into_owned()));
+    let entries: Vec<String> = sets
+        .iter()
+        .map(|s| {
+            let mut sources = s.sources.clone();
+            let mut include = s.include.clone();
+            let mut exports: Vec<String> = Vec::new();
+            if let Some(shim) = shims.get(&s.name) {
+                sources.push(shim.source.clone());
+                include.push(shim.include.clone());
+                exports.extend(SHIM_RUNTIME_EXPORTS.iter().map(|e| e.to_string()));
+            }
+            format!(
+                "    {{ \"name\": \"{}\", \"sources\": {}, \"include\": {}, \"defines\": {}, \"cflags\": {}, \"frameworks\": {}, \"libs\": {}, \"runtime_exports\": {} }}",
+                json_escape(&s.name),
+                path_list(&sources),
+                path_list(&include),
+                list(s.defines.iter().cloned()),
+                list(s.cflags.iter().cloned()),
+                list(s.frameworks.iter().cloned()),
+                list(s.libs.iter().cloned()),
+                list(exports),
+            )
+        })
+        .collect();
+    format!(",\n  \"c_sources\": [\n{}\n  ]", entries.join(",\n"))
 }
 
 /// Collects the set of unmanaged value-struct names referenced by any *live* `@c` extern's param
@@ -536,7 +610,57 @@ mod tests {
                 (m, fld)
             })
             .collect();
-        build_abi_json(program, &gpu, &live)
+        build_abi_json(program, &gpu, &live, &NativeGraph::default(), &BTreeMap::new())
+    }
+
+    #[test]
+    fn live_native_sets_become_c_sources_not_c_libs() {
+        let mut diagnostics = DiagnosticBag::new(None);
+        let source = "@c(\"kv\", \"kv_open\") extern fun kv_open(): int;\n@c(\"z\", \"inflate\") extern fun inflate(): int;\n";
+        let arena = Bump::new();
+        let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics);
+        let tree = parser.parse().expect("parse should succeed");
+        let live: Vec<LiveImport> = vec![
+            ("c/kv".into(), "kv_open".into()),
+            ("c/z".into(), "inflate".into()),
+        ];
+        let mut graph = NativeGraph::default();
+        graph.sets.insert(
+            "kv".into(),
+            NativeSet {
+                name: "kv".into(),
+                root: "/p".into(),
+                sources: vec!["/p/native/kv.c".into()],
+                include: vec!["/p/native".into()],
+                defines: vec!["A=1".into()],
+                cflags: vec![],
+                frameworks: vec![],
+                libs: vec!["m".into()],
+            },
+        );
+        let mut shims = BTreeMap::new();
+        shims.insert(
+            "kv".to_string(),
+            WrittenShim {
+                source: "/out/native-c/kv/shim.cpp".into(),
+                include: "/out/native-c/kv".into(),
+            },
+        );
+        let json = build_abi_json(
+            tree.get_root(),
+            &crate::driver::gpu_gen::GpuEmitResult::default(),
+            &live,
+            &graph,
+            &shims,
+        );
+        assert!(json.contains("\"c_libs\": [\"z\"]"), "{}", json);
+        assert!(json.contains("\"c_sources\""), "{}", json);
+        assert!(json.contains("\"/p/native/kv.c\", \"/out/native-c/kv/shim.cpp\""), "{}", json);
+        assert!(json.contains("\"libs\": [\"m\"]"), "{}", json);
+        assert!(
+            json.contains("\"runtime_exports\": [\"dream_callback_retain\", \"dream_callback_release\"]"),
+            "{}", json
+        );
     }
 
     #[test]

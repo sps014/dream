@@ -55,7 +55,10 @@ fn const_type(c: &Const, interner: &TypeInterner) -> TypeId {
 
 // --- Renumbering the cloned callee body into the caller's local/block namespaces. ---
 
-pub(super) fn remap_block(bb: &mut BasicBlock, local_base: u32, block_base: u32) {
+/// Where each callee local lives in the caller.
+pub(super) type LocalMap<'a> = &'a dyn Fn(Local) -> Local;
+
+pub(super) fn remap_block(bb: &mut BasicBlock, map: LocalMap<'_>, block_base: u32) {
     for s in &mut bb.stmts {
         // A callee's `SourceLine` markers name lines in *its own* source file; spliced verbatim
         // into the caller they would silently mislabel any checked construct that follows them
@@ -67,16 +70,16 @@ pub(super) fn remap_block(bb: &mut BasicBlock, local_base: u32, block_base: u32)
             *s = Statement::Nop;
             continue;
         }
-        remap_stmt(s, local_base);
+        remap_stmt(s, map);
     }
-    remap_terminator(&mut bb.terminator, local_base, block_base);
+    remap_terminator(&mut bb.terminator, map, block_base);
 }
 
-fn remap_local(l: &mut Local, base: u32) {
-    l.0 += base;
+fn remap_local(l: &mut Local, map: LocalMap<'_>) {
+    *l = map(*l);
 }
 
-fn remap_place(p: &mut Place, base: u32) {
+fn remap_place(p: &mut Place, base: LocalMap<'_>) {
     match p {
         Place::Local(l) => remap_local(l, base),
         Place::Field { base: b, .. } => remap_local(b, base),
@@ -89,15 +92,15 @@ fn remap_place(p: &mut Place, base: u32) {
     }
 }
 
-fn remap_operand(op: &mut Operand, base: u32) {
+fn remap_operand(op: &mut Operand, base: LocalMap<'_>) {
     if let Operand::Copy(p) = op {
         remap_place(p, base);
     }
 }
 
-fn remap_rvalue(rv: &mut Rvalue, base: u32) {
+fn remap_rvalue(rv: &mut Rvalue, base: LocalMap<'_>) {
     match rv {
-        Rvalue::Move { src, .. } => src.0 += base,
+        Rvalue::Move { src, .. } => remap_local(src, base),
         Rvalue::Select {
             cond,
             then_val,
@@ -196,7 +199,7 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
     }
 }
 
-fn remap_stmt(s: &mut Statement, base: u32) {
+fn remap_stmt(s: &mut Statement, base: LocalMap<'_>) {
     match s {
         Statement::Assign(place, rv) => {
             remap_place(place, base);
@@ -294,7 +297,7 @@ fn remap_stmt(s: &mut Statement, base: u32) {
     }
 }
 
-fn remap_terminator(t: &mut Terminator, local_base: u32, block_base: u32) {
+fn remap_terminator(t: &mut Terminator, local_base: LocalMap<'_>, block_base: u32) {
     match t {
         Terminator::Goto(b) => b.0 += block_base,
         Terminator::If {
@@ -327,7 +330,7 @@ fn remap_terminator(t: &mut Terminator, local_base: u32, block_base: u32) {
         } => {
             remap_operand(future, local_base);
             if let Some(d) = dest {
-                d.0 += local_base;
+                remap_local(d, local_base);
             }
             resume.0 += block_base;
         }

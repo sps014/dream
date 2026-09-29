@@ -110,6 +110,69 @@ pub struct HImport {
     pub async_host: bool,
     /// `@marshal("lpwstr")` on a `@c` extern: string args become UTF-16 rather than UTF-8.
     pub c_wide_strings: bool,
+    /// `@c` only: how each parameter crosses the C boundary, parallel to `params`.
+    pub c_params: Vec<CShape>,
+    /// `@c` only: how the C result becomes the Dream result.
+    pub c_ret: CShape,
+}
+
+/// How one Dream value crosses the C boundary, decided (and validated) by the analyzer so the
+/// backend never re-derives it from type names.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub enum CShape {
+    #[default]
+    Void,
+    /// Numbers, `bool`, `char`: the Dream scalar is the C scalar.
+    Scalar,
+    /// `string` as `const char*` (UTF-16 under `@marshal("lpwstr")`); `optional` maps `None` to `NULL`.
+    Str { optional: bool },
+    /// `CPtr` as `void*`; `optional` is `Option<CPtr>`.
+    Ptr { optional: bool },
+    /// A `fun(...)` as a plain C function pointer.
+    Func {
+        params: Vec<CShape>,
+        ret: Box<CShape>,
+        optional: bool,
+    },
+    /// `NativeCallback<fun(...)>` as `(fn, void* user_data)`.
+    Callback {
+        params: Vec<CShape>,
+        ret: Box<CShape>,
+        optional: bool,
+        user_data_last: bool,
+    },
+    /// `T[]` of unmanaged `T` as `T*` to its first element (`NULL` when empty), valid for the call.
+    Array,
+    /// An `@unmanaged` value struct by address.
+    StructPtr,
+    /// A `ref` out-param: the address of the caller's storage.
+    Ref,
+}
+
+impl CShape {
+    /// True for a plain `fun` whose C signature differs from the Dream one, so C must call a
+    /// per-target wrapper instead of the Dream function.
+    pub fn needs_wrapper(&self) -> bool {
+        match self {
+            CShape::Func { params, ret, .. } => {
+                !(ret.is_abi_identity() && params.iter().all(CShape::is_abi_identity))
+            }
+            _ => false,
+        }
+    }
+
+    /// True when a callback of this shape can be the Dream function itself (identical C ABI).
+    pub fn is_abi_identity(&self) -> bool {
+        match self {
+            CShape::Void | CShape::Scalar => true,
+            CShape::Func {
+                params,
+                ret,
+                optional,
+            } => !optional && ret.is_abi_identity() && params.iter().all(CShape::is_abi_identity),
+            _ => false,
+        }
+    }
 }
 
 /// One monomorphized instance of a generic def, keyed by `(DefId, args)` — never a mangled string.

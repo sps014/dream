@@ -10,16 +10,16 @@ use super::{is_borrowed_copy, rvalue_reads_local};
 use crate::{Const, MirFunction, Operand, Place, Rvalue, Statement};
 use dream_hir::LayoutTable;
 use dream_types::{TyKind, TypeId, TypeInterner};
-use std::collections::HashSet;
+use indexmap::IndexSet;
 
 /// Last-use store of an owned local into a field, index, or global transfers the +1.
 pub(crate) fn collect_container_moves(
     func: &MirFunction,
     interner: &TypeInterner,
-    live_out: &[HashSet<u32>],
+    live_out: &[IndexSet<u32>],
     is_owned: impl Fn(u32) -> bool,
     layouts: &LayoutTable,
-    sink_move: &mut HashSet<(usize, usize, u32)>,
+    sink_move: &mut IndexSet<(usize, usize, u32)>,
 ) {
     for (bi, block) in func.blocks.iter().enumerate() {
         for (si, stmt) in block.stmts.iter().enumerate() {

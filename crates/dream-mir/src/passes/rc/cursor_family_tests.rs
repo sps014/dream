@@ -7,7 +7,7 @@ use crate::build::FunctionBuilder;
 use crate::{Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_hir::{LayoutTable, TypeLayout};
 use dream_types::{DefId, TypeId, TypeInterner};
-use std::collections::HashSet;
+use indexmap::IndexSet;
 
 struct Types {
     i: TypeInterner,
@@ -142,7 +142,7 @@ fn node_fn(t: &Types, def: DefId, stores_next: bool) -> MirFunction {
 }
 
 fn insert(t: &Types, w: &mut Walk, modref: &ModRefTable) {
-    RcInsertion::run_with_layouts(&mut w.func, &t.i, &t.layouts, &HashSet::new(), modref);
+    RcInsertion::run_with_layouts(&mut w.func, &t.i, &t.layouts, &IndexSet::new(), modref);
 }
 
 fn rc_ops_on(func: &MirFunction, l: Local) -> usize {

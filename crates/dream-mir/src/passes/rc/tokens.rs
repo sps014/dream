@@ -11,7 +11,8 @@ use super::{is_borrowed_copy, is_pure_rvalue, rvalue_reads_local};
 use crate::passes::cfg;
 use crate::{Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{DefId, TyKind, TypeInterner};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use indexmap::{IndexMap, IndexSet};
+use std::collections::BTreeSet;
 
 /// Owned-RC locals (not cursors, not borrow params). Take-params are owned.
 pub(crate) fn is_owned_local(func: &MirFunction, interner: &TypeInterner, local: u32) -> bool {
@@ -27,7 +28,7 @@ pub(crate) fn is_owned_local(func: &MirFunction, interner: &TypeInterner, local:
     !is_param || d.is_take
 }
 
-pub(crate) fn take_param_set(func: &MirFunction) -> HashSet<u32> {
+pub(crate) fn take_param_set(func: &MirFunction) -> IndexSet<u32> {
     func.params
         .iter()
         .copied()
@@ -50,9 +51,9 @@ pub(crate) fn needs_rebind_temp(rvalue: &Rvalue, dest: u32) -> bool {
 }
 
 pub(crate) struct TokenAnalysis {
-    pub assign_move: HashSet<(usize, usize)>,
-    pub sink_move: HashSet<(usize, usize, u32)>,
-    pub die_after: HashSet<(usize, usize, u32)>,
+    pub assign_move: IndexSet<(usize, usize)>,
+    pub sink_move: IndexSet<(usize, usize, u32)>,
+    pub die_after: IndexSet<(usize, usize, u32)>,
     pub start_release: Vec<BTreeSet<u32>>,
     pub end_release: Vec<BTreeSet<u32>>,
     pub token_in: Vec<Vec<bool>>,
@@ -74,20 +75,20 @@ struct TokenFlow<'a> {
     func: &'a MirFunction,
     interner: &'a TypeInterner,
     is_owned: &'a dyn Fn(u32) -> bool,
-    take_params: &'a HashSet<u32>,
-    assign_move: &'a HashSet<(usize, usize)>,
-    sink_move: &'a HashSet<(usize, usize, u32)>,
-    die_after: &'a HashSet<(usize, usize, u32)>,
-    live_out: &'a [HashSet<u32>],
+    take_params: &'a IndexSet<u32>,
+    assign_move: &'a IndexSet<(usize, usize)>,
+    sink_move: &'a IndexSet<(usize, usize, u32)>,
+    die_after: &'a IndexSet<(usize, usize, u32)>,
+    live_out: &'a [IndexSet<u32>],
     preds: &'a [Vec<crate::BlockId>],
     entry: usize,
-    loop_headers: &'a HashSet<usize>,
-    loop_bodies: &'a [HashSet<usize>],
-    loop_assigns: &'a [HashSet<u32>],
+    loop_headers: &'a IndexSet<usize>,
+    loop_bodies: &'a [IndexSet<usize>],
+    loop_assigns: &'a [IndexSet<u32>],
     await_resume_dest: &'a [Option<u32>],
-    holds: &'a HashSet<DefId>,
-    alias_parent: &'a HashMap<u32, u32>,
-    order_parent: &'a HashMap<u32, u32>,
+    holds: &'a IndexSet<DefId>,
+    alias_parent: &'a IndexMap<u32, u32>,
+    order_parent: &'a IndexMap<u32, u32>,
 }
 
 impl TokenAnalysis {
@@ -95,7 +96,7 @@ impl TokenAnalysis {
         func: &MirFunction,
         interner: &TypeInterner,
         layouts: &dream_hir::LayoutTable,
-        holds: &HashSet<DefId>,
+        holds: &IndexSet<DefId>,
         modref: &super::modref::ModRefTable,
     ) -> TokenAnalysis {
         let n = func.blocks.len();
@@ -108,7 +109,7 @@ impl TokenAnalysis {
             .any(|b| matches!(b.terminator, Terminator::Await { .. }));
         let is_owned = |l: u32| is_owned_local(func, interner, l);
 
-        let mut assign_move = HashSet::new();
+        let mut assign_move = IndexSet::new();
         for (bi, block) in func.blocks.iter().enumerate() {
             for (si, stmt) in block.stmts.iter().enumerate() {
                 let Statement::Assign(Place::Local(dest), rvalue) = stmt else {
@@ -129,7 +130,7 @@ impl TokenAnalysis {
             }
         }
 
-        let mut sink_move = HashSet::new();
+        let mut sink_move = IndexSet::new();
         for (bi, block) in func.blocks.iter().enumerate() {
             for (si, stmt) in block.stmts.iter().enumerate() {
                 if stmt_borrow(stmt, holds) == StmtBorrow::Held {
@@ -143,7 +144,7 @@ impl TokenAnalysis {
             }
         }
 
-        let mut transferred: HashSet<(usize, usize, u32)> = HashSet::new();
+        let mut transferred: IndexSet<(usize, usize, u32)> = IndexSet::new();
         for &(bi, si) in &assign_move {
             if let Statement::Assign(_, rvalue) = &func.blocks[bi].stmts[si] {
                 if let Some(src) = move_source(rvalue, &is_owned) {
@@ -159,9 +160,9 @@ impl TokenAnalysis {
         // after an arbitrary last *read* (RC field/index, Call, union payload) UAFs cursors or
         // last-refs a value still stored in the parent. Sinks are already in `transferred`.
         let rc_snaps = rc_snapshots_of(func, interner);
-        let snapshot_locals: HashSet<u32> = rc_snaps.values().flatten().copied().collect();
+        let snapshot_locals: IndexSet<u32> = rc_snaps.values().flatten().copied().collect();
         let riders = cursor_riders(func);
-        let mut die_after: HashSet<(usize, usize, u32)> = HashSet::new();
+        let mut die_after: IndexSet<(usize, usize, u32)> = IndexSet::new();
         let site = DestroySite {
             func,
             interner,
@@ -228,18 +229,18 @@ impl TokenAnalysis {
         let preds = cfg::predecessors(func);
         let entry = func.entry.0 as usize;
         let natural_loops = cfg::natural_loops(func);
-        let loop_headers: HashSet<usize> = natural_loops
+        let loop_headers: IndexSet<usize> = natural_loops
             .iter()
             .map(|lp| lp.header.0 as usize)
             .collect();
-        let loop_bodies: Vec<HashSet<usize>> = natural_loops
+        let loop_bodies: Vec<IndexSet<usize>> = natural_loops
             .iter()
             .map(|lp| lp.body.iter().map(|b| b.0 as usize).collect())
             .collect();
-        let loop_assigns: Vec<HashSet<u32>> = natural_loops
+        let loop_assigns: Vec<IndexSet<u32>> = natural_loops
             .iter()
             .map(|lp| {
-                let mut asg = HashSet::new();
+                let mut asg = IndexSet::new();
                 for b in &lp.body {
                     let block = &func.blocks[b.0 as usize];
                     for stmt in &block.stmts {
@@ -713,7 +714,7 @@ fn reads_local_in_block(block: &crate::BasicBlock, local: u32) -> bool {
 }
 
 pub(crate) fn terminator_reads_local(term: &Terminator, local: u32) -> bool {
-    let mut live = HashSet::new();
+    let mut live = IndexSet::new();
     match term {
         Terminator::If { cond, .. } => add_op(cond, &mut live),
         Terminator::Switch { value, .. } => add_op(value, &mut live),
@@ -725,7 +726,7 @@ pub(crate) fn terminator_reads_local(term: &Terminator, local: u32) -> bool {
     live.contains(&local)
 }
 
-fn add_op(op: &Operand, live: &mut HashSet<u32>) {
+fn add_op(op: &Operand, live: &mut IndexSet<u32>) {
     if let Operand::Copy(place) = op {
         match place {
             Place::Local(l) => {
@@ -752,8 +753,8 @@ pub(crate) fn leftover_alias_parent(
     func: &MirFunction,
     interner: &TypeInterner,
     calls: bool,
-) -> HashMap<u32, u32> {
-    let mut parent = HashMap::new();
+) -> IndexMap<u32, u32> {
+    let mut parent = IndexMap::new();
     let ty = |l: u32| func.locals.get(l as usize).map(|d| d.ty);
     for block in &func.blocks {
         for stmt in &block.stmts {
@@ -852,12 +853,12 @@ pub(crate) fn leftover_alias_parent(
 }
 
 fn leftover_waits_for_live_parent(
-    parent: &HashMap<u32, u32>,
+    parent: &IndexMap<u32, u32>,
     local: u32,
-    live: &HashSet<u32>,
+    live: &IndexSet<u32>,
 ) -> bool {
     let mut x = local;
-    let mut seen = HashSet::new();
+    let mut seen = IndexSet::new();
     while seen.insert(x) {
         let Some(&p) = parent.get(&x) else {
             return false;
@@ -876,7 +877,7 @@ fn leftover_waits_for_live_parent(
 pub(crate) fn leftover_keep(
     _func: &MirFunction,
     ids: impl IntoIterator<Item = u32>,
-) -> HashSet<u32> {
+) -> IndexSet<u32> {
     ids.into_iter().collect()
 }
 
@@ -900,7 +901,7 @@ pub(crate) fn funcbox_env_pairs(func: &MirFunction, interner: &TypeInterner) -> 
                 continue;
             };
             let mut x = env.0;
-            let mut seen = HashSet::new();
+            let mut seen = IndexSet::new();
             loop {
                 if !seen.insert(x) {
                     break;
@@ -919,7 +920,7 @@ pub(crate) fn funcbox_env_pairs(func: &MirFunction, interner: &TypeInterner) -> 
     pairs
 }
 
-pub(crate) fn funcbox_env_rc_roots(func: &MirFunction, interner: &TypeInterner) -> HashSet<u32> {
+pub(crate) fn funcbox_env_rc_roots(func: &MirFunction, interner: &TypeInterner) -> IndexSet<u32> {
     funcbox_env_pairs(func, interner)
         .into_iter()
         .map(|(_, env)| env)
@@ -929,17 +930,17 @@ pub(crate) fn funcbox_env_rc_roots(func: &MirFunction, interner: &TypeInterner) 
 /// Child alias dests before parents so leftover Release of an extra-retain occupant runs while
 /// the container still holds +1 (parent-first last-refs the map slot under the dest).
 pub(crate) fn leftover_order(
-    parent: &HashMap<u32, u32>,
+    parent: &IndexMap<u32, u32>,
     ids: impl IntoIterator<Item = u32>,
-    defer: &HashSet<u32>,
+    defer: &IndexSet<u32>,
 ) -> Vec<u32> {
     let ids: Vec<u32> = ids.into_iter().collect();
-    let set: HashSet<u32> = ids.iter().copied().collect();
-    let mut indeg: HashMap<u32, u32> = ids.iter().map(|&x| (x, 0)).collect();
-    let mut edge: HashMap<u32, u32> = HashMap::new();
+    let set: IndexSet<u32> = ids.iter().copied().collect();
+    let mut indeg: IndexMap<u32, u32> = ids.iter().map(|&x| (x, 0)).collect();
+    let mut edge: IndexMap<u32, u32> = IndexMap::new();
     for &d in &ids {
         let mut x = d;
-        let mut seen = HashSet::new();
+        let mut seen = IndexSet::new();
         while seen.insert(x) {
             let Some(&p) = parent.get(&x) else {
                 break;
@@ -967,7 +968,7 @@ pub(crate) fn leftover_order(
     let mut out = Vec::with_capacity(ids.len());
     let mut left = set;
     while let Some((_, d)) = ready.pop_first() {
-        if !left.remove(&d) {
+        if !left.swap_remove(&d) {
             continue;
         }
         out.push(d);
@@ -1038,8 +1039,8 @@ pub(crate) fn assigns_local(stmt: &Statement, local: u32) -> bool {
     matches!(stmt, Statement::Assign(Place::Local(l), _) if l.0 == local)
 }
 
-fn rc_snapshots_of(func: &MirFunction, interner: &TypeInterner) -> HashMap<u32, Vec<u32>> {
-    let mut m: HashMap<u32, Vec<u32>> = HashMap::new();
+fn rc_snapshots_of(func: &MirFunction, interner: &TypeInterner) -> IndexMap<u32, Vec<u32>> {
+    let mut m: IndexMap<u32, Vec<u32>> = IndexMap::new();
     for block in &func.blocks {
         for stmt in &block.stmts {
             let Statement::Assign(Place::Local(dest), rv) = stmt else {
@@ -1066,8 +1067,8 @@ fn rc_snapshots_of(func: &MirFunction, interner: &TypeInterner) -> HashMap<u32, 
 }
 
 /// Cursors whose borrow rides, through copies and slot loads, on each local's count.
-fn cursor_riders(func: &MirFunction) -> HashMap<u32, Vec<u32>> {
-    let mut direct: HashMap<u32, Vec<u32>> = HashMap::new();
+fn cursor_riders(func: &MirFunction) -> IndexMap<u32, Vec<u32>> {
+    let mut direct: IndexMap<u32, Vec<u32>> = IndexMap::new();
     for stmt in func.blocks.iter().flat_map(|b| &b.stmts) {
         let Statement::Assign(Place::Local(d), rv) = stmt else {
             continue;
@@ -1091,9 +1092,9 @@ fn cursor_riders(func: &MirFunction) -> HashMap<u32, Vec<u32>> {
             direct.entry(src).or_default().push(d.0);
         }
     }
-    let mut out: HashMap<u32, Vec<u32>> = HashMap::new();
+    let mut out: IndexMap<u32, Vec<u32>> = IndexMap::new();
     for &root in direct.keys() {
-        let mut seen: HashSet<u32> = HashSet::new();
+        let mut seen: IndexSet<u32> = IndexSet::new();
         let mut stack = vec![root];
         while let Some(x) = stack.pop() {
             for &c in direct.get(&x).into_iter().flatten() {
@@ -1111,7 +1112,7 @@ struct DestroySite<'a> {
     func: &'a MirFunction,
     interner: &'a TypeInterner,
     layouts: &'a dream_hir::LayoutTable,
-    holds: &'a HashSet<DefId>,
+    holds: &'a IndexSet<DefId>,
     modref: &'a super::modref::ModRefTable,
 }
 

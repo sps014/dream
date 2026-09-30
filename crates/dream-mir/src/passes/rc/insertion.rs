@@ -19,7 +19,8 @@ use crate::{
     Const, Global, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
 };
 use dream_types::{DefId, TypeInterner};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use indexmap::{IndexMap, IndexSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 pub struct RcInsertion;
 
@@ -49,7 +50,7 @@ impl RcInsertion {
         func: &mut MirFunction,
         interner: &TypeInterner,
         layouts: &dream_hir::LayoutTable,
-        holds: &HashSet<DefId>,
+        holds: &IndexSet<DefId>,
         modref: &ModRefTable,
     ) -> bool {
         RcInsertion.run_inner(func, interner, layouts, holds, modref)
@@ -60,7 +61,7 @@ impl RcInsertion {
         func: &mut MirFunction,
         interner: &TypeInterner,
         layouts: &dream_hir::LayoutTable,
-        holds: &HashSet<DefId>,
+        holds: &IndexSet<DefId>,
         modref: &ModRefTable,
     ) -> bool {
         super::cursor::infer_cursors(func, interner, layouts, modref);
@@ -73,19 +74,19 @@ impl RcInsertion {
         let analysis = TokenAnalysis::analyze(func, interner, layouts, holds, modref);
         let leftover_parent = leftover_alias_parent(func, interner, true);
         let env_defer = funcbox_env_rc_roots(func, interner);
-        let start_keep: Vec<HashSet<u32>> = analysis
+        let start_keep: Vec<IndexSet<u32>> = analysis
             .start_release
             .iter()
             .map(|s| leftover_keep(func, s.iter().copied()))
             .collect();
-        let end_keep: Vec<HashSet<u32>> = analysis
+        let end_keep: Vec<IndexSet<u32>> = analysis
             .end_release
             .iter()
             .map(|s| leftover_keep(func, s.iter().copied()))
             .collect();
-        let mut die_keep: HashMap<(usize, usize), HashSet<u32>> = HashMap::new();
+        let mut die_keep: IndexMap<(usize, usize), IndexSet<u32>> = IndexMap::new();
         {
-            let mut groups: HashMap<(usize, usize), Vec<u32>> = HashMap::new();
+            let mut groups: IndexMap<(usize, usize), Vec<u32>> = IndexMap::new();
             for &(bi, si, local) in &analysis.die_after {
                 groups.entry((bi, si)).or_default().push(local);
             }
@@ -100,13 +101,13 @@ impl RcInsertion {
         let is_owned = |l: u32| owned_flags.get(l as usize).copied().unwrap_or(false);
         let mut changed = false;
 
-        let mut realloc_readers: HashMap<(usize, usize), Vec<u32>> = HashMap::new();
-        let mut slot_readers: HashMap<SlotId, Vec<u32>> = HashMap::new();
+        let mut realloc_readers: IndexMap<(usize, usize), Vec<u32>> = IndexMap::new();
+        let mut slot_readers: IndexMap<SlotId, Vec<u32>> = IndexMap::new();
         let live_out_rc = liveness::live_out(func);
         let is_async = func.is_async;
         // Resume blocks get their awaited future's Release from `insert_await_resume_releases`,
         // which runs after this loop and treats an existing `x = null` as "already handled".
-        let mut resume_futures: Vec<HashSet<u32>> = vec![HashSet::new(); func.blocks.len()];
+        let mut resume_futures: Vec<IndexSet<u32>> = vec![IndexSet::new(); func.blocks.len()];
         for block in &func.blocks {
             if let Terminator::Await {
                 future: Operand::Copy(Place::Local(f)),
@@ -117,7 +118,7 @@ impl RcInsertion {
                 resume_futures[resume.0 as usize].insert(f.0);
             }
         }
-        let in_loop: HashSet<usize> = cfg::natural_loops(func)
+        let in_loop: IndexSet<usize> = cfg::natural_loops(func)
             .iter()
             .flat_map(|lp| lp.body.iter().map(|b| b.0 as usize))
             .collect();
@@ -442,7 +443,7 @@ impl RcInsertion {
                         local,
                         unique.get(local as usize).copied().unwrap_or(false),
                     );
-                    let one = HashSet::from([local]);
+                    let one = IndexSet::from([local]);
                     let keep = die_keep.get(&(bi, si)).unwrap_or(&one);
                     if should_release_leftover(keep, n_orig, local)
                         && leftover_env_ok(local, &tokens, &env_defer)
@@ -642,7 +643,7 @@ impl MirPass for RcInsertion {
             func,
             interner,
             &dream_hir::LayoutTable::default(),
-            &HashSet::new(),
+            &IndexSet::new(),
             &ModRefTable::default(),
         )
     }
@@ -650,7 +651,7 @@ impl MirPass for RcInsertion {
 
 /// Intra-procedural Unique is not object uniqueness: a take param may be a copy the caller
 /// still holds (field extract, still-live local). Unique-destroy would `free` under them.
-fn should_release_leftover(keep: &HashSet<u32>, n_orig: u32, local: u32) -> bool {
+fn should_release_leftover(keep: &IndexSet<u32>, n_orig: u32, local: u32) -> bool {
     keep.contains(&local) || local >= n_orig
 }
 
@@ -658,7 +659,7 @@ fn should_release_leftover(keep: &HashSet<u32>, n_orig: u32, local: u32) -> bool
 /// `funcbox_new` retains the array on the box's behalf, so that is a 2→1 step while the box
 /// lives and the typed 1→0 last-drop once it is gone. Gating it on the box's own leftover
 /// instead leaked the leaf middleware env, whose box is released in another function.
-fn leftover_env_ok(local: u32, tokens: &[bool], env_defer: &HashSet<u32>) -> bool {
+fn leftover_env_ok(local: u32, tokens: &[bool], env_defer: &IndexSet<u32>) -> bool {
     if !env_defer.contains(&local) {
         return true;
     }
@@ -820,9 +821,9 @@ fn insert_value_struct_moves(func: &mut MirFunction, interner: &TypeInterner, ch
     if retain_before.is_empty() && retain_after.is_empty() && kill_after.is_empty() {
         return;
     }
-    let mut before_by: HashMap<usize, Vec<(usize, u32, u32)>> = HashMap::new();
-    let mut after_by: HashMap<usize, Vec<(usize, u32)>> = HashMap::new();
-    let mut kill_by: HashMap<usize, Vec<(usize, u32)>> = HashMap::new();
+    let mut before_by: IndexMap<usize, Vec<(usize, u32, u32)>> = IndexMap::new();
+    let mut after_by: IndexMap<usize, Vec<(usize, u32)>> = IndexMap::new();
+    let mut kill_by: IndexMap<usize, Vec<(usize, u32)>> = IndexMap::new();
     for (bi, si, local, n) in retain_before {
         before_by.entry(bi).or_default().push((si, local, n));
     }
@@ -847,9 +848,9 @@ fn insert_value_struct_moves(func: &mut MirFunction, interner: &TypeInterner, ch
     blocks.sort_unstable();
     blocks.dedup();
     for bi in blocks {
-        let before = before_by.remove(&bi).unwrap_or_default();
-        let after = after_by.remove(&bi).unwrap_or_default();
-        let kills = kill_by.remove(&bi).unwrap_or_default();
+        let before = before_by.swap_remove(&bi).unwrap_or_default();
+        let after = after_by.swap_remove(&bi).unwrap_or_default();
+        let kills = kill_by.swap_remove(&bi).unwrap_or_default();
         let mut out: Vec<Statement> = Vec::with_capacity(func.blocks[bi].stmts.len() + 4);
         for (si, stmt) in func.blocks[bi].stmts.drain(..).enumerate() {
             for (rsi, local, n) in &before {
@@ -1118,7 +1119,7 @@ fn insert_early_value_drops(
     if drop_at.is_empty() {
         return;
     }
-    let mut by_block: HashMap<usize, Vec<(usize, u32)>> = HashMap::new();
+    let mut by_block: IndexMap<usize, Vec<(usize, u32)>> = IndexMap::new();
     for (bi, si, local) in drop_at {
         by_block.entry(bi).or_default().push((si, local));
         func.locals[local as usize].manual_drop = true;
@@ -1175,7 +1176,7 @@ mod tests {
     use crate::build::FunctionBuilder;
     use crate::Callee;
     use dream_types::{DefId, DefKind, TypeCtx};
-    use std::collections::HashSet;
+    use indexmap::IndexSet;
 
     fn point_ty(ctx: &mut TypeCtx) -> dream_types::TypeId {
         let vs_def = ctx.register(DefKind::Struct, "Point", vec![]);
@@ -2018,7 +2019,7 @@ mod tests {
         );
         b.terminate(Terminator::Return(None));
         let mut func = b.finish();
-        let mut holds = HashSet::new();
+        let mut holds = IndexSet::new();
         holds.insert(peek);
         RcInsertion::run_with_layouts(
             &mut func,

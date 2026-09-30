@@ -28,7 +28,8 @@ use super::tokens::{assigns_local, sink_call_args};
 use crate::{Const, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_hir::LayoutTable;
 use dream_types::{TyKind, TypeId, TypeInterner};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use indexmap::{IndexMap, IndexSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// `--emit-mir` stage name.
 pub(crate) const STAGE: &str = "rc-held-by-owner";
@@ -86,7 +87,7 @@ pub(crate) fn run_function(
         if ready.is_empty() {
             break;
         }
-        let mut ignored: HashSet<u32> = pending.keys().copied().collect();
+        let mut ignored: IndexSet<u32> = pending.keys().copied().collect();
         for c in pending.values() {
             ignored.extend(c.class.iter().copied());
         }
@@ -140,7 +141,7 @@ fn candidates(
     interner: &TypeInterner,
     layouts: &LayoutTable,
 ) -> BTreeMap<u32, Candidate> {
-    let params: HashSet<u32> = f.params.iter().map(|p| p.0).collect();
+    let params: IndexSet<u32> = f.params.iter().map(|p| p.0).collect();
     let eligible = |x: u32| {
         let d = &f.locals[x as usize];
         !params.contains(&x)
@@ -148,14 +149,14 @@ fn candidates(
             && interner.is_reference(d.ty)
             && !interner.is_shared_type(d.ty)
     };
-    let mut snaps: HashMap<u32, Snapshot> = HashMap::new();
-    let mut bad_snapshot: HashSet<u32> = HashSet::new();
-    let mut given_away: HashSet<u32> = HashSet::new();
-    let mut defs: HashMap<u32, usize> = HashMap::new();
-    let mut rc_ops: HashMap<u32, (usize, usize)> = HashMap::new();
+    let mut snaps: IndexMap<u32, Snapshot> = IndexMap::new();
+    let mut bad_snapshot: IndexSet<u32> = IndexSet::new();
+    let mut given_away: IndexSet<u32> = IndexSet::new();
+    let mut defs: IndexMap<u32, usize> = IndexMap::new();
+    let mut rc_ops: IndexMap<u32, (usize, usize)> = IndexMap::new();
     // Local-to-local copies `dest = src` not followed by a retain of `dest`.
-    let mut alias_defs: HashMap<u32, Vec<u32>> = HashMap::new();
-    let mut other_defs: HashSet<u32> = HashSet::new();
+    let mut alias_defs: IndexMap<u32, Vec<u32>> = IndexMap::new();
+    let mut other_defs: IndexSet<u32> = IndexSet::new();
     for block in &f.blocks {
         for (si, stmt) in block.stmts.iter().enumerate() {
             match stmt {
@@ -333,7 +334,7 @@ fn terminator_hands_on(t: &Terminator) -> Option<u32> {
 }
 
 /// `f` without RC ops on `locals`, so their liveness is that of their real reads.
-fn without_rc_on(f: &MirFunction, locals: &HashSet<u32>) -> MirFunction {
+fn without_rc_on(f: &MirFunction, locals: &IndexSet<u32>) -> MirFunction {
     let mut g = MirFunction {
         def: f.def,
         instance: f.instance.clone(),
@@ -364,11 +365,11 @@ struct Check<'a> {
     snap: Snapshot,
     class: &'a BTreeSet<u32>,
     /// Pending snapshots, whose RC ops do not count as reads.
-    ignored: &'a HashSet<u32>,
+    ignored: &'a IndexSet<u32>,
 }
 
 impl Check<'_> {
-    fn holds(&self, live_out: &[HashSet<u32>]) -> bool {
+    fn holds(&self, live_out: &[IndexSet<u32>]) -> bool {
         let base = self.snap.base;
         let pinned =
             self.f.params.iter().any(|p| p.0 == base) && !self.f.locals[base as usize].is_take;
@@ -376,7 +377,7 @@ impl Check<'_> {
         let owner_pinned = pins.iter().any(|&owner| {
             self.f.params.iter().any(|p| p.0 == owner) && !self.f.locals[owner as usize].is_take
         });
-        let base_ok = |live: &HashSet<u32>| {
+        let base_ok = |live: &IndexSet<u32>| {
             !self.class.iter().any(|m| live.contains(m))
                 || pinned
                 || live.contains(&base)

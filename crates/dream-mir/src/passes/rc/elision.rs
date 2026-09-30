@@ -5,7 +5,8 @@ use crate::passes::cfg;
 use crate::passes::MirPass;
 use crate::{BlockId, MirFunction, Place, Statement, Terminator};
 use dream_types::TypeInterner;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use indexmap::{IndexMap, IndexSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 pub struct RcElision;
 
@@ -366,8 +367,7 @@ fn elide_region(func: &mut MirFunction, chain: &[BlockId]) -> bool {
     let n = locs.len();
     let mut keep = vec![true; n];
     let mut region_changed = false;
-    let mut pending: std::collections::HashMap<RcKey, Vec<usize>> =
-        std::collections::HashMap::new();
+    let mut pending: IndexMap<RcKey, Vec<usize>> = IndexMap::new();
     for i in 0..n {
         let (bi, si) = locs[i];
         match &func.blocks[bi].stmts[si] {
@@ -396,7 +396,7 @@ fn elide_region(func: &mut MirFunction, chain: &[BlockId]) -> bool {
             }
             Statement::Assign(Place::Local(dst), rvalue) if is_pure_rvalue(rvalue) => {
                 let key = RcKey::Local(*dst);
-                pending.remove(&key);
+                pending.swap_remove(&key);
             }
             Statement::Print { .. }
             | Statement::DebugLine(_)
@@ -410,7 +410,7 @@ fn elide_region(func: &mut MirFunction, chain: &[BlockId]) -> bool {
     if !region_changed {
         return false;
     }
-    let mut drop_at: BTreeMap<usize, HashSet<usize>> = BTreeMap::new();
+    let mut drop_at: BTreeMap<usize, IndexSet<usize>> = BTreeMap::new();
     for (i, &(bi, si)) in locs.iter().enumerate() {
         if !keep[i] {
             drop_at.entry(bi).or_default().insert(si);

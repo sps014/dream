@@ -23,7 +23,8 @@ use super::modref::{stmt_effects, Effect, ModRef, ModRefTable};
 use crate::{MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_hir::LayoutTable;
 use dream_types::{TypeId, TypeInterner};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use indexmap::IndexSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Copy)]
 enum Src {
@@ -89,7 +90,7 @@ pub(crate) fn infer_cursor_families(
         return;
     }
     let n = func.locals.len();
-    let params: HashSet<u32> = func.params.iter().map(|p| p.0).collect();
+    let params: IndexSet<u32> = func.params.iter().map(|p| p.0).collect();
     let mut srcs: Vec<Vec<Src>> = vec![Vec::new(); n];
     let mut shaped: Vec<bool> = vec![true; n];
     let mut defs: Vec<u32> = vec![0; n];
@@ -216,7 +217,7 @@ pub(crate) fn infer_cursor_families(
         }
     }
 
-    let mut escaped: HashSet<u32> = HashSet::new();
+    let mut escaped: IndexSet<u32> = IndexSet::new();
     for block in &func.blocks {
         for stmt in &block.stmts {
             mark_stmt_escapes(stmt, &mut escaped);
@@ -261,7 +262,7 @@ struct FamilyCx<'a> {
 }
 
 impl FamilyCx<'_> {
-    fn validate(&self, escaped: &HashSet<u32>, live_out: &[HashSet<u32>]) -> bool {
+    fn validate(&self, escaped: &IndexSet<u32>, live_out: &[IndexSet<u32>]) -> bool {
         if self.member_set.iter().any(|m| escaped.contains(m)) {
             return false;
         }
@@ -284,24 +285,24 @@ impl FamilyCx<'_> {
             return false;
         }
         // The caller holds a borrowed parameter for the whole call, dead or not.
-        let borrowed: HashSet<u32> = self
+        let borrowed: IndexSet<u32> = self
             .func
             .params
             .iter()
             .filter(|p| !self.func.locals[p.0 as usize].is_take)
             .map(|p| p.0)
             .collect();
-        let points_ok = |live: &HashSet<u32>| {
+        let points_ok = |live: &IndexSet<u32>| {
             self.member_set
                 .iter()
-                .filter(|m| live.contains(m))
+                .filter(|m| live.contains(*m))
                 .all(|m| {
                     roots_of[m]
                         .iter()
                         .all(|r| live.contains(r) || borrowed.contains(r))
                 })
         };
-        let in_flight = |live: &HashSet<u32>| self.member_set.iter().any(|m| live.contains(m));
+        let in_flight = |live: &IndexSet<u32>| self.member_set.iter().any(|m| live.contains(m));
         for (bi, block) in self.func.blocks.iter().enumerate() {
             let mut live = live_out[bi].clone();
             if !points_ok(&live) {

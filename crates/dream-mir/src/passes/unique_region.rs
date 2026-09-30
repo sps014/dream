@@ -7,16 +7,17 @@ use crate::{
     Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
 };
 use dream_types::{DefId, TypeId, TypeInterner};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use indexmap::{IndexMap, IndexSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 pub struct UniqueRegion;
 
 struct SafeCx<'a> {
     mir: &'a Mir,
     interner: &'a TypeInterner,
-    ctor_only: &'a HashSet<DefId>,
-    memo: &'a mut HashMap<(DefId, Vec<TypeId>), bool>,
-    visiting: &'a mut HashSet<(DefId, Vec<TypeId>)>,
+    ctor_only: &'a IndexSet<DefId>,
+    memo: &'a mut IndexMap<(DefId, Vec<TypeId>), bool>,
+    visiting: &'a mut IndexSet<(DefId, Vec<TypeId>)>,
 }
 
 impl ModulePass for UniqueRegion {
@@ -26,7 +27,7 @@ impl ModulePass for UniqueRegion {
 
     fn run(&self, mir: &mut Mir, interner: &TypeInterner) -> bool {
         let ctor_only = ctor_only_defs(mir);
-        let mut safe: HashMap<(DefId, Vec<TypeId>), bool> = HashMap::new();
+        let mut safe: IndexMap<(DefId, Vec<TypeId>), bool> = IndexMap::new();
         let mut changed = false;
         let n = mir.functions.len();
         for i in 0..n {
@@ -56,9 +57,9 @@ pub fn strip_escaped_regions(mir: &mut Mir, interner: &TypeInterner) -> bool {
     changed
 }
 
-fn ctor_only_defs(mir: &Mir) -> HashSet<DefId> {
-    let mut as_ctor = HashSet::new();
-    let mut as_call = HashSet::new();
+fn ctor_only_defs(mir: &Mir) -> IndexSet<DefId> {
+    let mut as_ctor = IndexSet::new();
+    let mut as_call = IndexSet::new();
     for f in &mir.functions {
         walk_fn(f, |stmt| match stmt {
             Statement::Call { callee, .. } => {
@@ -117,7 +118,7 @@ fn region_safe(cx: &mut SafeCx<'_>, f: &MirFunction) -> bool {
         return true;
     }
     let ok = region_safe_body(cx, f);
-    cx.visiting.remove(&key);
+    cx.visiting.swap_remove(&key);
     cx.memo.insert(key, ok);
     ok
 }
@@ -130,7 +131,7 @@ fn region_safe_body(cx: &mut SafeCx<'_>, f: &MirFunction) -> bool {
         return false;
     }
     let this_local = f.params.first().copied();
-    let mut new_locals = HashSet::new();
+    let mut new_locals = IndexSet::new();
     for b in &f.blocks {
         for s in &b.stmts {
             if let Statement::Assign(Place::Local(d), Rvalue::New { .. }) = s {
@@ -235,7 +236,7 @@ fn stmt_region_safe(
     f: &MirFunction,
     stmt: &Statement,
     this_local: Option<Local>,
-    new_locals: &HashSet<Local>,
+    new_locals: &IndexSet<Local>,
 ) -> bool {
     match stmt {
         Statement::Nop
@@ -365,8 +366,8 @@ fn wrap_sites(
     mir: &Mir,
     interner: &TypeInterner,
     fi: usize,
-    ctor_only: &HashSet<DefId>,
-    memo: &mut HashMap<(DefId, Vec<TypeId>), bool>,
+    ctor_only: &IndexSet<DefId>,
+    memo: &mut IndexMap<(DefId, Vec<TypeId>), bool>,
 ) -> Vec<WrapSite> {
     let f = &mir.functions[fi];
     let mut births: BTreeMap<u32, (usize, usize, Callee)> = BTreeMap::new();
@@ -412,7 +413,7 @@ fn wrap_sites(
             }
         }
     }
-    let mut visiting = HashSet::new();
+    let mut visiting = IndexSet::new();
     let mut out = Vec::new();
     let mut used_birth = BTreeSet::new();
     let mut used_death = BTreeSet::new();
@@ -568,7 +569,7 @@ fn payload_used_after_join(
     birth_bi: usize,
     aliases: &BTreeSet<u32>,
 ) -> bool {
-    let mut seen = HashSet::new();
+    let mut seen = IndexSet::new();
     let mut stack = vec![join];
     while let Some(bi) = stack.pop() {
         if bi == birth_bi || !seen.insert(bi) {
@@ -625,7 +626,7 @@ fn find_switch_after(
     mut si: usize,
     aliases: &BTreeSet<u32>,
 ) -> Option<usize> {
-    let mut seen = HashSet::new();
+    let mut seen = IndexSet::new();
     let mut keys = aliases.clone();
     loop {
         if !seen.insert(bi) {
@@ -742,7 +743,7 @@ fn apply_wraps(f: &mut MirFunction, sites: &[WrapSite]) {
 
 fn strip_escaped_fn(f: &mut MirFunction, interner: &TypeInterner) -> bool {
     let mut stack = Vec::new();
-    let mut drop_at: HashSet<(usize, usize)> = HashSet::new();
+    let mut drop_at: IndexSet<(usize, usize)> = IndexSet::new();
     for (bi, block) in f.blocks.iter().enumerate() {
         for (si, stmt) in block.stmts.iter().enumerate() {
             match stmt {
@@ -784,7 +785,7 @@ fn region_body_defs(
     (enter_bi, enter_si): (usize, usize),
 ) -> BTreeSet<u32> {
     let mut defs = BTreeSet::new();
-    let mut seen = HashSet::new();
+    let mut seen = IndexSet::new();
     let mut stack = vec![(enter_bi, enter_si + 1)];
     while let Some((bi, si0)) = stack.pop() {
         if si0 == 0 && !seen.insert(bi) {
@@ -831,8 +832,8 @@ fn rc_use_after_leave(
     leave_si: usize,
     tainted: &BTreeSet<u32>,
 ) -> bool {
-    let mut seen = HashSet::from([leave_bi]);
-    let mut stack = vec![(leave_bi, leave_si + 1, HashSet::new())];
+    let mut seen = IndexSet::from([leave_bi]);
+    let mut stack = vec![(leave_bi, leave_si + 1, IndexSet::new())];
     while let Some((bi, si0, mut killed)) = stack.pop() {
         if si0 == 0 && !seen.insert(bi) {
             continue;
@@ -862,7 +863,7 @@ fn rc_use_after_leave(
     false
 }
 
-fn rc_stmt_escapes(stmt: &Statement, killed: &HashSet<u32>, tainted: &BTreeSet<u32>) -> bool {
+fn rc_stmt_escapes(stmt: &Statement, killed: &IndexSet<u32>, tainted: &BTreeSet<u32>) -> bool {
     match stmt {
         Statement::Retain(_) | Statement::Release(_) | Statement::ReleaseUnique(_) => false,
         Statement::Assign(Place::Local(_), Rvalue::Use(Operand::Const(Const::Null))) => false,
@@ -873,8 +874,8 @@ fn rc_stmt_escapes(stmt: &Statement, killed: &HashSet<u32>, tainted: &BTreeSet<u
     }
 }
 
-fn rc_term_escapes(term: &Terminator, killed: &HashSet<u32>, tainted: &BTreeSet<u32>) -> bool {
-    let mut live = HashSet::new();
+fn rc_term_escapes(term: &Terminator, killed: &IndexSet<u32>, tainted: &BTreeSet<u32>) -> bool {
+    let mut live = IndexSet::new();
     match term {
         Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => {
             operand_locals(o, &mut live);
@@ -893,7 +894,7 @@ fn rc_term_escapes(term: &Terminator, killed: &HashSet<u32>, tainted: &BTreeSet<
         .any(|i| !killed.contains(i) && tainted.contains(i))
 }
 
-fn operand_locals(op: &Operand, live: &mut HashSet<u32>) {
+fn operand_locals(op: &Operand, live: &mut IndexSet<u32>) {
     if let Operand::Copy(place) = op {
         match place {
             Place::Local(l) => {

@@ -7,7 +7,7 @@
 use super::liveness::stmt_reads_local;
 use crate::{BasicBlock, Callee, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::DefId;
-use std::collections::HashSet;
+use indexmap::IndexSet;
 
 /// Whether a statement's guest borrows end when it returns, or may outlive it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,8 +24,8 @@ pub(crate) enum StmtBorrow {
 pub(crate) fn held_defs(
     intrinsics: &[(DefId, String)],
     imports: &[dream_hir::HImport],
-) -> HashSet<DefId> {
-    let mut out: HashSet<DefId> = intrinsics
+) -> IndexSet<DefId> {
+    let mut out: IndexSet<DefId> = intrinsics
         .iter()
         .filter(|(_, key)| dream_abi::intrinsics::holds_raw_borrow(key))
         .map(|(def, _)| *def)
@@ -40,15 +40,15 @@ pub(crate) fn held_defs(
 
 /// Borrowed arguments of the call that produced `Await.future` in this block. The callee (or host)
 /// may still read them until that await completes, so last-use destroy waits for the resume block.
-pub(crate) fn call_args_kept_across_await(block: &BasicBlock, nloc: usize) -> HashSet<u32> {
+pub(crate) fn call_args_kept_across_await(block: &BasicBlock, nloc: usize) -> IndexSet<u32> {
     let Terminator::Await {
         future: Operand::Copy(Place::Local(fut)),
         ..
     } = &block.terminator
     else {
-        return HashSet::new();
+        return IndexSet::new();
     };
-    let mut out = HashSet::new();
+    let mut out = IndexSet::new();
     for stmt in &block.stmts {
         if !assigns_future_call(stmt, fut.0) {
             continue;
@@ -87,11 +87,11 @@ fn assigns_future_call(stmt: &Statement, dest: u32) -> bool {
 }
 
 /// Last-use `Release` may be inserted immediately after `stmt`.
-pub(crate) fn may_die_after(stmt: &Statement, holds: &HashSet<DefId>) -> bool {
+pub(crate) fn may_die_after(stmt: &Statement, holds: &IndexSet<DefId>) -> bool {
     stmt_borrow(stmt, holds) == StmtBorrow::Ends
 }
 
-pub(crate) fn stmt_borrow(stmt: &Statement, holds: &HashSet<DefId>) -> StmtBorrow {
+pub(crate) fn stmt_borrow(stmt: &Statement, holds: &IndexSet<DefId>) -> StmtBorrow {
     match stmt {
         Statement::Assign(_, rv) => rvalue_borrow(rv, holds),
         Statement::Call { callee, .. } | Statement::JsCall { callee, .. } => {
@@ -122,7 +122,7 @@ pub(crate) fn stmt_borrow(stmt: &Statement, holds: &HashSet<DefId>) -> StmtBorro
     }
 }
 
-fn rvalue_borrow(rv: &Rvalue, holds: &HashSet<DefId>) -> StmtBorrow {
+fn rvalue_borrow(rv: &Rvalue, holds: &IndexSet<DefId>) -> StmtBorrow {
     match rv {
         Rvalue::Call { callee, .. } | Rvalue::JsCall { callee, .. } => callee_borrow(callee, holds),
         Rvalue::Use(_)
@@ -164,7 +164,7 @@ fn rvalue_borrow(rv: &Rvalue, holds: &HashSet<DefId>) -> StmtBorrow {
     }
 }
 
-fn callee_borrow(callee: &Callee, holds: &HashSet<DefId>) -> StmtBorrow {
+fn callee_borrow(callee: &Callee, holds: &IndexSet<DefId>) -> StmtBorrow {
     if holds.contains(&callee.def) {
         StmtBorrow::Held
     } else {

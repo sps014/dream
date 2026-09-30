@@ -1,18 +1,19 @@
 //! Backward liveness of locals, used by last-use move in [`super::RcInsertion`].
 
 use crate::{MirFunction, Operand, Place, Rvalue, Statement, Terminator};
-use std::collections::{BTreeSet, HashSet};
+use indexmap::IndexSet;
+use std::collections::BTreeSet;
 
 /// Per-block live-out set: locals that may be read on some path after the block's terminator.
-pub(crate) fn live_out(func: &MirFunction) -> Vec<HashSet<u32>> {
+pub(crate) fn live_out(func: &MirFunction) -> Vec<IndexSet<u32>> {
     let n = func.blocks.len();
-    let mut live_out = vec![HashSet::new(); n];
-    let mut live_in = vec![HashSet::new(); n];
+    let mut live_out = vec![IndexSet::new(); n];
+    let mut live_in = vec![IndexSet::new(); n];
     let mut changed = true;
     while changed {
         changed = false;
         for bi in (0..n).rev() {
-            let mut out = HashSet::new();
+            let mut out = IndexSet::new();
             for succ in func.blocks[bi].terminator.successors() {
                 out.extend(&live_in[succ.0 as usize]);
             }
@@ -36,7 +37,7 @@ pub(crate) fn live_out(func: &MirFunction) -> Vec<HashSet<u32>> {
 }
 
 /// Locals live at the start of block `bi` (may be read in the block or after it).
-pub(crate) fn live_in_of(func: &MirFunction, live_out: &[HashSet<u32>], bi: usize) -> HashSet<u32> {
+pub(crate) fn live_in_of(func: &MirFunction, live_out: &[IndexSet<u32>], bi: usize) -> IndexSet<u32> {
     let block = &func.blocks[bi];
     let mut inn = live_out[bi].clone();
     transfer_block(&block.stmts, &block.terminator, &mut inn);
@@ -47,7 +48,7 @@ pub(crate) fn live_in_of(func: &MirFunction, live_out: &[HashSet<u32>], bi: usiz
 /// statement itself).
 pub(crate) fn live_after_stmt(
     func: &MirFunction,
-    live_out: &[HashSet<u32>],
+    live_out: &[IndexSet<u32>],
     bi: usize,
     si: usize,
     local: u32,
@@ -68,7 +69,7 @@ pub(crate) fn live_after_stmt(
 /// of container stores (a fused `@json` unit).
 pub(crate) fn live_after_each(
     func: &MirFunction,
-    live_out: &[HashSet<u32>],
+    live_out: &[IndexSet<u32>],
     bi: usize,
     probes: &[Option<u32>],
 ) -> Vec<bool> {
@@ -85,17 +86,17 @@ pub(crate) fn live_after_each(
     out
 }
 
-fn transfer_block(stmts: &[Statement], term: &Terminator, live: &mut HashSet<u32>) {
+fn transfer_block(stmts: &[Statement], term: &Terminator, live: &mut IndexSet<u32>) {
     add_terminator_reads(term, live);
     for stmt in stmts.iter().rev() {
         transfer_stmt(stmt, live);
     }
 }
 
-pub(crate) fn transfer_stmt(stmt: &Statement, live: &mut HashSet<u32>) {
+pub(crate) fn transfer_stmt(stmt: &Statement, live: &mut IndexSet<u32>) {
     match stmt {
         Statement::Assign(Place::Local(d), rv) => {
-            live.remove(&d.0);
+            live.swap_remove(&d.0);
             add_rvalue_reads(rv, live);
         }
         Statement::Assign(place, rv) => {
@@ -186,12 +187,12 @@ pub(crate) fn transfer_stmt(stmt: &Statement, live: &mut HashSet<u32>) {
 
 /// True if `local` is read by `stmt` (plain operand, field/index base, or RC op).
 pub(crate) fn stmt_reads_local(stmt: &Statement, local: u32) -> bool {
-    let mut live = HashSet::new();
+    let mut live = IndexSet::new();
     transfer_stmt_reads_only(stmt, &mut live);
     live.contains(&local)
 }
 
-fn transfer_stmt_reads_only(stmt: &Statement, live: &mut HashSet<u32>) {
+fn transfer_stmt_reads_only(stmt: &Statement, live: &mut IndexSet<u32>) {
     match stmt {
         Statement::Assign(Place::Local(_), rv) => add_rvalue_reads(rv, live),
         Statement::Assign(place, rv) => {
@@ -202,7 +203,7 @@ fn transfer_stmt_reads_only(stmt: &Statement, live: &mut HashSet<u32>) {
     }
 }
 
-pub(crate) fn add_terminator_reads(term: &Terminator, live: &mut HashSet<u32>) {
+pub(crate) fn add_terminator_reads(term: &Terminator, live: &mut IndexSet<u32>) {
     match term {
         Terminator::If { cond, .. } => add_operand_reads(cond, live),
         Terminator::Switch { value, .. } => add_operand_reads(value, live),
@@ -215,7 +216,7 @@ pub(crate) fn add_terminator_reads(term: &Terminator, live: &mut HashSet<u32>) {
     }
 }
 
-fn add_rvalue_reads(rv: &Rvalue, live: &mut HashSet<u32>) {
+fn add_rvalue_reads(rv: &Rvalue, live: &mut IndexSet<u32>) {
     let mut add = |op: &Operand| add_operand_reads(op, live);
     match rv {
         Rvalue::Move { src, .. } => add(&Operand::Copy(Place::Local(*src))),
@@ -305,7 +306,7 @@ fn add_rvalue_reads(rv: &Rvalue, live: &mut HashSet<u32>) {
     }
 }
 
-fn add_operand_reads(op: &Operand, live: &mut HashSet<u32>) {
+fn add_operand_reads(op: &Operand, live: &mut IndexSet<u32>) {
     if let Operand::Copy(place) = op {
         match place {
             Place::Local(l) => {
@@ -326,7 +327,7 @@ fn add_operand_reads(op: &Operand, live: &mut HashSet<u32>) {
     }
 }
 
-fn add_place_base_reads(place: &Place, live: &mut HashSet<u32>) {
+fn add_place_base_reads(place: &Place, live: &mut IndexSet<u32>) {
     match place {
         Place::Field { base, .. } => {
             live.insert(base.0);
@@ -352,13 +353,13 @@ fn add_place_base_reads(place: &Place, live: &mut HashSet<u32>) {
 /// block's live-in set.
 pub(crate) fn frame_interference(func: &MirFunction) -> Vec<BTreeSet<u32>> {
     let n = func.blocks.len();
-    let mut live_out = vec![HashSet::new(); n];
-    let mut live_in = vec![HashSet::new(); n];
+    let mut live_out = vec![IndexSet::new(); n];
+    let mut live_in = vec![IndexSet::new(); n];
     let mut changed = true;
     while changed {
         changed = false;
         for bi in (0..n).rev() {
-            let mut out = HashSet::new();
+            let mut out = IndexSet::new();
             for succ in func.blocks[bi].terminator.successors() {
                 out.extend(&live_in[succ.0 as usize]);
             }
@@ -399,7 +400,7 @@ pub(crate) fn frame_interference(func: &MirFunction) -> Vec<BTreeSet<u32>> {
                 for &v in live.iter() {
                     interfere(v, d.0);
                 }
-                live.remove(&d.0);
+                live.swap_remove(&d.0);
             }
             transfer_stmt(stmt, &mut live);
         }

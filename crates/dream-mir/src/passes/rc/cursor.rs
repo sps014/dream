@@ -5,7 +5,7 @@ use super::modref::ModRefTable;
 use crate::{Callee, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_hir::LayoutTable;
 use dream_types::TypeInterner;
-use std::collections::HashSet;
+use indexmap::{IndexMap, IndexSet};
 
 /// Mark locals that only hold a non-escaping field/index (or union-field) load, or a forwarding
 /// copy of another RC local, as cursors so [`super::RcInsertion`] skips retain/release on them.
@@ -16,13 +16,13 @@ pub(crate) fn infer_cursors(
     modref: &ModRefTable,
 ) {
     let n = func.locals.len();
-    let params: HashSet<u32> = func.params.iter().map(|p| p.0).collect();
-    let mut candidates: HashSet<u32> = HashSet::new();
-    let mut forwarding: HashSet<u32> = HashSet::new();
+    let params: IndexSet<u32> = func.params.iter().map(|p| p.0).collect();
+    let mut candidates: IndexSet<u32> = IndexSet::new();
+    let mut forwarding: IndexSet<u32> = IndexSet::new();
     let mut forwarding_copies: Vec<(u32, u32, usize, usize)> = Vec::new();
-    let mut escaped: HashSet<u32> = HashSet::new();
+    let mut escaped: IndexSet<u32> = IndexSet::new();
     let mut def_count: Vec<u32> = vec![0; n];
-    let mut index_defined: HashSet<u32> = HashSet::new();
+    let mut index_defined: IndexSet<u32> = IndexSet::new();
     for block in &func.blocks {
         for stmt in &block.stmts {
             if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
@@ -55,7 +55,7 @@ pub(crate) fn infer_cursors(
                             forwarding_copies.push((dest.0, src.0, bi, si));
                         } else {
                             escaped.insert(dest.0);
-                            forwarding.remove(&dest.0);
+                            forwarding.swap_remove(&dest.0);
                         }
                     }
                 } else if is_null_init(rvalue) {
@@ -64,7 +64,7 @@ pub(crate) fn infer_cursors(
                     // last-ref of an owned `this.obj_map` copy frees the Map still in `JsonValue`.
                 } else if !is_cursor_source(rvalue) && !is_forwarding_copy(rvalue) {
                     escaped.insert(dest.0);
-                    forwarding.remove(&dest.0);
+                    forwarding.swap_remove(&dest.0);
                 }
             }
             mark_stmt_escapes(stmt, &mut escaped);
@@ -76,7 +76,7 @@ pub(crate) fn infer_cursors(
     // must own. Cursor-walking through `this.obj_map` would leftover-last-ref the value
     // still stored in the Map (`JsonValue.get` / `unwrap_or`).
     {
-        let mut snapshot_of: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+        let mut snapshot_of: IndexMap<u32, u32> = IndexMap::new();
         for block in &func.blocks {
             for stmt in &block.stmts {
                 if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
@@ -86,12 +86,12 @@ pub(crate) fn infer_cursors(
                 }
             }
         }
-        let mut copy_of: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+        let mut copy_of: IndexMap<u32, u32> = IndexMap::new();
         for &(dest, src, _, _) in &forwarding_copies {
             copy_of.insert(dest, src);
         }
         let reaches_index = |mut x: u32| {
-            let mut seen = HashSet::new();
+            let mut seen = IndexSet::new();
             while seen.insert(x) {
                 if index_defined.contains(&x) {
                     return true;
@@ -113,9 +113,9 @@ pub(crate) fn infer_cursors(
                         continue;
                     };
                     if reaches_index(base) {
-                        candidates.remove(&dest.0);
+                        candidates.swap_remove(&dest.0);
                         escaped.insert(dest.0);
-                        forwarding.remove(&dest.0);
+                        forwarding.swap_remove(&dest.0);
                     }
                 }
             }
@@ -136,9 +136,9 @@ pub(crate) fn infer_cursors(
         }
     }
 
-    let mut overwrite_escaped: HashSet<u32> = HashSet::new();
+    let mut overwrite_escaped: IndexSet<u32> = IndexSet::new();
     escape_slot_overwrite_readers(func, &mut candidates, &mut escaped, &mut overwrite_escaped);
-    let mut outlive_escaped: HashSet<u32> = HashSet::new();
+    let mut outlive_escaped: IndexSet<u32> = IndexSet::new();
     escape_cursors_outliving_base(
         func,
         &mut candidates,
@@ -165,7 +165,7 @@ pub(crate) fn infer_cursors(
         } = &block.terminator
         {
             escaped.insert(d.0);
-            forwarding.remove(&d.0);
+            forwarding.swap_remove(&d.0);
             let ri = resume.0 as usize;
             if ri < func.blocks.len() {
                 for stmt in &func.blocks[ri].stmts {
@@ -176,7 +176,7 @@ pub(crate) fn infer_cursors(
                     {
                         if src.0 == d.0 {
                             escaped.insert(user.0);
-                            forwarding.remove(&user.0);
+                            forwarding.swap_remove(&user.0);
                         }
                     }
                 }
@@ -197,7 +197,7 @@ pub(crate) fn infer_cursors(
     // Do not walk through index loads: `slots[i].value` is a Map occupant. Treating it as a
     // cursor lets leftover last-ref of `JsonValue.get` / `unwrap_or` destroy the value still
     // stored in `obj_map`.
-    let borrow_params: HashSet<u32> = func
+    let borrow_params: IndexSet<u32> = func
         .params
         .iter()
         .filter(|p| !func.locals[p.0 as usize].is_take)
@@ -293,8 +293,8 @@ fn weak_or_unowned_field_load(rvalue: &Rvalue, func: &MirFunction, layouts: &Lay
 fn borrow_field_snapshot(
     rvalue: &Rvalue,
     locals: &[crate::LocalDecl],
-    borrow_params: &HashSet<u32>,
-    index_defined: &HashSet<u32>,
+    borrow_params: &IndexSet<u32>,
+    index_defined: &IndexSet<u32>,
 ) -> bool {
     let Some(slot) = cursor_source_slot(rvalue) else {
         return false;
@@ -364,12 +364,12 @@ fn cursor_source_slot(rvalue: &Rvalue) -> Option<SourceSlot> {
 /// never under-retain; missing an overwrite would leave the use-after-free this guards against.
 fn escape_slot_overwrite_readers(
     func: &MirFunction,
-    candidates: &mut HashSet<u32>,
-    escaped: &mut HashSet<u32>,
-    overwrite_escaped: &mut HashSet<u32>,
+    candidates: &mut IndexSet<u32>,
+    escaped: &mut IndexSet<u32>,
+    overwrite_escaped: &mut IndexSet<u32>,
 ) {
-    let mut stored_fields: HashSet<(u32, u32)> = HashSet::new();
-    let mut stored_index_bases: HashSet<u32> = HashSet::new();
+    let mut stored_fields: IndexSet<(u32, u32)> = IndexSet::new();
+    let mut stored_index_bases: IndexSet<u32> = IndexSet::new();
     let mut def_counts: Vec<u32> = vec![0; func.locals.len()];
     for block in &func.blocks {
         for stmt in &block.stmts {
@@ -389,7 +389,7 @@ fn escape_slot_overwrite_readers(
     }
     // A base's *initializing* assignment creates the object; only a re-definition (2nd+ def)
     // can drop a previous occupant and invalidate snapshots taken through the base.
-    let overwritten_bases: HashSet<u32> = def_counts
+    let overwritten_bases: IndexSet<u32> = def_counts
         .iter()
         .enumerate()
         .filter(|(_, &n)| n > 1)
@@ -425,7 +425,7 @@ fn escape_slot_overwrite_readers(
             SourceSlot::UnionBase(base) => overwritten_bases.contains(&base),
         };
         if overwritten {
-            candidates.remove(&id);
+            candidates.swap_remove(&id);
             escaped.insert(id);
             overwrite_escaped.insert(id);
         }
@@ -436,17 +436,17 @@ fn escape_slot_overwrite_readers(
 /// destroy of `field` after `fname = field.name` (no retain) leaves `fname` dangling.
 fn escape_cursors_outliving_base(
     func: &MirFunction,
-    candidates: &mut HashSet<u32>,
-    escaped: &mut HashSet<u32>,
-    outlive_escaped: &mut HashSet<u32>,
+    candidates: &mut IndexSet<u32>,
+    escaped: &mut IndexSet<u32>,
+    outlive_escaped: &mut IndexSet<u32>,
     forwarding_copies: &[(u32, u32, usize, usize)],
 ) {
     let live_out = liveness::live_out(func);
-    let mut copy_of: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+    let mut copy_of: IndexMap<u32, u32> = IndexMap::new();
     for &(dest, src, _, _) in forwarding_copies {
         copy_of.insert(dest, src);
     }
-    let mut snapshot_of: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+    let mut snapshot_of: IndexMap<u32, u32> = IndexMap::new();
     for block in &func.blocks {
         for stmt in &block.stmts {
             if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
@@ -457,7 +457,7 @@ fn escape_cursors_outliving_base(
         }
     }
     let peel = |mut x: u32| {
-        let mut seen = HashSet::new();
+        let mut seen = IndexSet::new();
         while seen.insert(x) {
             if let Some(&s) = copy_of.get(&x) {
                 x = s;
@@ -526,7 +526,7 @@ fn escape_cursors_outliving_base(
             }
         }
         if outlives {
-            candidates.remove(&id);
+            candidates.swap_remove(&id);
             escaped.insert(id);
             outlive_escaped.insert(id);
         }
@@ -627,7 +627,7 @@ fn operand_mentions_local(op: &Operand, local: u32) -> bool {
     }
 }
 
-pub(super) fn mark_stmt_escapes(stmt: &Statement, escaped: &mut HashSet<u32>) {
+pub(super) fn mark_stmt_escapes(stmt: &Statement, escaped: &mut IndexSet<u32>) {
     match stmt {
         Statement::Assign(Place::Field { .. }, rvalue)
         | Statement::Assign(Place::Index { .. }, rvalue)
@@ -658,7 +658,7 @@ pub(super) fn mark_stmt_escapes(stmt: &Statement, escaped: &mut HashSet<u32>) {
     }
 }
 
-pub(super) fn mark_term_escapes(term: &Terminator, escaped: &mut HashSet<u32>) {
+pub(super) fn mark_term_escapes(term: &Terminator, escaped: &mut IndexSet<u32>) {
     match term {
         Terminator::Return(Some(op)) | Terminator::AsyncComplete(Some(op)) => {
             escape_operand(op, escaped);
@@ -669,7 +669,7 @@ pub(super) fn mark_term_escapes(term: &Terminator, escaped: &mut HashSet<u32>) {
     }
 }
 
-fn escape_take_args(callee: &Callee, args: &[Operand], escaped: &mut HashSet<u32>) {
+fn escape_take_args(callee: &Callee, args: &[Operand], escaped: &mut IndexSet<u32>) {
     for (i, arg) in args.iter().enumerate() {
         if callee.take_params.get(i).copied().unwrap_or(false) {
             escape_operand(arg, escaped);
@@ -677,7 +677,7 @@ fn escape_take_args(callee: &Callee, args: &[Operand], escaped: &mut HashSet<u32
     }
 }
 
-fn escape_constructor_payloads(rvalue: &Rvalue, escaped: &mut HashSet<u32>) {
+fn escape_constructor_payloads(rvalue: &Rvalue, escaped: &mut IndexSet<u32>) {
     match rvalue {
         Rvalue::Call { callee, args, .. } => escape_take_args(callee, args, escaped),
         Rvalue::New { args, .. }
@@ -702,14 +702,14 @@ fn escape_constructor_payloads(rvalue: &Rvalue, escaped: &mut HashSet<u32>) {
     }
 }
 
-fn escape_rvalue_payload(rvalue: &Rvalue, escaped: &mut HashSet<u32>) {
+fn escape_rvalue_payload(rvalue: &Rvalue, escaped: &mut IndexSet<u32>) {
     match rvalue {
         Rvalue::Use(op) | Rvalue::Cast(op, _, _) => escape_operand(op, escaped),
         other => escape_constructor_payloads(other, escaped),
     }
 }
 
-fn escape_operand(op: &Operand, escaped: &mut HashSet<u32>) {
+fn escape_operand(op: &Operand, escaped: &mut IndexSet<u32>) {
     if let Operand::Copy(Place::Local(l)) = op {
         escaped.insert(l.0);
     }

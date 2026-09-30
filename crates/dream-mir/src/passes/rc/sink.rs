@@ -25,7 +25,7 @@ use crate::passes::cfg::predecessors;
 use crate::passes::MirPass;
 use crate::{BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement};
 use dream_types::TypeInterner;
-use std::collections::HashSet;
+use indexmap::IndexSet;
 
 pub struct ReleaseSink;
 
@@ -89,7 +89,7 @@ fn sink_candidate(func: &MirFunction, preds: &[Vec<BlockId>]) -> Option<(usize, 
         if succs.is_empty() {
             continue;
         }
-        let distinct: HashSet<BlockId> = succs.iter().copied().collect();
+        let distinct: IndexSet<BlockId> = succs.iter().copied().collect();
         if distinct.len() != succs.len()
             || succs
                 .iter()
@@ -108,7 +108,7 @@ fn sink_candidate(func: &MirFunction, preds: &[Vec<BlockId>]) -> Option<(usize, 
             let tail_ok = stmts[si + 2..]
                 .iter()
                 .all(|t| is_transparent_stmt(t) && !touches(t, s));
-            let mut term_reads = HashSet::new();
+            let mut term_reads = IndexSet::new();
             add_terminator_reads(&block.terminator, &mut term_reads);
             if tail_ok && !term_reads.contains(&s.0) {
                 return Some((bi, si));

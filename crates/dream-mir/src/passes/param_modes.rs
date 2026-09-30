@@ -29,7 +29,7 @@ use crate::{Callee, Mir, MirFunction, Operand, Place, Rvalue, Statement, Termina
 use dream_hir::LayoutTable;
 use dream_types::{DefId, TypeId, TypeInterner};
 use indexmap::{IndexMap, IndexSet};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 pub struct ParamModes;
 
@@ -112,8 +112,8 @@ fn infer(mir: &Mir, interner: &TypeInterner, modref: &ModRefTable) -> IndexSet<S
         return IndexSet::new();
     }
 
-    let mut rejected: HashSet<Slot> = HashSet::new();
-    let mut called: HashSet<Slot> = HashSet::new();
+    let mut rejected: IndexSet<Slot> = IndexSet::new();
+    let mut called: IndexSet<Slot> = IndexSet::new();
     let mut hazard_checked: IndexSet<Slot> = IndexSet::new();
     let mut extra_deps: Vec<(Slot, Slot)> = Vec::new();
     for f in mir.functions.iter().chain(mir.polls.iter()) {
@@ -323,8 +323,8 @@ enum ArgKind {
 
 /// Per-caller facts for classifying call arguments.
 struct CallerArgs {
-    live_out: Vec<HashSet<u32>>,
-    params: HashSet<u32>,
+    live_out: Vec<IndexSet<u32>>,
+    params: IndexSet<u32>,
     /// Some definition is a fresh value (not a copy or slot load), so RC insertion makes the
     /// local an owner rather than a cursor.
     fresh_def: Vec<bool>,
@@ -379,7 +379,7 @@ impl CallerArgs {
 
 struct ArgsAt<'a> {
     facts: &'a CallerArgs,
-    live_after: &'a HashSet<u32>,
+    live_after: &'a IndexSet<u32>,
 }
 
 impl ArgsAt<'_> {

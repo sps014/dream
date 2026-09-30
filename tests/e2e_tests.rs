@@ -778,53 +778,91 @@ fn codegen_is_deterministic() {
     if !cases_dir.exists() {
         return;
     }
-    // Two independent compiles of a couple of fixtures is enough to catch HashMap-order
-    // regressions; the ignored full corpus still covers more shapes in CI `--ignored` runs.
     for name in ["classes", "async_basic"] {
         let src = cases_dir.join(format!("{}.dream", name));
-        if !src.exists() {
-            continue;
+        if src.exists() {
+            assert_deterministic("dream_det", name, &src, true);
         }
-        let src_str = src.to_str().unwrap().to_string();
-        let out = std::env::temp_dir().join(format!("dream_det_{}.wat", name));
-        let out_str = out.to_str().unwrap().to_string();
-        let artifacts = [
-            out.with_extension("ll"),
-            out.with_extension("wasm"),
-            out.with_extension("web.runtime.js"),
-        ];
-        let mut prev: Option<Vec<Vec<u8>>> = None;
-        for run in 0..2 {
-            Compiler::new(Target::Wasm32)
-                .with_release(true)
-                .with_optimize(None)
-                .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Web])
-                .compile(&src_str, &out_str)
-                .unwrap_or_else(|_| panic!("Compilation failed for {}", name));
-            let bytes: Vec<Vec<u8>> = artifacts
-                .iter()
-                .map(|p| fs::read(p).unwrap_or_else(|e| panic!("{}: {e}", p.display())))
-                .collect();
-            if let Some(first) = &prev {
-                for (i, p) in artifacts.iter().enumerate() {
-                    assert!(
-                        first[i] == bytes[i],
-                        "Nondeterministic {} for {} (run {})",
-                        p.display(),
-                        name,
-                        run
-                    );
-                }
-            } else {
-                prev = Some(bytes);
-            }
+    }
+}
+
+/// [`codegen_is_deterministic`] over every golden that compiles for wasm32. Cases that fail to
+/// compile (native-only hosts, `.expected_error`) are skipped: this checks reproducibility only.
+#[test]
+#[ignore = "full corpus, two compiles per case; cargo test --test e2e_tests codegen_is_deterministic_full_corpus -- --ignored"]
+fn codegen_is_deterministic_full_corpus() {
+    let mut names: Vec<String> = fs::read_dir("tests/cases")
+        .expect("tests/cases")
+        .filter_map(|e| {
+            let p = e.ok()?.path();
+            (p.extension()? == "dream" && p.with_extension("expected").exists())
+                .then(|| p.file_stem()?.to_str().map(str::to_string))?
+        })
+        .collect();
+    names.sort();
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(|| loop {
+                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some(name) = names.get(i) else {
+                    break;
+                };
+                let src = Path::new("tests/cases").join(format!("{}.dream", name));
+                assert_deterministic("dream_det_all", name, &src, false);
+            });
         }
-        for p in artifacts
+    });
+}
+
+/// Compiles `src` twice to the same path and asserts byte-identical `.ll`, `.wasm` and
+/// `*.web.runtime.js`. With `must_compile` false, a failing first compile skips the case.
+/// `prefix` keeps concurrently running tests off each other's output files.
+fn assert_deterministic(prefix: &str, name: &str, src: &Path, must_compile: bool) {
+    let src_str = src.to_str().unwrap().to_string();
+    let out = std::env::temp_dir().join(format!("{}_{}.wat", prefix, name));
+    let out_str = out.to_str().unwrap().to_string();
+    let artifacts = [
+        out.with_extension("ll"),
+        out.with_extension("wasm"),
+        out.with_extension("web.runtime.js"),
+    ];
+    let mut prev: Option<Vec<Vec<u8>>> = None;
+    for run in 0..2 {
+        let result = Compiler::new(Target::Wasm32)
+            .with_release(true)
+            .with_optimize(None)
+            .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Web])
+            .compile(&src_str, &out_str);
+        if result.is_err() {
+            assert!(!must_compile, "Compilation failed for {}", name);
+            assert!(prev.is_none(), "{} compiled once, then failed", name);
+            break;
+        }
+        let bytes: Vec<Vec<u8>> = artifacts
             .iter()
-            .chain([&out, &out.with_extension("abi.json")])
-        {
-            let _ = fs::remove_file(p);
+            .map(|p| fs::read(p).unwrap_or_else(|e| panic!("{}: {e}", p.display())))
+            .collect();
+        if let Some(first) = &prev {
+            for (i, p) in artifacts.iter().enumerate() {
+                assert!(
+                    first[i] == bytes[i],
+                    "Nondeterministic {} for {} (run {})",
+                    p.display(),
+                    name,
+                    run
+                );
+            }
+        } else {
+            prev = Some(bytes);
         }
+    }
+    for p in artifacts
+        .iter()
+        .chain([&out, &out.with_extension("abi.json")])
+    {
+        let _ = fs::remove_file(p);
     }
 }
 

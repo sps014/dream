@@ -59,7 +59,7 @@ impl MirPass for RcLastUseRepair {
 /// `Retain` is provably the inlined return's `+1` and not the only reference to a fresh value.
 fn baked_retain(
     func: &MirFunction,
-    live_out: &[std::collections::HashSet<u32>],
+    live_out: &[indexmap::IndexSet<u32>],
     bi: usize,
     si: usize,
     src: u32,

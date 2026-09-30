@@ -628,6 +628,26 @@ fn test_hir_emission_global_initializer_runs_in_start() {
 }
 
 #[test]
+fn test_hir_emission_noinline_is_attribute_driven() {
+    // Only `@noinline` marks a function noinline; a name containing "sink" gets no special treatment.
+    let code = "
+        @noinline
+        fun keep(x: int): int { return x + 1; }
+        fun kitchenSink(x: int): int { return x + 2; }
+        fun run(): int { return keep(1) + kitchenSink(2); }
+    ";
+    let c = emit_hir_to_module(code);
+    let define_line = |needle: &str| {
+        c.lines()
+            .find(|l| l.starts_with("define ") && l.contains(needle))
+            .unwrap_or_else(|| panic!("no define for {}:\n{}", needle, c))
+            .to_string()
+    };
+    assert!(define_line("keep").contains("noinline"), "{}", c);
+    assert!(!define_line("kitchenSink").contains("noinline"), "{}", c);
+}
+
+#[test]
 fn test_hir_emission_extern_import_and_call() {
     // An `extern fun` becomes a declaration of its `@js` host symbol, and a call to it resolves to
     // that symbol so the module links.

@@ -346,7 +346,7 @@ fn without_rc_on(f: &MirFunction, locals: &HashSet<u32>) -> MirFunction {
         is_async: f.is_async,
         hir_fn: None,
         file: None,
-        prefer_inline: false,
+        inline: dream_hir::InlineHint::Default,
     };
     for b in &mut g.blocks {
         b.stmts

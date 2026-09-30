@@ -17,7 +17,7 @@ pub struct FunctionBuilder {
     blocks: Vec<BasicBlock>,
     current: BlockId,
     file: Option<String>,
-    prefer_inline: bool,
+    inline: dream_hir::InlineHint,
 }
 
 impl FunctionBuilder {
@@ -35,7 +35,7 @@ impl FunctionBuilder {
             blocks: vec![BasicBlock::default()],
             current: BlockId(0),
             file: None,
-            prefer_inline: false,
+            inline: dream_hir::InlineHint::Default,
         }
     }
 
@@ -48,9 +48,8 @@ impl FunctionBuilder {
         self.file = file;
     }
 
-    /// Raised inliner size budget (`@inline` on the source declaration).
-    pub fn set_prefer_inline(&mut self, prefer_inline: bool) {
-        self.prefer_inline = prefer_inline;
+    pub fn set_inline(&mut self, inline: dream_hir::InlineHint) {
+        self.inline = inline;
     }
 
     /// Sets the nominal def and (optional) monomorphization instance args for the emitted symbol.
@@ -156,7 +155,7 @@ impl FunctionBuilder {
             entry: BlockId(0),
             hir_fn: None,
             file: self.file,
-            prefer_inline: self.prefer_inline,
+            inline: self.inline,
         }
     }
 }

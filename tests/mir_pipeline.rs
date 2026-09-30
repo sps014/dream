@@ -65,7 +65,7 @@ fn compile_sum_to() -> String {
         ],
         is_async: false,
         file: None,
-        prefer_inline: false,
+        inline: dream_hir::InlineHint::Default,
         body: vec![
             HStmt::Let {
                 local: i,

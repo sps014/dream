@@ -231,6 +231,17 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         doc: "Raises the inliner's size budget for this function/method. A compiler hint, not a guarantee.",
     },
     AttributeSpec {
+        name: "noinline",
+        targets: &[
+            AttributeTarget::Function,
+            AttributeTarget::Method,
+            AttributeTarget::StaticMethod,
+        ],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Never inline this function/method (neither the MIR inliner nor LLVM). Keeps benchmark sinks opaque.",
+    },
+    AttributeSpec {
         name: "js",
         targets: &[AttributeTarget::ExternFunction],
         args: ArgShape::Args {
@@ -597,7 +608,7 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
             max: 1,
         },
         repeatable: false,
-        doc: "C calling convention for `@c` externs: `@c_call(\"cdecl\")` or `@c_call(\"stdcall\")`.",
+        doc: "C calling convention for `@c` externs. Only `@c_call(\"cdecl\")` (the platform default) is supported.",
     },
     AttributeSpec {
         name: "marshal",
@@ -1153,6 +1164,14 @@ fn validate_attributes_with(
                     Some(attr.name.position),
                 );
             }
+            if (name == "inline" && seen.contains(&"noinline"))
+                || (name == "noinline" && seen.contains(&"inline"))
+            {
+                diagnostics.report_error(
+                    "'@inline' and '@noinline' cannot be combined".to_string(),
+                    Some(attr.name.position),
+                );
+            }
             seen.push(name);
             continue;
         }
@@ -1218,12 +1237,6 @@ pub fn has_packed_attr(attributes: &[AttributeNode]) -> bool {
     attributes.iter().any(|a| a.name.text == "packed")
 }
 
-/// `@c_call("cdecl")` or `@c_call("stdcall")`. `None` when absent (platform default).
-pub fn c_call_convention(attributes: &[AttributeNode]) -> Option<&str> {
-    let attr = attributes.iter().find(|a| a.name.text == "c_call")?;
-    attr.args.first()?.as_string()
-}
-
 /// `@marshal("lpstr")` or `@marshal("lpwstr")`. `None` when absent (ANSI/`lpstr`).
 pub fn c_marshal_charset(attributes: &[AttributeNode]) -> Option<&str> {
     let attr = attributes.iter().find(|a| a.name.text == "marshal")?;
@@ -1259,7 +1272,8 @@ pub fn extern_import_target(attributes: &[AttributeNode], default_field: &str) -
 /// - `@runtime` combined with `@js` / `@c` / `@intrinsic`,
 /// - `@c` combined with `@node` or `@web` (`@c` is native-only; `@native` is allowed),
 /// - `@marshal(...)` without `@c` (only meaningful for the C ABI),
-/// - `@c_call(...)` without `@c` (ditto).
+/// - `@c_call(...)` without `@c` (ditto),
+/// - `@c_call` with anything but `"cdecl"` (the backend emits only the platform C convention).
 ///
 /// Call after generic attribute shape validation.
 pub fn validate_c_extern_attrs(attrs: &[AttributeNode], diagnostics: &mut DiagnosticBag) {
@@ -1292,6 +1306,18 @@ pub fn validate_c_extern_attrs(attrs: &[AttributeNode], diagnostics: &mut Diagno
                     Some(attr.name.position),
                 );
             }
+        }
+    }
+    if let Some(attr) = attrs.iter().find(|a| a.name.text == "c_call") {
+        let conv = attr.args.first().and_then(|a| a.as_string());
+        if conv.is_some_and(|c| c != "cdecl") {
+            diagnostics.report_error(
+                format!(
+                    "unsupported C calling convention '{}': only \"cdecl\" is supported",
+                    conv.unwrap_or_default()
+                ),
+                Some(attr.name.position),
+            );
         }
     }
 }
@@ -1341,6 +1367,11 @@ pub fn has_async_host_attr(attributes: &[AttributeNode]) -> bool {
 /// True when the declaration carries `@inline` (raised inliner size budget).
 pub fn has_inline_attr(attributes: &[AttributeNode]) -> bool {
     has_named_attr(attributes, "inline")
+}
+
+/// True when the declaration carries `@noinline`.
+pub fn has_noinline_attr(attributes: &[AttributeNode]) -> bool {
+    has_named_attr(attributes, "noinline")
 }
 
 /// True when the declaration is any GPU shader stage (`@compute` / `@vertex` / `@fragment`).
@@ -1816,15 +1847,26 @@ mod tests {
     }
 
     #[test]
-    fn c_with_marshal_and_c_call_is_accepted() {
+    fn c_with_marshal_and_cdecl_is_accepted() {
         let attrs = &[
             attr("c", &["\"user32\"", "\"MessageBoxW\""]),
             attr("marshal", &["\"lpwstr\""]),
-            attr("c_call", &["\"stdcall\""]),
+            attr("c_call", &["\"cdecl\""]),
         ];
         let mut diagnostics = DiagnosticBag::new(None);
         validate_c_extern_attrs(attrs, &mut diagnostics);
         assert!(!diagnostics.has_errors());
+    }
+
+    #[test]
+    fn c_call_stdcall_is_rejected() {
+        let attrs = &[
+            attr("c", &["\"user32\"", "\"MessageBoxW\""]),
+            attr("c_call", &["\"stdcall\""]),
+        ];
+        let mut diagnostics = DiagnosticBag::new(None);
+        validate_c_extern_attrs(attrs, &mut diagnostics);
+        assert!(diagnostics.has_errors());
     }
 
     fn int_arg(text: &str) -> AttributeArg {

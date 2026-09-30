@@ -450,7 +450,7 @@ mod tests {
             body,
             is_async: false,
             file: None,
-            prefer_inline: false,
+            inline: crate::InlineHint::Default,
         };
 
         let hir = Hir {

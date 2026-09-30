@@ -208,8 +208,18 @@ pub struct HFunction {
     /// backend/source-map can attribute each `DebugLine` to the right file. `None` for synthesized
     /// functions (module init, tests) that have no originating source file.
     pub file: Option<String>,
-    /// Raised inliner size budget, from `@inline` on the source declaration.
-    pub prefer_inline: bool,
+    pub inline: InlineHint,
+}
+
+/// Inlining request from `@inline` / `@noinline` on the source declaration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InlineHint {
+    #[default]
+    Default,
+    /// `@inline`: raised MIR inliner size budget, `alwaysinline` in LLVM.
+    Prefer,
+    /// `@noinline`: never inlined by MIR or LLVM.
+    Never,
 }
 
 #[derive(Debug, Clone)]

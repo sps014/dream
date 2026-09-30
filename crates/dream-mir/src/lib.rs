@@ -124,8 +124,7 @@ pub struct MirFunction {
     /// for synthesized functions). Used by the backend to attribute `DebugLine`s to a file in the
     /// emitted source map.
     pub file: Option<String>,
-    /// Raised inliner size budget, from `@inline` on the source declaration.
-    pub prefer_inline: bool,
+    pub inline: dream_hir::InlineHint,
 }
 
 impl MirFunction {
@@ -725,7 +724,7 @@ mod tests {
             locals: vec![],
             is_async: false,
             file: None,
-            prefer_inline: false,
+            inline: dream_hir::InlineHint::Default,
             body: vec![HStmt::Return(Some(HExpr::new(
                 int,
                 HExprKind::Binary {

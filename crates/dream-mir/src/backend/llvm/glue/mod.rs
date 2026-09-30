@@ -28,7 +28,7 @@ static GLUE_FN: MirFunction = MirFunction {
     is_async: false,
     hir_fn: None,
     file: None,
-    prefer_inline: false,
+    inline: dream_hir::InlineHint::Default,
 };
 
 pub(super) fn register(l: &mut Lcx<'_>, name: &str, ret: Ty, params: Vec<Ty>) {

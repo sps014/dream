@@ -48,16 +48,19 @@ fun report(name: string, nanos: long, iters: int): void {
 
 // Sinks must be externally observable or the optimizer deletes the timed loop outright
 // (inlined-and-discarded pure results get DCE'd, reporting `ns_total=0`).
+@noinline
 fun sink_int(x: int): int {
     bench_sink.v = bench_sink.v + x;
     return x;
 }
 
+@noinline
 fun sink_string(s: string): int {
     bench_sink.v = bench_sink.v + s.byte_size();
     return s.byte_size();
 }
 
+@noinline
 fun sink_total(): int {
     return bench_sink.v;
 }

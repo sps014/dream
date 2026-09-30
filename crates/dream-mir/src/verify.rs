@@ -1,5 +1,5 @@
-//! Debug-build MIR verifier, run on the final module by [`crate::passes::run_late_module_passes`]
-//! when the compiler itself is built with `debug_assertions`. A violation is an ICE.
+//! MIR verifier, run on the final module by [`crate::passes::run_late_module_passes`] when the
+//! compiler is built with `debug_assertions` or `DREAM_VERIFY_MIR=1` is set. A violation is an ICE.
 //!
 //! The checks are deliberately conservative so they never fire on correct RC placement:
 //!
@@ -40,6 +40,11 @@ pub fn verify_module(mir: &Mir, interner: &TypeInterner) -> Vec<Violation> {
         .chain(mir.polls.iter())
         .flat_map(|f| verify_function(f, interner))
         .collect()
+}
+
+/// True in debug builds of the compiler, or when `DREAM_VERIFY_MIR=1` (lets release CI verify too).
+pub fn enabled() -> bool {
+    cfg!(debug_assertions) || std::env::var_os("DREAM_VERIFY_MIR").is_some_and(|v| v == "1")
 }
 
 /// Panics (an ICE) listing every violation in `mir`.

@@ -116,21 +116,18 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 }
 
-/// `sink` benches must stay opaque calls; `@inline` asks for inlining.
-fn inline_attr(name: &str, f: &MirFunction) -> Option<FnAttr> {
-    if name.to_ascii_lowercase().contains("sink") {
-        Some(FnAttr::NoInline)
-    } else if f.prefer_inline {
-        Some(FnAttr::AlwaysInline)
-    } else {
-        None
+fn inline_attr(f: &MirFunction) -> Option<FnAttr> {
+    match f.inline {
+        dream_hir::InlineHint::Never => Some(FnAttr::NoInline),
+        dream_hir::InlineHint::Prefer => Some(FnAttr::AlwaysInline),
+        dream_hir::InlineHint::Default => None,
     }
 }
 
 pub(super) fn build_sync<'a>(l: &mut Lcx<'a>, f: &'a MirFunction) {
     let name = l.user_fn(f);
     let mut w = l.writer(&name);
-    w.attrs.extend(inline_attr(&name, f));
+    w.attrs.extend(inline_attr(f));
     let mut fx = Fx::new(l, f, w);
     fx.debug_begin(f);
     fx.map_blocks();
@@ -218,7 +215,7 @@ pub(super) fn build_async_stub<'a>(
 ) {
     let name = l.user_fn(stub);
     let mut w = l.writer(&name);
-    w.attrs.extend(inline_attr(&name, stub));
+    w.attrs.extend(inline_attr(stub));
     let wide = crate::backend::shared::abi_types::wide_int_locals(&l.cx, body);
     let mut fx = Fx::new(l, stub, w);
     let first = fx.w.new_block("body");

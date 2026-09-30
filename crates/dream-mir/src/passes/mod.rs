@@ -330,14 +330,14 @@ pub fn run_function_pipelines(
 
 /// After per-function opts, drop inferred regions whose leave is followed by a still-live
 /// ref use (CFG simplify can merge a join with JSON `as_string` / `unwrap` after wrap), then give
-/// objects that never outlive their frame stack storage ([`frame_alloc`]). In debug builds of the
-/// compiler, the final MIR is then checked by [`crate::verify`].
+/// objects that never outlive their frame stack storage ([`frame_alloc`]). The final MIR is then
+/// checked by [`crate::verify`] in debug builds of the compiler, or when `DREAM_VERIFY_MIR=1`.
 pub fn run_late_module_passes(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirDump) {
     let _ = unique_region::strip_escaped_regions(mir, interner);
     dump.module(STAGE_LATE, mir, interner);
     let _ = frame_alloc::run(mir, interner);
     dump.module(frame_alloc::STAGE, mir, interner);
-    if cfg!(debug_assertions) {
+    if crate::verify::enabled() {
         crate::verify::assert_module(mir, interner);
     }
 }

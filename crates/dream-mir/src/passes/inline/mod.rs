@@ -172,6 +172,9 @@ fn eligible(
     if g.is_async {
         return false; // async bodies are stubs; real control flow lives in the HIR snapshot
     }
+    if g.inline == dream_hir::InlineHint::Never {
+        return false;
+    }
     if recursive.contains(key) {
         return false; // part of a call cycle: inlining could not terminate
     }
@@ -205,7 +208,8 @@ fn eligible(
         return false;
     }
     let stmt_count: usize = g.blocks.iter().map(|b| b.stmts.len()).sum();
-    let (max_stmts, max_blocks) = if g.prefer_inline {
+    let prefer = g.inline == dream_hir::InlineHint::Prefer;
+    let (max_stmts, max_blocks) = if prefer {
         (128, 24)
     } else {
         (MAX_INLINE_STMTS, MAX_INLINE_BLOCKS)
@@ -224,7 +228,7 @@ fn eligible(
         let caller_small =
             caller_stmts <= MAX_INLINE_STMTS && caller.blocks.len() <= MAX_INLINE_BLOCKS;
         if caller_small
-            && !g.prefer_inline
+            && !prefer
             && (caller_stmts + stmt_count > MAX_INLINE_STMTS
                 || caller.blocks.len() + g.blocks.len() > MAX_INLINE_BLOCKS)
         {
@@ -478,11 +482,11 @@ mod tests {
         name: &str,
         def: dream_types::DefId,
         int: TypeId,
-        prefer_inline: bool,
+        inline: dream_hir::InlineHint,
     ) -> MirFunction {
         let mut b = FunctionBuilder::new(name, int);
         b.set_def(def, vec![]);
-        b.set_prefer_inline(prefer_inline);
+        b.set_inline(inline);
         let a = b.new_param(int, Some("a".into()));
         let t = b.new_temp(int);
         for _ in 0..70 {
@@ -541,7 +545,7 @@ mod tests {
         let caller_def = ctx.register(DefKind::Function, "caller", vec![]);
         let mut mir = crate::Mir {
             functions: vec![
-                fat_int_callee("fat", callee_def, int, true),
+                fat_int_callee("fat", callee_def, int, dream_hir::InlineHint::Prefer),
                 caller_of(callee_def, caller_def, int),
             ],
             ..Default::default()
@@ -561,7 +565,7 @@ mod tests {
         let caller_def = ctx.register(DefKind::Function, "caller", vec![]);
         let mut mir = crate::Mir {
             functions: vec![
-                fat_int_callee("fat", callee_def, int, false),
+                fat_int_callee("fat", callee_def, int, dream_hir::InlineHint::Default),
                 caller_of(callee_def, caller_def, int),
             ],
             ..Default::default()
@@ -571,6 +575,25 @@ mod tests {
             caller_still_calls(&mir),
             "unflagged fat callee should stay a call"
         );
+    }
+
+    #[test]
+    fn noinline_small_callee_stays_a_call() {
+        let mut ctx = TypeCtx::new();
+        let int = ctx.interner.int();
+        let callee_def = ctx.register(DefKind::Function, "tiny", vec![]);
+        let caller_def = ctx.register(DefKind::Function, "caller", vec![]);
+        let mut b = FunctionBuilder::new("tiny", int);
+        b.set_def(callee_def, vec![]);
+        b.set_inline(dream_hir::InlineHint::Never);
+        let a = b.new_param(int, Some("a".into()));
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(a)))));
+        let mut mir = crate::Mir {
+            functions: vec![b.finish(), caller_of(callee_def, caller_def, int)],
+            ..Default::default()
+        };
+        assert!(!Inliner.run(&mut mir, &ctx.interner));
+        assert!(caller_still_calls(&mir), "@noinline callee must stay a call");
     }
 
     #[test]

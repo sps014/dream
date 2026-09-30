@@ -164,11 +164,11 @@ public struct Vec2 {
 ```dream
 @c("user32", "MessageBoxW")
 @marshal("lpwstr")
-@c_call("stdcall")
 extern fun MessageBoxW(hwnd: CPtr, text: string, caption: string, flags: int): int;
 ```
 
-`@c_call("stdcall")` selects the Win32 `stdcall` convention; cdecl is the default.
+Externs use the platform C calling convention. `@c_call("cdecl")` spells that out explicitly;
+any other convention (such as `"stdcall"`) is a compile error until the backend supports it.
 
 ## Callbacks
 

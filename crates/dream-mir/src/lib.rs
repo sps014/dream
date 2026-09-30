@@ -6,6 +6,7 @@
 //! (`Retain`/`Release`) and allocation are explicit [`Statement`]s, which lets the optimization
 //! passes reason about them with ordinary dataflow. The LLVM backend emits this CFG directly;
 //! async polls keep a program-counter dispatch.
+#![deny(clippy::disallowed_types)]
 
 pub mod abi;
 pub(crate) mod analysis;

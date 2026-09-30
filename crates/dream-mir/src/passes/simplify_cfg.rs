@@ -6,7 +6,7 @@
 use super::MirPass;
 use crate::{BlockId, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
-use std::collections::{HashMap, HashSet};
+use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 
 pub struct SimplifyCfg;
 

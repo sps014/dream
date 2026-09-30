@@ -6,7 +6,7 @@
 
 use crate::{Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement};
 use dream_types::{DefId, PrimTy, TyKind, TypeInterner};
-use std::collections::{HashMap, HashSet};
+use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 
 pub(crate) const STAGE: &str = "slice-measure";
 

@@ -31,7 +31,7 @@ impl<'a> Analyzer<'a> {
         let branches = std::iter::once((condition, condition.position(), if_body))
             .chain(else_if.iter().map(|i| (&i.0, i.0.position(), &i.1)));
 
-        let mut branch_moved: Vec<std::collections::HashSet<String>> = Vec::new();
+        let mut branch_moved: Vec<indexmap::IndexSet<String>> = Vec::new();
         let before_if = self.snapshot_moved();
 
         let mut taken_index: Option<usize> = None;

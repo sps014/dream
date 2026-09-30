@@ -17,7 +17,7 @@ use dream_text::text_span::TextSpan;
 use dream_types::{DefKind, TypeCtx};
 use indexmap::IndexMap;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 use std::rc::Rc;
 
 mod await_rules;
@@ -370,13 +370,13 @@ pub struct Analyzer<'a> {
     /// so must be boxed into a `CaptureCell<T>` rather than stored as a plain local (see
     /// `expressions::capture_scan::scan_function_captures`, run once as a pre-pass before the
     /// function's body is analyzed). Cleared and repopulated per function in `hir_begin_function`.
-    boxed_locals: std::collections::HashSet<String>,
+    boxed_locals: HashSet<String>,
     /// Names that are `ref`-passed somewhere in the current function's body
     /// (`expressions::capture_scan::scan_ref_argument_targets`) but are *not* in `boxed_locals` —
     /// i.e. never closure-captured. These are boxed into the stack-resident `RefBox<T>` value
     /// struct instead of the heap `CaptureCell<T>` (see `hir_declare_local`/`hir_begin_function`).
     /// Cleared and repopulated per function in `hir_begin_function`.
-    ref_boxed_locals: std::collections::HashSet<String>,
+    ref_boxed_locals: HashSet<String>,
     /// For each synthesized capturing-lambda function (keyed by its lifted name, e.g. `__lambda_3`):
     /// the ordered list of `(captured name, its type in the enclosing scope)` it closes over.
     /// Consulted by identifier resolution *inside that lifted function's own body* to redirect a
@@ -451,10 +451,10 @@ pub struct Analyzer<'a> {
     /// Mangled interface instances that already received `extend Iface<T>` package methods. Parent
     /// flattening can create `Collection_int` before `ensure_interface_instantiated("Collection")`
     /// runs; without this set the early-return would skip attaching `to_list`/`filter`/….
-    interface_extensions_attached: std::collections::HashSet<String>,
+    interface_extensions_attached: HashSet<String>,
     /// Concrete array types (`int[]`, `Point[]`, …) that have already been monomorphized from the
     /// generic `extend T[] : IndexedCollection<T>` template.
-    array_collections_attached: std::collections::HashSet<String>,
+    array_collections_attached: HashSet<String>,
     /// Class name -> the interfaces it implements (in `class C : A, B` order), recorded after the
     /// implements clause is validated. Names are mangled for generic instances (e.g. `Box_int` ->
     /// `Container_int`). Drives interface-typed assignability and itable emission. Includes
@@ -471,13 +471,13 @@ pub struct Analyzer<'a> {
     protocol_hooks: HashMap<String, declarations::protocol_hooks::ProtocolHooks>,
     /// Names of types declared `sealed` (class/struct/enum). A user `extend` block may not target
     /// any of these; compiler-synthesized extends (interface defaults) are exempt.
-    sealed_types: std::collections::HashSet<String>,
+    sealed_types: HashSet<String>,
     /// File/module-level visibility for enums and interfaces (types not tracked in the struct
     /// table): type name -> (declaring file, visibility). A non-public entry is only referenceable
     /// per [`Analyzer::visible_across_files`]. Absent or `None` file means always visible.
     type_visibility: HashMap<String, (Option<Rc<str>>, dream_syntax::nodes::Visibility)>,
     /// Sink RC params moved into a field/index store; further uses of the binding are errors.
-    moved_locals: std::collections::HashSet<String>,
+    moved_locals: HashSet<String>,
     /// An optional expected type for the expression currently being analyzed (from a `let`
     /// annotation or `return` type). Used to resolve the type arguments of a generic union's
     /// nullary variant (`let o: Option<int> = Option.None;`), where they cannot be inferred from
@@ -572,9 +572,9 @@ impl<'a> Analyzer<'a> {
             instantiated_generics: IndexMap::new(),
             pending_lambdas: IndexMap::new(),
             lambda_counter: 0,
-            boxed_locals: std::collections::HashSet::new(),
-            ref_boxed_locals: std::collections::HashSet::new(),
-            moved_locals: std::collections::HashSet::new(),
+            boxed_locals: HashSet::new(),
+            ref_boxed_locals: HashSet::new(),
+            moved_locals: HashSet::new(),
             closure_captures: HashMap::new(),
             receiver_modes: HashMap::new(),
             capturing_fun_locals: HashMap::new(),
@@ -593,9 +593,9 @@ impl<'a> Analyzer<'a> {
             interface_parents: HashMap::new(),
             interface_decls: HashMap::new(),
             interface_parent_instances: HashMap::new(),
-            interface_extensions_attached: std::collections::HashSet::new(),
-            array_collections_attached: std::collections::HashSet::new(),
-            sealed_types: std::collections::HashSet::new(),
+            interface_extensions_attached: HashSet::new(),
+            array_collections_attached: HashSet::new(),
+            sealed_types: HashSet::new(),
             type_visibility: HashMap::new(),
             implements: HashMap::new(),
             operator_overloads: HashMap::new(),

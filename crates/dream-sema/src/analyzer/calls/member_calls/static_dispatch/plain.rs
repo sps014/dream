@@ -57,7 +57,9 @@ impl<'a> Analyzer<'a> {
             }
             &normalized_params
         } else if is_variadic && !is_overloaded {
-            let info = method_info.as_ref().unwrap();
+            let Some(info) = method_info.as_ref() else {
+                crate::internal_error!("non-overloaded variadic static method has no signature");
+            };
             normalized_params = self.collect_variadic_args(info.param_names.len(), params);
             &normalized_params
         } else {

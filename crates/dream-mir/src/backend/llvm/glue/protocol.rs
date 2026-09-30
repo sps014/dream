@@ -14,7 +14,7 @@ use crate::backend::shared::reach::ProtocolReach;
 use crate::backend::shared::tables::{BUILTIN_TYPE_NAMES, NULL_TYPE_NAME, UNKNOWN_TYPE_NAME};
 use dream_hir::FieldLayout;
 use dream_types::{PrimTy, TyKind, TypeId};
-use std::collections::HashSet;
+use indexmap::IndexSet as HashSet;
 
 fn builtin_tag(name: &str) -> i32 {
     match name {

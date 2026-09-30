@@ -9,7 +9,7 @@
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_text::text_span::TextSpan;
-use std::collections::HashSet;
+use indexmap::IndexSet as HashSet;
 
 impl<'a> super::Analyzer<'a> {
     pub(super) fn clear_moved_locals(&mut self) {
@@ -17,7 +17,7 @@ impl<'a> super::Analyzer<'a> {
     }
 
     pub(super) fn unmark_moved_local(&mut self, name: &str) {
-        self.moved_locals.remove(name);
+        self.moved_locals.shift_remove(name);
     }
 
     pub(super) fn check_local_not_moved(

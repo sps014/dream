@@ -4,7 +4,7 @@
 
 use super::FnKey;
 use crate::{Rvalue, Statement};
-use std::collections::{HashMap, HashSet};
+use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 
 /// Counts direct-call sites (the forms inlining rewrites) per callee across the module.
 pub(super) fn count_call_sites(mir: &crate::Mir) -> HashMap<FnKey, usize> {

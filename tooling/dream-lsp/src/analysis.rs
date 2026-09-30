@@ -177,7 +177,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
     // the parts that did parse. The analysis is wrapped so any residual panic degrades to
     // "syntax diagnostics only" instead of taking down the language server.
     if user_ast.is_ok() {
-        let file_modules: std::collections::HashMap<std::rc::Rc<str>, std::rc::Rc<str>> = acc
+        let file_modules = acc
             .file_modules
             .iter()
             .map(|(k, v)| (std::rc::Rc::from(k.as_str()), v.clone()))

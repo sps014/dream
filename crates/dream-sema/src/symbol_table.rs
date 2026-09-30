@@ -4,7 +4,7 @@ use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_text::text_span::TextSpan;
 use indexmap::IndexMap;
 use std::cell::RefCell;
-use std::collections::HashSet;
+use indexmap::IndexSet as HashSet;
 use std::rc::Rc;
 
 #[derive(Debug)]
@@ -60,10 +60,10 @@ impl SymbolTable {
 
     pub fn add_symbol(&mut self, name: String, token: Type) -> Result<(), SymbolError> {
         match self.symbols.insert(name.clone(), token) {
-            Some(_) => Err(SymbolError::new(format!(
+            Some(previous) => Err(SymbolError::new(format!(
                 "variable {} already exists at: {}",
                 name,
-                self.symbols.get(&name).unwrap().get_line_str()
+                previous.get_line_str()
             ))),
             None => Ok(()),
         }

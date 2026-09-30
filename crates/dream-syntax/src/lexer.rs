@@ -52,11 +52,12 @@ impl Lexer {
                 let trivia = crate::token::syntax_trivia::SyntaxTrivia::new(kind, text_span, text);
                 let comment_line = self.line_text.get_point(span.start).0;
 
-                if !res.is_empty()
-                    && comment_line == last_token_line
-                    && pending_leading_trivia.is_empty()
-                {
-                    res.last_mut().unwrap().trailing_trivia.push(trivia);
+                if comment_line == last_token_line && pending_leading_trivia.is_empty() {
+                    if let Some(last) = res.last_mut() {
+                        last.trailing_trivia.push(trivia);
+                    } else {
+                        pending_leading_trivia.push(trivia);
+                    }
                 } else {
                     pending_leading_trivia.push(trivia);
                 }

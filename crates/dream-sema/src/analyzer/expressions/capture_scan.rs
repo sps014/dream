@@ -25,7 +25,7 @@
 use dream_syntax::nodes::{
     ExpressionNode, LambdaBody, LambdaNode, PatternNode, StatementNode, SwitchArmBody,
 };
-use std::collections::HashSet;
+use indexmap::IndexSet as HashSet;
 
 /// Unions [`lambda_free_names`] over every arrow-lambda anywhere in `stmts` (a whole function
 /// body), at any statement/expression nesting depth. Does not descend *into* a found lambda's own

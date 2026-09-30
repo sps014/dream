@@ -10,7 +10,7 @@ use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use indexmap::IndexMap as HashMap;
 use std::rc::Rc;
 
 impl<'a> Analyzer<'a> {

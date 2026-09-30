@@ -9,7 +9,7 @@ use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::{ExtendNode, FunctionNode, ProgramNode, Type};
 use dream_types::method_fn;
-use std::collections::HashMap;
+use indexmap::IndexMap as HashMap;
 
 impl<'a> Analyzer<'a> {
     /// Pass: register every interface's `DefId` and its method signatures. Interfaces declare method

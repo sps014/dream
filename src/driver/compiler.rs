@@ -352,7 +352,7 @@ impl Compiler {
         info!("finished parsing");
         info!("starting semantic analysis");
 
-        let file_modules: std::collections::HashMap<std::rc::Rc<str>, std::rc::Rc<str>> = acc
+        let file_modules = acc
             .file_modules
             .iter()
             .map(|(file, module)| (std::rc::Rc::from(file.as_str()), module.clone()))

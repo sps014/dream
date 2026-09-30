@@ -122,7 +122,7 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) {
         let mut variant_infos = Vec::new();
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = indexmap::IndexSet::new();
         let mut block_end = DISCRIMINANT_SIZE;
 
         for variant in variants {

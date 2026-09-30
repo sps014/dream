@@ -6,7 +6,7 @@ use super::FnKey;
 use crate::lower;
 use crate::{Global, Mir, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{TyKind, TypeId, TypeInterner};
-use std::collections::{HashMap, HashSet};
+use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 
 /// Records every callable this rvalue statically references (direct calls, first-class function
 /// refs, and user constructors) into `out`.

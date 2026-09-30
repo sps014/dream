@@ -250,11 +250,10 @@ impl<'a> Analyzer<'a> {
             self.hir.ok = false;
             return;
         };
-        if let Some(&cell_local) = self.hir.locals.get(name).map(|(l, _)| l) {
+        if let Some(&(cell_local, ty)) = self.hir.locals.get(name) {
             if let Some(&elem_ty) = self.hir.boxed.get(name) {
                 let value = self.coerce_to(value, elem_ty);
-                let cell_tid = self.hir.locals.get(name).map(|(_, t)| *t).unwrap();
-                let obj = HExpr::new(cell_tid, HExprKind::Var(Binding::Local(cell_local)));
+                let obj = HExpr::new(ty, HExprKind::Var(Binding::Local(cell_local)));
                 self.push_stmt(HStmt::Assign {
                     place: HPlace::Field {
                         obj: Box::new(obj),
@@ -264,7 +263,6 @@ impl<'a> Analyzer<'a> {
                 });
                 return;
             }
-            let ty = self.hir.locals.get(name).map(|(_, t)| *t).unwrap();
             let value = self.coerce_to(value, ty);
             self.push_stmt(HStmt::Assign {
                 place: HPlace::Local(cell_local),

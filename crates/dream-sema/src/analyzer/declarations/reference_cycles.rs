@@ -108,13 +108,12 @@ impl<'a> Analyzer<'a> {
     /// `@allow_cycle`.
     fn check_reference_cycles(&self, node: &'a ProgramNode<'a>, diagnostics: &mut DiagnosticBag) {
         // Value structs holding references participate as edges (see `strong_ref_targets`).
-        let mut ref_values: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut ref_values: indexmap::IndexSet<String> = indexmap::IndexSet::new();
         self.collect_ref_holding_value_structs(node, &mut ref_values);
 
         let mut edges: IndexMap<String, Vec<ClassEdge>> = IndexMap::new();
-        let mut allow_cycle: std::collections::HashSet<String> = std::collections::HashSet::new();
-        let mut positions: std::collections::HashMap<String, TextSpan> =
-            std::collections::HashMap::new();
+        let mut allow_cycle: indexmap::IndexSet<String> = indexmap::IndexSet::new();
+        let mut positions: indexmap::IndexMap<String, TextSpan> = indexmap::IndexMap::new();
 
         for struct_decl in node.structs.iter() {
             // Generic templates aren't monomorphized here (their field types aren't concrete
@@ -168,7 +167,7 @@ impl<'a> Analyzer<'a> {
                 continue;
             }
 
-            let scc_set: std::collections::HashSet<&str> = scc.iter().map(String::as_str).collect();
+            let scc_set: indexmap::IndexSet<&str> = scc.iter().map(String::as_str).collect();
             let mut culprits: Vec<(String, Option<TextSpan>)> = Vec::new();
             for class in &scc {
                 if let Some(es) = edges.get(class) {
@@ -211,7 +210,7 @@ impl<'a> Analyzer<'a> {
     fn strong_ref_targets(
         &self,
         ty: &Type,
-        ref_values: &std::collections::HashSet<String>,
+        ref_values: &indexmap::IndexSet<String>,
     ) -> Vec<String> {
         match ty {
             Type::Array(inner) => self.strong_ref_targets(inner, ref_values),
@@ -242,7 +241,7 @@ impl<'a> Analyzer<'a> {
                     // Qualifying value struct: recurse into its registered fields to reach the
                     // ultimate class targets (visited-guarded against value-struct cycles).
                     Some(_) if ref_values.contains(&token.text) => {
-                        let mut visited = std::collections::HashSet::new();
+                        let mut visited = indexmap::IndexSet::new();
                         visited.insert(token.text.clone());
                         let mut out = Vec::new();
                         if let Some(info) = self.struct_table.get_struct(&token.text) {
@@ -282,8 +281,8 @@ impl<'a> Analyzer<'a> {
     fn strong_ref_targets_visited(
         &self,
         ty: &Type,
-        ref_values: &std::collections::HashSet<String>,
-        visited: &mut std::collections::HashSet<String>,
+        ref_values: &indexmap::IndexSet<String>,
+        visited: &mut indexmap::IndexSet<String>,
     ) -> Vec<String> {
         match ty {
             Type::Struct(token, _) => {
@@ -321,7 +320,7 @@ impl<'a> Analyzer<'a> {
     fn collect_ref_holding_value_structs(
         &self,
         node: &'a ProgramNode<'a>,
-        out: &mut std::collections::HashSet<String>,
+        out: &mut indexmap::IndexSet<String>,
     ) {
         let value_decls: Vec<&StructDeclarationNode<'a>> =
             node.structs.iter().filter(|s| s.is_value).collect();
@@ -361,7 +360,7 @@ impl<'a> Analyzer<'a> {
     fn holds_managed_shallow(
         &self,
         ty: &Type,
-        ref_values: &std::collections::HashSet<String>,
+        ref_values: &indexmap::IndexSet<String>,
     ) -> bool {
         match ty {
             Type::Struct(tok, _) => ref_values.contains(&tok.text),
@@ -373,7 +372,7 @@ impl<'a> Analyzer<'a> {
     fn value_struct_array_holds(
         &self,
         inner: &Type,
-        ref_values: &std::collections::HashSet<String>,
+        ref_values: &indexmap::IndexSet<String>,
     ) -> bool {
         match inner {
             Type::Struct(tok, _) => match self.struct_table.get_struct(&tok.text) {
@@ -400,9 +399,9 @@ fn tarjan_scc(nodes: &[String], edges: &IndexMap<String, Vec<ClassEdge>>) -> Vec
         edges: &IndexMap<String, Vec<ClassEdge>>,
         index_counter: &mut usize,
         stack: &mut Vec<String>,
-        indices: &mut std::collections::HashMap<String, usize>,
-        lowlink: &mut std::collections::HashMap<String, usize>,
-        on_stack: &mut std::collections::HashMap<String, bool>,
+        indices: &mut indexmap::IndexMap<String, usize>,
+        lowlink: &mut indexmap::IndexMap<String, usize>,
+        on_stack: &mut indexmap::IndexMap<String, bool>,
         result: &mut Vec<Vec<String>>,
     ) {
         let idx = *index_counter;
@@ -427,11 +426,15 @@ fn tarjan_scc(nodes: &[String], edges: &IndexMap<String, Vec<ClassEdge>>) -> Vec
                         result,
                     );
                     let w_low = lowlink[w];
-                    let v_low = lowlink.get_mut(v).unwrap();
+                    let Some(v_low) = lowlink.get_mut(v) else {
+                        crate::internal_error!("Tarjan node '{v}' lost its lowlink");
+                    };
                     *v_low = (*v_low).min(w_low);
                 } else if *on_stack.get(w).unwrap_or(&false) {
                     let w_idx = indices[w];
-                    let v_low = lowlink.get_mut(v).unwrap();
+                    let Some(v_low) = lowlink.get_mut(v) else {
+                        crate::internal_error!("Tarjan node '{v}' lost its lowlink");
+                    };
                     *v_low = (*v_low).min(w_idx);
                 }
             }
@@ -440,7 +443,9 @@ fn tarjan_scc(nodes: &[String], edges: &IndexMap<String, Vec<ClassEdge>>) -> Vec
         if lowlink[v] == indices[v] {
             let mut component = Vec::new();
             loop {
-                let w = stack.pop().unwrap();
+                let Some(w) = stack.pop() else {
+                    crate::internal_error!("Tarjan stack emptied before node '{v}'");
+                };
                 on_stack.insert(w.clone(), false);
                 let done = w == v;
                 component.push(w);
@@ -454,9 +459,9 @@ fn tarjan_scc(nodes: &[String], edges: &IndexMap<String, Vec<ClassEdge>>) -> Vec
 
     let mut index_counter = 0usize;
     let mut stack = Vec::new();
-    let mut indices = std::collections::HashMap::new();
-    let mut lowlink = std::collections::HashMap::new();
-    let mut on_stack = std::collections::HashMap::new();
+    let mut indices = indexmap::IndexMap::new();
+    let mut lowlink = indexmap::IndexMap::new();
+    let mut on_stack = indexmap::IndexMap::new();
     let mut result = Vec::new();
 
     for n in nodes {

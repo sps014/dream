@@ -16,7 +16,8 @@ use super::MirPass;
 use crate::int_ty::IntTy;
 use crate::{BlockId, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
-use std::collections::{BTreeMap, HashMap};
+use indexmap::IndexMap as HashMap;
+use std::collections::BTreeMap;
 
 pub struct Sccp;
 

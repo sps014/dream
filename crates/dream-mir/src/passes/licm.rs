@@ -20,7 +20,8 @@ use crate::{
     BasicBlock, BinOp, BlockId, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
 };
 use dream_types::TypeInterner;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
+use std::collections::BTreeSet;
 
 pub struct Licm;
 

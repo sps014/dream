@@ -41,7 +41,7 @@ impl<'a> Analyzer<'a> {
         // When a `where`-constrained method is satisfied for this instantiation, it wins over an
         // unconstrained twin with the same name + parameter types (e.g. `Span.copy_from` keeps the
         // element loop for reference `T`, and the unmanaged specialization that bulk-blits).
-        let specialized_keys: std::collections::HashSet<(String, Vec<String>)> = methods
+        let specialized_keys: indexmap::IndexSet<(String, Vec<String>)> = methods
             .iter()
             .filter(|m| {
                 !m.where_constraints.is_empty()

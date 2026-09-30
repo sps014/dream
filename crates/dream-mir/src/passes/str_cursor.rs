@@ -12,7 +12,8 @@ use crate::{
     Terminator,
 };
 use dream_types::TypeInterner;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use indexmap::IndexSet as HashSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub struct StrCursor;
 

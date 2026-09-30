@@ -22,7 +22,7 @@ use super::*;
 use dream_syntax::nodes::function::ReceiverMode;
 use dream_syntax::nodes::statement::StatementNode;
 use dream_text::text_span::TextSpan;
-use std::collections::HashMap as StdHashMap;
+use indexmap::{IndexMap as StdHashMap, IndexSet as HashSet};
 
 /// Flat events emitted in source order by the structural walk; interpreted afterwards.
 #[derive(Debug, Clone)]
@@ -139,7 +139,7 @@ struct ViewSummary {
 struct Extractor<'s> {
     summaries: &'s HashMap<String, ViewSummary>,
     /// Names of declared classes — used to infer local types from constructor calls.
-    class_names: &'s std::collections::HashSet<String>,
+    class_names: &'s HashSet<String>,
     /// Owner class of the method being walked ("this").
     _owner: String,
     aliases_this: Vec<String>,
@@ -310,7 +310,7 @@ fn interpret_events(
     file_path: &Option<Rc<str>>,
     diagnostics: &mut DiagnosticBag,
 ) {
-    use std::collections::HashMap as StdHashMap;
+    use indexmap::IndexMap as StdHashMap;
 
     // --- Last-reference precompute: final index of each tracked name ----------------------
     let mut last_ref: StdHashMap<String, usize> = StdHashMap::new();
@@ -457,7 +457,7 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) {
         let summaries = compute_view_summaries(node);
-        let class_names: std::collections::HashSet<String> =
+        let class_names: HashSet<String> =
             node.structs.iter().map(|s| s.name.text.clone()).collect();
 
         for s in node.structs.iter() {

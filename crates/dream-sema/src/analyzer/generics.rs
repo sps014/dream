@@ -373,10 +373,10 @@ impl<'a> Analyzer<'a> {
         match kind {
             dream_syntax::nodes::ConstraintKind::Struct => self.name_is_value_type(&name),
             dream_syntax::nodes::ConstraintKind::Unmanaged => {
-                self.name_is_blittable_value(&name, &mut std::collections::HashSet::new())
+                self.name_is_blittable_value(&name, &mut indexmap::IndexSet::new())
             }
             dream_syntax::nodes::ConstraintKind::Shared => {
-                self.name_is_shared(&name, &mut std::collections::HashSet::new())
+                self.name_is_shared(&name, &mut indexmap::IndexSet::new())
             }
             dream_syntax::nodes::ConstraintKind::Class => self.name_is_reference_type(&name),
         }
@@ -472,7 +472,7 @@ impl<'a> Analyzer<'a> {
     fn name_is_blittable_value(
         &self,
         name: &str,
-        seen: &mut std::collections::HashSet<String>,
+        seen: &mut indexmap::IndexSet<String>,
     ) -> bool {
         match self.name_shape(name) {
             NameShape::Array | NameShape::String | NameShape::Unknown => false,
@@ -497,7 +497,7 @@ impl<'a> Analyzer<'a> {
 
     /// Sendable analogue: blittable values, `string`, value structs whose fields are all shared,
     /// and `@shared class` instances. Arrays and ordinary classes are not shared.
-    fn name_is_shared(&self, name: &str, seen: &mut std::collections::HashSet<String>) -> bool {
+    fn name_is_shared(&self, name: &str, seen: &mut indexmap::IndexSet<String>) -> bool {
         if name == "void" {
             return true;
         }

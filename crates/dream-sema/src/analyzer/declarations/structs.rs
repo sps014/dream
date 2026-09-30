@@ -382,7 +382,7 @@ impl<'a> Analyzer<'a> {
     /// True when value struct `start` transitively embeds itself by value. Only value-typed,
     /// non-array fields form inline edges; reference fields (`class`, `string`, arrays) do not.
     fn value_struct_contains_self(&self, start: &str) -> bool {
-        let mut visited = std::collections::HashSet::new();
+        let mut visited = indexmap::IndexSet::new();
         let mut work = self.value_struct_field_targets(start);
         while let Some(cur) = work.pop() {
             if cur == start {

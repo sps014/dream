@@ -17,7 +17,7 @@ use crate::union_table::UnionFieldInfo;
 use dream_syntax::nodes::{Type, Visibility};
 use dream_text::text_span::TextSpan;
 use indexmap::IndexMap;
-use std::collections::HashMap;
+use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 
 /// What a recorded source range resolved to. Names are source-level; keys are the analyzer's
 /// member-lookup keys (mangled spellings like `List_int`, matching `struct_table`/`method_fn`).
@@ -203,7 +203,7 @@ impl IdeSnapshot {
     /// `Point`, `List_int`, `string`, `int[]`). Sorted by name; deterministic across runs.
     pub fn members_of(&self, key: &str) -> Vec<MemberInfo> {
         let mut out: Vec<MemberInfo> = Vec::new();
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = HashSet::new();
 
         if let Some(fields) = self.structs.get(key) {
             for f in fields {
@@ -285,7 +285,7 @@ impl IdeSnapshot {
         &self,
         prefix: String,
         out: &mut Vec<MemberInfo>,
-        seen: &mut std::collections::HashSet<String>,
+        seen: &mut HashSet<String>,
     ) {
         for (emitted, sig) in &self.functions {
             let Some(rest) = emitted.strip_prefix(prefix.as_str()) else {

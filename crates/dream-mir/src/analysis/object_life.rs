@@ -9,7 +9,7 @@
 //! it dead. Handing a member to a `take` parameter moves a count out of sight and is refused.
 
 use crate::{Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
-use std::collections::HashMap;
+use indexmap::IndexMap as HashMap;
 
 /// Where one allocation's counts go.
 pub(crate) struct Lifetime {

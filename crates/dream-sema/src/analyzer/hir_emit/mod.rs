@@ -20,7 +20,7 @@ use dream_syntax::token::token_kind::TokenKind;
 use dream_text::text_span::TextSpan;
 use dream_types::{DefId, DefKind, PrimTy, TyKind, TypeId};
 use indexmap::IndexMap;
-use std::collections::HashMap;
+use indexmap::IndexMap as HashMap;
 
 mod build;
 mod exprs;

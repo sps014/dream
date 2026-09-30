@@ -111,7 +111,10 @@ impl<'a> Analyzer<'a> {
             let _ = report(diagnostics, "nameof requires a name".to_string(), None);
             return Ok(Type::Unknown);
         }
-        let name = parts.last().unwrap().text.clone();
+        let Some(last) = parts.last() else {
+            crate::internal_error!("non-empty nameof path lost its final segment");
+        };
+        let name = last.text.clone();
         let string_ty = Self::type_from_name("string");
         let ty_id = self.type_ctx.interner.string();
         self.hir_set_last(Some(HExpr::new(ty_id, HExprKind::StringLit(name))));

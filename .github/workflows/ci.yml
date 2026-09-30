@@ -1,10 +1,9 @@
 name: CI
 
 on:
-  #push:
-  #  branches:
-  #    - main
-  # pull_request:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -13,50 +12,70 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  DREAM_VERIFY_MIR: "1"
+
+permissions:
+  contents: read
 
 jobs:
-  # Placeholder so the workflow stays valid while real jobs are commented out.
-  noop:
+  hygiene:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "CI temporarily disabled"
+      - uses: actions/checkout@v4
+      - run: python3 scripts/check_hygiene.py
 
-  # test:
-  #   name: Test
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - name: Install Rust toolchain
-  #       uses: dtolnay/rust-toolchain@stable
-  #
-  #     - uses: Swatinem/rust-cache@v2
-  #
-  #     - name: Build
-  #       run: cargo build --workspace
-  #
-  #     - name: Install pinned LLVM
-  #       run: cargo run -p dreamer -- toolchain install llvm
-  #
-  #     - name: Test
-  #       run: cargo test --workspace
+  build-clippy-test:
+    name: Build, clippy, test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libclang-dev libgtk-3-dev libssl-dev \
+            libudev-dev libwebkit2gtk-4.1-dev ninja-build pkg-config python3 xz-utils
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/cache@v4
+        with:
+          path: ~/.dream/toolchains/llvm-22.1.8
+          key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
+      - name: Install pinned LLVM and wasi-sdk support
+        shell: bash
+        run: scripts/fetch-dev-llvm.sh
+      - run: cargo build --workspace
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
 
-  # interop:
-  #   name: JS interop smoke test
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - name: Install Rust toolchain
-  #       uses: dtolnay/rust-toolchain@stable
-  #
-  #     - uses: Swatinem/rust-cache@v2
-  #
-  #     - uses: actions/setup-node@v4
-  #       with:
-  #         node-version: "20"
-  #
-  #     # Builds each interop sample to WebAssembly and runs its Node runner through the shared
-  #     # runtime (runtime/dream.js), asserting the ABI still marshals values correctly.
-  #     - name: Interop smoke test
-  #       run: node sample/interop/smoke.mjs
+  golden-corpus:
+    name: Full native and Node corpus
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libclang-dev libgtk-3-dev libssl-dev \
+            libudev-dev libwebkit2gtk-4.1-dev ninja-build pkg-config python3 xz-utils
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/cache@v4
+        with:
+          path: ~/.dream/toolchains/llvm-22.1.8
+          key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
+      - name: Install pinned LLVM and wasi-sdk support
+        run: scripts/fetch-dev-llvm.sh
+      - run: ./scripts/probe_test.sh
+      - run: ./scripts/probe_test.sh --node

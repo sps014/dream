@@ -5,6 +5,8 @@
 //! signatures + overloads), [`struct_table`]/[`union_table`] (type layouts and variants), and
 //! [`function_control_flow`] (return/flow checks). [`entry`] holds the `main` return-value rules
 //! those checks share. [`errors`] is the analysis error type.
+#![cfg_attr(not(test), deny(clippy::expect_used, clippy::unwrap_used))]
+#![deny(clippy::disallowed_types)]
 
 pub mod analyzer;
 mod entry;

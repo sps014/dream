@@ -21,7 +21,7 @@
 
 use crate::{Callee, Mir, MirFunction, Rvalue, Statement};
 use dream_types::TypeInterner;
-use std::collections::HashSet;
+use indexmap::IndexSet as HashSet;
 
 type FnKey = (dream_types::DefId, Vec<dream_types::TypeId>);
 

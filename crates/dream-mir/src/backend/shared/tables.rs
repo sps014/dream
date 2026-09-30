@@ -7,7 +7,7 @@ use crate::abi::TAG_STRUCT_BASE;
 use crate::{Const, Mir, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{DefId, TypeId};
 use indexmap::IndexMap;
-use std::collections::HashMap;
+use indexmap::IndexMap as HashMap;
 
 /// Display name the `typeof` tag router returns for each built-in (non-nominal) tag.
 ///

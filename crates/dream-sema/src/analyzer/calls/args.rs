@@ -162,8 +162,10 @@ impl<'a> Analyzer<'a> {
                     }
                 }
             }
-            let mut result: Vec<ExpressionNode<'a>> =
-                slots.into_iter().map(|s| s.unwrap()).collect();
+            let Some(mut result): Option<Vec<ExpressionNode<'a>>> = slots.into_iter().collect()
+            else {
+                crate::internal_error!("validated variadic arguments still contain an empty slot");
+            };
             result.push(ExpressionNode::ArrayLiteral(
                 synthetic_token(TokenKind::OpenBracketToken, "["),
                 variadic_tail,
@@ -191,7 +193,10 @@ impl<'a> Analyzer<'a> {
                 }
             }
         }
-        Ok(slots.into_iter().map(|s| s.unwrap()).collect())
+        let Some(result) = slots.into_iter().collect() else {
+            crate::internal_error!("validated arguments still contain an empty slot");
+        };
+        Ok(result)
     }
 
     /// After overload selection, packs trailing analyzed arguments into a single array for a

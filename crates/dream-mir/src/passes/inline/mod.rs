@@ -19,7 +19,7 @@ use crate::{
     BasicBlock, BlockId, Const, Local, LocalDecl, Operand, Place, Rvalue, Statement, Terminator,
 };
 use dream_types::{DefId, TypeId, TypeInterner};
-use std::collections::{HashMap, HashSet};
+use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 
 pub(crate) mod graph;
 mod remap;
@@ -321,7 +321,7 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
     f.blocks[site.block].stmts.pop(); // remove the call statement itself
                                       // Bind parameters to the argument operands, applying the same numeric widening the call ABI would
                                       // (a narrower argument passed to a wider parameter), then jump into the (renumbered) callee entry.
-    let params: std::collections::HashSet<u32> = g_params.iter().map(|p| p.0).collect();
+    let params: HashSet<u32> = g_params.iter().map(|p| p.0).collect();
     // A `ref` value parameter is the caller's storage itself; binding it by assignment would
     // memcpy the value into a fresh buffer and drop the callee's writes.
     let mut aliased: Vec<Option<Local>> = vec![None; g_locals.len()];

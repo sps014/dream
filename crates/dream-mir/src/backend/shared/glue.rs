@@ -7,7 +7,8 @@ use super::cx::Cx;
 use super::symbols::func_symbol;
 use dream_hir::TypeLayout;
 use dream_types::{TyKind, TypeId, TypeInterner};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use indexmap::IndexMap as HashMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) fn retain_sym(cx: &Cx<'_>, ty: TypeId) -> &'static str {
     if cx.target.is_wasm32() && matches!(cx.interner.kind(ty), TyKind::Js) {

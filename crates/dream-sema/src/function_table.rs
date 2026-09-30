@@ -1,7 +1,7 @@
 use crate::errors::SymbolError;
 use dream_stdlib::StdlibFunction;
 use dream_syntax::nodes::{FunctionNode, Type, Visibility};
-use std::collections::HashMap;
+use indexmap::IndexMap as HashMap;
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]
@@ -191,14 +191,14 @@ impl FunctionTable {
         base: &str,
         type_ctx: &mut dream_types::TypeCtx,
     ) -> Result<(), SymbolError> {
-        let keys: Vec<String> = match self.overloads.remove(base) {
+        let keys: Vec<String> = match self.overloads.shift_remove(base) {
             Some(keys) => keys,
             None if self.functions.contains_key(base) => vec![base.to_string()],
             None => return Ok(()),
         };
         let mut infos = Vec::with_capacity(keys.len());
         for key in &keys {
-            if let Some(info) = self.functions.remove(key) {
+            if let Some(info) = self.functions.shift_remove(key) {
                 infos.push(info);
             }
         }
@@ -216,7 +216,7 @@ impl FunctionTable {
         }
 
         for module in module_order {
-            let group = groups.remove(&module).unwrap_or_default();
+            let group = groups.shift_remove(&module).unwrap_or_default();
             let ns = module_key(base, module.as_deref());
             self.by_module
                 .insert((module, base.to_string()), ns.clone());
@@ -238,7 +238,9 @@ impl FunctionTable {
             return Ok(());
         }
         if group.len() == 1 {
-            let mut info = group.into_iter().next().unwrap();
+            let Some(mut info) = group.into_iter().next() else {
+                crate::internal_error!("singleton overload group was empty");
+            };
             if self.functions.contains_key(ns) {
                 return Err(SymbolError::new(format!(
                     "Function '{}' is already defined in module '{}'",
@@ -293,7 +295,7 @@ impl FunctionTable {
         }
         // Promote a lone singleton to its mangled key the moment a second overload appears.
         if existing.len() == 1 && existing[0] == ns {
-            if let Some(mut first) = self.functions.remove(ns) {
+            if let Some(mut first) = self.functions.shift_remove(ns) {
                 let first_key = overload_key(ns, &first.parameter_types, type_ctx);
                 first.name = first_key.clone();
                 self.functions.insert(first_key.clone(), first);
@@ -440,13 +442,13 @@ impl FunctionTable {
             Some(max) => max,
             None => return OverloadResolution::None,
         };
-        let best: Vec<String> = scored
+        let mut best: Vec<String> = scored
             .iter()
             .filter(|(s, _)| *s == max_score)
             .map(|(_, k)| (*k).clone())
             .collect();
         if best.len() == 1 {
-            OverloadResolution::Unique(best.into_iter().next().unwrap())
+            OverloadResolution::Unique(best.remove(0))
         } else {
             OverloadResolution::Ambiguous(best)
         }
@@ -537,13 +539,13 @@ impl FunctionTable {
     }
 
     pub fn get_function(&self, name: &str) -> Result<FunctionTableInfo, SymbolError> {
-        if !self.functions.contains_key(name) {
-            return Err(SymbolError::new(format!(
+        match self.functions.get(name) {
+            Some(info) => Ok(info.clone()),
+            None => Err(SymbolError::new(format!(
                 "Function does not exist ({})",
                 name
-            )));
+            ))),
         }
-        Ok(self.functions.get(name).unwrap().clone())
     }
 }
 

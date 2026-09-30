@@ -12,7 +12,7 @@ use super::prop::{subst_stmt_reads, subst_terminator_reads, update_known};
 use super::{cfg, MirPass};
 use crate::{Local, MirFunction, Operand, Place};
 use dream_types::TypeInterner;
-use std::collections::HashMap;
+use indexmap::IndexMap as HashMap;
 
 pub struct GlobalProp;
 

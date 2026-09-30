@@ -11,7 +11,7 @@
 use super::MirPass;
 use crate::{Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
-use std::collections::HashMap;
+use indexmap::IndexMap as HashMap;
 
 pub struct CopyConstProp;
 
@@ -304,7 +304,7 @@ pub(super) fn update_known(
 }
 
 fn invalidate(dest: Local, known: &mut HashMap<Local, Operand>) {
-    known.remove(&dest);
+    known.shift_remove(&dest);
     known.retain(|_, v| !matches!(v, Operand::Copy(Place::Local(l)) if *l == dest));
 }
 

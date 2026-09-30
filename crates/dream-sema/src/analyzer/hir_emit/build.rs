@@ -117,7 +117,7 @@ impl<'a> Analyzer<'a> {
         // (or an enclosing struct/array/union) can size them. Compute each value struct's inline
         // (size, align) recursively — a value field contributes its full footprint; a reference field
         // contributes a 4-byte pointer — and record it on the interner so `scalar_size` resolves it.
-        let mut field_map: std::collections::HashMap<TypeId, Vec<TypeId>> = lowered
+        let mut field_map: indexmap::IndexMap<TypeId, Vec<TypeId>> = lowered
             .iter()
             .map(|(ty, _, _packed, defs)| (*ty, defs.iter().map(|(_, t, ..)| *t).collect()))
             .collect();
@@ -137,8 +137,8 @@ impl<'a> Analyzer<'a> {
         // A value union's inline footprint is `discriminant(4) + max value-aware variant payload`.
         // Collect each value union's variants as lists of payload field ids so the unified layout
         // computation can size value structs and value unions that embed one another.
-        let mut union_field_map: std::collections::HashMap<TypeId, Vec<Vec<TypeId>>> =
-            std::collections::HashMap::new();
+        let mut union_field_map: indexmap::IndexMap<TypeId, Vec<Vec<TypeId>>> =
+            indexmap::IndexMap::new();
         for (name, _size, variants) in &union_snapshot {
             let ty = self.type_ctx.lower_str(name);
             if !self.type_ctx.interner.is_value_union(ty) {
@@ -155,11 +155,10 @@ impl<'a> Analyzer<'a> {
                 .collect();
             union_field_map.insert(ty, vs);
         }
-        let mut memo: std::collections::HashMap<TypeId, (u32, u32)> =
-            std::collections::HashMap::new();
+        let mut memo: indexmap::IndexMap<TypeId, (u32, u32)> = indexmap::IndexMap::new();
         for &(ty, ..) in &lowered {
             if self.type_ctx.interner.is_value_type(ty) {
-                let mut in_progress = std::collections::HashSet::new();
+                let mut in_progress = indexmap::IndexSet::new();
                 compute_inline_layout(
                     ty,
                     &field_map,
@@ -171,7 +170,7 @@ impl<'a> Analyzer<'a> {
             }
         }
         for (ty, _) in &tuple_defs {
-            let mut in_progress = std::collections::HashSet::new();
+            let mut in_progress = indexmap::IndexSet::new();
             compute_inline_layout(
                 *ty,
                 &field_map,
@@ -185,7 +184,7 @@ impl<'a> Analyzer<'a> {
         // local/field/element resolves its full inline footprint via `scalar_size`.
         let value_union_ids: Vec<TypeId> = union_field_map.keys().copied().collect();
         for ty in value_union_ids {
-            let mut in_progress = std::collections::HashSet::new();
+            let mut in_progress = indexmap::IndexSet::new();
             compute_inline_layout(
                 ty,
                 &field_map,
@@ -465,9 +464,9 @@ impl<'a> Analyzer<'a> {
     }
 }
 
-type FieldMap = std::collections::HashMap<dream_types::TypeId, Vec<dream_types::TypeId>>;
-type UnionFieldMap = std::collections::HashMap<dream_types::TypeId, Vec<Vec<dream_types::TypeId>>>;
-type LayoutMemo = std::collections::HashMap<dream_types::TypeId, (u32, u32)>;
+type FieldMap = indexmap::IndexMap<dream_types::TypeId, Vec<dream_types::TypeId>>;
+type UnionFieldMap = indexmap::IndexMap<dream_types::TypeId, Vec<Vec<dream_types::TypeId>>>;
+type LayoutMemo = indexmap::IndexMap<dream_types::TypeId, (u32, u32)>;
 
 /// Recursively computes the inline `(size, align)` of a value type `ty` — a value (`struct`) type or
 /// a value union — memoizing results. A value-typed field contributes its own inline footprint
@@ -480,7 +479,7 @@ fn compute_inline_layout(
     field_map: &FieldMap,
     union_field_map: &UnionFieldMap,
     memo: &mut LayoutMemo,
-    in_progress: &mut std::collections::HashSet<dream_types::TypeId>,
+    in_progress: &mut indexmap::IndexSet<dream_types::TypeId>,
     interner: &dream_types::TypeInterner,
 ) -> (u32, u32) {
     if let Some(&sz) = memo.get(&ty) {
@@ -536,7 +535,7 @@ fn compute_inline_layout(
         }
         (offset, max_align)
     };
-    in_progress.remove(&ty);
+    in_progress.shift_remove(&ty);
     memo.insert(ty, result);
     result
 }
@@ -548,7 +547,7 @@ fn value_field_size(
     field_map: &FieldMap,
     union_field_map: &UnionFieldMap,
     memo: &mut LayoutMemo,
-    in_progress: &mut std::collections::HashSet<dream_types::TypeId>,
+    in_progress: &mut indexmap::IndexSet<dream_types::TypeId>,
     interner: &dream_types::TypeInterner,
 ) -> (u32, u32) {
     use dream_types::{PrimTy, TyKind};

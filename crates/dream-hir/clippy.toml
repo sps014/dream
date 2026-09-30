@@ -1,0 +1,4 @@
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "compiler output must not depend on randomized iteration", replacement = "indexmap::IndexMap or std::collections::BTreeMap" },
+    { path = "std::collections::HashSet", reason = "compiler output must not depend on randomized iteration", replacement = "indexmap::IndexSet or std::collections::BTreeSet" },
+]

@@ -106,7 +106,7 @@ impl<'a> Analyzer<'a> {
             );
         }
 
-        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut seen: indexmap::IndexSet<String> = indexmap::IndexSet::new();
         for (labels, body) in cases.iter() {
             let mut label_hirs: Vec<Option<HExpr>> = Vec::new();
             for label in labels.iter() {

@@ -13,7 +13,7 @@ use super::dce::is_pure;
 use super::MirPass;
 use crate::{Const, Global, Local, MirFunction, Operand, Place, Rvalue, Statement};
 use dream_types::TypeInterner;
-use std::collections::HashMap;
+use indexmap::IndexMap as HashMap;
 
 pub struct Dse;
 

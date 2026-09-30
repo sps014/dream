@@ -5,7 +5,7 @@
 use super::MirPass;
 use crate::{BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
-use std::collections::HashSet;
+use indexmap::IndexSet as HashSet;
 
 pub struct Dce;
 

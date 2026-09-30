@@ -18,7 +18,7 @@ use crate::passes::inline::graph::tarjan_scc;
 use crate::{Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{DefId, TypeId, TypeInterner};
 use indexmap::IndexMap;
-use std::collections::{HashMap, HashSet};
+use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 
 pub(crate) type FnKey = (DefId, Vec<TypeId>);
 

@@ -10,7 +10,7 @@ use crate::{Mir, MirFunction};
 use dream_hir::TypeLayout;
 use dream_types::{DefId, TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
-use std::collections::HashMap;
+use indexmap::IndexMap as HashMap;
 use std::sync::OnceLock;
 
 pub(crate) struct Cx<'a> {

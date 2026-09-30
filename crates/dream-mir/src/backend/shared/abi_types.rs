@@ -4,7 +4,7 @@
 
 use super::cx::Cx;
 use dream_types::{PrimTy, TyKind, TypeId, TypeInterner};
-use std::collections::HashSet;
+use indexmap::IndexSet as HashSet;
 use std::sync::OnceLock;
 
 const NATIVE_RT_HEADER: &str = include_str!("../../runtime/c/native/include/dream_rt_native.h");

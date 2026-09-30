@@ -8,7 +8,7 @@ use super::abi_types::c_ident;
 use super::cx::Cx;
 use super::symbols::func_symbol;
 use indexmap::IndexMap;
-use std::collections::HashMap;
+use indexmap::IndexMap as HashMap;
 
 /// Four is the largest closed set that still beats an itable call once the arms inline.
 /// Past that, a mixed receiver is cheaper as an indirect call than as a long test chain.

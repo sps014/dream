@@ -343,8 +343,7 @@ impl<'a> Analyzer<'a> {
         symbol_table_map: &mut HashMap<String, Rc<RefCell<SymbolTable>>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
-        let mut processed_generics: std::collections::HashSet<String> =
-            std::collections::HashSet::new();
+        let mut processed_generics: indexmap::IndexSet<String> = indexmap::IndexSet::new();
         let mut method_index = 0;
         // A generic whose field types amplify under substitution (e.g. a `List<fun(T): bool>`
         // field on `class C<T>` combined with something returning `C<fun(T): bool>`) expands

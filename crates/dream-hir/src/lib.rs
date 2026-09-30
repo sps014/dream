@@ -4,6 +4,7 @@
 //! re-derive: every expression carries a [`TypeId`]; every variable reference is a resolved
 //! [`Binding`]; every call names a resolved [`Callee`]. Control flow is still structured here —
 //! desugaring into a CFG happens in MIR. Monomorphization is an explicit [`MonoInstance`] worklist.
+#![deny(clippy::disallowed_types)]
 
 pub mod layout;
 mod module;

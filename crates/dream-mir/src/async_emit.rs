@@ -14,7 +14,7 @@
 
 use super::MirFunction;
 use dream_types::{TyKind, TypeId, TypeInterner};
-use std::collections::HashMap;
+use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 
 /// Slot offsets for one async function's `Future` frame.
 pub struct AsyncSlots {
@@ -61,7 +61,7 @@ pub fn layout_async_slots(
             frame_size: cursor,
         };
     };
-    let packable: std::collections::HashSet<usize> = eligible
+    let packable: HashSet<usize> = eligible
         .iter()
         .copied()
         .filter(|&i| packable(func.locals[i].ty))

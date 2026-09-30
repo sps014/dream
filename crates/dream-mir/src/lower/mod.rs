@@ -20,7 +20,7 @@ use super::{Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, T
 use dream_hir::{Binding, HExpr, HExprKind, HFunction, HParam, HPlace, HStmt, Hir};
 use dream_types::{DefId, PrimTy, TyKind, TypeId, TypeInterner};
 // Lookup only (HIR local → MIR local). Never iterated into emission order.
-use std::collections::HashMap;
+use indexmap::IndexMap as HashMap;
 
 mod control_flow;
 mod expr;

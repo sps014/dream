@@ -2,7 +2,7 @@
 
 use crate::{Local, MirFunction, Operand, Place, Rvalue, Statement};
 use dream_types::TypeInterner;
-use std::collections::HashMap;
+use indexmap::IndexMap as HashMap;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum ValueLocalKind {

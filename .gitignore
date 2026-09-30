@@ -57,3 +57,4 @@ tests/bench/csharp/obj/
 tests/bench/out/
 .dream_gen_autoharness_*
 .tmp-agent/
+AUDIT-PLAN.md

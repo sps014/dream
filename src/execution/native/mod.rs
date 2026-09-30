@@ -215,23 +215,19 @@ fn push_exe_parent(dirs: &mut Vec<PathBuf>, exe: &Path) {
     }
 }
 
+/// Search order: next to this process (so a dev build links its own newer host symbols rather
+/// than an older installed toolchain's), `DREAM_HOME`, `DREAM_BIN`, then `~/.dream/bin`. Never the
+/// working directory: a planted `target/*/libdream` would otherwise be linked and rpath'd.
+/// The result is canonical, so the `-rpath` baked into binaries is absolute.
 pub(crate) fn libdream_dir() -> Option<PathBuf> {
     let name = libdream_name();
     let mut dirs = Vec::new();
-    // Prefer the dylib next to this process (cargo test / `target/debug/dream`) so newly added
-    // host symbols link; `DREAM_HOME` may point at an older installed toolchain.
     if let Ok(exe) = std::env::current_exe() {
         if let Ok(canon) = exe.canonicalize() {
             push_exe_parent(&mut dirs, &canon);
         }
         push_exe_parent(&mut dirs, &exe);
     }
-    if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
-        push_libdream_dir(&mut dirs, PathBuf::from(&td).join("debug"));
-        push_libdream_dir(&mut dirs, PathBuf::from(&td).join("release"));
-    }
-    push_libdream_dir(&mut dirs, PathBuf::from("target/debug"));
-    push_libdream_dir(&mut dirs, PathBuf::from("target/release"));
     if let Ok(home) = std::env::var("DREAM_HOME") {
         if !home.is_empty() {
             let home = PathBuf::from(home);
@@ -249,7 +245,10 @@ pub(crate) fn libdream_dir() -> Option<PathBuf> {
             push_libdream_dir(&mut dirs, PathBuf::from(user).join(".dream").join("bin"));
         }
     }
-    dirs.into_iter().find(|d| d.join(name).exists())
+    dirs.into_iter()
+        .filter(|d| d.is_absolute())
+        .find(|d| d.join(name).is_file())
+        .and_then(|d| d.canonicalize().ok())
 }
 
 fn mtime(path: &Path) -> Option<std::time::SystemTime> {

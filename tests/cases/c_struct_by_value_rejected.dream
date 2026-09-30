@@ -1,0 +1,12 @@
+// A struct parameter passed by value would silently be passed by pointer; it must be rejected.
+@unmanaged
+struct Vec2 {
+    public x: double;
+    public y: double;
+}
+
+@c("m", "vec2_len")
+extern fun vec2_len(v: Vec2): double;
+
+fun main(): void {
+}

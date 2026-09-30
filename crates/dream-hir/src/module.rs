@@ -143,8 +143,6 @@ pub enum CShape {
     },
     /// `T[]` of unmanaged `T` as `T*` to its first element (`NULL` when empty), valid for the call.
     Array,
-    /// An `@unmanaged` value struct by address.
-    StructPtr,
     /// A `ref` out-param: the address of the caller's storage.
     Ref,
 }

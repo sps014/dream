@@ -265,7 +265,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     ) {
         match shape(imp, i).clone() {
             CShape::Void | CShape::Scalar => args.push(a.clone()),
-            CShape::Ref | CShape::StructPtr => args.push(V::s(self.ptr(a))),
+            CShape::Ref => args.push(V::s(self.ptr(a))),
             CShape::Str { optional } => {
                 let conv = if imp.c_wide_strings {
                     "dream_string_to_utf16z"

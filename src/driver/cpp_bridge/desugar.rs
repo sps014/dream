@@ -161,6 +161,12 @@ fn member_source(
                 ext_params.push(format!("p{i}: NativeCallback<{dream}>"));
                 args.push(format!("NativeCallback<{dream}>({})", p.name));
             }
+            // The shim takes `const T*` and copies; `@c` has no struct-by-value, so pass a copy by ref.
+            Bridge::Struct(_) if !p.is_ref => {
+                ext_params.push(format!("ref p{i}: {}", p.dream));
+                let _ = writeln!(prelude, "{indent}    let __cpp_a{i} = {};", p.name);
+                args.push(format!("ref __cpp_a{i}"));
+            }
             _ => {
                 ext_params.push(format!("{r}p{i}: {}", p.dream));
                 args.push(format!("{r}{}", p.name));

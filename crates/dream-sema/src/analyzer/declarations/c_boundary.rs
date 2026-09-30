@@ -19,8 +19,7 @@ enum Pos {
 }
 
 const PARAM_TYPES: &str = "numbers, `bool`, `string`, `CPtr`, `fun(...)`, `NativeCallback<fun(...)>`, \
-     `Option` of `string`/`CPtr`/`fun`/`NativeCallback`, arrays of numbers or @unmanaged structs, \
-     and @unmanaged structs";
+     `Option` of `string`/`CPtr`/`fun`/`NativeCallback`, and arrays of numbers or @unmanaged structs";
 const RETURN_TYPES: &str =
     "`void`, numbers, `bool`, `string`, `CPtr`, `Option<string>`, and `Option<CPtr>`";
 const CALLBACK_PARAM_TYPES: &str =
@@ -161,15 +160,22 @@ impl<'a> Analyzer<'a> {
         if ty.is_unknown() {
             return Ok(CShape::Scalar);
         }
+        // The backend has no C struct-by-value classifier yet; passing `&s` would silently
+        // mismatch a C prototype that takes the struct by value.
+        if pos == Pos::Param && self.is_unmanaged_struct(ty) {
+            return Err(format!(
+                "@unmanaged struct '{}' cannot be passed to C by value yet; declare the parameter \
+                 as `ref` to pass a pointer (`T*`)",
+                ty.get_type()
+            ));
+        }
         let shape = self.c_shape_inner(ty, pos);
         let allowed = match (&shape, pos) {
             (Some(CShape::Scalar), _) => true,
             (Some(CShape::Ptr { optional: false }), Pos::CallbackReturn) => true,
             (Some(CShape::Str { .. } | CShape::Ptr { .. }), p) => p != Pos::CallbackReturn,
             (
-                Some(
-                    CShape::Func { .. } | CShape::Callback { .. } | CShape::Array | CShape::StructPtr,
-                ),
+                Some(CShape::Func { .. } | CShape::Callback { .. } | CShape::Array),
                 Pos::Param,
             ) => true,
             _ => false,
@@ -226,7 +232,6 @@ impl<'a> Analyzer<'a> {
                 })
             }
             _ if self.is_c_ptr(ty) => Some(CShape::Ptr { optional: false }),
-            _ if pos == Pos::Param && self.is_unmanaged_struct(ty) => Some(CShape::StructPtr),
             _ => None,
         }
     }

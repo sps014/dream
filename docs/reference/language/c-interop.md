@@ -101,7 +101,7 @@ import system;
 | `CPtr` | `void*` / `T*` |
 | `Option<string>`, `Option<CPtr>` | a pointer where `NULL` is `None` |
 | `T[]` (numbers, `byte`, `@unmanaged` structs) | `T*` to the first element, valid for the call |
-| `@unmanaged` value struct | the struct by value |
+| `@unmanaged` value struct | only as `ref x: T` (`T*`); by value is rejected |
 | `ref x: T` | `T*`: C writes through it (`ref p: CPtr` is `T**`) |
 | `fun(...)` | a C function pointer (see [Callbacks](#callbacks)) |
 | `NativeCallback<F>` | a `(fn, void* user_data)` pair |
@@ -141,9 +141,9 @@ through pointers C hands to Dream (`char**` rows and similar).
 
 ### Structs
 
-Pass C structs as `@unmanaged` value structs, by value or by `ref`. Mark them `@packed` when the C
-header uses `#pragma pack(1)` / `__attribute__((packed))`. Otherwise fields are naturally aligned,
-as in C.
+Pass C structs as `@unmanaged` value structs by `ref`, which C sees as `T*`. Passing a struct by
+value is not supported yet and is a compile error. Mark structs `@packed` when the C header uses
+`#pragma pack(1)` / `__attribute__((packed))`. Otherwise fields are naturally aligned, as in C.
 
 ```dream
 @unmanaged
@@ -152,7 +152,7 @@ public struct Vec2 {
     public y: double;
 }
 
-@c extern fun vec2_len(v: Vec2): double;
+@c extern fun vec2_len(ref v: Vec2): double;       // C: double vec2_len(const Vec2* v)
 @c extern fun vec2_origin(ref out: Vec2): void;
 ```
 

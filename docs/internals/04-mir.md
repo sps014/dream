@@ -139,20 +139,32 @@ dream --release --emit-mir=after:gvn,each app.dream       # every run of gvn tha
 dream --release --emit-mir=all --emit-mir-fn=main,parse app.dream  # every module stage, two fns
 ```
 
-Snapshots land in `<output>.mir/<NN>-<pass>.mir`, numbered so lexicographic order is pipeline order. `after:<pass>` accepts every module stage (`lower`, `expand-simple-ctors`, `funcbox-abi`, `param-modes`, `rc-insertion`, `devirt`, `inline`, `rc-last-use-repair`, `unique-region`, `rc-held-by-owner`, `sroa-managed`, `fixpoint`, `strip-escaped-regions`, `frame-alloc`) and every per-function pass name; an unknown name errors with the valid list. For a per-function pass without `each`, the file holds each function's body after that pass's last run in the fixpoint. When a pass misbehaves, dump before and after it; the CFG text is far easier to read than the LLVM IR.
+Snapshots land in `<output>.mir/<NN>-<pass>.mir`, numbered so lexicographic order is pipeline order. `after:<pass>` accepts every module stage (`lower`, `expand-simple-ctors`, `funcbox-abi`, `param-modes`, `ownership-args`, `rc-insertion`, `devirt`, `inline`, `rc-last-use-repair`, `unique-region`, `rc-held-by-owner`, `sroa-managed`, `fixpoint`, `strip-escaped-regions`, `frame-alloc`) and every per-function pass name; an unknown name errors with the valid list. For a per-function pass without `each`, the file holds each function's body after that pass's last run in the fixpoint. When a pass misbehaves, dump before and after it; the CFG text is far easier to read than the LLVM IR.
 
 ## Verifier — `crates/dream-mir/src/verify/`
 
 `run_late_module_passes` checks the final module in debug builds or when `DREAM_VERIFY_MIR=1` (including release CI). Violations are ICEs. CFG targets are checked before dataflow. A finite may-dead analysis follows branches and backedges, rejecting reads or double releases after `Release` for conservative single-token locals (never retained, stored, passed, or a parameter).
+
+The same enablement also checks explicit ownership immediately after `RcInsertion`, before
+inlining and elision erase transfers. `ownership-args` first materializes taken projections
+(including globals) as typed locals; lowering already materializes discarded owning results. The independent token
+dataflow tracks all possible local obligations at CFG joins: borrowed/taken parameters, owning
+results, retained copies, moves into locals/containers, taken arguments, returns and async result
+handoffs. Overwrites and exits cannot discard a token; each taken argument occurrence consumes
+one. Indirect/interface calls use the borrowed ABI. Null slots and immortal literals owe no drop.
+Positive-balance cycles use a bound derived from static retains, not an iteration timeout.
+Cancellation requires one token per non-null owning async frame slot at suspension.
+Inline value fields use typed retain/drop glue rather than an envelope token.
 
 Closed retained alias families with one allocation site also receive an independent exact-path
 balance check. Copies, moves, null rebinding and scalar inspection preserve the family's count;
 each retain adds a token, each release consumes one, and a return forwards one. Joins preserve
 all incoming balances, and allocation-site re-entry requires the previous generation to be dead.
 Positive-balance cycles are rejected once the live count exceeds the birth plus all static retains,
-so balanced loops converge without an iteration cap. Parameters, cursors, calls, container handoffs,
-async functions and regions remain excluded from this check; pointer equality alone cannot prove
-their ownership transfers.
+so balanced loops converge without an iteration cap. This final-stage family check excludes
+parameters, cursors, calls, container handoffs, async functions and regions; their explicit
+transfer balance is checked at the insertion boundary instead. Pointer equality alone cannot
+recover erased ownership transfers.
 
 Region depth must agree at every join; leaves cannot underflow, and exits or suspension cannot
 carry active regions. Direct managed allocations and local copy/cast/move aliases carry region
@@ -161,12 +173,19 @@ preserves the payload's origin rather than inventing an allocation. Module-wide 
 keyed by definition and concrete type arguments, distinguish fresh results from parameter-derived
 results and propagate managed-child writes through direct calls. Recursive summaries converge on
 a finite may-provenance lattice without an iteration cap. Opaque calls conservatively preserve
-argument origins and potential allocations/writes. Field/index reads and managed-child stores
-preserve the containing graph's origins. These remain partial proofs: complete shared-token
-balance and more precise field/opaque-effect facts still require richer ownership information.
+argument origins and potential allocations/writes/capture. Graph identities keep mutations
+through aliases visible to caller/global roots even without later local reads. Reference-bearing
+inline structs, unions and tuples carry child origins without inventing a heap envelope;
+primitive snapshots do not inherit pointer lifetime. Field/index effects are conservative for
+the whole reachable graph. This is not a proof of every optimizer rewrite or external body;
+field-sensitive precision and richer post-optimization ownership facts remain follow-up work.
 Managed-child publication barriers are described in [06-llvm-backend.md](./06-llvm-backend.md).
 
-The late escaped-region guard conservatively checks managed definitions inside inferred regions, including opaque call results. Its finite CFG dataflow preserves possibly dangling locals at joins and follows backedges; redefinitions, including awaited results, clear the old provenance. A detected escape is an ICE in debug builds. Release builds remove the inferred region and log a warning naming the affected function before final verification; they no longer silently hide the repair.
+The late escaped-region guard uses the same region proof as final verification, not a separate
+block-linear scanner. A detected escape is an ICE in debug builds. Release builds remove all
+inferred-region markers in the affected function (preserving CFG stack balance) and log the
+located findings before final verification. This containment fallback is not a leak-free repair;
+Phase 7 tracks fixing the producing passes and deleting it.
 
 ## Invariants MIR guarantees to the backend
 
@@ -174,4 +193,4 @@ The late escaped-region guard conservatively checks managed definitions inside i
 2. Operands are atomic (local/global/const) — no nested computation hides in an operand.
 3. Every `Local` has a `LocalDecl` with a valid `TypeId`.
 4. The CFG is **reducible** (Dream cannot express `goto` spaghetti).
-5. RC is balanced (every retained reference is released on every path) after `RcInsertion`; `verify/` checks conservative single-token locals and closed retained alias families across the CFG, not complete shared-token balance.
+5. RC is balanced after `RcInsertion`: each explicit local token is released or transferred once on every path. `verify/` checks this boundary independently, then checks conservative alias death, closed retained families and region provenance in final optimized MIR.

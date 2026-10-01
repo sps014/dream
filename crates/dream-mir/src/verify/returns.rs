@@ -24,11 +24,13 @@ impl Sources {
 pub(super) struct Facts {
     pub result: Sources,
     pub writes: BTreeMap<usize, Sources>,
+    pub escaped: Sources,
 }
 
 impl Facts {
     fn extend(&mut self, other: &Self) -> bool {
         let mut changed = self.result.extend(&other.result);
+        changed |= self.escaped.extend(&other.escaped);
         for (&param, sources) in &other.writes {
             changed |= self.writes.entry(param).or_default().extend(sources);
         }
@@ -39,6 +41,7 @@ impl Facts {
 pub(super) type Returns = BTreeMap<(DefId, Vec<TypeId>), Facts>;
 
 pub(super) fn summarize(mir: &Mir, interner: &TypeInterner) -> Returns {
+    let refs = super::ref_types::RefTypes::new(&mir.layouts, interner);
     let mut returns: Returns = mir
         .functions
         .iter()
@@ -47,7 +50,7 @@ pub(super) fn summarize(mir: &Mir, interner: &TypeInterner) -> Returns {
     loop {
         let mut changed = false;
         for f in &mir.functions {
-            let sources = function_sources(f, interner, &returns);
+            let sources = function_sources(f, interner, &returns, &refs);
             changed |= returns
                 .get_mut(&(f.def, f.instance.clone()))
                 .expect("function summary")
@@ -73,11 +76,17 @@ pub(super) fn call_facts(callee: &Callee, arg_count: usize, returns: &Returns) -
             Facts {
                 result: sources.clone(),
                 writes: (0..arg_count).map(|p| (p, sources.clone())).collect(),
+                escaped: sources,
             }
         })
 }
 
-fn function_sources(f: &MirFunction, interner: &TypeInterner, returns: &Returns) -> Facts {
+fn function_sources(
+    f: &MirFunction,
+    interner: &TypeInterner,
+    returns: &Returns,
+    refs: &super::ref_types::RefTypes,
+) -> Facts {
     if f.is_async {
         return Facts {
             result: Sources {
@@ -85,11 +94,12 @@ fn function_sources(f: &MirFunction, interner: &TypeInterner, returns: &Returns)
                 params: (0..f.params.len()).collect(),
             },
             writes: BTreeMap::new(),
+            escaped: Sources::default(),
         };
     }
     let mut locals = vec![Sources::default(); f.locals.len()];
     for (index, local) in f.params.iter().enumerate() {
-        if interner.is_rc_tracked(f.local_ty(*local)) {
+        if refs.contains(f.local_ty(*local)) {
             locals[local.0 as usize].params.insert(index);
         }
     }
@@ -98,53 +108,8 @@ fn function_sources(f: &MirFunction, interner: &TypeInterner, returns: &Returns)
         let mut changed = false;
         for block in &f.blocks {
             for stmt in &block.stmts {
-                let opaque = match stmt {
-                    Statement::Assign(
-                        _,
-                        rv @ (Rvalue::IndirectCall { .. }
-                        | Rvalue::InterfaceCall { .. }
-                        | Rvalue::JsCall { .. }),
-                    ) => rvalue_local_operands(rv),
-                    Statement::IndirectCall { .. }
-                    | Statement::InterfaceCall { .. }
-                    | Statement::JsCall { .. } => super::operands::other_stmt_locals(stmt),
-                    _ => Vec::new(),
-                };
-                if !opaque.is_empty() {
-                    let mut effect = Sources {
-                        fresh: true,
-                        params: BTreeSet::new(),
-                    };
-                    for &local in &opaque {
-                        effect.extend(&locals[local as usize]);
-                    }
-                    for local in opaque {
-                        if interner.is_rc_tracked(f.local_ty(crate::Local(local))) {
-                            changed |= record_write(
-                                crate::Local(local),
-                                &effect,
-                                &mut locals,
-                                &mut result,
-                            );
-                        }
-                    }
-                }
-                let direct_call = match stmt {
-                    Statement::Call { callee, args }
-                    | Statement::Assign(_, Rvalue::Call { callee, args }) => Some((callee, args)),
-                    _ => None,
-                };
-                if let Some((callee, args)) = direct_call {
-                    let facts = call_facts(callee, args.len(), returns);
-                    let old = locals.clone();
-                    for (index, sources) in facts.writes {
-                        if let Some(arg) = args.get(index) {
-                            if let Some(local) = argument_local(arg) {
-                                let effect = substitute(&sources, args, &old);
-                                changed |= record_write(local, &effect, &mut locals, &mut result);
-                            }
-                        }
-                    }
+                if let Some((args, facts)) = super::call_effects::effects(stmt, returns) {
+                    changed |= apply_effects(f, refs, &args, facts, &mut locals, &mut result);
                 }
                 if let Statement::Assign(place, rv) = stmt {
                     let dest = match place {
@@ -152,9 +117,13 @@ fn function_sources(f: &MirFunction, interner: &TypeInterner, returns: &Returns)
                         | Place::Field { base: dest, .. }
                         | Place::Index { base: dest, .. }
                         | Place::Deref { ptr: dest, .. } => dest,
-                        Place::Global(_) => continue,
+                        Place::Global(_) => {
+                            let sources = rvalue_sources(rv, interner, returns, &locals);
+                            changed |= result.escaped.extend(&sources);
+                            continue;
+                        }
                     };
-                    if !interner.is_rc_tracked(f.local_ty(*dest)) {
+                    if !refs.contains(f.local_ty(*dest)) {
                         continue;
                     }
                     let sources = rvalue_sources(rv, interner, returns, &locals);
@@ -167,10 +136,14 @@ fn function_sources(f: &MirFunction, interner: &TypeInterner, returns: &Returns)
             }
             let sources = match &block.terminator {
                 Terminator::Return(Some(op)) => operand_sources(op, &locals),
-                Terminator::TailCall { callee, args } => apply_call(callee, args, returns, &locals),
+                Terminator::TailCall { callee, args } => {
+                    let facts = call_facts(callee, args.len(), returns);
+                    changed |= apply_effects(f, refs, args, facts, &mut locals, &mut result);
+                    apply_call(callee, args, returns, &locals)
+                }
                 _ => Sources::default(),
             };
-            if interner.is_rc_tracked(f.ret) {
+            if refs.contains(f.ret) {
                 changed |= result.result.extend(&sources);
             }
         }
@@ -178,6 +151,29 @@ fn function_sources(f: &MirFunction, interner: &TypeInterner, returns: &Returns)
             return result;
         }
     }
+}
+
+fn apply_effects(
+    f: &MirFunction,
+    refs: &super::ref_types::RefTypes,
+    args: &[Operand],
+    facts: Facts,
+    locals: &mut [Sources],
+    result: &mut Facts,
+) -> bool {
+    let old = locals.to_vec();
+    let mut changed = result
+        .escaped
+        .extend(&substitute(&facts.escaped, args, &old));
+    for (index, sources) in facts.writes {
+        if let Some(local) = args.get(index).and_then(argument_local) {
+            if refs.contains(f.local_ty(local)) {
+                let effect = substitute(&sources, args, &old);
+                changed |= record_write(local, &effect, locals, result);
+            }
+        }
+    }
+    changed
 }
 
 fn operand_sources(op: &Operand, locals: &[Sources]) -> Sources {
@@ -232,7 +228,7 @@ fn record_write(
     changed | target.extend(sources)
 }
 
-fn rvalue_sources(
+pub(super) fn rvalue_sources(
     rv: &Rvalue,
     interner: &TypeInterner,
     returns: &Returns,
@@ -245,22 +241,39 @@ fn rvalue_sources(
     for local in rvalue_local_operands(rv) {
         sources.extend(&locals[local as usize]);
     }
+    if let Rvalue::New {
+        ctor: Some(ctor),
+        args,
+        ty,
+        ..
+    } = rv
+    {
+        let mut actual = vec![Operand::Const(crate::Const::Null)];
+        actual.extend(args.iter().cloned());
+        let callee = Callee {
+            def: ctor.def,
+            args: vec![],
+            ret: *ty,
+            take_params: vec![],
+        };
+        if let Some(writes) = call_facts(&callee, actual.len(), returns).writes.get(&0) {
+            sources.extend(&substitute(writes, &actual, locals));
+        }
+    }
     sources.fresh |= matches!(
         rv,
-        Rvalue::New { .. }
-            | Rvalue::ArrayLit { .. }
-            | Rvalue::ArrayNew { .. }
-            | Rvalue::ArrayRealloc { .. }
-            | Rvalue::Concat(_)
-            | Rvalue::ConcatInt { .. }
-            | Rvalue::ToString(_)
-            | Rvalue::ToBytes { .. }
-            | Rvalue::FromBytes { .. }
-            | Rvalue::IndirectCall { .. }
-            | Rvalue::InterfaceCall { .. }
-            | Rvalue::JsCall { .. }
-            | Rvalue::Tuple { .. }
-            | Rvalue::StrBytes(_)
-    ) || matches!(rv, Rvalue::UnionNew { ty, .. } if !interner.is_niche_union(*ty));
+        Rvalue::New { ty, .. } if interner.is_rc_tracked(*ty)
+    ) || matches!(rv, |Rvalue::ArrayLit { .. }| Rvalue::ArrayNew { .. }
+        | Rvalue::ArrayRealloc { .. }
+        | Rvalue::Concat(_)
+        | Rvalue::ConcatInt { .. }
+        | Rvalue::ToString(_)
+        | Rvalue::ToBytes { .. }
+        | Rvalue::FromBytes { .. }
+        | Rvalue::IndirectCall { .. }
+        | Rvalue::InterfaceCall { .. }
+        | Rvalue::JsCall { .. }
+        | Rvalue::StrBytes(_))
+        || matches!(rv, Rvalue::UnionNew { ty, .. } if interner.is_rc_tracked(*ty) && !interner.is_niche_union(*ty));
     sources
 }

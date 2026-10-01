@@ -602,6 +602,14 @@ fn strip_escaped_keeps_region_when_only_pre_region_locals_are_used_after() {
     let node_def = ctx.register(DefKind::Struct, "Node", vec![]);
     let ty = ctx.interner.struct_ty(node_def, vec![]);
     let alloc_def = ctx.register(DefKind::Function, "alloc_node", vec![]);
+    let mut alloc = FunctionBuilder::new("alloc_node", ty);
+    alloc.set_def(alloc_def, vec![]);
+    let value = alloc.new_local(ty, None);
+    alloc.assign(
+        Place::Local(value),
+        Rvalue::New { def: node_def, ty, ctor: None, args: vec![] },
+    );
+    alloc.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(value)))));
     let mut f = FunctionBuilder::new("drop_it", ctx.interner.void());
     let sw = f.new_local(ty, Some("sw".into()));
     let x = f.new_local(ty, Some("x".into()));
@@ -636,7 +644,7 @@ fn strip_escaped_keeps_region_when_only_pre_region_locals_are_used_after() {
     );
     f.terminate(Terminator::Return(None));
     let mut mir = Mir {
-        functions: vec![f.finish()],
+        functions: vec![f.finish(), alloc.finish()],
         ..Default::default()
     };
     assert!(!strip_escaped_regions(&mut mir, &ctx.interner));

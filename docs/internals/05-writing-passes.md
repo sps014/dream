@@ -34,7 +34,7 @@ Two rules make the system work:
 
 ```mermaid
 flowchart LR
-    prune1[prune_module] --> expand[ExpandSimpleCtors] --> fbox[FuncboxAbi] --> pm[ParamModes] --> rc[RcInsertion\nmodule-wide] --> inline[Devirt + Inliner\nrounds + prune] --> repair[RcLastUseRepair] --> ur[UniqueRegion] --> held[rc-held-by-owner] --> sm[SroaManaged] --> perfn[per-function\nPassManager] --> late[strip-escaped-regions\n+ frame-alloc] --> verify[verify\ndebug compiler only]
+    prune1[prune_module] --> expand[ExpandSimpleCtors] --> fbox[FuncboxAbi] --> pm[ParamModes] --> args[ownership-args] --> rc[RcInsertion\n+ token verification] --> inline[Devirt + Inliner\nrounds + prune] --> repair[RcLastUseRepair] --> ur[UniqueRegion] --> held[rc-held-by-owner] --> sm[SroaManaged] --> perfn[per-function\nPassManager] --> late[strip-escaped-regions\n+ frame-alloc] --> verify[final verification\ndebug or DREAM_VERIFY_MIR=1]
 ```
 
 `driver/compiler.rs` calls three entry points in order: `optimize_module_opts` (everything up to `SroaManaged`), `run_function_pipelines` (the per-function fixpoint), and `run_late_module_passes`. Every stage reports to the `--emit-mir` sink under its name (see [04-mir.md](./04-mir.md#pretty-printing-and-emit-mir-cratesdream-mirsrcprettyrs-passesdumprs)).
@@ -50,7 +50,8 @@ flowchart LR
 - `rc-held-by-owner` (`rc/held.rs`) removes retain/release pairs on container snapshots whose owner is live and unmodified (per `ModRefTable`) wherever the snapshot is read — the post-inline counterpart of the conservative pre-inline cursors.
 - `SroaManaged` scalar-replaces non-escaping objects that the per-function `Sroa` cannot (several aliases, reference fields), spelling out the container-store RC rule from `rc_store.rs`.
 - The per-function `PassManager` then cleans up the merged bodies (`RcElision` / `HopElision` only — never a second `RcInsertion`).
-- `run_late_module_passes`: `strip_escaped_regions` drops inferred regions that CFG simplification made unsound (a live ref use after the leave), then `frame-alloc` builds instances that never outlive their frame in a stack buffer (`dream_frame_object`, immortal count), and finally debug builds of the compiler run the MIR verifier (`verify.rs`).
+- `ownership-args` canonicalizes taken projections; lowering already materializes discarded owning results. The explicit-token verifier runs immediately after RC insertion, before inlining/elision erase those transfers.
+- `run_late_module_passes`: `strip_escaped_regions` shares the final verifier's CFG/call/graph proof. Invalid regions are ICEs in debug builds and logged, complete-function marker removal in release. Then `frame-alloc` builds instances that never outlive their frame in a stack buffer (`dream_frame_object`, immortal count). Final MIR verification runs in debug builds or with `DREAM_VERIFY_MIR=1`.
 
 Escape levels (`analysis/escape.rs`: alias classes, `No` / `Arg` / `Global`, callee parameter summaries over SCCs) and static object counts (`analysis/object_life.rs`) are shared analyses; `SroaManaged` and `frame-alloc` consume them.
 

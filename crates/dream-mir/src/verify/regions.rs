@@ -9,6 +9,7 @@ pub(super) fn check(
     f: &MirFunction,
     interner: &TypeInterner,
     returns: &super::returns::Returns,
+    refs: &super::ref_types::RefTypes,
     out: &mut Vec<Violation>,
 ) {
     let initial_errors = out.len();
@@ -67,6 +68,6 @@ pub(super) fn check(
         }
     }
     if out.len() == initial_errors {
-        super::region_values::check(f, interner, returns, &incoming, out);
+        super::region_values::check(f, interner, returns, refs, &incoming, out);
     }
 }

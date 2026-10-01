@@ -90,8 +90,12 @@ fn an_opaque_call_cannot_erase_its_argument_origin() {
     f.push(Statement::RegionLeave);
     f.terminate(Terminator::Return(Some(copy(output))));
     let found = verify_function(&f.finish(), &ctx.interner);
-    assert_eq!(found.len(), 1, "{found:?}");
-    assert!(found[0].msg.contains("allocation region was left"));
+    assert!(found
+        .iter()
+        .any(|v| v.msg.contains("allocation region was left")));
+    assert!(found
+        .iter()
+        .any(|v| v.msg.contains("escape through a call")));
 }
 
 #[test]
@@ -141,8 +145,10 @@ fn call_side_effects_preserve_region_children_inserted_into_an_older_root() {
         ..Mir::default()
     };
     let found = verify_module(&mir, &ctx.interner);
-    assert_eq!(found.len(), 1, "{found:?}");
-    assert_eq!(found[0].func, "caller");
+    assert!(found.iter().all(|v| v.func == "caller"));
+    assert!(found
+        .iter()
+        .any(|v| v.msg.contains("allocation region was left")));
 }
 
 #[test]

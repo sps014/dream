@@ -8,9 +8,9 @@
 //! that named it), which keeps the analysis sound across loops: a back edge whose body redefines a
 //! local drops that fact from the meet.
 
-use super::prop::{subst_stmt_reads, subst_terminator_reads, update_known};
+use super::prop::{invalidate, subst_stmt_reads, subst_terminator_reads, update_known};
 use super::{cfg, MirPass};
-use crate::{Local, MirFunction, Operand, Place};
+use crate::{Local, MirFunction, Operand, Place, Terminator};
 use dream_types::TypeInterner;
 use indexmap::IndexMap as HashMap;
 
@@ -52,6 +52,14 @@ impl MirPass for GlobalProp {
                 let mut st = in_state.clone();
                 for stmt in &func.block(b).stmts {
                     update_known(stmt, &mut st, &value_local);
+                }
+                // Resume writes the awaited value before the successor's MIR statements.
+                // Neither the old value nor aliases naming its slot survive that definition.
+                if let Terminator::Await {
+                    dest: Some(dest), ..
+                } = func.block(b).terminator
+                {
+                    invalidate(dest, &mut st);
                 }
                 if !facts_eq(&st, &exit[bi]) {
                     exit[bi] = st;

@@ -1,16 +1,21 @@
 //! Final MIR validation: CFG structure, token death and balanced allocation regions.
 //! Enabled in debug builds or with DREAM_VERIFY_MIR=1. Violations are compiler bugs.
 //!
-//! RC path checks cover single-token locals and closed retained alias families.
-//! Opaque handoffs require richer ownership facts before complete token balance
-//! can be verified.
+//! Explicit local tokens are balanced immediately after RC insertion. Final MIR keeps
+//! independent alias-death and region-provenance checks after optimizations erase transfers.
 
+mod call_effects;
 mod operands;
 mod ownership;
+mod ref_types;
+mod region_guard;
+mod region_graph;
 mod region_values;
 mod regions;
 mod returns;
 mod shared_tokens;
+mod token_flow;
+mod token_transfer;
 
 #[cfg(test)]
 mod tests;
@@ -21,8 +26,15 @@ mod return_tests;
 #[cfg(test)]
 mod shared_token_tests;
 
+#[cfg(test)]
+mod token_tests;
+
+#[cfg(test)]
+mod region_tests;
+
 use crate::{Mir, MirFunction};
 use dream_types::TypeInterner;
+pub(crate) use region_guard::RegionVerifier;
 
 /// One verifier finding, located by function, block, and statement index (`stmts.len()` = the
 /// terminator).
@@ -36,10 +48,11 @@ pub struct Violation {
 
 pub fn verify_module(mir: &Mir, interner: &TypeInterner) -> Vec<Violation> {
     let returns = returns::summarize(mir, interner);
+    let refs = ref_types::RefTypes::new(&mir.layouts, interner);
     mir.functions
         .iter()
         .chain(mir.polls.iter())
-        .flat_map(|f| verify_with_returns(f, interner, &returns))
+        .flat_map(|f| verify_with_returns(f, interner, &returns, &refs))
         .collect()
 }
 
@@ -61,14 +74,25 @@ pub fn assert_module(mir: &Mir, interner: &TypeInterner) {
     crate::internal_error!("MIR verifier failed:\n{}", lines.join("\n"));
 }
 
+/// Check the explicit ownership boundary before inlining/elision erase transfers.
+pub fn assert_inserted_tokens(mir: &Mir, interner: &TypeInterner) {
+    token_flow::assert_module(mir, interner);
+}
+
 pub fn verify_function(f: &MirFunction, interner: &TypeInterner) -> Vec<Violation> {
-    verify_with_returns(f, interner, &returns::Returns::new())
+    verify_with_returns(
+        f,
+        interner,
+        &returns::Returns::new(),
+        &ref_types::RefTypes::new(&dream_hir::LayoutTable::default(), interner),
+    )
 }
 
 fn verify_with_returns(
     f: &MirFunction,
     interner: &TypeInterner,
     returns: &returns::Returns,
+    refs: &ref_types::RefTypes,
 ) -> Vec<Violation> {
     let mut out = Vec::new();
     for (bi, block) in f.blocks.iter().enumerate() {
@@ -79,7 +103,7 @@ fn verify_with_returns(
     }
     ownership::check_paths(f, &mut out);
     shared_tokens::check(f, interner, &mut out);
-    regions::check(f, interner, returns, &mut out);
+    regions::check(f, interner, returns, refs, &mut out);
     out
 }
 

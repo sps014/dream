@@ -17,6 +17,7 @@ fn publishes_cyclic_diamond_and_million_node_task_graphs() {
         "publish.c",
         "region.c",
         "weak.c",
+        "sync.c",
         "strings.c",
         "worker.c",
     ] {

@@ -1221,6 +1221,9 @@ void dream_release_object(dream_ptr p);
 
 void dream_lock_acquire(dream_ptr lock_addr);
 void dream_lock_release(dream_ptr lock_addr);
+#ifndef DREAM_WASM32
+void dream_lock_forget(dream_ptr target);
+#endif
 void dream_async_complete(dream_ptr future, dream_ptr value);
 void dream_resolve(dream_ptr future, dream_ptr value);
 void dream_cancel(dream_ptr future);

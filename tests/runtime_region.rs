@@ -17,6 +17,7 @@ fn regions_chain_rewind_and_fall_back_independently_per_thread() {
         "publish.c",
         "region.c",
         "weak.c",
+        "sync.c",
         "strings.c",
     ] {
         command.arg(native.join(unit));

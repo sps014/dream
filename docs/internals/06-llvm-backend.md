@@ -103,6 +103,8 @@ that table, and a missing entry is an ICE.
   `mir::abi`, initializes the fields or elements, and calls the user constructor when there is
   one. `shared class` instances allocate four extra bytes past their field layout for the lock
   word (`HEADER_LOCK_WORD_SIZE`), and retain/release for them use the atomic runtime helpers.
+- **Locks** pass the object identity to the native runtime's per-object registry, whose entry is
+  removed before heap recycling. WASM passes the address of the in-object lock word instead.
 - **String literals** are interned into `constant` heap-object blocks (`__ds<n>_blk`: header plus
   UTF-16 payload). The runtime never writes an immortal block, so `constant` is sound.
 - **Runtime units** are C under `crates/dream-mir/src/runtime/c/` (`wasm32/` for the wasm32 guest,

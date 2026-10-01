@@ -1,104 +1,149 @@
 #include "include/dream_rt_native.h"
 #include "include/dream_thread.h"
 
+#include <limits.h>
 #include <stdlib.h>
+
+static dream_mutex locks_mu = DREAM_MUTEX_INIT;
+
+static _Noreturn void lock_failure(const char *message) {
+    dream_mutex_unlock(&locks_mu);
+    dream_panic(dream_utf8_to_string(message));
+    __builtin_unreachable();
+}
+
+#define uthash_fatal(msg) lock_failure("panic: out of memory indexing locks")
+#include "include/uthash.h"
 
 typedef struct LockState {
     dream_ptr target;
     dream_thread_id owner;
     int32_t depth;
-    struct LockState *next;
+    unsigned waiters;
+    dream_cond changed;
+    UT_hash_handle hh;
 } LockState;
 
 static LockState *locks;
-static dream_mutex locks_mu = DREAM_MUTEX_INIT;
-static dream_cond locks_changed = DREAM_COND_INIT;
 
 static int64_t monotonic_ms(void) {
     return dream_monotonic_ns() / 1000000;
 }
 
-static LockState *lock_state(dream_ptr target) {
+static LockState *lock_find(dream_ptr target) {
     LockState *state;
-    for (state = locks; state; state = state->next) {
-        if (state->target == target) {
-            return state;
-        }
-    }
-    state = calloc(1, sizeof(*state));
-    if (!state) {
-        abort();
-    }
-    state->target = target;
-    state->next = locks;
-    locks = state;
+    HASH_FIND(hh, locks, &target, sizeof(target), state);
     return state;
 }
 
-void dream_lock_acquire(dream_ptr lock_addr) {
-    LockState *state;
-    dream_thread_id self;
-    if (!lock_addr) {
-        return;
+static LockState *lock_state(dream_ptr target) {
+    LockState *state = lock_find(target);
+    if (state == NULL) {
+        state = calloc(1, sizeof(*state));
+        if (state == NULL) {
+            lock_failure("panic: out of memory creating a lock");
+        }
+        state->target = target;
+        dream_cond_init(&state->changed);
+        HASH_ADD(hh, locks, target, sizeof(target), state);
     }
-    self = dream_thread_self();
-    dream_mutex_lock(&locks_mu);
-    state = lock_state(lock_addr);
-    while (state->depth && !dream_thread_id_eq(state->owner, self)) {
-        dream_cond_wait(&locks_changed, &locks_mu);
+    return state;
+}
+
+static void lock_take(LockState *state, dream_thread_id self) {
+    if (state->depth == INT32_MAX) {
+        lock_failure("panic: lock recursion limit exceeded");
     }
     state->owner = self;
     state->depth += 1;
+}
+
+void dream_lock_forget(dream_ptr target) {
+    dream_mutex_lock(&locks_mu);
+    LockState *state = lock_find(target);
+    if (state != NULL) {
+        /* Waiters still reference the condition after releasing locks_mu. */
+        if (state->waiters != 0) {
+            lock_failure("panic: destroying a lock with waiting threads");
+        }
+        HASH_DEL(locks, state);
+        dream_cond_destroy(&state->changed);
+        free(state);
+    }
     dream_mutex_unlock(&locks_mu);
 }
 
-void dream_lock_release(dream_ptr lock_addr) {
-    LockState *state;
-    if (!lock_addr) {
+void dream_lock_acquire(dream_ptr target) {
+    if (!target) {
+        return;
+    }
+    dream_thread_id self = dream_thread_self();
+    dream_mutex_lock(&locks_mu);
+    LockState *state = lock_state(target);
+    while (state->depth && !dream_thread_id_eq(state->owner, self)) {
+        state->waiters += 1;
+        dream_cond_wait(&state->changed, &locks_mu);
+        state->waiters -= 1;
+    }
+    lock_take(state, self);
+    dream_mutex_unlock(&locks_mu);
+}
+
+void dream_lock_release(dream_ptr target) {
+    if (!target) {
         return;
     }
     dream_mutex_lock(&locks_mu);
-    state = lock_state(lock_addr);
-    if (state->depth && dream_thread_id_eq(state->owner, dream_thread_self())) {
-        state->depth -= 1;
-        if (!state->depth) {
-            dream_cond_broadcast(&locks_changed);
-        }
+    LockState *state = lock_find(target);
+    if (state == NULL || state->depth == 0
+        || !dream_thread_id_eq(state->owner, dream_thread_self())) {
+        lock_failure("panic: lock release requires the owning thread");
+    }
+    state->depth -= 1;
+    if (state->depth == 0) {
+        dream_cond_signal(&state->changed);
     }
     dream_mutex_unlock(&locks_mu);
 }
 
-int32_t dream_lock_try_acquire(dream_ptr lock_addr) {
-    LockState *state;
-    dream_thread_id self;
-    int32_t acquired;
-    if (!lock_addr) {
+int32_t dream_lock_try_acquire(dream_ptr target) {
+    if (!target) {
         return 0;
     }
-    self = dream_thread_self();
+    dream_thread_id self = dream_thread_self();
     dream_mutex_lock(&locks_mu);
-    state = lock_state(lock_addr);
-    acquired = !state->depth || dream_thread_id_eq(state->owner, self);
+    LockState *state = lock_state(target);
+    int32_t acquired = !state->depth || dream_thread_id_eq(state->owner, self);
     if (acquired) {
-        state->owner = self;
-        state->depth += 1;
+        lock_take(state, self);
     }
     dream_mutex_unlock(&locks_mu);
     return acquired;
 }
 
-int32_t dream_lock_try_acquire_for(dream_ptr lock_addr, int32_t timeout_ms) {
-    int64_t deadline;
+int32_t dream_lock_try_acquire_for(dream_ptr target, int32_t timeout_ms) {
     if (timeout_ms <= 0) {
-        return dream_lock_try_acquire(lock_addr);
+        return dream_lock_try_acquire(target);
     }
-    deadline = monotonic_ms() + timeout_ms;
-    while (!dream_lock_try_acquire(lock_addr)) {
-        if (monotonic_ms() >= deadline) {
+    if (!target) {
+        return 0;
+    }
+    int64_t deadline = dream_monotonic_ns() + (int64_t)timeout_ms * 1000000;
+    dream_thread_id self = dream_thread_self();
+    dream_mutex_lock(&locks_mu);
+    LockState *state = lock_state(target);
+    while (state->depth && !dream_thread_id_eq(state->owner, self)) {
+        int64_t remaining = deadline - dream_monotonic_ns();
+        if (remaining <= 0) {
+            dream_mutex_unlock(&locks_mu);
             return 0;
         }
-        dream_thread_yield();
+        state->waiters += 1;
+        dream_cond_wait_ns(&state->changed, &locks_mu, remaining);
+        state->waiters -= 1;
     }
+    lock_take(state, self);
+    dream_mutex_unlock(&locks_mu);
     return 1;
 }
 

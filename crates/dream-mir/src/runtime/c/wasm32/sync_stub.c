@@ -15,7 +15,7 @@ void dream_lock_acquire(dream_ptr lock_addr) { *word(lock_addr) += 1; }
 void dream_lock_release(dream_ptr lock_addr) {
     int32_t *w = word(lock_addr);
     if (*w <= 0) {
-        dream_panic(dream_utf8_to_string("panic: lock released while not held"));
+        dream_panic(dream_utf8_to_string("panic: lock release requires the owning thread"));
     }
     *w -= 1;
 }
@@ -98,6 +98,9 @@ void dream_lock_acquire(dream_ptr lock_addr) {
 void dream_lock_release(dream_ptr lock_addr) {
     int32_t *addr = word(lock_addr);
     int32_t cur = __atomic_load_n(addr, __ATOMIC_ACQUIRE);
+    if ((cur & 65535) == 0 || (cur >> 16) != thread_id()) {
+        dream_panic(dream_utf8_to_string("panic: lock release requires the owning thread"));
+    }
     if ((cur & 65535) == 1) {
         __atomic_store_n(addr, 0, __ATOMIC_RELEASE);
         (void)__builtin_wasm_memory_atomic_notify(addr, 1);

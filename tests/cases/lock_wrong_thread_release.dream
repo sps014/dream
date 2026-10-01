@@ -1,0 +1,8 @@
+import system;
+import system.task;
+
+async fun main(): void {
+    let gate = Lock();
+    gate.acquire();
+    Task.spawn(() => gate.release()).await;
+}

@@ -18,6 +18,7 @@ tests/**/*.C
 !/tests/runtime_publish.c
 !/tests/runtime_weak.c
 !/tests/runtime_region.c
+!/tests/runtime_sync.c
 tests/**/*.bin
 tests/**/*.o
 # Native C emit (`dream --native-c`) next to the entry file.

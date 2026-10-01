@@ -56,6 +56,7 @@ pub(super) struct Fx<'l, 'a> {
     pub blocks: Vec<BlockRef>,
     pub wide: Vec<bool>,
     pub frame_bufs: Vec<Option<Value>>,
+    pub value_frame: crate::backend::shared::ValueFrame,
     /// The poll function's `__self` future (as `dream_ptr`); `None` in sync bodies.
     pub self_: Option<Value>,
     /// The subprogram's file and first line, when this body carries debug info.
@@ -107,6 +108,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             blocks: Vec::new(),
             wide,
             frame_bufs: Vec::new(),
+            value_frame: crate::backend::shared::ValueFrame::compute(f, interner),
             self_: None,
             dbg: None,
         }

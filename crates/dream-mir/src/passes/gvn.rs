@@ -12,7 +12,9 @@
 //! still equal to `arr + 4` in a later loop (see `does_not_cse_add_across_loop_back_edge`).
 
 use super::MirPass;
-use crate::{BinOp, BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement, UnOp};
+use crate::{
+    BinOp, BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator, UnOp,
+};
 use dream_types::TypeInterner;
 
 pub struct Gvn;
@@ -63,7 +65,13 @@ impl MirPass for Gvn {
                 let bi = bid.0 as usize;
                 let avail = meet_avail(&preds[bi], &exit_avail);
                 entry_avail[bi].clone_from(&avail);
-                let exit = transfer_avail(&func.blocks[bi].stmts, avail);
+                let mut exit = transfer_avail(&func.blocks[bi].stmts, avail);
+                if let Terminator::Await {
+                    dest: Some(dest), ..
+                } = func.blocks[bi].terminator
+                {
+                    invalidate(&mut exit, dest.0);
+                }
                 if exit_avail[bi].as_ref() != Some(&exit) {
                     exit_avail[bi] = Some(exit);
                     df_changed = true;

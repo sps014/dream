@@ -281,24 +281,11 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
             env_defer,
         ) {
             if dest_holds_token(&tokens, local) {
-                // Container stores may have retained an alias; only drop the local's count.
-                // Do not null an Await dest: resume is a C-only store, so `x = null`
-                // here lets SCCP prove `x` is null in the resume block.
-                let clobber_await_dest = matches!(
-                    &block.terminator,
-                    Terminator::Await {
-                        future: Operand::Copy(Place::Local(f)),
-                        dest: Some(d),
-                        ..
-                    } if *d != *f && d.0 == local
-                );
                 let rel = should_release_leftover(&end_keep[bi], n_orig, local)
                     && leftover_env_ok(local, &tokens, env_defer);
-                if clobber_await_dest {
-                    if rel {
-                        out.push(release_one(local));
-                    }
-                } else if rel {
+                // A suspended frame can be cancelled before its destination is overwritten
+                // by resume. SCCP already treats Await's destination as an unknown definition.
+                if rel {
                     out.extend(release_and_null(local));
                 } else {
                     out.push(null_local(local));

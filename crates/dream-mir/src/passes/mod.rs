@@ -3,6 +3,8 @@
 mod abc;
 mod algebraic;
 mod autovec;
+#[cfg(test)]
+mod await_facts_tests;
 mod cfg;
 mod const_fold;
 mod dce;
@@ -11,9 +13,6 @@ mod dse;
 mod dump;
 mod frame_alloc;
 pub(crate) mod funcbox_abi;
-mod param_modes;
-#[cfg(test)]
-mod param_modes_tests;
 mod global_prop;
 mod gvn;
 pub(crate) mod inline;
@@ -21,13 +20,19 @@ mod iv;
 mod licm;
 mod loop_unroll;
 mod overflow_elim;
+mod ownership_args;
+#[cfg(test)]
+mod ownership_args_tests;
+mod param_modes;
+#[cfg(test)]
+mod param_modes_tests;
 mod prop;
 pub(crate) mod rc;
 mod sccp;
-mod slice_measure;
-mod str_cursor;
 mod simplify_cfg;
+mod slice_measure;
 mod sroa;
+mod str_cursor;
 mod tco;
 mod unique_region;
 
@@ -43,7 +48,6 @@ pub use dump::{
     dumpable_pass_names, MirDump, MirDumpFile, MirDumpSpec, STAGE_FIXPOINT, STAGE_LATE, STAGE_LOWER,
 };
 pub use funcbox_abi::FuncboxAbi;
-pub use param_modes::ParamModes;
 pub use global_prop::GlobalProp;
 pub use gvn::Gvn;
 pub use inline::Inliner;
@@ -51,6 +55,7 @@ pub use iv::IvCanon;
 pub use licm::Licm;
 pub use loop_unroll::LoopUnroll;
 pub use overflow_elim::OverflowElim;
+pub use param_modes::ParamModes;
 pub use prop::CopyConstProp;
 pub(crate) use rc::{container_move_locals, rvalue_reads_local, stmt_reads_local};
 pub use rc::{HopElision, RcElision, RcInsertion, RcLastUseRepair, ReleaseSink};
@@ -267,6 +272,8 @@ pub fn optimize_module_opts(
     dump.module(FuncboxAbi.name(), mir, interner);
     let _ = ParamModes.run(mir, interner);
     dump.module(ParamModes.name(), mir, interner);
+    ownership_args::run(mir, interner);
+    dump.module(ownership_args::STAGE, mir, interner);
     let layouts = mir.layouts.clone();
     let holds = rc::lifetime::held_defs(&mir.intrinsics, &mir.imports);
     let modref = rc::modref::ModRefTable::compute(mir, interner);
@@ -274,6 +281,9 @@ pub fn optimize_module_opts(
         RcInsertion::run_with_layouts(f, interner, &layouts, &holds, &modref);
     }
     dump.module(MirPass::name(&RcInsertion), mir, interner);
+    if crate::verify::enabled() {
+        crate::verify::assert_inserted_tokens(mir, interner);
+    }
     // Correctness invariant: RC must be inserted (above) *before* any inlining (below), or callee
     // scope-exit releases won't be baked into bodies for inlining to copy. The `rc_inserted` flag
     // makes a future reordering that hoists the inliner above this point fail loudly in dev.

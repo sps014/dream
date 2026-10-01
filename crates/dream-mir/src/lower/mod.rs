@@ -432,7 +432,7 @@ impl Lowerer<'_> {
     /// A discarded call result the caller must still drop: an owned reference, or a value type
     /// (returned in a heap box and possibly holding nested references).
     fn discarded_result_is_owned(&self, ty: dream_types::TypeId) -> bool {
-        self.interner.is_reference(ty) || self.interner.is_value_type(ty)
+        self.interner.is_rc_tracked(ty) || self.interner.is_value_type(ty)
     }
 
     fn lower_block(&mut self, stmts: &[HStmt]) {

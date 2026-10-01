@@ -25,6 +25,7 @@ const MODULE_STAGES: &[&str] = &[
     "expand-simple-ctors",
     "funcbox-abi",
     "param-modes",
+    super::ownership_args::STAGE,
     "rc-insertion",
     "devirt",
     "inline",

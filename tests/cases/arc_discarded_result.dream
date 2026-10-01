@@ -1,0 +1,31 @@
+import system;
+
+let destroyed: int = 0;
+
+class Item {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+    del() { destroyed = destroyed + 1; }
+}
+
+let resident = Item(7);
+
+@noinline
+fun make(): Item { return Item(1); }
+
+@noinline
+fun forward(item: Item): Item { return item; }
+
+@noinline
+fun exercise(): void {
+    make();
+    let factory: fun(): Item = make;
+    factory();
+    forward(resident);
+    System.println(resident.value);
+}
+
+fun main(): void {
+    exercise();
+    System.println(destroyed);
+}

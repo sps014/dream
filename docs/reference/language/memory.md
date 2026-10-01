@@ -84,6 +84,11 @@ shared root can have newly attached children.
 Publication is not cycle collection, and it does not synchronize field mutation.
 Use `lock` when changing a shared object's fields.
 
+The native runtime records heap mappings in a growable sorted index, so heap
+validation during publication has no fixed mapping-count limit. Publication
+currently scans potential pointer words; type-directed traversal is planned
+alongside the compiler's typed layout metadata.
+
 ## Known boundaries
 
 The following are documented limitations, not silent unsoundness — each degrades to a detectable pattern or an explicit opt-out rather than memory corruption:

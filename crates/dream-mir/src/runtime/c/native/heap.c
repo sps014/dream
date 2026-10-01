@@ -1,5 +1,6 @@
 #include "include/dream_rt_native.h"
 #include "include/dream_thread.h"
+#include "include/dream_heap_maps.h"
 
 #include <limits.h>
 #include <stddef.h>
@@ -31,13 +32,6 @@ static size_t arena_len;
  * `pinned` counts immortal singletons that left `Debug.live_objects` without being freed. */
 static dream_heap_counters *counters_head;
 static uint32_t pinned;
-static char *chunks[32];
-static int nchunks;
-/* Every mmap used as a heap (process bump, TLS bump, unique-region). `dream_publish`
- * must not deref `char[]` payload words that happen to look like pointers. */
-static char *heap_maps[64];
-static size_t heap_map_lens[64];
-static int nheap_maps;
 static dream_mutex heap_mu = DREAM_MUTEX_INIT;
 int dream_rt_mt;
 
@@ -147,38 +141,17 @@ int dream_rc_last_slow(int32_t *rc) {
     return __atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL) == (DREAM_RC_SHARED_BIT | 1);
 }
 
-static void note_heap_map_locked(char *p, size_t n) {
-    if (p == NULL || n == 0) {
-        return;
-    }
-    if (nheap_maps < 64) {
-        heap_maps[nheap_maps] = p;
-        heap_map_lens[nheap_maps] = n;
-        nheap_maps += 1;
-    }
-}
-
 static void note_heap_map(char *p, size_t n) {
     heap_lock();
-    note_heap_map_locked(p, n);
+    dream_heap_map_add_locked(p, n);
     heap_unlock();
 }
 
 static int native_block_in_heap(char *block) {
-    int i;
-    int n;
     heap_lock();
-    n = nheap_maps;
-    for (i = 0; i < n; i++) {
-        char *base = heap_maps[i];
-        size_t len = heap_map_lens[i];
-        if (block >= base && (size_t)(block - base) < len) {
-            heap_unlock();
-            return 1;
-        }
-    }
+    int found = dream_heap_map_contains_locked(block, NATIVE_HEAP_HEADER_SIZE);
     heap_unlock();
-    return 0;
+    return found;
 }
 
 static void *map_chunk(size_t n) {
@@ -279,10 +252,7 @@ static char *bump(size_t n) {
         if (arena == NULL) {
             abort();
         }
-        if (nchunks < 32) {
-            chunks[nchunks++] = arena;
-        }
-        note_heap_map_locked(arena, map_len);
+        dream_heap_map_add_locked(arena, map_len);
     }
     {
         char *p = arena + arena_off;
@@ -543,8 +513,10 @@ void debug_dump_live(void) {
     int i;
     int j;
     heap_lock();
-    for (i = 0; i < nheap_maps; i++) {
-        dump_scan_map(heap_maps[i], heap_map_lens[i], hist, &nh, samples, &str_n);
+    for (size_t map = 0; map < dream_heap_map_count_locked(); ++map) {
+        size_t size;
+        char *base = (char *)dream_heap_map_at_locked(map, &size);
+        dump_scan_map(base, size, hist, &nh, samples, &str_n);
     }
     heap_unlock();
     for (i = 0; i < nh; i++) {

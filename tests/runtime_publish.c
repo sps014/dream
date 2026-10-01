@@ -1,4 +1,5 @@
 #include "../crates/dream-mir/src/runtime/c/native/include/dream_rt_native.h"
+#include "../crates/dream-mir/src/runtime/c/native/include/dream_heap_maps.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,17 +40,19 @@ dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg) {
     return 0;
 }
 
-static void make_nodes(size_t count) {
+static void make_sized_nodes(size_t count, int32_t size) {
     nodes = (dream_ptr *)calloc(count, sizeof(*nodes));
     assert(nodes != NULL);
     node_count = count;
     for (size_t i = 0; i < count; ++i) {
-        nodes[i] = dream_malloc(sizeof(Node), TAG_STRUCT_BASE);
+        nodes[i] = dream_malloc(size, TAG_STRUCT_BASE);
         Node *node = (Node *)dream_p(nodes[i]);
         node->left = 0;
         node->right = 0;
     }
 }
+
+static void make_nodes(size_t count) { make_sized_nodes(count, sizeof(Node)); }
 
 static void handoff_and_free(void) {
     int32_t worker = workerSpawn(0, 0);
@@ -108,5 +111,16 @@ int main(void) {
             break;
         }
     }
+    /* Each allocation needs its own >4 MiB map, exceeding both old registry caps. */
+    make_sized_nodes(130, (1 << 22) + 16);
+    assert(dream_heap_map_contains_locked(dream_p(nodes[0]), (1 << 22) + 16));
+    assert(!dream_heap_map_contains_locked(dream_p(nodes[0]), (1 << 22) + 17));
+    assert(!dream_heap_map_contains_locked(NULL, 16));
+    for (size_t i = 0; i + 1 < node_count; ++i) {
+        ((Node *)dream_p(nodes[i]))->left = nodes[i + 1];
+    }
+    handoff_and_free();
+    assert(debug_get_live_objects() == 0);
+    debug_dump_live();
     puts("publication stress passed");
 }

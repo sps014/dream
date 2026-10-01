@@ -11,7 +11,14 @@ fn publishes_cyclic_diamond_and_million_node_task_graphs() {
     let binary = temp.path().join("publish");
     let mut command = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
     command.args(["-std=gnu11", "-O2", "-pthread"]);
-    for unit in ["heap.c", "publish.c", "weak.c", "strings.c", "worker.c"] {
+    for unit in [
+        "heap.c",
+        "heap_maps.c",
+        "publish.c",
+        "weak.c",
+        "strings.c",
+        "worker.c",
+    ] {
         command.arg(native.join(unit));
     }
     let build = command

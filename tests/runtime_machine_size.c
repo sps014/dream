@@ -14,9 +14,11 @@ static void *sparse_memset(void *ptr, int value, size_t size) {
 #undef memset
 #define memset sparse_memset
 #include "../crates/dream-mir/src/runtime/c/native/strings.c"
+#include "../crates/dream-mir/src/runtime/c/native/async.c"
 #undef memset
 
-void dream_future_fini(dream_ptr ptr) { (void)ptr; }
+void *dream_ft_get(int32_t index) { (void)index; return NULL; }
+int64_t timeNowNanos(void) { return 0; }
 void dream_panic(dream_ptr message) {
     (void)message;
     fputs("unexpected allocation panic\n", stderr);
@@ -64,6 +66,16 @@ int main(int argc, char **argv) {
         ptr = dream_array_new(400000000, 8);
         assert(zeroed_bytes == bytes + 4 && dream_i32(ptr)[0] == 400000000);
         check_block(ptr, bytes + 4);
+        dream_free(ptr);
+    } else if (strcmp(argv[1], "from-bytes") == 0) {
+        ptr = dream_from_bytes(0, bytes, TAG_ARRAY);
+        assert(zeroed_bytes == bytes);
+        check_block(ptr, bytes);
+        dream_free(ptr);
+    } else if (strcmp(argv[1], "future") == 0) {
+        ptr = dream_new_future(bytes, 0, 0);
+        assert(zeroed_bytes == bytes);
+        check_block(ptr, bytes);
         dream_free(ptr);
     } else if (strcmp(argv[1], "string") == 0) {
         ptr = dream_string_alloc(INT32_MAX);

@@ -32,7 +32,16 @@ fn native_allocations_use_machine_width_without_committing_large_buffers() {
         "{}",
         String::from_utf8_lossy(&build.stderr)
     );
-    for mode in ["private", "shared", "realloc", "array", "string", "region"] {
+    for mode in [
+        "private",
+        "shared",
+        "realloc",
+        "array",
+        "from-bytes",
+        "future",
+        "string",
+        "region",
+    ] {
         let output = Command::new(&binary)
             .arg(mode)
             .output()

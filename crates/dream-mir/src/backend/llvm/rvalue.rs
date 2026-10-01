@@ -229,7 +229,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let tag = self.l.cx.type_tag(*ty);
                 let sz = elem_size(&self.l.cx, *ty) as i64;
                 let b = self.operand(bytes);
-                let boxed = self.call_v("dream_from_bytes", &[b, V::i32(sz), V::i32(tag as i64)]);
+                let boxed = self.call_v("dream_from_bytes", &[b, V::i64(sz), V::i32(tag as i64)]);
                 match self.interner.kind(*ty) {
                     TyKind::Prim(PrimTy::String) => boxed,
                     TyKind::Prim(_) | TyKind::Enum(_) => {

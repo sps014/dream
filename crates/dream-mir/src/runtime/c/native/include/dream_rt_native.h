@@ -1227,7 +1227,7 @@ DREAM_ALWAYS_INLINE void dream_sb_push_long(dream_ptr sb, int64_t v) {
 }
 dream_ptr dream_array_to_string(dream_ptr arr);
 dream_ptr dream_to_bytes(dream_ptr value, int32_t size);
-dream_ptr dream_from_bytes(dream_ptr bytes, int32_t size, int32_t tag);
+dream_ptr dream_from_bytes(dream_ptr bytes, dream_size size, int32_t tag);
 int32_t dream_object_hash_code(dream_ptr p);
 int32_t dream_bitcast_f32(float v);
 int32_t dream_hash_double(double v);
@@ -1298,7 +1298,7 @@ void dream_cancel(dream_ptr future);
 int32_t dream_async_await(dream_ptr future, dream_ptr *dest, int32_t resume_pc);
 void dream_async_set_waker(dream_ptr future, dream_ptr self);
 void dream_await(dream_ptr parent, dream_ptr child);
-dream_ptr dream_new_future(int32_t size, int32_t poll, int32_t kind);
+dream_ptr dream_new_future(dream_size size, int32_t poll, int32_t kind);
 void dream_enqueue(dream_ptr f);
 void dream_start(dream_ptr f);
 void dream_run_loop(void);

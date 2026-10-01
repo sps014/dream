@@ -127,11 +127,11 @@ dream_ptr dream_to_bytes(dream_ptr value, int32_t size) {
     return p;
 }
 
-dream_ptr dream_from_bytes(dream_ptr bytes, int32_t size, int32_t tag) {
+dream_ptr dream_from_bytes(dream_ptr bytes, dream_size size, int32_t tag) {
     dream_ptr p = dream_malloc(size, tag);
     memset(dream_p(p), 0, (size_t)size);
     if (bytes) {
-        int32_t n = dream_i32(bytes)[0];
+        dream_size n = (dream_size)dream_i32(bytes)[0];
         if (n > size) {
             n = size;
         }

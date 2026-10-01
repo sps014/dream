@@ -224,7 +224,7 @@ pub(super) fn build_async_stub<'a>(
     let s = fx.call_v(
         "dream_new_future",
         &[
-            V::i32(frame_size as i64),
+            V::i64(frame_size as i64),
             V::i32(poll_idx as i64),
             V::i32(0),
         ],

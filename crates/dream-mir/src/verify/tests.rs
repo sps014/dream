@@ -197,6 +197,27 @@ fn niche_wrappers_preserve_the_payload_allocation_origin() {
 }
 
 #[test]
+fn awaited_result_replaces_a_rewound_destination() {
+    let mut ctx = TypeCtx::new();
+    let ty = node(&mut ctx);
+    let mut f = FunctionBuilder::new("await_redefinition", ty);
+    let future = f.new_param(ty, None);
+    let result = f.new_local(ty, None);
+    let resume = f.new_block();
+    f.push(Statement::RegionEnter);
+    f.assign(Place::Local(result), new_node(ty));
+    f.push(Statement::RegionLeave);
+    f.terminate(Terminator::Await {
+        future: copy(future),
+        dest: Some(result),
+        resume,
+    });
+    f.switch_to(resume);
+    f.terminate(Terminator::Return(Some(copy(result))));
+    assert!(verify_function(&f.finish(), &ctx.interner).is_empty());
+}
+
+#[test]
 fn region_leave_requires_an_enter() {
     let ctx = TypeCtx::new();
     let mut f = FunctionBuilder::new("underflow", ctx.interner.void());

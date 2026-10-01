@@ -2,7 +2,7 @@
 
 use super::operands::{operand_locals, other_stmt_locals, rvalue_local_operands, terminator_reads};
 use super::{violation, Violation};
-use crate::{MirFunction, Operand, Place, Rvalue, Statement};
+use crate::{MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -31,6 +31,12 @@ pub(super) fn check(
         let mut depth = depths[bi.0 as usize].expect("balanced reachable region stack");
         for stmt in &f.blocks[bi.0 as usize].stmts {
             transfer(stmt, f, interner, &mut depth, &mut origins);
+        }
+        if let Terminator::Await {
+            dest: Some(dest), ..
+        } = &f.blocks[bi.0 as usize].terminator
+        {
+            origins.remove(&dest.0);
         }
         for successor in f.blocks[bi.0 as usize].terminator.successors() {
             let row = &mut incoming[successor.0 as usize];

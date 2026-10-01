@@ -1,0 +1,10 @@
+import system;
+import system.gpu;
+
+async fun main(): void {
+    Time.sleep(0).await;
+    let desc = GpuTextureDesc.d2(4, 4, GpuTextureFormat.Rgba8Unorm);
+    desc.sample_count = 3;
+    let result = GpuTexture.create(desc);
+    System.println("rejected=" + result.is_err().to_int().to_string());
+}

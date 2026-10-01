@@ -1,7 +1,8 @@
 //! Statement → WGSL lowering.
 
 use super::context::EmitCtx;
-use super::expr::{coerce_expr_to_wgsl_ty, emit_call, emit_expr};
+use super::call::emit_call;
+use super::expr::{coerce_expr_to_wgsl_ty, emit_expr};
 use super::ident::escape_wgsl_ident;
 use super::ty::{dream_ty_to_wgsl, infer_wgsl_ty};
 use dream_syntax::nodes::expression::ExpressionNode;

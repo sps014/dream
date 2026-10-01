@@ -66,7 +66,7 @@ if [[ ! -x "$DEST/bin/clang$EXE" || ! -x "$DEST/bin/opt$EXE" ]]; then
   archive="$(fetch "https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/${LLVM_ARCHIVE}" "$LLVM_ARCHIVE" "$LLVM_SHA")"
   patterns=("*/LICENSE.TXT" "*/lib/clang/*")
   for t in "${TOOLS[@]}"; do patterns+=("*/bin/$t$EXE"); done
-  tar -xJf "$archive" -C "$DEST" --strip-components=1 "${WILDCARDS[@]}" "${patterns[@]}"
+  tar -xJf "$archive" -C "$DEST" --strip-components=1 ${WILDCARDS[@]+"${WILDCARDS[@]}"} "${patterns[@]}"
   rm -f "$archive"
 fi
 
@@ -76,7 +76,7 @@ if [[ ! -f "$resource/wasm32-unknown-wasip1/libclang_rt.builtins.a" \
    || ! -f "$DEST/share/wasi-sysroot/include/wasm32-wasip1/string.h" ]]; then
   archive="$(fetch "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION%%.*}/${WASI_SDK_ARCHIVE}" "$WASI_SDK_ARCHIVE" "$WASI_SDK_SHA")"
   tmp="$(mktemp -d)"
-  tar -xzf "$archive" -C "$tmp" --strip-components=1 --exclude "*/c++/*" "${WILDCARDS[@]}" \
+  tar -xzf "$archive" -C "$tmp" --strip-components=1 --exclude "*/c++/*" ${WILDCARDS[@]+"${WILDCARDS[@]}"} \
     "*/lib/clang/${LLVM_MAJOR}/lib/wasm32-unknown-wasip1/libclang_rt.builtins.a" \
     "*/lib/clang/${LLVM_MAJOR}/lib/wasm32-unknown-wasip1-threads/libclang_rt.builtins.a" \
     "*/share/wasi-sysroot/include/wasm32-wasip1/*"

@@ -111,7 +111,7 @@ async fun main(): void {
     let co = GpuBuffer<int>.from([0, 0, 0, 0]);
     let rc = Compute.run_resources(
         "cas", [buf.id, co.id], none_i, none_i, 1, 1, 1, no_uniforms).await;
-    if rc.is_err() { System.println("cas dispatch failed"); return; }
+    if rc.is_err() { System.println("cas dispatch failed: " + rc.unwrap_err().message()); return; }
     let cr = co.read().await;
     for (let i = 0; i < 4; i = i + 1) {
         System.println("cas[" + i.to_string() + "]=" + cr[i].to_string());

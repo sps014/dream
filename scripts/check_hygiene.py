@@ -9,7 +9,7 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MAX_LARGE_RUST_FILES = 57
+MAX_LARGE_RUST_FILES = 56
 
 # These are symbol construction or LLVM attribute parsing, not semantic decisions. Keeping the
 # exact fingerprints here makes any new string-based decision fail CI until it is reviewed.

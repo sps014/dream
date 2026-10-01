@@ -1,0 +1,13 @@
+import system;
+
+@noinline
+fun keep(x: int): int { return x + 1; }
+
+fun kitchenSink(x: int): int { return x + 2; }
+
+@noinline
+fun run(n: int): int { return keep(n) + kitchenSink(n); }
+
+fun main(): void {
+    System.println(run(3));
+}

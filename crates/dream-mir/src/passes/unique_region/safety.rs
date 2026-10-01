@@ -13,11 +13,6 @@ pub(super) fn find_fn<'a>(mir: &'a Mir, def: DefId, args: &[TypeId]) -> Option<&
         .find(|f| f.def == def && f.instance == args)
 }
 
-pub(super) fn has_del(mir: &Mir, layout_name: &str) -> bool {
-    let name = format!("{layout_name}_del");
-    mir.functions.iter().any(|f| f.name == name)
-}
-
 pub(super) fn region_safe(cx: &mut SafeCx<'_>, f: &MirFunction) -> bool {
     let key = (f.def, f.instance.clone());
     cx.memo.get(&key).copied().unwrap_or(false)
@@ -289,7 +284,7 @@ pub(super) fn rvalue_region_safe(cx: &mut SafeCx<'_>, rv: &Rvalue) -> bool {
             let Some(layout) = cx.mir.layouts.get(*ty) else {
                 return false;
             };
-            if has_del(cx.mir, &layout.name) {
+            if layout.has_destructor() {
                 return false;
             }
             if let Some(ctor) = ctor {
@@ -313,7 +308,7 @@ pub(super) fn rvalue_region_safe(cx: &mut SafeCx<'_>, rv: &Rvalue) -> bool {
                     .mir
                     .layouts
                     .union(*ty)
-                    .is_none_or(|u| !has_del(cx.mir, &u.name))
+                    .is_none_or(|u| !u.has_destructor())
         }
         Rvalue::ArrayNew { .. }
         | Rvalue::ArrayLit { .. }

@@ -1,0 +1,33 @@
+import system;
+
+let destroyed: int = 0;
+
+class Box<T> {
+    public value: T;
+    public constructor(value: T) { this.value = value; }
+    del() { destroyed = destroyed + 1; }
+}
+
+class Plain {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+}
+
+fun Plain_del(item: Plain): void { destroyed = destroyed + item.value; }
+
+@noinline
+fun exercise(): void {
+    let number = Box<int>(42);
+    let text = Box<string>("typed");
+    let plain = Plain(7);
+    System.println(number.value);
+    System.println(text.value);
+    System.println(plain.value);
+}
+
+fun main() {
+    let before = Debug.live_objects;
+    exercise();
+    System.println(destroyed);
+    System.println(Debug.live_objects - before);
+}

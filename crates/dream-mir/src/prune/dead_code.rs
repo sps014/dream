@@ -451,7 +451,7 @@ fn prune_functions(mir: &mut Mir) {
             }
             // An interface call may dynamically reach the concrete method of *any* class that
             // implements that interface. Keep each such `{Class}_{method}` implementation alive
-            // (by name, like the RC-runtime-only `_del`/`_to_string` helpers).
+            // (`to_string` is likewise generated separately from ordinary call edges).
             for (iface_id, slot) in iface_uses {
                 for imp in &mir.interfaces.impls {
                     for (id, symbols) in &imp.entries {
@@ -478,11 +478,14 @@ fn prune_functions(mir: &mut Mir) {
             }
             let mut field_tys = Vec::new();
             let mut names = Vec::new();
+            let mut destructors = Vec::new();
             if let Some(l) = mir.layouts.structs.get(&ty) {
+                destructors.extend(l.destructor);
                 names.push(l.name.clone());
                 field_tys.extend(l.fields.iter().map(|f| f.ty));
             }
             if let Some(l) = mir.layouts.unions.get(&ty) {
+                destructors.extend(l.destructor);
                 names.push(l.name.clone());
                 field_tys.extend(
                     l.variants
@@ -491,11 +494,17 @@ fn prune_functions(mir: &mut Mir) {
                 );
             }
             for name in names {
-                for sym in [format!("{}_del", name), format!("{}_to_string", name)] {
-                    if let Some(&idx) = by_name.get(sym.as_str()) {
-                        if !reachable.contains(&idx) {
-                            worklist.push(idx);
-                        }
+                let sym = format!("{}_to_string", name);
+                if let Some(&idx) = by_name.get(sym.as_str()) {
+                    if !reachable.contains(&idx) {
+                        worklist.push(idx);
+                    }
+                }
+            }
+            for def in destructors {
+                if let Some(&idx) = index.get(&(def, vec![])) {
+                    if !reachable.contains(&idx) {
+                        worklist.push(idx);
                     }
                 }
             }

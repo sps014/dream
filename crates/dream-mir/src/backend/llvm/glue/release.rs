@@ -137,9 +137,10 @@ impl<'l, 'a> Fx<'l, 'a> {
         });
     }
 
-    fn del_call(&mut self, p: &V, name: &str) {
+    fn del_call(&mut self, p: &V, destructor: Option<dream_types::DefId>) {
         self.call("dream_weak_prepare_destroy", std::slice::from_ref(p));
-        if let Some(del) = del_symbol(&self.l.cx, name) {
+        if let Some(def) = destructor {
+            let del = del_symbol(&self.l.cx, def);
             self.call("dream_rc_revive", std::slice::from_ref(p));
             self.call(&del, std::slice::from_ref(p));
         }
@@ -321,7 +322,7 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
         let mut fx = glue(l, &tail_name);
         let p = fx.arg(0);
         fx.maybe_defer(&p, &c_ident(&format!("destroy_{}", layout.name)));
-        fx.del_call(&p, &layout.name);
+        fx.del_call(&p, layout.destructor);
         for (i, d) in drops.into_iter().enumerate() {
             if Some(i) != tail {
                 fx.field_drop_code(&p, d);
@@ -415,7 +416,7 @@ fn emit_destroys(l: &mut Lcx<'_>, n: &Names) {
         fx.ret_if_null(&p);
         fx.immortal_ret(&p);
         fx.maybe_defer(&p, &name);
-        fx.del_call(&p, &layout.name);
+        fx.del_call(&p, layout.destructor);
         for (i, d) in drops.into_iter().enumerate() {
             if Some(i) != tail {
                 fx.field_drop_code(&p, d);

@@ -171,7 +171,7 @@ pub(crate) fn canonical_maps(cx: &Cx<'_>) -> CanonMaps {
     let mut rel: Vec<(String, TypeId, String)> = Vec::new();
     let mut des: Vec<(String, TypeId, String)> = Vec::new();
     for (ty, layout) in &cx.native.structs {
-        if has_del(cx, &layout.name) {
+        if layout.has_destructor() {
             continue;
         }
         let key = struct_profile_key(cx, layout);
@@ -228,18 +228,15 @@ fn redirects(cands: Vec<(String, TypeId, String)>) -> HashMap<TypeId, String> {
     out
 }
 
-pub(crate) fn has_del(cx: &Cx<'_>, name: &str) -> bool {
-    find_del(cx, name).is_some()
-}
-
-pub(crate) fn find_del<'m>(cx: &Cx<'m>, name: &str) -> Option<&'m crate::MirFunction> {
-    let del = format!("{name}_del");
-    cx.mir.functions.iter().find(|f| f.name == del)
-}
-
 /// The `del` symbol a type's last drop calls (after reviving the object), when it has one.
-pub(crate) fn del_symbol(cx: &Cx<'_>, name: &str) -> Option<String> {
-    find_del(cx, name).map(|f| c_ident(&func_symbol(f)))
+pub(crate) fn del_symbol(cx: &Cx<'_>, def: dream_types::DefId) -> String {
+    let function = cx
+        .mir
+        .functions
+        .iter()
+        .find(|f| f.def == def && f.instance.is_empty())
+        .unwrap_or_else(|| crate::internal_error!("resolved destructor missing from MIR"));
+    c_ident(&func_symbol(function))
 }
 
 fn field_flag(cx: &Cx<'_>, f: &dream_hir::FieldLayout) -> &'static str {
@@ -283,11 +280,19 @@ pub(crate) enum FieldDrop {
     None,
     /// Unowned slots live in the weak registry (registered on store); destroying the holder
     /// must unregister them or a later clear of the target writes into freed memory.
-    Unregister { offset: u32 },
+    Unregister {
+        offset: u32,
+    },
     /// An inline value struct/union: walk its own reference fields.
-    Value { offset: u32, ty: TypeId },
+    Value {
+        offset: u32,
+        ty: TypeId,
+    },
     /// A strong reference: `destroy_*` when uniquely owned, else `release_*`.
-    Rc { offset: u32, ty: TypeId },
+    Rc {
+        offset: u32,
+        ty: TypeId,
+    },
 }
 
 pub(crate) fn field_drop(cx: &Cx<'_>, f: &dream_hir::FieldLayout, in_union: bool) -> FieldDrop {
@@ -356,7 +361,7 @@ pub(crate) fn self_tail_field(
     has_teardown: &[bool],
     destroy: &str,
 ) -> Option<usize> {
-    if has_del(cx, &layout.name) {
+    if layout.has_destructor() {
         return None;
     }
     let i = has_teardown.iter().rposition(|d| *d)?;

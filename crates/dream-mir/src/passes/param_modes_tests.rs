@@ -4,7 +4,9 @@
 
 use super::{ModulePass, ParamModes};
 use crate::build::FunctionBuilder;
-use crate::{Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use crate::{
+    Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
+};
 use dream_hir::{LayoutTable, TypeLayout};
 use dream_types::{DefId, TypeId, TypeInterner};
 
@@ -129,7 +131,12 @@ fn site_takes(mir: &Mir) -> Vec<bool> {
 #[test]
 fn read_only_param_and_its_call_sites_flip_to_borrow() {
     let t = types();
-    let mir = run(&t, callee_fn(&t, |_, _, _| {}), caller_fn(&t, false), vec![]);
+    let mir = run(
+        &t,
+        callee_fn(&t, |_, _, _| {}),
+        caller_fn(&t, false),
+        vec![],
+    );
     assert!(!param_take(&mir, 0));
     assert!(!param_take(&mir, 1));
     assert_eq!(site_takes(&mir), vec![false, false]);
@@ -169,12 +176,18 @@ fn slot_argument_blocks_a_callee_that_overwrites_its_owner() {
 
 #[test]
 fn del_on_the_param_graph_keeps_the_sink() {
-    let t = types();
+    let mut t = types();
+    t.layouts.structs.get_mut(&t.node).unwrap().destructor = Some(DefId(30));
     let mut b = FunctionBuilder::new("Node_del", t.i.void());
     b.set_def(DefId(30), vec![]);
     b.new_param(t.node, Some("this".into()));
     b.terminate(Terminator::Return(None));
-    let mir = run(&t, callee_fn(&t, |_, _, _| {}), caller_fn(&t, false), vec![b.finish()]);
+    let mir = run(
+        &t,
+        callee_fn(&t, |_, _, _| {}),
+        caller_fn(&t, false),
+        vec![b.finish()],
+    );
     assert!(param_take(&mir, 1));
 }
 

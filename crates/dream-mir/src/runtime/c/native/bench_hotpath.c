@@ -25,6 +25,13 @@ static uint64_t ns_now(void) {
 }
 
 /* Standalone benchmarks have no generated function table or host executable. */
+void dream_callback_drain(void) {}
+int dream_callback_pending(void) { return 0; }
+void dream_callback_set_waker(void (*wake)(void *), void *context) {
+    (void)wake;
+    (void)context;
+}
+
 void *dream_ft_get(int32_t index) {
     (void)index;
     dream_panic(dream_utf8_to_string("benchmark cannot invoke a generated async poll"));

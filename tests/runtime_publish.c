@@ -8,6 +8,13 @@
 void dream_release_object(dream_ptr ptr) { dream_release(ptr); }
 void dream_release_closure_env(dream_ptr ptr) { dream_release(ptr); }
 void dream_thread_attach(void) {}
+void dream_callback_drain(void) {}
+void dream_callback_owner_finish(void) {}
+int dream_callback_pending(void) { return 0; }
+void dream_callback_set_waker(void (*wake)(void *), void *context) {
+    (void)wake;
+    (void)context;
+}
 void dream_future_fini(dream_ptr ptr) {
     (void)ptr;
     assert(!"publication fixture contains no futures");

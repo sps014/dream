@@ -145,6 +145,15 @@ Snapshots land in `<output>.mir/<NN>-<pass>.mir`, numbered so lexicographic orde
 
 `run_late_module_passes` checks the final module in debug builds or when `DREAM_VERIFY_MIR=1` (including release CI). Violations are ICEs. CFG targets are checked before dataflow. A finite may-dead analysis follows branches and backedges, rejecting reads or double releases after `Release` for conservative single-token locals (never retained, stored, passed, or a parameter).
 
+Closed retained alias families with one allocation site also receive an independent exact-path
+balance check. Copies, moves, null rebinding and scalar inspection preserve the family's count;
+each retain adds a token, each release consumes one, and a return forwards one. Joins preserve
+all incoming balances, and allocation-site re-entry requires the previous generation to be dead.
+Positive-balance cycles are rejected once the live count exceeds the birth plus all static retains,
+so balanced loops converge without an iteration cap. Parameters, cursors, calls, container handoffs,
+async functions and regions remain excluded from this check; pointer equality alone cannot prove
+their ownership transfers.
+
 Region depth must agree at every join; leaves cannot underflow, and exits or suspension cannot
 carry active regions. Direct managed allocations and local copy/cast/move aliases carry region
 origins across the CFG, so reads after a rewind are rejected. Niche union wrapping/extraction
@@ -165,4 +174,4 @@ The late escaped-region guard conservatively checks managed definitions inside i
 2. Operands are atomic (local/global/const) — no nested computation hides in an operand.
 3. Every `Local` has a `LocalDecl` with a valid `TypeId`.
 4. The CFG is **reducible** (Dream cannot express `goto` spaghetti).
-5. RC is balanced (every retained reference is released on every path) after `RcInsertion`; `verify/` checks the conservative single-token subset across the CFG, not complete shared-token balance.
+5. RC is balanced (every retained reference is released on every path) after `RcInsertion`; `verify/` checks conservative single-token locals and closed retained alias families across the CFG, not complete shared-token balance.

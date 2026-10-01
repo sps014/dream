@@ -1,21 +1,25 @@
 //! Final MIR validation: CFG structure, token death and balanced allocation regions.
 //! Enabled in debug builds or with DREAM_VERIFY_MIR=1. Violations are compiler bugs.
 //!
-//! Ordinary RC path checks retain the conservative single-token eligibility proof.
-//! Opaque handoffs and shared alias classes require richer ownership facts before
-//! their complete token balance can be verified.
+//! RC path checks cover single-token locals and closed retained alias families.
+//! Opaque handoffs require richer ownership facts before complete token balance
+//! can be verified.
 
 mod operands;
 mod ownership;
 mod region_values;
 mod regions;
 mod returns;
+mod shared_tokens;
 
 #[cfg(test)]
 mod tests;
 
 #[cfg(test)]
 mod return_tests;
+
+#[cfg(test)]
+mod shared_token_tests;
 
 use crate::{Mir, MirFunction};
 use dream_types::TypeInterner;
@@ -61,7 +65,11 @@ pub fn verify_function(f: &MirFunction, interner: &TypeInterner) -> Vec<Violatio
     verify_with_returns(f, interner, &returns::Returns::new())
 }
 
-fn verify_with_returns(f: &MirFunction, interner: &TypeInterner, returns: &returns::Returns) -> Vec<Violation> {
+fn verify_with_returns(
+    f: &MirFunction,
+    interner: &TypeInterner,
+    returns: &returns::Returns,
+) -> Vec<Violation> {
     let mut out = Vec::new();
     for (bi, block) in f.blocks.iter().enumerate() {
         ownership::check_rc_types(f, interner, bi, block, &mut out);
@@ -70,6 +78,7 @@ fn verify_with_returns(f: &MirFunction, interner: &TypeInterner, returns: &retur
         return out;
     }
     ownership::check_paths(f, &mut out);
+    shared_tokens::check(f, interner, &mut out);
     regions::check(f, interner, returns, &mut out);
     out
 }

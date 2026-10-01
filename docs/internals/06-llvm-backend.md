@@ -110,6 +110,12 @@ that table, and a missing entry is an ICE.
   relative to the payload are unchanged. Array/string element counts remain language `int`.
 - **Locks** pass the object identity to the native runtime's per-object registry, whose entry is
   removed before heap recycling. WASM passes the address of the in-object lock word instead.
+- **Managed stores** publish new children before installing them in shared fields or arrays.
+  Inline structs and active value-union payloads use the same typed owned-reference walk as
+  retain/drop glue; weak and unowned fields are excluded. Private heap owners skip the barrier.
+  Raw/ref interiors and globals have no safe owning header, so their children are conservatively
+  published once workers exist. Before the first worker, its initial graph handoff supplies the
+  publication. This does not change MIR's retain/release or move decisions.
 - **String literals** are interned into `constant` heap-object blocks (`__ds<n>_blk`: header plus
   UTF-16 payload). The runtime never writes an immortal block, so `constant` is sound.
 - **Runtime units** are C under `crates/dream-mir/src/runtime/c/` (`wasm32/` for the wasm32 guest,

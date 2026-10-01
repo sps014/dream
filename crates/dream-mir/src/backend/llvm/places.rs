@@ -18,6 +18,7 @@ use dream_types::{TyKind, TypeId};
 /// Array payload elements sit at `data + 4 + i * es`, so nothing wider than 4 is guaranteed.
 pub(super) const ELEM_ALIGN: u32 = 4;
 
+
 impl<'l, 'a> Fx<'l, 'a> {
     // ---- locals and globals -------------------------------------------------------------------
 
@@ -132,7 +133,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         (addr, align_at(&self.h(), off as i64).min(cap).max(1))
     }
 
-    fn ptr_value(&mut self, addr: &Value) -> V {
+    pub(super) fn ptr_value(&mut self, addr: &Value) -> V {
         self.as_ref(&V::s(addr.clone()))
     }
 
@@ -260,6 +261,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let addr = self.index_addr(*base, index, es, *unchecked);
                 if self.is_value(ety) {
                     let src = self.ptr(&rhs);
+                    self.publish_store(place, ety, &rhs);
                     self.memcpy(&addr, &src, &Value::i64(es as i64));
                     if rvalue_allocates(rv) && !self.is_buffer_result(rv) {
                         self.call("dream_free", &[rhs]);
@@ -267,6 +269,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     return;
                 }
                 let m = mem_ty(&self.l.cx, ety);
+                self.publish_store(place, ety, &rhs);
                 if !realloc_self_store(place, rv) && self.interner.is_reference(ety) {
                     self.rc_store_ty(ety, &addr, &rhs, rv, ELEM_ALIGN);
                     return;
@@ -276,6 +279,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             Place::Deref { ptr, elem_ty } => {
                 let p = self.read_local(*ptr);
                 let dst = self.ptr(&p);
+                self.publish_store(place, *elem_ty, &rhs);
                 if self.is_value(*elem_ty) {
                     let size = elem_size(&self.l.cx, *elem_ty);
                     let src = self.ptr(&rhs);
@@ -290,6 +294,7 @@ impl<'l, 'a> Fx<'l, 'a> {
 
     fn store_global(&mut self, g: Global, place: &Place, rv: &Rvalue, rhs: V) {
         let ty = self.global_ty(g);
+        self.publish_store(place, ty, &rhs);
         if self.is_value(ty) {
             let alias = matches!(rv, Rvalue::Use(Operand::Copy(Place::Global(src))) if *src == g);
             let dest = self.read_global(g);
@@ -319,6 +324,9 @@ impl<'l, 'a> Fx<'l, 'a> {
             .cloned()
             .unwrap_or_else(|| crate::internal_error!("missing field {field} on type {ty:?}"));
         let (slot, align) = self.field_addr(base, fld.offset);
+        if !fld.is_unowned && !fld.is_weak {
+            self.publish_store(place, fld.ty, &rhs);
+        }
         if self.is_value(fld.ty) {
             let alias = matches!(
                 rv,
@@ -471,95 +479,4 @@ impl<'l, 'a> Fx<'l, 'a> {
         });
     }
 
-    /// Copies a value struct into `dest`, dropping the old contents when asked and taking the
-    /// nested references (a fresh heap box is freed instead: its references move with the bytes).
-    pub fn memcpy_value(
-        &mut self,
-        rv: &Rvalue,
-        rhs: &V,
-        ty: TypeId,
-        dest: &V,
-        retain_copy: bool,
-        drop_old: bool,
-    ) {
-        let size = elem_size(&self.l.cx, ty) as i64;
-        if drop_old {
-            self.value_refs(ty, dest, false);
-        }
-        let (d, s) = (self.ptr(dest), self.ptr(rhs));
-        self.memcpy(&d, &s, &Value::i64(size));
-        if rvalue_allocates(rv) {
-            if !self.is_buffer_result(rv) {
-                self.call("dream_free", std::slice::from_ref(rhs));
-            }
-        } else if retain_copy {
-            self.value_refs(ty, dest, true);
-        }
-    }
-
-    /// Retains or releases every owned reference nested in the value at `base`.
-    pub fn value_refs(&mut self, ty: TypeId, base: &V, retain: bool) {
-        if let Some(layout) = self.l.cx.nstruct(ty).cloned() {
-            for field in &layout.fields {
-                self.value_field_ref(field, base, retain);
-            }
-            return;
-        }
-        let Some(u) = self.l.cx.nunion(ty).cloned() else {
-            return;
-        };
-        let bp = self.ptr(base);
-        let disc = self.load_ty(Ty::I32, &bp, 4, false);
-        let join = self.w.new_block("vr.join");
-        let mut arms = Vec::new();
-        let mut bodies = Vec::new();
-        for variant in &u.variants {
-            let owns = variant
-                .fields
-                .iter()
-                .any(|f| !(f.is_weak || f.is_unowned) && (self.is_value(f.ty) || self.is_rc(f.ty)));
-            if !owns {
-                continue;
-            }
-            let b = self.w.new_block("vr.arm");
-            arms.push((variant.discriminant as i128, b));
-            bodies.push((b, variant.clone()));
-        }
-        if arms.is_empty() {
-            self.w.br(join);
-            self.w.switch_to(join);
-            return;
-        }
-        self.w.switch(&disc.v, join, &arms);
-        for (b, variant) in bodies {
-            self.w.switch_to(b);
-            for field in &variant.fields {
-                self.value_field_ref(field, base, retain);
-            }
-            self.w.br(join);
-        }
-        self.w.switch_to(join);
-    }
-
-    fn value_field_ref(&mut self, field: &dream_hir::FieldLayout, base: &V, retain: bool) {
-        if field.is_weak || field.is_unowned {
-            return;
-        }
-        let off = field.offset as i64;
-        if self.is_value(field.ty) {
-            let at = self.addr(base, off);
-            let at = self.ptr_value(&at);
-            self.value_refs(field.ty, &at, retain);
-        } else if self.is_rc(field.ty) {
-            let at = self.addr(base, off);
-            let v = self.load_ty(self.h(), &at, ELEM_ALIGN, true);
-            if retain {
-                let sym = retain_sym(&self.l.cx, field.ty);
-                self.call(sym, &[v]);
-            } else {
-                let sym = release_sym(&self.l.cx, field.ty);
-                self.call(&sym, &[v]);
-            }
-        }
-    }
 }

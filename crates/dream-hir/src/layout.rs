@@ -7,7 +7,7 @@
 //! struct lays its fields out sequentially), so the resolved field index used in
 //! [`super::HPlace::Field`] indexes straight into [`TypeLayout::fields`].
 
-use dream_types::{TyKind, TypeId, TypeInterner};
+use dream_types::{DefId, TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
 
 /// The in-memory size and alignment (bytes) of a scalar/reference value of `ty`. Reference types
@@ -45,6 +45,8 @@ pub struct FieldLayout {
 /// The full layout of one nominal type.
 #[derive(Debug, Clone, Default)]
 pub struct TypeLayout {
+    /// Resolved user destructor, recorded by semantic analysis rather than inferred from names.
+    pub destructor: Option<DefId>,
     /// The type's source display name (e.g. `Point`), used by the default `to_string`.
     pub name: String,
     /// Fields in declaration (== offset) order.
@@ -59,6 +61,9 @@ pub struct TypeLayout {
 }
 
 impl TypeLayout {
+    pub fn has_destructor(&self) -> bool {
+        self.destructor.is_some()
+    }
     /// Builds a layout from a struct's `(field name, field type)` pairs in declaration order,
     /// assigning aligned offsets. `name` is the struct's display name.
     pub fn from_fields(
@@ -87,6 +92,7 @@ impl TypeLayout {
             fields,
             size: align_up(offset, max_align),
             packed: false,
+            destructor: None,
         }
     }
 
@@ -116,6 +122,7 @@ impl TypeLayout {
             fields,
             size: offset,
             packed: true,
+            destructor: None,
         }
     }
 }
@@ -146,6 +153,7 @@ pub struct UnionVariant {
 /// variant, so any variant fits and the discriminant alone identifies the active one.
 #[derive(Debug, Clone, Default)]
 pub struct UnionLayout {
+    pub destructor: Option<DefId>,
     /// The union's source display name, used to name its generated `$<Union>_to_string`.
     pub name: String,
     pub variants: Vec<UnionVariant>,
@@ -154,6 +162,9 @@ pub struct UnionLayout {
 }
 
 impl UnionLayout {
+    pub fn has_destructor(&self) -> bool {
+        self.destructor.is_some()
+    }
     /// Looks up a variant by its source name (e.g. `"Some"`, `"None"`).
     pub fn variant(&self, name: &str) -> Option<&UnionVariant> {
         self.variants.iter().find(|v| v.name == name)

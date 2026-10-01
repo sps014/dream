@@ -154,18 +154,24 @@ public class Engine {
     public running: bool;
 
     public fun start(): void {
-        let we = Weak.make(this);
+        let we = Weak<Engine>(this);
         this.on_tick = () => {
-            if we.is_dead() { return; }   // engine freed
-            we.get().do_tick();
+            switch (we.get()) {
+                Some(engine) => engine.do_tick(),
+                None => {},
+            }
         };
     }
     public fun do_tick(): void { /* ... */ }
 }
 ```
 
-- `Weak.make(obj)` does not increment the target's refcount.
+- `Weak<T>(obj)` does not increment the target's refcount.
 - When the target drops, `is_dead()` flips to true automatically.
+- `get()` returns `Option<T>`, retaining a live target atomically. An `is_dead()`
+  check followed by a separate load cannot protect against concurrent destruction.
+- `T : class` requires a reference type; unmanaged scalar values cannot be weak targets.
+- `release()` empties the handle and is safe to call repeatedly.
 - Capture the handle in closures — not the raw object.
 
 ## Container safety

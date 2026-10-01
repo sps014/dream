@@ -112,6 +112,7 @@ const NATIVE_CORE_C: &[&str] = &[
     "heap.c",
     "heap_maps.c",
     "publish.c",
+    "region.c",
     "strings.c",
     "ffi.c",
     "object.c",
@@ -186,6 +187,7 @@ pub fn wasm32_libc_c() -> PathBuf {
 const WASM32_CORE_C: &[&str] = &[
     "wasm32/heap.c",
     "native/publish.c",
+    "native/region.c",
     "wasm32/libc.c",
     "wasm32/g0.c",
     "wasm32/g0.s",

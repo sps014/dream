@@ -1,0 +1,54 @@
+import system;
+
+@runtime("dream_region_enter")
+extern fun enter(): void;
+@runtime("dream_region_leave")
+extern fun leave(): void;
+
+@allow_cycle
+class TreeNode {
+    public left: Option<TreeNode>;
+    public right: Option<TreeNode>;
+    public constructor(left: Option<TreeNode>, right: Option<TreeNode>) {
+        this.left = left;
+        this.right = right;
+    }
+}
+
+@noinline
+fun make_tree(depth: int): Option<TreeNode> {
+    if depth <= 0 { return Option.None; }
+    return Option.Some(TreeNode(make_tree(depth - 1), make_tree(depth - 1)));
+}
+
+fun count(borrow node: Option<TreeNode>): int {
+    return switch (node) {
+        Some(value) => 1 + count(value.left) + count(value.right),
+        None => 0,
+    };
+}
+
+@noinline
+fun nested(depth: int): int {
+    if depth == 0 { return 0; }
+    enter();
+    let total = 0;
+    if true {
+        let leaf = TreeNode(Option.None, Option.None);
+        total = count(Option.Some(leaf)) + nested(depth - 1);
+    }
+    leave();
+    return total;
+}
+
+fun main(): void {
+    let base = Debug.live_objects;
+    enter();
+    if true {
+        let tree = make_tree(21);
+        System.println(count(tree));
+    }
+    leave();
+    System.println(nested(20));
+    System.println(Debug.live_objects == base);
+}

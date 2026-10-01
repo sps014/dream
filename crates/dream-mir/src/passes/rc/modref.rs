@@ -67,7 +67,11 @@ impl ModRef {
     }
 
     /// True if a stored field slot is in `fields`, or is any field of a type in `any_field_of`.
-    pub(crate) fn hits(&self, fields: &BTreeSet<(TypeId, u32)>, any_field_of: &BTreeSet<TypeId>) -> bool {
+    pub(crate) fn hits(
+        &self,
+        fields: &BTreeSet<(TypeId, u32)>,
+        any_field_of: &BTreeSet<TypeId>,
+    ) -> bool {
         match self {
             ModRef::Top => true,
             ModRef::Known(k) => k
@@ -110,8 +114,8 @@ pub(crate) struct ModRefTable {
     del: ModRef,
     /// `(iface id, method slot)` → join of the concrete methods. Missing slots are [`ModRef::Top`].
     ifaces: IndexMap<(usize, usize), ModRef>,
-    /// Layout names with a `<Name>_del`; `None` (an uncomputed table) means any type may.
-    del_types: Option<BTreeSet<String>>,
+    /// Resolved destructor-bearing types; `None` (an uncomputed table) means any type may.
+    del_types: Option<BTreeSet<TypeId>>,
 }
 
 impl ModRefTable {
@@ -119,7 +123,9 @@ impl ModRefTable {
         let intrinsics: IndexMap<DefId, ModRef> = mir
             .intrinsics
             .iter()
-            .filter_map(|(def, key)| intrinsic_summary(IntrinsicOp::from_key(key)?).map(|s| (*def, s)))
+            .filter_map(|(def, key)| {
+                intrinsic_summary(IntrinsicOp::from_key(key)?).map(|s| (*def, s))
+            })
             .chain(
                 mir.imports
                     .iter()
@@ -140,9 +146,16 @@ impl ModRefTable {
             del: ModRef::default(),
             ifaces: IndexMap::new(),
             del_types: Some(
-                mir.functions
+                mir.layouts
+                    .structs
                     .iter()
-                    .filter_map(|f| f.name.strip_suffix("_del").map(str::to_string))
+                    .filter_map(|(ty, layout)| layout.has_destructor().then_some(*ty))
+                    .chain(
+                        mir.layouts
+                            .unions
+                            .iter()
+                            .filter_map(|(ty, layout)| layout.has_destructor().then_some(*ty)),
+                    )
                     .collect(),
             ),
         };
@@ -173,8 +186,20 @@ impl ModRefTable {
             }
         }
         let mut del = ModRef::default();
+        let destructor_defs: BTreeSet<_> = mir
+            .layouts
+            .structs
+            .values()
+            .filter_map(|layout| layout.destructor)
+            .chain(
+                mir.layouts
+                    .unions
+                    .values()
+                    .filter_map(|layout| layout.destructor),
+            )
+            .collect();
         for f in &mir.functions {
-            if f.name.ends_with("_del") {
+            if destructor_defs.contains(&f.def) {
                 del.join(&table.call_def(f.def, &f.instance));
             }
         }
@@ -271,7 +296,12 @@ impl ModRefTable {
 
     /// Whether freeing a `ty` graph may run a `del` (walking strong fields; opaque types may
     /// hold anything).
-    pub(crate) fn may_run_del(&self, ty: TypeId, interner: &TypeInterner, layouts: &LayoutTable) -> bool {
+    pub(crate) fn may_run_del(
+        &self,
+        ty: TypeId,
+        interner: &TypeInterner,
+        layouts: &LayoutTable,
+    ) -> bool {
         let Some(dels) = &self.del_types else {
             return true;
         };
@@ -284,11 +314,7 @@ impl ModRefTable {
             if !seen.insert(t) {
                 continue;
             }
-            let name = match layouts.get(t) {
-                Some(l) => Some(l.name.as_str()),
-                None => layouts.union(t).map(|u| u.name.as_str()),
-            };
-            if name.is_some_and(|n| dels.contains(n)) {
+            if dels.contains(&t) {
                 return true;
             }
             match strong_children(t, interner, layouts) {
@@ -507,10 +533,12 @@ fn protocol_is_builtin(ty: TypeId, interner: &TypeInterner) -> bool {
 }
 
 fn pure_math_import(imp: &dream_hir::HImport, interner: &TypeInterner) -> bool {
-    let field = if imp.field.is_empty() { &imp.name } else { &imp.field };
-    let numeric = |t: TypeId| {
-        matches!(interner.kind(t), TyKind::Prim(p) if *p != dream_types::PrimTy::String)
+    let field = if imp.field.is_empty() {
+        &imp.name
+    } else {
+        &imp.field
     };
+    let numeric = |t: TypeId| matches!(interner.kind(t), TyKind::Prim(p) if *p != dream_types::PrimTy::String);
     dream_abi::runtime_hosts::is_pure_math_env_import(&imp.module, field)
         && !imp.is_async
         && !imp.param_by_ref.iter().any(|&r| r)

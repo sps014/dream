@@ -89,6 +89,18 @@ validation during publication has no fixed mapping-count limit. Publication
 currently scans potential pointer words; type-directed traversal is planned
 alongside the compiler's typed layout metadata.
 
+### Compiler-inferred allocation regions
+
+The compiler can group a non-escaping graph with no user destructors into a
+thread-local allocation region. Regions grow by chaining chunks rather than
+imposing a fixed graph-size limit. Leaving a nested region rewinds only its own
+allocations; outer objects remain valid. Nesting beyond eight active region
+levels uses ordinary ARC-managed heap allocation instead of aborting.
+
+Native and WebAssembly builds use the same region allocator, with target-specific
+heap backing and accounting. This is an internal optimization, not a user-facing
+allocation API.
+
 ## Known boundaries
 
 The following are documented limitations, not silent unsoundness — each degrades to a detectable pattern or an explicit opt-out rather than memory corruption:

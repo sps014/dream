@@ -34,6 +34,7 @@ impl StructFieldInfo {
 
 #[derive(Debug, Clone)]
 pub struct StructInfo {
+    pub has_destructor: bool,
     pub name: String,
     /// Insertion-ordered (declaration order) so field-release emission is deterministic. Field
     /// emission that must follow byte-offset order sorts these by their recorded `offset`.
@@ -140,6 +141,10 @@ impl StructTable {
         self.structs.insert(
             name.clone(),
             StructInfo {
+                has_destructor: struct_decl
+                    .methods
+                    .iter()
+                    .any(|method| method.name.text == dream_syntax::nodes::types::DESTRUCTOR_NAME),
                 name,
                 fields,
                 size: current_offset,
@@ -170,6 +175,7 @@ impl StructTable {
         self.structs.insert(
             name.to_string(),
             StructInfo {
+                has_destructor: false,
                 name: name.to_string(),
                 fields: IndexMap::new(),
                 size,

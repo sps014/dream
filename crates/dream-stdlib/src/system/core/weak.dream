@@ -6,11 +6,11 @@ module system.core;
 // callback stored on an object that must call back into that same object:
 //
 // ```dream
-// let wb = Weak.make(engine);
+// let wb = Weak<Engine>(engine);
 // engine.on_tick = () => {
-//     if !wb.is_dead() {
-//         let e = wb.get();   // retained for immediate use
-//         e.tick();
+//     switch (wb.get()) {
+//         Some(e) => e.tick(),
+//         None => {},
 //     }
 // };
 // ```
@@ -22,7 +22,7 @@ module system.core;
 // true and stays true. The registration is removed when either side dies (target free or
 // handle drop), so nothing dangles.
 
-public class Weak<T> {
+public class Weak<T : class> {
     /// Registered slot-box pointer (raw; owned by the weak registry).
     slot: long;
 
@@ -30,29 +30,25 @@ public class Weak<T> {
         this.slot = Weak.bind(target_obj);
     }
 
-    /// Convenience constructor.
-    public static fun make(target_obj: T): Weak<T> {
-        return Weak<T>(target_obj);
-    }
-
     /// True once the tracked object has been freed.
     public fun is_dead(): bool {
         return Weak<T>.dead(this.slot);
     }
 
-    /// The tracked object, retained for the caller. Call `is_dead()` first; loading a dead
-    /// handle is a fatal error rather than silent corruption.
-    public fun get(): T {
+    /// Atomically obtains an owning reference, or None if destruction won the race.
+    public fun get(): Option<T> {
         return Weak<T>.load(this.slot);
     }
 
     /// Removes the registration early (optional — happens automatically when either side dies).
     public fun release(): void {
-        Weak<T>.release_raw(this.slot);
+        let slot = this.slot;
+        this.slot = 0;
+        Weak<T>.release_raw(slot);
     }
 
     del() {
-        Weak<T>.release_raw(this.slot);
+        this.release();
     }
 
     @runtime("weakBind")
@@ -62,7 +58,7 @@ public class Weak<T> {
     static extern fun dead(slot: long): bool;
 
     @runtime("weakLoad")
-    static extern fun load(slot: long): T;
+    static extern fun load(slot: long): Option<T>;
 
     @runtime("weakReleaseRaw")
     static extern fun release_raw(slot: long): void;

@@ -198,11 +198,24 @@ impl<'a> Analyzer<'a> {
             self.type_ctx.interner.set_value_layout(*ty, sz.0, sz.1);
         }
         for (ty, name, packed, defs) in lowered {
-            let layout = if packed {
+            let destructor = if self
+                .struct_table
+                .get_struct(&name)
+                .is_some_and(|info| info.has_destructor)
+            {
+                self.type_ctx.defs.lookup(
+                    DefKind::Function,
+                    &dream_types::method_fn(&name, dream_syntax::nodes::types::DESTRUCTOR_NAME),
+                )
+            } else {
+                None
+            };
+            let mut layout = if packed {
                 TypeLayout::from_fields_packed(&self.type_ctx.interner, name, defs)
             } else {
                 TypeLayout::from_fields(&self.type_ctx.interner, name, defs)
             };
+            layout.destructor = destructor;
             layouts.insert(ty, layout);
         }
         for (ty, elems) in tuple_defs {
@@ -266,6 +279,7 @@ impl<'a> Analyzer<'a> {
             layouts.insert_union(
                 ty,
                 UnionLayout {
+                    destructor: None,
                     name,
                     variants: vs,
                     size,

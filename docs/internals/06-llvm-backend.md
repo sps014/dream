@@ -51,6 +51,11 @@ guarded by a file lock so concurrent compiles share one build.
 `backend/shared/` holds codegen *policy* the writers consume: native layouts, symbol and string
 tables, ARC glue selection, protocol routing, guarded devirtualization, JS marshaling rules.
 
+Semantic layouts carry `destructor: Option<DefId>` for each nominal type. MIR pruning, region
+safety, ARC effect analysis and allocation promotion consume this fact; native relayout preserves
+it. Drop glue resolves the stored identity to its emitted function symbol, never a `{name}_del`
+search. A generic class specialization has its own resolved destructor definition.
+
 ### Control flow
 
 Every MIR block becomes one LLVM block, and every MIR terminator becomes one LLVM terminator, so

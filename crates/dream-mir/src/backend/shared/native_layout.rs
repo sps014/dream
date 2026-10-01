@@ -147,6 +147,7 @@ fn relayout_struct(
         fields,
         size: align_up(offset, max_align),
         packed: false,
+        destructor: wasm.destructor,
     })
 }
 
@@ -174,6 +175,7 @@ fn pack_struct(
         fields,
         size: offset,
         packed: true,
+        destructor: wasm.destructor,
     })
 }
 
@@ -211,6 +213,7 @@ fn relayout_union(
         });
     }
     UnionLayout {
+        destructor: wasm.destructor,
         name: wasm.name.clone(),
         variants,
         size,

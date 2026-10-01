@@ -17,7 +17,9 @@ use crate::passes::licm::{stmt_reads, terminator_reads};
 use crate::passes::ModulePass;
 use crate::rc_store::store_adopts;
 use crate::visit::{stmt_operands_mut, terminator_operands_mut};
-use crate::{Const, Local, LocalDecl, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use crate::{
+    Const, Local, LocalDecl, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
+};
 use dream_hir::LayoutTable;
 use dream_types::{TyKind, TypeId, TypeInterner};
 use std::collections::{BTreeMap, BTreeSet};
@@ -30,18 +32,13 @@ impl ModulePass for SroaManaged {
     }
 
     fn run(&self, mir: &mut Mir, interner: &TypeInterner) -> bool {
-        let dels: BTreeSet<String> = mir
-            .functions
-            .iter()
-            .filter_map(|f| f.name.strip_suffix("_del").map(str::to_string))
-            .collect();
         let layouts = &mir.layouts;
         let mut changed = false;
         for f in &mut mir.functions {
             if f.is_async {
                 continue;
             }
-            while promote_one(f, interner, layouts, &dels) {
+            while promote_one(f, interner, layouts) {
                 changed = true;
             }
         }
@@ -49,12 +46,7 @@ impl ModulePass for SroaManaged {
     }
 }
 
-fn promote_one(
-    f: &mut MirFunction,
-    interner: &TypeInterner,
-    layouts: &LayoutTable,
-    dels: &BTreeSet<String>,
-) -> bool {
+fn promote_one(f: &mut MirFunction, interner: &TypeInterner, layouts: &LayoutTable) -> bool {
     let esc = LocalEscape::analyze(f, interner, &ParamSummaries::default());
     let news: Vec<(Local, TypeId)> = f
         .blocks
@@ -71,7 +63,7 @@ fn promote_one(
         if esc.of(o) != Escape::No {
             continue;
         }
-        let Some(fields) = field_types(ty, interner, layouts, dels) else {
+        let Some(fields) = field_types(ty, interner, layouts) else {
             continue;
         };
         let members: BTreeSet<Local> = esc.class(o).into_iter().collect();
@@ -91,12 +83,7 @@ fn promote_one(
 }
 
 /// Every field's type, or `None` if the object must stay whole.
-fn field_types(
-    ty: TypeId,
-    interner: &TypeInterner,
-    layouts: &LayoutTable,
-    dels: &BTreeSet<String>,
-) -> Option<Vec<TypeId>> {
+fn field_types(ty: TypeId, interner: &TypeInterner, layouts: &LayoutTable) -> Option<Vec<TypeId>> {
     if !matches!(interner.kind(ty), TyKind::Struct(..))
         || interner.is_value_type(ty)
         || interner.is_shared_type(ty)
@@ -104,7 +91,7 @@ fn field_types(
         return None;
     }
     let layout = layouts.get(ty)?;
-    if dels.contains(&layout.name)
+    if layout.has_destructor()
         || layout
             .fields
             .iter()
@@ -237,9 +224,10 @@ fn transform(
                             } else {
                                 zero_for(interner, fields[i])
                             };
-                            block
-                                .stmts
-                                .push(Statement::Assign(Place::Local(p), Rvalue::Use(Operand::Const(zero))));
+                            block.stmts.push(Statement::Assign(
+                                Place::Local(p),
+                                Rvalue::Use(Operand::Const(zero)),
+                            ));
                         }
                     }
                     continue;
@@ -251,7 +239,9 @@ fn transform(
                 continue;
             };
             if !members.contains(&base) {
-                block.stmts.push(Statement::Assign(Place::Field { base, field }, rv));
+                block
+                    .stmts
+                    .push(Statement::Assign(Place::Field { base, field }, rv));
                 continue;
             }
             let p = promo[field];

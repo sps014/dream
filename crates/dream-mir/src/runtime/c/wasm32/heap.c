@@ -1,4 +1,5 @@
 #include "dream_rt_wasm32.h"
+#include "../native/include/dream_region.h"
 
 #include <limits.h>
 
@@ -11,22 +12,6 @@ int32_t live_objects;
 int32_t total_allocations;
 int32_t last_freed;
 int32_t free_list_head;
-
-#define REGION_MAX_DEPTH 8
-#define REGION_PAYLOAD (4 << 20)
-
-static int region_owns(dream_ptr ptr) {
-    int32_t p;
-    int32_t b;
-    int32_t cap;
-    if (dream_region_depth_get() <= 0 || dream_region_slab_get() == 0) {
-        return 0;
-    }
-    p = (int32_t)ptr;
-    b = dream_region_slab_get();
-    cap = dream_region_cap_get();
-    return p >= b && p < b + cap;
-}
 
 #ifdef __wasm__
 extern unsigned char __heap_base;
@@ -374,93 +359,22 @@ static dream_ptr malloc_private(int32_t size, int32_t tag) {
     return malloc_private_ex(size, tag, 1);
 }
 
-static int32_t *region_mark_off(void) {
-    int32_t p = dream_region_marks_get();
-    return (int32_t *)(uintptr_t)(uint32_t)p;
+dream_ptr dream_region_backing_malloc(int32_t size) {
+    return dream_malloc_shared(size, 0);
 }
 
-static int32_t *region_mark_nalloc(void) {
-    return region_mark_off() + REGION_MAX_DEPTH;
+dream_ptr dream_region_activate(char *block, int32_t total, int32_t tag) {
+    int32_t address = (int32_t)(uintptr_t)block;
+    i32_put(address, total);
+    return finish_block(address, tag);
 }
 
-static dream_ptr region_malloc_locked(int32_t size, int32_t tag) {
-    int32_t block;
-    int32_t total;
-    int32_t off = dream_region_off_get();
-    int32_t cap = dream_region_cap_get();
-    total = round_total(size);
-    if (off == 0) {
-        /* Payload of the slab is 16-aligned; wasm blocks must start at 4 (mod 16). */
-        off = 4;
-    }
-    if (total < 0 || off > cap - total) {
-        abort();
-    }
-    block = dream_region_slab_get() + off;
-    dream_region_off_set(off + total);
-    i32_put(block, total);
-    i32_put(block + (int32_t)HEADER_TAG_OFFSET, tag);
-    i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, dream_rc_init(tag));
-    account_alloc();
-    dream_region_nalloc_set(dream_region_nalloc_get() + 1);
-    return (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
+void dream_region_account_free(uint32_t count) {
+    account_free_n((int32_t)count);
 }
 
-void dream_region_enter(void) {
-    int32_t depth = dream_region_depth_get();
-    int32_t *off_m;
-    int32_t *n_m;
-    if (depth >= REGION_MAX_DEPTH) {
-        abort();
-    }
-    if (dream_region_marks_get() == 0) {
-        /* Native uses static mark arrays. Counting this private block as live would leave
-         * `live_objects` +1 after the region unwinds (the marks outlive the slab). */
-        dream_region_marks_set((int32_t)malloc_private_ex(REGION_MAX_DEPTH * 8, 0, 0));
-    }
-    if (depth == 0) {
-        dream_region_slab_set((int32_t)malloc_private(REGION_PAYLOAD, 0));
-        dream_region_cap_set(round_total(REGION_PAYLOAD) - (int32_t)HEAP_HEADER_SIZE);
-        dream_region_off_set(0);
-        dream_region_nalloc_set(0);
-    }
-    off_m = region_mark_off();
-    n_m = region_mark_nalloc();
-    off_m[depth] = dream_region_off_get();
-    n_m[depth] = dream_region_nalloc_get();
-    dream_region_depth_set(depth + 1);
-}
-
-void dream_region_leave(void) {
-    int32_t n;
-    int32_t depth = dream_region_depth_get();
-    int32_t *off_m;
-    int32_t *n_m;
-    dream_ptr slab;
-    if (depth <= 0) {
-        return;
-    }
-    depth -= 1;
-    dream_region_depth_set(depth);
-    off_m = region_mark_off();
-    n_m = region_mark_nalloc();
-    n = dream_region_nalloc_get() - n_m[depth];
-    if (n < 0) {
-        n = 0;
-    }
-    account_free_n(n);
-    dream_region_nalloc_set(n_m[depth]);
-    dream_region_off_set(off_m[depth]);
-    if (depth == 0) {
-        slab = (dream_ptr)dream_region_slab_get();
-        dream_region_slab_set(0);
-        dream_region_cap_set(0);
-        dream_region_off_set(0);
-        dream_region_nalloc_set(0);
-        if (slab) {
-            dream_recycle(slab);
-        }
-    }
+void dream_region_heap_mode(int active) {
+    (void)active;
 }
 
 static dream_ptr malloc_locked(int32_t size, int32_t tag) {
@@ -468,10 +382,6 @@ static dream_ptr malloc_locked(int32_t size, int32_t tag) {
     int32_t *head;
     int32_t block = 0;
     int32_t next;
-
-    if ((tag & TAG_SHARED) == 0 && dream_region_depth_get() > 0 && dream_region_slab_get() != 0) {
-        return region_malloc_locked(size, tag);
-    }
 
     size = round_total(size);
     idx = size_class(size);
@@ -522,18 +432,22 @@ void dream_pin_immortal(dream_ptr s) {
 }
 
 void dream_retain_slow(int32_t *rc) {
-    if (*rc == DREAM_RC_IMMORTAL) {
+    if (__atomic_load_n(rc, __ATOMIC_RELAXED) == DREAM_RC_IMMORTAL) {
         return;
     }
     __atomic_fetch_add(rc, 1, __ATOMIC_RELAXED);
 }
 
 int dream_rc_last_slow(int32_t *rc) {
-    int32_t v = *rc;
+    int32_t v = __atomic_load_n(rc, __ATOMIC_RELAXED);
     if (v == 0 || v == DREAM_RC_IMMORTAL) {
         return 0;
     }
-    return __atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL) == (DREAM_RC_SHARED_BIT | 1);
+    if (__atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL) == (DREAM_RC_SHARED_BIT | 1)) {
+        __atomic_store_n(rc, 0, __ATOMIC_RELAXED);
+        return 1;
+    }
+    return 0;
 }
 int32_t debug_get_heap_ptr(void) { return heap_ptr_get(); }
 /* Native parity: the probe exposes "most recent freed block" (a free-happened detector),
@@ -542,10 +456,8 @@ int32_t debug_get_free_list_head(void) { return last_freed; }
 
 __attribute__((export_name(DREAM_SYM_MALLOC)))
 dream_ptr dream_malloc(int32_t size, int32_t tag) {
-    if (dream_region_depth_get() > 0 && dream_region_slab_get() != 0) {
-        return region_malloc_locked(size, tag);
-    }
-    return malloc_private(size, tag);
+    dream_ptr pointer = dream_region_try_malloc(size, tag);
+    return pointer != 0 ? pointer : malloc_private(size, tag);
 }
 
 dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
@@ -615,7 +527,7 @@ static void recycle_locked(dream_ptr ptr) {
     int32_t block_start;
     int32_t idx;
     int32_t sz;
-    if (region_owns(ptr)) {
+    if (dream_region_owns(ptr)) {
         return;
     }
     block_start = (int32_t)ptr - (int32_t)HEAP_HEADER_SIZE;
@@ -645,7 +557,7 @@ void dream_recycle(dream_ptr ptr) {
     if (*dream_tag_word(ptr) & DREAM_TAG_WEAK_TARGET) {
         dream_weak_clear_all(ptr);
     }
-    if (region_owns(ptr)) {
+    if (dream_region_owns(ptr)) {
         return;
     }
     if (dream_tag_shared(ptr)) {
@@ -678,6 +590,7 @@ void dream_free(dream_ptr ptr) {
     /* Substring slices retain their parent; release it before the block leaves the live
      * set. Weak slots pointing at this object are reset first so `del`-time observers see
      * the cleared state (mirrors native/heap.c). */
+    dream_weak_prepare_destroy(ptr);
     dream_str_fini(ptr);
     if (dream_object_tag(ptr) == TAG_FUTURE) {
         dream_future_fini(ptr);

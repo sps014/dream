@@ -27,11 +27,6 @@ const MAX_FRAME_BYTES: u32 = 1024;
 
 pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
     let sums = ParamSummaries::compute(mir, interner);
-    let dels: BTreeSet<String> = mir
-        .functions
-        .iter()
-        .filter_map(|f| f.name.strip_suffix("_del").map(str::to_string))
-        .collect();
     let layouts = &mir.layouts;
     let mut marked = Vec::new();
     for f in &mut mir.functions {
@@ -54,7 +49,7 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
             if esc.of(*o) > Escape::Arg {
                 continue;
             }
-            let Some(fields) = releasable_fields(*ty, interner, layouts, &dels) else {
+            let Some(fields) = releasable_fields(*ty, interner, layouts) else {
                 continue;
             };
             let size = layouts.get(*ty).map_or(u32::MAX, |l| l.size);
@@ -96,7 +91,6 @@ fn releasable_fields(
     ty: TypeId,
     interner: &TypeInterner,
     layouts: &LayoutTable,
-    dels: &BTreeSet<String>,
 ) -> Option<Vec<(usize, TypeId)>> {
     if !matches!(interner.kind(ty), TyKind::Struct(..))
         || interner.is_value_type(ty)
@@ -105,7 +99,7 @@ fn releasable_fields(
         return None;
     }
     let layout = layouts.get(ty)?;
-    if dels.contains(&layout.name) {
+    if layout.has_destructor() {
         return None;
     }
     let mut out = Vec::new();
@@ -128,8 +122,10 @@ fn unmanaged(ty: TypeId, interner: &TypeInterner, layouts: &LayoutTable, depth: 
     }
     match interner.kind(ty) {
         TyKind::Prim(_) | TyKind::Enum(_) | TyKind::Void => true,
-        _ => strong_children(ty, interner, layouts)
-            .is_some_and(|cs| cs.iter().all(|&c| unmanaged(c, interner, layouts, depth + 1))),
+        _ => strong_children(ty, interner, layouts).is_some_and(|cs| {
+            cs.iter()
+                .all(|&c| unmanaged(c, interner, layouts, depth + 1))
+        }),
     }
 }
 

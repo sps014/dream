@@ -81,8 +81,6 @@ jobs:
           key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - name: Install pinned LLVM and wasi-sdk support
         run: scripts/fetch-dev-llvm.sh
-      - name: Probe GPU portability regressions
-        run: ./scripts/probe_test.sh value_temporary_sink gpu_capabilities gpu_pack_unorm gpu_error_details gpu_sample_mask_out gpu_texture_atomic_bits
       - run: ./scripts/probe_test.sh
       - run: ./scripts/probe_test.sh --node
       - name: Preserve GPU corpus diagnostics

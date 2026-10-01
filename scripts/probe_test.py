@@ -50,6 +50,11 @@ _NODE_SKIP_PREFIXES = (
     "webapi_",
 )
 _NODE_SKIP_STEMS = {
+    # These bind host libc/libm through @c; wasm32 intentionally rejects native C imports.
+    "c_array_memchr",
+    "c_option_getenv",
+    "c_qsort_callback",
+    "c_ref_out_param",
     "console_read_line",
     "process_args_basic",
     "process_usage",

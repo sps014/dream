@@ -145,7 +145,17 @@ Snapshots land in `<output>.mir/<NN>-<pass>.mir`, numbered so lexicographic orde
 
 `run_late_module_passes` checks the final module in debug builds or when `DREAM_VERIFY_MIR=1` (including release CI). Violations are ICEs. CFG targets are checked before dataflow. A finite may-dead analysis follows branches and backedges, rejecting reads or double releases after `Release` for conservative single-token locals (never retained, stored, passed, or a parameter).
 
-Region depth must agree at every join; leaves cannot underflow, and exits or suspension cannot carry active regions. Direct managed allocations and local copy/cast/move aliases carry region origins across the CFG, so reads after a rewind are rejected. Niche union wrapping/extraction preserves the payload's origin rather than inventing an allocation. These are partial proofs: complete shared-token balance, opaque call-result provenance, and publication barriers still require richer ownership facts.
+Region depth must agree at every join; leaves cannot underflow, and exits or suspension cannot
+carry active regions. Direct managed allocations and local copy/cast/move aliases carry region
+origins across the CFG, so reads after a rewind are rejected. Niche union wrapping/extraction
+preserves the payload's origin rather than inventing an allocation. Module-wide return summaries,
+keyed by definition and concrete type arguments, distinguish fresh results from parameter-derived
+results and propagate managed-child writes through direct calls. Recursive summaries converge on
+a finite may-provenance lattice without an iteration cap. Opaque calls conservatively preserve
+argument origins and potential allocations/writes. Field/index reads and managed-child stores
+preserve the containing graph's origins. These remain partial proofs: complete shared-token
+balance and more precise field/opaque-effect facts still require richer ownership information.
+Managed-child publication barriers are described in [06-llvm-backend.md](./06-llvm-backend.md).
 
 The late escaped-region guard conservatively checks managed definitions inside inferred regions, including opaque call results. Its finite CFG dataflow preserves possibly dangling locals at joins and follows backedges; redefinitions, including awaited results, clear the old provenance. A detected escape is an ICE in debug builds. Release builds remove the inferred region and log a warning naming the affected function before final verification; they no longer silently hide the repair.
 

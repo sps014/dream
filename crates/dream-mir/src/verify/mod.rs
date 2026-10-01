@@ -9,9 +9,13 @@ mod operands;
 mod ownership;
 mod region_values;
 mod regions;
+mod returns;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod return_tests;
 
 use crate::{Mir, MirFunction};
 use dream_types::TypeInterner;
@@ -27,10 +31,11 @@ pub struct Violation {
 }
 
 pub fn verify_module(mir: &Mir, interner: &TypeInterner) -> Vec<Violation> {
+    let returns = returns::summarize(mir, interner);
     mir.functions
         .iter()
         .chain(mir.polls.iter())
-        .flat_map(|f| verify_function(f, interner))
+        .flat_map(|f| verify_with_returns(f, interner, &returns))
         .collect()
 }
 
@@ -53,6 +58,10 @@ pub fn assert_module(mir: &Mir, interner: &TypeInterner) {
 }
 
 pub fn verify_function(f: &MirFunction, interner: &TypeInterner) -> Vec<Violation> {
+    verify_with_returns(f, interner, &returns::Returns::new())
+}
+
+fn verify_with_returns(f: &MirFunction, interner: &TypeInterner, returns: &returns::Returns) -> Vec<Violation> {
     let mut out = Vec::new();
     for (bi, block) in f.blocks.iter().enumerate() {
         ownership::check_rc_types(f, interner, bi, block, &mut out);
@@ -61,7 +70,7 @@ pub fn verify_function(f: &MirFunction, interner: &TypeInterner) -> Vec<Violatio
         return out;
     }
     ownership::check_paths(f, &mut out);
-    regions::check(f, interner, &mut out);
+    regions::check(f, interner, returns, &mut out);
     out
 }
 

@@ -416,8 +416,6 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
     return (dream_ptr)(block + 16);
 }
 
-#define PUBLISH_SEEN_MAX 256
-
 int dream_heap_is_live(dream_ptr ptr) {
     char *block;
     if (ptr == 0 || (ptr & (sizeof(dream_ptr) - 1)) != 0) {
@@ -428,70 +426,6 @@ int dream_heap_is_live(dream_ptr ptr) {
         return 0;
     }
     return ((uint32_t *)block)[1] == MAGIC_LIVE;
-}
-
-static void publish_rec(dream_ptr ptr, dream_ptr *seen, int *nseen);
-
-static void publish_walk_payload(dream_ptr ptr, dream_ptr *seen, int *nseen) {
-    char *block;
-    char *data;
-    int32_t sz;
-    int32_t payload;
-    int32_t off;
-    block = (char *)dream_p(ptr) - (int)NATIVE_HEAP_HEADER_SIZE;
-    sz = ((int32_t *)block)[0];
-    payload = sz - (int32_t)NATIVE_HEAP_HEADER_SIZE;
-    data = (char *)dream_p(ptr);
-    for (off = 0; off + (int32_t)sizeof(dream_ptr) <= payload; off += (int32_t)sizeof(dream_ptr)) {
-        dream_ptr child = 0;
-        memcpy(&child, data + off, sizeof(child));
-        if (dream_heap_is_live(child)) {
-            publish_rec(child, seen, nseen);
-        }
-    }
-}
-
-static void publish_rec(dream_ptr ptr, dream_ptr *seen, int *nseen) {
-    int32_t *tag;
-    int32_t kind;
-    int i;
-    if (!dream_heap_is_live(ptr)) {
-        return;
-    }
-    for (i = 0; i < *nseen; i++) {
-        if (seen[i] == ptr) {
-            return;
-        }
-    }
-    if (*nseen < PUBLISH_SEEN_MAX) {
-        seen[(*nseen)++] = ptr;
-    }
-    tag = (int32_t *)((char *)dream_p(ptr) - TAG_FROM_DATA);
-    kind = *tag & TAG_VALUE_MASK;
-    if (kind == 0) {
-        return;
-    }
-    *tag |= TAG_SHARED;
-    if (*dream_rc_word(ptr) > 0) {
-        *dream_rc_word(ptr) |= DREAM_RC_SHARED_BIT;
-    }
-    if (kind == TAG_STRING) {
-        if (dream_i32(ptr)[1] == DREAM_STR_SLICE) {
-            dream_ptr parent = 0;
-            memcpy(&parent, (char *)dream_p(ptr) + 8, sizeof(parent));
-            publish_rec(parent, seen, nseen);
-        }
-        return;
-    }
-    if (kind == TAG_ARRAY || kind >= TAG_STRUCT_BASE) {
-        publish_walk_payload(ptr, seen, nseen);
-    }
-}
-
-void dream_publish(dream_ptr ptr) {
-    dream_ptr seen[PUBLISH_SEEN_MAX];
-    int nseen = 0;
-    publish_rec(ptr, seen, &nseen);
 }
 
 int32_t debug_get_live_objects(void) {

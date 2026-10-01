@@ -559,85 +559,23 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
     return p;
 }
 
-#define PUBLISH_SEEN_MAX 256
-
 int dream_heap_is_live(dream_ptr ptr) {
-    int32_t block;
-    int32_t sz;
-    int32_t rc;
-    if (ptr < (int32_t)HEAP_HEADER_SIZE || (ptr & 3) != 0) {
+    uint32_t address = (uint32_t)ptr;
+    uint32_t start = (uint32_t)heap_start() + META_SIZE;
+    uint32_t end = (uint32_t)heap_ptr_get();
+    if ((address & 3) != 0 || address < HEAP_HEADER_SIZE) {
         return 0;
     }
-    block = (int32_t)ptr - (int32_t)HEAP_HEADER_SIZE;
-    if (block < heap_start() + META_SIZE) {
+    uint32_t block = address - HEAP_HEADER_SIZE;
+    if (block < start || address > end) {
         return 0;
     }
-    sz = i32_at(block);
-    if (sz < (int32_t)HEAP_HEADER_SIZE) {
+    int32_t size = i32_at((int32_t)block);
+    if (size < (int32_t)HEAP_HEADER_SIZE || (uint32_t)size > end - block) {
         return 0;
     }
-    rc = i32_at(block + (int32_t)HEADER_REFCOUNT_OFFSET);
-    return rc > 0;
-}
-
-static void publish_rec(dream_ptr ptr, dream_ptr *seen, int *nseen);
-
-static void publish_walk_payload(dream_ptr ptr, dream_ptr *seen, int *nseen) {
-    int32_t block;
-    int32_t sz;
-    int32_t payload;
-    int32_t off;
-    block = (int32_t)ptr - (int32_t)HEAP_HEADER_SIZE;
-    sz = i32_at(block);
-    payload = sz - (int32_t)HEAP_HEADER_SIZE;
-    for (off = 0; off + 4 <= payload; off += 4) {
-        dream_ptr child = (dream_ptr)i32_at((int32_t)ptr + off);
-        if (dream_heap_is_live(child)) {
-            publish_rec(child, seen, nseen);
-        }
-    }
-}
-
-static void publish_rec(dream_ptr ptr, dream_ptr *seen, int *nseen) {
-    int32_t *tag;
-    int32_t kind;
-    int i;
-    if (!dream_heap_is_live(ptr)) {
-        return;
-    }
-    for (i = 0; i < *nseen; i++) {
-        if (seen[i] == ptr) {
-            return;
-        }
-    }
-    if (*nseen < PUBLISH_SEEN_MAX) {
-        seen[(*nseen)++] = ptr;
-    }
-    tag = (int32_t *)((char *)dream_p(ptr) - TAG_FROM_DATA);
-    kind = *tag & TAG_VALUE_MASK;
-    if (kind == 0) {
-        return;
-    }
-    *tag |= TAG_SHARED;
-    if (*dream_rc_word(ptr) > 0) {
-        *dream_rc_word(ptr) |= DREAM_RC_SHARED_BIT;
-    }
-    if (kind == TAG_STRING) {
-        if (i32_at((int32_t)ptr + 4) == DREAM_STR_SLICE) {
-            publish_rec((dream_ptr)i32_at((int32_t)ptr + 8), seen, nseen);
-        }
-        return;
-    }
-    if (kind == TAG_ARRAY || kind >= TAG_STRUCT_BASE) {
-        publish_walk_payload(ptr, seen, nseen);
-    }
-}
-
-__attribute__((export_name("dream_publish")))
-void dream_publish(dream_ptr ptr) {
-    dream_ptr seen[PUBLISH_SEEN_MAX];
-    int nseen = 0;
-    publish_rec(ptr, seen, &nseen);
+    int32_t rc = __atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED);
+    return rc != 0 && rc != DREAM_RC_IMMORTAL;
 }
 
 /* Free a large block, merging with physically adjacent free neighbors (the large list is

@@ -73,6 +73,17 @@ fun main() {
 When you compile for the browser or Node, memory is freed as soon as the last use ends.
 `dream run` may wait until the end of the block.
 
+### Publishing values to a Task
+
+Before handing a managed graph to a worker, the runtime walks it iteratively and
+converts its reference counts to atomic shared counts. Each publication tracks
+visited objects in a growable, temporary set, so cycles and deep graphs do not
+consume the C call stack. A later handoff traverses the graph again: an already
+shared root can have newly attached children.
+
+Publication is not cycle collection, and it does not synchronize field mutation.
+Use `lock` when changing a shared object's fields.
+
 ## Known boundaries
 
 The following are documented limitations, not silent unsoundness — each degrades to a detectable pattern or an explicit opt-out rather than memory corruption:

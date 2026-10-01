@@ -44,18 +44,6 @@ int32_t dream_priv_cap_get(void);
 void dream_priv_cap_set(int32_t v);
 int32_t dream_priv_fl_get(int32_t idx);
 void dream_priv_fl_set(int32_t idx, int32_t v);
-int32_t dream_region_depth_get(void);
-void dream_region_depth_set(int32_t v);
-int32_t dream_region_slab_get(void);
-void dream_region_slab_set(int32_t v);
-int32_t dream_region_cap_get(void);
-void dream_region_cap_set(int32_t v);
-int32_t dream_region_off_get(void);
-void dream_region_off_set(int32_t v);
-int32_t dream_region_nalloc_get(void);
-void dream_region_nalloc_set(int32_t v);
-int32_t dream_region_marks_get(void);
-void dream_region_marks_set(int32_t v);
 #else
 extern _Thread_local dream_ptr g0;
 DREAM_ALWAYS_INLINE dream_ptr dream_g0_get(void) { return g0; }

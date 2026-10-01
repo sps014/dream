@@ -62,7 +62,7 @@ jobs:
           native=crates/dream-mir/src/runtime/c/native
           clang -std=gnu11 -O1 -g -pthread -fsanitize=thread \
             "$native/heap.c" "$native/heap_maps.c" "$native/publish.c" \
-            "$native/weak.c" "$native/strings.c" tests/runtime_weak.c \
+            "$native/region.c" "$native/weak.c" "$native/strings.c" tests/runtime_weak.c \
             -o "$stress_dir/weak"
           DREAM_DEBUG_LEAKS=1 "$stress_dir/weak"
 

@@ -1,6 +1,7 @@
 #include "include/dream_rt_native.h"
 #include "include/dream_thread.h"
 #include "include/dream_heap_maps.h"
+#include "include/dream_region.h"
 
 #include <limits.h>
 #include <stddef.h>
@@ -39,12 +40,6 @@ int dream_rt_mt;
  * Tree/array churn stays off the process-wide list. */
 _Thread_local dream_heap_tls dream_heap;
 
-/* Unique-graph bump region: mallocs while depth > 0 come from a rewindable TLS slab so
- * `dream_region_leave` reclaims the whole graph in O(1). Independent of the process arena so
- * workers cannot rewind each other's bump pointer. */
-#define REGION_MAX_DEPTH 8
-#define REGION_CHUNK (1u << 23)
-
 /* Slow-path thread state in one block: region-heavy code runs every alloc/free through here,
  * and each distinct `_Thread_local` is its own TLV lookup on macOS. */
 typedef struct {
@@ -52,20 +47,9 @@ typedef struct {
     char *arena;
     size_t arena_off;
     size_t arena_len;
-    int region_depth;
-    char *region_base;
-    size_t region_len;
-    size_t region_off;
-    int32_t region_nalloc;
-    size_t region_off_mark[REGION_MAX_DEPTH];
-    int32_t region_nalloc_mark[REGION_MAX_DEPTH];
+    int region_active;
 } heap_thread;
 static _Thread_local heap_thread th;
-
-static int region_owns_block(char *block) {
-    return th.region_depth > 0 && th.region_base != NULL && block >= th.region_base
-        && (size_t)(block - th.region_base) < th.region_len;
-}
 
 static void heap_lock(void) {
     dream_mutex_lock(&heap_mu);
@@ -265,62 +249,29 @@ static char *bump(size_t n) {
     }
 }
 
-static dream_ptr region_malloc(int32_t alloc_size, int32_t tag) {
-    char *block;
-    size_t n = (size_t)alloc_size;
-    if (th.region_base == NULL) {
-        th.region_base = (char *)map_chunk(REGION_CHUNK);
-        if (th.region_base == NULL) {
-            abort();
-        }
-        note_heap_map(th.region_base, REGION_CHUNK);
-        th.region_len = REGION_CHUNK;
-        th.region_off = 0;
-    }
-    if (th.region_off > th.region_len || n > th.region_len - th.region_off) {
-        abort();
-    }
-    block = th.region_base + th.region_off;
-    th.region_off += n;
-    ((int32_t *)block)[0] = alloc_size;
+dream_ptr dream_region_activate(char *block, int32_t total, int32_t tag) {
+    ((int32_t *)block)[0] = total;
     activate(block, tag);
-    th.region_nalloc += 1;
     return (dream_ptr)(block + 16);
 }
 
-void dream_region_enter(void) {
-    if (th.region_depth >= REGION_MAX_DEPTH) {
-        abort();
-    }
-    th.region_off_mark[th.region_depth] = th.region_off;
-    th.region_nalloc_mark[th.region_depth] = th.region_nalloc;
-    th.region_depth += 1;
-    dream_heap.fast = NULL;
+void dream_region_account_free(uint32_t count) {
+    account_frees(count);
 }
 
-void dream_region_leave(void) {
-    int32_t n;
-    if (th.region_depth <= 0) {
-        return;
-    }
-    th.region_depth -= 1;
-    n = th.region_nalloc - th.region_nalloc_mark[th.region_depth];
-    if (n < 0) {
-        n = 0;
-    }
-    account_frees((uint32_t)n);
-    th.region_nalloc = th.region_nalloc_mark[th.region_depth];
-    th.region_off = th.region_off_mark[th.region_depth];
+void dream_region_heap_mode(int active) {
+    th.region_active = active;
+    dream_heap.fast = NULL;
     heap_refresh_fast();
 }
 
 static void heap_refresh_fast(void) {
-    if (dream_heap.fast == NULL && th.region_depth == 0) {
+    if (dream_heap.fast == NULL && !th.region_active) {
         dream_heap.fast = thread_counters();
     }
 }
 
-dream_ptr dream_malloc_slow(int32_t size, int32_t tag) {
+static dream_ptr malloc_general(int32_t size, int32_t tag) {
     int32_t total;
     int idx;
     char *block = NULL;
@@ -332,9 +283,6 @@ dream_ptr dream_malloc_slow(int32_t size, int32_t tag) {
     total = ((size + 15) & -16) + 16;
     idx = size_class(total);
     alloc_size = idx < NCLASS ? class_bytes(idx) : total;
-    if (th.region_depth > 0) {
-        return region_malloc(alloc_size, tag);
-    }
     if (idx < NCLASS) {
         block = dream_heap.free[idx];
         if (block != NULL) {
@@ -347,6 +295,15 @@ dream_ptr dream_malloc_slow(int32_t size, int32_t tag) {
     ((int32_t *)block)[0] = alloc_size;
     activate(block, tag);
     return (dream_ptr)(block + 16);
+}
+
+dream_ptr dream_malloc_slow(int32_t size, int32_t tag) {
+    dream_ptr pointer = dream_region_try_malloc(size, tag);
+    return pointer != 0 ? pointer : malloc_general(size, tag);
+}
+
+dream_ptr dream_region_backing_malloc(int32_t size) {
+    return dream_malloc_shared(size, 0);
 }
 
 dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
@@ -584,7 +541,7 @@ void dream_recycle_slow(dream_ptr ptr) {
         dream_weak_clear_all(ptr);
     }
     block = (char *)dream_p(ptr) - 16;
-    if (region_owns_block(block)) {
+    if (dream_region_owns(ptr)) {
         return;
     }
     sz = ((int32_t *)block)[0];

@@ -4,11 +4,11 @@ use std::path::Path;
 use std::process::Command;
 
 #[test]
-fn weak_load_and_unique_drop_do_not_resurrect_dying_targets() {
+fn regions_chain_rewind_and_fall_back_independently_per_thread() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let native = root.join("crates/dream-mir/src/runtime/c/native");
-    let temp = tempfile::tempdir().expect("weak test directory");
-    let binary = temp.path().join("weak");
+    let temp = tempfile::tempdir().expect("region test directory");
+    let binary = temp.path().join("region");
     let mut command = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
     command.args(["-std=gnu11", "-O2", "-pthread"]);
     for unit in [
@@ -22,21 +22,21 @@ fn weak_load_and_unique_drop_do_not_resurrect_dying_targets() {
         command.arg(native.join(unit));
     }
     let build = command
-        .arg(root.join("tests/runtime_weak.c"))
+        .arg(root.join("tests/runtime_region.c"))
         .arg("-o")
         .arg(&binary)
         .output()
-        .expect("C compiler for weak regressions");
+        .expect("C compiler for region regressions");
     assert!(
         build.status.success(),
-        "weak harness failed to compile:\n{}",
+        "region harness failed to compile:\n{}",
         String::from_utf8_lossy(&build.stderr)
     );
-    let output = Command::new(binary).output().expect("weak harness");
+    let output = Command::new(binary).output().expect("region harness");
     assert!(
         output.status.success(),
-        "weak harness failed:\n{}",
+        "region harness failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(output.stdout, b"weak lifetime stress passed\n");
+    assert_eq!(output.stdout, b"region stress passed\n");
 }

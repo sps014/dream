@@ -315,105 +315,19 @@ dream_priv_fl12_set:
 	global.set	__dream_priv_fl12
 	end_function
 
-	.hidden	__dream_region_depth
-	.globaltype	__dream_region_depth, i32
-__dream_region_depth:
-	.hidden	__dream_region_slab
-	.globaltype	__dream_region_slab, i32
-__dream_region_slab:
-	.hidden	__dream_region_cap
-	.globaltype	__dream_region_cap, i32
-__dream_region_cap:
-	.hidden	__dream_region_off
-	.globaltype	__dream_region_off, i32
-__dream_region_off:
-	.hidden	__dream_region_nalloc
-	.globaltype	__dream_region_nalloc, i32
-__dream_region_nalloc:
-	.hidden	__dream_region_marks
-	.globaltype	__dream_region_marks, i32
-__dream_region_marks:
-
-	.globl	dream_region_depth_get
-	.type	dream_region_depth_get,@function
-dream_region_depth_get:
-	.functype	dream_region_depth_get () -> (i32)
-	global.get	__dream_region_depth
+	.hidden	__dream_region_state
+	.globaltype	__dream_region_state, i32
+__dream_region_state:
+	.globl	dream_region_state_get
+	.type	dream_region_state_get,@function
+dream_region_state_get:
+	.functype	dream_region_state_get () -> (i32)
+	global.get	__dream_region_state
 	end_function
-	.globl	dream_region_depth_set
-	.type	dream_region_depth_set,@function
-dream_region_depth_set:
-	.functype	dream_region_depth_set (i32) -> ()
+	.globl	dream_region_state_set
+	.type	dream_region_state_set,@function
+dream_region_state_set:
+	.functype	dream_region_state_set (i32) -> ()
 	local.get	0
-	global.set	__dream_region_depth
-	end_function
-
-	.globl	dream_region_slab_get
-	.type	dream_region_slab_get,@function
-dream_region_slab_get:
-	.functype	dream_region_slab_get () -> (i32)
-	global.get	__dream_region_slab
-	end_function
-	.globl	dream_region_slab_set
-	.type	dream_region_slab_set,@function
-dream_region_slab_set:
-	.functype	dream_region_slab_set (i32) -> ()
-	local.get	0
-	global.set	__dream_region_slab
-	end_function
-
-	.globl	dream_region_cap_get
-	.type	dream_region_cap_get,@function
-dream_region_cap_get:
-	.functype	dream_region_cap_get () -> (i32)
-	global.get	__dream_region_cap
-	end_function
-	.globl	dream_region_cap_set
-	.type	dream_region_cap_set,@function
-dream_region_cap_set:
-	.functype	dream_region_cap_set (i32) -> ()
-	local.get	0
-	global.set	__dream_region_cap
-	end_function
-
-	.globl	dream_region_off_get
-	.type	dream_region_off_get,@function
-dream_region_off_get:
-	.functype	dream_region_off_get () -> (i32)
-	global.get	__dream_region_off
-	end_function
-	.globl	dream_region_off_set
-	.type	dream_region_off_set,@function
-dream_region_off_set:
-	.functype	dream_region_off_set (i32) -> ()
-	local.get	0
-	global.set	__dream_region_off
-	end_function
-
-	.globl	dream_region_nalloc_get
-	.type	dream_region_nalloc_get,@function
-dream_region_nalloc_get:
-	.functype	dream_region_nalloc_get () -> (i32)
-	global.get	__dream_region_nalloc
-	end_function
-	.globl	dream_region_nalloc_set
-	.type	dream_region_nalloc_set,@function
-dream_region_nalloc_set:
-	.functype	dream_region_nalloc_set (i32) -> ()
-	local.get	0
-	global.set	__dream_region_nalloc
-	end_function
-
-	.globl	dream_region_marks_get
-	.type	dream_region_marks_get,@function
-dream_region_marks_get:
-	.functype	dream_region_marks_get () -> (i32)
-	global.get	__dream_region_marks
-	end_function
-	.globl	dream_region_marks_set
-	.type	dream_region_marks_set,@function
-dream_region_marks_set:
-	.functype	dream_region_marks_set (i32) -> ()
-	local.get	0
-	global.set	__dream_region_marks
+	global.set	__dream_region_state
 	end_function

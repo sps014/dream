@@ -15,6 +15,7 @@ fn publishes_cyclic_diamond_and_million_node_task_graphs() {
         "heap.c",
         "heap_maps.c",
         "publish.c",
+        "region.c",
         "weak.c",
         "strings.c",
         "worker.c",

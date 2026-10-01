@@ -65,7 +65,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential clang cmake gdb libclang-dev libgtk-3-dev libssl-dev \
+            build-essential clang cmake libclang-dev libgtk-3-dev libssl-dev \
             libudev-dev libwebkit2gtk-4.1-dev mesa-vulkan-drivers ninja-build pkg-config python3 xz-utils
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -82,15 +82,9 @@ jobs:
       - name: Install pinned LLVM and wasi-sdk support
         run: scripts/fetch-dev-llvm.sh
       - name: Probe GPU portability regressions
-        run: ./scripts/probe_test.sh gpu_capabilities gpu_pack_unorm gpu_error_details gpu_sample_mask_out gpu_texture_atomic_bits
+        run: ./scripts/probe_test.sh value_temporary_sink gpu_capabilities gpu_pack_unorm gpu_error_details gpu_sample_mask_out gpu_texture_atomic_bits
       - run: ./scripts/probe_test.sh
       - run: ./scripts/probe_test.sh --node
-      - name: Trace GPU ownership failure
-        if: failure()
-        run: |
-          if [[ -f tests/cases/target/debug/gpu_capabilities.bin ]]; then
-            gdb --batch -x scripts/trace_gpu_ownership.gdb tests/cases/target/debug/gpu_capabilities.bin
-          fi
       - name: Preserve GPU corpus diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

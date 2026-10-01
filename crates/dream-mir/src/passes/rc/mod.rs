@@ -18,6 +18,7 @@ mod repair;
 mod sink;
 mod tokens;
 mod uniqueness;
+mod value;
 
 #[cfg(test)]
 mod cursor_family_tests;

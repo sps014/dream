@@ -1,0 +1,34 @@
+import system;
+
+class Item {
+    public id: int;
+    public constructor(id: int) { this.id = id; }
+    del() { System.println("drop=" + this.id.to_string()); }
+}
+
+struct Holder {
+    public item: Option<Item>;
+    public constructor(item: Option<Item>) { this.item = item; }
+}
+
+@noinline
+fun make_holder(): Holder {
+    return Holder(Option.Some(Item(7)));
+}
+
+@noinline
+fun consume(h: Holder): Result<Item, int> {
+    let id = h.item.unwrap().id;
+    return Result.Ok(Item(id + 1));
+}
+
+fun run(): void {
+    let result = consume(make_holder());
+    System.println("result=" + result.unwrap().id.to_string());
+}
+
+fun main(): void {
+    let before = Debug.live_objects;
+    run();
+    System.println("live=" + (Debug.live_objects - before).to_string());
+}

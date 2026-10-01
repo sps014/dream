@@ -14,6 +14,8 @@ use dream_syntax::nodes::ProgramNode;
 use indexmap::{IndexMap, IndexSet};
 use std::cell::RefCell;
 
+// Signed byte packing uses the stdlib's per-lane masking, preserving CPU/shader bit parity
+// instead of relying on driver-specific lowering of pack4x8snorm.
 const BUILTIN_CALLS: &[&str] = &[
     "workgroup_barrier",
     "storage_barrier",
@@ -91,7 +93,6 @@ const BUILTIN_CALLS: &[&str] = &[
     "determinant",
     "inverse",
     "pack4x8unorm",
-    "pack4x8snorm",
     "pack2x16unorm",
     "pack2x16snorm",
     "unpack4x8unorm",

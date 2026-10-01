@@ -73,11 +73,24 @@ jobs:
         with:
           node-version: "22"
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - uses: actions/cache@v4
         with:
           path: ~/.dream/toolchains/llvm-22.1.8
           key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - name: Install pinned LLVM and wasi-sdk support
         run: scripts/fetch-dev-llvm.sh
+      - name: Probe GPU portability regressions
+        run: ./scripts/probe_test.sh gpu_capabilities gpu_pack_unorm gpu_error_details gpu_sample_mask_out gpu_texture_atomic_bits
       - run: ./scripts/probe_test.sh
       - run: ./scripts/probe_test.sh --node
+      - name: Preserve GPU corpus diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-corpus-diagnostics
+          path: |
+            tests/cases/target/debug/gpu_capabilities.opt.ll
+            tests/cases/target/debug/gpu_capabilities.abi.json
+            tests/cases/target/debug/gpu_pack_unorm.wgsl

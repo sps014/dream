@@ -58,13 +58,15 @@ jobs:
   golden-corpus:
     name: Full native and Node corpus
     runs-on: ubuntu-latest
+    env:
+      WGPU_BACKEND: vulkan
     steps:
       - name: Install native dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential clang cmake libclang-dev libgtk-3-dev libssl-dev \
-            libudev-dev libwebkit2gtk-4.1-dev ninja-build pkg-config python3 xz-utils
+            libudev-dev libwebkit2gtk-4.1-dev mesa-vulkan-drivers ninja-build pkg-config python3 xz-utils
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-node@v4

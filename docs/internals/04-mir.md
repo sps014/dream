@@ -141,9 +141,11 @@ dream --release --emit-mir=all --emit-mir-fn=main,parse app.dream  # every modul
 
 Snapshots land in `<output>.mir/<NN>-<pass>.mir`, numbered so lexicographic order is pipeline order. `after:<pass>` accepts every module stage (`lower`, `expand-simple-ctors`, `funcbox-abi`, `param-modes`, `rc-insertion`, `devirt`, `inline`, `rc-last-use-repair`, `unique-region`, `rc-held-by-owner`, `sroa-managed`, `fixpoint`, `strip-escaped-regions`, `frame-alloc`) and every per-function pass name; an unknown name errors with the valid list. For a per-function pass without `each`, the file holds each function's body after that pass's last run in the fixpoint. When a pass misbehaves, dump before and after it; the CFG text is far easier to read than the LLVM IR.
 
-## Verifier — `crates/dream-mir/src/verify.rs`
+## Verifier — `crates/dream-mir/src/verify/`
 
-When the compiler itself is built with `debug_assertions` (debug builds and `cargo test`), `run_late_module_passes` checks the final module and panics (an ICE) on: an RC op on a non-RC local, a read after `ReleaseUnique` on the same straight-line path, and a read or double release after `Release` for locals that provably hold a single token (never retained, stored, passed, or a parameter). The checks are conservative by design so they never fire on correct RC placement; a release build of the compiler skips them.
+`run_late_module_passes` checks the final module in debug builds or when `DREAM_VERIFY_MIR=1` (including release CI). Violations are ICEs. CFG targets are checked before dataflow. A finite may-dead analysis follows branches and backedges, rejecting reads after `ReleaseUnique` and reads or double releases after `Release` for conservative single-token locals (never retained, stored, passed, or a parameter).
+
+Region depth must agree at every join; leaves cannot underflow, and exits or suspension cannot carry active regions. Direct managed allocations and local copy/cast/move aliases carry region origins across the CFG, so reads after a rewind are rejected. Niche union wrapping/extraction preserves the payload's origin rather than inventing an allocation. These are partial proofs: complete shared-token balance, opaque call-result provenance, and publication barriers still require richer ownership facts.
 
 ## Invariants MIR guarantees to the backend
 
@@ -151,4 +153,4 @@ When the compiler itself is built with `debug_assertions` (debug builds and `car
 2. Operands are atomic (local/global/const) — no nested computation hides in an operand.
 3. Every `Local` has a `LocalDecl` with a valid `TypeId`.
 4. The CFG is **reducible** (Dream cannot express `goto` spaghetti).
-5. RC is balanced (every retained reference is released on every path) after `RcInsertion`; debug compiler builds spot-check this with `verify.rs`.
+5. RC is balanced (every retained reference is released on every path) after `RcInsertion`; `verify/` checks the conservative single-token subset across the CFG, not complete shared-token balance.

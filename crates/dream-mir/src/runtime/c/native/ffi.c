@@ -39,10 +39,7 @@ void dream_thread_attach(void) {
 
 void dream_callback_enter(void) {
     if (DREAM_UNLIKELY(!dream_thread_attached)) {
-        fputs("dream: a C callback ran on a thread Dream did not start; call back from the "
-              "thread that registered it\n",
-              stderr);
-        abort();
+        DREAM_PANIC_LITERAL(u"panic: C callbacks must run on their Dream owner thread; foreign-thread attach is not supported yet");
     }
 }
 

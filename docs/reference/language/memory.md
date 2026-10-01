@@ -3,6 +3,8 @@
 Dream manages heap memory with **automatic reference counting (ARC)**.
 You never call `free` — memory is reclaimed the moment the last reference to an object drops.
 
+The current allocator represents block sizes with signed 32-bit fields, so a single allocation must fit below 2 GiB including its header and alignment. This is not a limit on total process memory. Oversized arrays and strings, or unavailable heap memory, stop execution with a panic diagnostic; allocation-failure reporting itself does not allocate from the Dream heap. Native 64-bit allocation sizes require a coordinated allocator/ABI migration.
+
 ## What lives on the heap
 
 - Strings

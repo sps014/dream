@@ -5,18 +5,7 @@
 #include <stdlib.h>
 
 static _Noreturn void heap_map_oom(void) {
-    /* Reporting must not allocate from the Dream heap while its mutex is held. */
-    static const struct {
-        int32_t length;
-        int32_t kind;
-        uint16_t text[sizeof(u"out of memory indexing the Dream heap") / sizeof(uint16_t)];
-    } message = {
-        sizeof(u"out of memory indexing the Dream heap") / sizeof(uint16_t) - 1,
-        DREAM_STR_PAD_INLINE,
-        u"out of memory indexing the Dream heap"
-    };
-    dream_panic((dream_ptr)(uintptr_t)&message);
-    __builtin_unreachable();
+    DREAM_PANIC_LITERAL(u"out of memory indexing the Dream heap");
 }
 
 #define utarray_oom() heap_map_oom()

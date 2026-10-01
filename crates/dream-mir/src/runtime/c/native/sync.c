@@ -6,11 +6,10 @@
 
 static dream_mutex locks_mu = DREAM_MUTEX_INIT;
 
-static _Noreturn void lock_failure(const char *message) {
-    dream_mutex_unlock(&locks_mu);
-    dream_panic(dream_utf8_to_string(message));
-    __builtin_unreachable();
-}
+#define lock_failure(message) do { \
+    dream_mutex_unlock(&locks_mu); \
+    DREAM_PANIC_LITERAL(u##message); \
+} while (0)
 
 #define uthash_fatal(msg) lock_failure("panic: out of memory indexing locks")
 #include "include/uthash.h"
@@ -194,6 +193,5 @@ dream_ptr dream_js_call(dream_ptr target, dream_ptr via, dream_ptr method, int32
     (void)via;
     (void)method;
     (void)argc;
-    abort();
-    return 0;
+    DREAM_PANIC_LITERAL(u"panic: JavaScript calls are unavailable in the native runtime");
 }

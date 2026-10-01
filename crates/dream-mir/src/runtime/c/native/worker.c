@@ -9,15 +9,11 @@ static dream_ptr worker_recv_blocking(int32_t id);
 
 static dream_mutex reg_mu = DREAM_MUTEX_INIT;
 
-static _Noreturn void worker_failure(const char *message) {
-    dream_panic(dream_utf8_to_string(message));
-    __builtin_unreachable();
-}
-
-static _Noreturn void registry_failure(const char *message) {
-    dream_mutex_unlock(&reg_mu);
-    worker_failure(message);
-}
+#define worker_failure(message) DREAM_PANIC_LITERAL(u##message)
+#define registry_failure(message) do { \
+    dream_mutex_unlock(&reg_mu); \
+    worker_failure(message); \
+} while (0)
 
 #define uthash_fatal(msg) registry_failure("panic: out of memory indexing workers")
 #include "include/uthash.h"
@@ -139,6 +135,9 @@ void workerPost(int32_t id, dream_ptr msg) {
         return;
     }
     j = (Job *)calloc(1, sizeof(Job));
+    if (j == NULL) {
+        worker_failure("panic: out of memory posting a worker job");
+    }
     j->fn = w->fn;
     j->env = w->env;
     j->msg = msg;
@@ -165,6 +164,9 @@ dream_ptr workerPoolDispatch(int32_t id, int32_t fn, int64_t env, dream_ptr msg)
         return 0;
     }
     j = (Job *)calloc(1, sizeof(Job));
+    if (j == NULL) {
+        worker_failure("panic: out of memory dispatching a worker job");
+    }
     j->fn = fn;
     j->env = (dream_ptr)(uintptr_t)env;
     j->msg = msg;

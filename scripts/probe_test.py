@@ -296,7 +296,8 @@ clearTimeout(timer);
         want = exp.read_text().strip()
         got = run_output_body(out)
         if got != want:
-            return stem, "fail", f"output mismatch got={got[:80]!r}"
+            detail = _ANSI.sub("", err).strip()
+            return stem, "fail", f"output mismatch got={got[:2000]!r} stderr={detail[-2000:]!r}"
     leak = leak_failure(err_txt, out)
     if leak:
         return stem, "fail", leak

@@ -96,5 +96,17 @@ int main(void) {
     ((Node *)dream_p(nodes[0]))->left = nodes[1];
     handoff_and_free();
     dream_recycle(old);
+
+    for (int32_t kind = TAG_ARRAY; ; kind = TAG_CLOSURE_ENV) {
+        make_nodes(3);
+        dream_recycle(nodes[0]);
+        nodes[0] = dream_malloc(4 + 2 * sizeof(dream_ptr), kind);
+        dream_i32(nodes[0])[0] = 2;
+        memcpy((char *)dream_p(nodes[0]) + 4, nodes + 1, 2 * sizeof(dream_ptr));
+        handoff_and_free();
+        if (kind == TAG_CLOSURE_ENV) {
+            break;
+        }
+    }
     puts("publication stress passed");
 }

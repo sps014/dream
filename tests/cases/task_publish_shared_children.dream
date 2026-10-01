@@ -15,4 +15,6 @@ async fun main(): void {
         n.label = "second" + " child";
     }
     System.println(Task.spawn(() => n.label + "!").await);
+    let labels = ["array" + " child", "closure" + " child"];
+    System.println(Task.spawn(() => labels[0] + ", " + labels[1]).await);
 }

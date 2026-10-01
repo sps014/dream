@@ -67,7 +67,7 @@ static int size_class(size_t size) {
     return dream_size_class((uint32_t)size);
 }
 
-static int32_t class_bytes(int idx) {
+static size_t class_bytes(int idx) {
     return dream_class_bytes(idx);
 }
 

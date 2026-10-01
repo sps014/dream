@@ -16,8 +16,13 @@
 
 #ifdef DREAM_WASM32
 typedef int32_t dream_ptr;
+typedef int32_t dream_size;
+#define DREAM_SIZE_MAX INT32_MAX
 #else
 typedef uintptr_t dream_ptr;
+typedef size_t dream_size;
+/* Pointer differences must remain representable even though sizes are unsigned. */
+#define DREAM_SIZE_MAX PTRDIFF_MAX
 #endif
 
 /* 0 until `workerSpawn`; leftover for non-RC MT paths. RC uses `TAG_SHARED`. */
@@ -78,10 +83,6 @@ void abort(void);
 
 DREAM_ALWAYS_INLINE int32_t dream_str_len(dream_ptr str) {
     return str ? dream_i32(str)[0] : 0;
-}
-
-DREAM_ALWAYS_INLINE int32_t dream_str_byte_size(dream_ptr str) {
-    return dream_str_len(str) << 1;
 }
 
 DREAM_ALWAYS_INLINE const uint16_t *dream_str_units(dream_ptr s) {
@@ -221,13 +222,13 @@ DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
 }
 
 void dream_free(dream_ptr ptr);
-dream_ptr dream_malloc_shared(int32_t size, int32_t tag);
+dream_ptr dream_malloc_shared(dream_size size, int32_t tag);
 /* Mark a singleton immortal: its rc word is never mutated again and it leaves
  * `Debug.live_objects` accounting (it will never be freed). */
 void dream_pin_immortal(dream_ptr s);
 
 #ifdef DREAM_WASM32
-dream_ptr dream_malloc(int32_t size, int32_t tag);
+dream_ptr dream_malloc(dream_size size, int32_t tag);
 /* Recycle a live block without `dream_str_fini`. Typed `destroy_*` for classes/arrays/unions
  * uses this; string destroy still goes through `dream_free`. */
 void dream_recycle(dream_ptr ptr);
@@ -238,6 +239,27 @@ void dream_recycle(dream_ptr ptr);
 #define DREAM_MAX_CLASS_BYTES 65536
 #define DREAM_MAGIC_LIVE 0x4c495645u
 #define DREAM_MAGIC_FREE 0x46524545u
+
+/* Keep the payload 16-aligned and the ARC words at the same offsets from it. */
+typedef struct {
+    dream_size size;
+    unsigned char reserved[NATIVE_HEAP_HEADER_SIZE - sizeof(dream_size) - 12];
+    uint32_t magic;
+    int32_t tag;
+    int32_t rc;
+} dream_heap_header;
+_Static_assert(sizeof(dream_heap_header) == NATIVE_HEAP_HEADER_SIZE, "native header size");
+_Static_assert(offsetof(dream_heap_header, tag) == NATIVE_HEAP_HEADER_SIZE - TAG_FROM_DATA,
+               "native tag offset");
+_Static_assert(offsetof(dream_heap_header, rc) == NATIVE_HEAP_HEADER_SIZE - RC_FROM_DATA,
+               "native reference-count offset");
+
+DREAM_ALWAYS_INLINE size_t *dream_block_size(char *block) {
+    return &((dream_heap_header *)block)->size;
+}
+DREAM_ALWAYS_INLINE uint32_t *dream_block_magic(char *block) {
+    return &((dream_heap_header *)block)->magic;
+}
 
 /* Per-thread alloc/free tallies behind `Debug.live_objects`. Heap-allocated and never freed so
  * the process-wide sum stays valid after a worker exits; plain (non-RMW) updates by the owner. */
@@ -256,7 +278,7 @@ typedef struct dream_heap_tls {
 } dream_heap_tls;
 extern _Thread_local dream_heap_tls dream_heap;
 
-dream_ptr dream_malloc_slow(int32_t size, int32_t tag);
+dream_ptr dream_malloc_slow(dream_size size, int32_t tag);
 void dream_recycle_slow(dream_ptr ptr);
 
 DREAM_ALWAYS_INLINE int dream_size_class(uint32_t total) {
@@ -278,20 +300,21 @@ DREAM_ALWAYS_INLINE int32_t dream_class_bytes(int idx) {
 }
 
 DREAM_ALWAYS_INLINE void dream_block_activate(char *block, int32_t tag) {
-    ((uint32_t *)block)[1] = DREAM_MAGIC_LIVE;
-    ((int32_t *)block)[2] = tag;
-    ((int32_t *)block)[3] = dream_rc_init(tag);
+    dream_heap_header *header = (dream_heap_header *)block;
+    header->magic = DREAM_MAGIC_LIVE;
+    header->tag = tag;
+    header->rc = dream_rc_init(tag);
 }
 
 DREAM_ALWAYS_INLINE void dream_heap_count(uint32_t *c) {
     __atomic_store_n(c, *c + 1u, __ATOMIC_RELAXED);
 }
 
-DREAM_ALWAYS_INLINE dream_ptr dream_malloc(int32_t size, int32_t tag) {
+DREAM_ALWAYS_INLINE dream_ptr dream_malloc(dream_size size, int32_t tag) {
     dream_heap_tls *h = &dream_heap;
     dream_heap_counters *c = h->fast;
-    if (DREAM_LIKELY(c != NULL && (uint32_t)size <= (uint32_t)(DREAM_MAX_CLASS_BYTES - 16))) {
-        int idx = dream_size_class((((uint32_t)size + 15u) & ~15u) + 16u);
+    if (DREAM_LIKELY(c != NULL && size <= DREAM_MAX_CLASS_BYTES - NATIVE_HEAP_HEADER_SIZE)) {
+        int idx = dream_size_class((((uint32_t)size + 15u) & ~15u) + NATIVE_HEAP_HEADER_SIZE);
         char *block = h->free[idx];
         if (DREAM_LIKELY(block != NULL)) {
             char *next;
@@ -311,7 +334,7 @@ DREAM_ALWAYS_INLINE void dream_recycle(dream_ptr ptr) {
     dream_heap_tls *h;
     dream_heap_counters *c;
     char *block;
-    int32_t sz;
+    size_t sz;
     int32_t tag;
     int idx;
     if (ptr == 0) {
@@ -320,17 +343,17 @@ DREAM_ALWAYS_INLINE void dream_recycle(dream_ptr ptr) {
     h = &dream_heap;
     c = h->fast;
     block = (char *)dream_p(ptr) - NATIVE_HEAP_HEADER_SIZE;
-    sz = ((int32_t *)block)[0];
-    tag = ((int32_t *)block)[2];
-    if (DREAM_UNLIKELY(c == NULL || ((uint32_t *)block)[1] != DREAM_MAGIC_LIVE
-                       || (uint32_t)(sz - 1) >= (uint32_t)DREAM_MAX_CLASS_BYTES
+    sz = *dream_block_size(block);
+    tag = *(int32_t *)(block + NATIVE_HEAP_HEADER_SIZE - TAG_FROM_DATA);
+    if (DREAM_UNLIKELY(c == NULL || *dream_block_magic(block) != DREAM_MAGIC_LIVE
+                       || sz - 1u >= DREAM_MAX_CLASS_BYTES
                        || (tag & (DREAM_TAG_WEAK_TARGET | TAG_SHARED)) != 0
                        || (tag & TAG_VALUE_MASK) == 0)) {
         dream_recycle_slow(ptr);
         return;
     }
     idx = dream_size_class((uint32_t)sz);
-    ((uint32_t *)block)[1] = DREAM_MAGIC_FREE;
+    *dream_block_magic(block) = DREAM_MAGIC_FREE;
     dream_heap_count(&c->frees);
     memcpy(block + 8, &h->free[idx], sizeof(char *));
     h->free[idx] = block;
@@ -341,12 +364,12 @@ DREAM_ALWAYS_INLINE void dream_recycle(dream_ptr ptr) {
  * `DREAM_BLOCK_HEADER + size` bytes (16-aligned): a live header with an immortal count, so
  * retains and releases on it are no-ops and nothing frees it. The compiler releases its strong
  * fields where its count would have reached zero. */
-DREAM_ALWAYS_INLINE dream_ptr dream_frame_object(void *block, int32_t size, int32_t tag) {
+DREAM_ALWAYS_INLINE dream_ptr dream_frame_object(void *block, dream_size size, int32_t tag) {
     char *b = (char *)block;
     memset(b, 0, (size_t)DREAM_BLOCK_HEADER + (size_t)size);
-    ((int32_t *)b)[0] = (int32_t)DREAM_BLOCK_HEADER + size;
+    *(dream_size *)b = DREAM_BLOCK_HEADER + size;
 #ifndef DREAM_WASM32
-    ((uint32_t *)b)[1] = DREAM_MAGIC_LIVE;
+    *dream_block_magic(b) = DREAM_MAGIC_LIVE;
 #endif
     *(int32_t *)(b + DREAM_BLOCK_HEADER - TAG_FROM_DATA) = tag;
     *(int32_t *)(b + DREAM_BLOCK_HEADER - RC_FROM_DATA) = DREAM_RC_IMMORTAL;
@@ -440,6 +463,30 @@ void dream_panic(dream_ptr msg);
     dream_panic((dream_ptr)(uintptr_t)&message); \
     __builtin_unreachable(); \
 } while (0)
+/* The language API still returns int, even when its allocation uses machine-width bytes. */
+DREAM_ALWAYS_INLINE int32_t dream_str_byte_size(dream_ptr str) {
+    int32_t units = dream_str_len(str);
+    if (DREAM_UNLIKELY(units > INT32_MAX / 2)) {
+        DREAM_PANIC_LITERAL(u"panic: string byte count exceeds the int range");
+    }
+    return units * 2;
+}
+
+DREAM_ALWAYS_INLINE int32_t dream_string_count_add(int32_t a, int32_t b) {
+    if (DREAM_UNLIKELY(a < 0 || b < 0 || b > INT32_MAX - a)) {
+        DREAM_PANIC_LITERAL(u"panic: string length exceeds the supported limit");
+    }
+    return a + b;
+}
+
+DREAM_ALWAYS_INLINE dream_size dream_string_bytes(int32_t units) {
+    if (DREAM_UNLIKELY(units < 0 ||
+        (size_t)units > (DREAM_SIZE_MAX - DREAM_BLOCK_HEADER - 23u) / 2u)) {
+        DREAM_PANIC_LITERAL(u"panic: string size exceeds the supported limit");
+    }
+    return (dream_size)units * 2 + STRING_HEADER_SIZE;
+}
+
 DREAM_ALWAYS_INLINE char *dream_array_at(dream_ptr p, int64_t i, int32_t esize,
                                          dream_ptr panic_msg) {
     int32_t len = p ? dream_i32(p)[0] : 0;
@@ -450,7 +497,7 @@ DREAM_ALWAYS_INLINE char *dream_array_at(dream_ptr p, int64_t i, int32_t esize,
 }
 
 void dream_publish(dream_ptr ptr);
-dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag);
+dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag);
 #ifdef DREAM_WASM32
 void dream_heap_init(void);
 #endif
@@ -476,17 +523,21 @@ DREAM_ALWAYS_INLINE int dream_str_unique_owned(dream_ptr p) {
 }
 
 DREAM_ALWAYS_INLINE int32_t dream_str_unit_cap(dream_ptr p) {
-    int32_t block;
-    int32_t payload;
+    dream_size block;
+    dream_size payload;
     if (p == 0) {
         return 0;
     }
-    block = ((int32_t *)((char *)dream_p(p) - DREAM_BLOCK_HEADER))[0];
+    block = *(dream_size *)((char *)dream_p(p) - DREAM_BLOCK_HEADER);
+    if (block <= DREAM_BLOCK_HEADER + STRING_HEADER_SIZE) {
+        return 0;
+    }
     payload = block - DREAM_BLOCK_HEADER;
     if (payload <= STRING_HEADER_SIZE) {
         return 0;
     }
-    return (payload - STRING_HEADER_SIZE) / 2;
+    dream_size units = (payload - STRING_HEADER_SIZE) / 2;
+    return units > INT32_MAX ? INT32_MAX : (int32_t)units;
 }
 
 DREAM_ALWAYS_INLINE int dream_str_can_hold(dream_ptr p, int32_t units) {
@@ -522,7 +573,7 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_strings(dream_ptr a, dream_ptr b) {
     }
     /* Operand buffers stay immutable: RC==1 is not "dead". `"--" + boundary` would
      * otherwise rewrite a live `boundary`. Dest reuse is `_into` only. */
-    p = dream_malloc((int32_t)(len1 + len2 + 8), TAG_STRING);
+    p = dream_malloc(dream_string_bytes(dream_string_count_add(sc1, sc2)), TAG_STRING);
     dream_concat_fill(p, a, b, sc1, sc2);
     return p;
 }
@@ -535,7 +586,7 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_strings_into(dream_ptr dest, dream_pt
         dream_release(dest);
         return 0;
     }
-    if (dest != a && dest != b && dream_str_can_hold(dest, sc1 + sc2)) {
+    if (dest != a && dest != b && dream_str_can_hold(dest, dream_string_count_add(sc1, sc2))) {
         dream_concat_fill(dest, a, b, sc1, sc2);
         return dest;
     }
@@ -564,9 +615,10 @@ DREAM_ALWAYS_INLINE void dream_strb_reserve(dream_strb *sb, int32_t units) {
     }
     cap = sb->blk == 0 ? units : sb->cap;
     while (cap < units) {
-        cap += (cap >> 1) + 16;
+        int32_t growth = (cap >> 1) + 16;
+        cap = cap > INT32_MAX - growth ? INT32_MAX : cap + growth;
     }
-    sb->blk = dream_realloc(sb->blk, (int32_t)((size_t)cap * 2 + 8), TAG_STRING);
+    sb->blk = dream_realloc(sb->blk, dream_string_bytes(cap), TAG_STRING);
     sb->cap = cap;
 }
 
@@ -576,8 +628,9 @@ DREAM_ALWAYS_INLINE void dream_strb_append(dream_strb *sb, dream_ptr s) {
     if (n <= 0) {
         return;
     }
-    if (sb->len + n > sb->cap || sb->blk == 0) {
-        dream_strb_reserve(sb, sb->len + n);
+    int32_t needed = dream_string_count_add(sb->len, n);
+    if (needed > sb->cap || sb->blk == 0) {
+        dream_strb_reserve(sb, needed);
     }
     d = (uint16_t *)((char *)dream_p(sb->blk) + STRING_UNITS_OFFSET) + sb->len;
     memcpy(d, dream_str_units(s), (size_t)n << 1);
@@ -590,6 +643,9 @@ DREAM_ALWAYS_INLINE void dream_strb_append_ascii(dream_strb *sb, const char *s) 
     uint16_t *d;
     if (n == 0) {
         return;
+    }
+    if (n > (size_t)(INT32_MAX - sb->len)) {
+        DREAM_PANIC_LITERAL(u"panic: string length exceeds the supported limit");
     }
     if ((size_t)sb->len + n > (size_t)sb->cap || sb->blk == 0) {
         dream_strb_reserve(sb, sb->len + (int32_t)n);
@@ -622,12 +678,12 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_n(dream_ptr const *parts, int32_t n) 
     dream_ptr p;
     uint16_t *d;
     for (i = 0; i < n; i++) {
-        total += dream_str_len(parts[i]);
+        total = dream_string_count_add(total, dream_str_len(parts[i]));
     }
     if (total <= 0) {
         return 0;
     }
-    p = dream_malloc((int32_t)((size_t)total * 2 + 8), TAG_STRING);
+    p = dream_malloc(dream_string_bytes(total), TAG_STRING);
     dream_i32(p)[0] = total;
     dream_str_init_owned(p);
     d = (uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET);
@@ -717,7 +773,7 @@ DREAM_ALWAYS_INLINE void dream_write_i32_utf16(uint16_t *out, int32_t v) {
 
 DREAM_ALWAYS_INLINE dream_ptr dream_int_to_string_fast(int32_t v) {
     int32_t n = dream_i32_utf16_len(v);
-    dream_ptr     p = dream_malloc((int32_t)((size_t)n * 2 + 8), TAG_STRING);
+    dream_ptr     p = dream_malloc(dream_string_bytes(n), TAG_STRING);
     dream_i32(p)[0] = n;
     dream_str_init_owned(p);
     dream_write_i32_utf16((uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET), v);
@@ -743,12 +799,12 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_str_int_str(dream_ptr pref, int32_t v
     int32_t plen = dream_str_len(pref);
     int32_t slen = dream_str_len(suf);
     int32_t nd = dream_i32_utf16_len(v);
-    int32_t total = plen + nd + slen;
+    int32_t total = dream_string_count_add(dream_string_count_add(plen, nd), slen);
     dream_ptr p;
     if (total <= 0) {
         return 0;
     }
-    p = dream_malloc((int32_t)((size_t)total * 2 + 8), TAG_STRING);
+    p = dream_malloc(dream_string_bytes(total), TAG_STRING);
     dream_concat_str_int_str_fill(p, pref, v, suf, plen, nd, slen);
     return p;
 }
@@ -758,7 +814,7 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_str_int_str_into(dream_ptr dest, drea
     int32_t plen = dream_str_len(pref);
     int32_t slen = dream_str_len(suf);
     int32_t nd = dream_i32_utf16_len(v);
-    int32_t total = plen + nd + slen;
+    int32_t total = dream_string_count_add(dream_string_count_add(plen, nd), slen);
     dream_ptr p;
     if (total <= 0) {
         dream_release(dest);

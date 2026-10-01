@@ -6,7 +6,7 @@
 
 static dream_ptr mk_ascii(const char *s) {
     size_t n = strlen(s);
-    dream_ptr p = dream_malloc((int32_t)(n * 2 + 8), TAG_STRING);
+    dream_ptr p = dream_malloc((dream_size)n * 2 + 8, TAG_STRING);
     uint16_t *u;
     size_t i;
     dream_i32(p)[0] = (int32_t)n;
@@ -75,6 +75,16 @@ int main(void) {
         buf[i] = 'z';
     }
     s = mk_ascii(buf);
+
+    BENCH_MIN("allocator_private", 5, 2000000, {
+        for (i = 0; i < 2000000; ++i) {
+            dream_ptr block = dream_malloc(24, TAG_ARRAY);
+            dream_i32(block)[0] = i;
+            acc ^= dream_i32(block)[0];
+            dream_release(block);
+        }
+    });
+
 
     BENCH_MIN("char_scan", 5, iters, {
         int32_t n = dream_str_len(s);

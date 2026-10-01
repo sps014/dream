@@ -103,6 +103,11 @@ that table, and a missing entry is an ICE.
   `mir::abi`, initializes the fields or elements, and calls the user constructor when there is
   one. `shared class` instances allocate four extra bytes past their field layout for the lock
   word (`HEADER_LOCK_WORD_SIZE`), and retain/release for them use the atomic runtime helpers.
+  Native allocation byte sizes and heap-header sizes use unsigned pointer-width `dream_size`
+  (`size_t`); wasm32 keeps its i32 allocation ABI. Generated allocation operands are widened
+  before runtime-call coercion, so native sizes never pass through an i32 truncation. Native
+  headers are 32 bytes to preserve payload alignment and the live-block marker; tag/RC offsets
+  relative to the payload are unchanged. Array/string element counts remain language `int`.
 - **Locks** pass the object identity to the native runtime's per-object registry, whose entry is
   removed before heap recycling. WASM passes the address of the in-object lock word instead.
 - **String literals** are interned into `constant` heap-object blocks (`__ds<n>_blk`: header plus

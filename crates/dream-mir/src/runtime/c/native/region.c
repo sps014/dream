@@ -35,7 +35,7 @@ static region_state *current(void) {
 }
 
 static void region_panic(void) {
-    dream_panic(dream_utf8_to_string("region allocation exceeds the supported object size"));
+    DREAM_PANIC_LITERAL(u"panic: region allocation exceeds the supported object size");
 }
 
 void dream_region_enter(void) {
@@ -62,12 +62,12 @@ void dream_region_enter(void) {
     dream_region_heap_mode(1);
 }
 
-dream_ptr dream_region_try_malloc(int32_t size, int32_t tag) {
+dream_ptr dream_region_try_malloc(dream_size size, int32_t tag) {
     region_state *s = current();
     if (s == NULL || s->depth == 0 || s->depth > REGION_MAX_DEPTH || (tag & TAG_SHARED)) {
         return 0;
     }
-    if (size < 0 || size > INT32_MAX - 63 - (int32_t)sizeof(region_chunk)) {
+    if ((size_t)size > DREAM_SIZE_MAX - 63 - sizeof(region_chunk)) {
         region_panic();
         return 0;
     }
@@ -80,7 +80,7 @@ dream_ptr dream_region_try_malloc(int32_t size, int32_t tag) {
         prefix += 4;
 #endif
         size_t capacity = prefix + (total > REGION_PAYLOAD ? total : REGION_PAYLOAD);
-        dream_ptr pointer = dream_region_backing_malloc((int32_t)capacity);
+        dream_ptr pointer = dream_region_backing_malloc((dream_size)capacity);
         chunk = (region_chunk *)dream_p(pointer);
         chunk->previous = s->chunk;
         chunk->capacity = capacity;
@@ -90,7 +90,7 @@ dream_ptr dream_region_try_malloc(int32_t size, int32_t tag) {
     char *block = (char *)chunk + chunk->offset;
     chunk->offset += total;
     ++s->allocations;
-    return dream_region_activate(block, (int32_t)total, tag);
+    return dream_region_activate(block, (dream_size)total, tag);
 }
 
 int dream_region_owns(dream_ptr pointer) {

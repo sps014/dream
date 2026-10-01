@@ -19,7 +19,7 @@ dream_ptr dream_int_to_string(int32_t v) {
 dream_ptr dream_uint_to_string(int32_t v) {
     uint32_t u = (uint32_t)v;
     int32_t n = u == 0 ? 1 : dream_u32_ndigits(u);
-    dream_ptr p = dream_malloc((int32_t)((size_t)n * 2 + 8), TAG_STRING);
+    dream_ptr p = dream_malloc((dream_size)n * 2 + 8, TAG_STRING);
     uint16_t *out;
     dream_i32(p)[0] = n;
     dream_str_init_owned(p);

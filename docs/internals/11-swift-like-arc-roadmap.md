@@ -23,7 +23,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - **Borrow inference** (`passes/param_modes.rs`): a sink parameter that is only read, with every
   caller known, is flipped to `borrow` before `RcInsertion`, so neither side emits RC for it.
 - Value `struct` / plain `enum` off-heap (shadow stack); classes / arrays / strings / collections
-  on the heap with a `[size][tag][ref_count]` header (12 bytes on wasm32, 16 on native). The RC
+  on the heap with a `[size][tag][ref_count]` header (12 bytes on wasm32, 32 on native, including machine-width size, alignment padding and a live-block marker). The RC
   word is one signed int: positive = thread-local count, sign bit = atomic count (`shared`),
   `DREAM_RC_IMMORTAL` = never mutated or freed (interned strings, frame-allocated objects), so
   every RC fast path is one load plus a sign test.

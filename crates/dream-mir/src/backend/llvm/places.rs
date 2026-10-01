@@ -440,7 +440,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         let drop_src = rvalue_allocates(rv).then(|| release_sym(&self.l.cx, fld.ty));
         let src = self.as_ref(rhs);
         let old = self.load_ty(self.h(), slot, align, true);
-        let box_ = self.call_v("dream_malloc", &[V::i32(size), V::i32(0)]);
+        let box_ = self.call_v("dream_malloc", &[V::i64(size), V::i32(0)]);
         let (bp, sp) = (self.ptr(&box_), self.ptr(&src));
         self.memcpy(&bp, &sp, &Value::i64(size));
         let disc = self.load_ty(Ty::I32, &sp, 4, false);

@@ -159,7 +159,7 @@ pub(super) fn build_boxed_wrapper<'a>(l: &mut Lcx<'a>, f: &'a MirFunction) {
     let mut fx = super::glue::glue(l, &wrapper);
     let size = crate::backend::shared::abi_types::elem_size(&fx.l.cx, f.ret) as i64;
     let tag = fx.l.cx.type_tag(f.ret);
-    let b = fx.call_v("dream_malloc", &[V::i32(size), V::i32(tag as i64)]);
+    let b = fx.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
     let mut args: Vec<V> = (0..n).map(|i| fx.arg(i)).collect();
     args.push(V::s(fx.ptr(&b)));
     fx.call(&name, &args);

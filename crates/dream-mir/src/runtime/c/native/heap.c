@@ -60,8 +60,8 @@ static void heap_unlock(void) {
 }
 
 /* Class index for a block of `size` total bytes, or NCLASS when it is a large block. */
-static int size_class(int32_t size) {
-    if ((uint32_t)(size - 1) >= (uint32_t)DREAM_MAX_CLASS_BYTES) {
+static int size_class(size_t size) {
+    if (size - 1u >= DREAM_MAX_CLASS_BYTES) {
         return NCLASS;
     }
     return dream_size_class((uint32_t)size);
@@ -191,13 +191,13 @@ static void account_frees(uint32_t n) {
 /* Re-arm the inline fast path once the thread is registered and no region is open. */
 static void heap_refresh_fast(void);
 
-static char *large_try_take(int32_t need) {
+static char *large_try_take(size_t need) {
     dream_ptr prev = 0;
     dream_ptr curr = large_freelist;
     while (curr != 0) {
         char *block = (char *)dream_p(curr);
         void *next = large_next(block);
-        if (((uint32_t *)block)[1] == MAGIC_FREE && ((int32_t *)block)[0] >= need) {
+        if (*dream_block_magic(block) == MAGIC_FREE && *dream_block_size(block) >= need) {
             if (prev == 0) {
                 large_freelist = (dream_ptr)(uintptr_t)next;
             } else {
@@ -212,7 +212,7 @@ static char *large_try_take(int32_t need) {
 }
 
 static char *tls_bump(size_t n) {
-    size_t aligned = (n + 15u) & ~15u;
+    size_t aligned = (n + 15u) & ~(size_t)15u;
     if (th.arena == NULL || aligned > th.arena_len || th.arena_off > th.arena_len - aligned) {
         size_t map_len = aligned > (size_t)CHUNK ? aligned : (size_t)CHUNK;
         th.arena = (char *)map_chunk(map_len);
@@ -231,7 +231,7 @@ static char *tls_bump(size_t n) {
 }
 
 static char *bump(size_t n) {
-    size_t aligned = (n + 15u) & ~15u;
+    size_t aligned = (n + 15u) & ~(size_t)15u;
     if (arena == NULL || aligned > arena_len || arena_off > arena_len - aligned) {
         size_t map_len = aligned > (size_t)CHUNK ? aligned : (size_t)CHUNK;
         arena = (char *)map_chunk(map_len);
@@ -249,10 +249,10 @@ static char *bump(size_t n) {
     }
 }
 
-dream_ptr dream_region_activate(char *block, int32_t total, int32_t tag) {
-    ((int32_t *)block)[0] = total;
+dream_ptr dream_region_activate(char *block, dream_size total, int32_t tag) {
+    *dream_block_size(block) = total;
     activate(block, tag);
-    return (dream_ptr)(block + 16);
+    return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
 }
 
 void dream_region_account_free(uint32_t count) {
@@ -271,16 +271,20 @@ static void heap_refresh_fast(void) {
     }
 }
 
-static dream_ptr malloc_general(int32_t size, int32_t tag) {
-    int32_t total;
-    int idx;
-    char *block = NULL;
-    int32_t alloc_size;
-    if (size < 0 || size > (INT32_MAX - 31)) {
+static size_t allocation_total(size_t size) {
+    if (size > PTRDIFF_MAX - NATIVE_HEAP_HEADER_SIZE - 15) {
         DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the supported limit");
     }
+    return ((size + 15u) & ~(size_t)15u) + NATIVE_HEAP_HEADER_SIZE;
+}
+
+static dream_ptr malloc_general(dream_size size, int32_t tag) {
+    size_t total;
+    int idx;
+    char *block = NULL;
+    size_t alloc_size;
+    total = allocation_total(size);
     heap_refresh_fast();
-    total = ((size + 15) & -16) + 16;
     idx = size_class(total);
     alloc_size = idx < NCLASS ? class_bytes(idx) : total;
     if (idx < NCLASS) {
@@ -288,33 +292,30 @@ static dream_ptr malloc_general(int32_t size, int32_t tag) {
         if (block != NULL) {
             dream_heap.free[idx] = class_next(block);
             activate(block, tag);
-            return (dream_ptr)(block + 16);
+            return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
         }
     }
     block = tls_bump((size_t)alloc_size);
-    ((int32_t *)block)[0] = alloc_size;
+    *dream_block_size(block) = alloc_size;
     activate(block, tag);
-    return (dream_ptr)(block + 16);
+    return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
 }
 
-dream_ptr dream_malloc_slow(int32_t size, int32_t tag) {
+dream_ptr dream_malloc_slow(dream_size size, int32_t tag) {
     dream_ptr pointer = dream_region_try_malloc(size, tag);
     return pointer != 0 ? pointer : malloc_general(size, tag);
 }
 
-dream_ptr dream_region_backing_malloc(int32_t size) {
+dream_ptr dream_region_backing_malloc(dream_size size) {
     return dream_malloc_shared(size, 0);
 }
 
-dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
-    int32_t total;
+dream_ptr dream_malloc_shared(dream_size size, int32_t tag) {
+    size_t total;
     int idx;
     char *block = NULL;
-    int32_t alloc_size;
-    if (size < 0 || size > (INT32_MAX - 31)) {
-        DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the supported limit");
-    }
-    total = ((size + 15) & -16) + 16;
+    size_t alloc_size;
+    total = allocation_total(size);
     idx = size_class(total);
     alloc_size = idx < NCLASS ? class_bytes(idx) : total;
     if (tag != 0) {
@@ -326,7 +327,7 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
     } else {
         while (freelist[idx] != 0) {
             block = (char *)dream_p(freelist[idx]);
-            if (((uint32_t *)block)[1] != MAGIC_FREE) {
+            if (*dream_block_magic(block) != MAGIC_FREE) {
                 freelist[idx] = 0;
                 block = NULL;
                 break;
@@ -340,11 +341,11 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
     }
     if (block == NULL) {
         block = bump((size_t)alloc_size);
-        ((int32_t *)block)[0] = alloc_size;
+        *dream_block_size(block) = alloc_size;
     }
     heap_unlock();
     activate(block, tag);
-    return (dream_ptr)(block + 16);
+    return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
 }
 
 int dream_heap_is_live(dream_ptr ptr) {
@@ -356,7 +357,7 @@ int dream_heap_is_live(dream_ptr ptr) {
     if (!native_block_in_heap(block)) {
         return 0;
     }
-    return ((uint32_t *)block)[1] == MAGIC_LIVE;
+    return *dream_block_magic(block) == MAGIC_LIVE;
 }
 
 int32_t debug_get_live_objects(void) {
@@ -446,20 +447,20 @@ static void dump_scan_map(char *base, size_t len, DumpHist *h, int *nh, DumpStr 
                           int32_t *str_n) {
     char *p = base;
     char *end = base + len;
-    while (p + 16 <= end) {
-        int32_t sz = ((int32_t *)p)[0];
-        uint32_t mag = ((uint32_t *)p)[1];
-        if (sz < 16 || (sz & 15) != 0 || (size_t)sz > (size_t)(end - p)) {
+    while ((size_t)(end - p) >= NATIVE_HEAP_HEADER_SIZE) {
+        size_t sz = *dream_block_size(p);
+        uint32_t mag = *dream_block_magic(p);
+        if (sz < NATIVE_HEAP_HEADER_SIZE || (sz & 15) != 0 || (size_t)sz > (size_t)(end - p)) {
             p += 16;
             continue;
         }
         // Pinned singletons (`dream_pin_immortal`) are never freed by design and already left
         // `live_objects`, so counting them here would report a leak the accounting denies.
-        if (mag == MAGIC_LIVE && ((int32_t *)p)[3] != DREAM_RC_IMMORTAL) {
-            int32_t tag = ((int32_t *)p)[2] & TAG_VALUE_MASK;
+        if (mag == MAGIC_LIVE && *(int32_t *)(p + NATIVE_HEAP_HEADER_SIZE - RC_FROM_DATA) != DREAM_RC_IMMORTAL) {
+            int32_t tag = *(int32_t *)(p + NATIVE_HEAP_HEADER_SIZE - TAG_FROM_DATA) & TAG_VALUE_MASK;
             dump_hist_add(h, nh, tag);
             if (tag == TAG_STRING) {
-                dump_string_save(p + 16, ss, str_n);
+                dump_string_save(p + NATIVE_HEAP_HEADER_SIZE, ss, str_n);
             }
         }
         p += sz;
@@ -531,7 +532,7 @@ int32_t debug_get_free_list_head(void) {
 
 void dream_recycle_slow(dream_ptr ptr) {
     char *block;
-    int32_t sz;
+    size_t sz;
     int idx;
     if (ptr == 0) {
         return;
@@ -540,19 +541,19 @@ void dream_recycle_slow(dream_ptr ptr) {
     if (*dream_tag_word(ptr) & DREAM_TAG_WEAK_TARGET) {
         dream_weak_clear_all(ptr);
     }
-    block = (char *)dream_p(ptr) - 16;
+    block = (char *)dream_p(ptr) - NATIVE_HEAP_HEADER_SIZE;
     if (dream_region_owns(ptr)) {
         return;
     }
-    sz = ((int32_t *)block)[0];
-    if (sz == 0 || ((uint32_t *)block)[1] != MAGIC_LIVE) {
+    sz = *dream_block_size(block);
+    if (sz == 0 || *dream_block_magic(block) != MAGIC_LIVE) {
         return;
     }
     if (dream_tag_shared(ptr)) {
         dream_lock_forget(ptr);
     }
     idx = size_class(sz);
-    ((uint32_t *)block)[1] = MAGIC_FREE;
+    *dream_block_magic(block) = MAGIC_FREE;
     account_frees(1);
     if (dream_tag_shared(ptr) || idx >= NCLASS) {
         heap_lock();
@@ -582,26 +583,23 @@ void dream_free(dream_ptr ptr) {
     dream_recycle(ptr);
 }
 
-dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {
+dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag) {
     char *block;
-    int32_t old_total;
-    int32_t new_total;
+    size_t old_total;
+    size_t new_total;
     dream_ptr np;
-    int32_t copy;
-    if (new_size < 0 || new_size > INT32_MAX - 31) {
-        DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the supported limit");
-    }
+    size_t copy;
+    new_total = allocation_total(new_size);
     if (ptr == 0) {
         return dream_malloc(new_size, tag);
     }
-    block = (char *)dream_p(ptr) - 16;
-    old_total = ((int32_t *)block)[0];
-    new_total = ((new_size + 15) & -16) + 16;
-    if ((uint32_t)new_total <= (uint32_t)old_total) {
+    block = (char *)dream_p(ptr) - NATIVE_HEAP_HEADER_SIZE;
+    old_total = *dream_block_size(block);
+    if (new_total <= old_total) {
         return ptr;
     }
     np = dream_tag_shared(ptr) ? dream_malloc_shared(new_size, tag) : dream_malloc(new_size, tag);
-    copy = old_total - 16;
+    copy = old_total - NATIVE_HEAP_HEADER_SIZE;
     if (copy > new_size) {
         copy = new_size;
     }

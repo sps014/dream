@@ -428,7 +428,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         let o = match frame {
             Some(buf) => self.call_v(
                 "dream_frame_object",
-                &[V::s(buf), V::i32(size as i64), V::i32(tag as i64)],
+                &[V::s(buf), V::i64(size as i64), V::i32(tag as i64)],
             ),
             None => {
                 let malloc = if shared {
@@ -436,7 +436,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 } else {
                     "dream_malloc"
                 };
-                let o = self.call_v(malloc, &[V::i32(size as i64), V::i32(tag as i64)]);
+                let o = self.call_v(malloc, &[V::i64(size as i64), V::i32(tag as i64)]);
                 let p = self.ptr(&o);
                 self.memset0(&p, &Value::i64(size as i64));
                 o
@@ -551,7 +551,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             .unwrap_or_else(|| crate::internal_error!("missing union layout {ty:?}"))
             .size;
         let tag = self.l.cx.type_tag(ty);
-        let o = self.call_v("dream_malloc", &[V::i32(size as i64), V::i32(tag as i64)]);
+        let o = self.call_v("dream_malloc", &[V::i64(size as i64), V::i32(tag as i64)]);
         self.union_new_at(&o, ty, variant, args);
         o
     }
@@ -570,7 +570,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         let rc = self.is_rc(elem_ty);
         let o = self.call_v(
             "dream_malloc",
-            &[V::i32(size), V::i32(crate::abi::TAG_ARRAY as i64)],
+            &[V::i64(size), V::i32(crate::abi::TAG_ARRAY as i64)],
         );
         let p = self.ptr(&o);
         self.memset0(&p, &Value::i64(size));
@@ -610,7 +610,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             .iter()
             .map(|e| unique_container_move_local(self.f, self.interner, e).is_some())
             .collect();
-        let o = self.call_v("dream_malloc", &[V::i32(size), V::i32(tag as i64)]);
+        let o = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
         let p = self.ptr(&o);
         self.memset0(&p, &Value::i64(size));
         for (i, v) in vals.iter().enumerate() {
@@ -692,7 +692,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         if matches!(tk, TyKind::Object | TyKind::Interface(..)) && self.is_value(from) {
             let size = elem_size(&self.l.cx, from) as i64;
             let tag = self.l.cx.type_tag(from);
-            let b = self.call_v("dream_malloc", &[V::i32(size), V::i32(tag as i64)]);
+            let b = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
             let (bp, sp) = (self.ptr(&b), self.ptr(&src));
             self.memcpy(&bp, &sp, &Value::i64(size));
             return b;

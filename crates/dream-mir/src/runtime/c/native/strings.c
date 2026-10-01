@@ -8,9 +8,6 @@ static dream_ptr empty_string_singleton;
 
 dream_ptr dream_string_alloc(int32_t units) {
     dream_ptr p;
-    if (units > (INT32_MAX - 39) / 2) {
-        DREAM_PANIC_LITERAL(u"panic: string size exceeds the supported limit");
-    }
     if (units <= 0) {
         /* Immortal shared empty string: callers release through ordinary ARC, so the
          * cached block is pinned (rc == DREAM_RC_IMMORTAL is ignored by retain/release).
@@ -24,14 +21,23 @@ dream_ptr dream_string_alloc(int32_t units) {
         }
         return empty_string_singleton;
     }
-    p = dream_malloc((int32_t)((size_t)units * 2 + 8), TAG_STRING);
+    p = dream_malloc(dream_string_bytes(units), TAG_STRING);
     dream_i32(p)[0] = units;
     dream_str_init_owned(p);
     return p;
 }
 
+/* Counts remain Dream int values; byte sizes use the target's allocation width. */
+static dream_size array_bytes(int32_t len, int32_t esize) {
+    if (len < 0 || esize < 1 ||
+        (size_t)len > (DREAM_SIZE_MAX - DREAM_BLOCK_HEADER - 19u) / (size_t)esize) {
+        DREAM_PANIC_LITERAL(u"panic: array size exceeds the supported limit");
+    }
+    return (dream_size)len * esize + 4;
+}
+
 static dream_ptr array_new_with(int32_t len, int32_t esize, int shared, int32_t tag) {
-    int32_t size;
+    dream_size size;
     dream_ptr p;
     if (len < 0) {
         len = 0;
@@ -39,10 +45,7 @@ static dream_ptr array_new_with(int32_t len, int32_t esize, int shared, int32_t 
     if (esize < 1) {
         esize = 1;
     }
-    if (len > 0 && (uint32_t)esize > (uint32_t)(INT32_MAX - 4) / (uint32_t)len) {
-        DREAM_PANIC_LITERAL(u"panic: array size exceeds the supported limit");
-    }
-    size = 4 + len * esize;
+    size = array_bytes(len, esize);
     p = shared ? dream_malloc_shared(size, tag) : dream_malloc(size, tag);
     memset(dream_p(p), 0, (size_t)size);
     dream_i32(p)[0] = len;
@@ -67,7 +70,7 @@ dream_ptr dream_closure_env_array_new(int32_t len, int32_t esize) {
 __attribute__((cold, noinline)) static dream_ptr sb_realloc_no_zero(dream_ptr bytes,
                                                                     int32_t new_cap) {
     int32_t old_len = bytes ? dream_i32(bytes)[0] : 0;
-    dream_ptr p = dream_realloc(bytes, 4 + new_cap, TAG_ARRAY);
+    dream_ptr p = dream_realloc(bytes, array_bytes(new_cap, 1), TAG_ARRAY);
     dream_i32(p)[0] = new_cap;
     (void)old_len;
     return p;
@@ -76,7 +79,7 @@ __attribute__((cold, noinline)) static dream_ptr sb_realloc_no_zero(dream_ptr by
 __attribute__((cold, noinline)) dream_ptr dream_sb_grow_bytes(dream_sb *sb, dream_ptr bytes,
                                                               int32_t need) {
     int32_t cap = bytes ? dream_i32(bytes)[0] : 0;
-    int32_t new_cap = cap * 2;
+    int32_t new_cap = cap <= INT32_MAX / 2 ? cap * 2 : INT32_MAX;
     if (new_cap < need) {
         new_cap = need;
     }
@@ -90,7 +93,7 @@ __attribute__((cold, noinline)) dream_ptr dream_sb_grow_bytes(dream_sb *sb, drea
 
 dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len, int32_t esize) {
     int32_t old_len = arr ? dream_i32(arr)[0] : 0;
-    dream_ptr p = dream_realloc(arr, 4 + new_len * esize, TAG_ARRAY);
+    dream_ptr p = dream_realloc(arr, array_bytes(new_len, esize), TAG_ARRAY);
     dream_i32(p)[0] = new_len;
     if (new_len > old_len) {
         memset((char *)dream_p(p) + 4 + (size_t)old_len * (size_t)esize, 0,
@@ -105,6 +108,7 @@ dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len, int32_t esize) {
 dream_ptr dream_array_realloc_rc(dream_ptr arr, int32_t new_len, int32_t esize,
                                  void (*release)(dream_ptr)) {
     int32_t old_len = arr ? dream_i32(arr)[0] : 0;
+    (void)array_bytes(new_len, esize);
     if (arr && release && new_len < old_len) {
         for (int32_t i = new_len; i < old_len; i++) {
             dream_ptr elem;
@@ -220,7 +224,7 @@ dream_ptr string_from_builder(dream_ptr bytes, int32_t len, int32_t scalars) {
     if (scalars < 0) {
         scalars = len >> 1;
     }
-    p = dream_malloc(len + 8, TAG_STRING);
+    p = dream_malloc((dream_size)len + 8, TAG_STRING);
     dream_i32(p)[0] = scalars;
     dream_str_init_owned(p);
     memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, (char *)dream_p(bytes) + 8, (size_t)len);

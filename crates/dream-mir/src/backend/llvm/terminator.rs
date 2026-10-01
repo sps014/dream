@@ -80,7 +80,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     let size = elem_size(&self.l.cx, self.f.ret) as i64;
                     let tag = self.l.cx.type_tag(self.f.ret);
                     let src = self.operand(o);
-                    let r = self.call_v("dream_malloc", &[V::i32(size), V::i32(tag as i64)]);
+                    let r = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
                     let (rp, sp) = (self.ptr(&r), self.ptr(&src));
                     self.memcpy(&rp, &sp, &Value::i64(size));
                     self.ret_v(&r);

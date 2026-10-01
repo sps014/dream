@@ -1,6 +1,0 @@
-import system;
-
-fun main(): void {
-    let values = Buffer.alloc<long>(400000000);
-    System.println(values.length.to_string());
-}

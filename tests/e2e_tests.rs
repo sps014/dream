@@ -146,9 +146,7 @@ fn spawn_tcp_echo() -> (u16, thread::JoinHandle<()>) {
     (port, handle)
 }
 
-fn write_e2e_tls_cert() -> (String, String) {
-    let dir = std::env::temp_dir().join(format!("dream_e2e_tls_{}", std::process::id()));
-    let _ = fs::create_dir_all(&dir);
+fn write_e2e_tls_cert(dir: &Path) -> (String, String) {
     let cert_path = dir.join("cert.pem");
     let key_path = dir.join("key.pem");
     let issued = rcgen::generate_simple_self_signed(["localhost".into()]).expect("rcgen");
@@ -260,13 +258,9 @@ fn run_native_case(dream_file: &Path, release: bool) {
     let expected_error_file = dream_file.with_extension("expected_error");
     let expected_trap_file = dream_file.with_extension("expected_trap");
     let stem = dream_file.file_stem().and_then(|s| s.to_str()).unwrap();
-    let dest_dir = Path::new("target").join(if release {
-        "e2e-native-release"
-    } else {
-        "e2e-native"
-    });
-    fs::create_dir_all(&dest_dir).unwrap();
-    let ll_path = dest_dir.join(format!("{stem}.ll"));
+    // Smoke and parity suites overlap and run concurrently, including binary cleanup.
+    let artifacts = tempfile::Builder::new().prefix(stem).tempdir().unwrap();
+    let ll_path = artifacts.path().join(format!("{stem}.ll"));
     let compiler = Compiler::new(Target::Native).with_release(release);
     let src = dream_file.to_str().unwrap().to_string();
     let dest = ll_path.to_str().unwrap().to_string();
@@ -333,7 +327,7 @@ fn run_native_case(dream_file: &Path, release: bool) {
         env.push(("DREAM_E2E_HTTP_PORT", port.to_string()));
     }
     let tls_paths = if stem == "webapi_tls" {
-        Some(write_e2e_tls_cert())
+        Some(write_e2e_tls_cert(artifacts.path()))
     } else {
         None
     };

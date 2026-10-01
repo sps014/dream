@@ -10,8 +10,6 @@
 
 pub mod abi;
 pub(crate) mod analysis;
-mod rc_store;
-mod visit;
 pub mod async_emit;
 pub mod backend;
 pub mod build;
@@ -20,9 +18,11 @@ pub mod lower;
 pub mod passes;
 pub mod pretty;
 mod prune;
+mod rc_store;
 pub mod runtime;
 mod simd;
 pub mod verify;
+mod visit;
 
 pub use simd::SimdLane;
 
@@ -181,9 +181,6 @@ pub enum Statement {
     Retain(Operand),
     /// Decrement the refcount of a reference operand (and free at zero).
     Release(Operand),
-    /// Last-use destroy of a compile-time **Unique** token: run `del` + nested releases + `free`
-    /// without the RC header decrement. Never used for `@shared`, `js`, or strings.
-    ReleaseUnique(Operand),
     /// Prints `Operand` (a `string`-typed panic message, always a compile-time-known literal built
     /// during HIR emission) via the shared `$dream_panic` runtime helper, then traps unconditionally.
     /// The single, shared halt point for every runtime failure: array/string bounds checks,
@@ -291,7 +288,7 @@ pub enum Statement {
     /// reclaims a uniquely owned graph with no `del`.
     RegionEnter,
     /// Rewind the current unique-graph region (O(1) free of every block allocated since the
-    /// matching [`Statement::RegionEnter`]). Replaces [`Statement::ReleaseUnique`] of the graph
+    /// matching [`Statement::RegionEnter`]). Replaces [`Statement::Release`] of the graph
     /// root so destroy does not walk/recycle per node.
     RegionLeave,
     /// `out[i..i+L] = a[i..i+L] ⊕ b[i..i+L]` (or splat RHS) as one WASM `v128` op.

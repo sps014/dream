@@ -66,14 +66,15 @@ impl<'a> PrettyCx<'a> {
             TyKind::Array(e) => format!("{}[]", self.ty(*e)),
             TyKind::Tuple(es) => format!("({})", self.tys(es)),
             TyKind::Func(ps, r) => format!("fun({}): {}", self.tys(ps), self.ty(*r)),
-            TyKind::Struct(d, args)
-            | TyKind::Union(d, args)
-            | TyKind::Interface(d, args)
+            TyKind::Struct(d, args) | TyKind::Union(d, args) | TyKind::Interface(d, args)
                 if !args.is_empty() =>
             {
                 format!("def{}<{}>", d.0, self.tys(args))
             }
-            TyKind::Struct(d, _) | TyKind::Union(d, _) | TyKind::Interface(d, _) | TyKind::Enum(d) => {
+            TyKind::Struct(d, _)
+            | TyKind::Union(d, _)
+            | TyKind::Interface(d, _)
+            | TyKind::Enum(d) => {
                 format!("def{}", d.0)
             }
         }
@@ -145,7 +146,13 @@ pub fn print_function(cx: &PrettyCx<'_>, func: &MirFunction) -> String {
     }
     let _ = writeln!(out, " {{");
     for (i, decl) in func.locals.iter().enumerate() {
-        let _ = writeln!(out, "  let _{}: {}{};", i, cx.ty(decl.ty), local_flags(decl));
+        let _ = writeln!(
+            out,
+            "  let _{}: {}{};",
+            i,
+            cx.ty(decl.ty),
+            local_flags(decl)
+        );
     }
     for (i, block) in func.blocks.iter().enumerate() {
         let entry = if i == func.entry.0 as usize {
@@ -199,7 +206,6 @@ impl FnPrinter<'_> {
             Statement::Assign(p, r) => format!("{} = {}", self.place(p), self.rvalue(r)),
             Statement::Retain(o) => format!("retain {}", self.operand(o)),
             Statement::Release(o) => format!("release {}", self.operand(o)),
-            Statement::ReleaseUnique(o) => format!("release_unique {}", self.operand(o)),
             Statement::Panic(o) => format!("panic {}", self.operand(o)),
             Statement::Call { callee, args } => {
                 format!("call {}({})", self.cx.callee(callee), self.ops(args))
@@ -442,8 +448,17 @@ impl FnPrinter<'_> {
                 len,
                 closure_env,
             } => {
-                let kind = if *closure_env { "closure_env_new" } else { "array_new" };
-                format!("{}::<{}>({})", kind, self.cx.ty(*elem_ty), self.operand(len))
+                let kind = if *closure_env {
+                    "closure_env_new"
+                } else {
+                    "array_new"
+                };
+                format!(
+                    "{}::<{}>({})",
+                    kind,
+                    self.cx.ty(*elem_ty),
+                    self.operand(len)
+                )
             }
             Rvalue::ToBytes { value, ty } => {
                 format!("to_bytes::<{}>({})", self.cx.ty(*ty), self.operand(value))

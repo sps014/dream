@@ -63,7 +63,6 @@ impl MirPass for Dse {
                     | Statement::Print { .. }
                     | Statement::Retain(_)
                     | Statement::Release(_)
-                    | Statement::ReleaseUnique(_)
                     | Statement::ForceFree(_)
                     | Statement::ArrayElemsCopy { .. }
                     | Statement::ArrayElemsFill { .. }

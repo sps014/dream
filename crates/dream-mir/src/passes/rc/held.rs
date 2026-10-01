@@ -68,8 +68,7 @@ pub(crate) fn run_function(
     modref: &ModRefTable,
 ) -> bool {
     if f.is_async
-        || f
-            .blocks
+        || f.blocks
             .iter()
             .any(|b| matches!(b.terminator, Terminator::Await { .. }))
     {
@@ -109,7 +108,10 @@ pub(crate) fn run_function(
                 .holds(&live_out)
             })
             .collect();
-        let classes: Vec<BTreeSet<u32>> = accepted.iter().map(|&x| pending[&x].class.clone()).collect();
+        let classes: Vec<BTreeSet<u32>> = accepted
+            .iter()
+            .map(|&x| pending[&x].class.clone())
+            .collect();
         for x in &ready {
             pending.remove(x);
         }
@@ -168,7 +170,10 @@ fn candidates(
                         Rvalue::Use(op) | Rvalue::Cast(op, _, _)
                             if local_of(op).is_some_and(|s| s != d.0) && !retained =>
                         {
-                            alias_defs.entry(d.0).or_default().push(local_of(op).expect("some"));
+                            alias_defs
+                                .entry(d.0)
+                                .or_default()
+                                .push(local_of(op).expect("some"));
                         }
                         _ => {
                             other_defs.insert(d.0);
@@ -314,9 +319,7 @@ fn for_each_given_away(stmt: &Statement, mut out: impl FnMut(u32)) {
             } => args.iter().filter_map(local_of).for_each(out),
             _ => {}
         },
-        Statement::ReleaseUnique(op) | Statement::ForceFree(op) => {
-            local_of(op).into_iter().for_each(out)
-        }
+        Statement::ForceFree(op) => local_of(op).into_iter().for_each(out),
         _ => {}
     }
 }
@@ -417,9 +420,7 @@ impl Check<'_> {
         let base = self.snap.base;
         let pins = self.owner_pins();
         let mut base_given = false;
-        for_each_given_away(stmt, |l| {
-            base_given |= l == base || pins.contains(&l)
-        });
+        for_each_given_away(stmt, |l| base_given |= l == base || pins.contains(&l));
         let base_dropped = match stmt {
             // Reloading the array pointer from the same field does not free the buffer.
             Statement::Assign(Place::Local(d), rv) if d.0 == base => {
@@ -444,9 +445,7 @@ impl Check<'_> {
                 .may_run_del(self.f.locals[l as usize].ty, self.interner, self.layouts)
         };
         let drops = match stmt {
-            Statement::Release(op) | Statement::ReleaseUnique(op) => {
-                local_of(op).is_none_or(|l| l != self.x && may_del(l))
-            }
+            Statement::Release(op) => local_of(op).is_none_or(|l| l != self.x && may_del(l)),
             Statement::ValueDrop(l) => may_del(l.0),
             Statement::DeferLeave(_) => true,
             _ => false,
@@ -468,7 +467,8 @@ impl Check<'_> {
                 Effect::SlotStore(ty) => !self.hits_elem(ty),
                 // A callee may also release anything, running any `del`.
                 Effect::Call(c) => {
-                    !self.summary_hits(&self.modref.call(c)) && !self.summary_hits(self.modref.del())
+                    !self.summary_hits(&self.modref.call(c))
+                        && !self.summary_hits(self.modref.del())
                 }
                 Effect::Iface(id, slot) => {
                     let summary = self.modref.iface(id, slot);
@@ -530,7 +530,11 @@ impl Check<'_> {
                 saw = true;
             }
         }
-        if saw { src } else { None }
+        if saw {
+            src
+        } else {
+            None
+        }
     }
 
     /// Array pointer loaded only from one field of one object. The element stays alive while
@@ -564,7 +568,11 @@ impl Check<'_> {
                 saw = true;
             }
         }
-        if saw { pin } else { None }
+        if saw {
+            pin
+        } else {
+            None
+        }
     }
 
     fn hits_elem(&self, elem: TypeId) -> bool {

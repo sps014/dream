@@ -37,7 +37,11 @@ pub(crate) fn live_out(func: &MirFunction) -> Vec<IndexSet<u32>> {
 }
 
 /// Locals live at the start of block `bi` (may be read in the block or after it).
-pub(crate) fn live_in_of(func: &MirFunction, live_out: &[IndexSet<u32>], bi: usize) -> IndexSet<u32> {
+pub(crate) fn live_in_of(
+    func: &MirFunction,
+    live_out: &[IndexSet<u32>],
+    bi: usize,
+) -> IndexSet<u32> {
     let block = &func.blocks[bi];
     let mut inn = live_out[bi].clone();
     transfer_block(&block.stmts, &block.terminator, &mut inn);
@@ -103,10 +107,9 @@ pub(crate) fn transfer_stmt(stmt: &Statement, live: &mut IndexSet<u32>) {
             add_place_base_reads(place, live);
             add_rvalue_reads(rv, live);
         }
-        Statement::Retain(op)
-        | Statement::Release(op)
-        | Statement::ReleaseUnique(op)
-        | Statement::Panic(op) => add_operand_reads(op, live),
+        Statement::Retain(op) | Statement::Release(op) | Statement::Panic(op) => {
+            add_operand_reads(op, live)
+        }
         Statement::Call { args, .. } => args.iter().for_each(|a| add_operand_reads(a, live)),
         Statement::JsCall {
             target,

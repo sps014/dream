@@ -346,13 +346,6 @@ pub(crate) fn can_container_move(interner: &TypeInterner, ty: TypeId) -> bool {
         && !matches!(interner.kind(ty), TyKind::Js)
 }
 
-/// Typed unique-destroy skips the RC RMW and `free`s. Intra-procedural Unique is not object
-/// uniqueness: field/index snapshots, `Result.Ok` payloads, and Map slots keep aliases. Ordinary
-/// `Release` still destroys when last (`dream_rc_last`).
-pub(crate) fn can_unique_destroy(_interner: &TypeInterner, _ty: TypeId) -> bool {
-    false
-}
-
 fn is_fresh_alloc(rvalue: &Rvalue) -> bool {
     matches!(
         rvalue,

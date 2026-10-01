@@ -3,7 +3,7 @@
 //! Given the alias class of `o = New …` (see [`super::escape`]), every definition of a member must
 //! be that `New`, a copy of a member, or null, so each member either holds the object, holds
 //! null, or is a stale alias of an instance already dead. A forward dataflow then tracks the
-//! object's count through the members' `Retain` / `Release` / `ReleaseUnique`, requiring every
+//! object's count through the members' `Retain`  , requiring every
 //! path into a block to agree on the count and on which members hold it. The statements that drop the last count are the object's deaths;
 //! a fresh `New` is only allowed once the previous instance is dead, and every return must leave
 //! it dead. Handing a member to a `take` parameter moves a count out of sight and is refused.
@@ -13,7 +13,7 @@ use indexmap::IndexMap as HashMap;
 
 /// Where one allocation's counts go.
 pub(crate) struct Lifetime {
-    /// `(block, stmt, member)` of each `Release` / `ReleaseUnique` that drops the last count.
+    /// `(block, stmt, member)` of each `Release`  that drops the last count.
     pub deaths: Vec<(usize, usize, Local)>,
     /// `(block, stmt)` of every other RC statement on a member.
     pub rc_ops: Vec<(usize, usize)>,
@@ -43,9 +43,10 @@ enum Rc {
 
 pub(crate) fn lifetime(f: &MirFunction, members: &[Local], new_local: Local) -> Option<Lifetime> {
     let pos: HashMap<Local, usize> = members.iter().enumerate().map(|(i, &m)| (m, i)).collect();
-    if members.iter().any(|m| {
-        f.params.contains(m) || f.locals[m.0 as usize].is_ref
-    }) || !pos.contains_key(&new_local)
+    if members
+        .iter()
+        .any(|m| f.params.contains(m) || f.locals[m.0 as usize].is_ref)
+        || !pos.contains_key(&new_local)
     {
         return None;
     }
@@ -158,9 +159,7 @@ fn member_of(op: &Operand, pos: &HashMap<Local, usize>) -> Option<Local> {
 
 fn rc_member(s: &Statement, pos: &HashMap<Local, usize>) -> Option<Local> {
     match s {
-        Statement::Retain(op) | Statement::Release(op) | Statement::ReleaseUnique(op) => {
-            member_of(op, pos)
-        }
+        Statement::Retain(op) | Statement::Release(op) => member_of(op, pos),
         _ => None,
     }
 }
@@ -219,17 +218,6 @@ fn step(s: &Statement, pos: &HashMap<Local, usize>, st: &mut State) -> Option<Rc
                 }
             }
         }
-        Statement::ReleaseUnique(op) => {
-            let Some(m) = member_of(op, pos) else {
-                return Some(Rc::Other);
-            };
-            if st.hold[pos[&m]] != Hold::Obj || st.count != 1 {
-                return None;
-            }
-            st.count = 0;
-            kill(st);
-            Some(Rc::Death(m))
-        }
         _ => Some(Rc::Other),
     }
 }
@@ -242,8 +230,9 @@ fn gives_count_away(s: &Statement, pos: &HashMap<Local, usize>) -> bool {
             .any(|(i, a)| takes.get(i).copied().unwrap_or(false) && member_of(a, pos).is_some())
     };
     match s {
-        Statement::Call { callee, args }
-        | Statement::Assign(_, Rvalue::Call { callee, args }) => taken(&callee.take_params, args),
+        Statement::Call { callee, args } | Statement::Assign(_, Rvalue::Call { callee, args }) => {
+            taken(&callee.take_params, args)
+        }
         Statement::Assign(
             _,
             Rvalue::New {

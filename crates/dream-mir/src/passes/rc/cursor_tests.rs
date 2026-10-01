@@ -501,7 +501,7 @@ fn union_payload_escapes_when_scrutinee_dies() {
         matches!(
             s,
             Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+
             if *l == res
         )
     });
@@ -570,7 +570,7 @@ fn field_cursor_keeps_base_alive_until_last_use() {
         matches!(
             s,
             Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+
             if *l == res
         )
     });

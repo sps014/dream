@@ -60,8 +60,10 @@ fn function(func: &mut MirFunction, interner: &TypeInterner, subs: &HashSet<DefI
     let mut copies: Vec<(u32, u32)> = Vec::new();
     for block in &func.blocks {
         for stmt in &block.stmts {
-            if let Statement::Assign(Place::Local(dest), Rvalue::Use(Operand::Copy(Place::Local(src)))) =
-                stmt
+            if let Statement::Assign(
+                Place::Local(dest),
+                Rvalue::Use(Operand::Copy(Place::Local(src))),
+            ) = stmt
             {
                 if !is_only_null_or_copy(func, dest.0) {
                     continue;
@@ -121,7 +123,7 @@ fn function(func: &mut MirFunction, interner: &TypeInterner, subs: &HashSet<DefI
                         changed = true;
                     }
                 }
-                Statement::Retain(op) | Statement::Release(op) | Statement::ReleaseUnique(op)
+                Statement::Retain(op) | Statement::Release(op)
                     if local_op(op).is_some_and(|id| n_of.contains_key(&id)) =>
                 {
                     *stmt = Statement::Nop;
@@ -167,14 +169,11 @@ fn is_only_null_or_copy(func: &MirFunction, id: u32) -> bool {
 
 fn use_ok(stmt: &Statement, id: u32) -> bool {
     match stmt {
-        Statement::Retain(op) | Statement::Release(op) | Statement::ReleaseUnique(op) => {
+        Statement::Retain(op) | Statement::Release(op) => local_op(op) == Some(id),
+        Statement::Assign(Place::Local(dest), Rvalue::Call { .. }) => dest.0 == id,
+        Statement::Assign(Place::Local(_), Rvalue::StrLen(op) | Rvalue::StrByteSize(op)) => {
             local_op(op) == Some(id)
         }
-        Statement::Assign(Place::Local(dest), Rvalue::Call { .. }) => dest.0 == id,
-        Statement::Assign(
-            Place::Local(_),
-            Rvalue::StrLen(op) | Rvalue::StrByteSize(op),
-        ) => local_op(op) == Some(id),
         Statement::Assign(Place::Local(_), Rvalue::Use(Operand::Copy(Place::Local(src)))) => {
             src.0 == id
         }
@@ -292,7 +291,11 @@ fn const_int(func: &MirFunction, op: &Operand, seen: &mut HashSet<u32>) -> Optio
     }
 }
 
-fn place_is_wide(local_tys: &[dream_types::TypeId], interner: &TypeInterner, place: &Place) -> bool {
+fn place_is_wide(
+    local_tys: &[dream_types::TypeId],
+    interner: &TypeInterner,
+    place: &Place,
+) -> bool {
     let Place::Local(Local(id)) = place else {
         return false;
     };

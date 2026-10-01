@@ -143,7 +143,7 @@ Snapshots land in `<output>.mir/<NN>-<pass>.mir`, numbered so lexicographic orde
 
 ## Verifier — `crates/dream-mir/src/verify/`
 
-`run_late_module_passes` checks the final module in debug builds or when `DREAM_VERIFY_MIR=1` (including release CI). Violations are ICEs. CFG targets are checked before dataflow. A finite may-dead analysis follows branches and backedges, rejecting reads after `ReleaseUnique` and reads or double releases after `Release` for conservative single-token locals (never retained, stored, passed, or a parameter).
+`run_late_module_passes` checks the final module in debug builds or when `DREAM_VERIFY_MIR=1` (including release CI). Violations are ICEs. CFG targets are checked before dataflow. A finite may-dead analysis follows branches and backedges, rejecting reads or double releases after `Release` for conservative single-token locals (never retained, stored, passed, or a parameter).
 
 Region depth must agree at every join; leaves cannot underflow, and exits or suspension cannot carry active regions. Direct managed allocations and local copy/cast/move aliases carry region origins across the CFG, so reads after a rewind are rejected. Niche union wrapping/extraction preserves the payload's origin rather than inventing an allocation. These are partial proofs: complete shared-token balance, opaque call-result provenance, and publication barriers still require richer ownership facts.
 

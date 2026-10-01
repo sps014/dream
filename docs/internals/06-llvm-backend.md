@@ -6,8 +6,8 @@ bitcode, then runs the pinned LLVM toolchain (`llvm-link` → `opt` → `llc`). 
 object with the system `cc`. wasm32 builds link with wasi-sdk's `wasm-ld`, then pretty-print `.wat`
 with `wasmprinter`.
 
-Ownership is decided by MIR, and LLVM never decides it. Every `Retain` / `Release` /
-`ReleaseUnique` / `ValueDrop` that MIR emits becomes exactly one runtime call or one inlined
+Ownership is decided by MIR, and LLVM never decides it. Every `Retain`  /
+`Release` / `ValueDrop` that MIR emits becomes exactly one runtime call or one inlined
 glue sequence. LLVM may only optimize what those calls leave behind.
 
 ```mermaid

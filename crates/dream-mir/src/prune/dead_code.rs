@@ -245,7 +245,6 @@ fn collect_stmt_types(s: &Statement, seed: &mut impl FnMut(TypeId)) {
         | Statement::ArrayElemsFill { elem_ty: ty, .. } => seed(*ty),
         Statement::Retain(_)
         | Statement::Release(_)
-        | Statement::ReleaseUnique(_)
         | Statement::Panic(_)
         | Statement::Nop
         | Statement::DebugLine(_)
@@ -589,10 +588,9 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
             }
             collect_global_reads_rvalue(rv, out);
         }
-        Statement::Retain(o)
-        | Statement::Release(o)
-        | Statement::ReleaseUnique(o)
-        | Statement::Panic(o) => collect_global_reads_operand(o, out),
+        Statement::Retain(o) | Statement::Release(o) | Statement::Panic(o) => {
+            collect_global_reads_operand(o, out)
+        }
         Statement::Call { args, .. } => args
             .iter()
             .for_each(|a| collect_global_reads_operand(a, out)),

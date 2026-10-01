@@ -96,7 +96,7 @@ pub(super) fn insert(
             if should_release_leftover(&ret_keep, n_orig, local)
                 && leftover_env_ok(local, &token_row, env_defer)
             {
-                func.blocks[bi].stmts.extend(release_and_null(local, false));
+                func.blocks[bi].stmts.extend(release_and_null(local));
             } else {
                 func.blocks[bi].stmts.push(null_local(local));
             }

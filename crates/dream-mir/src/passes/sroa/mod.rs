@@ -134,7 +134,7 @@ fn analyze_simple_ctor(
                 assigned.insert(*field, ());
                 inits.push((*field, init));
             }
-            Statement::Retain(_) | Statement::Release(_) | Statement::ReleaseUnique(_) => {
+            Statement::Retain(_) | Statement::Release(_) => {
                 // RC bookkeeping is ignored; this pass runs before insertion, but leftover RC
                 // from a previous pipeline must not look like ctor logic.
                 if stmt_mentions(stmt, this) {
@@ -337,7 +337,6 @@ fn classify(
                 // Heap RC on the object itself: dropped in `transform` once the allocation is gone.
                 Statement::Retain(Operand::Copy(Place::Local(l)))
                 | Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
                     if *l == o => {}
                 // Any other mention of `o` disqualifies promotion.
                 _ => {
@@ -410,7 +409,6 @@ fn transform(
                 }
                 Statement::Retain(Operand::Copy(Place::Local(l)))
                 | Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
                     if l == o => {}
                 other => new_stmts.push(other),
             }

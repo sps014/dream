@@ -67,7 +67,7 @@ fn elide_goto_chains(func: &mut MirFunction) -> bool {
     changed
 }
 
-/// `Retain` in the If-block / `Release` in the unique join, with both arms transparent.
+/// `Retain` in the If-block  in the unique join, with both arms transparent.
 fn elide_transparent_diamonds(func: &mut MirFunction) -> bool {
     let preds = cfg::predecessors(func);
     let n = func.blocks.len();
@@ -120,7 +120,7 @@ fn elide_transparent_diamonds(func: &mut MirFunction) -> bool {
     changed
 }
 
-/// `Retain` in the unique preheader / `Release` in the unique exit, with a transparent loop body.
+/// `Retain` in the unique preheader  in the unique exit, with a transparent loop body.
 fn elide_around_transparent_loops(func: &mut MirFunction) -> bool {
     let preds = cfg::predecessors(func);
     let loops = cfg::natural_loops(func);
@@ -389,9 +389,6 @@ fn elide_region(func: &mut MirFunction, chain: &[BlockId]) -> bool {
                 }
                 // An unmatched (or differently-keyed) `Release` may drop the last count of
                 // an object some *other* pending key aliases — not provably safe to ignore.
-                pending.clear();
-            }
-            Statement::ReleaseUnique(_) => {
                 pending.clear();
             }
             Statement::Assign(Place::Local(dst), rvalue) if is_pure_rvalue(rvalue) => {

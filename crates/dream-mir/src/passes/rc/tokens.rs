@@ -58,14 +58,6 @@ pub(crate) struct TokenAnalysis {
     pub end_release: Vec<BTreeSet<u32>>,
     pub token_in: Vec<Vec<bool>>,
     pub token_out: Vec<Vec<bool>>,
-    pub unique_in: Vec<Vec<bool>>,
-    /// Unique token on this block, Shared on a successor that still holds it — the lattice drops to
-    /// Shared at the join. This used to also Retain on the edge, to keep a later unique destroy from
-    /// freeing under the second owner, but [`super::uniqueness::can_unique_destroy`] is now always
-    /// false: `RcInsertion` emits no unconditional free, so there is nothing for that +1 to protect
-    /// and it simply leaked whenever the successor was Shared only because of a borrowed alias (an
-    /// inlined method copying the receiver into `this`).
-    pub share_at_end: Vec<BTreeSet<u32>>,
     /// Await dest written at the top of this resume block.
     pub await_resume_dest: Vec<Option<u32>>,
     pub has_await: bool,
@@ -339,43 +331,6 @@ impl TokenAnalysis {
             .into_iter()
             .map(|row| row.into_iter().map(|t| t.unwrap_or(false)).collect())
             .collect();
-        let unique_out: Vec<Vec<bool>> = unique_out
-            .into_iter()
-            .map(|row| row.into_iter().map(|t| t.unwrap_or(false)).collect())
-            .collect();
-
-        let mut share_at_end = vec![BTreeSet::new(); n];
-        for bi in 0..n {
-            for succ in func.blocks[bi].terminator.successors() {
-                let s = succ.0 as usize;
-                // A loop header is Shared because the back-edge meets the entry edge.
-                // That is one token going around, not a second owner — Retain here leaks
-                // (StringBuilder across stringify loops, take params in add_all / serve_loop).
-                if loop_headers.contains(&s) {
-                    continue;
-                }
-                for local in 0..nloc {
-                    if token_out[bi][local]
-                        && unique_out[bi][local]
-                        && token_in[s][local]
-                        && !unique_in[s][local]
-                    {
-                        // Phi dest: this arm *assigned* `local` (e.g. `unwrap_or` `None => fallback`).
-                        // The other arm's Shared is a different value, not a second owner of this
-                        // object. Retain would leak the moved fallback (`Option.unwrap_or`).
-                        if func.blocks[bi]
-                            .stmts
-                            .iter()
-                            .any(|stmt| assigns_local(stmt, local as u32))
-                        {
-                            continue;
-                        }
-                        share_at_end[bi].insert(local as u32);
-                    }
-                }
-            }
-        }
-
         TokenAnalysis {
             assign_move,
             sink_move,
@@ -384,8 +339,6 @@ impl TokenAnalysis {
             end_release,
             token_in,
             token_out,
-            unique_in,
-            share_at_end,
             await_resume_dest,
             has_await,
         }
@@ -1008,14 +961,10 @@ pub(crate) fn null_local(local: u32) -> Statement {
     )
 }
 
-pub(crate) fn release_and_null(local: u32, unique: bool) -> [Statement; 2] {
+pub(crate) fn release_and_null(local: u32) -> [Statement; 2] {
     let op = Operand::Copy(Place::Local(Local(local)));
     [
-        if unique {
-            Statement::ReleaseUnique(op)
-        } else {
-            Statement::Release(op)
-        },
+        Statement::Release(op),
         Statement::Assign(
             Place::Local(Local(local)),
             Rvalue::Use(Operand::Const(Const::Null)),
@@ -1026,8 +975,7 @@ pub(crate) fn release_and_null(local: u32, unique: bool) -> [Statement; 2] {
 pub(crate) fn rc_op_on_local(stmt: &Statement, local: u32) -> bool {
     match stmt {
         Statement::Retain(Operand::Copy(Place::Local(l)))
-        | Statement::Release(Operand::Copy(Place::Local(l)))
-        | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) => l.0 == local,
+        | Statement::Release(Operand::Copy(Place::Local(l))) => l.0 == local,
         Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(Const::Null))) => {
             l.0 == local
         }
@@ -1127,11 +1075,14 @@ impl DestroySite<'_> {
             // frame. A `del` keeps the declared-`borrow` rule of dying at the block end.
             Statement::Call { callee, args }
             | Statement::Assign(_, Rvalue::Call { callee, args }) => {
-                !self.modref.may_run_del(self.func.local_ty(Local(local)), self.interner, self.layouts)
-                    && args.iter().enumerate().all(|(i, a)| {
-                        !matches!(a, Operand::Copy(Place::Local(l)) if l.0 == local)
-                            || !callee.take_params.get(i).copied().unwrap_or(false)
-                    })
+                !self.modref.may_run_del(
+                    self.func.local_ty(Local(local)),
+                    self.interner,
+                    self.layouts,
+                ) && args.iter().enumerate().all(|(i, a)| {
+                    !matches!(a, Operand::Copy(Place::Local(l)) if l.0 == local)
+                        || !callee.take_params.get(i).copied().unwrap_or(false)
+                })
             }
             Statement::Assign(Place::Local(dest), rv) => match rv {
                 Rvalue::Use(Operand::Copy(Place::Field { base, .. })) if base.0 == local => self

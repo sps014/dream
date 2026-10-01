@@ -110,6 +110,7 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[RuntimeModule {
 
 const NATIVE_CORE_C: &[&str] = &[
     "heap.c",
+    "heap_maps.c",
     "publish.c",
     "strings.c",
     "ffi.c",

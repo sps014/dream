@@ -6,12 +6,12 @@ class Session {
 }
 
 fun make_dead(): Weak<Session> {
-    return Weak.make(Session(7));
+    return Weak<Session>(Session(7));
 }
 
 fun main(): void {
     let session = Session(42);
-    let handle = Weak.make(session);
+    let handle = Weak<Session>(session);
     switch (handle.get()) {
         Some(value) => System.println(value.id),
         None => System.println(-1),

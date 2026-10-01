@@ -6,7 +6,7 @@ module system.core;
 // callback stored on an object that must call back into that same object:
 //
 // ```dream
-// let wb = Weak.make(engine);
+// let wb = Weak<Engine>(engine);
 // engine.on_tick = () => {
 //     switch (wb.get()) {
 //         Some(e) => e.tick(),
@@ -28,11 +28,6 @@ public class Weak<T : class> {
 
     public constructor(target_obj: T) {
         this.slot = Weak.bind(target_obj);
-    }
-
-    /// Convenience constructor.
-    public static fun make(target_obj: T): Weak<T> {
-        return Weak<T>(target_obj);
     }
 
     /// True once the tracked object has been freed.

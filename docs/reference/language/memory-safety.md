@@ -154,7 +154,7 @@ public class Engine {
     public running: bool;
 
     public fun start(): void {
-        let we = Weak.make(this);
+        let we = Weak<Engine>(this);
         this.on_tick = () => {
             switch (we.get()) {
                 Some(engine) => engine.do_tick(),
@@ -166,7 +166,7 @@ public class Engine {
 }
 ```
 
-- `Weak.make(obj)` does not increment the target's refcount.
+- `Weak<T>(obj)` does not increment the target's refcount.
 - When the target drops, `is_dead()` flips to true automatically.
 - `get()` returns `Option<T>`, retaining a live target atomically. An `is_dead()`
   check followed by a separate load cannot protect against concurrent destruction.

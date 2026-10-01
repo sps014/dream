@@ -11,7 +11,7 @@ shared class Session {
 }
 
 fun make_dead(): Weak<Session> {
-    return Weak.make(Session(7));
+    return Weak<Session>(Session(7));
 }
 
 fun check(handle: Weak<Session>): bool {
@@ -23,7 +23,7 @@ fun check(handle: Weak<Session>): bool {
 
 async fun main(): void {
     let session = Session(42);
-    let alive = Weak.make(session);
+    let alive = Weak<Session>(session);
     let valid = Task.spawn(() => check(alive)).await;
     System.println(valid);
     System.println(session.id);

@@ -15,12 +15,12 @@ fun main(): void {
 
     // Alive case: target held by a live local.
     let engine = Session(99);
-    let wa = Weak.make(engine);
+    let wa = Weak<Session>(engine);
     System.println(wa.is_dead());
     System.println(Debug.ref_count(engine).to_string());
 }
 
 fun make_and_drop(): Weak<Session> {
     let s = Session(1);
-    return Weak.make(s);
+    return Weak<Session>(s);
 }

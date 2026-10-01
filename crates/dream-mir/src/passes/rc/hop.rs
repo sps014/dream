@@ -16,9 +16,8 @@
 //!    reads. Sinking stops at the first write, call, or rebind of `c`.
 //! 2. **Cancel `Retain(n)` / `Release(n)`** once the sink placed `Release(c)` after `n`'s
 //!    last read: the extra count `Retain(n)` added exists only to protect reads that now all
-//!    happen before `c`'s count drop. Deleting both leaves the object's survival to `c`'s own
-//!    count through every read. If nothing else held the object, it is freed by the sunk
-//!    `Release(c)` — after its last use.
+//!    happen before `c`'s count drop. The successor must also be retained before that drop:
+//!    loading its pointer alone does not protect it from the parent's destruction cascade.
 //!
 //! Per chain hop this turns 3 RMWs + 2 calls into 2 RMWs and no steady-state calls.
 
@@ -126,14 +125,18 @@ impl MirPass for HopElision {
                             )
                         })
                     });
-                    let no_late_use = block.stmts[k + 1..].iter().all(|s| {
-                        !super::stmt_reads_local(s, n.0)
-                            || matches!(
-                                s,
-                                Statement::Release(Operand::Copy(Place::Local(l2))) if *l2 == n
-                            )
-                    }) && !super::tokens::terminator_reads_local(&block.terminator, n.0);
-                    let cancel = last_read.is_some() && rel_n.is_some() && no_late_use;
+                    let no_late_use =
+                        block.stmts[k + 1..].iter().all(|s| {
+                            !super::stmt_reads_local(s, n.0)
+                                || matches!(
+                                    s,
+                                    Statement::Release(Operand::Copy(Place::Local(l2))) if *l2 == n
+                                )
+                        }) && !super::tokens::terminator_reads_local(&block.terminator, n.0);
+                    let cancel = last_read.is_some()
+                        && rel_n.is_some()
+                        && no_late_use
+                        && retain_successor_before_release(&mut block.stmts, k, base);
                     if cancel {
                         block.stmts[j] = Statement::Nop;
                     }
@@ -160,6 +163,46 @@ impl MirPass for HopElision {
         }
         changed
     }
+}
+
+/// Without the arm binding's extra count, dropping the holder may destroy its successor.
+/// Acquire the successor's count while the holder still owns that strong field.
+fn retain_successor_before_release(
+    stmts: &mut Vec<Statement>,
+    release_at: usize,
+    base: Local,
+) -> bool {
+    let next = |start: usize| {
+        (start..stmts.len()).find(|&i| {
+            !matches!(
+                stmts[i],
+                Statement::DebugLine(_) | Statement::SourceLine(_) | Statement::Nop
+            )
+        })
+    };
+    let Some(assign_at) = next(release_at + 1) else {
+        return false;
+    };
+    let Statement::Assign(Place::Local(dest), Rvalue::Use(Operand::Copy(Place::Local(src)))) =
+        stmts[assign_at]
+    else {
+        return false;
+    };
+    if dest != base || src == base {
+        return false;
+    }
+    let Some(retain_at) = next(assign_at + 1) else {
+        return false;
+    };
+    if !matches!(stmts[retain_at], Statement::Retain(Operand::Copy(Place::Local(l))) if l == base) {
+        return false;
+    }
+    stmts[retain_at] = Statement::Nop;
+    stmts.insert(
+        release_at,
+        Statement::Retain(Operand::Copy(Place::Local(src))),
+    );
+    true
 }
 
 /// `base = n.field` loads the next pointer and overwrites `base` in one statement. Split it
@@ -194,7 +237,9 @@ fn split_field_rebind(
         Place::Local(base),
         Rvalue::Use(Operand::Copy(Place::Local(tmp))),
     );
-    func.blocks[bi].stmts.insert(p, Statement::Assign(Place::Local(tmp), rv));
+    func.blocks[bi]
+        .stmts
+        .insert(p, Statement::Assign(Place::Local(tmp), rv));
     true
 }
 
@@ -211,8 +256,7 @@ fn field_then_store(stmts: &[Statement], release_at: usize, n: Local, base: Loca
                 tmp = Some(*d);
             }
         }
-        if let Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Copy(Place::Local(s)))) = s
-        {
+        if let Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Copy(Place::Local(s)))) = s {
             if *d == base && tmp == Some(*s) {
                 return true;
             }
@@ -268,16 +312,20 @@ fn field_rebind(stmt: &Statement, n: Local, base: Local) -> bool {
 
 fn block_reenters(func: &MirFunction, bi: usize) -> bool {
     let here = BlockId(bi as u32);
-    func.blocks.iter().any(|b| terminator_targets(&b.terminator, here))
+    func.blocks
+        .iter()
+        .any(|b| terminator_targets(&b.terminator, here))
 }
 
 fn terminator_targets(term: &crate::Terminator, target: BlockId) -> bool {
     match term {
         crate::Terminator::Goto(b) => *b == target,
-        crate::Terminator::If { then_blk, else_blk, .. } => *then_blk == target || *else_blk == target,
-        crate::Terminator::Switch { targets, default, .. } => {
-            targets.iter().any(|(_, b)| *b == target) || *default == target
-        }
+        crate::Terminator::If {
+            then_blk, else_blk, ..
+        } => *then_blk == target || *else_blk == target,
+        crate::Terminator::Switch {
+            targets, default, ..
+        } => targets.iter().any(|(_, b)| *b == target) || *default == target,
         _ => false,
     }
 }
@@ -353,7 +401,7 @@ mod tests {
     #[test]
     fn cancels_bracket_around_chain_hop() {
         let i = TypeInterner::new();
-        let (mut func, _curr, n, _t) = hop_mir();
+        let (mut func, _curr, n, successor) = hop_mir();
         assert!(HopElision.run(&mut func, &i));
         let stmts = &func.blocks[0].stmts;
         assert!(
@@ -374,6 +422,16 @@ mod tests {
             .position(|s| matches!(s, Statement::Assign(_, Rvalue::UnionField { .. })))
             .expect("extract kept");
         assert!(extract < rel_base, "extract must precede the sunk release");
+        let retained = stmts
+            .iter()
+            .position(
+                |s| matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == successor),
+            )
+            .expect("successor owns a count");
+        assert!(
+            retained < rel_base,
+            "successor must be retained before the parent can destroy it"
+        );
     }
 
     #[test]
@@ -420,9 +478,9 @@ mod tests {
         );
         let rel = stmts
             .iter()
-            .position(|s| {
-                matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) if *l == curr)
-            })
+            .position(
+                |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) if *l == curr),
+            )
             .expect("one release of the previous node");
         let load = stmts
             .iter()
@@ -433,7 +491,18 @@ mod tests {
                 )
             })
             .expect("next-pointer load");
-        assert!(load < rel, "next pointer is loaded before the previous node is released");
+        assert!(
+            load < rel,
+            "next pointer is loaded before the previous node is released"
+        );
+        let retained = stmts
+            .iter()
+            .position(|s| matches!(s, Statement::Retain(..)))
+            .expect("successor owns a count");
+        assert!(
+            load < retained && retained < rel,
+            "load and retain the successor before destroying its parent"
+        );
     }
 
     /// `l13 = curr; release node; node = l13; retain node; …; release curr; tmp = node.next; curr = tmp`
@@ -508,18 +577,21 @@ mod tests {
         assert!(HopElision.run(&mut func, &i));
         let arm_stmts = &func.blocks[arm.0 as usize].stmts;
         assert!(
-            !func.blocks.iter().any(|blk| blk.stmts.iter().any(|s| matches!(
-                s,
-                Statement::Retain(Operand::Copy(Place::Local(l)))
-                    | Statement::Release(Operand::Copy(Place::Local(l))) if *l == node
-            ))),
+            !func
+                .blocks
+                .iter()
+                .any(|blk| blk.stmts.iter().any(|s| matches!(
+                    s,
+                    Statement::Retain(Operand::Copy(Place::Local(l)))
+                        | Statement::Release(Operand::Copy(Place::Local(l))) if *l == node
+                ))),
             "copied niche hop must drop every retain and release of the arm binding"
         );
         let rel = arm_stmts
             .iter()
-            .position(|s| {
-                matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) if *l == curr)
-            })
+            .position(
+                |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) if *l == curr),
+            )
             .expect("one release of the previous node");
         let load = arm_stmts
             .iter()
@@ -533,7 +605,20 @@ mod tests {
                 )
             })
             .expect("next-pointer load");
-        assert!(load < rel, "next pointer is loaded before the previous node is released");
+        let retained = arm_stmts
+            .iter()
+            .position(
+                |s| matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == next),
+            )
+            .expect("successor owns a count");
+        assert!(
+            load < retained && retained < rel,
+            "copied niche hop must acquire the successor before destroying its parent"
+        );
+        assert!(
+            load < rel,
+            "next pointer is loaded before the previous node is released"
+        );
     }
 
     /// `node = curr; retain node; …; release curr; curr = node.next; node.next = null`: the

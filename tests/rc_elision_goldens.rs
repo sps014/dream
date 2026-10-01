@@ -250,6 +250,32 @@ fn rc_golden_js_rebuild_emits_js_release() {
 }
 
 #[test]
+fn rc_golden_discarded_js_call_releases_result() {
+    let code = r#"
+        fun discard(): void {
+            js.global.logger("hello");
+        }
+        fun main(): void {
+            discard();
+        }
+    "#;
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}\n{}", SYSTEM_STUB, JS_STUB, code));
+    let discard = ir_func_defs(&c)
+        .into_iter()
+        .find(|f| f.name == "discard")
+        .expect("discard should be emitted");
+    let call = discard
+        .body
+        .find("@dream_js_call(")
+        .expect("JS call should remain");
+    assert!(
+        discard.body[call..].contains("@dream_release("),
+        "discarded JS result must be released after the call:\n{}",
+        discard.body
+    );
+}
+
+#[test]
 fn rc_golden_local_object_is_scalarized() {
     let code = r#"
         class Box {

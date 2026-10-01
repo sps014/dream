@@ -1,0 +1,66 @@
+//! RC insertion separates analysis, block rewrites, exits and async resume cleanup.
+mod awaits;
+mod blocks;
+mod exits;
+mod helpers;
+mod prepare;
+use super::{
+    modref::ModRefTable,
+    value::{
+        insert_early_value_drops, insert_value_struct_moves, mark_returned_value_locals_moved,
+    },
+};
+use crate::passes::MirPass;
+use crate::MirFunction;
+use dream_types::{DefId, TypeInterner};
+use indexmap::IndexSet;
+pub struct RcInsertion;
+impl RcInsertion {
+    pub(crate) fn run_with_layouts(
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        layouts: &dream_hir::LayoutTable,
+        holds: &IndexSet<DefId>,
+        modref: &ModRefTable,
+    ) -> bool {
+        RcInsertion.run_inner(func, interner, layouts, holds, modref)
+    }
+    fn run_inner(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        layouts: &dream_hir::LayoutTable,
+        holds: &IndexSet<DefId>,
+        modref: &ModRefTable,
+    ) -> bool {
+        let state = prepare::State::new(func, interner, layouts, holds, modref);
+        let mut changed = blocks::insert(func, interner, &state);
+        insert_value_struct_moves(func, interner, &mut changed);
+        insert_early_value_drops(func, interner, &mut changed, state.analysis.has_await);
+        awaits::insert_await_resume_releases(func, interner, &mut changed);
+        mark_returned_value_locals_moved(func, interner, &mut changed);
+        exits::insert(func, interner, &state, &mut changed);
+        changed
+    }
+}
+impl MirPass for RcInsertion {
+    fn name(&self) -> &'static str {
+        "rc-insertion"
+    }
+
+    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+        self.run_inner(
+            func,
+            interner,
+            &dream_hir::LayoutTable::default(),
+            &IndexSet::new(),
+            &ModRefTable::default(),
+        )
+    }
+}
+
+#[cfg(test)]
+use crate::{Const, Operand, Place, Rvalue, Statement, Terminator};
+#[cfg(test)]
+#[path = "../insertion_tests.rs"]
+mod tests;

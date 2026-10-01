@@ -1,11 +1,26 @@
 #include "include/dream_rt_native.h"
 #include "include/dream_thread.h"
 
+#include <limits.h>
 #include <stdlib.h>
-#include <string.h>
 
 extern dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg);
 static dream_ptr worker_recv_blocking(int32_t id);
+
+static dream_mutex reg_mu = DREAM_MUTEX_INIT;
+
+static _Noreturn void worker_failure(const char *message) {
+    dream_panic(dream_utf8_to_string(message));
+    __builtin_unreachable();
+}
+
+static _Noreturn void registry_failure(const char *message) {
+    dream_mutex_unlock(&reg_mu);
+    worker_failure(message);
+}
+
+#define uthash_fatal(msg) registry_failure("panic: out of memory indexing workers")
+#include "include/uthash.h"
 
 typedef struct Job {
     int32_t fn;
@@ -28,12 +43,11 @@ typedef struct Worker {
     int dead;
     int busy;
     int abandoned;
+    UT_hash_handle hh;
 } Worker;
 
-#define MAX_WORKERS 64
-static Worker *workers[MAX_WORKERS];
-static dream_mutex reg_mu = DREAM_MUTEX_INIT;
-static int32_t next_id = 1;
+static Worker *workers;
+static int64_t next_id = 1;
 
 static Worker *find_worker(int32_t id);
 static void destroy_worker(Worker *w);
@@ -77,18 +91,16 @@ static DREAM_THREAD_PROC(worker_main) {
 }
 
 static Worker *find_worker(int32_t id) {
-    int i;
-    for (i = 0; i < MAX_WORKERS; i++) {
-        if (workers[i] && workers[i]->id == id) {
-            return workers[i];
-        }
-    }
-    return NULL;
+    Worker *w;
+    HASH_FIND(hh, workers, &id, sizeof(id), w);
+    return w;
 }
 
 int32_t workerSpawn(int32_t fn, int64_t env) {
     Worker *w = (Worker *)calloc(1, sizeof(Worker));
-    int i;
+    if (w == NULL) {
+        worker_failure("panic: out of memory creating a worker");
+    }
     __atomic_store_n(&dream_rt_mt, 1, __ATOMIC_RELEASE);
     w->fn = fn;
     w->env = (dream_ptr)(uintptr_t)env;
@@ -97,15 +109,21 @@ int32_t workerSpawn(int32_t fn, int64_t env) {
     dream_mutex_init(&w->mu);
     dream_cond_init(&w->cv);
     dream_mutex_lock(&reg_mu);
-    w->id = next_id++;
-    for (i = 0; i < MAX_WORKERS; i++) {
-        if (!workers[i]) {
-            workers[i] = w;
-            break;
-        }
+    if (next_id > INT32_MAX) {
+        dream_mutex_unlock(&reg_mu);
+        destroy_worker(w);
+        worker_failure("panic: worker ID space exhausted");
+    }
+    w->id = (int32_t)next_id++;
+    HASH_ADD(hh, workers, id, sizeof(w->id), w);
+    /* Do not expose a handle until its thread exists; failure must undo registration. */
+    if (dream_thread_start(&w->th, worker_main, w) != 0) {
+        HASH_DEL(workers, w);
+        dream_mutex_unlock(&reg_mu);
+        destroy_worker(w);
+        worker_failure("panic: could not start a worker thread");
     }
     dream_mutex_unlock(&reg_mu);
-    dream_thread_start(&w->th, worker_main, w);
     return w->id;
 }
 
@@ -188,15 +206,10 @@ static dream_ptr worker_recv_blocking(int32_t id) {
 dream_ptr workerRecv(int32_t id) { return worker_recv_blocking(id); }
 
 static Worker *take_worker(int32_t id) {
-    Worker *w = NULL;
-    int i;
     dream_mutex_lock(&reg_mu);
-    for (i = 0; i < MAX_WORKERS; i++) {
-        if (workers[i] && workers[i]->id == id) {
-            w = workers[i];
-            workers[i] = NULL;
-            break;
-        }
+    Worker *w = find_worker(id);
+    if (w != NULL) {
+        HASH_DEL(workers, w);
     }
     dream_mutex_unlock(&reg_mu);
     return w;

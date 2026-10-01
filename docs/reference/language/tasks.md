@@ -252,6 +252,7 @@ Async bodies use `dispatch_async`.
 
 ## Notes and limits
 
+- The native worker registry grows with the number of live tasks and pool members; there is no 64-worker limit. OS thread or memory exhaustion stops execution with a diagnostic rather than returning an unusable worker handle.
 - Body is `fun(): TOut` (`spawn`) or `fun(): Future<TOut>` (`spawn_async`).
 - `TOut` must be `shared`. Captures must be `shared` **or moved** (ordinary arrays / `List` / classes transfer ownership; see [Sharing state safely](#sharing-state-safely)).
 - A moved or captured heap value is visible to both sides while both can observe it. Task-local `new` / strings stay in that task's private memory.

@@ -77,6 +77,18 @@ jobs:
             -o "$stress_dir/sync"
           DREAM_DEBUG_LEAKS=1 "$stress_dir/sync"
 
+      - name: Worker registry stress under ThreadSanitizer
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          stress_dir=$(mktemp -d)
+          native=crates/dream-mir/src/runtime/c/native
+          clang -std=gnu11 -O1 -g -pthread -fsanitize=thread \
+            "$native/heap.c" "$native/heap_maps.c" "$native/publish.c" \
+            "$native/region.c" "$native/weak.c" "$native/sync.c" "$native/strings.c" tests/runtime_worker.c \
+            -o "$stress_dir/worker"
+          DREAM_DEBUG_LEAKS=1 "$stress_dir/worker"
+
   golden-corpus:
     name: Full native and Node corpus
     runs-on: ubuntu-latest

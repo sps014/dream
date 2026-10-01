@@ -287,10 +287,9 @@ fn read_only_deps(
                     !is_alias(receiver) && !any_alias(args)
                 }
                 Statement::JsCall { target, args, .. } => !js_alias(target, args),
-                Statement::Retain(op)
-                | Statement::Release(op)
-                | Statement::ReleaseUnique(op)
-                | Statement::ForceFree(op) => !is_alias(op),
+                Statement::Retain(op) | Statement::Release(op) | Statement::ForceFree(op) => {
+                    !is_alias(op)
+                }
                 _ => true,
             };
             if !ok {

@@ -69,7 +69,7 @@ pub(super) fn insert_await_resume_releases(
             continue;
         }
         let mut stmts = Vec::with_capacity(func.blocks[ri].stmts.len() + 2);
-        stmts.extend(release_and_null(local, false));
+        stmts.extend(release_and_null(local));
         stmts.append(&mut func.blocks[ri].stmts);
         func.blocks[ri].stmts = stmts;
         *changed = true;

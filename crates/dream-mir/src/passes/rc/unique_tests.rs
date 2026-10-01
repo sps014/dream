@@ -221,7 +221,7 @@ fn same_stmt_field_store_of_self_is_copy() {
     let uniq = func.blocks[0]
         .stmts
         .iter()
-        .any(|s| matches!(s, Statement::ReleaseUnique(_)));
+        .any(|s| matches!(s, Statement::ForceFree(_)));
     assert!(
         rel && !uniq,
         "n.next = n copies then ordinary-releases the local: {:?}",
@@ -319,7 +319,7 @@ fn await_future_resume_release_is_not_unique() {
     let await_uniq = func.blocks[0]
         .stmts
         .iter()
-        .any(|s| matches!(s, Statement::ReleaseUnique(_)));
+        .any(|s| matches!(s, Statement::ForceFree(_)));
     assert!(
         !await_uniq,
         "awaited handle must not unique-destroy in the Await block: {:?}",
@@ -341,7 +341,7 @@ fn shared_class_never_release_unique() {
     let uniq = func.blocks[0]
         .stmts
         .iter()
-        .any(|s| matches!(s, Statement::ReleaseUnique(_)));
+        .any(|s| matches!(s, Statement::ForceFree(_)));
     assert!(
         !uniq,
         "@shared stays on ordinary Release: {:?}",
@@ -373,7 +373,7 @@ fn js_never_release_unique() {
     let uniq = func.blocks[0]
         .stmts
         .iter()
-        .any(|s| matches!(s, Statement::ReleaseUnique(_)));
+        .any(|s| matches!(s, Statement::ForceFree(_)));
     assert!(
         !uniq,
         "js stays on ordinary Release: {:?}",
@@ -394,7 +394,7 @@ fn take_param_last_use_is_ordinary_release() {
         .blocks
         .iter()
         .flat_map(|bb| &bb.stmts)
-        .any(|s| matches!(s, Statement::ReleaseUnique(_)));
+        .any(|s| matches!(s, Statement::ForceFree(_)));
     assert!(!uniq, "take params may be caller copies: {:?}", func.blocks);
 }
 
@@ -414,7 +414,7 @@ fn interface_typed_unique_still_release_unique() {
     let rel = func.blocks[0]
         .stmts
         .iter()
-        .any(|s| matches!(s, Statement::Release(_) | Statement::ReleaseUnique(_)));
+        .any(|s| matches!(s, Statement::Release(_)));
     assert!(
         rel,
         "interface leftover still destroys: {:?}",
@@ -447,7 +447,7 @@ fn last_use_union_new_payload_is_not_unique_destroy() {
     let uniq_x = func.blocks[0].stmts.iter().any(|s| {
         matches!(
             s,
-            Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == x
+            Statement::ForceFree(Operand::Copy(Place::Local(l))) if *l == x
         )
     });
     assert!(
@@ -484,7 +484,7 @@ fn borrow_call_last_use_is_ordinary_release() {
     let uniq_x = func.blocks.iter().flat_map(|bb| &bb.stmts).any(|s| {
         matches!(
             s,
-            Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == x
+            Statement::ForceFree(Operand::Copy(Place::Local(l))) if *l == x
         )
     });
     assert!(
@@ -519,7 +519,7 @@ fn call_result_last_use_is_ordinary_release() {
     let uniq_x = func.blocks.iter().flat_map(|bb| &bb.stmts).any(|s| {
         matches!(
             s,
-            Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == x
+            Statement::ForceFree(Operand::Copy(Place::Local(l))) if *l == x
         )
     });
     assert!(
@@ -547,7 +547,7 @@ fn pointer_pun_to_int_is_not_unique_destroy() {
     let uniq = func.blocks.iter().flat_map(|bb| &bb.stmts).any(|s| {
         matches!(
             s,
-            Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == cell
+            Statement::ForceFree(Operand::Copy(Place::Local(l))) if *l == cell
         )
     });
     assert!(
@@ -644,7 +644,7 @@ fn last_use_primitive_field_inserts_one_release() {
             matches!(
                 s,
                 Statement::Release(Operand::Copy(Place::Local(l)))
-                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == x
+                     if *l == x
             )
         })
         .collect();

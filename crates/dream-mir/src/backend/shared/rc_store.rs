@@ -53,7 +53,7 @@ fn token_moved_into_container(func: &MirFunction, local: u32) -> bool {
                 if matches!(
                     later,
                     Statement::Release(Operand::Copy(Place::Local(l)))
-                        | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+
                         if l.0 == local
                 ) {
                     break;
@@ -75,7 +75,6 @@ fn is_rc_bookkeeping(stmt: &Statement) -> bool {
         stmt,
         Statement::Retain(_)
             | Statement::Release(_)
-            | Statement::ReleaseUnique(_)
             | Statement::ValueDrop(_)
             | Statement::ValueRetain(_)
             | Statement::ValueKill(_)

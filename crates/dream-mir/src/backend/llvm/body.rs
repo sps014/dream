@@ -339,8 +339,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         for s in &f.blocks[bi].stmts {
             let id = match s {
                 Statement::Assign(Place::Local(l), _) => l.0,
-                Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) => l.0,
+                Statement::Release(Operand::Copy(Place::Local(l))) => l.0,
                 _ => continue,
             };
             let decl = &f.locals[id as usize];

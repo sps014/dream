@@ -152,7 +152,7 @@ pub(super) fn rc_use_after_leave(
 
 pub(super) fn rc_stmt_escapes(stmt: &Statement, tainted: &BTreeSet<u32>) -> bool {
     match stmt {
-        Statement::Retain(_) | Statement::Release(_) | Statement::ReleaseUnique(_) => false,
+        Statement::Retain(_) | Statement::Release(_) => false,
         Statement::Assign(Place::Local(_), Rvalue::Use(Operand::Const(Const::Null))) => false,
         Statement::RegionEnter | Statement::RegionLeave => false,
         _ => tainted

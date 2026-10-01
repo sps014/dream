@@ -1,6 +1,5 @@
-use super::super::{tokens::dest_holds_token, uniqueness::can_unique_destroy};
+use super::super::tokens::dest_holds_token;
 use crate::{Local, Operand, Place, Statement};
-use dream_types::TypeInterner;
 use indexmap::IndexSet;
 /// Intra-procedural Unique is not object uniqueness: a take param may be a copy the caller
 /// still holds (field extract, still-live local). Unique-destroy would `free` under them.
@@ -19,25 +18,7 @@ pub(super) fn leftover_env_ok(local: u32, tokens: &[bool], env_defer: &IndexSet<
     dest_holds_token(tokens, local)
 }
 
-pub(super) fn unique_destroy(
-    interner: &TypeInterner,
-    local_types: &[dream_types::TypeId],
-    take_flags: &[bool],
-    local: u32,
-    unique: bool,
-) -> bool {
-    unique
-        && take_flags.get(local as usize) != Some(&true)
-        && local_types
-            .get(local as usize)
-            .is_some_and(|ty| can_unique_destroy(interner, *ty))
-}
-
-pub(super) fn release_one(local: u32, unique: bool) -> Statement {
+pub(super) fn release_one(local: u32) -> Statement {
     let op = Operand::Copy(Place::Local(Local(local)));
-    if unique {
-        Statement::ReleaseUnique(op)
-    } else {
-        Statement::Release(op)
-    }
+    Statement::Release(op)
 }

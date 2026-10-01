@@ -1,4 +1,4 @@
-//! Inferred unique-graph bump region: wrap `x = f(...); … ReleaseUnique x` when `f` only allocates
+//! Inferred unique-graph bump region: wrap `x = f(...); … Release x` when `f` only allocates
 //! `del`-free class instances that cannot escape the region. The runtime TLS slab then rewinds in
 //! O(1) instead of walking/recycling each node.
 

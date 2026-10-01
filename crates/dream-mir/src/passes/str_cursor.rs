@@ -30,9 +30,10 @@ impl MirPass for StrCursor {
         for _ in 0..(func.blocks.len() + 1) * 2 {
             let mut loops = cfg::natural_loops(func);
             loops.sort_by_key(|l| l.body.len());
-            let Some(target) = loops.into_iter().find(|l| {
-                !skipped.contains(&l.header.0) && !scan_bases(func, &l.body).is_empty()
-            }) else {
+            let Some(target) = loops
+                .into_iter()
+                .find(|l| !skipped.contains(&l.header.0) && !scan_bases(func, &l.body).is_empty())
+            else {
                 break;
             };
             if !apply(func, interner, target.header, &target.body) {
@@ -158,7 +159,7 @@ fn body_is_scan(func: &MirFunction, body: &BTreeSet<BlockId>, bases: &BTreeSet<u
 fn stmt_is_scan(stmt: &Statement, bases: &BTreeSet<u32>) -> bool {
     match stmt {
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => true,
-        Statement::Retain(op) | Statement::Release(op) | Statement::ReleaseUnique(op) => {
+        Statement::Retain(op) | Statement::Release(op) => {
             base_local(op).is_none_or(|b| !bases.contains(&b))
         }
         Statement::Assign(Place::Local(_), rv) => rvalue_is_scan(rv),

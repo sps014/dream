@@ -279,7 +279,7 @@ fn count_rc(func: &MirFunction) -> (usize, usize) {
         for s in &b.stmts {
             match s {
                 Statement::Retain(_) => retains += 1,
-                Statement::Release(_) | Statement::ReleaseUnique(_) => releases += 1,
+                Statement::Release(_) => releases += 1,
                 _ => {}
             }
         }
@@ -380,7 +380,7 @@ fn unwrap_or_none_does_not_release_returned_fallback() {
         matches!(
             s,
             Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+
             if *l == fallback
         )
     });
@@ -476,7 +476,7 @@ fn unbalanced_if_releases_on_kept_arm() {
     let else_rel = func.blocks[else_blk.0 as usize]
         .stmts
         .iter()
-        .any(|s| matches!(s, Statement::Release(_) | Statement::ReleaseUnique(_)));
+        .any(|s| matches!(s, Statement::Release(_)));
     assert!(else_rel, "release is on the arm that still held the token");
 }
 
@@ -699,9 +699,10 @@ fn loop_rebind_string_releases_previous() {
     b.terminate(Terminator::Return(None));
     let mut func = b.finish();
     assert!(RcInsertion.run(&mut func, &ctx.interner));
-    let body_rel = func.blocks[body.0 as usize].stmts.iter().any(
-        |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == x),
-    );
+    let body_rel = func.blocks[body.0 as usize]
+        .stmts
+        .iter()
+        .any(|s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l)))  if *l == x));
     assert!(
         body_rel,
         "overwrite of loop-carried string must drop the previous value: {:?}",
@@ -744,9 +745,9 @@ fn rebind_evaluates_rhs_before_release() {
     let call_at = stmts
         .iter()
         .position(|s| matches!(s, Statement::Assign(_, Rvalue::Call { .. })));
-    let rel_at = stmts.iter().position(
-        |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == x),
-    );
+    let rel_at = stmts
+        .iter()
+        .position(|s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l)))  if *l == x));
     assert!(call_at.is_some() && rel_at.is_some(), "{:?}", stmts);
     assert!(
         call_at.unwrap() < rel_at.unwrap(),
@@ -808,7 +809,7 @@ fn unread_local_survives_until_rebind() {
             && matches!(
                 st,
                 Statement::Release(Operand::Copy(Place::Local(l)))
-                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+
                 if *l == x
             )
     });
@@ -963,7 +964,7 @@ fn await_call_borrow_arg_not_released_before_await() {
         matches!(
             s,
             Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+
                 if *l == path
         )
     });
@@ -976,7 +977,7 @@ fn await_call_borrow_arg_not_released_before_await() {
         matches!(
             s,
             Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+
                 if *l == path
         )
     });
@@ -1027,9 +1028,10 @@ fn loop_rebind_array_releases_previous() {
     b.terminate(Terminator::Return(None));
     let mut func = b.finish();
     assert!(RcInsertion.run(&mut func, &ctx.interner));
-    let body_rel = func.blocks[body.0 as usize].stmts.iter().any(
-        |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == wire),
-    );
+    let body_rel = func.blocks[body.0 as usize]
+        .stmts
+        .iter()
+        .any(|s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l)))  if *l == wire));
     assert!(
         body_rel,
         "loop-carried array rebind must drop the previous block: {:?}",
@@ -1078,9 +1080,10 @@ fn loop_field_store_of_take_param_releases_at_return() {
     b.terminate(Terminator::Return(None));
     let mut func = b.finish();
     RcInsertion.run(&mut func, &ctx.interner);
-    let exit_rel = func.blocks[exit.0 as usize].stmts.iter().any(
-        |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == key),
-    );
+    let exit_rel = func.blocks[exit.0 as usize]
+        .stmts
+        .iter()
+        .any(|s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l)))  if *l == key));
     assert!(
         exit_rel,
         "take-param retained into a field in a loop must leftover-Release: {:?}",
@@ -1107,9 +1110,10 @@ fn union_last_use_released_at_return() {
     b.terminate(Terminator::Return(None));
     let mut func = b.finish();
     RcInsertion.run(&mut func, &ctx.interner);
-    let rel = func.blocks[0].stmts.iter().any(
-        |s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) if *l == a),
-    );
+    let rel = func.blocks[0]
+        .stmts
+        .iter()
+        .any(|s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l)))  if *l == a));
     assert!(
         rel,
         "owned union must Release before return: {:?}",
@@ -1157,7 +1161,7 @@ fn async_class_released_before_await() {
         matches!(
             s,
             Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+
                 if *l == x
         )
     });
@@ -1195,7 +1199,7 @@ fn async_complete_releases_sequential_hidden_borrow_locals() {
         matches!(
             s,
             Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+
                 if *l == s1
         )
     });
@@ -1203,7 +1207,7 @@ fn async_complete_releases_sequential_hidden_borrow_locals() {
         matches!(
             s,
             Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+
                 if *l == s2
         )
     });
@@ -1246,7 +1250,7 @@ fn rebind_after_union_move_releases_dest_at_return() {
         matches!(
             s,
             Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+
                 if *l == a
         )
     });
@@ -1254,7 +1258,7 @@ fn rebind_after_union_move_releases_dest_at_return() {
         matches!(
             s,
             Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+
                 if *l == a
         )
     });
@@ -1322,7 +1326,7 @@ fn async_await_rebind_releases_previous_dest() {
         matches!(
             st,
             Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+
                 if *l == s
         )
     });
@@ -1377,7 +1381,7 @@ fn loop_await_releases_future_on_resume() {
         matches!(
             s,
             Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
+
                 if *l == fut
         )
     });
@@ -1409,7 +1413,7 @@ fn unique_new_uses_release_unique() {
     let has_release = func.blocks[0]
         .stmts
         .iter()
-        .any(|s| matches!(s, Statement::Release(_) | Statement::ReleaseUnique(_)));
+        .any(|s| matches!(s, Statement::Release(_)));
     let has_retain = func.blocks[0]
         .stmts
         .iter()
@@ -1643,7 +1647,7 @@ fn string_never_release_unique() {
     let uniq = func.blocks[0]
         .stmts
         .iter()
-        .any(|st| matches!(st, Statement::ReleaseUnique(_)));
+        .any(|st| matches!(st, Statement::ForceFree(_)));
     assert!(
         !uniq,
         "strings stay on ordinary release: {:?}",

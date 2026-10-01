@@ -1283,7 +1283,7 @@ fn func_value_argument_is_reference_counted() {
     for block in &main.blocks {
         for stmt in &block.stmts {
             match stmt {
-                Statement::Retain(o) | Statement::Release(o) | Statement::ReleaseUnique(o) => {
+                Statement::Retain(o) | Statement::Release(o) => {
                     if let Operand::Copy(Place::Local(l)) = o {
                         let ty = main.locals[l.0 as usize].ty;
                         if matches!(interner.kind(ty), dream_types::TyKind::Func(_, _)) {

@@ -4,12 +4,10 @@ use super::super::{
         apply_stmt_tokens, dest_holds_token, leftover_order, move_source, needs_rebind_temp,
         null_local, release_and_null, take_arg_effects, terminator_reads_local,
     },
-    uniqueness::{
-        apply_stmt_unique, constructed_payload_locals, container_move_locals, mark_container_move,
-    },
+    uniqueness::{container_move_locals, mark_container_move},
 };
 use super::{
-    helpers::{leftover_env_ok, release_one, should_release_leftover, unique_destroy},
+    helpers::{leftover_env_ok, release_one, should_release_leftover},
     prepare::State,
 };
 use crate::{Const, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
@@ -34,13 +32,11 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
     let is_owned = |l: u32| owned_flags.get(l as usize).copied().unwrap_or(false);
     let mut changed = false;
     let local_types: Vec<dream_types::TypeId> = func.locals.iter().map(|d| d.ty).collect();
-    let take_flags: Vec<bool> = func.locals.iter().map(|d| d.is_take).collect();
     let mut extra_locals: Vec<LocalDecl> = Vec::new();
 
     let temp_base = func.locals.len() as u32;
     for (bi, block) in func.blocks.iter_mut().enumerate() {
         let mut tokens = analysis.token_in[bi].clone();
-        let mut unique = analysis.unique_in[bi].clone();
         let mut out: Vec<Statement> = Vec::with_capacity(block.stmts.len() + 8);
         for local in leftover_order(
             leftover_parent,
@@ -52,20 +48,18 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
             if should_release_leftover(&start_keep[bi], n_orig, local)
                 && leftover_env_ok(local, &tokens, env_defer)
             {
-                out.extend(release_and_null(local, false));
+                out.extend(release_and_null(local));
             } else {
                 out.push(null_local(local));
             }
             if (local as usize) < tokens.len() {
                 tokens[local as usize] = false;
-                unique[local as usize] = false;
             }
             changed = true;
         }
         if let Some(d) = analysis.await_resume_dest.get(bi).copied().flatten() {
             if (d as usize) < tokens.len() && is_owned(d) {
                 tokens[d as usize] = true;
-                unique[d as usize] = true;
             }
         }
         for (si, stmt) in block.stmts.drain(..).enumerate() {
@@ -88,13 +82,6 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
                 || ref_dest
                     .as_ref()
                     .is_some_and(|(d, _, _, _)| is_owned(d.0) && in_loop.contains(&bi));
-            let had_unique = ref_dest
-                .as_ref()
-                .map(|(d, _, _, _)| {
-                    unique.get(d.0 as usize).copied().unwrap_or(false)
-                        && !constructed_payload_locals(&stmt).contains(&d.0)
-                })
-                .unwrap_or(false);
             let container_srcs = container_move_locals(&stmt);
             // Self-realloc of a slot destroys the block under any read-derived owner of it
             // (the lowering emits `$realloc` with no release-old step). Release those owners
@@ -107,13 +94,11 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
                     if !dest_holds_token(&tokens, x) {
                         continue;
                     }
-                    pre_releases.extend(release_and_null(x, false));
+                    pre_releases.extend(release_and_null(x));
                 }
             }
             for r in &pre_releases {
                 if let Statement::Release(Operand::Copy(Place::Local(l))) = r {
-                    tokens[l.0 as usize] = false;
-                } else if let Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) = r {
                     tokens[l.0 as usize] = false;
                 }
                 changed = true;
@@ -136,14 +121,6 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
                 analysis.assign_move.contains(&(bi, si)),
                 |l| analysis.sink_move.contains(&(bi, si, l)),
                 &mut tokens,
-            );
-            apply_stmt_unique(
-                &stmt,
-                interner,
-                &is_owned,
-                analysis.assign_move.contains(&(bi, si)),
-                |l| analysis.sink_move.contains(&(bi, si, l)),
-                &mut unique,
             );
 
             let (sink_retains, sink_nulls) =
@@ -170,16 +147,7 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
                         out.push(r);
                     }
                     out.push(Statement::Assign(Place::Local(tmp), rvalue));
-                    out.push(release_one(
-                        dest.0,
-                        unique_destroy(
-                            interner,
-                            &local_types,
-                            &take_flags,
-                            dest.0,
-                            dest_had_token && had_unique,
-                        ),
-                    ));
+                    out.push(release_one(dest.0));
                     out.push(Statement::Assign(
                         Place::Local(dest),
                         Rvalue::Use(Operand::Copy(Place::Local(tmp))),
@@ -232,16 +200,7 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
                 }
                 Some((dest, retain, false, move_from)) => {
                     if drop_previous {
-                        out.push(release_one(
-                            dest.0,
-                            unique_destroy(
-                                interner,
-                                &local_types,
-                                &take_flags,
-                                dest.0,
-                                dest_had_token && had_unique,
-                            ),
-                        ));
+                        out.push(release_one(dest.0));
                     }
                     for r in sink_retains {
                         out.push(r);
@@ -302,39 +261,27 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
                 .filter(|&local| analysis.die_after.contains(&(bi, si, local)))
                 .collect();
             for local in leftover_order(leftover_parent, dying, env_defer) {
-                let u = unique_destroy(
-                    interner,
-                    &local_types,
-                    &take_flags,
-                    local,
-                    unique.get(local as usize).copied().unwrap_or(false),
-                );
                 let one = IndexSet::from([local]);
                 let keep = die_keep.get(&(bi, si)).unwrap_or(&one);
                 if should_release_leftover(keep, n_orig, local)
                     && leftover_env_ok(local, &tokens, env_defer)
                 {
-                    out.extend(release_and_null(local, u));
+                    out.extend(release_and_null(local));
                 } else {
                     out.push(null_local(local));
                 }
                 tokens[local as usize] = false;
-                unique[local as usize] = false;
                 changed = true;
             }
         }
-        for &local in &analysis.share_at_end[bi] {
-            unique[local as usize] = false;
-        }
+
         for local in leftover_order(
             leftover_parent,
             analysis.end_release[bi].iter().copied(),
             env_defer,
         ) {
             if dest_holds_token(&tokens, local) {
-                // Leftover may run after a field/Result store that retained an alias.
-                // ReleaseUnique ignores RC and would free that copy (`JsonValue.get`,
-                // `Result.Ok(from_json)`).
+                // Container stores may have retained an alias; only drop the local's count.
                 // Do not null an Await dest: resume is a C-only store, so `x = null`
                 // here lets SCCP prove `x` is null in the resume block.
                 let clobber_await_dest = matches!(
@@ -349,15 +296,14 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
                     && leftover_env_ok(local, &tokens, env_defer);
                 if clobber_await_dest {
                     if rel {
-                        out.push(release_one(local, false));
+                        out.push(release_one(local));
                     }
                 } else if rel {
-                    out.extend(release_and_null(local, false));
+                    out.extend(release_and_null(local));
                 } else {
                     out.push(null_local(local));
                 }
                 tokens[local as usize] = false;
-                unique[local as usize] = false;
                 changed = true;
             }
         }

@@ -215,7 +215,6 @@ pub(super) fn stmt_region_safe(
         | Statement::SourceLine(_)
         | Statement::Retain(_)
         | Statement::Release(_)
-        | Statement::ReleaseUnique(_)
         | Statement::RegionEnter
         | Statement::RegionLeave => true,
         Statement::Print { .. }

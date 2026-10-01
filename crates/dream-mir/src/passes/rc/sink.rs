@@ -19,8 +19,8 @@
 //!    is unobservable. Region, defer and force-free statements in `X` block the merge, since they
 //!    change how a release is carried out.
 
-use super::liveness::{add_terminator_reads, stmt_reads_local};
 use super::is_transparent_stmt;
+use super::liveness::{add_terminator_reads, stmt_reads_local};
 use crate::passes::cfg::predecessors;
 use crate::passes::MirPass;
 use crate::{BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement};
@@ -142,7 +142,6 @@ fn blocks_merge(stmt: &Statement) -> bool {
             | Statement::ForceFree(_)
             | Statement::Retain(_)
             | Statement::Release(_)
-            | Statement::ReleaseUnique(_)
     )
 }
 
@@ -202,7 +201,11 @@ mod tests {
         b.push(null(s));
         b.assign(
             Place::Local(c),
-            Rvalue::Binary(BinOp::Lt, Operand::Const(Const::Int(0)), Operand::Copy(Place::Local(n))),
+            Rvalue::Binary(
+                BinOp::Lt,
+                Operand::Const(Const::Int(0)),
+                Operand::Copy(Place::Local(n)),
+            ),
         );
         b.terminate(Terminator::If {
             cond: Operand::Copy(Place::Local(c)),
@@ -210,9 +213,18 @@ mod tests {
             else_blk: exit,
         });
         b.switch_to(body);
-        b.assign(Place::Local(tmp), Rvalue::Concat(vec![Operand::Const(Const::Str("a".into())), Operand::Const(Const::Str("b".into()))]));
+        b.assign(
+            Place::Local(tmp),
+            Rvalue::Concat(vec![
+                Operand::Const(Const::Str("a".into())),
+                Operand::Const(Const::Str("b".into())),
+            ]),
+        );
         b.push(rel(s));
-        b.assign(Place::Local(s), Rvalue::Use(Operand::Copy(Place::Local(tmp))));
+        b.assign(
+            Place::Local(s),
+            Rvalue::Use(Operand::Copy(Place::Local(tmp))),
+        );
         b.terminate(Terminator::Goto(header));
         b.switch_to(exit);
         b.terminate(Terminator::Return(None));
@@ -229,7 +241,12 @@ mod tests {
         let body = &f.blocks[2].stmts;
         assert!(matches!(body[0], Statement::Assign(..)));
         assert_eq!(released_local(&body[1]), Some(s));
-        assert_eq!(body.iter().filter(|st| released_local(st) == Some(s)).count(), 1);
+        assert_eq!(
+            body.iter()
+                .filter(|st| released_local(st) == Some(s))
+                .count(),
+            1
+        );
         let exit = &f.blocks[3].stmts;
         assert_eq!(released_local(&exit[0]), Some(s));
         assert!(is_null_store(&exit[1], s));
@@ -243,7 +260,12 @@ mod tests {
         let (mut f, s) = loop_fn(&i, arr);
         ReleaseSink.run(&mut f, &i);
         let body = &f.blocks[2].stmts;
-        assert_eq!(body.iter().filter(|st| released_local(st) == Some(s)).count(), 2);
+        assert_eq!(
+            body.iter()
+                .filter(|st| released_local(st) == Some(s))
+                .count(),
+            2
+        );
     }
 
     #[test]

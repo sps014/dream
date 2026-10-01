@@ -87,12 +87,8 @@ pub(super) fn wrap_sites(
                 Statement::Retain(Operand::Copy(Place::Local(l))) | Statement::ValueRetain(l) => {
                     retained.insert(l.0);
                 }
-                Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
-                | Statement::Release(Operand::Copy(Place::Local(l))) => {
+                Statement::Release(Operand::Copy(Place::Local(l))) => {
                     if deaths.insert(l.0, (bi, si)).is_some() {
-                        extra_death.insert(l.0);
-                    }
-                    if matches!(stmt, Statement::Release(_)) {
                         extra_death.insert(l.0);
                     }
                 }
@@ -129,6 +125,7 @@ pub(super) fn wrap_sites(
             .collect();
         let unique_ok = alias_deaths.len() == 1
             && !aliases.iter().any(|a| extra_death.contains(a))
+            && unobserved_root(f, &aliases, (bbi, bsi))
             && postdom_death(f, bbi, bsi, alias_deaths[0].0, alias_deaths[0].1);
         if unique_ok {
             let (dbi, dsi) = alias_deaths[0];
@@ -169,6 +166,33 @@ pub(super) fn wrap_sites(
     }
     out.sort_by_key(|s| (s.birth_bi, s.birth_si));
     out
+}
+
+fn unobserved_root(f: &MirFunction, aliases: &BTreeSet<u32>, birth: (usize, usize)) -> bool {
+    // A plain Release proves no uniqueness. Only eliminate its walk when the fresh result
+    // stayed entirely in local slots: calls and field/payload access can introduce hidden owners.
+    f.blocks.iter().enumerate().all(|(bi, block)| {
+        block.stmts.iter().enumerate().all(|(si, stmt)| match stmt {
+            _ if (bi, si) == birth => !aliases
+                .iter()
+                .any(|a| crate::passes::rc::stmt_reads_local(stmt, *a)),
+            Statement::Assign(Place::Local(d), rv) if aliases.contains(&d.0) => match rv {
+                Rvalue::Use(Operand::Const(Const::Null)) => true,
+                Rvalue::Use(Operand::Copy(Place::Local(s)))
+                | Rvalue::Cast(Operand::Copy(Place::Local(s)), _, _) => aliases.contains(&s.0),
+                _ => false,
+            },
+            Statement::Assign(
+                Place::Local(_),
+                Rvalue::Use(Operand::Copy(Place::Local(_)))
+                | Rvalue::Cast(Operand::Copy(Place::Local(_)), _, _),
+            )
+            | Statement::Release(_) => true,
+            _ => !aliases
+                .iter()
+                .any(|a| crate::passes::rc::stmt_reads_local(stmt, *a)),
+        }) && !payload_use_term(&block.terminator, aliases)
+    })
 }
 
 pub(super) fn aliases_of(root: u32, from: &BTreeMap<u32, BTreeSet<u32>>) -> BTreeSet<u32> {
@@ -294,7 +318,7 @@ pub(super) fn payload_used_after_join(
 
 pub(super) fn payload_use_stmt(stmt: &Statement, aliases: &BTreeSet<u32>) -> bool {
     match stmt {
-        Statement::Retain(_) | Statement::Release(_) | Statement::ReleaseUnique(_) => false,
+        Statement::Retain(_) | Statement::Release(_) => false,
         Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Const(Const::Null)))
             if aliases.contains(&d.0) =>
         {
@@ -396,8 +420,7 @@ pub(super) fn join_arm_ok(stmt: &Statement) -> bool {
         | Statement::DebugLine(_)
         | Statement::SourceLine(_)
         | Statement::Retain(_)
-        | Statement::Release(_)
-        | Statement::ReleaseUnique(_) => true,
+        | Statement::Release(_) => true,
         Statement::Assign(Place::Local(_), rv) => !matches!(
             rv,
             Rvalue::Call { .. }

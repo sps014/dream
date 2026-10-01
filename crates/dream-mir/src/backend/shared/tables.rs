@@ -41,10 +41,7 @@ pub(crate) fn symbol_table(mir: &Mir) -> HashMap<(DefId, Vec<TypeId>), String> {
         .map(|f| ((f.def, f.instance.clone()), c_ident(&func_symbol(f))))
         .collect();
     for imp in &mir.imports {
-        table.insert(
-            (imp.def, vec![]),
-            import_call_name(imp),
-        );
+        table.insert((imp.def, vec![]), import_call_name(imp));
     }
     for (def, key) in &mir.intrinsics {
         table.entry((*def, vec![])).or_insert_with(|| c_ident(key));
@@ -212,7 +209,6 @@ fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
         | Statement::Panic(arg)
         | Statement::Retain(arg)
         | Statement::Release(arg)
-        | Statement::ReleaseUnique(arg)
         | Statement::ForceFree(arg)
         | Statement::LockAcquire(arg)
         | Statement::LockRelease(arg)

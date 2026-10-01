@@ -67,7 +67,7 @@ pub(super) fn check(
                     }
                     reads
                 }
-                Statement::Retain(op) | Statement::Release(op) | Statement::ReleaseUnique(op) => {
+                Statement::Retain(op) | Statement::Release(op) => {
                     let mut reads = Vec::new();
                     operand_locals(op, &mut reads);
                     reads

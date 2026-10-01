@@ -40,8 +40,21 @@ public struct CPtr {
 public class NativeCallback<F> {
     f: F;
 
+    @native
+    @intrinsic("dream_callback_register")
+    static extern fun register(borrow callback: object): void;
+
+    @native
+    @intrinsic("dream_callback_unregister")
+    static extern fun unregister(borrow callback: object): void;
+
     public constructor(f: F) {
         this.f = f;
+        NativeCallback<F>.register(this);
+    }
+
+    del() {
+        NativeCallback<F>.unregister(this);
     }
 }
 

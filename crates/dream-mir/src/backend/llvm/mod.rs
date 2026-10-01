@@ -11,11 +11,13 @@ pub mod ir;
 mod js;
 mod lcx;
 mod places;
+mod publication;
 pub mod runtime_sigs;
 mod rvalue;
 mod statements;
 mod terminator;
 mod types;
+mod value_refs;
 
 pub use runtime_sigs::RuntimeSigs;
 

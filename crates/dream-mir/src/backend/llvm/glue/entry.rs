@@ -168,6 +168,7 @@ fn guest_entry(l: &mut Lcx<'_>, main: &MirFunction, exit: EntryExit) {
         }
     }
     fx.call("dream_drop_globals", &[]);
+    fx.call("dream_callback_owner_finish", &[]);
     if exit == EntryExit::Void {
         fx.w.ret(Some(&Value::i32(0)));
     } else {

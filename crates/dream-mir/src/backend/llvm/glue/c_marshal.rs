@@ -468,7 +468,15 @@ fn reverse_trampoline(l: &mut Lcx<'_>, rev: &Reverse, shapes: &[CShape], ret: &C
     };
     let (params, ret_ty) = fun_parts(l, fun_ty);
     let mut fx = glue(l, &rev.symbol());
-    fx.call("dream_callback_enter", &[]);
+    match rev {
+        Reverse::Callback { user_data_last, .. } => {
+            let object = fx.arg(if *user_data_last { shapes.len() } else { 0 });
+            fx.call("dream_callback_check", &[object]);
+        }
+        Reverse::Direct { .. } => {
+            fx.call("dream_callback_enter", &[]);
+        }
+    }
     let first = match rev {
         Reverse::Callback {
             user_data_last: false,

@@ -20,10 +20,8 @@ fn out_dir(tag: &str) -> PathBuf {
 
 /// Writes `files` (relative path, contents) under a fresh temp directory.
 fn project(tag: &str, files: &[(&str, &str)]) -> PathBuf {
-    let root = std::env::temp_dir().join(format!(
-        "dream-native-interop-{tag}-{}",
-        std::process::id()
-    ));
+    let root =
+        std::env::temp_dir().join(format!("dream-native-interop-{tag}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     for (rel, text) in files {
         let path = root.join(rel);
@@ -157,7 +155,10 @@ fn cpp_struct_layout_mismatch_fails_the_static_assert() {
         ],
     );
     let err = run(&root.join("src/main.dream"), "layout").unwrap_err();
-    assert_contains(&err, "@cpp struct 'P': sizeof(P) differs from the Dream declaration");
+    assert_contains(
+        &err,
+        "@cpp struct 'P': sizeof(P) differs from the Dream declaration",
+    );
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -187,6 +188,40 @@ fn callback_from_a_foreign_thread_traps() {
     );
     let err = run(&root.join("src/main.dream"), "thread").unwrap_err();
     assert_contains(&err, "C callbacks must run on their Dream owner thread");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+#[ignore = "builds C/C++ sources; cargo test --workspace -- --ignored"]
+fn cpp_callback_destroyed_on_a_foreign_thread_releases_on_its_owner() {
+    let root = project(
+        "callback-release",
+        &[
+            ("dream.toml", "[package]\nname = \"callback_release\"\n"),
+            (
+                "native/include/drop.hpp",
+                "#include <functional>\n#include <thread>\ninline void drop_on_thread(std::function<int(int)> callback) { std::thread([callback = std::move(callback)]() mutable { callback = {}; }).join(); }\n",
+            ),
+            ("native/drop.cpp", "#include \"drop.hpp\"\n"),
+            (
+                "src/main.dream",
+                "import system;\n@cpp(\"drop.hpp\", \"drop_on_thread\") extern fun drop_on_thread(callback: fun(int): int): void;\nclass Capture { public constructor() {} public fun value(): int { return 7; } del() { System.println(\"capture destroyed\"); } }\nfun submit(): void { let capture = Capture(); drop_on_thread((x: int) => capture.value() + x); System.println(\"foreign release queued\"); }\nfun main(): void { submit(); }\n",
+            ),
+        ],
+    );
+    let output = run(&root.join("src/main.dream"), "callback-release").unwrap();
+    assert_eq!(output.trim(), "foreign release queued\ncapture destroyed");
+    let entry = root.join("src/main.dream");
+    let source = fs::read_to_string(&entry).unwrap().replace(
+        "fun main(): void { submit(); }",
+        "async fun main(): void { submit(); Time.delay(1).await; System.println(\"drained\"); }",
+    );
+    fs::write(&entry, source).unwrap();
+    let output = run(&entry, "callback-release-async").unwrap();
+    assert_eq!(
+        output.trim(),
+        "foreign release queued\ncapture destroyed\ndrained"
+    );
     let _ = fs::remove_dir_all(&root);
 }
 

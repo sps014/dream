@@ -16,6 +16,13 @@ static int start_worker(dream_thread *thread, void *(*body)(void *), void *arg) 
 
 void dream_future_fini(dream_ptr ptr) { (void)ptr; }
 void dream_thread_attach(void) {}
+void dream_callback_drain(void) {}
+void dream_callback_owner_finish(void) {}
+int dream_callback_pending(void) { return 0; }
+void dream_callback_set_waker(void (*wake)(void *), void *context) {
+    (void)wake;
+    (void)context;
+}
 void dream_release_closure_env(dream_ptr env) { dream_release(env); }
 void dream_panic(dream_ptr message) {
     dream_mutex_lock(&reg_mu);

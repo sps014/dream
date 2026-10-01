@@ -3,11 +3,19 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 
 /* Generated-program hooks: these graphs are explicitly recycled after their worker exits. */
 void dream_release_object(dream_ptr ptr) { dream_release(ptr); }
 void dream_release_closure_env(dream_ptr ptr) { dream_release(ptr); }
 void dream_thread_attach(void) {}
+void dream_callback_drain(void) {}
+void dream_callback_owner_finish(void) {}
+int dream_callback_pending(void) { return 0; }
+void dream_callback_set_waker(void (*wake)(void *), void *context) {
+    (void)wake;
+    (void)context;
+}
 void dream_future_fini(dream_ptr ptr) {
     (void)ptr;
     assert(!"publication fixture contains no futures");
@@ -25,10 +33,27 @@ typedef struct {
 
 static dream_ptr *nodes;
 static size_t node_count;
+static pthread_mutex_t mutation_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t mutation_cv = PTHREAD_COND_INITIALIZER;
+static int installed;
 
 dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg) {
-    (void)fn;
     (void)env;
+    if (fn == 1) {
+        pthread_mutex_lock(&mutation_mu);
+        while (!installed) {
+            pthread_cond_wait(&mutation_cv, &mutation_mu);
+        }
+        assert(dream_tag_shared(nodes[1]));
+        assert(dream_tag_shared(nodes[2]));
+        pthread_mutex_unlock(&mutation_mu);
+        for (size_t i = 0; i < 100000; ++i) {
+            dream_retain(nodes[1]);
+            dream_release(nodes[1]);
+        }
+        dream_release(arg);
+        return 0;
+    }
     for (size_t i = 0; i < node_count; ++i) {
         assert(dream_heap_is_live(nodes[i]));
         assert(dream_tag_shared(nodes[i]));
@@ -67,6 +92,48 @@ static void handoff_and_free(void) {
 }
 
 int main(void) {
+    make_nodes(3);
+    dream_publish_child(nodes[0], nodes[1]);
+    assert(!dream_tag_shared(nodes[1]));
+    dream_publish(nodes[0]);
+    ((Node *)dream_p(nodes[1]))->left = nodes[2];
+    dream_publish_child(nodes[0], nodes[1]);
+    assert(dream_tag_shared(nodes[1]));
+    assert(dream_tag_shared(nodes[2]));
+    ((Node *)dream_p(nodes[0]))->left = nodes[1];
+    dream_publish_child(nodes[0], 0);
+    handoff_and_free();
+
+    make_nodes(3);
+    int32_t observer = workerSpawn(1, 0);
+    workerPost(observer, nodes[0]);
+    /* The observer already owns the root: no second handoff can repair the missing barrier. */
+    pthread_mutex_lock(&mutation_mu);
+    ((Node *)dream_p(nodes[1]))->left = nodes[2];
+    dream_publish_child(nodes[0], nodes[1]);
+    ((Node *)dream_p(nodes[0]))->left = nodes[1];
+    installed = 1;
+    pthread_cond_signal(&mutation_cv);
+    pthread_mutex_unlock(&mutation_mu);
+    for (size_t i = 0; i < 100000; ++i) {
+        dream_retain(nodes[1]);
+        dream_release(nodes[1]);
+    }
+    assert(workerRecv(observer) == 0);
+    workerTerminate(observer);
+    for (size_t i = 0; i < node_count; ++i) {
+        assert((*dream_rc_word(nodes[i]) & INT32_MAX) == 1);
+        dream_recycle(nodes[i]);
+    }
+    free(nodes);
+
+    make_nodes(2);
+    /* Ref interiors may point into a heap object: no header is available at the ref address. */
+    dream_publish_child(0, nodes[1]);
+    assert(dream_tag_shared(nodes[1]));
+    ((Node *)dream_p(nodes[0]))->left = nodes[1];
+    handoff_and_free();
+
     make_nodes(1000);
     for (size_t i = 0; i < node_count; ++i) {
         ((Node *)dream_p(nodes[i]))->left = nodes[(i + 1) % node_count];

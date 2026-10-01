@@ -115,6 +115,7 @@ const NATIVE_CORE_C: &[&str] = &[
     "region.c",
     "strings.c",
     "ffi.c",
+    "callback.c",
     "object.c",
     "format.c",
     "panic.c",

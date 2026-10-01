@@ -11,6 +11,7 @@ type Origins = BTreeMap<u32, BTreeSet<usize>>;
 pub(super) fn check(
     f: &MirFunction,
     interner: &TypeInterner,
+    returns: &super::returns::Returns,
     depths: &[Option<usize>],
     out: &mut Vec<Violation>,
 ) {
@@ -30,7 +31,7 @@ pub(super) fn check(
             .expect("queued reachable block");
         let mut depth = depths[bi.0 as usize].expect("balanced reachable region stack");
         for stmt in &f.blocks[bi.0 as usize].stmts {
-            transfer(stmt, f, interner, &mut depth, &mut origins);
+            transfer(stmt, f, interner, returns, &mut depth, &mut origins);
         }
         if let Terminator::Await {
             dest: Some(dest), ..
@@ -77,7 +78,7 @@ pub(super) fn check(
             reads.sort_unstable();
             reads.dedup();
             check_reads(f, bi, si, reads, &origins, out);
-            transfer(stmt, f, interner, &mut depth, &mut origins);
+            transfer(stmt, f, interner, returns, &mut depth, &mut origins);
         }
         check_reads(
             f,
@@ -117,9 +118,45 @@ fn transfer(
     stmt: &Statement,
     f: &MirFunction,
     interner: &TypeInterner,
+    returns: &super::returns::Returns,
     depth: &mut usize,
     origins: &mut Origins,
 ) {
+    let call = match stmt {
+        Statement::Call { callee, args } | Statement::Assign(_, Rvalue::Call { callee, args }) => {
+            Some((callee, args))
+        }
+        _ => None,
+    };
+    if let Some((callee, args)) = call {
+        let facts = super::returns::call_facts(callee, args.len(), returns);
+        let old = origins.clone();
+        for (index, sources) in facts.writes {
+            let Some(Operand::Copy(place)) = args.get(index) else {
+                continue;
+            };
+            let local = match place {
+                Place::Local(local)
+                | Place::Field { base: local, .. }
+                | Place::Index { base: local, .. }
+                | Place::Deref { ptr: local, .. } => local,
+                Place::Global(_) => continue,
+            };
+            if !interner.is_rc_tracked(f.local_ty(*local)) {
+                continue;
+            }
+            let mut effect = BTreeSet::new();
+            if sources.fresh && *depth > 0 {
+                effect.insert(*depth);
+            }
+            for param in sources.params {
+                if let Some(arg) = args.get(param) {
+                    effect.extend(operand_origins(arg, &old));
+                }
+            }
+            origins.entry(local.0).or_default().extend(effect);
+        }
+    }
     match stmt {
         Statement::RegionEnter => *depth += 1,
         Statement::RegionLeave => {
@@ -132,6 +169,19 @@ fn transfer(
         }
         Statement::Assign(Place::Local(dest), rv) => {
             let sources = match rv {
+                Rvalue::Call { callee, args } if interner.is_rc_tracked(f.local_ty(*dest)) => {
+                    let summary = super::returns::call_facts(callee, args.len(), returns).result;
+                    let mut sources = BTreeSet::new();
+                    if summary.fresh && *depth > 0 {
+                        sources.insert(*depth);
+                    }
+                    for index in summary.params {
+                        if let Some(arg) = args.get(index) {
+                            sources.extend(operand_origins(arg, origins));
+                        }
+                    }
+                    Some(sources)
+                }
                 Rvalue::Use(Operand::Copy(Place::Local(src)))
                 | Rvalue::Cast(Operand::Copy(Place::Local(src)), _, _)
                 | Rvalue::Move { src, .. } => origins.get(&src.0).cloned(),
@@ -154,6 +204,28 @@ fn transfer(
                 {
                     Some(BTreeSet::from([*depth]))
                 }
+                Rvalue::Use(op) | Rvalue::Cast(op, _, _) | Rvalue::UnionField { base: op, .. } => {
+                    Some(operand_origins(op, origins))
+                }
+                Rvalue::Select {
+                    then_val, else_val, ..
+                } => {
+                    let mut sources = operand_origins(then_val, origins);
+                    sources.extend(operand_origins(else_val, origins));
+                    Some(sources)
+                }
+                _ if interner.is_rc_tracked(f.local_ty(*dest)) => {
+                    let mut sources = BTreeSet::new();
+                    for local in rvalue_local_operands(rv) {
+                        if let Some(old) = origins.get(&local) {
+                            sources.extend(old);
+                        }
+                    }
+                    if *depth > 0 {
+                        sources.insert(*depth);
+                    }
+                    Some(sources)
+                }
                 _ => None,
             };
             if let Some(sources) = sources {
@@ -162,6 +234,39 @@ fn transfer(
                 origins.remove(&dest.0);
             }
         }
+        Statement::Assign(place, rv) => {
+            let base = match place {
+                Place::Field { base, .. }
+                | Place::Index { base, .. }
+                | Place::Deref { ptr: base, .. } => base,
+                _ => return,
+            };
+            if !interner.is_rc_tracked(f.local_ty(*base)) {
+                return;
+            }
+            let mut sources = BTreeSet::new();
+            for local in rvalue_local_operands(rv) {
+                if let Some(old) = origins.get(&local) {
+                    sources.extend(old);
+                }
+            }
+            if *depth > 0 && crate::rc_store::rvalue_allocates(rv) {
+                sources.insert(*depth);
+            }
+            origins.entry(base.0).or_default().extend(sources);
+        }
         _ => {}
+    }
+}
+
+fn operand_origins(op: &Operand, origins: &Origins) -> BTreeSet<usize> {
+    match op {
+        Operand::Copy(Place::Local(local))
+        | Operand::Copy(Place::Field { base: local, .. })
+        | Operand::Copy(Place::Index { base: local, .. })
+        | Operand::Copy(Place::Deref { ptr: local, .. }) => {
+            origins.get(&local.0).cloned().unwrap_or_default()
+        }
+        _ => BTreeSet::new(),
     }
 }

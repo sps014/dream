@@ -497,6 +497,25 @@ DREAM_ALWAYS_INLINE char *dream_array_at(dream_ptr p, int64_t i, int32_t esize,
 }
 
 void dream_publish(dream_ptr ptr);
+
+/* A zero owner denotes an interior/ref value whose containing heap object is not known.
+ * Once workers exist, such stores conservatively publish the child; stack addresses must never
+ * be read as headers. The first worker handoff publishes the whole pre-existing graph. */
+DREAM_ALWAYS_INLINE void dream_publish_child(dream_ptr owner, dream_ptr child) {
+    if (child == 0) {
+        return;
+    }
+    int shared;
+    if (owner == 0) {
+        shared = __atomic_load_n(&dream_rt_mt, __ATOMIC_ACQUIRE);
+    } else {
+        int32_t tag = __atomic_load_n(dream_tag_word(owner), __ATOMIC_ACQUIRE);
+        shared = (tag & TAG_SHARED) != 0 || (tag & TAG_VALUE_MASK) == 0;
+    }
+    if (shared) {
+        dream_publish(child);
+    }
+}
 dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag);
 #ifdef DREAM_WASM32
 void dream_heap_init(void);
@@ -1246,6 +1265,13 @@ double dream_ffi_read_f64(int64_t base, int32_t index);
 dream_ptr dream_ffi_read_cstring(int64_t ptr);
 void dream_thread_attach(void);
 void dream_callback_enter(void);
+void dream_callback_register(dream_ptr obj);
+void dream_callback_unregister(dream_ptr obj);
+void dream_callback_check(dream_ptr obj);
+void dream_callback_drain(void);
+int dream_callback_pending(void);
+void dream_callback_set_waker(void (*wake)(void *), void *context);
+void dream_callback_owner_finish(void);
 void dream_callback_retain(dream_ptr obj);
 void dream_callback_release(dream_ptr obj);
 

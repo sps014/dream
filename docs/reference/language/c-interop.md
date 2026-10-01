@@ -214,8 +214,14 @@ public class Ticker {
 The callback's lifetime is ordinary ARC. Keep the `NativeCallback` in a field for as long as C may
 call it. Pass a temporary when C only calls it during the call (`qsort_r`, `sqlite3_exec`).
 
-Callbacks must arrive on a thread Dream started: the main thread or a `Task` worker. A call from a
-thread C created traps: `a C callback ran on a thread Dream did not start`.
+Each `NativeCallback` belongs to the Dream thread that constructed it. Calls and retains must
+run on that owner, even when another thread is a Dream `Task` worker. Foreign-thread calls trap
+with an owner-thread diagnostic; foreign callback-call attach support is planned.
+
+C++ adapters may release their retained callback from any thread. Such releases are queued
+without touching the object's non-atomic reference count; the owner drains them at scheduler
+ticks, worker wakeups, or shutdown. Destructors run on the owner. Join foreign users and release
+their callback handles before the owner exits; a callback that outlives its owner is an error.
 
 ## C++: `@cpp`
 

@@ -94,7 +94,9 @@ impl<'l, 'a> Fx<'l, 'a> {
     fn drop_rc_slot(&mut self, ty: TypeId, c: &V) {
         let rel = release_sym(&self.l.cx, ty);
         let des = destroy_sym(&self.l.cx, ty);
-        if rel == des {
+        // Erased-type destruction routes some runtime tags through a decrementing release.
+        // Its count must remain unclaimed until that dispatcher chooses the concrete cascade.
+        if rel == des || des == c_ident("destroy_object") {
             self.call(&rel, std::slice::from_ref(c));
             return;
         }

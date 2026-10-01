@@ -17,9 +17,15 @@ fn typed_drops_claim_counts_and_clear_weak_slots_before_destructor_revival() {
             public item: Item;
             public constructor(item: Item) { this.item = item; }
         }
+        class Erased {
+            public item: object;
+            public constructor(item: object) { this.item = item; }
+        }
         fun main(): void {
             let holder = Holder(Item(42));
             System.println(holder.item.value);
+            let erased = Erased(Item(7));
+            System.println(erased.item);
         }
         "#
     );
@@ -27,6 +33,9 @@ fn typed_drops_claim_counts_and_clear_weak_slots_before_destructor_revival() {
     let holder = ir_func_body(&ir, "destroy_Holder");
     assert!(holder.contains("@dream_rc_claim_unique("), "{}", holder);
     assert!(!ir.contains("@dream_rc_one("));
+    let erased = ir_func_body(&ir, "destroy_Erased");
+    assert!(erased.contains("@dream_release_object("), "{}", erased);
+    assert!(!erased.contains("@dream_rc_claim_unique("), "{}", erased);
     for name in ["release_Item_into", "destroy_Item"] {
         let body = ir_func_body(&ir, name);
         let clear = body

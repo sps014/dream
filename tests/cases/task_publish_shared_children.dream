@@ -1,0 +1,18 @@
+import system;
+import system.task;
+
+shared class Named {
+    public label: string;
+    public constructor(label: string) {
+        this.label = label;
+    }
+}
+
+async fun main(): void {
+    let n = Named("first" + " child");
+    System.println(Task.spawn(() => n.label + "!").await);
+    lock (n) {
+        n.label = "second" + " child";
+    }
+    System.println(Task.spawn(() => n.label + "!").await);
+}

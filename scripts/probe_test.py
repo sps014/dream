@@ -120,7 +120,8 @@ def leak_failure(*streams):
     for s in streams:
         m = _LEAK.search(s or "")
         if m and m.group(1) != "0":
-            return f"leak live={m.group(1)}"
+            detail = _ANSI.sub("", s).strip()
+            return f"leak live={m.group(1)} stderr={detail[-2000:]!r}"
     return None
 
 
@@ -296,7 +297,7 @@ clearTimeout(timer);
         want = exp.read_text().strip()
         got = run_output_body(out)
         if got != want:
-            detail = _ANSI.sub("", err).strip()
+            detail = _ANSI.sub("", err_txt).strip()
             return stem, "fail", f"output mismatch got={got[:2000]!r} stderr={detail[-2000:]!r}"
     leak = leak_failure(err_txt, out)
     if leak:
@@ -342,7 +343,8 @@ def one(f: Path):
         want = exp.read_text().strip()
         got = run_output_body(out)
         if got != want:
-            return stem, "fail", f"output mismatch got={got[:80]!r}"
+            detail = _ANSI.sub("", err).strip()
+            return stem, "fail", f"output mismatch got={got[:2000]!r} stderr={detail[-2000:]!r}"
     leak = leak_failure(err, out)
     if leak:
         return stem, "fail", leak

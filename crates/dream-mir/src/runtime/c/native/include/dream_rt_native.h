@@ -1246,6 +1246,13 @@ double dream_ffi_read_f64(int64_t base, int32_t index);
 dream_ptr dream_ffi_read_cstring(int64_t ptr);
 void dream_thread_attach(void);
 void dream_callback_enter(void);
+void dream_callback_register(dream_ptr obj);
+void dream_callback_unregister(dream_ptr obj);
+void dream_callback_check(dream_ptr obj);
+void dream_callback_drain(void);
+int dream_callback_pending(void);
+void dream_callback_set_waker(void (*wake)(void *), void *context);
+void dream_callback_owner_finish(void);
 void dream_callback_retain(dream_ptr obj);
 void dream_callback_release(dream_ptr obj);
 

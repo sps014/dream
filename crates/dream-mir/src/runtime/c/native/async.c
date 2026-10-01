@@ -117,6 +117,13 @@ static Node *fq_head;
 static Node *fq_tail;
 static int32_t foreign_pending;
 
+static void callback_wake(void *context) {
+    (void)context;
+    dream_mutex_lock(&wake_mu);
+    dream_cond_broadcast(&wake_cv);
+    dream_mutex_unlock(&wake_mu);
+}
+
 void dream_foreign_work_begin(void) {
     dream_mutex_lock(&wake_mu);
     foreign_pending += 1;
@@ -355,9 +362,13 @@ void dream_await(dream_ptr parent, dream_ptr child) {
 __attribute__((export_name(DREAM_SYM_RUN_LOOP)))
 #endif
 void dream_run_loop(void) {
+#ifndef DREAM_WASM32
+    dream_callback_set_waker(callback_wake, NULL);
+#endif
     for (;;) {
 #ifndef DREAM_WASM32
         foreign_drain();
+        dream_callback_drain();
 #endif
         while (rq_head) {
             Node *n = rq_head;
@@ -377,6 +388,9 @@ void dream_run_loop(void) {
                     poll_current = f;
                     poll_drop_start_retain = 0;
                     ((int32_t (*)(dream_ptr))dream_ft_get(poll))(f);
+#ifndef DREAM_WASM32
+                    dream_callback_drain();
+#endif
                     poll_current = 0;
                     if (poll_drop_start_retain) {
                         poll_drop_start_retain = 0;
@@ -410,14 +424,14 @@ void dream_run_loop(void) {
                 dream_mutex_lock(&wake_mu);
                 /* Re-check under the lock: a foreign completion between the drain above and
                  * this wait must not be slept through. */
-                if (!fq_head) {
+                if (!fq_head && !dream_callback_pending()) {
                     dream_cond_wait_ns(&wake_cv, &wake_mu, due - now);
                 }
                 dream_mutex_unlock(&wake_mu);
             } else if (!timer_head) {
                 /* No timers: park until a foreign completion signals. */
                 dream_mutex_lock(&wake_mu);
-                if (!fq_head) {
+                if (!fq_head && !dream_callback_pending()) {
                     dream_cond_wait(&wake_cv, &wake_mu);
                 }
                 dream_mutex_unlock(&wake_mu);

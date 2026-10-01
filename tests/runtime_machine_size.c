@@ -18,6 +18,12 @@ static void *sparse_memset(void *ptr, int value, size_t size) {
 #undef memset
 
 void *dream_ft_get(int32_t index) { (void)index; return NULL; }
+void dream_callback_drain(void) {}
+int dream_callback_pending(void) { return 0; }
+void dream_callback_set_waker(void (*wake)(void *), void *context) {
+    (void)wake;
+    (void)context;
+}
 int64_t timeNowNanos(void) { return 0; }
 void dream_panic(dream_ptr message) {
     (void)message;

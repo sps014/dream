@@ -48,19 +48,36 @@ static int64_t next_id = 1;
 static Worker *find_worker(int32_t id);
 static void destroy_worker(Worker *w);
 
+static void callback_wake(void *context) {
+    Worker *worker = (Worker *)context;
+    dream_mutex_lock(&worker->mu);
+    dream_cond_signal(&worker->cv);
+    dream_mutex_unlock(&worker->mu);
+}
+
 static DREAM_THREAD_PROC(worker_main) {
     Worker *w = (Worker *)arg;
     dream_thread_attach();
     for (;;) {
+        dream_callback_set_waker(callback_wake, w);
+        dream_callback_drain();
         dream_mutex_lock(&w->mu);
         while (!w->head && !w->dead) {
+            if (dream_callback_pending()) {
+                dream_mutex_unlock(&w->mu);
+                dream_callback_drain();
+                dream_mutex_lock(&w->mu);
+                continue;
+            }
             dream_cond_wait(&w->cv, &w->mu);
         }
         if (w->dead && !w->head) {
             int abandoned = w->abandoned;
             dream_mutex_unlock(&w->mu);
             if (abandoned) {
+                dream_callback_owner_finish();
                 destroy_worker(w);
+                return 0;
             }
             break;
         }
@@ -83,6 +100,7 @@ static DREAM_THREAD_PROC(worker_main) {
         dream_cond_signal(&w->cv);
         dream_mutex_unlock(&w->mu);
     }
+    dream_callback_owner_finish();
     return 0;
 }
 

@@ -28,29 +28,3 @@ dream_ptr dream_ffi_read_cstring(int64_t ptr) {
     }
     return dream_utf8_to_string((const char *)(uintptr_t)ptr);
 }
-
-/* Set on threads Dream started (the process main thread and `Task` workers). Dream's ARC and
- * scheduler state are per-thread, so a callback arriving on a thread C created cannot run. */
-_Thread_local int32_t dream_thread_attached;
-
-void dream_thread_attach(void) {
-    dream_thread_attached = 1;
-}
-
-void dream_callback_enter(void) {
-    if (DREAM_UNLIKELY(!dream_thread_attached)) {
-        DREAM_PANIC_LITERAL(u"panic: C callbacks must run on their Dream owner thread; foreign-thread attach is not supported yet");
-    }
-}
-
-/* Called by generated C++ shims: a `std::function` adapter holds its `NativeCallback` across the
- * call that handed it over, and drops it when the last copy of the `std::function` dies. */
-void dream_callback_retain(dream_ptr obj) {
-    dream_callback_enter();
-    dream_retain(obj);
-}
-
-void dream_callback_release(dream_ptr obj) {
-    dream_callback_enter();
-    dream_release_object(obj);
-}

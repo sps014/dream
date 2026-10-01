@@ -1,0 +1,39 @@
+import system;
+
+class Node {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+}
+
+let escaped: Option<Node> = Option.None;
+
+@noinline
+fun first(depth: int): Node {
+    let node = Node(depth);
+    if depth > 0 {
+        let child = second(depth - 1);
+        node.value = node.value + child.value;
+    }
+    escaped = Option.Some(node);
+    return node;
+}
+
+@noinline
+fun second(depth: int): Node {
+    let node = Node(depth);
+    if depth > 0 {
+        let child = first(depth - 1);
+        node.value = node.value + child.value;
+    }
+    return node;
+}
+
+fun main(): void {
+    let root = second(3);
+    System.println(root.value);
+    switch (escaped) {
+        Some(node) => System.println(node.value),
+        None => System.println(-1),
+    }
+    escaped = Option.None;
+}

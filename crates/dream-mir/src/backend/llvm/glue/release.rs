@@ -90,7 +90,7 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
 }
 
 impl<'l, 'a> Fx<'l, 'a> {
-    /// Last-ref field drop: a uniquely owned payload skips the decrement and runs `destroy_*`.
+    /// Claiming the last count closes the weak-retain race before entering destroy glue.
     fn drop_rc_slot(&mut self, ty: TypeId, c: &V) {
         let rel = release_sym(&self.l.cx, ty);
         let des = destroy_sym(&self.l.cx, ty);
@@ -100,7 +100,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         }
         let nz = self.truthy(c);
         self.if_then(&nz, |fx| {
-            let one = fx.call_v("dream_rc_one", std::slice::from_ref(c));
+            let one = fx.call_v("dream_rc_claim_unique", std::slice::from_ref(c));
             let one = fx.truthy(&one);
             let (tb, eb, join) = (
                 fx.w.new_block("one"),
@@ -136,6 +136,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     fn del_call(&mut self, p: &V, name: &str) {
+        self.call("dream_weak_prepare_destroy", std::slice::from_ref(p));
         if let Some(del) = del_symbol(&self.l.cx, name) {
             self.call("dream_rc_revive", std::slice::from_ref(p));
             self.call(&del, std::slice::from_ref(p));
@@ -171,14 +172,13 @@ impl<'l, 'a> Fx<'l, 'a> {
         }
     }
 
-    /// `c && (dream_rc_one(c) || dream_rc_last(c))` — the holder owns `c`'s last reference. The
-    /// `||` short-circuits: `dream_rc_last` decrements.
+    /// Both arms claim the last reference; a count peek would let weak loads resurrect it.
     fn unique_or_last(&mut self, c: &V) -> Value {
         let nz = self.truthy(c);
         let yes = self.if_else_v(
             &nz,
             |fx| {
-                let one = fx.call_v("dream_rc_one", std::slice::from_ref(c));
+                let one = fx.call_v("dream_rc_claim_unique", std::slice::from_ref(c));
                 let one = fx.truthy(&one);
                 let one = V::s(one);
                 let o = one.v.clone();

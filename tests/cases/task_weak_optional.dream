@@ -1,0 +1,32 @@
+import system;
+import system.task;
+
+shared class Session {
+    public id: int;
+    public label: string;
+    public constructor(id: int) {
+        this.id = id;
+        this.label = "live" + " child";
+    }
+}
+
+fun make_dead(): Weak<Session> {
+    return Weak.make(Session(7));
+}
+
+fun check(handle: Weak<Session>): bool {
+    switch (handle.get()) {
+        Some(value) => { return value.id == 42 && value.label == "live child"; },
+        None => { return false; },
+    }
+}
+
+async fun main(): void {
+    let session = Session(42);
+    let alive = Weak.make(session);
+    let valid = Task.spawn(() => check(alive)).await;
+    System.println(valid);
+    System.println(session.id);
+    let dead = make_dead();
+    System.println(Task.spawn(() => dead.get().is_none()).await);
+}

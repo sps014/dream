@@ -1,0 +1,26 @@
+import system;
+
+class Session {
+    public id: int;
+    public constructor(id: int) { this.id = id; }
+}
+
+fun make_dead(): Weak<Session> {
+    return Weak.make(Session(7));
+}
+
+fun main(): void {
+    let session = Session(42);
+    let handle = Weak.make(session);
+    switch (handle.get()) {
+        Some(value) => System.println(value.id),
+        None => System.println(-1),
+    }
+    session.id = 43;
+    handle.release();
+    handle.release();
+    System.println(handle.is_dead());
+    System.println(handle.get().is_none());
+    let dead = make_dead();
+    System.println(dead.get().is_none());
+}

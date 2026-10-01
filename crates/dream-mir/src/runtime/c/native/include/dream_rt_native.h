@@ -215,6 +215,7 @@ DREAM_ALWAYS_INLINE int32_t *dream_rc_word(dream_ptr ptr) {
 
 void dream_retain_slow(int32_t *rc);
 int dream_rc_last_slow(int32_t *rc);
+void dream_weak_prepare_destroy(dream_ptr ptr);
 
 DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
     int32_t *rc;
@@ -223,7 +224,7 @@ DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
         return;
     }
     rc = dream_rc_word(ptr);
-    v = *rc;
+    v = __atomic_load_n(rc, __ATOMIC_RELAXED);
     if (DREAM_LIKELY(v >= 0)) {
         *rc = v + 1;
         return;
@@ -378,7 +379,7 @@ void dream_defer_drain_all(void);
  * (this was the last reference). `rc == 0` (mid-destroy) never re-frees. */
 DREAM_ALWAYS_INLINE int dream_rc_last(dream_ptr p) {
     int32_t *rc = dream_rc_word(p);
-    int32_t v = *rc;
+    int32_t v = __atomic_load_n(rc, __ATOMIC_RELAXED);
     if (DREAM_LIKELY(v > 0)) {
         *rc = v - 1;
         return v == 1;
@@ -399,7 +400,7 @@ DREAM_ALWAYS_INLINE void dream_destroy(dream_ptr ptr) {
     if (ptr == 0) {
         return;
     }
-    if (*dream_rc_word(ptr) == DREAM_RC_IMMORTAL) {
+    if (__atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED) == DREAM_RC_IMMORTAL) {
         return;
     }
     dream_free(ptr);
@@ -407,19 +408,25 @@ DREAM_ALWAYS_INLINE void dream_destroy(dream_ptr ptr) {
 
 /* True when `p` is an immortal block: never mutate or free. */
 DREAM_ALWAYS_INLINE int dream_rc_immortal(dream_ptr p) {
-    return *dream_rc_word(p) == DREAM_RC_IMMORTAL;
+    return __atomic_load_n(dream_rc_word(p), __ATOMIC_RELAXED) == DREAM_RC_IMMORTAL;
 }
 
-/* Peek: this pointer is the unique remaining holder (count 1, local or shared). Destroy
- * glue uses this to skip the decrement and call `destroy_*` on uniquely owned fields. */
-DREAM_ALWAYS_INLINE int dream_rc_one(dream_ptr p) {
-    return (__atomic_load_n(dream_rc_word(p), __ATOMIC_RELAXED) & INT32_MAX) == 1;
+/* A weak reader can retain between a count peek and destruction. Claiming count zero
+ * makes that decision atomic and also distinguishes dying shared objects from immortals. */
+DREAM_ALWAYS_INLINE int dream_rc_claim_unique(dream_ptr p) {
+    int32_t *rc = dream_rc_word(p);
+    int32_t expected = __atomic_load_n(rc, __ATOMIC_RELAXED);
+    if ((expected & INT32_MAX) != 1) {
+        return 0;
+    }
+    return __atomic_compare_exchange_n(rc, &expected, 0, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED);
 }
 
 /* `del` runs with the object observably alive (count 1), keeping its local/shared encoding. */
 DREAM_ALWAYS_INLINE void dream_rc_revive(dream_ptr p) {
     int32_t *rc = dream_rc_word(p);
-    *rc = *rc < 0 ? (DREAM_RC_SHARED_BIT | 1) : 1;
+    int32_t tag = __atomic_load_n(dream_tag_word(p), __ATOMIC_RELAXED);
+    __atomic_store_n(rc, dream_rc_init(tag), __ATOMIC_RELAXED);
 }
 
 /* User-visible count (`Debug.ref_count`): immortal reads as `INT32_MAX`. */
@@ -1255,6 +1262,10 @@ int32_t dream_semaphore_try_acquire(dream_ptr semaphore);
 int32_t dream_semaphore_try_acquire_for(dream_ptr semaphore, int32_t timeout_ms);
 dream_ptr dream_js_call(dream_ptr target, dream_ptr via, dream_ptr method, int32_t argc);
 void dream_weak_clear_all(dream_ptr obj);
+int64_t weakBind(dream_ptr value);
+dream_ptr weakLoad(int64_t slot);
+int32_t weakDead(int64_t slot);
+void weakReleaseRaw(int64_t slot);
 void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, dream_ptr extra);
 void dream_weak_unregister(dream_ptr target, dream_ptr slot);
 

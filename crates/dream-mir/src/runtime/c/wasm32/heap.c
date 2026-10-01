@@ -522,18 +522,22 @@ void dream_pin_immortal(dream_ptr s) {
 }
 
 void dream_retain_slow(int32_t *rc) {
-    if (*rc == DREAM_RC_IMMORTAL) {
+    if (__atomic_load_n(rc, __ATOMIC_RELAXED) == DREAM_RC_IMMORTAL) {
         return;
     }
     __atomic_fetch_add(rc, 1, __ATOMIC_RELAXED);
 }
 
 int dream_rc_last_slow(int32_t *rc) {
-    int32_t v = *rc;
+    int32_t v = __atomic_load_n(rc, __ATOMIC_RELAXED);
     if (v == 0 || v == DREAM_RC_IMMORTAL) {
         return 0;
     }
-    return __atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL) == (DREAM_RC_SHARED_BIT | 1);
+    if (__atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL) == (DREAM_RC_SHARED_BIT | 1)) {
+        __atomic_store_n(rc, 0, __ATOMIC_RELAXED);
+        return 1;
+    }
+    return 0;
 }
 int32_t debug_get_heap_ptr(void) { return heap_ptr_get(); }
 /* Native parity: the probe exposes "most recent freed block" (a free-happened detector),
@@ -678,6 +682,7 @@ void dream_free(dream_ptr ptr) {
     /* Substring slices retain their parent; release it before the block leaves the live
      * set. Weak slots pointing at this object are reset first so `del`-time observers see
      * the cleared state (mirrors native/heap.c). */
+    dream_weak_prepare_destroy(ptr);
     dream_str_fini(ptr);
     if (dream_object_tag(ptr) == TAG_FUTURE) {
         dream_future_fini(ptr);

@@ -86,24 +86,30 @@ void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, dream_p
     weak_unlock();
 }
 
-void dream_weak_unregister(dream_ptr target, dream_ptr slot) {
+static dream_weak_node *weak_remove_locked(dream_ptr target, dream_ptr slot) {
     dream_weak_node **link;
     if (!target) {
-        return;
+        return NULL;
     }
-    weak_lock();
     link = weak_bucket(target);
     while (*link) {
         dream_weak_node *node = *link;
         if (node->target == target && node->slot == slot) {
             *link = node->next;
-            weak_unlock();
-            dream_free((dream_ptr)(uintptr_t)node);
-            return;
+            return node;
         }
         link = &node->next;
     }
+    return NULL;
+}
+
+void dream_weak_unregister(dream_ptr target, dream_ptr slot) {
+    weak_lock();
+    dream_weak_node *node = weak_remove_locked(target, slot);
     weak_unlock();
+    if (node != NULL) {
+        dream_free((dream_ptr)(uintptr_t)node);
+    }
 }
 
 void dream_weak_clear_all(dream_ptr obj) {
@@ -137,7 +143,18 @@ void dream_weak_clear_all(dream_ptr obj) {
     weak_free_list(dead);
 }
 
+void dream_weak_prepare_destroy(dream_ptr ptr) {
+    if (__atomic_load_n(dream_tag_word(ptr), __ATOMIC_RELAXED) & DREAM_TAG_WEAK_TARGET) {
+        dream_weak_clear_all(ptr);
+    }
+}
+
 /* --- Weak-handle slots (`Weak` stdlib class) --------------------------------- */
+
+typedef struct {
+    dream_ptr value;
+    int32_t immortal;
+} WeakBox;
 
 /* Allocates the registered slot-box for a fresh weak handle holding `value`. The box holds a
  * single raw pointer; when `value` dies, clear_all writes 0 into it (kind 2). */
@@ -146,8 +163,13 @@ int64_t weakBind(dream_ptr value) {
     if (!value) {
         return 0;
     }
-    box = dream_malloc((int32_t)sizeof(dream_ptr), 0);
-    *(dream_ptr *)dream_p(box) = value;
+    int32_t immortal = __atomic_load_n(dream_rc_word(value), __ATOMIC_RELAXED) == DREAM_RC_IMMORTAL;
+    /* The opaque slot does not expose its target to Task's graph walker. */
+    dream_publish(value);
+    box = dream_malloc((int32_t)sizeof(WeakBox), 0);
+    WeakBox *data = (WeakBox *)dream_p(box);
+    data->value = value;
+    data->immortal = immortal;
     dream_weak_register(value, box, 2, 0);
     return (int64_t)(uintptr_t)box;
 }
@@ -160,12 +182,33 @@ dream_ptr weakLoad(int64_t slot) {
     if (!box) {
         return 0;
     }
-    v = *(dream_ptr *)dream_p(box);
+    weak_lock();
+    WeakBox *data = (WeakBox *)dream_p(box);
+    v = data->value;
     if (!v) {
+        weak_unlock();
         return 0;
     }
-    dream_retain(v);
-    return v;
+    if (data->immortal) {
+        weak_unlock();
+        return v;
+    }
+    int32_t *rc = dream_rc_word(v);
+    int32_t count = __atomic_load_n(rc, __ATOMIC_RELAXED);
+    while ((count & INT32_MAX) != 0) {
+        if ((count & INT32_MAX) == INT32_MAX) {
+            weak_unlock();
+            dream_panic(dream_utf8_to_string("reference count overflow loading a weak target"));
+            return 0;
+        }
+        int32_t next = (int32_t)((uint32_t)count + 1u);
+        if (__atomic_compare_exchange_n(rc, &count, next, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
+            weak_unlock();
+            return v;
+        }
+    }
+    weak_unlock();
+    return 0;
 }
 
 int32_t weakDead(int64_t slot) {
@@ -173,7 +216,13 @@ int32_t weakDead(int64_t slot) {
     if (!box) {
         return 1;
     }
-    return *(dream_ptr *)dream_p(box) == 0;
+    weak_lock();
+    WeakBox *data = (WeakBox *)dream_p(box);
+    dream_ptr value = data->value;
+    int32_t dead = value == 0 ||
+        (!data->immortal && (__atomic_load_n(dream_rc_word(value), __ATOMIC_RELAXED) & INT32_MAX) == 0);
+    weak_unlock();
+    return dead;
 }
 
 /* Unregisters early (handle dropped before its target) and frees the slot-box: the box
@@ -184,6 +233,13 @@ void weakReleaseRaw(int64_t slot) {
     if (!box) {
         return;
     }
-    dream_weak_unregister(*(dream_ptr *)dream_p(box), box);
+    weak_lock();
+    WeakBox *data = (WeakBox *)dream_p(box);
+    dream_weak_node *node = weak_remove_locked(data->value, box);
+    data->value = 0;
+    weak_unlock();
+    if (node != NULL) {
+        dream_free((dream_ptr)(uintptr_t)node);
+    }
     dream_free(box);
 }

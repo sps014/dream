@@ -56,7 +56,6 @@ pub(crate) fn wasm_ld_command(wasm_ld: &Path, threads: bool, opt: OptLevel) -> C
         "--export=__stack_pointer",
         "--export=__tls_base",
         "--export=dream_malloc",
-        "--export=dream_publish",
         "--gc-sections",
         "--strip-debug",
     ]);
@@ -67,6 +66,7 @@ pub(crate) fn wasm_ld_command(wasm_ld: &Path, threads: bool, opt: OptLevel) -> C
         cmd.arg(format!("-zstack-size={stack}"));
     }
     if threads {
+        cmd.arg("--export=dream_publish");
         let max_bytes =
             u64::from(dream_mir::abi::MAX_MEMORY_PAGES) * u64::from(dream_mir::abi::WASM_PAGE_SIZE);
         cmd.arg("--shared-memory");

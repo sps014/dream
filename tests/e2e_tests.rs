@@ -927,6 +927,11 @@ fn release_arithmetic_code_section_stays_small() {
     let wasm_path = out.with_extension("wasm");
     let wasm = fs::read(&wasm_path).expect("arithmetic.wasm");
     let code = wasm_code_section_len(&wasm);
+    let wat = fs::read_to_string(&out).expect("arithmetic WAT");
+    assert!(
+        !wat.contains("(export \"dream_publish\""),
+        "worker-only publication must not be exported by arithmetic"
+    );
     let _ = fs::remove_file(&out);
     let _ = fs::remove_file(&wasm_path);
     let _ = fs::remove_file(out.with_extension("abi.json"));

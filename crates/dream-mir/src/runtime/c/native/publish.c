@@ -54,7 +54,7 @@ static void publish_children(PublishGraph *graph, dream_ptr ptr, int32_t kind) {
     }
 }
 
-#ifdef DREAM_WASM32
+#ifdef DREAM_WASM32_THREADS
 __attribute__((export_name("dream_publish")))
 #endif
 void dream_publish(dream_ptr ptr) {

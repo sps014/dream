@@ -17,6 +17,7 @@ fn weak_load_and_unique_drop_do_not_resurrect_dying_targets() {
         "publish.c",
         "region.c",
         "weak.c",
+        "sync.c",
         "strings.c",
     ] {
         command.arg(native.join(unit));

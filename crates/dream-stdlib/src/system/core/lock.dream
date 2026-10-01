@@ -14,7 +14,7 @@ shared public class Lock {
     @intrinsic("shared_lock_try_acquire_for")
     static extern fun host_try_acquire_for(borrow target: Lock, timeout_ms: int): bool;
 
-    // Acquires the lock, blocking (busy-waiting) until available. Reentrant: the same thread may
+    // Reentrant: the same thread may
     // call `acquire` again before releasing (matching `lock (obj) { ... }`'s own semantics), and
     // must call `release` the same number of times to fully release it.
     public fun acquire(): void {
@@ -33,8 +33,7 @@ shared public class Lock {
         return Lock.host_try_acquire_for(this, timeout_ms);
     }
 
-    // Releases one level of a lock acquired via `acquire()`. Undefined if called by a thread that
-    // does not currently hold the lock.
+    // Releasing without ownership is a runtime panic, including release of an unheld lock.
     public fun release(): void {
         Lock.host_release(this);
     }

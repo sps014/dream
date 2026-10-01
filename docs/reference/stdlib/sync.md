@@ -21,6 +21,14 @@ fun main() {
 | `try_acquire()` | `true` if taken now |
 | `try_acquire_for(ms)` | wait up to `ms` milliseconds |
 
+Locks are reentrant: each successful acquisition must be matched by a release on the same
+thread. Releasing an unheld lock, or releasing from another thread, panics with
+`panic: lock release requires the owning thread`.
+
+Native waiters sleep on a condition belonging to that object, and timed acquisition keeps one
+deadline across spurious wakes. Native lock-registry entries are removed when their objects are
+destroyed, so a reused heap address starts with a fresh lock. WASM uses the object's lock word.
+
 ## `Semaphore`
 
 `Semaphore(initial)` then `acquire()` / `release()` — a counting permit.

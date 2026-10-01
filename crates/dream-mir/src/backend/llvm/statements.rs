@@ -377,6 +377,9 @@ impl<'l, 'a> Fx<'l, 'a> {
     fn lock_addr(&mut self, o: &Operand) -> V {
         let ty = self.operand_ty(o);
         let base = self.operand(o);
+        if !self.l.cx.target.is_wasm32() {
+            return base;
+        }
         let size = self.l.cx.nstruct(ty).map(|l| l.size).unwrap_or(0);
         if size == 0 {
             return base;

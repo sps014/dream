@@ -548,6 +548,9 @@ void dream_recycle_slow(dream_ptr ptr) {
     if (sz == 0 || ((uint32_t *)block)[1] != MAGIC_LIVE) {
         return;
     }
+    if (dream_tag_shared(ptr)) {
+        dream_lock_forget(ptr);
+    }
     idx = size_class(sz);
     ((uint32_t *)block)[1] = MAGIC_FREE;
     account_frees(1);

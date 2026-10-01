@@ -31,7 +31,7 @@ fn data_global(l: &mut Lcx<'_>, name: &str, ty: Ty, init: String, constant: bool
     );
 }
 
-/// Immortal string blocks: `{ size, header_pad, tag, rc }` header (`{ size, tag, rc }` on wasm32),
+/// Immortal string blocks use the target's heap header,
 /// then `{ len, hash, units }`.
 /// They are `constant`: the runtime never writes an immortal block (retain/release skip the
 /// immortal rc, the hash is precomputed, in-place rebuilds require a unique owner), so LLVM may
@@ -49,10 +49,23 @@ pub(in super::super) fn emit_strings(l: &mut Lcx<'_>) {
         let pad = if l.cx.target.is_wasm32() {
             ""
         } else {
-            "i32 0, "
+            "i64 0, i32 0, i32 0, "
         };
-        let header = if l.cx.target.is_wasm32() { 5 } else { 6 };
-        let mut fields = vec![Ty::I32; header];
+        let size_ty = l.h();
+        let mut fields = if l.cx.target.is_wasm32() {
+            vec![Ty::I32; 5]
+        } else {
+            vec![
+                size_ty.clone(),
+                Ty::I64,
+                Ty::I32,
+                Ty::I32,
+                Ty::I32,
+                Ty::I32,
+                Ty::I32,
+                Ty::I32,
+            ]
+        };
         fields.push(arr.clone());
         let ty = Ty::Struct {
             packed: false,
@@ -68,7 +81,7 @@ pub(in super::super) fn emit_strings(l: &mut Lcx<'_>) {
                 .join(", ")
         };
         let init = format!(
-            "{{ i32 0, {pad}i32 {}, i32 {}, i32 {}, i32 {}, {arr} [{elems}] }}",
+            "{{ {size_ty} 0, {pad}i32 {}, i32 {}, i32 {}, i32 {}, {arr} [{elems}] }}",
             abi::TAG_STRING,
             i32::MIN,
             units.len(),

@@ -34,11 +34,16 @@ void dream_panic(dream_ptr message) {
 int main(int argc, char **argv) {
     alarm(5);
     assert(argc == 2);
-    if (strcmp(argv[1], "private-size") == 0) { dream_malloc_slow(INT32_MAX, 0); }
+    if (strcmp(argv[1], "private-size") == 0) { dream_malloc_slow(SIZE_MAX, 0); }
     if (strcmp(argv[1], "shared-size") == 0) { dream_malloc_shared(-1, 0); }
-    if (strcmp(argv[1], "realloc-size") == 0) { dream_realloc(0, INT32_MAX, 0); }
-    if (strcmp(argv[1], "array-size") == 0) { dream_array_new(400000000, 8); }
-    if (strcmp(argv[1], "string-size") == 0) { dream_string_alloc(INT32_MAX); }
+    if (strcmp(argv[1], "realloc-size") == 0) { dream_realloc(0, SIZE_MAX, 0); }
+    if (strcmp(argv[1], "array-size") == 0) { dream_array_realloc(0, -1, 8); }
+    if (strcmp(argv[1], "string-size") == 0) { dream_string_bytes(-1); }
+    if (strcmp(argv[1], "string-byte-count") == 0) {
+        int32_t string[] = {INT32_MAX, 0};
+        dream_str_byte_size((dream_ptr)(uintptr_t)string);
+    }
+    if (strcmp(argv[1], "string-count") == 0) { dream_string_count_add(INT32_MAX, 1); }
     if (strcmp(argv[1], "js") == 0) { dream_js_call(0, 0, 0, 0); }
     if (strcmp(argv[1], "counters") == 0) {
         fail_counters = 1;

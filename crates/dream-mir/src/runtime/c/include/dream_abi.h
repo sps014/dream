@@ -36,7 +36,7 @@
 #define STRING_SCALAR_LEN_OFFSET 4
 #define DREAM_STR_PAD_INLINE 0
 #define DREAM_STR_SLICE 1
-#define NATIVE_HEAP_HEADER_SIZE 16
+#define NATIVE_HEAP_HEADER_SIZE 32
 /* Written into cleared `unowned` slots (weak-registry kind 1) so a later load can tell
  * "target was destroyed" apart from "never assigned" (null). Must not be a valid pointer. */
 #define DREAM_UNOWNED_POISON (-165764356) /* 0xF601A0CC as i32 */

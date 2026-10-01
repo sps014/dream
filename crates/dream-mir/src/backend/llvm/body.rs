@@ -159,7 +159,7 @@ pub(super) fn build_boxed_wrapper<'a>(l: &mut Lcx<'a>, f: &'a MirFunction) {
     let mut fx = super::glue::glue(l, &wrapper);
     let size = crate::backend::shared::abi_types::elem_size(&fx.l.cx, f.ret) as i64;
     let tag = fx.l.cx.type_tag(f.ret);
-    let b = fx.call_v("dream_malloc", &[V::i32(size), V::i32(tag as i64)]);
+    let b = fx.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
     let mut args: Vec<V> = (0..n).map(|i| fx.arg(i)).collect();
     args.push(V::s(fx.ptr(&b)));
     fx.call(&name, &args);
@@ -224,7 +224,7 @@ pub(super) fn build_async_stub<'a>(
     let s = fx.call_v(
         "dream_new_future",
         &[
-            V::i32(frame_size as i64),
+            V::i64(frame_size as i64),
             V::i32(poll_idx as i64),
             V::i32(0),
         ],
@@ -339,8 +339,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         for s in &f.blocks[bi].stmts {
             let id = match s {
                 Statement::Assign(Place::Local(l), _) => l.0,
-                Statement::Release(Operand::Copy(Place::Local(l)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(l))) => l.0,
+                Statement::Release(Operand::Copy(Place::Local(l))) => l.0,
                 _ => continue,
             };
             let decl = &f.locals[id as usize];

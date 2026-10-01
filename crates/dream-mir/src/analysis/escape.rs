@@ -68,8 +68,10 @@ impl ParamSummaries {
             }
             for &i in &scc {
                 let f = &mir.functions[i];
-                sums.params
-                    .insert((f.def, f.instance.clone()), vec![f.is_async; f.params.len()]);
+                sums.params.insert(
+                    (f.def, f.instance.clone()),
+                    vec![f.is_async; f.params.len()],
+                );
             }
             loop {
                 let mut changed = false;
@@ -121,12 +123,7 @@ fn for_each_callee(f: &MirFunction, mut out: impl FnMut(FnKey)) {
                 | Statement::Assign(_, Rvalue::Call { callee, .. }) => {
                     out((callee.def, callee.args.clone()))
                 }
-                Statement::Assign(
-                    _,
-                    Rvalue::New {
-                        ctor: Some(c), ..
-                    },
-                ) => out((c.def, vec![])),
+                Statement::Assign(_, Rvalue::New { ctor: Some(c), .. }) => out((c.def, vec![])),
                 _ => {}
             }
         }
@@ -240,7 +237,10 @@ fn call_args(
     }
 }
 
-fn all_global<'a>(ops: impl IntoIterator<Item = &'a Operand>, mark: &mut impl FnMut(Local, Escape)) {
+fn all_global<'a>(
+    ops: impl IntoIterator<Item = &'a Operand>,
+    mark: &mut impl FnMut(Local, Escape),
+) {
     for op in ops {
         if let Some(l) = local_of(op) {
             mark(l, Escape::Global);
@@ -307,11 +307,14 @@ fn stmt_uses(
         Statement::ArrayElemsFill { dst, .. } => all_global([dst], mark),
         Statement::ForceFree(op) => all_global([op], mark),
         Statement::SimdV128 {
-            dest, lhs, rhs, splat_rhs, ..
+            dest,
+            lhs,
+            rhs,
+            splat_rhs,
+            ..
         } => all_global([dest, lhs, rhs].iter().copied().chain(splat_rhs), mark),
         Statement::Retain(_)
         | Statement::Release(_)
-        | Statement::ReleaseUnique(_)
         | Statement::Panic(_)
         | Statement::Nop
         | Statement::DebugLine(_)

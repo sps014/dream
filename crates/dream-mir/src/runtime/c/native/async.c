@@ -220,10 +220,10 @@ static void foreign_drain(void) {
 #ifdef DREAM_WASM32
 __attribute__((export_name(DREAM_SYM_NEW_FUTURE)))
 #endif
-dream_ptr dream_new_future(int32_t size, int32_t poll, int32_t kind) {
-    dream_ptr p = dream_malloc_shared(
-        size < (int32_t)F_SLOTS ? (int32_t)F_SLOTS : size, TAG_FUTURE);
-    memset(dream_p(p), 0, (size_t)(size < (int32_t)F_SLOTS ? (int32_t)F_SLOTS : size));
+dream_ptr dream_new_future(dream_size size, int32_t poll, int32_t kind) {
+    dream_size bytes = size < F_SLOTS ? F_SLOTS : size;
+    dream_ptr p = dream_malloc_shared(bytes, TAG_FUTURE);
+    memset(dream_p(p), 0, (size_t)bytes);
     i32_at(p, F_POLL)[0] = poll;
     i32_at(p, F_KIND)[0] = kind;
     return p;

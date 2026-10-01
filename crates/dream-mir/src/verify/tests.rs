@@ -308,17 +308,17 @@ fn copy(l: Local) -> Operand {
 }
 
 #[test]
-fn flags_use_after_release_unique() {
+fn flags_return_after_last_release() {
     let mut ctx = TypeCtx::new();
     let ty = node(&mut ctx);
     let mut f = FunctionBuilder::new("f", ty);
     let x = f.new_local(ty, None);
     f.assign(Place::Local(x), new_node(ty));
-    f.push(Statement::ReleaseUnique(copy(x)));
+    f.push(Statement::Release(copy(x)));
     f.terminate(Terminator::Return(Some(copy(x))));
     let v = verify_function(&f.finish(), &ctx.interner);
     assert_eq!(v.len(), 1, "{:?}", v);
-    assert!(v[0].msg.contains("release_unique"), "{:?}", v);
+    assert!(v[0].msg.contains("only token was released"), "{:?}", v);
 }
 
 #[test]

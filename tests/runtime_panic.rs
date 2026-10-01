@@ -63,6 +63,8 @@ fn fatal_runtime_paths_report_without_allocating_or_deadlocking() {
         ),
         ("array-size", "array size exceeds the supported limit"),
         ("string-size", "string size exceeds the supported limit"),
+        ("string-count", "string length exceeds the supported limit"),
+        ("string-byte-count", "string byte count exceeds the int range"),
         (
             "js",
             "JavaScript calls are unavailable in the native runtime",

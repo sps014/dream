@@ -11,7 +11,6 @@ pub(crate) fn stmt_operands_mut(s: &mut Statement, f: &mut impl FnMut(&mut Opera
         }
         Statement::Retain(o)
         | Statement::Release(o)
-        | Statement::ReleaseUnique(o)
         | Statement::Panic(o)
         | Statement::ForceFree(o)
         | Statement::LockAcquire(o)
@@ -49,7 +48,7 @@ pub(crate) fn stmt_operands_mut(s: &mut Statement, f: &mut impl FnMut(&mut Opera
             for o in [dst, dst_off, src, src_off, count] {
                 operand_mut(o, f);
             }
-        },
+        }
         Statement::ArrayElemsFill {
             dst,
             dst_off,
@@ -59,7 +58,7 @@ pub(crate) fn stmt_operands_mut(s: &mut Statement, f: &mut impl FnMut(&mut Opera
             for o in [dst, dst_off, count] {
                 operand_mut(o, f);
             }
-        },
+        }
         Statement::SimdV128 {
             dest,
             lhs,
@@ -69,10 +68,10 @@ pub(crate) fn stmt_operands_mut(s: &mut Statement, f: &mut impl FnMut(&mut Opera
             ..
         } => {
             {
-            for o in [dest, lhs, rhs, index] {
-                operand_mut(o, f);
-            }
-        };
+                for o in [dest, lhs, rhs, index] {
+                    operand_mut(o, f);
+                }
+            };
             splat_rhs.iter_mut().for_each(|o| operand_mut(o, f));
         }
         Statement::Nop
@@ -130,7 +129,7 @@ pub(crate) fn rvalue_operands_mut(rv: &mut Rvalue, f: &mut impl FnMut(&mut Opera
             for o in [cond, then_val, else_val] {
                 operand_mut(o, f);
             }
-        },
+        }
         Rvalue::ConcatInt {
             prefix,
             value,
@@ -139,7 +138,7 @@ pub(crate) fn rvalue_operands_mut(rv: &mut Rvalue, f: &mut impl FnMut(&mut Opera
             for o in [prefix, value, suffix] {
                 operand_mut(o, f);
             }
-        },
+        }
         Rvalue::Concat(ops)
         | Rvalue::Call { args: ops, .. }
         | Rvalue::New { args: ops, .. }

@@ -86,8 +86,8 @@ pub fn string_hash(units: &[u16]) -> i32 {
     }
     h as i32
 }
-/// Native malloc header `[size:i32][magic:i32][tag:i32][rc:i32]`. WASM uses [`HEAP_HEADER_SIZE`].
-pub const NATIVE_HEAP_HEADER_SIZE: u32 = 16;
+/// Native malloc header `[size:usize][padding][magic:i32][tag:i32][rc:i32]`. WASM uses [`HEAP_HEADER_SIZE`].
+pub const NATIVE_HEAP_HEADER_SIZE: u32 = 32;
 /// `data_ptr - RC_FROM_DATA` is the refcount word ([`HEADER_REFCOUNT_OFFSET`] from block start).
 pub const RC_FROM_DATA: u32 = HEAP_HEADER_SIZE - HEADER_REFCOUNT_OFFSET;
 /// `data_ptr - TAG_FROM_DATA` is the type-tag word ([`HEADER_TAG_OFFSET`] from block start).

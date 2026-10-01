@@ -593,7 +593,10 @@ mod tests {
             ..Default::default()
         };
         assert!(!Inliner.run(&mut mir, &ctx.interner));
-        assert!(caller_still_calls(&mir), "@noinline callee must stay a call");
+        assert!(
+            caller_still_calls(&mir),
+            "@noinline callee must stay a call"
+        );
     }
 
     #[test]
@@ -985,7 +988,6 @@ mod tests {
             matches!(
                 st,
                 Statement::Release(Operand::Copy(Place::Local(_)))
-                    | Statement::ReleaseUnique(Operand::Copy(Place::Local(_)))
                     | Statement::Assign(Place::Local(_), Rvalue::Use(Operand::Const(Const::Null)))
             )
         });

@@ -277,7 +277,7 @@ fn js_to_struct(l: &mut Lcx<'_>, ty: TypeId, layout: &TypeLayout) {
     } else {
         fx.call_v(
             "dream_malloc",
-            &[V::i32(layout.size as i64), V::i32(tag as i64)],
+            &[V::i64(layout.size as i64), V::i32(tag as i64)],
         )
     };
     for f in &layout.fields {
@@ -404,7 +404,7 @@ fn js_to_union(l: &mut Lcx<'_>, ty: TypeId, layout: &UnionLayout) {
     } else {
         fx.call_v(
             "dream_malloc",
-            &[V::i32(layout.size as i64), V::i32(tag as i64)],
+            &[V::i64(layout.size as i64), V::i32(tag as i64)],
         )
     };
     let bp = fx.ptr(&base);

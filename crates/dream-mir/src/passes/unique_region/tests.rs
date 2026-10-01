@@ -102,7 +102,7 @@ fn wraps_unique_call_that_only_news_del_free_class() {
             args: vec![],
         },
     );
-    drop_it.push(Statement::ReleaseUnique(Operand::Copy(Place::Local(x))));
+    drop_it.push(Statement::Release(Operand::Copy(Place::Local(x))));
     drop_it.terminate(Terminator::Return(None));
 
     let mut mir = Mir {
@@ -128,7 +128,7 @@ fn wraps_unique_call_that_only_news_del_free_class() {
     assert!(!drop_fn.blocks[0]
         .stmts
         .iter()
-        .any(|s| matches!(s, Statement::ReleaseUnique(_))),);
+        .any(|s| matches!(s, Statement::Release(_))),);
 }
 
 #[test]
@@ -497,7 +497,7 @@ fn make_tree_module(ctx: &mut TypeCtx, base_returns_param: bool) -> Mir {
             args,
         },
     );
-    bench.push(Statement::ReleaseUnique(Operand::Copy(Place::Local(x))));
+    bench.push(Statement::Release(Operand::Copy(Place::Local(x))));
     bench.terminate(Terminator::Return(None));
 
     Mir {
@@ -538,6 +538,40 @@ fn does_not_wrap_builder_that_may_return_a_parameter() {
     let mut mir = make_tree_module(&mut ctx, true);
     assert!(!UniqueRegion.run(&mut mir, &ctx.interner));
     assert!(!has_region_enter(&mir.functions[1]));
+}
+
+#[test]
+fn ordinary_release_does_not_prove_a_stored_root_unique() {
+    let mut ctx = TypeCtx::new();
+    let mut mir = make_tree_module(&mut ctx, false);
+    let bench = &mut mir.functions[1];
+    let root = match bench.blocks[0].stmts[0] {
+        Statement::Assign(Place::Local(root), _) => root,
+        _ => unreachable!(),
+    };
+    bench.blocks[0].stmts.insert(1, Statement::Assign(
+        Place::Global(crate::Global(0)), Rvalue::Use(Operand::Copy(Place::Local(root))),
+    ));
+    assert!(!UniqueRegion.run(&mut mir, &ctx.interner));
+}
+
+#[test]
+fn ordinary_release_does_not_prove_a_rebound_root_unique() {
+    let mut ctx = TypeCtx::new();
+    let mut mir = make_tree_module(&mut ctx, false);
+    let bench = &mut mir.functions[1];
+    let root = match bench.blocks[0].stmts[0] {
+        Statement::Assign(Place::Local(root), _) => root,
+        _ => unreachable!(),
+    };
+    let ty = bench.locals[root.0 as usize].ty;
+    let param = Local(bench.locals.len() as u32);
+    bench.locals.push(crate::LocalDecl {ty, name: None, is_ref: false, is_take: false, is_cursor: false, manual_drop: false});
+    bench.params.push(param);
+    bench.blocks[0].stmts.insert(1, Statement::Assign(
+        Place::Local(root), Rvalue::Use(Operand::Copy(Place::Local(param))),
+    ));
+    assert!(!UniqueRegion.run(&mut mir, &ctx.interner));
 }
 
 #[test]

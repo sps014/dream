@@ -173,7 +173,6 @@ pub(super) fn other_stmt_locals(s: &Statement) -> Vec<u32> {
         Statement::Assign(..)
         | Statement::Retain(_)
         | Statement::Release(_)
-        | Statement::ReleaseUnique(_)
         | Statement::Nop
         | Statement::DebugLine(_)
         | Statement::SourceLine(_)

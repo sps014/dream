@@ -30,7 +30,12 @@ use std::collections::{BTreeMap, BTreeSet};
 enum Src {
     Copy(u32),
     Field(u32, u32),
-    Union { base: u32, ty: TypeId, variant: usize, field: usize },
+    Union {
+        base: u32,
+        ty: TypeId,
+        variant: usize,
+        field: usize,
+    },
 }
 
 impl Src {
@@ -41,7 +46,12 @@ impl Src {
     }
 }
 
-fn family_source(func: &MirFunction, interner: &TypeInterner, dest: u32, rv: &Rvalue) -> Option<Src> {
+fn family_source(
+    func: &MirFunction,
+    interner: &TypeInterner,
+    dest: u32,
+    rv: &Rvalue,
+) -> Option<Src> {
     let rc = |ty: TypeId| interner.is_rc_tracked(ty);
     match rv {
         // A niche `Some(x)` / upcast is the same pointer under another type.
@@ -188,7 +198,10 @@ pub(crate) fn infer_cursor_families(
         families.entry(r).or_default().push(i as u32);
     }
     // Single-definition aliases are `infer_cursors`' job; only loop-carried shapes qualify.
-    families.retain(|_, ms| ms.iter().any(|&m| fresh[m as usize] && defs[m as usize] >= 2));
+    families.retain(|_, ms| {
+        ms.iter()
+            .any(|&m| fresh[m as usize] && defs[m as usize] >= 2)
+    });
     if families.is_empty() {
         return;
     }
@@ -334,8 +347,11 @@ impl FamilyCx<'_> {
 
     /// Roots each member may point into.
     fn roots_of(&self) -> BTreeMap<u32, BTreeSet<u32>> {
-        let mut out: BTreeMap<u32, BTreeSet<u32>> =
-            self.member_set.iter().map(|&m| (m, BTreeSet::new())).collect();
+        let mut out: BTreeMap<u32, BTreeSet<u32>> = self
+            .member_set
+            .iter()
+            .map(|&m| (m, BTreeSet::new()))
+            .collect();
         let mut changed = true;
         while changed {
             changed = false;
@@ -427,10 +443,7 @@ impl FamilyCx<'_> {
     ) -> bool {
         match stmt {
             Statement::Assign(Place::Local(l), _) if roots.contains(&l.0) => return false,
-            Statement::Release(Operand::Copy(Place::Local(l)))
-            | Statement::ReleaseUnique(Operand::Copy(Place::Local(l)))
-                if roots.contains(&l.0) =>
-            {
+            Statement::Release(Operand::Copy(Place::Local(l))) if roots.contains(&l.0) => {
                 return false
             }
             Statement::RegionLeave => return false,

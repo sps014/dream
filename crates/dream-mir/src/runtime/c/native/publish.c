@@ -41,7 +41,7 @@ static void publish_enqueue(PublishGraph *graph, dream_ptr ptr) {
 
 static void publish_children(PublishGraph *graph, dream_ptr ptr, int32_t kind) {
     const char *data = (const char *)dream_p(ptr);
-    int32_t size;
+    dream_size size;
     memcpy(&size, data - DREAM_BLOCK_HEADER, sizeof(size));
     size_t payload = (size_t)(size - DREAM_BLOCK_HEADER);
     /* Array elements follow a 32-bit length even when native pointers are 64-bit. */

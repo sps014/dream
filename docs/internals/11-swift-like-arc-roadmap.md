@@ -10,7 +10,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 
 ## Baseline
 
-- Implicit HIR ownership; explicit MIR `Retain` / `Release` / `ReleaseUnique` / `New` after `RcInsertion`.
+- Implicit HIR ownership; explicit MIR `Retain` / `Release` / `New` after `RcInsertion`.
 - Call ABI: **unmarked RC params sink; `borrow` shares; caller owns the result (`+1`)**.
   Implicit `this` is never a sink. Call sites **move on last use**, otherwise **retain a copy**
   (Nim sink semantics).
@@ -23,7 +23,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - **Borrow inference** (`passes/param_modes.rs`): a sink parameter that is only read, with every
   caller known, is flipped to `borrow` before `RcInsertion`, so neither side emits RC for it.
 - Value `struct` / plain `enum` off-heap (shadow stack); classes / arrays / strings / collections
-  on the heap with a `[size][tag][ref_count]` header (12 bytes on wasm32, 16 on native). The RC
+  on the heap with a `[size][tag][ref_count]` header (12 bytes on wasm32, 32 on native, including machine-width size, alignment padding and a live-block marker). The RC
   word is one signed int: positive = thread-local count, sign bit = atomic count (`shared`),
   `DREAM_RC_IMMORTAL` = never mutated or freed (interned strings, frame-allocated objects), so
   every RC fast path is one load plus a sign test.
@@ -33,9 +33,9 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - `RcElision` over Goto chains, transparent diamonds, transparent natural loops, postdom regions
   (never under-retain); `RcInsertion` is CFG **ownership-token** dataflow plus a **Unique/Shared**
   lattice (last-use **move**, last-use **destroy**, split-edge release when a token is dead on one
-  successor). Sharing still emits `Retain`. Unique last-use destroy of a class/array/union is
-  `ReleaseUnique` (typed `destroy_*`: `del` + nested release + `free`, no RC RMW).
-  `js`, `shared`, and strings stay on ordinary `Release`. Last-use field/index/global stores of a
+  successor). Sharing still emits `Retain`. All last-use destroys use ordinary `Release`,
+  including class/array/union values: a unique ownership token is not proof that the object
+  has no other owners. Last-use field/index/global stores of a
   unique local transfer the +1 (the backend skips the retain). Rebind of an owned local
   through a call/`New` evaluates the RHS into a temp, then `Release`s the old occupant
   (`tmp = f(x); Release(x); x = tmp`) so `x = f(x)` cannot UAF. Loop headers of loop-carried owned
@@ -93,8 +93,8 @@ levers (no SSO / `@stack` class / value collections):
    thread queues, reused mark/caps buffers, and `Buffer.elems_copy` for capture clones.
 5. **Ownership discipline** — sink-default + `borrow` + field-store use-after-move (see
    [`ownership.md`](../reference/language/ownership.md)).
-6. **Inferred unique region** — a `x = f(); … ReleaseUnique x` graph whose callee only `New`s
-   `del`-free classes is allocated from a TLS bump slab and rewound in O(1) (`dream_region_enter` /
+6. **Inferred unique region** — a fresh, unobserved `x = f(); … Release x` graph whose callee
+   only `New`s `del`-free classes is allocated from a TLS bump slab and rewound in O(1) (`dream_region_enter` /
    `leave`). Silent; not user `@stack`.
 7. **Frame allocation** (`passes/frame_alloc.rs`) — an instance whose alias class escapes at most
    into non-retaining callee parameters, with a statically known count (`analysis/object_life.rs`),

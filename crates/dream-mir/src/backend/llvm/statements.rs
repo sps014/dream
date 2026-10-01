@@ -4,7 +4,7 @@
 use super::fx::{Fx, V};
 use super::ir::{Ty, Value};
 use crate::backend::shared::abi_types::{elem_size, native_scalar_size, runtime_c_name};
-use crate::backend::shared::glue::{destroy_sym, release_into_sym, release_sym, retain_sym};
+use crate::backend::shared::glue::{release_into_sym, release_sym, retain_sym};
 use crate::backend::shared::place_policy::{
     has_frame_buffer, is_alias_value_local, is_value_place_alias,
 };
@@ -74,8 +74,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     fn try_emit_into(&mut self, stmts: &[Statement], i: usize) -> Option<usize> {
         if i + 1 < stmts.len() {
             if let (
-                Statement::Release(Operand::Copy(Place::Local(rel)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(rel))),
+                Statement::Release(Operand::Copy(Place::Local(rel))),
                 Statement::Assign(Place::Local(dest), rv),
             ) = (&stmts[i], &stmts[i + 1])
             {
@@ -91,8 +90,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         if i + 2 < stmts.len() {
             if let (
                 Statement::Assign(Place::Local(tmp), rv),
-                Statement::Release(Operand::Copy(Place::Local(rel)))
-                | Statement::ReleaseUnique(Operand::Copy(Place::Local(rel))),
+                Statement::Release(Operand::Copy(Place::Local(rel))),
                 Statement::Assign(
                     Place::Local(dest),
                     Rvalue::Use(Operand::Copy(Place::Local(src))),
@@ -149,16 +147,6 @@ impl<'l, 'a> Fx<'l, 'a> {
                     };
                     self.call(&sym, &[a]);
                 }
-            }
-            Statement::ReleaseUnique(o) => {
-                let ty = self.operand_ty(o);
-                let sym = if self.is_rc(ty) {
-                    destroy_sym(&self.l.cx, ty)
-                } else {
-                    "dream_destroy".into()
-                };
-                let a = self.operand(o);
-                self.call(&sym, &[a]);
             }
             Statement::Panic(o) => {
                 let a = self.operand(o);

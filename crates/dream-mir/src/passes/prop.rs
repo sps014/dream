@@ -76,7 +76,7 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
         // RC ops name the local that owns the token. Substituting a copy alias
         // (or Null after a move) lets DCE drop the owning copy while Release
         // becomes `Release(null)` — a leak. Panic still substitutes.
-        Statement::Retain(_) | Statement::Release(_) | Statement::ReleaseUnique(_) => false,
+        Statement::Retain(_) | Statement::Release(_) => false,
         Statement::Panic(o) => subst_operand(o, known),
         Statement::Call { args, .. } => args
             .iter_mut()

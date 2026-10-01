@@ -407,7 +407,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             .discriminant;
         let (none, off) = self.option_layout(ty);
         let tag = self.l.cx.type_tag(ty) as i64;
-        let b = self.call_v("dream_malloc", &[V::i32(size), V::i32(tag)]);
+        let b = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag)]);
         let bp = self.ptr(&b);
         self.memset0(&bp, &Value::i64(size));
         let z = self.is_zero(p);
@@ -423,7 +423,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     fn cptr_new(&mut self, ty: TypeId, p: &V) -> V {
         let size = self.l.cx.nstruct(ty).map_or(8, |s| s.size.max(8)) as i64;
         let tag = self.l.cx.type_tag(ty) as i64;
-        let b = self.call_v("dream_malloc", &[V::i32(size), V::i32(tag)]);
+        let b = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag)]);
         let bp = self.ptr(&b);
         let raw = V::s(self.conv(p, &Ty::I64));
         self.store_ty(&Ty::I64, &bp, &raw, 8);

@@ -24,7 +24,6 @@ pub(super) fn check_rc_types(
         let (op, what) = match s {
             Statement::Retain(o) => (o, "retain"),
             Statement::Release(o) => (o, "release"),
-            Statement::ReleaseUnique(o) => (o, "release_unique"),
             _ => continue,
         };
         let Some(l) = rc_local(op) else { continue };
@@ -51,7 +50,6 @@ pub(super) fn check_rc_types(
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Dead {
     Released,
-    Destroyed,
 }
 
 fn check_block_paths(
@@ -69,31 +67,22 @@ fn check_block_paths(
                 continue;
             }
             let msg = match (how, s) {
-                (Dead::Released, Statement::Release(_) | Statement::ReleaseUnique(_)) => {
+                (Dead::Released, Statement::Release(_)) => {
                     format!("_{l} released twice with no retain or redefinition between")
                 }
                 (Dead::Released, _) => format!("_{l} used after its only token was released"),
-                (Dead::Destroyed, _) => format!("_{l} used after release_unique"),
             };
             out.push(violation(f, bi, si, msg));
         }
         if let Some(d) = defined_local(s) {
             dead.remove(&d);
         }
-        match s {
-            Statement::ReleaseUnique(o) => {
-                if let Some(l) = rc_local(o) {
-                    mark(&mut dead, l.0, Dead::Destroyed);
+        if let Statement::Release(o) = s {
+            if let Some(l) = rc_local(o) {
+                if single_token.contains(&l.0) {
+                    mark(&mut dead, l.0, Dead::Released);
                 }
             }
-            Statement::Release(o) => {
-                if let Some(l) = rc_local(o) {
-                    if single_token.contains(&l.0) {
-                        mark(&mut dead, l.0, Dead::Released);
-                    }
-                }
-            }
-            _ => {}
         }
     }
     let term_reads = terminator_reads(&block.terminator);
@@ -103,7 +92,6 @@ fn check_block_paths(
                 Dead::Released => {
                     format!("_{l} used by terminator after its only token was released")
                 }
-                Dead::Destroyed => format!("_{l} used by terminator after release_unique"),
             };
             out.push(violation(f, bi, block.stmts.len(), msg));
         }
@@ -127,18 +115,10 @@ pub(super) fn check_paths(f: &MirFunction, out: &mut Vec<Violation>) {
             if let Some(d) = defined_local(stmt) {
                 state.remove(&d);
             }
-            match stmt {
-                Statement::ReleaseUnique(op) => {
-                    if let Some(l) = rc_local(op) {
-                        mark(&mut state, l.0, Dead::Destroyed);
-                    }
+            if let Statement::Release(op) = stmt {
+                if let Some(l) = rc_local(op).filter(|l| single_token.contains(&l.0)) {
+                    mark(&mut state, l.0, Dead::Released);
                 }
-                Statement::Release(op) => {
-                    if let Some(l) = rc_local(op).filter(|l| single_token.contains(&l.0)) {
-                        mark(&mut state, l.0, Dead::Released);
-                    }
-                }
-                _ => {}
             }
         }
         for successor in f.blocks[bi.0 as usize].terminator.successors() {
@@ -147,11 +127,9 @@ pub(super) fn check_paths(f: &MirFunction, out: &mut Vec<Violation>) {
             let joined = row.get_or_insert_with(BTreeMap::new);
             for (&local, &death) in &state {
                 // A use is invalid if any incoming path has lost its last owner.
-                // The two death states form a finite lattice, so loops need no iteration cap.
-                if !joined.contains_key(&local)
-                    || (death == Dead::Destroyed && joined[&local] != Dead::Destroyed)
-                {
-                    joined.insert(local, death);
+                // The finite may-dead set needs no iteration cap.
+                if let std::collections::btree_map::Entry::Vacant(entry) = joined.entry(local) {
+                    entry.insert(death);
                     changed = true;
                 }
             }
@@ -244,7 +222,6 @@ fn single_token_locals(f: &MirFunction) -> BTreeSet<u32> {
                 },
                 Statement::Assign(_, rv) => shared.extend(rvalue_local_operands(rv)),
                 Statement::Release(_)
-                | Statement::ReleaseUnique(_)
                 | Statement::Nop
                 | Statement::DebugLine(_)
                 | Statement::SourceLine(_) => {}

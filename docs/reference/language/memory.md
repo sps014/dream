@@ -3,7 +3,7 @@
 Dream manages heap memory with **automatic reference counting (ARC)**.
 You never call `free` — memory is reclaimed the moment the last reference to an object drops.
 
-The current allocator represents block sizes with signed 32-bit fields, so a single allocation must fit below 2 GiB including its header and alignment. This is not a limit on total process memory. Oversized arrays and strings, or unavailable heap memory, stop execution with a panic diagnostic; allocation-failure reporting itself does not allocate from the Dream heap. Native 64-bit allocation sizes require a coordinated allocator/ABI migration.
+Native allocation byte sizes use an unsigned, machine-width runtime type (`dream_size`, C `size_t`), including heap headers and reallocation. Native buffers can exceed 2 GiB when memory is available. Requests must fit within the target's pointer-difference range after header and alignment overhead; arithmetic overflow and allocation failure produce a panic diagnostic without allocating from the Dream heap. wasm32 retains its 32-bit allocation ABI and linear-memory constraints. Array and string lengths remain Dream `int` values; machine-width byte sizes do not change that element-count limit. Dream does not yet expose a language-level `usize` type.
 
 ## What lives on the heap
 

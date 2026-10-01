@@ -3,10 +3,10 @@
 
 #include "dream_rt_native.h"
 
-dream_ptr dream_region_try_malloc(int32_t size, int32_t tag);
+dream_ptr dream_region_try_malloc(dream_size size, int32_t tag);
 int dream_region_owns(dream_ptr ptr);
-dream_ptr dream_region_backing_malloc(int32_t size);
-dream_ptr dream_region_activate(char *block, int32_t total, int32_t tag);
+dream_ptr dream_region_backing_malloc(dream_size size);
+dream_ptr dream_region_activate(char *block, dream_size total, int32_t tag);
 void dream_region_account_free(uint32_t count);
 void dream_region_heap_mode(int active);
 

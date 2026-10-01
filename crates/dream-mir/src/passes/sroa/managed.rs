@@ -132,9 +132,7 @@ fn only_field_uses(f: &MirFunction, members: &BTreeSet<Local>) -> bool {
         for s in &b.stmts {
             match s {
                 Statement::Assign(Place::Local(d), _) if members.contains(d) => continue,
-                Statement::Retain(op) | Statement::Release(op) | Statement::ReleaseUnique(op)
-                    if is_member(op, members) =>
-                {
+                Statement::Retain(op) | Statement::Release(op) if is_member(op, members) => {
                     continue
                 }
                 _ => {}

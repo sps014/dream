@@ -100,7 +100,6 @@ pub(crate) fn stmt_borrow(stmt: &Statement, holds: &IndexSet<DefId>) -> StmtBorr
         Statement::IndirectCall { .. } | Statement::InterfaceCall { .. } => StmtBorrow::Ends,
         Statement::Retain(_)
         | Statement::Release(_)
-        | Statement::ReleaseUnique(_)
         | Statement::Panic(_)
         | Statement::Print { .. }
         | Statement::Nop

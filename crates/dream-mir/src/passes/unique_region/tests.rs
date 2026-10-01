@@ -358,7 +358,10 @@ fn strip_escaped_drops_leave_before_payload_use() {
         layouts,
         ..Default::default()
     };
-    assert!(strip_escaped_regions(&mut mir, &ctx.interner));
+    assert!(strip::strip_escaped_fn(
+        &mut mir.functions[1],
+        &ctx.interner
+    ));
     let drop_fn = &mir.functions[1];
     assert!(
         !drop_fn.blocks.iter().any(|b| b

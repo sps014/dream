@@ -328,8 +328,8 @@ pub fn run_function_pipelines(
     dump.module(STAGE_FIXPOINT, mir, interner);
 }
 
-/// After per-function opts, drop inferred regions whose leave is followed by a still-live
-/// ref use (CFG simplify can merge a join with JSON `as_string` / `unwrap` after wrap), then give
+/// After per-function opts, reject escaped inferred regions in debug builds or remove them with
+/// a warning in release (CFG simplify can merge a join with payload use after wrap), then give
 /// objects that never outlive their frame stack storage ([`frame_alloc`]). The final MIR is then
 /// checked by [`crate::verify`] in debug builds of the compiler, or when `DREAM_VERIFY_MIR=1`.
 pub fn run_late_module_passes(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirDump) {

@@ -5,7 +5,12 @@ use crate::{MirFunction, Statement, Terminator};
 use dream_types::TypeInterner;
 use std::collections::VecDeque;
 
-pub(super) fn check(f: &MirFunction, interner: &TypeInterner, out: &mut Vec<Violation>) {
+pub(super) fn check(
+    f: &MirFunction,
+    interner: &TypeInterner,
+    returns: &super::returns::Returns,
+    out: &mut Vec<Violation>,
+) {
     let initial_errors = out.len();
     let mut incoming = vec![None; f.blocks.len()];
     incoming[f.entry.0 as usize] = Some(0usize);
@@ -62,6 +67,6 @@ pub(super) fn check(f: &MirFunction, interner: &TypeInterner, out: &mut Vec<Viol
         }
     }
     if out.len() == initial_errors {
-        super::region_values::check(f, interner, &incoming, out);
+        super::region_values::check(f, interner, returns, &incoming, out);
     }
 }

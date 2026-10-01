@@ -3,8 +3,7 @@
 #include <string.h>
 
 static _Noreturn void publish_oom(void) {
-    dream_panic(dream_utf8_to_string("out of memory while publishing a Task graph"));
-    __builtin_unreachable();
+    DREAM_PANIC_LITERAL(u"out of memory while publishing a Task graph");
 }
 
 #define uthash_fatal(msg) publish_oom()

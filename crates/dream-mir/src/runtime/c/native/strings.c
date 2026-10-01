@@ -8,6 +8,9 @@ static dream_ptr empty_string_singleton;
 
 dream_ptr dream_string_alloc(int32_t units) {
     dream_ptr p;
+    if (units > (INT32_MAX - 39) / 2) {
+        DREAM_PANIC_LITERAL(u"panic: string size exceeds the supported limit");
+    }
     if (units <= 0) {
         /* Immortal shared empty string: callers release through ordinary ARC, so the
          * cached block is pinned (rc == DREAM_RC_IMMORTAL is ignored by retain/release).
@@ -37,7 +40,7 @@ static dream_ptr array_new_with(int32_t len, int32_t esize, int shared, int32_t 
         esize = 1;
     }
     if (len > 0 && (uint32_t)esize > (uint32_t)(INT32_MAX - 4) / (uint32_t)len) {
-        abort();
+        DREAM_PANIC_LITERAL(u"panic: array size exceeds the supported limit");
     }
     size = 4 + len * esize;
     p = shared ? dream_malloc_shared(size, tag) : dream_malloc(size, tag);

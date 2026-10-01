@@ -20,6 +20,7 @@ tests/**/*.C
 !/tests/runtime_region.c
 !/tests/runtime_sync.c
 !/tests/runtime_worker.c
+!/tests/runtime_panic.c
 tests/**/*.bin
 tests/**/*.o
 # Native C emit (`dream --native-c`) next to the entry file.

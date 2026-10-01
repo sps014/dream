@@ -186,7 +186,7 @@ fn callback_from_a_foreign_thread_traps() {
         ],
     );
     let err = run(&root.join("src/main.dream"), "thread").unwrap_err();
-    assert_contains(&err, "a C callback ran on a thread Dream did not start");
+    assert_contains(&err, "C callbacks must run on their Dream owner thread");
     let _ = fs::remove_dir_all(&root);
 }
 

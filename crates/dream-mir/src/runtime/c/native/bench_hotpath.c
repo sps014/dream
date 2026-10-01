@@ -33,14 +33,14 @@ void *dream_ft_get(int32_t index) {
 
 int64_t timeNowNanos(void) { return (int64_t)ns_now(); }
 
-void dream_panic(dream_ptr message) {
+void print_err_string(dream_ptr message) {
     int32_t length = dream_str_len(message);
     for (int32_t i = 0; i < length; ++i) {
         fputc(dream_char_at_u(message, i), stderr);
     }
-    fputc('\n', stderr);
-    abort();
 }
+
+void print_err_char(int32_t ch) { fputc(ch, stderr); }
 
 static void sb_count_reset(dream_ptr sb) { ((dream_sb *)dream_p(sb))->count = 0; }
 

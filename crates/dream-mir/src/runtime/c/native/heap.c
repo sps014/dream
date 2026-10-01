@@ -78,7 +78,7 @@ static dream_heap_counters *thread_counters(void) {
     }
     c = (dream_heap_counters *)calloc(1, sizeof(*c));
     if (c == NULL) {
-        abort();
+        DREAM_PANIC_LITERAL(u"panic: out of memory registering heap counters");
     }
     heap_lock();
     c->next = counters_head;
@@ -219,7 +219,7 @@ static char *tls_bump(size_t n) {
         th.arena_off = 0;
         th.arena_len = map_len;
         if (th.arena == NULL) {
-            abort();
+            DREAM_PANIC_LITERAL(u"panic: out of memory mapping the private heap");
         }
         note_heap_map(th.arena, map_len);
     }
@@ -238,7 +238,7 @@ static char *bump(size_t n) {
         arena_off = 0;
         arena_len = map_len;
         if (arena == NULL) {
-            abort();
+            DREAM_PANIC_LITERAL(u"panic: out of memory mapping the shared heap");
         }
         dream_heap_map_add_locked(arena, map_len);
     }
@@ -277,7 +277,7 @@ static dream_ptr malloc_general(int32_t size, int32_t tag) {
     char *block = NULL;
     int32_t alloc_size;
     if (size < 0 || size > (INT32_MAX - 31)) {
-        abort();
+        DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the supported limit");
     }
     heap_refresh_fast();
     total = ((size + 15) & -16) + 16;
@@ -312,7 +312,7 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
     char *block = NULL;
     int32_t alloc_size;
     if (size < 0 || size > (INT32_MAX - 31)) {
-        abort();
+        DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the supported limit");
     }
     total = ((size + 15) & -16) + 16;
     idx = size_class(total);
@@ -588,6 +588,9 @@ dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {
     int32_t new_total;
     dream_ptr np;
     int32_t copy;
+    if (new_size < 0 || new_size > INT32_MAX - 31) {
+        DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the supported limit");
+    }
     if (ptr == 0) {
         return dream_malloc(new_size, tag);
     }

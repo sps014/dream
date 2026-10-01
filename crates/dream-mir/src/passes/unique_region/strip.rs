@@ -1,11 +1,24 @@
 use super::*;
 
+#[cfg(test)]
+mod tests;
+
 /// Drop enter/leave pairs when a later pass merged a payload use (call, to_string, return)
 /// after `RegionLeave` without redefining the RC local.
 pub fn strip_escaped_regions(mir: &mut Mir, interner: &TypeInterner) -> bool {
     let mut changed = false;
     for f in &mut mir.functions {
         if strip_escaped_fn(f, interner) {
+            if cfg!(debug_assertions) {
+                crate::internal_error!(
+                    "escaped inferred region in {} after function passes",
+                    f.name
+                );
+            }
+            eprintln!(
+                "warning: removed escaped inferred region in {} after function passes",
+                f.name
+            );
             changed = true;
         }
     }
@@ -102,57 +115,53 @@ pub(super) fn rc_use_after_leave(
     leave_si: usize,
     tainted: &BTreeSet<u32>,
 ) -> bool {
-    let mut seen = IndexSet::from([leave_bi]);
-    let mut stack = vec![(leave_bi, leave_si + 1, IndexSet::new())];
-    while let Some((bi, si0, mut killed)) = stack.pop() {
-        if si0 == 0 && !seen.insert(bi) {
-            continue;
-        }
+    let mut incoming: Vec<Option<BTreeSet<u32>>> = vec![None; f.blocks.len()];
+    let mut pending = std::collections::VecDeque::from([(leave_bi, leave_si + 1, tainted.clone())]);
+    while let Some((bi, si0, mut dangling)) = pending.pop_front() {
         let Some(block) = f.blocks.get(bi) else {
             continue;
         };
         for stmt in block.stmts.iter().skip(si0) {
-            if rc_stmt_escapes(stmt, &killed, tainted) {
+            if rc_stmt_escapes(stmt, &dangling) {
                 return true;
             }
             if let Statement::Assign(Place::Local(d), _) = stmt {
-                killed.insert(d.0);
+                dangling.remove(&d.0);
             }
         }
-        if rc_term_escapes(&block.terminator, &killed, tainted) {
+        if rc_term_escapes(&block.terminator, &dangling) {
             return true;
         }
-        for s in block.terminator.successors() {
-            let nbi = s.0 as usize;
-            if nbi == leave_bi {
+        if let Terminator::Await { dest: Some(d), .. } = &block.terminator {
+            dangling.remove(&d.0);
+        }
+        for successor in block.terminator.successors() {
+            let Some(row) = incoming.get_mut(successor.0 as usize) else {
                 continue;
+            };
+            let changed = row.as_ref().is_none_or(|old| !dangling.is_subset(old));
+            if changed {
+                let joined = row.get_or_insert_with(BTreeSet::new);
+                joined.extend(dangling.iter().copied());
+                pending.push_back((successor.0 as usize, 0, joined.clone()));
             }
-            stack.push((nbi, 0, killed.clone()));
         }
     }
     false
 }
 
-pub(super) fn rc_stmt_escapes(
-    stmt: &Statement,
-    killed: &IndexSet<u32>,
-    tainted: &BTreeSet<u32>,
-) -> bool {
+pub(super) fn rc_stmt_escapes(stmt: &Statement, tainted: &BTreeSet<u32>) -> bool {
     match stmt {
         Statement::Retain(_) | Statement::Release(_) | Statement::ReleaseUnique(_) => false,
         Statement::Assign(Place::Local(_), Rvalue::Use(Operand::Const(Const::Null))) => false,
         Statement::RegionEnter | Statement::RegionLeave => false,
         _ => tainted
             .iter()
-            .any(|i| !killed.contains(i) && crate::passes::rc::stmt_reads_local(stmt, *i)),
+            .any(|i| crate::passes::rc::stmt_reads_local(stmt, *i)),
     }
 }
 
-pub(super) fn rc_term_escapes(
-    term: &Terminator,
-    killed: &IndexSet<u32>,
-    tainted: &BTreeSet<u32>,
-) -> bool {
+pub(super) fn rc_term_escapes(term: &Terminator, tainted: &BTreeSet<u32>) -> bool {
     let mut live = IndexSet::new();
     match term {
         Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => {
@@ -168,8 +177,7 @@ pub(super) fn rc_term_escapes(
         Terminator::Await { future, .. } => operand_locals(future, &mut live),
         _ => {}
     }
-    live.iter()
-        .any(|i| !killed.contains(i) && tainted.contains(i))
+    live.iter().any(|i| tainted.contains(i))
 }
 
 pub(super) fn operand_locals(op: &Operand, live: &mut IndexSet<u32>) {

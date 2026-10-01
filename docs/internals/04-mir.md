@@ -147,6 +147,8 @@ Snapshots land in `<output>.mir/<NN>-<pass>.mir`, numbered so lexicographic orde
 
 Region depth must agree at every join; leaves cannot underflow, and exits or suspension cannot carry active regions. Direct managed allocations and local copy/cast/move aliases carry region origins across the CFG, so reads after a rewind are rejected. Niche union wrapping/extraction preserves the payload's origin rather than inventing an allocation. These are partial proofs: complete shared-token balance, opaque call-result provenance, and publication barriers still require richer ownership facts.
 
+The late escaped-region guard conservatively checks managed definitions inside inferred regions, including opaque call results. Its finite CFG dataflow preserves possibly dangling locals at joins and follows backedges; redefinitions, including awaited results, clear the old provenance. A detected escape is an ICE in debug builds. Release builds remove the inferred region and log a warning naming the affected function before final verification; they no longer silently hide the repair.
+
 ## Invariants MIR guarantees to the backend
 
 1. Every block ends in exactly one terminator; `entry` is a valid block id.

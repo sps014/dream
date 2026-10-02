@@ -298,14 +298,15 @@ def one_node(f: Path):
 const timer = setTimeout(() => {{ console.error('probe --node timeout'); process.exit(2); }}, 25000);
 await run({wasm_url}, {{ stdout: (s) => process.stdout.write(s) }});
 clearTimeout(timer);
-"""
+""",
+        encoding="utf-8",
     )
     code, out, err_txt = run_group(["node", str(runner)], 35)
     if code != 0:
         tail = " | ".join((err_txt or out or "").strip().splitlines()[-2:])
         return stem, "fail", f"node {code} {tail}"
     if exp.exists():
-        want = exp.read_text().strip()
+        want = exp.read_text(encoding="utf-8").strip()
         got = run_output_body(out)
         if got != want:
             detail = _ANSI.sub("", err_txt).strip()
@@ -351,7 +352,7 @@ def one(f: Path):
         tail = " | ".join((err or out or "").strip().splitlines()[-2:])
         return stem, "fail", f"run {code} {tail}"
     if exp.exists():
-        want = exp.read_text().strip()
+        want = exp.read_text(encoding="utf-8").strip()
         got = run_output_body(out)
         if got != want:
             detail = _ANSI.sub("", err).strip()
@@ -363,6 +364,8 @@ def one(f: Path):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     node, only = parse_args(sys.argv[1:])
     if not dream.is_file():
         sys.stderr.write(f"missing {dream}; build with `cargo build`\n")

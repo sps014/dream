@@ -22,6 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/check_hygiene.py
+      - run: python3 scripts/test_probe.py
 
   build-clippy-test:
     name: Build, clippy, test (${{ matrix.os }})

@@ -16,14 +16,13 @@ use super::tools::LlvmTools;
 use crate::driver::rt_stamp;
 use crate::driver::wasi::run_captured;
 use crate::driver::wasm_opt::OptLevel;
-use dream_mir::runtime::modules::runtime_c_dir;
 use dream_mir::runtime::{
     native_runtime_include_dir, runtime_abi_include_dir, RuntimeNeed, RUNTIME_MODULES,
 };
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
 pub struct LlvmRuntime {
     pub bc: PathBuf,
@@ -52,15 +51,15 @@ fn clang_level_flags(opt: OptLevel) -> Vec<&'static str> {
 }
 
 /// `-isysroot` for the pinned clang on macOS, which (unlike Apple's) doesn't find the SDK itself.
-fn sysroot_args() -> &'static [String] {
-    static ARGS: OnceLock<Vec<String>> = OnceLock::new();
-    ARGS.get_or_init(|| {
+fn sysroot_args(config: &crate::driver::toolchain::ToolchainConfig) -> &[String] {
+    config.sdkroot_args.get_or_init(|| {
         if !cfg!(target_os = "macos") {
             return Vec::new();
         }
-        let sdk = std::env::var("SDKROOT")
-            .ok()
-            .filter(|s| !s.is_empty())
+        let sdk = config
+            .sdkroot
+            .as_ref()
+            .map(|s| s.to_string_lossy().into_owned())
             .or_else(|| {
                 let out = Command::new("xcrun").arg("--show-sdk-path").output().ok()?;
                 out.status
@@ -93,11 +92,11 @@ fn native_target_args() -> &'static [&'static str] {
     }
 }
 
-fn bitcode_units(need: RuntimeNeed) -> (Vec<Unit>, Vec<Unit>) {
-    let c = runtime_c_dir();
+fn bitcode_units(root: &Path, need: RuntimeNeed) -> (Vec<Unit>, Vec<Unit>) {
+    let c = root.to_path_buf();
     let native = c.join("native");
-    let native_inc = native_runtime_include_dir();
-    let mut bc: Vec<Unit> = dream_mir::runtime::native_runtime_units(RuntimeNeed::CORE)
+    let native_inc = native_runtime_include_dir(root);
+    let mut bc: Vec<Unit> = dream_mir::runtime::native_runtime_units(root, RuntimeNeed::CORE)
         .into_iter()
         .map(|u| Unit {
             path: u.path,
@@ -124,7 +123,7 @@ fn bitcode_units(need: RuntimeNeed) -> (Vec<Unit>, Vec<Unit>) {
         }
         let defines: Vec<String> = m.native_defines.iter().map(|s| (*s).to_string()).collect();
         let shared: Vec<PathBuf> = m.shared_c.iter().map(|r| c.join(r)).collect();
-        for u in dream_mir::runtime::native_runtime_units(m.need) {
+        for u in dream_mir::runtime::native_runtime_units(root, m.need) {
             let unit = Unit {
                 path: u.path,
                 defines: defines.clone(),
@@ -140,12 +139,22 @@ fn bitcode_units(need: RuntimeNeed) -> (Vec<Unit>, Vec<Unit>) {
     (bc, vendored)
 }
 
-fn clang_unit(clang: &Path, u: &Unit, flags: &[&str], out: &Path) -> Result<(), String> {
+fn clang_unit(
+    config: &crate::driver::toolchain::ToolchainConfig,
+    clang: &Path,
+    u: &Unit,
+    flags: &[&str],
+    out: &Path,
+) -> Result<(), String> {
     let mut cmd = Command::new(clang);
     cmd.args(native_target_args())
-        .args(sysroot_args())
+        .args(sysroot_args(config))
         .args(["-std=gnu11", "-w", "-c"])
-        .args(if cfg!(windows) { &[][..] } else { &["-pthread"][..] })
+        .args(if cfg!(windows) {
+            &[][..]
+        } else {
+            &["-pthread"][..]
+        })
         .args(flags);
     for inc in &u.include_dirs {
         cmd.arg(format!("-I{}", inc.display()));
@@ -167,7 +176,7 @@ pub fn llvm_runtime(
     // and lldb's Mach-O debug map reads one compile unit per object, so runtime units would hide
     // the Dream one.
     let opt = if debug { OptLevel::O0 } else { opt };
-    match rt_dir("native", opt, need) {
+    match rt_dir(&tools.config, "native", opt, need) {
         RtDir::Prebuilt(dir) => Ok(LlvmRuntime {
             bc: prebuilt_file(&dir, "dream_rt.bc")?,
             sigs: prebuilt_file(&dir, "dream_rt.sigs")?,
@@ -198,18 +207,23 @@ pub(super) fn build_native_runtime(
     lock_file.lock().map_err(io)?;
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
-    let (bc_units, vendored) = bitcode_units(need);
+    let config = &tools.config;
+    let root = &config.runtime_c;
+    let (bc_units, vendored) = bitcode_units(root, need);
     let bc = dir.join("dream_rt.bc");
     let sigs = dir.join("dream_rt.sigs");
     let archive = (!vendored.is_empty()).then(|| dir.join(VENDOR_ARCHIVE));
     let stamp = dir.join(".stamp");
     let level = clang_level_flags(opt);
-    let headers: Vec<PathBuf> = [native_runtime_include_dir(), runtime_abi_include_dir()]
-        .iter()
-        .filter_map(|d| std::fs::read_dir(d).ok())
-        .flatten()
-        .filter_map(|e| Some(e.ok()?.path()))
-        .collect();
+    let headers: Vec<PathBuf> = [
+        native_runtime_include_dir(root),
+        runtime_abi_include_dir(root),
+    ]
+    .iter()
+    .filter_map(|d| std::fs::read_dir(d).ok())
+    .flatten()
+    .filter_map(|e| Some(e.ok()?.path()))
+    .collect();
     let mut inputs: Vec<PathBuf> = bc_units
         .iter()
         .chain(&vendored)
@@ -222,7 +236,7 @@ pub(super) fn build_native_runtime(
         rt_stamp::fingerprint(inputs),
         level.join(" "),
         native_target_args().join(" "),
-        sysroot_args().join(" ")
+        sysroot_args(config).join(" ")
     );
     let fresh = bc.exists()
         && sigs.exists()
@@ -240,7 +254,7 @@ pub(super) fn build_native_runtime(
     let mut parts = Vec::new();
     for (i, u) in bc_units.iter().enumerate() {
         let out = dir.join(format!("{i}.bc"));
-        clang_unit(&clang, u, &bc_flags, &out)?;
+        clang_unit(config, &clang, u, &bc_flags, &out)?;
         parts.push(out);
     }
     let mut link = tools.command("llvm-link");
@@ -248,7 +262,7 @@ pub(super) fn build_native_runtime(
     run_captured(&mut link, "llvm-link (runtime)")?;
     strip_target_cpu(tools, &bc)?;
 
-    let anchor = build_anchor(&clang, dir, &bc_flags)?;
+    let anchor = build_anchor(config, &clang, dir, &bc_flags)?;
     let merged = dir.join("sigs.bc");
     let mut link = tools.command("llvm-link");
     link.arg(&bc).arg(&anchor).arg("-o").arg(&merged);
@@ -260,7 +274,7 @@ pub(super) fn build_native_runtime(
         let mut objs = Vec::new();
         for (i, u) in vendored.iter().enumerate() {
             let obj = dir.join(format!("v{i}.o"));
-            clang_unit(&clang, u, &level, &obj)?;
+            clang_unit(config, &clang, u, &level, &obj)?;
             objs.push(obj);
         }
         let _ = std::fs::remove_file(archive);
@@ -332,12 +346,18 @@ fn strip_cpu_attrs(ll: &str) -> String {
     out
 }
 
-fn build_anchor(clang: &Path, dir: &Path, flags: &[&str]) -> Result<PathBuf, String> {
-    let inc = format!("-I{}", native_runtime_include_dir().display());
+fn build_anchor(
+    config: &crate::driver::toolchain::ToolchainConfig,
+    clang: &Path,
+    dir: &Path,
+    flags: &[&str],
+) -> Result<PathBuf, String> {
+    let root = &config.runtime_c;
+    let inc = format!("-I{}", native_runtime_include_dir(root).display());
     let check = |src: &Path| {
         Command::new(clang)
             .args(native_target_args())
-            .args(sysroot_args())
+            .args(sysroot_args(config))
             .args([
                 "-std=gnu11",
                 "-w",
@@ -355,9 +375,9 @@ fn build_anchor(clang: &Path, dir: &Path, flags: &[&str]) -> Result<PathBuf, Str
         let unit = Unit {
             path: src.to_path_buf(),
             defines: vec!["DREAM_NATIVE".into()],
-            include_dirs: vec![native_runtime_include_dir()],
+            include_dirs: vec![native_runtime_include_dir(root)],
         };
-        clang_unit(clang, &unit, flags, out)
+        clang_unit(config, clang, &unit, flags, out)
     };
     anchor_unit(dir, "dream_rt_native.h", &check, &compile)
 }
@@ -396,7 +416,9 @@ pub(super) fn anchor_unit(
     write(&|line| !bad.contains(&line)).map_err(|e| e.to_string())?;
     let rest = check(&src)?;
     if rest.contains("error:") {
-        return Err(format!("runtime anchor unit still fails to compile:\n{rest}"));
+        return Err(format!(
+            "runtime anchor unit still fails to compile:\n{rest}"
+        ));
     }
     let obj = dir.join("anchor.bc");
     compile(&src, &obj)?;
@@ -431,7 +453,9 @@ mod tests {
 
     #[test]
     fn runtime_bitcode_signatures_cover_header() {
-        let Ok(tools) = super::super::resolve_llvm() else {
+        let Ok(tools) = super::super::resolve_llvm(&std::sync::Arc::new(
+            crate::driver::toolchain::ToolchainConfig::default(),
+        )) else {
             eprintln!("skipping: pinned LLVM not installed");
             return;
         };
@@ -442,7 +466,10 @@ mod tests {
         assert_eq!(sigs.function("dream_retain").fty.params, vec![Ty::I64]);
         assert_eq!(sigs.function("dream_malloc").fty.ret, Ty::I64);
         assert!(sigs.globals["g0"].thread_local);
-        assert!(sigs.target_attrs.iter().all(|(k, _)| !CPU_ATTRS.contains(&k.as_str())));
+        assert!(sigs
+            .target_attrs
+            .iter()
+            .all(|(k, _)| !CPU_ATTRS.contains(&k.as_str())));
     }
 
     #[test]

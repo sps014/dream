@@ -63,7 +63,10 @@ fn cpu_only_gpu_helpers_do_not_require_gpu_host() {
 #[cfg(unix)]
 #[test]
 fn core_only_toolchain_compiles_and_runs_without_optional_hosts() {
-    let tools = dream::execution::llvm::resolve_llvm().unwrap();
+    let tools = dream::execution::llvm::resolve_llvm(&std::sync::Arc::new(
+        dream::driver::toolchain::ToolchainConfig::default(),
+    ))
+    .unwrap();
     let directory = tempfile::tempdir().unwrap();
     let compiler = std::path::Path::new(env!("CARGO_BIN_EXE_dream"));
     let isolated = directory.path().join("dream");

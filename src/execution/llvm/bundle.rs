@@ -5,35 +5,20 @@
 //! Only the directory next to the running executable counts, so a development build never picks
 //! up an installed runtime that was built from different C sources.
 
+use crate::driver::toolchain::ToolchainConfig;
 use crate::driver::wasm_opt::OptLevel;
-use crate::execution::native::cc::native_rt_cache_root;
 use dream_mir::runtime::RuntimeNeed;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::OnceLock;
 
 /// `lib/dream` of the running executable: `<exe dir>/lib/dream` (unpacked archive) or
 /// `<exe dir>/../lib/dream` (installed `bin/` layout).
-pub fn bundle_dir() -> Option<&'static Path> {
-    static DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
-    DIR.get_or_init(|| {
-        let exe = std::env::current_exe().ok()?;
-        let exe = std::fs::canonicalize(&exe).unwrap_or(exe);
-        let dir = exe.parent()?;
-        vec![dir.join("lib").join("dream"), dir.join("../lib/dream")]
-            .into_iter()
-            .find(|d| d.join("rt").is_dir())
-    })
-    .as_deref()
+pub fn bundled_llvm_bin(config: &ToolchainConfig) -> Option<PathBuf> {
+    config.bundle_dir().map(|d| d.join("llvm/bin"))
 }
 
-pub fn bundled_llvm_bin() -> Option<PathBuf> {
-    bundle_dir().map(|d| d.join("llvm").join("bin"))
-}
-
-/// The prebuilt runtime tree, when this is a release install.
-pub fn prebuilt_rt() -> Option<PathBuf> {
-    bundle_dir().map(|d| d.join("rt"))
+pub fn prebuilt_rt(config: &ToolchainConfig) -> Option<PathBuf> {
+    config.bundle_dir().map(|d| d.join("rt"))
 }
 
 /// Runtime flavors, each a `<flavor>/<level>/need_<bits>/` tree.
@@ -62,12 +47,13 @@ pub enum RtDir {
     Cache(PathBuf),
 }
 
-pub fn rt_dir(flavor: &str, opt: OptLevel, need: RuntimeNeed) -> RtDir {
+pub fn rt_dir(config: &ToolchainConfig, flavor: &str, opt: OptLevel, need: RuntimeNeed) -> RtDir {
     let rel = rt_rel_dir(flavor, opt, need);
-    match prebuilt_rt() {
+    match prebuilt_rt(config) {
         Some(root) => RtDir::Prebuilt(root.join(rel)),
         None => RtDir::Cache(
-            native_rt_cache_root()
+            config
+                .native_rt_cache_root()
                 .join(format!("llvm-{}", super::LLVM_VERSION))
                 .join(rel),
         ),
@@ -113,7 +99,7 @@ impl ClangRt {
 /// Where `kind` lives: under `rt/clang_rt/` in a release, else in the resource directory of the
 /// development LLVM's clang (`scripts/fetch-dev-llvm.sh` adds the wasm32 builtins there).
 pub fn clang_rt(tools: &super::LlvmTools, kind: ClangRt) -> Result<PathBuf, String> {
-    if let Some(rt) = prebuilt_rt() {
+    if let Some(rt) = prebuilt_rt(&tools.config) {
         return prebuilt_file(&rt.join("clang_rt"), kind.bundled_name());
     }
     dev_clang_rt(&tools.clang()?, kind)

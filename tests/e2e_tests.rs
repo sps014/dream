@@ -3,6 +3,8 @@
 use dream::driver::compiler::{Compiler, Target};
 use dream::driver::wasm_opt::OptLevel;
 use dream::execution::native::{compile_and_capture, compile_and_capture_ex};
+
+mod common;
 use dream_abi::attributes::CompileTargets;
 use pretty_assertions::assert_eq;
 use rayon::prelude::*;
@@ -338,9 +340,21 @@ fn run_native_case(dream_file: &Path, release: bool) {
     let env_refs: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
     let run =
         if timeout_secs != 8 || !extra_args.is_empty() || stdin.is_some() || !env_refs.is_empty() {
-            compile_and_capture_ex(ll_str, opt, &env_refs, extra_args, stdin, timeout_secs)
+            compile_and_capture_ex(
+                &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+                ll_str,
+                opt,
+                &env_refs,
+                extra_args,
+                stdin,
+                timeout_secs,
+            )
         } else {
-            compile_and_capture(ll_str, opt)
+            compile_and_capture(
+                &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+                ll_str,
+                opt,
+            )
         };
     let _ = fs::remove_file(&ll_path);
     let _ = fs::remove_file(ll_path.with_extension("o"));
@@ -355,6 +369,7 @@ fn run_native_case(dream_file: &Path, release: bool) {
         return;
     }
     let actual = run.unwrap_or_else(|e| panic!("run failed for {:?}: {}", dream_file, e));
+    let actual = common::normalize_stdout(actual);
     assert_eq!(
         actual.trim(),
         expected_output.trim(),
@@ -1011,6 +1026,7 @@ fn dream_test_runs_attr_marked_functions() {
         return;
     }
     let result = dream::driver::test::run_tests(
+        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
         path,
         &dream::driver::test::TestOptions {
             release: false,

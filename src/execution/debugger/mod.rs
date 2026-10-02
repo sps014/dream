@@ -35,9 +35,13 @@ use std::process::{Command, Stdio};
 use std::thread;
 
 /// Speak DAP over stdin/stdout by driving `lldb-dap` on `bin` (guest + runtime built with `-g`).
-pub fn run_debug_adapter(bin: &Path, module: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let env_pairs = crate::execution::native::native_run_env_pairs(module)?;
-    let dap = find_lldb_dap()?;
+pub fn run_debug_adapter(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
+    bin: &Path,
+    module: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let env_pairs = crate::execution::native::native_run_env_pairs(config, module)?;
+    let dap = find_lldb_dap(config)?;
     let mut child = Command::new(&dap)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -200,11 +204,13 @@ fn rewrite_launch(msg: &mut Value, bin: &str, cwd: &Path, env_pairs: &[(String, 
     args.insert("envArray".into(), json!(env_arr));
 }
 
-fn find_lldb_dap() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    if let Some(p) = which("lldb-dap") {
+fn find_lldb_dap(
+    config: &crate::driver::toolchain::ToolchainConfig,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    if let Some(p) = config.find_on_path("lldb-dap") {
         return Ok(p);
     }
-    if let Some(p) = which("lldb-vscode") {
+    if let Some(p) = config.find_on_path("lldb-vscode") {
         return Ok(p);
     }
     if cfg!(target_os = "macos") {
@@ -221,17 +227,6 @@ fn find_lldb_dap() -> Result<PathBuf, Box<dyn std::error::Error>> {
         }
     }
     Err(lldb_dap_hint().into())
-}
-
-fn which(name: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path) {
-        let cand = dir.join(name);
-        if cand.is_file() {
-            return Some(cand);
-        }
-    }
-    None
 }
 
 fn lldb_dap_hint() -> String {

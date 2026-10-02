@@ -17,8 +17,13 @@ pub fn find_project_root(entry_file: &str) -> Option<PathBuf> {
 /// Cache directory for a generator harness, keyed only by kind + fingerprint so every project on
 /// the machine shares one compiled harness.
 #[cfg(feature = "native")]
-pub fn harness_cache_dir(kind: &str, fingerprint: u64) -> PathBuf {
-    crate::execution::native::generator_cache_root()
+pub fn harness_cache_dir(
+    config: &crate::driver::toolchain::ToolchainConfig,
+    kind: &str,
+    fingerprint: u64,
+) -> PathBuf {
+    config
+        .generator_cache_root()
         .join(format!("dream-{kind}-{fingerprint:x}"))
 }
 

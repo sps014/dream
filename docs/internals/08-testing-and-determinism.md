@@ -2,6 +2,17 @@
 
 This chapter covers how the compiler is tested, the determinism contract the whole back end must honor, and the conventions every contributor is expected to follow.
 
+CI validates pull requests and merge-queue candidates, with manual dispatch available for
+main or other refs. It does not automatically rerun the same suite after merging a validated
+PR into protected main. Required checks and strict up-to-date protection remain in place;
+rebasing or updating a PR can still require a new run because its tested integration changed.
+
+Linux, macOS and Windows run workspace build, strict Clippy and default tests. Linux runs
+the full native/Node corpus; Windows additionally runs the full native corpus with the
+pinned MSVC-compatible clang driver and developer SDK environment. Windows Rust/probe
+steps use PowerShell so Git Bash's `link` utility cannot shadow Microsoft's linker.
+Size budgets remain Linux/macOS-only until Windows distribution baselines are measured.
+
 ## The test pyramid
 
 ```mermaid

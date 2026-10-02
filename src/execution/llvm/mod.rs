@@ -9,7 +9,7 @@ pub mod runtime;
 pub mod tools;
 pub mod wasm;
 
-pub use build::{compile_llvm, Toolchain};
+pub use build::{compile_llvm, NativeBuildOptions, Toolchain};
 pub use pack::pack_runtime;
 pub use runtime::{llvm_runtime, LlvmRuntime};
 pub use tools::{resolve_llvm, LlvmTools, LLVM_VERSION};

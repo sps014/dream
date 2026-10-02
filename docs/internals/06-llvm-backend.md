@@ -43,6 +43,14 @@ under `~/.dream/toolchains/llvm-*`, and rejects any other major version. The ins
 (`scripts/install.sh`, `install.ps1`, `use-toolchain.sh`) install it unless `DREAM_SKIP_LLVM=1`.
 No crate links against LLVM: the IR is text, and the tools run as subprocesses.
 
+The driver captures toolchain configuration once in `driver/toolchain/environment.rs`.
+One shared `ToolchainConfig` is passed through the compiler, generators, native links,
+runtime builds, packing and debugger setup. LLVM/linker discovery and the macOS SDK query
+are cached per configuration, not process-global. Runtime catalogs receive their source
+root explicitly and never read the environment. `DREAM_HOME`, `DREAM_BIN`, `DREAM_LLVM`,
+`DREAM_CC`/`CC`, `DREAM_CXX`/`CXX`, `DREAM_TOOLCHAINS` and `DREAM_RUNTIME_C` keep their
+documented search roles. Windows uses `USERPROFILE` for the default install prefix.
+
 The runtime bitcode (`src/execution/llvm/runtime.rs`, `wasm.rs`) is built by the pinned clang for
 native targets and by wasi-sdk's clang for wasm32. It is cached per LLVM version, opt level and
 `RuntimeNeed` under `target/dream-native-rt/` (in the repo) or `~/.dream/cache/native-rt/`, and

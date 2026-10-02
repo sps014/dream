@@ -1,0 +1,122 @@
+use super::*;
+use std::collections::BTreeMap;
+
+fn config(values: &[(&str, &str)], exe: Option<PathBuf>, cwd: PathBuf) -> ToolchainConfig {
+    let vars: BTreeMap<_, _> = values.iter().copied().collect();
+    ToolchainConfig::from_lookup(|key| vars.get(key).map(OsString::from), exe, cwd)
+}
+
+#[test]
+fn explicit_paths_and_compiler_precedence_are_captured() {
+    let c = config(
+        &[
+            ("DREAM_HOME", "/install/bin"),
+            ("DREAM_BIN", "/other/dream"),
+            ("DREAM_TOOLCHAINS", "/tools"),
+            ("DREAM_LLVM", "/llvm/bin"),
+            ("DREAM_RUNTIME_C", "/runtime"),
+            ("DREAM_CC", "dream-clang"),
+            ("CC", "other-clang"),
+            ("DREAM_CXX", "dream-clang++"),
+            ("CXX", "other-clang++"),
+        ],
+        None,
+        PathBuf::from("/project"),
+    );
+    assert_eq!(c.prefix, PathBuf::from("/install"));
+    assert_eq!(
+        c.toolchains,
+        vec![
+            PathBuf::from("/tools"),
+            PathBuf::from("/install/toolchains")
+        ]
+    );
+    assert_eq!(c.llvm, Some(PathBuf::from("/llvm/bin")));
+    assert_eq!(c.runtime_c, PathBuf::from("/runtime"));
+    assert_eq!(c.cc, Some(OsString::from("dream-clang")));
+    assert_eq!(c.cxx, Some(OsString::from("dream-clang++")));
+}
+
+#[test]
+fn empty_overrides_use_user_defaults_not_cargo_output_as_install_prefix() {
+    let c = config(
+        &[
+            ("DREAM_HOME", "/project/target/debug"),
+            ("DREAM_TOOLCHAINS", ""),
+            ("DREAM_LLVM", ""),
+            ("HOME", "/user"),
+            ("DREAM_CC", ""),
+            ("CC", "clang"),
+        ],
+        None,
+        PathBuf::from("/project"),
+    );
+    assert_eq!(c.prefix, PathBuf::from("/user/.dream"));
+    assert_eq!(c.toolchains, vec![PathBuf::from("/user/.dream/toolchains")]);
+    assert!(c.llvm.is_none());
+    assert_eq!(c.cc, Some(OsString::from("clang")));
+}
+
+#[test]
+fn hosts_never_search_the_working_directory() {
+    let root = tempfile::tempdir().unwrap();
+    let c = config(
+        &[],
+        Some(root.path().join("compiler/deps/dream")),
+        root.path().join("project"),
+    );
+    let dirs = c.host_library_dirs();
+    assert_eq!(
+        dirs,
+        vec![
+            root.path().join("compiler/deps"),
+            root.path().join("compiler")
+        ]
+    );
+    assert!(!dirs.contains(&c.cwd));
+}
+
+#[test]
+fn captured_path_is_used_for_program_resolution() {
+    let root = tempfile::tempdir().unwrap();
+    let name = if cfg!(windows) {
+        "dream-test-cc.exe"
+    } else {
+        "dream-test-cc"
+    };
+    std::fs::write(root.path().join(name), []).unwrap();
+    let path = std::env::join_paths([root.path()]).unwrap();
+    let c = ToolchainConfig::from_lookup(
+        |key| (key == "PATH").then(|| path.clone()),
+        None,
+        root.path().to_path_buf(),
+    );
+    assert_eq!(
+        c.find_on_path("dream-test-cc"),
+        Some(root.path().join(name))
+    );
+}
+
+#[test]
+fn configs_are_independent_without_mutating_process_environment() {
+    let a = config(&[("DREAM_RUNTIME_C", "first")], None, PathBuf::from("."));
+    let b = config(&[("DREAM_RUNTIME_C", "second")], None, PathBuf::from("."));
+    assert_eq!(a.runtime_c, PathBuf::from("first"));
+    assert_eq!(b.runtime_c, PathBuf::from("second"));
+}
+
+#[test]
+fn execution_and_runtime_catalog_do_not_read_environment_again() {
+    for source in [
+        include_str!("../../execution/llvm/tools.rs"),
+        include_str!("../../execution/llvm/runtime.rs"),
+        include_str!("../../execution/llvm/bundle.rs"),
+        include_str!("../../execution/native/cc.rs"),
+        include_str!("../../execution/native/c_link.rs"),
+        include_str!("../../execution/native/mod.rs"),
+        include_str!("../../execution/debugger/mod.rs"),
+        include_str!("../../../crates/dream-mir/src/runtime/modules.rs"),
+    ] {
+        assert!(!source.contains("std::env::var"));
+    }
+}

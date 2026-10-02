@@ -53,8 +53,16 @@ fn build(entry: &Path, tag: &str) -> Result<PathBuf, String> {
 fn run(entry: &Path, tag: &str) -> Result<String, String> {
     let ll = build(entry, tag)?;
     // A freshly linked binary's first launch can be slow while the OS vets it.
-    compile_and_capture_ex(ll.to_str().unwrap(), OptLevel::O0, &[], &[], None, 60)
-        .map_err(|e| e.to_string())
+    compile_and_capture_ex(
+        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+        ll.to_str().unwrap(),
+        OptLevel::O0,
+        &[],
+        &[],
+        None,
+        60,
+    )
+    .map_err(|e| e.to_string())
 }
 
 fn assert_contains(haystack: &str, needle: &str) {

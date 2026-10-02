@@ -63,6 +63,7 @@ fn is_cxx(path: &Path) -> bool {
 
 /// Compiles every set to objects under `cache_root/<set>/`.
 pub fn compile_sets(
+    config: &crate::driver::toolchain::ToolchainConfig,
     cc: &Cc,
     sets: &[CSourceSet],
     cache_root: &Path,
@@ -79,7 +80,8 @@ pub fn compile_sets(
             .write(true)
             .open(dir.join(".lock"))
             .map_err(|e| format!("{}: {e}", dir.display()))?;
-        lock.lock().map_err(|e| format!("locking {}: {e}", dir.display()))?;
+        lock.lock()
+            .map_err(|e| format!("locking {}: {e}", dir.display()))?;
         let headers_t = newest_header(&set.include);
         for src in &set.sources {
             let src = PathBuf::from(src);
@@ -92,7 +94,11 @@ pub fn compile_sets(
             let fresh = object_fresh(&obj, &src, headers_t)
                 && std::fs::read_to_string(&stamp_path).is_ok_and(|s| s == stamp);
             if !fresh {
-                let mut cmd = if cxx { cc.cxx_command()? } else { cc.cc_command() };
+                let mut cmd = if cxx {
+                    cc.cxx_command(config)?
+                } else {
+                    cc.cc_command()
+                };
                 cmd.args(&args);
                 if let Err(e) = run_captured(&mut cmd, &format!("compiling {}", src.display())) {
                     let _ = std::fs::remove_file(&obj);
@@ -118,7 +124,7 @@ pub fn compile_sets(
             }
         }
     }
-    if out.needs_cxx {
+    if out.needs_cxx && !cfg!(all(windows, target_env = "msvc")) {
         out.link_args.push("-lc++".into());
     }
     Ok(out)
@@ -151,7 +157,10 @@ fn compile_args(set: &CSourceSet, src: &Path, obj: &Path, cxx: bool, debug: bool
 /// A stable, collision-free object name: the source stem plus a hash of its full path.
 fn object_name(src: &Path) -> String {
     let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("src");
-    format!("{stem}-{:016x}.o", fnv1a(src.display().to_string().as_bytes()))
+    format!(
+        "{stem}-{:016x}.o",
+        fnv1a(src.display().to_string().as_bytes())
+    )
 }
 
 fn fnv1a(bytes: &[u8]) -> u64 {

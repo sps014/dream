@@ -1,9 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  merge_group:
   workflow_dispatch:
 
 concurrency:
@@ -13,6 +12,10 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   DREAM_VERIFY_MIR: "1"
+
+defaults:
+  run:
+    shell: bash
 
 permissions:
   contents: read
@@ -26,10 +29,11 @@ jobs:
 
   build-clippy-test:
     name: Build, clippy, test (${{ matrix.os }})
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install Linux native dependencies
@@ -40,6 +44,12 @@ jobs:
             build-essential clang cmake libclang-dev libgtk-3-dev libssl-dev \
             libudev-dev libwebkit2gtk-4.1-dev ninja-build pkg-config python3 xz-utils
       - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - uses: actions/setup-python@v5
+        if: runner.os == 'Windows'
+        with:
+          python-version: "3.13"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -51,10 +61,20 @@ jobs:
       - name: Install pinned LLVM and wasi-sdk support
         shell: bash
         run: scripts/fetch-dev-llvm.sh
+      - name: Use the MSVC-compatible pinned C driver
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "DREAM_CC=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang.exe" >> $env:GITHUB_ENV
+          "DREAM_CXX=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang++.exe" >> $env:GITHUB_ENV
       - run: cargo build --workspace
+        shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
       - run: cargo clippy --workspace --all-targets -- -D warnings
+        shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
       - run: cargo test --workspace
+        shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
       - name: Native distribution size budget
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           python3 scripts/test_binary_size.py
@@ -67,12 +87,16 @@ jobs:
           python3 scripts/check-binary-size.py --compiler target/debug/dream \
             --host-library "$host_library" --report target/binary-size.json
       - name: Preserve native size measurements
-        if: always()
+        if: always() && runner.os != 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: binary-size-${{ runner.os }}-${{ runner.arch }}
           path: target/binary-size.json
           if-no-files-found: ignore
+      - name: Full Windows native corpus
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python scripts/probe_test.py
       - name: Weak lifetime race under ThreadSanitizer
         if: runner.os == 'macOS'
         shell: bash

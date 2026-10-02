@@ -20,7 +20,8 @@ _LEAK = re.compile(r"\[dream\] leak check: live=(\d+)")
 
 root = Path(__file__).resolve().parents[1]
 # DREAM_PROBE_BIN probes another build, e.g. a staged release archive's `dream`.
-dream = Path(os.environ.get("DREAM_PROBE_BIN") or root / "target/debug/dream")
+dream_name = "dream.exe" if os.name == "nt" else "dream"
+dream = Path(os.environ.get("DREAM_PROBE_BIN") or root / "target/debug" / dream_name)
 cases = sorted((root / "tests/cases").glob("*.dream"))
 workers = int(os.environ.get("PROBE_JOBS", "8"))
 dream_js = root / "runtime" / "dream.js"
@@ -107,7 +108,12 @@ def run_group(args, timeout, stdin=None, env=None):
         return proc.returncode, out or "", err or ""
     except subprocess.TimeoutExpired:
         try:
-            os.killpg(proc.pid, signal.SIGKILL)
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               check=False)
+            else:
+                os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
         proc.wait()

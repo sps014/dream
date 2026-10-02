@@ -211,6 +211,7 @@ enum Command {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    let config = Arc::new(dream::driver::toolchain::ToolchainConfig::default());
 
     // Deep per-phase detail goes through tracing (`-v` only); user-facing status/errors go through
     // [`Ui`], so stray library warns do not pollute normal runs.
@@ -229,7 +230,7 @@ fn main() -> ExitCode {
     let ui = Ui::new();
 
     if let Some(Command::PackRuntime { out }) = &cli.command {
-        return match dream::execution::llvm::pack_runtime(out) {
+        return match dream::execution::llvm::pack_runtime(&config, out) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 ui.error(&e);
@@ -378,7 +379,7 @@ fn main() -> ExitCode {
             },
             verbose: cli.verbose,
         };
-        return match dream::driver::test::run_tests(&path, &opts) {
+        return match dream::driver::test::run_tests(&config, &path, &opts) {
             Ok(_) => ExitCode::SUCCESS,
             Err(e) => {
                 ui.error(&e);
@@ -433,11 +434,14 @@ fn main() -> ExitCode {
     let reporter = Arc::new(ConsoleReporter::new());
     // `with_release` installs RELEASE_DEFAULT wasm-opt; an explicit `-O` overrides.
     let cc_opt = OptLevel::from_cli(cli.release, optimize);
-    let mut compiler = Compiler::new(if native {
-        Target::Native
-    } else {
-        Target::Wasm32
-    })
+    let mut compiler = Compiler::new_with_toolchain_config(
+        if native {
+            Target::Native
+        } else {
+            Target::Wasm32
+        },
+        config.clone(),
+    )
     .with_release(cli.release)
     .with_debug_info(debug_info)
     .with_runtimes(runtimes)
@@ -483,7 +487,7 @@ fn main() -> ExitCode {
     let unoptimized = !cli.release && optimize.is_none() && !debug_adapter;
 
     if cli.emit_llvm {
-        match emit_llvm_artifacts(raw_ll, cc_opt, debug_info, cli.icon.as_deref()) {
+        match emit_llvm_artifacts(&config, raw_ll, cc_opt, debug_info, cli.icon.as_deref()) {
             Ok(paths) => {
                 drop_raw_ll();
                 artifacts.extend(paths);
@@ -515,13 +519,16 @@ fn main() -> ExitCode {
         };
         let opt_ll = raw_ll.with_extension("opt.ll");
         match compile_llvm(
+            &config,
             raw_ll,
-            Some(&opt_ll),
-            cc_opt,
-            debug_info,
-            &pgo,
-            cli.icon.as_deref(),
-            cli.relocatable,
+            dream::execution::llvm::NativeBuildOptions {
+                opt_ll: Some(&opt_ll),
+                opt: cc_opt,
+                debug: debug_info,
+                pgo: &pgo,
+                icon: cli.icon.as_deref(),
+                relocatable: cli.relocatable,
+            },
         ) {
             Ok(bin) => {
                 drop_raw_ll();
@@ -532,7 +539,9 @@ fn main() -> ExitCode {
                     ui.debug_build_note(false);
                 }
                 if debug_adapter {
-                    if let Err(e) = dream::execution::debugger::run_debug_adapter(&bin, &out_path) {
+                    if let Err(e) =
+                        dream::execution::debugger::run_debug_adapter(&config, &bin, &out_path)
+                    {
                         ui.error(&format!("debug adapter failed: {e}"));
                         return ExitCode::FAILURE;
                     }
@@ -542,7 +551,7 @@ fn main() -> ExitCode {
                     ui.step("Running", &bin.display().to_string());
                     // The guest's exit status is the program's own (`main(): int`, or a failing
                     // `Result`), so forward it instead of reporting a tool failure.
-                    match run_native_bin(&bin, &out_path, &program_args) {
+                    match run_native_bin(&config, &bin, &out_path, &program_args) {
                         Ok(0) => {}
                         Ok(code) => return ExitCode::from(code.clamp(1, 255) as u8),
                         Err(e) if e.downcast_ref::<GuestAborted>().is_some() => {

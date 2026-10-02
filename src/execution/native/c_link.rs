@@ -15,14 +15,18 @@ struct AbiFile {
 
 /// Walks an artifact path's parent chain so `sample/foo/target/release/x.c` still finds
 /// `sample/foo/native/`.
-pub fn search_roots_for_artifact(artifact: &Path) -> Vec<PathBuf> {
+pub fn search_roots_for_artifact(
+    config: &crate::driver::toolchain::ToolchainConfig,
+    artifact: &Path,
+) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     let mut cur = artifact.parent().map(|p| p.to_path_buf());
     while let Some(dir) = cur {
         roots.push(dir.clone());
         cur = dir.parent().map(|p| p.to_path_buf());
     }
-    if let Ok(cwd) = std::env::current_dir() {
+    {
+        let cwd = config.cwd.clone();
         if !roots.iter().any(|r| r == &cwd) {
             roots.push(cwd);
         }
@@ -62,7 +66,7 @@ pub fn library_file_names(lib_name: &str) -> Vec<String> {
     }
 }
 
-pub fn system_library_dirs() -> Vec<PathBuf> {
+pub fn system_library_dirs(_config: &crate::driver::toolchain::ToolchainConfig) -> Vec<PathBuf> {
     #[cfg(target_os = "macos")]
     {
         vec![
@@ -86,7 +90,7 @@ pub fn system_library_dirs() -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         let mut dirs = Vec::new();
-        if let Ok(win) = std::env::var("WINDIR") {
+        if let Some(win) = &_config.windir {
             dirs.push(PathBuf::from(win).join("System32"));
         } else {
             dirs.push(PathBuf::from("C:\\Windows\\System32"));
@@ -97,7 +101,11 @@ pub fn system_library_dirs() -> Vec<PathBuf> {
 
 /// Resolves `lib_name` to a filesystem path. Does not probe the OS loader (that's the caller's
 /// last resort when `dlopen`ing).
-pub fn find_library_path(lib_name: &str, search_roots: &[PathBuf]) -> Option<PathBuf> {
+pub fn find_library_path(
+    config: &crate::driver::toolchain::ToolchainConfig,
+    lib_name: &str,
+    search_roots: &[PathBuf],
+) -> Option<PathBuf> {
     let file_names = library_file_names(lib_name);
     for root in search_roots {
         for name in &file_names {
@@ -117,7 +125,7 @@ pub fn find_library_path(lib_name: &str, search_roots: &[PathBuf]) -> Option<Pat
             return Some(path);
         }
     }
-    for dir in system_library_dirs() {
+    for dir in system_library_dirs(config) {
         for name in &file_names {
             let candidate = dir.join(name);
             if candidate.exists() {
@@ -131,11 +139,19 @@ pub fn find_library_path(lib_name: &str, search_roots: &[PathBuf]) -> Option<Pat
 /// `-L` / `-l` / `-rpath` flags for each `@c` library. Always emits `-l<name>` so the
 /// compiler's default search (macOS SDK `libsqlite3`, `LIBRARY_PATH`, …) still applies when
 /// the dylib is not in a well-known directory.
-pub fn cc_link_flags(libs: &[String], search_roots: &[PathBuf]) -> Vec<String> {
+pub fn cc_link_flags(
+    config: &crate::driver::toolchain::ToolchainConfig,
+    libs: &[String],
+    search_roots: &[PathBuf],
+) -> Vec<String> {
     let mut flags = Vec::new();
     let mut rpaths = BTreeSet::new();
     for lib in libs {
-        if let Some(path) = find_library_path(lib, search_roots) {
+        // The MSVC CRT supplies both C and math symbols; there are no c.lib/m.lib archives.
+        if cfg!(all(windows, target_env = "msvc")) && matches!(lib.as_str(), "c" | "m") {
+            continue;
+        }
+        if let Some(path) = find_library_path(config, lib, search_roots) {
             if let Some(dir) = path.parent() {
                 flags.push(format!("-L{}", dir.display()));
                 rpaths.insert(dir.to_path_buf());
@@ -149,4 +165,21 @@ pub fn cc_link_flags(libs: &[String], search_roots: &[PathBuf]) -> Vec<String> {
         }
     }
     flags
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn platform_crt_libraries() {
+        let config = crate::driver::toolchain::ToolchainConfig::default();
+        let flags = cc_link_flags(&config, &["c".into(), "m".into()], &[]);
+        if cfg!(all(windows, target_env = "msvc")) {
+            assert!(flags.is_empty());
+        } else {
+            assert!(flags.iter().any(|arg| arg == "-lc"));
+            assert!(flags.iter().any(|arg| arg == "-lm"));
+        }
+    }
 }

@@ -8,7 +8,6 @@
 //! [`error`] (the driver-level error type).
 
 pub mod abi;
-pub mod wasi;
 pub mod compiler;
 pub mod compress;
 pub mod cpp_bridge;
@@ -26,5 +25,7 @@ pub mod rt_stamp;
 pub mod source_loader;
 #[cfg(feature = "native")]
 pub mod test;
+pub mod toolchain;
 pub mod ui;
+pub mod wasi;
 pub mod wasm_opt;

@@ -3,6 +3,7 @@
 
 pub mod abi;
 pub mod app_icon;
+pub(crate) mod bundle;
 pub(crate) mod cc;
 pub mod desktop;
 pub(crate) mod native_c;
@@ -41,7 +42,7 @@ pub fn compile_and_capture_ex(
     stdin: Option<&[u8]>,
     timeout_secs: u64,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let bin = compile_llvm(Path::new(ll_path), None, opt, false, &Pgo::Off, None)?;
+    let bin = compile_llvm(Path::new(ll_path), None, opt, false, &Pgo::Off, None, false)?;
     capture_native_bin(&bin, ll_path, extra_env, extra_args, stdin, timeout_secs)
 }
 
@@ -188,7 +189,7 @@ pub(crate) fn native_run_env_pairs(module: &str) -> Vec<(String, String)> {
     out
 }
 
-fn libdream_name() -> &'static str {
+pub(crate) fn libdream_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "dream.dll"
     } else if cfg!(target_os = "macos") {
@@ -218,7 +219,8 @@ fn push_exe_parent(dirs: &mut Vec<PathBuf>, exe: &Path) {
 /// Search order: next to this process (so a dev build links its own newer host symbols rather
 /// than an older installed toolchain's), `DREAM_HOME`, `DREAM_BIN`, then `~/.dream/bin`. Never the
 /// working directory: a planted `target/*/libdream` would otherwise be linked and rpath'd.
-/// The result is canonical, so the `-rpath` baked into binaries is absolute.
+/// Development builds use this canonical directory as their absolute rpath; relocatable builds
+/// stage the library into the package instead.
 pub(crate) fn libdream_dir() -> Option<PathBuf> {
     let name = libdream_name();
     let mut dirs = Vec::new();

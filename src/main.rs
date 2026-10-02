@@ -93,6 +93,10 @@ struct Cli {
     #[arg(long = "emit-llvm", global = true)]
     emit_llvm: bool,
 
+    /// Bundle libdream beside the native binary and use package-relative library lookup
+    #[arg(long, global = true, conflicts_with_all = ["wasm", "emit_llvm"])]
+    relocatable: bool,
+
     /// App icon PNG compiled into a native binary (dreamer passes `[package].icon`)
     #[arg(long, value_name = "PNG", global = true, hide = true)]
     icon: Option<PathBuf>,
@@ -266,6 +270,12 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
     let native = !cli.wasm && runtimes.is_empty();
+    if cli.relocatable
+        && (!native || run_tests || matches!(cli.crate_type, Some(CrateTypeArg::Lib)))
+    {
+        ui.error("--relocatable applies to native executable builds only");
+        return ExitCode::FAILURE;
+    }
     if cli.emit_llvm && !native {
         ui.error("--emit-llvm writes the native whole-program module");
         ui.help("drop --wasm/--web/--node; wasm32 builds keep the generated .ll anyway");
@@ -514,6 +524,7 @@ fn main() -> ExitCode {
             debug_info,
             &pgo,
             cli.icon.as_deref(),
+            cli.relocatable,
         ) {
             Ok(bin) => {
                 drop_raw_ll();

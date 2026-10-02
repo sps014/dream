@@ -7,6 +7,7 @@ use super::tools::{resolve_llvm, LlvmTools};
 use crate::driver::wasi::run_captured;
 use crate::driver::wasm_opt::OptLevel;
 use crate::execution::host::{cc_link_flags, read_c_libs_from_abi, search_roots_for_artifact};
+use crate::execution::native::bundle::{link_runtime, stage_runtime};
 use crate::execution::native::native_c::{compile_sets, read_c_sources_from_abi, NativeObjects};
 use crate::execution::native::pgo::{clear_raw_profiles, llvm_pgo};
 use crate::execution::native::{cc, libdream_dir, native_bin_fresh, Pgo};
@@ -185,9 +186,14 @@ pub fn compile_llvm(
     debug: bool,
     pgo: &Pgo,
     icon: Option<&Path>,
+    relocatable: bool,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let tools = resolve_llvm()?;
     let bin = native_bin_path(ll_path);
+    let dir = libdream_dir().ok_or(
+        "libdream not found next to the dream binary (needed to link host functions). \
+         Set DREAM_HOME or DREAM_BIN to the directory containing libdream.",
+    )?;
     let lock_file = OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -195,6 +201,14 @@ pub fn compile_llvm(
         .write(true)
         .open(bin.with_extension("lock"))?;
     lock_file.lock()?;
+    let bundled = if relocatable {
+        Some(stage_runtime(
+            &dir,
+            bin.parent().unwrap_or_else(|| Path::new(".")),
+        )?)
+    } else {
+        None
+    };
     let src = std::fs::read_to_string(ll_path)?;
     let need = runtime_need_from_module_text(&src);
     let rt = llvm_runtime(&tools, opt, need, debug)?;
@@ -216,7 +230,7 @@ pub fn compile_llvm(
     };
     let stamp_path = bin.with_extension("flags");
     let stamp = format!(
-        "{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
+        "{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{}",
         pipeline(opt, debug),
         debug,
         llc_level(opt, debug),
@@ -225,7 +239,8 @@ pub fn compile_llvm(
         profile,
         icon_png.as_deref().map(icon::fingerprint),
         native.objects,
-        native.link_args
+        native.link_args,
+        relocatable
     );
     let input = match (pgo, &profile) {
         (Pgo::Use(_), Some((_, p))) => Some(p.as_path()),
@@ -289,23 +304,7 @@ pub fn compile_llvm(
     if !cfg!(windows) {
         lcmd.args(["-lm", "-lpthread"]);
     }
-    let Some(dir) = libdream_dir() else {
-        return Err(
-            "libdream not found next to the dream binary (needed to link host functions). \
-             Set DREAM_HOME or DREAM_BIN to the directory containing libdream."
-                .into(),
-        );
-    };
-    if cfg!(windows) {
-        // `-ldream` resolves to the DLL itself; MSVC links against its import library. POSIX
-        // names (`read`, `getcwd`, …) the runtime calls live in oldnames.lib.
-        lcmd.arg(dir.join("dream.dll.lib"));
-        lcmd.arg("-loldnames");
-    } else {
-        lcmd.arg(format!("-L{}", dir.display()));
-        lcmd.arg("-ldream");
-        lcmd.arg(format!("-Wl,-rpath,{}", dir.display()));
-    }
+    link_runtime(&mut lcmd, &dir, bundled.as_deref());
     let c_libs = read_c_libs_from_abi(&abi_path);
     if !c_libs.is_empty() {
         let roots = search_roots_for_artifact(ll_path);

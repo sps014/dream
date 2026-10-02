@@ -34,6 +34,14 @@ native targets and by wasi-sdk's clang for wasm32. It is cached per LLVM version
 `RuntimeNeed` under `target/dream-native-rt/` (in the repo) or `~/.dream/cache/native-rt/`, and
 guarded by a file lock so concurrent compiles share one build.
 
+Native `--relocatable` builds stage the host `libdream` next to the executable and include this
+link policy in the freshness stamp. Linux uses `$ORIGIN`; macOS links the staged library after
+changing its install name to `@rpath/libdream.dylib`, then uses executable-relative search paths
+for adjacent libraries and `.app/Contents/Frameworks`. Windows ships `dream.dll` beside the
+executable while linking through the original import library. `dreamer pack` enables this mode
+and copies the staged library into each package layout. Normal development builds retain the
+validated absolute toolchain lookup, without copying a host library for every corpus case.
+
 ## The writers
 
 | Module | Role |

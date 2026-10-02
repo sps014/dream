@@ -68,6 +68,18 @@ selected libraries into each package layout, ignoring unused artifacts left by o
 Normal development builds retain the validated absolute toolchain lookup without copying
 libraries for every corpus case. A core-only program needs only the core host library installed.
 
+The final native link dead-strips unreachable code (`-dead_strip` on macOS, `--gc-sections`
+on Linux). Linux `llc` emits separate function/data sections so collection can operate below
+whole-object granularity; both policies participate in native binary cache stamps. Windows
+link policy is unchanged. Native source-set runtime exports remain roots through the existing
+`internalize-public-api-list`; foreign callbacks and entry points must survive collection.
+
+CI builds the release core host library, then `scripts/check-binary-size.py` compiles and runs
+`tests/size/hello.dream` at `-Os` in an isolated relocatable package. It checks raw executable
+bytes (96 KiB maximum) and raw release core-library bytes (3 MiB maximum) independently, and
+uploads the measurements as `binary-size-<OS>-<arch>`. Debug host artifacts are not size baselines.
+Budget changes require explicit review; the gate never adjusts limits from measured results.
+
 ## The writers
 
 | Module | Role |

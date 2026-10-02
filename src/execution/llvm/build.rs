@@ -125,6 +125,7 @@ fn run_llc(
 ) -> Result<(), String> {
     let mut llc = tools.command("llc");
     llc.arg(llc_level(opt, debug))
+        .args(section_args())
         .args(cpu_args(opt, debug))
         .arg(format!("-filetype={filetype}"))
         .arg("-relocation-model=pic")
@@ -132,6 +133,24 @@ fn run_llc(
         .arg("-o")
         .arg(out);
     run_captured(&mut llc, "llc")
+}
+
+fn section_args() -> &'static [&'static str] {
+    if cfg!(target_os = "linux") {
+        &["-function-sections", "-data-sections"]
+    } else {
+        &[]
+    }
+}
+
+fn dead_strip_args() -> &'static [&'static str] {
+    if cfg!(target_os = "macos") {
+        &["-Wl,-dead_strip"]
+    } else if cfg!(target_os = "linux") {
+        &["-Wl,--gc-sections"]
+    } else {
+        &[]
+    }
 }
 
 /// Disassembles bitcode `bc` to textual IR at `out`.
@@ -240,7 +259,7 @@ pub fn compile_llvm(
     };
     let stamp_path = bin.with_extension("flags");
     let stamp = format!(
-        "{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{}\n{:?}",
+        "{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{}\n{:?}\n{:?}\n{:?}",
         pipeline(opt, debug),
         debug,
         llc_level(opt, debug),
@@ -251,7 +270,9 @@ pub fn compile_llvm(
         native.objects,
         native.link_args,
         relocatable,
-        capabilities
+        capabilities,
+        section_args(),
+        dead_strip_args()
     );
     let input = match (pgo, &profile) {
         (Pgo::Use(_), Some((_, p))) => Some(p.as_path()),
@@ -305,6 +326,7 @@ pub fn compile_llvm(
         c
     };
     lcmd.args(&native.objects);
+    lcmd.args(dead_strip_args());
     if let Some(a) = &rt.archive {
         lcmd.arg(a);
     }
@@ -410,5 +432,24 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
             req.threads,
             req.wasm_opt,
         )
+    }
+}
+
+#[cfg(test)]
+mod size_tests {
+    use super::*;
+
+    #[test]
+    fn native_dead_stripping_matches_object_section_policy() {
+        if cfg!(target_os = "linux") {
+            assert_eq!(section_args(), &["-function-sections", "-data-sections"]);
+            assert_eq!(dead_strip_args(), &["-Wl,--gc-sections"]);
+        } else if cfg!(target_os = "macos") {
+            assert!(section_args().is_empty());
+            assert_eq!(dead_strip_args(), &["-Wl,-dead_strip"]);
+        } else {
+            assert!(section_args().is_empty());
+            assert!(dead_strip_args().is_empty());
+        }
     }
 }

@@ -7,6 +7,7 @@ pub mod attributes;
 pub mod c_abi;
 pub mod gpu_format;
 pub mod gpu_swizzle;
+pub mod host_capability;
 pub mod intrinsics;
 pub mod js_abi;
 pub mod runtime_hosts;

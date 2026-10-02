@@ -106,14 +106,9 @@ fn llvm_relocatable_binary_runs_after_move() {
     let ll = build.join("arithmetic.ll");
     compile_ll(&source, &ll, OptLevel::O0);
     let binary = compile_llvm(&ll, None, OptLevel::O0, false, &Pgo::Off, None, true).unwrap();
-    let library = if cfg!(target_os = "macos") {
-        "libdream.dylib"
-    } else if cfg!(windows) {
-        "dream.dll"
-    } else {
-        "libdream.so"
-    };
-    assert!(build.join(library).is_file());
+    for capability in dream_abi::host_capability::HostCapability::ALL {
+        assert!(build.join(capability.library_name()).is_file());
+    }
     let moved = temporary.path().join("moved package");
     fs::rename(&build, &moved).unwrap();
     let binary = moved.join(binary.file_name().unwrap());

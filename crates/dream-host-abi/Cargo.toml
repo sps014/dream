@@ -1,0 +1,7 @@
+[package]
+name = "dream-host-abi"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dream-mir = { path = "../dream-mir" }

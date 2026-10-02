@@ -12,7 +12,7 @@ use crate::execution::native::c_link::{
 };
 use crate::execution::native::native_c::{compile_sets, read_c_sources_from_abi, NativeObjects};
 use crate::execution::native::pgo::{clear_raw_profiles, llvm_pgo};
-use crate::execution::native::{cc, libdream_dir, native_bin_fresh, Pgo};
+use crate::execution::native::{cc, host_library_dir, native_bin_fresh, Pgo};
 use dream_mir::runtime::runtime_need_from_module_text;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
@@ -151,7 +151,11 @@ pub fn emit_llvm_artifacts(
     let src = std::fs::read_to_string(ll_path)?;
     let rt = llvm_runtime(&tools, opt, runtime_need_from_module_text(&src), debug)?;
     let icon_ll = match icon {
-        Some(icon) => Some(icon::write_icon_module(ll_path, &icon::read_png(icon)?, &src)?),
+        Some(icon) => Some(icon::write_icon_module(
+            ll_path,
+            &icon::read_png(icon)?,
+            &src,
+        )?),
         None => None,
     };
     let optimized = link_and_optimize(
@@ -192,9 +196,9 @@ pub fn compile_llvm(
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let tools = resolve_llvm()?;
     let bin = native_bin_path(ll_path);
-    let dir = libdream_dir().ok_or(
-        "libdream not found next to the dream binary (needed to link host functions). \
-         Build it with cargo build -p dream-host, or set DREAM_HOME or DREAM_BIN to the directory containing libdream.",
+    let dir = host_library_dir().ok_or(
+        "native capability libraries not found next to the dream binary. \
+         Build with cargo build --workspace, or set DREAM_HOME or DREAM_BIN to the installed toolchain.",
     )?;
     let lock_file = OpenOptions::new()
         .create(true)
@@ -232,7 +236,7 @@ pub fn compile_llvm(
     };
     let stamp_path = bin.with_extension("flags");
     let stamp = format!(
-        "{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{}",
+        "{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{}\n{:?}",
         pipeline(opt, debug),
         debug,
         llc_level(opt, debug),
@@ -242,7 +246,8 @@ pub fn compile_llvm(
         icon_png.as_deref().map(icon::fingerprint),
         native.objects,
         native.link_args,
-        relocatable
+        relocatable,
+        dream_abi::host_capability::HostCapability::ALL
     );
     let input = match (pgo, &profile) {
         (Pgo::Use(_), Some((_, p))) => Some(p.as_path()),
@@ -392,6 +397,14 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
         req: &crate::driver::compiler::LlvmRuntimeRequest,
     ) -> Result<(), String> {
         let tools = resolve_llvm()?;
-        super::wasm::link_wasm(&tools, ll, wasm, opt_ll, req.need, req.threads, req.wasm_opt)
+        super::wasm::link_wasm(
+            &tools,
+            ll,
+            wasm,
+            opt_ll,
+            req.need,
+            req.threads,
+            req.wasm_opt,
+        )
     }
 }

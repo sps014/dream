@@ -2,9 +2,6 @@
 
 pub(crate) mod wire;
 
-#[cfg(feature = "webview")]
 pub(crate) mod clipboard;
-#[cfg(feature = "webview")]
 pub(crate) mod dialog;
-#[cfg(feature = "webview")]
 pub(crate) mod shell;

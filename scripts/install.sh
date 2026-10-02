@@ -168,15 +168,14 @@ fi
 replace_previous_install
 mkdir -p "$BIN_DIR"
 
-# Archives contain binaries + libdream at top level or in a single directory.
+# Archives contain binaries and the capability libraries.
 copy_named() {
   find "${WORK}/out" -type f \( \
     -name 'dream' -o -name 'dream.exe' -o \
     -name 'dreamer' -o -name 'dreamer.exe' -o \
     -name 'dream-lsp' -o -name 'dream-lsp.exe' -o \
-    -name 'libdream.so' -o -name 'libdream.dylib' -o \
-    -name 'dream.dll' -o -name 'dream.dll.lib' -o -name 'dream.lib' -o \
-    -name 'libdream.dll.a' \
+    -name 'libdream_host_*.so' -o -name 'libdream_host_*.dylib' -o \
+    -name 'dream_host_*.dll' -o -name 'dream_host_*.dll.lib' \
   \) -exec cp -f {} "$BIN_DIR/" \;
 }
 
@@ -194,18 +193,19 @@ if [ ! -f "${BIN_DIR}/dream${EXT}" ] || [ ! -f "${BIN_DIR}/dreamer${EXT}" ]; the
   exit 1
 fi
 
-LIBDREAM_OK=0
-for lib in libdream.so libdream.dylib dream.dll; do
-  if [ -f "${BIN_DIR}/${lib}" ]; then
-    LIBDREAM_OK=1
-    break
+for capability in core net gpu webview; do
+  HOST_LIBRARY_OK=0
+  for lib in "libdream_host_${capability}.so" "libdream_host_${capability}.dylib" "dream_host_${capability}.dll"; do
+    if [ -f "${BIN_DIR}/${lib}" ]; then
+      HOST_LIBRARY_OK=1
+      break
+    fi
+  done
+  if [ "$HOST_LIBRARY_OK" -eq 0 ]; then
+    echo "error: archive did not contain the ${capability} host library" >&2
+    exit 1
   fi
 done
-if [ "$LIBDREAM_OK" -eq 0 ]; then
-  echo "error: archive did not contain libdream (needed to link native programs)" >&2
-  echo "  expected libdream.so, libdream.dylib, or dream.dll next to the compiler" >&2
-  exit 1
-fi
 
 # Native-C runtime sources (packed next to the binaries in the release archive).
 RT_SRC="$(find "${WORK}/out" -type d -path '*/lib/runtime/c' 2>/dev/null | head -n1 || true)"
@@ -313,7 +313,7 @@ ensure_linux_libs() {
     echo "${LIBS_NOTE}"
     return 0
   fi
-  if ! bin_needs_shared_libs "${BIN_DIR}/dream${EXT}" && ! bin_needs_shared_libs "${BIN_DIR}/libdream.so"; then
+  if ! bin_needs_shared_libs "${BIN_DIR}/libdream_host_webview.so"; then
     return 0
   fi
   _pkgs="$(linux_runtime_packages)"
@@ -324,10 +324,10 @@ ensure_linux_libs() {
   fi
   echo "Installing Linux runtime libraries for native run / system.webview: ${_pkgs}"
   if linux_pkg_install "${_pkgs}"; then
-    if bin_needs_shared_libs "${BIN_DIR}/dream${EXT}" || bin_needs_shared_libs "${BIN_DIR}/libdream.so"; then
+    if bin_needs_shared_libs "${BIN_DIR}/libdream_host_webview.so"; then
       LIBS_NOTE="warning: shared libraries still missing after install; see ldd ${BIN_DIR}/dream"
       echo "${LIBS_NOTE}" >&2
-      ldd "${BIN_DIR}/dream${EXT}" 2>/dev/null | grep 'not found' >&2 || true
+      ldd "${BIN_DIR}/libdream_host_webview.so" 2>/dev/null | grep 'not found' >&2 || true
     else
       LIBS_NOTE="Installed Linux runtime libraries (${_pkgs})"
     fi

@@ -65,6 +65,7 @@ native = ["dep:serde", "dep:serde_json", "dep:image"]
 wasm-opt = ["dep:wasm-opt"]
 
 [dev-dependencies]
+libloading = "0.8"
 tempfile = "3"
 pretty_assertions = "1.4.1"
 rayon = "1"
@@ -83,7 +84,7 @@ debug-assertions = true
 overflow-checks = true
 
 [workspace]
-default-members = [".", "crates/dream-host"]
+default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-net", "crates/dream-host-gpu", "crates/dream-host-webview"]
 members = [
     ".",
     "crates/dream-text",
@@ -97,6 +98,12 @@ members = [
     "crates/dream-sema",
     "crates/dream-mir",
     "crates/dream-host",
+    "crates/dream-host-core",
+    "crates/dream-host-abi",
+    "crates/dream-host-gui",
+    "crates/dream-host-net",
+    "crates/dream-host-gpu",
+    "crates/dream-host-webview",
     "tooling/dream-lsp",
     "tooling/dreamer",
     "tooling/dream-runner",

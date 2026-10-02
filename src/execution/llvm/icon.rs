@@ -1,5 +1,5 @@
 //! `--icon`: the app icon PNG compiled into the binary. A small module holds the bytes and a
-//! global constructor that hands them to libdream (`dream_set_app_icon`) before `main`, so
+//! global constructor that hands them to the core host library (`dream_set_app_icon`) before `main`, so
 //! windows and the macOS Dock use it without reading a file at run time. On Windows the same PNG
 //! also becomes the `.exe` icon through a linked resource.
 

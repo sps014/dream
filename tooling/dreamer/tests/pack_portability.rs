@@ -1,5 +1,6 @@
 #![cfg(any(target_os = "macos", target_os = "linux"))]
 
+use dream_abi::host_capability::HostCapability;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -111,7 +112,11 @@ fn inspect_loader(binary: &Path, executable: bool) {
                     .0
             })
             .collect();
-        assert!(dependencies.contains(&"@rpath/libdream.dylib"));
+        assert!(dependencies.contains(&"@rpath/libdream_host_core.dylib"));
+        if !executable {
+            let own_name = format!("@rpath/{}", binary.file_name().unwrap().to_str().unwrap());
+            assert!(dependencies.contains(&own_name.as_str()));
+        }
         for dependency in dependencies {
             assert!(
                 package_relative(dependency)
@@ -150,10 +155,14 @@ fn inspect_loader(binary: &Path, executable: bool) {
         }
         assert_search_paths(paths.iter().copied());
         if executable {
-            assert!(dependencies.contains(&"libdream.so"));
+            assert!(dependencies.contains(&"libdream_host_core.so"));
             assert!(paths.contains(&"$ORIGIN"));
         } else {
-            assert_eq!(soname, Some("libdream.so"));
+            assert_eq!(soname, binary.file_name().unwrap().to_str());
+            if binary.file_name().unwrap() != "libdream_host_core.so" {
+                assert!(dependencies.contains(&"libdream_host_core.so"));
+                assert!(paths.contains(&"$ORIGIN"));
+            }
         }
     }
 }
@@ -191,21 +200,24 @@ fn packed_application_has_no_builder_runtime_dependency() {
                     .starts_with("portable-")
         })
         .unwrap();
-    let library_name = if cfg!(target_os = "macos") {
-        "libdream.dylib"
-    } else {
-        "libdream.so"
-    };
-    let library = moved.join(library_name);
+    let library_name = HostCapability::Core.library_name();
+    let library = moved.join(&library_name);
     inspect_loader(&executable, true);
-    inspect_loader(&library, false);
+    for capability in HostCapability::ALL {
+        inspect_loader(&moved.join(capability.library_name()), false);
+    }
     assert_runs_clean(&executable, &empty_home, temporary.path());
     #[cfg(target_os = "macos")]
     {
         let contents = moved.join("portable.app/Contents");
         let app_executable = contents.join("MacOS/portable");
         inspect_loader(&app_executable, true);
-        inspect_loader(&contents.join("Frameworks").join(library_name), false);
+        for capability in HostCapability::ALL {
+            inspect_loader(
+                &contents.join("Frameworks").join(capability.library_name()),
+                false,
+            );
+        }
         assert_runs_clean(&app_executable, &empty_home, temporary.path());
     }
     // Failure without the shipped runtime proves the clean run did not find a toolchain copy.
@@ -217,7 +229,7 @@ fn packed_application_has_no_builder_runtime_dependency() {
         !output.status.success(),
         "executable found an unbundled runtime"
     );
-    assert!(String::from_utf8_lossy(&output.stderr).contains(library_name));
+    assert!(String::from_utf8_lossy(&output.stderr).contains(&library_name));
 }
 
 #[test]
@@ -237,7 +249,7 @@ fn loader_path_checks_reject_builder_and_working_directory_paths() {
         "${ORIGIN}/lib",
         "@executable_path/../Frameworks",
         "@loader_path",
-        "@rpath/libdream.dylib",
+        "@rpath/libdream_host_core.dylib",
     ] {
         assert!(package_relative(path), "{path}");
     }

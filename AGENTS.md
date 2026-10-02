@@ -34,7 +34,9 @@ Dream/
 │   ├── dream-stdlib/               Embedded prelude .dream files + STD_PACKAGES registry
 │   ├── dream-sema/                 Semantic analyzer + tables + hir_emit (fused; no MIR dep)
 │   ├── dream-mir/                  CFG MIR, passes, backend/llvm (textual LLVM IR), runtime/c
-│   └── dream-host/                 Native host cdylib; core/net/gpu/webview features and C ABI
+│   ├── dream-host/                 Distribution features: core/net/gpu/webview
+│   ├── dream-host-{core,net,gpu,webview}/ Separate native capability cdylibs
+│   └── dream-host-{abi,gui}/       Shared C ABI conversions and stateless GUI icon helpers
 ├── src/                            Root `dream` crate — driver, CLI, execution only
 │   ├── main.rs                     CLI entry point
 │   ├── lib.rs                      Thin facade: driver + execution (+ debug_schema)
@@ -91,7 +93,9 @@ dream-abi ← dream-types (+ dream-syntax for attribute AST)
 dream-stdlib ← dream-syntax
 dream-sema ← dream-syntax, dream-types, dream-hir, dream-abi, dream-stdlib
 dream-mir ← dream-hir, dream-types, dream-abi, dream-stdlib
-dream-host ← dream-abi, dream-mir (guest layout constants); independent of dream
+dream-host → optional capability crates; independent of dream
+dream-host-{net,gpu,webview} → core cdylib through C ABI
+dream-host-abi ← dream-mir (guest layout constants)
 dream (driver/CLI/execution) ← dream-sema, dream-mir, dream-stdlib, dream-abi, …
 dream-lsp ← dream
 ```
@@ -101,7 +105,7 @@ Hard rules Cargo enforces:
 - `dream-sema` never depends on `dream-mir`.
 - `dream-mir` never depends on `dream-sema`.
 - Shared names (JS ABI, intrinsics, attributes) live in `dream-abi`, not in MIR.
-- The compiler never depends on `dream-host`, wgpu, winit, wry or reqwest. Host C exports live in `crates/dream-host/src/exports/`; C-library discovery/link flags stay in the compiler.
+- The compiler never depends on host crates, wgpu, winit, wry or reqwest. Host C exports live in the capability crates; C-library discovery/link flags stay in the compiler.
 
 Root `dream` may re-export front-end leaves as `dream::{syntax,diagnostics,text}` for the CLI/LSP facade; it does **not** permanently re-export middle/back-end crates.
 
@@ -144,7 +148,7 @@ Every build needs the pinned LLVM (`LLVM_VERSION` in `src/execution/llvm/tools.r
 
 ```bash
 # Build (release)
-cargo build --release -p dream -p dream-host  # compiler + native host library
+cargo build --release --workspace # compiler + all native capability libraries
 
 # Run a program
 cargo run -- run path/to/file.dream        # compile natively + execute
@@ -241,4 +245,4 @@ When iterating on a feature or bugfix, prefer `./scripts/probe_test.sh <case-ste
 - Memory: AST uses `bumpalo` arena allocation — mind lifetimes tied to the `Bump` arena.
 - Avoid `unsafe` unless there's no idiomatic composition available.
 - Deps of note (don't reinvent): `logos` (lexing), `bumpalo` (arena alloc), `indexmap` (deterministic maps), `wat` (dev-dep; parses emitted `.wat` in tests), `reqwest`+`serde_json` (HTTP host fn), `crossterm` (raw terminal I/O), `chrono` (OS timezone lookups only — calendar math is hand-written in Dream itself), `tower-lsp`+`tokio`+`dashmap` (LSP server).
-- The compiler's `native` feature enables execution/linking tools, not runtime hosts. `dream-host` owns core/net/gpu/webview dependencies; its default build enables all four. Host capability libraries are a separate distribution follow-up; do not re-embed them in the compiler.
+- The compiler's `native` feature enables execution/linking tools, not runtime hosts. `dream-host` selects core/net/gpu/webview packages through Cargo features; all four are enabled by default. Core owns guest binding and icon storage; other capability libraries dynamically call core. Never duplicate that state in statically linked helpers or re-embed hosts in the compiler.

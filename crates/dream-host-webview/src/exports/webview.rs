@@ -1,8 +1,7 @@
-//! C ABI for `system.webview` host functions (`-ldream`).
+//! C ABI for `system.webview` host functions (WebView capability).
 
-
-use super::abi::{alloc_bytes, read_bytes, read_string};
 use crate::webview;
+use dream_host_abi::{alloc_bytes, read_bytes, read_string};
 
 #[no_mangle]
 pub unsafe extern "C" fn webviewCreate(title: usize, width: i32, height: i32) -> i32 {

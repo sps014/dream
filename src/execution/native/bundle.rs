@@ -1,51 +1,47 @@
 //! Package-relative host runtime linkage for redistributable native executables.
 
-use super::libdream_name;
-#[cfg(target_os = "macos")]
-use crate::driver::wasi::run_captured;
+use dream_abi::host_capability::HostCapability;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub(crate) fn stage_runtime(source_dir: &Path, output_dir: &Path) -> Result<PathBuf, String> {
-    let source = source_dir.join(libdream_name());
-    let destination = output_dir.join(libdream_name());
-    let canonical_source = source
-        .canonicalize()
-        .map_err(|e| format!("locating {}: {e}", source.display()))?;
-    if destination
-        .canonicalize()
-        .is_ok_and(|p| p == canonical_source)
-    {
-        return Err("relocatable output must not overwrite the compiler's host runtime".into());
+    // Validate the whole family before copying, especially when output is a toolchain directory.
+    for capability in HostCapability::ALL {
+        let source = source_dir.join(capability.library_name());
+        let destination = output_dir.join(capability.library_name());
+        let canonical_source = source
+            .canonicalize()
+            .map_err(|e| format!("locating {}: {e}", source.display()))?;
+        if destination
+            .canonicalize()
+            .is_ok_and(|p| p == canonical_source)
+        {
+            return Err("relocatable output must not overwrite the compiler's host runtime".into());
+        }
     }
-    std::fs::copy(&source, &destination)
-        .map_err(|e| format!("bundling {}: {e}", source.display()))?;
-    #[cfg(target_os = "macos")]
-    {
-        let mut edit = Command::new("install_name_tool");
-        edit.arg("-id")
-            .arg(format!("@rpath/{}", libdream_name()))
-            .arg(&destination);
-        run_captured(&mut edit, "set bundled libdream install name")?;
-        let mut sign = Command::new("codesign");
-        sign.args(["--force", "--sign", "-"]).arg(&destination);
-        run_captured(&mut sign, "sign bundled libdream")?;
+    for capability in HostCapability::ALL {
+        let source = source_dir.join(capability.library_name());
+        let destination = output_dir.join(capability.library_name());
+        std::fs::copy(&source, &destination)
+            .map_err(|e| format!("bundling {}: {e}", source.display()))?;
     }
-    Ok(destination)
+    Ok(output_dir.to_path_buf())
 }
 
 pub(crate) fn link_runtime(command: &mut Command, source_dir: &Path, bundled: Option<&Path>) {
     if cfg!(windows) {
-        // MSVC requires the import library, not the DLL being shipped.
-        command
-            .arg(source_dir.join("dream.dll.lib"))
-            .arg("-loldnames");
+        for capability in HostCapability::ALL {
+            command.arg(source_dir.join(capability.import_library_name()));
+        }
+        command.arg("-loldnames");
         return;
     }
-    if let Some(path) = bundled {
-        // Zig turns -L directories into native rpaths; a direct library input
-        // preserves the library's install name without leaking the build path.
-        command.arg(path);
+    if let Some(directory) = bundled {
+        // Zig turns -L directories into native rpaths; direct inputs preserve the
+        // libraries' package-relative install names without leaking the build path.
+        for capability in HostCapability::ALL {
+            command.arg(directory.join(capability.library_name()));
+        }
         if cfg!(target_os = "macos") {
             command.args([
                 "-Wl,-rpath,@executable_path",
@@ -55,10 +51,11 @@ pub(crate) fn link_runtime(command: &mut Command, source_dir: &Path, bundled: Op
             command.arg("-Wl,-rpath,$ORIGIN");
         }
     } else {
-        command
-            .arg(format!("-L{}", source_dir.display()))
-            .arg("-ldream")
-            .arg(format!("-Wl,-rpath,{}", source_dir.display()));
+        command.arg(format!("-L{}", source_dir.display()));
+        for capability in HostCapability::ALL {
+            command.arg(format!("-l{}", capability.link_name()));
+        }
+        command.arg(format!("-Wl,-rpath,{}", source_dir.display()));
     }
 }
 
@@ -72,18 +69,25 @@ mod tests {
         link_runtime(
             &mut command,
             Path::new("/toolchain"),
-            Some(Path::new("/package/runtime")),
+            Some(Path::new("/package")),
         );
         let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy()).collect();
+        for capability in HostCapability::ALL {
+            let expected = if cfg!(windows) {
+                Path::new("/toolchain").join(capability.import_library_name())
+            } else {
+                Path::new("/package").join(capability.library_name())
+            };
+            assert!(args
+                .iter()
+                .any(|a| a.as_ref() == expected.to_string_lossy()));
+        }
         if cfg!(target_os = "macos") {
-            assert!(args.iter().any(|a| a == "/package/runtime"));
             assert!(args
                 .iter()
                 .any(|a| a == "-Wl,-rpath,@executable_path/../Frameworks"));
         } else if cfg!(target_os = "linux") {
             assert!(args.iter().any(|a| a == "-Wl,-rpath,$ORIGIN"));
-        } else if cfg!(windows) {
-            assert!(args.iter().any(|a| a.ends_with("dream.dll.lib")));
         }
         assert!(!args.iter().any(|a| a.starts_with("-Wl,-rpath,/")));
         assert!(!args.iter().any(|a| a.starts_with("-L")));
@@ -92,24 +96,34 @@ mod tests {
     #[test]
     fn staging_cannot_modify_compiler_runtime() {
         let directory = tempfile::tempdir().unwrap();
-        let library = directory.path().join(libdream_name());
-        std::fs::write(&library, b"compiler runtime").unwrap();
+        for capability in HostCapability::ALL {
+            std::fs::write(
+                directory.path().join(capability.library_name()),
+                b"compiler runtime",
+            )
+            .unwrap();
+        }
         assert!(stage_runtime(directory.path(), directory.path()).is_err());
-        assert_eq!(std::fs::read(library).unwrap(), b"compiler runtime");
+        for capability in HostCapability::ALL {
+            assert_eq!(
+                std::fs::read(directory.path().join(capability.library_name())).unwrap(),
+                b"compiler runtime"
+            );
+        }
     }
 
     #[test]
-    fn relative_output_links_the_bundled_library_directly() {
+    fn relative_output_links_each_bundled_library_directly() {
         if cfg!(windows) {
             return;
         }
         let mut command = Command::new("cc");
-        link_runtime(
-            &mut command,
-            Path::new("/toolchain"),
-            Some(Path::new(libdream_name())),
-        );
-        assert!(command.get_args().any(|arg| arg == libdream_name()));
+        link_runtime(&mut command, Path::new("/toolchain"), Some(Path::new(".")));
+        for capability in HostCapability::ALL {
+            assert!(command
+                .get_args()
+                .any(|arg| arg == Path::new(".").join(capability.library_name())));
+        }
         assert!(!command.get_args().any(|arg| arg == "-L."));
     }
 }

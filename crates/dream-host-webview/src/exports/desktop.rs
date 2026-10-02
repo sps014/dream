@@ -1,9 +1,8 @@
 //! C ABI for `system.desktop` host functions (`-ldream`).
 
-
-use super::abi::{alloc_bytes, read_bytes, read_string};
 use crate::desktop::wire::{self, ClipKind, DialogKind, DialogRequest};
 use crate::desktop::{clipboard, dialog, shell};
+use dream_host_abi::{alloc_bytes, read_bytes, read_string};
 
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]

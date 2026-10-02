@@ -1198,6 +1198,7 @@ dependencies = [
  "flate2",
  "image",
  "indexmap",
+ "libloading",
  "logos",
  "naga 30.0.0",
  "oxc_allocator",
@@ -1256,46 +1257,113 @@ dependencies = [
 name = "dream-host"
 version = "0.1.0"
 dependencies = [
+ "dream-host-core",
+ "dream-host-gpu",
+ "dream-host-net",
+ "dream-host-webview",
+]
+
+[[package]]
+name = "dream-host-abi"
+version = "0.1.0"
+dependencies = [
+ "dream-mir",
+]
+
+[[package]]
+name = "dream-host-core"
+version = "0.1.0"
+dependencies = [
  "aes-gcm",
- "bytes",
  "chrono",
  "chrono-tz",
- "clipboard-rs",
  "dream-abi",
- "dream-mir",
+ "dream-host-abi",
  "dream-stdlib",
- "futures-util",
  "getrandom 0.2.17",
- "gilrs",
  "hmac",
- "http-body-util",
- "hyper",
- "hyper-util",
  "iana-time-zone",
+ "indexmap",
+ "sha2",
+ "unicode-normalization",
+ "unicode-segmentation",
+]
+
+[[package]]
+name = "dream-host-gpu"
+version = "0.1.0"
+dependencies = [
+ "dream-abi",
+ "dream-host-abi",
+ "dream-host-core",
+ "dream-host-gui",
+ "gilrs",
  "image",
  "indexmap",
- "multer",
+ "pollster",
+ "serde",
+ "serde_json",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
+name = "dream-host-gui"
+version = "0.1.0"
+dependencies = [
+ "dream-host-abi",
+ "image",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
- "open",
- "percent-encoding",
+ "winit",
+]
+
+[[package]]
+name = "dream-host-net"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "dream-abi",
+ "dream-host-abi",
+ "dream-host-core",
+ "futures-util",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "indexmap",
+ "multer",
  "pollster",
  "rcgen",
  "reqwest",
- "rfd",
  "rustls",
  "rustls-pemfile",
  "serde",
  "serde_json",
- "sha2",
  "tokio",
  "tokio-rustls",
  "tokio-tungstenite",
  "tungstenite",
- "unicode-normalization",
- "unicode-segmentation",
- "wgpu",
+]
+
+[[package]]
+name = "dream-host-webview"
+version = "0.1.0"
+dependencies = [
+ "clipboard-rs",
+ "dream-abi",
+ "dream-host-abi",
+ "dream-host-core",
+ "dream-host-gui",
+ "image",
+ "indexmap",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "open",
+ "percent-encoding",
+ "rfd",
+ "serde",
+ "serde_json",
  "winit",
  "wry",
 ]
@@ -1396,6 +1464,7 @@ dependencies = [
  "base64",
  "clap",
  "dirs 5.0.1",
+ "dream-abi",
  "flate2",
  "icns",
  "image",

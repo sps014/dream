@@ -41,7 +41,6 @@ pub(crate) struct DialogRequest {
 }
 
 // The stub host only ever reports `Cancelled`; the other variants come from the rfd host.
-#[cfg_attr(not(feature = "webview"), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Outcome {
     Cancelled,

@@ -15,6 +15,21 @@ Size budgets remain Linux/macOS-only until Windows distribution baselines are me
 Dependency caches survive failed validation; the pinned toolchain is cached immediately
 after installation so later test failures do not force another download.
 
+CI sets `CARGO_PROFILE_DEV_OPT_LEVEL=1` to match the workspace test profile. Build,
+Clippy and tests can reuse dependency artifacts instead of code-generating both O0
+and O1 copies. Tests retain debug assertions, overflow checks and line-table
+backtraces; local development profiles and the release size-budget build are unchanged.
+Clippy runs first to reject lint failures before expensive executable builds.
+
+Rust caches share a profile-specific key across jobs on the same OS/architecture;
+workspace artifacts and incremental state are not cached. Cargo timing reports are
+retained for seven days to identify remaining compilation bottlenecks. GitHub scopes
+PR caches to that PR, so a new PR can still start cold: manually dispatch CI on main
+after dependency/toolchain changes to seed caches reusable by subsequent PRs. Do not
+restore caches from unrelated PR refs or reintroduce a full post-merge suite solely
+for cache warming. The first run after changing cache/profile settings is also cold;
+measure both cold and warm runs before setting a wall-clock target.
+
 ## The test pyramid
 
 ```mermaid

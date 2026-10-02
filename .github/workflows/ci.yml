@@ -12,6 +12,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   DREAM_VERIFY_MIR: "1"
+  # Tests use O1; matching dev avoids rebuilding their dependency graph for codegen.
+  CARGO_PROFILE_DEV_OPT_LEVEL: "1"
 
 permissions:
   contents: read
@@ -52,6 +54,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
+          shared-key: ci-o1-${{ runner.os }}-${{ runner.arch }}
           cache-on-failure: true
       - uses: actions/cache/restore@v4
         id: llvm-cache
@@ -73,9 +76,9 @@ jobs:
         run: |
           "DREAM_CC=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang.exe" >> $env:GITHUB_ENV
           "DREAM_CXX=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang++.exe" >> $env:GITHUB_ENV
-      - run: cargo build --workspace
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace --no-fail-fast
+      - run: cargo build --workspace --timings
+      - run: cargo test --workspace --no-fail-fast --timings
       - name: Native distribution size budget
         if: runner.os != 'Windows'
         shell: bash
@@ -95,6 +98,14 @@ jobs:
         with:
           name: binary-size-${{ runner.os }}-${{ runner.arch }}
           path: target/binary-size.json
+          if-no-files-found: ignore
+      - name: Preserve compilation timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-${{ runner.os }}-${{ runner.arch }}
+          path: target/cargo-timings/*.html
+          retention-days: 7
           if-no-files-found: ignore
       - name: Full Windows native corpus
         if: runner.os == 'Windows'
@@ -154,13 +165,23 @@ jobs:
           node-version: "22"
       - uses: Swatinem/rust-cache@v2
         with:
+          shared-key: ci-o1-${{ runner.os }}-${{ runner.arch }}
           cache-on-failure: true
-      - uses: actions/cache@v4
+          # The workspace job saves the superset of build and test dependencies.
+          save-if: false
+      - uses: actions/cache/restore@v4
+        id: llvm-cache
         with:
           path: ~/.dream/toolchains/llvm-22.1.8
           key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - name: Install pinned LLVM and wasi-sdk support
         run: scripts/fetch-dev-llvm.sh
+      - name: Cache the validated pinned toolchain
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.dream/toolchains/llvm-22.1.8
+          key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
       - run: ./scripts/probe_test.sh
       - run: ./scripts/probe_test.sh --node
       - name: Preserve GPU corpus diagnostics

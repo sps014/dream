@@ -1,5 +1,7 @@
 //! `dreamer pack`: compile a bin package and copy the native `.bin`, plus the OS bundle around it
-//! (a macOS `.app`, a Linux `.desktop` entry). The Windows `.exe` carries its icon already.
+//! and libdream (a macOS `.app`, a Linux `.desktop` entry). The Windows `.exe` carries its icon already.
+
+mod runtime;
 
 use crate::app_icon;
 use crate::compile_flags::CompileFlags;
@@ -22,7 +24,7 @@ pub fn run(
     start_dir: &Path,
     target_args: &[String],
     package: Option<&str>,
-    flags: CompileFlags,
+    mut flags: CompileFlags,
 ) -> Result<()> {
     super::install::run(start_dir)?;
     let workspace = Workspace::discover_package(start_dir, package)?;
@@ -36,6 +38,15 @@ pub fn run(
     }
 
     let triples = resolve_pack_targets(target_args)?;
+    let host_triple = host_rustc_triple()?;
+    for (dream_triple, rust_triple) in &triples {
+        if rust_triple.as_str() != host_triple {
+            bail!(
+                "cross-pack to {dream_triple} is not supported (native pack is host-only; host is {host_triple})"
+            );
+        }
+    }
+    flags.relocatable = true;
     super::build::compile_entry(&workspace, &flags, Some(crate::manifest::RunTarget::Native))?;
 
     let bin_path = artifact_native_bin(&workspace, &flags)?;
@@ -50,15 +61,10 @@ pub fn run(
     std::fs::create_dir_all(&pack_dir)
         .with_context(|| format!("creating {}", pack_dir.display()))?;
 
-    let host_triple = host_rustc_triple()?;
     let pkg_name = pkg.name.clone();
     let icon = app_icon::resolve(&workspace)?;
-    for (dream_triple, rust_triple) in &triples {
-        if rust_triple.as_str() != host_triple {
-            bail!(
-                "cross-pack to {dream_triple} is not supported (native pack is host-only; host is {host_triple})"
-            );
-        }
+    runtime::copy(&bin_path, &pack_dir)?;
+    for (dream_triple, _) in &triples {
         let out_name = if dream_triple.starts_with("windows-") {
             format!("{pkg_name}-{dream_triple}.exe")
         } else {
@@ -77,6 +83,7 @@ pub fn run(
                 &bin_path,
                 icon.as_deref(),
             )?;
+            runtime::copy(&bin_path, &app.join("Contents").join("Frameworks"))?;
             println!("packed {}", app.display());
         } else if dream_triple.starts_with("linux-") {
             let entry =

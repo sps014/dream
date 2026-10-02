@@ -15,6 +15,7 @@ pub struct CompileFlags {
     pub profile: bool,
     /// `--use-profile[=<path>]`: `Some("")` merges the recorded `--profile` runs.
     pub use_profile: Option<String>,
+    pub relocatable: bool,
 }
 
 impl Default for CompileFlags {
@@ -25,6 +26,7 @@ impl Default for CompileFlags {
             native: true,
             profile: false,
             use_profile: None,
+            relocatable: false,
         }
     }
 }
@@ -42,6 +44,7 @@ impl CompileFlags {
             native: !wasm,
             profile: false,
             use_profile: None,
+            relocatable: false,
         })
     }
 
@@ -57,7 +60,9 @@ impl CompileFlags {
             bail!("pack produces a native executable; omit --wasm");
         }
         let release = release || optimize.is_none();
-        Self::from_cli(release, optimize, false)
+        let mut flags = Self::from_cli(release, optimize, false)?;
+        flags.relocatable = true;
+        Ok(flags)
     }
 
     /// `target/release` vs `target/debug`, matching `dream`'s native output layout.
@@ -70,6 +75,9 @@ impl CompileFlags {
     }
 
     pub fn apply(&self, cmd: &mut Command) {
+        if self.relocatable {
+            cmd.arg("--relocatable");
+        }
         if self.release {
             cmd.arg("--release");
         }
@@ -164,6 +172,13 @@ mod tests {
         assert!(flags.release);
         assert!(flags.optimize.is_none());
         assert_eq!(flags.native_artifact_subdir(), "release");
+        assert!(flags.relocatable);
+        let mut cmd = Command::new("dream");
+        flags.apply(&mut cmd);
+        assert_eq!(
+            cmd.get_args().collect::<Vec<_>>(),
+            ["--relocatable", "--release"]
+        );
     }
 
     #[test]

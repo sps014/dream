@@ -89,9 +89,51 @@ fn run_llvm(src: &Path, opt: OptLevel) -> Result<String, String> {
     let stem = src.file_stem().unwrap().to_str().unwrap();
     let ll = out_dir(&format!("llvm-backend-{opt:?}")).join(format!("{stem}.ll"));
     compile_ll(src, &ll, opt);
-    let bin = compile_llvm(&ll, None, opt, false, &Pgo::Off, None)
+    let bin = compile_llvm(&ll, None, opt, false, &Pgo::Off, None, false)
         .unwrap_or_else(|e| panic!("LLVM build failed for {}: {}", stem, e));
     capture_native_bin(&bin, ll.to_str().unwrap(), &[], &[], None, 60).map_err(|e| e.to_string())
+}
+
+#[test]
+fn llvm_relocatable_binary_runs_after_move() {
+    if !llvm_available() {
+        return;
+    }
+    let temporary = tempfile::tempdir().unwrap();
+    let build = temporary.path().join("build");
+    fs::create_dir(&build).unwrap();
+    let source = case("arithmetic");
+    let ll = build.join("arithmetic.ll");
+    compile_ll(&source, &ll, OptLevel::O0);
+    let binary = compile_llvm(&ll, None, OptLevel::O0, false, &Pgo::Off, None, true).unwrap();
+    let library = if cfg!(target_os = "macos") {
+        "libdream.dylib"
+    } else if cfg!(windows) {
+        "dream.dll"
+    } else {
+        "libdream.so"
+    };
+    assert!(build.join(library).is_file());
+    let moved = temporary.path().join("moved package");
+    fs::rename(&build, &moved).unwrap();
+    let binary = moved.join(binary.file_name().unwrap());
+    let output = std::process::Command::new(&binary)
+        .env_remove("LD_LIBRARY_PATH")
+        .env_remove("DYLD_LIBRARY_PATH")
+        .current_dir(temporary.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        fs::read_to_string(source.with_extension("expected"))
+            .unwrap()
+            .trim()
+    );
 }
 
 fn check_case(stem: &str) -> Result<(), String> {
@@ -289,13 +331,13 @@ fn llvm_pgo_round_trip() {
     let expected = fs::read_to_string(src.with_extension("expected")).unwrap();
     let run =
         |bin: &Path| capture_native_bin(bin, ll.to_str().unwrap(), &[], &[], None, 60).unwrap();
-    let gen = compile_llvm(&ll, None, OptLevel::O2, false, &Pgo::Generate, None).unwrap();
+    let gen = compile_llvm(&ll, None, OptLevel::O2, false, &Pgo::Generate, None, false).unwrap();
     assert_eq!(run(&gen), expected);
     let raw = gen.with_extension("pgo");
     assert!(fs::read_dir(&raw)
         .unwrap()
         .flatten()
         .any(|e| e.path().extension().is_some_and(|x| x == "profraw")));
-    let used = compile_llvm(&ll, None, OptLevel::O2, false, &Pgo::Use(None), None).unwrap();
+    let used = compile_llvm(&ll, None, OptLevel::O2, false, &Pgo::Use(None), None, false).unwrap();
     assert_eq!(run(&used), expected);
 }

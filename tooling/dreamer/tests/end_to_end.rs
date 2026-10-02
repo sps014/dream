@@ -352,7 +352,7 @@ fn build_lib_writes_under_target_debug() {
 }
 
 #[test]
-#[ignore = "builds dream-runner --release; cargo test --workspace -- --ignored"]
+#[ignore = "invokes the compiler and relocated packed executables; cargo test --workspace -- --ignored"]
 fn pack_rejects_libs_and_packs_bin_for_host() {
     prefer_workspace_dream();
     if dreamer::dream_bin::locate().is_err() {
@@ -375,11 +375,7 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
     let mut manifest = Manifest::load(&manifest_path).unwrap();
     manifest.package_mut().unwrap().icon = Some("assets/icon.png".into());
     manifest.save(&manifest_path).unwrap();
-    // Pack builds dream-runner via cargo; needs the Dream workspace (discovered from the dream bin).
-    if let Err(e) = commands::pack::run(&bin_dir, &[], None, pack_flags) {
-        eprintln!("pack skipped/failed (may need DREAM_REPO / full workspace): {e:#}");
-        return;
-    }
+    commands::pack::run(&bin_dir, &[], None, pack_flags).unwrap();
     let pack_dir = bin_dir.join("target").join("pack");
     let entries: Vec<_> = std::fs::read_dir(&pack_dir)
         .unwrap()
@@ -393,6 +389,7 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
     if cfg!(target_os = "macos") {
         let contents = pack_dir.join("binpack.app").join("Contents");
         assert!(contents.join("MacOS").join("binpack").is_file());
+        assert!(contents.join("Frameworks").join("libdream.dylib").is_file());
         assert!(contents.join("Resources").join("icon.icns").is_file());
         let plist = std::fs::read_to_string(contents.join("Info.plist")).unwrap();
         assert!(plist.contains("<string>dev.dream.binpack</string>"));
@@ -400,6 +397,48 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
         let entry = std::fs::read_to_string(pack_dir.join("binpack.desktop")).unwrap();
         assert!(entry.contains("Icon=binpack"));
         assert!(pack_dir.join("binpack.png").is_file());
+    }
+    let library = if cfg!(target_os = "macos") {
+        "libdream.dylib"
+    } else if cfg!(windows) {
+        "dream.dll"
+    } else {
+        "libdream.so"
+    };
+    assert!(pack_dir.join(library).is_file());
+    let moved = tmp.path().join("relocated package");
+    std::fs::rename(&pack_dir, &moved).unwrap();
+    let executable = std::fs::read_dir(&moved)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| {
+            path.is_file()
+                && path
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with("binpack-")
+        })
+        .unwrap();
+    let output = std::process::Command::new(executable)
+        .current_dir(tmp.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    if cfg!(target_os = "macos") {
+        let output = std::process::Command::new(moved.join("binpack.app/Contents/MacOS/binpack"))
+            .current_dir(tmp.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }
 

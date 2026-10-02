@@ -241,9 +241,9 @@ into the executable; around it, each OS gets what it needs to show the app with 
 
 | Host | Output in `target/pack/` |
 |---|---|
-| macOS | `<name>-macos-<arch>` and `<name>.app/Contents/{MacOS/<name>, Info.plist, Resources/icon.icns}` |
-| Linux | `<name>-linux-<arch>`, `<name>.desktop`, and `<name>.png` when an icon is set |
-| Windows | `<name>-windows-<arch>.exe` with the icon as its Explorer/taskbar icon |
+| macOS | `<name>-macos-<arch>` with adjacent `libdream.dylib`, and `<name>.app/Contents/{MacOS/<name>, Frameworks/libdream.dylib, Info.plist, Resources/icon.icns}` |
+| Linux | `<name>-linux-<arch>`, adjacent `libdream.so`, `<name>.desktop`, and `<name>.png` when an icon is set |
+| Windows | `<name>-windows-<arch>.exe` with the icon as its Explorer/taskbar icon, and adjacent `dream.dll` |
 
 `Info.plist` takes its name and version from `[package]`, and the bundle id is
 `dev.dream.<name>`. The `.desktop` entry names the executable and icon relative to the pack folder,
@@ -256,8 +256,13 @@ dreamer pack --target macos-arm64    # must name the host
 ```
 
 Only the host OS/arch can be packed: naming another target (or `all`) is an error, never a
-silent skip. Libraries cannot be packed. A packed executable still loads `libdream` from the
-installed toolchain (through an rpath), so it runs on machines with the same Dream toolchain.
+silent skip. Libraries cannot be packed. Copy the whole pack folder, or the macOS `.app`, to
+redistribute it: packed executables use loader-relative paths to their bundled `libdream`, not
+the builder's toolchain directory. The copied macOS library has an `@rpath` install name and
+an ad-hoc signature; distribution signing/notarization is a separate step. Target machines
+still need compatible OS libraries (including the Linux host runtime's system dependencies),
+but do not need the Dream compiler or toolchain. Direct compiler builds can request the same
+adjacent runtime layout with `dream --relocatable <file>`; ordinary build/run lookup is unchanged.
 
 ### How `dreamer run` picks a host
 

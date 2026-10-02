@@ -301,8 +301,11 @@ fn links_conflict_names_both_manifests() {
     );
     let err = build(&root.join("src/main.dream"), "links").unwrap_err();
     assert_contains(&err, "native library 'z' is provided by two packages");
-    assert_contains(&err, "dream_packages/a/dream.toml");
-    assert_contains(&err, "dream_packages/b/dream.toml");
+    for package in ["a", "b"] {
+        let manifest = root.join("dream_packages").join(package).join("dream.toml");
+        let manifest = fs::canonicalize(manifest).unwrap();
+        assert_contains(&err, &manifest.display().to_string());
+    }
     let _ = fs::remove_dir_all(&root);
 }
 

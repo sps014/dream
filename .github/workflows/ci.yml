@@ -74,7 +74,7 @@ jobs:
           "DREAM_CXX=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang++.exe" >> $env:GITHUB_ENV
       - run: cargo build --workspace
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - run: cargo test --workspace --no-fail-fast
       - name: Native distribution size budget
         if: runner.os != 'Windows'
         shell: bash

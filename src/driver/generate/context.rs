@@ -13,6 +13,7 @@ use std::io::Error;
 use crate::driver::source_loader::ProgramAccumulator;
 
 pub struct GeneratorContext {
+    pub toolchain_config: std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     pub semantic: SemanticModel,
     pub syntax: SyntaxTreeView,
     pub registered: Vec<RegisteredGenerator>,
@@ -28,7 +29,11 @@ enum EmitRequest {
 }
 
 impl GeneratorContext {
-    pub fn build(acc: &ProgramAccumulator<'_>, registered: Vec<RegisteredGenerator>) -> Self {
+    pub fn build(
+        toolchain_config: std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
+        acc: &ProgramAccumulator<'_>,
+        registered: Vec<RegisteredGenerator>,
+    ) -> Self {
         let semantic = SemanticModel::from_program(
             &acc.all_structs,
             &acc.all_enums,
@@ -67,6 +72,7 @@ impl GeneratorContext {
         syntax_block_names.dedup();
 
         Self {
+            toolchain_config,
             semantic,
             syntax,
             registered,

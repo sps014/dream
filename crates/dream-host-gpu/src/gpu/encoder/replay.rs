@@ -69,7 +69,7 @@ struct Pass {
 }
 
 enum FrameOp {
-    Pass(Pass),
+    Pass(Box<Pass>),
     WriteTimestamp {
         query_set: wgpu::QuerySet,
         index: u32,
@@ -149,12 +149,8 @@ fn plan_pass(
     for rec in records {
         match rec {
             Record::SetPipeline(id) => {
-                let pipe = super::super::render::pipeline_for_format(
-                    st,
-                    device,
-                    *id,
-                    attachments.format,
-                )?;
+                let pipe =
+                    super::super::render::pipeline_for_format(st, device, *id, attachments.format)?;
                 bound.pipeline = *id;
                 // A pipeline switch invalidates the previous pipeline's group layouts.
                 bound.explicit.clear();
@@ -314,6 +310,7 @@ fn run_pass(encoder: &mut wgpu::CommandEncoder, pass: &Pass) {
         .map(|c| {
             Some(wgpu::RenderPassColorAttachment {
                 view: &c.view,
+                depth_slice: None,
                 resolve_target: c.resolve.as_ref(),
                 ops: wgpu::Operations {
                     load: c.load,
@@ -335,7 +332,9 @@ fn run_pass(encoder: &mut wgpu::CommandEncoder, pass: &Pass) {
                     load: d.load,
                     store: d.store,
                 }),
-                stencil_ops: d.stencil.map(|(load, store)| wgpu::Operations { load, store }),
+                stencil_ops: d
+                    .stencil
+                    .map(|(load, store)| wgpu::Operations { load, store }),
             }
         }),
         timestamp_writes: writes,
@@ -460,7 +459,9 @@ fn plan_all(
                 if !closed {
                     return Err("render pass was never ended".into());
                 }
-                items.push(FrameOp::Pass(plan_pass(st, device, queue, &desc, &body)?));
+                items.push(FrameOp::Pass(Box::new(plan_pass(
+                    st, device, queue, &desc, &body,
+                )?)));
             }
             _ => return Err("command outside of a render pass".into()),
         }
@@ -508,7 +509,9 @@ pub fn submit(stream: &[u8]) -> Result<(), String> {
     // once the GPU is busy (the end stamp stays 0, so end < begin). Resolve after the pass
     // submission has finished.
     if !resolve_ids.is_empty() {
-        let _ = device.poll(wgpu::Maintain::Wait);
+        device
+            .poll(wgpu::PollType::Wait)
+            .map_err(|e| format!("timestamp resolve poll failed: {e}"))?;
         if let Some(err) = super::super::error::drain_uncaptured() {
             return Err(err);
         }

@@ -6,7 +6,6 @@ pub(crate) mod cc;
 pub(crate) mod native_c;
 pub(crate) mod pgo;
 
-pub use cc::generator_cache_root;
 pub use pgo::Pgo;
 
 use crate::driver::wasm_opt::OptLevel;
@@ -17,21 +16,24 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 pub fn compile_and_capture(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     ll_path: &str,
     opt: OptLevel,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    compile_and_capture_with_env(ll_path, opt, &[])
+    compile_and_capture_with_env(config, ll_path, opt, &[])
 }
 
 pub fn compile_and_capture_with_env(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     ll_path: &str,
     opt: OptLevel,
     extra_env: &[(&str, &str)],
 ) -> Result<String, Box<dyn std::error::Error>> {
-    compile_and_capture_ex(ll_path, opt, extra_env, &[], None, 8)
+    compile_and_capture_ex(config, ll_path, opt, extra_env, &[], None, 8)
 }
 
 pub fn compile_and_capture_ex(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     ll_path: &str,
     opt: OptLevel,
     extra_env: &[(&str, &str)],
@@ -39,13 +41,33 @@ pub fn compile_and_capture_ex(
     stdin: Option<&[u8]>,
     timeout_secs: u64,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let bin = compile_llvm(Path::new(ll_path), None, opt, false, &Pgo::Off, None, false)?;
-    capture_native_bin(&bin, ll_path, extra_env, extra_args, stdin, timeout_secs)
+    let bin = compile_llvm(
+        config,
+        Path::new(ll_path),
+        crate::execution::llvm::NativeBuildOptions {
+            opt_ll: None,
+            opt,
+            debug: false,
+            pgo: &Pgo::Off,
+            icon: None,
+            relocatable: false,
+        },
+    )?;
+    capture_native_bin(
+        config,
+        &bin,
+        ll_path,
+        extra_env,
+        extra_args,
+        stdin,
+        timeout_secs,
+    )
 }
 
 /// Runs a built guest with stdout captured; a failing status, a timeout or a non-zero leak count
 /// is an error.
 pub fn capture_native_bin(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     bin: &Path,
     artifact: &str,
     extra_env: &[(&str, &str)],
@@ -54,14 +76,13 @@ pub fn capture_native_bin(
     timeout_secs: u64,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let mut cmd = Command::new(bin);
-    apply_native_run_env(&mut cmd, artifact)?;
+    apply_native_run_env(config, &mut cmd, artifact)?;
     for (k, v) in extra_env {
         cmd.env(k, v);
     }
-    if std::env::var("DREAM_NATIVE_SANITIZE")
-        .ok()
-        .is_some_and(|s| s.contains("address") || s.contains("leak"))
-        && std::env::var("ASAN_OPTIONS").is_err()
+    if config.native_sanitize.as_ref().is_some_and(|s| {
+        s.to_string_lossy().contains("address") || s.to_string_lossy().contains("leak")
+    }) && config.asan_options.is_none()
     {
         cmd.env("ASAN_OPTIONS", "detect_leaks=1:halt_on_error=1");
     }
@@ -85,7 +106,13 @@ pub fn capture_native_bin(
     let start = Instant::now();
     while !waiter.is_finished() {
         if start.elapsed() > limit {
-            let _ = Command::new("kill").args(["-9", &pid.to_string()]).status();
+            if cfg!(windows) {
+                let _ = Command::new("taskkill")
+                    .args(["/F", "/T", "/PID", &pid.to_string()])
+                    .status();
+            } else {
+                let _ = Command::new("kill").args(["-9", &pid.to_string()]).status();
+            }
             break;
         }
         std::thread::sleep(Duration::from_millis(10));
@@ -140,12 +167,13 @@ impl std::error::Error for GuestAborted {}
 /// return `int` or a failing `Result` — so only a crash (killed by a signal, no status at all) is
 /// an error here; callers that treat any failure as their own decide that for themselves.
 pub fn run_native_bin(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     bin: &Path,
     module: &str,
     extra_args: &[String],
 ) -> Result<i32, Box<dyn std::error::Error>> {
     let mut cmd = Command::new(bin);
-    apply_native_run_env(&mut cmd, module)?;
+    apply_native_run_env(config, &mut cmd, module)?;
     cmd.args(extra_args);
     let status = cmd.status()?;
     match status.code() {
@@ -155,10 +183,11 @@ pub fn run_native_bin(
 }
 
 pub(crate) fn apply_native_run_env(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     cmd: &mut Command,
     module: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    for (k, v) in native_run_env_pairs(module)? {
+    for (k, v) in native_run_env_pairs(config, module)? {
         cmd.env(k, v);
     }
     Ok(())
@@ -176,81 +205,35 @@ pub(crate) fn read_host_capabilities(
 /// Env vars the native guest needs (`DREAM_NATIVE_MODULE`, dylib search path). Used by
 /// `dream run` and the lldb-dap debug adapter.
 pub(crate) fn native_run_env_pairs(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     module: &str,
 ) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
     let mut out = vec![("DREAM_NATIVE_MODULE".to_string(), module.to_string())];
     let capabilities = read_host_capabilities(Path::new(module))?;
-    if let Some(dir) = host_library_dir(&capabilities) {
-        let key = if cfg!(target_os = "macos") {
-            "DYLD_LIBRARY_PATH"
-        } else if cfg!(target_os = "windows") {
-            "PATH"
-        } else {
-            "LD_LIBRARY_PATH"
-        };
+    if let Some(dir) = host_library_dir(config, &capabilities) {
+        let key = crate::driver::toolchain::ToolchainConfig::loader_path_key();
         let mut paths = dir.display().to_string();
-        if let Ok(prev) = std::env::var(key) {
+        if let Some(prev) = &config.loader_path {
             let sep = if cfg!(target_os = "windows") {
                 ';'
             } else {
                 ':'
             };
-            paths = format!("{paths}{sep}{prev}");
+            paths = format!("{paths}{sep}{}", prev.to_string_lossy());
         }
         out.push((key.to_string(), paths));
     }
     Ok(out)
 }
 
-fn push_host_library_dir(dirs: &mut Vec<PathBuf>, dir: PathBuf) {
-    if !dir.as_os_str().is_empty() && !dirs.iter().any(|d| d == &dir) {
-        dirs.push(dir);
-    }
-}
-
-fn push_exe_parent(dirs: &mut Vec<PathBuf>, exe: &Path) {
-    if let Some(p) = exe.parent() {
-        push_host_library_dir(dirs, p.to_path_buf());
-        if p.file_name().and_then(|s| s.to_str()) == Some("deps") {
-            if let Some(parent) = p.parent() {
-                push_host_library_dir(dirs, parent.to_path_buf());
-            }
-        }
-    }
-}
-
-/// Search order: next to this process (so a dev build links its own newer host symbols rather
-/// than an older installed toolchain's), `DREAM_HOME`, `DREAM_BIN`, then `~/.dream/bin`. Never the
-/// working directory: planted libraries would otherwise be linked and rpath'd.
-/// Development builds use this canonical directory as their absolute rpath; relocatable builds
-/// stage the library family into the package instead.
-pub(crate) fn host_library_dir(capabilities: &[HostCapability]) -> Option<PathBuf> {
-    let mut dirs = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Ok(canon) = exe.canonicalize() {
-            push_exe_parent(&mut dirs, &canon);
-        }
-        push_exe_parent(&mut dirs, &exe);
-    }
-    if let Ok(home) = std::env::var("DREAM_HOME") {
-        if !home.is_empty() {
-            let home = PathBuf::from(home);
-            push_host_library_dir(&mut dirs, home.clone());
-            push_host_library_dir(&mut dirs, home.join("bin"));
-        }
-    }
-    if let Ok(bin) = std::env::var("DREAM_BIN") {
-        if let Some(p) = Path::new(&bin).parent() {
-            push_host_library_dir(&mut dirs, p.to_path_buf());
-        }
-    }
-    if let Ok(user) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
-        if !user.is_empty() {
-            push_host_library_dir(&mut dirs, PathBuf::from(user).join(".dream").join("bin"));
-        }
-    }
-    dirs.into_iter()
-        .filter(|d| d.is_absolute())
+/// Capability hosts are searched next to the compiler, then in configured install roots, never the cwd.
+pub(crate) fn host_library_dir(
+    config: &crate::driver::toolchain::ToolchainConfig,
+    capabilities: &[HostCapability],
+) -> Option<PathBuf> {
+    config
+        .host_library_dirs()
+        .into_iter()
         .find(|d| {
             capabilities
                 .iter()

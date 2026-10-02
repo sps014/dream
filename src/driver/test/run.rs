@@ -27,7 +27,11 @@ pub struct TestRunResult {
 
 /// Run tests for `path` (a `.dream` file or a directory of them). Returns `Ok` when every suite
 /// exited successfully; `Err` with a short summary otherwise.
-pub fn run_tests(path: &Path, opts: &TestOptions) -> Result<TestRunResult, String> {
+pub fn run_tests(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
+    path: &Path,
+    opts: &TestOptions,
+) -> Result<TestRunResult, String> {
     let files = collect_test_files(path)?;
     if files.is_empty() {
         return Err(format!("no .dream test files under '{}'", path.display()));
@@ -38,7 +42,7 @@ pub fn run_tests(path: &Path, opts: &TestOptions) -> Result<TestRunResult, Strin
     for file in &files {
         ui.step("Testing", &file.display().to_string());
         let start = Instant::now();
-        match run_one_file(file, opts) {
+        match run_one_file(config, file, opts) {
             Ok(n) => {
                 result.files_run += 1;
                 result.tests_run += n;
@@ -106,7 +110,11 @@ fn collect_dream_files_rec(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), Str
     Ok(())
 }
 
-fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
+fn run_one_file(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
+    path: &Path,
+    opts: &TestOptions,
+) -> Result<usize, String> {
     let path_str = path.to_string_lossy().into_owned();
     let source =
         fs::read_to_string(path).map_err(|e| format!("read '{}': {}", path.display(), e))?;
@@ -141,7 +149,7 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
     fs::write(&runner_path, &runner_source)
         .map_err(|e| format!("write {}: {}", runner_path.display(), e))?;
 
-    let mut compiler = Compiler::new(Target::Native)
+    let mut compiler = Compiler::new_with_toolchain_config(Target::Native, config.clone())
         .with_release(opts.release)
         .with_crate_type(CrateType::Bin);
     if let Some(level) = opts.optimize {
@@ -156,20 +164,26 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
         .map_err(|e| format!("compile '{}': {}", path.display(), e))?;
     let opt = OptLevel::from_cli(opts.release, opts.optimize);
     let bin = crate::execution::llvm::compile_llvm(
+        config,
         &ll_path,
-        None,
-        opt,
-        false,
-        &crate::execution::native::Pgo::Off,
-        None,
-        false,
+        crate::execution::llvm::NativeBuildOptions {
+            opt_ll: None,
+            opt,
+            debug: false,
+            pgo: &crate::execution::native::Pgo::Off,
+            icon: None,
+            relocatable: false,
+        },
     )
     .map_err(|e| format!("link '{}': {}", path.display(), e))?;
     // A failing assertion exits non-zero (`Assert.fail`), which is how a suite reports failure.
-    match crate::execution::native::run_native_bin(&bin, &ll_str, &[]) {
+    match crate::execution::native::run_native_bin(config, &bin, &ll_str, &[]) {
         Ok(0) => {}
         Ok(code) => return Err(format!("'{}' failed (exit code {code})", path.display())),
-        Err(e) if e.downcast_ref::<crate::execution::native::GuestAborted>().is_some() => {
+        Err(e)
+            if e.downcast_ref::<crate::execution::native::GuestAborted>()
+                .is_some() =>
+        {
             return Err(format!("'{}' aborted", path.display()));
         }
         Err(e) => return Err(format!("'{}' failed: {}", path.display(), e)),

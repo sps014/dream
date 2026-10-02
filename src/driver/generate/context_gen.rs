@@ -57,7 +57,7 @@ pub fn expand_context_generators(
         #[cfg(feature = "native")]
         {
             let snapshot = build_snapshot(ctx, &site_ids);
-            match run_context_body(&gen, &snapshot) {
+            match run_context_body(&ctx.toolchain_config, &gen, &snapshot) {
                 Ok(output) => {
                     for (id, source) in output.replacements {
                         ctx.replace(id, source);
@@ -85,6 +85,7 @@ pub fn expand_context_generators(
 
 #[cfg(feature = "native")]
 fn run_context_body(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     gen: &RegisteredGenerator,
     snapshot: &str,
 ) -> Result<super::syntax_gen::HarnessOutput, HarnessError> {
@@ -113,13 +114,14 @@ fn run_context_body(
     let temp =
         write_temp_harness(dir, &gen.name, &harness_source).map_err(HarnessError::General)?;
 
-    let ll_path = compile_harness(&temp.path).map_err(HarnessError::General)?;
+    let ll_path = compile_harness(config, &temp.path).map_err(HarnessError::General)?;
     let snap_file = write_snapshot_tempfile(&gen.name, snapshot).map_err(HarnessError::General)?;
 
     let ll_path_str = ll_path.to_string_lossy().into_owned();
     let snap_arg = snap_file.to_string_lossy().into_owned();
     // Same trade-off as the `@json` harness: generator run time is negligible next to build time.
     let output = crate::execution::native::compile_and_capture_ex(
+        config,
         &ll_path_str,
         crate::driver::wasm_opt::OptLevel::O0,
         &[],
@@ -186,17 +188,27 @@ fn write_snapshot_tempfile(gen_name: &str, snapshot: &str) -> Result<PathBuf, St
 }
 
 #[cfg(feature = "native")]
-fn compile_harness(src_path: &Path) -> Result<PathBuf, String> {
+fn compile_harness(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
+    src_path: &Path,
+) -> Result<PathBuf, String> {
     let mut ll_path = std::env::temp_dir();
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    ll_path.push(format!("dream-ctx-gen-{}-{}.ll", std::process::id(), unique));
-    let compiler = crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Native)
-        .with_skip_generators(true)
-        .with_release(true)
-        .with_optimize(Some(crate::driver::wasm_opt::OptLevel::O0));
+    ll_path.push(format!(
+        "dream-ctx-gen-{}-{}.ll",
+        std::process::id(),
+        unique
+    ));
+    let compiler = crate::driver::compiler::Compiler::new_with_toolchain_config(
+        crate::driver::compiler::Target::Native,
+        config.clone(),
+    )
+    .with_skip_generators(true)
+    .with_release(true)
+    .with_optimize(Some(crate::driver::wasm_opt::OptLevel::O0));
     let src = src_path
         .to_str()
         .ok_or_else(|| "generator: non-UTF-8 auto-harness path".to_string())?

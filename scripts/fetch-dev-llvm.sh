@@ -33,7 +33,7 @@ case "$(uname -s)-$(uname -m)" in
     LLVM_ARCHIVE="clang+llvm-${LLVM_VERSION}-x86_64-pc-windows-msvc.tar.xz"
     LLVM_SHA="d96c2cc1736f4eb7fa43cb9bbdf56d93551a9ae0a9aadb9c99c3c3b2b712a234"
     EXE=".exe"
-    TOOLS+=(llvm-rc) ;;
+    TOOLS+=(clang++ llvm-rc) ;;
   *) echo "no official LLVM ${LLVM_VERSION} build for this host; install it yourself and set DREAM_LLVM" >&2
      exit 1 ;;
 esac

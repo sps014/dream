@@ -53,8 +53,16 @@ fn build(entry: &Path, tag: &str) -> Result<PathBuf, String> {
 fn run(entry: &Path, tag: &str) -> Result<String, String> {
     let ll = build(entry, tag)?;
     // A freshly linked binary's first launch can be slow while the OS vets it.
-    compile_and_capture_ex(ll.to_str().unwrap(), OptLevel::O0, &[], &[], None, 60)
-        .map_err(|e| e.to_string())
+    compile_and_capture_ex(
+        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+        ll.to_str().unwrap(),
+        OptLevel::O0,
+        &[],
+        &[],
+        None,
+        60,
+    )
+    .map_err(|e| e.to_string())
 }
 
 fn assert_contains(haystack: &str, needle: &str) {
@@ -293,8 +301,11 @@ fn links_conflict_names_both_manifests() {
     );
     let err = build(&root.join("src/main.dream"), "links").unwrap_err();
     assert_contains(&err, "native library 'z' is provided by two packages");
-    assert_contains(&err, "dream_packages/a/dream.toml");
-    assert_contains(&err, "dream_packages/b/dream.toml");
+    for package in ["a", "b"] {
+        let manifest = root.join("dream_packages").join(package).join("dream.toml");
+        let manifest = fs::canonicalize(manifest).unwrap();
+        assert_contains(&err, &manifest.display().to_string());
+    }
     let _ = fs::remove_dir_all(&root);
 }
 

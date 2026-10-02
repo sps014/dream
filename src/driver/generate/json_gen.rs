@@ -93,7 +93,7 @@ pub fn expand_from_acc(
         );
 
         let snapshot = build_snapshot(acc, structs, enums, &json_names, &jsonable);
-        match run_dream_json_generator(&snapshot) {
+        match run_dream_json_generator(&ctx.toolchain_config, &snapshot) {
             Ok(source) => {
                 if !source.is_empty() {
                     ctx.emit_file("<json-derive>", source);
@@ -881,14 +881,17 @@ struct JsonGenError {
 }
 
 #[cfg(feature = "native")]
-fn run_dream_json_generator(snapshot: &str) -> Result<String, JsonGenError> {
+fn run_dream_json_generator(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
+    snapshot: &str,
+) -> Result<String, JsonGenError> {
     // `System.env_or` reads process env, so concurrent compiles in this process must not
     // overlap `set_var`. Snapshot *files* are unique so another `dream` (LSP, bench) cannot
     // overwrite our input the way a shared `snapshot.json` did.
     static SNAPSHOT_GUARD: Mutex<()> = Mutex::new(());
     let _guard = SNAPSHOT_GUARD.lock().unwrap_or_else(|e| e.into_inner());
 
-    let ll_path = cached_harness_ll().map_err(|e| JsonGenError {
+    let ll_path = cached_harness_ll(config).map_err(|e| JsonGenError {
         message: e,
         type_name: None,
         field_name: None,
@@ -899,6 +902,7 @@ fn run_dream_json_generator(snapshot: &str) -> Result<String, JsonGenError> {
     // The harness is a throwaway code generator that runs for milliseconds on one small snapshot,
     // so build time dominates end to end; it builds at `-O0`.
     let output = crate::execution::native::compile_and_capture(
+        config,
         &ll_path,
         crate::driver::wasm_opt::OptLevel::O0,
     );
@@ -915,7 +919,10 @@ fn run_dream_json_generator(snapshot: &str) -> Result<String, JsonGenError> {
 }
 
 #[cfg(feature = "native")]
-fn write_unique_snapshot(module_path: &str, snapshot: &str) -> Result<std::path::PathBuf, JsonGenError> {
+fn write_unique_snapshot(
+    module_path: &str,
+    snapshot: &str,
+) -> Result<std::path::PathBuf, JsonGenError> {
     static SEQ: AtomicU64 = AtomicU64::new(0);
     let dir = std::path::Path::new(module_path)
         .parent()
@@ -1082,7 +1089,9 @@ fn fnv1a(parts: &[&str]) -> u64 {
 }
 
 #[cfg(feature = "native")]
-fn cached_harness_ll() -> Result<String, String> {
+fn cached_harness_ll(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
+) -> Result<String, String> {
     let fingerprint = fnv1a(&[
         HARNESS_SOURCE,
         include_str!("../abi.rs"),
@@ -1133,7 +1142,7 @@ fn cached_harness_ll() -> Result<String, String> {
             dream_mir::abi::STRING_UNITS_OFFSET
         ),
     ]);
-    let dir = super::manifest::harness_cache_dir("json-gen-harness", fingerprint);
+    let dir = super::manifest::harness_cache_dir(config, "json-gen-harness", fingerprint);
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("@json generator: create harness dir: {e}"))?;
     let lock_path = dir.join(".lock");
@@ -1154,11 +1163,13 @@ fn cached_harness_ll() -> Result<String, String> {
             .map_err(|e| format!("@json generator: write harness source: {e}"))?;
         let src = src_path.to_string_lossy().into_owned();
         let out = ll_path.to_string_lossy().into_owned();
-        let compiler =
-            crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Native)
-                .with_skip_generators(true)
-                .with_release(true)
-                .with_optimize(Some(crate::driver::wasm_opt::OptLevel::O0));
+        let compiler = crate::driver::compiler::Compiler::new_with_toolchain_config(
+            crate::driver::compiler::Target::Native,
+            config.clone(),
+        )
+        .with_skip_generators(true)
+        .with_release(true)
+        .with_optimize(Some(crate::driver::wasm_opt::OptLevel::O0));
         compiler
             .compile(&src, &out)
             .map_err(|_| "@json generator: failed to compile Dream harness".to_string())?;

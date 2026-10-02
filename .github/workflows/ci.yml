@@ -1,9 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  merge_group:
   workflow_dispatch:
 
 concurrency:
@@ -13,6 +12,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   DREAM_VERIFY_MIR: "1"
+  # Tests use O1; matching dev avoids rebuilding their dependency graph for codegen.
+  CARGO_PROFILE_DEV_OPT_LEVEL: "1"
 
 permissions:
   contents: read
@@ -23,13 +24,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/check_hygiene.py
+      - run: python3 scripts/test_probe.py
 
   build-clippy-test:
     name: Build, clippy, test (${{ matrix.os }})
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install Linux native dependencies
@@ -40,21 +43,44 @@ jobs:
             build-essential clang cmake libclang-dev libgtk-3-dev libssl-dev \
             libudev-dev libwebkit2gtk-4.1-dev ninja-build pkg-config python3 xz-utils
       - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - uses: actions/setup-python@v5
+        if: runner.os == 'Windows'
+        with:
+          python-version: "3.13"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/cache@v4
+        with:
+          shared-key: ci-o1-${{ runner.os }}-${{ runner.arch }}
+          cache-on-failure: true
+      - uses: actions/cache/restore@v4
+        id: llvm-cache
         with:
           path: ~/.dream/toolchains/llvm-22.1.8
           key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - name: Install pinned LLVM and wasi-sdk support
         shell: bash
         run: scripts/fetch-dev-llvm.sh
-      - run: cargo build --workspace
+      - name: Cache the validated pinned toolchain
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.dream/toolchains/llvm-22.1.8
+          key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
+      - name: Use the MSVC-compatible pinned C driver
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "DREAM_CC=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang.exe" >> $env:GITHUB_ENV
+          "DREAM_CXX=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang++.exe" >> $env:GITHUB_ENV
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - run: cargo build --workspace --timings
+      - run: cargo test --workspace --no-fail-fast --timings
       - name: Native distribution size budget
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           python3 scripts/test_binary_size.py
@@ -67,12 +93,24 @@ jobs:
           python3 scripts/check-binary-size.py --compiler target/debug/dream \
             --host-library "$host_library" --report target/binary-size.json
       - name: Preserve native size measurements
-        if: always()
+        if: always() && runner.os != 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: binary-size-${{ runner.os }}-${{ runner.arch }}
           path: target/binary-size.json
           if-no-files-found: ignore
+      - name: Preserve compilation timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-${{ runner.os }}-${{ runner.arch }}
+          path: target/cargo-timings/*.html
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Full Windows native corpus
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python scripts/probe_test.py
       - name: Weak lifetime race under ThreadSanitizer
         if: runner.os == 'macOS'
         shell: bash
@@ -127,13 +165,23 @@ jobs:
           node-version: "22"
       - uses: Swatinem/rust-cache@v2
         with:
+          shared-key: ci-o1-${{ runner.os }}-${{ runner.arch }}
           cache-on-failure: true
-      - uses: actions/cache@v4
+          # The workspace job saves the superset of build and test dependencies.
+          save-if: false
+      - uses: actions/cache/restore@v4
+        id: llvm-cache
         with:
           path: ~/.dream/toolchains/llvm-22.1.8
           key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - name: Install pinned LLVM and wasi-sdk support
         run: scripts/fetch-dev-llvm.sh
+      - name: Cache the validated pinned toolchain
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.dream/toolchains/llvm-22.1.8
+          key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
       - run: ./scripts/probe_test.sh
       - run: ./scripts/probe_test.sh --node
       - name: Preserve GPU corpus diagnostics

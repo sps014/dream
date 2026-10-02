@@ -2,6 +2,34 @@
 
 This chapter covers how the compiler is tested, the determinism contract the whole back end must honor, and the conventions every contributor is expected to follow.
 
+CI validates pull requests and merge-queue candidates, with manual dispatch available for
+main or other refs. It does not automatically rerun the same suite after merging a validated
+PR into protected main. Required checks and strict up-to-date protection remain in place;
+rebasing or updating a PR can still require a new run because its tested integration changed.
+
+Linux, macOS and Windows run workspace build, strict Clippy and default tests. Linux runs
+the full native/Node corpus; Windows additionally runs the full native corpus with the
+pinned MSVC-compatible clang driver and developer SDK environment. Windows Rust/probe
+steps use PowerShell so Git Bash's `link` utility cannot shadow Microsoft's linker.
+Size budgets remain Linux/macOS-only until Windows distribution baselines are measured.
+Dependency caches survive failed validation; the pinned toolchain is cached immediately
+after installation so later test failures do not force another download.
+
+CI sets `CARGO_PROFILE_DEV_OPT_LEVEL=1` to match the workspace test profile. Build,
+Clippy and tests can reuse dependency artifacts instead of code-generating both O0
+and O1 copies. Tests retain debug assertions, overflow checks and line-table
+backtraces; local development profiles and the release size-budget build are unchanged.
+Clippy runs first to reject lint failures before expensive executable builds.
+
+Rust caches share a profile-specific key across jobs on the same OS/architecture;
+workspace artifacts and incremental state are not cached. Cargo timing reports are
+retained for seven days to identify remaining compilation bottlenecks. GitHub scopes
+PR caches to that PR, so a new PR can still start cold: manually dispatch CI on main
+after dependency/toolchain changes to seed caches reusable by subsequent PRs. Do not
+restore caches from unrelated PR refs or reintroduce a full post-merge suite solely
+for cache warming. The first run after changing cache/profile settings is also cold;
+measure both cold and warm runs before setting a wall-clock target.
+
 ## The test pyramid
 
 ```mermaid

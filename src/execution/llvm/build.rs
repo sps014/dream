@@ -163,12 +163,13 @@ pub(super) fn write_ir(tools: &LlvmTools, bc: &Path, out: &Path) -> Result<(), S
 /// `--emit-llvm`: the optimized whole-program module as `<stem>.opt.ll` and its assembly as
 /// `<stem>.s`, next to the `.ll`.
 pub fn emit_llvm_artifacts(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     ll_path: &Path,
     opt: OptLevel,
     debug: bool,
     icon: Option<&Path>,
 ) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
-    let tools = resolve_llvm()?;
+    let tools = resolve_llvm(config)?;
     let src = std::fs::read_to_string(ll_path)?;
     let rt = llvm_runtime(&tools, opt, runtime_need_from_module_text(&src), debug)?;
     let icon_ll = match icon {
@@ -206,20 +207,33 @@ pub fn emit_llvm_artifacts(
 
 /// Links `ll_path` into `<stem>.bin`. With `opt_ll`, also writes the optimized whole-program module
 /// there as text. `icon` is a PNG compiled in as the app icon.
+pub struct NativeBuildOptions<'a> {
+    pub opt_ll: Option<&'a Path>,
+    pub opt: OptLevel,
+    pub debug: bool,
+    pub pgo: &'a Pgo,
+    pub icon: Option<&'a Path>,
+    pub relocatable: bool,
+}
+
 pub fn compile_llvm(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     ll_path: &Path,
-    opt_ll: Option<&Path>,
-    opt: OptLevel,
-    debug: bool,
-    pgo: &Pgo,
-    icon: Option<&Path>,
-    relocatable: bool,
+    options: NativeBuildOptions<'_>,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let tools = resolve_llvm()?;
+    let NativeBuildOptions {
+        opt_ll,
+        opt,
+        debug,
+        pgo,
+        icon,
+        relocatable,
+    } = options;
+    let tools = resolve_llvm(config)?;
     let bin = native_bin_path(ll_path);
     let abi_path = ll_path.with_extension("abi.json");
     let capabilities = read_host_capabilities(ll_path)?;
-    let dir = host_library_dir(&capabilities).ok_or(
+    let dir = host_library_dir(config, &capabilities).ok_or(
         "native capability libraries not found next to the dream binary. \
          Build with cargo build --workspace, or set DREAM_HOME or DREAM_BIN to the installed toolchain.",
     )?;
@@ -255,7 +269,7 @@ pub fn compile_llvm(
             .parent()
             .unwrap_or_else(|| Path::new("."))
             .join("native-c");
-        compile_sets(&cc::resolve_cc()?, &c_sources, &cache, debug)?
+        compile_sets(config, &cc::resolve_cc(config)?, &c_sources, &cache, debug)?
     };
     let stamp_path = bin.with_extension("flags");
     let stamp = format!(
@@ -317,11 +331,16 @@ pub fn compile_llvm(
     run_llc(&tools, &optimized, opt, debug, "obj", &obj)?;
 
     let mut lcmd = if *pgo == Pgo::Generate {
-        let mut c = std::process::Command::new(cc::resolve_system_cc().ok_or(PGO_NEEDS_CC)?);
+        let mut c = std::process::Command::new(cc::resolve_system_cc(config).ok_or(PGO_NEEDS_CC)?);
         c.arg(&obj).args(profile_link_args(&tools)?);
         c
     } else {
-        let mut c = cc::resolve_cc()?.cc_command();
+        let cc = cc::resolve_cc(config)?;
+        let mut c = if native.needs_cxx && cfg!(all(windows, target_env = "msvc")) {
+            cc.cxx_command(config)?
+        } else {
+            cc.cc_command()
+        };
         c.arg(&obj);
         c
     };
@@ -340,8 +359,8 @@ pub fn compile_llvm(
     link_runtime(&mut lcmd, &dir, bundled.as_deref(), &capabilities);
     let c_libs = read_c_libs_from_abi(&abi_path);
     if !c_libs.is_empty() {
-        let roots = search_roots_for_artifact(ll_path);
-        lcmd.args(cc_link_flags(&c_libs, &roots));
+        let roots = search_roots_for_artifact(config, ll_path);
+        lcmd.args(cc_link_flags(config, &c_libs, &roots));
     }
     lcmd.args(&native.link_args);
     lcmd.arg("-o").arg(&bin);
@@ -397,6 +416,7 @@ fn profile_link_args(tools: &LlvmTools) -> Result<Vec<String>, String> {
 /// The pinned toolchain behind the driver's LLVM targets. `opt`/`debug` pick the native runtime
 /// flavor; wasm32 builds take the guest level from the compiler.
 pub struct Toolchain {
+    pub config: std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     pub opt: OptLevel,
     pub debug: bool,
 }
@@ -406,7 +426,8 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
         &self,
         req: &crate::driver::compiler::LlvmRuntimeRequest,
     ) -> Result<String, String> {
-        let tools = resolve_llvm()?;
+        let config = &self.config;
+        let tools = resolve_llvm(config)?;
         let sigs = if req.target.is_wasm32() {
             super::wasm::wasm_runtime(&tools, req.wasm_opt, req.need, req.threads)?.sigs
         } else {
@@ -422,7 +443,8 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
         opt_ll: Option<&Path>,
         req: &crate::driver::compiler::LlvmRuntimeRequest,
     ) -> Result<(), String> {
-        let tools = resolve_llvm()?;
+        let config = &self.config;
+        let tools = resolve_llvm(config)?;
         super::wasm::link_wasm(
             &tools,
             ll,

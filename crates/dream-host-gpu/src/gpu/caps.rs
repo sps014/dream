@@ -84,6 +84,14 @@ const FLAG_TIMESTAMP_QUERY_INSIDE_PASSES: u32 = 1 << 12;
 /// Byte length of the packed blob. A decoder that sees fewer bytes reports nothing as available.
 pub const BLOB_LEN: usize = 56;
 
+fn subgroup_limits(features: wgpu::Features, limits: &wgpu::Limits) -> (u32, u32) {
+    if features.contains(wgpu::Features::SUBGROUP) {
+        (limits.min_subgroup_size, limits.max_subgroup_size)
+    } else {
+        (0, 0)
+    }
+}
+
 /// Packs the device-granted features and limits little-endian. Returns an all-zero blob before
 /// `try_init`, so callers see "nothing available" rather than a stale or optimistic answer.
 pub fn encode() -> Vec<u8> {
@@ -98,10 +106,7 @@ pub fn encode() -> Vec<u8> {
     let subgroup = st
         .adapter
         .as_ref()
-        .map(|a| {
-            let l = a.limits();
-            (l.min_subgroup_size, l.max_subgroup_size)
-        })
+        .map(|a| subgroup_limits(features, &a.limits()))
         .unwrap_or_default();
 
     let mut flags = 0u32;
@@ -207,10 +212,7 @@ mod tests {
         assert_eq!(got.max_compute_workgroup_size_z, 1024);
         assert_eq!(got.max_compute_workgroups_per_dimension, 1 << 20);
         // Untouched fields stay at the portable default rather than following the adapter.
-        assert_eq!(
-            got.max_texture_dimension_2d,
-            base.max_texture_dimension_2d
-        );
+        assert_eq!(got.max_texture_dimension_2d, base.max_texture_dimension_2d);
     }
 
     /// An adapter that advertises *less* than the WebGPU default must not drag the request below
@@ -277,5 +279,20 @@ mod tests {
         let blob = encode();
         assert_eq!(blob.len(), BLOB_LEN);
         assert!(blob.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn subgroup_widths_require_the_device_feature() {
+        let limits = wgpu::Limits {
+            min_subgroup_size: 32,
+            max_subgroup_size: 64,
+            ..Default::default()
+        };
+        assert_eq!(subgroup_limits(wgpu::Features::empty(), &limits), (0, 0));
+        assert_eq!(
+            subgroup_limits(wgpu::Features::SUBGROUP_BARRIER, &limits),
+            (0, 0)
+        );
+        assert_eq!(subgroup_limits(wgpu::Features::SUBGROUP, &limits), (32, 64));
     }
 }

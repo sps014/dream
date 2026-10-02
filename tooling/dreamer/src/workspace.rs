@@ -325,17 +325,9 @@ fn symlink_member_packages_dirs(ws_root: &Path, packages_dir: &Path) -> Result<(
             continue;
         }
         let dest = member_dir.join(PACKAGES_DIR_NAME);
-        if dest.exists() || dest.is_symlink() {
-            if dest.is_symlink() {
-                std::fs::remove_file(&dest)?;
-            } else if dest.is_dir() {
-                std::fs::remove_dir_all(&dest)?;
-            } else {
-                std::fs::remove_file(&dest)?;
-            }
-        }
+        crate::package_fs::remove_entry(&dest)?;
         let target = relative_path(&member_dir, packages_dir)?;
-        try_symlink(&target, &dest)
+        try_symlink_dir(&target, &dest)
             .with_context(|| format!("symlinking {} -> {}", dest.display(), target.display()))?;
     }
     Ok(())
@@ -385,15 +377,9 @@ fn pathdiff_from(from_dir: &Path, to: &Path) -> Option<PathBuf> {
 /// allows it (so edits to a local `path` dependency show up immediately), falling back to a
 /// recursive copy (used for registry/git sources, and anywhere symlinks aren't permitted).
 fn link_or_copy_dir(src: &Path, dest: &Path) -> Result<()> {
-    if dest.exists() {
-        if dest.is_symlink() {
-            std::fs::remove_file(dest)?;
-        } else {
-            std::fs::remove_dir_all(dest)?;
-        }
-    }
+    crate::package_fs::remove_entry(dest)?;
 
-    if try_symlink(src, dest).is_ok() {
+    if try_symlink_dir(src, dest).is_ok() {
         return Ok(());
     }
 
@@ -401,21 +387,17 @@ fn link_or_copy_dir(src: &Path, dest: &Path) -> Result<()> {
 }
 
 #[cfg(unix)]
-fn try_symlink(src: &Path, dest: &Path) -> std::io::Result<()> {
+fn try_symlink_dir(src: &Path, dest: &Path) -> std::io::Result<()> {
     std::os::unix::fs::symlink(src, dest)
 }
 
 #[cfg(windows)]
-fn try_symlink(src: &Path, dest: &Path) -> std::io::Result<()> {
-    if src.is_dir() {
-        std::os::windows::fs::symlink_dir(src, dest)
-    } else {
-        std::os::windows::fs::symlink_file(src, dest)
-    }
+fn try_symlink_dir(src: &Path, dest: &Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_dir(src, dest)
 }
 
 #[cfg(not(any(unix, windows)))]
-fn try_symlink(_src: &Path, _dest: &Path) -> std::io::Result<()> {
+fn try_symlink_dir(_src: &Path, _dest: &Path) -> std::io::Result<()> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
         "symlinks not supported on this platform",

@@ -137,60 +137,26 @@ const NATIVE_CORE_C: &[&str] = &[
     "defer.c",
 ];
 
-pub fn runtime_c_dir() -> PathBuf {
-    if let Ok(p) = std::env::var("DREAM_RUNTIME_C") {
-        if !p.is_empty() {
-            return PathBuf::from(p);
-        }
-    }
-    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runtime/c");
-    if crate_dir.join("native/include/dream_rt_native.h").is_file() {
-        return crate_dir;
-    }
-    for candidate in installed_runtime_c_dirs() {
-        if candidate.join("native/include/dream_rt_native.h").is_file() {
-            return candidate;
-        }
-    }
-    crate_dir
+pub const SOURCE_RUNTIME_C_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/runtime/c");
+
+pub fn native_runtime_include_dir(root: &Path) -> PathBuf {
+    root.to_path_buf().join("native/include")
 }
 
-fn installed_runtime_c_dirs() -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    if let Ok(home) = std::env::var("DREAM_HOME") {
-        let p = PathBuf::from(home);
-        out.push(p.join("lib/runtime/c"));
-        if p.file_name().and_then(|s| s.to_str()) == Some("bin") {
-            if let Some(parent) = p.parent() {
-                out.push(parent.join("lib/runtime/c"));
-            }
-        }
-    }
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
-    if let Some(home) = home {
-        out.push(PathBuf::from(home).join(".dream/lib/runtime/c"));
-    }
-    out
+pub fn wasm32_runtime_include_dir(root: &Path) -> PathBuf {
+    root.to_path_buf().join("wasm32/include")
 }
 
-pub fn native_runtime_include_dir() -> PathBuf {
-    runtime_c_dir().join("native/include")
+pub fn wasm32_heap_c(root: &Path) -> PathBuf {
+    root.to_path_buf().join("wasm32/heap.c")
 }
 
-pub fn wasm32_runtime_include_dir() -> PathBuf {
-    runtime_c_dir().join("wasm32/include")
+pub fn runtime_abi_include_dir(root: &Path) -> PathBuf {
+    root.to_path_buf().join("include")
 }
 
-pub fn wasm32_heap_c() -> PathBuf {
-    runtime_c_dir().join("wasm32/heap.c")
-}
-
-pub fn runtime_abi_include_dir() -> PathBuf {
-    runtime_c_dir().join("include")
-}
-
-pub fn wasm32_libc_c() -> PathBuf {
-    runtime_c_dir().join("wasm32/libc.c")
+pub fn wasm32_libc_c(root: &Path) -> PathBuf {
+    root.to_path_buf().join("wasm32/libc.c")
 }
 
 const WASM32_CORE_C: &[&str] = &[
@@ -215,8 +181,8 @@ const WASM32_CORE_C: &[&str] = &[
 ];
 
 /// Guest runtime C units for wasm32. Skips native mmap heap, libc host, and pthreads.
-pub fn wasm32_runtime_c_files() -> Vec<PathBuf> {
-    let c = runtime_c_dir();
+pub fn wasm32_runtime_c_files(root: &Path) -> Vec<PathBuf> {
+    let c = root.to_path_buf();
     WASM32_CORE_C.iter().map(|rel| c.join(rel)).collect()
 }
 
@@ -229,17 +195,17 @@ pub struct Wasm32LinkedUnit {
 }
 
 /// Linked-library units for `need` on wasm32 (today: PCRE2 regex).
-pub fn wasm32_linked_units(need: RuntimeNeed) -> Vec<Wasm32LinkedUnit> {
+pub fn wasm32_linked_units(root: &Path, need: RuntimeNeed) -> Vec<Wasm32LinkedUnit> {
     let mut units = Vec::new();
     if !need.contains(RuntimeNeed::REGEX) {
         return units;
     }
-    let c = runtime_c_dir();
+    let c = root.to_path_buf();
     for m in RUNTIME_MODULES {
         if !need.contains(m.need) {
             continue;
         }
-        let mut dirs: Vec<PathBuf> = vec![c.join("include"), native_runtime_include_dir()];
+        let mut dirs: Vec<PathBuf> = vec![c.join("include"), native_runtime_include_dir(root)];
         for rel in m.include_dirs {
             let d = c.join(rel);
             if !dirs.contains(&d) {
@@ -317,9 +283,9 @@ pub struct NativeCompileUnit {
     pub include_dirs: Vec<PathBuf>,
 }
 
-fn catalog_include_dirs(m: &RuntimeModule) -> Vec<PathBuf> {
-    let c = runtime_c_dir();
-    let mut dirs = vec![native_runtime_include_dir(), c.join("include")];
+fn catalog_include_dirs(root: &Path, m: &RuntimeModule) -> Vec<PathBuf> {
+    let c = root.to_path_buf();
+    let mut dirs = vec![native_runtime_include_dir(root), c.join("include")];
     for rel in m.include_dirs {
         let p = c.join(rel);
         if !dirs.iter().any(|d| d == &p) {
@@ -329,19 +295,19 @@ fn catalog_include_dirs(m: &RuntimeModule) -> Vec<PathBuf> {
     dirs
 }
 
-fn push_unit(units: &mut Vec<NativeCompileUnit>, path: PathBuf, m: &RuntimeModule) {
+fn push_unit(root: &Path, units: &mut Vec<NativeCompileUnit>, path: PathBuf, m: &RuntimeModule) {
     units.push(NativeCompileUnit {
         path,
         defines: m.native_defines.iter().map(|s| (*s).to_string()).collect(),
-        include_dirs: catalog_include_dirs(m),
+        include_dirs: catalog_include_dirs(root, m),
     });
 }
 
 /// Native objects for `need`: always-on host C plus catalog `shared_c`/`native_extra_c`/`SOURCES`
 /// for live linked modules.
-pub fn native_runtime_units(need: RuntimeNeed) -> Vec<NativeCompileUnit> {
-    let native = runtime_c_dir().join("native");
-    let native_inc = native_runtime_include_dir();
+pub fn native_runtime_units(root: &Path, need: RuntimeNeed) -> Vec<NativeCompileUnit> {
+    let native = root.to_path_buf().join("native");
+    let native_inc = native_runtime_include_dir(root);
     let mut units = Vec::new();
     for name in NATIVE_CORE_C {
         units.push(NativeCompileUnit {
@@ -350,22 +316,22 @@ pub fn native_runtime_units(need: RuntimeNeed) -> Vec<NativeCompileUnit> {
             include_dirs: vec![native_inc.clone()],
         });
     }
-    let c = runtime_c_dir();
+    let c = root.to_path_buf();
     for m in RUNTIME_MODULES {
         if !need.contains(m.need) {
             continue;
         }
         for rel in m.shared_c {
-            push_unit(&mut units, c.join(rel), m);
+            push_unit(root, &mut units, c.join(rel), m);
         }
         if let Some(list) = m.vendor_sources {
             let parent = Path::new(list).parent().unwrap_or(Path::new("."));
             for name in vendor_c_names_static(list) {
-                push_unit(&mut units, c.join(parent).join(name), m);
+                push_unit(root, &mut units, c.join(parent).join(name), m);
             }
         }
         for rel in m.native_extra_c {
-            push_unit(&mut units, c.join(rel), m);
+            push_unit(root, &mut units, c.join(rel), m);
         }
     }
     units
@@ -377,7 +343,7 @@ mod tests {
 
     #[test]
     fn catalog_sources_exist_on_disk() {
-        let c = runtime_c_dir();
+        let c = PathBuf::from(SOURCE_RUNTIME_C_DIR);
         assert!(!RUNTIME_MODULES.is_empty());
         for m in RUNTIME_MODULES {
             for rel in m.shared_c.iter().chain(m.native_extra_c) {
@@ -414,7 +380,7 @@ mod tests {
     }
 
     fn native_runtime_c_files(need: RuntimeNeed) -> Vec<PathBuf> {
-        native_runtime_units(need)
+        native_runtime_units(Path::new(SOURCE_RUNTIME_C_DIR), need)
             .into_iter()
             .map(|u| u.path)
             .collect()

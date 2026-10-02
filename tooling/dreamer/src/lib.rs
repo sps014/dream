@@ -7,6 +7,7 @@ pub mod fetch;
 pub mod git;
 pub mod lockfile;
 pub mod manifest;
+mod package_fs;
 pub mod process_status;
 pub mod registry;
 pub mod resolver;

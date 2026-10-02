@@ -20,7 +20,8 @@ _LEAK = re.compile(r"\[dream\] leak check: live=(\d+)")
 
 root = Path(__file__).resolve().parents[1]
 # DREAM_PROBE_BIN probes another build, e.g. a staged release archive's `dream`.
-dream = Path(os.environ.get("DREAM_PROBE_BIN") or root / "target/debug/dream")
+dream_name = "dream.exe" if os.name == "nt" else "dream"
+dream = Path(os.environ.get("DREAM_PROBE_BIN") or root / "target/debug" / dream_name)
 cases = sorted((root / "tests/cases").glob("*.dream"))
 workers = int(os.environ.get("PROBE_JOBS", "8"))
 dream_js = root / "runtime" / "dream.js"
@@ -107,7 +108,12 @@ def run_group(args, timeout, stdin=None, env=None):
         return proc.returncode, out or "", err or ""
     except subprocess.TimeoutExpired:
         try:
-            os.killpg(proc.pid, signal.SIGKILL)
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               check=False)
+            else:
+                os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
         proc.wait()
@@ -292,14 +298,15 @@ def one_node(f: Path):
 const timer = setTimeout(() => {{ console.error('probe --node timeout'); process.exit(2); }}, 25000);
 await run({wasm_url}, {{ stdout: (s) => process.stdout.write(s) }});
 clearTimeout(timer);
-"""
+""",
+        encoding="utf-8",
     )
     code, out, err_txt = run_group(["node", str(runner)], 35)
     if code != 0:
         tail = " | ".join((err_txt or out or "").strip().splitlines()[-2:])
         return stem, "fail", f"node {code} {tail}"
     if exp.exists():
-        want = exp.read_text().strip()
+        want = exp.read_text(encoding="utf-8").strip()
         got = run_output_body(out)
         if got != want:
             detail = _ANSI.sub("", err_txt).strip()
@@ -345,7 +352,7 @@ def one(f: Path):
         tail = " | ".join((err or out or "").strip().splitlines()[-2:])
         return stem, "fail", f"run {code} {tail}"
     if exp.exists():
-        want = exp.read_text().strip()
+        want = exp.read_text(encoding="utf-8").strip()
         got = run_output_body(out)
         if got != want:
             detail = _ANSI.sub("", err).strip()
@@ -357,6 +364,8 @@ def one(f: Path):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     node, only = parse_args(sys.argv[1:])
     if not dream.is_file():
         sys.stderr.write(f"missing {dream}; build with `cargo build`\n")

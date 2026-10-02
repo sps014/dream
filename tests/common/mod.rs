@@ -16,6 +16,15 @@ use dream_syntax::lexer::Lexer;
 use dream_syntax::parser::Parser;
 use dream_types::TypeInterner;
 
+pub fn normalize_stdout(output: String) -> String {
+    // The Windows CRT translates text-mode stdout to CRLF; golden files use LF.
+    if cfg!(windows) {
+        output.replace("\r\n", "\n")
+    } else {
+        output
+    }
+}
+
 pub fn analyze_code(code: &str) -> DiagnosticBag {
     let mut diagnostics = DiagnosticBag::new(None);
     let lexer = Lexer::new(code.to_string());
@@ -70,6 +79,7 @@ pub fn emit_ll_for(
         wasm_opt: OptLevel::O0,
     };
     let toolchain = Toolchain {
+        config: std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
         opt: OptLevel::O0,
         debug: false,
     };
@@ -154,7 +164,13 @@ fn run_native_main(code: &str) -> String {
     Compiler::new(Target::Native)
         .compile(&src_s, &ll_s)
         .unwrap_or_else(|e| panic!("native compile failed: {}", e));
-    compile_and_capture(&ll_s, OptLevel::O0).unwrap_or_else(|e| panic!("native run failed: {}", e))
+    compile_and_capture(
+        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+        &ll_s,
+        OptLevel::O0,
+    )
+    .map(normalize_stdout)
+    .unwrap_or_else(|e| panic!("native run failed: {}", e))
 }
 
 fn dedent_dream_source(s: &str) -> String {

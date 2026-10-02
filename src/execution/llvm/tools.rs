@@ -2,10 +2,10 @@
 //! minimal LLVM a release ships in `lib/dream/llvm`, then a development LLVM under
 //! `~/.dream/toolchains/llvm-*` (`scripts/fetch-dev-llvm.sh`).
 
-use crate::execution::native::cc::toolchains_dir;
+use crate::driver::toolchain::ToolchainConfig;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::OnceLock;
+use std::sync::Arc;
 
 /// Must match `scripts/build-llvm-dist.sh`'s CI pin and `scripts/fetch-dev-llvm.sh`. Textual IR is only guaranteed to parse with
 /// the LLVM major it was written for, so any other major is rejected.
@@ -16,9 +16,10 @@ const MISSING_LLVM: &str =
     "LLVM 22 not found: a Dream release ships it in lib/dream/llvm next to the binary; \
      for a development build run scripts/fetch-dev-llvm.sh, or set DREAM_LLVM to an LLVM 22 bin/";
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct LlvmTools {
     pub bin: PathBuf,
+    pub(crate) config: Arc<ToolchainConfig>,
 }
 
 impl LlvmTools {
@@ -58,17 +59,26 @@ impl LlvmTools {
     }
 }
 
-pub fn resolve_llvm() -> Result<LlvmTools, String> {
-    static RESOLVED: OnceLock<Result<LlvmTools, String>> = OnceLock::new();
-    RESOLVED.get_or_init(resolve_uncached).clone()
+pub fn resolve_llvm(config: &Arc<ToolchainConfig>) -> Result<LlvmTools, String> {
+    let bin = config
+        .resolved_llvm
+        .get_or_init(|| resolve_uncached(config))
+        .clone()?;
+    Ok(LlvmTools {
+        bin,
+        config: config.clone(),
+    })
 }
 
-fn resolve_uncached() -> Result<LlvmTools, String> {
-    let bin = env_bin()
-        .or_else(|| super::bundle::bundled_llvm_bin().filter(|b| has_opt(b)))
-        .or_else(installed_bin)
+fn resolve_uncached(config: &Arc<ToolchainConfig>) -> Result<PathBuf, String> {
+    let bin = env_bin(config)
+        .or_else(|| super::bundle::bundled_llvm_bin(config).filter(|b| has_opt(b)))
+        .or_else(|| installed_bin(config))
         .ok_or_else(|| MISSING_LLVM.to_string())?;
-    let tools = LlvmTools { bin };
+    let tools = LlvmTools {
+        bin,
+        config: config.clone(),
+    };
     for t in ["opt", "llc", "llvm-link", "llvm-dis"] {
         if !tools.tool(t).is_file() {
             return Err(format!(
@@ -95,26 +105,18 @@ fn resolve_uncached() -> Result<LlvmTools, String> {
             tools.bin.display()
         ));
     }
-    Ok(tools)
+    Ok(tools.bin)
 }
 
-fn env_bin() -> Option<PathBuf> {
-    let v = std::env::var("DREAM_LLVM").ok().filter(|v| !v.is_empty())?;
-    let p = PathBuf::from(v);
+fn env_bin(config: &ToolchainConfig) -> Option<PathBuf> {
+    let p = config.llvm.as_ref()?.clone();
     has_opt(&p)
         .then(|| p.clone())
         .or_else(|| has_opt(&p.join("bin")).then(|| p.join("bin")))
 }
 
-fn installed_bin() -> Option<PathBuf> {
-    let mut roots = Vec::new();
-    if let Ok(dir) = std::env::var("DREAM_TOOLCHAINS") {
-        if !dir.is_empty() {
-            roots.push(PathBuf::from(dir));
-        }
-    }
-    roots.push(toolchains_dir());
-    roots.iter().find_map(|r| newest_llvm_in(r))
+fn installed_bin(config: &ToolchainConfig) -> Option<PathBuf> {
+    config.toolchains.iter().find_map(|r| newest_llvm_in(r))
 }
 
 fn newest_llvm_in(toolchains: &Path) -> Option<PathBuf> {

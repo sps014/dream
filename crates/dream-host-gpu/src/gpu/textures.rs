@@ -200,12 +200,13 @@ fn validate_shape(
             return Err(format!("validation: unsupported sample count {samples}"));
         }
     }
-    let max_mips = 32 - (width.max(height).max(if dim == wgpu::TextureDimension::D3 {
-        layers
-    } else {
-        1
-    }))
-    .leading_zeros();
+    let max_mips = 32
+        - (width.max(height).max(if dim == wgpu::TextureDimension::D3 {
+            layers
+        } else {
+            1
+        }))
+        .leading_zeros();
     if mips > max_mips {
         return Err(format!(
             "validation: {width}x{height} allows at most {max_mips} mip levels, got {mips}"
@@ -320,7 +321,10 @@ pub fn texture_read_rgba(id: i32) -> Vec<u8> {
 
     let slice = staging.slice(..);
     slice.map_async(wgpu::MapMode::Read, |_| {});
-    let _ = device.poll(wgpu::Maintain::Wait);
+    if let Err(e) = device.poll(wgpu::PollType::Wait) {
+        st.set_last_error(format!("texture readback poll failed: {e}"));
+        return Vec::new();
+    }
     let mapped = slice.get_mapped_range();
     let mut out = vec![0u8; unpadded * height as usize];
     for row in 0..height as usize {

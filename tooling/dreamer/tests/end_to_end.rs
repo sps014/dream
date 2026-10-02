@@ -155,6 +155,9 @@ fn init_add_install_materializes_registry_and_path_dependencies() {
     commands::install::run(&project_dir).unwrap();
     let lock_again = dreamer::lockfile::Lockfile::load(&project_dir.join("dream.lock")).unwrap();
     assert_eq!(lock_again.find("greeter").unwrap().version, "1.0.0");
+    commands::remove::run(&project_dir, "local-lib", None).unwrap();
+    assert!(!local_lib_file.exists());
+    assert!(local_lib_dir.join("src/local_lib.dream").is_file());
 }
 
 /// Only runs the real compiler when a `dream` binary is discoverable (it is, for anyone running

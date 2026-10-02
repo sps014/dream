@@ -168,7 +168,9 @@ fn read_messages(stdout: ChildStdout, tx: mpsc::Sender<serde_json::Value>) {
 }
 
 fn llvm_available() -> bool {
-    match dream::execution::llvm::tools::resolve_llvm() {
+    match dream::execution::llvm::tools::resolve_llvm(&std::sync::Arc::new(
+        dream::driver::toolchain::ToolchainConfig::default(),
+    )) {
         Ok(_) => true,
         Err(e) => {
             eprintln!("skipping debugger test: {e}");

@@ -21,8 +21,16 @@ fn native_link_removes_unused_foreign_functions_but_keeps_called_symbols() {
     Compiler::new(Target::Native)
         .compile(&source.display().to_string(), &module.display().to_string())
         .unwrap();
-    let output =
-        compile_and_capture_ex(module.to_str().unwrap(), OptLevel::O0, &[], &[], None, 60).unwrap();
+    let output = compile_and_capture_ex(
+        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+        module.to_str().unwrap(),
+        OptLevel::O0,
+        &[],
+        &[],
+        None,
+        60,
+    )
+    .unwrap();
     assert_eq!(output.trim(), "42");
     let symbols = std::process::Command::new("nm")
         .arg(module.with_extension("bin"))

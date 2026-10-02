@@ -30,15 +30,17 @@ use crate::driver::source_loader::ProgramAccumulator;
 
 /// Runs the declaration + syntax generate passes.
 pub fn run_generators<'a>(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     arena: &'a Bump,
     acc: &mut ProgramAccumulator<'a>,
     entry_file: &str,
     diagnostics: &mut DiagnosticBag,
 ) -> Result<(), Error> {
-    run_generators_inner(arena, acc, entry_file, diagnostics)
+    run_generators_inner(config, arena, acc, entry_file, diagnostics)
 }
 
 fn run_generators_inner<'a>(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     arena: &'a Bump,
     acc: &mut ProgramAccumulator<'a>,
     entry_file: &str,
@@ -47,7 +49,7 @@ fn run_generators_inner<'a>(
     acc.manifest_generator_paths = manifest::load_manifest_generators(entry_file);
 
     let registered = discover_generators(acc, diagnostics);
-    let mut ctx = GeneratorContext::build(acc, registered);
+    let mut ctx = GeneratorContext::build(config.clone(), acc, registered);
 
     json_gen::expand_from_acc(&mut ctx, acc, &acc.all_structs, &acc.all_enums, diagnostics);
     ctx.apply_emits(arena, acc, diagnostics)?;

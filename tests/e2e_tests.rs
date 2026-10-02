@@ -3,6 +3,8 @@
 use dream::driver::compiler::{Compiler, Target};
 use dream::driver::wasm_opt::OptLevel;
 use dream::execution::native::{compile_and_capture, compile_and_capture_ex};
+
+mod common;
 use dream_abi::attributes::CompileTargets;
 use pretty_assertions::assert_eq;
 use rayon::prelude::*;
@@ -338,9 +340,21 @@ fn run_native_case(dream_file: &Path, release: bool) {
     let env_refs: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
     let run =
         if timeout_secs != 8 || !extra_args.is_empty() || stdin.is_some() || !env_refs.is_empty() {
-            compile_and_capture_ex(ll_str, opt, &env_refs, extra_args, stdin, timeout_secs)
+            compile_and_capture_ex(
+                &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+                ll_str,
+                opt,
+                &env_refs,
+                extra_args,
+                stdin,
+                timeout_secs,
+            )
         } else {
-            compile_and_capture(ll_str, opt)
+            compile_and_capture(
+                &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+                ll_str,
+                opt,
+            )
         };
     let _ = fs::remove_file(&ll_path);
     let _ = fs::remove_file(ll_path.with_extension("o"));
@@ -355,6 +369,7 @@ fn run_native_case(dream_file: &Path, release: bool) {
         return;
     }
     let actual = run.unwrap_or_else(|e| panic!("run failed for {:?}: {}", dream_file, e));
+    let actual = common::normalize_stdout(actual);
     assert_eq!(
         actual.trim(),
         expected_output.trim(),
@@ -396,24 +411,44 @@ fn run_corpus(release: bool, only: Option<&[&str]>) {
     );
 }
 
-fn file_url(path: &Path) -> String {
-    let abs = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    format!("file://{}", abs.display())
+fn js_string(s: &str) -> String {
+    serde_json::to_string(s).unwrap()
 }
 
-fn js_string(s: &str) -> String {
-    let mut out = String::from("\"");
-    for c in s.chars() {
-        match c {
-            '\\' | '"' => {
-                out.push('\\');
-                out.push(c);
-            }
-            _ => out.push(c),
-        }
-    }
-    out.push('"');
-    out
+fn wasm_runner_script(runtime: &Path, wasm: &Path) -> String {
+    format!(
+        "import {{ pathToFileURL }} from 'node:url';\n\
+         const {{ run }} = await import(pathToFileURL({js}).href);\n\
+         const timer = setTimeout(() => {{ console.error('wasm/js e2e timeout'); process.exit(2); }}, 25000);\n\
+         run({wasm}, {{ stdout: (s) => process.stdout.write(s) }}).await;\n\
+         clearTimeout(timer);\n",
+        js = js_string(runtime.to_str().unwrap()),
+        wasm = js_string(wasm.to_str().unwrap()),
+    )
+}
+
+#[test]
+fn file_urls_round_trip_special_paths() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("runtime #π%.mjs");
+    fs::write(
+        &file,
+        "export function run(path, {stdout}) { stdout(path); return {await: 0}; }\n",
+    )
+    .unwrap();
+    let wasm = dir.path().join("guest #π%.wasm");
+    let runner = dir.path().join("runner.mjs");
+    fs::write(&runner, wasm_runner_script(&file, &wasm)).unwrap();
+    let output = Command::new("node").arg(runner).output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        wasm.to_str().unwrap()
+    );
 }
 
 fn run_wasm_js_case(dream_file: &Path) {
@@ -434,18 +469,7 @@ fn run_wasm_js_case(dream_file: &Path) {
     let wasm_path = fs::canonicalize(&wasm_path).unwrap_or(wasm_path);
     let dream_js = Path::new(env!("CARGO_MANIFEST_DIR")).join("runtime/dream.js");
     let runner = dest_dir.join(format!("{stem}_run.mjs"));
-    fs::write(
-        &runner,
-        format!(
-            "import {{ run }} from {js};\n\
-             const timer = setTimeout(() => {{ console.error('wasm/js e2e timeout'); process.exit(2); }}, 25000);\n\
-             run({wasm}, {{ stdout: (s) => process.stdout.write(s) }}).await;\n\
-             clearTimeout(timer);\n",
-            js = js_string(&file_url(&dream_js)),
-            wasm = js_string(wasm_path.to_str().unwrap()),
-        ),
-    )
-    .unwrap();
+    fs::write(&runner, wasm_runner_script(&dream_js, &wasm_path)).unwrap();
     let child = Command::new("node")
         .arg(&runner)
         .stdout(std::process::Stdio::piped())
@@ -464,7 +488,13 @@ fn run_wasm_js_case(dream_file: &Path) {
             thread::sleep(std::time::Duration::from_millis(50));
         }
         if !flag.load(std::sync::atomic::Ordering::Relaxed) {
-            let _ = Command::new("kill").arg("-9").arg(pid.to_string()).status();
+            if cfg!(windows) {
+                let _ = Command::new("taskkill")
+                    .args(["/F", "/T", "/PID", &pid.to_string()])
+                    .status();
+            } else {
+                let _ = Command::new("kill").arg("-9").arg(pid.to_string()).status();
+            }
         }
     });
     let out = child
@@ -874,6 +904,18 @@ fn dream_js_bundle_is_fresh() {
     );
 }
 
+#[test]
+fn dream_js_bundle_is_platform_independent() {
+    let status = Command::new("node")
+        .args(["--test", "scripts/test-bundle-runtime.mjs"])
+        .status()
+        .unwrap();
+    assert!(
+        status.success(),
+        "runtime bundle differs across platform paths"
+    );
+}
+
 /// A compute-free arithmetic program must not pull GPU/FS/crypto host chunks into its selective
 /// runtime (js bridges may still appear when layouts exist for marshaler keepalive).
 #[test]
@@ -1011,6 +1053,7 @@ fn dream_test_runs_attr_marked_functions() {
         return;
     }
     let result = dream::driver::test::run_tests(
+        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
         path,
         &dream::driver::test::TestOptions {
             release: false,

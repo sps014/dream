@@ -34,9 +34,9 @@ struct Unit {
     include_dirs: Vec<PathBuf>,
 }
 
-fn units(need: RuntimeNeed) -> Vec<Unit> {
-    let native_inc = dream_mir::runtime::native_runtime_include_dir();
-    let mut out: Vec<Unit> = dream_mir::runtime::wasm32_runtime_c_files()
+fn units(root: &Path, need: RuntimeNeed) -> Vec<Unit> {
+    let native_inc = dream_mir::runtime::native_runtime_include_dir(root);
+    let mut out: Vec<Unit> = dream_mir::runtime::wasm32_runtime_c_files(root)
         .into_iter()
         .map(|path| Unit {
             path,
@@ -52,7 +52,7 @@ fn units(need: RuntimeNeed) -> Vec<Unit> {
         });
     }
     out.extend(
-        dream_mir::runtime::wasm32_linked_units(need)
+        dream_mir::runtime::wasm32_linked_units(root, need)
             .into_iter()
             .map(|u| Unit {
                 path: u.path,
@@ -108,7 +108,7 @@ pub fn wasm_runtime(
     need: RuntimeNeed,
     threads: bool,
 ) -> Result<WasmRuntime, String> {
-    match rt_dir(flavor(threads), opt, need) {
+    match rt_dir(&tools.config, flavor(threads), opt, need) {
         RtDir::Prebuilt(dir) => {
             let mut objs: Vec<PathBuf> = std::fs::read_dir(&dir)
                 .map_err(|e| format!("{}: {e}", dir.display()))?
@@ -149,8 +149,8 @@ pub(super) fn build_wasm_runtime(
     lock_file.lock().map_err(|e| e.to_string())?;
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
-    let units = units(need);
-    let include_dirs = guest_include_dirs();
+    let units = units(&tools.config.runtime_c, need);
+    let include_dirs = guest_include_dirs(&tools.config.runtime_c);
     let includes: Vec<&Path> = include_dirs.iter().map(PathBuf::as_path).collect();
     let bc = dir.join("dream_rt.bc");
     let sigs = dir.join("dream_rt.sigs");
@@ -205,20 +205,40 @@ pub(super) fn build_wasm_runtime(
     run_captured(&mut link, "llvm-link (wasm32 runtime)")?;
 
     let check = |src: &Path| {
-        let mut cmd = unit_command(&clang, &sysroot, src, &includes, &[], &[], threads, opt, "anchor.c");
+        let mut cmd = unit_command(
+            &clang,
+            &sysroot,
+            src,
+            &includes,
+            &[],
+            &[],
+            threads,
+            opt,
+            "anchor.c",
+        );
         cmd.args([
             "-fsyntax-only",
             "-w",
             "-ferror-limit=0",
             "-fno-color-diagnostics",
         ])
-            .arg(src)
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stderr).into_owned())
-            .map_err(|e| e.to_string())
+        .arg(src)
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stderr).into_owned())
+        .map_err(|e| e.to_string())
     };
     let compile = |src: &Path, out: &Path| {
-        let mut cmd = unit_command(&clang, &sysroot, src, &includes, &[], &[], threads, opt, "anchor.c");
+        let mut cmd = unit_command(
+            &clang,
+            &sysroot,
+            src,
+            &includes,
+            &[],
+            &[],
+            threads,
+            opt,
+            "anchor.c",
+        );
         run_captured(cmd.arg("-w").arg("-o").arg(out).arg(src), "clang (anchor)")
     };
     let anchor = anchor_unit(dir, "dream_rt_wasm32.h", &check, &compile)?;
@@ -301,7 +321,11 @@ pub fn link_wasm(
     // instantiation. As an archive after the objects, only referenced members are linked.
     let builtins = clang_rt(tools, ClangRt::WasmBuiltins { threads })?;
     let mut cmd = wasm_ld_command(&tools.optional_tool("wasm-ld")?, threads, opt);
-    cmd.arg("-o").arg(wasm_path).arg(&obj).args(&rt.objs).arg(builtins);
+    cmd.arg("-o")
+        .arg(wasm_path)
+        .arg(&obj)
+        .args(&rt.objs)
+        .arg(builtins);
     let r = run_captured(&mut cmd, "wasm-ld");
     let _ = std::fs::remove_file(&obj);
     r

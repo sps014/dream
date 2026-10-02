@@ -57,6 +57,7 @@ pub trait LlvmToolchain: Send + Sync {
 /// semantic analysis, code generation, and artifact emission (delegated to `abi`). Diagnostic
 /// rendering is delegated to the `diagnostics` module.
 pub struct Compiler {
+    toolchain_config: Arc<crate::driver::toolchain::ToolchainConfig>,
     target: Target,
     /// When `true` (the default), codegen emits allocator instrumentation so the
     /// `Debug.live_objects()` / `Debug.total_allocations()` probes report real values, and keeps
@@ -95,8 +96,19 @@ pub struct Compiler {
 
 impl Compiler {
     pub fn new(target: Target) -> Self {
+        Self::new_with_toolchain_config(
+            target,
+            Arc::new(crate::driver::toolchain::ToolchainConfig::default()),
+        )
+    }
+
+    pub fn new_with_toolchain_config(
+        target: Target,
+        toolchain_config: Arc<crate::driver::toolchain::ToolchainConfig>,
+    ) -> Self {
         Self {
             target,
+            toolchain_config,
             debug: true,
             debug_info: false,
             optimize: None,
@@ -111,6 +123,10 @@ impl Compiler {
         }
     }
 
+    pub fn toolchain_config(&self) -> &Arc<crate::driver::toolchain::ToolchainConfig> {
+        &self.toolchain_config
+    }
+
     /// The native optimization level these settings build at.
     pub fn native_opt(&self) -> OptLevel {
         OptLevel::from_cli(!self.debug, self.optimize)
@@ -123,6 +139,7 @@ impl Compiler {
         #[cfg(feature = "native")]
         {
             Some(Arc::new(crate::execution::llvm::Toolchain {
+                config: self.toolchain_config.clone(),
                 opt: self.native_opt(),
                 debug: self.debug_info,
             }))
@@ -253,12 +270,8 @@ impl Compiler {
         let native_graph = crate::driver::native_sets::NativeGraph::load(main_file_path, &acc)
             .map_err(CompileError::Manifest)?;
         crate::driver::native_sets::resolve_bare_c_attrs(&mut acc, &native_graph, &mut diagnostics);
-        let cpp_bridge = crate::driver::cpp_bridge::expand(
-            &arena,
-            &mut acc,
-            &native_graph,
-            &mut diagnostics,
-        )?;
+        let cpp_bridge =
+            crate::driver::cpp_bridge::expand(&arena, &mut acc, &native_graph, &mut diagnostics)?;
 
         // Opt-in stdlib packages (`import system.net;`, etc.) plus always-on bootstrap
         // (`system.core` / `system.primitives`). `@json` types need `system.json` for derives.
@@ -308,7 +321,13 @@ impl Compiler {
                 !acc.all_structs.is_empty(),
                 "run_generators must run after prelude merge / class collection"
             );
-            run_generators(&arena, &mut acc, main_file_path, &mut diagnostics)?;
+            run_generators(
+                &self.toolchain_config,
+                &arena,
+                &mut acc,
+                main_file_path,
+                &mut diagnostics,
+            )?;
         }
 
         // Inherit interface default-method bodies into implementing classes that omit them, by
@@ -508,8 +527,7 @@ impl Compiler {
             if !self.opt_ir {
                 self.reporter.artifact(Path::new(out_path));
             }
-            let abi_artifacts =
-                emit_wasm_and_abi(
+            let abi_artifacts = emit_wasm_and_abi(
                 out_path,
                 ast.get_root(),
                 &gpu,
@@ -536,7 +554,8 @@ impl Compiler {
             .ok_or_else(|| CompileError::Internal("no LLVM toolchain configured".into()))?
             .link_wasm(&ll_path, &wasm_path, opt_ll.as_deref(), &req)
             .map_err(CompileError::Internal)?;
-        self.reporter.artifact(opt_ll.as_deref().unwrap_or(&ll_path));
+        self.reporter
+            .artifact(opt_ll.as_deref().unwrap_or(&ll_path));
         self.reporter.artifact(&wasm_path);
 
         // Post-process order matters: wasm-opt first (it drops unknown custom sections), then
@@ -555,15 +574,14 @@ impl Compiler {
         }
 
         // Sibling `.abi.json` for JS/`dream.js` interop, plus `.wgsl` when GPU kernels were emitted.
-        let abi_artifacts =
-            emit_wasm_and_abi(
-                out_path,
-                ast.get_root(),
-                &gpu,
-                &live_imports,
-                &native_graph,
-                &cpp_bridge,
-            )?;
+        let abi_artifacts = emit_wasm_and_abi(
+            out_path,
+            ast.get_root(),
+            &gpu,
+            &live_imports,
+            &native_graph,
+            &cpp_bridge,
+        )?;
         for p in abi_artifacts {
             self.reporter.artifact(&p);
         }
@@ -685,7 +703,8 @@ fn report_wasm_c_imports(
         if !f.is_extern || !dream_abi::attributes::has_c_attr(&f.attributes) {
             continue;
         }
-        let (module, field) = dream_abi::attributes::extern_import_target(&f.attributes, &f.name.text);
+        let (module, field) =
+            dream_abi::attributes::extern_import_target(&f.attributes, &f.name.text);
         if !live.contains(&(module.as_str(), field.as_str())) || !reported.insert((module, field)) {
             continue;
         }

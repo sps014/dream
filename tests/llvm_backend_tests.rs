@@ -11,6 +11,8 @@ use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod common;
+
 /// One or more cases per plan area: arithmetic, recursion, loops, structs, arrays and a bounds
 /// trap, classes, retain/release, destruction through `del`, ownership transfer, borrowed and
 /// sink params, return ownership, interface dispatch, strings, List/Map, weak refs, async, tasks.
@@ -58,7 +60,9 @@ const CASES: &[&str] = &[
 ];
 
 fn llvm_available() -> bool {
-    match resolve_llvm() {
+    match resolve_llvm(&std::sync::Arc::new(
+        dream::driver::toolchain::ToolchainConfig::default(),
+    )) {
         Ok(_) => true,
         Err(e) => {
             eprintln!("skipping LLVM backend test: {e}");
@@ -71,6 +75,60 @@ fn case(stem: &str) -> PathBuf {
     Path::new("tests/cases").join(format!("{stem}.dream"))
 }
 
+#[test]
+fn unsigned_string_reads_do_not_depend_on_abi_extension_attributes() {
+    use dream_mir::build::FunctionBuilder;
+    use dream_mir::{Const, Mir, Operand, Place, Rvalue, Terminator};
+    let interner = dream_types::TypeInterner::new();
+    let mut builder = FunctionBuilder::new("unsigned_reads", interner.int());
+    let source = builder.new_param(interner.string(), None);
+    let char_value = builder.new_temp(interner.int());
+    let byte_value = builder.new_temp(interner.int());
+    let source = Operand::Copy(Place::Local(source));
+    let index = Operand::Const(Const::Int(0));
+    builder.assign(
+        Place::Local(char_value),
+        Rvalue::CharAt(source.clone(), index.clone(), true),
+    );
+    builder.assign(
+        Place::Local(byte_value),
+        Rvalue::ByteAt(source, index, true),
+    );
+    builder.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(
+        byte_value,
+    )))));
+    let mir = Mir {
+        functions: vec![builder.finish()],
+        ..Default::default()
+    };
+    let target = dream_mir::backend::Target::Native;
+    let req = LlvmRuntimeRequest {
+        need: dream_mir::runtime::runtime_need_from_mir(&mir),
+        target,
+        threads: false,
+        wasm_opt: OptLevel::O0,
+    };
+    let toolchain = Toolchain {
+        config: std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+        opt: OptLevel::O0,
+        debug: false,
+    };
+    let mut sigs = RuntimeSigs::parse(&toolchain.runtime_sigs(&req).unwrap()).unwrap();
+    // MSVC's ABI omits zeroext even for unsigned narrow returns.
+    for name in ["dream_char_at_u", "dream_byte_at_u"] {
+        sigs.fns.get_mut(name).unwrap().ret_attrs.clear();
+    }
+    let ir = dream_mir::backend::llvm::emit_llvm_module(&mir, &interner, &sigs, false, target);
+    let body = common::ir_func_body(&ir, "unsigned_reads");
+    assert!(body.contains("zext i16"), "{}", body);
+    assert!(body.contains("zext i8"), "{}", body);
+    assert!(
+        !body.contains("sext i16") && !body.contains("sext i8"),
+        "{}",
+        body
+    );
+}
+
 fn out_dir(tag: &str) -> PathBuf {
     let dir = Path::new("target").join(tag);
     fs::create_dir_all(&dir).unwrap();
@@ -80,7 +138,11 @@ fn out_dir(tag: &str) -> PathBuf {
 fn compile_ll(src: &Path, ll: &Path, opt: OptLevel) {
     Compiler::new(Target::Native)
         .with_release(opt != OptLevel::O0)
-        .with_llvm(std::sync::Arc::new(Toolchain { opt, debug: false }))
+        .with_llvm(std::sync::Arc::new(Toolchain {
+            config: std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+            opt,
+            debug: false,
+        }))
         .compile(&src.display().to_string(), &ll.display().to_string())
         .unwrap_or_else(|e| panic!("LLVM compile failed for {}: {}", src.display(), e));
 }
@@ -89,9 +151,30 @@ fn run_llvm(src: &Path, opt: OptLevel) -> Result<String, String> {
     let stem = src.file_stem().unwrap().to_str().unwrap();
     let ll = out_dir(&format!("llvm-backend-{opt:?}")).join(format!("{stem}.ll"));
     compile_ll(src, &ll, opt);
-    let bin = compile_llvm(&ll, None, opt, false, &Pgo::Off, None, false)
-        .unwrap_or_else(|e| panic!("LLVM build failed for {}: {}", stem, e));
-    capture_native_bin(&bin, ll.to_str().unwrap(), &[], &[], None, 60).map_err(|e| e.to_string())
+    let bin = compile_llvm(
+        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+        &ll,
+        dream::execution::llvm::NativeBuildOptions {
+            opt_ll: None,
+            opt,
+            debug: false,
+            pgo: &Pgo::Off,
+            icon: None,
+            relocatable: false,
+        },
+    )
+    .unwrap_or_else(|e| panic!("LLVM build failed for {}: {}", stem, e));
+    capture_native_bin(
+        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+        &bin,
+        ll.to_str().unwrap(),
+        &[],
+        &[],
+        None,
+        60,
+    )
+    .map(common::normalize_stdout)
+    .map_err(|e| e.to_string())
 }
 
 #[test]
@@ -105,7 +188,19 @@ fn llvm_relocatable_binary_runs_after_move() {
     let source = case("arithmetic");
     let ll = build.join("arithmetic.ll");
     compile_ll(&source, &ll, OptLevel::O0);
-    let binary = compile_llvm(&ll, None, OptLevel::O0, false, &Pgo::Off, None, true).unwrap();
+    let binary = compile_llvm(
+        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+        &ll,
+        dream::execution::llvm::NativeBuildOptions {
+            opt_ll: None,
+            opt: OptLevel::O0,
+            debug: false,
+            pgo: &Pgo::Off,
+            icon: None,
+            relocatable: true,
+        },
+    )
+    .unwrap();
     for capability in dream_abi::host_capability::HostCapability::ALL {
         assert_eq!(
             build.join(capability.library_name()).is_file(),
@@ -127,7 +222,7 @@ fn llvm_relocatable_binary_runs_after_move() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(
-        String::from_utf8_lossy(&output.stdout).trim(),
+        common::normalize_stdout(String::from_utf8_lossy(&output.stdout).into_owned()).trim(),
         fs::read_to_string(source.with_extension("expected"))
             .unwrap()
             .trim()
@@ -198,6 +293,7 @@ fn llvm_runtime_declarations_match_bitcode() {
         return;
     }
     let toolchain = Toolchain {
+        config: std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
         opt: OptLevel::O2,
         debug: false,
     };
@@ -316,7 +412,9 @@ fn llvm_ir_shapes() {
 #[test]
 #[ignore = "PGO round trip; cargo test --workspace -- --ignored"]
 fn llvm_pgo_round_trip() {
-    let Ok(tools) = resolve_llvm() else {
+    let Ok(tools) = resolve_llvm(&std::sync::Arc::new(
+        dream::driver::toolchain::ToolchainConfig::default(),
+    )) else {
         return;
     };
     if !tools.tool("llvm-profdata").is_file() {
@@ -327,15 +425,50 @@ fn llvm_pgo_round_trip() {
     let ll = out_dir("llvm-backend-pgo").join("for_each.ll");
     compile_ll(&src, &ll, OptLevel::O2);
     let expected = fs::read_to_string(src.with_extension("expected")).unwrap();
-    let run =
-        |bin: &Path| capture_native_bin(bin, ll.to_str().unwrap(), &[], &[], None, 60).unwrap();
-    let gen = compile_llvm(&ll, None, OptLevel::O2, false, &Pgo::Generate, None, false).unwrap();
+    let run = |bin: &Path| {
+        capture_native_bin(
+            &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+            bin,
+            ll.to_str().unwrap(),
+            &[],
+            &[],
+            None,
+            60,
+        )
+        .map(common::normalize_stdout)
+        .unwrap()
+    };
+    let gen = compile_llvm(
+        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+        &ll,
+        dream::execution::llvm::NativeBuildOptions {
+            opt_ll: None,
+            opt: OptLevel::O2,
+            debug: false,
+            pgo: &Pgo::Generate,
+            icon: None,
+            relocatable: false,
+        },
+    )
+    .unwrap();
     assert_eq!(run(&gen), expected);
     let raw = gen.with_extension("pgo");
     assert!(fs::read_dir(&raw)
         .unwrap()
         .flatten()
         .any(|e| e.path().extension().is_some_and(|x| x == "profraw")));
-    let used = compile_llvm(&ll, None, OptLevel::O2, false, &Pgo::Use(None), None, false).unwrap();
+    let used = compile_llvm(
+        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+        &ll,
+        dream::execution::llvm::NativeBuildOptions {
+            opt_ll: None,
+            opt: OptLevel::O2,
+            debug: false,
+            pgo: &Pgo::Use(None),
+            icon: None,
+            relocatable: false,
+        },
+    )
+    .unwrap();
     assert_eq!(run(&used), expected);
 }

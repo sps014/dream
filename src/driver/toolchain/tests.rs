@@ -106,6 +106,29 @@ fn configs_are_independent_without_mutating_process_environment() {
 }
 
 #[test]
+fn cache_locations_do_not_depend_on_cargo_files_in_the_working_directory() {
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    std::fs::create_dir_all(project.join("target")).unwrap();
+    std::fs::write(project.join("Cargo.toml"), "").unwrap();
+    let prefix = root.path().join("install");
+    let a = ToolchainConfig::from_lookup(
+        |key| (key == "DREAM_PREFIX").then(|| prefix.clone().into_os_string()),
+        None,
+        project,
+    );
+    let b = ToolchainConfig::from_lookup(
+        |key| (key == "DREAM_PREFIX").then(|| prefix.clone().into_os_string()),
+        None,
+        root.path().join("elsewhere"),
+    );
+    assert_eq!(a.native_rt_cache_root(), prefix.join("cache/native-rt"));
+    assert_eq!(a.generator_cache_root(), prefix.join("cache/generators"));
+    assert_eq!(a.native_rt_cache_root(), b.native_rt_cache_root());
+    assert_eq!(a.generator_cache_root(), b.generator_cache_root());
+}
+
+#[test]
 fn execution_and_runtime_catalog_do_not_read_environment_again() {
     for source in [
         include_str!("../../execution/llvm/tools.rs"),

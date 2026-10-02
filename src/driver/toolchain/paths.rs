@@ -128,19 +128,11 @@ impl ToolchainConfig {
     }
 
     pub fn native_rt_cache_root(&self) -> PathBuf {
-        self.cache_root("dream-native-rt", "native-rt")
+        self.prefix.join("cache").join("native-rt")
     }
 
     pub fn generator_cache_root(&self) -> PathBuf {
-        self.cache_root("generators", "generators")
-    }
-
-    fn cache_root(&self, development: &str, installed: &str) -> PathBuf {
-        if self.cwd.join("Cargo.toml").is_file() && self.cwd.join("target").is_dir() {
-            self.cwd.join("target").join(development)
-        } else {
-            self.prefix.join("cache").join(installed)
-        }
+        self.prefix.join("cache").join("generators")
     }
 
     pub fn host_library_dirs(&self) -> Vec<PathBuf> {

@@ -5,12 +5,13 @@
 
 #![allow(dead_code)]
 
-use dream::driver::compiler::{Compiler, LlvmRuntimeRequest, LlvmToolchain, Target};
+use dream::driver::compiler::{Compiler, LlvmRuntimeRequest, LlvmToolchain};
 use dream::driver::wasm_opt::OptLevel;
 use dream::execution::llvm::Toolchain;
 use dream::execution::native::compile_and_capture;
 use dream_diagnostics::DiagnosticBag;
 use dream_hir::Hir;
+use dream_mir::backend::Target;
 use dream_sema::analyzer::Analyzer;
 use dream_syntax::lexer::Lexer;
 use dream_syntax::parser::Parser;
@@ -63,7 +64,7 @@ pub fn compile_test_pipeline<R>(code: &str, emit: impl FnOnce(&Hir, &TypeInterne
 
 /// The module's LLVM IR, typed against the pinned toolchain's native runtime signatures.
 pub fn emit_ll(mir: &dream_mir::Mir, interner: &TypeInterner) -> String {
-    emit_ll_for(mir, interner, dream_mir::backend::Target::Native)
+    emit_ll_for(mir, interner, dream_mir::backend::Target::native())
 }
 
 /// Like [`emit_ll`] for an explicit target (wasm32 calls JS bridge imports by name).
@@ -74,7 +75,7 @@ pub fn emit_ll_for(
 ) -> String {
     let req = LlvmRuntimeRequest {
         need: dream_mir::runtime::runtime_need_from_mir(mir),
-        target,
+        target: target.clone(),
         threads: false,
         wasm_opt: OptLevel::O0,
     };
@@ -161,7 +162,7 @@ fn run_native_main(code: &str) -> String {
     let ll = dir.join("t.ll");
     let src_s = src.to_string_lossy().into_owned();
     let ll_s = ll.to_string_lossy().into_owned();
-    Compiler::new(Target::Native)
+    Compiler::new(Target::native())
         .compile(&src_s, &ll_s)
         .unwrap_or_else(|e| panic!("native compile failed: {}", e));
     compile_and_capture(
@@ -225,7 +226,7 @@ pub fn emit_hir_to_module_optimized(code: &str) -> String {
 pub fn emit_hir_to_module_wasm32(code: &str) -> String {
     compile_test_pipeline(code, |hir, interner| {
         let mir = dream_mir::lower::lower_program(hir, interner);
-        emit_ll_for(&mir, interner, dream_mir::backend::Target::Wasm32)
+        emit_ll_for(&mir, interner, dream_mir::backend::Target::wasm32())
     })
 }
 

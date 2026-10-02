@@ -20,6 +20,7 @@ pub fn pack_runtime(
         for need in RuntimeNeed::all_sets() {
             build_native_runtime(
                 &tools,
+                &dream_abi::target::TargetSpec::host(),
                 opt,
                 need,
                 &out.join(rt_rel_dir("native", opt, need)),

@@ -2,9 +2,10 @@
 //! or C++ need a C/C++ compiler (Zig, or `DREAM_CXX`) and run with `--ignored`; the rest only
 //! drive the front end.
 
-use dream::driver::compiler::{Compiler, Target};
+use dream::driver::compiler::Compiler;
 use dream::driver::wasm_opt::OptLevel;
 use dream::execution::native::compile_and_capture_ex;
+use dream_mir::backend::Target;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -46,7 +47,7 @@ fn compile(target: Target, entry: &Path, out: &Path) -> Result<(), String> {
 
 fn build(entry: &Path, tag: &str) -> Result<PathBuf, String> {
     let ll = out_dir(tag).join("main.ll");
-    compile(Target::Native, entry, &ll)?;
+    compile(Target::native(), entry, &ll)?;
     Ok(ll)
 }
 
@@ -332,7 +333,7 @@ fn cpp_shim_and_ir_are_deterministic() {
 fn wasm32_rejects_a_live_cpp_member_by_its_dream_name() {
     let entry = repo("sample/native_cpp/src/main.dream");
     let out = out_dir("wasm").join("main.wat");
-    let err = compile(Target::Wasm32, &entry, &out).unwrap_err();
+    let err = compile(Target::wasm32(), &entry, &out).unwrap_err();
     assert_contains(
         &err,
         "'Store.put' is a native C/C++ import and cannot be called from a wasm32 build",

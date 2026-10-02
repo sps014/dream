@@ -11,13 +11,14 @@ pub(crate) struct NativeLayouts {
 }
 
 impl NativeLayouts {
-    pub(crate) fn for_target(mir: &Mir, interner: &TypeInterner, target: super::Target) -> Self {
-        match target {
-            super::Target::Native => Self::compute(mir, interner),
-            super::Target::Wasm32 => Self {
+    pub(crate) fn for_target(mir: &Mir, interner: &TypeInterner, target: &super::Target) -> Self {
+        if target.is_wasm32() {
+            Self {
                 structs: mir.layouts.structs.clone(),
                 unions: mir.layouts.unions.clone(),
-            },
+            }
+        } else {
+            Self::compute(mir, interner)
         }
     }
 

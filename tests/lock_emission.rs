@@ -16,13 +16,13 @@ fn native_locks_use_object_identity_while_wasm_uses_the_lock_word() {
         "#,
         |hir, interner| {
             let mir = dream_mir::lower::lower_program(hir, interner);
-            for target in [Target::Native, Target::Wasm32] {
-                let ir = emit_ll_for(&mir, interner, target);
+            for target in [Target::native(), Target::wasm32()] {
+                let ir = emit_ll_for(&mir, interner, target.clone());
                 let body = ir_func_body(&ir, "touch");
                 assert!(body.contains("@dream_lock_acquire("), "{}", body);
                 assert!(body.contains("@dream_lock_release("), "{}", body);
                 let adjusts_address = body.contains("add i64") || body.contains("add i32");
-                assert_eq!(adjusts_address, target == Target::Wasm32, "{body}");
+                assert_eq!(adjusts_address, target.is_wasm32(), "{body}");
             }
         },
     );

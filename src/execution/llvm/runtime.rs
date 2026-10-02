@@ -16,6 +16,7 @@ use super::tools::LlvmTools;
 use crate::driver::rt_stamp;
 use crate::driver::wasi::run_captured;
 use crate::driver::wasm_opt::OptLevel;
+use dream_abi::target::TargetSpec;
 use dream_mir::runtime::{
     native_runtime_include_dir, runtime_abi_include_dir, RuntimeNeed, RUNTIME_MODULES,
 };
@@ -71,25 +72,9 @@ fn sysroot_args(config: &crate::driver::toolchain::ToolchainConfig) -> &[String]
     })
 }
 
-/// The target of the running `dream`, not clang's default: a cross-built release (macOS x86_64 on
-/// an arm64 runner) packs its runtime by running its own `dream` with the runner's clang. macOS
-/// pins the oldest release the Rust toolchain supports so binaries run beyond the build machine's.
-fn native_target_args() -> &'static [&'static str] {
-    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-        &["--target=arm64-apple-macosx11.0"]
-    } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
-        &["--target=x86_64-apple-macosx11.0"]
-    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-        &["--target=x86_64-unknown-linux-gnu"]
-    } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
-        &["--target=aarch64-unknown-linux-gnu"]
-    } else if cfg!(all(windows, target_env = "msvc", target_arch = "x86_64")) {
-        &["--target=x86_64-pc-windows-msvc"]
-    } else if cfg!(all(windows, target_env = "msvc", target_arch = "aarch64")) {
-        &["--target=aarch64-pc-windows-msvc"]
-    } else {
-        &[]
-    }
+/// Clang's default may describe its runner rather than the compiler's selected target.
+fn native_target_arg(spec: &TargetSpec) -> String {
+    format!("--target={}", spec.triple)
 }
 
 fn bitcode_units(root: &Path, need: RuntimeNeed) -> (Vec<Unit>, Vec<Unit>) {
@@ -141,13 +126,14 @@ fn bitcode_units(root: &Path, need: RuntimeNeed) -> (Vec<Unit>, Vec<Unit>) {
 
 fn clang_unit(
     config: &crate::driver::toolchain::ToolchainConfig,
+    spec: &TargetSpec,
     clang: &Path,
     u: &Unit,
     flags: &[&str],
     out: &Path,
 ) -> Result<(), String> {
     let mut cmd = Command::new(clang);
-    cmd.args(native_target_args())
+    cmd.arg(native_target_arg(spec))
         .args(sysroot_args(config))
         .args(["-std=gnu11", "-w", "-c"])
         .args(if cfg!(windows) {
@@ -168,6 +154,7 @@ fn clang_unit(
 
 pub fn llvm_runtime(
     tools: &LlvmTools,
+    spec: &TargetSpec,
     opt: OptLevel,
     need: RuntimeNeed,
     debug: bool,
@@ -177,18 +164,23 @@ pub fn llvm_runtime(
     // the Dream one.
     let opt = if debug { OptLevel::O0 } else { opt };
     match rt_dir(&tools.config, "native", opt, need) {
+        RtDir::Prebuilt(dir) if *spec != TargetSpec::host() => Err(format!(
+            "prebuilt native runtime {} does not support target {}; rebuild the runtime for this target",
+            dir.display(), spec.triple
+        )),
         RtDir::Prebuilt(dir) => Ok(LlvmRuntime {
             bc: prebuilt_file(&dir, "dream_rt.bc")?,
             sigs: prebuilt_file(&dir, "dream_rt.sigs")?,
             archive: Some(dir.join(VENDOR_ARCHIVE)).filter(|a| a.is_file()),
         }),
-        RtDir::Cache(dir) => build_native_runtime(tools, opt, need, &dir),
+        RtDir::Cache(dir) => build_native_runtime(tools, spec, opt, need, &dir.join(spec.triple.to_string())),
     }
 }
 
 /// Compiles the native runtime for `opt`/`need` into `dir`, unless its stamp says it is current.
 pub(super) fn build_native_runtime(
     tools: &LlvmTools,
+    spec: &TargetSpec,
     opt: OptLevel,
     need: RuntimeNeed,
     dir: &Path,
@@ -235,7 +227,7 @@ pub(super) fn build_native_runtime(
         "{}{}\n{}\n{}\n",
         rt_stamp::fingerprint(inputs),
         level.join(" "),
-        native_target_args().join(" "),
+        native_target_arg(spec),
         sysroot_args(config).join(" ")
     );
     let fresh = bc.exists()
@@ -254,7 +246,7 @@ pub(super) fn build_native_runtime(
     let mut parts = Vec::new();
     for (i, u) in bc_units.iter().enumerate() {
         let out = dir.join(format!("{i}.bc"));
-        clang_unit(config, &clang, u, &bc_flags, &out)?;
+        clang_unit(config, spec, &clang, u, &bc_flags, &out)?;
         parts.push(out);
     }
     let mut link = tools.command("llvm-link");
@@ -262,7 +254,7 @@ pub(super) fn build_native_runtime(
     run_captured(&mut link, "llvm-link (runtime)")?;
     strip_target_cpu(tools, &bc)?;
 
-    let anchor = build_anchor(config, &clang, dir, &bc_flags)?;
+    let anchor = build_anchor(config, spec, &clang, dir, &bc_flags)?;
     let merged = dir.join("sigs.bc");
     let mut link = tools.command("llvm-link");
     link.arg(&bc).arg(&anchor).arg("-o").arg(&merged);
@@ -274,7 +266,7 @@ pub(super) fn build_native_runtime(
         let mut objs = Vec::new();
         for (i, u) in vendored.iter().enumerate() {
             let obj = dir.join(format!("v{i}.o"));
-            clang_unit(config, &clang, u, &level, &obj)?;
+            clang_unit(config, spec, &clang, u, &level, &obj)?;
             objs.push(obj);
         }
         let _ = std::fs::remove_file(archive);
@@ -348,6 +340,7 @@ fn strip_cpu_attrs(ll: &str) -> String {
 
 fn build_anchor(
     config: &crate::driver::toolchain::ToolchainConfig,
+    spec: &TargetSpec,
     clang: &Path,
     dir: &Path,
     flags: &[&str],
@@ -356,7 +349,7 @@ fn build_anchor(
     let inc = format!("-I{}", native_runtime_include_dir(root).display());
     let check = |src: &Path| {
         Command::new(clang)
-            .args(native_target_args())
+            .arg(native_target_arg(spec))
             .args(sysroot_args(config))
             .args([
                 "-std=gnu11",
@@ -377,7 +370,7 @@ fn build_anchor(
             defines: vec!["DREAM_NATIVE".into()],
             include_dirs: vec![native_runtime_include_dir(root)],
         };
-        clang_unit(config, clang, &unit, flags, out)
+        clang_unit(config, spec, clang, &unit, flags, out)
     };
     anchor_unit(dir, "dream_rt_native.h", &check, &compile)
 }
@@ -459,7 +452,14 @@ mod tests {
             eprintln!("skipping: pinned LLVM not installed");
             return;
         };
-        let rt = llvm_runtime(&tools, OptLevel::O2, RuntimeNeed::CORE, false).expect("runtime");
+        let rt = llvm_runtime(
+            &tools,
+            &TargetSpec::host(),
+            OptLevel::O2,
+            RuntimeNeed::CORE,
+            false,
+        )
+        .expect("runtime");
         let sigs =
             RuntimeSigs::parse(&std::fs::read_to_string(&rt.sigs).expect("sigs")).expect("parse");
         assert!(sigs.function("dream_panic").noreturn);

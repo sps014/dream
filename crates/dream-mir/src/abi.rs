@@ -199,12 +199,16 @@ impl TargetAbi {
         future: FutureLayout::WASM32,
     };
 
-    pub fn native() -> Self {
+    pub fn for_target(spec: &dream_abi::target::TargetSpec) -> Self {
         Self {
-            ptr_size: std::mem::size_of::<usize>() as u32,
-            ptr_align: std::mem::align_of::<usize>() as u32,
-            heap_header_size: NATIVE_HEAP_HEADER_SIZE,
-            future: FutureLayout::native(),
+            ptr_size: spec.ptr_size,
+            ptr_align: spec.ptr_align,
+            heap_header_size: if spec.capabilities.linear_memory {
+                HEAP_HEADER_SIZE
+            } else {
+                NATIVE_HEAP_HEADER_SIZE
+            },
+            future: FutureLayout::for_target(spec),
         }
     }
 }
@@ -248,11 +252,11 @@ impl FutureLayout {
     /// locals start at 64. Kept as a `const` so WAT/JS/host stay byte-stable.
     pub const WASM32: Self = Self::compute(4, 4, false);
 
-    pub fn native() -> Self {
+    pub fn for_target(spec: &dream_abi::target::TargetSpec) -> Self {
         Self::compute(
-            std::mem::size_of::<usize>() as u32,
-            std::mem::align_of::<usize>() as u32,
-            true,
+            spec.ptr_size,
+            spec.ptr_align,
+            !spec.capabilities.linear_memory,
         )
     }
 
@@ -612,11 +616,12 @@ mod abi_h_lockstep {
         ] {
             assert_eq!(header_define(h, name), want as i64, "{name}");
         }
-        let n = FutureLayout::native();
+        let n = FutureLayout::for_target(
+            &dream_abi::target::TargetSpec::parse("x86_64-unknown-linux-gnu").unwrap(),
+        );
         assert_ne!(n.wide, n.remaining);
         assert!(n.wide + 8 <= n.slots);
         assert!(n.esize + 4 <= n.wide || n.wide + 8 <= n.esize);
-        assert_eq!(std::mem::size_of::<usize>(), 8);
         for (name, want) in [
             ("F_STATE_NATIVE", n.state),
             ("F_STATUS_NATIVE", n.status),

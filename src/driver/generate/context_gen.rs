@@ -203,7 +203,7 @@ fn compile_harness(
         unique
     ));
     let compiler = crate::driver::compiler::Compiler::new_with_toolchain_config(
-        crate::driver::compiler::Target::Native,
+        dream_mir::backend::Target::native(),
         config.clone(),
     )
     .with_skip_generators(true)

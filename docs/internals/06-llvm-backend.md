@@ -23,6 +23,26 @@ flowchart TD
 
 ## The toolchain
 
+The driver resolves one `Target::Llvm(TargetSpec)` and passes it through runtime
+signature loading and MIR emission. Shared target data lives in `dream-abi::target`
+so MIR does not depend on the driver. `target-lexicon` parses triples and determines
+pointer width, including x32/ILP32 ABIs; pointer alignment is the pointer width for
+the supported 32/64-bit targets. `TargetAbi` and future headers use these facts,
+rather than Rust's host `usize` layout.
+
+Native runtime clang invocations use the selected triple. Development runtime
+caches are separated by triple and their stamps include that triple. Native
+linking receives the same specification when loading the runtime again. Emitted
+IR retains clang's canonical target spelling, including its MSVC version suffix.
+macOS defaults to deployment version 11.0;
+`--min-os 13.2` selects a different version for the runtime, generated module and
+linker. Installed prebuilt runtimes support their packaged host specification;
+other specifications require a development runtime build.
+
+This target foundation does not yet enable cross-target native linking or unify
+aggregate layouts. Runtime datalayout validation and the target-driven layout
+table are the next audit steps (3.2 and 3.3).
+
 Native Rust hosts live in `crates/dream-host-{core,net,gpu,webview}`, not in the compiler.
 The root `dream` library is an rlib only and has no GUI/network host dependencies.
 `cargo build --workspace` builds the compiler and all four native capability libraries:

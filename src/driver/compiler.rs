@@ -15,18 +15,10 @@ use crate::driver::ui::{BuildReporter, SilentReporter};
 use crate::driver::wasm_opt::OptLevel;
 use dream_abi::attributes::CompileTargets;
 use dream_diagnostics::{format_diagnostics, render_with, DiagnosticBag};
+use dream_mir::backend::Target;
 use dream_sema::analyzer::Analyzer;
 use dream_syntax::nodes::ProgramNode;
 use dream_syntax::syntax_tree::SyntaxTree;
-
-/// Output artifact kind. Both go MIR → textual LLVM IR (`dream_mir::backend::llvm`).
-pub enum Target {
-    /// The whole-program `.ll` the native build (`execution::llvm::compile_llvm`) links.
-    Native,
-    /// `.ll` → `.wasm` through the pinned `llc` and `wasm-ld`, then `wasm-opt`, the
-    /// `.abi.json` sidecar and the `.wat` printed from the final binary.
-    Wasm32,
-}
 
 /// The runtime a module links against: its needed catalog modules, target, and for wasm32 whether
 /// the module runs on shared memory and the guest optimization level.
@@ -445,7 +437,7 @@ impl Compiler {
                 .iter()
                 .map(|imp| (imp.module.clone(), imp.field.clone()))
                 .collect();
-            let wasm = matches!(target, Target::Wasm32);
+            let wasm = target.is_wasm32();
             if wasm
                 && report_wasm_c_imports(
                     ast.get_root(),
@@ -460,11 +452,7 @@ impl Compiler {
             let need = dream_mir::runtime::runtime_need_from_mir(&mir);
             let req = LlvmRuntimeRequest {
                 need,
-                target: if wasm {
-                    dream_mir::backend::Target::Wasm32
-                } else {
-                    dream_mir::backend::Target::Native
-                },
+                target: target.clone(),
                 threads,
                 wasm_opt: guest_opt,
             };
@@ -478,7 +466,7 @@ impl Compiler {
                     interner,
                     &sigs,
                     debug && !wasm,
-                    req.target,
+                    req.target.clone(),
                 )
                 .into_bytes(),
                 Err(e) => {
@@ -522,7 +510,7 @@ impl Compiler {
         };
 
         info!("finished code generation");
-        if matches!(self.target, Target::Native) {
+        if !self.target.is_wasm32() {
             fs::write(out_path, &bytes)?;
             if !self.opt_ir {
                 self.reporter.artifact(Path::new(out_path));
@@ -546,7 +534,7 @@ impl Compiler {
         let opt_ll = self.opt_ir.then(|| ll_path.with_extension("opt.ll"));
         let req = LlvmRuntimeRequest {
             need,
-            target: dream_mir::backend::Target::Wasm32,
+            target: self.target.clone(),
             threads,
             wasm_opt: guest_opt,
         };

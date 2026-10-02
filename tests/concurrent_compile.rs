@@ -6,7 +6,8 @@
 //! must keep N concurrent full compiles correct (each ICE-catch window suppresses only its
 //! own thread's panic output).
 
-use dream::driver::compiler::{Compiler, Target};
+use dream::driver::compiler::Compiler;
+use dream_mir::backend::Target;
 use std::fs;
 use std::path::PathBuf;
 use std::thread;
@@ -45,7 +46,7 @@ fn concurrent_native_compiles_all_succeed() {
                 &PROGRAM.replace("xs.join(\"+\")", &format!("xs.join(\"+{i}\")")),
             );
             let out = dir.join(format!("out_{i}"));
-            let compiler = Compiler::new(Target::Native);
+            let compiler = Compiler::new(Target::native());
             compiler
                 .compile(
                     &src.to_string_lossy().to_string(),

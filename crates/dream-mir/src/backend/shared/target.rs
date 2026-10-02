@@ -1,22 +1,52 @@
 //! Target pointer width and Future layout.
 
 use crate::abi::TargetAbi;
+use dream_abi::target::TargetSpec;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Target {
-    Native,
-    Wasm32,
+    Llvm(TargetSpec),
 }
 
 impl Target {
-    pub fn abi(self) -> TargetAbi {
-        match self {
-            Self::Native => TargetAbi::native(),
-            Self::Wasm32 => TargetAbi::WASM32,
-        }
+    pub fn native() -> Self {
+        Self::Llvm(TargetSpec::host())
     }
 
-    pub fn is_wasm32(self) -> bool {
-        matches!(self, Self::Wasm32)
+    pub fn wasm32() -> Self {
+        Self::Llvm(TargetSpec::wasm32())
+    }
+
+    pub fn spec(&self) -> &TargetSpec {
+        let Self::Llvm(spec) = self;
+        spec
+    }
+
+    pub fn abi(&self) -> TargetAbi {
+        TargetAbi::for_target(self.spec())
+    }
+
+    pub fn is_wasm32(&self) -> bool {
+        self.spec().capabilities.linear_memory
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn future_layout_uses_selected_pointer_width() {
+        let narrow = Target::Llvm(TargetSpec::parse("i686-unknown-linux-gnu").unwrap());
+        let wide = Target::Llvm(TargetSpec::parse("x86_64-unknown-linux-gnu").unwrap());
+        assert_eq!(
+            (narrow.abi().future.waker, narrow.abi().future.slots),
+            (16, 72)
+        );
+        assert_eq!(
+            (wide.abi().future.waker, wide.abi().future.slots),
+            (24, 104)
+        );
+        assert_eq!(Target::wasm32().abi(), TargetAbi::WASM32);
     }
 }

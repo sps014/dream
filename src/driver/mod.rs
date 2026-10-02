@@ -23,6 +23,7 @@ pub mod project_manifest;
 pub mod quiet_panic;
 pub mod rt_stamp;
 pub mod source_loader;
+pub mod target;
 #[cfg(feature = "native")]
 pub mod test;
 pub mod toolchain;

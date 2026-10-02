@@ -1,14 +1,15 @@
 #![cfg(feature = "native")]
 
-use dream::driver::compiler::{Compiler, Target};
+use dream::driver::compiler::Compiler;
 use dream_abi::host_capability::{HostCapability, HostManifest};
+use dream_mir::backend::Target;
 
 fn inventory(source: &str) -> Vec<HostCapability> {
     let directory = tempfile::tempdir().unwrap();
     let input = directory.path().join("main.dream");
     let output = directory.path().join("main.ll");
     std::fs::write(&input, source).unwrap();
-    Compiler::new(Target::Native)
+    Compiler::new(Target::native())
         .compile(&input.display().to_string(), &output.display().to_string())
         .unwrap();
     HostManifest::parse(&std::fs::read_to_string(output.with_extension("abi.json")).unwrap())

@@ -9,7 +9,10 @@ Not used by `cargo test` / WAT splice. Companion to wasm `../include/dream_rt.h`
 - SIMD helpers use platform vector width (`DREAM_F32_LANES` is 8 on AVX2).
 - Regex is vendored PCRE2-16 with JIT (`../regex.c` `-DDREAM_NATIVE` + [`../pcre2/README.md`](../pcre2/README.md)), linked only when the program uses `Regex`.
 - Core runtime: `heap.c`, `strings.c`, `object.c`, `format.c`, `panic.c`, `weak.c`, `closure.c`, `async.c`, `sync.c`.
-- Host print/math/file stubs: `host.c`. Linked by `dream run` and golden e2e.
+- Native host operations: `fs.c`, `file_handle.c`, `dirs.c`, `process.c`, `env.c`,
+  `time.c`, `stdio.c` and `math.c`. Shared string conversion and sorted-name helpers
+  live in `host_support.c`, with private declarations in `include/dream_host_support.h`.
+  These units are linked by `dream run` and golden e2e through `NATIVE_CORE_C`.
 - Compiled to bitcode by the pinned clang (`dreamer toolchain install llvm`); the system `cc` (or Zig via `dreamer toolchain install cc`) only links.
 
 ```bash

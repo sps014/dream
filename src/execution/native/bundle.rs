@@ -42,17 +42,10 @@ pub(crate) fn link_runtime(command: &mut Command, source_dir: &Path, bundled: Op
             .arg("-loldnames");
         return;
     }
-    let directory = match bundled {
-        Some(path) => path
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new(".")),
-        None => source_dir,
-    };
-    command
-        .arg(format!("-L{}", directory.display()))
-        .arg("-ldream");
-    if bundled.is_some() {
+    if let Some(path) = bundled {
+        // Zig turns -L directories into native rpaths; a direct library input
+        // preserves the library's install name without leaking the build path.
+        command.arg(path);
         if cfg!(target_os = "macos") {
             command.args([
                 "-Wl,-rpath,@executable_path",
@@ -62,7 +55,10 @@ pub(crate) fn link_runtime(command: &mut Command, source_dir: &Path, bundled: Op
             command.arg("-Wl,-rpath,$ORIGIN");
         }
     } else {
-        command.arg(format!("-Wl,-rpath,{}", source_dir.display()));
+        command
+            .arg(format!("-L{}", source_dir.display()))
+            .arg("-ldream")
+            .arg(format!("-Wl,-rpath,{}", source_dir.display()));
     }
 }
 
@@ -80,7 +76,7 @@ mod tests {
         );
         let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy()).collect();
         if cfg!(target_os = "macos") {
-            assert!(args.iter().any(|a| a == "-L/package"));
+            assert!(args.iter().any(|a| a == "/package/runtime"));
             assert!(args
                 .iter()
                 .any(|a| a == "-Wl,-rpath,@executable_path/../Frameworks"));
@@ -90,6 +86,7 @@ mod tests {
             assert!(args.iter().any(|a| a.ends_with("dream.dll.lib")));
         }
         assert!(!args.iter().any(|a| a.starts_with("-Wl,-rpath,/")));
+        assert!(!args.iter().any(|a| a.starts_with("-L")));
     }
 
     #[test]
@@ -102,7 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn relative_output_uses_current_directory_as_library_search_path() {
+    fn relative_output_links_the_bundled_library_directly() {
         if cfg!(windows) {
             return;
         }
@@ -112,6 +109,7 @@ mod tests {
             Path::new("/toolchain"),
             Some(Path::new(libdream_name())),
         );
-        assert!(command.get_args().any(|arg| arg == "-L."));
+        assert!(command.get_args().any(|arg| arg == libdream_name()));
+        assert!(!command.get_args().any(|arg| arg == "-L."));
     }
 }

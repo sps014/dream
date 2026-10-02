@@ -9,4 +9,5 @@ path = "src/lib.rs"
 
 [dependencies]
 dream-syntax = { path = "../dream-syntax" }
+dream-abi = { path = "../dream-abi" }
 indexmap = "2"

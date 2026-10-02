@@ -204,7 +204,11 @@ fn packed_application_has_no_builder_runtime_dependency() {
     let library = moved.join(&library_name);
     inspect_loader(&executable, true);
     for capability in HostCapability::ALL {
-        inspect_loader(&moved.join(capability.library_name()), false);
+        let path = moved.join(capability.library_name());
+        assert_eq!(path.is_file(), capability == HostCapability::Core);
+        if path.is_file() {
+            inspect_loader(&path, false);
+        }
     }
     assert_runs_clean(&executable, &empty_home, temporary.path());
     #[cfg(target_os = "macos")]
@@ -213,10 +217,11 @@ fn packed_application_has_no_builder_runtime_dependency() {
         let app_executable = contents.join("MacOS/portable");
         inspect_loader(&app_executable, true);
         for capability in HostCapability::ALL {
-            inspect_loader(
-                &contents.join("Frameworks").join(capability.library_name()),
-                false,
-            );
+            let path = contents.join("Frameworks").join(capability.library_name());
+            assert_eq!(path.is_file(), capability == HostCapability::Core);
+            if path.is_file() {
+                inspect_loader(&path, false);
+            }
         }
         assert_runs_clean(&app_executable, &empty_home, temporary.path());
     }

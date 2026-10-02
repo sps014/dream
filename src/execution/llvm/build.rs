@@ -12,7 +12,9 @@ use crate::execution::native::c_link::{
 };
 use crate::execution::native::native_c::{compile_sets, read_c_sources_from_abi, NativeObjects};
 use crate::execution::native::pgo::{clear_raw_profiles, llvm_pgo};
-use crate::execution::native::{cc, host_library_dir, native_bin_fresh, Pgo};
+use crate::execution::native::{
+    cc, host_library_dir, native_bin_fresh, read_host_capabilities, Pgo,
+};
 use dream_mir::runtime::runtime_need_from_module_text;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
@@ -196,7 +198,9 @@ pub fn compile_llvm(
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let tools = resolve_llvm()?;
     let bin = native_bin_path(ll_path);
-    let dir = host_library_dir().ok_or(
+    let abi_path = ll_path.with_extension("abi.json");
+    let capabilities = read_host_capabilities(ll_path)?;
+    let dir = host_library_dir(&capabilities).ok_or(
         "native capability libraries not found next to the dream binary. \
          Build with cargo build --workspace, or set DREAM_HOME or DREAM_BIN to the installed toolchain.",
     )?;
@@ -211,6 +215,7 @@ pub fn compile_llvm(
         Some(stage_runtime(
             &dir,
             bin.parent().unwrap_or_else(|| Path::new(".")),
+            &capabilities,
         )?)
     } else {
         None
@@ -220,7 +225,6 @@ pub fn compile_llvm(
     let rt = llvm_runtime(&tools, opt, need, debug)?;
     let profile = llvm_pgo(pgo, &bin, || tools.optional_tool("llvm-profdata"))?;
     let icon_png = icon.map(icon::read_png).transpose()?;
-    let abi_path = ll_path.with_extension("abi.json");
     let c_sources = read_c_sources_from_abi(&abi_path);
     if !c_sources.is_empty() && *pgo != Pgo::Off {
         return Err(PGO_NATIVE_SOURCES.into());
@@ -247,7 +251,7 @@ pub fn compile_llvm(
         native.objects,
         native.link_args,
         relocatable,
-        dream_abi::host_capability::HostCapability::ALL
+        capabilities
     );
     let input = match (pgo, &profile) {
         (Pgo::Use(_), Some((_, p))) => Some(p.as_path()),
@@ -311,7 +315,7 @@ pub fn compile_llvm(
     if !cfg!(windows) {
         lcmd.args(["-lm", "-lpthread"]);
     }
-    link_runtime(&mut lcmd, &dir, bundled.as_deref());
+    link_runtime(&mut lcmd, &dir, bundled.as_deref(), &capabilities);
     let c_libs = read_c_libs_from_abi(&abi_path);
     if !c_libs.is_empty() {
         let roots = search_roots_for_artifact(ll_path);

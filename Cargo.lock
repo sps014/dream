@@ -1228,6 +1228,8 @@ dependencies = [
  "dream-syntax",
  "dream-text",
  "dream-types",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1427,6 +1429,7 @@ dependencies = [
 name = "dream-stdlib"
 version = "0.1.0"
 dependencies = [
+ "dream-abi",
  "dream-syntax",
  "indexmap",
 ]

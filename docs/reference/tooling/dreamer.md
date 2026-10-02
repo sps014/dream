@@ -241,9 +241,13 @@ into the executable; around it, each OS gets what it needs to show the app with 
 
 | Host | Output in `target/pack/` |
 |---|---|
-| macOS | `<name>-macos-<arch>` with adjacent `libdream_host_{core,net,gpu,webview}.dylib`, and `<name>.app/Contents/{MacOS/<name>, Frameworks/, Info.plist, Resources/icon.icns}` with the same libraries in Frameworks |
-| Linux | `<name>-linux-<arch>`, adjacent `libdream_host_{core,net,gpu,webview}.so`, `<name>.desktop`, and `<name>.png` when an icon is set |
-| Windows | `<name>-windows-<arch>.exe` with the icon as its Explorer/taskbar icon, and adjacent `dream_host_{core,net,gpu,webview}.dll` |
+| macOS | `<name>-macos-<arch>` with selected adjacent `libdream_host_*.dylib` libraries, and `<name>.app/Contents/{MacOS/<name>, Frameworks/, Info.plist, Resources/icon.icns}` with the same libraries in Frameworks |
+| Linux | `<name>-linux-<arch>`, selected adjacent `libdream_host_*.so` libraries, `<name>.desktop`, and `<name>.png` when an icon is set |
+| Windows | `<name>-windows-<arch>.exe` with the icon as its Explorer/taskbar icon, and selected adjacent `dream_host_*.dll` libraries |
+
+Every native program ships the core library. Networking, GPU and WebView/desktop libraries are
+included only when host calls from those packages survive compiler pruning. Unused imports and
+CPU-only GPU helpers do not add networking or GUI libraries to a fresh package.
 
 `Info.plist` takes its name and version from `[package]`, and the bundle id is
 `dev.dream.<name>`. The `.desktop` entry names the executable and icon relative to the pack folder,

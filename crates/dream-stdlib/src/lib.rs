@@ -1,3 +1,4 @@
+use dream_abi::host_capability::HostCapability;
 use dream_syntax::nodes::Type;
 use indexmap::IndexSet;
 
@@ -9,6 +10,8 @@ pub struct StdPackage {
     pub files: &'static [(&'static str, &'static str)],
     /// Other packages that must be loaded before this one.
     pub deps: &'static [&'static str],
+    /// Native libraries needed when an extern from this package is live.
+    pub host_capabilities: &'static [HostCapability],
 }
 
 /// Bootstrap packages always merged into every program (no user `import` required).
@@ -18,6 +21,7 @@ pub const BOOTSTRAP_PACKAGES: &[&str] = &["system.core", "system.primitives"];
 pub const STD_PACKAGES: &[StdPackage] = &[
     StdPackage {
         name: "system.core",
+        host_capabilities: &[HostCapability::Core],
         deps: &[],
         files: &[
             (
@@ -152,6 +156,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.primitives",
+        host_capabilities: &[],
         deps: &["system.core"],
         files: &[
             (
@@ -194,6 +199,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.collections",
+        host_capabilities: &[],
         deps: &["system.core", "system.primitives"],
         files: &[
             (
@@ -268,11 +274,13 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.simd",
+        host_capabilities: &[],
         deps: &["system.core"],
         files: &[("<std>/system/simd.dream", include_str!("system/simd.dream"))],
     },
     StdPackage {
         name: "system.task",
+        host_capabilities: &[],
         deps: &["system.core"],
         files: &[
             (
@@ -287,6 +295,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.text",
+        host_capabilities: &[HostCapability::Core],
         deps: &["system.core", "system.primitives", "system.collections"],
         files: &[
             (
@@ -329,6 +338,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.encoding",
+        host_capabilities: &[],
         deps: &["system.core", "system.primitives", "system.text"],
         files: &[(
             "<std>/system/encoding.dream",
@@ -337,6 +347,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.json",
+        host_capabilities: &[],
         deps: &[
             "system.core",
             "system.primitives",
@@ -385,6 +396,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.gpu",
+        host_capabilities: &[HostCapability::Gpu],
         deps: &[
             "system.core",
             "system.primitives",
@@ -544,6 +556,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.io",
+        host_capabilities: &[],
         deps: &[
             "system.core",
             "system.primitives",
@@ -580,6 +593,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.net",
+        host_capabilities: &[HostCapability::Net],
         deps: &[
             "system.core",
             "system.primitives",
@@ -653,6 +667,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.crypto",
+        host_capabilities: &[HostCapability::Core],
         deps: &["system.core", "system.primitives"],
         files: &[
             (
@@ -687,6 +702,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.process",
+        host_capabilities: &[HostCapability::Core],
         deps: &[
             "system.core",
             "system.primitives",
@@ -721,6 +737,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.webview",
+        host_capabilities: &[HostCapability::WebView],
         deps: &[
             "system.core",
             "system.primitives",
@@ -747,6 +764,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.desktop",
+        host_capabilities: &[HostCapability::WebView],
         deps: &[
             "system.core",
             "system.primitives",
@@ -784,6 +802,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system",
+        host_capabilities: &[HostCapability::Core],
         deps: &[
             "system.core",
             "system.primitives",
@@ -845,6 +864,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.testing",
+        host_capabilities: &[],
         deps: &["system.core", "system.primitives", "system"],
         files: &[
             (
@@ -859,6 +879,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.codegen",
+        host_capabilities: &[],
         deps: &[
             "system.core",
             "system.primitives",
@@ -881,6 +902,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.logging",
+        host_capabilities: &[],
         deps: &[
             "system.core",
             "system.primitives",
@@ -917,6 +939,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     },
     StdPackage {
         name: "system.webapi",
+        host_capabilities: &[HostCapability::Net],
         deps: &[
             "system.core",
             "system.primitives",
@@ -984,6 +1007,13 @@ pub fn all_prelude_files() -> Vec<(&'static str, &'static str)> {
 /// Looks up a package by dotted name (`system.net`).
 pub fn find_package(name: &str) -> Option<&'static StdPackage> {
     STD_PACKAGES.iter().find(|p| p.name == name)
+}
+
+/// Resolve a declaration's exact embedded source, not a user-controlled path prefix.
+pub fn package_for_source(path: &str) -> Option<&'static StdPackage> {
+    STD_PACKAGES
+        .iter()
+        .find(|package| package.files.iter().any(|(source, _)| *source == path))
 }
 
 /// True when `slash_path` (parser form of a plain import, e.g. `system/net`) names a std package.

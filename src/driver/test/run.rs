@@ -143,8 +143,7 @@ fn run_one_file(path: &Path, opts: &TestOptions) -> Result<usize, String> {
 
     let mut compiler = Compiler::new(Target::Native)
         .with_release(opts.release)
-        .with_crate_type(CrateType::Bin)
-        .with_emit_abi(false);
+        .with_crate_type(CrateType::Bin);
     if let Some(level) = opts.optimize {
         compiler = compiler.with_optimize(Some(level));
     }

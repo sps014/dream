@@ -1,7 +1,17 @@
 import system;
 import system.process;
 async fun main(): void {
-    let spawned = Process.spawn("cat", []).await;
+    let args = System.args;
+    if args.length > 0 && args[0] == "echo" {
+        while true {
+            System.println(System.read_line());
+        }
+    }
+    let child_args = ["echo"];
+    if System.platform == Platform.Node {
+        child_args = ["-e", "process.stdin.on('data', data => process.stdout.write(data))"];
+    }
+    let spawned = Process.spawn(System.exe_path.unwrap_or(""), child_args).await;
     switch (spawned) {
         Ok(child) => {
             child.write_stdin_text("line1\n");

@@ -37,3 +37,6 @@ icns = "0.3"
 
 [dev-dependencies]
 tempfile = "3"
+
+[target.'cfg(windows)'.dev-dependencies]
+junction = "2.1"

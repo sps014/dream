@@ -54,7 +54,8 @@ mod tests {
             #[cfg(unix)]
             std::os::unix::fs::symlink(&source, &link).unwrap();
             #[cfg(windows)]
-            std::os::windows::fs::symlink_dir(&source, &link).unwrap();
+            // Junctions exercise directory-link cleanup without Developer Mode or elevation.
+            junction::create(&source, &link).unwrap();
             if dangling {
                 fs::remove_dir_all(&source).unwrap();
             }

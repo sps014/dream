@@ -23,7 +23,7 @@ $LlvmSha = "d96c2cc1736f4eb7fa43cb9bbdf56d93551a9ae0a9aadb9c99c3c3b2b712a234"
 
 $Toolchains = if ($env:DREAM_TOOLCHAINS) { $env:DREAM_TOOLCHAINS } else { Join-Path $HOME ".dream\toolchains" }
 $Dest = Join-Path $Toolchains "llvm-$LlvmVersion"
-$Tools = @("clang", "opt", "llc", "llvm-link", "llvm-dis", "llvm-as", "llvm-ar", "llvm-profdata", "lld", "wasm-ld")
+$Tools = @("clang", "clang++", "opt", "llc", "llvm-link", "llvm-dis", "llvm-as", "llvm-ar", "llvm-profdata", "lld", "lld-link", "wasm-ld", "llvm-rc")
 
 New-Item -ItemType Directory -Force -Path $Toolchains, $Dest | Out-Null
 
@@ -54,7 +54,8 @@ function Expand-Tar([string]$Archive, [string]$Into, [string[]]$Patterns, [strin
     if ($LASTEXITCODE -ne 0) { throw "tar could not extract $Archive" }
 }
 
-if (-not (Test-Path (Join-Path $Dest "bin\clang.exe")) -or -not (Test-Path (Join-Path $Dest "bin\opt.exe"))) {
+$missingTools = $Tools | Where-Object { -not (Test-Path (Join-Path $Dest "bin\$_.exe")) }
+if ($missingTools) {
     $archive = Get-Verified "https://github.com/llvm/llvm-project/releases/download/llvmorg-$LlvmVersion/$LlvmArchive" $LlvmArchive $LlvmSha
     $patterns = @("*/LICENSE.TXT", "*/lib/clang/*") + ($Tools | ForEach-Object { "*/bin/$_.exe" })
     Expand-Tar $archive $Dest $patterns

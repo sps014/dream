@@ -21,6 +21,22 @@ and O1 copies. Tests retain debug assertions, overflow checks and line-table
 backtraces; local development profiles and the release size-budget build are unchanged.
 Clippy runs first to reject lint failures before expensive executable builds.
 
+CI additionally uses sccache for Rust and C++ compiler invocations,
+including Binaryen's large `wasm-opt-sys` build. Rust incremental compilation is
+disabled in CI because sccache cannot cache incremental invocations. The existing
+`cc` build dependency also recognizes `RUSTC_WRAPPER=sccache`, so native dependency
+compilation is cached without changing Dream's guest linker configuration.
+Cache statistics are reported at the end of each job;
+the native and Node probes share one freshly built compiler. Corpus logs and timing
+reports survive failures for seven days.
+
+The Windows compiler executable reserves 32 MiB for its main stack. `RUST_MIN_STACK`
+only applies to spawned Rust threads, so it cannot prevent stack overflow in CLI
+syntax-generator compilation. Windows LLVM installers include `lld-link`, `clang++`
+and `llvm-rc` and validate every required executable before accepting an installation.
+Process goldens launch their own guest binary to exercise child I/O without depending
+on Unix utilities being available on PATH.
+
 Rust caches share a profile-specific key across jobs on the same OS/architecture;
 workspace artifacts and incremental state are not cached. Cargo timing reports are
 retained for seven days to identify remaining compilation bottlenecks. GitHub scopes

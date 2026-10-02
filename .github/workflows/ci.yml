@@ -14,6 +14,9 @@ env:
   DREAM_VERIFY_MIR: "1"
   # Tests use O1; matching dev avoids rebuilding their dependency graph for codegen.
   CARGO_PROFILE_DEV_OPT_LEVEL: "1"
+  CARGO_INCREMENTAL: "0"
+  RUSTC_WRAPPER: sccache
+  SCCACHE_GHA_ENABLED: "true"
 
 permissions:
   contents: read
@@ -52,6 +55,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      - uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: "v0.16.0"
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci-o1-${{ runner.os }}-${{ runner.arch }}
@@ -110,7 +116,17 @@ jobs:
       - name: Full Windows native corpus
         if: runner.os == 'Windows'
         shell: pwsh
-        run: python scripts/probe_test.py
+        run: |
+          python scripts/probe_test.py 2>&1 | Tee-Object -FilePath target/probe-native.log
+          exit $LASTEXITCODE
+      - name: Preserve Windows corpus results
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-Windows
+          path: target/probe-native.log
+          retention-days: 7
+          if-no-files-found: ignore
       - name: Weak lifetime race under ThreadSanitizer
         if: runner.os == 'macOS'
         shell: bash
@@ -160,6 +176,9 @@ jobs:
             libudev-dev libwebkit2gtk-4.1-dev mesa-vulkan-drivers ninja-build pkg-config python3 xz-utils
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: "v0.16.0"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -182,8 +201,25 @@ jobs:
         with:
           path: ~/.dream/toolchains/llvm-22.1.8
           key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
-      - run: ./scripts/probe_test.sh
-      - run: ./scripts/probe_test.sh --node
+      - name: Full native corpus
+        shell: bash
+        run: |
+          mkdir -p target
+          ./scripts/probe_test.sh 2>&1 | tee target/probe-native.log
+      - name: Full Node corpus using the same build
+        shell: bash
+        run: python3 scripts/probe_test.py --node 2>&1 | tee target/probe-node.log
+      - name: Preserve corpus results and compilation timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-Linux
+          path: |
+            target/probe-native.log
+            target/probe-node.log
+            target/cargo-timings/*.html
+          retention-days: 7
+          if-no-files-found: ignore
       - name: Preserve GPU corpus diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

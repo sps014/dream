@@ -13,10 +13,6 @@ env:
   CARGO_TERM_COLOR: always
   DREAM_VERIFY_MIR: "1"
 
-defaults:
-  run:
-    shell: bash
-
 permissions:
   contents: read
 
@@ -68,11 +64,8 @@ jobs:
           "DREAM_CC=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang.exe" >> $env:GITHUB_ENV
           "DREAM_CXX=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang++.exe" >> $env:GITHUB_ENV
       - run: cargo build --workspace
-        shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
       - run: cargo clippy --workspace --all-targets -- -D warnings
-        shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
       - run: cargo test --workspace
-        shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
       - name: Native distribution size budget
         if: runner.os != 'Windows'
         shell: bash

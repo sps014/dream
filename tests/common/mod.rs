@@ -84,12 +84,15 @@ pub fn emit_ll_for(
         opt: OptLevel::O0,
         debug: false,
     };
-    let text = toolchain
+    let runtime = toolchain
         .runtime_sigs(&req)
         .unwrap_or_else(|e| panic!("runtime signatures: {}", e));
-    let sigs = dream_mir::backend::llvm::RuntimeSigs::parse(&text)
+    let sigs = dream_mir::backend::llvm::RuntimeSigs::parse(&runtime.text)
+        .unwrap_or_else(|e| panic!("runtime signatures: {}", e));
+    sigs.validate_target(target.spec())
         .unwrap_or_else(|e| panic!("runtime signatures: {}", e));
     dream_mir::backend::llvm::emit_llvm_module(mir, interner, &sigs, false, target)
+        .expect("runtime signatures must cover emitted calls")
 }
 
 /// Extracts the body of the function `name` (its `define ... @name(... {` line), up to its

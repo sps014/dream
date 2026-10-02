@@ -125,7 +125,7 @@ impl TargetSpec {
     }
 
     pub fn wasm32() -> Self {
-        Self::parse("wasm32-unknown-wasi").expect("built-in wasm32 target must be valid")
+        Self::parse("wasm32-unknown-wasip1").expect("built-in wasm32 target must be valid")
     }
 
     pub fn with_min_os(mut self, version: OsVersion) -> Result<Self, String> {

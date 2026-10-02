@@ -40,8 +40,13 @@ linker. Installed prebuilt runtimes support their packaged host specification;
 other specifications require a development runtime build.
 
 This target foundation does not yet enable cross-target native linking or unify
-aggregate layouts. Runtime datalayout validation and the target-driven layout
-table are the next audit steps (3.2 and 3.3).
+aggregate layouts.
+
+Before generated IR adopts the runtime header, `RuntimeSigs` validates the parsed runtime triple
+and address-space-zero pointer layout against the selected `TargetSpec`. Clang's canonical MSVC
+version suffix is accepted without weakening architecture, OS, environment, width, or alignment
+checks. A mismatch, malformed table, or missing runtime symbol reports `CompileError::Toolchain`
+with the exact `dream_rt.sigs` cache path, so stale artifacts are actionable rather than ICEs.
 
 Native Rust hosts live in `crates/dream-host-{core,net,gpu,webview}`, not in the compiler.
 The root `dream` library is an rlib only and has no GUI/network host dependencies.
@@ -171,7 +176,7 @@ may legitimately spin.
 The backend never spells a runtime signature. The driver disassembles the runtime bitcode (plus an
 anchor unit that references every function the native header declares) and hands the
 `define`/`declare`/`attributes`/`target` lines to `RuntimeSigs`. Every runtime call is typed from
-that table, and a missing entry is an ICE.
+that validated table. A missing entry rejects the stale runtime cache before any IR is written.
 
 - **Allocation** (`New`, `UnionNew`, `ArrayLit`) calls `dream_malloc(size, tag)` with the tag from
   `mir::abi`, initializes the fields or elements, and calls the user constructor when there is

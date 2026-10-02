@@ -25,6 +25,25 @@ use crate::Mir;
 use dream_types::TypeInterner;
 use ir::{FnTy, Ty};
 use lcx::{FnSig, Lcx};
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+
+#[derive(Debug, PartialEq, Eq)]
+struct MissingRuntimeSymbol(String);
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum EmitError {
+    MissingRuntimeSymbol(String),
+}
+
+impl std::fmt::Display for EmitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingRuntimeSymbol(name) => {
+                write!(f, "required runtime symbol `{name}` is missing")
+            }
+        }
+    }
+}
 
 /// Function names the native runtime header declares; the driver references each from an anchor
 /// unit so the runtime signature table covers header-declared host functions too.
@@ -35,6 +54,25 @@ pub fn native_header_function_names() -> Vec<String> {
 /// Lowers optimized MIR to one `.ll` module typed against the runtime's signature table.
 /// `leak_checks` makes native `main` always print the exit-time heap report.
 pub fn emit_llvm_module(
+    mir: &Mir,
+    interner: &TypeInterner,
+    sigs: &RuntimeSigs,
+    leak_checks: bool,
+    target: crate::backend::Target,
+) -> Result<String, EmitError> {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        emit_llvm_module_unchecked(mir, interner, sigs, leak_checks, target)
+    }));
+    match result {
+        Ok(ir) => Ok(ir),
+        Err(payload) => match payload.downcast::<MissingRuntimeSymbol>() {
+            Ok(missing) => Err(EmitError::MissingRuntimeSymbol(missing.0)),
+            Err(payload) => resume_unwind(payload),
+        },
+    }
+}
+
+fn emit_llvm_module_unchecked(
     mir: &Mir,
     interner: &TypeInterner,
     sigs: &RuntimeSigs,

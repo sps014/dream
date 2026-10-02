@@ -168,7 +168,7 @@ fn llvm_relocatable_binary_runs_after_move() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(
-        String::from_utf8_lossy(&output.stdout).trim(),
+        common::normalize_stdout(String::from_utf8_lossy(&output.stdout).into_owned()).trim(),
         fs::read_to_string(source.with_extension("expected"))
             .unwrap()
             .trim()
@@ -381,6 +381,7 @@ fn llvm_pgo_round_trip() {
             None,
             60,
         )
+        .map(common::normalize_stdout)
         .unwrap()
     };
     let gen = compile_llvm(

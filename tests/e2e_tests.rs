@@ -488,7 +488,13 @@ fn run_wasm_js_case(dream_file: &Path) {
             thread::sleep(std::time::Duration::from_millis(50));
         }
         if !flag.load(std::sync::atomic::Ordering::Relaxed) {
-            let _ = Command::new("kill").arg("-9").arg(pid.to_string()).status();
+            if cfg!(windows) {
+                let _ = Command::new("taskkill")
+                    .args(["/F", "/T", "/PID", &pid.to_string()])
+                    .status();
+            } else {
+                let _ = Command::new("kill").arg("-9").arg(pid.to_string()).status();
+            }
         }
     });
     let out = child

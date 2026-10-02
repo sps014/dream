@@ -1,7 +1,7 @@
 //! C entry point for the compile-time app icon (`dream --icon`). The generated `icon.ll` module
 //! calls it from a constructor, so it is not a stdlib `@runtime` host function.
 
-use crate::execution::host::app_icon;
+use crate::app_icon;
 
 /// # Safety
 /// `png` must point to `len` bytes that live for the whole process (a constant global).

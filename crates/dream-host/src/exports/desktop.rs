@@ -1,10 +1,9 @@
 //! C ABI for `system.desktop` host functions (`-ldream`).
 
-#![allow(clippy::missing_safety_doc)]
 
 use super::abi::{alloc_bytes, read_bytes, read_string};
-use crate::execution::host::desktop::wire::{self, ClipKind, DialogKind, DialogRequest};
-use crate::execution::host::desktop::{clipboard, dialog, shell};
+use crate::desktop::wire::{self, ClipKind, DialogKind, DialogRequest};
+use crate::desktop::{clipboard, dialog, shell};
 
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]

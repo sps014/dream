@@ -9,7 +9,7 @@ use winit::dpi::{LogicalPosition, LogicalSize};
 use winit::window::{Fullscreen, Theme, Window, WindowLevel};
 
 use super::{full_window_bounds, pump, with_entry_mut, WebViewEntry};
-use crate::execution::host::app_icon;
+use crate::app_icon;
 
 #[derive(Debug, Default, Clone)]
 pub(super) struct Chrome {

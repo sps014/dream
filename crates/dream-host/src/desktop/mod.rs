@@ -8,8 +8,3 @@ pub(crate) mod clipboard;
 pub(crate) mod dialog;
 #[cfg(feature = "webview")]
 pub(crate) mod shell;
-
-#[cfg(not(feature = "webview"))]
-mod unavailable;
-#[cfg(not(feature = "webview"))]
-pub(crate) use unavailable::{clipboard, dialog, shell};

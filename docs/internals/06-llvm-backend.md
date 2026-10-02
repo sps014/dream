@@ -23,6 +23,15 @@ flowchart TD
 
 ## The toolchain
 
+Native Rust hosts and their C entry points live in `crates/dream-host`, not in the compiler.
+The root `dream` library is an rlib only and has no GUI/network host dependencies. Build both
+with `cargo build -p dream -p dream-host` (or `--workspace`) before running native programs.
+`dream-host` currently emits `libdream` with `core`, `net`, `gpu` and `webview` Cargo features;
+the default enables all four. Separate capability link artifacts and live-use selection are
+the remaining distribution work. Guest binding/allocation helpers stay together, while core,
+net and GPU entry points have separate export modules. Build-time `@c` library discovery remains
+in the compiler's `execution/native/c_link.rs`.
+
 LLVM is pinned to one version (`LLVM_VERSION` in `src/execution/llvm/tools.rs`). `dream` resolves
 it from `DREAM_LLVM` (a `bin/` directory or its parent), then from `dreamer toolchain install llvm`
 under `~/.dream/toolchains/llvm-*`, and rejects any other major version. The installers

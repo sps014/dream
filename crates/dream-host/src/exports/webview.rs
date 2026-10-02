@@ -1,9 +1,8 @@
 //! C ABI for `system.webview` host functions (`-ldream`).
 
-#![allow(clippy::missing_safety_doc)]
 
 use super::abi::{alloc_bytes, read_bytes, read_string};
-use crate::execution::host::webview;
+use crate::webview;
 
 #[no_mangle]
 pub unsafe extern "C" fn webviewCreate(title: usize, width: i32, height: i32) -> i32 {

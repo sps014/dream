@@ -71,9 +71,9 @@ jobs:
           set -euo pipefail
           # macOS /bin/bash is 3.2: `"${arr[@]}"` with `set -u` and an empty array is an error.
           if [[ -n "${{ matrix.rust_target }}" ]]; then
-            cargo build --release -p dream -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
+            cargo build --release -p dream -p dream-host -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
           else
-            cargo build --release -p dream -p dreamer -p dream-lsp
+            cargo build --release -p dream -p dream-host -p dreamer -p dream-lsp
           fi
 
       # The official LLVM (clang) builds the runtime the archive ships prebuilt; it is not shipped.

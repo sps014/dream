@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::thread::ThreadId;
-use wgpu;
 
 pub struct BufEntry {
     pub cpu: Vec<u8>,

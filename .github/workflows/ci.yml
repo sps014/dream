@@ -58,6 +58,12 @@ jobs:
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
           version: "v0.16.0"
+      - name: Cache MSVC C and C++ compilation
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "CC=sccache cl" >> $env:GITHUB_ENV
+          "CXX=sccache cl" >> $env:GITHUB_ENV
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci-o1-${{ runner.os }}-${{ runner.arch }}

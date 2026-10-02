@@ -2,11 +2,12 @@
 //! declarations in lockstep with `dream_rt.bc`, IR shapes, and byte-identical `.ll` across
 //! compiles. Skipped (with a message) when the pinned LLVM toolchain is not installed.
 
-use dream::driver::compiler::{Compiler, LlvmRuntimeRequest, LlvmToolchain, Target};
+use dream::driver::compiler::{Compiler, LlvmRuntimeRequest, LlvmToolchain};
 use dream::driver::wasm_opt::OptLevel;
 use dream::execution::llvm::{compile_llvm, resolve_llvm, Toolchain};
 use dream::execution::native::{capture_native_bin, Pgo};
 use dream_mir::backend::llvm::RuntimeSigs;
+use dream_mir::backend::Target;
 use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -101,10 +102,10 @@ fn unsigned_string_reads_do_not_depend_on_abi_extension_attributes() {
         functions: vec![builder.finish()],
         ..Default::default()
     };
-    let target = dream_mir::backend::Target::Native;
+    let target = dream_mir::backend::Target::native();
     let req = LlvmRuntimeRequest {
         need: dream_mir::runtime::runtime_need_from_mir(&mir),
-        target,
+        target: target.clone(),
         threads: false,
         wasm_opt: OptLevel::O0,
     };
@@ -136,7 +137,7 @@ fn out_dir(tag: &str) -> PathBuf {
 }
 
 fn compile_ll(src: &Path, ll: &Path, opt: OptLevel) {
-    Compiler::new(Target::Native)
+    Compiler::new(Target::native())
         .with_release(opt != OptLevel::O0)
         .with_llvm(std::sync::Arc::new(Toolchain {
             config: std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
@@ -155,6 +156,7 @@ fn run_llvm(src: &Path, opt: OptLevel) -> Result<String, String> {
         &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
         &ll,
         dream::execution::llvm::NativeBuildOptions {
+            target: dream_abi::target::TargetSpec::host(),
             opt_ll: None,
             opt,
             debug: false,
@@ -192,6 +194,7 @@ fn llvm_relocatable_binary_runs_after_move() {
         &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
         &ll,
         dream::execution::llvm::NativeBuildOptions {
+            target: dream_abi::target::TargetSpec::host(),
             opt_ll: None,
             opt: OptLevel::O0,
             debug: false,
@@ -310,7 +313,7 @@ fn llvm_runtime_declarations_match_bitcode() {
         let need = dream_mir::runtime::runtime_need_from_module_text(&text);
         let req = LlvmRuntimeRequest {
             need,
-            target: dream_mir::backend::Target::Native,
+            target: dream_mir::backend::Target::native(),
             threads: false,
             wasm_opt: OptLevel::O2,
         };
@@ -442,6 +445,7 @@ fn llvm_pgo_round_trip() {
         &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
         &ll,
         dream::execution::llvm::NativeBuildOptions {
+            target: dream_abi::target::TargetSpec::host(),
             opt_ll: None,
             opt: OptLevel::O2,
             debug: false,
@@ -461,6 +465,7 @@ fn llvm_pgo_round_trip() {
         &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
         &ll,
         dream::execution::llvm::NativeBuildOptions {
+            target: dream_abi::target::TargetSpec::host(),
             opt_ll: None,
             opt: OptLevel::O2,
             debug: false,

@@ -164,6 +164,7 @@ pub(super) fn write_ir(tools: &LlvmTools, bc: &Path, out: &Path) -> Result<(), S
 /// `<stem>.s`, next to the `.ll`.
 pub fn emit_llvm_artifacts(
     config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
+    target: &dream_abi::target::TargetSpec,
     ll_path: &Path,
     opt: OptLevel,
     debug: bool,
@@ -171,7 +172,13 @@ pub fn emit_llvm_artifacts(
 ) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     let tools = resolve_llvm(config)?;
     let src = std::fs::read_to_string(ll_path)?;
-    let rt = llvm_runtime(&tools, opt, runtime_need_from_module_text(&src), debug)?;
+    let rt = llvm_runtime(
+        &tools,
+        target,
+        opt,
+        runtime_need_from_module_text(&src),
+        debug,
+    )?;
     let icon_ll = match icon {
         Some(icon) => Some(icon::write_icon_module(
             ll_path,
@@ -208,6 +215,7 @@ pub fn emit_llvm_artifacts(
 /// Links `ll_path` into `<stem>.bin`. With `opt_ll`, also writes the optimized whole-program module
 /// there as text. `icon` is a PNG compiled in as the app icon.
 pub struct NativeBuildOptions<'a> {
+    pub target: dream_abi::target::TargetSpec,
     pub opt_ll: Option<&'a Path>,
     pub opt: OptLevel,
     pub debug: bool,
@@ -222,6 +230,7 @@ pub fn compile_llvm(
     options: NativeBuildOptions<'_>,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let NativeBuildOptions {
+        target: spec,
         opt_ll,
         opt,
         debug,
@@ -255,7 +264,7 @@ pub fn compile_llvm(
     };
     let src = std::fs::read_to_string(ll_path)?;
     let need = runtime_need_from_module_text(&src);
-    let rt = llvm_runtime(&tools, opt, need, debug)?;
+    let rt = llvm_runtime(&tools, &spec, opt, need, debug)?;
     let profile = llvm_pgo(pgo, &bin, || tools.optional_tool("llvm-profdata"))?;
     let icon_png = icon.map(icon::read_png).transpose()?;
     let c_sources = read_c_sources_from_abi(&abi_path);
@@ -345,6 +354,12 @@ pub fn compile_llvm(
         c
     };
     lcmd.args(&native.objects);
+    if let Some(version) = spec.min_os {
+        lcmd.arg(format!(
+            "-mmacosx-version-min={}.{}.{}",
+            version.major, version.minor, version.patch
+        ));
+    }
     lcmd.args(dead_strip_args());
     if let Some(a) = &rt.archive {
         lcmd.arg(a);
@@ -431,7 +446,7 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
         let sigs = if req.target.is_wasm32() {
             super::wasm::wasm_runtime(&tools, req.wasm_opt, req.need, req.threads)?.sigs
         } else {
-            llvm_runtime(&tools, self.opt, req.need, self.debug)?.sigs
+            llvm_runtime(&tools, req.target.spec(), self.opt, req.need, self.debug)?.sigs
         };
         std::fs::read_to_string(&sigs).map_err(|e| format!("{}: {e}", sigs.display()))
     }

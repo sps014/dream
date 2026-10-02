@@ -1,9 +1,10 @@
 //! Orchestrate `dream test`: discover `@test` fns, write a runner under `target/test/`, compile+run.
 
 use super::discovery::{discover_tests_in_source, DiscoveredTest};
-use crate::driver::compiler::{Compiler, Target};
+use crate::driver::compiler::Compiler;
 use crate::driver::ui::Ui;
 use crate::driver::wasm_opt::OptLevel;
+use dream_mir::backend::Target;
 use dream_sema::analyzer::CrateType;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -149,7 +150,7 @@ fn run_one_file(
     fs::write(&runner_path, &runner_source)
         .map_err(|e| format!("write {}: {}", runner_path.display(), e))?;
 
-    let mut compiler = Compiler::new_with_toolchain_config(Target::Native, config.clone())
+    let mut compiler = Compiler::new_with_toolchain_config(Target::native(), config.clone())
         .with_release(opts.release)
         .with_crate_type(CrateType::Bin);
     if let Some(level) = opts.optimize {
@@ -167,6 +168,7 @@ fn run_one_file(
         config,
         &ll_path,
         crate::execution::llvm::NativeBuildOptions {
+            target: dream_abi::target::TargetSpec::host(),
             opt_ll: None,
             opt,
             debug: false,

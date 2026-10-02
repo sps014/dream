@@ -1164,7 +1164,7 @@ fn cached_harness_ll(
         let src = src_path.to_string_lossy().into_owned();
         let out = ll_path.to_string_lossy().into_owned();
         let compiler = crate::driver::compiler::Compiler::new_with_toolchain_config(
-            crate::driver::compiler::Target::Native,
+            dream_mir::backend::Target::native(),
             config.clone(),
         )
         .with_skip_generators(true)

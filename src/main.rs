@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
-use dream::driver::compiler::{Compiler, Target};
+use dream::driver::compiler::Compiler;
 use dream::driver::js_runtime::JsRuntimeTarget;
 use dream::driver::ui::{ConsoleReporter, Ui};
 use dream::driver::wasm_opt::OptLevel;
@@ -110,6 +110,10 @@ struct Cli {
         global = true
     )]
     target: Option<TargetArg>,
+
+    /// Minimum macOS version encoded in the LLVM target triple
+    #[arg(long, value_name = "VERSION", global = true)]
+    min_os: Option<dream_abi::target::OsVersion>,
 
     /// Emit tree-shaken *.(web|node).runtime.js hosts (requires --web and/or --node)
     #[arg(long, global = true)]
@@ -434,23 +438,23 @@ fn main() -> ExitCode {
     let reporter = Arc::new(ConsoleReporter::new());
     // `with_release` installs RELEASE_DEFAULT wasm-opt; an explicit `-O` overrides.
     let cc_opt = OptLevel::from_cli(cli.release, optimize);
-    let mut compiler = Compiler::new_with_toolchain_config(
-        if native {
-            Target::Native
-        } else {
-            Target::Wasm32
-        },
-        config.clone(),
-    )
-    .with_release(cli.release)
-    .with_debug_info(debug_info)
-    .with_runtimes(runtimes)
-    .with_compile_targets(compile_targets)
-    .with_crate_type(crate_type)
-    .with_emit_mir(emit_mir)
-    // A native library's product is its unoptimized `.ll`; every other build links it away.
-    .with_opt_ir(!(native && matches!(crate_type, CrateType::Lib)))
-    .with_reporter(reporter.clone());
+    let target = match dream::driver::target::resolve(!native, cli.min_os) {
+        Ok(target) => target,
+        Err(error) => {
+            ui.error(&error);
+            return ExitCode::FAILURE;
+        }
+    };
+    let mut compiler = Compiler::new_with_toolchain_config(target.clone(), config.clone())
+        .with_release(cli.release)
+        .with_debug_info(debug_info)
+        .with_runtimes(runtimes)
+        .with_compile_targets(compile_targets)
+        .with_crate_type(crate_type)
+        .with_emit_mir(emit_mir)
+        // A native library's product is its unoptimized `.ll`; every other build links it away.
+        .with_opt_ir(!(native && matches!(crate_type, CrateType::Lib)))
+        .with_reporter(reporter.clone());
     if let Some(level) = optimize {
         compiler = compiler.with_optimize(Some(level));
     }
@@ -487,7 +491,14 @@ fn main() -> ExitCode {
     let unoptimized = !cli.release && optimize.is_none() && !debug_adapter;
 
     if cli.emit_llvm {
-        match emit_llvm_artifacts(&config, raw_ll, cc_opt, debug_info, cli.icon.as_deref()) {
+        match emit_llvm_artifacts(
+            &config,
+            target.spec(),
+            raw_ll,
+            cc_opt,
+            debug_info,
+            cli.icon.as_deref(),
+        ) {
             Ok(paths) => {
                 drop_raw_ll();
                 artifacts.extend(paths);
@@ -522,6 +533,7 @@ fn main() -> ExitCode {
             &config,
             raw_ll,
             dream::execution::llvm::NativeBuildOptions {
+                target: target.spec().clone(),
                 opt_ll: Some(&opt_ll),
                 opt: cc_opt,
                 debug: debug_info,

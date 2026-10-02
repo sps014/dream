@@ -57,7 +57,7 @@ impl<'a> Cx<'a> {
             symbols,
             tags: struct_tags(mir),
             ft,
-            native: NativeLayouts::for_target(mir, interner, target),
+            native: NativeLayouts::for_target(mir, interner, &target),
             mir,
             interner,
             target,

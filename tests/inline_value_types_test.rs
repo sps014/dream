@@ -1,7 +1,8 @@
 //! Release inlining of value-type / Span helpers: `List<int>.insert` must collapse the
 //! `Span.copy_from` call layer into an open-coded bulk copy (`memcpy`) on the C→wasm32 path.
 
-use dream::driver::compiler::{Compiler, Target};
+use dream::driver::compiler::Compiler;
+use dream_mir::backend::Target;
 use std::fs;
 use std::path::PathBuf;
 
@@ -22,7 +23,7 @@ fn list_insert_inlines_span_copy_from() {
     let src_s = src.to_str().unwrap().to_string();
     let wat_s = wat_path.to_str().unwrap().to_string();
 
-    Compiler::new(Target::Wasm32)
+    Compiler::new(Target::wasm32())
         .with_release(true)
         .compile(&src_s, &wat_s)
         .expect("list_insert should compile under --release");

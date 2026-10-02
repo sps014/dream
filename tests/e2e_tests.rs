@@ -1,8 +1,9 @@
-//! Golden e2e: native builds (`Target::Native`). WAT determinism / JS runtime tests stay below.
+//! Golden e2e: native builds (`Target::native()`). WAT determinism / JS runtime tests stay below.
 
-use dream::driver::compiler::{Compiler, Target};
+use dream::driver::compiler::Compiler;
 use dream::driver::wasm_opt::OptLevel;
 use dream::execution::native::{compile_and_capture, compile_and_capture_ex};
+use dream_mir::backend::Target;
 
 mod common;
 use dream_abi::attributes::CompileTargets;
@@ -263,7 +264,7 @@ fn run_native_case(dream_file: &Path, release: bool) {
     // Smoke and parity suites overlap and run concurrently, including binary cleanup.
     let artifacts = tempfile::Builder::new().prefix(stem).tempdir().unwrap();
     let ll_path = artifacts.path().join(format!("{stem}.ll"));
-    let compiler = Compiler::new(Target::Native).with_release(release);
+    let compiler = Compiler::new(Target::native()).with_release(release);
     let src = dream_file.to_str().unwrap().to_string();
     let dest = ll_path.to_str().unwrap().to_string();
     let compile_result = compiler.compile(&src, &dest);
@@ -462,7 +463,7 @@ fn run_wasm_js_case(dream_file: &Path) {
     let wat_path = dest_dir.join(format!("{stem}.wat"));
     let src = dream_file.to_str().unwrap().to_string();
     let dest = wat_path.to_str().unwrap().to_string();
-    Compiler::new(Target::Wasm32)
+    Compiler::new(Target::wasm32())
         .compile(&src, &dest)
         .unwrap_or_else(|e| panic!("wasm compile failed for {:?}: {}", dream_file, e));
     let wasm_path = wat_path.with_extension("wasm");
@@ -594,7 +595,7 @@ fn wasm_js_compile_errors_match_native() {
         let dest = std::env::temp_dir().join(format!("dream_wasm_err_{stem}.wat"));
         let src_s = src.to_str().unwrap().to_string();
         let dest_s = dest.to_str().unwrap().to_string();
-        let err = Compiler::new(Target::Wasm32).compile(&src_s, &dest_s);
+        let err = Compiler::new(Target::wasm32()).compile(&src_s, &dest_s);
         assert!(err.is_err(), "{} should fail to compile for wasm", stem);
         let _ = fs::remove_file(&dest);
         let _ = fs::remove_file(dest.with_extension("ll"));
@@ -621,7 +622,7 @@ fn wasm_compiles_js_interop_samples() {
         let dest = std::env::temp_dir().join(format!("dream_js_{stem}.wat"));
         let src_s = src.to_str().unwrap().to_string();
         let dest_s = dest.to_str().unwrap().to_string();
-        Compiler::new(Target::Wasm32)
+        Compiler::new(Target::wasm32())
             .compile(&src_s, &dest_s)
             .unwrap_or_else(|e| panic!("{} should compile to wasm32: {}", rel, e));
         let wasm = dest.with_extension("wasm");
@@ -639,7 +640,7 @@ fn wasm32_js_option_struct_fields_are_marshaled() {
     let dest = std::env::temp_dir().join("dream_js_option_fields.wat");
     let src_s = src.to_str().unwrap().to_string();
     let dest_s = dest.to_str().unwrap().to_string();
-    Compiler::new(Target::Wasm32)
+    Compiler::new(Target::wasm32())
         .compile(&src_s, &dest_s)
         .unwrap_or_else(|e| panic!("option_fields should compile to wasm32: {}", e));
     let ll_path = dest.with_extension("ll");
@@ -667,7 +668,7 @@ fn webapi_listen_not_available_on_wasm32() {
     let dest = std::env::temp_dir().join("dream_webapi_wasm32.wat");
     let src_s = src.to_str().unwrap().to_string();
     let dest_s = dest.to_str().unwrap().to_string();
-    let err = Compiler::new(Target::Wasm32)
+    let err = Compiler::new(Target::wasm32())
         .with_compile_targets(CompileTargets {
             native: false,
             node: false,
@@ -700,7 +701,7 @@ fn wasm_compiles_webgpu_samples() {
         let dest = std::env::temp_dir().join(format!("dream_gpu_{stem}.wat"));
         let src_s = src.to_str().unwrap().to_string();
         let dest_s = dest.to_str().unwrap().to_string();
-        Compiler::new(Target::Wasm32)
+        Compiler::new(Target::wasm32())
             .compile(&src_s, &dest_s)
             .unwrap_or_else(|e| panic!("{} should compile to wasm32: {}", rel, e));
         let wasm = dest.with_extension("wasm");
@@ -854,7 +855,7 @@ fn assert_deterministic(prefix: &str, name: &str, src: &Path, must_compile: bool
     ];
     let mut prev: Option<Vec<Vec<u8>>> = None;
     for run in 0..2 {
-        let result = Compiler::new(Target::Wasm32)
+        let result = Compiler::new(Target::wasm32())
             .with_release(true)
             .with_optimize(None)
             .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Web])
@@ -927,7 +928,7 @@ fn selective_runtime_omits_unused_host_chunks() {
     let out = std::env::temp_dir().join("dream_sel_runtime_check.wat");
     let out_str = out.to_str().unwrap().to_string();
     let src_str = src.to_str().unwrap().to_string();
-    Compiler::new(Target::Wasm32)
+    Compiler::new(Target::wasm32())
         .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Web])
         .compile(&src_str, &out_str)
         .expect("arithmetic compile");
@@ -956,7 +957,7 @@ fn release_arithmetic_code_section_stays_small() {
     let out = std::env::temp_dir().join("dream_arith_size_check.wat");
     let out_str = out.to_str().unwrap().to_string();
     let src_str = src.to_str().unwrap().to_string();
-    Compiler::new(Target::Wasm32)
+    Compiler::new(Target::wasm32())
         .with_release(true)
         .compile(&src_str, &out_str)
         .expect("arithmetic --release compile");
@@ -992,7 +993,7 @@ fn release_music_player_code_section_stays_bounded() {
     let out = std::env::temp_dir().join("dream_music_player_size_check.wat");
     let out_str = out.to_str().unwrap().to_string();
     let src_str = src.to_str().unwrap().to_string();
-    Compiler::new(Target::Wasm32)
+    Compiler::new(Target::wasm32())
         .with_release(true)
         .compile(&src_str, &out_str)
         .expect("music_player --release compile");

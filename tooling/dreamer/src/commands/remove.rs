@@ -19,11 +19,7 @@ pub fn run(start_dir: &Path, name: &str, package: Option<&str>) -> Result<()> {
     let dest = workspace
         .packages_dir()
         .join(crate::manifest::import_segment(name));
-    if dest.is_symlink() {
-        std::fs::remove_file(&dest)?;
-    } else if dest.is_dir() {
-        std::fs::remove_dir_all(&dest)?;
-    }
+    crate::package_fs::remove_entry(&dest)?;
 
     println!("Removed '{}'", name);
     super::install::run(start_dir)

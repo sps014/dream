@@ -124,7 +124,15 @@ const NATIVE_CORE_C: &[&str] = &[
     "async.c",
     "sync.c",
     "simd.c",
-    "host.c",
+    "host_support.c",
+    "fs.c",
+    "file_handle.c",
+    "dirs.c",
+    "process.c",
+    "env.c",
+    "time.c",
+    "stdio.c",
+    "math.c",
     "worker.c",
     "defer.c",
 ];
@@ -406,7 +414,37 @@ mod tests {
     }
 
     fn native_runtime_c_files(need: RuntimeNeed) -> Vec<PathBuf> {
-        native_runtime_units(need).into_iter().map(|u| u.path).collect()
+        native_runtime_units(need)
+            .into_iter()
+            .map(|u| u.path)
+            .collect()
+    }
+
+    #[test]
+    fn native_host_units_are_included_once() {
+        let core = native_runtime_c_files(RuntimeNeed::CORE);
+        for name in [
+            "host_support.c",
+            "fs.c",
+            "file_handle.c",
+            "dirs.c",
+            "process.c",
+            "env.c",
+            "time.c",
+            "stdio.c",
+            "math.c",
+        ] {
+            assert_eq!(
+                core.iter()
+                    .filter(|p| p.file_name().and_then(|n| n.to_str()) == Some(name))
+                    .count(),
+                1,
+                "{name}"
+            );
+        }
+        assert!(core
+            .iter()
+            .all(|p| p.file_name().and_then(|n| n.to_str()) != Some("host.c")));
     }
 
     #[test]

@@ -70,6 +70,7 @@ pretty_assertions = "1.4.1"
 rayon = "1"
 # Parses the emitted `.wat` text back into a module in wasm-opt / e2e assertions.
 wat = "1.252.0"
+rcgen = "0.13"
 
 [profile.dev]
 debug = "line-tables-only"

@@ -55,7 +55,7 @@ objc2-foundation = { version = "0.3", optional = true, default-features = false,
 [features]
 default = ["core", "net", "gpu", "webview"]
 core = ["dep:chrono", "dep:chrono-tz", "dep:iana-time-zone", "dep:sha2", "dep:hmac", "dep:getrandom", "dep:unicode-normalization", "dep:unicode-segmentation", "dep:aes-gcm"]
-net = ["core", "dep:reqwest", "dep:tokio", "dep:hyper", "dep:hyper-util", "dep:http-body-util", "dep:bytes", "dep:serde_json", "dep:serde", "dep:tungstenite", "dep:tokio-tungstenite", "dep:multer", "dep:futures-util", "dep:rustls", "dep:tokio-rustls", "dep:rustls-pemfile"]
+net = ["core", "dep:reqwest", "dep:tokio", "dep:hyper", "dep:hyper-util", "dep:http-body-util", "dep:bytes", "dep:serde_json", "dep:serde", "dep:tungstenite", "dep:tokio-tungstenite", "dep:multer", "dep:futures-util", "dep:rustls", "dep:tokio-rustls", "dep:rustls-pemfile", "dep:pollster"]
 gpu = ["core", "dep:wgpu", "dep:pollster", "dep:winit", "dep:gilrs", "dep:image", "dep:serde", "dep:serde_json"]
 webview = ["core", "dep:wry", "dep:winit", "dep:image", "dep:serde", "dep:serde_json", "dep:percent-encoding", "dep:rfd", "dep:clipboard-rs", "dep:open", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
 

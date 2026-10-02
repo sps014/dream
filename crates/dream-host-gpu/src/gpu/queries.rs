@@ -17,10 +17,7 @@ pub fn create_timestamps(count: i32) -> i32 {
         return -super::state::ERR_UNAVAILABLE;
     }
     let device = st.device.as_ref().unwrap();
-    if !device
-        .features()
-        .contains(wgpu::Features::TIMESTAMP_QUERY)
-    {
+    if !device.features().contains(wgpu::Features::TIMESTAMP_QUERY) {
         st.set_last_error("timestamp-query is not available on this device".into());
         return -ERR_UNSUPPORTED;
     }
@@ -162,7 +159,9 @@ pub fn map_readback(id: i32) -> Result<Vec<i64>, String> {
     slice.map_async(wgpu::MapMode::Read, move |r| {
         let _ = tx.send(r);
     });
-    device.poll(wgpu::Maintain::Wait);
+    device
+        .poll(wgpu::PollType::Wait)
+        .map_err(|e| format!("timestamp poll failed: {e}"))?;
     rx.recv()
         .map_err(|_| "timestamp readback channel closed".to_string())?
         .map_err(|e| format!("timestamp map failed: {e}"))?;

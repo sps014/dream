@@ -263,7 +263,9 @@ fn sync_gpu_to_cpu(id: i32) -> Result<(), String> {
     slice.map_async(wgpu::MapMode::Read, move |r| {
         let _ = tx.send(r);
     });
-    device.poll(wgpu::Maintain::Wait);
+    device
+        .poll(wgpu::PollType::Wait)
+        .map_err(|e| format!("readback poll failed: {e}"))?;
     rx.recv()
         .map_err(|_| "readback channel closed".to_string())?
         .map_err(|e| format!("map failed: {e}"))?;

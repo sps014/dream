@@ -93,13 +93,13 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let (s, i) = (self.operand(s), self.operand(i));
                 let i = self.conv_v(&i, &Ty::I32, false);
                 let c = self.call_v("dream_char_at_u", &[s, i]);
-                self.conv_v(&c, &Ty::I32, false)
+                self.conv_v(&V::u(c.v), &Ty::I32, false)
             }
             Rvalue::ByteAt(s, i, _) => {
                 let (s, i) = (self.operand(s), self.operand(i));
                 let i = self.conv_v(&i, &Ty::I32, false);
                 let c = self.call_v("dream_byte_at_u", &[s, i]);
-                self.conv_v(&c, &Ty::I32, false)
+                self.conv_v(&V::u(c.v), &Ty::I32, false)
             }
             Rvalue::StrBytes(s) => {
                 let s = self.operand(s);

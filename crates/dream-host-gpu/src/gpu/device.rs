@@ -10,7 +10,7 @@ pub fn is_available() -> bool {
         compatible_surface: None,
         force_fallback_adapter: false,
     }));
-    adapter.is_some()
+    adapter.is_ok()
 }
 
 pub fn try_init(power: i32) -> i32 {
@@ -40,46 +40,50 @@ pub fn try_init(power: i32) -> i32 {
     st.power_preference = pref;
     if st.adapter.is_none() {
         let instance = st.instance.as_ref().unwrap();
-        let adapter = match pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: pref,
-            compatible_surface: None,
-            force_fallback_adapter: false,
-        })) {
-            Some(a) => {
-                if super::profile::enabled() {
-                    let info = a.get_info();
-                    eprintln!(
-                        "[dream-gpu] adapter: {} ({:?}, {:?}, driver: {} {})",
-                        info.name, info.backend, info.device_type, info.driver, info.driver_info
-                    );
+        let adapter =
+            match pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: pref,
+                compatible_surface: None,
+                force_fallback_adapter: false,
+            })) {
+                Ok(a) => {
+                    if super::profile::enabled() {
+                        let info = a.get_info();
+                        eprintln!(
+                            "[dream-gpu] adapter: {} ({:?}, {:?}, driver: {} {})",
+                            info.name,
+                            info.backend,
+                            info.device_type,
+                            info.driver,
+                            info.driver_info
+                        );
+                    }
+                    a
                 }
-                a
-            }
-            None => {
-                st.set_last_error("no GPU adapter".into());
-                return ERR_UNAVAILABLE;
-            }
-        };
+                Err(e) => {
+                    st.set_last_error(format!("no GPU adapter: {e}"));
+                    return ERR_UNAVAILABLE;
+                }
+            };
         st.adapter = Some(adapter);
     }
     let adapter = st.adapter.as_ref().unwrap();
-    let (device, queue) = match pollster::block_on(adapter.request_device(
-        &wgpu::DeviceDescriptor {
+    let (device, queue) =
+        match pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("dream-gpu"),
             required_features: super::caps::requested_features(adapter),
             required_limits: super::caps::requested_limits(adapter),
             memory_hints: wgpu::MemoryHints::default(),
-        },
-        None,
-    )) {
-        Ok(pair) => pair,
-        Err(e) => {
-            let msg = format!("request_device failed: {e}");
-            eprintln!("Dream gpuTryInit: {msg}");
-            st.set_last_error(msg.clone());
-            return classify_err(&msg);
-        }
-    };
+            trace: wgpu::Trace::Off,
+        })) {
+            Ok(pair) => pair,
+            Err(e) => {
+                let msg = format!("request_device failed: {e}");
+                eprintln!("Dream gpuTryInit: {msg}");
+                st.set_last_error(msg.clone());
+                return classify_err(&msg);
+            }
+        };
     device.on_uncaptured_error(Box::new(|err| {
         note_uncaptured_error(err);
     }));

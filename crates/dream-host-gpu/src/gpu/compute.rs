@@ -112,7 +112,7 @@ fn run(
         indirect,
     )?;
     queue.submit(Some(encoder.finish()));
-    let _ = device.poll(wgpu::Maintain::Poll);
+    let _ = device.poll(wgpu::PollType::Poll);
     if let Some(e) = drain_uncaptured() {
         st.set_last_error(e.clone());
         return Err(e);
@@ -300,9 +300,10 @@ fn encode_op(
         }
         let mut bgs = Vec::new();
         for (group, entries) in &entry_plan {
-            let bgl = pipe.bgls.get(*group as usize).ok_or_else(|| {
-                format!("kernel '{kernel}' has no layout for @group({group})")
-            })?;
+            let bgl = pipe
+                .bgls
+                .get(*group as usize)
+                .ok_or_else(|| format!("kernel '{kernel}' has no layout for @group({group})"))?;
             let bg_entries: Vec<wgpu::BindGroupEntry<'_>> = entries
                 .iter()
                 .filter_map(|(binding, idx, kind)| {
@@ -382,7 +383,10 @@ fn encode_op(
     Ok(())
 }
 
-pub(crate) fn texture_view(st: &mut super::state::GpuState, id: i32) -> Result<wgpu::TextureView, String> {
+pub(crate) fn texture_view(
+    st: &mut super::state::GpuState,
+    id: i32,
+) -> Result<wgpu::TextureView, String> {
     let t = st
         .textures
         .get_mut(&id)
@@ -859,7 +863,7 @@ pub fn pass_submit(pass_id: i32) -> i32 {
             }
         }
         queue.submit(Some(encoder.finish()));
-        let _ = device.poll(wgpu::Maintain::Poll);
+        let _ = device.poll(wgpu::PollType::Poll);
         if let Some(e) = drain_uncaptured() {
             return Err(e);
         }

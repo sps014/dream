@@ -26,5 +26,6 @@ async fun main(): void {
     File.delete(root + "/a.bin").await;
     File.delete(root + "/nested/leaf").await;
     File.delete(root + "/nested").await;
-    File.delete(root).await;
+    System.println(File.delete(root).await.is_ok());
+    System.println(!File.exists(root));
 }

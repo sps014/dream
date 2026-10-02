@@ -114,7 +114,8 @@ impl ApplicationHandler for PumpApp {
             let mut st = lock_state();
             for surf in st.surfaces.values_mut() {
                 if surf.pointer_locked {
-                    surf.input.add_relative_delta(delta.0 as f32, delta.1 as f32);
+                    surf.input
+                        .add_relative_delta(delta.0 as f32, delta.1 as f32);
                 }
             }
         }
@@ -170,7 +171,12 @@ fn sync_drawable_from_client(st: &mut super::state::GpuState, id: i32) {
             .as_ref()
             .map(|w| w.scale_factor())
             .unwrap_or(f64::from(surf.scale_factor.max(1.0)));
-        (surf.client_width, surf.client_height, surf.max_pixel_ratio, raw)
+        (
+            surf.client_width,
+            surf.client_height,
+            surf.max_pixel_ratio,
+            raw,
+        )
     };
     let ratio = effective_pixel_ratio(raw, max_ratio);
     if let Some(surf) = st.surfaces.get_mut(&id) {
@@ -889,6 +895,7 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
                 label: Some("dream-blit-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &dst_view,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
@@ -953,6 +960,7 @@ fn blit_inner(surface_id: i32, texture_id: i32) -> Result<(), String> {
             label: Some("dream-blit-pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &dst_view,
+                depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
@@ -1020,10 +1028,7 @@ pub fn pointers_bytes(id: i32) -> Vec<u8> {
 
 pub fn pixel_ratio(id: i32) -> f32 {
     let st = lock_state();
-    st.surfaces
-        .get(&id)
-        .map(|s| s.pixel_ratio)
-        .unwrap_or(1.0)
+    st.surfaces.get(&id).map(|s| s.pixel_ratio).unwrap_or(1.0)
 }
 
 pub fn scale_factor(id: i32) -> f32 {
@@ -1191,7 +1196,10 @@ mod tests {
     fn alpha_mode_codes_match_the_enum() {
         assert_eq!(alpha_mode_from_code(0), wgpu::CompositeAlphaMode::Auto);
         assert_eq!(alpha_mode_from_code(1), wgpu::CompositeAlphaMode::Opaque);
-        assert_eq!(alpha_mode_from_code(2), wgpu::CompositeAlphaMode::PreMultiplied);
+        assert_eq!(
+            alpha_mode_from_code(2),
+            wgpu::CompositeAlphaMode::PreMultiplied
+        );
     }
 
     #[test]

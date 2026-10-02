@@ -6,6 +6,10 @@
 #include <stdio.h>
 #include <sys/stat.h>
 
+#ifdef _WIN32
+#include <direct.h>
+#endif
+
 dream_ptr fileRead(dream_ptr path) {
     char *p = dream_str_utf8(path);
     FILE *f;
@@ -90,7 +94,11 @@ int32_t fileDelete(dream_ptr path) {
     char *p = dream_str_utf8(path);
     int32_t ok = 0;
     if (p) {
+#ifdef _WIN32
+        ok = dream_host_path_is_dir(p) ? _rmdir(p) == 0 : remove(p) == 0;
+#else
         ok = remove(p) == 0;
+#endif
         free(p);
     }
     return ok;

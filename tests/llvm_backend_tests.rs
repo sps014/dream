@@ -75,6 +75,60 @@ fn case(stem: &str) -> PathBuf {
     Path::new("tests/cases").join(format!("{stem}.dream"))
 }
 
+#[test]
+fn unsigned_string_reads_do_not_depend_on_abi_extension_attributes() {
+    use dream_mir::build::FunctionBuilder;
+    use dream_mir::{Const, Mir, Operand, Place, Rvalue, Terminator};
+    let interner = dream_types::TypeInterner::new();
+    let mut builder = FunctionBuilder::new("unsigned_reads", interner.int());
+    let source = builder.new_param(interner.string(), None);
+    let char_value = builder.new_temp(interner.int());
+    let byte_value = builder.new_temp(interner.int());
+    let source = Operand::Copy(Place::Local(source));
+    let index = Operand::Const(Const::Int(0));
+    builder.assign(
+        Place::Local(char_value),
+        Rvalue::CharAt(source.clone(), index.clone(), true),
+    );
+    builder.assign(
+        Place::Local(byte_value),
+        Rvalue::ByteAt(source, index, true),
+    );
+    builder.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(
+        byte_value,
+    )))));
+    let mir = Mir {
+        functions: vec![builder.finish()],
+        ..Default::default()
+    };
+    let target = dream_mir::backend::Target::Native;
+    let req = LlvmRuntimeRequest {
+        need: dream_mir::runtime::runtime_need_from_mir(&mir),
+        target,
+        threads: false,
+        wasm_opt: OptLevel::O0,
+    };
+    let toolchain = Toolchain {
+        config: std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+        opt: OptLevel::O0,
+        debug: false,
+    };
+    let mut sigs = RuntimeSigs::parse(&toolchain.runtime_sigs(&req).unwrap()).unwrap();
+    // MSVC's ABI omits zeroext even for unsigned narrow returns.
+    for name in ["dream_char_at_u", "dream_byte_at_u"] {
+        sigs.fns.get_mut(name).unwrap().ret_attrs.clear();
+    }
+    let ir = dream_mir::backend::llvm::emit_llvm_module(&mir, &interner, &sigs, false, target);
+    let body = common::ir_func_body(&ir, "unsigned_reads");
+    assert!(body.contains("zext i16"), "{}", body);
+    assert!(body.contains("zext i8"), "{}", body);
+    assert!(
+        !body.contains("sext i16") && !body.contains("sext i8"),
+        "{}",
+        body
+    );
+}
+
 fn out_dir(tag: &str) -> PathBuf {
     let dir = Path::new("target").join(tag);
     fs::create_dir_all(&dir).unwrap();

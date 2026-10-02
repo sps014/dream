@@ -1484,6 +1484,7 @@ dependencies = [
  "flate2",
  "icns",
  "image",
+ "junction",
  "lzma-rs",
  "semver",
  "serde",
@@ -2804,6 +2805,16 @@ name = "json-escape-simd"
 version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c22a2041e3874a055a4eb03ea2395aaccdefa84ce75b31d542d72a741c3c6ad3"
+
+[[package]]
+name = "junction"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cde48f36530cbd91b65f050101e6c056d6eb743cea2a8f0f19beef69c6742ff8"
+dependencies = [
+ "scopeguard",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "khronos-egl"

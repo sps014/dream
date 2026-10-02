@@ -7,7 +7,8 @@ import probe_test as probe
 
 
 def windows_default_read(path, encoding=None, errors=None):
-    return path.read_bytes().decode(encoding or "cp1252", errors or "strict")
+    with path.open(encoding=encoding or "cp1252", errors=errors or "strict") as source:
+        return source.read()
 
 
 class GoldenEncodingTests(unittest.TestCase):

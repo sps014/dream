@@ -2,6 +2,13 @@
 //! `DREAM_DEFAULT_STACK_SIZE` for the native runtime (`execution::host::stack_size`).
 
 fn main() {
+    // RUST_MIN_STACK only sizes spawned threads; the Windows CLI compiles on its main thread.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+        && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
+    {
+        println!("cargo:rustc-link-arg-bin=dream=/STACK:33554432");
+    }
+
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-env-changed=DREAM_DEFAULT_STACK_SIZE");
 

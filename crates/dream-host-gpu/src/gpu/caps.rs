@@ -92,6 +92,11 @@ fn subgroup_limits(features: wgpu::Features, limits: &wgpu::Limits) -> (u32, u32
     }
 }
 
+fn buffer_limit_bytes(limit: u64) -> [u8; 8] {
+    // DX12 reports unlimited buffers as u64::MAX; Dream exposes this limit as a signed long.
+    limit.min(i64::MAX as u64).to_le_bytes()
+}
+
 /// Packs the device-granted features and limits little-endian. Returns an all-zero blob before
 /// `try_init`, so callers see "nothing available" rather than a stale or optimistic answer.
 pub fn encode() -> Vec<u8> {
@@ -155,7 +160,7 @@ pub fn encode() -> Vec<u8> {
     let mut out = Vec::with_capacity(BLOB_LEN);
     out.extend_from_slice(&flags.to_le_bytes());
     out.extend_from_slice(&tile_n.to_le_bytes());
-    out.extend_from_slice(&limits.max_buffer_size.to_le_bytes());
+    out.extend_from_slice(&buffer_limit_bytes(limits.max_buffer_size));
     out.extend_from_slice(&u64::from(limits.max_storage_buffer_binding_size).to_le_bytes());
     out.extend_from_slice(&limits.max_compute_workgroup_storage_size.to_le_bytes());
     out.extend_from_slice(&limits.max_compute_invocations_per_workgroup.to_le_bytes());
@@ -172,6 +177,14 @@ pub fn encode() -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn buffer_limits_fit_the_signed_dream_field() {
+        for limit in [0, 256 << 20, 8 << 30, i64::MAX as u64] {
+            assert_eq!(i64::from_le_bytes(buffer_limit_bytes(limit)), limit as i64);
+        }
+        assert_eq!(i64::from_le_bytes(buffer_limit_bytes(u64::MAX)), i64::MAX);
+    }
 
     fn downlevel() -> wgpu::Limits {
         wgpu::Limits {

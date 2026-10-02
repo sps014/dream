@@ -1,7 +1,16 @@
 import system;
 import system.process;
 async fun main(): void {
-    let ok = Process.run("echo", ["hello", "world"]).await;
+    let args = System.args;
+    if args.length > 0 && args[0] == "echo" {
+        System.println(args[1] + " " + args[2]);
+        return;
+    }
+    let child_args = ["echo", "hello", "world"];
+    if System.platform == Platform.Node {
+        child_args = ["-e", "console.log(process.argv.slice(1).join(' '))", "hello", "world"];
+    }
+    let ok = Process.run(System.exe_path.unwrap_or(""), child_args).await;
     switch (ok) {
         Ok(out) => {
             System.println(out.success);

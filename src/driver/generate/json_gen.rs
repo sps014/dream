@@ -1085,6 +1085,9 @@ fn fnv1a(parts: &[&str]) -> u64 {
 fn cached_harness_ll() -> Result<String, String> {
     let fingerprint = fnv1a(&[
         HARNESS_SOURCE,
+        include_str!("../abi.rs"),
+        include_str!("../../../crates/dream-abi/src/host_capability.rs"),
+        include_str!("../../../crates/dream-stdlib/src/lib.rs"),
         include_str!("../../../crates/dream-stdlib/src/system/json/json_generator.dream"),
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream"),
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_field.dream"),

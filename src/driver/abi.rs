@@ -69,10 +69,8 @@ pub(crate) fn embed_abi_in_wasm(wat_path: &str) -> Result<(), Error> {
     Ok(())
 }
 
-/// Emits a binary `.wasm` next to the `.wat`, and optionally an `.abi.json` describing the module's
-/// **live** extern imports (for JS interop marshaling) and exported functions. When `gpu` is
-/// non-empty, also writes a sibling `.wgsl` file and embeds a `"gpu"` section in the ABI (when ABI
-/// is requested). Native `run` / `debug-adapter` also load `abi.gpu` for wgpu kernels/shaders.
+/// Writes the mandatory ABI sidecar for native capability linking and JS interop. GPU programs
+/// also need sibling WGSL and ABI shader metadata for native run/debug and JS hosts.
 /// Returns the paths of every file written so callers can surface them as build artifacts.
 pub(crate) fn emit_wasm_and_abi(
     wat_path: &str,
@@ -81,7 +79,6 @@ pub(crate) fn emit_wasm_and_abi(
     live_imports: &[LiveImport],
     native: &NativeGraph,
     cpp: &CppBridge,
-    emit_abi: bool,
 ) -> Result<Vec<std::path::PathBuf>, Error> {
     let base = Path::new(wat_path);
     let mut written = Vec::new();
@@ -92,20 +89,18 @@ pub(crate) fn emit_wasm_and_abi(
         written.push(wgsl_path);
     }
 
-    if emit_abi {
-        let abi_path = base.with_extension("abi.json");
-        let native_root = base
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join("native-c");
-        let live = live_set_names(live_imports);
-        let shims = cpp.write(&native_root, |set| live.contains(set))?;
-        fs::write(
-            &abi_path,
-            build_abi_json(program, gpu, live_imports, native, &shims),
-        )?;
-        written.push(abi_path);
-    }
+    let abi_path = base.with_extension("abi.json");
+    let native_root = base
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("native-c");
+    let live = live_set_names(live_imports);
+    let shims = cpp.write(&native_root, |set| live.contains(set))?;
+    fs::write(
+        &abi_path,
+        build_abi_json(program, gpu, live_imports, native, &shims),
+    )?;
+    written.push(abi_path);
     Ok(written)
 }
 
@@ -252,6 +247,7 @@ pub(crate) fn build_abi_json(
     }
 
     let mut externs = Vec::new();
+    let mut host_capabilities = vec![dream_abi::host_capability::HostCapability::Core];
     let mut c_lib_set: BTreeSet<String> = BTreeSet::new();
     let mut seen_fields: BTreeSet<(String, String)> = BTreeSet::new();
     let class_methods = program.structs.iter().flat_map(|s| s.methods.iter());
@@ -265,6 +261,13 @@ pub(crate) fn build_abi_json(
         if let Some((module, field, entry, c_lib)) = extern_entry(func) {
             if !live.contains(&(module.as_str(), field.as_str())) {
                 continue;
+            }
+            if let Some(package) = func
+                .file_path
+                .as_deref()
+                .and_then(dream_stdlib::package_for_source)
+            {
+                host_capabilities.extend_from_slice(package.host_capabilities);
             }
             if let Some(lib) = c_lib {
                 c_lib_set.insert(lib);
@@ -315,11 +318,18 @@ pub(crate) fn build_abi_json(
     // Struct map for `@c`-referenced unmanaged value types (native host consults it to marshal
     // struct-pointer params and to size out-struct writebacks).
     let structs_section = build_c_structs_section(program, &externs);
+    let host_capabilities = dream_abi::host_capability::HostCapability::ALL
+        .iter()
+        .filter(|capability| host_capabilities.contains(capability))
+        .map(|capability| format!("\"{}\"", capability.name()))
+        .collect::<Vec<_>>()
+        .join(", ");
 
     format!(
-        "{{\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}]{}{}{}{}\n}}\n",
+        "{{\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}],\n  \"host_capabilities\": [{}]{}{}{}{}\n}}\n",
         externs.join(",\n"),
         exports.join(", "),
+        host_capabilities,
         gpu_section,
         c_libs_section,
         c_sources_section,
@@ -610,7 +620,13 @@ mod tests {
                 (m, fld)
             })
             .collect();
-        build_abi_json(program, &gpu, &live, &NativeGraph::default(), &BTreeMap::new())
+        build_abi_json(
+            program,
+            &gpu,
+            &live,
+            &NativeGraph::default(),
+            &BTreeMap::new(),
+        )
     }
 
     #[test]
@@ -655,11 +671,18 @@ mod tests {
         );
         assert!(json.contains("\"c_libs\": [\"z\"]"), "{}", json);
         assert!(json.contains("\"c_sources\""), "{}", json);
-        assert!(json.contains("\"/p/native/kv.c\", \"/out/native-c/kv/shim.cpp\""), "{}", json);
+        assert!(
+            json.contains("\"/p/native/kv.c\", \"/out/native-c/kv/shim.cpp\""),
+            "{}",
+            json
+        );
         assert!(json.contains("\"libs\": [\"m\"]"), "{}", json);
         assert!(
-            json.contains("\"runtime_exports\": [\"dream_callback_retain\", \"dream_callback_release\"]"),
-            "{}", json
+            json.contains(
+                "\"runtime_exports\": [\"dream_callback_retain\", \"dream_callback_release\"]"
+            ),
+            "{}",
+            json
         );
     }
 

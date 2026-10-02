@@ -36,6 +36,7 @@ use std::thread;
 
 /// Speak DAP over stdin/stdout by driving `lldb-dap` on `bin` (guest + runtime built with `-g`).
 pub fn run_debug_adapter(bin: &Path, module: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let env_pairs = crate::execution::native::native_run_env_pairs(module)?;
     let dap = find_lldb_dap()?;
     let mut child = Command::new(&dap)
         .stdin(Stdio::piped())
@@ -71,7 +72,6 @@ pub fn run_debug_adapter(bin: &Path, module: &str) -> Result<(), Box<dyn std::er
     });
 
     let bin_s = bin.to_string_lossy().into_owned();
-    let env_pairs = crate::execution::native::native_run_env_pairs(module);
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     // Presentation-only lldb formatters (strings as quoted text, array lengths), shipped next to
     // the other artifacts and imported at session start via `initCommands`. lldb forbids dots in

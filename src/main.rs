@@ -93,7 +93,7 @@ struct Cli {
     #[arg(long = "emit-llvm", global = true)]
     emit_llvm: bool,
 
-    /// Bundle libdream beside the native binary and use package-relative library lookup
+    /// Bundle required host libraries beside the native binary with package-relative lookup
     #[arg(long, global = true, conflicts_with_all = ["wasm", "emit_llvm"])]
     relocatable: bool,
 
@@ -432,8 +432,6 @@ fn main() -> ExitCode {
 
     let reporter = Arc::new(ConsoleReporter::new());
     // `with_release` installs RELEASE_DEFAULT wasm-opt; an explicit `-O` overrides.
-    // Always emit `.abi.json`: JS hosts need imports/exports, and native `run` /
-    // `debug-adapter` load abi.gpu for `@compute` / shader metadata.
     let cc_opt = OptLevel::from_cli(cli.release, optimize);
     let mut compiler = Compiler::new(if native {
         Target::Native
@@ -444,7 +442,6 @@ fn main() -> ExitCode {
     .with_debug_info(debug_info)
     .with_runtimes(runtimes)
     .with_compile_targets(compile_targets)
-    .with_emit_abi(true)
     .with_crate_type(crate_type)
     .with_emit_mir(emit_mir)
     // A native library's product is its unoptimized `.ll`; every other build links it away.

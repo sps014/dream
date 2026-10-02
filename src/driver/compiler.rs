@@ -81,9 +81,6 @@ pub struct Compiler {
     /// Active compile-time runtime target(s) for semantic availability checks. Defaults to
     /// native-only; overridden by `--target` or inferred from `--runtime --web`/`--node`.
     compile_targets: CompileTargets,
-    /// When `true` (default), write sibling `.abi.json` for JS/`dream.js` interop. Native
-    /// `run` / `debug-adapter` use it for GPU/`@c` metadata.
-    emit_abi: bool,
     /// Library vs binary; libs reject a primary-file `main`.
     crate_type: dream_sema::analyzer::CrateType,
     /// Progress/artifact sink (silent by default; the CLI installs [`ConsoleReporter`](crate::driver::ui::ConsoleReporter)).
@@ -106,7 +103,6 @@ impl Compiler {
             skip_generators: false,
             runtimes: Vec::new(),
             compile_targets: CompileTargets::native_only(),
-            emit_abi: true,
             crate_type: dream_sema::analyzer::CrateType::Bin,
             reporter: Arc::new(SilentReporter),
             emit_mir: None,
@@ -222,12 +218,6 @@ impl Compiler {
     /// Builder: set compile-time runtime target(s) explicitly (`--target native|node|web`).
     pub fn with_compile_targets(mut self, targets: CompileTargets) -> Self {
         self.compile_targets = targets;
-        self
-    }
-
-    /// Builder: write `.abi.json` next to the module (needed for browser/Node + `dream.js`).
-    pub fn with_emit_abi(mut self, on: bool) -> Self {
-        self.emit_abi = on;
         self
     }
 
@@ -526,7 +516,6 @@ impl Compiler {
                 &live_imports,
                 &native_graph,
                 &cpp_bridge,
-                self.emit_abi,
             )?;
             for p in abi_artifacts {
                 self.reporter.artifact(&p);
@@ -574,15 +563,12 @@ impl Compiler {
                 &live_imports,
                 &native_graph,
                 &cpp_bridge,
-                self.emit_abi,
             )?;
         for p in abi_artifacts {
             self.reporter.artifact(&p);
         }
 
-        if self.emit_abi {
-            crate::driver::abi::embed_abi_in_wasm(out_path)?;
-        }
+        crate::driver::abi::embed_abi_in_wasm(out_path)?;
 
         let wasm_bytes = fs::read(&wasm_path)?;
         let text = dream_mir::backend::print_wasm(&wasm_bytes);

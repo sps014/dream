@@ -1,6 +1,7 @@
 //! Native host link artifacts, shared by the compiler and package manager.
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum HostCapability {
     Core,
     Net,
@@ -10,6 +11,15 @@ pub enum HostCapability {
 
 impl HostCapability {
     pub const ALL: [Self; 4] = [Self::Core, Self::Net, Self::Gpu, Self::WebView];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Core => "core",
+            Self::Net => "net",
+            Self::Gpu => "gpu",
+            Self::WebView => "webview",
+        }
+    }
 
     pub const fn link_name(self) -> &'static str {
         match self {
@@ -33,5 +43,39 @@ impl HostCapability {
 
     pub fn import_library_name(self) -> String {
         format!("{}.dll.lib", self.link_name())
+    }
+}
+
+/// The native linker and packager consume the same live-use inventory.
+#[derive(serde::Deserialize)]
+pub struct HostManifest {
+    pub host_capabilities: Vec<HostCapability>,
+}
+
+impl HostManifest {
+    pub fn parse(json: &str) -> Result<Self, serde_json::Error> {
+        let manifest: Self = serde_json::from_str(json)?;
+        Ok(Self {
+            // Core binds guest callbacks even when no stdlib extern survives pruning.
+            host_capabilities: HostCapability::ALL
+                .iter()
+                .copied()
+                .filter(|c| *c == HostCapability::Core || manifest.host_capabilities.contains(c))
+                .collect(),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manifest_requires_inventory_and_canonicalizes_order() {
+        assert!(HostManifest::parse("{}").is_err());
+        assert!(HostManifest::parse(r#"{"host_capabilities":["unknown"]}"#).is_err());
+        let manifest =
+            HostManifest::parse(r#"{"host_capabilities":["webview","gpu","net","gpu"]}"#).unwrap();
+        assert_eq!(manifest.host_capabilities, HostCapability::ALL);
     }
 }

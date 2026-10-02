@@ -11,6 +11,7 @@ pub use pgo::Pgo;
 
 use crate::driver::wasm_opt::OptLevel;
 use crate::execution::llvm::compile_llvm;
+use dream_abi::host_capability::{HostCapability, HostManifest};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -53,7 +54,7 @@ pub fn capture_native_bin(
     timeout_secs: u64,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let mut cmd = Command::new(bin);
-    apply_native_run_env(&mut cmd, artifact);
+    apply_native_run_env(&mut cmd, artifact)?;
     for (k, v) in extra_env {
         cmd.env(k, v);
     }
@@ -144,7 +145,7 @@ pub fn run_native_bin(
     extra_args: &[String],
 ) -> Result<i32, Box<dyn std::error::Error>> {
     let mut cmd = Command::new(bin);
-    apply_native_run_env(&mut cmd, module);
+    apply_native_run_env(&mut cmd, module)?;
     cmd.args(extra_args);
     let status = cmd.status()?;
     match status.code() {
@@ -153,17 +154,33 @@ pub fn run_native_bin(
     }
 }
 
-pub(crate) fn apply_native_run_env(cmd: &mut Command, module: &str) {
-    for (k, v) in native_run_env_pairs(module) {
+pub(crate) fn apply_native_run_env(
+    cmd: &mut Command,
+    module: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for (k, v) in native_run_env_pairs(module)? {
         cmd.env(k, v);
     }
+    Ok(())
+}
+
+pub(crate) fn read_host_capabilities(
+    module: &Path,
+) -> Result<Vec<HostCapability>, Box<dyn std::error::Error>> {
+    let path = module.with_extension("abi.json");
+    let text = std::fs::read_to_string(&path)
+        .map_err(|error| format!("reading host inventory {}: {error}", path.display()))?;
+    Ok(HostManifest::parse(&text)?.host_capabilities)
 }
 
 /// Env vars the native guest needs (`DREAM_NATIVE_MODULE`, dylib search path). Used by
 /// `dream run` and the lldb-dap debug adapter.
-pub(crate) fn native_run_env_pairs(module: &str) -> Vec<(String, String)> {
+pub(crate) fn native_run_env_pairs(
+    module: &str,
+) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
     let mut out = vec![("DREAM_NATIVE_MODULE".to_string(), module.to_string())];
-    if let Some(dir) = host_library_dir() {
+    let capabilities = read_host_capabilities(Path::new(module))?;
+    if let Some(dir) = host_library_dir(&capabilities) {
         let key = if cfg!(target_os = "macos") {
             "DYLD_LIBRARY_PATH"
         } else if cfg!(target_os = "windows") {
@@ -182,7 +199,7 @@ pub(crate) fn native_run_env_pairs(module: &str) -> Vec<(String, String)> {
         }
         out.push((key.to_string(), paths));
     }
-    out
+    Ok(out)
 }
 
 fn push_host_library_dir(dirs: &mut Vec<PathBuf>, dir: PathBuf) {
@@ -207,7 +224,7 @@ fn push_exe_parent(dirs: &mut Vec<PathBuf>, exe: &Path) {
 /// working directory: planted libraries would otherwise be linked and rpath'd.
 /// Development builds use this canonical directory as their absolute rpath; relocatable builds
 /// stage the library family into the package instead.
-pub(crate) fn host_library_dir() -> Option<PathBuf> {
+pub(crate) fn host_library_dir(capabilities: &[HostCapability]) -> Option<PathBuf> {
     let mut dirs = Vec::new();
     if let Ok(exe) = std::env::current_exe() {
         if let Ok(canon) = exe.canonicalize() {
@@ -235,7 +252,7 @@ pub(crate) fn host_library_dir() -> Option<PathBuf> {
     dirs.into_iter()
         .filter(|d| d.is_absolute())
         .find(|d| {
-            dream_abi::host_capability::HostCapability::ALL
+            capabilities
                 .iter()
                 .all(|c| d.join(c.library_name()).is_file())
         })

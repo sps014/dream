@@ -107,7 +107,10 @@ fn llvm_relocatable_binary_runs_after_move() {
     compile_ll(&source, &ll, OptLevel::O0);
     let binary = compile_llvm(&ll, None, OptLevel::O0, false, &Pgo::Off, None, true).unwrap();
     for capability in dream_abi::host_capability::HostCapability::ALL {
-        assert!(build.join(capability.library_name()).is_file());
+        assert_eq!(
+            build.join(capability.library_name()).is_file(),
+            capability == dream_abi::host_capability::HostCapability::Core
+        );
     }
     let moved = temporary.path().join("moved package");
     fs::rename(&build, &moved).unwrap();

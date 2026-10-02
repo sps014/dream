@@ -48,17 +48,25 @@ native targets and by wasi-sdk's clang for wasm32. It is cached per LLVM version
 `RuntimeNeed` under `target/dream-native-rt/` (in the repo) or `~/.dream/cache/native-rt/`, and
 guarded by a file lock so concurrent compiles share one build.
 
-Native `--relocatable` builds stage the four host libraries next to the executable and include
+Native links select host libraries from the ABI sidecar's `host_capabilities` inventory. Each
+embedded stdlib package declares its native capabilities; only externs surviving MIR import
+pruning contribute them. Core always binds guest callbacks. Importing an unused GUI package or
+calling CPU-only GPU helpers does not select a GUI library. The linker and packager share the
+typed manifest reader and canonical core/net/gpu/webview ordering.
+ABI sidecars are mandatory, including generator harnesses and `dream test` runners; harness
+cache fingerprints include the ABI emitter and capability schema/registry.
+
+Native `--relocatable` builds stage the selected host libraries next to the executable and include
 this link policy in the freshness stamp. Linux uses `$ORIGIN`; macOS libraries carry their
 `@rpath/libdream_host_*.dylib` install identities from build time and executables use relative
 search paths for adjacent libraries and `.app/Contents/Frameworks`. Bundled Unix libraries
 are direct linker inputs rather than `-L` search directories, since Zig adds native search
 directories to rpaths. Linux libraries carry filename-only SONAMEs; each non-core library finds
-core through `$ORIGIN` (macOS: `@loader_path`). Windows ships the four `dream_host_*.dll` files
+core through `$ORIGIN` (macOS: `@loader_path`). Windows ships the selected `dream_host_*.dll` files
 beside the executable, linking through their MSVC import libraries. `dreamer pack` copies the
-whole family into each package layout. Normal development builds retain the validated absolute
-toolchain lookup without copying libraries for every corpus case. Live-use selection is the
-next distribution task; this split still links/stages the complete family.
+selected libraries into each package layout, ignoring unused artifacts left by other builds.
+Normal development builds retain the validated absolute toolchain lookup without copying
+libraries for every corpus case. A core-only program needs only the core host library installed.
 
 ## The writers
 

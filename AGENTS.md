@@ -90,7 +90,7 @@ dream-text ← dream-diagnostics ← dream-syntax
 dream-types ← dream-syntax, dream-diagnostics
 dream-hir ← dream-types
 dream-abi ← dream-types (+ dream-syntax for attribute AST)
-dream-stdlib ← dream-syntax
+dream-stdlib ← dream-syntax, dream-abi
 dream-sema ← dream-syntax, dream-types, dream-hir, dream-abi, dream-stdlib
 dream-mir ← dream-hir, dream-types, dream-abi, dream-stdlib
 dream-host → optional capability crates; independent of dream

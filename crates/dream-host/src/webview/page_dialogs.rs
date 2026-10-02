@@ -4,8 +4,8 @@
 
 use serde_json::{json, Value as JsonValue};
 
-use crate::execution::host::desktop::dialog;
-use crate::execution::host::desktop::wire::{DialogKind, DialogRequest, Outcome};
+use crate::desktop::dialog;
+use crate::desktop::wire::{DialogKind, DialogRequest, Outcome};
 
 pub(super) const CHANNEL: &str = "__dream.dialog";
 

@@ -170,12 +170,12 @@ _dream_home="${_dream_root}/target/${_dream_profile}"
 if [ "$_dream_skip_build" -eq 0 ]; then
   echo "Building ${_dream_profile} toolchain (dream, dream-lsp, dreamer)..."
   if [ "$_dream_profile" = release ]; then
-    (cd "$_dream_root" && cargo build --release -p dream -p dream-lsp -p dreamer) || {
+    (cd "$_dream_root" && cargo build --release -p dream -p dream-host -p dream-lsp -p dreamer) || {
       _dream_fail
       return 1 2>/dev/null || exit 1
     }
   else
-    (cd "$_dream_root" && cargo build -p dream -p dream-lsp -p dreamer) || {
+    (cd "$_dream_root" && cargo build -p dream -p dream-host -p dream-lsp -p dreamer) || {
       _dream_fail
       return 1 2>/dev/null || exit 1
     }

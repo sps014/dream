@@ -1,14 +1,11 @@
 //! Build a native Dream binary through the LLVM backend and run it against libdream (the host
 //! side of the runtime ABI).
 
-pub mod abi;
-pub mod app_icon;
+pub(crate) mod c_link;
 pub(crate) mod bundle;
 pub(crate) mod cc;
-pub mod desktop;
 pub(crate) mod native_c;
 pub(crate) mod pgo;
-pub mod webview;
 
 pub use cc::generator_cache_root;
 pub use pgo::Pgo;

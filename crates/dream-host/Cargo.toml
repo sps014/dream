@@ -1,0 +1,64 @@
+[package]
+name = "dream-host"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "dream"
+crate-type = ["cdylib"]
+
+[dependencies]
+indexmap = "2"
+dream-abi = { path = "../dream-abi" }
+dream-mir = { path = "../dream-mir" }
+reqwest = { version = "0.12", features = ["blocking", "json"], optional = true }
+tokio = { version = "1", optional = true, default-features = false, features = ["rt-multi-thread", "net", "sync", "time", "macros"] }
+hyper = { version = "1", optional = true, default-features = false, features = ["http1", "server"] }
+hyper-util = { version = "0.1", optional = true, default-features = false, features = ["tokio", "server-auto", "http1"] }
+http-body-util = { version = "0.1", optional = true }
+bytes = { version = "1", optional = true }
+multer = { version = "3", optional = true }
+futures-util = { version = "0.3", optional = true }
+rustls = { version = "0.23", optional = true, default-features = false, features = ["std", "tls12", "ring"] }
+tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["ring"] }
+rustls-pemfile = { version = "2", optional = true }
+tokio-tungstenite = { version = "0.24", optional = true, default-features = false }
+serde_json = { version = "1", optional = true }
+chrono = { version = "0.4", optional = true }
+unicode-normalization = { version = "0.1", optional = true }
+unicode-segmentation = { version = "1.12", optional = true }
+sha2 = { version = "0.10", optional = true }
+hmac = { version = "0.12", optional = true }
+getrandom = { version = "0.2", optional = true }
+aes-gcm = { version = "0.10", optional = true }
+chrono-tz = { version = "0.10.4", optional = true }
+iana-time-zone = { version = "0.1.65", optional = true }
+wgpu = { version = "24", optional = true }
+pollster = { version = "0.4", optional = true }
+winit = { version = "0.30", optional = true }
+wry = { version = "0.53", optional = true, features = ["devtools"] }
+percent-encoding = { version = "2.3", optional = true }
+rfd = { version = "0.17", optional = true }
+clipboard-rs = { version = "0.3", optional = true }
+open = { version = "5", optional = true }
+gilrs = { version = "0.11", optional = true }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico"], optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+tungstenite = { version = "0.24", optional = true, default-features = false, features = ["handshake", "native-tls"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6", optional = true }
+objc2-app-kit = { version = "0.3", optional = true, default-features = false, features = ["std", "NSApplication", "NSImage", "NSResponder"] }
+objc2-foundation = { version = "0.3", optional = true, default-features = false, features = ["std", "NSData"] }
+
+
+[features]
+default = ["core", "net", "gpu", "webview"]
+core = ["dep:chrono", "dep:chrono-tz", "dep:iana-time-zone", "dep:sha2", "dep:hmac", "dep:getrandom", "dep:unicode-normalization", "dep:unicode-segmentation", "dep:aes-gcm"]
+net = ["core", "dep:reqwest", "dep:tokio", "dep:hyper", "dep:hyper-util", "dep:http-body-util", "dep:bytes", "dep:serde_json", "dep:serde", "dep:tungstenite", "dep:tokio-tungstenite", "dep:multer", "dep:futures-util", "dep:rustls", "dep:tokio-rustls", "dep:rustls-pemfile"]
+gpu = ["core", "dep:wgpu", "dep:pollster", "dep:winit", "dep:gilrs", "dep:image", "dep:serde", "dep:serde_json"]
+webview = ["core", "dep:wry", "dep:winit", "dep:image", "dep:serde", "dep:serde_json", "dep:percent-encoding", "dep:rfd", "dep:clipboard-rs", "dep:open", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
+
+[dev-dependencies]
+dream-stdlib = { path = "../dream-stdlib" }
+rcgen = "0.13"

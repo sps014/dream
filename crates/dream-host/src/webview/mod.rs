@@ -23,7 +23,7 @@ use wry::dpi::{LogicalPosition, LogicalSize};
 use wry::http::Request;
 use wry::{Rect, WebViewBuilder};
 
-use crate::execution::host::{app_icon, desktop};
+use crate::{app_icon, desktop};
 
 mod events;
 mod page_dialogs;

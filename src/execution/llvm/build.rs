@@ -6,8 +6,10 @@ use super::runtime::llvm_runtime;
 use super::tools::{resolve_llvm, LlvmTools};
 use crate::driver::wasi::run_captured;
 use crate::driver::wasm_opt::OptLevel;
-use crate::execution::host::{cc_link_flags, read_c_libs_from_abi, search_roots_for_artifact};
 use crate::execution::native::bundle::{link_runtime, stage_runtime};
+use crate::execution::native::c_link::{
+    cc_link_flags, read_c_libs_from_abi, search_roots_for_artifact,
+};
 use crate::execution::native::native_c::{compile_sets, read_c_sources_from_abi, NativeObjects};
 use crate::execution::native::pgo::{clear_raw_profiles, llvm_pgo};
 use crate::execution::native::{cc, libdream_dir, native_bin_fresh, Pgo};
@@ -192,7 +194,7 @@ pub fn compile_llvm(
     let bin = native_bin_path(ll_path);
     let dir = libdream_dir().ok_or(
         "libdream not found next to the dream binary (needed to link host functions). \
-         Set DREAM_HOME or DREAM_BIN to the directory containing libdream.",
+         Build it with cargo build -p dream-host, or set DREAM_HOME or DREAM_BIN to the directory containing libdream.",
     )?;
     let lock_file = OpenOptions::new()
         .create(true)

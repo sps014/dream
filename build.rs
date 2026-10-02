@@ -2,10 +2,6 @@
 //! `DREAM_DEFAULT_STACK_SIZE` for the native runtime (`execution::host::stack_size`).
 
 fn main() {
-    // Direct linkage must record the runtime's package name, not its build path.
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
-        println!("cargo:rustc-cdylib-link-arg=-Wl,-soname,libdream.so");
-    }
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-env-changed=DREAM_DEFAULT_STACK_SIZE");
 

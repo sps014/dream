@@ -15,7 +15,7 @@ use indexmap::IndexMap;
 use rfd::{AsyncFileDialog, AsyncMessageDialog, FileHandle, MessageDialogResult};
 
 use super::wire::{DialogKind, DialogRequest, Outcome};
-use crate::execution::host::webview;
+use crate::webview;
 
 type Pending = Pin<Box<dyn Future<Output = Outcome>>>;
 

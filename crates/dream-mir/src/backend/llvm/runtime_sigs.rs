@@ -7,6 +7,7 @@
 
 use std::convert::TryFrom;
 
+use dream_abi::target::TargetSpec;
 use indexmap::IndexMap;
 
 use super::ir::{FnAttr, FnTy, ParamAttr, Ty};
@@ -65,6 +66,36 @@ impl RuntimeSigs {
         self.fns.contains_key(name)
     }
 
+    /// Rejects runtime artifacts built for a different target before their signatures shape IR.
+    pub fn validate_target(&self, target: &TargetSpec) -> Result<(), String> {
+        let runtime = parse_runtime_target(&self.triple)?;
+        if runtime.triple != target.triple {
+            return Err(format!(
+                "target triple `{}` does not match selected target `{}`",
+                self.triple, target.triple
+            ));
+        }
+        if (runtime.ptr_size, runtime.ptr_align) != (target.ptr_size, target.ptr_align) {
+            return Err(format!(
+                "target triple `{}` has pointer layout ({}, {}) but selected target `{}` requires ({}, {})",
+                self.triple,
+                runtime.ptr_size,
+                runtime.ptr_align,
+                target.triple,
+                target.ptr_size,
+                target.ptr_align
+            ));
+        }
+        let (size, align) = default_pointer_layout(&self.datalayout)?;
+        if (size, align) != (target.ptr_size, target.ptr_align) {
+            return Err(format!(
+                "data layout `{}` has pointer layout ({size}, {align}) but selected target `{}` requires ({}, {})",
+                self.datalayout, target.triple, target.ptr_size, target.ptr_align
+            ));
+        }
+        Ok(())
+    }
+
     /// Parses the reduced disassembly. Lines that are not external function definitions,
     /// declarations, globals, attribute groups or the target header are ignored.
     pub fn parse(text: &str) -> Result<Self, String> {
@@ -119,6 +150,53 @@ impl RuntimeSigs {
         }
         Ok(out)
     }
+}
+
+fn parse_runtime_target(triple: &str) -> Result<TargetSpec, String> {
+    TargetSpec::parse(triple).or_else(|original| {
+        let Some(msvc) = triple.find("-msvc") else {
+            return Err(format!(
+                "runtime target triple `{triple}` is invalid: {original}"
+            ));
+        };
+        let suffix = &triple[msvc + "-msvc".len()..];
+        if suffix.is_empty()
+            || !suffix
+                .chars()
+                .all(|character| character.is_ascii_digit() || character == '.')
+        {
+            return Err(format!(
+                "runtime target triple `{triple}` is invalid: {original}"
+            ));
+        }
+        TargetSpec::parse(&triple[..msvc + "-msvc".len()])
+            .map_err(|e| format!("runtime target triple `{triple}` is invalid: {e}"))
+    })
+}
+
+fn default_pointer_layout(datalayout: &str) -> Result<(u32, u32), String> {
+    let layout = datalayout
+        .split('-')
+        .find_map(|part| part.strip_prefix("p:").or_else(|| part.strip_prefix("p0:")));
+    let Some(layout) = layout else {
+        // LLVM's default address-space-zero pointer layout when `p0` is omitted.
+        return Ok((8, 8));
+    };
+    let mut parts = layout.split(':');
+    let bits = parts
+        .next()
+        .and_then(|part| part.parse::<u32>().ok())
+        .ok_or_else(|| format!("data layout `{datalayout}` has an invalid pointer size"))?;
+    let align_bits = parts
+        .next()
+        .and_then(|part| part.parse::<u32>().ok())
+        .ok_or_else(|| format!("data layout `{datalayout}` has an invalid pointer alignment"))?;
+    if bits % 8 != 0 || align_bits % 8 != 0 {
+        return Err(format!(
+            "data layout `{datalayout}` has a non-byte pointer layout"
+        ));
+    }
+    Ok((bits / 8, align_bits / 8))
 }
 
 fn string_attr(body: &str, key: &str) -> Option<String> {
@@ -433,5 +511,36 @@ attributes #2 = { nounwind }
                 ("frame-pointer".to_string(), "non-leaf".to_string()),
             ]
         );
+    }
+
+    #[test]
+    fn validates_target_identity_and_pointer_layout() {
+        let target = TargetSpec::parse("aarch64-apple-macosx26.0.0").unwrap();
+        let sigs = RuntimeSigs::parse(SAMPLE).unwrap();
+        sigs.validate_target(&target).unwrap();
+
+        let wrong_target = TargetSpec::parse("x86_64-unknown-linux-gnu").unwrap();
+        assert!(sigs
+            .validate_target(&wrong_target)
+            .unwrap_err()
+            .contains("target triple"));
+
+        let mut wrong_layout = sigs.clone();
+        wrong_layout.datalayout = "e-p:32:32".into();
+        assert!(wrong_layout
+            .validate_target(&target)
+            .unwrap_err()
+            .contains("pointer layout"));
+    }
+
+    #[test]
+    fn accepts_clang_msvc_version_suffix() {
+        let target = TargetSpec::parse("x86_64-pc-windows-msvc").unwrap();
+        let sigs = RuntimeSigs {
+            triple: "x86_64-pc-windows-msvc19.44.35211".into(),
+            datalayout: "e-m:w-i64:64-f80:128-n8:16:32:64-S128".into(),
+            ..Default::default()
+        };
+        sigs.validate_target(&target).unwrap();
     }
 }

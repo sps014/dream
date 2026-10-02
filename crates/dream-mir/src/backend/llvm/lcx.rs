@@ -138,7 +138,7 @@ impl<'a> Lcx<'a> {
             return s;
         }
         let Some(rt) = self.sigs.fns.get(name) else {
-            crate::internal_error!("no LLVM signature for `{name}` (not generated, not a host import, not in the runtime)")
+            std::panic::panic_any(super::MissingRuntimeSymbol(name.to_string()));
         };
         let s = FnSig::of_runtime(rt);
         self.declare(name, &s);
@@ -227,7 +227,7 @@ impl<'a> Lcx<'a> {
     /// `ptr @name` of a global the runtime defines, declared external with the runtime's type.
     pub fn rt_global(&mut self, name: &str) -> (Value, Ty) {
         let Some(g) = self.sigs.globals.get(name) else {
-            crate::internal_error!("runtime has no global `{name}`")
+            std::panic::panic_any(super::MissingRuntimeSymbol(name.to_string()));
         };
         let ty = g.ty.clone();
         if !self.m.has_global(name) {

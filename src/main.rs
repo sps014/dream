@@ -469,6 +469,7 @@ fn main() -> ExitCode {
             CompileError::Syntax(_) | CompileError::Semantic(_) | CompileError::Generator(_) => {}
             CompileError::Io(err) => ui.error(&format!("{err}")),
             CompileError::Manifest(msg) => ui.error(&msg),
+            CompileError::Toolchain(msg) => ui.error(&msg),
             CompileError::Internal(msg) => {
                 report_tool_error(&ui, &msg);
                 ui.help("this is an internal compiler error — please report it");

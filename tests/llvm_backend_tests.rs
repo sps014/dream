@@ -114,12 +114,14 @@ fn unsigned_string_reads_do_not_depend_on_abi_extension_attributes() {
         opt: OptLevel::O0,
         debug: false,
     };
-    let mut sigs = RuntimeSigs::parse(&toolchain.runtime_sigs(&req).unwrap()).unwrap();
+    let runtime = toolchain.runtime_sigs(&req).unwrap();
+    let mut sigs = RuntimeSigs::parse(&runtime.text).unwrap();
     // MSVC's ABI omits zeroext even for unsigned narrow returns.
     for name in ["dream_char_at_u", "dream_byte_at_u"] {
         sigs.fns.get_mut(name).unwrap().ret_attrs.clear();
     }
-    let ir = dream_mir::backend::llvm::emit_llvm_module(&mir, &interner, &sigs, false, target);
+    let ir =
+        dream_mir::backend::llvm::emit_llvm_module(&mir, &interner, &sigs, false, target).unwrap();
     let body = common::ir_func_body(&ir, "unsigned_reads");
     assert!(body.contains("zext i16"), "{}", body);
     assert!(body.contains("zext i8"), "{}", body);
@@ -317,7 +319,8 @@ fn llvm_runtime_declarations_match_bitcode() {
             threads: false,
             wasm_opt: OptLevel::O2,
         };
-        let rt = RuntimeSigs::parse(&toolchain.runtime_sigs(&req).unwrap()).unwrap();
+        let runtime = toolchain.runtime_sigs(&req).unwrap();
+        let rt = RuntimeSigs::parse(&runtime.text).unwrap();
         let ours = RuntimeSigs::parse(&text).unwrap();
         assert_eq!(ours.triple, rt.triple, "{stem}: target triple");
         assert_eq!(ours.datalayout, rt.datalayout, "{stem}: datalayout");

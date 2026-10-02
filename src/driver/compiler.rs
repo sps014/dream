@@ -29,11 +29,17 @@ pub struct LlvmRuntimeRequest {
     pub wasm_opt: OptLevel,
 }
 
+/// The reduced runtime signature table and the cache artifact it came from.
+pub struct RuntimeSignatures {
+    pub text: String,
+    pub cache_path: std::path::PathBuf,
+}
+
 /// The pinned LLVM toolchain as the driver sees it. The native execution layer implements it and
 /// installs itself by default; the driver stays toolchain-free.
 pub trait LlvmToolchain: Send + Sync {
     /// The runtime signature table (`dream_rt.sigs` text) the backend types runtime calls from.
-    fn runtime_sigs(&self, req: &LlvmRuntimeRequest) -> Result<String, String>;
+    fn runtime_sigs(&self, req: &LlvmRuntimeRequest) -> Result<RuntimeSignatures, String>;
     /// `.ll` → `.wasm`: whole-program link with the wasm runtime bitcode, `opt`, `llc`, `wasm-ld`.
     /// With `opt_ll`, also writes the optimized whole-program module there as text.
     fn link_wasm(
@@ -456,19 +462,40 @@ impl Compiler {
                 threads,
                 wasm_opt: guest_opt,
             };
-            let sigs = llvm_ref
+            let runtime = llvm_ref
                 .ok_or_else(|| "no LLVM toolchain configured".to_string())
-                .and_then(|t| t.runtime_sigs(&req))
-                .and_then(|text| dream_mir::backend::llvm::RuntimeSigs::parse(&text));
-            let bytes: Vec<u8> = match sigs {
-                Ok(sigs) => dream_mir::backend::llvm::emit_llvm_module(
-                    &mir,
-                    interner,
-                    &sigs,
-                    debug && !wasm,
-                    req.target.clone(),
-                )
-                .into_bytes(),
+                .and_then(|t| t.runtime_sigs(&req));
+            let bytes: Vec<u8> = match runtime {
+                Ok(runtime) => {
+                    let cache = runtime.cache_path.display();
+                    let sigs = dream_mir::backend::llvm::RuntimeSigs::parse(&runtime.text)
+                        .and_then(|sigs| {
+                            sigs.validate_target(req.target.spec())?;
+                            Ok(sigs)
+                        })
+                        .map_err(|e| format!("runtime signature cache `{cache}` is stale: {e}"));
+                    let sigs = match sigs {
+                        Ok(sigs) => sigs,
+                        Err(e) => {
+                            *llvm_err_ref = Some(e);
+                            return Err("llvm");
+                        }
+                    };
+                    match dream_mir::backend::llvm::emit_llvm_module(
+                        &mir,
+                        interner,
+                        &sigs,
+                        debug && !wasm,
+                        req.target.clone(),
+                    ) {
+                        Ok(ir) => ir.into_bytes(),
+                        Err(e) => {
+                            *llvm_err_ref =
+                                Some(format!("runtime signature cache `{cache}` is stale: {e}"));
+                            return Err("llvm");
+                        }
+                    }
+                }
                 Err(e) => {
                     *llvm_err_ref = Some(e);
                     return Err("llvm");
@@ -491,7 +518,7 @@ impl Compiler {
                 ));
             }
             Ok(Err("llvm")) => {
-                return Err(CompileError::Internal(
+                return Err(CompileError::Toolchain(
                     llvm_err.unwrap_or_else(|| "LLVM runtime unavailable".into()),
                 ));
             }

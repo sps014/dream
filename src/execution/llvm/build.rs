@@ -440,7 +440,7 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
     fn runtime_sigs(
         &self,
         req: &crate::driver::compiler::LlvmRuntimeRequest,
-    ) -> Result<String, String> {
+    ) -> Result<crate::driver::compiler::RuntimeSignatures, String> {
         let config = &self.config;
         let tools = resolve_llvm(config)?;
         let sigs = if req.target.is_wasm32() {
@@ -448,7 +448,12 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
         } else {
             llvm_runtime(&tools, req.target.spec(), self.opt, req.need, self.debug)?.sigs
         };
-        std::fs::read_to_string(&sigs).map_err(|e| format!("{}: {e}", sigs.display()))
+        let text =
+            std::fs::read_to_string(&sigs).map_err(|e| format!("{}: {e}", sigs.display()))?;
+        Ok(crate::driver::compiler::RuntimeSignatures {
+            text,
+            cache_path: sigs,
+        })
     }
 
     fn link_wasm(

@@ -12,6 +12,8 @@ the full native/Node corpus; Windows additionally runs the full native corpus wi
 pinned MSVC-compatible clang driver and developer SDK environment. Windows Rust/probe
 steps use PowerShell so Git Bash's `link` utility cannot shadow Microsoft's linker.
 Size budgets remain Linux/macOS-only until Windows distribution baselines are measured.
+Dependency caches survive failed validation; the pinned toolchain is cached immediately
+after installation so later test failures do not force another download.
 
 ## The test pyramid
 

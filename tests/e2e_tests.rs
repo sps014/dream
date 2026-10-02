@@ -411,24 +411,44 @@ fn run_corpus(release: bool, only: Option<&[&str]>) {
     );
 }
 
-fn file_url(path: &Path) -> String {
-    let abs = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    format!("file://{}", abs.display())
+fn js_string(s: &str) -> String {
+    serde_json::to_string(s).unwrap()
 }
 
-fn js_string(s: &str) -> String {
-    let mut out = String::from("\"");
-    for c in s.chars() {
-        match c {
-            '\\' | '"' => {
-                out.push('\\');
-                out.push(c);
-            }
-            _ => out.push(c),
-        }
-    }
-    out.push('"');
-    out
+fn wasm_runner_script(runtime: &Path, wasm: &Path) -> String {
+    format!(
+        "import {{ pathToFileURL }} from 'node:url';\n\
+         const {{ run }} = await import(pathToFileURL({js}).href);\n\
+         const timer = setTimeout(() => {{ console.error('wasm/js e2e timeout'); process.exit(2); }}, 25000);\n\
+         run({wasm}, {{ stdout: (s) => process.stdout.write(s) }}).await;\n\
+         clearTimeout(timer);\n",
+        js = js_string(runtime.to_str().unwrap()),
+        wasm = js_string(wasm.to_str().unwrap()),
+    )
+}
+
+#[test]
+fn file_urls_round_trip_special_paths() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("runtime #π%.mjs");
+    fs::write(
+        &file,
+        "export function run(path, {stdout}) { stdout(path); return {await: 0}; }\n",
+    )
+    .unwrap();
+    let wasm = dir.path().join("guest #π%.wasm");
+    let runner = dir.path().join("runner.mjs");
+    fs::write(&runner, wasm_runner_script(&file, &wasm)).unwrap();
+    let output = Command::new("node").arg(runner).output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        wasm.to_str().unwrap()
+    );
 }
 
 fn run_wasm_js_case(dream_file: &Path) {
@@ -449,18 +469,7 @@ fn run_wasm_js_case(dream_file: &Path) {
     let wasm_path = fs::canonicalize(&wasm_path).unwrap_or(wasm_path);
     let dream_js = Path::new(env!("CARGO_MANIFEST_DIR")).join("runtime/dream.js");
     let runner = dest_dir.join(format!("{stem}_run.mjs"));
-    fs::write(
-        &runner,
-        format!(
-            "import {{ run }} from {js};\n\
-             const timer = setTimeout(() => {{ console.error('wasm/js e2e timeout'); process.exit(2); }}, 25000);\n\
-             run({wasm}, {{ stdout: (s) => process.stdout.write(s) }}).await;\n\
-             clearTimeout(timer);\n",
-            js = js_string(&file_url(&dream_js)),
-            wasm = js_string(wasm_path.to_str().unwrap()),
-        ),
-    )
-    .unwrap();
+    fs::write(&runner, wasm_runner_script(&dream_js, &wasm_path)).unwrap();
     let child = Command::new("node")
         .arg(&runner)
         .stdout(std::process::Stdio::piped())
@@ -886,6 +895,18 @@ fn dream_js_bundle_is_fresh() {
     assert!(
         status.success(),
         "runtime/dream.js is stale; run: node scripts/bundle-runtime.mjs"
+    );
+}
+
+#[test]
+fn dream_js_bundle_is_platform_independent() {
+    let status = Command::new("node")
+        .args(["--test", "scripts/test-bundle-runtime.mjs"])
+        .status()
+        .unwrap();
+    assert!(
+        status.success(),
+        "runtime bundle differs across platform paths"
     );
 }
 

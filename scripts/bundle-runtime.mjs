@@ -66,7 +66,7 @@ function collectModules(entryAbs) {
  * Dynamic `import("node:...")` is preserved.
  */
 function transformModule(text, filePath) {
-  const rel = path.relative(SRC_ROOT, filePath);
+  const rel = path.relative(SRC_ROOT, filePath).split(path.sep).join("/");
   let body = text;
 
   // Remove static import lines (including multi-line).

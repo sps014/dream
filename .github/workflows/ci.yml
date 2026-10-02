@@ -50,13 +50,22 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/cache@v4
+        with:
+          cache-on-failure: true
+      - uses: actions/cache/restore@v4
+        id: llvm-cache
         with:
           path: ~/.dream/toolchains/llvm-22.1.8
           key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - name: Install pinned LLVM and wasi-sdk support
         shell: bash
         run: scripts/fetch-dev-llvm.sh
+      - name: Cache the validated pinned toolchain
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.dream/toolchains/llvm-22.1.8
+          key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
       - name: Use the MSVC-compatible pinned C driver
         if: runner.os == 'Windows'
         shell: pwsh

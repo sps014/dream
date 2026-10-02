@@ -99,10 +99,7 @@ try {
     Get-ChildItem -Path (Join-Path $Work "out") -Recurse -File |
         Where-Object {
             $_.Name -match '^(dream|dreamer|dream-lsp)(\.exe)?$' -or
-            $_.Name -in @(
-                'libdream.so', 'libdream.dylib', 'dream.dll',
-                'dream.dll.lib', 'dream.lib', 'libdream.dll.a'
-            )
+            $_.Name -match '^(lib)?dream_host_(core|net|gpu|webview)\.(so|dylib|dll|dll\.lib)$'
         } |
         ForEach-Object { Copy-Item $_.FullName -Destination $BinDir -Force }
     Get-ChildItem -Path (Join-Path $Work "out") -Recurse -Directory |
@@ -135,13 +132,15 @@ try {
     if (-not (Test-Path -LiteralPath $dreamBin) -or -not (Test-Path -LiteralPath $dreamerBin)) {
         throw "archive did not contain dream/dreamer binaries"
     }
-    $libdream = @(
-        (Join-Path $BinDir "libdream.so"),
-        (Join-Path $BinDir "libdream.dylib"),
-        (Join-Path $BinDir "dream.dll")
-    ) | Where-Object { Test-Path -LiteralPath $_ }
-    if (-not $libdream) {
-        throw "archive did not contain libdream (needed to link native programs)"
+    foreach ($capability in @("core", "net", "gpu", "webview")) {
+        $libraries = @(
+            (Join-Path $BinDir "libdream_host_$capability.so"),
+            (Join-Path $BinDir "libdream_host_$capability.dylib"),
+            (Join-Path $BinDir "dream_host_$capability.dll")
+        ) | Where-Object { Test-Path -LiteralPath $_ }
+        if (-not $libraries) {
+            throw "archive did not contain the $capability host library"
+        }
     }
     @"
 DREAM_HOME=$BinDir

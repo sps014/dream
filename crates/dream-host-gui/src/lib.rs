@@ -1,26 +1,10 @@
-//! App icon shared by GPU and WebView windows (and the macOS Dock).
-//!
-//! The PNG is baked into the program at compile time (`dream --icon`, which `dreamer` passes from
-//! `[package].icon`): a module constructor hands the bytes to [`set_app_icon_png`] before `main`.
+//! Stateless window icon helpers; PNG storage belongs to the core library.
 
-use std::sync::OnceLock;
-
+pub use dream_host_abi::app_icon_png;
 use winit::window::Icon;
 
-static APP_ICON_PNG: OnceLock<&'static [u8]> = OnceLock::new();
-
-pub(crate) fn set_app_icon_png(png: &'static [u8]) {
-    if !png.is_empty() {
-        let _ = APP_ICON_PNG.set(png);
-    }
-}
-
-pub(crate) fn app_icon_png() -> Option<&'static [u8]> {
-    APP_ICON_PNG.get().copied()
-}
-
 /// The compiled-in icon, decoded for a winit window.
-pub(crate) fn window_icon() -> Option<Icon> {
+pub fn window_icon() -> Option<Icon> {
     let bytes = app_icon_png()?;
     match icon_from_png_bytes(bytes) {
         Ok(icon) => Some(icon),
@@ -31,7 +15,7 @@ pub(crate) fn window_icon() -> Option<Icon> {
     }
 }
 
-pub(crate) fn icon_from_png_bytes(bytes: &[u8]) -> Result<Icon, String> {
+pub fn icon_from_png_bytes(bytes: &[u8]) -> Result<Icon, String> {
     let img = image::load_from_memory(bytes)
         .map_err(|e| e.to_string())?
         .into_rgba8();
@@ -41,8 +25,8 @@ pub(crate) fn icon_from_png_bytes(bytes: &[u8]) -> Result<Icon, String> {
 
 /// macOS shows the Dock icon from the app bundle; a bare binary needs it set on NSApplication.
 /// Call on the main thread after the event loop exists.
-#[cfg(all(target_os = "macos", feature = "webview"))]
-pub(crate) fn apply_dock_icon(png: &[u8]) {
+#[cfg(target_os = "macos")]
+pub fn apply_dock_icon(png: &[u8]) {
     use objc2::AllocAnyThread;
     use objc2::MainThreadMarker;
     use objc2_app_kit::{NSApplication, NSImage};
@@ -59,8 +43,8 @@ pub(crate) fn apply_dock_icon(png: &[u8]) {
     unsafe { app.setApplicationIconImage(Some(&image)) };
 }
 
-#[cfg(not(all(target_os = "macos", feature = "webview")))]
-pub(crate) fn apply_dock_icon(_png: &[u8]) {}
+#[cfg(not(target_os = "macos"))]
+pub fn apply_dock_icon(_png: &[u8]) {}
 
 #[cfg(test)]
 mod tests {

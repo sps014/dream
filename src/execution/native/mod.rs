@@ -1,8 +1,7 @@
-//! Build a native Dream binary through the LLVM backend and run it against libdream (the host
-//! side of the runtime ABI).
+//! Build and run native Dream binaries against the capability host libraries.
 
-pub(crate) mod c_link;
 pub(crate) mod bundle;
+pub(crate) mod c_link;
 pub(crate) mod cc;
 pub(crate) mod native_c;
 pub(crate) mod pgo;
@@ -164,7 +163,7 @@ pub(crate) fn apply_native_run_env(cmd: &mut Command, module: &str) {
 /// `dream run` and the lldb-dap debug adapter.
 pub(crate) fn native_run_env_pairs(module: &str) -> Vec<(String, String)> {
     let mut out = vec![("DREAM_NATIVE_MODULE".to_string(), module.to_string())];
-    if let Some(dir) = libdream_dir() {
+    if let Some(dir) = host_library_dir() {
         let key = if cfg!(target_os = "macos") {
             "DYLD_LIBRARY_PATH"
         } else if cfg!(target_os = "windows") {
@@ -186,17 +185,7 @@ pub(crate) fn native_run_env_pairs(module: &str) -> Vec<(String, String)> {
     out
 }
 
-pub(crate) fn libdream_name() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "dream.dll"
-    } else if cfg!(target_os = "macos") {
-        "libdream.dylib"
-    } else {
-        "libdream.so"
-    }
-}
-
-fn push_libdream_dir(dirs: &mut Vec<PathBuf>, dir: PathBuf) {
+fn push_host_library_dir(dirs: &mut Vec<PathBuf>, dir: PathBuf) {
     if !dir.as_os_str().is_empty() && !dirs.iter().any(|d| d == &dir) {
         dirs.push(dir);
     }
@@ -204,10 +193,10 @@ fn push_libdream_dir(dirs: &mut Vec<PathBuf>, dir: PathBuf) {
 
 fn push_exe_parent(dirs: &mut Vec<PathBuf>, exe: &Path) {
     if let Some(p) = exe.parent() {
-        push_libdream_dir(dirs, p.to_path_buf());
+        push_host_library_dir(dirs, p.to_path_buf());
         if p.file_name().and_then(|s| s.to_str()) == Some("deps") {
             if let Some(parent) = p.parent() {
-                push_libdream_dir(dirs, parent.to_path_buf());
+                push_host_library_dir(dirs, parent.to_path_buf());
             }
         }
     }
@@ -215,11 +204,10 @@ fn push_exe_parent(dirs: &mut Vec<PathBuf>, exe: &Path) {
 
 /// Search order: next to this process (so a dev build links its own newer host symbols rather
 /// than an older installed toolchain's), `DREAM_HOME`, `DREAM_BIN`, then `~/.dream/bin`. Never the
-/// working directory: a planted `target/*/libdream` would otherwise be linked and rpath'd.
+/// working directory: planted libraries would otherwise be linked and rpath'd.
 /// Development builds use this canonical directory as their absolute rpath; relocatable builds
-/// stage the library into the package instead.
-pub(crate) fn libdream_dir() -> Option<PathBuf> {
-    let name = libdream_name();
+/// stage the library family into the package instead.
+pub(crate) fn host_library_dir() -> Option<PathBuf> {
     let mut dirs = Vec::new();
     if let Ok(exe) = std::env::current_exe() {
         if let Ok(canon) = exe.canonicalize() {
@@ -230,23 +218,27 @@ pub(crate) fn libdream_dir() -> Option<PathBuf> {
     if let Ok(home) = std::env::var("DREAM_HOME") {
         if !home.is_empty() {
             let home = PathBuf::from(home);
-            push_libdream_dir(&mut dirs, home.clone());
-            push_libdream_dir(&mut dirs, home.join("bin"));
+            push_host_library_dir(&mut dirs, home.clone());
+            push_host_library_dir(&mut dirs, home.join("bin"));
         }
     }
     if let Ok(bin) = std::env::var("DREAM_BIN") {
         if let Some(p) = Path::new(&bin).parent() {
-            push_libdream_dir(&mut dirs, p.to_path_buf());
+            push_host_library_dir(&mut dirs, p.to_path_buf());
         }
     }
     if let Ok(user) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
         if !user.is_empty() {
-            push_libdream_dir(&mut dirs, PathBuf::from(user).join(".dream").join("bin"));
+            push_host_library_dir(&mut dirs, PathBuf::from(user).join(".dream").join("bin"));
         }
     }
     dirs.into_iter()
         .filter(|d| d.is_absolute())
-        .find(|d| d.join(name).is_file())
+        .find(|d| {
+            dream_abi::host_capability::HostCapability::ALL
+                .iter()
+                .all(|c| d.join(c.library_name()).is_file())
+        })
         .and_then(|d| d.canonicalize().ok())
 }
 

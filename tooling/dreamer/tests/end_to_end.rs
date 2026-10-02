@@ -389,7 +389,12 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
     if cfg!(target_os = "macos") {
         let contents = pack_dir.join("binpack.app").join("Contents");
         assert!(contents.join("MacOS").join("binpack").is_file());
-        assert!(contents.join("Frameworks").join("libdream.dylib").is_file());
+        for capability in dream_abi::host_capability::HostCapability::ALL {
+            assert!(contents
+                .join("Frameworks")
+                .join(capability.library_name())
+                .is_file());
+        }
         assert!(contents.join("Resources").join("icon.icns").is_file());
         let plist = std::fs::read_to_string(contents.join("Info.plist")).unwrap();
         assert!(plist.contains("<string>dev.dream.binpack</string>"));
@@ -398,14 +403,9 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
         assert!(entry.contains("Icon=binpack"));
         assert!(pack_dir.join("binpack.png").is_file());
     }
-    let library = if cfg!(target_os = "macos") {
-        "libdream.dylib"
-    } else if cfg!(windows) {
-        "dream.dll"
-    } else {
-        "libdream.so"
-    };
-    assert!(pack_dir.join(library).is_file());
+    for capability in dream_abi::host_capability::HostCapability::ALL {
+        assert!(pack_dir.join(capability.library_name()).is_file());
+    }
     let moved = tmp.path().join("relocated package");
     std::fs::rename(&pack_dir, &moved).unwrap();
     let executable = std::fs::read_dir(&moved)

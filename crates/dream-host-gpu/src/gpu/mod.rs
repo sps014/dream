@@ -1,4 +1,4 @@
-//! Native wgpu host for `system.gpu` (libdream C ABI).
+//! Native wgpu host for `system.gpu` (GPU capability C ABI).
 
 mod abi;
 pub(crate) mod binds;

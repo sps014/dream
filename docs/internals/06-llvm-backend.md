@@ -23,14 +23,19 @@ flowchart TD
 
 ## The toolchain
 
-Native Rust hosts and their C entry points live in `crates/dream-host`, not in the compiler.
-The root `dream` library is an rlib only and has no GUI/network host dependencies. Build both
-with `cargo build -p dream -p dream-host` (or `--workspace`) before running native programs.
-`dream-host` currently emits `libdream` with `core`, `net`, `gpu` and `webview` Cargo features;
-the default enables all four. Separate capability link artifacts and live-use selection are
-the remaining distribution work. Guest binding/allocation helpers stay together, while core,
-net and GPU entry points have separate export modules. Build-time `@c` library discovery remains
-in the compiler's `execution/native/c_link.rs`.
+Native Rust hosts live in `crates/dream-host-{core,net,gpu,webview}`, not in the compiler.
+The root `dream` library is an rlib only and has no GUI/network host dependencies.
+`cargo build --workspace` builds the compiler and all four native capability libraries:
+`dream_host_core`, `dream_host_net`, `dream_host_gpu`, and `dream_host_webview` (with the
+platform's shared-library prefix/suffix). `dream-host` is a distribution feature set, not
+another host implementation: its independent `core`, `net`, `gpu`, and `webview` features
+select these packages. Core-only builds do not compile networking or GUI dependencies.
+For direct package builds, name the required capability packages as primary targets to put
+their artifacts next to the compiler; dependency-only artifacts live in Cargo's `deps/`.
+Guest callback binding and icon storage belong exclusively to the core library. Shared
+`dream-host-abi` payload helpers call its C exports; `dream-host-gui` contains stateless icon
+decoding/window helpers. Every other capability dynamically links core, with an adjacent-library
+loader path. Build-time `@c` library discovery stays in `execution/native/c_link.rs`.
 
 LLVM is pinned to one version (`LLVM_VERSION` in `src/execution/llvm/tools.rs`). `dream` resolves
 it from `DREAM_LLVM` (a `bin/` directory or its parent), then from `dreamer toolchain install llvm`
@@ -43,16 +48,17 @@ native targets and by wasi-sdk's clang for wasm32. It is cached per LLVM version
 `RuntimeNeed` under `target/dream-native-rt/` (in the repo) or `~/.dream/cache/native-rt/`, and
 guarded by a file lock so concurrent compiles share one build.
 
-Native `--relocatable` builds stage the host `libdream` next to the executable and include this
-link policy in the freshness stamp. Linux uses `$ORIGIN`; macOS links the staged library after
-changing its install name to `@rpath/libdream.dylib`, then uses executable-relative search paths
-for adjacent libraries and `.app/Contents/Frameworks`. Bundled Unix libraries are direct linker
-inputs rather than `-L` search directories, since Zig adds native search directories to rpaths.
-The Linux host library carries the `libdream.so` SONAME so direct linkage records its package
-name rather than its build path. Windows ships `dream.dll` beside the
-executable while linking through the original import library. `dreamer pack` enables this mode
-and copies the staged library into each package layout. Normal development builds retain the
-validated absolute toolchain lookup, without copying a host library for every corpus case.
+Native `--relocatable` builds stage the four host libraries next to the executable and include
+this link policy in the freshness stamp. Linux uses `$ORIGIN`; macOS libraries carry their
+`@rpath/libdream_host_*.dylib` install identities from build time and executables use relative
+search paths for adjacent libraries and `.app/Contents/Frameworks`. Bundled Unix libraries
+are direct linker inputs rather than `-L` search directories, since Zig adds native search
+directories to rpaths. Linux libraries carry filename-only SONAMEs; each non-core library finds
+core through `$ORIGIN` (macOS: `@loader_path`). Windows ships the four `dream_host_*.dll` files
+beside the executable, linking through their MSVC import libraries. `dreamer pack` copies the
+whole family into each package layout. Normal development builds retain the validated absolute
+toolchain lookup without copying libraries for every corpus case. Live-use selection is the
+next distribution task; this split still links/stages the complete family.
 
 ## The writers
 

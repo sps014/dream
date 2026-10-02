@@ -1,6 +1,6 @@
 //! Network guest C ABI.
 
-use super::abi::*;
+use dream_host_abi::*;
 
 #[no_mangle]
 pub unsafe extern "C" fn httpRequest(

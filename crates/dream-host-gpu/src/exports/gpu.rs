@@ -1,6 +1,6 @@
 //! GPU guest C ABI.
 
-use super::abi::*;
+use dream_host_abi::*;
 use crate::gpu::{
     attach_abi_from_wat_path, buffers, caps, compute, device, error, render, surface, textures,
 };

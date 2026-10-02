@@ -1,6 +1,6 @@
 //! Core guest C ABI: text, cryptography, processes and time zones.
 
-use super::abi::*;
+use dream_host_abi::*;
 
 #[no_mangle]
 pub unsafe extern "C" fn unicodeNormalize(text: usize, form: i32) -> usize {

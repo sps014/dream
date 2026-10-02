@@ -47,7 +47,7 @@ impl Cc {
     }
 }
 
-/// Zig defaults to the GNU ABI on Windows, but the runtime objects and `libdream` are MSVC-ABI.
+/// Zig defaults to the GNU ABI on Windows, but the runtime objects and capability libraries are MSVC-ABI.
 fn zig_target_args() -> &'static [&'static str] {
     if cfg!(all(windows, target_env = "msvc", target_arch = "x86_64")) {
         &["-target", "x86_64-windows-msvc"]

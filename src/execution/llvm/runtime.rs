@@ -363,7 +363,7 @@ fn build_anchor(clang: &Path, dir: &Path, flags: &[&str]) -> Result<PathBuf, Str
 }
 
 /// A unit that takes the address of every header-declared function, so functions only the
-/// generated code calls (host exports from `libdream`, wasm host imports) still appear with clang's
+/// generated code calls (host exports from capability libraries, wasm host imports) still appear with clang's
 /// lowering. Some header names are macros or builtins; `check` (a syntax-only compile returning
 /// its stderr, uncoloured so its `file:line:` prefixes parse) finds their lines, which are dropped
 /// before `compile` builds the bitcode.

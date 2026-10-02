@@ -1,15 +1,14 @@
-//! Native C ABI (`native/abi.rs` + `webview.rs`) vs stdlib `@runtime("…")` names.
+//! Native capability C exports vs stdlib `@runtime("…")` names.
 
 use dream_abi::js_abi::HOST_MODULE;
 use std::collections::HashSet;
 
 const HOST_SOURCES: &[&str] = &[
-    include_str!("exports/abi.rs"),
     include_str!("exports/core.rs"),
-    include_str!("exports/gpu.rs"),
-    include_str!("exports/net.rs"),
-    include_str!("exports/webview.rs"),
-    include_str!("exports/desktop.rs"),
+    include_str!("../../dream-host-gpu/src/exports/gpu.rs"),
+    include_str!("../../dream-host-net/src/exports/net.rs"),
+    include_str!("../../dream-host-webview/src/exports/webview.rs"),
+    include_str!("../../dream-host-webview/src/exports/desktop.rs"),
 ];
 
 fn names_after_module(src: &str, module: &str) -> Vec<String> {
@@ -115,7 +114,7 @@ const JS_HOST_SOURCES: &[&str] = &[
 
 const JS_HOST_INTERNAL_KEYS: &[&str] = &["__attachGpuAbi"];
 // Satisfied by the runtime C archive (runtime/c/native/weak.c), not by any
-// JS host or libdream ABI table — so they are exempt from the prelude/host parity check.
+// JS host or capability ABI table — so they are exempt from the prelude/host parity check.
 const RUNTIME_ARCHIVE_KEYS: &[&str] = &["weakBind", "weakDead", "weakLoad", "weakReleaseRaw"];
 const COMPILER_EMITTED_JS_RC: &[&str] = &["jsRetain", "jsRelease"];
 // Native `system.webapi` (`@native` only; no JS/wasm listen in v1).

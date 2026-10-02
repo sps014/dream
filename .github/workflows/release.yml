@@ -71,9 +71,9 @@ jobs:
           set -euo pipefail
           # macOS /bin/bash is 3.2: `"${arr[@]}"` with `set -u` and an empty array is an error.
           if [[ -n "${{ matrix.rust_target }}" ]]; then
-            cargo build --release -p dream -p dream-host -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
+            cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-net -p dream-host-gpu -p dream-host-webview -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
           else
-            cargo build --release -p dream -p dream-host -p dreamer -p dream-lsp
+            cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-net -p dream-host-gpu -p dream-host-webview -p dreamer -p dream-lsp
           fi
 
       # The official LLVM (clang) builds the runtime the archive ships prebuilt; it is not shipped.
@@ -101,18 +101,21 @@ jobs:
           cp "${BIN_DIR}/dream${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dreamer${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dream-lsp${EXT}" "$STAGE/"
-          LIBDREAM_COPIED=0
-          for f in libdream.so libdream.dylib dream.dll dream.dll.lib dream.lib libdream.dll.a; do
-            if [[ -f "${BIN_DIR}/$f" ]]; then
-              cp "${BIN_DIR}/$f" "$STAGE/"
-              LIBDREAM_COPIED=1
+          for capability in core net gpu webview; do
+            case "$RUNNER_OS" in
+              Windows) library="dream_host_${capability}.dll" ;;
+              macOS) library="libdream_host_${capability}.dylib" ;;
+              *) library="libdream_host_${capability}.so" ;;
+            esac
+            test -f "${BIN_DIR}/$library" || {
+              echo "error: $library missing under ${BIN_DIR}" >&2
+              exit 1
+            }
+            cp "${BIN_DIR}/$library" "$STAGE/"
+            if [[ "$RUNNER_OS" == Windows ]]; then
+              cp "${BIN_DIR}/$library.lib" "$STAGE/"
             fi
           done
-          if [[ "$LIBDREAM_COPIED" -eq 0 ]]; then
-            echo "error: libdream shared library missing under ${BIN_DIR}" >&2
-            ls -la "${BIN_DIR}"
-            exit 1
-          fi
           mkdir -p "$STAGE/lib/runtime"
           cp -R crates/dream-mir/src/runtime/c "$STAGE/lib/runtime/"
           # lib/dream: the minimal LLVM from the llvm-dist release (.github/workflows/llvm-dist.yml)

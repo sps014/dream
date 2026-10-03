@@ -203,7 +203,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     fn ret_null_str_if_null(&mut self, p: &V) {
-        let z = self.w.icmp("eq", &p.v, &Value::i64(0));
+        let z = self.w.icmp("eq", &p.v, &Value::zero(p.ty().clone()));
         self.if_then(&z, |fx| fx.ret_str("null"));
     }
 }
@@ -494,7 +494,7 @@ fn tag_router(
 ) {
     let mut fx = glue(l, name);
     let p = fx.arg(0);
-    let z = fx.w.icmp("eq", &p.v, &Value::i64(0));
+    let z = fx.w.icmp("eq", &p.v, &Value::zero(p.ty().clone()));
     fx.if_then(&z, |fx| fx.w.ret(Some(&on_null)));
     let tag = fx.call_v("dream_object_tag", std::slice::from_ref(&p));
     let tag = fx.conv(&tag, &Ty::I32);

@@ -110,14 +110,14 @@ static Worker *find_worker(int32_t id) {
     return w;
 }
 
-int32_t workerSpawn(int32_t fn, int64_t env) {
+int32_t workerSpawn(int32_t fn, dream_ptr env) {
     Worker *w = (Worker *)calloc(1, sizeof(Worker));
     if (w == NULL) {
         worker_failure("panic: out of memory creating a worker");
     }
     __atomic_store_n(&dream_rt_mt, 1, __ATOMIC_RELEASE);
     w->fn = fn;
-    w->env = (dream_ptr)(uintptr_t)env;
+    w->env = (dream_ptr)env;
     dream_publish(w->env);
     dream_retain(w->env);
     dream_mutex_init(&w->mu);
@@ -172,7 +172,7 @@ void workerPost(int32_t id, dream_ptr msg) {
     dream_mutex_unlock(&w->mu);
 }
 
-dream_ptr workerPoolDispatch(int32_t id, int32_t fn, int64_t env, dream_ptr msg) {
+dream_ptr workerPoolDispatch(int32_t id, int32_t fn, dream_ptr env, dream_ptr msg) {
     Worker *w;
     Job *j;
     dream_mutex_lock(&reg_mu);
@@ -186,7 +186,7 @@ dream_ptr workerPoolDispatch(int32_t id, int32_t fn, int64_t env, dream_ptr msg)
         worker_failure("panic: out of memory dispatching a worker job");
     }
     j->fn = fn;
-    j->env = (dream_ptr)(uintptr_t)env;
+    j->env = (dream_ptr)env;
     j->msg = msg;
     dream_publish(j->env);
     dream_publish(msg);

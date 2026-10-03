@@ -21,7 +21,7 @@ fn by_ref(imp: &HImport, i: usize) -> bool {
 
 fn dream_ret(l: &Lcx<'_>, imp: &HImport) -> Ty {
     imp.ret
-        .map(|t| ll_ty(l.interner, t, &l.h()))
+        .map(|t| ll_ty(l.interner, t, &l.h(), &l.word()))
         .unwrap_or(Ty::Void)
 }
 
@@ -34,7 +34,7 @@ fn host_params(l: &Lcx<'_>, imp: &HImport) -> Vec<Ty> {
             if by_ref(imp, i) {
                 l.h()
             } else {
-                ll_ty(l.interner, *t, &l.h())
+                ll_ty(l.interner, *t, &l.h(), &l.word())
             }
         })
         .collect()
@@ -45,7 +45,7 @@ fn async_host_ret(l: &Lcx<'_>, imp: &HImport) -> Ty {
     match imp.ret.map(|r| l.interner.kind(r)) {
         Some(TyKind::Struct(_, args)) => match args.first() {
             Some(t) if matches!(l.interner.kind(*t), TyKind::Void) => Ty::I32,
-            Some(t) => ll_ty(l.interner, *t, &l.h()),
+            Some(t) => ll_ty(l.interner, *t, &l.h(), &l.word()),
             None => Ty::I32,
         },
         _ => Ty::I32,
@@ -73,7 +73,7 @@ fn register_wasm(l: &mut Lcx<'_>, imports: &[HImport]) {
         ("js_retain", js_abi::HOST_JS_RETAIN),
         ("js_release", js_abi::HOST_JS_RELEASE),
     ] {
-        let sig = FnSig::plain(FnTy::new(Ty::Void, vec![h.clone()]));
+        let sig = FnSig::plain(FnTy::new(Ty::Void, vec![Ty::I32]));
         l.wasm_import(name, sig, js_abi::HOST_MODULE, field);
     }
     for imp in imports {
@@ -107,7 +107,7 @@ fn register_wasm(l: &mut Lcx<'_>, imports: &[HImport]) {
 
 pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
     let imports = l.mir.imports.clone();
-    if l.cx.target.is_wasm32() {
+    if l.cx.target.spec().capabilities.js_interop {
         register_wasm(l, &imports);
         return;
     }
@@ -147,13 +147,13 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
 
 pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
     let imports = l.mir.imports.clone();
-    if !l.cx.target.is_wasm32() {
+    if l.cx.target.spec().capabilities.c_interop {
         c_marshal::emit_reverse(l);
     }
     let mut poll_i = 0usize;
     for imp in &imports {
         if is_c_import(imp) {
-            if !l.cx.target.is_wasm32() {
+            if l.cx.target.spec().capabilities.c_interop {
                 c_marshal::trampoline(l, imp);
             }
         } else if imp.is_async {
@@ -208,7 +208,7 @@ fn async_bridge(l: &mut Lcx<'_>, imp: &HImport, poll_idx: usize) {
                 fx.load_ty(t.clone(), &at, 8, *t == fx.h())
             })
             .collect();
-        if fx.l.cx.target.is_wasm32() {
+        if fx.l.cx.target.spec().capabilities.js_interop {
             let mut a = vec![s.clone()];
             a.extend(saved);
             fx.call(&host, &a);
@@ -227,7 +227,14 @@ fn async_bridge(l: &mut Lcx<'_>, imp: &HImport, poll_idx: usize) {
             fx.call("dream_async_complete", &[s.clone(), V::i32(0)]);
         } else {
             let r = fx.call(&host, &saved).unwrap_or_else(|| V::i32(0));
-            let r = fx.conv_v(&r, &Ty::I64, true);
+            let r = match r.ty() {
+                Ty::F64 => V::u(fx.w.cast("bitcast", &r.v, Ty::I64)),
+                Ty::F32 => {
+                    let bits = V::u(fx.w.cast("bitcast", &r.v, Ty::I32));
+                    fx.conv_v(&bits, &Ty::I64, true)
+                }
+                _ => fx.conv_v(&r, &Ty::I64, true),
+            };
             fx.call("dream_async_complete", &[s.clone(), r]);
         }
         let st_at = fx.addr(&s, fut.state as i64);

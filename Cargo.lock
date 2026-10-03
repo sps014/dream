@@ -1213,6 +1213,7 @@ dependencies = [
  "libloading",
  "logos",
  "naga 30.0.0",
+ "object",
  "oxc_allocator",
  "oxc_codegen",
  "oxc_minifier",
@@ -3825,6 +3826,15 @@ dependencies = [
  "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
+]
+
+[[package]]
+name = "object"
+version = "0.37.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]

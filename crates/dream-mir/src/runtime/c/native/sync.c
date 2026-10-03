@@ -188,7 +188,7 @@ int32_t dream_semaphore_try_acquire_for(dream_ptr semaphore, int32_t timeout_ms)
     return 1;
 }
 
-dream_ptr dream_js_call(dream_ptr target, dream_ptr via, dream_ptr method, int32_t argc) {
+int32_t dream_js_call(int32_t target, int32_t via, dream_ptr method, int32_t argc) {
     (void)target;
     (void)via;
     (void)method;

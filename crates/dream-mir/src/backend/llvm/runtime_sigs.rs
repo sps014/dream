@@ -96,6 +96,43 @@ impl RuntimeSigs {
         Ok(())
     }
 
+    /// Target identity alone cannot distinguish cached runtimes using the old integer handles.
+    pub fn validate_reference_abi(&self, target: &TargetSpec) -> Result<(), String> {
+        let reference = if target.capabilities.linear_memory {
+            Ty::I32
+        } else {
+            Ty::Ptr
+        };
+        for (name, returned) in [
+            ("dream_malloc", true),
+            ("dream_retain", false),
+            ("dream_release", false),
+        ] {
+            let function = self.fns.get(name).ok_or_else(|| {
+                format!("missing required runtime symbol `{name}` (reference ABI)")
+            })?;
+            let actual = if returned {
+                Some(&function.fty.ret)
+            } else {
+                function.fty.params.first()
+            };
+            if actual != Some(&reference) {
+                return Err(format!(
+                    "reference ABI mismatch: `{name}` {} must be {reference}, found {}",
+                    if returned {
+                        "return"
+                    } else {
+                        "first parameter"
+                    },
+                    actual
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| "missing".into())
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Parses the reduced disassembly. Lines that are not external function definitions,
     /// declarations, globals, attribute groups or the target header are ignored.
     pub fn parse(text: &str) -> Result<Self, String> {
@@ -542,5 +579,38 @@ attributes #2 = { nounwind }
             ..Default::default()
         };
         sigs.validate_target(&target).unwrap();
+    }
+
+    #[test]
+    fn reference_abi_accepts_native_pointers_and_wasm_offsets() {
+        for (triple, reference) in [
+            ("x86_64-unknown-linux-gnu", "ptr"),
+            ("wasm32-unknown-wasip1", "i32"),
+        ] {
+            let text = format!("target triple = \"{triple}\"\ntarget datalayout = \"e\"\ndeclare {reference} @dream_malloc(i64, i32)\ndeclare void @dream_retain({reference})\ndeclare void @dream_release({reference})\n");
+            RuntimeSigs::parse(&text)
+                .unwrap()
+                .validate_reference_abi(&TargetSpec::parse(triple).unwrap())
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn reference_abi_rejects_stale_integer_native_handles() {
+        let target = TargetSpec::parse("x86_64-unknown-linux-gnu").unwrap();
+        for name in ["dream_malloc", "dream_retain", "dream_release"] {
+            let text = "target triple = \"x86_64-unknown-linux-gnu\"\ntarget datalayout = \"e\"\ndeclare ptr @dream_malloc(i64, i32)\ndeclare void @dream_retain(ptr)\ndeclare void @dream_release(ptr)\n";
+            let old = if name == "dream_malloc" {
+                text.replace("ptr @dream_malloc", "i64 @dream_malloc")
+            } else {
+                text.replace(&format!("@{name}(ptr)"), &format!("@{name}(i64)"))
+            };
+            let error = RuntimeSigs::parse(&old)
+                .unwrap()
+                .validate_reference_abi(&target)
+                .unwrap_err();
+            assert!(error.contains(name));
+            assert!(error.contains("reference ABI mismatch"));
+        }
     }
 }

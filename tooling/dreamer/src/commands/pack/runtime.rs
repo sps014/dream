@@ -32,7 +32,7 @@ mod tests {
         let destination = root.path().join("package");
         std::fs::write(
             binary.with_extension("abi.json"),
-            r#"{"host_capabilities":["core"]}"#,
+            r#"{"native_abi_version":2,"host_capabilities":["core"]}"#,
         )
         .unwrap();
         for capability in HostCapability::ALL {
@@ -54,7 +54,7 @@ mod tests {
         let destination = root.path().join("package").join("Frameworks");
         std::fs::write(
             binary.with_extension("abi.json"),
-            r#"{"host_capabilities":["core","net","gpu","webview"]}"#,
+            r#"{"native_abi_version":2,"host_capabilities":["core","net","gpu","webview"]}"#,
         )
         .unwrap();
         assert!(copy(&binary, &destination).is_err());

@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "string-size") == 0) { dream_string_bytes(-1); }
     if (strcmp(argv[1], "string-byte-count") == 0) {
         int32_t string[] = {INT32_MAX, 0};
-        dream_str_byte_size((dream_ptr)(uintptr_t)string);
+        dream_str_byte_size((dream_ptr)string);
     }
     if (strcmp(argv[1], "string-count") == 0) { dream_string_count_add(INT32_MAX, 1); }
     if (strcmp(argv[1], "js") == 0) { dream_js_call(0, 0, 0, 0); }

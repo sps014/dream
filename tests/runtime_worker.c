@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
         int32_t ids[100];
         dream_ptr env = dream_utf8_to_string("env");
         for (int i = 0; i < 100; ++i) {
-            ids[i] = workerSpawn(7, (int64_t)env);
+            ids[i] = workerSpawn(7, env);
             assert(ids[i] > 0);
             if (i) { assert(ids[i] > ids[i - 1]); }
         }

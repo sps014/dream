@@ -30,7 +30,7 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
     }
     register(l, crate::abi::GUEST_ENTRY_FN, Ty::I32, vec![]);
     l.export(crate::abi::GUEST_ENTRY_FN, crate::abi::ENTRY_FN);
-    if l.cx.target.is_wasm32() {
+    if !l.cx.target.spec().capabilities.native_entry {
         if entry_exit(main, &l.cx) != EntryExit::Void {
             let h = l.h();
             register(l, crate::abi::EXPORT_MAIN_REPORT, Ty::I32, vec![h]);
@@ -72,7 +72,7 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
         status_fn(l, ty);
     }
     guest_entry(l, main, exit);
-    if l.cx.target.is_wasm32() {
+    if !l.cx.target.spec().capabilities.native_entry {
         main_report(l, main, exit);
     } else {
         native_main(l);
@@ -117,7 +117,7 @@ fn guest_entry(l: &mut Lcx<'_>, main: &MirFunction, exit: EntryExit) {
     let main_name = l.user_fn(main);
     let async_n = l.mir.polls.len();
     let uses_defer = l.mir.uses_defer;
-    let wasm = l.cx.target.is_wasm32();
+    let host_scheduled = !l.cx.target.spec().capabilities.native_entry;
     let mut fx = glue(l, crate::abi::GUEST_ENTRY_FN);
     fx.call("dream_runtime_init", &[]);
     let args = if main.params.is_empty() {
@@ -145,7 +145,7 @@ fn guest_entry(l: &mut Lcx<'_>, main: &MirFunction, exit: EntryExit) {
         fx.call("dream_defer_drain_all", &[]);
     }
     // An async `main` has settled by now on native; on wasm32 the host's loop has not run yet.
-    if exit != EntryExit::Void && !(wasm && main.is_async) {
+    if exit != EntryExit::Void && !(host_scheduled && main.is_async) {
         let value = match (&r, main.is_async) {
             (Some(mf), true) => settled_value(&mut fx, mf, &value_ty, exit),
             (Some(mv), false) => mv.clone(),
@@ -153,7 +153,7 @@ fn guest_entry(l: &mut Lcx<'_>, main: &MirFunction, exit: EntryExit) {
         };
         store_status(&mut fx, exit, value);
     }
-    if wasm {
+    if host_scheduled {
         let ret = match (&r, main.is_async) {
             (Some(mf), true) => fx.conv(mf, &Ty::I32),
             _ => Value::i32(0),

@@ -31,6 +31,10 @@ static dream_ptr *ptr_at(dream_ptr p, int32_t off) {
     return (dream_ptr *)((char *)dream_p(p) + off);
 }
 
+static dream_result *result_at(dream_ptr p) {
+    return (dream_result *)((char *)dream_p(p) + F_RESULT);
+}
+
 static dream_ptr arr_get(dream_ptr arr, int32_t i) {
     return ((dream_ptr *)((char *)dream_p(arr) + LEN_PREFIX_SIZE))[i];
 }
@@ -148,7 +152,7 @@ static void fq_push_locked(Node *n) {
     }
 }
 
-void dream_complete_foreign(dream_ptr f, dream_ptr res) {
+void dream_complete_foreign(dream_ptr f, dream_result res) {
     int32_t expected = 0;
     int32_t had_waker = 0;
     Node *n = (Node *)calloc(1, sizeof(Node));
@@ -158,7 +162,7 @@ void dream_complete_foreign(dream_ptr f, dream_ptr res) {
     }
     /* Foreign Future/result are published so host pthreads use atomic RC. */
     dream_publish(f);
-    dream_publish(res);
+    dream_publish((dream_ptr)(uintptr_t)res);
     dream_mutex_lock(&wake_mu);
     /* Publish under the lock so a concurrent dream_await cannot set its waker between our
      * status flip and our waker read (lost-wakeup guard). */
@@ -168,7 +172,7 @@ void dream_complete_foreign(dream_ptr f, dream_ptr res) {
         free(n);
         return; /* already completed or cancelled */
     }
-    ptr_at(f, F_RESULT)[0] = res;
+    *result_at(f) = res;
     if (foreign_pending > 0) {
         foreign_pending -= 1;
     }
@@ -257,16 +261,16 @@ void dream_enqueue(dream_ptr f) {
 __attribute__((export_name(DREAM_SYM_RESOLVE)))
 #endif
 void dream_resolve(dream_ptr f, dream_ptr res) {
-    dream_async_complete(f, res);
+    dream_async_complete(f, (dream_result)(uintptr_t)res);
 }
 
-void dream_async_complete(dream_ptr f, dream_ptr res) {
+void dream_async_complete(dream_ptr f, dream_result res) {
     dream_ptr w;
     int32_t wk;
     if (!f || i32_at(f, F_STATUS)[0]) {
         return;
     }
-    ptr_at(f, F_RESULT)[0] = res;
+    *result_at(f) = res;
     i32_at(f, F_STATUS)[0] = 1;
     w = ptr_at(f, F_WAKER)[0];
     if (w) {
@@ -299,7 +303,7 @@ void dream_cancel(dream_ptr f) {
     }
 }
 
-int32_t dream_async_await(dream_ptr future, dream_ptr *dest, int32_t resume_pc) {
+int32_t dream_async_await(dream_ptr future, dream_result *dest, int32_t resume_pc) {
     (void)resume_pc;
     if (!future) {
         if (dest) {
@@ -309,7 +313,7 @@ int32_t dream_async_await(dream_ptr future, dream_ptr *dest, int32_t resume_pc) 
     }
     if (i32_at(future, F_STATUS)[0]) {
         if (dest) {
-            *dest = ptr_at(future, F_RESULT)[0];
+            *dest = *result_at(future);
         }
         return 1;
     }
@@ -498,7 +502,7 @@ static void combinator_progress(dream_ptr w, dream_ptr child) {
          * `combinator_new` took. Losers may still be in flight; `dream_start` gave each a
          * scheduler retain, and their later `combinator_progress` sees `F_STATUS` set and
          * returns, so dropping our reference here cannot free one out from under the loop. */
-        dream_async_complete(w, ptr_at(child, F_RESULT)[0]);
+        dream_async_complete(w, *result_at(child));
         n = i32_at(w, F_COUNT)[0];
         kids = ptr_at(w, F_CHILDREN)[0];
         for (i = 0; i < n; i++) {
@@ -521,12 +525,12 @@ static void combinator_progress(dream_ptr w, dream_ptr child) {
         out = dream_array_new(n, es);
         for (i = 0; i < n; i++) {
             dream_ptr c = arr_get(kids, i);
-            dream_ptr res = c ? ptr_at(c, F_RESULT)[0] : 0;
+            dream_result res = c ? *result_at(c) : 0;
             memcpy((char *)dream_p(out) + LEN_PREFIX_SIZE + (size_t)i * (size_t)es, &res, (size_t)es);
             dream_release(c);
         }
     }
-    dream_async_complete(w, out);
+    dream_async_complete(w, (dream_result)(uintptr_t)out);
 }
 
 static dream_ptr combinator_new(dream_ptr arr, int32_t kind, int32_t esize) {
@@ -538,7 +542,7 @@ static dream_ptr combinator_new(dream_ptr arr, int32_t kind, int32_t esize) {
     i32_at(w, F_REMAINING)[0] = n;
     i32_at(w, F_ESIZE)[0] = esize > 0 ? esize : 4;
     if (n == 0 && kind == KIND_ALL) {
-        dream_async_complete(w, arr);
+        dream_async_complete(w, (dream_result)(uintptr_t)arr);
         return w;
     }
     for (i = 0; i < n; i++) {

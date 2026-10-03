@@ -19,13 +19,13 @@ void dream_panic(dream_ptr message) {
 
 typedef struct {
     dream_ptr child;
-    int64_t slot;
+    uintptr_t slot;
 } Node;
 
 static dream_mutex mutex = DREAM_MUTEX_INIT;
 static dream_cond condition = DREAM_COND_INIT;
 static int phase;
-static int64_t current_slot;
+static uintptr_t current_slot;
 
 /* These mirror generated typed destruction, including the user's observably-live del(). */
 static void node_destroy(dream_ptr ptr) {
@@ -51,7 +51,7 @@ static DREAM_THREAD_PROC(reader) {
         while (phase != 1) {
             dream_cond_wait(&condition, &mutex);
         }
-        int64_t slot = current_slot;
+        uintptr_t slot = current_slot;
         dream_mutex_unlock(&mutex);
         dream_ptr first = weakLoad(slot);
         assert(first != 0);
@@ -79,6 +79,18 @@ static DREAM_THREAD_PROC(reader) {
 }
 
 int main(void) {
+    struct {
+        int32_t tag;
+        dream_ptr payload;
+    } optional = {3, NULL};
+    dream_ptr target = dream_malloc(4, TAG_INT);
+    optional.payload = target;
+    dream_weak_register(target, (dream_ptr)&optional, 0, 17);
+    dream_release(target);
+    assert(optional.tag == 17);
+    assert(optional.payload == NULL);
+    assert(debug_get_live_objects() == 0);
+
     dream_thread thread;
     assert(dream_thread_start(&thread, reader, NULL) == 0);
     for (int round = 0; round < ROUNDS; ++round) {
@@ -86,7 +98,7 @@ int main(void) {
         Node *node = (Node *)dream_p(ptr);
         node->child = dream_utf8_to_string("child");
         node->slot = 0;
-        int64_t slot = weakBind(ptr);
+        uintptr_t slot = weakBind(ptr);
         node->slot = slot;
         dream_mutex_lock(&mutex);
         current_slot = slot;
@@ -116,7 +128,7 @@ int main(void) {
     dream_ptr pinned = dream_malloc(sizeof(Node), TAG_STRUCT_BASE);
     memset(dream_p(pinned), 0, sizeof(Node));
     dream_pin_immortal(pinned);
-    int64_t slot = weakBind(pinned);
+    uintptr_t slot = weakBind(pinned);
     assert(!weakDead(slot));
     assert(weakLoad(slot) == pinned);
     assert(*dream_rc_word(pinned) == DREAM_RC_IMMORTAL);

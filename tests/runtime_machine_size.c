@@ -32,7 +32,7 @@ void dream_panic(dream_ptr message) {
 }
 
 static void check_block(dream_ptr ptr, size_t payload) {
-    assert(ptr && ptr % 16 == 0);
+    assert(ptr && (uintptr_t)ptr % 16 == 0);
     assert(dream_heap_is_live(ptr));
     assert(*dream_block_size((char *)dream_p(ptr) - DREAM_BLOCK_HEADER) >=
            payload + DREAM_BLOCK_HEADER);

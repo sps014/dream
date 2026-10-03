@@ -10,7 +10,7 @@ use dream_syntax::parser::Parser;
 use pretty_assertions::assert_eq;
 
 /// Whether `body` does `op` (`"load i32"` / `"store i32"`) through an address derived from a
-/// handle (`inttoptr`), a field offset (`getelementptr`), or a runtime address call — a real heap
+/// reference load, a field offset (`getelementptr`), or a runtime address call — a real heap
 /// access rather than a local slot.
 fn heap_access(body: &str, op: &str) -> bool {
     let mut derived = Vec::new();
@@ -20,7 +20,7 @@ fn heap_access(body: &str, op: &str) -> bool {
             None => (None, line),
         };
         if let Some(l) = lhs {
-            if ["inttoptr ", "getelementptr ", "call ptr "]
+            if ["load ptr,", "getelementptr ", "call ptr "]
                 .iter()
                 .any(|p| rhs.starts_with(p))
             {
@@ -266,7 +266,7 @@ fn test_hir_emission_index_and_array_literal() {
         c
     );
     assert!(
-        c.contains("define internal i64 @make()"),
+        c.contains("define internal ptr @make()"),
         "missing array-literal function:\n{}",
         c
     );
@@ -294,7 +294,7 @@ fn test_empty_array_literal_infers_from_context() {
     ";
     let (c, _count) = emit_hir_to_ir(code);
     assert!(
-        c.contains("define internal i64 @make()"),
+        c.contains("define internal ptr @make()"),
         "return-context empty array should emit:\n{}",
         c
     );
@@ -391,7 +391,7 @@ fn test_hir_emission_extend_nongeneric_class() {
         c
     );
     assert!(
-        c.contains("call i32 @Point_getx(i64 "),
+        c.contains("call i32 @Point_getx(ptr "),
         "call should resolve to the extend method:\n{}",
         c
     );
@@ -413,7 +413,7 @@ fn test_hir_emission_extend_generic_class() {
         c
     );
     assert!(
-        c.contains("call i32 @Box_int_peek(i64 "),
+        c.contains("call i32 @Box_int_peek(ptr "),
         "call should resolve to the instance:\n{}",
         c
     );
@@ -571,7 +571,7 @@ fn test_hir_emission_generic_struct_method_instance() {
         c
     );
     assert!(
-        c.contains("call i32 @Box_int_get(i64 "),
+        c.contains("call i32 @Box_int_get(ptr "),
         "instance call should dispatch to the mangled method:\n{}",
         c
     );
@@ -735,7 +735,7 @@ fn test_hir_emission_print_string_interns_literal() {
     let code = format!("{SYSTEM_STUB} fun run(): void {{ System.print(\"hi\"); }}");
     let c = emit_hir_to_module(&code);
     assert!(
-        c.contains("call void @print_string(i64 ptrtoint (ptr getelementptr (i8, ptr @__ds"),
+        c.contains("call void @print_string(ptr getelementptr (i8, ptr @__ds"),
         "print(string) should call print_string:\n{}",
         c
     );
@@ -798,12 +798,12 @@ fn test_hir_emission_print_object_routes_to_print_object() {
         c
     );
     assert!(
-        c.contains("call i64 @Box_to_string(i64 "),
+        c.contains("call ptr @Box_to_string(ptr "),
         "object print routes through the generated to_string:\n{}",
         c
     );
     assert!(
-        c.contains("define internal i64 @Box_to_string(i64 %a0)"),
+        c.contains("define internal ptr @Box_to_string(ptr %a0)"),
         "a default struct to_string is generated:\n{}",
         c
     );
@@ -1368,7 +1368,7 @@ fn test_hir_emission_string_literal() {
         "the string-returning function should be emitted as HIR"
     );
     assert!(
-        c.contains("define internal i64 @greet()"),
+        c.contains("define internal ptr @greet()"),
         "missing emitted function:\n{}",
         c
     );
@@ -1400,7 +1400,7 @@ fn test_hir_emission_field_read_and_constructor() {
         c
     );
     assert!(
-        c.contains("define internal i64 @make()"),
+        c.contains("define internal ptr @make()"),
         "missing constructor function:\n{}",
         c
     );
@@ -1506,7 +1506,7 @@ fn test_hir_emission_method_body_and_instance_call() {
         c
     );
     assert!(
-        c.contains("call i32 @Box_get(i64 "),
+        c.contains("call i32 @Box_get(ptr "),
         "instance call should dispatch to the method:\n{}",
         c
     );
@@ -1842,7 +1842,7 @@ fn test_hir_emission_async_await() {
     let (c, count) = emit_hir_to_ir(code);
     assert_eq!(count, 2, "both async functions should be emitted:\n{}", c);
     assert!(
-        c.contains("define internal i64 @work(") && c.contains("define internal i32 @poll_work("),
+        c.contains("define internal ptr @work(") && c.contains("define internal i32 @poll_work("),
         "missing async function / poll companion:\n{}",
         c
     );

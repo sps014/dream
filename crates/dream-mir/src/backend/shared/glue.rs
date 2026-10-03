@@ -11,7 +11,7 @@ use indexmap::IndexMap as HashMap;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) fn retain_sym(cx: &Cx<'_>, ty: TypeId) -> &'static str {
-    if cx.target.is_wasm32() && matches!(cx.interner.kind(ty), TyKind::Js) {
+    if cx.target.spec().capabilities.js_interop && matches!(cx.interner.kind(ty), TyKind::Js) {
         "js_retain"
     } else {
         "dream_retain"
@@ -99,7 +99,7 @@ pub(crate) fn release_sym(cx: &Cx<'_>, ty: TypeId) -> String {
         return sym;
     }
     match interner.kind(ty) {
-        TyKind::Js if cx.target.is_wasm32() => "js_release".into(),
+        TyKind::Js if cx.target.spec().capabilities.js_interop => "js_release".into(),
         TyKind::Struct(..) | TyKind::Union(..) => {
             let raw = if let Some(l) = mir.layouts.structs.get(&ty) {
                 c_ident(&format!("release_{}", l.name))

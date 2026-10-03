@@ -41,7 +41,7 @@ void dream_release_object(dream_ptr object) {
 static dream_ptr callback_new(void) {
     char *block = (char *)calloc(1, NATIVE_HEAP_HEADER_SIZE + 8);
     assert(block);
-    dream_ptr object = (dream_ptr)(uintptr_t)(block + NATIVE_HEAP_HEADER_SIZE);
+    dream_ptr object = (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
     *dream_rc_word(object) = 1;
     dream_callback_register(object);
     return object;

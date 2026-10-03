@@ -65,6 +65,7 @@ native = ["dep:serde", "dep:serde_json", "dep:image"]
 wasm-opt = ["dep:wasm-opt"]
 
 [dev-dependencies]
+object = { version = "0.37", default-features = false, features = ["read"] }
 libloading = "0.8"
 tempfile = "3"
 pretty_assertions = "1.4.1"

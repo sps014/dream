@@ -10,6 +10,8 @@ The guest runtime is **C only** — there is no WAT runtime anymore. This direct
 
 - Share numeric ABI via `include/dream_abi.h`. Portable wrappers (wasm regex + native) include `include/dream_guest.h`.
 - Native-only files live in [`native/`](native/).
+- Native references use byte pointers; wasm32 references remain linear-memory offsets. Counts and raw foreign addresses remain integers with their declared widths.
+- Native capability libraries export their ABI v2 marker; linking requires every selected marker and binds callbacks through `dream_host_bind_v2`, rejecting stale libraries before execution.
 - Keep the wasm32 unit list in `../modules.rs` (`WASM32_CORE_C`) in sync with new helper files.
 
 ## Don't

@@ -2,17 +2,17 @@
 
 use crate::desktop::wire::{self, ClipKind, DialogKind, DialogRequest};
 use crate::desktop::{clipboard, dialog, shell};
-use dream_host_abi::{alloc_bytes, read_bytes, read_string};
+use dream_host_abi::{alloc_bytes, read_bytes, read_string, DreamPtr};
 
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
 pub unsafe extern "C" fn desktopDialogStart(
     kind: i32,
-    title: usize,
-    text: usize,
-    directory: usize,
-    file_name: usize,
-    filters: usize,
+    title: DreamPtr,
+    text: DreamPtr,
+    directory: DreamPtr,
+    file_name: DreamPtr,
+    filters: DreamPtr,
     level: i32,
     buttons: i32,
     parent: i32,
@@ -34,18 +34,18 @@ pub unsafe extern "C" fn desktopDialogStart(
 }
 
 #[no_mangle]
-pub extern "C" fn desktopDialogPoll(handle: i32) -> usize {
+pub extern "C" fn desktopDialogPoll(handle: i32) -> DreamPtr {
     alloc_bytes(&wire::encode_outcome(dialog::poll(handle).as_ref()))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn clipboardGet(kind: i32, format: usize) -> usize {
+pub unsafe extern "C" fn clipboardGet(kind: i32, format: DreamPtr) -> DreamPtr {
     let value = ClipKind::from_code(kind).and_then(|k| clipboard::get(k, &read_string(format)));
     alloc_bytes(&wire::encode_clip(value))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn clipboardSet(kind: i32, format: usize, data: usize) -> i32 {
+pub unsafe extern "C" fn clipboardSet(kind: i32, format: DreamPtr, data: DreamPtr) -> i32 {
     let Some(kind) = ClipKind::from_code(kind) else {
         return 1;
     };
@@ -59,7 +59,7 @@ pub unsafe extern "C" fn clipboardSet(kind: i32, format: usize, data: usize) -> 
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn clipboardHas(format: usize) -> i32 {
+pub unsafe extern "C" fn clipboardHas(format: DreamPtr) -> i32 {
     i32::from(clipboard::has(&read_string(format)))
 }
 
@@ -72,7 +72,7 @@ pub extern "C" fn clipboardClear() {
 
 /// Empty on success, otherwise the error message.
 #[no_mangle]
-pub unsafe extern "C" fn shellOpen(target: usize) -> usize {
+pub unsafe extern "C" fn shellOpen(target: DreamPtr) -> DreamPtr {
     let msg = shell::open(&read_string(target)).err().unwrap_or_default();
     alloc_bytes(msg.as_bytes())
 }

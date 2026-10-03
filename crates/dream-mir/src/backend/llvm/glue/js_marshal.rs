@@ -1,5 +1,5 @@
 //! wasm32 struct/union/array `<-> js` marshalers (policy in `shared::js_marshal`). Every JS value
-//! is a `dream_ptr` handle the host's `js.*` bridges create and read.
+//! is an integer registry ID, distinct from a managed Dream reference.
 
 use super::super::fx::{align_at, Fx, V};
 use super::super::ir::{Ty, Value};
@@ -127,7 +127,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let v = self.load_ty(Ty::I32, at, MARSHAL_ALIGN, false);
                 Some(self.bridge("box_int", &[v]))
             }
-            TyKind::Js => Some(self.load_handle(at)),
+            TyKind::Js => Some(self.load_ty(Ty::I32, at, MARSHAL_ALIGN, true)),
             TyKind::Array(elem) if is_marshalable(cx, elem) => {
                 let a = self.load_handle(at);
                 Some(self.call_v(&array_syms(elem).0, &[a]))

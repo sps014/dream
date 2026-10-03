@@ -123,7 +123,7 @@ void dream_region_leave(void) {
         region_chunk *chunk = s->chunk;
         s->chunk = chunk->previous;
         /* Detach before recycling so the backing block is not mistaken for a region object. */
-        dream_recycle((dream_ptr)(uintptr_t)chunk);
+        dream_recycle((dream_ptr)chunk);
     }
     if (s->chunk != NULL) {
         s->chunk->offset = mark.offset;
@@ -131,7 +131,7 @@ void dream_region_leave(void) {
     if (s->depth == 0) {
 #ifdef DREAM_WASM32
         dream_region_state_set(0);
-        dream_recycle((dream_ptr)(uintptr_t)s);
+        dream_recycle((dream_ptr)s);
 #endif
         dream_region_heap_mode(0);
     }

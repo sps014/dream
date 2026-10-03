@@ -11,33 +11,33 @@ static STRINGS: AtomicUsize = AtomicUsize::new(0);
 static ARRAYS: AtomicUsize = AtomicUsize::new(0);
 static COMPLETION: Mutex<Option<mpsc::Sender<(usize, usize)>>> = Mutex::new(None);
 
-unsafe extern "C" fn string_alloc(length: i32) -> usize {
+unsafe extern "C" fn string_alloc(length: i32) -> *mut u8 {
     STRINGS.fetch_add(1, Ordering::Relaxed);
     allocate(length, 2, 8)
 }
 
-unsafe extern "C" fn array_new(length: i32, element_size: i32) -> usize {
+unsafe extern "C" fn array_new(length: i32, element_size: i32) -> *mut u8 {
     ARRAYS.fetch_add(1, Ordering::Relaxed);
     allocate(length, element_size, 4)
 }
 
-fn allocate(length: i32, element_size: i32, header_size: usize) -> usize {
+fn allocate(length: i32, element_size: i32, header_size: usize) -> *mut u8 {
     assert!(length >= 0 && element_size > 0);
     let size = header_size + length as usize * element_size as usize;
     let mut storage = vec![0_u64; size.div_ceil(8)].into_boxed_slice();
-    let pointer = storage.as_mut_ptr() as usize;
+    let pointer = storage.as_mut_ptr().cast::<u8>();
     unsafe { (pointer as *mut i32).write(length) };
     ALLOCATIONS.lock().unwrap().push(storage);
     pointer
 }
 
-extern "C" fn complete(future: usize, result: usize) {
+extern "C" fn complete(future: *mut u8, result: u64) {
     COMPLETION
         .lock()
         .unwrap()
         .as_ref()
         .unwrap()
-        .send((future, result))
+        .send((future as usize, result as usize))
         .unwrap();
 }
 
@@ -56,24 +56,29 @@ fn capabilities_share_core_binding_allocation_completion_and_icon() {
             .copied()
             .map(|capability| Library::new(directory.join(capability.library_name())).unwrap())
             .collect();
+        for (capability, library) in HostCapability::ALL.iter().zip(&libraries) {
+            let marker = format!("dream_host_{}_abi_v2", capability.name());
+            let marker: Symbol<unsafe extern "C" fn()> = library.get(marker.as_bytes()).unwrap();
+            marker();
+        }
         type Bind = unsafe extern "C" fn(
-            unsafe extern "C" fn(i32) -> usize,
-            unsafe extern "C" fn(i32, i32) -> usize,
-            extern "C" fn(usize, usize),
+            unsafe extern "C" fn(i32) -> *mut u8,
+            unsafe extern "C" fn(i32, i32) -> *mut u8,
+            extern "C" fn(*mut u8, u64),
         );
-        let bind: Symbol<Bind> = libraries[0].get(b"dream_host_bind").unwrap();
+        let bind: Symbol<Bind> = libraries[0].get(b"dream_host_bind_v2").unwrap();
         bind(string_alloc, array_new, complete);
 
-        let gpu_error: Symbol<unsafe extern "C" fn() -> usize> =
+        let gpu_error: Symbol<unsafe extern "C" fn() -> *mut u8> =
             libraries[2].get(b"gpuLastError").unwrap();
         let string = gpu_error();
-        assert_ne!(string, 0);
+        assert!(!string.is_null());
         assert_eq!(*(string as *const i32), 0);
 
-        let shell_open: Symbol<unsafe extern "C" fn(usize) -> usize> =
+        let shell_open: Symbol<unsafe extern "C" fn(*mut u8) -> *mut u8> =
             libraries[3].get(b"shellOpen").unwrap();
-        let bytes = shell_open(0);
-        assert_ne!(bytes, 0);
+        let bytes = shell_open(std::ptr::null_mut());
+        assert!(!bytes.is_null());
         let length = *(bytes as *const i32) as usize;
         assert_eq!(
             std::slice::from_raw_parts((bytes as *const u8).add(4), length),
@@ -83,9 +88,20 @@ fn capabilities_share_core_binding_allocation_completion_and_icon() {
         let (sender, receiver) = mpsc::channel();
         *COMPLETION.lock().unwrap() = Some(sender);
         let request: Symbol<
-            unsafe extern "C" fn(usize, usize, usize, usize, usize, i32, i32) -> i32,
+            unsafe extern "C" fn(*mut u8, *mut u8, *mut u8, *mut u8, *mut u8, i32, i32) -> i32,
         > = libraries[1].get(b"httpRequestAsync").unwrap();
-        assert_eq!(request(42, 0, 0, 0, 0, 100, 0), 1);
+        assert_eq!(
+            request(
+                42usize as *mut u8,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                100,
+                0
+            ),
+            1
+        );
         let (future, result) = receiver.recv_timeout(Duration::from_secs(5)).unwrap();
         assert_eq!(future, 42);
         assert_ne!(result, 0);

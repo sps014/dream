@@ -74,7 +74,7 @@ Without a project folder you can still run a single file:
 dream run hello.dream
 ```
 
-Compile without running (writes a WebAssembly module under `target/web/`):
+Compile without running (writes a native executable):
 
 ```bash
 dream hello.dream
@@ -103,6 +103,22 @@ await run("target/web/hello.wasm");
 ```
 
 See [JavaScript interop](../reference/language/interop.md).
+
+### Target checks and cross emission
+
+`dream --runtime-target native|web|node` selects runtime availability for semantic checks.
+Use `--web` or `--node` to produce the corresponding WebAssembly and JavaScript artifacts.
+The `dreamer run --target web|node` spelling above is unchanged.
+
+`dream --target` instead takes an LLVM triple and emits checked LLVM IR and an object file:
+
+```bash
+dream --target aarch64-unknown-linux-gnu -o hello.ll hello.dream
+```
+
+This writes `hello.ll`, `hello.o` and ABI metadata without linking or running them.
+Native executable linking remains host-only; `--target` cannot be combined with `run`,
+`test`, `debug-adapter`, `--wasm`, `--web`, `--node` or `--emit-llvm`.
 
 ## Next
 

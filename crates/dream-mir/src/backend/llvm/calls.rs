@@ -87,9 +87,10 @@ impl<'l, 'a> Fx<'l, 'a> {
     /// The function pointer in `dream_ft[idx]`.
     pub fn ft_entry(&mut self, idx: &V) -> Value {
         let i = self.conv_v(idx, &Ty::I32, false);
-        let i = self.conv(&i, &Ty::I64);
+        let word = self.word();
+        let i = self.conv(&i, &word);
         let ps = self.l.cx.target.abi().ptr_size as i64;
-        let off = self.w.bin("mul", &i, &Value::i64(ps));
+        let off = self.w.bin("mul", &i, &Value::int(word, ps as i128));
         let at = self.w.gep_i8(&Value::global("dream_ft"), &off);
         self.w.load(Ty::Ptr, &at, ps as u32, &[])
     }
@@ -100,7 +101,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             self.retain_rc_global_sink(true, a);
             vals.push(self.operand(a));
         }
-        let s = fn_ptr_sig(self.interner, sig, &self.h());
+        let s = fn_ptr_sig(self.interner, sig, &self.h(), &self.word());
         if vals.len() != s.fty.params.len() {
             crate::internal_error!(
                 "indirect call arity {} != signature arity {}",
@@ -129,7 +130,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             call_args.push(self.operand(a));
         }
         let (td, _, _) = fn_sig(self.interner, sig);
-        let s = fn_ptr_sig(self.interner, sig, &self.h());
+        let s = fn_ptr_sig(self.interner, sig, &self.h(), &self.word());
         let dispatch = c_ident(&format!("__iface_dispatch_{td}"));
         let itable = V::s(Value::global(format!(
             "dream_iface_{iface_id}_{method_slot}"

@@ -9,7 +9,7 @@ use dream_types::{method_fn, PrimTy, TyKind, TypeId};
 
 /// Whether this module gets marshalers at all (wasm32 modules that call a `js.*` bridge).
 pub(crate) fn emits_js_marshal(cx: &Cx<'_>) -> bool {
-    cx.target.is_wasm32() && crate::module_uses_js_bridges(cx.mir, cx.interner)
+    cx.target.spec().capabilities.js_interop && crate::module_uses_js_bridges(cx.mir, cx.interner)
 }
 
 pub(crate) fn js_sym(wat: &str) -> String {

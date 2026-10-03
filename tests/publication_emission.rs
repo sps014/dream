@@ -12,8 +12,8 @@ fn managed_field_and_array_stores_publish_before_installing_the_child() {
     for name in ["field", "element"] {
         let body = ir_func_body(&ir, name);
         let barrier = body.find("@dream_publish_child(").expect(body);
-        assert!(body[barrier..].contains("store i64"), "{}", body);
-        assert!(body[..barrier].contains("load i64"), "{}", body);
+        assert!(body[barrier..].contains("store ptr"), "{}", body);
+        assert!(body[..barrier].contains("load ptr"), "{}", body);
     }
 }
 
@@ -46,7 +46,10 @@ fn value_constructor_ref_interiors_never_read_a_heap_header() {
     );
     assert!(
         ir.lines()
-            .any(|line| line.contains("call void @dream_publish_child(i64 0,")),
-        "{}", ir
+            .any(|line| line.contains("call void @dream_publish_child(ptr null,")),
+        "{}",
+        ir
     );
+    let body = ir_func_body(&ir, "Wrap_constructor");
+    assert!(!body.contains("inttoptr"), "{}", body);
 }

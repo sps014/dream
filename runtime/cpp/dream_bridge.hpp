@@ -21,8 +21,8 @@
 #include <span>
 #endif
 
-extern "C" void dream_callback_retain(uintptr_t obj);
-extern "C" void dream_callback_release(uintptr_t obj);
+extern "C" void dream_callback_retain(void* obj);
+extern "C" void dream_callback_release(void* obj);
 
 namespace dream {
 
@@ -204,8 +204,8 @@ template <class T> struct slice {
 
 // Holds the Dream `NativeCallback` for as long as any copy of the `std::function` lives.
 struct callback_ref {
-    uintptr_t obj;
-    explicit callback_ref(void* o) : obj(reinterpret_cast<uintptr_t>(o)) { dream_callback_retain(obj); }
+    void* obj;
+    explicit callback_ref(void* o) : obj(o) { dream_callback_retain(obj); }
     ~callback_ref() { dream_callback_release(obj); }
     callback_ref(const callback_ref&) = delete;
     callback_ref& operator=(const callback_ref&) = delete;
@@ -246,7 +246,7 @@ template <class R, class... A> struct callback {
     template <class... X> auto operator()(X&&... x) const {
         static_assert(sizeof...(X) == sizeof...(A),
                       "the C++ callback's arity differs from the Dream `fun` type");
-        void* ud = reinterpret_cast<void*>(ref->obj);
+        void* ud = ref->obj;
         if constexpr (std::is_void_v<R>) {
             fn(ud, to_c<A>(std::forward<X>(x)).get()...);
         } else if constexpr (std::is_same_v<R, void*>) {

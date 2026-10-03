@@ -370,6 +370,15 @@ fn prune_functions(mir: &mut Mir) {
         .map(|(i, f)| (f.name.as_str(), i))
         .collect();
 
+    // An `@owned("free_fn")` `@c` import constructs its `OwnedCPtr` result in backend glue, so a
+    // call to it makes that class live like a `New` would.
+    let constructing_imports: HashMap<dream_types::DefId, TypeId> = mir
+        .imports
+        .iter()
+        .filter(|imp| matches!(imp.c_ret, dream_hir::CShape::OwnedPtr { .. }))
+        .filter_map(|imp| Some((imp.def, imp.ret?)))
+        .collect();
+
     let mut reachable: HashSet<usize> = HashSet::new();
     let mut live_types: HashSet<TypeId> = HashSet::new();
     let mut type_worklist: Vec<TypeId> = Vec::new();
@@ -442,6 +451,9 @@ fn prune_functions(mir: &mut Mir) {
                 }
             }
             for key in callees {
+                if let Some(&ty) = constructing_imports.get(&key.0) {
+                    type_worklist.push(ty);
+                }
                 if let Some(&target) = index.get(&key) {
                     if !reachable.contains(&target) {
                         worklist.push(target);

@@ -24,16 +24,31 @@ System.panic("unreachable: config was never validated");
 
 ## What a panic looks like
 
-A panic prints its message to standard error, then halts the program — diagnostics stay out of the program's own output, so piping stdout is unaffected. The automatic checks' messages include the failing source file, line, and declaring function, e.g.:
+A panic prints its message to standard error, then aborts the process — diagnostics stay out of the program's own output, so piping stdout is unaffected:
 
 ```
-panic: index out of bounds (at /path/to/program.dream:6, in main)
+panic: index out of bounds
 ```
 
-`System.panic(message)` prints exactly the `message` you pass — no automatic location is appended, so include whatever context is useful yourself.
+`System.panic(message)` prints exactly the `message` you pass, so include whatever context is useful yourself.
 
-!!! note "Precision notes"
-    The line is the checked construct's own source line whenever Dream can determine it (`?` otherwise). A check inside a small function that was copied into the caller may show the caller's line — still diagnosable, not a wrong file.
+A panic never unwinds: no destructor, `defer`, or caller code runs after it, and it never crosses into C as an exception.
+
+## Embedding a panic hook
+
+C linked into a native program (a `native/` source, or the app embedding Dream) can observe panics with `dream_set_panic_hook` from `dream_embed.h`:
+
+```c
+#include <dream_embed.h>
+
+static void on_panic(const char *message, const char *location) {
+    log_fatal("dream: %s (%s)", message, location ? location : "unknown location");
+}
+
+void install(void) { dream_set_panic_hook(on_panic); }
+```
+
+The hook runs on the panicking thread, in place of the default stderr message, with the message in UTF-8. `location` is `NULL` when the panic site recorded no source location, which is currently every site. When the hook returns, the process still aborts. A panic raised inside the hook skips the hook and aborts with the default message.
 
 ## Why panics, not undefined behavior
 

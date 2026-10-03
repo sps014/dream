@@ -5,9 +5,13 @@
 //! [`HImport`]: dream_hir::HImport
 
 use super::*;
-use dream_abi::c_abi::{C_PTR_TYPE, MARSHAL_USER_DATA_LAST, NATIVE_CALLBACK_TYPE};
+use dream_abi::attributes::{c_import_target, owned_result, OwnedResult};
+use dream_abi::c_abi::{
+    is_c_identifier, C_PTR_TYPE, MARSHAL_USER_DATA_LAST, NATIVE_CALLBACK_TYPE, OWNED_C_PTR_TYPE,
+};
 use dream_hir::CShape;
 use dream_syntax::nodes::{ConstraintKind, ExpressionNode, FunctionNode, ParameterNode, Type};
+use dream_types::CScalar;
 
 /// Where a type sits, which decides what it may be.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -18,10 +22,11 @@ enum Pos {
     CallbackReturn,
 }
 
-const PARAM_TYPES: &str = "numbers, `bool`, `string`, `CPtr`, `fun(...)`, `NativeCallback<fun(...)>`, \
-     `Option` of `string`/`CPtr`/`fun`/`NativeCallback`, and arrays of numbers or @unmanaged structs";
-const RETURN_TYPES: &str =
-    "`void`, numbers, `bool`, `string`, `CPtr`, `Option<string>`, and `Option<CPtr>`";
+const PARAM_TYPES: &str = "numbers, `bool`, `string`, `CPtr`, @unmanaged structs, `fun(...)`, \
+     `NativeCallback<fun(...)>`, `Option` of `string`/`CPtr`/`fun`/`NativeCallback`, and arrays of \
+     numbers or @unmanaged structs";
+const RETURN_TYPES: &str = "`void`, numbers, `bool`, `string`, `CPtr`, @unmanaged structs, \
+     `OwnedCPtr` (with `@owned(\"free_fn\")`), `Option<string>`, and `Option<CPtr>`";
 const CALLBACK_PARAM_TYPES: &str =
     "numbers, `bool`, `string`, `CPtr`, `Option<string>`, and `Option<CPtr>`";
 const CALLBACK_RETURN_TYPES: &str = "`void`, numbers, `bool`, and `CPtr`";
@@ -55,6 +60,18 @@ impl<'a> Analyzer<'a> {
         if let Err(msg) = self.c_ret_shape(function) {
             diagnostics.report_error(
                 format!("'@c' extern '{}' result: {msg}", function.name.text),
+                Some(function.name.position),
+            );
+        }
+        let symbol = c_import_target(&function.attributes)
+            .map(|(_, symbol)| symbol)
+            .unwrap_or_else(|| function.name.text.clone());
+        if !is_c_identifier(&symbol) {
+            diagnostics.report_error(
+                format!(
+                    "'@c' extern '{}' binds '{symbol}', which is not a C identifier",
+                    function.name.text
+                ),
                 Some(function.name.position),
             );
         }
@@ -99,7 +116,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// `(parameter shapes, result shape)` of a validated `@c` extern; invalid positions (already
-    /// reported) fall back to [`CShape::Scalar`].
+    /// reported) fall back to an `int` scalar.
     pub(in crate::analyzer) fn c_shapes(
         &self,
         function: &FunctionNode<'a>,
@@ -107,9 +124,9 @@ impl<'a> Analyzer<'a> {
         let params = function
             .parameters
             .iter()
-            .map(|p| self.c_param_shape(p).unwrap_or(CShape::Scalar))
+            .map(|p| self.c_param_shape(p).unwrap_or(POISON))
             .collect();
-        let ret = self.c_ret_shape(function).unwrap_or(CShape::Scalar);
+        let ret = self.c_ret_shape(function).unwrap_or(POISON);
         (params, ret)
     }
 
@@ -140,15 +157,36 @@ impl<'a> Analyzer<'a> {
     }
 
     fn c_ret_shape(&self, function: &FunctionNode<'a>) -> Result<CShape, String> {
-        match &function.return_type {
-            None | Some(Type::Void) => Ok(CShape::Void),
-            Some(t) => self.c_shape(t, Pos::Return),
+        let owned = owned_result(&function.attributes);
+        let ret = function.return_type.as_ref().filter(|t| **t != Type::Void);
+        match (ret, owned) {
+            (Some(t), OwnedResult::FreedBy(free)) if self.is_owned_c_ptr(t) => {
+                if is_c_identifier(free) {
+                    Ok(CShape::OwnedPtr {
+                        free: free.to_string(),
+                    })
+                } else {
+                    Err(format!(
+                        "`@owned` names '{free}', which is not a C identifier"
+                    ))
+                }
+            }
+            (Some(t), _) if self.is_owned_c_ptr(t) => Err(format!(
+                "returning `{OWNED_C_PTR_TYPE}` needs `@owned(\"free_fn\")` naming the C function \
+                 that frees the pointer"
+            )),
+            (_, OwnedResult::FreedBy(_)) => Err(format!(
+                "`@owned(\"free_fn\")` applies only to a `@c` extern returning `{OWNED_C_PTR_TYPE}`"
+            )),
+            (None, _) => Ok(CShape::Void),
+            (Some(t), _) => self.c_shape(t, Pos::Return),
         }
     }
 
     /// `ref p: T` passes `&p`: `T` must be a scalar, `CPtr`, or an @unmanaged struct.
     fn c_ref_shape(&self, ty: &Type) -> Result<CShape, String> {
-        let ok = is_c_scalar(ty) || self.is_c_ptr(ty) || self.is_unmanaged_struct(ty);
+        let ok =
+            CScalar::of_type(ty).is_some() || self.is_c_ptr(ty) || self.is_unmanaged_struct(ty);
         if ok {
             Ok(CShape::Ref)
         } else {
@@ -161,22 +199,14 @@ impl<'a> Analyzer<'a> {
 
     fn c_shape(&self, ty: &Type, pos: Pos) -> Result<CShape, String> {
         if ty.is_unknown() {
-            return Ok(CShape::Scalar);
-        }
-        // The backend has no C struct-by-value classifier yet; passing `&s` would silently
-        // mismatch a C prototype that takes the struct by value.
-        if pos == Pos::Param && self.is_unmanaged_struct(ty) {
-            return Err(format!(
-                "@unmanaged struct '{}' cannot be passed to C by value yet; declare the parameter \
-                 as `ref` to pass a pointer (`T*`)",
-                ty.get_type()
-            ));
+            return Ok(POISON);
         }
         let shape = self.c_shape_inner(ty, pos);
         let allowed = match (&shape, pos) {
-            (Some(CShape::Scalar), _) => true,
+            (Some(CShape::Scalar(_)), _) => true,
             (Some(CShape::Ptr { optional: false }), Pos::CallbackReturn) => true,
             (Some(CShape::Str { .. } | CShape::Ptr { .. }), p) => p != Pos::CallbackReturn,
+            (Some(CShape::Struct), p) => matches!(p, Pos::Param | Pos::Return),
             (Some(CShape::Func { .. } | CShape::Callback { .. } | CShape::Array), Pos::Param) => {
                 true
             }
@@ -198,8 +228,11 @@ impl<'a> Analyzer<'a> {
     }
 
     fn c_shape_inner(&self, ty: &Type, pos: Pos) -> Option<CShape> {
-        if is_c_scalar(ty) {
-            return Some(CShape::Scalar);
+        if let Some(s) = CScalar::of_type(ty) {
+            return Some(CShape::Scalar(s));
+        }
+        if self.is_unmanaged_struct(ty) {
+            return Some(CShape::Struct);
         }
         match ty {
             Type::String(_) => Some(CShape::Str { optional: false }),
@@ -255,6 +288,11 @@ impl<'a> Analyzer<'a> {
             && self.struct_table.get_struct(C_PTR_TYPE).is_some()
     }
 
+    fn is_owned_c_ptr(&self, ty: &Type) -> bool {
+        matches!(ty, Type::Struct(tok, None) if tok.text == OWNED_C_PTR_TYPE)
+            && self.struct_table.get_struct(OWNED_C_PTR_TYPE).is_some()
+    }
+
     fn is_unmanaged_struct(&self, ty: &Type) -> bool {
         let Type::Struct(tok, None) = ty else {
             return false;
@@ -289,35 +327,10 @@ fn optional(inner: CShape) -> Option<CShape> {
     }
 }
 
-fn is_c_scalar(ty: &Type) -> bool {
-    matches!(
-        ty,
-        Type::Integer(_)
-            | Type::UInt(_)
-            | Type::Long(_)
-            | Type::ULong(_)
-            | Type::ISize(_)
-            | Type::USize(_)
-            | Type::Byte(_)
-            | Type::Char(_)
-            | Type::Boolean(_)
-            | Type::Float(_)
-            | Type::Double(_)
-    )
-}
+/// The shape recorded for a position whose error was already reported.
+const POISON: CShape = CShape::Scalar(CScalar::I32);
 
 /// Element types whose Dream array storage is the C array (`bool`/`char` use Dream-specific widths).
 fn is_c_array_elem(ty: &Type) -> bool {
-    matches!(
-        ty,
-        Type::Integer(_)
-            | Type::UInt(_)
-            | Type::Long(_)
-            | Type::ULong(_)
-            | Type::ISize(_)
-            | Type::USize(_)
-            | Type::Byte(_)
-            | Type::Float(_)
-            | Type::Double(_)
-    )
+    CScalar::of_type(ty).is_some_and(|s| !matches!(s, CScalar::Bool | CScalar::Char))
 }

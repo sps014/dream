@@ -1,6 +1,7 @@
 //! Cross emission compiles the runtime header for its actual target ABI, without linking a
 //! host runtime or requiring the foreign libc SDK. Objects keep their runtime symbols unresolved.
 
+use super::c_shim::shim_bitcode;
 use super::runtime::{anchor_unit, reduce_disassembly};
 use super::tools::{resolve_llvm, LlvmTools};
 use crate::driver::compiler::RuntimeSignatures;
@@ -91,17 +92,40 @@ pub fn emit_object(
             .arg(ir),
         "cross IR verification",
     )?;
+    let linked = match shim_bitcode(&tools, target, ir)? {
+        Some(shim) => {
+            let linked = ir.with_extension("linked.bc");
+            let r = run_captured(
+                tools
+                    .command("llvm-link")
+                    .arg(ir)
+                    .arg(&shim)
+                    .arg("-o")
+                    .arg(&linked),
+                "cross C shim link",
+            );
+            let _ = std::fs::remove_file(&shim);
+            r?;
+            Some(linked)
+        }
+        None => None,
+    };
+    let input = linked.as_deref().unwrap_or(ir);
     // Never select the runner's CPU for an object intended for another machine.
-    run_captured(
+    let r = run_captured(
         tools
             .command("llc")
             .arg(format!("-mtriple={}", target.triple))
             .arg(super::build::llc_level(level, false))
             .args(["-filetype=obj", "-relocation-model=pic"])
-            .arg(ir)
+            .arg(input)
             .arg("-o")
             .arg(&object),
         "cross object emission",
-    )?;
+    );
+    if let Some(linked) = &linked {
+        let _ = std::fs::remove_file(linked);
+    }
+    r?;
     Ok(object)
 }

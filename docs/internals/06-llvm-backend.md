@@ -285,6 +285,23 @@ Debug builds link the O0 runtime bitcode without DWARF. The whole program become
 object, and lldb's Mach-O debug map reads one compile unit per object, so runtime units would
 hide the Dream one.
 
+## The `@c` shim
+
+The backend never encodes the C ABI itself. `glue/c_shim.rs` describes every `@c` import as a
+`dream_abi::c_abi::shim::CShim`. Each import gets a forward shim (`dream_cs_<name>`) taking Dream's
+carrier types: `bool`/`char`/`byte` as `int32_t`, a struct as a pointer to its Dream layout, and a
+struct result as a leading out-pointer. Each C function-pointer wrapper (`glue/c_reverse.rs`) gets
+a reverse adapter with the real C signature that calls the Dream body `<wrapper>__body`. Each
+`@owned("free_fn")` import gets a getter for `free_fn`'s address. The driver renders the
+description to C (`src/driver/ffi_shim/c_shim.rs`) next to the `.ll` as `<stem>.cshim.c`. The pinned
+clang compiles it for the target triple (`src/execution/llvm/c_shim.rs`), and `llvm-link` merges it
+before `opt`, so the forward shims (`always_inline`) disappear into their callers. Clang owns
+struct classification, narrow-scalar extension and `__attribute__((stdcall))`. The `@cpp` shim
+(`ffi_shim/cpp_shim.rs`) spells scalars with the same `dream_types::CScalar` vocabulary.
+
+Every native program keeps `dream_abi::c_abi::EMBED_EXPORTS` (the `dream_embed.h` API) through
+internalize, so C linked into it can call them.
+
 ## PGO
 
 - `--profile` runs `opt` with `-pgo-kind=pgo-instr-gen-pipeline` and links through the pinned

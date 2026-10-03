@@ -1,0 +1,25 @@
+// Structs returned by value from libc: `div_t` (two ints) and `lldiv_t` (two long longs).
+import system;
+
+struct DivT {
+    public quot: int;
+    public rem: int;
+}
+
+struct LlDivT {
+    public quot: long;
+    public rem: long;
+}
+
+@c("c", "div")
+extern fun div(n: int, d: int): DivT;
+
+@c("c", "lldiv")
+extern fun lldiv(n: long, d: long): LlDivT;
+
+fun main(): void {
+    let d = div(17, 5);
+    System.println(d.quot.to_string() + " r " + d.rem.to_string());
+    let l = lldiv(10000000007L, -3L);
+    System.println(l.quot.to_string() + " r " + l.rem.to_string());
+}

@@ -62,6 +62,8 @@ pub(super) struct Lcx<'a> {
     intrinsics: IndexMap<String, FnTy>,
     /// wasm32 export names of functions this module defines.
     exports: IndexMap<String, String>,
+    /// Functions the C shim calls, so they must stay visible until the shim is linked in.
+    shim_callees: IndexSet<String>,
     pub dbg_cu: Option<MdRef>,
     /// Debugger view composites by name (`debug_views.rs`).
     pub dbg_views: IndexMap<String, MdRef>,
@@ -88,6 +90,7 @@ impl<'a> Lcx<'a> {
             hosts: IndexMap::new(),
             intrinsics: IndexMap::new(),
             exports: IndexMap::new(),
+            shim_callees: IndexSet::new(),
             dbg_cu: None,
             dbg_views: IndexMap::new(),
         }
@@ -101,6 +104,12 @@ impl<'a> Lcx<'a> {
             None => sig,
         };
         self.own.insert(name.to_string(), sig);
+    }
+
+    /// Registers a function this module defines that the generated C shim calls.
+    pub fn own_shim_callee(&mut self, name: &str, sig: FnSig) {
+        self.shim_callees.insert(name.to_string());
+        self.own(name, sig);
     }
 
     /// A host import the runtime header does not declare; its C type follows the Dream signature.
@@ -209,7 +218,11 @@ impl<'a> Lcx<'a> {
         let mut w = FunctionWriter::new(name, sig.fty.ret.clone(), params);
         w.ret_attrs = sig.ret_attrs.clone();
         let export = self.exports.get(name);
-        w.linkage = if name == "main" || export.is_some() || self.sigs.has_function(name) {
+        w.linkage = if name == "main"
+            || export.is_some()
+            || self.shim_callees.contains(name)
+            || self.sigs.has_function(name)
+        {
             Linkage::External
         } else {
             Linkage::Internal

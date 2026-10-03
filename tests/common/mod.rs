@@ -104,6 +104,7 @@ pub fn emit_ll_for(
         .unwrap_or_else(|e| panic!("runtime signatures: {}", e));
     dream_mir::backend::llvm::emit_llvm_module(mir, interner, &sigs, false, target)
         .expect("runtime signatures must cover emitted calls")
+        .ir
 }
 
 /// Extracts the body of the function `name` (its `define ... @name(... {` line), up to its

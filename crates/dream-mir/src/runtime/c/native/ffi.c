@@ -3,6 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+void dream_ffi_free_with(uintptr_t free_fn, uintptr_t ptr) {
+    if (free_fn && ptr) {
+        ((void (*)(void *))free_fn)((void *)ptr);
+    }
+}
+
 uintptr_t dream_ffi_read_ptr(uintptr_t base, int32_t index) {
     if (!base) {
         return 0;

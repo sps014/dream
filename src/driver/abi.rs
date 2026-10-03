@@ -3,7 +3,7 @@ use std::fs;
 use std::io::Error;
 use std::path::Path;
 
-use crate::driver::cpp_bridge::{CppBridge, WrittenShim, SHIM_RUNTIME_EXPORTS};
+use crate::driver::ffi_shim::{CppBridge, WrittenShim, SHIM_RUNTIME_EXPORTS};
 use crate::driver::gpu_gen::{self, GpuEmitResult};
 use crate::driver::native_sets::{NativeGraph, NativeSet};
 use dream_abi::attributes::{c_import_target, c_marshal_charset, extern_import_target, has_c_attr};

@@ -151,16 +151,16 @@ Final #34 CI now targets de67d23f; hosted cold/warm timing improvement is not ye
 
 | Step | Title | Findings | Status | Owner | PR | Notes |
 |---|---|---|---|---|---|---|
-| 4.1 | Structs by value (shim or classifier) | FFI-1 | Not started | | | |
-| 4.2 | Width-aware narrow scalars | FFI-3 | Not started | | | |
-| 4.3 | Embedding API and `dream_embed.h` | FFI-6 | Not started | | | |
-| 4.4 | Panic ABI and hook | ERR-1 | Not started | | | |
-| 4.5 | `@owned` for `@c` `CPtr` | FOWN-1 | Not started | | | |
-| 4.6 | Implement `stdcall` | FFI-4 | Not started | | | |
-| 4.C1 | One FFI shim generator for `@c` and `@cpp` | FFI-1 | Not started | | | |
-| 4.C2 | One ownership vocabulary in `dream-abi` | FOWN-1 | Not started | | | |
-| 4.C3 | Split `attributes.rs` | — | Not started | | | |
-| 4.C4 | Replace the old `CShape::Scalar` | FFI-3 | Not started | | | |
+| 4.1 | Structs by value (shim or classifier) | FFI-1 | Done | Cursor agent | — (uncommitted) | Generated C shim compiled by the pinned clang owns struct classification. Plain-data value structs pass and return by value; the Phase 0 error is deleted. `native_interop` covers two floats, three `int64_t`s and a 32-byte mixed struct at -O0 and -O2; golden `c_struct_by_value` uses libc `div`/`lldiv`. |
+| 4.2 | Width-aware narrow scalars | FFI-3 | Done | Cursor agent | — (uncommitted) | `CScalar` (dream-types) spells `bool`/`char`/`uint8_t` with real C types; the shim re-extends to Dream's i32 carrier. `native_interop` checks a `bool` return with garbage upper bits at -O2 (on Darwin arm64 the C ABI makes the callee zero-extend, so garbage is injected only where legal). |
+| 4.3 | Embedding API and `dream_embed.h` | FFI-6 | Done | Cursor agent | — (uncommitted) | `dream_abi::c_abi::EMBED_EXPORTS` (`dream_thread_attach`/`_detach`, `dream_retain`/`_release`, `dream_set_panic_hook`) always survive internalize. Public header `runtime/c/include/dream_embed.h` is on every `native/` source's include path. Attached foreign threads may call plain `fun` pointers; `NativeCallback` stays owner-bound. The 1.11 message now names `dream_thread_attach()`/`dream_embed.h`. The old internal `dream_thread_detach(dream_thread)` is renamed `dream_thread_release`. |
+| 4.4 | Panic ABI and hook | ERR-1 | In progress | Cursor agent | — (uncommitted) | Abort by default, never unwinds. `dream_set_panic_hook(fn(message, location))` runs on the panicking thread with a heap-free UTF-8 copy; abort follows when it returns; a re-entrant panic skips the hook. **Open:** `location` is always NULL — no panic site records a source location (the LLVM backend ignores `Statement::SourceLine`; `panics.md` claimed otherwise and was corrected). Recording locations is the remaining work. |
+| 4.5 | `@owned` for `@c` `CPtr` | FOWN-1 | Done | Cursor agent | — (uncommitted) | `@c @owned("free_fn") extern fun f(...): OwnedCPtr` builds a `system.OwnedCPtr` whose `del` calls `free_fn(ptr)`; `get()`/`take()`. Sema checks via `dream_abi` constants (`OWNED_C_PTR_TYPE`, `owned_result`, `is_c_identifier`); prune keeps the class live from the import. Golden `c_owned_rejected`; `native_interop` checks the finalizer and `take()`. |
+| 4.6 | Implement `stdcall` | FFI-4 | Done | Cursor agent | — (uncommitted) | `@c_call("stdcall")` emits `__attribute__((stdcall))` in the shim (clang lowers it to `x86_stdcallcc` on 32-bit x86 Windows only). Unknown conventions are rejected. Goldens `c_call_stdcall`, `c_call_unknown_convention_rejected`. |
+| 4.C1 | One FFI shim generator for `@c` and `@cpp` | FFI-1 | Done | Cursor agent | — (uncommitted) | `src/driver/cpp_bridge` → `src/driver/ffi_shim` (`c_shim.rs` + `cpp_shim.rs`, shared `CScalar` vocabulary). Hand-written C ABI in `c_marshal.rs` deleted; reverse adapters (`glue/c_reverse.rs`) are defined in C with real types. |
+| 4.C2 | One ownership vocabulary in `dream-abi` | FOWN-1 | Done | Cursor agent | — (uncommitted) | `dream_abi::attributes::ownership` (`CONSUMING`, `OWNED`, `is_consuming`, `OwnedResult`); sema and the `@cpp` model read it; no string-matched ownership attributes remain. |
+| 4.C3 | Split `attributes.rs` | — | Done | Cursor agent | — (uncommitted) | `crates/dream-abi/src/attributes/` split by family, joined by `all_specs()`. |
+| 4.C4 | Replace the old `CShape::Scalar` | FFI-3 | Done | Cursor agent | — (uncommitted) | `CShape::Scalar(CScalar)` plus `Struct` and `OwnedPtr`; `HImport.c_stdcall`. |
 
 ### Phase 5: Identity, modules and symbols
 
@@ -210,15 +210,15 @@ Final #34 CI now targets de67d23f; hosted cold/warm timing improvement is not ye
 
 | Metric | Baseline (Phase 0) | After P1 | After P2 | After P3 | After P4 | After P5 | After P6 | After P7 | Target |
 |---|---|---|---|---|---|---|---|---|---|
-| Production `.rs` files over 600 lines | 56 | 55 | 54 | 54 | | | | | 0 without a stated reason |
-| Production `.rs` files over 1,000 lines | 18 | 17 | 16 | 16 | | | | | 0 |
-| `#[allow(clippy::…)]` count | 40 | 40 | 40 | 40 | | | | | Only external-API cases |
-| `unwrap`/`expect` in syntax and sema (non-test) | 0 | 0 | 0 | 0 | | | | | 0 |
-| Name-string heuristics in passes and backend | 0 (10 allowlisted non-heuristic pattern matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | | | | | 0 |
-| `std::collections::HashMap`/`HashSet` in mir and sema | 0 | 0 | 0 | 0 | | | | | 0 in output paths |
-| Duplicated lines, native vs wasm32 runtime | 141 (remeasured; originally recorded as 213) | 103 | 103 | 102 | | | | | ~0 |
-| Repair passes needed for correctness | 2 | 2 | 2 | 2 | | | | | 0 |
-| Runtime C files over 600 lines | 3 | 3 | 2 | 2 | | | | | 0 |
+| Production `.rs` files over 600 lines | 56 | 55 | 54 | 54 | 53 | | | | 0 without a stated reason |
+| Production `.rs` files over 1,000 lines | 18 | 17 | 16 | 16 | 15 | | | | 0 |
+| `#[allow(clippy::…)]` count | 40 | 40 | 40 | 40 | 40 | | | | Only external-API cases |
+| `unwrap`/`expect` in syntax and sema (non-test) | 0 | 0 | 0 | 0 | 0 | | | | 0 |
+| Name-string heuristics in passes and backend | 0 (10 allowlisted non-heuristic pattern matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | | | | 0 |
+| `std::collections::HashMap`/`HashSet` in mir and sema | 0 | 0 | 0 | 0 | 0 | | | | 0 in output paths |
+| Duplicated lines, native vs wasm32 runtime | 141 (remeasured; originally recorded as 213) | 103 | 103 | 102 | 102 | | | | ~0 |
+| Repair passes needed for correctness | 2 | 2 | 2 | 2 | 2 | | | | 0 |
+| Runtime C files over 600 lines | 3 | 3 | 2 | 2 | 2 | | | | 0 |
 
 Phase 2 metrics were remeasured on 2026-10-02 at merged commit
 `9fe2dfb2445ab883e8408724d358510f74d73733` (PR #34). Both 2.C4 and 2.C5 are
@@ -246,6 +246,15 @@ There are still no `std::collections::HashMap`/`HashSet` imports in MIR or sema,
 and no non-test `unwrap`/`expect` calls in syntax or sema. The two correctness
 repair paths remain `RcLastUseRepair` and `strip_escaped_regions` (task 7.6);
 target and layout completion does not remove them.
+
+Phase 4 metrics were measured on 2026-10-03 on the uncommitted Phase 4 working tree, using
+the same method as Phase 3. Splitting `attributes.rs` removed one file over 600 and over 1,000
+lines (53 and 15); `scripts/check_hygiene.py` now ratchets at 53. The new shim symbol names live
+in `dream_abi::c_abi::shim`, so the string-pattern allowlist is unchanged at ten. Other counts
+are unchanged. Phase 4 exit criteria: `tests/native_interop.rs` has no `#[ignore]` and covers
+structs by value, narrow returns, an attached foreign-thread callback and an owned `CPtr`
+finalizer (plus the panic hook); one shim generator; attributes split. Phase 4 is not `Done`
+while 4.4 still passes a NULL panic location.
 
 Phase 0 counts exclude test Rust files and vendored PCRE2/sljit C sources. Runtime duplication is
 the normalized non-blank exact-line intersection between `runtime/c/native` and `runtime/c/wasm32`.

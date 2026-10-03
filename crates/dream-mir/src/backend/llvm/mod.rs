@@ -51,6 +51,13 @@ pub fn native_header_function_names() -> Vec<String> {
     crate::backend::shared::abi_types::native_header_fn_names()
 }
 
+/// One emitted program: the `.ll` module and the C shim its `@c` calls go through, which must be
+/// compiled for the same target and linked beside it (empty when the program calls no C).
+pub struct LlvmModule {
+    pub ir: String,
+    pub c_shim: dream_abi::c_abi::shim::CShim,
+}
+
 /// Lowers optimized MIR to one `.ll` module typed against the runtime's signature table.
 /// `leak_checks` makes native `main` always print the exit-time heap report.
 pub fn emit_llvm_module(
@@ -59,7 +66,7 @@ pub fn emit_llvm_module(
     sigs: &RuntimeSigs,
     leak_checks: bool,
     target: crate::backend::Target,
-) -> Result<String, EmitError> {
+) -> Result<LlvmModule, EmitError> {
     let result = catch_unwind(AssertUnwindSafe(|| {
         emit_llvm_module_unchecked(mir, interner, sigs, leak_checks, target)
     }));
@@ -78,7 +85,7 @@ fn emit_llvm_module_unchecked(
     sigs: &RuntimeSigs,
     leak_checks: bool,
     target: crate::backend::Target,
-) -> String {
+) -> LlvmModule {
     let mut l = Lcx::new(mir, interner, sigs, leak_checks, target);
     for f in &mir.functions {
         let name = l.user_fn(f);
@@ -139,5 +146,13 @@ fn emit_llvm_module_unchecked(
     glue::js_marshal::emit_all(&mut l);
     glue::tables::emit_all(&mut l);
     glue::entry::emit_all(&mut l);
-    l.m.finish()
+    let c_shim = if l.cx.target.spec().capabilities.c_interop {
+        glue::c_shim::build(&l)
+    } else {
+        Default::default()
+    };
+    LlvmModule {
+        ir: l.m.finish(),
+        c_shim,
+    }
 }

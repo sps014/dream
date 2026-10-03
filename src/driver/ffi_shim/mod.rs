@@ -1,11 +1,17 @@
-//! `@cpp` bindings. Hand-written declarations in a package's thin Dream wrapper become (1) ordinary
-//! Dream classes whose members call `@c` externs, spliced into the program before semantic
-//! analysis, and (2) a generated C++ shim per native set that implements those externs against
-//! the real headers. The compiler never parses C++; the C++ compiler checks the declarations.
+//! Generated native shims. Every `@c` call goes through a C shim ([`c_shim`]) that clang compiles
+//! for the build target, so the platform C ABI is clang's job, never hand-written lowering.
+//!
+//! `@cpp` bindings build on it. Hand-written declarations in a package's thin Dream wrapper become
+//! (1) ordinary Dream classes whose members call `@c` externs, spliced into the program before
+//! semantic analysis, and (2) a generated C++ shim per native set ([`cpp_shim`]) that implements
+//! those externs against the real headers. Both shims spell scalars through
+//! [`dream_types::CScalar`], so the C prototype one declares is the one the other defines. The
+//! compiler never parses C++; the C++ compiler checks the declarations.
 
+pub mod c_shim;
+pub(crate) mod cpp_shim;
 mod desugar;
 mod model;
-pub(crate) mod shim;
 #[cfg(test)]
 mod tests;
 mod types;
@@ -16,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use bumpalo::Bump;
+use dream_abi::attributes::cpp_attr;
 use dream_diagnostics::DiagnosticBag;
 use dream_text::text_span::TextSpan;
 
@@ -76,7 +83,10 @@ impl CppBridge {
             std::fs::create_dir_all(&dir)?;
             let source = dir.join("shim.cpp");
             write_if_changed(&source, text)?;
-            write_if_changed(&dir.join(shim::BRIDGE_HEADER_NAME), shim::BRIDGE_HEADER)?;
+            write_if_changed(
+                &dir.join(cpp_shim::BRIDGE_HEADER_NAME),
+                cpp_shim::BRIDGE_HEADER,
+            )?;
             out.insert(
                 set.clone(),
                 WrittenShim {
@@ -105,11 +115,11 @@ fn write_if_changed(path: &Path, text: &str) -> std::io::Result<()> {
 fn declares_cpp(acc: &ProgramAccumulator<'_>) -> bool {
     acc.all_structs
         .iter()
-        .any(|s| model::cpp_attr(&s.attributes).is_some())
+        .any(|s| cpp_attr(&s.attributes).is_some())
         || acc
             .all_functions
             .iter()
-            .any(|f| model::cpp_attr(&f.attributes).is_some())
+            .any(|f| cpp_attr(&f.attributes).is_some())
 }
 
 /// Replaces every `@cpp` class and free function with its generated Dream wrapper and builds the
@@ -125,9 +135,9 @@ pub fn expand<'a>(
     }
     let program = model::collect(acc, graph, diagnostics);
     acc.all_structs
-        .retain(|s| s.is_value || model::cpp_attr(&s.attributes).is_none());
+        .retain(|s| s.is_value || cpp_attr(&s.attributes).is_none());
     acc.all_functions
-        .retain(|f| model::cpp_attr(&f.attributes).is_none());
+        .retain(|f| cpp_attr(&f.attributes).is_none());
     acc.requested_std_packages.insert("system".to_string());
 
     let mut file_index = 0;
@@ -142,7 +152,7 @@ pub fn expand<'a>(
         .sets
         .iter()
         .filter(|(_, d)| !d.files.is_empty() || !d.structs.is_empty())
-        .map(|(set, d)| (set.clone(), shim::shim_source(set, d, &program.known)))
+        .map(|(set, d)| (set.clone(), cpp_shim::shim_source(set, d, &program.known)))
         .collect();
     Ok(CppBridge {
         shims,
@@ -161,7 +171,10 @@ fn origins(program: &model::Program) -> BTreeMap<String, CppOrigin> {
         for c in &fd.classes {
             out.insert(c.delete_symbol.clone(), origin(c.name.clone(), c.at));
             for m in &c.members {
-                out.insert(m.symbol.clone(), origin(format!("{}.{}", c.name, m.name), m.at));
+                out.insert(
+                    m.symbol.clone(),
+                    origin(format!("{}.{}", c.name, m.name), m.at),
+                );
             }
         }
         for m in &fd.free {
@@ -217,7 +230,10 @@ fn parse_into<'a>(
 fn point_at(functions: &mut [dream_syntax::nodes::FunctionNode<'_>], members: &[model::Member]) {
     let mut used = vec![false; members.len()];
     for f in functions {
-        if f.parameters.first().is_some_and(|p| is_generated(&p.name.text)) {
+        if f.parameters
+            .first()
+            .is_some_and(|p| is_generated(&p.name.text))
+        {
             continue;
         }
         let found = members

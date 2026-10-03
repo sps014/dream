@@ -1268,16 +1268,21 @@ int32_t dream_hash_long(int64_t v);
 dream_ptr dream_object_to_string(dream_ptr p);
 void dream_print_object(dream_ptr p);
 void dream_panic(dream_ptr msg);
+/* Mirrors `dream_panic_hook` in the public `dream_embed.h`. */
+typedef void (*dream_panic_hook)(const char *message, const char *location);
+void dream_set_panic_hook(dream_panic_hook hook);
 
 char *dream_string_to_utf8(dream_ptr s);
 uint16_t *dream_string_to_utf16z(dream_ptr s);
 dream_ptr dream_utf8_to_string(const char *s);
+void dream_ffi_free_with(uintptr_t free_fn, uintptr_t ptr);
 uintptr_t dream_ffi_read_ptr(uintptr_t base, int32_t index);
 int32_t dream_ffi_read_i32(uintptr_t base, int32_t index);
 int64_t dream_ffi_read_i64(uintptr_t base, int32_t index);
 double dream_ffi_read_f64(uintptr_t base, int32_t index);
 dream_ptr dream_ffi_read_cstring(uintptr_t ptr);
 void dream_thread_attach(void);
+void dream_thread_detach(void);
 void dream_callback_enter(void);
 void dream_callback_register(dream_ptr obj);
 void dream_callback_unregister(dream_ptr obj);

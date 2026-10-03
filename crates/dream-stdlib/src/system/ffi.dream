@@ -34,6 +34,34 @@ public struct CPtr {
     }
 }
 
+// A C pointer returned by an `@owned("free_fn")` `@c` extern: Dream owns it, and the destructor
+// calls `free_fn(ptr)` unless `take()` handed ownership back first. Native-only.
+public class OwnedCPtr {
+    ptr: CPtr;
+    free: usize;
+
+    @native
+    @intrinsic("dream_ffi_free_with")
+    static extern fun free_with(free: usize, ptr: usize): void;
+
+    // The pointer, still owned (and later freed) by this object.
+    public fun get(): CPtr {
+        return this.ptr;
+    }
+
+    // Gives up ownership: the caller now frees the returned pointer, and this object holds `NULL`.
+    public fun take(): CPtr {
+        let p = this.ptr;
+        this.ptr = CPtr.null();
+        return p;
+    }
+
+    @native
+    del() {
+        OwnedCPtr.free_with(this.free, this.ptr.address());
+    }
+}
+
 // A Dream `fun` (capturing or not) handed to a `@c` extern as a `(fn, void* user_data)` pair. C may
 // call it for as long as this object is alive: keep it in a field while C holds the pointer.
 // Calls from threads Dream did not start trap.

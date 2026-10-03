@@ -1,0 +1,8 @@
+// `stdcall` only changes the convention on 32-bit x86 Windows; everywhere else it is the C default.
+import system;
+
+@c("c", "strlen") @c_call("stdcall") extern fun strlen(s: string): usize;
+
+fun main(): void {
+    System.println(strlen("stdcall").to_string());
+}

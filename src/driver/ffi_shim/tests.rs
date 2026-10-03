@@ -101,7 +101,12 @@ fn non_bridgeable_and_non_extern_members_are_rejected() {
         "put helpers such as 'helper' in an `extend Store { ... }` block",
         "`@cpp` parameter 'n' cannot have a default",
     ] {
-        assert!(messages.contains(needle), "missing {:?} in:\n{}", needle, messages);
+        assert!(
+            messages.contains(needle),
+            "missing {:?} in:\n{}",
+            needle,
+            messages
+        );
     }
 }
 

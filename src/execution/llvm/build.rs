@@ -1,6 +1,7 @@
 //! `.ll` → native binary: `llvm-link` with the runtime bitcode, `opt` (internalize to `main`, then
 //! the standard pipeline), `llc` to an object, and the system C compiler as the linker only.
 
+use super::c_shim::shim_bitcode;
 use super::icon;
 use super::runtime::llvm_runtime;
 use super::tools::{resolve_llvm, LlvmTools};
@@ -15,6 +16,7 @@ use crate::execution::native::pgo::{clear_raw_profiles, llvm_pgo};
 use crate::execution::native::{
     cc, host_library_dir, native_bin_fresh, read_host_capabilities, Pgo,
 };
+use dream_abi::c_abi::EMBED_EXPORTS;
 use dream_mir::runtime::runtime_need_from_module_text;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
@@ -85,10 +87,16 @@ fn optimize_linked(
     Ok(out)
 }
 
-/// `main` plus the runtime functions compiled native sources call into.
+/// `main`, the embedding API, and the runtime functions compiled native sources call into.
 fn public_api_list(exports: &[String]) -> String {
     let mut list = vec!["main"];
-    list.extend(exports.iter().map(String::as_str));
+    list.extend(EMBED_EXPORTS);
+    list.extend(
+        exports
+            .iter()
+            .map(String::as_str)
+            .filter(|e| !EMBED_EXPORTS.contains(e)),
+    );
     format!("-internalize-public-api-list={}", list.join(","))
 }
 
@@ -187,10 +195,11 @@ pub fn emit_llvm_artifacts(
         )?),
         None => None,
     };
+    let shim = shim_bitcode(&tools, target, ll_path)?;
     let optimized = link_and_optimize(
         &tools,
         ll_path,
-        &[Some(rt.bc.as_path()), icon_ll.as_deref()]
+        &[Some(rt.bc.as_path()), shim.as_deref(), icon_ll.as_deref()]
             .iter()
             .flatten()
             .copied()
@@ -200,7 +209,7 @@ pub fn emit_llvm_artifacts(
         &None,
         &[],
     );
-    if let Some(p) = &icon_ll {
+    for p in icon_ll.iter().chain(&shim) {
         let _ = std::fs::remove_file(p);
     }
     let optimized = optimized?;
@@ -289,7 +298,7 @@ pub fn compile_llvm(
     };
     let stamp_path = bin.with_extension("flags");
     let stamp = format!(
-        "native-pointer-abi-v2\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{}\n{:?}\n{:?}\n{:?}",
+        "native-c-shim-v3\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{}\n{:?}\n{:?}\n{:?}",
         pipeline(opt, debug),
         debug,
         llc_level(opt, debug),
@@ -323,10 +332,11 @@ pub fn compile_llvm(
         Some(png) => Some(icon::write_icon_module(ll_path, png, &src)?),
         None => None,
     };
+    let shim = shim_bitcode(&tools, &spec, ll_path)?;
     let optimized = link_and_optimize(
         &tools,
         ll_path,
-        &[Some(rt.bc.as_path()), icon_ll.as_deref()]
+        &[Some(rt.bc.as_path()), shim.as_deref(), icon_ll.as_deref()]
             .iter()
             .flatten()
             .copied()
@@ -336,7 +346,7 @@ pub fn compile_llvm(
         &profile,
         &native.runtime_exports,
     );
-    if let Some(p) = &icon_ll {
+    for p in icon_ll.iter().chain(&shim) {
         let _ = std::fs::remove_file(p);
     }
     let optimized = optimized?;

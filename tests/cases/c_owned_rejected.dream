@@ -1,0 +1,12 @@
+// `OwnedCPtr` results need a C free function, and `@owned("…")` applies only to them.
+import system;
+
+@c("c", "malloc") extern fun leaky(n: usize): OwnedCPtr;
+
+@c("c", "strlen") @owned("free") extern fun counted(s: string): usize;
+
+@c("c", "malloc") @owned("free me") extern fun spaced(n: usize): OwnedCPtr;
+
+@c("c", "dream_cs_x") extern fun reserved(): int;
+
+fun main(): void {}

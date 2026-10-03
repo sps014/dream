@@ -302,7 +302,7 @@ pub(super) fn disassemble(tools: &LlvmTools, bc: &Path) -> Result<String, String
 }
 
 /// Rewrites `bc` without the CPU clang tuned it for (textual IR round-trips through llvm-link).
-fn strip_target_cpu(tools: &LlvmTools, bc: &Path) -> Result<(), String> {
+pub(super) fn strip_target_cpu(tools: &LlvmTools, bc: &Path) -> Result<(), String> {
     let ll = bc.with_extension("ll");
     std::fs::write(&ll, strip_cpu_attrs(&disassemble(tools, bc)?))
         .map_err(|e| format!("{}: {e}", ll.display()))?;

@@ -60,7 +60,7 @@ let h = "hello".hash_code();    // some stable integer
 
 ### Overriding them on a class
 
-A class customizes `to_string` and `hash_code` by declaring them `@override public`:
+A class customizes `to_string` and `hash_code` by declaring them `public override`:
 
 ```dream
 class Color {
@@ -68,14 +68,14 @@ class Color {
     g: int;
     b: int;
 
-    @override public fun to_string(): string {
+    public override fun to_string(): string {
         return "rgb(" + this.r + ", " + this.g + ", " + this.b + ")";
     }
 
-    @override public fun hash_code(): int {
+    public override fun hash_code(): int {
         return this.r * 65536 + this.g * 256 + this.b;
     }
 }
 ```
 
-Requirements: both `@override` and `public` are required; `to_string` returns `string` and `hash_code` returns `int`, and both take no parameters. Once overridden, `print` / `to_string` on a `Color` — even one stored in an `object` — uses your implementation.
+Requirements: both `public` and the `override` keyword are required; `to_string` returns `string` and `hash_code` returns `int`, and both take no parameters. Once overridden, `print` / `to_string` on a `Color` — even one stored in an `object` — uses your implementation.

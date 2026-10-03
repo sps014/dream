@@ -4,19 +4,23 @@ use dream_abi::attributes::{
     field_builtin_name, field_interpolate_mode, field_is_position_builtin, field_location_override,
     field_vertex_format, has_named_attr,
 };
+use dream_sema::module_graph::ProgramView;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::types::Type;
-use dream_syntax::nodes::ProgramNode;
 use indexmap::IndexMap;
 
 use super::ident::escape_wgsl_ident;
 use super::types::{GpuVertexAttr, GpuVertexBuffer};
 
 pub(super) fn find_struct<'a>(
-    program: &'a ProgramNode<'a>,
+    program: &'a ProgramView<'a>,
     name: &str,
 ) -> Option<&'a StructDeclarationNode<'a>> {
-    program.structs.iter().find(|s| s.name.text == name)
+    program
+        .structs
+        .iter()
+        .copied()
+        .find(|s| s.name.text == name)
 }
 
 pub(super) fn struct_name_of(ty: &Type) -> Option<&str> {
@@ -53,7 +57,7 @@ pub(super) fn dream_ty_to_wgsl_vec(ty: &Type) -> Option<&'static str> {
 /// has no shader representation, and folding it to its discriminant would quietly drop the
 /// payload rather than reporting that the type does not belong in a shader.
 pub(super) fn build_enum_values(
-    program: &ProgramNode<'_>,
+    program: &ProgramView<'_>,
 ) -> IndexMap<String, IndexMap<String, i32>> {
     let mut map = IndexMap::new();
     for decl in &program.enums {
@@ -71,7 +75,7 @@ pub(super) fn build_enum_values(
 }
 
 pub(super) fn build_struct_field_tys(
-    program: &ProgramNode<'_>,
+    program: &ProgramView<'_>,
 ) -> IndexMap<String, IndexMap<String, String>> {
     use super::ty::dream_ty_to_wgsl;
 

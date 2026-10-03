@@ -23,9 +23,6 @@ mod overflow_elim;
 mod ownership_args;
 #[cfg(test)]
 mod ownership_args_tests;
-mod param_modes;
-#[cfg(test)]
-mod param_modes_tests;
 mod prop;
 pub(crate) mod rc;
 mod sccp;
@@ -55,7 +52,6 @@ pub use iv::IvCanon;
 pub use licm::Licm;
 pub use loop_unroll::LoopUnroll;
 pub use overflow_elim::OverflowElim;
-pub use param_modes::ParamModes;
 pub use prop::CopyConstProp;
 pub(crate) use rc::{container_move_locals, rvalue_reads_local, stmt_reads_local};
 pub use rc::{HopElision, RcElision, RcInsertion, RcLastUseRepair, ReleaseSink};
@@ -288,8 +284,6 @@ pub fn optimize_module_opts(
     let _ = FuncboxAbi.run(mir, interner);
     crate::prune_module(mir, interner);
     dump.module(FuncboxAbi.name(), mir, interner);
-    let _ = ParamModes.run(mir, interner);
-    dump.module(ParamModes.name(), mir, interner);
     ownership_args::run(mir, interner);
     dump.module(ownership_args::STAGE, mir, interner);
     let layouts = mir.layouts.clone();

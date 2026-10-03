@@ -36,7 +36,7 @@ impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn validate_c_extern_signature(
         &mut self,
         function: &FunctionNode<'a>,
-        registered_name: &str,
+        def: dream_types::DefId,
         diagnostics: &mut DiagnosticBag,
     ) {
         let mut wrapped = Vec::new();
@@ -55,7 +55,7 @@ impl<'a> Analyzer<'a> {
         }
         if !wrapped.is_empty() {
             self.c_wrapped_fun_params
-                .insert(registered_name.to_string(), wrapped);
+                .insert(def, wrapped);
         }
         if let Err(msg) = self.c_ret_shape(function) {
             diagnostics.report_error(
@@ -81,12 +81,12 @@ impl<'a> Analyzer<'a> {
     /// the target must be statically known: a named function or a lambda literal.
     pub(in crate::analyzer) fn check_c_fun_args(
         &self,
-        callee: &str,
+        callee: dream_types::DefId,
         args: &[ExpressionNode<'a>],
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) {
-        let Some(wrapped) = self.c_wrapped_fun_params.get(callee) else {
+        let Some(wrapped) = self.c_wrapped_fun_params.get(&callee) else {
             return;
         };
         for &i in wrapped {
@@ -97,17 +97,18 @@ impl<'a> Analyzer<'a> {
                 ExpressionNode::Lambda(_) => true,
                 ExpressionNode::Identifier(tok) => {
                     symbol_table.borrow().get_symbol(tok).is_err()
-                        && self.function_table.get_function(&tok.text).is_ok()
+                        && self.function_info(&tok.text).is_ok()
                 }
                 _ => false,
             };
             if !known {
                 diagnostics.report_error(
                     format!(
-                        "argument {} of '@c' extern '{callee}' must be a named function or a lambda \
+                        "argument {} of '@c' extern '{}' must be a named function or a lambda \
                          literal: its C signature needs a wrapper generated per target; wrap a \
                          `fun` value in NativeCallback instead",
-                        i + 1
+                        i + 1,
+                        self.type_ctx.defs.name(callee)
                     ),
                     arg.position(),
                 );
@@ -285,12 +286,12 @@ impl<'a> Analyzer<'a> {
 
     fn is_c_ptr(&self, ty: &Type) -> bool {
         matches!(ty, Type::Struct(tok, None) if tok.text == C_PTR_TYPE)
-            && self.struct_table.get_struct(C_PTR_TYPE).is_some()
+            && self.type_ctx.resolved_type(C_PTR_TYPE).is_some_and(|ty| self.struct_info(ty).is_some())
     }
 
     fn is_owned_c_ptr(&self, ty: &Type) -> bool {
         matches!(ty, Type::Struct(tok, None) if tok.text == OWNED_C_PTR_TYPE)
-            && self.struct_table.get_struct(OWNED_C_PTR_TYPE).is_some()
+            && self.type_ctx.resolved_type(OWNED_C_PTR_TYPE).is_some_and(|ty| self.struct_info(ty).is_some())
     }
 
     fn is_unmanaged_struct(&self, ty: &Type) -> bool {
@@ -298,8 +299,14 @@ impl<'a> Analyzer<'a> {
             return false;
         };
         tok.text != C_PTR_TYPE
-            && self.struct_table.get_struct(&tok.text).is_some()
-            && self.type_satisfies_kind(ty, ConstraintKind::Unmanaged)
+            && self.type_ctx.resolved_type(&tok.text).is_some_and(|ty| {
+                self.struct_info(ty).is_some()
+                    && self.type_id_satisfies_kind(
+                        ty,
+                        ConstraintKind::Unmanaged,
+                        &mut indexmap::IndexSet::new(),
+                    )
+            })
     }
 }
 

@@ -67,19 +67,17 @@ pub(crate) fn address_taken(mir: &Mir) -> HashSet<FnKey> {
         }
     }
     // An interface method is dispatched through an itable slot, so its call sites are no better
-    // informed about parameter ownership than a funcbox's. The table records concrete symbols.
-    let slots: HashSet<&str> = mir
+    // informed about parameter ownership than a funcbox's.
+    let slots: HashSet<dream_types::DefId> = mir
         .interfaces
         .impls
         .iter()
         .flat_map(|i| i.entries.iter())
-        .flat_map(|(_, syms)| syms.iter().map(String::as_str))
+        .flat_map(|(_, defs)| defs.iter().flatten().copied())
         .collect();
     if !slots.is_empty() {
         for f in mir.functions.iter().chain(mir.polls.iter()) {
-            if slots.contains(crate::backend::shared::func_symbol(f).as_str())
-                || slots.contains(f.name.as_str())
-            {
+            if slots.contains(&f.def) {
                 out.insert((f.def, f.instance.clone()));
             }
         }

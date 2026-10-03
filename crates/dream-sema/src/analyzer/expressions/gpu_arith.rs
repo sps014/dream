@@ -7,7 +7,8 @@ use dream_hir::HExpr;
 use dream_syntax::nodes::Type;
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
-use dream_types::method_fn;
+use crate::function_table::FunctionIdentity;
+use dream_types::TypeId;
 
 impl<'a> Analyzer<'a> {
     pub(super) fn gpu_struct_name(ty: &Type) -> Option<&str> {
@@ -167,24 +168,26 @@ impl<'a> Analyzer<'a> {
 
         // `GpuMatN * GpuVecN` and `GpuMatN * GpuMatN`.
         if opr.kind == TokenKind::StarToken {
-            if let (Some(lname), Some(lm), Some(rv_rank)) = (
-                ln,
+            if let (Some(lm), Some(rv_rank)) = (
                 ln.and_then(Self::gpu_mat_rank),
                 rn.and_then(Self::gpu_vec_rank),
             ) {
                 if lm == rv_rank {
-                    let method = method_fn(lname, "mul");
+                    let receiver = left_hir.as_ref().map(|hir| hir.ty)
+                        .unwrap_or_else(|| self.type_ctx.lower(left));
+                    let method = self.gpu_method_identity(receiver, "mul", 1)?;
                     self.hir_set_method_call(left_hir, &method, vec![right_hir], right);
                     return Some(Ok(right.clone()));
                 }
             }
-            if let (Some(lname), Some(lm), Some(rm)) = (
-                ln,
+            if let (Some(lm), Some(rm)) = (
                 ln.and_then(Self::gpu_mat_rank),
                 rn.and_then(Self::gpu_mat_rank),
             ) {
                 if lm == rm {
-                    let method = method_fn(lname, "mul_mat");
+                    let receiver = left_hir.as_ref().map(|hir| hir.ty)
+                        .unwrap_or_else(|| self.type_ctx.lower(left));
+                    let method = self.gpu_method_identity(receiver, "mul_mat", 1)?;
                     self.hir_set_method_call(left_hir, &method, vec![right_hir], left);
                     return Some(Ok(left.clone()));
                 }
@@ -201,7 +204,6 @@ impl<'a> Analyzer<'a> {
             if ln != rn {
                 return None;
             }
-            let lname = ln?;
             let method = match opr.kind {
                 TokenKind::PlusToken => "add",
                 TokenKind::MinusToken => "sub",
@@ -209,8 +211,10 @@ impl<'a> Analyzer<'a> {
                 TokenKind::SlashToken => "div",
                 _ => return None,
             };
-            let mangled = method_fn(lname, method);
-            self.hir_set_method_call(left_hir, &mangled, vec![right_hir], left);
+            let receiver = left_hir.as_ref().map(|hir| hir.ty)
+                .unwrap_or_else(|| self.type_ctx.lower(left));
+            let identity = self.gpu_method_identity(receiver, method, 1)?;
+            self.hir_set_method_call(left_hir, &identity, vec![right_hir], left);
             return Some(Ok(left.clone()));
         }
 
@@ -236,9 +240,10 @@ impl<'a> Analyzer<'a> {
         } else {
             return None;
         };
-        let name = Self::gpu_struct_name(vec_ty)?;
-        let mangled = method_fn(name, method);
-        self.hir_set_method_call(vec_hir, &mangled, vec![scalar_hir], vec_ty);
+        let receiver = vec_hir.as_ref().map(|hir| hir.ty)
+            .unwrap_or_else(|| self.type_ctx.lower(vec_ty));
+        let identity = self.gpu_method_identity(receiver, method, 1)?;
+        self.hir_set_method_call(vec_hir, &identity, vec![scalar_hir], vec_ty);
         Some(Ok(vec_ty.clone()))
     }
 
@@ -246,11 +251,29 @@ impl<'a> Analyzer<'a> {
         if !Self::is_gpu_vec(operand) {
             return false;
         }
-        let Some(name) = Self::gpu_struct_name(operand) else {
+        let receiver = operand_hir.as_ref().map(|hir| hir.ty)
+            .unwrap_or_else(|| self.type_ctx.lower(operand));
+        let Some(identity) = self.gpu_method_identity(receiver, "neg", 0) else {
             return false;
         };
-        let mangled = method_fn(name, "neg");
-        self.hir_set_method_call(operand_hir, &mangled, vec![], operand);
+        self.hir_set_method_call(operand_hir, &identity, vec![], operand);
         true
+    }
+
+    fn gpu_method_identity(
+        &self,
+        receiver: TypeId,
+        member: &str,
+        arity: usize,
+    ) -> Option<FunctionIdentity> {
+        let mut candidates = self.function_table.method_candidates(receiver, member)
+            .into_iter().filter(|identity| {
+                self.function_table.functions.get(identity).is_some_and(|info| {
+                    !info.is_static && info.parameters.len() == arity + 1
+                        && info.parameters.first() == Some(&receiver)
+                })
+            });
+        let identity = candidates.next()?;
+        candidates.next().is_none().then_some(identity)
     }
 }

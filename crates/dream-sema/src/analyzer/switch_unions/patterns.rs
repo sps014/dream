@@ -111,7 +111,10 @@ impl<'a> Analyzer<'a> {
                 self.hir_box_captured_binding(&name.text, subject_type);
             }
             (PatternNode::Variant(_, vname, subs), HirArmShape::Variant { .. }) => {
-                let Some(v) = union_info.as_ref().and_then(|info| info.variant(&vname.text)) else {
+                let Some(v) = union_info
+                    .as_ref()
+                    .and_then(|info| info.variant(&vname.text))
+                else {
                     return;
                 };
                 let fields: Vec<Type> = v.fields.iter().map(|f| f.type_.clone()).collect();
@@ -268,13 +271,13 @@ impl<'a> Analyzer<'a> {
         pattern: &PatternNode,
     ) -> Option<(Vec<dream_hir::HExpr>, Vec<(String, Type, dream_hir::HExpr)>)> {
         use dream_hir::{BinOp, HExpr, HExprKind};
-        let base = value_type.get_type();
+        let base = self.type_ctx.lower(value_type);
         match pattern {
             PatternNode::Wildcard(_) => Some((vec![], vec![])),
             PatternNode::Binding(name) => {
                 // A bare identifier naming a unit variant of the value's union is a variant test;
                 // otherwise it binds the whole value.
-                if let Some(info) = self.union_table.get(&base).cloned() {
+                if let Some(info) = self.union_info(base).cloned() {
                     if let Some(v) = info.variant(&name.text) {
                         if v.fields.is_empty() {
                             let cond = self.hx_bin(
@@ -297,7 +300,7 @@ impl<'a> Analyzer<'a> {
                 Some((vec![self.hx_bin(BinOp::Eq, value.clone(), le)], vec![]))
             }
             PatternNode::Variant(_qual, name, subs) => {
-                let info = self.union_table.get(&base).cloned()?;
+                let info = self.union_info(base).cloned()?;
                 let v = info.variant(&name.text)?.clone();
                 if subs.len() != v.fields.len() {
                     return None;

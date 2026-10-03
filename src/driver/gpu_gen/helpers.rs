@@ -7,10 +7,10 @@ use super::stmt::{emit_stmts, reject_gpu_string_meta};
 use super::ty::dream_ty_to_wgsl;
 use dream_abi::attributes::{has_compute_attr, has_fragment_attr, has_vertex_attr};
 use dream_diagnostics::DiagnosticBag;
+use dream_sema::module_graph::ProgramView;
 use dream_syntax::nodes::expression::ExpressionNode;
 use dream_syntax::nodes::function::FunctionNode;
 use dream_syntax::nodes::statement::StatementNode;
-use dream_syntax::nodes::ProgramNode;
 use indexmap::{IndexMap, IndexSet};
 use std::cell::RefCell;
 
@@ -243,7 +243,7 @@ fn maybe_add(name: &str, out: &mut IndexSet<String>) {
 /// `@gpu` free-function name → WGSL return type.
 /// `@gpu` free-function name → WGSL return type, plus stdlib GPU math methods that shaders
 /// are allowed to call even without an explicit `@gpu` attribute (`GpuMat4.perspective`, …).
-pub(super) fn build_helper_return_tys(program: &ProgramNode<'_>) -> IndexMap<String, String> {
+pub(super) fn build_helper_return_tys(program: &ProgramView<'_>) -> IndexMap<String, String> {
     use super::ty::dream_ty_to_wgsl;
     let mut map = IndexMap::new();
     for f in &program.functions {
@@ -266,7 +266,7 @@ pub(super) fn build_helper_return_tys(program: &ProgramNode<'_>) -> IndexMap<Str
 /// Emit WGSL `fn` definitions for helpers reachable from `entry_body`, in dependency order.
 pub(super) fn emit_helpers_wgsl(
     entry_body: &[StatementNode<'_>],
-    program: &ProgramNode<'_>,
+    program: &ProgramView<'_>,
     already_declared: &IndexSet<String>,
     diagnostics: &mut DiagnosticBag,
 ) -> String {
@@ -367,7 +367,7 @@ pub(super) fn emit_helpers_wgsl(
 /// so a struct holding another struct emits both, dependency first.
 fn emit_used_data_structs(
     needed: &IndexSet<String>,
-    program: &ProgramNode<'_>,
+    program: &ProgramView<'_>,
     already_declared: &IndexSet<String>,
     diagnostics: &mut DiagnosticBag,
 ) -> String {
@@ -405,7 +405,7 @@ fn emit_used_data_structs(
 /// `done` so shared dependencies are declared exactly once.
 fn emit_struct_with_deps(
     name: &str,
-    program: &ProgramNode<'_>,
+    program: &ProgramView<'_>,
     done: &mut IndexSet<String>,
     out: &mut String,
     diagnostics: &mut DiagnosticBag,
@@ -468,10 +468,7 @@ fn emit_one_helper(
         // emitted as the parameter type and the failure surfaced as a WGSL "unknown identifier"
         // naming a Dream type.
         if let dream_syntax::nodes::Type::Struct(tok, _) = &p.type_ {
-            if matches!(
-                tok.text.as_str(),
-                "GpuBuffer" | "GpuTexture" | "GpuSampler"
-            ) {
+            if matches!(tok.text.as_str(), "GpuBuffer" | "GpuTexture" | "GpuSampler") {
                 diagnostics.report_error(
                     format!(
                         "@gpu helper '{name}' cannot take '{}' as a parameter: {} is bound to a \
@@ -517,7 +514,7 @@ fn emit_one_helper(
     )
 }
 
-fn find_helper<'a>(program: &'a ProgramNode<'a>, name: &str) -> Option<&'a FunctionNode<'a>> {
+fn find_helper<'a>(program: &'a ProgramView<'a>, name: &str) -> Option<&'a FunctionNode<'a>> {
     if let Some(f) = program
         .functions
         .iter()
@@ -531,7 +528,7 @@ fn find_helper<'a>(program: &'a ProgramNode<'a>, name: &str) -> Option<&'a Funct
 /// Static methods on the GPU math / matrix types. Shaders may call these without `@gpu`
 /// (see `check_compute_call`); the emitter still needs the body to produce WGSL.
 fn iter_gpu_stdlib_methods<'a>(
-    program: &'a ProgramNode<'a>,
+    program: &'a ProgramView<'a>,
 ) -> impl Iterator<Item = &'a FunctionNode<'a>> {
     const HOSTS: &[&str] = &[
         "GpuMath", "GpuMat2", "GpuMat3", "GpuMat4", "GpuQuat", "GpuVec2", "GpuVec3", "GpuVec4",

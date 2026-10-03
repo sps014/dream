@@ -21,11 +21,15 @@ use dream_syntax::nodes::{
 use dream_syntax::parser::Parser;
 use dream_syntax::token::syntax_token::SyntaxToken;
 
+mod graph;
+
 /// Collects every top-level declaration from all parsed files (user code + imports + prelude +
 /// `@json` derives), tagged with its originating file so semantic diagnostics attribute errors
 /// correctly.
 #[derive(Default)]
 pub struct ProgramAccumulator<'a> {
+    pub parsed_files: indexmap::IndexMap<String, ProgramNode<'a>>,
+    pub import_edges: indexmap::IndexMap<String, Vec<String>>,
     pub visited: HashSet<String>,
     pub all_functions: Vec<FunctionNode<'a>>,
     pub all_structs: Vec<StructDeclarationNode<'a>>,
@@ -35,10 +39,8 @@ pub struct ProgramAccumulator<'a> {
     pub all_globals: Vec<GlobalVariableNode<'a>>,
     pub file_contents: HashMap<String, String>,
     /// Every file that declared a `module a.b.c;`, mapped to its dot-joined module path. Files
-    /// absent from this map belong to the implicit, unnamed root module. Handed to the analyzer
-    /// (see `Analyzer::with_file_modules`) so module-scoped `internal` visibility and aliased
-    /// `import ... as` resolution can compare/resolve modules after every file's individual
-    /// `ProgramNode` has been flattened into one merged program.
+    /// absent from this map belong to the implicit, unnamed root module. Used when assembling
+    /// graph modules for embedded and generated source files.
     pub file_modules: HashMap<String, Rc<str>>,
     /// Every aliased `import a.b.c as x;` encountered across all files, as
     /// `(module path "a.b", item name "c", alias token "x")`. Resolved by the analyzer in a second
@@ -227,6 +229,7 @@ pub fn parse_file_recursive<'a>(
     diagnostics.extend(&file_diagnostics);
 
     let program = ast.get_root();
+    acc.parsed_files.insert(path_str.clone(), program.clone());
     if let Some(module_decl) = &program.module {
         acc.file_modules
             .insert(path_str.clone(), Rc::from(module_decl.path.text.as_str()));
@@ -293,6 +296,11 @@ pub fn parse_file_recursive<'a>(
             continue;
         }
 
+        let imported = import_path.canonicalize()?.to_string_lossy().into_owned();
+        acc.import_edges
+            .entry(path_str.clone())
+            .or_default()
+            .push(imported);
         parse_file_recursive(&import_path_str, acc, arena, diagnostics)?;
     }
 

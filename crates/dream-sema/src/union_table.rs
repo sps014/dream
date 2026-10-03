@@ -9,6 +9,7 @@ use indexmap::IndexMap;
 pub struct UnionFieldInfo {
     pub name: String,
     pub type_: Type,
+    pub ty: dream_types::TypeId,
 }
 
 /// A single variant of a discriminated union.
@@ -33,6 +34,6 @@ impl UnionInfo {
     }
 }
 
-/// Registered (monomorphized) unions: name -> variants. Insertion-ordered so the union protocol
+/// Registered (monomorphized) unions: TypeId -> variants. Insertion-ordered so the union protocol
 /// defaults and release code emit in a deterministic (registration) order.
-pub type UnionTable = IndexMap<String, UnionInfo>;
+pub type UnionTable = IndexMap<dream_types::TypeId, UnionInfo>;

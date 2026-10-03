@@ -364,7 +364,7 @@ mod tests {
     fn heap_payload_keeps_its_trailing_lock_word_aligned() {
         let mut interner = TypeInterner::new();
         let boolean = interner.prim(PrimTy::Bool);
-        let ty = interner.struct_ty(DefId(0), vec![]);
+        let ty = interner.struct_ty(DefId::root(0), vec![]);
         let table = LayoutTable::build(
             TargetLayout::default(),
             &interner,

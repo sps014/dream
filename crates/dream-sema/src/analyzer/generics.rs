@@ -1,25 +1,8 @@
 use super::*;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::function::ParameterNode;
-use dream_syntax::nodes::types::{is_unknown_type_name, mangle_generic};
 use dream_syntax::nodes::{FunctionNode, Type};
 use dream_syntax::token::token_kind::TokenKind;
 use dream_text::text_span::TextSpan;
-
-/// The coarse shape of a type name, as classified by [`Analyzer::name_shape`].
-enum NameShape<'s> {
-    /// `T[]`: always a heap-allocated array reference.
-    Array,
-    /// `string`: a heap-allocated reference (spelled as a primitive name for historical reasons).
-    String,
-    /// A non-`string` scalar primitive (`int`, `bool`, `byte`, ...), stored inline.
-    Primitive,
-    /// A declared nominal `struct`/`class`; [`crate::struct_table::StructInfo::is_value`]
-    /// says which.
-    Nominal(&'s crate::struct_table::StructInfo),
-    /// Not a recognized name (an interface, `object`/`js`, or an unresolved/generic name).
-    Unknown,
-}
 
 impl<'a> Analyzer<'a> {
     /// Substitutes every generic parameter appearing in a method's parameter or return types
@@ -37,107 +20,61 @@ impl<'a> Analyzer<'a> {
     }
 
     pub(in crate::analyzer) fn match_generic_type(
+        &self,
         formal: &Type,
-        arg: &str,
+        arg: dream_types::TypeId,
         param_name: &str,
-    ) -> Option<String> {
-        match formal {
-            Type::Struct(token, None) if token.text == param_name => Some(arg.to_string()),
-            Type::Generic(name) if name == param_name => Some(arg.to_string()),
-            Type::Array(inner) => {
-                if let Some(arg_inner) = arg.strip_suffix("[]") {
-                    Self::match_generic_type(inner, arg_inner, param_name)
-                } else {
-                    None
-                }
+    ) -> Option<dream_types::TypeId> {
+        use dream_types::TyKind;
+        match (formal, self.type_ctx.interner.kind(arg)) {
+            (Type::Struct(token, None), _) if token.text == param_name => Some(arg),
+            (Type::Generic(name), _) if name == param_name => Some(arg),
+            (Type::Array(inner), TyKind::Array(arg_inner)) => {
+                self.match_generic_type(inner, *arg_inner, param_name)
             }
-            // `Future<TOut>` / `List<T>` against `Future_int` or `Future<int>` spellings.
-            Type::Struct(token, Some(args)) => {
-                if let Some(inner_args) = Self::split_generic_type_str(arg, &token.text) {
-                    if args.len() != inner_args.len() {
-                        return None;
-                    }
-                    for (f, a) in args.iter().zip(inner_args.iter()) {
-                        if let Some(c) = Self::match_generic_type(f, a, param_name) {
-                            return Some(c);
-                        }
-                    }
-                }
-                None
+            (Type::Tuple(formals), TyKind::Tuple(actuals)) if formals.len() == actuals.len() => {
+                formals.iter().zip(actuals).find_map(|(formal, &actual)| {
+                    self.match_generic_type(formal, actual, param_name)
+                })
             }
-            // `fun(TIn): TOut` against `fun(int):int` — recurse into params and the return type.
-            // An `async fun(...): T` value is typed as `fun(...): T` until a `Future<T>` context
-            // wraps it, so also accept `fun(...): Future<TOut>` against a bare `T` return.
-            Type::Function(formals, ret) => {
-                let (arg_params, arg_ret) = Self::split_fun_type_str(arg)?;
-                if formals.len() != arg_params.len() {
-                    return None;
-                }
-                for (f, a) in formals.iter().zip(arg_params.iter()) {
-                    if let Some(c) = Self::match_generic_type(f, a, param_name) {
-                        return Some(c);
-                    }
-                }
-                if let Some(c) = Self::match_generic_type(ret, arg_ret, param_name) {
-                    return Some(c);
-                }
-                // `Future<TOut>` formal return vs bare `T` actual (async fun sugar).
-                if let Type::Struct(token, Some(args)) = ret.as_ref() {
-                    if token.text == "Future" && args.len() == 1 {
-                        return Self::match_generic_type(&args[0], arg_ret, param_name);
-                    }
-                }
-                None
+            (
+                Type::Struct(token, Some(formals)),
+                TyKind::Struct(def, actuals)
+                | TyKind::Union(def, actuals)
+                | TyKind::Interface(def, actuals),
+            ) if formals.len() == actuals.len()
+                && self
+                    .type_ctx
+                    .resolve(self.type_ctx.defs.get(*def).kind, &token.text)
+                    == Some(*def) =>
+            {
+                formals.iter().zip(actuals).find_map(|(formal, &actual)| {
+                    self.match_generic_type(formal, actual, param_name)
+                })
+            }
+            (Type::Function(formals, ret), TyKind::Func(actuals, arg_ret))
+                if formals.len() == actuals.len() =>
+            {
+                formals
+                    .iter()
+                    .zip(actuals)
+                    .find_map(|(formal, &actual)| {
+                        self.match_generic_type(formal, actual, param_name)
+                    })
+                    .or_else(|| self.match_generic_type(ret, *arg_ret, param_name))
+                    .or_else(|| {
+                        let Type::Struct(token, Some(args)) = ret.as_ref() else {
+                            return None;
+                        };
+                        let future = self.type_ctx.resolve(DefKind::Struct, FUTURE_TYPE)?;
+                        (args.len() == 1
+                            && self.type_ctx.resolve(DefKind::Struct, &token.text) == Some(future))
+                        .then(|| self.match_generic_type(&args[0], *arg_ret, param_name))
+                        .flatten()
+                    })
             }
             _ => None,
         }
-    }
-
-    /// Splits `Future_int` / `Future<int>` (when `base` is `Future`) into the type-argument
-    /// spellings, or `None` if `s` is not an application of `base`.
-    fn split_generic_type_str<'b>(s: &'b str, base: &str) -> Option<Vec<&'b str>> {
-        if let Some(rest) = s.strip_prefix(base).and_then(|r| r.strip_prefix('<')) {
-            let inner = rest.strip_suffix('>')?;
-            return Some(Self::split_top_level_args(inner));
-        }
-        if let Some(rest) = s.strip_prefix(base).and_then(|r| r.strip_prefix('_')) {
-            // Mangling joins args with `_`; nested generics are rare here and already flattened.
-            return Some(rest.split('_').filter(|p| !p.is_empty()).collect());
-        }
-        None
-    }
-
-    fn split_top_level_args(s: &str) -> Vec<&str> {
-        let mut out = Vec::new();
-        let mut depth = 0i32;
-        let mut start = 0;
-        for (i, ch) in s.char_indices() {
-            match ch {
-                '(' | '<' => depth += 1,
-                ')' | '>' => depth -= 1,
-                ',' if depth == 0 => {
-                    out.push(s[start..i].trim());
-                    start = i + 1;
-                }
-                _ => {}
-            }
-        }
-        out.push(s[start..].trim());
-        out
-    }
-
-    /// Splits a `fun(a,b):ret` spelling into `([a, b], ret)`, or `None` if `s` is not a fun type.
-    fn split_fun_type_str(s: &str) -> Option<(Vec<&str>, &str)> {
-        let rest = s.strip_prefix("fun(")?;
-        let close = rest.find(')')?;
-        let params_str = &rest[..close];
-        let after = rest[close + 1..].strip_prefix(':')?;
-        let params = if params_str.is_empty() {
-            Vec::new()
-        } else {
-            Self::split_top_level_args(params_str)
-        };
-        Some((params, after.trim()))
     }
 
     /// Determines the concrete type bound to each generic parameter of `template` for one call.
@@ -145,10 +82,10 @@ impl<'a> Analyzer<'a> {
     /// from the actual argument passed to the first formal parameter that is exactly that
     /// parameter. Parameters that cannot be inferred produce a diagnostic.
     pub(super) fn infer_generic_bindings(
-        &self,
+        &mut self,
         template: &FunctionNode<'a>,
         generic_args: &Option<Vec<Type>>,
-        params_types: &[String],
+        params_types: &[dream_types::TypeId],
         position: &TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) -> GenericBindings {
@@ -167,28 +104,36 @@ impl<'a> Analyzer<'a> {
                 return gen_params
                     .iter()
                     .zip(generics.iter())
-                    .map(|(param, arg)| (param.text.clone(), arg.clone()))
+                    .map(|(param, arg)| {
+                        let id = self.type_ctx.lower(arg);
+                        (param.text.clone(), self.type_ctx.syntax_type(id))
+                    })
                     .collect();
             }
         }
 
-        gen_params.iter().map(|param| {
+        let scope = self.type_ctx.scope();
+        self.type_ctx
+            .set_scope(self.graph.module_for_file(template.file_path.as_deref()));
+        let bindings = gen_params.iter().map(|param| {
             let concrete = template.parameters.iter().enumerate().find_map(|(i, formal)| {
                 params_types.get(i).and_then(|arg| {
-                    Self::match_generic_type(&formal.type_, arg, &param.text)
+                    self.match_generic_type(&formal.type_, *arg, &param.text)
                 })
             });
             match concrete {
-                Some(concrete) => (param.text.clone(), Self::concrete_type_from_str(&concrete)),
+                Some(concrete) => (param.text.clone(), self.type_ctx.syntax_type(concrete)),
                 None => {
                     diagnostics.report_error(
                         format!("Cannot infer generic parameter '{}' of function '{}'; specify type arguments explicitly", param.text, template.name.text),
                         Some(*position),
                     );
-                    (param.text.clone(), Type::Void)
+                    (param.text.clone(), Type::Unknown)
                 }
             }
-        }).collect()
+        }).collect();
+        self.type_ctx.set_scope(scope);
+        bindings
     }
 
     /// Returns `ty` with any generic parameter substituted for its concrete type per the
@@ -336,59 +281,69 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// True when `concrete` satisfies a `struct`/`unmanaged`/`shared`/`class` kind constraint.
-    /// `struct` requires a *value type* (a non-`string` scalar primitive or a value `struct`),
-    /// which may still hold reference-typed fields; `unmanaged` additionally requires it to be
-    /// *blittable* (recursively only value fields, no inner heap pointers - a self-contained run of
-    /// bytes); `shared` is the Sendable analogue (see [`Self::name_is_shared`]); `class` requires a
-    /// reference type.
     pub(super) fn type_satisfies_kind(
-        &self,
+        &mut self,
         concrete: &Type,
         kind: dream_syntax::nodes::ConstraintKind,
     ) -> bool {
-        if matches!(concrete, Type::Unknown) || is_unknown_type_name(&concrete.get_type()) {
-            return true;
-        }
-        if matches!(kind, dream_syntax::nodes::ConstraintKind::Shared)
-            && matches!(concrete, Type::Function(_, _) | Type::Void)
-        {
-            return true;
-        }
-        if let Type::Tuple(elems) = concrete {
-            return match kind {
-                dream_syntax::nodes::ConstraintKind::Struct => {
-                    elems.iter().all(|e| self.type_satisfies_kind(e, kind))
-                }
-                dream_syntax::nodes::ConstraintKind::Unmanaged => elems.iter().all(|e| {
-                    self.type_satisfies_kind(e, dream_syntax::nodes::ConstraintKind::Unmanaged)
-                }),
-                dream_syntax::nodes::ConstraintKind::Shared => {
-                    elems.iter().all(|e| self.type_satisfies_kind(e, kind))
-                }
-                dream_syntax::nodes::ConstraintKind::Class => false,
-            };
-        }
-        let name = concrete.get_type();
-        match kind {
-            dream_syntax::nodes::ConstraintKind::Struct => self.name_is_value_type(&name),
-            dream_syntax::nodes::ConstraintKind::Unmanaged => {
-                self.name_is_blittable_value(&name, &mut indexmap::IndexSet::new())
+        let ty = self.type_ctx.lower(concrete);
+        self.type_id_satisfies_kind(ty, kind, &mut indexmap::IndexSet::new())
+    }
+
+    pub(super) fn type_id_satisfies_kind(
+        &self,
+        ty: dream_types::TypeId,
+        kind: dream_syntax::nodes::ConstraintKind,
+        seen: &mut indexmap::IndexSet<dream_types::TypeId>,
+    ) -> bool {
+        use dream_syntax::nodes::ConstraintKind;
+        use dream_types::{PrimTy, TyKind};
+        match self.type_ctx.interner.kind(ty) {
+            TyKind::Error => true,
+            TyKind::Prim(PrimTy::String) => {
+                matches!(kind, ConstraintKind::Class | ConstraintKind::Shared)
             }
-            dream_syntax::nodes::ConstraintKind::Shared => {
-                self.name_is_shared(&name, &mut indexmap::IndexSet::new())
+            TyKind::Prim(_) => !matches!(kind, ConstraintKind::Class),
+            TyKind::Func(_, _) | TyKind::Void => matches!(kind, ConstraintKind::Shared),
+            TyKind::Tuple(elems) => {
+                !matches!(kind, ConstraintKind::Class)
+                    && elems
+                        .iter()
+                        .all(|&elem| self.type_id_satisfies_kind(elem, kind, seen))
             }
-            dream_syntax::nodes::ConstraintKind::Class => self.name_is_reference_type(&name),
+            TyKind::Struct(def, _) => {
+                let value = self.type_ctx.defs.is_value(*def);
+                match kind {
+                    ConstraintKind::Class => !value,
+                    ConstraintKind::Struct => value,
+                    ConstraintKind::Shared if !value => self.type_ctx.interner.is_shared_def(*def),
+                    ConstraintKind::Unmanaged | ConstraintKind::Shared => {
+                        if !value {
+                            return false;
+                        }
+                        if !seen.insert(ty) {
+                            return true;
+                        }
+                        self.struct_info(ty).is_some_and(|info| {
+                            info.fields
+                                .values()
+                                .all(|field| self.type_id_satisfies_kind(field.ty, kind, seen))
+                        })
+                    }
+                }
+            }
+            TyKind::Enum(_) => !matches!(kind, ConstraintKind::Class),
+            TyKind::Array(_)
+            | TyKind::Object
+            | TyKind::Js
+            | TyKind::Interface(_, _)
+            | TyKind::Union(_, _) => matches!(kind, ConstraintKind::Class),
         }
     }
 
-    /// True when `ty` is a still-unbound generic type parameter (an unresolved name, e.g. `TIn`
-    /// inside a generic template's own body before monomorphization substitutes it) rather than a
-    /// concrete, checkable type. Lets a call-site intrinsic (e.g. `Bytes.toWire<T>`) defer its own
-    /// validation to the monomorphized pass instead of misreporting the bare parameter name as
-    /// failing a constraint it hasn't been bound long enough to actually satisfy or violate.
-    pub(super) fn is_unresolved_generic_type(&self, ty: &Type) -> bool {
-        matches!(self.name_shape(&ty.get_type()), NameShape::Unknown)
+    pub(super) fn is_unresolved_generic_type(&mut self, ty: &Type) -> bool {
+        let id = self.type_ctx.lower(ty);
+        matches!(self.type_ctx.interner.kind(id), dream_types::TyKind::Error)
     }
 
     /// Reports an error unless `ty` satisfies the `unmanaged` (blittable) kind. Used by the raw
@@ -434,106 +389,6 @@ impl<'a> Analyzer<'a> {
         self.require_unmanaged(ty, who, position, diagnostics);
     }
 
-    /// The coarse shape of a type name, as needed to decide the `struct`/
-    /// `unmanaged`/`class` kind constraints. Single source of truth for "what counts as an array /
-    /// a string / a scalar primitive / a declared value struct", shared by
-    /// [`Self::name_is_value_type`], [`Self::name_is_blittable_value`], and
-    /// [`Self::name_is_reference_type`] below (previously each re-derived this classification from
-    /// the raw name independently).
-    fn name_shape<'s>(&'s self, name: &str) -> NameShape<'s> {
-        if name.ends_with("[]") {
-            return NameShape::Array;
-        }
-        if name == "string" {
-            return NameShape::String;
-        }
-        if dream_syntax::nodes::types::is_boxable_primitive(name) {
-            return NameShape::Primitive;
-        }
-        match self.struct_table.get_struct(name) {
-            Some(info) => NameShape::Nominal(info),
-            // An interface, `object`/`js`, or an unresolved/generic name: not a known value shape,
-            // so it falls back to a reference type below (the pre-existing default).
-            None => NameShape::Unknown,
-        }
-    }
-
-    /// True when `name` is a value type: a non-`string` scalar primitive or a declared value
-    /// `struct` (regardless of whether its fields are references). The complement of
-    /// [`Self::name_is_reference_type`] for known nominal types.
-    fn name_is_value_type(&self, name: &str) -> bool {
-        match self.name_shape(name) {
-            NameShape::Primitive => true,
-            NameShape::Nominal(info) => info.is_value,
-            NameShape::Array | NameShape::String | NameShape::Unknown => false,
-        }
-    }
-
-    fn name_is_blittable_value(
-        &self,
-        name: &str,
-        seen: &mut indexmap::IndexSet<String>,
-    ) -> bool {
-        match self.name_shape(name) {
-            NameShape::Array | NameShape::String | NameShape::Unknown => false,
-            NameShape::Primitive => true,
-            NameShape::Nominal(info) => {
-                if !info.is_value {
-                    return false; // class / reference struct
-                }
-                if !seen.insert(name.to_string()) {
-                    return true; // cycle guard (value structs cannot actually recurse by value)
-                }
-                for f in info.fields.values() {
-                    let fname = f.type_.get_type();
-                    if !self.name_is_blittable_value(&fname, seen) {
-                        return false;
-                    }
-                }
-                true
-            }
-        }
-    }
-
-    /// Sendable analogue: blittable values, `string`, value structs whose fields are all shared,
-    /// and `@shared class` instances. Arrays and ordinary classes are not shared.
-    fn name_is_shared(&self, name: &str, seen: &mut indexmap::IndexSet<String>) -> bool {
-        if name == "void" {
-            return true;
-        }
-        match self.name_shape(name) {
-            NameShape::Array | NameShape::Unknown => false,
-            NameShape::String | NameShape::Primitive => true,
-            NameShape::Nominal(info) => {
-                if !info.is_value {
-                    return self
-                        .type_ctx
-                        .defs
-                        .lookup(dream_types::DefKind::Struct, name)
-                        .is_some_and(|def| self.type_ctx.interner.is_shared_def(def));
-                }
-                if !seen.insert(name.to_string()) {
-                    return true;
-                }
-                for f in info.fields.values() {
-                    let fname = f.type_.get_type();
-                    if !self.name_is_shared(&fname, seen) {
-                        return false;
-                    }
-                }
-                true
-            }
-        }
-    }
-
-    fn name_is_reference_type(&self, name: &str) -> bool {
-        match self.name_shape(name) {
-            NameShape::Array | NameShape::String | NameShape::Unknown => true,
-            NameShape::Primitive => false,
-            NameShape::Nominal(info) => !info.is_value,
-        }
-    }
-
     /// True when `concrete` implements the interface named by `bound` (after substituting the
     /// monomorphization `bindings` into `bound`, e.g. `Comparable<T>` -> `Comparable<int>`).
     pub(super) fn type_satisfies_bound(
@@ -543,28 +398,26 @@ impl<'a> Analyzer<'a> {
         bindings: &GenericBindings,
         diagnostics: &mut DiagnosticBag,
     ) -> bool {
+        let concrete_id = self.type_ctx.lower(concrete);
+        if matches!(
+            self.type_ctx.interner.kind(concrete_id),
+            dream_types::TyKind::Error
+        ) {
+            return true;
+        }
         let bound = substitute_generic_type(bound, bindings);
-        let iface = match Self::resolve_struct_parts(&bound) {
-            Some((base, args)) if args.is_empty() => base,
-            Some((base, args)) => mangle_generic(&base, &args),
-            None => return false,
+        let Some((base, args)) = Self::resolve_struct_parts(&bound) else {
+            return false;
         };
-        let concrete_name = match Self::resolve_struct_parts(concrete) {
-            Some((base, args)) => mangle_generic(&base, &args),
-            None => concrete.get_type(),
-        };
-        self.implements_as_interface_ref(&concrete_name, &iface, diagnostics)
-    }
-
-    /// Builds the implicit `this` parameter injected as the first argument of every method.
-    /// For an extension method on a primitive, `this` is the primitive's value type (e.g.
-    /// `int` -> `Type::Integer`, a stack value); for a struct it is the struct reference type.
-    pub(super) fn make_this_param(struct_type_str: &str) -> ParameterNode {
-        let token = synthetic_token(TokenKind::IdentifierToken, struct_type_str);
-        let this_type = Type::from_token(token.clone()).unwrap_or(Type::Struct(token, None));
-        ParameterNode::new(
-            synthetic_token(TokenKind::IdentifierToken, "this"),
-            this_type,
-        )
+        self.ensure_interface_instantiated(
+            &base,
+            &args,
+            &bound
+                .get_span()
+                .unwrap_or_else(|| synthetic_token(TokenKind::IdentifierToken, &base).position),
+            diagnostics,
+        );
+        let iface = self.type_ctx.lower(&bound);
+        self.implements_as_interface_ref(concrete_id, iface, diagnostics)
     }
 }

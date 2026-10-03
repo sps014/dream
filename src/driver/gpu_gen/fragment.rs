@@ -1,26 +1,26 @@
 //! `@fragment` shader emission.
 
+use super::bind::{emit_resource_param, finalize_uniforms, BindingAlloc};
 use super::context::EmitCtx;
 use super::helpers::emit_helpers_wgsl;
-use indexmap::IndexSet;
 use super::ident::escape_wgsl_ident;
 use super::layout::{
     build_struct_field_tys, emit_fragment_out_struct_wgsl, emit_interface_struct_wgsl, find_struct,
     fragment_color_target_count, has_position_gpuvec4, struct_name_of,
 };
-use super::bind::{emit_resource_param, finalize_uniforms, BindingAlloc};
 use super::stmt::{emit_stmts, reject_gpu_string_meta};
 use super::types::GpuShaderInfo;
 use dream_diagnostics::DiagnosticBag;
+use dream_sema::module_graph::ProgramView;
 use dream_syntax::nodes::function::FunctionNode;
 use dream_syntax::nodes::types::Type;
-use dream_syntax::nodes::ProgramNode;
 use indexmap::IndexMap;
+use indexmap::IndexSet;
 use std::cell::RefCell;
 
 pub(super) fn emit_fragment(
     func: &FunctionNode<'_>,
-    program: &ProgramNode<'_>,
+    program: &ProgramView<'_>,
     diagnostics: &mut DiagnosticBag,
 ) -> GpuShaderInfo {
     let name = func.name.text.clone();

@@ -44,6 +44,11 @@ impl Index {
         let mut parser = Parser::new(lexer, &arena, &mut scratch);
 
         let mut builder = Builder {
+            type_ctx: std::cell::RefCell::new(dream_types::TypeCtx::new()),
+            decl_types: HashMap::new(),
+            inferred_types: HashMap::new(),
+            callables: HashMap::new(),
+            member_owners: HashMap::new(),
             decls: Vec::new(),
             refs: Vec::new(),
             inlay_hints: Vec::new(),
@@ -51,7 +56,6 @@ impl Index {
             is_main: true,
             current_file: None,
             fn_params: HashMap::new(),
-            method_params: HashMap::new(),
             ctor_params: HashMap::new(),
         };
         if let Ok(ast) = parser.parse() {

@@ -27,8 +27,10 @@ use dream_syntax::nodes::{ExpressionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
 use dream_text::text_span::TextSpan;
-use dream_types::{method_fn, DefId, DefKind, PrimTy, TyKind, TypeId};
+use dream_types::{DefId, PrimTy, TyKind, TypeId};
 
+mod conversions;
+mod slots;
 impl<'a> Analyzer<'a> {
     /// The legacy AST `Type` for the dynamic `js` type (a bare nominal name the type context lowers
     /// to `TyKind::Js`).
@@ -86,9 +88,8 @@ impl<'a> Analyzer<'a> {
     }
 
     fn def_is_capturing_fun(&self, def: DefId) -> bool {
-        let name = self.type_ctx.defs.name(def);
         self.closure_captures
-            .get(name)
+            .get(&def)
             .is_some_and(|caps| !caps.is_empty())
     }
 
@@ -126,8 +127,7 @@ impl<'a> Analyzer<'a> {
     /// Builds a call to a `js` bridge extern (`js.__something`), resolved by its mangled def name.
     /// Returns `None` only if the bridge is somehow unregistered (a stdlib bug).
     fn js_bridge_call(&self, method: &str, args: Vec<HExpr>, ret: TypeId) -> Option<HExpr> {
-        let mangled = method_fn(dream_abi::js_abi::JS_TYPE, method);
-        let def = self.type_ctx.defs.lookup(DefKind::Function, &mangled)?;
+        let def = self.js_bridge_def(method)?;
         Some(HExpr::new(
             ret,
             HExprKind::Call {
@@ -142,336 +142,6 @@ impl<'a> Analyzer<'a> {
         ))
     }
 
-    /// Wraps `e` in an implicit cast to primitive `prim` (for widening a boxing argument to the
-    /// bridge's declared parameter type, e.g. `float` -> `double`).
-    fn cast_prim(&mut self, e: HExpr, prim: PrimTy) -> HExpr {
-        let ty = self.type_ctx.interner.prim(prim);
-        HExpr::new(ty, HExprKind::Cast(Box::new(e)))
-    }
-
-    /// Boxes a Dream value into a `js` handle: a `js` value passes through; primitives/`string` route
-    /// through the matching `__box_*` bridge; a `fun(js): void` / `fun(): void` is wrapped as a JS
-    /// callable. Any other type (struct/class/union/array/list) yields `None` (a compile error at the
-    /// call site, pointing at `js.object()` / `js.array()`).
-    ///
-    /// A capturing `fun(...)` yields `None` after reporting via `diagnostics` when provided — the
-    /// host bridges strip the closure env word, so only captureless functions are marshalable.
-    pub(super) fn box_to_js(
-        &mut self,
-        e: HExpr,
-        pos: Option<TextSpan>,
-        diagnostics: Option<&mut DiagnosticBag>,
-    ) -> Option<HExpr> {
-        let js = self.type_ctx.interner.js();
-        let stripped = e.ty;
-        let kind = self.type_ctx.interner.kind(stripped).clone();
-        match kind {
-            TyKind::Js => Some(e),
-            TyKind::Enum(_) => self.js_bridge_call("box_int", vec![e], js),
-            TyKind::Prim(p) => match p {
-                PrimTy::String => self.js_bridge_call("box_string", vec![e], js),
-                PrimTy::Bool => self.js_bridge_call("box_bool", vec![e], js),
-                PrimTy::Double => self.js_bridge_call("box_double", vec![e], js),
-                PrimTy::Float => {
-                    let d = self.cast_prim(e, PrimTy::Double);
-                    self.js_bridge_call("box_double", vec![d], js)
-                }
-                PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => {
-                    let wide =
-                        HExpr::new(self.type_ctx.interner.long(), HExprKind::Cast(Box::new(e)));
-                    self.js_bridge_call("box_long", vec![wide], js)
-                }
-                PrimTy::Int => self.js_bridge_call("box_int", vec![e], js),
-                PrimTy::UInt | PrimTy::Byte | PrimTy::Char => {
-                    let i = self.cast_prim(e, PrimTy::Int);
-                    self.js_bridge_call("box_int", vec![i], js)
-                }
-            },
-            TyKind::Func(params, _ret) => {
-                // A Dream function handed to a JS API as a persistent handle. `e` is a boxed
-                // `fun(...)` value (see `hir_set_func_value`); the host has no env-restoring
-                // prologue of its own, so only the funcidx half is meaningful — a *capturing*
-                // lambda would lose its environment and is rejected at compile time. Arity 0/1 use
-                // the documented `func0`/`func` convenience bridges; any higher arity routes through
-                // the generalized `funcN` bridge, which receives the raw funcref-table index plus
-                // the parameter count and wraps it host-side as `fun(js, …): void`. Each parameter
-                // is marshaled as a `js` handle and the result is discarded.
-                if self.func_expr_is_capturing(&e) {
-                    if let Some(diagnostics) = diagnostics {
-                        diagnostics.report_error(Self::JS_CAPTURING_CALLBACK_MSG.to_string(), pos);
-                    }
-                    return None;
-                }
-                let funcidx = self.hir_funcbox_funcidx(e)?;
-                match params.len() {
-                    0 => self.js_bridge_call("func0", vec![funcidx], js),
-                    1 => self.js_bridge_call("func", vec![funcidx], js),
-                    n => {
-                        let arity =
-                            HExpr::new(self.type_ctx.interner.int(), HExprKind::IntLit(n as i64));
-                        self.js_bridge_call("funcN", vec![funcidx, arity], js)
-                    }
-                }
-            }
-            // A struct/class deep-copies into a plain JS object; the backend generates a
-            // `$<Type>_to_js` marshaler that the `Cast` dispatches to (see `mir/emit/js_marshal.rs`).
-            TyKind::Struct(..) => Some(HExpr::new(js, HExprKind::Cast(Box::new(e)))),
-            _ => None,
-        }
-    }
-
-    /// Unboxes a `js` value into primitive/`string` `target`, via the matching `__as_*` bridge (plus
-    /// a widening/narrowing cast when `target` is not the bridge's own result type). Used at typed
-    /// boundaries by `coerce_to`. When `e` is a fresh `js.get` / `JsCall`, rewrites to a fused
-    /// `get_as_*` / `call_as_*` / `get_call_as_*` bridge so the intermediate handle is never
-    /// registered.
-    pub(super) fn unbox_from_js(&mut self, e: HExpr, target: TypeId) -> HExpr {
-        let target_stripped = target;
-        // A struct/class target reconstructs from the JS object's properties via the generated
-        // `$js_to_<Type>` marshaler that the `Cast` dispatches to (heap result for reference
-        // classes; in-place `(j, dst)` fill for value structs — see `mir/emit/js_marshal.rs`).
-        if matches!(
-            self.type_ctx.interner.kind(target_stripped),
-            TyKind::Struct(..)
-        ) {
-            return HExpr::new(target_stripped, HExprKind::Cast(Box::new(e)));
-        }
-        let TyKind::Prim(p) = self.type_ctx.interner.kind(target_stripped).clone() else {
-            return e;
-        };
-        let Some(suffix) = Self::js_as_suffix(p) else {
-            return e;
-        };
-        let bridge_ret = self.js_as_bridge_ret(p);
-        if let Some(fused) = self.try_fuse_unbox(e.clone(), suffix, bridge_ret) {
-            return self.js_widen_as_result(fused, p, target_stripped);
-        }
-        let call = self.js_bridge_call(&format!("as_{}", suffix), vec![e], bridge_ret);
-        let raw = call.unwrap_or_else(|| HExpr::new(bridge_ret, HExprKind::IntLit(0)));
-        self.js_widen_as_result(raw, p, target_stripped)
-    }
-
-    /// Suffix of the `as_*` / `get_as_*` / `call_as_*` bridge for `p` (`"int"`, `"string"`, …).
-    fn js_as_suffix(p: PrimTy) -> Option<&'static str> {
-        match p {
-            PrimTy::String => Some("string"),
-            PrimTy::Bool => Some("bool"),
-            PrimTy::Double | PrimTy::Float => Some("double"),
-            PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => Some("long"),
-            PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => Some("int"),
-        }
-    }
-
-    /// Return type of the matching `as_*` bridge (before any widening cast to the Dream target).
-    fn js_as_bridge_ret(&self, p: PrimTy) -> TypeId {
-        match p {
-            PrimTy::String => self.type_ctx.interner.string(),
-            PrimTy::Bool => self.type_ctx.interner.bool(),
-            PrimTy::Double | PrimTy::Float => self.type_ctx.interner.double(),
-            PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => {
-                self.type_ctx.interner.long()
-            }
-            PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => {
-                self.type_ctx.interner.int()
-            }
-        }
-    }
-
-    /// Casts a fused/`as_*` bridge result to `target` when the Dream binding type is narrower or a
-    /// different integer width than the bridge's native return (e.g. `float` from `as_double`,
-    /// `byte` from `as_int`).
-    fn js_widen_as_result(&self, raw: HExpr, p: PrimTy, target: TypeId) -> HExpr {
-        match p {
-            PrimTy::Float | PrimTy::UInt | PrimTy::Byte | PrimTy::Char | PrimTy::ULong => {
-                HExpr::new(target, HExprKind::Cast(Box::new(raw)))
-            }
-            _ => {
-                if raw.ty == target {
-                    raw
-                } else {
-                    HExpr::new(target, HExprKind::Cast(Box::new(raw)))
-                }
-            }
-        }
-    }
-
-    /// True when `def` is the mangled `js.<method>` bridge.
-    fn is_js_bridge_def(&self, def: DefId, method: &str) -> bool {
-        self.type_ctx.defs.name(def) == method_fn(dream_abi::js_abi::JS_TYPE, method)
-    }
-
-    /// Peels a trivial `Cast` wrapper so fusion can see the underlying bridge call.
-    fn peel_js_cast(e: HExpr) -> HExpr {
-        match e.kind {
-            HExprKind::Cast(inner) => Self::peel_js_cast(*inner),
-            _ => e,
-        }
-    }
-
-    /// If `e` is `js.get(recv, name)`, returns `(recv, name)`.
-    fn match_js_get(&self, e: &HExpr) -> Option<(HExpr, HExpr)> {
-        let e = match &e.kind {
-            HExprKind::Cast(inner) => inner.as_ref(),
-            _ => e,
-        };
-        match &e.kind {
-            HExprKind::Call { callee, args }
-                if args.len() == 2 && self.is_js_bridge_def(callee.def, "get") =>
-            {
-                Some((args[0].clone(), args[1].clone()))
-            }
-            _ => None,
-        }
-    }
-
-    /// Rewrites a fresh get / call / get_call into the matching `*_as_*` bridge, or `None` when
-    /// `e` is not a fusible dynamic op (stored intermediate, unknown shape, …).
-    fn try_fuse_unbox(&self, e: HExpr, suffix: &str, ret: TypeId) -> Option<HExpr> {
-        let e = Self::peel_js_cast(e);
-        if let Some((recv, name)) = self.match_js_get(&e) {
-            return self.js_bridge_call(&format!("get_as_{}", suffix), vec![recv, name], ret);
-        }
-        match e.kind {
-            HExprKind::JsCall {
-                callee: _,
-                target,
-                via,
-                method,
-                args,
-            } => {
-                let bridge = match (&via, &method) {
-                    (Some(_), Some(_)) => format!("get_call_as_{}", suffix),
-                    (None, Some(_)) => format!("call_as_{}", suffix),
-                    (None, None) => format!("invoke_as_{}", suffix),
-                    (Some(_), None) => return None,
-                };
-                self.js_call_node(
-                    &bridge,
-                    *target,
-                    via.map(|v| *v),
-                    method.map(|m| *m),
-                    args,
-                    ret,
-                )
-            }
-            _ => None,
-        }
-    }
-
-    /// A `string` literal HExpr (for the dynamic member/method name).
-    fn js_name_lit(&self, name: &str) -> HExpr {
-        let string = self.type_ctx.interner.string();
-        HExpr::new(string, HExprKind::StringLit(name.to_string()))
-    }
-
-    /// Prepares one argument for a shadow-stack `js` call *slot*: unlike [`box_to_js`], primitives
-    /// are NOT boxed into handles (the host reads them straight out of the tagged slot); only a
-    /// `float` is widened to `double` so its slot payload is an `f64`. `js`, `string`, primitive,
-    /// `enum`, a `fun(js)`/`fun()` callback, and a primitive/`string`/`js` array are all accepted as
-    /// they are; any other type returns `None` (a compile error pointing at `js.object()`/`js.array()`).
-    ///
-    /// Capturing callbacks are rejected by the caller ([`js_slot_args`]) before this runs.
-    fn js_slot_arg(&mut self, e: HExpr) -> Option<HExpr> {
-        let stripped = e.ty;
-        let kind = self.type_ctx.interner.kind(stripped).clone();
-        match kind {
-            TyKind::Js | TyKind::Enum(_) => Some(e),
-            TyKind::Prim(PrimTy::Float) => Some(self.cast_prim(e, PrimTy::Double)),
-            TyKind::Prim(_) => Some(e),
-            // A callback slot carries its arity in the slot `aux` word (see `js_abi::slot_desc`), so
-            // the host wraps the funcref as `fun(js, …): void` with the right number of `js`
-            // parameters. Any arity is marshalable through the slot buffer (env is stripped at emit).
-            TyKind::Func(..) => Some(e),
-            TyKind::Array(elem) => {
-                let ek = self.type_ctx.interner.kind(elem).clone();
-                match ek {
-                    TyKind::Prim(_) | TyKind::Js | TyKind::Enum(_) => Some(e),
-                    _ => None,
-                }
-            }
-            // A struct/class argument deep-copies into a JS object handle (a JS slot).
-            TyKind::Struct(..) => self.box_to_js(e, None, None),
-            _ => None,
-        }
-    }
-
-    /// Prepares every argument via [`js_slot_arg`], reporting a compile error and returning `None` on
-    /// the first non-marshalable one.
-    fn js_slot_args(
-        &mut self,
-        args: Vec<Option<HExpr>>,
-        pos: Option<TextSpan>,
-        diagnostics: &mut DiagnosticBag,
-    ) -> Option<Vec<HExpr>> {
-        let mut out = Vec::with_capacity(args.len());
-        for arg in args {
-            let arg = arg?;
-            if matches!(self.type_ctx.interner.kind(arg.ty), TyKind::Func(..))
-                && !self.ensure_captureless_js_callback(&arg, pos, diagnostics)
-            {
-                return None;
-            }
-            let arg_display =
-                dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, arg.ty);
-            match self.js_slot_arg(arg) {
-                Some(a) => out.push(a),
-                None => {
-                    diagnostics.report_error(
-                        format!(
-                            "cannot pass a value of type '{}' to a js call; build a JS value with js.object() / js.array() and set its members natively",
-                            arg_display
-                        ),
-                        pos,
-                    );
-                    return None;
-                }
-            }
-        }
-        Some(out)
-    }
-
-    /// Builds a `JsCall` HIR node targeting a shadow-stack `js` bridge (`call` / `invoke` /
-    /// `get_call` / `*_as_*` / `set_slot` / `index_set_slot`). `via` is the property to read
-    /// before calling when fusing get+call. Returns `None` only if the bridge is somehow
-    /// unregistered (a stdlib bug).
-    fn js_call_node(
-        &self,
-        bridge: &str,
-        target: HExpr,
-        via: Option<HExpr>,
-        method: Option<HExpr>,
-        args: Vec<HExpr>,
-        ret: TypeId,
-    ) -> Option<HExpr> {
-        let mangled = method_fn(dream_abi::js_abi::JS_TYPE, bridge);
-        let def = self.type_ctx.defs.lookup(DefKind::Function, &mangled)?;
-        Some(HExpr::new(
-            ret,
-            HExprKind::JsCall {
-                callee: Callee {
-                    def,
-                    instance: vec![],
-                    ret,
-                    take_params: vec![],
-                },
-                target: Box::new(target),
-                via: via.map(Box::new),
-                method: method.map(Box::new),
-                args,
-            },
-        ))
-    }
-
-    /// If `recv` is a pure `js.get(base, prop)` (possibly under a cast), peel it into
-    /// `(base, Some(prop))` for fused `get_call`; otherwise `(recv, None)`.
-    fn peel_js_get_recv(&self, recv: HExpr) -> (HExpr, Option<HExpr>) {
-        if let Some((base, prop)) = self.match_js_get(&recv) {
-            (base, Some(prop))
-        } else {
-            (recv, None)
-        }
-    }
-
     /// Analyzes a method call `recv.method(args)` on a `js` receiver. A method actually declared on
     /// `js` (the stdlib conversion/release helpers such as `to_int`, `is_null`, `release`) is
     /// dispatched normally; any other name binds dynamically at runtime via `call`.
@@ -483,10 +153,11 @@ impl<'a> Analyzer<'a> {
         ctx: &super::AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        let mangled = method_fn(dream_abi::js_abi::JS_TYPE, &method.text);
         // Cloned up front (rather than re-looked-up below) because the argument analysis loop needs
         // `&mut self`, which would otherwise conflict with a borrow held from this lookup.
-        let known_sig = self.function_table.get_function(&mangled).ok();
+        let known_sig = self
+            .method_info(self.type_ctx.interner.js(), &method.text)
+            .ok();
 
         let mut arg_hirs = Vec::with_capacity(params.len());
         for (i, param) in params.iter().enumerate() {
@@ -518,7 +189,7 @@ impl<'a> Analyzer<'a> {
                 }
             }
             let ret = sig.return_type.clone().unwrap_or(Type::Void);
-            self.hir_set_method_call(recv, &sig.name, arg_hirs, &ret);
+            self.hir_set_method_call(recv, &sig.identity, arg_hirs, &ret);
             return Ok(ret);
         }
 
@@ -530,74 +201,6 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
         Ok(Self::js_type())
-    }
-
-    /// `recv.name` -> `js.get(recv, "name")`. Sets the last-expression HIR.
-    pub(super) fn desugar_js_get(&mut self, recv: Option<HExpr>, name: &str) {
-        if !self.hir_active() {
-            self.hir_none();
-            return;
-        }
-        let js = self.type_ctx.interner.js();
-        let name_lit = self.js_name_lit(name);
-        let call = match recv {
-            Some(recv) => self.js_bridge_call("get", vec![recv, name_lit], js),
-            None => None,
-        };
-        self.hir_set_last(call);
-    }
-
-    /// True when `ty` can ride a shadow-stack slot for `set_slot` / `index_set_slot` (same set as
-    /// call args, minus callbacks/arrays which still need the handle `set` path for property
-    /// identity).
-    fn js_slot_settable(&self, ty: TypeId) -> bool {
-        matches!(
-            self.type_ctx.interner.kind(ty),
-            TyKind::Js | TyKind::Enum(_) | TyKind::Prim(_)
-        )
-    }
-
-    /// `recv.name = value` -> `js.set_slot` for slot-marshalable values (one crossing, no pre-box),
-    /// else `js.set(recv, "name", box(value))`. Emits a void statement.
-    pub(super) fn desugar_js_set(
-        &mut self,
-        recv: Option<HExpr>,
-        name: &str,
-        value: Option<HExpr>,
-        pos: Option<TextSpan>,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        if !self.hir_active() {
-            return;
-        }
-        let void = self.type_ctx.interner.void();
-        let name_lit = self.js_name_lit(name);
-        let (Some(recv), Some(value)) = (recv, value) else {
-            self.hir_fail();
-            return;
-        };
-        if self.js_slot_settable(value.ty) {
-            let Some(value) = self.js_slot_arg(value) else {
-                self.hir_fail();
-                return;
-            };
-            let call = self.js_call_node("set_slot", recv, None, Some(name_lit), vec![value], void);
-            self.hir_expr_stmt(call);
-            return;
-        }
-        let Some(value) = self.box_to_js(value, pos, Some(diagnostics)) else {
-            // `box_to_js` already reported the capturing-callback diagnostic when applicable.
-            if !diagnostics.has_errors() {
-                diagnostics.report_error(
-                    "cannot assign this value to a js property; build a JS value with js.object() / js.array()".to_string(),
-                    pos,
-                );
-            }
-            self.hir_fail();
-            return;
-        };
-        let call = self.js_bridge_call("set", vec![recv, name_lit, value], void);
-        self.hir_expr_stmt(call);
     }
 
     /// `recv.name(args...)` -> `js.call` or fused `js.get_call` when `recv` is a pure get.
@@ -702,7 +305,6 @@ impl<'a> Analyzer<'a> {
 
     /// `Option<inner>.None` as HIR, instantiating `Option<inner>` if this is its first use.
     fn option_none(&mut self, inner: &Type) -> Option<HExpr> {
-        use dream_syntax::nodes::types::mangle_generic;
         let mut throwaway = DiagnosticBag::new(None);
         let no_span = TextSpan {
             start: 0,
@@ -712,17 +314,14 @@ impl<'a> Analyzer<'a> {
         };
         let args = std::slice::from_ref(inner);
         self.ensure_union_instantiated("Option", args, &no_span, &mut throwaway);
-        let mangled = mangle_generic("Option", args);
-        let def = self.type_ctx.defs.lookup(DefKind::Union, &mangled)?;
-        let variant = self
-            .union_table
-            .get(&mangled)?
-            .variant("None")?
-            .discriminant as usize;
         let ty = self.type_ctx.lower(&Type::Struct(
             synthetic_token(TokenKind::IdentifierToken, "Option"),
             Some(vec![inner.clone()]),
         ));
+        let TyKind::Union(def, _) = *self.type_ctx.interner.kind(ty) else {
+            return None;
+        };
+        let variant = self.union_info(ty)?.variant("None")?.discriminant as usize;
         Some(HExpr::new(
             ty,
             HExprKind::UnionNew {
@@ -731,78 +330,5 @@ impl<'a> Analyzer<'a> {
                 args: vec![],
             },
         ))
-    }
-
-    /// `recv[key]` -> `js.index_get(recv, box(key))`. Sets `hir.last`.
-    pub(super) fn desugar_js_index_get(
-        &mut self,
-        recv: Option<HExpr>,
-        key: Option<HExpr>,
-        pos: Option<TextSpan>,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        if !self.hir_active() {
-            self.hir_none();
-            return;
-        }
-        let js = self.type_ctx.interner.js();
-        let (Some(recv), Some(key)) = (recv, key) else {
-            self.hir_none();
-            return;
-        };
-        let Some(key) = self.box_to_js(key, pos, Some(diagnostics)) else {
-            if !diagnostics.has_errors() {
-                diagnostics
-                    .report_error("cannot use this value as a js index key".to_string(), pos);
-            }
-            self.hir_none();
-            return;
-        };
-        let call = self.js_bridge_call("index_get", vec![recv, key], js);
-        self.hir_set_last(call);
-    }
-
-    /// `recv[key] = value` -> `js.index_set_slot` when both are slot-marshalable, else boxed
-    /// `js.index_set`. Emits a void statement.
-    pub(super) fn desugar_js_index_set(
-        &mut self,
-        recv: Option<HExpr>,
-        key: Option<HExpr>,
-        value: Option<HExpr>,
-        pos: Option<TextSpan>,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        if !self.hir_active() {
-            return;
-        }
-        let void = self.type_ctx.interner.void();
-        let (Some(recv), Some(key), Some(value)) = (recv, key, value) else {
-            self.hir_fail();
-            return;
-        };
-        if self.js_slot_settable(key.ty) && self.js_slot_settable(value.ty) {
-            let (Some(key), Some(value)) = (self.js_slot_arg(key), self.js_slot_arg(value)) else {
-                self.hir_fail();
-                return;
-            };
-            let call =
-                self.js_call_node("index_set_slot", recv, None, None, vec![key, value], void);
-            self.hir_expr_stmt(call);
-            return;
-        }
-        let key = self.box_to_js(key, pos, Some(diagnostics));
-        let value = self.box_to_js(value, pos, Some(diagnostics));
-        let (Some(key), Some(value)) = (key, value) else {
-            if !diagnostics.has_errors() {
-                diagnostics.report_error(
-                    "cannot use this value as a js index key/value".to_string(),
-                    pos,
-                );
-            }
-            self.hir_fail();
-            return;
-        };
-        let call = self.js_bridge_call("index_set", vec![recv, key, value], void);
-        self.hir_expr_stmt(call);
     }
 }

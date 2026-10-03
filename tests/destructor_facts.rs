@@ -47,6 +47,7 @@ fn destructor_identity_survives_symbol_changes_and_ignores_decoy_names() {
             .find(|f| f.def == destructor)
             .expect("destructor function");
         cleanup.name = "renamed_cleanup".into();
+        cleanup.symbol = "renamed_cleanup".into();
         dream_mir::passes::optimize_module(&mut mir, interner);
         assert!(
             mir.functions.iter().any(|f| f.def == destructor),

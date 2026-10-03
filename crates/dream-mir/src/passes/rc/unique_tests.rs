@@ -352,7 +352,7 @@ fn shared_class_never_release_unique() {
 #[test]
 fn js_never_release_unique() {
     let i = dream_types::TypeInterner::new();
-    let make = dream_types::DefId(0);
+    let make = dream_types::DefId::root(0);
     let mut b = FunctionBuilder::new("f", i.void());
     let h = b.new_local(i.js(), Some("h".into()));
     b.assign(

@@ -14,10 +14,12 @@ impl<'a> Analyzer<'a> {
         function: &FunctionNode<'a>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Rc<RefCell<SymbolTable>>, SemanticError> {
+        self.current_file = function.file_path.clone();
+        self.type_ctx
+            .set_scope(self.graph.module_for_file(function.file_path.as_deref()));
         let param_table = Rc::new(RefCell::new(
             self.add_function_param_table(function, diagnostics)?,
         ));
-        self.current_file = function.file_path.clone();
         let errors_before = diagnostics.errors().count();
         self.hir_begin_function(function);
         let is_unsafe = function.attributes.iter().any(|a| a.name.text == "unsafe");
@@ -71,7 +73,10 @@ impl<'a> Analyzer<'a> {
         let mut param_table = SymbolTable::new(Some(self.global_symbol_table.clone()));
         for param in function.parameters.iter() {
             self.check_reserved_name(&param.name, "parameter", diagnostics);
-            if let Err(e) = param_table.add_symbol(param.name.text.clone(), param.type_.clone()) {
+            let sink = !param.is_ref && !param.is_borrow && param.name.text != "this";
+            if let Err(e) =
+                param_table.add_parameter(param.name.text.clone(), param.type_.clone(), sink)
+            {
                 diagnostics.report_error(e.to_string(), Some(param.name.position));
             }
         }
@@ -80,7 +85,10 @@ impl<'a> Analyzer<'a> {
         // locals as far as the body is concerned (its runtime storage, an unboxed `.value` read
         // through a `CaptureCell<T>` populated from `$__closure_env`, is purely a `hir_begin_function`
         // concern; see the capturing-lambda prologue there).
-        if let Some(captures) = self.closure_captures.get(&function.name.text) {
+        let function_def = self
+            .function_declaration(function)
+            .map(|identity| identity.0);
+        if let Some(captures) = function_def.and_then(|def| self.closure_captures.get(&def)) {
             for (cap_name, cap_ty) in captures.clone() {
                 let _ = param_table.add_symbol(cap_name, cap_ty);
             }

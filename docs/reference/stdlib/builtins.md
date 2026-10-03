@@ -56,4 +56,4 @@ Example: `Math.sqrt(9.0)` → `3.0`. A negative input is NaN.
 
 - `.length` on strings, arrays, and collections.
 - `Buffer.alloc<T>(n)` — a zeroed fixed array. Prefer [List](collections.md) when the size grows.
-- Override `@override public fun to_string()` so `print` and `+` show your type. See [object](../language/objects.md).
+- Override `public override fun to_string()` so `print` and `+` show your type. See [object](../language/objects.md).

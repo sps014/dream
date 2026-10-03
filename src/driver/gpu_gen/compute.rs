@@ -11,11 +11,11 @@ use super::ty::dream_ty_to_wgsl;
 use super::types::{GpuBinding, GpuKernelInfo};
 use dream_abi::attributes::{compute_workgroup_size, has_readonly_attr};
 use dream_diagnostics::DiagnosticBag;
+use dream_sema::module_graph::ProgramView;
 use dream_syntax::nodes::expression::ExpressionNode;
 use dream_syntax::nodes::function::{FunctionNode, ParameterNode};
 use dream_syntax::nodes::statement::StatementNode;
 use dream_syntax::nodes::types::Type;
-use dream_syntax::nodes::ProgramNode;
 use indexmap::{IndexMap, IndexSet};
 use std::cell::RefCell;
 
@@ -62,7 +62,7 @@ fn collect_workgroup_names(stmts: &[StatementNode<'_>], out: &mut Vec<String>) {
 
 pub(super) fn emit_kernel(
     func: &FunctionNode<'_>,
-    program: &ProgramNode<'_>,
+    program: &ProgramView<'_>,
     diagnostics: &mut DiagnosticBag,
 ) -> GpuKernelInfo {
     let name = func.name.text.clone();
@@ -166,9 +166,7 @@ pub(super) fn emit_kernel(
                 }
                 uniforms.push((pname.clone(), ty.clone()));
                 // group/binding are back-patched by `finalize_uniforms`
-                bindings.push(GpuBinding::buffer(
-                    pname, 0, 0, "uniform", ty, false, false,
-                ));
+                bindings.push(GpuBinding::buffer(pname, 0, 0, "uniform", ty, false, false));
             }
         }
     }
@@ -209,7 +207,8 @@ pub(super) fn emit_kernel(
     reject_gpu_string_meta(func.body, &ctx);
     emit_stmts(func.body, &mut body, &mut workgroup_decls, 1, &ctx);
 
-    let helpers = super::helpers::emit_helpers_wgsl(func.body, program, &value_structs, diagnostics);
+    let helpers =
+        super::helpers::emit_helpers_wgsl(func.body, program, &value_structs, diagnostics);
 
     let mut wgsl = String::new();
     wgsl.push_str(&header);
@@ -311,7 +310,7 @@ fn is_builtin_gpu_type(name: &str) -> bool {
 /// User value structs referenced as `GpuBuffer<T>` element types (need WGSL `struct` decls).
 fn collect_value_struct_names(
     func: &FunctionNode<'_>,
-    program: &ProgramNode<'_>,
+    program: &ProgramView<'_>,
 ) -> IndexSet<String> {
     let mut names = IndexSet::new();
     for param in &func.parameters {

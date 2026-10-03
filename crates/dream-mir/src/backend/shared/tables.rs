@@ -140,8 +140,11 @@ fn protocol_strings(mir: &Mir) -> Vec<String> {
     ];
     v.push("length".into());
     v.push("type".into());
-    for (_ty, layout) in &mir.layouts.structs {
-        v.push(format!("{} {{ ", layout.name));
+    for (ty, layout) in &mir.layouts.structs {
+        v.push(format!(
+            "{} {{ ",
+            mir.type_names.get(ty).unwrap_or(&layout.name)
+        ));
         for (i, f) in layout.fields.iter().enumerate() {
             v.push(if i == 0 {
                 format!("{}: ", f.name)

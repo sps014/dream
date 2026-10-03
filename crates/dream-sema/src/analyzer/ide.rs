@@ -12,24 +12,41 @@
 //! re-exported from `analyzer`.)
 
 use super::Analyzer;
-use crate::function_table::FunctionTableInfo;
+use crate::function_table::{FunctionIdentity, FunctionTableInfo};
 use crate::union_table::UnionFieldInfo;
 use dream_syntax::nodes::{Type, Visibility};
 use dream_text::text_span::TextSpan;
 use indexmap::IndexMap;
 use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 
+mod identity;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdeSource {
+    pub file: Option<String>,
+    pub start: usize,
+    pub end: usize,
+}
+
 /// What a recorded source range resolved to. Names are source-level; keys are the analyzer's
 /// member-lookup keys (mangled spellings like `List_int`, matching `struct_table`/`method_fn`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IdeTarget {
+    Resolved {
+        def: dream_types::DefId,
+        source: IdeSource,
+        target: Box<IdeTarget>,
+    },
     /// A function-local or parameter binding.
     Local { name: String },
     /// A top-level variable.
     Global { name: String },
     /// A resolved call target (free function, method, static method): the emitted function-table
     /// key plus the name as written at the call site.
-    Callee { key: String, label: String },
+    Callee {
+        key: FunctionIdentity,
+        label: String,
+    },
     /// A `new T(...)` constructor call; `type_key` is the concrete (possibly monomorphized) type.
     Constructor { type_key: String },
     /// An `obj.field` access; `type_key` is the receiver's member-lookup key.
@@ -46,6 +63,7 @@ pub enum IdeTarget {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeSummary {
     Named {
+        ty: dream_types::TypeId,
         /// Member-lookup key (`int`, `List_int`, `Point[]`, ...) when the type is addressable in
         /// the signature tables; `None` for unknown/poison types.
         key: Option<String>,
@@ -140,8 +158,11 @@ pub struct GlobalOut {
 /// arena references); all queries return deterministic orderings.
 #[derive(Debug, Clone, Default)]
 pub struct IdeSnapshot {
+    pub primary_file: Option<String>,
     pub refs: Vec<IdeRef>,
-    pub functions: HashMap<String, FnSigOut>,
+    pub functions: HashMap<FunctionIdentity, FnSigOut>,
+    pub methods: HashMap<String, Vec<MemberInfo>>,
+    pub future_types: HashSet<dream_types::TypeId>,
     pub structs: HashMap<String, Vec<FieldOut>>,
     pub enums: IndexMap<String, Vec<(String, i32)>>,
     pub unions: IndexMap<String, Vec<VariantOut>>,
@@ -218,13 +239,12 @@ impl IdeSnapshot {
             }
         }
 
-        let prefix = format!("{key}_");
-        self.push_methods(prefix, &mut out, &mut seen);
-        // Array-extend methods are registered per *element* type (`int__arr_get`), not per
-        // array spelling — merge that family too for `T[]` receivers.
-        if let Some(elem) = key.strip_suffix("[]") {
-            self.push_methods(format!("{elem}__arr_"), &mut out, &mut seen);
-            self.push_methods(format!("{elem}[]_"), &mut out, &mut seen);
+        if let Some(methods) = self.methods.get(key) {
+            for method in methods {
+                if seen.insert(method.name.clone()) {
+                    out.push(method.clone());
+                }
+            }
         }
 
         if let Some(variants) = self.enums.get(key) {
@@ -277,60 +297,6 @@ impl IdeSnapshot {
         out.sort_by(|a, b| a.name.cmp(&b.name));
         out
     }
-
-    /// Appends the methods of one registration family: every function whose emitted key starts
-    /// with `prefix` (`{Type}_{method}`, `{elem}__arr_{method}`, …). Deduplicated through
-    /// `seen`, which may already contain field/variant names.
-    fn push_methods(
-        &self,
-        prefix: String,
-        out: &mut Vec<MemberInfo>,
-        seen: &mut HashSet<String>,
-    ) {
-        for (emitted, sig) in &self.functions {
-            let Some(rest) = emitted.strip_prefix(prefix.as_str()) else {
-                continue;
-            };
-            // Overload-mangled keys append `.TypeId...`; getters/setters use internal `$` names.
-            let base = rest.split('.').next().unwrap_or(rest);
-            if base.is_empty() || base == "constructor" {
-                continue;
-            }
-            if let Some(prop) = base.strip_prefix("get$") {
-                if !prop.is_empty() && seen.insert(format!("get${prop}")) {
-                    out.push(MemberInfo {
-                        kind: MemberKind::Property,
-                        name: prop.to_string(),
-                        detail: format!("{}: {}", prop, sig.ret),
-                        is_static: false,
-                    });
-                }
-                continue;
-            }
-            if base.starts_with("set$") {
-                continue;
-            }
-            let params = sig
-                .params
-                .iter()
-                .map(|p| format!("{}: {}", p.name, p.display))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let ret = if sig.ret == "void" {
-                String::new()
-            } else {
-                format!(": {}", sig.ret)
-            };
-            if seen.insert(base.to_string()) {
-                out.push(MemberInfo {
-                    kind: MemberKind::Method,
-                    name: base.to_string(),
-                    detail: format!("{}({}){}", base, params, ret),
-                    is_static: sig.is_static,
-                });
-            }
-        }
-    }
 }
 
 impl<'a> Analyzer<'a> {
@@ -338,16 +304,50 @@ impl<'a> Analyzer<'a> {
     /// `&mut self` only because rendering lowers AST types through the interner.
     pub fn ide_snapshot(&mut self) -> IdeSnapshot {
         let mut refs = std::mem::take(&mut self.ide_refs);
+        for (&def, source) in &self.ide_sources {
+            let info = self.type_ctx.defs.get(def);
+            let target = match info.kind {
+                dream_types::DefKind::Function => IdeTarget::Callee {
+                    key: (def, vec![]),
+                    label: info.name.clone(),
+                },
+                _ => IdeTarget::Constructor {
+                    type_key: info.name.clone(),
+                },
+            };
+            refs.push(IdeRef {
+                start: source.start,
+                end: source.end,
+                file: source.file.clone(),
+                target: IdeTarget::Resolved {
+                    def,
+                    source: source.clone(),
+                    target: Box::new(target),
+                },
+                result: TypeSummary::Unknown,
+            });
+        }
+        self.append_ide_member_declarations(&mut refs);
         refs.sort_by_key(|r| (r.start, r.end));
+        refs.dedup_by(|a, b| {
+            a.file == b.file && a.start == b.start && a.end == b.end && a.target == b.target
+        });
 
         // Array-extend methods monomorphize lazily (on first use), so a receiver typed `int[]`
         // whose methods were never called would otherwise complete with nothing. Attach the
         // extension family for every array type the document actually handles; diagnostics go
         // to a throwaway bag because this runs purely for editor queries.
-        let mut array_keys: Vec<String> = refs
+        let mut array_keys: Vec<dream_types::TypeId> = refs
             .iter()
             .filter_map(|r| match &r.result {
-                TypeSummary::Named { key: Some(k), .. } if k.ends_with("[]") => Some(k.clone()),
+                TypeSummary::Named { ty, .. }
+                    if matches!(
+                        self.type_ctx.interner.kind(*ty),
+                        dream_types::TyKind::Array(_)
+                    ) =>
+                {
+                    Some(*ty)
+                }
                 _ => None,
             })
             .collect();
@@ -356,13 +356,13 @@ impl<'a> Analyzer<'a> {
         if !array_keys.is_empty() {
             let mut scratch = dream_diagnostics::DiagnosticBag::new(None);
             for key in &array_keys {
-                self.ensure_array_collection(key, &mut scratch);
+                self.ensure_array_collection(*key, &mut scratch);
             }
         }
 
         // Collect owned inputs first so rendering (`ty_display`, which needs `&mut self` to lower
         // types) never runs against a live borrow of the tables.
-        let fn_inputs: Vec<(String, FunctionTableInfo)> = self
+        let fn_inputs: Vec<(FunctionIdentity, FunctionTableInfo)> = self
             .function_table
             .functions
             .iter()
@@ -372,12 +372,12 @@ impl<'a> Analyzer<'a> {
             .struct_table
             .structs
             .iter()
-            .map(|(name, info)| {
+            .map(|(ty, info)| {
                 (
-                    name.clone(),
+                    dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, *ty),
                     info.fields
                         .iter()
-                        .map(|(fname, f)| (fname.clone(), f.type_.clone(), f.visibility))
+                        .map(|(fname, f)| (fname.clone(), f.ty, f.visibility))
                         .collect::<Vec<_>>(),
                 )
             })
@@ -385,9 +385,9 @@ impl<'a> Analyzer<'a> {
         let union_inputs: Vec<UnionVariantInput> = self
             .union_table
             .iter()
-            .map(|(name, info)| {
+            .map(|(ty, info)| {
                 (
-                    name.clone(),
+                    dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, *ty),
                     info.variants
                         .iter()
                         .map(|v| (v.name.clone(), v.discriminant, v.fields.clone()))
@@ -395,15 +395,28 @@ impl<'a> Analyzer<'a> {
                 )
             })
             .collect();
-        let global_inputs: Vec<(String, String)> = self
+        let global_inputs: Vec<(String, dream_types::TypeId)> = self
             .globals
             .iter()
-            .map(|g| (g.name.clone(), g.type_str.clone()))
+            .map(|g| (g.name.clone(), g.ty))
             .collect();
 
         let mut functions = HashMap::with_capacity(fn_inputs.len());
         for (key, info) in fn_inputs {
             functions.insert(key, self.render_fn_sig(&info));
+        }
+        let mut methods = HashMap::new();
+        for ((receiver, member), identities) in &self.function_table.methods {
+            let key =
+                dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, *receiver);
+            let entries = methods.entry(key).or_insert_with(Vec::new);
+            for identity in identities {
+                if let Some(sig) = functions.get(identity) {
+                    if let Some(method) = render_method(member, sig) {
+                        entries.push(method);
+                    }
+                }
+            }
         }
 
         let mut structs = HashMap::with_capacity(struct_inputs.len());
@@ -411,7 +424,11 @@ impl<'a> Analyzer<'a> {
             let mut out: Vec<FieldOut> = fields
                 .into_iter()
                 .map(|(fname, ty, visibility)| FieldOut {
-                    display: self.ty_display(&ty),
+                    display: dream_types::display_name(
+                        &self.type_ctx.interner,
+                        &self.type_ctx.defs,
+                        ty,
+                    ),
                     name: fname,
                     public: visibility == Visibility::Public,
                 })
@@ -428,7 +445,11 @@ impl<'a> Analyzer<'a> {
                     fields: fields
                         .into_iter()
                         .map(|f| VariantFieldOut {
-                            display: self.ty_display(&f.type_),
+                            display: dream_types::display_name(
+                                &self.type_ctx.interner,
+                                &self.type_ctx.defs,
+                                f.ty,
+                            ),
                             name: f.name,
                         })
                         .collect(),
@@ -441,8 +462,12 @@ impl<'a> Analyzer<'a> {
 
         let globals = global_inputs
             .into_iter()
-            .map(|(name, type_str)| GlobalOut {
-                display: self.ty_display(&Self::concrete_type_from_str(&type_str)),
+            .map(|(name, ty)| GlobalOut {
+                display: dream_types::display_name(
+                    &self.type_ctx.interner,
+                    &self.type_ctx.defs,
+                    ty,
+                ),
                 name,
             })
             .collect();
@@ -452,15 +477,31 @@ impl<'a> Analyzer<'a> {
             .iter()
             .map(|(name, members)| {
                 (
-                    name.clone(),
+                    self.type_ctx.defs.name(*name).to_string(),
                     members.iter().map(|(n, v)| (n.clone(), *v)).collect(),
                 )
             })
             .collect();
 
+        let future_types = self
+            .type_ctx
+            .interner
+            .iter_kinds()
+            .filter_map(|(ty, kind)| match kind {
+                dream_types::TyKind::Struct(def, _)
+                    if self.type_ctx.defs.name(*def) == dream_syntax::nodes::types::FUTURE_TYPE =>
+                {
+                    Some(ty)
+                }
+                _ => None,
+            })
+            .collect();
         IdeSnapshot {
+            primary_file: None,
             refs,
             functions,
+            methods,
+            future_types,
             structs,
             enums,
             unions,
@@ -469,17 +510,16 @@ impl<'a> Analyzer<'a> {
     }
 
     fn render_fn_sig(&mut self, info: &FunctionTableInfo) -> FnSigOut {
-        let types = if info.parameter_types.len() == info.parameters.len() {
-            info.parameter_types.clone()
-        } else {
-            info.parameters
-                .iter()
-                .map(|p| Self::type_from_name(p))
-                .collect()
-        };
+        let scope = self.type_ctx.scope();
+        self.type_ctx.set_scope(info.identity.0.module);
         let is_method = info.param_names.first().is_some_and(|n| n == "this");
-        let mut params = Vec::with_capacity(types.len());
-        for (i, p) in types.iter().enumerate().skip(if is_method { 1 } else { 0 }) {
+        let mut params = Vec::with_capacity(info.parameters.len());
+        for (i, p) in info
+            .parameters
+            .iter()
+            .enumerate()
+            .skip(if is_method { 1 } else { 0 })
+        {
             let name = info
                 .param_names
                 .get(i)
@@ -487,10 +527,14 @@ impl<'a> Analyzer<'a> {
                 .unwrap_or_else(|| format!("arg{i}"));
             params.push(ParamOut {
                 name,
-                display: self.ty_display(p),
+                display: dream_types::display_name(
+                    &self.type_ctx.interner,
+                    &self.type_ctx.defs,
+                    *p,
+                ),
             });
         }
-        FnSigOut {
+        let signature = FnSigOut {
             label: render_label(&info.name),
             params,
             ret: self.ty_display(&Self::async_return_type(
@@ -499,7 +543,9 @@ impl<'a> Analyzer<'a> {
             )),
             is_static: info.is_static && !is_method,
             is_async: info.is_async,
-        }
+        };
+        self.type_ctx.set_scope(scope);
+        signature
     }
 
     /// Records one resolution. Synthesized spans (`start == end`) are skipped so desugar-time
@@ -514,6 +560,16 @@ impl<'a> Analyzer<'a> {
         if span.end <= span.start {
             return;
         }
+        let target = match (&target, &result) {
+            (IdeTarget::Constructor { .. }, TypeSummary::Named { ty, .. }) => {
+                self.resolve_ide_owner_target(*ty, None, target)
+            }
+            (IdeTarget::UnionVariant { variant, .. }, TypeSummary::Named { ty, .. }) => {
+                let member = variant.clone();
+                self.resolve_ide_owner_target(*ty, Some(&member), target)
+            }
+            _ => self.resolve_ide_target(target),
+        };
         self.ide_refs.push(IdeRef {
             start: span.start,
             end: span.end,
@@ -525,17 +581,28 @@ impl<'a> Analyzer<'a> {
 
     /// Summarizes an AST type for the IDE table (lookup key + pretty display).
     pub(in crate::analyzer) fn ide_summary(&mut self, ty: &Type) -> TypeSummary {
-        if ty.is_unknown() {
-            return TypeSummary::Unknown;
+        let id = self.type_ctx.lower(ty);
+        self.ide_summary_id(id)
+    }
+
+    pub(in crate::analyzer) fn ide_summary_id(&self, id: dream_types::TypeId) -> TypeSummary {
+        match self.type_ctx.interner.kind(id) {
+            dream_types::TyKind::Error => return TypeSummary::Unknown,
+            dream_types::TyKind::Tuple(elems) => {
+                return TypeSummary::Tuple {
+                    elems: elems
+                        .iter()
+                        .map(|elem| self.ide_summary_id(*elem))
+                        .collect(),
+                }
+            }
+            _ => {}
         }
-        if let Type::Tuple(elems) = ty {
-            return TypeSummary::Tuple {
-                elems: elems.iter().map(|e| self.ide_summary(e)).collect(),
-            };
-        }
+        let display = dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, id);
         TypeSummary::Named {
-            key: Some(ty.get_type()),
-            display: self.ty_display(ty),
+            ty: id,
+            key: Some(display.clone()),
+            display,
         }
     }
 
@@ -556,5 +623,36 @@ fn render_label(emitted: &str) -> String {
     no_module.split('.').next().unwrap_or(no_module).to_string()
 }
 
-type StructFieldInput = (String, Vec<(String, Type, Visibility)>);
+type StructFieldInput = (String, Vec<(String, dream_types::TypeId, Visibility)>);
 type UnionVariantInput = (String, Vec<(String, i32, Vec<UnionFieldInfo>)>);
+
+fn render_method(name: &str, sig: &FnSigOut) -> Option<MemberInfo> {
+    if name == dream_syntax::nodes::types::CONSTRUCTOR_NAME || name.starts_with("set$") {
+        return None;
+    }
+    if let Some(property) = name.strip_prefix("get$") {
+        return Some(MemberInfo {
+            kind: MemberKind::Property,
+            name: property.to_string(),
+            detail: format!("{property}: {}", sig.ret),
+            is_static: sig.is_static,
+        });
+    }
+    let params = sig
+        .params
+        .iter()
+        .map(|p| format!("{}: {}", p.name, p.display))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let ret = if sig.ret == "void" {
+        String::new()
+    } else {
+        format!(": {}", sig.ret)
+    };
+    Some(MemberInfo {
+        kind: MemberKind::Method,
+        name: name.to_string(),
+        detail: format!("{name}({params}){ret}"),
+        is_static: sig.is_static,
+    })
+}

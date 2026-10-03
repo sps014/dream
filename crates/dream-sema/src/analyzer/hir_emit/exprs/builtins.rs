@@ -125,14 +125,8 @@ impl<'a> Analyzer<'a> {
             return;
         }
         let string_ty = self.type_ctx.interner.string();
-        self.hir.last = value.map(|v| {
-            HExpr::new(
-                string_ty,
-                HExprKind::TypeName {
-                    value: Box::new(v),
-                },
-            )
-        });
+        self.hir.last =
+            value.map(|v| HExpr::new(string_ty, HExprKind::TypeName { value: Box::new(v) }));
     }
 
     /// Records string concatenation `a + b` (typed `string`): each non-string operand is first run
@@ -176,8 +170,8 @@ impl<'a> Analyzer<'a> {
         if ty.is_string() {
             return e;
         }
-        let base = ty.get_type();
-        if let Some(members) = self.enum_table.get(&base) {
+        if let dream_types::TyKind::Enum(def) = self.type_ctx.interner.kind(e.ty) {
+            let Some(members) = self.enum_members(*def) else { return e; };
             let arms: Vec<(i64, String)> = members
                 .iter()
                 .map(|(name, value)| (*value as i64, name.clone()))

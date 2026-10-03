@@ -429,21 +429,20 @@ mod tests {
         let func = HFunction {
             def,
             name: "add".to_string(),
+            symbol: "add".to_string(),
             instance: vec![],
             params: vec![
                 HParam {
                     local: LocalId(0),
                     name: "a".into(),
                     ty: int,
-                    is_ref: false,
-                    is_take: false,
+                    mode: crate::ParamMode::Borrow,
                 },
                 HParam {
                     local: LocalId(1),
                     name: "b".into(),
                     ty: int,
-                    is_ref: false,
-                    is_take: false,
+                    mode: crate::ParamMode::Borrow,
                 },
             ],
             ret: int,
@@ -464,6 +463,8 @@ mod tests {
             interfaces: InterfaceTable::default(),
             enums: indexmap::IndexMap::new(),
             type_names: indexmap::IndexMap::new(),
+            type_symbols: indexmap::IndexMap::new(),
+            object_methods: indexmap::IndexMap::new(),
         };
         assert_eq!(hir.functions.len(), 1);
         assert_eq!(hir.functions[0].params.len(), 2);

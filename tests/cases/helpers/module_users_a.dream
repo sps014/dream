@@ -1,0 +1,14 @@
+module users.a;
+
+public class User {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+}
+
+public fun first_user_value(): int {
+    let user = Option<User>.Some(User(17));
+    switch (user) {
+        Some(value) => { return value.value; }
+        None => { return 0; }
+    }
+}

@@ -31,23 +31,23 @@ pub(super) enum Reverse {
 
 impl Reverse {
     /// The C-callable adapter, defined by the shim.
-    pub(super) fn symbol(&self) -> String {
+    pub(super) fn symbol(&self, l: &Lcx<'_>) -> String {
+        let signature = l.mir.type_symbols.get(&self.fun_ty()).unwrap_or_else(|| {
+            crate::internal_error!("C callback signature has no structural symbol")
+        });
         match self {
-            Reverse::Callback {
-                fun_ty,
-                user_data_last,
-            } => format!(
+            Reverse::Callback { user_data_last, .. } => format!(
                 "dream_ctramp_{}{}",
-                fun_ty.0,
+                signature,
                 if *user_data_last { "_udl" } else { "" }
             ),
-            Reverse::Direct { symbol, fun_ty } => format!("{symbol}__c_{}", fun_ty.0),
+            Reverse::Direct { symbol, .. } => format!("{symbol}__c_{signature}"),
         }
     }
 
     /// The Dream-side body the adapter calls.
-    pub(super) fn body(&self) -> String {
-        reverse_body_name(&self.symbol())
+    pub(super) fn body(&self, l: &Lcx<'_>) -> String {
+        reverse_body_name(&self.symbol(l))
     }
 
     pub(super) fn fun_ty(&self) -> TypeId {
@@ -175,8 +175,8 @@ pub(super) fn reverse_trampolines(l: &Lcx<'_>) -> IndexMap<Reverse, (Vec<CShape>
 pub(super) fn register_reverse(l: &mut Lcx<'_>) {
     for (rev, (shapes, ret)) in reverse_trampolines(l) {
         let (r, ps) = body_sig(l, &rev, &shapes, &ret);
-        l.own_shim_callee(&rev.body(), FnSig::plain(FnTy::new(r.clone(), ps.clone())));
-        l.host(&rev.symbol(), FnSig::plain(FnTy::new(r, ps)));
+        l.own_shim_callee(&rev.body(l), FnSig::plain(FnTy::new(r.clone(), ps.clone())));
+        l.host(&rev.symbol(l), FnSig::plain(FnTy::new(r, ps)));
     }
 }
 
@@ -189,7 +189,7 @@ pub(super) fn emit_reverse(l: &mut Lcx<'_>) {
 fn reverse_trampoline(l: &mut Lcx<'_>, rev: &Reverse, shapes: &[CShape], ret: &CShape) {
     let fun_ty = rev.fun_ty();
     let (params, _) = fun_parts(l, fun_ty);
-    let mut fx = glue(l, &rev.body());
+    let mut fx = glue(l, &rev.body(l));
     let ud_at = rev.user_data_at(shapes.len());
     match ud_at {
         Some(at) => {

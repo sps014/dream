@@ -6,6 +6,7 @@ use dream_diagnostics::DiagnosticBag;
 use dream_hir::{HExpr, HExprKind};
 use dream_syntax::nodes::Type;
 use dream_syntax::token::syntax_token::SyntaxToken;
+use dream_types::{TyKind, TypeId};
 
 impl<'a> Analyzer<'a> {
     /// Resolves `sizeof(T)` to a type identity; MIR folds it using the completed target layout.
@@ -21,11 +22,23 @@ impl<'a> Analyzer<'a> {
         }
         if let Some((base_name, generic_args)) = Self::resolve_struct_parts(core) {
             let pos = ty.get_span().unwrap_or_else(empty_span);
-            self.ensure_struct_instantiated(&base_name, &generic_args, &pos, diagnostics);
+            let core_id = self.type_ctx.lower(core);
+            match self.type_ctx.interner.kind(core_id) {
+                TyKind::Struct(..) => {
+                    self.ensure_struct_instantiated(&base_name, &generic_args, &pos, diagnostics)
+                }
+                TyKind::Union(..) => {
+                    self.ensure_union_instantiated(&base_name, &generic_args, &pos, diagnostics)
+                }
+                TyKind::Interface(..) => {
+                    self.ensure_interface_instantiated(&base_name, &generic_args, &pos, diagnostics)
+                }
+                _ => {}
+            }
         }
 
-        let type_name = ty.get_type();
-        if type_name == "void" || type_name.is_empty() {
+        let sized_ty = self.type_ctx.lower(ty);
+        if matches!(self.type_ctx.interner.kind(sized_ty), TyKind::Void) {
             self.hir_none();
             report(
                 diagnostics,
@@ -35,11 +48,11 @@ impl<'a> Analyzer<'a> {
             return Ok(Type::Unknown);
         }
 
-        if !self.sizeof_type_known(&type_name) {
+        if !self.sizeof_type_known(sized_ty) {
             self.hir_none();
             report(
                 diagnostics,
-                format!("sizeof: unknown type '{}'", type_name),
+                format!("sizeof: unknown type '{}'", ty.display_name()),
                 ty.get_span(),
             );
             return Ok(Type::Unknown);
@@ -47,57 +60,22 @@ impl<'a> Analyzer<'a> {
 
         let int_ty = Self::type_from_name("int");
         let ty_id = self.type_ctx.interner.int();
-        let sized_ty = self.type_ctx.lower(ty);
         self.hir_set_last(Some(HExpr::new(ty_id, HExprKind::SizeOf(sized_ty))));
         Ok(int_ty)
     }
 
-    fn sizeof_type_known(&self, type_name: &str) -> bool {
-        if self.struct_table.get_struct(type_name).is_some() {
-            return true;
+    fn sizeof_type_known(&self, ty: TypeId) -> bool {
+        match self.type_ctx.interner.kind(ty) {
+            TyKind::Struct(..) => self.struct_info(ty).is_some(),
+            TyKind::Union(..) => self.union_info(ty).is_some(),
+            TyKind::Enum(def) => self.enum_members(*def).is_some(),
+            TyKind::Interface(..) => self.interface_method_list(ty).is_some(),
+            TyKind::Tuple(elements) => elements.iter().all(|&elem| self.sizeof_type_known(elem)),
+            TyKind::Prim(_) | TyKind::Object | TyKind::Js | TyKind::Array(_) | TyKind::Func(..) => {
+                true
+            }
+            TyKind::Void | TyKind::Error => false,
         }
-        if type_name.ends_with("[]") {
-            return true;
-        }
-        if type_name == "string"
-            || type_name == "object"
-            || type_name == "js"
-            || type_name == "void"
-        {
-            return true;
-        }
-        if self.enum_table.contains_key(type_name) {
-            return true;
-        }
-        if self.interface_methods.contains_key(type_name) {
-            return true;
-        }
-        if type_name.starts_with("fun(") {
-            return true;
-        }
-        if type_name.starts_with("Future<") {
-            return true;
-        }
-        if type_name.starts_with("Result<") {
-            return true;
-        }
-        if type_name.starts_with("Option<") {
-            return true;
-        }
-        matches!(
-            type_name,
-            "int"
-                | "uint"
-                | "float"
-                | "char"
-                | "byte"
-                | "bool"
-                | "long"
-                | "ulong"
-                | "double"
-                | "isize"
-                | "usize"
-        )
     }
 
     /// `nameof(a.b.c)` → string literal of the last path segment. Operand is not evaluated.
@@ -141,8 +119,12 @@ impl<'a> Analyzer<'a> {
             return Ok(Type::Unknown);
         }
 
-        let type_name = operand_type.get_type();
-        if type_name == "void" {
+        let value = self.hir_take();
+        let operand_id = value
+            .as_ref()
+            .map(|hir| hir.ty)
+            .unwrap_or_else(|| self.type_ctx.lower(&operand_type));
+        if matches!(self.type_ctx.interner.kind(operand_id), TyKind::Void) {
             self.hir_none();
             report(
                 diagnostics,
@@ -153,8 +135,9 @@ impl<'a> Analyzer<'a> {
         }
 
         let string_ty = Self::type_from_name("string");
-        if type_name == "object" || self.is_interface_name(&type_name) {
-            let value = self.hir_take();
+        if matches!(self.type_ctx.interner.kind(operand_id), TyKind::Object)
+            || self.is_interface_name(operand_id)
+        {
             self.hir_set_type_name(value);
         } else {
             let display = self.ty_display(&operand_type);
@@ -162,5 +145,67 @@ impl<'a> Analyzer<'a> {
             self.hir_set_last(Some(HExpr::new(ty_id, HExprKind::StringLit(display))));
         }
         Ok(string_ty)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::module_graph::ModuleGraph;
+    use bumpalo::Bump;
+    use dream_syntax::nodes::ProgramNode;
+    use dream_types::{DefKind, ModuleId};
+
+    #[test]
+    fn sizeof_enum_lookup_uses_definition_identity() {
+        let arena = Bump::new();
+        let graph = ModuleGraph::single(ProgramNode::new(
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        ));
+        let mut analyzer = Analyzer::new(&graph, &arena);
+        analyzer
+            .type_ctx
+            .define_module(ModuleId(1), "left".into(), vec![]);
+        analyzer.type_ctx.set_scope(ModuleId(1));
+        let left = analyzer.type_ctx.register(DefKind::Enum, "Color", vec![]);
+        analyzer.enum_table.insert(left, indexmap::IndexMap::new());
+        let left_ty = analyzer.type_ctx.instantiate(left, vec![]);
+        analyzer
+            .type_ctx
+            .define_module(ModuleId(2), "right".into(), vec![]);
+        analyzer.type_ctx.set_scope(ModuleId(2));
+        let right = analyzer.type_ctx.register(DefKind::Enum, "Color", vec![]);
+        let right_ty = analyzer.type_ctx.instantiate(right, vec![]);
+        assert!(analyzer.sizeof_type_known(left_ty));
+        assert!(!analyzer.sizeof_type_known(right_ty));
+    }
+
+    #[test]
+    fn sizeof_rejects_poison_and_incomplete_tuple_members() {
+        let arena = Bump::new();
+        let graph = ModuleGraph::single(ProgramNode::new(
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        ));
+        let mut analyzer = Analyzer::new(&graph, &arena);
+        let int = analyzer.type_ctx.interner.int();
+        let error = analyzer.type_ctx.interner.error();
+        let valid = analyzer.type_ctx.interner.tuple_ty(vec![int, int]);
+        let invalid = analyzer.type_ctx.interner.tuple_ty(vec![int, error]);
+        assert!(analyzer.sizeof_type_known(valid));
+        assert!(!analyzer.sizeof_type_known(invalid));
+        assert!(!analyzer.sizeof_type_known(error));
+        assert!(!analyzer.sizeof_type_known(analyzer.type_ctx.interner.void()));
     }
 }

@@ -366,9 +366,10 @@ fn emit_itables(l: &mut Lcx<'_>) {
         let Some(tag) = l.cx.interface_tag(imp.class_ty) else {
             continue;
         };
-        for (iid, symbols) in &imp.entries {
-            for (slot, sym) in symbols.iter().enumerate() {
-                let Some(f) = l.mir.functions.iter().find(|f| f.name == *sym) else {
+        for (iid, definitions) in &imp.entries {
+            for (slot, def) in definitions.iter().enumerate() {
+                let Some(f) = def.and_then(|def| l.mir.functions.iter().find(|f| f.def == def))
+                else {
                     continue;
                 };
                 let (Some(&t), true) = (index.get(&(*iid, slot)), (tag as usize) < ntags) else {

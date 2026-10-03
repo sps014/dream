@@ -69,13 +69,13 @@ impl<'a> PrettyCx<'a> {
             TyKind::Struct(d, args) | TyKind::Union(d, args) | TyKind::Interface(d, args)
                 if !args.is_empty() =>
             {
-                format!("def{}<{}>", d.0, self.tys(args))
+                format!("def{d}<{}>", self.tys(args))
             }
             TyKind::Struct(d, _)
             | TyKind::Union(d, _)
             | TyKind::Interface(d, _)
             | TyKind::Enum(d) => {
-                format!("def{}", d.0)
+                format!("def{d}")
             }
         }
     }
@@ -95,9 +95,9 @@ impl<'a> PrettyCx<'a> {
             return format!("@{key}");
         }
         if c.args.is_empty() {
-            format!("def{}", c.def.0)
+            format!("def{}", c.def)
         } else {
-            format!("def{}<{}>", c.def.0, self.tys(&c.args))
+            format!("def{}<{}>", c.def, self.tys(&c.args))
         }
     }
 }

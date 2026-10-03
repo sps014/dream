@@ -49,6 +49,16 @@ pub struct Hir {
     /// `typeof` tag router. The backend has the `TypeInterner` but no `DefTable`, so it cannot
     /// reconstruct these itself.
     pub type_names: TypeNameTable,
+    /// Stable structural encodings for C callback adapters and other generated symbols.
+    pub type_symbols: TypeNameTable,
+    pub object_methods: indexmap::IndexMap<TypeId, ObjectMethods>,
+}
+
+/// Resolved overrides of the generated object protocol, independent of emitted names.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ObjectMethods {
+    pub to_string: Option<DefId>,
+    pub hash_code: Option<DefId>,
 }
 
 /// Source-level display names of tagged nominal types, keyed by interned `TypeId`.
@@ -63,7 +73,7 @@ pub struct InterfaceTable {
     /// The program's interfaces in registration order; the index into this vector is the stable
     /// `iface_id` referenced by [`HExprKind::InterfaceCall`].
     pub interfaces: Vec<InterfaceInfo>,
-    /// Every class that implements at least one interface, with the concrete method symbols it
+    /// Every class that implements at least one interface, with the concrete method definitions it
     /// supplies for each implemented interface.
     pub impls: Vec<InterfaceImpl>,
 }
@@ -79,13 +89,13 @@ pub struct InterfaceInfo {
 }
 
 /// One class's interface implementations: for each interface it implements, the concrete method
-/// symbol (`{Class}_{method}`) that fills each method slot, keyed by the interface's `iface_id`.
+/// definition that fills each method slot, keyed by the interface's `iface_id`.
 #[derive(Debug, Clone)]
 pub struct InterfaceImpl {
     /// The implementing class's interned struct type (its `struct_tags` key / runtime tag).
     pub class_ty: TypeId,
-    /// `(iface_id, [concrete method symbol per slot])`.
-    pub entries: Vec<(usize, Vec<String>)>,
+    /// `(iface_id, [concrete method definition per slot])`; absent definitions use generated glue.
+    pub entries: Vec<(usize, Vec<Option<DefId>>)>,
 }
 
 /// A host function the module imports: an `extern fun` (interop) or a compiler-provided host
@@ -199,8 +209,9 @@ pub struct HGlobal {
 #[derive(Debug, Clone)]
 pub struct HFunction {
     pub def: DefId,
-    /// The base (un-mangled) source name; the backend derives the emitted symbol from
-    /// `(def, instance args)`.
+    /// Resolved emitted symbol; no backend stage derives identity from numeric type handles.
+    pub symbol: String,
+    /// The semantic lookup name, retained for diagnostics and debug information.
     pub name: String,
     /// The instance args when this is a monomorphized body, empty otherwise.
     pub instance: Vec<TypeId>,
@@ -231,13 +242,15 @@ pub struct HParam {
     pub local: LocalId,
     pub name: String,
     pub ty: TypeId,
-    /// True for a `ref` parameter backed by a value-struct box (see
-    /// `Analyzer::ref_box_type`/`docs/compiler/03-hir.md`): its MIR local must alias the caller's
-    /// storage in place rather than take a private copy (`FunctionBuilder::new_ref_param`).
-    pub is_ref: bool,
-    /// True for a `take name: T` parameter: the callee takes ownership of the caller's +1.
-    /// Unmarked / explicit `borrow` parameters leave this false (default borrow ABI).
-    pub is_take: bool,
+    pub mode: ParamMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamMode {
+    Borrow,
+    Share,
+    Sink,
+    Ref,
 }
 
 /// Declaration metadata for a function local (used by the backend to allocate slots and by RC

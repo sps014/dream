@@ -1,0 +1,8 @@
+import system;
+import helpers.module_receiver_a;
+import helpers.module_receiver_b;
+
+fun main(): void {
+    System.println(first_counter());
+    System.println(second_counter());
+}

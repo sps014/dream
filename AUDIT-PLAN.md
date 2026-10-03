@@ -47,7 +47,7 @@ This document merges two read-only reviews of the Dream compiler and turns them 
 | 2 | Distribution correctness | 10 | 10 | Done | #34 merged as `9fe2dfb2` on 2026-10-02 after all five required CI checks passed, including Windows workspace gates and full native corpus. Follow-up Windows portability and CI caching improvements merged in [#35](https://github.com/sps014/dream/pull/35) as `87037e0d`, with all five checks green. Warm Windows CI measured 11m13s versus the prior 33m22s; the initial cold-cache run took 38m41s. |
 | 3 | Target and layout foundation | 11 | 11 | Done | #41 merged as `01b1e976` on 2026-10-03. Manual run [37106486399](https://github.com/sps014/dream/actions/runs/37106486399) on implementation `0469ddb4` passed Ubuntu, macOS and Windows workspace gates, macOS runtime sanitizers, hygiene, Linux native 638/638, Windows native 638/638, and Node 539 passed/99 expected skips/0 failures. Local workspace tests: 1151 passed, 21 expected ignored. Paired optimization evidence is in `docs/internals/12-native-pointer-migration.md`. Automatic CI remains disabled. |
 | 4 | FFI completion and embedding API | 10 | 10 | Done | #42 merged as `04d5c085` on 2026-10-03; panic source locations (4.4) completed in a follow-up PR. Local gates: workspace tests, native probe 640/640, Node 539 passed/101 expected skips/0 failures. |
-| 5 | Identity, modules and symbols | 12 | 0 | Not started | — |
+| 5 | Identity, modules and symbols | 12 | 0 | In progress | Local structural symbols and analyzer/LSP splits; module-scoped identity migration remains outstanding. |
 | 6 | Platform expansion | 9 | 1 | In progress | 6.4 merged at user request; other tasks still depend on Phases 4, 5 |
 | 7 | Scale, performance and long-term work | 8 | 0 | Not started | Phases 5, 6 |
 
@@ -166,18 +166,28 @@ Final #34 CI now targets de67d23f; hosted cold/warm timing improvement is not ye
 
 | Step | Title | Findings | Status | Owner | PR | Notes |
 |---|---|---|---|---|---|---|
-| 5.1 | Module-scoped `DefId` | TY-1 | Not started | | | |
-| 5.2 | `ModuleGraph` | MOD-1 | Not started | | | |
-| 5.3 | Remove string-keyed type paths | TY-2 | Not started | | | |
-| 5.4 | Structural symbol mangling | GEN-1 | Not started | | | |
-| 5.5 | Parameter modes as HIR facts | OWN-1 | Not started | | | |
-| 5.6 | LSP resolves by `DefId` | TY-1 | Not started | | | |
-| 5.C1 | Delete the name-keyed identity paths | TY-1, TY-2 | Not started | | | |
-| 5.C2 | Delete the MIR parameter-mode inference | OWN-1 | Not started | | | |
-| 5.C3 | Split the analyzer hotspots | — | Not started | | | |
-| 5.C4 | Split the LSP hotspots | — | Not started | | | |
-| 5.C5 | Turn analyzer `unwrap()` into `internal_error!` | — | Not started | | | |
-| 5.C6 | Split `driver/compiler.rs` into stages | MOD-1 | Not started | | | |
+| 5.1 | Module-scoped `DefId` | TY-1 | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | DefIds carry ModuleId and a module-local index; source resolution follows module imports. Same-named nominal definitions remain distinct. Awaiting merge. |
+| 5.2 | `ModuleGraph` | MOD-1 | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Driver preserves per-file ASTs, module edges, export signatures and content/interface hashes; analysis uses a borrowed graph view. Cache integration remains outstanding. |
+| 5.3 | Remove string-keyed type paths | TY-2 | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Nominal, enum, union and interface tables use typed IDs; DefTable name lookup and lower_str removed. Function tables, generic aliases and several inference paths still require migration. |
+| 5.4 | Structural symbol mangling | GEN-1 | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Generic functions, overload keys and C callback adapters use shared structural encoding; HIR carries resolved symbols and object-protocol override DefIds. Module-qualified struct symbols, identifier collisions, cross-module function-name promotion and unrelated-edit stability covered. |
+| 5.5 | Parameter modes as HIR facts | OWN-1 | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | HParam carries Borrow/Share/Sink/Ref; MIR lowering consumes these facts directly. Ownership-mode regression coverage added; await merge. |
+| 5.6 | LSP resolves by `DefId` | TY-1 | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | References carry resolved DefIds and source locations; navigation uses source identity across document graphs and filters imported spans. Typed summaries and async display remain outstanding. |
+| 5.C1 | Delete the name-keyed identity paths | TY-1, TY-2 | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Numeric mangling, DefTable name lookup and lower_str deleted; backend dispatch follows resolved IDs. Remaining frontend string-keyed paths are tracked under 5.3. |
+| 5.C2 | Delete the MIR parameter-mode inference | OWN-1 | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | MIR ParamModes pass deleted; lowering consumes HIR facts directly. Lexical sink metadata respects shadowing. Awaiting merge. |
+| 5.C3 | Split the analyzer hotspots | — | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Topic splits implemented and validated; all analyzer production files below 800 lines. Awaiting merge. |
+| 5.C4 | Split the LSP hotspots | — | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Builder/query/request-family splits implemented; all LSP production files below 800 lines. Shared TypeId-based async display remains outstanding. |
+| 5.C5 | Turn analyzer `unwrap()` into `internal_error!` | — | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Verified the listed sites already use internal_error! and sema contains no non-test unwrap() calls. Local gates pass; no new exception added. |
+| 5.C6 | Split `driver/compiler.rs` into stages | MOD-1 | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Configuration, graph-backed source preparation, lowering/optimization, pipeline and diagnostics separated. Remaining analysis/emission stage extraction is outstanding. |
+
+Local validation on 2026-10-03: workspace build, strict Clippy, workspace tests and the full
+native corpus all pass (646 passed, zero skips, failures or guest leak reports). Hygiene and
+git diff --check pass. Scope-tree parent links
+are weak to prevent compiler reference cycles; struct fields and union payloads retain resolved
+TypeIds so imported generic arguments do not lose layout or ARC information.
+Phase 5 is not complete: remaining string-keyed lookups, cache integration and fully typed
+LSP summaries/display remain outstanding. The stdlib, tests
+and documentation now consistently spell object-protocol methods `public override fun`;
+parser coverage verifies that both keyword modifiers reach the AST.
 
 ### Phase 6: Platform expansion
 

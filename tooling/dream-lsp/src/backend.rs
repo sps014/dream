@@ -199,7 +199,7 @@ impl Backend {
     ) -> Option<(dream_sema::analyzer::ide::IdeTarget, Vec<(usize, usize)>)> {
         use dream_sema::analyzer::ide::IdeTarget;
         let r = snapshot.ref_covering(offset)?;
-        if matches!(r.target, IdeTarget::Local { .. } | IdeTarget::Expr) {
+        if !matches!(r.target, IdeTarget::Resolved { .. }) {
             return None;
         }
         let mut spans = crate::sema_ide::references_in(snapshot, &r.target);
@@ -350,1029 +350,125 @@ fn apply_change(text: &mut String, range: Option<Range>, new_text: &str) {
     }
 }
 
+mod completion;
+mod formatting;
+mod lifecycle;
+mod navigation;
+mod symbols;
+
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
-        Ok(InitializeResult {
-            capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::INCREMENTAL,
-                )),
-                hover_provider: Some(HoverProviderCapability::Simple(true)),
-                completion_provider: Some(CompletionOptions {
-                    trigger_characters: Some(vec![
-                        ".".to_string(),
-                        "\"".to_string(),
-                        "/".to_string(),
-                        "@".to_string(),
-                    ]),
-                    ..Default::default()
-                }),
-                definition_provider: Some(OneOf::Left(true)),
-                references_provider: Some(OneOf::Left(true)),
-                document_highlight_provider: Some(OneOf::Left(true)),
-                rename_provider: Some(OneOf::Right(RenameOptions {
-                    prepare_provider: Some(true),
-                    work_done_progress_options: Default::default(),
-                })),
-                document_symbol_provider: Some(OneOf::Left(true)),
-                workspace_symbol_provider: Some(OneOf::Left(true)),
-                document_formatting_provider: Some(OneOf::Left(true)),
-                document_range_formatting_provider: Some(OneOf::Left(true)),
-                inlay_hint_provider: Some(OneOf::Left(true)),
-                signature_help_provider: Some(SignatureHelpOptions {
-                    trigger_characters: Some(vec!["(".to_string(), ",".to_string()]),
-                    retrigger_characters: None,
-                    work_done_progress_options: Default::default(),
-                }),
-                semantic_tokens_provider: Some(
-                    SemanticTokensServerCapabilities::SemanticTokensOptions(
-                        SemanticTokensOptions {
-                            legend: SemanticTokensLegend {
-                                token_types: semantic_tokens::TOKEN_TYPES.to_vec(),
-                                token_modifiers: vec![],
-                            },
-                            full: Some(SemanticTokensFullOptions::Bool(true)),
-                            ..Default::default()
-                        },
-                    ),
-                ),
-                code_lens_provider: Some(CodeLensOptions {
-                    resolve_provider: Some(false),
-                }),
-                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
-                ..Default::default()
-            },
-            ..Default::default()
-        })
+    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+        self.handle_initialize(params).await
     }
 
-    async fn initialized(&self, _: InitializedParams) {
-        // Register a filesystem watcher so edits to imported `.dream` files (not open in the
-        // editor) invalidate cached models and refresh diagnostics of the importers. Failure is
-        // non-fatal: clients without dynamic registration just keep the old behavior.
-        let _ = self
-            .client
-            .register_capability(vec![Registration {
-                id: "dream-watch-dream-files".to_string(),
-                method: "workspace/didChangeWatchedFiles".to_string(),
-                register_options: Some(
-                    serde_json::json!({ "watchers": [{ "globPattern": "**/*.dream" }] }),
-                ),
-            }])
-            .await;
-        self.client
-            .log_message(MessageType::INFO, "Dream LSP initialized!")
-            .await;
+    async fn initialized(&self, params: InitializedParams) {
+        self.handle_initialized(params).await
     }
 
     async fn shutdown(&self) -> Result<()> {
-        Ok(())
+        self.handle_shutdown().await
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        let uri = params.text_document.uri.clone();
-        let text = params.text_document.text;
-        let version = params.text_document.version;
-        self.documents.insert(
-            uri.to_string(),
-            Document {
-                text: text.clone(),
-                version,
-            },
-        );
-        self.schedule_diagnostics(uri, text, version);
+        self.handle_did_open(params).await
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        let uri = params.text_document.uri.clone();
-        let version = params.text_document.version;
-        let key = uri.to_string();
-
-        let text = {
-            let mut entry = self
-                .documents
-                .entry(key.clone())
-                .or_insert_with(|| Document {
-                    text: String::new(),
-                    version: 0,
-                });
-
-            for change in params.content_changes {
-                apply_change(&mut entry.text, change.range, &change.text);
-            }
-            entry.version = version;
-            entry.text.clone()
-        };
-
-        self.schedule_diagnostics(uri, text, version);
+        self.handle_did_change(params).await
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
-        let uri = params.text_document.uri.to_string();
-        self.documents.remove(&uri);
-        self.index_cache.remove(&uri);
-        self.pending_diagnostics.remove(&uri);
+        self.handle_did_close(params).await
     }
 
     async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
-        use tower_lsp::lsp_types::FileChangeType;
-        // A dependency changed on disk. Cached models embed parsed copies of every imported
-        // file, so drop them all (they rebuild lazily on the next request) and re-publish
-        // diagnostics for every open document.
-        let changed: Vec<String> = params
-            .changes
-            .iter()
-            .filter(|c| c.typ != FileChangeType::DELETED)
-            .filter_map(|c| Self::file_path_of(&c.uri))
-            .filter(|p| p.ends_with(".dream"))
-            .collect();
-        if changed.is_empty() {
-            return;
-        }
-        self.index_cache.clear();
-        *self.workspace_cache.lock().await = None;
-        for entry in self.documents.iter() {
-            let (uri, text, version) = (
-                Url::parse(&entry.key().clone()).ok(),
-                entry.text.clone(),
-                entry.version,
-            );
-            drop(entry);
-            let Some(uri) = uri else { continue };
-            self.schedule_diagnostics(uri, text, version);
-        }
+        self.handle_did_change_watched_files(params).await
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
-        let uri = params
-            .text_document_position_params
-            .text_document
-            .uri
-            .clone();
-        let key = uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        let line_index = LineIndex::new(&text);
-        let offset = line_index.offset(
-            params.text_document_position_params.position.line,
-            params.text_document_position_params.position.character,
-        );
-        let Some((idx, sema)) = self.models_for(&key, Self::file_path_of(&uri).as_deref()) else {
-            return Ok(None);
-        };
-        if let Some(located) = idx.hover(&text, offset) {
-            return Ok(Some(Hover {
-                contents: HoverContents::Markup(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: located.contents,
-                }),
-                range: Some(Range {
-                    start: map_position(line_index.position(located.start)),
-                    end: map_position(line_index.position(located.end)),
-                }),
-            }));
-        }
-        // The AST index only resolves receivers it could type heuristically; the analyzer's
-        // snapshot covers chained/call-result/tuple positions it cannot.
-        if let Some(snapshot) = &sema {
-            if let Some((start, end, contents)) = crate::sema_ide::hover_at(snapshot, offset) {
-                return Ok(Some(Hover {
-                    contents: HoverContents::Markup(MarkupContent {
-                        kind: MarkupKind::Markdown,
-                        value: contents,
-                    }),
-                    range: Some(Range {
-                        start: map_position(line_index.position(start)),
-                        end: map_position(line_index.position(end)),
-                    }),
-                }));
-            }
-        }
-        Ok(None)
+        self.handle_hover(params).await
     }
 
     async fn goto_definition(
         &self,
         params: GotoDefinitionParams,
     ) -> Result<Option<GotoDefinitionResponse>> {
-        let uri = params
-            .text_document_position_params
-            .text_document
-            .uri
-            .clone();
-        let key = uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        let line_index = LineIndex::new(&text);
-        let offset = line_index.offset(
-            params.text_document_position_params.position.line,
-            params.text_document_position_params.position.character,
-        );
-        let Some((idx, sema)) = self.models_for(&key, Self::file_path_of(&uri).as_deref()) else {
-            return Ok(None);
-        };
-        let sema_loc = sema
-            .as_ref()
-            .and_then(|s| crate::sema_ide::definition_at(s, &idx, offset))
-            .map(|(start, end)| (start, end, None::<String>));
-        if let Some((start, end, file_path)) = idx.definition(offset).or(sema_loc) {
-            return Ok(
-                Self::location_at(&uri, &text, start, end, file_path.as_deref())
-                    .map(GotoDefinitionResponse::Scalar),
-            );
-        }
-        Ok(None)
+        self.handle_goto_definition(params).await
     }
 
     async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
-        let uri = params.text_document_position.text_document.uri.clone();
-        let key = uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        let file_path = Self::file_path_of(&uri);
-        let line_index = LineIndex::new(&text);
-        let offset = line_index.offset(
-            params.text_document_position.position.line,
-            params.text_document_position.position.character,
-        );
-        let Some((idx, sema)) = self.models_for(&key, file_path.as_deref()) else {
-            return Ok(None);
-        };
-
-        let include_decl = params.context.include_declaration;
-        let mut locations: Vec<Location> = Vec::new();
-
-        // Cross-document matches first (other open documents), so the primary document's
-        // entries keep the legacy ordering role below.
-        if let Some(snapshot) = &sema {
-            if let Some(r) = snapshot.ref_covering(offset) {
-                if !matches!(
-                    r.target,
-                    dream_sema::analyzer::ide::IdeTarget::Local { .. }
-                        | dream_sema::analyzer::ide::IdeTarget::Expr
-                ) {
-                    for other_key in self.documents.iter().map(|e| e.key().clone()) {
-                        if other_key == key {
-                            continue;
-                        }
-                        let Some(other_uri) = Url::parse(&other_key).ok() else {
-                            continue;
-                        };
-                        let Some((_, other_sema)) =
-                            self.models_for(&other_key, Self::file_path_of(&other_uri).as_deref())
-                        else {
-                            continue;
-                        };
-                        let Some(other_sema) = other_sema else {
-                            continue;
-                        };
-                        let Some(other_text) = self.document_text(&other_key) else {
-                            continue;
-                        };
-                        let other_li = LineIndex::new(&other_text);
-                        for (start, end) in crate::sema_ide::references_in(&other_sema, &r.target) {
-                            locations.push(Location {
-                                uri: other_uri.clone(),
-                                range: Range {
-                                    start: map_position(other_li.position(start)),
-                                    end: map_position(other_li.position(end)),
-                                },
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        // This document: sema-precise spans when available, legacy name-based otherwise.
-        let spans = match sema
-            .as_ref()
-            .and_then(|s| Self::precise_references(&idx, s, offset))
-        {
-            Some((_, mut spans)) => {
-                if !include_decl {
-                    // Drop the declaration span (the one that is a declaration, not a use).
-                    if let Some(snapshot) = &sema {
-                        if let Some((ds, de)) =
-                            crate::sema_ide::definition_at(snapshot, &idx, offset)
-                        {
-                            spans.retain(|&(st, en)| (st, en) != (ds, de));
-                        }
-                    }
-                }
-                spans
-            }
-            None => idx.references(offset, include_decl),
-        };
-        for (start, end) in spans {
-            locations.push(Location {
-                uri: uri.clone(),
-                range: Range {
-                    start: map_position(line_index.position(start)),
-                    end: map_position(line_index.position(end)),
-                },
-            });
-        }
-        Ok(Some(locations))
+        self.handle_references(params).await
     }
 
     async fn document_highlight(
         &self,
         params: DocumentHighlightParams,
     ) -> Result<Option<Vec<DocumentHighlight>>> {
-        let uri = params
-            .text_document_position_params
-            .text_document
-            .uri
-            .clone();
-        let key = uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        let line_index = LineIndex::new(&text);
-        let offset = line_index.offset(
-            params.text_document_position_params.position.line,
-            params.text_document_position_params.position.character,
-        );
-        let Some((idx, sema)) = self.models_for(&key, Self::file_path_of(&uri).as_deref()) else {
-            return Ok(None);
-        };
-        // When the analyzer resolved this position to a cross-file-capable entity, its
-        // receiver-typed matching is strictly more precise than the index's name-based match
-        // (which collides across same-named members of different types).
-        let highlights_spans = sema
-            .as_ref()
-            .and_then(|s| Self::precise_references(&idx, s, offset))
-            .map(|(_, spans)| spans)
-            .unwrap_or_else(|| idx.references(offset, true));
-        let highlights = highlights_spans
-            .into_iter()
-            .map(|(start, end)| DocumentHighlight {
-                range: Range {
-                    start: map_position(line_index.position(start)),
-                    end: map_position(line_index.position(end)),
-                },
-                kind: Some(DocumentHighlightKind::TEXT),
-            })
-            .collect::<Vec<_>>();
-        Ok(Some(highlights))
+        self.handle_document_highlight(params).await
     }
 
     async fn prepare_rename(
         &self,
         params: TextDocumentPositionParams,
     ) -> Result<Option<PrepareRenameResponse>> {
-        let uri = params.text_document.uri.clone();
-        let key = uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        let line_index = LineIndex::new(&text);
-        let offset = line_index.offset(params.position.line, params.position.character);
-        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
-            return Ok(None);
-        };
-        let Some(decl) = idx.decl_for_offset(offset) else {
-            return Ok(None);
-        };
-        // Only rename symbols whose declaration lives in this document.
-        if !decl.is_main || decl.file_path.is_some() {
-            return Ok(None);
-        }
-        if decl.name == "this" || decl.name.is_empty() {
-            return Ok(None);
-        }
-        // Prefer the identifier under the cursor (ref or decl span).
-        let (start, end) = idx
-            .references(offset, true)
-            .into_iter()
-            .find(|(s, e)| *s <= offset && offset <= *e)
-            .unwrap_or((decl.start, decl.end));
-        Ok(Some(PrepareRenameResponse::Range(Range {
-            start: map_position(line_index.position(start)),
-            end: map_position(line_index.position(end)),
-        })))
+        self.handle_prepare_rename(params).await
     }
 
     async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
-        let uri = params.text_document_position.text_document.uri.clone();
-        let key = uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        let line_index = LineIndex::new(&text);
-        let offset = line_index.offset(
-            params.text_document_position.position.line,
-            params.text_document_position.position.character,
-        );
-        let Some((idx, sema)) = self.models_for(&key, Self::file_path_of(&uri).as_deref()) else {
-            return Ok(None);
-        };
-        let Some(decl) = idx.decl_for_offset(offset) else {
-            return Ok(None);
-        };
-        if !decl.is_main || decl.file_path.is_some() {
-            return Ok(None);
-        }
-        if decl.name == "this" || decl.name.is_empty() {
-            return Ok(None);
-        }
-        let new_name = params.new_name;
-        if new_name.is_empty()
-            || !new_name
-                .chars()
-                .next()
-                .map(|c| c == '_' || c.is_ascii_alphabetic())
-                .unwrap_or(false)
-            || !new_name
-                .chars()
-                .all(|c| c == '_' || c.is_ascii_alphanumeric())
-        {
-            return Err(jsonrpc::Error {
-                code: jsonrpc::ErrorCode::InvalidParams,
-                message: "Invalid identifier for rename".into(),
-                data: None,
-            });
-        }
-
-        // Resolve the target once, then collect edits per open document. Sema-resolved targets
-        // (fields/methods/enum members/globals) rename across every open document that uses
-        // them, matched by entity identity rather than bare name — renaming `Point.x` never
-        // touches `Size.x`. Locals keep the exact single-document scope behavior.
-        let mut changes: std::collections::HashMap<Url, Vec<TextEdit>> =
-            std::collections::HashMap::new();
-        let mut push_edits = |uri_key: &str, spans: Vec<(usize, usize)>| {
-            if spans.is_empty() {
-                return;
-            }
-            let Ok(doc_uri) = Url::parse(uri_key) else {
-                return;
-            };
-            let Some(doc_text) = self.document_text(uri_key) else {
-                return;
-            };
-            let doc_li = LineIndex::new(&doc_text);
-            let edits = spans
-                .into_iter()
-                .map(|(start, end)| TextEdit {
-                    range: Range {
-                        start: map_position(doc_li.position(start)),
-                        end: map_position(doc_li.position(end)),
-                    },
-                    new_text: new_name.clone(),
-                })
-                .collect();
-            changes.insert(doc_uri, edits);
-        };
-
-        let target_and_spans = sema
-            .as_ref()
-            .and_then(|s| Self::precise_references(&idx, s, offset));
-        if let Some((target, _)) = &target_and_spans {
-            for entry in self.documents.iter() {
-                let other_key: String = entry.key().clone();
-                drop(entry);
-                let Some(other_uri) = Url::parse(&other_key).ok().filter(|u| *u != uri) else {
-                    continue;
-                };
-                let Some((_, other_sema)) =
-                    self.models_for(&other_key, Self::file_path_of(&other_uri).as_deref())
-                else {
-                    continue;
-                };
-                let Some(other_sema) = other_sema else {
-                    continue;
-                };
-                let spans = crate::sema_ide::references_in(&other_sema, target);
-                push_edits(&other_key, spans);
-            }
-        }
-        let own_spans = target_and_spans
-            .map(|(_, spans)| spans)
-            .unwrap_or_else(|| idx.references(offset, true));
-        push_edits(&key, own_spans);
-
-        if changes.is_empty() {
-            return Ok(None);
-        }
-        Ok(Some(WorkspaceEdit {
-            changes: Some(changes),
-            document_changes: None,
-            change_annotations: None,
-        }))
+        self.handle_rename(params).await
     }
 
     async fn document_symbol(
         &self,
         params: DocumentSymbolParams,
     ) -> Result<Option<DocumentSymbolResponse>> {
-        let uri = params.text_document.uri.clone();
-        let key = uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        let line_index = LineIndex::new(&text);
-        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
-            return Ok(None);
-        };
-        let symbols = idx
-            .document_symbols()
-            .into_iter()
-            .map(|d| {
-                let range = Range {
-                    start: map_position(line_index.position(d.start)),
-                    end: map_position(line_index.position(d.end)),
-                };
-                // `DocumentSymbol::deprecated` is a deprecated field in the external `lsp-types`
-                // crate; we must still initialize it, so the allow is unavoidable (not our API).
-                #[allow(deprecated)]
-                DocumentSymbol {
-                    name: d.name.clone(),
-                    detail: Some(d.detail.clone()),
-                    kind: symbol_kind(d.kind),
-                    tags: None,
-                    deprecated: None,
-                    range,
-                    selection_range: range,
-                    children: None,
-                }
-            })
-            .collect();
-        Ok(Some(DocumentSymbolResponse::Nested(symbols)))
+        self.handle_document_symbol(params).await
     }
 
     async fn symbol(
         &self,
         params: WorkspaceSymbolParams,
     ) -> Result<Option<Vec<SymbolInformation>>> {
-        let query = params.query;
-        let mut out = Vec::new();
-
-        // 1) Every currently-open document (its in-editor version is authoritative). Each
-        // document's index is version-cached, so repeated lookups are cheap.
-        let keys: Vec<String> = self.documents.iter().map(|e| e.key().clone()).collect();
-        for key in &keys {
-            let Ok(uri) = Url::parse(key) else {
-                continue;
-            };
-            let Some(text) = self.document_text(key) else {
-                continue;
-            };
-            let Some(idx) = self.index_for(key, Self::file_path_of(&uri).as_deref()) else {
-                continue;
-            };
-            let line_index = LineIndex::new(&text);
-            for d in idx.symbols_matching(&query) {
-                let range = Range {
-                    start: map_position(line_index.position(d.start)),
-                    end: map_position(line_index.position(d.end)),
-                };
-                // `SymbolInformation::deprecated` is a deprecated field in `lsp-types` that must
-                // still be initialized; the allow is unavoidable (not our API).
-                #[allow(deprecated)]
-                out.push(SymbolInformation {
-                    name: d.name.clone(),
-                    kind: symbol_kind(d.kind),
-                    tags: None,
-                    deprecated: None,
-                    location: Location {
-                        uri: uri.clone(),
-                        range,
-                    },
-                    container_name: None,
-                });
-            }
-        }
-
-        // 2) Files on disk under the project root (skipping files already open above). The scan
-        // is cached briefly and invalidated by file-watch events.
-        let open_paths: Vec<String> = keys
-            .iter()
-            .filter_map(|k| Url::parse(k).ok())
-            .filter_map(|u| Self::file_path_of(&u))
-            .collect();
-        if !open_paths.is_empty() {
-            if let Some(root) = crate::workspace::project_root(&open_paths) {
-                let mut cache = self.workspace_cache.lock().await;
-                let fresh = cache.as_ref().is_some_and(|w| w.is_fresh(&root));
-                if !fresh {
-                    let symbols = crate::workspace::scan(&root);
-                    *cache = Some(crate::workspace::WorkspaceIndex::new(root, symbols));
-                }
-                if let Some(index) = cache.as_ref() {
-                    let open_set: std::collections::HashSet<&String> = open_paths.iter().collect();
-                    let lower_query = query.to_lowercase();
-                    for s in &index.symbols {
-                        if open_set.contains(&s.path) {
-                            continue;
-                        }
-                        if !s.name.to_lowercase().contains(&lower_query) {
-                            continue;
-                        }
-                        let Ok(path) = std::path::PathBuf::from(&s.path).canonicalize() else {
-                            continue;
-                        };
-                        let Some(text) = std::fs::read_to_string(&path).ok() else {
-                            continue;
-                        };
-                        let Some(uri) = Url::from_file_path(&path).ok() else {
-                            continue;
-                        };
-                        let line_index = LineIndex::new(&text);
-                        #[allow(deprecated)]
-                        out.push(SymbolInformation {
-                            name: s.name.clone(),
-                            kind: symbol_kind(s.kind),
-                            tags: None,
-                            deprecated: None,
-                            location: Location {
-                                uri,
-                                range: Range {
-                                    start: map_position(line_index.position(s.start)),
-                                    end: map_position(line_index.position(s.end)),
-                                },
-                            },
-                            container_name: None,
-                        });
-                    }
-                }
-            }
-        }
-
-        Ok(Some(out))
+        self.handle_symbol(params).await
     }
 
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
-        let uri = params.text_document.uri.clone();
-        let key = uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        let line_index = LineIndex::new(&text);
-        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
-            return Ok(None);
-        };
-
-        let mut hints = Vec::new();
-        for hint in &idx.inlay_hints {
-            let pos = line_index.position(hint.offset);
-            // Type hints (`: int`) sit after the name with left padding; parameter-name hints
-            // (`x:`) sit before the argument with right padding.
-            let (kind, padding_left, padding_right) = match hint.kind {
-                index::InlayKind::Type => (InlayHintKind::TYPE, Some(true), None),
-                index::InlayKind::Parameter => (InlayHintKind::PARAMETER, None, Some(true)),
-            };
-            hints.push(InlayHint {
-                position: map_position(pos),
-                label: InlayHintLabel::String(hint.label.clone()),
-                kind: Some(kind),
-                text_edits: None,
-                tooltip: None,
-                padding_left,
-                padding_right,
-                data: None,
-            });
-        }
-        Ok(Some(hints))
+        self.handle_inlay_hint(params).await
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        let uri = params.text_document_position.text_document.uri.clone();
-        let key = uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        let file_path = Self::file_path_of(&uri);
-        let line_index = LineIndex::new(&text);
-        let offset = line_index.offset(
-            params.text_document_position.position.line,
-            params.text_document_position.position.character,
-        );
-        let Some((idx, sema)) = self.models_for(&key, file_path.as_deref()) else {
-            return Ok(None);
-        };
-
-        // Member completion after `.`: the analyzer's snapshot resolves the receiver's real
-        // Member completion after `.`: the analyzer's snapshot resolves the receiver's real
-        // type (locals, chained calls, call results, tuples, loop variables), so it leads the
-        // list; AST-index heuristic items are appended for anything lazy instantiation hasn't
-        // materialized yet (e.g. `extend T[]` methods never called in this document).
-        let mut completions = idx.completions(file_path.as_deref(), &text, offset);
-        if index::is_member_completion_context(&text, offset) {
-            if let Some(snapshot) = &sema {
-                if let Some(items) = crate::sema_ide::member_completions(snapshot, &text, offset) {
-                    let seen: std::collections::HashSet<String> =
-                        completions.iter().map(|(n, ..)| n.clone()).collect();
-                    completions.extend(items.into_iter().filter(|(n, ..)| !seen.contains(n)));
-                }
-            }
-        }
-        let import_replace = index::import_path_partial(&text, offset).map(|(start, _)| start);
-        let in_attr_name = index::attribute_name_partial(&text, offset).is_some();
-        let in_attr_args = index::attribute_arg_context(&text, offset).is_some();
-
-        let items: Vec<CompletionItem> = {
-            let mut items: Vec<CompletionItem> = completions
-                .into_iter()
-                .map(|(label, kind, detail, doc_comment)| {
-                    let text_edit = if kind == index::SymKind::Module {
-                        if let Some(start) = import_replace {
-                            let start_pos = line_index.position(start);
-                            let end_pos = line_index.position(offset);
-                            Some(CompletionTextEdit::Edit(TextEdit {
-                                range: map_range(crate::position::Range {
-                                    start: start_pos,
-                                    end: end_pos,
-                                }),
-                                new_text: label.clone(),
-                            }))
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    };
-                    let (insert_text, insert_text_format) = if kind == index::SymKind::Decorator
-                        && in_attr_name
-                    {
-                        if let Some(spec) = dream_abi::attributes::find_spec(&label) {
-                            match spec.args {
-                                dream_abi::attributes::ArgShape::Args { min, .. } if min > 0 => (
-                                    Some(format!("{label}($0)")),
-                                    Some(InsertTextFormat::SNIPPET),
-                                ),
-                                _ => (None, None),
-                            }
-                        } else {
-                            (None, None)
-                        }
-                    } else if kind == index::SymKind::EnumMember {
-                        match index::enum_member_snippet(&label, &detail) {
-                            Some(snippet) => (Some(snippet), Some(InsertTextFormat::SNIPPET)),
-                            None => (None, None),
-                        }
-                    } else {
-                        (None, None)
-                    };
-                    CompletionItem {
-                        label,
-                        kind: Some(completion_kind(kind)),
-                        detail: Some(detail),
-                        documentation: doc_comment.map(|doc| {
-                            Documentation::MarkupContent(MarkupContent {
-                                kind: MarkupKind::Markdown,
-                                value: doc,
-                            })
-                        }),
-                        text_edit,
-                        insert_text,
-                        insert_text_format,
-                        ..Default::default()
-                    }
-                })
-                .collect();
-
-            // Offer not-yet-imported stdlib exports with an import edit on accept.
-            // Skip inside `import …` (package paths), after `.` (member access — `System.`
-            // must not mix in `List` / `Gpu` from unloaded packages), and in `@…` attribute
-            // name/arg context.
-            if import_replace.is_none()
-                && !index::is_member_completion_context(&text, offset)
-                && !index::is_switch_arm_completion_context(&text, offset)
-                && !in_attr_name
-                && !in_attr_args
-            {
-                let existing: std::collections::HashSet<String> =
-                    items.iter().map(|i| i.label.clone()).collect();
-                for (label, package, detail) in
-                    crate::code_actions::unloaded_import_completions(&text, file_path.as_deref())
-                {
-                    if existing.contains(&label) {
-                        continue;
-                    }
-                    let additional = crate::code_actions::import_text_edits(&text, &package);
-                    items.push(CompletionItem {
-                        label,
-                        kind: Some(CompletionItemKind::CLASS),
-                        detail: Some(detail),
-                        additional_text_edits: additional,
-                        ..Default::default()
-                    });
-                }
-            }
-            items
-        };
-        Ok(Some(CompletionResponse::Array(items)))
+        self.handle_completion(params).await
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
-        let uri = params.text_document.uri.clone();
-        let key = uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        let file_path = Self::file_path_of(&uri);
-        let mut actions = Vec::new();
-        for diag in &params.context.diagnostics {
-            let is_unresolved = diag
-                .code
-                .as_ref()
-                .map(|c| {
-                    matches!(
-                        c,
-                        NumberOrString::String(s) if s == "unresolved-name" || s == "missing-member"
-                    )
-                })
-                .unwrap_or(false)
-                || diag.message.contains("does not exist")
-                || diag.message.contains("not found")
-                || diag.message.contains("has no method")
-                || diag.message.contains("has no static method");
-            if !is_unresolved {
-                continue;
-            }
-            for name in crate::code_actions::unresolved_names_from_message(&diag.message) {
-                actions.extend(crate::code_actions::auto_import_actions(
-                    &uri,
-                    &text,
-                    &name,
-                    file_path.as_deref(),
-                ));
-            }
-        }
-        // Also offer based on the word under the selection range when diagnostics are empty.
-        if actions.is_empty() {
-            let line_index = LineIndex::new(&text);
-            let offset = line_index.offset(params.range.start.line, params.range.start.character);
-            if let Some(name) = word_at(&text, offset) {
-                actions.extend(crate::code_actions::auto_import_actions(
-                    &uri,
-                    &text,
-                    &name,
-                    file_path.as_deref(),
-                ));
-            }
-        }
-        if actions.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(actions))
-        }
+        self.handle_code_action(params).await
     }
 
     async fn signature_help(&self, params: SignatureHelpParams) -> Result<Option<SignatureHelp>> {
-        let uri = params
-            .text_document_position_params
-            .text_document
-            .uri
-            .clone();
-        let key = uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        let line_index = LineIndex::new(&text);
-        let offset = line_index.offset(
-            params.text_document_position_params.position.line,
-            params.text_document_position_params.position.character,
-        );
-        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
-            return Ok(None);
-        };
-        if let Some(decl) = idx.signature_help(&text, offset) {
-            let label = decl.detail.clone();
-            let mut parameters = vec![];
-
-            if let Some(start_paren) = label.find('(') {
-                if let Some(end_paren) = label.rfind(')') {
-                    if start_paren < end_paren {
-                        let params_str = &label[start_paren + 1..end_paren];
-                        if !params_str.trim().is_empty() {
-                            for param in params_str.split(',') {
-                                parameters.push(ParameterInformation {
-                                    label: ParameterLabel::Simple(param.trim().to_string()),
-                                    documentation: None,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-
-            let active_parameter = active_parameter_at(&text, offset);
-
-            return Ok(Some(SignatureHelp {
-                signatures: vec![SignatureInformation {
-                    label,
-                    documentation: decl.doc_comment.map(|doc| {
-                        Documentation::MarkupContent(MarkupContent {
-                            kind: MarkupKind::Markdown,
-                            value: doc,
-                        })
-                    }),
-                    parameters: Some(parameters),
-                    active_parameter: Some(active_parameter),
-                }],
-                active_signature: Some(0),
-                active_parameter: Some(active_parameter),
-            }));
-        }
-        Ok(None)
+        self.handle_signature_help(params).await
     }
 
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
-        let key = params.text_document.uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        Ok(crate::format::formatting_edits(&text))
+        self.handle_formatting(params).await
     }
 
     async fn range_formatting(
         &self,
         params: DocumentRangeFormattingParams,
     ) -> Result<Option<Vec<TextEdit>>> {
-        let key = params.text_document.uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        Ok(crate::format::formatting_edits(&text))
+        self.handle_range_formatting(params).await
     }
 
     async fn semantic_tokens_full(
         &self,
         params: SemanticTokensParams,
     ) -> Result<Option<SemanticTokensResult>> {
-        let uri = params.text_document.uri.clone();
-        let key = uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        // Serve from the cached index (semantic tokens consult the symbol model); building a
-        // fresh Index here would re-parse the document + all imports on every token request.
-        let Some((idx, _)) = self.models_for(&key, Self::file_path_of(&uri).as_deref()) else {
-            return Ok(None);
-        };
-        let tokens = semantic_tokens::compute_cached(&idx, &text);
-        Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
-            result_id: None,
-            data: tokens,
-        })))
+        self.handle_semantic_tokens_full(params).await
     }
 
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
-        let uri = params.text_document.uri.clone();
-        let key = uri.to_string();
-        let Some(text) = self.document_text(&key) else {
-            return Ok(None);
-        };
-        let file_path = Self::file_path_of(&uri);
-        if file_path.as_deref().is_some_and(workspace_is_lib_package) {
-            return Ok(Some(Vec::new()));
-        }
-        let line_index = LineIndex::new(&text);
-        let Some(idx) = self.index_for(&key, file_path.as_deref()) else {
-            return Ok(None);
-        };
-
-        let mut lenses = Vec::new();
-        // Look for a top-level function named "main"
-        for decl in &idx.decls {
-            if decl.name == "main" && decl.kind == index::SymKind::Function {
-                // The range points to the start of the 'fun main' token
-                let range = Range {
-                    start: map_position(line_index.position(decl.start)),
-                    end: map_position(line_index.position(decl.end)),
-                };
-
-                // Add Run CodeLens — extension routes to `dreamer run` when a dream.toml exists.
-                lenses.push(CodeLens {
-                    range,
-                    command: Some(Command {
-                        title: "▶ Run".to_string(),
-                        command: "dream.runFile".to_string(),
-                        arguments: Some(vec![serde_json::json!(uri.to_string())]),
-                    }),
-                    data: None,
-                });
-
-                // Add Debug CodeLens
-                lenses.push(CodeLens {
-                    range,
-                    command: Some(Command {
-                        title: "▶ Debug".to_string(),
-                        command: "dream.debugFile".to_string(),
-                        arguments: Some(vec![serde_json::json!(uri.to_string())]),
-                    }),
-                    data: None,
-                });
-            }
-        }
-
-        Ok(Some(lenses))
+        self.handle_code_lens(params).await
     }
 }
 

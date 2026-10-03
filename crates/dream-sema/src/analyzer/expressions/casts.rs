@@ -6,7 +6,6 @@ use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
 use dream_diagnostics::DiagnosticBag;
 use dream_hir::HExpr;
-use dream_syntax::nodes::types::{is_numeric_primitive, mangle_with_suffixes};
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_text::text_span::TextSpan;
 use dream_types::{TyKind, TypeId};
@@ -34,16 +33,22 @@ impl<'a> Analyzer<'a> {
         self.current_expected_type = saved_expected;
         self.check_type_not_static_class(target_type, diagnostics);
         let inner_hir = self.hir_take();
+        let expr_id = inner_hir
+            .as_ref()
+            .map(|hir| hir.ty)
+            .unwrap_or_else(|| self.type_ctx.lower(&expr_type));
 
-        let target_type_str = target_type.get_type();
-        let expr_type_str = expr_type.get_type();
+        if expr_type.is_unknown() || target_type.is_unknown() {
+            self.hir_none();
+            return Ok(Type::Unknown);
+        }
 
         // User-defined explicit conversion: `@cast("explicit")` (or `@cast("implicit")`, since an
         // explicit cast may always invoke an implicit one) on `expr`'s type converting to
         // `target_type`. Checked before the built-in conversion rules below so a struct's overload
         // always wins over (what would otherwise be) a "cannot cast" error.
         if let Some(cast) = self.operator_cast_fn(&expr_type, target_type, false) {
-            self.hir_set_method_call(inner_hir, &cast.mangled_name, vec![], target_type);
+            self.hir_set_method_call(inner_hir, &cast.identity, vec![], target_type);
             return Ok(target_type.clone());
         }
 
@@ -59,46 +64,46 @@ impl<'a> Analyzer<'a> {
         // The cast yields `target_type` regardless of whether the conversion is allowed (a
         // disallowed one is reported below); record its HIR before the validation branches.
         self.hir_set_cast(inner_hir, target_type);
+        let target_id = self.type_ctx.lower(target_type);
+        let numeric = |ty: &Type| ty.is_integer() || matches!(ty, Type::Float(_) | Type::Double(_));
 
-        if target_type_str == expr_type_str ||
-           (is_numeric_primitive(&target_type_str) && is_numeric_primitive(&expr_type_str)) ||
+        if target_id == expr_id ||
+           (numeric(target_type) && numeric(&expr_type)) ||
            // `char` is a code point: allow lossless conversion to/from `int`/`byte`.
-           (target_type_str == "char" && (expr_type_str == "int" || expr_type_str == "byte")) ||
-           ((target_type_str == "int" || target_type_str == "byte") && expr_type_str == "char")
+           (matches!(target_type, Type::Char(_)) && matches!(expr_type, Type::Integer(_) | Type::Byte(_))) ||
+           (matches!(target_type, Type::Integer(_) | Type::Byte(_)) && matches!(expr_type, Type::Char(_)))
         {
             Ok(target_type.clone())
-        } else if target_type_str == "object" || expr_type_str == "object" {
+        } else if target_type.is_object() || expr_type.is_object() {
             // Boxing (`T as object`) and unboxing (`object as T`) are always permitted;
             // an unbox to the wrong primitive traps at runtime.
             Ok(target_type.clone())
-        } else if expr_type_str == "int"
-            && (self.struct_table.get_struct(&target_type_str).is_some()
-                || target_type_str.ends_with("[]"))
+        } else if expr_type.is_int()
+            && (self.struct_info(target_id).is_some() || target_type.is_array())
         {
             // Allow casting int to pointer types (for null pointers)
             Ok(target_type.clone())
-        } else if self.is_interface_name(&target_type_str) {
+        } else if self.is_interface_name(target_id) {
             // Cast to an interface (`(Animal)cat`). Allowed from another interface, or a class that
             // implements the interface (an upcast). Both are identity at runtime (same tagged
             // pointer); only the static type changes.
-            let src = &expr_type_str;
-            if self.is_interface_name(src)
-                || self.implements_as_interface_ref(src, &target_type_str, diagnostics)
+            if self.is_interface_name(expr_id)
+                || self.implements_as_interface_ref(expr_id, target_id, diagnostics)
             {
                 Ok(target_type.clone())
             } else {
                 diagnostics.report_error(
                     format!(
                         "Cannot cast from {} to interface {} ({} does not implement it)",
-                        self.ty_str_display(&expr_type_str),
-                        self.ty_str_display(&target_type_str),
-                        self.ty_str_display(&expr_type_str)
+                        self.ty_display(&expr_type),
+                        self.ty_display(target_type),
+                        self.ty_display(&expr_type)
                     ),
                     target_type.get_span().or_else(|| expr.position()),
                 );
                 Ok(target_type.clone())
             }
-        } else if self.is_interface_name(&expr_type_str) {
+        } else if self.is_interface_name(expr_id) {
             // Downcast from an interface to a concrete class or another interface: permitted
             // (identity at runtime; like unboxing `object`, a wrong downcast is the caller's risk).
             Ok(target_type.clone())
@@ -106,8 +111,8 @@ impl<'a> Analyzer<'a> {
             diagnostics.report_error(
                 format!(
                     "Cannot cast from {} to {}",
-                    self.ty_str_display(&expr_type_str),
-                    self.ty_str_display(&target_type_str)
+                    self.ty_display(&expr_type),
+                    self.ty_display(target_type)
                 ),
                 target_type.get_span().or_else(|| expr.position()),
             );
@@ -173,9 +178,7 @@ impl<'a> Analyzer<'a> {
         if !matches!(self.type_ctx.interner.kind(target), TyKind::Interface(..)) {
             return false;
         }
-        let iface = self.type_id_identity(target);
-        let val = self.type_id_identity(value);
-        self.implements_as_interface_ref(&val, &iface, diagnostics)
+        self.implements_as_interface_ref(value, target, diagnostics)
     }
 
     /// `Result`/`Option` are covariant in their type arguments when a bitcast of the heap box is
@@ -221,33 +224,6 @@ impl<'a> Analyzer<'a> {
                 && self.type_ctx.interner.is_reference(value))
     }
 
-    /// Mangled identity spelling matching [`Type::get_type`], used to probe `implements`.
-    fn type_id_identity(&self, id: TypeId) -> String {
-        match self.type_ctx.interner.kind(id).clone() {
-            TyKind::Prim(p) => p.name().to_string(),
-            TyKind::Object => "object".to_string(),
-            TyKind::Void => "void".to_string(),
-            TyKind::Error => dream_types::UNKNOWN_TYPE_NAME.to_string(),
-            TyKind::Js => "js".to_string(),
-            TyKind::Array(elem) => format!("{}[]", self.type_id_identity(elem)),
-            TyKind::Enum(def) => self.type_ctx.defs.name(def).to_string(),
-            TyKind::Struct(def, args) | TyKind::Union(def, args) | TyKind::Interface(def, args) => {
-                let base = self.type_ctx.defs.name(def).to_string();
-                let arg_names: Vec<String> =
-                    args.iter().map(|a| self.type_id_identity(*a)).collect();
-                mangle_with_suffixes(&base, arg_names)
-            }
-            TyKind::Func(params, ret) => {
-                let ps: Vec<String> = params.iter().map(|p| self.type_id_identity(*p)).collect();
-                format!("fun({}):{}", ps.join(","), self.type_id_identity(ret))
-            }
-            TyKind::Tuple(elems) => {
-                let inner: Vec<String> = elems.iter().map(|e| self.type_id_identity(*e)).collect();
-                format!("({})", inner.join(","))
-            }
-        }
-    }
-
     /// If `value` (of static type `from`) has a registered `@cast("implicit")` method converting
     /// `from` to `to`, rewrites the HIR into a call to it and returns `to`; otherwise returns
     /// `from`/`value` unchanged. Meant to run just before a [`Self::compare_data_type`] check at a
@@ -260,13 +236,85 @@ impl<'a> Analyzer<'a> {
         to: &Type,
         value: Option<HExpr>,
     ) -> (Type, Option<HExpr>) {
-        if from.get_type() == to.get_type() {
+        if self.type_ctx.lower(from) == self.type_ctx.lower(to) {
             return (from.clone(), value);
         }
         let Some(cast) = self.operator_cast_fn(from, to, true) else {
             return (from.clone(), value);
         };
-        self.hir_set_method_call(value, &cast.mangled_name, vec![], to);
+        self.hir_set_method_call(value, &cast.identity, vec![], to);
         (to.clone(), self.hir_take())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::module_graph::ModuleGraph;
+    use bumpalo::Bump;
+    use dream_syntax::nodes::ProgramNode;
+    use dream_types::{DefKind, ModuleId};
+
+    #[test]
+    fn assignability_keeps_same_named_module_types_distinct() {
+        let arena = Bump::new();
+        let graph = ModuleGraph::single(ProgramNode::new(
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        ));
+        let mut analyzer = Analyzer::new(&graph, &arena);
+        let mut types = Vec::new();
+        for (module, path) in [(ModuleId(1), "left"), (ModuleId(2), "right")] {
+            analyzer.type_ctx.define_module(module, path.into(), vec![]);
+            analyzer.type_ctx.set_scope(module);
+            let def = analyzer.type_ctx.register(DefKind::Struct, "User", vec![]);
+            let ty = analyzer.type_ctx.instantiate(def, vec![]);
+            types.push(analyzer.type_ctx.syntax_type(ty));
+        }
+        let mut diagnostics = DiagnosticBag::new(None);
+        analyzer
+            .compare_data_type(&types[0], &types[1], &empty_span(), &mut diagnostics)
+            .unwrap();
+        assert!(diagnostics.has_errors());
+    }
+
+    #[test]
+    fn assignability_preserves_nested_generic_arguments() {
+        let arena = Bump::new();
+        let graph = ModuleGraph::single(ProgramNode::new(
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        ));
+        let mut analyzer = Analyzer::new(&graph, &arena);
+        let box_def = analyzer
+            .type_ctx
+            .register(DefKind::Struct, "Box", vec!["T".into()]);
+        let nested_def = analyzer
+            .type_ctx
+            .register(DefKind::Struct, "A", vec!["T".into()]);
+        let flat_def = analyzer.type_ctx.register(DefKind::Struct, "A_B", vec![]);
+        let leaf_def = analyzer.type_ctx.register(DefKind::Struct, "B", vec![]);
+        let flat = analyzer.type_ctx.instantiate(flat_def, vec![]);
+        let leaf = analyzer.type_ctx.instantiate(leaf_def, vec![]);
+        let nested = analyzer.type_ctx.instantiate(nested_def, vec![leaf]);
+        let left = analyzer.type_ctx.instantiate(box_def, vec![flat]);
+        let right = analyzer.type_ctx.instantiate(box_def, vec![nested]);
+        let left = analyzer.type_ctx.syntax_type(left);
+        let right = analyzer.type_ctx.syntax_type(right);
+        let mut diagnostics = DiagnosticBag::new(None);
+        analyzer
+            .compare_data_type(&left, &right, &empty_span(), &mut diagnostics)
+            .unwrap();
+        assert!(diagnostics.has_errors());
     }
 }

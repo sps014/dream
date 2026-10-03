@@ -13,6 +13,7 @@ mod display;
 mod interner;
 mod kind;
 mod lower;
+mod syntax;
 mod naming;
 
 pub use c_scalar::CScalar;
@@ -30,7 +31,35 @@ pub struct TypeId(pub u32);
 
 /// A compact handle to a nominal declaration (struct/union/enum/function) in a [`DefTable`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct DefId(pub u32);
+pub struct DefId {
+    pub module: ModuleId,
+    pub index: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+pub struct ModuleId(pub u32);
+
+impl ModuleId {
+    pub const ROOT: Self = Self(0);
+}
+
+impl DefId {
+    pub const fn root(index: u32) -> Self {
+        Self {
+            module: ModuleId::ROOT,
+            index,
+        }
+    }
+}
+
+impl std::fmt::Display for DefId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.module.0, self.index)
+    }
+}
+
+mod symbols;
+pub use symbols::{function_symbol, symbol_component, type_symbol};
 
 #[cfg(test)]
 mod tests {
@@ -75,14 +104,26 @@ mod tests {
     fn display_renders_generics_with_angle_brackets() {
         let mut defs = DefTable::new();
         let mut i = TypeInterner::new();
-        let def = defs.intern(DefKind::Struct, "Box", vec!["T".to_string()]);
+        let def = defs.allocate(
+            ModuleId::ROOT,
+            "",
+            DefKind::Struct,
+            "Box",
+            vec!["T".to_string()],
+        );
         let boxed_int = i.struct_ty(def, vec![i.int()]);
         assert_eq!(display_name(&i, &defs, boxed_int), "Box<int>");
         let arr = i.array(i.int());
         assert_eq!(display_name(&i, &defs, arr), "int[]");
         let arr2 = i.array(arr);
         assert_eq!(display_name(&i, &defs, arr2), "int[][]");
-        let list = defs.intern(DefKind::Struct, "List", vec!["T".to_string()]);
+        let list = defs.allocate(
+            ModuleId::ROOT,
+            "",
+            DefKind::Struct,
+            "List",
+            vec!["T".to_string()],
+        );
         let list_int = i.struct_ty(list, vec![i.int()]);
         assert_eq!(display_name(&i, &defs, list_int), "List<int>");
         let nested = i.struct_ty(list, vec![list_int]);
@@ -92,16 +133,15 @@ mod tests {
     }
 
     #[test]
-    fn def_table_dedups_by_name() {
+    fn definitions_have_module_local_identity() {
         let mut defs = DefTable::new();
-        let a = defs.intern(DefKind::Struct, "Point", vec![]);
-        let b = defs.intern(DefKind::Struct, "Point", vec![]);
-        assert_eq!(a, b);
-        let f = defs.intern(DefKind::Function, "Point", vec![]);
-        assert_ne!(
-            a, f,
-            "different DefKinds with the same name are distinct defs"
-        );
+        let a = defs.allocate(ModuleId(1), "a", DefKind::Struct, "User", vec![]);
+        let b = defs.allocate(ModuleId(2), "b", DefKind::Struct, "User", vec![]);
+        assert_ne!(a, b);
+        assert_eq!(a.index, b.index);
+        assert_eq!(defs.name(a), defs.name(b));
+        let f = defs.allocate(ModuleId(1), "a", DefKind::Function, "User", vec![]);
+        assert_eq!(f.index, a.index + 1);
     }
 
     #[test]
@@ -119,7 +159,7 @@ mod tests {
         assert!(!assignable(&i, i.int(), long));
 
         // Enum <-> int.
-        let color = defs.intern(DefKind::Enum, "Color", vec![]);
+        let color = defs.allocate(ModuleId::ROOT, "", DefKind::Enum, "Color", vec![]);
         let color_ty = i.enum_ty(color);
         assert!(assignable(&i, color_ty, i.int()));
         assert!(assignable(&i, i.int(), color_ty));

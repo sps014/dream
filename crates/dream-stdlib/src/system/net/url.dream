@@ -104,7 +104,7 @@ public class Url {
     }
 
     // Reconstructs the URL string from components.
-    override public fun to_string(): string {
+    public override fun to_string(): string {
         let sb = StringBuilder();
         if this.scheme.is_empty() == false {
             sb.append(this.scheme);

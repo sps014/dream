@@ -3,85 +3,40 @@
 
 use super::*;
 use crate::function_table::FunctionTableInfo;
-use dream_abi::intrinsics;
 
 impl<'a> Analyzer<'a> {
-    /// Registers one monomorphized instance of a generic free function under its mangled name
-    /// (`swap_int_string`, `natural_order_int`, ...), idempotently: a clone with its signature made
-    /// concrete is stashed in `instantiated_generics` so its body is analyzed under `bindings`, and
-    /// a matching signature is added to the function table. Shared by generic call resolution and by
-    /// using a generic function as a first-class value. Returns the mangled name.
     pub(crate) fn register_generic_function_instance(
         &mut self,
         template: &'a FunctionNode<'a>,
         bindings: &GenericBindings,
-    ) -> String {
-        let mangled_name = mangle_bindings(&template.name.text, bindings);
-        if self.function_table.get_function(&mangled_name).is_err() {
-            // Store a clone with its signature monomorphized (params + return type made concrete),
-            // mirroring how struct methods are specialized. The body is shared and resolved against
-            // the bindings during analysis/codegen, so the declared return type (e.g. `List<T>` ->
-            // `List_int`) stays consistent with what the body builds.
+    ) -> crate::function_table::FunctionIdentity {
+        let old_scope = self.type_ctx.scope();
+        self.type_ctx.set_scope(self.graph.module_for_file(template.file_path.as_deref()));
+        let def = self.function_table.declaration_node(template).map(|key| key.0)
+            .or_else(|| self.type_ctx.resolve(DefKind::Function, &template.name.text));
+        let Some(def) = def else {
+            self.type_ctx.set_scope(old_scope);
+            return (self.type_ctx.register(DefKind::Function, &template.name.text, generic_param_names(&template.generic_parameters)), Vec::new());
+        };
+        let args: Vec<_> = bindings.values().map(|ty| self.type_ctx.lower(ty)).collect();
+        let identity = (def, args);
+        if !self.function_table.functions.contains_key(&identity) {
             let mut specialized = template.clone();
             Self::substitute_generic_signature(&mut specialized, bindings);
             let specialized_ref: &'a FunctionNode<'a> = self.arena.alloc(specialized);
-            self.instantiated_generics
-                .insert(mangled_name.clone(), (bindings.clone(), specialized_ref));
-
-            let monomorphized_params: Vec<Type> = template
-                .parameters
-                .iter()
-                .map(|p| Self::monomorphize_type(&p.type_, bindings))
-                .collect();
-            let info = FunctionTableInfo {
-                name: mangled_name.clone(),
-                parameters: monomorphized_params.iter().map(|t| t.get_type()).collect(),
-                parameter_types: monomorphized_params,
-                param_names: template
-                    .parameters
-                    .iter()
-                    .map(|p| p.name.text.clone())
-                    .collect(),
-                is_variadic: template
-                    .parameters
-                    .last()
-                    .map(|p| p.is_variadic)
-                    .unwrap_or(false),
-                is_ref: template.parameters.iter().map(|p| p.is_ref).collect(),
-                is_take: template
-                    .parameters
-                    .iter()
-                    .map(|p| !p.is_ref && !p.is_borrow && p.name.text != "this")
-                    .collect(),
-                defaults: template
-                    .parameters
-                    .iter()
-                    .map(|p| p.default.clone())
-                    .collect(),
-                return_type: template
-                    .return_type
-                    .as_ref()
-                    .map(|ret| Self::monomorphize_type(ret, bindings)),
-                is_async: template.is_async,
-                is_static: template.is_static,
-                is_unsafe: template.attributes.iter().any(|a| a.name.text == "unsafe"),
-                runtime_support: dream_abi::attributes::RuntimeSupport::from_attributes(
-                    &template.attributes,
-                ),
-                is_compute: dream_abi::attributes::has_compute_attr(&template.attributes),
-                is_vertex: dream_abi::attributes::has_vertex_attr(&template.attributes),
-                is_fragment: dream_abi::attributes::has_fragment_attr(&template.attributes),
-                is_gpu_helper: dream_abi::attributes::has_gpu_helper_attr(&template.attributes),
-                is_shader_only: dream_abi::attributes::has_shader_only_attr(&template.attributes),
-                visibility: template.visibility,
-                intrinsic_name: intrinsics::intrinsic_key(&template.attributes),
-                declaring_file: template.file_path.clone(),
-                declaring_module: self.module_of(template.file_path.as_ref()),
-            };
-
-            let _ = self.function_table.add_function(mangled_name.clone(), info);
+            let mut info = FunctionTableInfo::from_identity(specialized_ref, identity.clone(), &mut self.type_ctx);
+            info.declaring_module = self.module_of(template.file_path.as_ref());
+            self.instantiated_generics.insert(identity.clone(), (bindings.clone(), specialized_ref));
+            self.function_table.record_declaration(specialized_ref, identity.clone());
+            self.function_table.add_instance(info, def, identity.1.clone());
+            let owners: Vec<_> = self.function_table.generic_methods.iter()
+                .filter(|(_, candidate)| **candidate == def).map(|(key, _)| key.clone()).collect();
+            for key in owners {
+                self.function_table.methods.entry(key).or_default().push(identity.clone());
+            }
         }
-        mangled_name
+        self.type_ctx.set_scope(old_scope);
+        identity
     }
 
     /// Instantiates a generic free function used as a first-class *value* (`let cmp: fun(T, T): int =
@@ -95,7 +50,8 @@ impl<'a> Analyzer<'a> {
         id: &SyntaxToken,
         diagnostics: &mut DiagnosticBag,
     ) -> Option<Type> {
-        let template = *self.generic_functions.get(&id.text)?;
+        let def = self.type_ctx.resolve(DefKind::Function, &id.text)?;
+        let template = *self.generic_functions.get(&def)?;
 
         // The expected type at this site drives inference; it must be a concrete function type.
         let expected = self
@@ -117,9 +73,9 @@ impl<'a> Analyzer<'a> {
 
         // Infer bindings by matching the expected parameter types against the template's formals,
         // then verify the type parameters' constraints are satisfied by those concrete types.
-        let param_strings: Vec<String> = exp_params.iter().map(|p| p.get_type()).collect();
+        let param_ids: Vec<_> = exp_params.iter().map(|p| self.type_ctx.lower(p)).collect();
         let bindings =
-            self.infer_generic_bindings(template, &None, &param_strings, &id.position, diagnostics);
+            self.infer_generic_bindings(template, &None, &param_ids, &id.position, diagnostics);
         self.verify_generic_constraints(
             &template.generic_constraints,
             &bindings,
@@ -127,14 +83,12 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
 
-        self.register_generic_function_instance(template, &bindings);
+        let identity = self.register_generic_function_instance(template, &bindings);
         // The func value must reference the base template's `DefId` + concrete instance args (in
         // binding order) so it maps to the monomorphized instance's function-table slot.
-        let instance: Vec<dream_types::TypeId> =
-            bindings.values().map(|t| self.type_ctx.lower(t)).collect();
         let ret = (*exp_ret).clone();
         let func_ty = Type::Function(exp_params, exp_ret);
-        self.hir_set_generic_func_value(&template.name.text, instance, &func_ty, &ret);
+        self.hir_set_func_value_identity(&identity, &func_ty, &ret);
         Some(func_ty)
     }
 }

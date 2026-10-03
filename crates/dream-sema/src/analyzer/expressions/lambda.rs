@@ -618,22 +618,20 @@ impl<'a> Analyzer<'a> {
             indexer_kind: None,
         };
         let func_ref: &'a FunctionNode<'a> = self.arena.alloc(func_node);
+        let parameter_ids: Vec<_> = func_ref.parameters.iter().map(|p| self.type_ctx.lower(&p.type_)).collect();
+        let def = if is_generic_lambda {
+            self.type_ctx.register(DefKind::Function, &name, generic_param_names(&lambda.generic_parameters))
+        } else {
+            self.type_ctx.register_function(&name, &parameter_ids)
+        };
+        self.function_table.record_declaration(func_ref, (def, Vec::new()));
 
         if !captures.is_empty() {
-            self.closure_captures.insert(name.clone(), captures.clone());
+            self.closure_captures.insert(def, captures.clone());
         }
 
         if is_generic_lambda {
-            self.generic_functions.insert(name.clone(), func_ref);
-            self.type_ctx.register(
-                DefKind::Function,
-                &name,
-                lambda
-                    .generic_parameters
-                    .as_ref()
-                    .map(|ps| ps.iter().map(|p| p.text.clone()).collect())
-                    .unwrap_or_default(),
-            );
+            self.generic_functions.insert(def, func_ref);
 
             let expected = self
                 .current_expected_type
@@ -644,7 +642,7 @@ impl<'a> Analyzer<'a> {
                 return match self.instantiate_generic_function_value(&tok, diagnostics) {
                     Some(func_ty) => {
                         // Propagate captures onto the mangled instance if any.
-                        if let Some(caps) = self.closure_captures.get(&name).cloned() {
+                        if let Some(caps) = self.closure_captures.get(&def).cloned() {
                             if let Some(Type::Function(_, _)) = self.current_expected_type.as_ref()
                             {
                                 // Instance name is mangled; find latest registered instance.
@@ -661,11 +659,10 @@ impl<'a> Analyzer<'a> {
             return Ok(Type::GenericFunctionItem(name));
         }
 
-        let info = FunctionTableInfo::from(func_ref);
+        let info = FunctionTableInfo::from(func_ref, &mut self.type_ctx);
         let _ = self.function_table.add_function(name.clone(), info);
-        self.type_ctx.register(DefKind::Function, &name, vec![]);
         self.pending_lambdas.insert(
-            name.clone(),
+            def,
             (func_ref, self.current_generic_bindings.clone()),
         );
 

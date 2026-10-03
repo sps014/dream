@@ -29,7 +29,7 @@ fn rvalue_callees(rv: &Rvalue, out: &mut Vec<FnKey>) {
 /// `extern` imports are dropped. See [`prune_functions`] for the reachability core; the extra
 /// shaking lives in [`prune_dead_globals`] / [`prune_dead_layouts`] / [`prune_dead_imports`].
 pub fn prune_module(mir: &mut Mir, interner: &TypeInterner) {
-    prune_functions(mir);
+    prune_functions(mir, interner);
     prune_dead_globals(mir);
     prune_dead_layouts(mir, interner);
     prune_dead_imports(mir, interner);
@@ -179,12 +179,12 @@ fn live_layout_types(mir: &Mir, interner: &TypeInterner) -> HashSet<TypeId> {
         }
     }
 
-    let kept_names: HashSet<&str> = mir.functions.iter().map(|f| f.name.as_str()).collect();
+    let kept_defs: HashSet<dream_types::DefId> = mir.functions.iter().map(|f| f.def).collect();
     for imp in &mir.interfaces.impls {
         if imp
             .entries
             .iter()
-            .any(|(_, syms)| syms.iter().any(|s| kept_names.contains(s.as_str())))
+            .any(|(_, defs)| defs.iter().flatten().any(|def| kept_defs.contains(def)))
         {
             seed(imp.class_ty, &mut live, &mut work);
         }
@@ -351,7 +351,7 @@ fn collect_import_defs_rvalue(rv: &Rvalue, out: &mut HashSet<dream_types::DefId>
 /// (including [`Terminator::TailCall`]), `FuncRef`s, and constructors. An `IndirectCall` has no
 /// static target, but its only possible targets are functions whose address was taken by a
 /// `FuncRef` in reachable code — which the `FuncRef` edges already keep — so the result stays sound.
-fn prune_functions(mir: &mut Mir) {
+fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
     let index: HashMap<FnKey, usize> = mir
         .functions
         .iter()
@@ -359,15 +359,11 @@ fn prune_functions(mir: &mut Mir) {
         .map(|(i, f)| ((f.def, f.instance.clone()), i))
         .collect();
 
-    // `<Type>_del`/`<Type>_to_string` are invoked only by the generated RC runtime (the release
-    // helpers and `$print_object`), never by a normal call edge, so reachability tracks them by name
-    // for every type that is *live* — constructed (`New`/`UnionNew`) or printed — plus, transitively,
-    // the types of its (reference) fields, whose release/print the runtime chains into.
-    let by_name: HashMap<&str, usize> = mir
+    let by_def: HashMap<dream_types::DefId, usize> = mir
         .functions
         .iter()
         .enumerate()
-        .map(|(i, f)| (f.name.as_str(), i))
+        .map(|(i, f)| (f.def, i))
         .collect();
 
     // An `@owned("free_fn")` `@c` import constructs its `OwnedCPtr` result in backend glue, so a
@@ -381,7 +377,7 @@ fn prune_functions(mir: &mut Mir) {
 
     let mut reachable: HashSet<usize> = HashSet::new();
     let mut live_types: HashSet<TypeId> = HashSet::new();
-    let mut type_worklist: Vec<TypeId> = Vec::new();
+    let mut type_worklist: Vec<TypeId> = mir.globals.iter().map(|g| g.ty).collect();
     let mut worklist: Vec<usize> = mir
         .functions
         .iter()
@@ -441,6 +437,11 @@ fn prune_functions(mir: &mut Mir) {
             // An async function's MIR body is a stub; its real call/type edges live in the preserved
             // HIR snapshot, so walk that too (otherwise awaited helpers would be pruned).
             let f = &mir.functions[idx];
+            // Layout retention follows signatures and local types, including nested generic
+            // arguments; their protocol overrides must survive with those layouts.
+            type_worklist.push(f.ret);
+            type_worklist.extend(f.instance.iter().copied());
+            type_worklist.extend(f.locals.iter().map(|l| l.ty));
             if f.is_async {
                 if let Some(hir_fn) = &f.hir_fn {
                     let mut edges = HirEdges::default();
@@ -461,14 +462,14 @@ fn prune_functions(mir: &mut Mir) {
                 }
             }
             // An interface call may dynamically reach the concrete method of *any* class that
-            // implements that interface. Keep each such `{Class}_{method}` implementation alive
+            // implements that interface. Keep each concrete implementation alive
             // (`to_string` is likewise generated separately from ordinary call edges).
             for (iface_id, slot) in iface_uses {
                 for imp in &mir.interfaces.impls {
-                    for (id, symbols) in &imp.entries {
+                    for (id, definitions) in &imp.entries {
                         if *id == iface_id {
-                            if let Some(sym) = symbols.get(slot) {
-                                if let Some(&t) = by_name.get(sym.as_str()) {
+                            if let Some(Some(def)) = definitions.get(slot) {
+                                if let Some(&t) = by_def.get(def) {
                                     if !reachable.contains(&t) {
                                         worklist.push(t);
                                     }
@@ -488,27 +489,37 @@ fn prune_functions(mir: &mut Mir) {
                 continue;
             }
             let mut field_tys = Vec::new();
-            let mut names = Vec::new();
+            match interner.kind(ty) {
+                TyKind::Array(elem) => field_tys.push(*elem),
+                TyKind::Struct(_, args)
+                | TyKind::Union(_, args)
+                | TyKind::Interface(_, args)
+                | TyKind::Tuple(args) => field_tys.extend(args.iter().copied()),
+                TyKind::Func(params, ret) => {
+                    field_tys.extend(params.iter().copied());
+                    field_tys.push(*ret);
+                }
+                _ => {}
+            }
             let mut destructors = Vec::new();
             if let Some(l) = mir.layouts.structs.get(&ty) {
                 destructors.extend(l.destructor);
-                names.push(l.name.clone());
                 field_tys.extend(l.fields.iter().map(|f| f.ty));
             }
             if let Some(l) = mir.layouts.unions.get(&ty) {
                 destructors.extend(l.destructor);
-                names.push(l.name.clone());
                 field_tys.extend(
                     l.variants
                         .iter()
                         .flat_map(|v| v.fields.iter().map(|f| f.ty)),
                 );
             }
-            for name in names {
-                let sym = format!("{}_to_string", name);
-                if let Some(&idx) = by_name.get(sym.as_str()) {
-                    if !reachable.contains(&idx) {
-                        worklist.push(idx);
+            if let Some(methods) = mir.object_methods.get(&ty) {
+                for def in methods.to_string.iter().chain(methods.hash_code.iter()) {
+                    if let Some(&idx) = index.get(&(*def, vec![])) {
+                        if !reachable.contains(&idx) {
+                            worklist.push(idx);
+                        }
                     }
                 }
             }
@@ -525,7 +536,7 @@ fn prune_functions(mir: &mut Mir) {
             break;
         }
     }
-    drop(by_name);
+    drop(by_def);
 
     let mut keep = reachable.into_iter().collect::<Vec<_>>();
     keep.sort_unstable();

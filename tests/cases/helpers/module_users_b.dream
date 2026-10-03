@@ -1,0 +1,14 @@
+module users.b;
+
+public class User {
+    public name: string;
+    public constructor(name: string) { this.name = name; }
+}
+
+public fun second_user_value(): string {
+    let user: Result<User, string> = Result.Ok(User("second"));
+    switch (user) {
+        Ok(value) => { return value.name; }
+        Err(error) => { return error; }
+    }
+}

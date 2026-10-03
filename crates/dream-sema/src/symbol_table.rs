@@ -3,23 +3,30 @@ use dream_syntax::nodes::Type;
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_text::text_span::TextSpan;
 use indexmap::IndexMap;
-use std::cell::RefCell;
 use indexmap::IndexSet as HashSet;
-use std::rc::Rc;
+use std::cell::RefCell;
+use std::rc::{Rc, Weak};
 
 #[derive(Debug)]
 pub struct SymbolTable {
     /// Insertion-ordered (declaration order) so codegen emits each function's `(local ...)`
     /// declarations and function-exit releases in a deterministic order.
-    symbols: IndexMap<String, Type>,
+    symbols: IndexMap<String, Symbol>,
     /// Names declared with `const` in this scope; reassigning them is an error.
     const_symbols: HashSet<String>,
     /// Locals (`let`/`const`/tuple bindings) subject to unused-variable warnings, with decl span.
     tracked_locals: IndexMap<String, TextSpan>,
     /// Names that have been read (not merely assigned to) in this scope or via lookup here.
     used_locals: HashSet<String>,
-    parent: Option<Rc<RefCell<SymbolTable>>>,
+    // Children are owned by the scope tree; owning the parent too would leak every nested scope.
+    parent: Option<Weak<RefCell<SymbolTable>>>,
     pub children: Vec<Rc<RefCell<SymbolTable>>>,
+}
+
+#[derive(Debug)]
+struct Symbol {
+    ty: Type,
+    sink_parameter: bool,
 }
 
 impl SymbolTable {
@@ -29,7 +36,7 @@ impl SymbolTable {
             const_symbols: HashSet::new(),
             tracked_locals: IndexMap::new(),
             used_locals: HashSet::new(),
-            parent,
+            parent: parent.as_ref().map(Rc::downgrade),
             children: Vec::new(),
         }
     }
@@ -48,8 +55,8 @@ impl SymbolTable {
         if self.symbols.contains_key(name) {
             return false;
         }
-        match self.parent {
-            Some(ref parent) => parent.as_ref().borrow().is_const(name),
+        match self.parent.as_ref().and_then(Weak::upgrade) {
+            Some(parent) => parent.borrow().is_const(name),
             None => false,
         }
     }
@@ -59,14 +66,45 @@ impl SymbolTable {
     }
 
     pub fn add_symbol(&mut self, name: String, token: Type) -> Result<(), SymbolError> {
-        match self.symbols.insert(name.clone(), token) {
+        self.add_binding(name, token, false)
+    }
+
+    pub fn add_parameter(
+        &mut self,
+        name: String,
+        ty: Type,
+        sink_parameter: bool,
+    ) -> Result<(), SymbolError> {
+        self.add_binding(name, ty, sink_parameter)
+    }
+
+    fn add_binding(
+        &mut self,
+        name: String,
+        ty: Type,
+        sink_parameter: bool,
+    ) -> Result<(), SymbolError> {
+        match self
+            .symbols
+            .insert(name.clone(), Symbol { ty, sink_parameter })
+        {
             Some(previous) => Err(SymbolError::new(format!(
                 "variable {} already exists at: {}",
                 name,
-                previous.get_line_str()
+                previous.ty.get_line_str()
             ))),
             None => Ok(()),
         }
+    }
+
+    pub fn is_sink_parameter(&self, name: &str) -> bool {
+        if let Some(symbol) = self.symbols.get(name) {
+            return symbol.sink_parameter;
+        }
+        self.parent
+            .as_ref()
+            .and_then(Weak::upgrade)
+            .is_some_and(|parent| parent.borrow().is_sink_parameter(name))
     }
 
     /// Registers a user `let`/`const`/destructure binding for unused-variable warnings.
@@ -83,8 +121,8 @@ impl SymbolTable {
             self.used_locals.insert(name.to_string());
             return;
         }
-        if let Some(ref parent) = self.parent {
-            parent.as_ref().borrow_mut().mark_used(name);
+        if let Some(parent) = self.parent.as_ref().and_then(Weak::upgrade) {
+            parent.borrow_mut().mark_used(name);
         }
     }
 
@@ -109,24 +147,65 @@ impl SymbolTable {
             // Found in this scope: local unless this scope has no parent (the global root).
             return self.parent.is_some();
         }
-        match self.parent {
-            Some(ref parent) => parent.as_ref().borrow().resolves_before_global_root(name),
+        match self.parent.as_ref().and_then(Weak::upgrade) {
+            Some(parent) => parent.borrow().resolves_before_global_root(name),
             None => false,
         }
     }
 
     pub fn get_symbol(&self, name: &SyntaxToken) -> Result<Type, SymbolError> {
         if let Some(symbol) = self.symbols.get(&name.text) {
-            return Ok(symbol.clone());
+            return Ok(symbol.ty.clone());
         }
 
-        match self.parent {
-            Some(ref parent) => parent.as_ref().borrow().get_symbol(name),
+        match self.parent.as_ref().and_then(Weak::upgrade) {
+            Some(parent) => parent.borrow().get_symbol(name),
             None => Err(SymbolError::new(format!(
                 "variable {} does not exist at: {}",
                 name.text,
                 name.position.get_point_str()
             ))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scope_tree_drops_without_reference_cycles() {
+        let root = Rc::new(RefCell::new(SymbolTable::new(None)));
+        let child = Rc::new(RefCell::new(SymbolTable::new(Some(root.clone()))));
+        let grandchild = Rc::new(RefCell::new(SymbolTable::new(Some(child.clone()))));
+        root.borrow_mut().add_child(child.clone());
+        child.borrow_mut().add_child(grandchild.clone());
+        let handles = [
+            Rc::downgrade(&root),
+            Rc::downgrade(&child),
+            Rc::downgrade(&grandchild),
+        ];
+        drop(grandchild);
+        drop(child);
+        drop(root);
+        assert!(handles.iter().all(|handle| handle.upgrade().is_none()));
+    }
+
+    #[test]
+    fn sink_parameter_metadata_respects_lexical_shadowing() {
+        let mut params = SymbolTable::new(None);
+        params
+            .add_parameter("items".into(), Type::Unknown, true)
+            .unwrap();
+        params
+            .add_parameter("borrowed".into(), Type::Unknown, false)
+            .unwrap();
+        let params = Rc::new(RefCell::new(params));
+        let mut inner = SymbolTable::new(Some(params.clone()));
+        assert!(inner.is_sink_parameter("items"));
+        assert!(!inner.is_sink_parameter("borrowed"));
+        inner.add_symbol("items".into(), Type::Unknown).unwrap();
+        assert!(!inner.is_sink_parameter("items"));
+        assert!(params.borrow().is_sink_parameter("items"));
     }
 }

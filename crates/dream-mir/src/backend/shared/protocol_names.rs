@@ -7,6 +7,9 @@ use dream_types::{PrimTy, TyKind, TypeId};
 
 /// The `to_string` conversion for `ty`; empty for `string`, which is already its own text.
 pub(crate) fn to_string_fn(cx: &Cx<'_>, ty: TypeId) -> String {
+    if let Some(def) = cx.mir.object_methods.get(&ty).and_then(|m| m.to_string) {
+        return cx.callee_sym(def, &[]);
+    }
     match cx.interner.kind(ty) {
         TyKind::Prim(PrimTy::Int) => "dream_int_to_string_fast".into(),
         TyKind::Prim(PrimTy::UInt) => "dream_uint_to_string".into(),
@@ -51,6 +54,9 @@ pub(crate) enum HashFn {
 }
 
 pub(crate) fn hash_fn(cx: &Cx<'_>, ty: TypeId) -> HashFn {
+    if let Some(def) = cx.mir.object_methods.get(&ty).and_then(|m| m.hash_code) {
+        return HashFn::Call(cx.callee_sym(def, &[]));
+    }
     match cx.interner.kind(ty) {
         TyKind::Prim(PrimTy::String) => HashFn::Call("dream_string_hash".into()),
         TyKind::Prim(PrimTy::Float) => HashFn::Call("dream_bitcast_f32".into()),

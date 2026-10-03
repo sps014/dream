@@ -157,19 +157,9 @@ impl<'a> Analyzer<'a> {
         // `this` is simply parameter 0. Static methods have no receiver. Both are emittable. A free
         // function is registered under its *emitted* name (signature-mangled when overloaded), so an
         // overloaded declaration resolves to its own distinct `DefId` rather than a shared base def.
-        let param_types: Vec<Type> = function
-            .parameters
-            .iter()
-            .map(|p| p.type_.clone())
-            .collect();
-        let module = self.module_of(function.file_path.as_ref());
-        let lookup_name = self.function_table.resolve_emitted_name_scoped(
-            &function.name.text,
-            module.as_ref(),
-            &param_types,
-            &mut self.type_ctx,
-        );
-        let def = self.type_ctx.defs.lookup(DefKind::Function, &lookup_name);
+        let identity = self.function_declaration(function);
+        let def = identity.as_ref().map(|key| key.0);
+        let lookup_name = identity.as_ref().map(|key| self.function_table.emitted_name(&self.type_ctx, key)).unwrap_or_else(|| function.name.text.clone());
 
         // A generic template is emitted once per monomorphization: the initial (unbound) pass is
         // skipped, and each concrete instantiation is analyzed again under `current_generic_bindings`
@@ -184,12 +174,7 @@ impl<'a> Analyzer<'a> {
         // base name. A method on a generic struct (`Box<int>.get`) is a non-generic method whose
         // specialization is already baked into its mangled `{Type_args}_{method}` def name, so it
         // takes an empty instance (its call sites resolve to that same mangled name with no suffix).
-        let instance: Vec<TypeId> = if is_generic && under_mono {
-            let concrete: Vec<Type> = self.current_generic_bindings.values().cloned().collect();
-            concrete.iter().map(|c| self.type_ctx.lower(c)).collect()
-        } else {
-            Vec::new()
-        };
+        let instance = identity.map(|key| key.1).unwrap_or_default();
 
         self.hir.collecting = true;
         self.hir.ok = true;
@@ -224,7 +209,7 @@ impl<'a> Analyzer<'a> {
         self.hir.blocks.push(Vec::new());
         self.hir.def = def;
         self.hir.instance = instance;
-        let lookup_name_for_captures = lookup_name.clone();
+        let lookup_def_for_captures = def;
         self.hir.name = lookup_name;
         self.hir.name_span = Some(function.name.position);
         self.hir.is_async = function.is_async;
@@ -283,8 +268,7 @@ impl<'a> Analyzer<'a> {
                     local,
                     name: param.name.text.clone(),
                     ty: box_tid,
-                    is_ref: true,
-                    is_take: false,
+                    mode: dream_hir::ParamMode::Ref,
                 });
                 self.hir.boxed.insert(param.name.text.clone(), elem_ty);
                 continue;
@@ -297,8 +281,13 @@ impl<'a> Analyzer<'a> {
                 local,
                 name: param.name.text.clone(),
                 ty,
-                is_ref: false,
-                is_take: !param.is_ref && !param.is_borrow && param.name.text != "this",
+                mode: if param.is_borrow || param.name.text == "this" {
+                    dream_hir::ParamMode::Borrow
+                } else if self.type_ctx.interner.is_shared_type(ty) {
+                    dream_hir::ParamMode::Share
+                } else {
+                    dream_hir::ParamMode::Sink
+                },
             });
         }
 
@@ -326,10 +315,7 @@ impl<'a> Analyzer<'a> {
         // `CaptureCell<T>` its creating scope boxed it into, so `hir_set_var`/`hir_assign_local`'s
         // `self.hir.boxed`-driven redirect (see `hir_declare_local`) applies transparently to it
         // too — reads/writes inside this body go through `.value` exactly like a captured `let`'s.
-        if let Some(captures) = self
-            .closure_captures
-            .get(&lookup_name_for_captures)
-            .cloned()
+        if let Some(captures) = lookup_def_for_captures.and_then(|def| self.closure_captures.get(&def)).cloned()
         {
             if captures.len() == 1 {
                 let (cap_name, cap_ty) = &captures[0];
@@ -524,8 +510,26 @@ impl<'a> Analyzer<'a> {
         if emittable {
             if let (Some(def), Some(ret)) = (self.hir.def, self.hir.ret) {
                 let body = self.hir.blocks.pop().unwrap_or_default();
+                let source_file = self.hir.file.as_deref().map(std::rc::Rc::from);
+                let module = self.module_of(source_file.as_ref());
+                let args = self
+                    .hir
+                    .instance
+                    .iter()
+                    .map(|&ty| {
+                        dream_types::type_symbol(&self.type_ctx.interner, &self.type_ctx.defs, ty)
+                    })
+                    .collect::<Vec<_>>();
+                // Cross-module collision promotion changes lookup keys, not declaration identity.
+                let namespace = module.as_ref().map(|m| format!("{m}::"));
+                let name = namespace
+                    .as_ref()
+                    .and_then(|prefix| self.hir.name.strip_prefix(prefix))
+                    .unwrap_or(&self.hir.name);
+                let symbol = dream_types::function_symbol(module.as_deref(), name, &args);
                 self.hir.functions.push(HFunction {
                     def,
+                    symbol,
                     name: std::mem::take(&mut self.hir.name),
                     instance: std::mem::take(&mut self.hir.instance),
                     params: std::mem::take(&mut self.hir.params),

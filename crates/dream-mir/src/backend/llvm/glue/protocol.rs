@@ -8,13 +8,11 @@ use super::super::places::ELEM_ALIGN;
 use super::{glue, register};
 use crate::abi;
 use crate::backend::shared::abi_types::{c_ident, elem_size, mem_ty};
-use crate::backend::shared::func_symbol;
-use crate::backend::shared::protocol_names::to_string_fn;
+use crate::backend::shared::protocol_names::{hash_fn, to_string_fn, HashFn};
 use crate::backend::shared::reach::ProtocolReach;
 use crate::backend::shared::tables::{BUILTIN_TYPE_NAMES, NULL_TYPE_NAME, UNKNOWN_TYPE_NAME};
 use dream_hir::FieldLayout;
 use dream_types::{PrimTy, TyKind, TypeId};
-use indexmap::IndexSet as HashSet;
 
 fn builtin_tag(name: &str) -> i32 {
     match name {
@@ -70,10 +68,18 @@ pub(in super::super) fn plan(l: &Lcx<'_>, reach: &ProtocolReach) -> Plan {
         .collect();
     arrays.sort_by_key(|t| t.0);
     arrays.dedup();
-    let user: HashSet<String> = cx.mir.functions.iter().map(func_symbol).collect();
-    let pick = |name: &str, suffix: &str| {
+    let pick = |ty: TypeId, name: &str, suffix: &str| {
         let sym = format!("{name}{suffix}");
-        (!user.contains(&sym)).then(|| c_ident(&sym))
+        let overridden = cx
+            .mir
+            .object_methods
+            .get(&ty)
+            .is_some_and(|m| match suffix {
+                "_to_string" => m.to_string.is_some(),
+                "_hash_code" => m.hash_code.is_some(),
+                _ => crate::internal_error!("unknown object protocol suffix {suffix}"),
+            });
+        (!overridden).then(|| c_ident(&sym))
     };
     let mut p = Plan {
         arrays,
@@ -86,24 +92,24 @@ pub(in super::super) fn plan(l: &Lcx<'_>, reach: &ProtocolReach) -> Plan {
     };
     for (ty, layout) in &cx.mir.layouts.structs {
         if reach.needs_to_string(*ty) {
-            if let Some(s) = pick(&layout.name, "_to_string") {
+            if let Some(s) = pick(*ty, &layout.name, "_to_string") {
                 p.struct_to_string.push((*ty, s));
             }
         }
         if reach.needs_hash_code(*ty) {
-            if let Some(s) = pick(&layout.name, "_hash_code") {
+            if let Some(s) = pick(*ty, &layout.name, "_hash_code") {
                 p.struct_hash.push((*ty, s));
             }
         }
     }
     for (ty, layout) in &cx.mir.layouts.unions {
         if reach.needs_to_string(*ty) || reach.to_string.contains(ty) {
-            if let Some(s) = pick(&layout.name, "_to_string") {
+            if let Some(s) = pick(*ty, &layout.name, "_to_string") {
                 p.union_to_string.push((*ty, s));
             }
         }
         if reach.needs_hash_code(*ty) {
-            if let Some(s) = pick(&layout.name, "_hash_code") {
+            if let Some(s) = pick(*ty, &layout.name, "_hash_code") {
                 p.union_hash.push((*ty, s));
             }
         }
@@ -306,7 +312,10 @@ fn struct_to_string(l: &mut Lcx<'_>, ty: TypeId, fn_name: &str) {
     let start = if tuple {
         "(".to_string()
     } else {
-        format!("{} {{ ", layout.name)
+        format!(
+            "{} {{ ",
+            fx.l.mir.type_names.get(&ty).unwrap_or(&layout.name)
+        )
     };
     fx.strb_lit(&sb, &start);
     for (i, f) in layout.fields.iter().enumerate() {
@@ -556,21 +565,22 @@ fn tagged_arms(l: &Lcx<'_>, suffix: &str, skip_tuples: bool) -> Vec<Arm> {
     tagged.sort_by_key(|(_, t)| *t);
     let mut out = Vec::new();
     for (ty, tag) in tagged {
-        let name = if let Some(s) = l.cx.mir.layouts.structs.get(&ty) {
+        if l.cx.mir.layouts.structs.contains_key(&ty) {
             if skip_tuples && matches!(l.interner.kind(ty), TyKind::Tuple(_)) {
                 continue;
             }
-            &s.name
-        } else if let Some(u) = l.cx.mir.layouts.unions.get(&ty) {
-            &u.name
-        } else {
+        } else if !l.cx.mir.layouts.unions.contains_key(&ty) {
             continue;
+        }
+        let symbol = match suffix {
+            "_to_string" => to_string_fn(&l.cx, ty),
+            "_hash_code" => match hash_fn(&l.cx, ty) {
+                HashFn::Call(sym) => sym,
+                HashFn::Identity => crate::internal_error!("nominal object has scalar hash"),
+            },
+            _ => crate::internal_error!("unknown object protocol suffix {suffix}"),
         };
-        out.push(call_arm(
-            vec![tag],
-            c_ident(&format!("{name}{suffix}")),
-            None,
-        ));
+        out.push(call_arm(vec![tag], symbol, None));
     }
     out
 }

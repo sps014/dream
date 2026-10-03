@@ -35,7 +35,7 @@ fn compile(target: Target, entry: &Path, out: &Path) -> Result<(), String> {
     Compiler::new(target)
         .compile(
             &entry.to_str().unwrap().to_string(),
-            &out.to_str().unwrap().to_string(),
+            out.to_str().unwrap(),
         )
         .map_err(|e| {
             e.diagnostic_text()

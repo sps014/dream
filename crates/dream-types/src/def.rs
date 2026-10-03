@@ -1,8 +1,6 @@
-//! Definition tables: the [`DefTable`] assigns a stable [`DefId`] to every nominal declaration
-//! (struct, union, enum, function) so interned types and the future HIR can reference declarations
-//! by index instead of by mangled string name.
+//! Module-scoped declaration storage. Source-name resolution belongs to the frontend resolver.
 
-use super::DefId;
+use super::{DefId, ModuleId};
 use indexmap::IndexMap;
 
 /// What a [`DefId`] names.
@@ -20,6 +18,7 @@ pub enum DefKind {
 /// (never a mangled monomorphization name).
 #[derive(Debug, Clone)]
 pub struct DefInfo {
+    pub module_path: String,
     pub kind: DefKind,
     pub name: String,
     pub generic_params: Vec<String>,
@@ -30,13 +29,11 @@ pub struct DefInfo {
     pub is_static: bool,
 }
 
-/// Interns nominal declarations to [`DefId`]s. Lookups by `(kind, name)` are deduplicated so a base
-/// name maps to exactly one def; monomorphized instances are *not* separate defs (they are the same
-/// `DefId` with different type arguments in [`TyKind::Struct`](super::TyKind)).
+/// Definitions are indexed only by identity; equal source names in distinct modules are unrelated.
 #[derive(Debug, Default)]
 pub struct DefTable {
-    defs: Vec<DefInfo>,
-    by_name: IndexMap<(DefKind, String), DefId>,
+    defs: IndexMap<DefId, DefInfo>,
+    next_index: IndexMap<ModuleId, u32>,
 }
 
 impl DefTable {
@@ -44,55 +41,73 @@ impl DefTable {
         DefTable::default()
     }
 
-    /// Interns `(kind, name)`, returning the existing `DefId` if already present. `generic_params`
-    /// is recorded on first insertion only.
-    pub fn intern(&mut self, kind: DefKind, name: &str, generic_params: Vec<String>) -> DefId {
-        let key = (kind, name.to_string());
-        if let Some(&id) = self.by_name.get(&key) {
-            return id;
-        }
-        let id = DefId(self.defs.len() as u32);
-        self.defs.push(DefInfo {
-            kind,
-            name: name.to_string(),
-            generic_params,
-            is_value: false,
-            is_static: false,
-        });
-        self.by_name.insert(key, id);
+    pub fn allocate(
+        &mut self,
+        module: ModuleId,
+        module_path: &str,
+        kind: DefKind,
+        name: &str,
+        generic_params: Vec<String>,
+    ) -> DefId {
+        let next = self.next_index.entry(module).or_default();
+        let id = DefId {
+            module,
+            index: *next,
+        };
+        *next += 1;
+        self.defs.insert(
+            id,
+            DefInfo {
+                module_path: module_path.to_string(),
+                kind,
+                name: name.to_string(),
+                generic_params,
+                is_value: false,
+                is_static: false,
+            },
+        );
         id
     }
 
     /// Marks a definition as a value (`struct`) type. Idempotent.
     pub fn mark_value(&mut self, id: DefId) {
-        self.defs[id.0 as usize].is_value = true;
+        self.defs
+            .get_mut(&id)
+            .expect("registered definition")
+            .is_value = true;
     }
 
     /// True when `id` names a value (`struct`) type.
     pub fn is_value(&self, id: DefId) -> bool {
-        self.defs[id.0 as usize].is_value
+        self.defs[&id].is_value
     }
 
     /// Marks a definition as a `static class`. Idempotent.
     pub fn mark_static(&mut self, id: DefId) {
-        self.defs[id.0 as usize].is_static = true;
+        self.defs
+            .get_mut(&id)
+            .expect("registered definition")
+            .is_static = true;
     }
 
     /// True when `id` names a `static class`.
     pub fn is_static(&self, id: DefId) -> bool {
-        self.defs[id.0 as usize].is_static
+        self.defs[&id].is_static
     }
 
     pub fn get(&self, id: DefId) -> &DefInfo {
-        &self.defs[id.0 as usize]
+        &self.defs[&id]
     }
 
-    pub fn lookup(&self, kind: DefKind, name: &str) -> Option<DefId> {
-        self.by_name.get(&(kind, name.to_string())).copied()
+    pub fn set_generic_params(&mut self, id: DefId, params: Vec<String>) {
+        self.defs
+            .get_mut(&id)
+            .expect("registered definition")
+            .generic_params = params;
     }
 
     pub fn name(&self, id: DefId) -> &str {
-        &self.defs[id.0 as usize].name
+        &self.defs[&id].name
     }
 
     pub fn len(&self) -> usize {

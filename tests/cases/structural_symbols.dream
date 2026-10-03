@@ -1,0 +1,13 @@
+import system;
+
+fun foo<T>(value: T): T { return value; }
+fun foo__0(): int { return 20; }
+fun foo__12(): int { return 30; }
+fun _Dg0_3_foo_6_p3_int(): int { return 40; }
+
+fun main() {
+    System.println(foo<int>(10));
+    System.println(foo__0());
+    System.println(foo__12());
+    System.println(_Dg0_3_foo_6_p3_int());
+}

@@ -3,13 +3,15 @@
 
 use super::escape::{Escape, LocalEscape, ParamSummaries};
 use crate::build::FunctionBuilder;
-use crate::{Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use crate::{
+    Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
+};
 use dream_types::{DefId, TypeId, TypeInterner};
 
-const NODE: DefId = DefId(7);
-const READ: DefId = DefId(40);
-const KEEP: DefId = DefId(41);
-const RELAY: DefId = DefId(42);
+const NODE: DefId = DefId::root(7);
+const READ: DefId = DefId::root(40);
+const KEEP: DefId = DefId::root(41);
+const RELAY: DefId = DefId::root(42);
 
 fn node(i: &mut TypeInterner) -> TypeId {
     i.struct_ty(NODE, vec![])
@@ -71,7 +73,9 @@ fn callees(i: &mut TypeInterner) -> Vec<MirFunction> {
 }
 
 /// `o = new Node; a = o; <tail(a)>; return`, analysed against `callees`.
-fn level_of(tail: impl FnOnce(&mut FunctionBuilder, &TypeInterner, Local, TypeId)) -> (Escape, bool) {
+fn level_of(
+    tail: impl FnOnce(&mut FunctionBuilder, &TypeInterner, Local, TypeId),
+) -> (Escape, bool) {
     let mut i = TypeInterner::new();
     let ty = node(&mut i);
     let mut mir = Mir {
@@ -132,7 +136,7 @@ fn a_keeping_callee_escapes_through_its_relay() {
 #[test]
 fn an_unknown_callee_keeps_its_argument() {
     let (level, _) = level_of(|b, i, a, _| {
-        b.push(call(DefId(99), i, a));
+        b.push(call(DefId::root(99), i, a));
         b.terminate(Terminator::Return(None));
     });
     assert_eq!(level, Escape::Global);
@@ -142,7 +146,13 @@ fn an_unknown_callee_keeps_its_argument() {
 fn stores_and_returns_of_an_alias_escape() {
     let (stored, _) = level_of(|b, _, a, ty| {
         let other = b.new_temp(ty);
-        b.assign(Place::Field { base: other, field: 1 }, Rvalue::Use(copy(a)));
+        b.assign(
+            Place::Field {
+                base: other,
+                field: 1,
+            },
+            Rvalue::Use(copy(a)),
+        );
         b.terminate(Terminator::Return(None));
     });
     assert_eq!(stored, Escape::Global);
@@ -158,7 +168,10 @@ fn recursion_through_a_reading_cycle_stays_optimistic() {
     let mut i = TypeInterner::new();
     let ty = node(&mut i);
     let mut fns = callees(&mut i);
-    for (name, def, next) in [("even", DefId(50), DefId(51)), ("odd", DefId(51), DefId(50))] {
+    for (name, def, next) in [
+        ("even", DefId::root(50), DefId::root(51)),
+        ("odd", DefId::root(51), DefId::root(50)),
+    ] {
         let mut b = FunctionBuilder::new(name, i.void());
         b.set_def(def, vec![]);
         let n = b.new_param(ty, Some("n".into()));
@@ -172,8 +185,8 @@ fn recursion_through_a_reading_cycle_stays_optimistic() {
         ..Mir::default()
     };
     let sums = ParamSummaries::compute(&mir, &i);
-    assert!(!sums.param_escapes(DefId(50), &[], 0));
-    assert!(!sums.param_escapes(DefId(51), &[], 0));
+    assert!(!sums.param_escapes(DefId::root(50), &[], 0));
+    assert!(!sums.param_escapes(DefId::root(51), &[], 0));
     assert!(sums.param_escapes(KEEP, &[], 0));
     assert!(sums.param_escapes(RELAY, &[], 0));
 }

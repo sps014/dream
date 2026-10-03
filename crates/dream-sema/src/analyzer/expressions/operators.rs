@@ -3,13 +3,13 @@
 
 use super::*;
 use crate::errors::SemanticError;
+use crate::function_table::FunctionIdentity;
 use crate::symbol_table::SymbolTable;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
-use dream_types::method_fn;
+use dream_types::{DefKind, TyKind, TypeId};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -82,7 +82,10 @@ impl<'a> Analyzer<'a> {
                 );
                 return Ok(Type::Unknown);
             };
-            if base != "Option" || args.len() != 1 {
+            let option_def = self.type_ctx.resolve(DefKind::Union, &base);
+            if option_def.is_none_or(|def| self.type_ctx.defs.name(def) != "Option")
+                || args.len() != 1
+            {
                 diagnostics.report_error(
                     format!(
                         "'??' requires an Option<T> operand, got {}",
@@ -92,11 +95,21 @@ impl<'a> Analyzer<'a> {
                 );
                 return Ok(Type::Unknown);
             }
-            self.ensure_union_instantiated("Option", &args, &opr.position, diagnostics);
+            self.ensure_union_instantiated(&base, &args, &opr.position, diagnostics);
             let inner = args[0].clone();
             self.compare_data_type(&inner, &right_value, &opr.position, diagnostics)?;
-            let recv = mangle_generic(&base, &args);
-            let method = method_fn(&recv, "unwrap_or");
+            if diagnostics.has_errors() {
+                self.hir_none();
+                return Ok(Type::Unknown);
+            }
+            let recv = left_hir
+                .as_ref()
+                .map(|hir| hir.ty)
+                .unwrap_or_else(|| self.type_ctx.lower(&left_value));
+            let inner_id = self.type_ctx.lower(&inner);
+            let Some(method) = self.binary_instance_method(recv, "unwrap_or", inner_id) else {
+                crate::internal_error!("validated Option type has no unwrap_or method");
+            };
             self.hir_set_method_call(left_hir, &method, vec![right_hir], &inner);
             return Ok(inner);
         }
@@ -138,11 +151,11 @@ impl<'a> Analyzer<'a> {
         if let Some(op_method) = self.operator_binary_fn(&left_value, opr.kind) {
             let param_type = op_method.param_type;
             let return_type = op_method.return_type;
-            let mangled_name = op_method.mangled_name;
+            let identity = op_method.identity;
             if let Some(param_type) = &param_type {
                 self.compare_data_type(param_type, &right_value, &opr.position, diagnostics)?;
             }
-            self.hir_set_method_call(left_hir, &mangled_name, vec![right_hir], &return_type);
+            self.hir_set_method_call(left_hir, &identity, vec![right_hir], &return_type);
             return Ok(return_type);
         }
 
@@ -242,7 +255,7 @@ impl<'a> Analyzer<'a> {
                     let bool_ty = Type::Boolean(opr.clone());
                     self.hir_set_method_call(
                         left_hir,
-                        &op_method.mangled_name,
+                        &op_method.identity,
                         vec![right_hir],
                         &bool_ty,
                     );
@@ -272,33 +285,51 @@ impl<'a> Analyzer<'a> {
         Ok(result_type)
     }
 
-    /// If `==`/`!=` on a value of type `left` should dispatch to a user-defined `equals`, returns
-    /// the mangled method symbol (e.g. `Money_equals`). Applies when `left`'s concrete type is a
-    /// class/struct that implements `Equatable<Self>`; the caller has already verified the operands
-    /// are type-compatible.
-    fn equatable_equals_fn(&self, left: &Type) -> Option<String> {
-        let (base, args) = Self::resolve_struct_parts(left)?;
-        let recv = mangle_generic(&base, &args);
-        // The interface argument is the receiver type itself (the `Equatable<Self>` convention),
-        // mangled exactly as `validate_implements` recorded it.
-        let iface = mangle_generic("Equatable", std::slice::from_ref(left));
-        if self.class_implements(&recv, &iface) {
-            return Some(method_fn(&recv, "equals"));
-        }
-        None
+    fn binary_instance_method(
+        &self,
+        receiver: TypeId,
+        member: &str,
+        argument: TypeId,
+    ) -> Option<FunctionIdentity> {
+        let candidates = self.function_table.method_candidates(receiver, member);
+        let mut matches = candidates.into_iter().filter(|identity| {
+            self.function_table
+                .functions
+                .get(identity)
+                .is_some_and(|info| {
+                    !info.is_static && info.parameters.as_slice() == [receiver, argument]
+                })
+        });
+        let identity = matches.next()?;
+        matches.next().is_none().then_some(identity)
     }
 
-    /// If `<`/`<=`/`>`/`>=` on a value of type `left` should dispatch to a user-defined `compare`,
-    /// returns the mangled method symbol (e.g. `Money_compare`). Applies when `left`'s concrete type
-    /// implements `Comparable<Self>` (and has no more specific `@operator`-tagged overload, checked
-    /// by the caller first).
-    fn comparable_compare_fn(&self, left: &Type) -> Option<String> {
-        let (base, args) = Self::resolve_struct_parts(left)?;
-        let recv = mangle_generic(&base, &args);
-        let iface = mangle_generic("Comparable", std::slice::from_ref(left));
-        if self.class_implements(&recv, &iface) {
-            return Some(method_fn(&recv, "compare"));
+    fn equatable_equals_fn(&mut self, left: &Type) -> Option<FunctionIdentity> {
+        self.comparison_method(left, "Equatable", "equals")
+    }
+
+    fn comparable_compare_fn(&mut self, left: &Type) -> Option<FunctionIdentity> {
+        self.comparison_method(left, "Comparable", "compare")
+    }
+
+    fn comparison_method(
+        &mut self,
+        left: &Type,
+        interface: &str,
+        member: &str,
+    ) -> Option<FunctionIdentity> {
+        let receiver = self.type_ctx.lower(left);
+        if !matches!(
+            self.type_ctx.interner.kind(receiver),
+            TyKind::Struct(..) | TyKind::Union(..)
+        ) {
+            return None;
         }
-        None
+        let def = self.type_ctx.resolve(DefKind::Interface, interface)?;
+        let iface = self.type_ctx.instantiate(def, vec![receiver]);
+        if !self.class_implements(receiver, iface) {
+            return None;
+        }
+        self.binary_instance_method(receiver, member, receiver)
     }
 }

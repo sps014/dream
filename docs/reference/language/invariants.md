@@ -44,9 +44,9 @@ Call sites are `Type(...)`.
 
 ```dream
 // good
-@override public fun to_string(): string { return "x"; }
+public override fun to_string(): string { return "x"; }
 
-// bad — missing @override, or not public
+// bad — missing override, or not public
 public fun to_string(): string { return "x"; }
 ```
 

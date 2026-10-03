@@ -57,11 +57,10 @@ impl<'a> Analyzer<'a> {
                 let left_t = self
                     .analyze_expression(left, ctx.parent_function, ctx.symbol_table, diagnostics)
                     .unwrap_or(Type::Unknown);
-                let left_name = left_t.get_type();
+                let left_id = self.type_ctx.lower(&left_t);
                 let runtime =
-                    left_t.is_object() || left_t.is_unknown() || self.is_interface_name(&left_name);
+                    left_t.is_object() || left_t.is_unknown() || self.is_interface_name(left_id);
                 if !runtime {
-                    let left_id = self.type_ctx.lower(&left_t);
                     let right_id = self.type_ctx.lower(right_type);
                     if left_id == right_id {
                         let branch_scope = self.branch_scope(ctx.symbol_table);

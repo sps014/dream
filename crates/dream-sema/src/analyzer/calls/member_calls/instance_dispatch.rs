@@ -7,129 +7,11 @@ use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
-use dream_syntax::token::token_kind::TokenKind;
 use dream_types::method_fn;
 
+mod generics;
+mod interfaces;
 impl<'a> Analyzer<'a> {
-    /// If `obj_type` names an interface, returns that interface's name; otherwise `None`.
-    pub(crate) fn interface_receiver_name(&self, obj_type: &Type) -> Option<String> {
-        let name = obj_type.get_type();
-        if self.is_interface_name(&name) {
-            Some(name)
-        } else {
-            None
-        }
-    }
-
-    /// Dispatches a method call on an interface-typed receiver. Resolves `method` against the
-    /// interface's ordered signature list (yielding its local slot index and return type),
-    /// type-checks the arguments, and emits a dynamically-dispatched `InterfaceCall` HIR node.
-    pub(crate) fn analyze_interface_method(
-        &mut self,
-        iface_name: &str,
-        method: &SyntaxToken,
-        params: &Vec<ExpressionNode<'a>>,
-        ctx: &super::super::super::AnalyzerContext<'a, '_>,
-        receiver: Option<dream_hir::HExpr>,
-        diagnostics: &mut DiagnosticBag,
-    ) -> Result<Type, SemanticError> {
-        let (arg_types, arg_hirs) = self.analyze_call_arguments(
-            params,
-            ctx.parent_function,
-            ctx.symbol_table,
-            diagnostics,
-        )?;
-
-        let methods = self
-            .interface_methods
-            .get(iface_name)
-            .cloned()
-            .unwrap_or_default();
-        let Some((slot, im)) = methods
-            .iter()
-            .enumerate()
-            .find(|(_, m)| accessor_member_name(m) == method.text || m.name.text == method.text)
-        else {
-            return Err(report(
-                diagnostics,
-                format!(
-                    "interface '{}' has no method '{}'",
-                    self.ty_str_display(iface_name),
-                    method.text
-                ),
-                Some(method.position),
-            ));
-        };
-
-        let expected: Vec<String> = im.parameters.iter().map(|p| p.type_.get_type()).collect();
-        // Calling an `async` interface method is eager and yields a `Future<T>` handle (just like an
-        // async instance method); the concrete implementation dispatches to a `Future`-producing
-        // constructor. The caller must `await` the result.
-        let ret_type = Self::async_return_type(im.is_async, im.return_type.clone());
-        if expected.len() != arg_types.len() {
-            diagnostics.report_error(
-                format!(
-                    "interface method '{}.{}' expects {} arguments, got {}",
-                    self.ty_str_display(iface_name),
-                    method.text,
-                    expected.len(),
-                    arg_types.len()
-                ),
-                Some(method.position),
-            );
-            self.hir_none();
-            return Ok(ret_type);
-        }
-        for (i, given) in arg_types.iter().enumerate() {
-            if !self.type_str_assignable(&expected[i], given) {
-                diagnostics.report_error(
-                    format!(
-                        "interface method '{}.{}' expects parameter {} to be {}, got {}",
-                        self.ty_str_display(iface_name),
-                        method.text,
-                        i + 1,
-                        self.ty_str_display(&expected[i]),
-                        self.ty_str_display(given)
-                    ),
-                    Some(method.position),
-                );
-            }
-        }
-
-        let iface_id = self.interface_methods.get_index_of(iface_name).unwrap_or(0);
-        // The `call_indirect` signature is `fun(this, params...): ret`, with `this` typed as
-        // `object` (an `i32` pointer, matching every concrete implementation's receiver).
-        let sig = self.interface_dispatch_sig(im);
-        self.hir_set_interface_call(receiver, iface_id, slot, sig, arg_hirs, &ret_type);
-        Ok(ret_type)
-    }
-
-    /// Interns the `fun(this, params...): ret` function type used to `call_indirect` an interface
-    /// method: `this` is `object` (a tagged pointer), followed by the method's declared parameters
-    /// and its return type. The same signature is used to declare the WASM `call_indirect` type.
-    pub(crate) fn interface_dispatch_sig(
-        &mut self,
-        method: &FunctionNode<'a>,
-    ) -> dream_types::TypeId {
-        let mut params = vec![self.type_ctx.interner.object()];
-        for p in &method.parameters {
-            let id = self.type_ctx.lower(&p.type_);
-            params.push(id);
-        }
-        // An `async` interface method dispatches to a concrete async constructor whose WASM result
-        // is the `Future` frame pointer (an `i32`), so the `call_indirect` signature returns an
-        // `object`-shaped pointer regardless of the method's declared return type.
-        let ret = if method.is_async {
-            self.type_ctx.interner.object()
-        } else {
-            match &method.return_type {
-                Some(t) => self.type_ctx.lower(t),
-                None => self.type_ctx.interner.void(),
-            }
-        };
-        self.type_ctx.interner.func(params, ret)
-    }
-
     /// Resolves and type-checks an instance method call `obj.method(args)` once the receiver type
     /// (`obj_type`) is known and the builtins/static cases have been ruled out: monomorphizes the
     /// Resolves an ordinary instance method call on a concrete (non-interface) receiver. Instantiates
@@ -152,19 +34,19 @@ impl<'a> Analyzer<'a> {
         // so its concrete method slots exist, even if no implementing class was instantiated earlier
         // in analysis order.
         if let Some((base, args)) = Self::resolve_struct_parts(obj_type) {
-            if !args.is_empty() && self.is_generic_interface(&base) {
+            if !args.is_empty() && self.type_ctx.resolve(DefKind::Interface, &base).is_some_and(|def| self.is_generic_interface(def)) {
                 self.ensure_interface_instantiated(&base, &args, &method.position, diagnostics);
             }
         }
         // Interface-typed receiver: package `extend Iface` methods (`Collection_int_to_list`) are
         // ordinary `{iface}_{method}` entries — prefer those over itable dispatch.
+        let obj_id = self.type_ctx.lower(obj_type);
         if let Some(iface_name) = self.interface_receiver_name(obj_type) {
-            let ext_mangled = method_fn(&iface_name, &method.text);
-            let has_extension = self.function_table.get_function(&ext_mangled).is_ok()
-                || self.generic_functions.contains_key(&ext_mangled);
+            let has_extension = self.method_info(obj_id, &method.text).is_ok()
+                || self.function_table.generic_methods.contains_key(&(obj_id, method.text.clone()));
             if !has_extension {
                 return self.analyze_interface_method(
-                    &iface_name,
+                    obj_id,
                     method,
                     params,
                     ctx,
@@ -227,30 +109,33 @@ impl<'a> Analyzer<'a> {
         mut receiver: Option<dream_hir::HExpr>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
+        let mut owner = self.type_ctx.lower(obj_type);
         let mut mangled_name = method_fn(struct_name, &method.text);
         let mut effective_struct = struct_name.to_string();
 
         // Concrete array: instantiate `extend T[]` so `arr.is_empty()` / query helpers resolve.
         if struct_name.ends_with("[]") {
-            self.ensure_array_collection(struct_name, diagnostics);
+            self.ensure_array_collection(owner, diagnostics);
         }
 
         // Concrete class missing the method: try package extensions on implemented interfaces.
-        let missing = self.function_table.get_function(&mangled_name).is_err()
-            && !self.generic_functions.contains_key(&mangled_name);
+        let missing = self.method_info(owner, &method.text).is_err()
+            && !self.function_table.generic_methods.contains_key(&(owner, method.text.clone()));
         if missing {
-            if let Some(ifaces) = self.implements.get(struct_name).cloned() {
+            if let Some(ifaces) = self.implemented_interfaces(owner).cloned() {
                 for iface in ifaces {
+                    let iface_id = iface;
+                    let iface = self.type_id_display(iface_id);
                     let ext = method_fn(&iface, &method.text);
-                    if self.function_table.get_function(&ext).is_ok()
-                        || self.generic_functions.contains_key(&ext)
+                    if self.method_info(iface_id, &method.text).is_ok()
+                        || self.function_table.generic_methods.contains_key(&(iface_id, method.text.clone()))
                     {
-                        let iface_ty =
-                            Type::Struct(synthetic_token(TokenKind::IdentifierToken, &iface), None);
+                        let iface_ty = self.type_ctx.syntax_type(iface_id);
                         self.hir_set_cast(receiver.take(), &iface_ty);
                         receiver = self.hir_take();
                         mangled_name = ext;
                         effective_struct = iface;
+                        owner = iface_id;
                         break;
                     }
                 }
@@ -259,7 +144,7 @@ impl<'a> Analyzer<'a> {
 
         // Method-level generics (`pool.dispatch<TIn, TOut>(...)`): monomorphize before the plain
         // `function_table` path, which only knows the unbound template signature.
-        if let Some(&template) = self.generic_functions.get(&mangled_name) {
+        if let Some(&template) = self.function_table.generic_methods.get(&(owner, method.text.clone())).and_then(|def| self.generic_functions.get(def)) {
             return self.analyze_generic_instance_method(
                 template,
                 &mangled_name,
@@ -279,32 +164,32 @@ impl<'a> Analyzer<'a> {
         let has_named_arg = params
             .iter()
             .any(|a| matches!(a, ExpressionNode::NamedArg(..)));
-        let method_info = self.function_table.get_function(&mangled_name).ok();
+        let method_info = self.method_info(owner, &method.text).ok();
         let is_variadic = method_info.as_ref().is_some_and(|info| info.is_variadic);
-        let is_overloaded = self.function_table.is_overloaded(&mangled_name);
+        let is_overloaded = self.method_overloaded(owner, &method.text);
         let normalized_params: Vec<ExpressionNode<'a>>;
         let params: &[ExpressionNode<'a>] = if has_named_arg {
             if is_overloaded {
-                normalized_params = self.normalize_named_for_overloads(
+                normalized_params = self.normalize_named_for_candidates(
                     &mangled_name,
+                    self.function_table.method_candidates(owner, &method.text),
                     params,
                     method.position,
                     1,
                     diagnostics,
                 )?;
             } else {
-                let Some(info) = method_info else {
-                    let suggestions =
-                        suggest_methods(&self.function_table, struct_name, &method.text);
-                    let notes = suggestions
+                let Some(info) = method_info.as_ref() else {
+                    let owner_name = self.type_id_display(owner);
+                    let notes = suggest_methods(&self.function_table, owner, &method.text)
                         .iter()
-                        .map(|m| format!("similar method exists: '{}.{}'", struct_name, m))
+                        .map(|m| format!("similar method exists: '{}.{}'", owner_name, m))
                         .collect();
                     return Err(report_with_notes(
                         diagnostics,
                         format!(
                             "Type '{}' has no method '{}'",
-                            self.ty_str_display(struct_name),
+                            owner_name,
                             method.text
                         ),
                         Some(method.position),
@@ -324,7 +209,7 @@ impl<'a> Analyzer<'a> {
             }
             &normalized_params
         } else if is_variadic && !is_overloaded {
-            let Some(info) = method_info else {
+            let Some(info) = method_info.as_ref() else {
                 crate::internal_error!("non-overloaded variadic method has no signature");
             };
             let param_names_len = info.param_names.len().saturating_sub(1);
@@ -340,15 +225,13 @@ impl<'a> Analyzer<'a> {
         // own type context (e.g. `nums.sort_by((a: int, b: int) => a - b)`) infer from the `fun(...)`
         // parameter type. An overloaded method's parameter types aren't known until the arguments
         // themselves are typed, so it falls back to no expected-type context (unchanged behavior).
-        let expected_params: Option<Vec<Type>> = if self.function_table.is_overloaded(&mangled_name)
-        {
-            self.expected_params_preferring_fun_overload(&mangled_name, params, 1)
+        let expected_params: Option<Vec<Type>> = if is_overloaded {
+            self.expected_params_for_candidates(self.function_table.method_candidates(owner, &method.text), params, 1)
         } else {
-            self.function_table
-                .get_function(&mangled_name)
-                .ok()
+            method_info
+                .as_ref()
                 .map(|info| {
-                    Self::expected_param_types(&info)
+                    Self::expected_param_types(info)
                         .into_iter()
                         .skip(1) // implicit `this`
                         .collect()
@@ -372,31 +255,30 @@ impl<'a> Analyzer<'a> {
 
         self.current_call_target_name = saved_call_target;
 
-        let store_sig = if self.function_table.is_overloaded(&mangled_name) {
+        let store_sig = if is_overloaded {
             let mut selection_args = Vec::with_capacity(arg_types.len() + 1);
-            selection_args.push(effective_struct.clone());
+            selection_args.push(owner);
             selection_args.extend(arg_types.iter().cloned());
-            match self.select_function_overload(&mangled_name, &selection_args) {
+            match self.select_method_overload(owner, &method.text, &selection_args) {
                 Ok(sig) => sig,
                 Err(message) => {
                     return Err(report(diagnostics, message, Some(method.position)));
                 }
             }
         } else {
-            match self.function_table.get_function(&mangled_name) {
+            match self.method_info(owner, &method.text) {
                 Ok(s) => s.clone(),
                 Err(_) => {
-                    let suggestions =
-                        suggest_methods(&self.function_table, struct_name, &method.text);
-                    let notes = suggestions
+                    let owner_name = self.type_id_display(owner);
+                    let notes = suggest_methods(&self.function_table, owner, &method.text)
                         .iter()
-                        .map(|m| format!("similar method exists: '{}.{}'", struct_name, m))
+                        .map(|m| format!("similar method exists: '{}.{}'", owner_name, m))
                         .collect();
                     return Err(report_noted(
                         diagnostics,
                         format!(
                             "Type '{}' has no method '{}'",
-                            self.ty_str_display(struct_name),
+                            owner_name,
                             method.text
                         ),
                         Some(method.position),
@@ -425,7 +307,7 @@ impl<'a> Analyzer<'a> {
                 store_sig.visibility,
                 &store_sig.declaring_file,
                 ctx.parent_function.file_path.as_ref(),
-                self.in_methods_of(ctx.parent_function, &base_name),
+                self.in_methods_of(ctx.parent_function, owner),
             ) {
                 diagnostics.report_error(
                     format!(
@@ -477,6 +359,7 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
 
+        let method_label = format!("{}.{}", self.type_id_display(owner), method.text);
         let total = expected_params.len();
         let required = Self::required_arg_count(&expected_defaults, total);
         let given = arg_types.len();
@@ -484,12 +367,12 @@ impl<'a> Analyzer<'a> {
             let message = if required == total {
                 format!(
                     "function {} expects {} parameters, got {}",
-                    mangled_name, total, given
+                    method_label, total, given
                 )
             } else {
                 format!(
                     "function {} expects between {} and {} parameters, got {}",
-                    mangled_name, required, total, given
+                    method_label, required, total, given
                 )
             };
             diagnostics.report_error(message, Some(method.position));
@@ -508,7 +391,7 @@ impl<'a> Analyzer<'a> {
         )?;
 
         self.validate_arguments(
-            &format!("function {}", mangled_name),
+            &format!("function {}", method_label),
             &expected_params,
             &arg_types,
             method.position,
@@ -517,17 +400,17 @@ impl<'a> Analyzer<'a> {
 
         // An `async` method yields a `Future<T>` handle (carried by the `MethodCall`); `await`
         // unwraps it.
-        let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type);
+        let ret_type = Self::async_return_type(store_sig.is_async, Some(self.type_ctx.syntax_type(store_sig.resolved_return)));
         // Overloaded methods each register a distinct `DefId` under their emitted (signature-mangled)
         // name; resolve to the selected overload's name so the call targets the right instance.
         // Non-overloaded methods keep their base-mangled name.
-        self.hir_set_method_call(receiver, &store_sig.name, arg_hirs, &ret_type);
+        self.hir_set_method_call(receiver, &store_sig.identity, arg_hirs, &ret_type);
         self.note_sink_arg_moves(params, &arg_types, &expected_is_take, false, diagnostics);
         let call_summary = self.ide_summary(&ret_type);
         self.record_ide_ref(
             method.position,
             ide::IdeTarget::Callee {
-                key: store_sig.name.clone(),
+                key: store_sig.identity.clone(),
                 label: method.text.clone(),
             },
             call_summary,
@@ -535,242 +418,10 @@ impl<'a> Analyzer<'a> {
         Ok(ret_type)
     }
 
-    /// Monomorphizes a method-level generic instance call (`obj.method<T>(args)`). Mirrors
-    /// [`analyze_generic_static_method`]: infer/bind type args, register a concrete instance, emit
-    /// a `MethodCall` whose `Callee.instance` carries the TypeIds so WASM symbols match the body.
-    #[allow(clippy::too_many_arguments)]
-    fn analyze_generic_instance_method(
-        &mut self,
-        template: &'a FunctionNode<'a>,
-        base: &str,
-        struct_name: &str,
-        method: &SyntaxToken,
-        generic_args: &Option<Vec<Type>>,
-        params: &Vec<ExpressionNode<'a>>,
-        ctx: &super::super::super::AnalyzerContext<'a, '_>,
-        receiver: Option<dream_hir::HExpr>,
-        diagnostics: &mut DiagnosticBag,
-    ) -> Result<Type, SemanticError> {
-        // Explicit type args let us publish monomorphized parameter types as expected types for
-        // argument lambdas (`pool.dispatch<int,int>(5, (n) => n + 1)`).
-        let early_bindings = if generic_args.as_ref().is_some_and(|g| !g.is_empty()) {
-            Some(self.infer_generic_bindings(
-                template,
-                generic_args,
-                &[],
-                &method.position,
-                diagnostics,
-            ))
-        } else {
-            None
-        };
-
-        let expected_params: Option<Vec<Type>> = early_bindings.as_ref().map(|bindings| {
-            template
-                .parameters
-                .iter()
-                .skip(1) // implicit `this`
-                .map(|p| Self::monomorphize_type(&p.type_, bindings))
-                .collect()
-        });
-
-        let call_target = format!("{}.{}", struct_name, method.text);
-        let saved_call_target = self.current_call_target_name.take();
-        self.current_call_target_name = Some(call_target);
-
-        let (mut arg_types, mut arg_hirs, mut arg_is_ref) = self
-            .analyze_call_arguments_expecting_ref(
-                params,
-                expected_params.as_deref(),
-                ctx.parent_function,
-                ctx.symbol_table,
-                diagnostics,
-            )?;
-
-        self.current_call_target_name = saved_call_target;
-
-        // Align with the template's parameter list (index 0 is `this`) for inference.
-        let mut inference_types: Vec<String> = Vec::with_capacity(arg_types.len() + 1);
-        inference_types.push(struct_name.to_string());
-        inference_types.extend(arg_types.iter().cloned());
-
-        let bindings = early_bindings.unwrap_or_else(|| {
-            self.infer_generic_bindings(
-                template,
-                generic_args,
-                &inference_types,
-                &method.position,
-                diagnostics,
-            )
-        });
-
-        if !self.member_accessible(
-            template.visibility,
-            &template.file_path,
-            ctx.parent_function.file_path.as_ref(),
-            self.in_methods_of(ctx.parent_function, struct_name),
-        ) {
-            diagnostics.report_error(
-                format!(
-                    "'{}' is private to '{}'",
-                    method.text,
-                    self.ty_str_display(struct_name)
-                ),
-                Some(method.position),
-            );
-        }
-
-        self.verify_generic_constraints(
-            &template.generic_constraints,
-            &bindings,
-            &method.position,
-            diagnostics,
-        );
-        let mangled_name = self.register_generic_function_instance(template, &bindings);
-
-        let store_sig = match self.function_table.get_function(&mangled_name) {
-            Ok(sig) => sig,
-            Err(_) => {
-                diagnostics.report_error(
-                    format!("Function '{}' could not be instantiated", mangled_name),
-                    Some(method.position),
-                );
-                return Ok(Type::Unknown);
-            }
-        };
-
-        self.check_unsafe_call(&store_sig, method.position, diagnostics);
-        self.check_runtime_call(
-            &format!("{}.{}", struct_name, method.text),
-            store_sig.runtime_support,
-            method.position,
-            diagnostics,
-        );
-        self.check_compute_call(&store_sig, method.position, diagnostics);
-
-        let mut expected_params = store_sig.parameters.clone();
-        let mut expected_defaults = store_sig.defaults.clone();
-        let mut expected_is_ref = store_sig.is_ref.clone();
-        if !expected_params.is_empty() {
-            expected_params.remove(0);
-        }
-        if !expected_defaults.is_empty() {
-            expected_defaults.remove(0);
-        }
-        if !expected_is_ref.is_empty() {
-            expected_is_ref.remove(0);
-        }
-        let mut expected_param_tys = store_sig.parameter_types.clone();
-        if !expected_param_tys.is_empty() {
-            expected_param_tys.remove(0);
-        }
-
-        self.pack_variadic_analyzed_args(
-            &store_sig,
-            &mut arg_types,
-            &mut arg_hirs,
-            &mut arg_is_ref,
-            1,
-        );
-
-        self.validate_ref_arguments(
-            &format!("method '{}'", method.text),
-            &expected_is_ref,
-            &arg_is_ref,
-            method.position,
-            diagnostics,
-        );
-
-        let total = expected_params.len();
-        let required = Self::required_arg_count(&expected_defaults, total);
-        let given = arg_types.len();
-        if given < required || given > total {
-            let message = if required == total {
-                format!(
-                    "function {} expects {} parameters, got {}",
-                    mangled_name, total, given
-                )
-            } else {
-                format!(
-                    "function {} expects between {} and {} parameters, got {}",
-                    mangled_name, required, total, given
-                )
-            };
-            diagnostics.report_error(message, Some(method.position));
-            self.hir_none();
-            return Ok(Type::Unknown);
-        }
-
-        self.substitute_default_args(
-            (&expected_defaults, &expected_param_tys),
-            &mut arg_types,
-            &mut arg_hirs,
-            ctx.parent_function,
-            ctx.symbol_table,
-            diagnostics,
-        )?;
-
-        self.validate_arguments(
-            &format!("function {}", mangled_name),
-            &expected_params,
-            &arg_types,
-            method.position,
-            diagnostics,
-        );
-
-        let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type.clone());
-        let instance = bindings.values().map(|t| self.type_ctx.lower(t)).collect();
-        // `base` is the template's `{Type}_{method}` DefId shared by every monomorphization.
-        // `store_sig.is_take` is the instance's sink ABI (`take_params_for(base)` is empty).
-        self.hir_set_generic_method_call(
-            receiver,
-            base,
-            instance,
-            arg_hirs,
-            &ret_type,
-            store_sig.is_take.clone(),
-        );
-        let call_summary = self.ide_summary(&ret_type);
-        self.record_ide_ref(
-            method.position,
-            ide::IdeTarget::Callee {
-                key: mangled_name,
-                label: method.text.clone(),
-            },
-            call_summary,
-        );
-        Ok(ret_type)
-    }
-
-    /// True when `parent_function` is a method whose implicit `this` receiver has base type
-    /// `base_name` (allowing for monomorphized generic variants). Used to gate access to
-    /// `_`-prefixed (private) members.
-    pub(crate) fn in_methods_of(
-        &self,
-        parent_function: &FunctionNode<'a>,
-        base_name: &str,
-    ) -> bool {
-        // A `static` method belongs to its declaring type, so it may access that type's private
-        // members even though it has no `this` receiver. Static methods are registered under the
-        // mangled name `{Type}_{method}`, so a name prefixed with `{base_name}_` identifies one.
-        if parent_function.is_static {
-            let name = &parent_function.name.text;
-            return name == base_name
-                || name.starts_with(&format!("{}_", base_name))
-                || base_name.starts_with(&format!("{}_", name));
-        }
-        let Some(first) = parent_function.parameters.first() else {
-            return false;
-        };
-        if first.name.text != "this" {
-            return false;
-        }
-        let this_base = Self::resolve_struct_parts(&first.type_)
-            .map(|(b, _)| b)
-            .unwrap_or_else(|| first.type_.get_type());
-        this_base == base_name
-            || this_base.starts_with(&format!("{}_", base_name))
-            || base_name.starts_with(&format!("{}_", this_base))
+    pub(crate) fn in_methods_of(&self, parent_function: &FunctionNode<'a>, owner: dream_types::TypeId) -> bool {
+        let Some(identity) = self.function_table.declaration_node(parent_function) else { return false; };
+        self.function_table.methods.iter().any(|((receiver, _), keys)| *receiver == owner && keys.iter().any(|key| key.0 == identity.0))
+            || self.function_table.generic_methods.iter().any(|((receiver, _), def)| *receiver == owner && *def == identity.0)
     }
 }
 
@@ -778,17 +429,14 @@ impl<'a> Analyzer<'a> {
 /// Levenshtein distance <= 2 over the methods of `struct_name` registered in the table.
 fn suggest_methods(
     table: &crate::function_table::FunctionTable,
-    struct_name: &str,
+    owner: dream_types::TypeId,
     wanted: &str,
 ) -> Vec<String> {
-    let prefix = format!("{struct_name}_"); // method_fn naming: Counter_increment
     let mut out: Vec<String> = Vec::new();
     let want = wanted.to_ascii_lowercase();
-    for key in table.functions.keys() {
-        if !key.starts_with(&prefix) {
-            continue;
-        }
-        let m = key[prefix.len()..].to_string();
+    for (receiver, member) in table.methods.keys() {
+        if *receiver != owner { continue; }
+        let m = member.clone();
         let lm = m.to_ascii_lowercase();
         if (lm.starts_with(&want) || levenshtein(&lm, &want) <= 2) && !out.contains(&m) {
             out.push(m);

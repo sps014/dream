@@ -284,7 +284,7 @@ public struct DateTime : Equatable<DateTime> {
     }
 
     // A human-readable formatting.
-    override public fun to_string(): string {
+    public override fun to_string(): string {
         let ymd = this.decompose();
         let sb = StringBuilder(32);
         sb.append(DateTime._pad(ymd.year, 4));

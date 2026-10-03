@@ -4,7 +4,6 @@
 
 use super::*;
 use crate::union_table::{UnionFieldInfo, UnionInfo, UnionVariantInfo};
-use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::EnumVariantNode;
 
 impl<'a> Analyzer<'a> {
@@ -14,24 +13,34 @@ impl<'a> Analyzer<'a> {
     /// templates and instantiated on demand. Reports duplicate enum/member names.
     pub(in crate::analyzer) fn register_enums(
         &mut self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
         // Pass 1: register C-style enums and stash generic-union *templates*. Doing templates
         // first means a concrete union may reference a generic union declared later (or one from
         // the prelude, which is merged after user code), e.g. `enum Pair { Both(Option<int>) }`.
         for enum_decl in node.enums.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(enum_decl.file_path.as_deref()));
             let name = &enum_decl.name.text;
-            if enum_decl.is_sealed {
-                self.sealed_types.insert(name.clone());
-            }
-            self.type_visibility.insert(
-                name.clone(),
-                (enum_decl.file_path.clone(), enum_decl.visibility),
+            let def = self.type_ctx.register(
+                if enum_decl.is_data_enum() {
+                    DefKind::Union
+                } else {
+                    DefKind::Enum
+                },
+                name,
+                generic_param_names(&enum_decl.generic_parameters),
             );
-            if self.enum_table.contains_key(name)
-                || self.union_table.contains_key(name)
-                || self.generic_unions.contains_key(name)
+            if enum_decl.is_sealed {
+                self.sealed_types.insert(def);
+            }
+            self.type_visibility
+                .insert(def, (enum_decl.file_path.clone(), enum_decl.visibility));
+            let ty = self.type_ctx.instantiate(def, vec![]);
+            if self.enum_members(def).is_some()
+                || self.union_info(ty).is_some()
+                || self.generic_union(def).is_some()
             {
                 diagnostics.report_error(
                     format!("Enum '{}' is already defined", name),
@@ -43,12 +52,12 @@ impl<'a> Analyzer<'a> {
             if enum_decl.is_data_enum() {
                 // Generic discriminated unions are templates, monomorphized on first use.
                 if enum_decl.generic_parameters.is_some() {
-                    self.type_ctx.register(
+                    let def = self.type_ctx.register(
                         DefKind::Union,
                         name,
                         generic_param_names(&enum_decl.generic_parameters),
                     );
-                    self.generic_unions.insert(name.clone(), enum_decl);
+                    self.generic_unions.insert(def, enum_decl);
                 }
                 continue;
             }
@@ -69,12 +78,12 @@ impl<'a> Analyzer<'a> {
                 }
                 members.insert(variant.name.text.clone(), variant.value);
             }
-            self.type_ctx.register(DefKind::Enum, name, vec![]);
-            self.enum_table.insert(name.clone(), members);
+            let def = self.type_ctx.register(DefKind::Enum, name, vec![]);
+            self.enum_table.insert(def, members);
             // C-style enums may declare methods in the body (same as unions/classes).
             if !enum_decl.methods.is_empty() {
                 self.register_methods_for(
-                    name,
+                    ty,
                     &enum_decl.methods,
                     &GenericBindings::new(),
                     diagnostics,
@@ -85,9 +94,16 @@ impl<'a> Analyzer<'a> {
         // Pass 2: register concrete (non-generic) discriminated unions. Their payload fields may
         // instantiate generic unions whose templates were collected in pass 1.
         for enum_decl in node.enums.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(enum_decl.file_path.as_deref()));
             if enum_decl.is_data_enum() && enum_decl.generic_parameters.is_none() {
+                let def = self.type_ctx.resolve(DefKind::Union, &enum_decl.name.text);
+                let Some(def) = def else {
+                    continue;
+                };
+                let ty = self.type_ctx.instantiate(def, vec![]);
                 self.register_union(
-                    &enum_decl.name.text,
+                    ty,
                     &enum_decl.variants,
                     &GenericBindings::new(),
                     enum_decl.is_enum_struct,
@@ -95,7 +111,7 @@ impl<'a> Analyzer<'a> {
                 );
                 if !enum_decl.methods.is_empty() {
                     self.register_methods_for(
-                        &enum_decl.name.text,
+                        ty,
                         &enum_decl.methods,
                         &GenericBindings::new(),
                         diagnostics,
@@ -114,12 +130,14 @@ impl<'a> Analyzer<'a> {
     /// non-self-referential reference payloads — self-reference is rejected).
     pub(in crate::analyzer) fn register_union(
         &mut self,
-        union_name: &str,
+        union_tid: dream_types::TypeId,
         variants: &[EnumVariantNode],
         bindings: &GenericBindings,
         is_enum_struct: bool,
         diagnostics: &mut DiagnosticBag,
     ) {
+        let union_name =
+            dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, union_tid);
         let mut variant_infos = Vec::new();
         let mut seen = indexmap::IndexSet::new();
 
@@ -162,7 +180,8 @@ impl<'a> Analyzer<'a> {
                 }
                 field_infos.push(UnionFieldInfo {
                     name: field.name.text.clone(),
-                    type_: ftype,
+                    type_: self.type_ctx.syntax_type(ftid),
+                    ty: ftid,
                 });
             }
             variant_infos.push(UnionVariantInfo {
@@ -172,13 +191,14 @@ impl<'a> Analyzer<'a> {
             });
         }
 
-        self.type_ctx.register(DefKind::Union, union_name, vec![]);
         // Data-enum unions are treated as always visible here; C-style enum visibility is tracked
         // separately in `enum_visibility` and checked at type-reference sites.
-        if let Err(e) =
-            self.struct_table
-                .add_union(union_name, dream_syntax::nodes::Visibility::Public, None)
-        {
+        if let Err(e) = self.struct_table.add_union(
+            union_tid,
+            &union_name,
+            dream_syntax::nodes::Visibility::Public,
+            None,
+        ) {
             diagnostics.report_error(e, None);
             return;
         }
@@ -193,7 +213,6 @@ impl<'a> Analyzer<'a> {
         // a value `struct`. Self-reference is still rejected: an inline recursive value union
         // would have infinite size. Plain `enum` keeps automatic all-value / niche classification
         // only; reference payloads stay a heap envelope unless the declaration is `enum struct`.
-        let union_tid = self.type_ctx.lower_str(union_name);
         let mut ref_count = 0usize;
         let mut self_ref_field: Option<(String, String)> = None;
         for v in &variant_infos {
@@ -203,7 +222,7 @@ impl<'a> Analyzer<'a> {
                 }
                 ref_count += 1;
                 if self.type_ctx.lower(&f.type_) == union_tid && self_ref_field.is_none() {
-                    self_ref_field = Some((f.name.clone(), f.type_.get_type()));
+                    self_ref_field = Some((f.name.clone(), self.type_id_display(f.ty)));
                 }
             }
         }
@@ -244,7 +263,7 @@ impl<'a> Analyzer<'a> {
         }
 
         self.union_table.insert(
-            union_name.to_string(),
+            union_tid,
             UnionInfo {
                 name: union_name.to_string(),
                 variants: variant_infos,
@@ -275,16 +294,24 @@ impl<'a> Analyzer<'a> {
         position: &TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
-        let mangled = mangle_generic(base_name, args);
-        self.type_ctx
-            .register_instance(DefKind::Union, base_name, args);
-        if self.union_table.contains_key(&mangled) {
+        let Some(def) = self.type_ctx.resolve(DefKind::Union, base_name) else {
+            return;
+        };
+        let ids: Vec<_> = args.iter().map(|arg| self.type_ctx.lower(arg)).collect();
+        let instance = self.type_ctx.instantiate(def, ids.clone());
+        if self.union_info(instance).is_some() {
             return;
         }
-        let template = match self.generic_unions.get(base_name) {
-            Some(t) => *t,
+        let template = match self.generic_union(def) {
+            Some(template) => *template,
             None => return,
         };
+        let args: Vec<_> = ids
+            .iter()
+            .map(|&arg| self.type_ctx.syntax_type(arg))
+            .collect();
+        let scope = self.type_ctx.scope();
+        self.type_ctx.set_scope(def.module);
         let params = template.generic_parameters.as_deref().unwrap_or(&[]);
         Self::check_generic_arity(
             "enum",
@@ -294,10 +321,10 @@ impl<'a> Analyzer<'a> {
             position,
             diagnostics,
         );
-        self.reject_ref_struct_type_args(args, position, diagnostics);
-        let bindings = generic_bindings(params, args);
+        self.reject_ref_struct_type_args(&args, position, diagnostics);
+        let bindings = generic_bindings(params, &args);
         self.register_union(
-            &mangled,
+            instance,
             &template.variants,
             &bindings,
             template.is_enum_struct,
@@ -312,9 +339,19 @@ impl<'a> Analyzer<'a> {
                 position,
                 diagnostics,
             );
-            self.register_methods_for(&mangled, &template.methods, &bindings, diagnostics);
+            let scope = self.type_ctx.scope();
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(template.file_path.as_deref()));
+            self.register_methods_for(instance, &template.methods, &bindings, diagnostics);
+            self.type_ctx.set_scope(scope);
         }
-        self.register_generic_extension_methods(base_name, &mangled, args, diagnostics);
+        self.register_generic_extension_methods(
+            GenericExtendTarget::Nominal(def),
+            instance,
+            &args,
+            diagnostics,
+        );
+        self.type_ctx.set_scope(scope);
     }
 
     /// If a generic `extend` block targets `base_name` (e.g. `extend Option<T> { ... }`),
@@ -323,25 +360,30 @@ impl<'a> Analyzer<'a> {
     /// when no generic extension targets `base_name`.
     pub(in crate::analyzer) fn register_generic_extension_methods(
         &mut self,
-        base_name: &str,
-        mangled: &str,
+        template: GenericExtendTarget,
+        target: dream_types::TypeId,
         args: &[Type],
         diagnostics: &mut DiagnosticBag,
     ) {
-        let exts: Vec<&'a ExtendNode<'a>> = match self.generic_extends.get(base_name) {
+        let exts: Vec<&'a ExtendNode<'a>> = match self.generic_extends.get(&template) {
             Some(list) => list.clone(),
             None => return,
         };
         for ext in exts {
             let ext_params = ext.generic_parameters.as_deref().unwrap_or(&[]);
             let ext_bindings = generic_bindings(ext_params, args);
+            let scope = self.type_ctx.scope();
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(ext.file_path.as_deref()));
             // A constrained extension (`extend List<T : Comparable<T>>`) only applies to instances
             // whose argument satisfies the bound; skip attaching its methods otherwise (so e.g.
             // `List<int>.sort()` is simply "no such method" unless `int` is made `Comparable`).
             if !self.extension_constraints_satisfied(&ext.generic_constraints, &ext_bindings) {
+                self.type_ctx.set_scope(scope);
                 continue;
             }
-            self.register_methods_for(mangled, &ext.methods, &ext_bindings, diagnostics);
+            self.register_methods_for(target, &ext.methods, &ext_bindings, diagnostics);
+            self.type_ctx.set_scope(scope);
         }
     }
 
@@ -375,7 +417,11 @@ impl<'a> Analyzer<'a> {
         position: &TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
-        if self.generic_unions.contains_key(base_name) {
+        if self
+            .type_ctx
+            .resolve(DefKind::Union, base_name)
+            .is_some_and(|def| self.generic_union(def).is_some())
+        {
             self.ensure_union_instantiated(base_name, args, position, diagnostics);
         } else {
             self.ensure_struct_instantiated(base_name, args, position, diagnostics);
@@ -388,8 +434,7 @@ impl<'a> Analyzer<'a> {
         enum_name: &str,
         member: &str,
     ) -> Option<i32> {
-        self.enum_table
-            .get(enum_name)
+        self.enum_members(self.type_ctx.resolve(DefKind::Enum, enum_name)?)
             .and_then(|m| m.get(member))
             .copied()
     }

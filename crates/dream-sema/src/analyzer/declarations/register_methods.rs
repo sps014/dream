@@ -5,21 +5,26 @@
 
 use super::*;
 use crate::function_table::FunctionTableInfo;
+use crate::module_graph::ProgramView;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::types::PRIMITIVE_TYPE_NAMES;
-use dream_syntax::nodes::{FunctionNode, ProgramNode, Type};
+use dream_syntax::nodes::{FunctionNode, Type};
 use dream_types::method_fn;
 
 impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn register_struct_methods(
         &mut self,
         struct_decl: &'a StructDeclarationNode<'a>,
-        struct_type_str: &str,
+        struct_type: dream_types::TypeId,
         bindings: &GenericBindings,
         diagnostics: &mut DiagnosticBag,
     ) {
-        self.register_methods_for(struct_type_str, &struct_decl.methods, bindings, diagnostics);
+        let scope = self.type_ctx.scope();
+        self.type_ctx
+            .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
+        self.register_methods_for(struct_type, &struct_decl.methods, bindings, diagnostics);
+        self.type_ctx.set_scope(scope);
     }
 
     /// Registers a list of methods against `target_type_str` (a struct, a monomorphized generic
@@ -29,11 +34,12 @@ impl<'a> Analyzer<'a> {
     /// blocks so they lower identically.
     pub(in crate::analyzer) fn register_methods_for(
         &mut self,
-        target_type_str: &str,
+        target_type: dream_types::TypeId,
         methods: &'a [FunctionNode<'a>],
         bindings: &GenericBindings,
         diagnostics: &mut DiagnosticBag,
     ) {
+        let target_type_str = self.type_ctx.syntax_type(target_type).get_type();
         // Collect the mangled name + full parameter list (with the implicit `this`) of each method so
         // overloaded methods can be registered under their signature-mangled *emitted* names in a
         // second pass, once the whole overload set for this target is known.
@@ -53,7 +59,6 @@ impl<'a> Analyzer<'a> {
                 (name, params)
             })
             .collect();
-        let mut registered: Vec<(String, Vec<Type>)> = Vec::new();
         for method in methods {
             // Conditional methods (`fun sort(): void where T : Comparable<T>`) only attach when
             // every where-bound is satisfied by this instantiation — same rule as constrained
@@ -87,52 +92,30 @@ impl<'a> Analyzer<'a> {
             if bindings.is_empty() {
                 self.validate_protocol_override(method, diagnostics);
                 self.validate_accessor(method, diagnostics);
-                if method.is_extern && dream_abi::attributes::has_c_attr(&method.attributes) {
-                    let registered = method_fn(target_type_str, &member_name);
-                    self.validate_c_extern_signature(method, &registered, diagnostics);
-                }
             }
             // Property accessors (`get`/`set`) are registered under a `$`-tagged internal name that a
             // user identifier can never spell, so `obj.prop`/`obj.prop = v` resolve to them without a
             // regular method (or the indexer `get`/`set` hooks) ever colliding.
-            let mangled_name = method_fn(target_type_str, &member_name);
-            self.validate_and_register_protocol_hook(
-                target_type_str,
-                method,
-                &mangled_name,
-                diagnostics,
-            );
-            self.type_ctx.register(
-                DefKind::Function,
-                &mangled_name,
-                generic_param_names(&method.generic_parameters),
-            );
-            if let Some(key) = dream_abi::intrinsics::intrinsic_key(&method.attributes) {
-                if let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, &mangled_name) {
-                    self.intrinsic_defs.push((def, key));
-                }
-            }
-
+            let mangled_name = method_fn(&target_type_str, &member_name);
             let mut new_method = method.clone();
             new_method.name = synthetic_token(TokenKind::IdentifierToken, &mangled_name);
+            new_method.name.position = method.name.position;
 
             if !bindings.is_empty() {
                 Self::substitute_generic_signature(&mut new_method, bindings);
             }
+            let mut parameters: Vec<_> = new_method.parameters.iter().map(|p| self.type_ctx.lower(&p.type_)).collect();
+            if !new_method.is_static { parameters.insert(0, target_type); }
+            let def = self.type_ctx.register_method(target_type, &member_name, &parameters);
 
             // Register after substitution so generic `@operator` params are `Vector<int>`, not `Vector<T>`.
-            self.validate_and_register_operator(
-                target_type_str,
-                &new_method,
-                &mangled_name,
-                diagnostics,
-            );
+            let operator_method = new_method.clone();
 
             // Static methods have no implicit receiver; instance methods get `this` at index 0.
             if !new_method.is_static {
                 new_method
                     .parameters
-                    .insert(0, Self::make_this_param(target_type_str));
+                    .insert(0, dream_syntax::nodes::ParameterNode::new(synthetic_token(TokenKind::IdentifierToken, "this"), self.type_ctx.syntax_type(target_type)));
             }
 
             // Stash the *renamed* clone (`{Type}_{method}`), not the raw declaration: its own
@@ -148,49 +131,34 @@ impl<'a> Analyzer<'a> {
             // `instantiated_generics` after `register_generic_function_instance`.
             if method.generic_parameters.is_some() {
                 let renamed_template: &'a FunctionNode<'a> = self.arena.alloc(new_method);
-                self.generic_functions
-                    .insert(mangled_name.clone(), renamed_template);
+                self.type_ctx.defs.set_generic_params(def, generic_param_names(&method.generic_parameters));
+                self.generic_functions.insert(def, renamed_template);
+                self.function_table.generic_methods.insert((target_type, member_name), def);
+                self.function_table.record_declaration(renamed_template, (def, Vec::new()));
+                self.record_ide_definition(def, &method.name, method.file_path.as_deref());
                 continue;
             }
 
-            let param_types: Vec<Type> = new_method
-                .parameters
-                .iter()
-                .map(|p| p.type_.clone())
-                .collect();
             let method_ref = self.arena.alloc(new_method);
             self.struct_methods.push((method_ref, bindings.clone()));
 
-            let info = FunctionTableInfo::from(method_ref);
-            if let Err(e) =
-                self.function_table
-                    .add_overload(&mangled_name, info, &mut self.type_ctx)
-            {
-                diagnostics.report_error(e.to_string(), Some(method.name.position));
+            let mut info = FunctionTableInfo::from_identity(method_ref, (def, Vec::new()), &mut self.type_ctx);
+            self.validate_and_register_operator(target_type, &operator_method, &info.identity, diagnostics);
+            self.validate_and_register_protocol_hook(target_type, method, &info.identity, diagnostics);
+            if bindings.is_empty() && method.is_extern && dream_abi::attributes::has_c_attr(&method.attributes) {
+                self.validate_c_extern_signature(method, def, diagnostics);
             }
-            registered.push((mangled_name, param_types));
-        }
-        // Register a distinct `DefId` for each overloaded method under its emitted (signature-mangled)
-        // name, so overloads don't collide on the single base-mangled def (mirrors free functions).
-        // When `extend` adds an overload, the original singleton is promoted to a mangled key too —
-        // intern every key in the set, not only the methods in this `extend` block.
-        let mut seen = indexmap::IndexSet::new();
-        for (mangled_name, _) in &registered {
-            if !seen.insert(mangled_name.clone()) {
-                continue;
-            }
-            let keys: Vec<String> = self
-                .function_table
-                .overloads
-                .get(mangled_name)
-                .cloned()
-                .unwrap_or_else(|| vec![mangled_name.clone()]);
-            for key in keys {
-                if key != *mangled_name {
-                    self.type_ctx.register(DefKind::Function, &key, vec![]);
-                }
+            self.record_ide_definition(info.identity.0, &method.name, method.file_path.as_deref());
+            if let Some(key) = dream_abi::intrinsics::intrinsic_key(&method.attributes) { self.intrinsic_defs.push((info.identity.0, key)); }
+            info.declaring_module = self.module_of(method_ref.file_path.as_ref());
+            let identity = info.identity.clone();
+            self.function_table.record_declaration(method_ref, identity);
+            match self.function_table.add_method(target_type, &member_name, info) {
+                Ok(_) => (),
+                Err(error) => diagnostics.report_error(error.to_string(), Some(method.name.position)),
             }
         }
+
     }
 
     /// Returns true if `name` is a type that an `extend` block may attach methods to: a
@@ -204,10 +172,20 @@ impl<'a> Analyzer<'a> {
         }
         PRIMITIVE_TYPE_NAMES.contains(&name)
             || matches!(name, "object" | "js")
-            || self.struct_table.get_struct(name).is_some()
-            || self.generic_structs.contains_key(name)
-            || self.enum_table.contains_key(name)
-            || self.interface_decls.contains_key(name)
+            || self.type_ctx.resolved_type(name).is_some_and(|ty| self.struct_info(ty).is_some())
+            || self.type_ctx.resolve(DefKind::Struct, name).is_some_and(|def| self.generic_struct(def).is_some())
+            || self.type_ctx.resolve(DefKind::Enum, name).is_some_and(|def| self.enum_members(def).is_some())
+            || self.type_ctx.resolve(DefKind::Interface, name).is_some_and(|def| self.interface_decl(def).is_some())
+    }
+
+    fn extend_target_type(&mut self, name: &str) -> Option<dream_types::TypeId> {
+        match name.strip_suffix("[]") {
+            Some(elem) => {
+                let elem = self.extend_target_type(elem)?;
+                Some(self.type_ctx.interner.array(elem))
+            }
+            None => self.type_ctx.resolved_type(name),
+        }
     }
 
     /// Pass: register every `extend Type { ... }` block's methods. Extension methods are lowered
@@ -216,16 +194,23 @@ impl<'a> Analyzer<'a> {
     /// keep their value/reference semantics.
     pub(in crate::analyzer) fn register_extensions(
         &mut self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
         for ext in node.extends.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(ext.file_path.as_deref()));
             diagnostics.file_path = file_path_string(&ext.file_path);
             let target = ext.target.text.clone();
             // `sealed` types reject user-authored `extend` blocks. Compiler-synthesized extends
             // (interface defaults, `@json` converters) are exempt, so a sealed type may still
             // implement interfaces with default methods or derive `@json`.
-            if !ext.is_synthesized && self.sealed_types.contains(&target) {
+            let target_def = self
+                .type_ctx
+                .nominal_kind(&target)
+                .and_then(|kind| self.type_ctx.resolve(kind, &target));
+            if !ext.is_synthesized && target_def.is_some_and(|def| self.sealed_types.contains(&def))
+            {
                 diagnostics.report_error(
                     format!("Cannot extend sealed type '{}'", target),
                     Some(ext.target.position),
@@ -253,9 +238,9 @@ impl<'a> Analyzer<'a> {
                 if target.ends_with("[]") {
                     continue;
                 }
-                if !self.generic_unions.contains_key(target)
-                    && !self.generic_structs.contains_key(target)
-                    && !self.generic_interfaces.contains_key(target)
+                if self.type_ctx.resolve(DefKind::Union, target).is_none()
+                    && self.type_ctx.resolve(DefKind::Struct, target).is_none()
+                    && self.type_ctx.resolve(DefKind::Interface, target).is_none()
                 {
                     diagnostics.report_error(
                         format!(
@@ -274,14 +259,15 @@ impl<'a> Analyzer<'a> {
                 );
                 continue;
             }
-            self.register_methods_for(&target, &ext.methods, &GenericBindings::new(), diagnostics);
+            let Some(target_type) = self.extend_target_type(&target) else { continue; };
+            self.register_methods_for(target_type, &ext.methods, &GenericBindings::new(), diagnostics);
             // An `extend Type : Iface { ... }` block records that its target implements the
             // interface(s), so the target (including a primitive like `int`) participates in
             // interface dispatch and satisfies generic constraints (`T : Comparable<T>`). The
             // block's own methods supply the required signatures.
             if !ext.implements.is_empty() {
                 self.validate_implements(
-                    &target,
+                    target_type,
                     &ext.implements,
                     &ext.methods,
                     &GenericBindings::new(),
@@ -299,23 +285,26 @@ impl<'a> Analyzer<'a> {
     ///
     /// Generic array templates (`extend T[] { … }`) are keyed under [`ARRAY_EXTEND_KEY`] (`"[]"`),
     /// not under the spelling `T[]`, so every concrete `Elem[]` shares one template.
-    pub(in crate::analyzer) fn stash_generic_extensions(&mut self, node: &'a ProgramNode<'a>) {
-        use dream_syntax::nodes::types::ARRAY_EXTEND_KEY;
+    pub(in crate::analyzer) fn stash_generic_extensions(&mut self, node: &'a ProgramView<'a>) {
+        use super::super::GenericExtendTarget;
         for ext in node.extends.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(ext.file_path.as_deref()));
             if ext.generic_parameters.is_some() {
                 let key = if ext.target.text.ends_with("[]") {
-                    ARRAY_EXTEND_KEY.to_string()
+                    GenericExtendTarget::Array
                 } else {
-                    ext.target.text.clone()
+                    let Some(def) = self.type_ctx.nominal_kind(&ext.target.text).and_then(|kind| self.type_ctx.resolve(kind, &ext.target.text)) else { continue; };
+                    GenericExtendTarget::Nominal(def)
                 };
                 self.generic_extends.entry(key).or_default().push(ext);
             }
         }
     }
 
-    /// Validates an `@override` object-protocol method: `@override` may only mark `to_string`
+    /// Validates an `override` object-protocol method: `override` may only mark `to_string`
     /// / `hash_code`, those must be exported with the exact protocol signature, and a method
-    /// that shadows a protocol name must carry `@override`.
+    /// that shadows a protocol name must carry `override`.
     pub(in crate::analyzer) fn validate_protocol_override(
         &self,
         method: &FunctionNode<'a>,

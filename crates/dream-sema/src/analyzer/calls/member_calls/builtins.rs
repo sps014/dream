@@ -5,11 +5,9 @@ use super::super::super::*;
 use crate::errors::SemanticError;
 use dream_abi::intrinsics;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::{ExpressionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
-use dream_types::method_fn;
 
 impl<'a> Analyzer<'a> {
     /// Type-checks the builtin methods available on every (or every primitive/array) receiver:
@@ -138,13 +136,11 @@ impl<'a> Analyzer<'a> {
         // user-defined override (registered as `{Type}_to_string`) takes precedence and is resolved
         // by the normal method lookup below; otherwise fall back to the builtin protocol.
         if method.text == intrinsics::TO_STRING || method.text == intrinsics::HASH_CODE {
-            let receiver_name = match Self::resolve_struct_parts(obj_type) {
-                Some((base_name, generic_args)) => mangle_generic(&base_name, &generic_args),
-                None => obj_type.get_type(),
-            };
-            let user_method = method_fn(&receiver_name, &method.text);
-            let has_override = self.function_table.is_overloaded(&user_method)
-                || self.function_table.get_function(&user_method).is_ok();
+            let receiver_ty = self.type_ctx.lower(obj_type);
+            let has_override = !self
+                .function_table
+                .method_candidates(receiver_ty, &method.text)
+                .is_empty();
             if !has_override {
                 if !params.is_empty() {
                     diagnostics.report_error(
@@ -156,7 +152,11 @@ impl<'a> Analyzer<'a> {
                     // A C-style enum's `to_string()` renders the variant name (e.g. `Color.Green`
                     // -> "Green") by mapping the discriminant to its interned name, rather than the
                     // generic object protocol (which would stringify the underlying integer).
-                    if let Some(members) = self.enum_table.get(&receiver_name) {
+                    let enum_def = match self.type_ctx.interner.kind(receiver_ty) {
+                        dream_types::TyKind::Enum(def) => Some(*def),
+                        _ => None,
+                    };
+                    if let Some(members) = enum_def.and_then(|def| self.enum_members(def)) {
                         let arms: Vec<(i64, String)> = members
                             .iter()
                             .map(|(name, value)| (*value as i64, name.clone()))

@@ -36,12 +36,18 @@ impl<'a> Analyzer<'a> {
         // The subject's union may be a generic instantiation that has not been constructed yet
         // (e.g. matching on a `param: Option<int>`); ensure its layout is registered first.
         if let Type::Struct(base, Some(args)) = &subject_type {
-            if self.generic_unions.contains_key(&base.text) {
+            if self
+                .type_ctx
+                .resolve(DefKind::Union, &base.text)
+                .is_some_and(|def| self.generic_union(def).is_some())
+            {
                 self.ensure_union_instantiated(&base.text, args, &base.position, diagnostics);
             }
         }
-        let subject_base = subject_type.get_type();
-        let union_info: Option<UnionInfo> = self.union_table.get(&subject_base).cloned();
+        let subject_id = self.type_ctx.lower(&subject_type);
+        let subject_base =
+            dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, subject_id);
+        let union_info: Option<UnionInfo> = self.union_info(subject_id).cloned();
         Ok((subject_type, subject_hir, subject_base, union_info))
     }
     /// Analyzes one switch arm's body (`=> expr` or `=> { stmts }`) and, in expression position,

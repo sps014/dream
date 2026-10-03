@@ -10,7 +10,7 @@ use dream_sema::analyzer::ide::{
     IdeRef, IdeSnapshot, IdeTarget, MemberInfo, MemberKind, TypeSummary,
 };
 
-use crate::index::{detail_belongs_to, is_ident_byte, type_base, Decl, Index, SymKind};
+use crate::index::{is_ident_byte, Index, SymKind};
 
 /// Finds the reference recorded for the receiver in a `receiver.<cursor>` completion at `offset`.
 ///
@@ -89,10 +89,6 @@ fn member_sym_kind(m: &MemberInfo) -> SymKind {
     }
 }
 
-fn is_future_key(key: &str) -> bool {
-    key == "Future" || key.starts_with("Future_") || key.starts_with("Future<")
-}
-
 /// One completion proposal, mirroring the AST-index query output shape.
 pub type CompletionOut = (String, SymKind, String, Option<String>);
 
@@ -119,10 +115,10 @@ pub fn member_completions(
                 })
                 .collect()
         }
-        TypeSummary::Named { key, .. } => {
+        TypeSummary::Named { key, ty, .. } => {
             let key = key.as_deref()?;
             let mut members = snapshot.members_of(key);
-            if is_future_key(key) {
+            if snapshot.future_types.contains(ty) {
                 members.insert(
                     0,
                     MemberInfo {
@@ -154,7 +150,10 @@ pub fn hover_at(snapshot: &IdeSnapshot, offset: usize) -> Option<(usize, usize, 
     Some((r.start, r.end, format!("```dream\n{body}\n```")))
 }
 
-fn fn_signature(snapshot: &IdeSnapshot, key: &str) -> Option<String> {
+fn fn_signature(
+    snapshot: &IdeSnapshot,
+    key: &dream_sema::function_table::FunctionIdentity,
+) -> Option<String> {
     let sig = snapshot.functions.get(key)?;
     let params = sig
         .params
@@ -168,11 +167,16 @@ fn fn_signature(snapshot: &IdeSnapshot, key: &str) -> Option<String> {
         format!(": {}", sig.ret)
     };
     let prefix = if sig.is_static { "static " } else { "" };
-    Some(format!("{prefix}fun {key}({params}){ret}"))
+    Some(format!("{prefix}fun {}({params}){ret}", sig.label))
 }
 
 fn hover_body(snapshot: &IdeSnapshot, r: &IdeRef) -> String {
     match &r.target {
+        IdeTarget::Resolved { target, .. } => {
+            let mut reference = r.clone();
+            reference.target = (**target).clone();
+            hover_body(snapshot, &reference)
+        }
         IdeTarget::Local { name } | IdeTarget::Global { name } => {
             format!("let {name}: {}", r.result.display())
         }
@@ -221,60 +225,16 @@ fn hover_body(snapshot: &IdeSnapshot, r: &IdeRef) -> String {
 /// results): maps the analyzer's resolved target back to the indexed declaration.
 pub fn definition_at(snapshot: &IdeSnapshot, idx: &Index, offset: usize) -> Option<(usize, usize)> {
     let r = snapshot.ref_covering(offset)?;
-    let decl: Option<&Decl> = match &r.target {
-        IdeTarget::Local { name } | IdeTarget::Global { name } => idx
-            .decls
-            .iter()
-            .filter(|d| {
-                d.name == *name
-                    && matches!(d.kind, SymKind::Variable | SymKind::Param)
-                    && d.start <= offset
-            })
-            .max_by_key(|d| d.start),
-        IdeTarget::Field { type_key, name } => idx.decls.iter().find(|d| {
-            d.kind == SymKind::Field
-                && d.name == *name
-                && detail_belongs_to(&d.detail, type_base(type_key))
-        }),
-        IdeTarget::Callee { key, label } => {
-            // Instance/static methods register under `{Type}_{method}`; free functions keep
-            // their bare name. Prefer the method interpretation when the key carries a `_`.
-            idx.decls
-                .iter()
-                .find(|d| {
-                    d.kind == SymKind::Method && d.name == *label && method_matches_key(d, key)
-                })
-                .or_else(|| {
-                    idx.decls
-                        .iter()
-                        .find(|d| d.kind == SymKind::Function && d.name == *label)
-                })
-        }
-        IdeTarget::Constructor { type_key } => idx.decls.iter().find(|d| {
-            matches!(d.kind, SymKind::Class | SymKind::Struct) && d.name == type_base(type_key)
-        }),
-        IdeTarget::EnumMember { enum_name, member } => idx.decls.iter().find(|d| {
-            d.kind == SymKind::EnumMember
-                && d.name == *member
-                && d.detail.starts_with(&format!("{enum_name}."))
-        }),
-        IdeTarget::UnionVariant { union_key, variant } => idx.decls.iter().find(|d| {
-            d.kind == SymKind::EnumMember
-                && d.name == *variant
-                && detail_belongs_to(&d.detail, type_base(union_key))
-        }),
-        IdeTarget::Expr => None,
-    };
-    decl.map(|d| (d.start, d.end))
-}
-
-fn method_matches_key(decl: &Decl, key: &str) -> bool {
-    // The emitted key is `{Type}_{method}[.overloads]` (possibly module-qualified). Mangling
-    // appends suffixes to the base name, so the base type is everything before the first `_`.
-    let stripped = key.rsplit("::").next().unwrap_or(key);
-    let no_overload = stripped.split('.').next().unwrap_or(stripped);
-    let base_ty = no_overload.split('_').next().unwrap_or(no_overload);
-    detail_belongs_to(&decl.detail, base_ty)
+    if let IdeTarget::Resolved { source, .. } = &r.target {
+        return (source.file == snapshot.primary_file).then_some((source.start, source.end));
+    }
+    match &r.target {
+        IdeTarget::Local { .. } | IdeTarget::Global { .. } => idx
+            .decl_for_offset(offset)
+            .filter(|decl| decl.is_main && decl.file_path.is_none())
+            .map(|decl| (decl.start, decl.end)),
+        _ => None,
+    }
 }
 
 /// True when two resolved targets denote the same program entity — the identity test that makes
@@ -283,45 +243,7 @@ fn method_matches_key(decl: &Decl, key: &str) -> bool {
 /// not comparable between files.
 pub fn target_matches(a: &IdeTarget, b: &IdeTarget) -> bool {
     match (a, b) {
-        (IdeTarget::Global { name: a }, IdeTarget::Global { name: b }) => a == b,
-        (
-            IdeTarget::Field {
-                type_key: ta,
-                name: fa,
-            },
-            IdeTarget::Field {
-                type_key: tb,
-                name: fb,
-            },
-        ) =>
-        // Mangling appends generic suffixes to the base name; compare bases.
-        {
-            fa == fb && type_base(ta) == type_base(tb)
-        }
-        (IdeTarget::Callee { key: a, .. }, IdeTarget::Callee { key: b, .. }) => {
-            // Emitted keys encode the declaring type + overload signature exactly.
-            a.rsplit("::").next() == b.rsplit("::").next()
-        }
-        (
-            IdeTarget::EnumMember {
-                enum_name: ea,
-                member: ma,
-            },
-            IdeTarget::EnumMember {
-                enum_name: eb,
-                member: mb,
-            },
-        ) => ea == eb && ma == mb,
-        (
-            IdeTarget::UnionVariant {
-                union_key: ua,
-                variant: va,
-            },
-            IdeTarget::UnionVariant {
-                union_key: ub,
-                variant: vb,
-            },
-        ) => type_base(ua) == type_base(ub) && va == vb,
+        (IdeTarget::Resolved { source: a, .. }, IdeTarget::Resolved { source: b, .. }) => a == b,
         _ => false,
     }
 }
@@ -339,10 +261,47 @@ pub fn references_in(snapshot: &IdeSnapshot, target: &IdeTarget) -> Vec<(usize, 
     let mut out: Vec<(usize, usize)> = snapshot
         .refs
         .iter()
-        .filter(|r| ref_in_primary_doc(r) && target_matches(&r.target, target))
+        .filter(|r| {
+            if !ref_in_primary_doc(r) || !target_matches(&r.target, target) {
+                return false;
+            }
+            !matches!(
+                &r.target,
+                IdeTarget::Resolved { source, .. }
+                    if source.file == snapshot.primary_file
+                        && (source.start, source.end) == (r.start, r.end)
+            )
+        })
         .map(|r| (r.start, r.end))
         .collect();
     out.sort_unstable();
     out.dedup();
     out
+}
+
+/// Rename must address the resolved declaration even when the receiver is a chained expression.
+pub fn rename_decl_at<'a>(
+    snapshot: &IdeSnapshot,
+    idx: &'a Index,
+    offset: usize,
+) -> Option<&'a crate::index::Decl> {
+    if let Some(reference) = snapshot.ref_covering(offset) {
+        if let IdeTarget::Resolved { source, .. } = &reference.target {
+            if source.file != snapshot.primary_file {
+                return None;
+            }
+            return idx.decls.iter().find(|decl| {
+                decl.is_main
+                    && decl.file_path.is_none()
+                    && (decl.start, decl.end) == (source.start, source.end)
+            });
+        }
+        if !matches!(
+            reference.target,
+            IdeTarget::Local { .. } | IdeTarget::Global { .. }
+        ) {
+            return None;
+        }
+    }
+    idx.decl_for_offset(offset)
 }

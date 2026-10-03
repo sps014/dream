@@ -372,14 +372,14 @@ fn llvm_ir_shapes() {
     assert!(ll.contains("@dream_ft = internal constant ["));
     assert!(ll.lines().any(|l| l.starts_with("@dream_iface_")
         && l.contains("internal constant")
-        && l.contains("@Sq_area")
-        && l.contains("@Tri_area")));
+        && l.contains("@s0_2_Sq_0_area")
+        && l.contains("@s0_3_Tri_0_area")));
     assert!(!ll.contains("dream_init_ft") && !ll.contains("dream_init_itables"));
 
     assert!(function_body(&ll, "fib").matches("call i32 @fib(").count() == 2);
 
     let total = function_body(&ll, "total");
-    assert!(total.contains("call i32 @Sq_area(") && total.contains("call i32 @Tri_area("));
+    assert!(total.contains("call i32 @s0_2_Sq_0_area(") && total.contains("call i32 @s0_3_Tri_0_area("));
     assert!(total.contains("@__iface_dispatch_"));
     assert!(total.contains("call i32 @dream_rc_last(") && total.contains("_into("));
 

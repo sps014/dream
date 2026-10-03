@@ -119,8 +119,9 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         .collect();
     if !init_body.is_empty() {
         let init_fn = HFunction {
-            def: DefId(u32::MAX),
+            def: DefId::root(u32::MAX),
             name: INIT_FN_NAME.to_string(),
+            symbol: INIT_FN_NAME.to_string(),
             instance: vec![],
             params: Vec::<HParam>::new(),
             ret: interner.void(),
@@ -163,6 +164,8 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         interfaces: hir.interfaces.clone(),
         enums: hir.enums.clone(),
         type_names: hir.type_names.clone(),
+        type_symbols: hir.type_symbols.clone(),
+        object_methods: hir.object_methods.clone(),
         frame_objects: Default::default(),
     }
 }
@@ -296,13 +299,17 @@ fn init_builder(func: &HFunction, is_async: bool) -> (FunctionBuilder, HashMap<u
     let mut b = FunctionBuilder::new(func.name.clone(), func.ret);
     b.set_async(is_async);
     b.set_def(func.def, func.instance.clone());
+    b.set_symbol(func.symbol.clone());
     b.set_file(func.file.clone());
     b.set_inline(func.inline);
     let mut locals: HashMap<u32, Local> = HashMap::new();
     for p in &func.params {
-        let l = if p.is_ref {
+        let l = if p.mode == dream_hir::ParamMode::Ref {
             b.new_ref_param(p.ty, Some(p.name.clone()))
-        } else if p.is_take {
+        } else if matches!(
+            p.mode,
+            dream_hir::ParamMode::Sink | dream_hir::ParamMode::Share
+        ) {
             b.new_take_param(p.ty, Some(p.name.clone()))
         } else {
             b.new_param(p.ty, Some(p.name.clone()))
@@ -752,13 +759,13 @@ mod tests {
         let func = HFunction {
             def,
             name: "f".into(),
+            symbol: "f".into(),
             instance: vec![],
             params: vec![dream_hir::HParam {
                 local: LocalId(0),
                 name: "x".into(),
                 ty: int,
-                is_ref: false,
-                is_take: false,
+                mode: dream_hir::ParamMode::Borrow,
             }],
             ret: int,
             locals: vec![],

@@ -3,8 +3,8 @@
 //! of the compiler stop threading stringly-typed names around: declarations register their nominal
 //! defs here, and every AST type annotation is lowered through [`TypeCtx::lower`].
 
-use super::{DefKind, DefTable, PrimTy, TypeId, TypeInterner};
-use dream_syntax::nodes::types::{mangle_generic, Type};
+use super::{DefId, DefKind, DefTable, ModuleId, PrimTy, TypeId, TypeInterner};
+use dream_syntax::nodes::types::Type;
 use indexmap::IndexMap;
 
 /// Owns the interner and def table and remembers which nominal base names are structs/unions/enums
@@ -15,12 +15,12 @@ pub struct TypeCtx {
     pub defs: DefTable,
     /// Base name -> declared kind, used to disambiguate `Type::Struct` (which the parser also emits
     /// for unions and enums, since they are bare identifiers syntactically).
-    nominal: IndexMap<String, DefKind>,
-    /// Mangled monomorphization name (`List_JsonValue`) -> the canonical interned id of that generic
-    /// instance (`Struct(List_def, [JsonValue])`). The analyzer registers each instantiation here so
-    /// the pre-mangled bare spelling and the structured `List<JsonValue>` spelling lower to the same
-    /// [`TypeId`].
-    instances: IndexMap<String, TypeId>,
+    declarations: IndexMap<(ModuleId, DefKind, String), DefId>,
+    modules: IndexMap<ModuleId, String>,
+    scope: ModuleId,
+    imports: IndexMap<ModuleId, Vec<ModuleId>>,
+    functions: IndexMap<(ModuleId, String, Vec<TypeId>), DefId>,
+    methods: IndexMap<(TypeId, String, Vec<TypeId>), DefId>,
 }
 
 impl TypeCtx {
@@ -28,8 +28,12 @@ impl TypeCtx {
         TypeCtx {
             interner: TypeInterner::new(),
             defs: DefTable::new(),
-            nominal: IndexMap::new(),
-            instances: IndexMap::new(),
+            declarations: IndexMap::new(),
+            modules: IndexMap::new(),
+            scope: ModuleId::ROOT,
+            imports: IndexMap::new(),
+            functions: IndexMap::new(),
+            methods: IndexMap::new(),
         }
     }
 
@@ -39,56 +43,221 @@ impl TypeCtx {
         name: &str,
         generic_params: Vec<String>,
     ) -> super::DefId {
-        self.nominal.insert(name.to_string(), kind);
-        self.defs.intern(kind, name, generic_params)
+        let key = (self.scope, kind, name.to_string());
+        if let Some(&def) = self.declarations.get(&key) {
+            return def;
+        }
+        let path = self
+            .modules
+            .get(&self.scope)
+            .map(String::as_str)
+            .unwrap_or("");
+        let def = self
+            .defs
+            .allocate(self.scope, path, kind, name, generic_params);
+        self.declarations.insert(key, def);
+        match kind {
+            DefKind::Struct => {
+                self.interner.struct_ty(def, vec![]);
+            }
+            DefKind::Union => {
+                self.interner.union_ty(def, vec![]);
+            }
+            DefKind::Enum => {
+                self.interner.enum_ty(def);
+            }
+            DefKind::Interface => {
+                self.interner.interface_ty(def, vec![]);
+            }
+            DefKind::Function => {}
+        }
+        def
     }
 
     pub fn nominal_kind(&self, name: &str) -> Option<DefKind> {
-        self.nominal.get(name).copied()
+        [
+            DefKind::Struct,
+            DefKind::Union,
+            DefKind::Enum,
+            DefKind::Interface,
+        ]
+        .iter()
+        .copied()
+        .find(|kind| self.resolve(*kind, name).is_some())
     }
 
-    /// Records a generic instantiation so its mangled bare name canonicalizes to the structured
-    /// `(base def, args)` id. `kind` is the base's kind (`Struct`/`Union`), `base` its source name,
-    /// and `args` the concrete type arguments. Returns the canonical id. Idempotent.
-    ///
-    /// The mangled name is identity-defining, so the first registration wins: a later call whose
-    /// `base` is itself the already-mangled name with no args (e.g. a field access on a value typed
-    /// `Box_string`, which lowers `("Box_string", [])` rather than `("Box", [string])`) must not
-    /// clobber the canonical `(base def, args)` id with a bogus nominal `struct_ty(Box_string, [])`.
-    pub fn register_instance(&mut self, kind: DefKind, base: &str, args: &[Type]) -> TypeId {
-        let mangled = mangle_generic(base, args);
-        if let Some(&id) = self.instances.get(&mangled) {
-            return id;
+    pub fn define_module(&mut self, id: ModuleId, path: String, imports: Vec<ModuleId>) {
+        self.modules.insert(id, path);
+        self.imports.insert(id, imports);
+    }
+
+    pub fn set_scope(&mut self, scope: ModuleId) {
+        self.scope = scope;
+    }
+
+    pub fn scope(&self) -> ModuleId {
+        self.scope
+    }
+
+    pub fn module_path(&self, module: ModuleId) -> Option<&str> {
+        self.modules.get(&module).map(String::as_str)
+    }
+
+    pub fn visible_modules(&self) -> Vec<ModuleId> {
+        let mut modules = indexmap::IndexSet::new();
+        modules.insert(self.scope);
+        modules.insert(ModuleId::ROOT);
+        modules.extend(self.imports.get(&self.scope).into_iter().flatten().copied());
+        modules.into_iter().collect()
+    }
+
+    pub fn register_function(&mut self, name: &str, parameters: &[TypeId]) -> DefId {
+        let key = (self.scope, name.to_string(), parameters.to_vec());
+        if let Some(&def) = self.functions.get(&key) {
+            return def;
         }
-        let arg_ids: Vec<TypeId> = args.iter().map(|a| self.lower(a)).collect();
-        let def = self.defs.intern(kind, base, vec![]);
-        let id = match kind {
-            DefKind::Union => self.interner.union_ty(def, arg_ids),
-            DefKind::Interface => self.interner.interface_ty(def, arg_ids),
-            _ => self.interner.struct_ty(def, arg_ids),
+        let path = self.module_path(self.scope).unwrap_or("").to_string();
+        let def = self
+            .defs
+            .allocate(self.scope, &path, DefKind::Function, name, vec![]);
+        self.functions.insert(key, def);
+        self.declarations
+            .entry((self.scope, DefKind::Function, name.to_string()))
+            .or_insert(def);
+        def
+    }
+
+    pub fn register_method(&mut self, owner: TypeId, member: &str, parameters: &[TypeId]) -> DefId {
+        let key = (owner, member.to_string(), parameters.to_vec());
+        if let Some(&def) = self.methods.get(&key) {
+            return def;
+        }
+        let name = super::method_fn(
+            &super::type_symbol(&self.interner, &self.defs, owner),
+            member,
+        );
+        let path = self.module_path(self.scope).unwrap_or("").to_string();
+        let def = self
+            .defs
+            .allocate(self.scope, &path, DefKind::Function, &name, vec![]);
+        self.methods.insert(key, def);
+        def
+    }
+
+    pub fn resolve_function(&self, name: &str, parameters: &[TypeId]) -> Option<DefId> {
+        let lookup = |module, name: &str| {
+            self.functions
+                .get(&(module, name.to_string(), parameters.to_vec()))
+                .copied()
         };
-        self.instances.insert(mangled, id);
-        id
+        if let Some((path, local)) = name.rsplit_once("::") {
+            let module = self
+                .modules
+                .iter()
+                .find_map(|(&id, value)| (value == path).then_some(id))?;
+            return lookup(module, name).or_else(|| lookup(module, local));
+        }
+        if let Some(def) = lookup(self.scope, name).or_else(|| lookup(ModuleId::ROOT, name)) {
+            return Some(def);
+        }
+        let mut matches = self
+            .imports
+            .get(&self.scope)
+            .into_iter()
+            .flatten()
+            .filter_map(|&module| lookup(module, name));
+        let def = matches.next()?;
+        matches.all(|other| other == def).then_some(def)
+    }
+
+    /// The definition `name` declares in exactly `module`, ignoring imports and the root fallback.
+    pub fn declared_in(&self, module: ModuleId, kind: DefKind, name: &str) -> Option<DefId> {
+        self.declarations
+            .get(&(module, kind, name.to_string()))
+            .copied()
+    }
+
+    pub fn resolve(&self, kind: DefKind, name: &str) -> Option<DefId> {
+        if let Some((path, name)) = name.rsplit_once("::") {
+            let module = self
+                .modules
+                .iter()
+                .find_map(|(&id, module)| (module == path).then_some(id))?;
+            return self
+                .declarations
+                .get(&(module, kind, format!("{path}::{name}")))
+                .or_else(|| self.declarations.get(&(module, kind, name.to_string())))
+                .copied();
+        }
+        self.resolve_from(self.scope, kind, name)
+    }
+
+    /// Resolves an unqualified source name as written inside `scope`: the module itself, then the
+    /// root module, then an unambiguous import.
+    pub fn resolve_from(&self, scope: ModuleId, kind: DefKind, name: &str) -> Option<DefId> {
+        let lookup = |module| {
+            self.declarations
+                .get(&(module, kind, name.to_string()))
+                .copied()
+        };
+        if let Some(def) = lookup(scope).or_else(|| lookup(ModuleId::ROOT)) {
+            return Some(def);
+        }
+        let mut matches = self
+            .imports
+            .get(&scope)
+            .into_iter()
+            .flatten()
+            .filter_map(|&module| lookup(module));
+        let def = matches.next()?;
+        matches.all(|other| other == def).then_some(def)
+    }
+
+    /// True when the unqualified `name` denotes `def` from every module's lexical scope, so a
+    /// syntax type can spell it bare without changing meaning wherever it is lowered.
+    pub fn resolves_everywhere(&self, def: DefId, name: &str) -> bool {
+        let kind = self.defs.get(def).kind;
+        std::iter::once(ModuleId::ROOT)
+            .chain(self.modules.keys().copied())
+            .all(|module| self.resolve_from(module, kind, name) == Some(def))
+    }
+
+    /// Resolves a lexical source name; composite types must already have a structural shape.
+    pub fn resolved_type(&self, name: &str) -> Option<TypeId> {
+        use super::TyKind;
+        if let Some(primitive) = PrimTy::from_name(name) {
+            return self.interner.lookup(&TyKind::Prim(primitive));
+        }
+        match name {
+            "object" => return Some(self.interner.object()),
+            "void" => return Some(self.interner.void()),
+            "js" => return Some(self.interner.js()),
+            _ => {}
+        }
+        let kind = self.nominal_kind(name)?;
+        let def = self.resolve(kind, name)?;
+        self.interner.lookup(&match kind {
+            DefKind::Struct => TyKind::Struct(def, vec![]),
+            DefKind::Union => TyKind::Union(def, vec![]),
+            DefKind::Enum => TyKind::Enum(def),
+            DefKind::Interface => TyKind::Interface(def, vec![]),
+            DefKind::Function => return None,
+        })
+    }
+
+    pub fn instantiate(&mut self, def: DefId, args: Vec<TypeId>) -> TypeId {
+        match self.defs.get(def).kind {
+            DefKind::Struct => self.interner.struct_ty(def, args),
+            DefKind::Union => self.interner.union_ty(def, args),
+            DefKind::Interface => self.interner.interface_ty(def, args),
+            DefKind::Enum => self.interner.enum_ty(def),
+            DefKind::Function => self.interner.error(),
+        }
     }
 
     /// Lowers an AST type to an interned id with no generic substitution in scope.
     pub fn lower(&mut self, ty: &Type) -> TypeId {
         self.lower_with(ty, &IndexMap::new())
-    }
-
-    /// Lowers a bare type-name string (possibly suffixed `T[]`, a primitive spelling, or a
-    /// pre-mangled generic instance) to an interned id. Used where signatures/tables still carry
-    /// string type spellings.
-    pub fn lower_str(&mut self, name: &str) -> TypeId {
-        self.lower_name(name, &IndexMap::new())
-    }
-
-    /// Lowers a bare type-name string, substituting any in-scope generic parameter names (`T`) with
-    /// their bound concrete id. The string-form counterpart of [`Self::lower_with`], used where a
-    /// monomorphized body still carries a stringly-reconstructed type spelling that names a generic
-    /// parameter (`T`, `T[]`, `T?`).
-    pub fn lower_str_with(&mut self, name: &str, bindings: &IndexMap<String, TypeId>) -> TypeId {
-        self.lower_name(name, bindings)
     }
 
     /// Lowers an AST type, substituting any in-scope generic parameter names (`T`) with the bound
@@ -136,11 +305,10 @@ impl TypeCtx {
                 if let Some(bound) = bindings.get(name) {
                     return *bound;
                 }
-                // A bare name (no structured args) may be stringly-reconstructed and encode an array
-                // suffix, a primitive spelling, or a pre-mangled generic instance; route it through
-                // name-based lowering so every spelling of a type interns identically.
                 if generic_args.is_none() {
-                    return self.lower_name(name, bindings);
+                    if let Some(id) = self.resolved_type(name) {
+                        return id;
+                    }
                 }
                 let args: Vec<TypeId> = generic_args
                     .as_ref()
@@ -148,77 +316,31 @@ impl TypeCtx {
                     .unwrap_or_default();
                 match self.nominal_kind(name) {
                     Some(DefKind::Enum) => {
-                        let def = self.defs.intern(DefKind::Enum, name, vec![]);
+                        let Some(def) = self.resolve(DefKind::Enum, name) else {
+                            return self.interner.error();
+                        };
                         self.interner.enum_ty(def)
                     }
                     Some(DefKind::Union) => {
-                        let def = self.defs.intern(DefKind::Union, name, vec![]);
+                        let Some(def) = self.resolve(DefKind::Union, name) else {
+                            return self.interner.error();
+                        };
                         self.interner.union_ty(def, args)
                     }
                     Some(DefKind::Interface) => {
-                        let def = self.defs.intern(DefKind::Interface, name, vec![]);
+                        let Some(def) = self.resolve(DefKind::Interface, name) else {
+                            return self.interner.error();
+                        };
                         self.interner.interface_ty(def, args)
                     }
-                    // Default unknown nominal names to structs (forward references during
-                    // declaration registration land here before the def is seen).
                     _ => {
-                        let def = self.defs.intern(DefKind::Struct, name, vec![]);
+                        let Some(def) = self.resolve(DefKind::Struct, name) else {
+                            return self.interner.error();
+                        };
                         self.interner.struct_ty(def, args)
                     }
                 }
             }
-        }
-    }
-
-    /// Lowers a bare type *name* (as opposed to a structured AST node) to an interned id, absorbing
-    /// string spellings still used by signatures/tables: array (`T[]`) suffixes, primitive names,
-    /// `object`/`void`, pre-mangled generic instances, and nominal references. This keeps every
-    /// spelling of the same type interning to one [`TypeId`].
-    fn lower_name(&mut self, name: &str, bindings: &IndexMap<String, TypeId>) -> TypeId {
-        if let Some(&bound) = bindings.get(name) {
-            return bound;
-        }
-        if let Some(base) = name.strip_suffix("[]") {
-            let inner = self.lower_name(base, bindings);
-            return self.interner.array(inner);
-        }
-        if let Some(prim) = PrimTy::from_name(name) {
-            return self.interner.prim(prim);
-        }
-        match name {
-            "object" => return self.interner.object(),
-            "void" => return self.interner.void(),
-            // The dynamic JS-interop type is a distinguished non-reference i32 handle, not a nominal
-            // struct, so recognize its bare name here before the nominal fallback.
-            "js" => return self.interner.js(),
-            _ => {}
-        }
-        if let Some(&id) = self.instances.get(name) {
-            return id;
-        }
-        match self.nominal_kind(name) {
-            Some(DefKind::Enum) => {
-                let def = self.defs.intern(DefKind::Enum, name, vec![]);
-                self.interner.enum_ty(def)
-            }
-            Some(DefKind::Union) => {
-                let def = self.defs.intern(DefKind::Union, name, vec![]);
-                self.interner.union_ty(def, vec![])
-            }
-            Some(DefKind::Interface) => {
-                let def = self.defs.intern(DefKind::Interface, name, vec![]);
-                self.interner.interface_ty(def, vec![])
-            }
-            Some(DefKind::Struct) => {
-                let def = self.defs.intern(DefKind::Struct, name, vec![]);
-                self.interner.struct_ty(def, vec![])
-            }
-            // An unregistered name (or a function name used in type position) is not a known type.
-            // Interning it as a nominal struct here is exactly the fragility hazard from the review:
-            // a typo or interning-drift would silently mint a bogus type and miscompile. Lower it to
-            // the poison `Error` type instead, which `compat.rs` already suppresses so the real
-            // diagnostic (raised where the name was resolved) is what surfaces.
-            Some(DefKind::Function) | None => self.interner.error(),
         }
     }
 }
@@ -264,5 +386,62 @@ mod tests {
         bindings.insert("T".to_string(), int);
         let ty = Type::Generic("T".to_string());
         assert_eq!(ctx.lower_with(&ty, &bindings), int);
+    }
+
+    #[test]
+    fn nested_arguments_do_not_collide_with_source_identifiers() {
+        let mut ctx = TypeCtx::new();
+        let boxed = ctx.register(DefKind::Struct, "Box", vec!["T".to_string()]);
+        let a_b = ctx.register(DefKind::Struct, "A_B", vec![]);
+        let a = ctx.register(DefKind::Struct, "A", vec!["T".to_string()]);
+        let b = ctx.register(DefKind::Struct, "B", vec![]);
+        let a_b = ctx.instantiate(a_b, vec![]);
+        let b = ctx.instantiate(b, vec![]);
+        let nested = ctx.instantiate(a, vec![b]);
+        let first = ctx.instantiate(boxed, vec![a_b]);
+        let second = ctx.instantiate(boxed, vec![nested]);
+        assert_ne!(first, second);
+        assert_eq!(ctx.lower(&ctx.syntax_type(first)), first);
+        assert_eq!(ctx.lower(&ctx.syntax_type(second)), second);
+        assert!(ctx.resolved_type("Box_A_B").is_none());
+        assert_eq!(
+            ctx.lower(&Type::Struct(ident("int[]"), None)),
+            ctx.interner.error()
+        );
+    }
+
+    #[test]
+    fn reconstructed_foreign_arguments_preserve_definition_identity() {
+        let mut ctx = TypeCtx::new();
+        let caller = ModuleId(1);
+        let library = ModuleId(2);
+        ctx.define_module(caller, "caller".to_string(), vec![library]);
+        ctx.define_module(library, "library".to_string(), vec![]);
+        ctx.set_scope(caller);
+        let local = ctx.register(DefKind::Struct, "Value", vec![]);
+        let local = ctx.instantiate(local, vec![]);
+        let array = ctx.interner.array(local);
+        ctx.set_scope(library);
+        let foreign = ctx.register(DefKind::Struct, "Value", vec![]);
+        let foreign = ctx.instantiate(foreign, vec![]);
+        let container = ctx.register(DefKind::Struct, "Container", vec!["T".to_string()]);
+        let instance = ctx.instantiate(container, vec![array]);
+        let syntax = ctx.syntax_type(instance);
+        assert_eq!(ctx.lower(&syntax), instance);
+        assert_ne!(local, foreign);
+        ctx.set_scope(caller);
+        assert_eq!(ctx.lower(&syntax), instance);
+    }
+
+    #[test]
+    fn method_identity_includes_the_concrete_receiver() {
+        let mut ctx = TypeCtx::new();
+        let def = ctx.register(DefKind::Struct, "Box", vec!["T".to_string()]);
+        let integer = ctx.instantiate(def, vec![ctx.interner.int()]);
+        let string = ctx.instantiate(def, vec![ctx.interner.string()]);
+        let first = ctx.register_method(integer, "read", &[]);
+        let second = ctx.register_method(string, "read", &[]);
+        assert_ne!(first, second);
+        assert_eq!(ctx.register_method(integer, "read", &[]), first);
     }
 }

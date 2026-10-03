@@ -41,7 +41,8 @@ pub(super) fn analyze_code_with_crate_type(
 
     if let Ok(tree) = parser.parse() {
         let arena = bumpalo::Bump::new();
-        let mut analyzer = Analyzer::new(&tree, &arena)
+        let graph = crate::module_graph::ModuleGraph::single(tree.get_root().clone());
+        let mut analyzer = Analyzer::new(&graph, &arena)
             .with_crate_type(crate_type, primary_file.map(|s| s.to_string()));
         let _ = analyzer.analyze(&mut diagnostics);
     }

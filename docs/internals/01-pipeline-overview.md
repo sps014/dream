@@ -7,9 +7,9 @@ This chapter is the map. It walks the whole compilation pipeline stage by stage:
 ```mermaid
 flowchart TD
     src["source files (.dream)"]
-    src --> load["source_loader: resolve imports,\nparse each file, merge declarations"]
+    src --> load["source_loader: resolve imports,\nparse each file separately"]
     load --> prelude["prelude::merge_prelude\n(selective system.* packages)"]
-    prelude --> ast["AST (SyntaxTree / ProgramNode)"]
+    prelude --> ast["ModuleGraph (per-file ProgramNode)\nborrowed ProgramView"]
 
     ast --> analyze["semantics::Analyzer::analyze\ntype-check, scopes, async rules,\ngeneric instantiation"]
     analyze -->|errors| diag["DiagnosticBag rendered → CompileError::Semantic"]
@@ -17,7 +17,7 @@ flowchart TD
 
     info --> hir["HIR emission\nlower AST+SemanticInfo → typed HIR"]
     hir --> mir["mir::lower\nHIR → CFG MIR"]
-    mir --> rc["ExpandSimpleCtors, ParamModes, RcInsertion\n(make ownership explicit)"]
+    mir --> rc["ExpandSimpleCtors, RcInsertion\n(make ownership explicit)"]
     rc --> opt["module optimize\ndevirt + inline rounds, post-inline RC,\nregions / sroa-managed"]
     opt --> perfn["per-function pipeline (fixpoint)"]
     perfn --> late["late module passes\nstrip-escaped-regions, frame-alloc,\n(debug compiler) MIR verifier"]
@@ -39,7 +39,7 @@ The `hir → mir → emit` pipeline is the **only** backend.
 ### 1. Source loading — `src/driver/source_loader.rs`, `src/driver/prelude.rs`
 
 - **In:** an entry file path.
-- **Out:** one merged `ProgramNode` (all imported files' declarations plus the selectively merged stdlib packages).
+- **Out:** a `ModuleGraph` with per-file `ProgramNode`s, module IDs, import edges, export descriptors and content/interface hashes. `ProgramView` borrows declarations from those files; analysis does not consume a flattened AST.
 - **Key types:** `ProgramAccumulator` collects `all_functions`, `all_structs`, `all_enums`, `all_extends`, `all_globals`, and `visited` (the cycle guard).
 - **Guarantees:** import cycles are broken; every referenced module is parsed once.
 
@@ -52,16 +52,16 @@ The `hir → mir → emit` pipeline is the **only** backend.
 
 ### 3. Semantic analysis — `src/semantics/analyzer/`
 
-- **In:** the AST.
+- **In:** the module graph and its borrowed declaration view.
 - **Out:** `SemanticInfo`, or a `CompileError::Semantic` after errors.
 - **What it does:** name resolution, type checking, scope validation, `async`/`await` legality, overload selection, and **generic instantiation** (monomorphization discovery).
 - **Tables it populates** (in `SemanticInfo`):
   - `StructTable` / `StructInfo` — field layout
   - `UnionTable` / `UnionInfo` — variant layout
-  - `EnumTable` — `name → (member → i32)`
+  - `EnumTable` — `DefId → (member → i32)`
   - `FunctionTable` / `FunctionTableInfo` — signatures + overloads
   - symbol tables — per-scope `name → Type`
-- **Type identity:** type *decisions* run on the interned type system — assignability and overload viability go through `crate::types::{assignable, overload_compatible}` on `TypeId`s, generic bindings carry structured `Type`s, and classification matches on AST variants / `TyKind` rather than comparing `get_type()` spellings. The instance-keyed tables are keyed by their monomorphized instance names, which double as the deterministic backend emit identity. User-facing diagnostics use `display_name` (`Box<int>`), never the mangled spelling.
+- **Type identity:** nominal definitions use `(ModuleId, local index)`. Struct/union instances and interface methods use `TypeId` keys; enum and nominal-template tables use `DefId`. Source-name resolution is module scoped. Some frontend function, generic and receiver metadata still uses name keys; the Phase 5 migration is not yet complete. User-facing diagnostics use `display_name` (`Box<int>`), while backend symbols use structural encodings.
 
 ### 4. Type system — `src/types/` (cross-cutting)
 
@@ -85,10 +85,16 @@ Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-s
 - **Out:** a textual LLVM IR module (`backend::llvm::emit_llvm_module`). The driver links it with the C runtime compiled to bitcode, runs the pinned `opt` + `llc`, then links with the host `cc` (native `.bin`, optionally PGO via `--profile` / `--use-profile`, `src/execution/native/pgo.rs`) or wasi-sdk `wasm-ld` (`.wasm`, pretty-printed to `.wat` via wasmprinter). The runtime bitcode is cached with a stamp listing every input's path, size, and mtime (`src/driver/rt_stamp.rs`), so switching between compiler checkouts rebuilds it instead of linking a stale one.
 - **How:** every MIR block becomes one LLVM block and every local an entry `alloca`; runtime calls are typed from the runtime bitcode's own signatures. The guest runtime is C under `crates/dream-mir/src/runtime/c/`. See [06-llvm-backend.md](./06-llvm-backend.md).
 
-### 8. Artifact emission — `src/driver/compiler.rs` / `src/driver/abi.rs`
+### 8. Artifact emission — `src/driver/compiler/pipeline.rs` / `src/driver/abi.rs`
 
 - **In:** linked `.wasm` plus the AST root (for ABI metadata).
 - **Out:** link → `wasm-opt` → embed the ABI custom section → print `.wat` via `wasmprinter`; the `.abi.json` sidecar describes extern imports/exports for the JS runtime.
+
+`compiler.rs` owns configuration and entry wiring. `compiler/load.rs` loads and prepares source,
+`compiler/optimize.rs` lowers HIR and runs the MIR pipelines, `compiler/pipeline.rs` coordinates
+analysis, LLVM generation and artifacts, and `compiler/diagnostics.rs` renders failures. Source
+loading still uses `ProgramAccumulator`; replacing the flattened AST with `ModuleGraph` remains
+part of Phase 5.
 
 ## Where errors come from
 

@@ -14,6 +14,7 @@ mod places;
 mod publication;
 pub mod runtime_sigs;
 mod rvalue;
+mod source_loc;
 mod statements;
 mod terminator;
 mod types;

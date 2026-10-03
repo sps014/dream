@@ -24,13 +24,16 @@ System.panic("unreachable: config was never validated");
 
 ## What a panic looks like
 
-A panic prints its message to standard error, then aborts the process — diagnostics stay out of the program's own output, so piping stdout is unaffected:
+A panic prints its message and the source location of the statement that panicked to standard error, then aborts the process — diagnostics stay out of the program's own output, so piping stdout is unaffected:
 
 ```
 panic: index out of bounds
+  at /home/me/app/src/main.dream:12
 ```
 
-`System.panic(message)` prints exactly the `message` you pass, so include whatever context is useful yourself.
+`System.panic(message)` prints exactly the `message` you pass, followed by the same location line.
+
+The location names the file as the compiler saw it and the line of the statement. A check inside a standard library function names the library source (for example `<std>/system/collections/list.dream:113`) unless the compiler inlined that function, in which case it names the calling statement. Panics raised by the runtime itself, such as running out of memory, have no location.
 
 A panic never unwinds: no destructor, `defer`, or caller code runs after it, and it never crosses into C as an exception.
 
@@ -48,7 +51,7 @@ static void on_panic(const char *message, const char *location) {
 void install(void) { dream_set_panic_hook(on_panic); }
 ```
 
-The hook runs on the panicking thread, in place of the default stderr message, with the message in UTF-8. `location` is `NULL` when the panic site recorded no source location, which is currently every site. When the hook returns, the process still aborts. A panic raised inside the hook skips the hook and aborts with the default message.
+The hook runs on the panicking thread, in place of the default stderr message, with the message in UTF-8 and `location` as the same `file:line` the default message prints. `location` is `NULL` for panics raised by the runtime itself, which have no source line. When the hook returns, the process still aborts. A panic raised inside the hook skips the hook and aborts with the default message.
 
 ## Why panics, not undefined behavior
 

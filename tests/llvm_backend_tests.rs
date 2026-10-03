@@ -388,10 +388,10 @@ fn llvm_ir_shapes() {
     let div_const = function_body(&ll, "div_const");
     assert!(div_const.contains("srem i32 %") && div_const.contains(", 64"));
     assert!(div_const.contains("sdiv i32 %") && div_const.contains(", 7"));
-    assert!(!div_const.contains("icmp") && !div_const.contains("@dream_panic("));
+    assert!(!div_const.contains("icmp") && !div_const.contains("@dream_panic_at("));
     let div_var = function_body(&ll, "div_var");
     assert!(div_var.contains("icmp eq i32 %") && div_var.contains(", 0"));
-    assert!(div_var.contains("@dream_panic(") && div_var.contains(", -1"));
+    assert!(div_var.contains("@dream_panic_at(") && div_var.contains(", -1"));
 
     assert!(ll.contains("define internal void @mk(i32 %a0, ptr %a1)"));
     assert!(function_body(&ll, "mk__boxed").contains("call void @mk("));

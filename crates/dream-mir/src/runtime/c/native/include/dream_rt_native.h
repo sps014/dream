@@ -465,6 +465,8 @@ DREAM_ALWAYS_INLINE int32_t dream_rc_count(dream_ptr p) {
  * lets the compiler CSE the check across read/write pairs). Traps via
  * `dream_panic` on out-of-range or non-i32-representable indices. */
 void dream_panic(dream_ptr msg);
+/* `location` is a static "file:line" for compiler-emitted checks, NULL for runtime invariants. */
+void dream_panic_at(dream_ptr msg, const char *location);
 
 /* Fatal paths must remain usable with no heap memory and while allocator locks are held. */
 #define DREAM_PANIC_LITERAL(text_literal) do { \
@@ -502,10 +504,10 @@ DREAM_ALWAYS_INLINE dream_size dream_string_bytes(int32_t units) {
 }
 
 DREAM_ALWAYS_INLINE char *dream_array_at(dream_ptr p, int64_t i, int32_t esize,
-                                         dream_ptr panic_msg) {
+                                         dream_ptr panic_msg, const char *location) {
     int32_t len = p ? dream_i32(p)[0] : 0;
     if (DREAM_UNLIKELY((uint64_t)i >= (uint64_t)(uint32_t)len)) {
-        dream_panic(panic_msg);
+        dream_panic_at(panic_msg, location);
     }
     return (char *)dream_p(p) + 4 + i * esize;
 }

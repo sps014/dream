@@ -74,7 +74,9 @@ cargo test -p dream-mir backend::llvm::
 
 ### End-to-end tests — `tests/`
 
-`tests/e2e_tests.rs` compiles real `.dream` programs through the full driver and checks behavior against each case's `.expected`. Default `cargo test --workspace` runs a smoke subset (`run_smoke_e2e_cases`). The full debug/release corpora, DAP, and Binaryen-every-level live behind `#[ignore]` — run them with `cargo test --workspace -- --ignored`.
+The full golden corpus runs through `./scripts/probe_test.sh`: it compiles every `tests/cases/*.dream` with the real `dream` CLI and checks stdout against `.expected` exactly, every line of `.expected_error` against the compile diagnostics, and every line of `.expected_trap` against the failing run's output plus an `exit code N` line. It also fails any case whose leak check reports live objects. `--release` probes an optimized build and `--node` the wasm32 build.
+
+`tests/e2e_tests.rs` compiles real `.dream` programs through the in-process driver. Default `cargo test --workspace` runs a smoke subset (`run_smoke_e2e_cases`) and a few host-parity subsets. DAP and Binaryen-every-level live behind `#[ignore]` — run them with `cargo test --workspace -- --ignored`.
 
 ### Determinism test — `codegen_is_deterministic` (`tests/e2e_tests.rs`)
 

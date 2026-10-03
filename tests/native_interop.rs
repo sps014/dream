@@ -393,7 +393,8 @@ fun main(): void {
 "#;
     let err = run_c("panic_hook", c, dream, OptLevel::O0).unwrap_err();
     assert_contains(&err, "before");
-    assert_contains(&err, "[hook] boom é (no location)");
+    assert_contains(&err, "[hook] boom é (");
+    assert_contains(&err, "src/main.dream:8)");
     assert!(!err.contains("unreachable"), "{}", err);
 }
 

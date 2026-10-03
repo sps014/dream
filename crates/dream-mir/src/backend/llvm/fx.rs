@@ -60,6 +60,12 @@ pub(super) struct Fx<'l, 'a> {
     pub self_: Option<Value>,
     /// The subprogram's file and first line, when this body carries debug info.
     pub dbg: Option<(MdRef, u32)>,
+    /// Source file panic locations name (`source_loc.rs`); `None` outside user bodies.
+    pub src_file: Option<String>,
+    /// The source line in effect on entry to each block.
+    pub src_lines: Vec<Option<u32>>,
+    /// The source line in effect at the statement being emitted.
+    pub src_line: Option<u32>,
 }
 
 pub(super) fn mem_ll(m: MemTy, h: &Ty, word: &Ty) -> (Ty, bool) {
@@ -112,6 +118,9 @@ impl<'l, 'a> Fx<'l, 'a> {
             value_frame: crate::backend::shared::ValueFrame::compute(f, interner),
             self_: None,
             dbg: None,
+            src_file: None,
+            src_lines: Vec::new(),
+            src_line: None,
         }
     }
 
@@ -353,7 +362,8 @@ impl<'l, 'a> Fx<'l, 'a> {
 
     pub fn panic_with(&mut self, msg: &str) {
         let m = V::u(self.l.str_val(msg));
-        self.call("dream_panic", &[m]);
+        let at = self.panic_location();
+        self.call("dream_panic_at", &[m, at]);
     }
 
     pub fn str_v(&self, s: &str) -> V {

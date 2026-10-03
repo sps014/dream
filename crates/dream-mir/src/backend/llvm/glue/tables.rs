@@ -264,27 +264,8 @@ fn emit_tag_names(l: &mut Lcx<'_>) {
             arms.push((t, n));
         }
     }
-    let mut cstrs: Vec<String> = Vec::new();
-    let mut cstr = |l: &mut Lcx<'_>, s: &str| -> Value {
-        let name = format!(".tn{}", cstrs.len());
-        cstrs.push(name.clone());
-        let bytes: Vec<u8> = s.bytes().chain(std::iter::once(0)).collect();
-        l.global(
-            &name,
-            GlobalDef {
-                linkage: Linkage::Private,
-                thread_local: false,
-                constant: true,
-                unnamed_addr: true,
-                ty: Ty::bytes(bytes.len() as u64),
-                init: Some(fmt::c_string(&bytes)),
-                align: 1,
-            },
-        );
-        Value::global(name)
-    };
-    let names: Vec<(i32, Value)> = arms.iter().map(|(t, n)| (*t, cstr(l, n))).collect();
-    let object = cstr(l, "object");
+    let names: Vec<(i32, Value)> = arms.iter().map(|(t, n)| (*t, l.cstr(n))).collect();
+    let object = l.cstr("object");
     let mut fx = glue(l, "dream_tag_name");
     let tag = fx.arg(0);
     let kind =

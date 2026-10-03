@@ -259,7 +259,7 @@ fn spawn_http_mock() -> (u16, thread::JoinHandle<()>) {
     (port, handle)
 }
 
-fn run_native_case(dream_file: &Path, release: bool) {
+fn run_native_case(dream_file: &Path) {
     let native_expected = dream_file.with_extension("expected.native");
     let expected_file = if Target::native().spec().ptr_size == 8 && native_expected.exists() {
         native_expected
@@ -272,7 +272,7 @@ fn run_native_case(dream_file: &Path, release: bool) {
     // Smoke and parity suites overlap and run concurrently, including binary cleanup.
     let artifacts = tempfile::Builder::new().prefix(stem).tempdir().unwrap();
     let ll_path = artifacts.path().join(format!("{stem}.ll"));
-    let compiler = Compiler::new(Target::native()).with_release(release);
+    let compiler = Compiler::new(Target::native());
     let src = dream_file.to_str().unwrap().to_string();
     let dest = ll_path.to_str().unwrap().to_string();
     let compile_result = compiler.compile(&src, &dest);
@@ -300,7 +300,6 @@ fn run_native_case(dream_file: &Path, release: bool) {
         String::new()
     };
 
-    let opt = if release { OptLevel::O3 } else { OptLevel::O0 };
     let ll_str = ll_path.to_str().unwrap();
     let tcp = if stem == "tcp_echo_local" {
         Some(spawn_tcp_echo())
@@ -352,7 +351,7 @@ fn run_native_case(dream_file: &Path, release: bool) {
             compile_and_capture_ex(
                 &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
                 ll_str,
-                opt,
+                OptLevel::O0,
                 &env_refs,
                 extra_args,
                 stdin,
@@ -362,7 +361,7 @@ fn run_native_case(dream_file: &Path, release: bool) {
             compile_and_capture(
                 &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
                 ll_str,
-                opt,
+                OptLevel::O0,
             )
         };
     let _ = fs::remove_file(&ll_path);
@@ -387,7 +386,7 @@ fn run_native_case(dream_file: &Path, release: bool) {
     );
 }
 
-fn run_corpus(release: bool, only: Option<&[&str]>) {
+fn run_corpus(only: Option<&[&str]>) {
     let mut paths = collect_case_paths();
     if let Some(stems) = only {
         paths.retain(|p| {
@@ -399,7 +398,7 @@ fn run_corpus(release: bool, only: Option<&[&str]>) {
     let failures: Vec<String> = paths
         .par_iter()
         .filter_map(|path| {
-            match catch_unwind(AssertUnwindSafe(|| run_native_case(path, release))) {
+            match catch_unwind(AssertUnwindSafe(|| run_native_case(path))) {
                 Ok(()) => None,
                 Err(payload) => {
                     let msg = payload
@@ -724,13 +723,12 @@ fn wasm_compiles_webgpu_samples() {
 
 #[test]
 fn run_smoke_e2e_cases() {
-    run_corpus(false, Some(SMOKE_CASES));
+    run_corpus(Some(SMOKE_CASES));
 }
 
 #[test]
 fn run_file_http_parity_e2e() {
     run_corpus(
-        false,
         Some(&[
             "file_bytes",
             "file_dir",
@@ -768,12 +766,6 @@ fn run_file_http_parity_e2e() {
     );
 }
 
-#[test]
-#[ignore = "full golden corpus; cargo test --workspace -- --ignored"]
-fn run_all_e2e_cases() {
-    run_corpus(false, None);
-}
-
 /// Native ASan/LSan on leak-sensitive goldens. Opt-in: `DREAM_NATIVE_SANITIZE=address,leak`
 /// (see `src/execution/native`). Guest `live=0` is still the heap-counter check.
 #[test]
@@ -784,7 +776,6 @@ fn native_asan_focused_goldens() {
         std::env::set_var("ASAN_OPTIONS", "detect_leaks=1:halt_on_error=1");
     }
     run_corpus(
-        false,
         Some(&[
             "webapi_basic",
             "json_parse",
@@ -792,12 +783,6 @@ fn native_asan_focused_goldens() {
             "promise_start_no_leak",
         ]),
     );
-}
-
-#[test]
-#[ignore = "full native release corpus; cargo test --workspace -- --ignored"]
-fn run_all_e2e_cases_release() {
-    run_corpus(true, None);
 }
 
 /// Codegen must be reproducible: compiling the same program twice (each compile uses fresh,

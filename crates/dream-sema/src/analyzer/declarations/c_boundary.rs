@@ -192,7 +192,7 @@ impl<'a> Analyzer<'a> {
         } else {
             Err(format!(
                 "`ref` type '{}' has no C representation; use a number, `CPtr`, or an @unmanaged struct",
-                ty.get_type()
+                ty.display_name()
             ))
         }
     }
@@ -216,7 +216,7 @@ impl<'a> Analyzer<'a> {
             Some(s) if allowed => Ok(s),
             _ => Err(format!(
                 "type '{}' has no C representation here; allowed: {}",
-                ty.get_type(),
+                ty.display_name(),
                 match pos {
                     Pos::Param => PARAM_TYPES,
                     Pos::Return => RETURN_TYPES,

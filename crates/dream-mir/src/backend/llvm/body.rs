@@ -102,6 +102,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         let f = self.f;
         for (bi, block) in f.blocks.iter().enumerate() {
             self.w.switch_to(self.blocks[bi]);
+            self.source_block(bi);
             if let Some(d) = resume_dest.get(bi).copied().flatten() {
                 self.await_handoff(Local(d));
             }
@@ -130,6 +131,7 @@ pub(super) fn build_sync<'a>(l: &mut Lcx<'a>, f: &'a MirFunction) {
     w.attrs.extend(inline_attr(f));
     let mut fx = Fx::new(l, f, w);
     fx.debug_begin(f);
+    fx.source_begin(f);
     fx.map_blocks();
     fx.sync_locals();
     fx.frame_buffers();
@@ -382,6 +384,7 @@ pub(super) fn build_poll<'a>(
     let w = l.writer(&name);
     let mut fx = Fx::new(l, body, w);
     fx.debug_begin(stub);
+    fx.source_begin(stub);
     fx.map_blocks();
     fx.poll_locals(offs);
     fx.debug_locals(false);

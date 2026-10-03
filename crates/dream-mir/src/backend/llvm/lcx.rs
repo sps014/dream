@@ -64,6 +64,8 @@ pub(super) struct Lcx<'a> {
     exports: IndexMap<String, String>,
     /// Functions the C shim calls, so they must stay visible until the shim is linked in.
     shim_callees: IndexSet<String>,
+    /// NUL-terminated constant strings by contents, each a private global.
+    cstrs: IndexMap<String, String>,
     pub dbg_cu: Option<MdRef>,
     /// Debugger view composites by name (`debug_views.rs`).
     pub dbg_views: IndexMap<String, MdRef>,
@@ -91,6 +93,7 @@ impl<'a> Lcx<'a> {
             intrinsics: IndexMap::new(),
             exports: IndexMap::new(),
             shim_callees: IndexSet::new(),
+            cstrs: IndexMap::new(),
             dbg_cu: None,
             dbg_views: IndexMap::new(),
         }
@@ -285,6 +288,29 @@ impl<'a> Lcx<'a> {
                 format!("ptrtoint (ptr {address} to {h})")
             }),
         )
+    }
+
+    /// `ptr` to a private NUL-terminated copy of `s`, shared by every use of the same contents.
+    pub fn cstr(&mut self, s: &str) -> Value {
+        if let Some(name) = self.cstrs.get(s) {
+            return Value::global(name.clone());
+        }
+        let name = format!(".cstr{}", self.cstrs.len());
+        let bytes: Vec<u8> = s.bytes().chain(std::iter::once(0)).collect();
+        self.m.global(
+            &name,
+            GlobalDef {
+                linkage: Linkage::Private,
+                thread_local: false,
+                constant: true,
+                unnamed_addr: true,
+                ty: Ty::bytes(bytes.len() as u64),
+                init: Some(super::ir::fmt::c_string(&bytes)),
+                align: 1,
+            },
+        );
+        self.cstrs.insert(s.to_string(), name.clone());
+        Value::global(name)
     }
 
     pub fn global(&mut self, name: &str, def: GlobalDef) {

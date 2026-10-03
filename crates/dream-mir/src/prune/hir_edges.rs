@@ -275,6 +275,7 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
             out.funcrefs.push(key);
         }
         K::IntLit(_)
+        | K::SizeOf(_)
         | K::FloatLit(_)
         | K::BoolLit(_)
         | K::CharLit(_)

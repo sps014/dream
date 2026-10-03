@@ -513,7 +513,7 @@ impl<'a> Analyzer<'a> {
         Some(func_ty)
     }
 
-    /// Resolves a field's position in a struct's layout (offset order, matching the
+    /// Resolves a field's declaration-order position (matching the
     /// auto-generated constructor's argument order and the backend's field indexing). Returns
     /// `None` if the struct or field is unknown.
     pub(in crate::analyzer) fn struct_field_index(
@@ -522,9 +522,6 @@ impl<'a> Analyzer<'a> {
         field: &str,
     ) -> Option<usize> {
         let info = self.struct_table.get_struct(struct_name)?;
-        let mut ordered: Vec<(&String, &crate::struct_table::StructFieldInfo)> =
-            info.fields.iter().collect();
-        ordered.sort_by_key(|(_, f)| f.offset);
-        ordered.iter().position(|(n, _)| n.as_str() == field)
+        info.fields.get_index_of(field)
     }
 }

@@ -363,13 +363,22 @@ fn gpu_sizeof_bytes(ty: &Type, ctx: &EmitCtx<'_>) -> u32 {
                 }
                 return size.max(1);
             }
-            dream_types::value_size_align(&tok.text).0 as u32
+            gpu_named_type_byte_size(&tok.text)
         }
         Type::Array(_) => 4,
-        _ => {
-            let name = ty.get_type();
-            dream_types::value_size_align(&name).0 as u32
-        }
+        _ => gpu_named_type_byte_size(&ty.get_type()),
+    }
+}
+
+fn gpu_named_type_byte_size(name: &str) -> u32 {
+    match name {
+        "bool" | "byte" | "char" => 1,
+        "int" | "uint" | "float" => 4,
+        "long" | "ulong" | "double" => 8,
+        "GpuVec2" => 8,
+        "GpuVec3" | "GpuId3" => 12,
+        "GpuVec4" => 16,
+        _ => 4,
     }
 }
 

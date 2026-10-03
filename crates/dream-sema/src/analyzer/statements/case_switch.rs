@@ -8,8 +8,15 @@ use dream_hir::HExpr;
 use dream_syntax::nodes::{ExpressionNode, StatementNode, Type};
 
 impl<'a> Analyzer<'a> {
-    fn const_case_key(&self, e: &dream_hir::HExpr) -> Option<String> {
+    fn const_case_key(
+        &self,
+        e: &dream_hir::HExpr,
+        layouts: Option<&dream_hir::LayoutTable>,
+    ) -> Option<String> {
         match &e.kind {
+            dream_hir::HExprKind::SizeOf(ty) => {
+                layouts.map(|l| l.size_align(&self.type_ctx.interner, *ty).0.to_string())
+            }
             dream_hir::HExprKind::IntLit(v) | dream_hir::HExprKind::EnumValue(v) => {
                 Some(v.to_string())
             }
@@ -31,10 +38,31 @@ impl<'a> Analyzer<'a> {
                         Some(format!("-{f}"))
                     }
                 } else {
-                    self.const_case_key(operand).map(|s| format!("-{s}"))
+                    self.const_case_key(operand, layouts)
+                        .map(|s| format!("-{s}"))
                 }
             }
             _ => None,
+        }
+    }
+
+    pub(in crate::analyzer) fn validate_layout_case_labels(
+        &mut self,
+        layouts: &dream_hir::LayoutTable,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        for labels in std::mem::take(&mut self.deferred_case_labels) {
+            let mut seen = indexmap::IndexSet::new();
+            for (label, span) in labels {
+                if let Some(key) = self.const_case_key(&label, Some(layouts)) {
+                    if !seen.insert(key.clone()) {
+                        diagnostics.report_error(
+                            format!("duplicate case label '{}' in switch statement", key),
+                            span,
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -107,6 +135,8 @@ impl<'a> Analyzer<'a> {
         }
 
         let mut seen: indexmap::IndexSet<String> = indexmap::IndexSet::new();
+        let mut deferred_labels = Vec::new();
+        let mut needs_layout = false;
         for (labels, body) in cases.iter() {
             let mut label_hirs: Vec<Option<HExpr>> = Vec::new();
             for label in labels.iter() {
@@ -119,11 +149,16 @@ impl<'a> Analyzer<'a> {
                 // enum member access like `Color.Red`. `analyze_expression` evaluates these to pure HIR
                 // constants. If it evaluates to a non-constant (e.g. a runtime field access), reject it.
                 let key = match &label_hir {
-                    Some(hir) => self.const_case_key(hir),
+                    Some(hir) => self.const_case_key(hir, None),
                     None => self.const_case_key_ast(label),
                 };
 
-                if key.is_none() && !label_type.is_unknown() {
+                let layout_constant = label_hir.as_ref().is_some_and(case_needs_layout);
+                needs_layout |= layout_constant;
+                if let Some(hir) = &label_hir {
+                    deferred_labels.push((hir.clone(), label.position()));
+                }
+                if key.is_none() && !layout_constant && !label_type.is_unknown() {
                     diagnostics.report_error(
                         "switch case labels must be constant literals or enum members".to_string(),
                         label.position(),
@@ -179,7 +214,22 @@ impl<'a> Analyzer<'a> {
             Vec::new()
         };
 
+        if needs_layout {
+            self.deferred_case_labels.push(deferred_labels);
+        }
         self.hir_switch(subject_hir, hir_arms, default_hir, hir_ok);
         Ok(())
+    }
+}
+
+fn case_needs_layout(e: &HExpr) -> bool {
+    match &e.kind {
+        dream_hir::HExprKind::SizeOf(_) => true,
+        dream_hir::HExprKind::Unary {
+            op: dream_hir::UnOp::Neg,
+            operand,
+            ..
+        } => case_needs_layout(operand),
+        _ => false,
     }
 }

@@ -5,6 +5,17 @@ struct Point {
     public y: int;
 }
 
+struct Inner {
+    public text: string;
+    public count: int;
+}
+
+struct Outer {
+    public tag: byte;
+    public inner: Inner;
+    public total: double;
+}
+
 class Box {
     public value: int;
 }
@@ -19,4 +30,9 @@ fun main(): void {
     System.println(sizeof(Point));
     System.println(sizeof(Box));
     System.println(sizeof(List<int>));
+    System.println(sizeof(Outer));
+    switch (sizeof(Outer)) {
+        case sizeof(Outer): System.println(true);
+        default: System.println(false);
+    }
 }

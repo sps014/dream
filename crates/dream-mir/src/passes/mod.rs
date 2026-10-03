@@ -75,6 +75,14 @@ pub trait MirPass {
     /// Runs the pass over one function. Returns `true` if it changed anything (drives the
     /// fixpoint loop in [`PassManager::run`]).
     fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool;
+    fn run_with_layouts(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+    ) -> bool {
+        self.run(func, interner)
+    }
 }
 
 /// A whole-program transformation (needs to see every function at once, e.g. inlining). Distinct
@@ -209,10 +217,20 @@ impl PassManager {
 
     /// [`Self::run`], reporting every pass run to `dump` (`--emit-mir=after:<pass>[,each]`).
     pub fn run_dumped(&self, func: &mut MirFunction, interner: &TypeInterner, dump: &mut MirDump) {
+        self.run_layouts_dumped(func, interner, &dream_hir::LayoutTable::default(), dump);
+    }
+
+    pub fn run_layouts_dumped(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        layouts: &dream_hir::LayoutTable,
+        dump: &mut MirDump,
+    ) {
         for iteration in 0..self.max_iterations {
             let mut changed = false;
             for pass in &self.passes {
-                let pass_changed = pass.run(func, interner);
+                let pass_changed = pass.run_with_layouts(func, interner, layouts);
                 if dump.is_active() {
                     dump.function_pass(pass.as_ref(), iteration, pass_changed, func, interner);
                 }
@@ -330,10 +348,10 @@ pub fn run_function_pipelines(
     dump: &mut MirDump,
 ) {
     for f in &mut mir.functions {
-        pipeline.run_dumped(f, interner, dump);
+        pipeline.run_layouts_dumped(f, interner, &mir.layouts, dump);
     }
     for p in &mut mir.polls {
-        poll_pipeline.run_dumped(p, interner, dump);
+        poll_pipeline.run_layouts_dumped(p, interner, &mir.layouts, dump);
     }
     dump.module(STAGE_FIXPOINT, mir, interner);
 }

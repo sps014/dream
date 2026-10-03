@@ -6,7 +6,6 @@ use super::MirPass;
 use crate::{
     BinOp, BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
 };
-use dream_hir::scalar_size;
 use dream_types::{TyKind, TypeId, TypeInterner};
 use std::collections::BTreeSet;
 
@@ -18,10 +17,19 @@ impl MirPass for IvCanon {
     }
 
     fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+        self.run_with_layouts(func, interner, &dream_hir::LayoutTable::default())
+    }
+
+    fn run_with_layouts(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        layouts: &dream_hir::LayoutTable,
+    ) -> bool {
         let loops = cfg::natural_loops(func);
         let mut changed = false;
         for l in loops {
-            changed |= rewrite_loop(func, interner, &l.body, l.header, &l.latches);
+            changed |= rewrite_loop(func, interner, layouts, &l.body, l.header, &l.latches);
         }
         changed
     }
@@ -30,6 +38,7 @@ impl MirPass for IvCanon {
 fn rewrite_loop(
     func: &mut MirFunction,
     interner: &TypeInterner,
+    layouts: &dream_hir::LayoutTable,
     body: &BTreeSet<BlockId>,
     header: BlockId,
     latches: &[BlockId],
@@ -44,7 +53,7 @@ fn rewrite_loop(
     if interner.is_value_type(elem_ty) {
         return false;
     }
-    let (esize, _) = scalar_size(interner, elem_ty);
+    let esize = layouts.size_align(interner, elem_ty).0;
     if esize == 0 {
         return false;
     }

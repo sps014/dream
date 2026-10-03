@@ -19,7 +19,8 @@ use dream_types::{TyKind, TypeId};
 const MARSHAL_ALIGN: u32 = 4;
 
 fn marshaled_structs(l: &Lcx<'_>) -> Vec<(TypeId, TypeLayout)> {
-    l.cx.native
+    l.cx.mir
+        .layouts
         .structs
         .iter()
         .filter(|(ty, _)| !matches!(l.interner.kind(**ty), TyKind::Tuple(_)))
@@ -28,7 +29,8 @@ fn marshaled_structs(l: &Lcx<'_>) -> Vec<(TypeId, TypeLayout)> {
 }
 
 fn marshaled_unions(l: &Lcx<'_>) -> Vec<(TypeId, UnionLayout)> {
-    l.cx.native
+    l.cx.mir
+        .layouts
         .unions
         .iter()
         .filter(|(ty, _)| is_marshalable(&l.cx, **ty))

@@ -90,7 +90,7 @@ impl Lowerer<'_> {
         for arm in arms {
             let blk = self.b.new_block();
             if let dream_hir::HPattern::Const(c) = &arm.pattern {
-                if let Some(v) = const_int_value(c) {
+                if let Some(v) = const_int_value(c, self.layouts, self.interner) {
                     targets.push((v, blk));
                 }
             }

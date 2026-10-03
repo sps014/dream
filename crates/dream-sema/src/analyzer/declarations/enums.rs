@@ -3,10 +3,9 @@
 //! method attachment.
 
 use super::*;
-use crate::union_table::{UnionFieldInfo, UnionInfo, UnionVariantInfo, DISCRIMINANT_SIZE};
+use crate::union_table::{UnionFieldInfo, UnionInfo, UnionVariantInfo};
 use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::EnumVariantNode;
-use dream_types::value_size_align;
 
 impl<'a> Analyzer<'a> {
     /// Pass: register every enum. A C-style integer enum (no payloads) goes into the enum table
@@ -123,7 +122,6 @@ impl<'a> Analyzer<'a> {
     ) {
         let mut variant_infos = Vec::new();
         let mut seen = indexmap::IndexSet::new();
-        let mut block_end = DISCRIMINANT_SIZE;
 
         for variant in variants {
             if !seen.insert(variant.name.text.clone()) {
@@ -136,7 +134,6 @@ impl<'a> Analyzer<'a> {
                 );
                 continue;
             }
-            let mut offset = DISCRIMINANT_SIZE;
             let mut field_infos = Vec::new();
             for field in &variant.fields {
                 let ftype = substitute_generic_type(&field.field_type, bindings);
@@ -163,19 +160,11 @@ impl<'a> Analyzer<'a> {
                         Some(field.name.position),
                     );
                 }
-                let (size, align) = value_size_align(&ftype.get_type());
-                let rem = offset % align;
-                if rem != 0 {
-                    offset += align - rem;
-                }
                 field_infos.push(UnionFieldInfo {
                     name: field.name.text.clone(),
                     type_: ftype,
-                    offset,
                 });
-                offset += size;
             }
-            block_end = block_end.max(offset);
             variant_infos.push(UnionVariantInfo {
                 name: variant.name.text.clone(),
                 discriminant: variant.value,
@@ -183,18 +172,13 @@ impl<'a> Analyzer<'a> {
             });
         }
 
-        // Align the block to 8 bytes so a `double` payload stays naturally aligned.
-        let size = block_end.div_ceil(8) * 8;
-
         self.type_ctx.register(DefKind::Union, union_name, vec![]);
         // Data-enum unions are treated as always visible here; C-style enum visibility is tracked
         // separately in `enum_visibility` and checked at type-reference sites.
-        if let Err(e) = self.struct_table.add_union(
-            union_name,
-            size,
-            dream_syntax::nodes::Visibility::Public,
-            None,
-        ) {
+        if let Err(e) =
+            self.struct_table
+                .add_union(union_name, dream_syntax::nodes::Visibility::Public, None)
+        {
             diagnostics.report_error(e, None);
             return;
         }
@@ -264,7 +248,6 @@ impl<'a> Analyzer<'a> {
             UnionInfo {
                 name: union_name.to_string(),
                 variants: variant_infos,
-                size,
             },
         );
     }

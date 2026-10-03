@@ -1,62 +1,71 @@
-//! Memory layout for nominal types: the byte offset, size, and type of each field, which the backend
-//! needs to lower `obj.field` / `array[i]` access to concrete loads and stores.
-//!
-//! Offsets are computed here (independently of analyzer `StructInfo`) with a single, internally
-//! consistent size rule ([`scalar_size`]), so the layout and the store widths the emitter picks
-//! always agree. Fields are kept in **declaration order**, which coincides with offset order (a
-//! struct lays its fields out sequentially), so the resolved field index used in
-//! [`super::HPlace::Field`] indexes straight into [`TypeLayout::fields`].
+//! Target-specific memory layouts for nominal and aggregate value types.
 
-use dream_types::{DefId, TyKind, TypeId, TypeInterner};
-use indexmap::IndexMap;
+use dream_types::{DefId, PrimTy, TyKind, TypeId, TypeInterner};
+use indexmap::{IndexMap, IndexSet};
 
-/// The in-memory size and alignment (bytes) of a scalar/reference value of `ty`. Reference types
-/// (string, array, `class`, union, object), enums, and function values are `i32` pointers/indices
-/// (4 bytes). A value (`struct`) type is stored *inline* and occupies its full footprint, recorded
-/// on the interner once layouts are computed.
-pub fn scalar_size(interner: &TypeInterner, ty: TypeId) -> (u32, u32) {
-    // Value structs are stored inline: their footprint is their computed layout size/align.
-    if let Some(sz) = interner.value_layout(ty) {
-        return sz;
-    }
-    match interner.kind(ty) {
-        // Delegates to `PrimTy::size_align` (see there) so this agrees byte-for-byte with the
-        // string-keyed `dream_types::naming::value_size_align` used by analyzer struct tables.
-        TyKind::Prim(p) => p.size_align(),
-        _ => (4, 4),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TargetLayout {
+    pub ptr_size: u32,
+    pub ptr_align: u32,
+}
+
+impl Default for TargetLayout {
+    fn default() -> Self {
+        Self {
+            ptr_size: 4,
+            ptr_align: 4,
+        }
     }
 }
 
-/// One field's position, type, and source name within a struct. The name is carried so the backend
-/// can synthesize a default `to_string` (`Point { x: 1, y: 2 }`) without re-consulting the analyzer.
+#[derive(Debug, Clone)]
+pub struct LayoutFieldDef {
+    pub name: String,
+    pub ty: TypeId,
+    pub is_weak: bool,
+    pub is_unowned: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct StructLayoutDef {
+    pub ty: TypeId,
+    pub name: String,
+    pub fields: Vec<LayoutFieldDef>,
+    pub packed: bool,
+    pub destructor: Option<DefId>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UnionVariantDef {
+    pub name: String,
+    pub discriminant: i32,
+    pub fields: Vec<LayoutFieldDef>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UnionLayoutDef {
+    pub ty: TypeId,
+    pub name: String,
+    pub variants: Vec<UnionVariantDef>,
+    pub destructor: Option<DefId>,
+}
+
 #[derive(Debug, Clone)]
 pub struct FieldLayout {
     pub offset: u32,
     pub ty: TypeId,
     pub name: String,
-    /// True when declared `weak` (an `Option<T>` field, `T` a class, excluded from strong ARC
-    /// bookkeeping and from the reference-cycle graph). Always `false` for union-variant fields.
     pub is_weak: bool,
-    /// True when declared `unowned` (a plain class-typed field excluded from strong ARC
-    /// bookkeeping). Always `false` for union-variant fields.
     pub is_unowned: bool,
 }
 
-/// The full layout of one nominal type.
 #[derive(Debug, Clone, Default)]
 pub struct TypeLayout {
-    /// Resolved user destructor, recorded by semantic analysis rather than inferred from names.
     pub destructor: Option<DefId>,
-    /// The type's source display name (e.g. `Point`), used by the default `to_string`.
     pub name: String,
-    /// Fields in declaration (== offset) order.
     pub fields: Vec<FieldLayout>,
-    /// Total allocated size in bytes (data only; the allocator adds its own header).
     pub size: u32,
-    /// True when the struct carries `@packed` — fields are packed with no padding, the whole
-    /// struct is `align=1`, and its size is the raw sum of field sizes with no trailing pad-up.
-    /// Meaningful for the `.abi.json` `structs` map consumed by the C FFI host, so a C ABI struct
-    /// with explicit `#pragma pack(1)` semantics round-trips byte-identical.
+    pub align: u32,
     pub packed: bool,
 }
 
@@ -64,189 +73,356 @@ impl TypeLayout {
     pub fn has_destructor(&self) -> bool {
         self.destructor.is_some()
     }
-    /// Builds a layout from a struct's `(field name, field type)` pairs in declaration order,
-    /// assigning aligned offsets. `name` is the struct's display name.
+
+    /// Test/support convenience for non-nested wasm32-shaped aggregates. Production layouts are
+    /// built together through [`LayoutTable::build`], which handles nested value types.
     pub fn from_fields(
         interner: &TypeInterner,
         name: impl Into<String>,
-        field_defs: impl IntoIterator<Item = (String, TypeId, bool, bool)>,
+        fields: impl IntoIterator<Item = (String, TypeId, bool, bool)>,
     ) -> Self {
-        let mut offset = 0u32;
-        let mut max_align = 4u32;
-        let mut fields = Vec::new();
-        for (field_name, ty, is_weak, is_unowned) in field_defs {
-            let (size, align) = scalar_size(interner, ty);
-            offset = align_up(offset, align);
-            fields.push(FieldLayout {
-                offset,
-                ty,
-                name: field_name,
-                is_weak,
-                is_unowned,
-            });
-            offset += size;
-            max_align = max_align.max(align);
-        }
-        TypeLayout {
-            name: name.into(),
-            fields,
-            size: align_up(offset, max_align),
-            packed: false,
-            destructor: None,
-        }
-    }
-
-    /// Builds a `@packed` layout: fields are laid out sequentially with **no** inter-field
-    /// alignment padding, the struct's own alignment is `1`, and its size is the raw byte sum
-    /// with no trailing pad-up. Mirrors C's `#pragma pack(1)` / `__attribute__((packed))`.
-    pub fn from_fields_packed(
-        interner: &TypeInterner,
-        name: impl Into<String>,
-        field_defs: impl IntoIterator<Item = (String, TypeId, bool, bool)>,
-    ) -> Self {
-        let mut offset = 0u32;
-        let mut fields = Vec::new();
-        for (field_name, ty, is_weak, is_unowned) in field_defs {
-            let (size, _align) = scalar_size(interner, ty);
-            fields.push(FieldLayout {
-                offset,
-                ty,
-                name: field_name,
-                is_weak,
-                is_unowned,
-            });
-            offset += size;
-        }
-        TypeLayout {
-            name: name.into(),
-            fields,
-            size: offset,
-            packed: true,
-            destructor: None,
-        }
+        direct_layout(interner, name, fields, false)
     }
 }
 
-fn align_up(offset: u32, align: u32) -> u32 {
-    let rem = offset % align;
-    if rem == 0 {
-        offset
-    } else {
-        offset + (align - rem)
-    }
+fn direct_layout(
+    interner: &TypeInterner,
+    name: impl Into<String>,
+    fields: impl IntoIterator<Item = (String, TypeId, bool, bool)>,
+    packed: bool,
+) -> TypeLayout {
+    let ty = interner.void();
+    let def = StructLayoutDef {
+        ty,
+        destructor: None,
+        name: name.into(),
+        fields: fields
+            .into_iter()
+            .map(|(name, ty, is_weak, is_unowned)| LayoutFieldDef {
+                name,
+                ty,
+                is_weak,
+                is_unowned,
+            })
+            .collect(),
+        packed,
+    };
+    LayoutTable::build(TargetLayout::default(), interner, vec![def], vec![])
+        .structs
+        .shift_remove(&ty)
+        .expect("root layout must be built")
 }
 
-/// The layout of one variant of a discriminated union: its discriminant plus its payload fields.
-/// Payload offsets are `>= 4` (a union block leads with an `i32` discriminant at offset 0); the
-/// vector index matches [`super::HExprKind::UnionNew::variant`].
 #[derive(Debug, Clone)]
 pub struct UnionVariant {
-    /// The variant's source name (e.g. `Some`), used as its `to_string` label.
     pub name: String,
-    /// The value written to the discriminant word (offset 0) to identify this variant.
     pub discriminant: i32,
-    /// Payload fields in declaration order, at their fixed block offsets.
     pub fields: Vec<FieldLayout>,
 }
 
-/// The layout of a discriminated union. Every variant shares one heap block sized to the largest
-/// variant, so any variant fits and the discriminant alone identifies the active one.
 #[derive(Debug, Clone, Default)]
 pub struct UnionLayout {
     pub destructor: Option<DefId>,
-    /// The union's source display name, used to name its generated `$<Union>_to_string`.
     pub name: String,
     pub variants: Vec<UnionVariant>,
-    /// Total allocated block size (discriminant + largest payload).
     pub size: u32,
+    pub align: u32,
 }
 
 impl UnionLayout {
     pub fn has_destructor(&self) -> bool {
         self.destructor.is_some()
     }
-    /// Looks up a variant by its source name (e.g. `"Some"`, `"None"`).
+
     pub fn variant(&self, name: &str) -> Option<&UnionVariant> {
         self.variants.iter().find(|v| v.name == name)
     }
 }
 
-/// Layouts of all nominal types, keyed by the **interned type id** of the (fully monomorphized)
-/// type — so `Box<int>` and `Box<string>`, which share a base `DefId` but differ in field widths,
-/// get distinct layouts. Lookup-only (never iterated for emission), so iteration order does not
-/// affect codegen determinism.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct LayoutTable {
+    pub target: TargetLayout,
     pub structs: IndexMap<TypeId, TypeLayout>,
     pub unions: IndexMap<TypeId, UnionLayout>,
 }
 
+impl Default for LayoutTable {
+    fn default() -> Self {
+        Self::new(TargetLayout::default())
+    }
+}
+
 impl LayoutTable {
+    pub fn new(target: TargetLayout) -> Self {
+        Self {
+            target,
+            structs: IndexMap::new(),
+            unions: IndexMap::new(),
+        }
+    }
+
+    pub fn build(
+        target: TargetLayout,
+        interner: &TypeInterner,
+        structs: Vec<StructLayoutDef>,
+        unions: Vec<UnionLayoutDef>,
+    ) -> Self {
+        let struct_defs: IndexMap<_, _> = structs.into_iter().map(|d| (d.ty, d)).collect();
+        let union_defs: IndexMap<_, _> = unions.into_iter().map(|d| (d.ty, d)).collect();
+        let mut table = Self::new(target);
+        let mut active = IndexSet::new();
+        for ty in struct_defs.keys().copied().collect::<Vec<_>>() {
+            table.build_struct(ty, interner, &struct_defs, &union_defs, &mut active);
+        }
+        for ty in union_defs.keys().copied().collect::<Vec<_>>() {
+            table.build_union(ty, interner, &struct_defs, &union_defs, &mut active);
+        }
+        table
+    }
+
+    fn build_struct(
+        &mut self,
+        ty: TypeId,
+        interner: &TypeInterner,
+        structs: &IndexMap<TypeId, StructLayoutDef>,
+        unions: &IndexMap<TypeId, UnionLayoutDef>,
+        active: &mut IndexSet<TypeId>,
+    ) -> (u32, u32) {
+        if let Some(layout) = self.structs.get(&ty) {
+            return (layout.size, layout.align);
+        }
+        let Some(def) = structs.get(&ty) else {
+            return (self.target.ptr_size, self.target.ptr_align);
+        };
+        assert!(
+            active.insert(ty),
+            "recursive value-struct layout reached HIR"
+        );
+        let mut offset = 0;
+        // Heap objects can carry a trailing atomic lock word, which requires word alignment.
+        let mut max_align = if interner.is_value_type(ty) { 1 } else { 4 };
+        let mut fields = Vec::with_capacity(def.fields.len());
+        for field in &def.fields {
+            let (size, align) = self.size_align_inner(field.ty, interner, structs, unions, active);
+            if !def.packed {
+                offset = align_up(offset, align);
+                max_align = max_align.max(align);
+            }
+            fields.push(FieldLayout {
+                offset,
+                ty: field.ty,
+                name: field.name.clone(),
+                is_weak: field.is_weak,
+                is_unowned: field.is_unowned,
+            });
+            offset += size;
+        }
+        active.shift_remove(&ty);
+        let align = if def.packed { 1 } else { max_align };
+        let layout = TypeLayout {
+            destructor: def.destructor,
+            name: def.name.clone(),
+            fields,
+            size: if def.packed {
+                offset
+            } else {
+                align_up(offset, align)
+            },
+            align,
+            packed: def.packed,
+        };
+        let result = (layout.size, layout.align);
+        self.structs.insert(ty, layout);
+        result
+    }
+
+    fn build_union(
+        &mut self,
+        ty: TypeId,
+        interner: &TypeInterner,
+        structs: &IndexMap<TypeId, StructLayoutDef>,
+        unions: &IndexMap<TypeId, UnionLayoutDef>,
+        active: &mut IndexSet<TypeId>,
+    ) -> (u32, u32) {
+        if let Some(layout) = self.unions.get(&ty) {
+            return (layout.size, layout.align);
+        }
+        let Some(def) = unions.get(&ty) else {
+            return (self.target.ptr_size, self.target.ptr_align);
+        };
+        assert!(
+            active.insert(ty),
+            "recursive value-union layout reached HIR"
+        );
+        let mut size = 4;
+        let mut max_align = 4;
+        let mut variants = Vec::with_capacity(def.variants.len());
+        for variant in &def.variants {
+            let mut offset = 4;
+            let mut fields = Vec::with_capacity(variant.fields.len());
+            for field in &variant.fields {
+                let (field_size, field_align) =
+                    self.size_align_inner(field.ty, interner, structs, unions, active);
+                offset = align_up(offset, field_align);
+                fields.push(FieldLayout {
+                    offset,
+                    ty: field.ty,
+                    name: field.name.clone(),
+                    is_weak: field.is_weak,
+                    is_unowned: field.is_unowned,
+                });
+                offset += field_size;
+                max_align = max_align.max(field_align);
+            }
+            size = size.max(offset);
+            variants.push(UnionVariant {
+                name: variant.name.clone(),
+                discriminant: variant.discriminant,
+                fields,
+            });
+        }
+        active.shift_remove(&ty);
+        let layout = UnionLayout {
+            destructor: def.destructor,
+            name: def.name.clone(),
+            variants,
+            size: align_up(size, max_align),
+            align: max_align,
+        };
+        let result = (layout.size, layout.align);
+        self.unions.insert(ty, layout);
+        result
+    }
+
+    fn size_align_inner(
+        &mut self,
+        ty: TypeId,
+        interner: &TypeInterner,
+        structs: &IndexMap<TypeId, StructLayoutDef>,
+        unions: &IndexMap<TypeId, UnionLayoutDef>,
+        active: &mut IndexSet<TypeId>,
+    ) -> (u32, u32) {
+        if interner.is_value_type(ty) {
+            if structs.contains_key(&ty) {
+                return self.build_struct(ty, interner, structs, unions, active);
+            }
+            if unions.contains_key(&ty) {
+                return self.build_union(ty, interner, structs, unions, active);
+            }
+            panic!("value type has no layout definition: {:?}", ty);
+        }
+        scalar(interner, self.target, ty)
+    }
+
+    pub fn size_align(&self, interner: &TypeInterner, ty: TypeId) -> (u32, u32) {
+        if interner.is_value_type(ty) {
+            if let Some(layout) = self.structs.get(&ty) {
+                return (layout.size, layout.align);
+            }
+            if let Some(layout) = self.unions.get(&ty) {
+                return (layout.size, layout.align);
+            }
+            panic!("value type has no finalized layout: {:?}", ty);
+        }
+        scalar(interner, self.target, ty)
+    }
+
     pub fn get(&self, ty: TypeId) -> Option<&TypeLayout> {
         self.structs.get(&ty)
     }
-
     pub fn insert(&mut self, ty: TypeId, layout: TypeLayout) {
         self.structs.insert(ty, layout);
     }
-
     pub fn union(&self, ty: TypeId) -> Option<&UnionLayout> {
         self.unions.get(&ty)
     }
-
     pub fn insert_union(&mut self, ty: TypeId, layout: UnionLayout) {
         self.unions.insert(ty, layout);
     }
 }
 
+fn scalar(interner: &TypeInterner, target: TargetLayout, ty: TypeId) -> (u32, u32) {
+    match interner.kind(ty) {
+        TyKind::Prim(PrimTy::String) => (target.ptr_size, target.ptr_align),
+        TyKind::Prim(p) => p.size_align(),
+        TyKind::Enum(_) => (4, 4),
+        _ => (target.ptr_size, target.ptr_align),
+    }
+}
+
+fn align_up(offset: u32, align: u32) -> u32 {
+    offset.div_ceil(align) * align
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dream_types::PrimTy;
 
     #[test]
-    fn packs_and_aligns_fields() {
-        let mut i = TypeInterner::new();
-        let dbl = i.prim(PrimTy::Double);
-        let by = i.prim(PrimTy::Byte);
-        let int = i.int();
-        // byte(1) @0, then double needs 8-align -> @8, then int @16; size aligns to 8 -> 24.
-        let l = TypeLayout::from_fields(
-            &i,
-            "T",
-            [
-                ("b".into(), by, false, false),
-                ("d".into(), dbl, false, false),
-                ("n".into(), int, false, false),
-            ],
+    fn heap_payload_keeps_its_trailing_lock_word_aligned() {
+        let mut interner = TypeInterner::new();
+        let boolean = interner.prim(PrimTy::Bool);
+        let ty = interner.struct_ty(DefId(0), vec![]);
+        let table = LayoutTable::build(
+            TargetLayout::default(),
+            &interner,
+            vec![StructLayoutDef {
+                ty,
+                name: "Token".into(),
+                fields: vec![LayoutFieldDef {
+                    name: "cancelled".into(),
+                    ty: boolean,
+                    is_weak: false,
+                    is_unowned: false,
+                }],
+                packed: false,
+                destructor: None,
+            }],
+            vec![],
         );
-        assert_eq!(l.fields[0].offset, 0);
-        assert_eq!(l.fields[1].offset, 8);
-        assert_eq!(l.fields[2].offset, 16);
-        assert_eq!(l.size, 24);
-        assert!(!l.packed);
+        let layout = table.get(ty).unwrap();
+        assert_eq!((layout.size, layout.align), (4, 4));
     }
 
     #[test]
-    fn packed_layout_has_no_padding() {
-        let mut i = TypeInterner::new();
-        let by = i.prim(PrimTy::Byte);
-        let dbl = i.prim(PrimTy::Double);
-        let int = i.int();
-        // Packed: byte@0 (size 1) + double@1 (size 8) + int@9 (size 4) = 13 bytes total, align=1.
-        let l = TypeLayout::from_fields_packed(
-            &i,
-            "T",
-            [
-                ("b".into(), by, false, false),
-                ("d".into(), dbl, false, false),
-                ("n".into(), int, false, false),
-            ],
+    fn target_pointer_width_changes_reference_fields() {
+        let mut interner = TypeInterner::new();
+        let string = interner.string();
+        let ty = interner.tuple_ty(vec![string]);
+        let def = StructLayoutDef {
+            ty,
+            name: "T".into(),
+            fields: vec![LayoutFieldDef {
+                name: "s".into(),
+                ty: string,
+                is_weak: false,
+                is_unowned: false,
+            }],
+            packed: false,
+            destructor: None,
+        };
+        let narrow = LayoutTable::build(
+            TargetLayout::default(),
+            &interner,
+            vec![def.clone()],
+            vec![],
         );
-        assert_eq!(l.fields[0].offset, 0);
-        assert_eq!(l.fields[1].offset, 1);
-        assert_eq!(l.fields[2].offset, 9);
-        assert_eq!(l.size, 13);
-        assert!(l.packed);
+        let wide = LayoutTable::build(
+            TargetLayout {
+                ptr_size: 8,
+                ptr_align: 8,
+            },
+            &interner,
+            vec![def],
+            vec![],
+        );
+        assert_eq!(
+            (narrow.get(ty).unwrap().size, narrow.get(ty).unwrap().align),
+            (4, 4)
+        );
+        assert_eq!(
+            (wide.get(ty).unwrap().size, wide.get(ty).unwrap().align),
+            (8, 8)
+        );
     }
 }

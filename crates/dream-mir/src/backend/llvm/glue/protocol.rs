@@ -54,7 +54,8 @@ pub(in super::super) fn plan(l: &Lcx<'_>, reach: &ProtocolReach) -> Plan {
         .iter()
         .flat_map(|f| f.locals.iter().map(|d| d.ty))
         .chain(
-            cx.native
+            cx.mir
+                .layouts
                 .structs
                 .values()
                 .flat_map(|layout| layout.fields.iter().map(|f| f.ty)),
@@ -81,7 +82,7 @@ pub(in super::super) fn plan(l: &Lcx<'_>, reach: &ProtocolReach) -> Plan {
         type_name: cx.mir.uses_type_name,
         dynamic: reach.dynamic,
     };
-    for (ty, layout) in &cx.native.structs {
+    for (ty, layout) in &cx.mir.layouts.structs {
         if reach.needs_to_string(*ty) {
             if let Some(s) = pick(&layout.name, "_to_string") {
                 p.struct_to_string.push((*ty, s));
@@ -93,7 +94,7 @@ pub(in super::super) fn plan(l: &Lcx<'_>, reach: &ProtocolReach) -> Plan {
             }
         }
     }
-    for (ty, layout) in &cx.native.unions {
+    for (ty, layout) in &cx.mir.layouts.unions {
         if reach.needs_to_string(*ty) || reach.to_string.contains(ty) {
             if let Some(s) = pick(&layout.name, "_to_string") {
                 p.union_to_string.push((*ty, s));
@@ -552,12 +553,12 @@ fn tagged_arms(l: &Lcx<'_>, suffix: &str, skip_tuples: bool) -> Vec<Arm> {
     tagged.sort_by_key(|(_, t)| *t);
     let mut out = Vec::new();
     for (ty, tag) in tagged {
-        let name = if let Some(s) = l.cx.native.structs.get(&ty) {
+        let name = if let Some(s) = l.cx.mir.layouts.structs.get(&ty) {
             if skip_tuples && matches!(l.interner.kind(ty), TyKind::Tuple(_)) {
                 continue;
             }
             &s.name
-        } else if let Some(u) = l.cx.native.unions.get(&ty) {
+        } else if let Some(u) = l.cx.mir.layouts.unions.get(&ty) {
             &u.name
         } else {
             continue;

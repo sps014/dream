@@ -162,7 +162,7 @@ keep the unoptimized `.ll`, which is their product.
 A reference is a `dream_ptr` handle: `i64` on native, `i32` on wasm32, converted with `inttoptr` at
 each access. Pointer attributes such as `nonnull` or `dereferenceable` therefore do not apply.
 Field and index access compute `base + offset` from the layouts in `Mir.layouts`
-(`backend/shared/native_layout.rs` widens them for 8-byte native pointers).
+(the HIR `LayoutTable` is built once with the selected target's pointer size and alignment).
 
 Dream integer arithmetic wraps at its type's width, so the writers emit plain `add`/`mul`,
 never `nsw`/`nuw`. Unsigned types compare, divide and shift unsigned. Shift counts are masked,

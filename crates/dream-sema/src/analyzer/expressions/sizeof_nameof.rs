@@ -6,10 +6,9 @@ use dream_diagnostics::DiagnosticBag;
 use dream_hir::{HExpr, HExprKind};
 use dream_syntax::nodes::Type;
 use dream_syntax::token::syntax_token::SyntaxToken;
-use dream_types::value_size_align;
 
 impl<'a> Analyzer<'a> {
-    /// `sizeof(T)` → `int` literal of Dream ABI storage size (refs/classes/arrays = 4).
+    /// Resolves `sizeof(T)` to a type identity; MIR folds it using the completed target layout.
     pub(in crate::analyzer) fn analyze_sizeof(
         &mut self,
         ty: &Type,
@@ -36,68 +35,59 @@ impl<'a> Analyzer<'a> {
             return Ok(Type::Unknown);
         }
 
-        let size = match self.sizeof_bytes(&type_name) {
-            Some(s) => s,
-            None => {
-                self.hir_none();
-                report(
-                    diagnostics,
-                    format!("sizeof: unknown type '{}'", type_name),
-                    ty.get_span(),
-                );
-                return Ok(Type::Unknown);
-            }
-        };
+        if !self.sizeof_type_known(&type_name) {
+            self.hir_none();
+            report(
+                diagnostics,
+                format!("sizeof: unknown type '{}'", type_name),
+                ty.get_span(),
+            );
+            return Ok(Type::Unknown);
+        }
 
         let int_ty = Self::type_from_name("int");
         let ty_id = self.type_ctx.interner.int();
-        self.hir_set_last(Some(HExpr::new(ty_id, HExprKind::IntLit(size as i64))));
+        let sized_ty = self.type_ctx.lower(ty);
+        self.hir_set_last(Some(HExpr::new(ty_id, HExprKind::SizeOf(sized_ty))));
         Ok(int_ty)
     }
 
-    /// Byte size of a type name under Dream's ABI (matches `scalar_size` / struct tables).
-    fn sizeof_bytes(&self, type_name: &str) -> Option<u32> {
-        if let Some(info) = self.struct_table.get_struct(type_name) {
-            if info.is_value {
-                return Some(info.size as u32);
-            }
-            return Some(4);
+    fn sizeof_type_known(&self, type_name: &str) -> bool {
+        if self.struct_table.get_struct(type_name).is_some() {
+            return true;
         }
         if type_name.ends_with("[]") {
-            return Some(4);
+            return true;
         }
         if type_name == "string"
             || type_name == "object"
             || type_name == "js"
             || type_name == "void"
         {
-            return Some(4);
+            return true;
         }
         if self.enum_table.contains_key(type_name) {
-            return Some(4);
+            return true;
         }
         if self.interface_methods.contains_key(type_name) {
-            return Some(4);
+            return true;
         }
         if type_name.starts_with("fun(") {
-            return Some(4);
+            return true;
         }
         if type_name.starts_with("Future<") {
-            return Some(4);
+            return true;
         }
         if type_name.starts_with("Result<") {
-            return Some(4);
+            return true;
         }
         if type_name.starts_with("Option<") {
-            return Some(4);
+            return true;
         }
-
-        match type_name {
-            "int" | "uint" | "float" | "char" | "byte" | "bool" | "long" | "ulong" | "double" => {
-                Some(value_size_align(type_name).0 as u32)
-            }
-            _ => None,
-        }
+        matches!(
+            type_name,
+            "int" | "uint" | "float" | "char" | "byte" | "bool" | "long" | "ulong" | "double"
+        )
     }
 
     /// `nameof(a.b.c)` → string literal of the last path segment. Operand is not evaluated.

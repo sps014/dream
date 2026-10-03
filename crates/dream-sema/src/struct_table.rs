@@ -1,12 +1,10 @@
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::{Type, Visibility};
-use dream_types::value_size_align;
 use indexmap::IndexMap;
 
 #[derive(Debug, Clone)]
 pub struct StructFieldInfo {
     pub type_: Type,
-    pub offset: usize,
     /// Accessibility of the field. Private (default) fields may only be accessed from within the
     /// declaring type's own methods; `internal` fields from anywhere in the same module.
     pub visibility: Visibility,
@@ -36,10 +34,8 @@ impl StructFieldInfo {
 pub struct StructInfo {
     pub has_destructor: bool,
     pub name: String,
-    /// Insertion-ordered (declaration order) so field-release emission is deterministic. Field
-    /// emission that must follow byte-offset order sorts these by their recorded `offset`.
+    /// Insertion-ordered declaration order, matching HIR layout field indices.
     pub fields: IndexMap<String, StructFieldInfo>,
-    pub size: usize,
     pub visibility: Visibility,
     /// True for `struct` (value) types: stored inline with copy semantics, not heap-allocated and
     /// reference-counted. Unions are always reference types (`false`).
@@ -82,8 +78,6 @@ impl StructTable {
             struct_decl.is_value && dream_abi::attributes::has_packed_attr(&struct_decl.attributes);
 
         let mut fields = IndexMap::new();
-        let mut current_offset = 0;
-
         for field in &struct_decl.fields {
             let field_name = field.name.text.clone();
             if fields.contains_key(&field_name) {
@@ -97,22 +91,10 @@ impl StructTable {
             // (e.g. `List<JsonValue>`, `Map<string, V>`) that the flat token text would lose.
             let field_type = field.field_type.clone();
 
-            let (size, alignment) = value_size_align(field_type.get_type().as_str());
-
-            // A `@packed` struct lays fields out with no inter-field alignment padding so its
-            // wire layout matches C's `__attribute__((packed))` / `#pragma pack(1)`.
-            if !packed {
-                let remainder = current_offset % alignment;
-                if remainder != 0 {
-                    current_offset += alignment - remainder;
-                }
-            }
-
             fields.insert(
                 field_name,
                 StructFieldInfo {
                     type_: field_type,
-                    offset: current_offset,
                     visibility: field.visibility,
                     is_weak: field.is_weak,
                     is_unowned: field.is_unowned,
@@ -121,21 +103,6 @@ impl StructTable {
                     interpolate: dream_abi::attributes::field_interpolate_mode(&field.attributes),
                 },
             );
-            current_offset += size;
-        }
-
-        if !packed {
-            // Align total size to the largest alignment (usually 8 if double is present, else 4)
-            let max_alignment = fields
-                .values()
-                .map(|f| value_size_align(f.type_.get_type().as_str()).1)
-                .max()
-                .unwrap_or(4);
-
-            let remainder = current_offset % max_alignment;
-            if remainder != 0 {
-                current_offset += max_alignment - remainder;
-            }
         }
 
         self.structs.insert(
@@ -147,7 +114,6 @@ impl StructTable {
                     .any(|method| method.name.text == dream_syntax::nodes::types::DESTRUCTOR_NAME),
                 name,
                 fields,
-                size: current_offset,
                 visibility: struct_decl.visibility,
                 is_value: struct_decl.is_value,
                 packed,
@@ -165,7 +131,6 @@ impl StructTable {
     pub fn add_union(
         &mut self,
         name: &str,
-        size: usize,
         visibility: Visibility,
         file_path: Option<std::rc::Rc<str>>,
     ) -> Result<(), String> {
@@ -178,7 +143,6 @@ impl StructTable {
                 has_destructor: false,
                 name: name.to_string(),
                 fields: IndexMap::new(),
-                size,
                 visibility,
                 is_value: false,
                 packed: false,

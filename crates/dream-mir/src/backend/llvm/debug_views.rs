@@ -96,21 +96,24 @@ impl<'a> Lcx<'a> {
         let (members, bytes) = match interner.kind(ty) {
             TyKind::Prim(_) => (self.str_members(r), 8),
             TyKind::Array(elem) => (self.arr_members(r, *elem), 4),
-            TyKind::Struct(..) => {
+            TyKind::Struct(..) | TyKind::Tuple(_) => {
                 let layout = self.cx.nstruct(ty)?;
                 let size = layout.size;
                 let fields: Vec<Member> = layout
                     .fields
                     .iter()
-                    .map(|f| (f.offset, f.ty, f.name.clone()))
+                    .map(|f| {
+                        let name = if matches!(interner.kind(ty), TyKind::Tuple(_)) {
+                            format!("t{}", f.name)
+                        } else {
+                            f.name.clone()
+                        };
+                        (f.offset, f.ty, name)
+                    })
                     .collect();
                 (self.members(r, &fields), size)
             }
             TyKind::Union(..) => self.union_members(r, ty)?,
-            TyKind::Tuple(elems) => {
-                let elems = elems.clone();
-                self.tuple_members(r, &elems)
-            }
             _ => return None,
         };
         let elements = self.m.md.tuple(&members);
@@ -197,19 +200,6 @@ impl<'a> Lcx<'a> {
                 self.member(scope, name, base, bits, *off)
             })
             .collect()
-    }
-
-    /// Tuple elements inline, aligned like `TypeLayout::from_fields`.
-    fn tuple_members(&mut self, scope: MdRef, elems: &[TypeId]) -> (Vec<MdRef>, u32) {
-        let mut fields = Vec::new();
-        let mut cursor = 0u32;
-        for (i, e) in elems.iter().enumerate() {
-            let (size, align) = native_scalar_size(&self.cx, *e);
-            let off = (cursor + align - 1) & !(align - 1);
-            fields.push((off, *e, format!("t{i}")));
-            cursor = off + size.max(1);
-        }
-        (self.members(scope, &fields), cursor)
     }
 
     /// The discriminant word, then an anonymous union whose members are the variants in

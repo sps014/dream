@@ -668,7 +668,6 @@ mod tests {
         ctx.defs.mark_value(vs_def);
         ctx.interner.mark_value_def(vs_def);
         let point = ctx.interner.struct_ty(vs_def, vec![]);
-        ctx.interner.set_value_layout(point, 8, 4);
 
         let callee_def = ctx.register(DefKind::Function, "make", vec![]);
         let caller_def = ctx.register(DefKind::Function, "caller", vec![]);
@@ -743,7 +742,6 @@ mod tests {
         ctx.defs.mark_value(vs_def);
         ctx.interner.mark_value_def(vs_def);
         let span = ctx.interner.struct_ty(vs_def, vec![]);
-        ctx.interner.set_value_layout(span, 12, 4);
 
         let callee_def = ctx.register(DefKind::Function, "len", vec![]);
         let caller_def = ctx.register(DefKind::Function, "caller", vec![]);

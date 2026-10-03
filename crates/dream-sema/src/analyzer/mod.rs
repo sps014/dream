@@ -16,8 +16,8 @@ use dream_text::line_text::LineText;
 use dream_text::text_span::TextSpan;
 use dream_types::{DefKind, TypeCtx};
 use indexmap::IndexMap;
-use std::cell::RefCell;
 use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
+use std::cell::RefCell;
 use std::rc::Rc;
 
 mod await_rules;
@@ -508,6 +508,9 @@ pub struct Analyzer<'a> {
     current_function_runtime: RuntimeSupport,
     /// Active compile-time runtime target(s) from the driver/CLI. Defaults to native-only.
     compile_targets: CompileTargets,
+    /// Pointer facts used by the single HIR layout table.
+    target_layout: dream_hir::TargetLayout,
+    deferred_case_labels: Vec<Vec<(dream_hir::HExpr, Option<TextSpan>)>>,
     /// True while analyzing the body of an `@compute` kernel. Gates calling non-compute functions
     /// and accepting `@workgroup` declarations — see `Analyzer::check_compute_call`.
     current_function_is_compute: bool,
@@ -609,6 +612,8 @@ impl<'a> Analyzer<'a> {
             current_function_is_unsafe: false,
             current_function_runtime: RuntimeSupport::ALL,
             compile_targets: CompileTargets::native_only(),
+            target_layout: dream_hir::TargetLayout::default(),
+            deferred_case_labels: Vec::new(),
             current_function_is_compute: false,
             current_function_is_gpu: false,
             overflow: dream_hir::Overflow::Wrapping,
@@ -666,6 +671,11 @@ impl<'a> Analyzer<'a> {
     /// Active compile-time runtime target(s). Call before [`Self::analyze`].
     pub fn with_compile_targets(mut self, targets: CompileTargets) -> Self {
         self.compile_targets = targets;
+        self
+    }
+
+    pub fn with_target_layout(mut self, target: dream_hir::TargetLayout) -> Self {
+        self.target_layout = target;
         self
     }
 
@@ -1144,6 +1154,10 @@ impl<'a> Analyzer<'a> {
         // Built before the borrow-immutable `SemanticInfo` literal below, since lowering field types
         // needs `&mut self.type_ctx`.
         let layouts = self.hir_build_layouts();
+        self.validate_layout_case_labels(&layouts, diagnostics);
+        if diagnostics.has_errors() {
+            return Err(SemanticError::AnalysisFailed);
+        }
         let type_names = self.hir_build_type_names(&layouts);
         let imports = self.hir_build_imports(node);
         let intrinsics = self.hir_build_intrinsics(node);

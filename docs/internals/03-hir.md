@@ -43,6 +43,13 @@ pub struct Hir {
 
 `MonoInstance { def: DefId, args: Vec<TypeId> }` is the entire monomorphization story: a list of concrete `(generic def, type args)` pairs the backend must emit. No mangled names, no string parsing — the emitted WASM symbol is derived from the pair at the very end.
 
+`Hir.layouts` holds the sole storage layout table, built from resolved struct, tuple and union
+field definitions with `TargetLayout { ptr_size, ptr_align }`. It records field offsets and
+aggregate size/alignment, including nested and packed value types. Semantic tables retain type
+and visibility facts only. MIR carries this table unchanged; LLVM emission, debugger views,
+element sizing and ABI JSON consume it directly. `SizeOf(TypeId)` expressions fold during MIR
+lowering, after the complete target-specific table exists.
+
 ## Functions, params, locals
 
 `HFunction` carries `def` (its `DefId`), the base `name`, the `instance` args (empty unless this is a monomorphized copy), typed `params`, the `ret` type, a `locals` table, the structured `body`, and `is_async`.

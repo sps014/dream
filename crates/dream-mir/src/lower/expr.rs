@@ -43,6 +43,9 @@ impl Lowerer<'_> {
     pub(super) fn lower_operand(&mut self, e: &HExpr) -> Operand {
         match &e.kind {
             HExprKind::IntLit(v) => Operand::Const(self.int_const(e.ty, *v)),
+            HExprKind::SizeOf(ty) => Operand::Const(Const::Int(
+                self.layouts.size_align(self.interner, *ty).0 as i64,
+            )),
             HExprKind::FloatLit(v) => Operand::Const(self.float_const(e.ty, *v)),
             HExprKind::BoolLit(v) => Operand::Const(Const::Bool(*v)),
             HExprKind::CharLit(v) => Operand::Const(Const::Char(*v)),

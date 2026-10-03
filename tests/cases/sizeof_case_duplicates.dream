@@ -1,0 +1,7 @@
+struct Point { public x: int; public y: int; }
+fun main(): void {
+    switch (8) {
+        case sizeof(Point):
+        case 8:
+    }
+}

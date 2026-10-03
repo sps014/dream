@@ -63,6 +63,8 @@ const SMOKE_CASES: &[&str] = &[
     "nested_self_realloc",
     "literal_overflow",
     "sizeof_unknown",
+    "sizeof",
+    "sizeof_case_duplicates",
     "guarded_arm_nonreturn",
     "char_literal_errors",
     "defer_break",
@@ -257,7 +259,12 @@ fn spawn_http_mock() -> (u16, thread::JoinHandle<()>) {
 }
 
 fn run_native_case(dream_file: &Path, release: bool) {
-    let expected_file = dream_file.with_extension("expected");
+    let native_expected = dream_file.with_extension("expected.native");
+    let expected_file = if Target::native().spec().ptr_size == 8 && native_expected.exists() {
+        native_expected
+    } else {
+        dream_file.with_extension("expected")
+    };
     let expected_error_file = dream_file.with_extension("expected_error");
     let expected_trap_file = dream_file.with_extension("expected_trap");
     let stem = dream_file.file_stem().and_then(|s| s.to_str()).unwrap();

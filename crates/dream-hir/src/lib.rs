@@ -11,7 +11,10 @@ mod module;
 mod nodes;
 pub mod ops;
 
-pub use layout::{scalar_size, FieldLayout, LayoutTable, TypeLayout, UnionLayout, UnionVariant};
+pub use layout::{
+    FieldLayout, LayoutFieldDef, LayoutTable, StructLayoutDef, TargetLayout, TypeLayout,
+    UnionLayout, UnionLayoutDef, UnionVariant, UnionVariantDef,
+};
 pub use module::*;
 pub use nodes::*;
 pub use ops::{BinOp, Overflow, UnOp};

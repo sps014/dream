@@ -1,9 +1,8 @@
-//! Per-module codegen context: target, native layouts, symbol and
+//! Per-module codegen context: target, layouts, symbol and
 //! string tables, runtime type tags, function-table indices, and lazily built glue policy.
 
 use super::glue::CanonMaps;
 use super::iface_guard::GuardTable;
-use super::native_layout::NativeLayouts;
 use super::tables::{intern_strings, struct_tags, symbol_table};
 use super::target::Target;
 use crate::{Mir, MirFunction};
@@ -22,7 +21,6 @@ pub(crate) struct Cx<'a> {
     pub symbols: HashMap<(DefId, Vec<TypeId>), String>,
     pub tags: HashMap<TypeId, i32>,
     pub ft: HashMap<(DefId, Vec<TypeId>), usize>,
-    pub native: NativeLayouts,
     /// True when the module was compiled with debug info (`-g`): the analyzer only emits
     /// `Statement::DebugLine` markers then, so their presence is the backend's signal to add
     /// debugger-only views (async future-frame structs).
@@ -57,7 +55,6 @@ impl<'a> Cx<'a> {
             symbols,
             tags: struct_tags(mir),
             ft,
-            native: NativeLayouts::for_target(mir, interner, &target),
             mir,
             interner,
             target,
@@ -92,11 +89,11 @@ impl<'a> Cx<'a> {
     }
 
     pub(crate) fn nstruct(&self, ty: TypeId) -> Option<&TypeLayout> {
-        self.native.structs.get(&ty)
+        self.mir.layouts.structs.get(&ty)
     }
 
     pub(crate) fn nunion(&self, ty: TypeId) -> Option<&dream_hir::UnionLayout> {
-        self.native.unions.get(&ty)
+        self.mir.layouts.unions.get(&ty)
     }
 
     pub(crate) fn intrinsic_key(&self, def: DefId) -> Option<&str> {

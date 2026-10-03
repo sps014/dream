@@ -208,9 +208,9 @@ fn operand_is_wide(
             ty_is_wide(cx, ty)
                 || (is_narrow_int(cx, ty) && wide.get(l.0 as usize).copied().unwrap_or(false))
         }
-        crate::Operand::Copy(crate::Place::Global(g)) => cx
-            .global_ty(*g)
-            .is_some_and(|ty| ty_is_wide(cx, ty)),
+        crate::Operand::Copy(crate::Place::Global(g)) => {
+            cx.global_ty(*g).is_some_and(|ty| ty_is_wide(cx, ty))
+        }
         crate::Operand::Copy(crate::Place::Field { base, field }) => cx
             .nstruct(func.local_ty(*base))
             .and_then(|layout| layout.fields.get(*field))
@@ -242,7 +242,9 @@ fn rvalue_is_wide(
         | crate::Rvalue::ToString(o)
         | crate::Rvalue::TypeName(o)
         | crate::Rvalue::IsType(o, _) => op(o),
-        crate::Rvalue::UnionField { ty, variant, field, .. } => cx
+        crate::Rvalue::UnionField {
+            ty, variant, field, ..
+        } => cx
             .nunion(*ty)
             .and_then(|u| u.variants.get(*variant))
             .and_then(|v| v.fields.get(*field))
@@ -268,9 +270,12 @@ fn rvalue_is_wide(
                 || args.iter().any(op)
         }
         crate::Rvalue::IndirectCall { args, .. } => args.iter().any(op),
-        crate::Rvalue::InterfaceCall { receiver, ret, args, .. } => {
-            ty_is_wide(cx, *ret) || op(receiver) || args.iter().any(op)
-        }
+        crate::Rvalue::InterfaceCall {
+            receiver,
+            ret,
+            args,
+            ..
+        } => ty_is_wide(cx, *ret) || op(receiver) || args.iter().any(op),
         crate::Rvalue::New { ty, .. }
         | crate::Rvalue::UnionNew { ty, .. }
         | crate::Rvalue::ArrayNew { elem_ty: ty, .. }
@@ -284,21 +289,8 @@ pub(crate) fn elem_size(cx: &Cx<'_>, ty: TypeId) -> u32 {
 }
 
 pub(crate) fn native_scalar_size(cx: &Cx<'_>, ty: TypeId) -> (u32, u32) {
-    let ptr = cx.target.abi().ptr_size;
-    if cx.interner.is_value_type(ty) {
-        if let Some(l) = cx.nstruct(ty) {
-            return (l.size.max(1), ptr.max(4));
-        }
-        if let Some(u) = cx.nunion(ty) {
-            return (u.size.max(1), ptr.max(4));
-        }
-    }
-    match cx.interner.kind(ty) {
-        TyKind::Prim(PrimTy::String) => (ptr, ptr),
-        TyKind::Prim(p) => p.size_align(),
-        TyKind::Enum(_) => (4, 4),
-        _ => (ptr, ptr),
-    }
+    let (size, align) = cx.mir.layouts.size_align(cx.interner, ty);
+    (size.max(1), align)
 }
 
 pub(crate) fn array_elem_ty(interner: &TypeInterner, arr_ty: TypeId) -> TypeId {

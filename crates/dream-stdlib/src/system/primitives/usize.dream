@@ -1,0 +1,32 @@
+module system.primitives;
+
+extend usize : Comparable<usize> {
+    public fun compare(other: usize): int {
+        if this < other { return -1; }
+        if this > other { return 1; }
+        return 0;
+    }
+
+    public fun min(other: usize): usize {
+        if this < other { return this; }
+        return other;
+    }
+
+    public fun max(other: usize): usize {
+        if this > other { return this; }
+        return other;
+    }
+
+    public fun clamp(lo: usize, hi: usize): usize {
+        return this.max(lo).min(hi);
+    }
+
+    public static fun parse(borrow text: string): Result<usize, ParseError> {
+        let parsed = ulong.parse(text)?;
+        let narrowed = (usize)parsed;
+        if (ulong)narrowed != parsed {
+            return Result.Err(ParseError.invalid("cannot parse usize: value out of range"));
+        }
+        return Result.Ok(narrowed);
+    }
+}

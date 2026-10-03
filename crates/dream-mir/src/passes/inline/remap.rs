@@ -11,6 +11,7 @@ use dream_types::{PrimTy, TyKind, TypeId, TypeInterner};
 pub(super) enum WasmKind {
     I32,
     I64,
+    Word,
     F32,
     F64,
 }
@@ -20,6 +21,7 @@ pub(super) fn wasm_kind(interner: &TypeInterner, ty: TypeId) -> WasmKind {
         TyKind::Prim(PrimTy::Double) => WasmKind::F64,
         TyKind::Prim(PrimTy::Float) => WasmKind::F32,
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => WasmKind::I64,
+        TyKind::Prim(PrimTy::ISize | PrimTy::USize) => WasmKind::Word,
         _ => WasmKind::I32,
     }
 }

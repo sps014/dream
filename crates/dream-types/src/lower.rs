@@ -99,6 +99,8 @@ impl TypeCtx {
             Type::UInt(_) => self.interner.prim(PrimTy::UInt),
             Type::Long(_) => self.interner.prim(PrimTy::Long),
             Type::ULong(_) => self.interner.prim(PrimTy::ULong),
+            Type::ISize(_) => self.interner.prim(PrimTy::ISize),
+            Type::USize(_) => self.interner.prim(PrimTy::USize),
             Type::Byte(_) => self.interner.prim(PrimTy::Byte),
             Type::Float(_) => self.interner.prim(PrimTy::Float),
             Type::Double(_) => self.interner.prim(PrimTy::Double),

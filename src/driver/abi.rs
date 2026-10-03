@@ -121,21 +121,28 @@ fn json_escape(s: &str) -> String {
 }
 
 /// ABI tag for a Dream `fun(...)` parameter: `fn:i64,i32,ptr:i32`.
-fn fn_tag_from_types(params: &[Type], ret: &Type) -> String {
-    fn one(t: &Type) -> &'static str {
+fn fn_tag_from_types(params: &[Type], ret: &Type, ptr_size: u32) -> String {
+    fn one(t: &Type, ptr_size: u32) -> &'static str {
         match t {
             Type::Integer(_) | Type::Boolean(_) | Type::Byte(_) | Type::Char(_) | Type::UInt(_) => {
                 "i32"
             }
             Type::Long(_) | Type::ULong(_) => "i64",
+            Type::ISize(_) | Type::USize(_) => {
+                if ptr_size == 8 {
+                    "i64"
+                } else {
+                    "i32"
+                }
+            }
             Type::Float(_) => "f32",
             Type::Double(_) => "f64",
             Type::Void => "void",
             _ => "ptr",
         }
     }
-    let args: Vec<&str> = params.iter().map(one).collect();
-    format!("fn:{}:{}", args.join(","), one(ret))
+    let args: Vec<&str> = params.iter().map(|t| one(t, ptr_size)).collect();
+    format!("fn:{}:{}", args.join(","), one(ret, ptr_size))
 }
 
 /// Builds the `.abi.json` describing live extern imports and exported functions. Externs are
@@ -161,12 +168,15 @@ pub(crate) fn build_abi_json(
         }
     }
 
-    fn c_param_tag(param: &ParameterNode, extern_attrs: &[AttributeNode]) -> String {
+    fn c_param_tag(param: &ParameterNode, extern_attrs: &[AttributeNode], ptr_size: u32) -> String {
         // C out-params use Dream `ref` (address passed); tagged for the native host trampoline.
         if param.is_ref {
             let ty = param.type_.get_type();
             if ty == "long" {
                 return "out_long".to_string();
+            }
+            if ty == "isize" || ty == "usize" {
+                return if ptr_size == 8 { "out_long" } else { "out_int" }.to_string();
             }
             if ty == "int" {
                 return "out_int".to_string();
@@ -178,7 +188,7 @@ pub(crate) fn build_abi_json(
         }
         let ty = &param.type_;
         if let Type::Function(params, ret) = ty {
-            return fn_tag_from_types(params, ret);
+            return fn_tag_from_types(params, ret, ptr_size);
         }
         if let Type::Array(inner) = ty {
             if matches!(**inner, Type::Byte(_)) {
@@ -196,6 +206,7 @@ pub(crate) fn build_abi_json(
             }
             "int" => "int".to_string(),
             "long" => "long".to_string(),
+            "isize" | "usize" => if ptr_size == 8 { "long" } else { "int" }.to_string(),
             "bool" => "bool".to_string(),
             "float" => "float".to_string(),
             "double" => "double".to_string(),
@@ -204,7 +215,10 @@ pub(crate) fn build_abi_json(
         }
     }
 
-    fn extern_entry(func: &FunctionNode) -> Option<(String, String, String, Option<String>)> {
+    fn extern_entry(
+        func: &FunctionNode,
+        ptr_size: u32,
+    ) -> Option<(String, String, String, Option<String>)> {
         if !func.is_extern || dream_abi::intrinsics::has_intrinsic_attr(&func.attributes) {
             return None;
         }
@@ -213,7 +227,12 @@ pub(crate) fn build_abi_json(
         let params: Vec<String> = if is_c {
             func.parameters
                 .iter()
-                .map(|p| format!("\"{}\"", json_escape(&c_param_tag(p, &func.attributes))))
+                .map(|p| {
+                    format!(
+                        "\"{}\"",
+                        json_escape(&c_param_tag(p, &func.attributes, ptr_size))
+                    )
+                })
                 .collect()
         } else {
             func.parameters
@@ -258,7 +277,7 @@ pub(crate) fn build_abi_json(
         .chain(class_methods)
         .chain(extend_methods)
     {
-        if let Some((module, field, entry, c_lib)) = extern_entry(func) {
+        if let Some((module, field, entry, c_lib)) = extern_entry(func, layouts.target.ptr_size) {
             if !live.contains(&(module.as_str(), field.as_str())) {
                 continue;
             }
@@ -510,7 +529,7 @@ fn c_field_tag(ty: &Type, by_name: &BTreeMap<&str, &StructDeclarationNode<'_>>) 
             let key = ty.get_type();
             if matches!(
                 key.as_str(),
-                "bool" | "byte" | "int" | "float" | "long" | "double" | "ulong"
+                "bool" | "byte" | "int" | "float" | "long" | "double" | "ulong" | "isize" | "usize"
             ) {
                 return key;
             }
@@ -567,13 +586,17 @@ mod tests {
     }
 
     fn abi_json_for(source: &str) -> String {
+        abi_json_for_target(source, dream_hir::TargetLayout::default())
+    }
+
+    fn abi_json_for_target(source: &str, target: dream_hir::TargetLayout) -> String {
         let mut diagnostics = DiagnosticBag::new(None);
         let lexer = Lexer::new(source.to_string());
         let arena = Bump::new();
         let mut parser = Parser::new(lexer, &arena, &mut diagnostics);
         let tree = parser.parse().expect("parse should succeed");
         let program = tree.get_root();
-        let layouts = test_layouts(program, dream_hir::TargetLayout::default());
+        let layouts = test_layouts(program, target);
         let gpu = crate::driver::gpu_gen::GpuEmitResult::default();
         // Consider every extern in the source "live" so the extern actually reaches the JSON.
         let live: Vec<LiveImport> = program
@@ -594,6 +617,30 @@ mod tests {
             &BTreeMap::new(),
             &layouts,
         )
+    }
+
+    #[test]
+    fn pointer_integer_c_metadata_uses_target_width() {
+        let source = r#"@c("c", "sizes") extern fun sizes(bytes: usize, offset: isize, callback: fun(usize): isize, ref out: usize): usize;"#;
+        for (size, scalar, callback, output) in [
+            (4, "int", "fn:i32:i32", "out_int"),
+            (8, "long", "fn:i64:i64", "out_long"),
+        ] {
+            let json = abi_json_for_target(
+                source,
+                dream_hir::TargetLayout {
+                    ptr_size: size,
+                    ptr_align: size,
+                },
+            );
+            assert!(
+                json.contains(&format!(
+                    "\"params\": [\"{scalar}\", \"{scalar}\", \"{callback}\", \"{output}\"]"
+                )),
+                "{}",
+                json
+            );
+        }
     }
 
     #[test]

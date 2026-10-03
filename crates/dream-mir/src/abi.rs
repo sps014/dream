@@ -18,6 +18,8 @@ pub const TAG_LONG: i32 = 8;
 pub const TAG_UINT: i32 = 9;
 pub const TAG_ULONG: i32 = 10;
 pub const TAG_BYTE: i32 = 11;
+pub const TAG_ISIZE: i32 = 12;
+pub const TAG_USIZE: i32 = 13;
 /// Coroutine `Future` frames (`dream_new_future`). Distinct from tag 0 (untagged C/weak blocks)
 /// so last-release can run the per-poll slot destructor.
 pub const TAG_FUTURE: i32 = 256;
@@ -28,7 +30,7 @@ pub const TAG_FUNCBOX: i32 = 257;
 /// free; this tag dispatches to typed `release_array_t{object}` from `dream_release_object`.
 pub const TAG_CLOSURE_ENV: i32 = 258;
 /// Structs/unions are assigned consecutive tags starting here, ordered by sorted type name.
-pub const TAG_STRUCT_BASE: i32 = 12;
+pub const TAG_STRUCT_BASE: i32 = 14;
 /// Header tag high bit: object is concurrently refcounted (`@shared` / published worker
 /// env and wire / foreign futures). Mask with [`TAG_VALUE_MASK`] before comparing type tags.
 pub const TAG_SHARED: i32 = 1 << 30;
@@ -486,6 +488,8 @@ mod abi_h_lockstep {
         assert_eq!(header_define(h, "TAG_UINT"), TAG_UINT as i64);
         assert_eq!(header_define(h, "TAG_ULONG"), TAG_ULONG as i64);
         assert_eq!(header_define(h, "TAG_BYTE"), TAG_BYTE as i64);
+        assert_eq!(header_define(h, "TAG_ISIZE"), TAG_ISIZE as i64);
+        assert_eq!(header_define(h, "TAG_USIZE"), TAG_USIZE as i64);
         assert_eq!(header_define(h, "TAG_FUTURE"), TAG_FUTURE as i64);
         assert_eq!(header_define(h, "TAG_FUNCBOX"), TAG_FUNCBOX as i64);
         assert_eq!(header_define(h, "TAG_CLOSURE_ENV"), TAG_CLOSURE_ENV as i64);
@@ -685,6 +689,8 @@ mod abi_h_lockstep {
         assert_eq!(js_num(js, "LONG"), TAG_LONG as i64);
         assert_eq!(js_num(js, "UINT"), TAG_UINT as i64);
         assert_eq!(js_num(js, "ULONG"), TAG_ULONG as i64);
+        assert_eq!(js_num(js, "ISIZE"), TAG_ISIZE as i64);
+        assert_eq!(js_num(js, "USIZE"), TAG_USIZE as i64);
         assert_eq!(js_num(js, "BYTE"), TAG_BYTE as i64);
         assert_eq!(js_num(js, "STRUCT_BASE"), TAG_STRUCT_BASE as i64);
         assert_eq!(js_assign(js, "HEAP_HEADER_SIZE"), HEAP_HEADER_SIZE as i64);

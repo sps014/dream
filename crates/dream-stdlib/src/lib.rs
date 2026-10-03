@@ -176,6 +176,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/primitives/ulong.dream"),
             ),
             (
+                "<std>/system/primitives/isize.dream",
+                include_str!("system/primitives/isize.dream"),
+            ),
+            (
+                "<std>/system/primitives/usize.dream",
+                include_str!("system/primitives/usize.dream"),
+            ),
+            (
                 "<std>/system/primitives/byte.dream",
                 include_str!("system/primitives/byte.dream"),
             ),

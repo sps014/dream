@@ -1341,13 +1341,17 @@ fn test_hir_emission_generic_function_instances() {
         "two id instances + driver should be emitted:\n{}",
         c
     );
+    let types = dream_types::TypeInterner::new();
+    let int_symbol = format!("id__{}", types.int().0);
+    let bool_symbol = format!("id__{}", types.bool().0);
     assert!(
-        c.contains("id__0(") && c.contains("id__7("),
+        c.contains(&format!("{int_symbol}(")) && c.contains(&format!("{bool_symbol}(")),
         "each monomorphization gets its own symbol:\n{}",
         c
     );
     assert!(
-        c.contains("call i32 @id__0(i32 5)") && c.contains("call i32 @id__7(i32 1)"),
+        c.contains(&format!("call i32 @{int_symbol}(i32 5)"))
+            && c.contains(&format!("call i32 @{bool_symbol}(i32 1)")),
         "each generic call site should resolve to an instance symbol:\n{}",
         c
     );

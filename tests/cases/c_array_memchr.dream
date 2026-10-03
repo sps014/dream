@@ -2,13 +2,13 @@
 import system;
 
 @c("c", "memchr")
-extern fun memchr(hay: byte[], needle: int, n: long): Option<CPtr>;
+extern fun memchr(hay: byte[], needle: int, n: usize): Option<CPtr>;
 
 fun main(): void {
     let data: byte[] = [104, 105, 33];
-    let hit = memchr(data, 33, 3L);
+    let hit = memchr(data, 33, (usize)3);
     System.println(hit.is_some());
-    System.println(memchr(data, 120, 3L).is_none());
+    System.println(memchr(data, 120, (usize)3).is_none());
     let empty: byte[] = [];
-    System.println(memchr(empty, 104, 0L).is_none());
+    System.println(memchr(empty, 104, (usize)0).is_none());
 }

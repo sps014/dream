@@ -195,7 +195,13 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         // The snapshot is extracted inside the same scope as the analyzer (it borrows the
         // arena); a panic degrades to "syntax diagnostics only" with no snapshot.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let mut analyzer = Analyzer::new(&tree, &arena).with_file_modules(file_modules);
+            let target = dream_abi::target::TargetSpec::host();
+            let mut analyzer = Analyzer::new(&tree, &arena)
+                .with_file_modules(file_modules)
+                .with_target_layout(dream_hir::TargetLayout {
+                    ptr_size: target.ptr_size,
+                    ptr_align: target.ptr_align,
+                });
             let _ = analyzer.analyze(&mut diagnostics);
             analyzer.ide_snapshot()
         }));
@@ -331,4 +337,24 @@ fn report_analyzer_panic(diagnostics: &mut DiagnosticBag, payload: &(dyn std::an
         }),
         None,
     ));
+}
+
+#[cfg(test)]
+mod pointer_integer_tests {
+    #[test]
+    fn literals_use_the_language_server_target_width() {
+        let diagnostics =
+            super::collect_diagnostics(None, "fun main() { let value: usize = 4294967296; }");
+        let target = dream_abi::target::TargetSpec::host();
+        if target.ptr_size == 8 {
+            assert!(
+                !diagnostics.iter().any(|d| d.severity == "error"),
+                "{diagnostics:?}"
+            );
+        } else {
+            assert!(diagnostics
+                .iter()
+                .any(|d| d.message.contains("out of range")));
+        }
+    }
 }

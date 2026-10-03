@@ -100,7 +100,10 @@ impl<'a> Analyzer<'a> {
 
     /// `(parameter shapes, result shape)` of a validated `@c` extern; invalid positions (already
     /// reported) fall back to [`CShape::Scalar`].
-    pub(in crate::analyzer) fn c_shapes(&self, function: &FunctionNode<'a>) -> (Vec<CShape>, CShape) {
+    pub(in crate::analyzer) fn c_shapes(
+        &self,
+        function: &FunctionNode<'a>,
+    ) -> (Vec<CShape>, CShape) {
         let params = function
             .parameters
             .iter()
@@ -174,10 +177,9 @@ impl<'a> Analyzer<'a> {
             (Some(CShape::Scalar), _) => true,
             (Some(CShape::Ptr { optional: false }), Pos::CallbackReturn) => true,
             (Some(CShape::Str { .. } | CShape::Ptr { .. }), p) => p != Pos::CallbackReturn,
-            (
-                Some(CShape::Func { .. } | CShape::Callback { .. } | CShape::Array),
-                Pos::Param,
-            ) => true,
+            (Some(CShape::Func { .. } | CShape::Callback { .. } | CShape::Array), Pos::Param) => {
+                true
+            }
             _ => false,
         };
         match shape {
@@ -294,6 +296,8 @@ fn is_c_scalar(ty: &Type) -> bool {
             | Type::UInt(_)
             | Type::Long(_)
             | Type::ULong(_)
+            | Type::ISize(_)
+            | Type::USize(_)
             | Type::Byte(_)
             | Type::Char(_)
             | Type::Boolean(_)
@@ -310,6 +314,8 @@ fn is_c_array_elem(ty: &Type) -> bool {
             | Type::UInt(_)
             | Type::Long(_)
             | Type::ULong(_)
+            | Type::ISize(_)
+            | Type::USize(_)
             | Type::Byte(_)
             | Type::Float(_)
             | Type::Double(_)

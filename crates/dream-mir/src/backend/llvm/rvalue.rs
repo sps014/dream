@@ -689,6 +689,18 @@ impl<'l, 'a> Fx<'l, 'a> {
         }
         let fk = self.interner.kind(from).clone();
         let tk = self.interner.kind(to).clone();
+        if let (TyKind::Prim(from_prim), TyKind::Prim(to_prim)) = (&fk, &tk) {
+            if from_prim.is_numeric()
+                && to_prim.is_numeric()
+                && (matches!(from_prim, PrimTy::ISize | PrimTy::USize)
+                    || matches!(to_prim, PrimTy::ISize | PrimTy::USize))
+            {
+                let source_ty = super::types::ll_ty(self.interner, from, &self.h());
+                let target_ty = super::types::ll_ty(self.interner, to, &self.h());
+                let source = self.conv_v(&src, &source_ty, from_prim.is_unsigned_integer());
+                return self.conv_v(&source, &target_ty, to_prim.is_unsigned_integer());
+            }
+        }
         if matches!(tk, TyKind::Object | TyKind::Interface(..)) && self.is_value(from) {
             let size = elem_size(&self.l.cx, from) as i64;
             let tag = self.l.cx.type_tag(from);
@@ -742,6 +754,14 @@ impl<'l, 'a> Fx<'l, 'a> {
                 i32s(self, &src)
             }
             (_, TyKind::Object) => {
+                if matches!(fk, TyKind::Prim(P::ISize | P::USize)) {
+                    let size = elem_size(&self.l.cx, from) as i64;
+                    let tag = runtime_tag(&self.l.cx, from);
+                    let boxed = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
+                    let address = self.ptr(&boxed);
+                    self.store_ty(&self.h(), &address, &src, size as u32);
+                    return boxed;
+                }
                 let (f, t) = match fk {
                     TyKind::Prim(P::Int) => ("dream_box_int", Ty::I32),
                     TyKind::Prim(P::Float) => ("dream_box_float", Ty::F32),
@@ -767,6 +787,10 @@ impl<'l, 'a> Fx<'l, 'a> {
                     P::Long => "dream_unbox_long",
                     P::UInt => "dream_unbox_uint",
                     P::ULong => "dream_unbox_ulong",
+                    P::ISize if self.l.cx.mir.layouts.target.ptr_size == 8 => "dream_unbox_long",
+                    P::USize if self.l.cx.mir.layouts.target.ptr_size == 8 => "dream_unbox_ulong",
+                    P::ISize => "dream_unbox_int",
+                    P::USize => "dream_unbox_uint",
                     P::Byte => "dream_unbox_byte",
                     P::String => return src,
                 };

@@ -42,7 +42,11 @@ impl<'l, 'a> Fx<'l, 'a> {
     fn operand_int_ty(&self, o: &Operand) -> Option<IntTy> {
         match o {
             Operand::Const(_) => const_int_ty(o),
-            _ => IntTy::of(self.interner, self.operand_ty(o)),
+            _ => IntTy::of(
+                self.interner,
+                self.operand_ty(o),
+                self.l.cx.mir.layouts.target.ptr_size,
+            ),
         }
     }
 
@@ -64,7 +68,8 @@ impl<'l, 'a> Fx<'l, 'a> {
         if op.is_comparison() || matches!(op, BinOp::And | BinOp::Or) {
             return Some(operand);
         }
-        let dest = dest.and_then(|t| IntTy::of(self.interner, t));
+        let dest =
+            dest.and_then(|t| IntTy::of(self.interner, t, self.l.cx.mir.layouts.target.ptr_size));
         Some(match dest {
             Some(d) if d.is_64() == operand.is_64() => d,
             _ => operand,
@@ -73,7 +78,8 @@ impl<'l, 'a> Fx<'l, 'a> {
 
     pub fn unary_int_ty(&self, a: &Operand, dest: Option<TypeId>) -> Option<IntTy> {
         let operand = self.operand_int_ty(a)?;
-        let dest = dest.and_then(|t| IntTy::of(self.interner, t));
+        let dest =
+            dest.and_then(|t| IntTy::of(self.interner, t, self.l.cx.mir.layouts.target.ptr_size));
         Some(match dest {
             Some(d) if d.is_64() == operand.is_64() => d,
             _ => operand,

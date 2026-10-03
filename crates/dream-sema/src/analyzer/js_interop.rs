@@ -176,7 +176,11 @@ impl<'a> Analyzer<'a> {
                     let d = self.cast_prim(e, PrimTy::Double);
                     self.js_bridge_call("box_double", vec![d], js)
                 }
-                PrimTy::Long | PrimTy::ULong => self.js_bridge_call("box_long", vec![e], js),
+                PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => {
+                    let wide =
+                        HExpr::new(self.type_ctx.interner.long(), HExprKind::Cast(Box::new(e)));
+                    self.js_bridge_call("box_long", vec![wide], js)
+                }
                 PrimTy::Int => self.js_bridge_call("box_int", vec![e], js),
                 PrimTy::UInt | PrimTy::Byte | PrimTy::Char => {
                     let i = self.cast_prim(e, PrimTy::Int);
@@ -253,7 +257,7 @@ impl<'a> Analyzer<'a> {
             PrimTy::String => Some("string"),
             PrimTy::Bool => Some("bool"),
             PrimTy::Double | PrimTy::Float => Some("double"),
-            PrimTy::Long | PrimTy::ULong => Some("long"),
+            PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => Some("long"),
             PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => Some("int"),
         }
     }
@@ -264,7 +268,9 @@ impl<'a> Analyzer<'a> {
             PrimTy::String => self.type_ctx.interner.string(),
             PrimTy::Bool => self.type_ctx.interner.bool(),
             PrimTy::Double | PrimTy::Float => self.type_ctx.interner.double(),
-            PrimTy::Long | PrimTy::ULong => self.type_ctx.interner.long(),
+            PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => {
+                self.type_ctx.interner.long()
+            }
             PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => {
                 self.type_ctx.interner.int()
             }

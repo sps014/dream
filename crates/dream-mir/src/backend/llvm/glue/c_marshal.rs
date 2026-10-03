@@ -21,7 +21,10 @@ use indexmap::IndexMap;
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum Reverse {
     /// `NativeCallback<F>`: `user_data` is the callback object, `fun_ty` is `F`.
-    Callback { fun_ty: TypeId, user_data_last: bool },
+    Callback {
+        fun_ty: TypeId,
+        user_data_last: bool,
+    },
     /// A fixed Dream function (named function or non-capturing lambda) of type `fun_ty`.
     Direct { symbol: String, fun_ty: TypeId },
 }
@@ -72,8 +75,7 @@ fn fun_parts(l: &Lcx<'_>, fun_ty: TypeId) -> (Vec<TypeId>, TypeId) {
 
 /// `Option<T>`'s `T`, or `ty` itself.
 fn unwrap_option(l: &Lcx<'_>, ty: TypeId) -> TypeId {
-    l.cx
-        .nunion(ty)
+    l.cx.nunion(ty)
         .and_then(|u| u.variant("Some"))
         .and_then(|v| v.fields.first())
         .map(|f| f.ty)
@@ -103,7 +105,10 @@ fn direct_targets<'m>(l: &Lcx<'m>, fun_ty: TypeId) -> Vec<&'m MirFunction> {
             !f.is_async
                 && f.ret == ret
                 && f.params.len() == params.len()
-                && f.params.iter().zip(&params).all(|(p, t)| f.local_ty(*p) == *t)
+                && f.params
+                    .iter()
+                    .zip(&params)
+                    .all(|(p, t)| f.local_ty(*p) == *t)
                 && taken.contains(&(f.def, f.instance.clone()))
         })
         .collect()
@@ -250,7 +255,7 @@ impl<'l, 'a> Fx<'l, 'a> {
 
     /// The `raw` word of the `CPtr` stored at `at`, as `void*`.
     fn cptr_load(&mut self, at: &Value) -> V {
-        let raw = self.load_ty(Ty::I64, at, 8, false);
+        let raw = self.load_ty(self.h(), at, self.l.cx.mir.layouts.target.ptr_align, true);
         V::s(self.ptr(&raw))
     }
 
@@ -336,9 +341,8 @@ impl<'l, 'a> Fx<'l, 'a> {
                 args.push(ud);
             }
             CShape::Array => {
-                let data = self.null_or(a, |fx| {
-                    V::s(fx.addr(a, crate::abi::LEN_PREFIX_SIZE as i64))
-                });
+                let data =
+                    self.null_or(a, |fx| V::s(fx.addr(a, crate::abi::LEN_PREFIX_SIZE as i64)));
                 args.push(data);
             }
         }
@@ -411,22 +415,24 @@ impl<'l, 'a> Fx<'l, 'a> {
         let bp = self.ptr(&b);
         self.memset0(&bp, &Value::i64(size));
         let z = self.is_zero(p);
-        let disc = self.w.select(&z, &Value::i32(none as i64), &Value::i32(some as i64));
+        let disc = self
+            .w
+            .select(&z, &Value::i32(none as i64), &Value::i32(some as i64));
         self.store_ty(&Ty::I32, &bp, &V::s(disc), 4);
         let at = self.addr(&b, off as i64);
-        let raw = V::s(self.conv(p, &Ty::I64));
-        self.store_ty(&Ty::I64, &at, &raw, 8);
+        let raw = V::u(self.conv(p, &self.h()));
+        self.store_ty(&self.h(), &at, &raw, self.l.cx.mir.layouts.target.ptr_align);
         self.as_ref(&b)
     }
 
     /// A fresh heap `CPtr` holding `p`, the value-struct result convention for native calls.
     fn cptr_new(&mut self, ty: TypeId, p: &V) -> V {
-        let size = self.l.cx.nstruct(ty).map_or(8, |s| s.size.max(8)) as i64;
+        let size = crate::backend::shared::abi_types::elem_size(&self.l.cx, ty) as i64;
         let tag = self.l.cx.type_tag(ty) as i64;
         let b = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag)]);
         let bp = self.ptr(&b);
-        let raw = V::s(self.conv(p, &Ty::I64));
-        self.store_ty(&Ty::I64, &bp, &raw, 8);
+        let raw = V::u(self.conv(p, &self.h()));
+        self.store_ty(&self.h(), &bp, &raw, self.l.cx.mir.layouts.target.ptr_align);
         self.as_ref(&b)
     }
 
@@ -496,9 +502,10 @@ fn reverse_trampoline(l: &mut Lcx<'_>, rev: &Reverse, shapes: &[CShape], ret: &C
                 v
             }
             CShape::Ptr { optional: false } => {
-                let slot = fx.alloca_bytes(8, 8);
-                let raw = V::s(fx.conv(&c, &Ty::I64));
-                fx.store_ty(&Ty::I64, &slot, &raw, 8);
+                let layout = fx.l.cx.mir.layouts.target;
+                let slot = fx.alloca_bytes(layout.ptr_size as u64, layout.ptr_align);
+                let raw = V::u(fx.conv(&c, &fx.h()));
+                fx.store_ty(&fx.h(), &slot, &raw, layout.ptr_align);
                 fx.as_ref(&V::s(slot))
             }
             CShape::Ptr { optional: true } => {
@@ -516,12 +523,11 @@ fn reverse_trampoline(l: &mut Lcx<'_>, rev: &Reverse, shapes: &[CShape], ret: &C
             let ud_i = if first == 1 { 0 } else { shapes.len() };
             let obj = fx.arg(ud_i);
             let class_ty = callback_class_ty(fx.l, fun_ty);
-            let off = fx
-                .l
-                .cx
-                .nstruct(class_ty)
-                .and_then(|s| s.fields.first())
-                .map_or(0, |f| f.offset);
+            let off =
+                fx.l.cx
+                    .nstruct(class_ty)
+                    .and_then(|s| s.fields.first())
+                    .map_or(0, |f| f.offset);
             let at = fx.addr(&obj, off as i64);
             let boxed = fx.load_ty(h.clone(), &at, 8, true);
             let env = fx.call_v("dream_funcbox_env", std::slice::from_ref(&boxed));
@@ -542,7 +548,7 @@ fn reverse_trampoline(l: &mut Lcx<'_>, rev: &Reverse, shapes: &[CShape], ret: &C
         (Some(r), CShape::Ptr { .. }) => {
             let boxed = V::u(r);
             let bp = fx.ptr(&boxed);
-            let raw = fx.load_ty(Ty::I64, &bp, 8, false);
+            let raw = fx.load_ty(fx.h(), &bp, fx.l.cx.mir.layouts.target.ptr_align, true);
             fx.call("dream_free", &[boxed]);
             let p = fx.ptr(&raw);
             fx.w.ret(Some(&p));

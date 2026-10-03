@@ -1,0 +1,42 @@
+import system;
+
+struct WordPair { public signed: isize; public unsigned: usize; }
+
+fun signed_step(x: isize): isize { return x - (isize)1; }
+fun unsigned_half(x: usize): usize { return x / (usize)2; }
+async fun async_word(x: usize): usize { return x + (usize)1; }
+
+async fun main(): void {
+    let signed: isize = 42;
+    let unsigned: usize = 42;
+    System.println(sizeof(isize) == sizeof(string));
+    System.println(sizeof(usize) == sizeof(string));
+    System.println(sizeof(WordPair) == sizeof(string) * 2);
+    System.println(signed_step(signed));
+    System.println(unsigned_half(unsigned));
+    let maximum: usize = ~(usize)0;
+    System.println(maximum > unsigned);
+    System.println((maximum + (usize)1) == (usize)0);
+    System.println((maximum >> (usize)(sizeof(usize) * 8 - 1)) == (usize)1);
+    let negative: isize = (isize)0 - (isize)1;
+    System.println(negative < (isize)0);
+    System.println((negative >> (isize)1) == negative);
+    let words: usize[] = [unsigned, (usize)9];
+    System.println(words[1]);
+    let box: object = unsigned;
+    System.println((usize)box == unsigned);
+    System.println(typeof(box));
+    System.println(box);
+    let call: fun(usize): usize = unsigned_half;
+    System.println(call(unsigned));
+    let capture = () => unsigned_half(unsigned);
+    System.println(capture());
+    let result = async_word(unsigned).await;
+    System.println(result);
+    System.println(usize.parse("42").unwrap_or((usize)0));
+    System.println(isize.parse("-42").unwrap_or((isize)0));
+    System.println(usize.parse("4294967296").is_err() == (sizeof(usize) == 4));
+    System.println(isize.parse("2147483648").is_err() == (sizeof(isize) == 4));
+    System.println(unsigned.compare((usize)9));
+    System.println(maximum.to_string().length >= 10);
+}

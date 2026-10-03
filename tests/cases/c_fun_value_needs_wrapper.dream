@@ -1,7 +1,7 @@
 import system;
 
 @c("c", "qsort")
-extern fun qsort(base: int[], n: long, size: long, cmp: fun(CPtr, CPtr): int): void;
+extern fun qsort(base: int[], n: usize, size: usize, cmp: fun(CPtr, CPtr): int): void;
 
 fun ascending(a: CPtr, b: CPtr): int {
     return Ffi.read_int(a, 0) - Ffi.read_int(b, 0);
@@ -10,5 +10,5 @@ fun ascending(a: CPtr, b: CPtr): int {
 fun main(): void {
     let xs: int[] = [2, 1];
     let cmp = ascending;
-    qsort(xs, 2L, 4L, cmp);
+    qsort(xs, (usize)2, (usize)sizeof(int), cmp);
 }

@@ -148,6 +148,7 @@ export class DreamInstance {
     const t = stripSuffix(elemType);
     switch (t) {
       case "int":
+      case "isize":
         return this.i32(addr);
       case "char":
       case "byte":
@@ -155,6 +156,7 @@ export class DreamInstance {
       case "bool":
         return this.bytes[addr] !== 0;
       case "uint":
+      case "usize":
         return this.view.getUint32(addr, true);
       case "long":
         return this.view.getBigInt64(addr, true);
@@ -177,6 +179,7 @@ export class DreamInstance {
     const t = stripSuffix(elemType);
     switch (t) {
       case "int":
+      case "isize":
         this.view.setInt32(addr, value | 0, true);
         break;
       case "char":
@@ -187,6 +190,7 @@ export class DreamInstance {
         this.bytes[addr] = value ? 1 : 0;
         break;
       case "uint":
+      case "usize":
         this.view.setUint32(addr, value >>> 0, true);
         break;
       case "long":

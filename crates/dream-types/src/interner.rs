@@ -64,6 +64,8 @@ impl TypeInterner {
             PrimTy::UInt,
             PrimTy::Long,
             PrimTy::ULong,
+            PrimTy::ISize,
+            PrimTy::USize,
             PrimTy::Byte,
             PrimTy::Float,
             PrimTy::Double,

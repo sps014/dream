@@ -19,6 +19,7 @@ use std::thread;
 
 const SMOKE_CASES: &[&str] = &[
     "arithmetic",
+    "pointer_integers",
     "classes",
     "enum_basic",
     "generic_structs",

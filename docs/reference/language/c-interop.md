@@ -95,6 +95,7 @@ import system;
 | Dream | C |
 |-------|---|
 | `int`, `long`, `float`, `double` | `int32_t`, `int64_t`, `float`, `double` |
+| `isize`, `usize` | `intptr_t`, `uintptr_t` (`usize` also matches `size_t`) |
 | `bool`, `char`, `byte` | `int32_t` |
 | `string` parameter | `const char*`: NUL-terminated UTF-8, valid for the call |
 | `string` result | `const char*`, copied into a Dream `string`; C keeps ownership |
@@ -127,7 +128,7 @@ public fun fingerprint(data: byte[]): int {
 ### `CPtr`
 
 `CPtr` (in `system`) is an opaque C pointer. It has `CPtr.null()`, `is_null()`, `==`,
-`address()`, and `offset(bytes)`. Use it for handles, and use `ref` for C's out-parameters:
+`address(): usize`, and `offset(bytes: isize)`. Its single address field is target-sized. Use it for handles, and use `ref` for C's out-parameters:
 
 ```dream
 @c("sqlite3") extern fun sqlite3_open(path: string, ref db: CPtr): int;
@@ -181,9 +182,9 @@ wrapper for that function. Passing a `fun` held in a variable where conversion i
 error that points at `NativeCallback`.
 
 ```dream
-@c("c") extern fun qsort(base: int[], n: long, size: long, cmp: fun(CPtr, CPtr): int): void;
+@c("c") extern fun qsort(base: int[], n: usize, size: usize, cmp: fun(CPtr, CPtr): int): void;
 
-qsort(xs, 5L, 4L, (a: CPtr, b: CPtr) => Ffi.read_int(a, 0) - Ffi.read_int(b, 0));
+qsort(xs, (usize)5, (usize)sizeof(int), (a: CPtr, b: CPtr) => Ffi.read_int(a, 0) - Ffi.read_int(b, 0));
 ```
 
 **`NativeCallback<F>`** (in `system`) wraps any `fun`, capturing or not. Use it for C APIs that

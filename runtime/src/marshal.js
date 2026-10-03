@@ -206,12 +206,14 @@ export function resolveGlobal(module, field) {
 // `[tag: i32][aux: i32][payload: 8 bytes]`. Must match `src/mir/emit/types.rs::js_slot`.
 export const JS_SLOT = {
   NULL: 0, INT: 1, LONG: 2, DOUBLE: 3, BOOL: 4, STRING: 5, JS: 6, FUNC: 7, ARRAY: 8,
+  ISIZE: 9, USIZE: 10,
 };
 // Maps an array element's slot tag (the `aux` word of an ARRAY slot) to the Dream element-type name
 // understood by `readArray`.
 export const JS_ARRAY_ELEM = {
   [JS_SLOT.INT]: "int", [JS_SLOT.LONG]: "long", [JS_SLOT.DOUBLE]: "double",
   [JS_SLOT.BOOL]: "bool", [JS_SLOT.STRING]: "string", [JS_SLOT.JS]: "js",
+  [JS_SLOT.ISIZE]: "isize", [JS_SLOT.USIZE]: "usize",
 };
 
 /**
@@ -231,6 +233,8 @@ export function decodeJsSlots(inst, ptr, argc) {
     switch (tag) {
       case JS_SLOT.NULL: out[i] = null; break;
       case JS_SLOT.INT: out[i] = dv.getInt32(p, true); break;
+      case JS_SLOT.ISIZE: out[i] = dv.getInt32(p, true); break;
+      case JS_SLOT.USIZE: out[i] = dv.getUint32(p, true); break;
       case JS_SLOT.LONG: out[i] = dv.getBigInt64(p, true); break;
       case JS_SLOT.DOUBLE: out[i] = dv.getFloat64(p, true); break;
       case JS_SLOT.BOOL: out[i] = dv.getInt32(p, true) !== 0; break;

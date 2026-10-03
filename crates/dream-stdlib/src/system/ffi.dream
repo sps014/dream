@@ -3,30 +3,30 @@ module system;
 // An opaque C pointer (`void*`, `T*`). `@c` passes it by value; `ref p: CPtr` is a `T**` out-param
 // and `Option<CPtr>` a nullable pointer. Native-only.
 public struct CPtr {
-    raw: long;
+    raw: usize;
 
-    public constructor(raw: long) {
+    public constructor(raw: usize) {
         this.raw = raw;
     }
 
     // The `NULL` pointer.
     public static fun null(): CPtr {
-        return CPtr(0L);
+        return CPtr((usize)0);
     }
 
     // True when this is `NULL`.
     public fun is_null(): bool {
-        return this.raw == 0L;
+        return this.raw == (usize)0;
     }
 
     // The pointer as an integer address.
-    public fun address(): long {
+    public fun address(): usize {
         return this.raw;
     }
 
     // The pointer `bytes` bytes past this one.
-    public fun offset(bytes: long): CPtr {
-        return CPtr(this.raw + bytes);
+    public fun offset(bytes: isize): CPtr {
+        return CPtr(this.raw + (usize)bytes);
     }
 
     fun operator ==(other: CPtr): bool {
@@ -62,23 +62,23 @@ public class NativeCallback<F> {
 public static class Ffi {
     @native
     @intrinsic("dream_ffi_read_ptr")
-    static extern fun host_read_ptr(base: long, index: int): long;
+    static extern fun host_read_ptr(base: usize, index: int): usize;
 
     @native
     @intrinsic("dream_ffi_read_cstring")
-    static extern fun host_read_cstring(ptr: long): string;
+    static extern fun host_read_cstring(ptr: usize): string;
 
     @native
     @intrinsic("dream_ffi_read_i32")
-    static extern fun host_read_i32(base: long, index: int): int;
+    static extern fun host_read_i32(base: usize, index: int): int;
 
     @native
     @intrinsic("dream_ffi_read_i64")
-    static extern fun host_read_i64(base: long, index: int): long;
+    static extern fun host_read_i64(base: usize, index: int): long;
 
     @native
     @intrinsic("dream_ffi_read_f64")
-    static extern fun host_read_f64(base: long, index: int): double;
+    static extern fun host_read_f64(base: usize, index: int): double;
 
     // `((int32_t*)base)[index]`.
     @native

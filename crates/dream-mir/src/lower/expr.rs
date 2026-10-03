@@ -11,7 +11,7 @@ impl Lowerer<'_> {
     /// True when `op` at result type `ty` has inputs it cannot represent, so a checked op needs
     /// a runtime check. Unsigned division cannot overflow.
     fn can_overflow(&self, op: BinOp, ty: TypeId) -> bool {
-        let Some(int) = IntTy::of_prim(self.interner, ty) else {
+        let Some(int) = IntTy::of_prim(self.interner, ty, self.layouts.target.ptr_size) else {
             return false;
         };
         match op {
@@ -24,9 +24,10 @@ impl Lowerer<'_> {
     /// Selects the integer constant width from the literal's static type: `long`/`ulong` lower to a
     /// 64-bit [`Const::Long`], everything else (`int`/`uint`/`byte`) to a 32-bit [`Const::Int`].
     fn int_const(&self, ty: TypeId, v: i64) -> Const {
-        match self.interner.kind(ty) {
-            TyKind::Prim(PrimTy::Long | PrimTy::ULong) => Const::Long(v),
-            _ => Const::Int(v),
+        match IntTy::of(self.interner, ty, self.layouts.target.ptr_size) {
+            Some(int) if int.is_64() => Const::Long(int.wrap(v as i128)),
+            Some(int) => Const::Int(int.wrap(v as i128)),
+            None => Const::Int(v),
         }
     }
 
@@ -104,7 +105,7 @@ impl Lowerer<'_> {
                 let o = self.lower_operand(operand);
                 if *op == UnOp::Neg
                     && *overflow == Overflow::Checked
-                    && IntTy::of_prim(self.interner, e.ty).is_some()
+                    && IntTy::of_prim(self.interner, e.ty, self.layouts.target.ptr_size).is_some()
                 {
                     Rvalue::CheckedNeg(o)
                 } else {

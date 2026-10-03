@@ -68,6 +68,8 @@ pub(super) fn mem_ll(m: MemTy, h: &Ty) -> (Ty, bool) {
         MemTy::U8 => (Ty::I8, true),
         MemTy::I32 => (Ty::I32, false),
         MemTy::I64 => (Ty::I64, false),
+        MemTy::Word => (h.clone(), false),
+        MemTy::UWord => (h.clone(), true),
         MemTy::F32 => (Ty::F32, false),
         MemTy::F64 => (Ty::F64, false),
         MemTy::Ptr => (h.clone(), true),

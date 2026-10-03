@@ -26,6 +26,50 @@ impl LlvmToolchain for CaptureTarget {
 
 struct StaleRuntime;
 
+#[test]
+fn pointer_integer_literal_ranges_follow_the_selected_target() {
+    let temporary = tempfile::tempdir().unwrap();
+    let source = temporary.path().join("literal.dream");
+    let output = temporary.path().join("literal.ll");
+    for (ty, value) in [("isize", "2147483648"), ("usize", "4294967296")] {
+        std::fs::write(
+            &source,
+            format!("fun main(): void {{ let n: {ty} = {value}; }}"),
+        )
+        .unwrap();
+        for (triple, fits) in [
+            ("i686-unknown-linux-gnu", false),
+            ("x86_64-unknown-linux-gnu", true),
+        ] {
+            let capture = Arc::new(CaptureTarget(Mutex::new(None)));
+            let error = Compiler::new(Target::Llvm(TargetSpec::parse(triple).unwrap()))
+                .with_llvm(capture.clone())
+                .compile(
+                    &source.to_string_lossy().into_owned(),
+                    &output.to_string_lossy().into_owned(),
+                )
+                .unwrap_err();
+            if fits {
+                assert!(
+                    error
+                        .to_string()
+                        .contains("target captured before loading runtime"),
+                    "{}",
+                    error
+                );
+                assert!(capture.0.lock().unwrap().is_some());
+            } else {
+                assert!(
+                    matches!(error, dream::driver::error::CompileError::Semantic(_)),
+                    "{}",
+                    error
+                );
+                assert!(capture.0.lock().unwrap().is_none());
+            }
+        }
+    }
+}
+
 impl LlvmToolchain for StaleRuntime {
     fn runtime_sigs(&self, req: &LlvmRuntimeRequest) -> Result<RuntimeSignatures, String> {
         let data_layout = if req.target.spec().ptr_size == 4 {

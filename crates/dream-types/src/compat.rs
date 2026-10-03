@@ -13,6 +13,16 @@ pub fn numeric_widen(from: PrimTy, to: PrimTy) -> bool {
     matches!(
         (from, to),
         (Byte, Int)
+            | (Byte, ISize)
+            | (Byte, USize)
+            | (Int, ISize)
+            | (UInt, USize)
+            | (ISize, Long)
+            | (USize, ULong)
+            | (ISize, Float)
+            | (ISize, Double)
+            | (USize, Float)
+            | (USize, Double)
             | (Byte, UInt)
             | (Byte, Long)
             | (Byte, ULong)

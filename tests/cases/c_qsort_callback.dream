@@ -3,7 +3,7 @@
 import system;
 
 @c("c", "qsort")
-extern fun qsort(base: int[], n: long, size: long, cmp: fun(CPtr, CPtr): int): void;
+extern fun qsort(base: int[], n: usize, size: usize, cmp: fun(CPtr, CPtr): int): void;
 
 fun ascending(a: CPtr, b: CPtr): int {
     return Ffi.read_int(a, 0) - Ffi.read_int(b, 0);
@@ -19,9 +19,9 @@ fun show(xs: int[]): void {
 
 fun main(): void {
     let xs: int[] = [5, 3, 9, 1, 7];
-    qsort(xs, 5L, 4L, ascending);
+    qsort(xs, (usize)5, (usize)sizeof(int), ascending);
     show(xs);
-    qsort(xs, 5L, 4L, (a: CPtr, b: CPtr) => {
+    qsort(xs, (usize)5, (usize)sizeof(int), (a: CPtr, b: CPtr) => {
         return Ffi.read_int(b, 0) - Ffi.read_int(a, 0);
     });
     show(xs);

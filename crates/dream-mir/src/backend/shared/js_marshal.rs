@@ -126,7 +126,7 @@ pub(crate) fn array_elems(cx: &Cx<'_>) -> Vec<TypeId> {
 pub(crate) fn box_prim(p: PrimTy) -> (&'static str, bool) {
     match p {
         PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => ("box_int", false),
-        PrimTy::Long | PrimTy::ULong => ("box_long", false),
+        PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => ("box_long", false),
         PrimTy::Float | PrimTy::Double => ("box_double", matches!(p, PrimTy::Float)),
         PrimTy::Bool => ("box_bool", false),
         PrimTy::String => ("box_string", false),
@@ -137,7 +137,7 @@ pub(crate) fn box_prim(p: PrimTy) -> (&'static str, bool) {
 pub(crate) fn unbox_prim(p: PrimTy) -> (&'static str, bool) {
     match p {
         PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => ("as_int", false),
-        PrimTy::Long | PrimTy::ULong => ("as_long", false),
+        PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => ("as_long", false),
         PrimTy::Float => ("as_double", true),
         PrimTy::Double => ("as_double", false),
         PrimTy::Bool => ("as_bool", false),

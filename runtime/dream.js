@@ -24,7 +24,9 @@ const TAGS = {
   UINT: 9,
   ULONG: 10,
   BYTE: 11,
-  STRUCT_BASE: 12,
+  ISIZE: 12,
+  USIZE: 13,
+  STRUCT_BASE: 14,
   // `dream_new_future` — distinct from 0 (untagged C/weak). Mask TAG_SHARED before compare.
   FUTURE: 256,
 };
@@ -224,6 +226,7 @@ class DreamInstance {
     const t = stripSuffix(elemType);
     switch (t) {
       case "int":
+      case "isize":
         return this.i32(addr);
       case "char":
       case "byte":
@@ -231,6 +234,7 @@ class DreamInstance {
       case "bool":
         return this.bytes[addr] !== 0;
       case "uint":
+      case "usize":
         return this.view.getUint32(addr, true);
       case "long":
         return this.view.getBigInt64(addr, true);
@@ -253,6 +257,7 @@ class DreamInstance {
     const t = stripSuffix(elemType);
     switch (t) {
       case "int":
+      case "isize":
         this.view.setInt32(addr, value | 0, true);
         break;
       case "char":
@@ -263,6 +268,7 @@ class DreamInstance {
         this.bytes[addr] = value ? 1 : 0;
         break;
       case "uint":
+      case "usize":
         this.view.setUint32(addr, value >>> 0, true);
         break;
       case "long":
@@ -719,12 +725,14 @@ function resolveGlobal(module, field) {
 // `[tag: i32][aux: i32][payload: 8 bytes]`. Must match `src/mir/emit/types.rs::js_slot`.
 const JS_SLOT = {
   NULL: 0, INT: 1, LONG: 2, DOUBLE: 3, BOOL: 4, STRING: 5, JS: 6, FUNC: 7, ARRAY: 8,
+  ISIZE: 9, USIZE: 10,
 };
 // Maps an array element's slot tag (the `aux` word of an ARRAY slot) to the Dream element-type name
 // understood by `readArray`.
 const JS_ARRAY_ELEM = {
   [JS_SLOT.INT]: "int", [JS_SLOT.LONG]: "long", [JS_SLOT.DOUBLE]: "double",
   [JS_SLOT.BOOL]: "bool", [JS_SLOT.STRING]: "string", [JS_SLOT.JS]: "js",
+  [JS_SLOT.ISIZE]: "isize", [JS_SLOT.USIZE]: "usize",
 };
 
 /**
@@ -744,6 +752,8 @@ function decodeJsSlots(inst, ptr, argc) {
     switch (tag) {
       case JS_SLOT.NULL: out[i] = null; break;
       case JS_SLOT.INT: out[i] = dv.getInt32(p, true); break;
+      case JS_SLOT.ISIZE: out[i] = dv.getInt32(p, true); break;
+      case JS_SLOT.USIZE: out[i] = dv.getUint32(p, true); break;
       case JS_SLOT.LONG: out[i] = dv.getBigInt64(p, true); break;
       case JS_SLOT.DOUBLE: out[i] = dv.getFloat64(p, true); break;
       case JS_SLOT.BOOL: out[i] = dv.getInt32(p, true) !== 0; break;

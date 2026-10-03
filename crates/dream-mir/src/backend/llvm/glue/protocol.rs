@@ -23,6 +23,8 @@ fn builtin_tag(name: &str) -> i32 {
         "TAG_LONG" => abi::TAG_LONG,
         "TAG_ULONG" => abi::TAG_ULONG,
         "TAG_BYTE" => abi::TAG_BYTE,
+        "TAG_ISIZE" => abi::TAG_ISIZE,
+        "TAG_USIZE" => abi::TAG_USIZE,
         "TAG_BOOL" => abi::TAG_BOOL,
         "TAG_CHAR" => abi::TAG_CHAR,
         "TAG_FLOAT" => abi::TAG_FLOAT,
@@ -145,6 +147,7 @@ fn elem_units_bound(l: &Lcx<'_>, elem: TypeId) -> i64 {
         TyKind::Prim(PrimTy::Char) => 4,
         TyKind::Prim(PrimTy::Int | PrimTy::UInt) | TyKind::Enum(_) => 14,
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => 24,
+        TyKind::Prim(PrimTy::ISize | PrimTy::USize) => 24,
         TyKind::Prim(PrimTy::Float | PrimTy::Double) => 16,
         _ => 8,
     }
@@ -648,6 +651,27 @@ fn to_string_router(l: &mut Lcx<'_>) {
         ),
         call_arm(vec![abi::TAG_ARRAY], "dream_array_to_string".into(), None),
     ];
+    let wide = l.cx.mir.layouts.target.ptr_size == 8;
+    arms.push(call_arm(
+        vec![abi::TAG_ISIZE],
+        if wide {
+            "dream_long_to_string"
+        } else {
+            "dream_int_to_string"
+        }
+        .into(),
+        Some(l.h()),
+    ));
+    arms.push(call_arm(
+        vec![abi::TAG_USIZE],
+        if wide {
+            "dream_ulong_to_string"
+        } else {
+            "dream_uint_to_string"
+        }
+        .into(),
+        Some(l.h()),
+    ));
     arms.extend(tagged_arms(l, "_to_string", true));
     let null = l.str_val("null");
     let obj = l.str_val("<object>");
@@ -692,6 +716,21 @@ fn hash_code_router(l: &mut Lcx<'_>) {
         ),
         call_arm(vec![abi::TAG_STRING], "dream_string_hash".into(), None),
     ];
+    if l.cx.mir.layouts.target.ptr_size == 8 {
+        arms.push(call_arm(
+            vec![abi::TAG_ISIZE, abi::TAG_USIZE],
+            "dream_hash_long".into(),
+            Some(Ty::I64),
+        ));
+    } else {
+        arms.push((
+            vec![abi::TAG_ISIZE, abi::TAG_USIZE],
+            Box::new(|fx, p| {
+                let address = fx.ptr(p);
+                fx.load_ty(Ty::I32, &address, 4, false).v
+            }),
+        ));
+    }
     arms.extend(tagged_arms(l, "_hash_code", true));
     tag_router(
         l,

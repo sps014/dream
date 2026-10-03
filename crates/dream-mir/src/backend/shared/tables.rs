@@ -20,6 +20,8 @@ pub(crate) const BUILTIN_TYPE_NAMES: &[(&str, &str)] = &[
     ("TAG_LONG", "long"),
     ("TAG_ULONG", "ulong"),
     ("TAG_BYTE", "byte"),
+    ("TAG_ISIZE", "isize"),
+    ("TAG_USIZE", "usize"),
     ("TAG_BOOL", "bool"),
     ("TAG_CHAR", "char"),
     ("TAG_FLOAT", "float"),

@@ -12,6 +12,8 @@ pub enum PrimTy {
     UInt,
     Long,
     ULong,
+    ISize,
+    USize,
     Byte,
     Float,
     Double,
@@ -29,6 +31,8 @@ impl PrimTy {
             PrimTy::UInt => "uint",
             PrimTy::Long => "long",
             PrimTy::ULong => "ulong",
+            PrimTy::ISize => "isize",
+            PrimTy::USize => "usize",
             PrimTy::Byte => "byte",
             PrimTy::Float => "float",
             PrimTy::Double => "double",
@@ -45,6 +49,8 @@ impl PrimTy {
             "uint" => PrimTy::UInt,
             "long" => PrimTy::Long,
             "ulong" => PrimTy::ULong,
+            "isize" => PrimTy::ISize,
+            "usize" => PrimTy::USize,
             "byte" => PrimTy::Byte,
             "float" => PrimTy::Float,
             "double" => PrimTy::Double,
@@ -63,6 +69,8 @@ impl PrimTy {
                 | PrimTy::UInt
                 | PrimTy::Long
                 | PrimTy::ULong
+                | PrimTy::ISize
+                | PrimTy::USize
                 | PrimTy::Byte
                 | PrimTy::Float
                 | PrimTy::Double
@@ -71,19 +79,25 @@ impl PrimTy {
 
     /// True for the unsigned integer primitives, which select unsigned WASM ops.
     pub fn is_unsigned_integer(self) -> bool {
-        matches!(self, PrimTy::Byte | PrimTy::UInt | PrimTy::ULong)
+        matches!(
+            self,
+            PrimTy::Byte | PrimTy::UInt | PrimTy::ULong | PrimTy::USize
+        )
     }
 
     /// Byte size and alignment of a scalar value of this primitive when stored inline (a struct
     /// field, array element, or local): `bool`/`char`/`byte` occupy a single byte;
     /// `double`/`long`/`ulong` are 8 bytes; everything else (`int`, `uint`, `float`, and `string`,
-    /// whose entry here is only its wasm32 representation) is a 4-byte word. The HIR layout table
-    /// replaces `string` with the selected target's pointer size and alignment.
+    /// whose entry here is only its wasm32 representation) is a 4-byte word. Target-sized integers
+    /// must be queried through the HIR layout table, which also overrides `string`'s width.
     pub fn size_align(self) -> (u32, u32) {
         match self {
             PrimTy::Bool | PrimTy::Char | PrimTy::Byte => (1, 1),
             PrimTy::Double | PrimTy::Long | PrimTy::ULong => (8, 8),
             PrimTy::Int | PrimTy::UInt | PrimTy::Float | PrimTy::String => (4, 4),
+            PrimTy::ISize | PrimTy::USize => {
+                panic!("pointer-sized integers require a target layout")
+            }
         }
     }
 }

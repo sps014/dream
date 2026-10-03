@@ -10,6 +10,8 @@ Dream is statically typed: every value has a type known at compile time. This pa
 | `uint` | 32-bit unsigned integer | `42u`, `42U` |
 | `long` | 64-bit signed integer | `42L` |
 | `ulong` | 64-bit unsigned integer | `42uL`, `42UL`, `42Lu` |
+| `isize` | Target-pointer-width signed integer | `let n: isize = 42;`, `(isize)42` |
+| `usize` | Target-pointer-width unsigned integer | `let n: usize = 42;`, `(usize)42` |
 | `byte` | 8-bit unsigned integer (0–255) | `255b`, `255B` |
 | `float` | 32-bit floating point | `3.14f`, `1.0` |
 | `double` | 64-bit floating point | `3.14d`, or bare `3.14` / `0` when the expected type is `double` |
@@ -43,11 +45,13 @@ Decimal scientific notation (`1e-3`, `2.5e10`) is a `float` unless given a `d` s
 
 Bare decimal literals default to `float`. When the surrounding expected type is `double` (typed binding, parameter, return, field, …), an unsuffixed float or int literal is treated as `double`. So `let x: double = 3.14` works without a `d` suffix.
 
-`byte`, `uint`, and `ulong` are **unsigned** — division, remainder, comparisons, and right shift use unsigned semantics. `int` and `long` are signed. For storage sizes, use [`sizeof`](operators.md#sizeof-nameof-and-typeof).
+`byte`, `uint`, `ulong`, and `usize` are **unsigned** — division, remainder, comparisons, and right shift use unsigned semantics. `int`, `long`, and `isize` are signed. `isize`/`usize` are 32 bits on wasm32 and 64 bits on 64-bit native targets; their width comes from the selected target, not the compiler host. For storage sizes, use [`sizeof`](operators.md#sizeof-nameof-and-typeof).
 
 ### Implicit widening
 
 A narrower numeric value promotes to a wider type automatically. Narrowing — and switching signedness at the same width (`int`↔`uint`, `long`↔`ulong`) — always needs an explicit cast.
+
+Target-sized integers keep distinct type identities. Portable implicit conversions include `int` → `isize`, `uint` → `usize`, `isize` → `long`, and `usize` → `ulong`. Converting a fixed 64-bit integer to a target-sized integer requires a cast and wraps at the target width. Their `parse` methods reject values outside that width.
 
 ```mermaid
 flowchart LR

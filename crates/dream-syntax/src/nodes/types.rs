@@ -52,6 +52,8 @@ pub fn primitive_type(name: &str, token: SyntaxToken) -> Option<Type> {
         "long" => Type::Long(token),
         "uint" => Type::UInt(token),
         "ulong" => Type::ULong(token),
+        "isize" => Type::ISize(token),
+        "usize" => Type::USize(token),
         "byte" => Type::Byte(token),
         _ => return None,
     })
@@ -61,8 +63,9 @@ pub fn primitive_type(name: &str, token: SyntaxToken) -> Option<Type> {
 /// `string` is included here because it is a first-class value type even though it is a heap
 /// reference; it is excluded from [`is_boxable_primitive`]. Single source of truth for the
 /// repeated `"int" | "float" | ...` lists that were previously copied across codegen modules.
-pub const PRIMITIVE_TYPE_NAMES: [&str; 10] = [
-    "int", "float", "double", "bool", "char", "string", "long", "uint", "ulong", "byte",
+pub const PRIMITIVE_TYPE_NAMES: [&str; 12] = [
+    "int", "float", "double", "bool", "char", "string", "long", "uint", "ulong", "byte", "isize",
+    "usize",
 ];
 
 /// True for the scalar primitives that are boxed into a small tagged heap block when widened to
@@ -70,7 +73,17 @@ pub const PRIMITIVE_TYPE_NAMES: [&str; 10] = [
 pub fn is_boxable_primitive(name: &str) -> bool {
     matches!(
         name,
-        "int" | "float" | "double" | "bool" | "char" | "long" | "uint" | "ulong" | "byte"
+        "int"
+            | "float"
+            | "double"
+            | "bool"
+            | "char"
+            | "long"
+            | "uint"
+            | "ulong"
+            | "byte"
+            | "isize"
+            | "usize"
     )
 }
 
@@ -79,7 +92,7 @@ pub fn is_boxable_primitive(name: &str) -> bool {
 pub fn is_numeric_primitive(name: &str) -> bool {
     matches!(
         name,
-        "int" | "float" | "double" | "long" | "uint" | "ulong" | "byte"
+        "int" | "float" | "double" | "long" | "uint" | "ulong" | "byte" | "isize" | "usize"
     )
 }
 
@@ -144,6 +157,8 @@ pub enum Type {
     /// An unsigned 64-bit integer. Represented as an `i64` on the stack (8 bytes in memory) and
     /// uses unsigned WASM ops.
     ULong(SyntaxToken),
+    ISize(SyntaxToken),
+    USize(SyntaxToken),
     /// An unsigned 8-bit integer. Stored as an `i32` on the stack but only one byte in memory
     /// (`i32.load8_u`/`i32.store8`, like `char`). A value type (not ref-counted).
     Byte(SyntaxToken),
@@ -199,6 +214,8 @@ impl Type {
             Type::Long(_) => "long".to_string(),
             Type::UInt(_) => "uint".to_string(),
             Type::ULong(_) => "ulong".to_string(),
+            Type::ISize(_) => "isize".to_string(),
+            Type::USize(_) => "usize".to_string(),
             Type::Byte(_) => "byte".to_string(),
             Type::Array(inner) => format!("{}[]", inner.get_type()),
             Type::Tuple(elems) => {
@@ -293,7 +310,7 @@ impl Type {
         matches!(self, Type::Integer(_))
     }
 
-    /// True for any of the five integer primitives (`int`/`long`/`uint`/`ulong`/`byte`) — the
+    /// True for fixed-width and target-sized integer primitives — the
     /// operand types the bitwise operators (`&`/`|`/`^`/`<<`/`>>`/unary `~`) accept. `float`/
     /// `double` are numeric but not integral, so they are excluded (bitwise ops on them have no
     /// well-defined WASM lowering and must be rejected at analysis time, not surfaced as an
@@ -301,7 +318,13 @@ impl Type {
     pub fn is_integer(&self) -> bool {
         matches!(
             self,
-            Type::Integer(_) | Type::Long(_) | Type::UInt(_) | Type::ULong(_) | Type::Byte(_)
+            Type::Integer(_)
+                | Type::Long(_)
+                | Type::UInt(_)
+                | Type::ULong(_)
+                | Type::Byte(_)
+                | Type::ISize(_)
+                | Type::USize(_)
         )
     }
 
@@ -335,6 +358,8 @@ impl Type {
             | Type::Long(token)
             | Type::UInt(token)
             | Type::ULong(token)
+            | Type::ISize(token)
+            | Type::USize(token)
             | Type::Byte(token)
             | Type::Object(token)
             | Type::Struct(token, _) => Some(token.position),
@@ -362,6 +387,7 @@ impl Type {
             Type::Long(token) => token.position.get_point_str(),
             Type::UInt(token) => token.position.get_point_str(),
             Type::ULong(token) => token.position.get_point_str(),
+            Type::ISize(token) | Type::USize(token) => token.position.get_point_str(),
             Type::Byte(token) => token.position.get_point_str(),
             Type::Array(inner) => inner.get_line_str(),
             Type::Tuple(elems) => elems.first().map(|e| e.get_line_str()).unwrap_or_default(),

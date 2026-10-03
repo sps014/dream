@@ -10,9 +10,9 @@ impl<'a> Analyzer<'a> {
             return;
         }
         let kind = match lit {
-            Type::ULong(t) => dream_syntax::number::parse_u64_literal(&t.text)
+            Type::ULong(t) | Type::USize(t) => dream_syntax::number::parse_u64_literal(&t.text)
                 .map(|u| HExprKind::IntLit(u as i64)),
-            Type::Integer(t) | Type::Long(t) | Type::UInt(t) | Type::Byte(t) => {
+            Type::Integer(t) | Type::Long(t) | Type::UInt(t) | Type::Byte(t) | Type::ISize(t) => {
                 dream_syntax::number::parse_int_literal(&t.text).map(HExprKind::IntLit)
             }
             Type::Float(t) | Type::Double(t) => {

@@ -118,6 +118,11 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let wide = self.l.cx.target.abi().future.wide as i64;
                 let wide_ty = match self.interner.kind(self.f.ret) {
                     TyKind::Prim(PrimTy::Long | PrimTy::ULong) => Some(Ty::I64),
+                    TyKind::Prim(PrimTy::ISize | PrimTy::USize)
+                        if self.l.cx.mir.layouts.target.ptr_size == 8 =>
+                    {
+                        Some(Ty::I64)
+                    }
                     TyKind::Prim(PrimTy::Float) => Some(Ty::F32),
                     TyKind::Prim(PrimTy::Double) => Some(Ty::F64),
                     _ => None,

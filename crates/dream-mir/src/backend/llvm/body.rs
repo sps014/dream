@@ -308,6 +308,11 @@ impl<'l, 'a> Fx<'l, 'a> {
         }
         let (t, off) = match self.interner.kind(dest_ty) {
             TyKind::Prim(PrimTy::Long | PrimTy::ULong) => (Ty::I64, fut.wide),
+            TyKind::Prim(PrimTy::ISize | PrimTy::USize)
+                if self.l.cx.mir.layouts.target.ptr_size == 8 =>
+            {
+                (Ty::I64, fut.wide)
+            }
             TyKind::Prim(PrimTy::Float) => (Ty::F32, fut.wide),
             TyKind::Prim(PrimTy::Double) => (Ty::F64, fut.wide),
             _ => (self.h(), fut.result),

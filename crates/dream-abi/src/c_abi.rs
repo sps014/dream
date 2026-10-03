@@ -1,6 +1,6 @@
 //! Names shared by sema and MIR for the native C/C++ boundary.
 
-/// The stdlib opaque pointer struct (`system.CPtr`): one `long` field, passed to C by value.
+/// The stdlib opaque pointer struct (`system.CPtr`): one `usize` field, passed to C by value.
 pub const C_PTR_TYPE: &str = "CPtr";
 
 /// The stdlib callback class (`system.NativeCallback<F>`), passed to C as `(fn, void* user_data)`.
@@ -36,6 +36,9 @@ mod tests {
             cpp_shim_symbol("kv-store", "Store", "put", 2),
             "dream__kv_store__Store__put_2"
         );
-        assert_eq!(cpp_shim_symbol("m", "", "version", 0), "dream__m____version");
+        assert_eq!(
+            cpp_shim_symbol("m", "", "version", 0),
+            "dream__m____version"
+        );
     }
 }

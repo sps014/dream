@@ -51,7 +51,7 @@ impl MirPass for Algebraic {
 fn is_unsigned(interner: &TypeInterner, ty: TypeId) -> bool {
     matches!(
         interner.kind(ty),
-        TyKind::Prim(PrimTy::UInt | PrimTy::ULong | PrimTy::Byte)
+        TyKind::Prim(PrimTy::UInt | PrimTy::ULong | PrimTy::USize | PrimTy::Byte)
     )
 }
 

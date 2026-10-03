@@ -343,7 +343,9 @@ impl LayoutTable {
 
 fn scalar(interner: &TypeInterner, target: TargetLayout, ty: TypeId) -> (u32, u32) {
     match interner.kind(ty) {
-        TyKind::Prim(PrimTy::String) => (target.ptr_size, target.ptr_align),
+        TyKind::Prim(PrimTy::String | PrimTy::ISize | PrimTy::USize) => {
+            (target.ptr_size, target.ptr_align)
+        }
         TyKind::Prim(p) => p.size_align(),
         TyKind::Enum(_) => (4, 4),
         _ => (target.ptr_size, target.ptr_align),

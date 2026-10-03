@@ -16,6 +16,7 @@ pub(super) fn abi_ll(t: AbiTy, h: &Ty) -> Ty {
         AbiTy::I32 => Ty::I32,
         AbiTy::I64 => Ty::I64,
         AbiTy::Ptr => h.clone(),
+        AbiTy::Word => h.clone(),
         AbiTy::F32 => Ty::F32,
         AbiTy::F64 => Ty::F64,
     }
@@ -28,6 +29,10 @@ pub(super) fn ll_ty(interner: &TypeInterner, ty: TypeId, h: &Ty) -> Ty {
 /// `dream_ptr` is `uintptr_t`; every other C local type is signed.
 pub(super) fn is_unsigned(interner: &TypeInterner, ty: TypeId) -> bool {
     abi_ty(interner, ty) == AbiTy::Ptr
+        || matches!(
+            interner.kind(ty),
+            dream_types::TyKind::Prim(dream_types::PrimTy::USize)
+        )
 }
 
 /// The signature every generated Dream function has.

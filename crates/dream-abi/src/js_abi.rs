@@ -74,6 +74,8 @@ pub mod tag {
     pub const JS: i32 = 6;
     pub const FUNC: i32 = 7;
     pub const ARRAY: i32 = 8;
+    pub const ISIZE: i32 = 9;
+    pub const USIZE: i32 = 10;
 }
 
 /// How a `js`-call argument of type `ty` is written into its 16-byte slot: `(tag, aux, payload store
@@ -91,6 +93,8 @@ pub fn slot_desc(interner: &TypeInterner, ty: TypeId) -> (i32, i32, &'static str
             PrimTy::String => (tag::STRING, 0, "i32.store"),
             PrimTy::Bool => (tag::BOOL, 0, "i32.store"),
             PrimTy::Double | PrimTy::Float => (tag::DOUBLE, 0, "f64.store"),
+            PrimTy::ISize => (tag::ISIZE, 0, "i32.store"),
+            PrimTy::USize => (tag::USIZE, 0, "i32.store"),
             PrimTy::Long | PrimTy::ULong => (tag::LONG, 0, "i64.store"),
             PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => (tag::INT, 0, "i32.store"),
         },

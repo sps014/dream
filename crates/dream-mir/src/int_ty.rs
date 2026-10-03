@@ -22,22 +22,32 @@ pub enum IntTy {
 impl IntTy {
     /// The integer type of `ty`, if it has integer arithmetic. C-style enums and `char` are
     /// 32-bit signed values at runtime.
-    pub fn of(interner: &TypeInterner, ty: TypeId) -> Option<IntTy> {
+    pub fn of(interner: &TypeInterner, ty: TypeId, ptr_size: u32) -> Option<IntTy> {
         match interner.kind(ty) {
             TyKind::Prim(PrimTy::Byte) => Some(IntTy::Byte),
             TyKind::Prim(PrimTy::Int | PrimTy::Char) | TyKind::Enum(_) => Some(IntTy::Int),
             TyKind::Prim(PrimTy::UInt) => Some(IntTy::UInt),
             TyKind::Prim(PrimTy::Long) => Some(IntTy::Long),
             TyKind::Prim(PrimTy::ULong) => Some(IntTy::ULong),
+            TyKind::Prim(PrimTy::ISize) => Some(if ptr_size == 8 {
+                IntTy::Long
+            } else {
+                IntTy::Int
+            }),
+            TyKind::Prim(PrimTy::USize) => Some(if ptr_size == 8 {
+                IntTy::ULong
+            } else {
+                IntTy::UInt
+            }),
             _ => None,
         }
     }
 
     /// Like [`IntTy::of`] but only for the integer primitives, which are the types whose
     /// arithmetic is overflow-checked.
-    pub fn of_prim(interner: &TypeInterner, ty: TypeId) -> Option<IntTy> {
+    pub fn of_prim(interner: &TypeInterner, ty: TypeId, ptr_size: u32) -> Option<IntTy> {
         match interner.kind(ty) {
-            TyKind::Prim(_) => IntTy::of(interner, ty)
+            TyKind::Prim(_) => IntTy::of(interner, ty, ptr_size)
                 .filter(|_| !matches!(interner.kind(ty), TyKind::Prim(PrimTy::Char))),
             _ => None,
         }
@@ -107,6 +117,24 @@ impl IntTy {
 #[cfg(test)]
 mod tests {
     use super::IntTy;
+
+    #[test]
+    fn pointer_integers_use_the_selected_target() {
+        let mut types = dream_types::TypeInterner::new();
+        let signed = types.prim(dream_types::PrimTy::ISize);
+        let unsigned = types.prim(dream_types::PrimTy::USize);
+        for (size, expected_signed, expected_unsigned) in
+            [(4, IntTy::Int, IntTy::UInt), (8, IntTy::Long, IntTy::ULong)]
+        {
+            assert_eq!(IntTy::of(&types, signed, size), Some(expected_signed));
+            assert_eq!(IntTy::of(&types, unsigned, size), Some(expected_unsigned));
+            assert_eq!(
+                IntTy::of_prim(&types, unsigned, size),
+                Some(expected_unsigned)
+            );
+        }
+        assert_ne!(signed, types.long());
+    }
 
     #[test]
     fn canonical_payloads() {

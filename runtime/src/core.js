@@ -12,7 +12,9 @@ export const TAGS = {
   UINT: 9,
   ULONG: 10,
   BYTE: 11,
-  STRUCT_BASE: 12,
+  ISIZE: 12,
+  USIZE: 13,
+  STRUCT_BASE: 14,
   // `dream_new_future` — distinct from 0 (untagged C/weak). Mask TAG_SHARED before compare.
   FUTURE: 256,
 };

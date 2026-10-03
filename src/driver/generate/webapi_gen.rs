@@ -439,6 +439,8 @@ fn type_name(t: &Type) -> String {
         Type::UInt(_) => "uint".into(),
         Type::Long(_) => "long".into(),
         Type::ULong(_) => "ulong".into(),
+        Type::ISize(_) => "isize".into(),
+        Type::USize(_) => "usize".into(),
         Type::Byte(_) => "byte".into(),
         Type::Float(_) => "float".into(),
         Type::Double(_) => "double".into(),

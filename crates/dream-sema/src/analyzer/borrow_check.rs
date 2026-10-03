@@ -75,6 +75,8 @@ fn type_owner_name(ty: &Type) -> Option<String> {
         Type::Long(_) => Some("long".to_string()),
         Type::UInt(_) => Some("uint".to_string()),
         Type::ULong(_) => Some("ulong".to_string()),
+        Type::ISize(_) => Some("isize".to_string()),
+        Type::USize(_) => Some("usize".to_string()),
         _ => None,
     }
 }

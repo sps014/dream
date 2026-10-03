@@ -12,6 +12,18 @@ pub(crate) fn to_string_fn(cx: &Cx<'_>, ty: TypeId) -> String {
         TyKind::Prim(PrimTy::UInt) => "dream_uint_to_string".into(),
         TyKind::Prim(PrimTy::Long) => "dream_long_to_string".into(),
         TyKind::Prim(PrimTy::ULong) => "dream_ulong_to_string".into(),
+        TyKind::Prim(PrimTy::ISize) => if cx.mir.layouts.target.ptr_size == 8 {
+            "dream_long_to_string"
+        } else {
+            "dream_int_to_string_fast"
+        }
+        .into(),
+        TyKind::Prim(PrimTy::USize) => if cx.mir.layouts.target.ptr_size == 8 {
+            "dream_ulong_to_string"
+        } else {
+            "dream_uint_to_string"
+        }
+        .into(),
         TyKind::Prim(PrimTy::Byte) => "dream_byte_to_string".into(),
         TyKind::Prim(PrimTy::Bool) => "dream_bool_to_string".into(),
         TyKind::Prim(PrimTy::Char) => "dream_char_to_string".into(),
@@ -44,6 +56,9 @@ pub(crate) fn hash_fn(cx: &Cx<'_>, ty: TypeId) -> HashFn {
         TyKind::Prim(PrimTy::Float) => HashFn::Call("dream_bitcast_f32".into()),
         TyKind::Prim(PrimTy::Double) => HashFn::Call("dream_hash_double".into()),
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => HashFn::Call("dream_hash_long".into()),
+        TyKind::Prim(PrimTy::ISize | PrimTy::USize) if cx.mir.layouts.target.ptr_size == 8 => {
+            HashFn::Call("dream_hash_long".into())
+        }
         TyKind::Prim(_) | TyKind::Enum(_) => HashFn::Identity,
         _ => HashFn::Call(if let Some(l) = cx.nstruct(ty) {
             c_ident(&format!("{}_hash_code", l.name))
@@ -67,6 +82,8 @@ pub(crate) fn runtime_tag(cx: &Cx<'_>, ty: TypeId) -> i32 {
         TyKind::Prim(PrimTy::Long) => crate::abi::TAG_LONG,
         TyKind::Prim(PrimTy::UInt) => crate::abi::TAG_UINT,
         TyKind::Prim(PrimTy::ULong) => crate::abi::TAG_ULONG,
+        TyKind::Prim(PrimTy::ISize) => crate::abi::TAG_ISIZE,
+        TyKind::Prim(PrimTy::USize) => crate::abi::TAG_USIZE,
         TyKind::Prim(PrimTy::Byte) => crate::abi::TAG_BYTE,
         TyKind::Array(_) => crate::abi::TAG_ARRAY,
         _ => cx.type_tag(ty),

@@ -30,6 +30,15 @@ impl MirPass for OverflowElim {
     }
 
     fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+        self.run_with_layouts(func, interner, &dream_hir::LayoutTable::default())
+    }
+
+    fn run_with_layouts(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        layouts: &dream_hir::LayoutTable,
+    ) -> bool {
         let has_checked = func.blocks.iter().flat_map(|b| &b.stmts).any(|s| {
             matches!(
                 s,
@@ -39,7 +48,7 @@ impl MirPass for OverflowElim {
         if !has_checked {
             return false;
         }
-        let cx = Cx::new(func, interner);
+        let cx = Cx::new(func, interner, layouts.target.ptr_size);
         let mut rewrites = Vec::new();
         for (bi, block) in func.blocks.iter().enumerate() {
             for (si, stmt) in block.stmts.iter().enumerate() {
@@ -82,6 +91,7 @@ struct Guard<'f> {
 }
 
 struct Cx<'f> {
+    ptr_size: u32,
     func: &'f MirFunction,
     interner: &'f TypeInterner,
     /// Every definition site of each local (`Await` destinations count as a def without a site).
@@ -92,7 +102,7 @@ struct Cx<'f> {
 }
 
 impl<'f> Cx<'f> {
-    fn new(func: &'f MirFunction, interner: &'f TypeInterner) -> Self {
+    fn new(func: &'f MirFunction, interner: &'f TypeInterner, ptr_size: u32) -> Self {
         let mut defs = vec![Vec::new(); func.locals.len()];
         for (bi, block) in func.blocks.iter().enumerate() {
             for (si, stmt) in block.stmts.iter().enumerate() {
@@ -107,6 +117,7 @@ impl<'f> Cx<'f> {
         let preds = predecessors(func);
         let dom = DomTree::new(func);
         let mut cx = Cx {
+            ptr_size,
             func,
             interner,
             defs,
@@ -158,7 +169,7 @@ impl<'f> Cx<'f> {
     }
 
     fn unchecked_form(&self, rv: &Rvalue, dest: Local, site: Site) -> Option<Rvalue> {
-        let ty = IntTy::of(self.interner, self.func.local_ty(dest))?;
+        let ty = IntTy::of(self.interner, self.func.local_ty(dest), self.ptr_size)?;
         match rv {
             Rvalue::CheckedBinary(op, a, b) => {
                 let ra = self.operand_range(a, ty, site, 0);
@@ -193,7 +204,7 @@ impl<'f> Cx<'f> {
                 (v, v)
             }
             Operand::Copy(Place::Local(l)) => {
-                match IntTy::of(self.interner, self.func.local_ty(*l)) {
+                match IntTy::of(self.interner, self.func.local_ty(*l), self.ptr_size) {
                     Some(lty) => self.local_range(*l, lty, site, depth),
                     None => full(ty),
                 }
@@ -302,7 +313,7 @@ impl<'f> Cx<'f> {
             Rvalue::ArrayLen(_) | Rvalue::StrLen(_) | Rvalue::StrByteSize(_) => {
                 Some((0, i128::from(i32::MAX)))
             }
-            Rvalue::Cast(o, from, _) => match IntTy::of(self.interner, *from) {
+            Rvalue::Cast(o, from, _) => match IntTy::of(self.interner, *from, self.ptr_size) {
                 Some(from) => {
                     Some(self.operand_range(o, from, site, depth)).filter(|r| within(*r, ty))
                 }

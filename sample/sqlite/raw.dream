@@ -1,4 +1,5 @@
 // Raw `@c` bindings to libsqlite3. Out-params use Dream `ref`.
+// `CPtr.address()` is `usize`; SQLite's status and row-count parameters remain C `int`.
 //
 // Run:
 //   dream run sample/sqlite/raw.dream

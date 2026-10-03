@@ -14,12 +14,25 @@ impl MirPass for ConstFold {
     }
 
     fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+        self.run_with_layouts(func, interner, &dream_hir::LayoutTable::default())
+    }
+
+    fn run_with_layouts(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        layouts: &dream_hir::LayoutTable,
+    ) -> bool {
         let mut changed = false;
         let locals = &func.locals;
         for block in &mut func.blocks {
             for stmt in &mut block.stmts {
                 if let Statement::Assign(Place::Local(local), rvalue) = stmt {
-                    let dest = IntTy::of(interner, locals[local.0 as usize].ty);
+                    let dest = IntTy::of(
+                        interner,
+                        locals[local.0 as usize].ty,
+                        layouts.target.ptr_size,
+                    );
                     if let Some(folded) = fold(rvalue, dest) {
                         *rvalue = Rvalue::Use(Operand::Const(folded));
                         changed = true;
@@ -224,6 +237,44 @@ mod tests {
 
     fn bin(op: BinOp, a: Const, b: Const) -> Rvalue {
         Rvalue::Binary(op, Operand::Const(a), Operand::Const(b))
+    }
+
+    #[test]
+    fn pointer_integer_folding_obeys_target_width() {
+        let mut types = TypeInterner::new();
+        let word = types.prim(dream_types::PrimTy::USize);
+        for ptr_size in [4, 8] {
+            let mut builder = FunctionBuilder::new("word", word);
+            let dest = builder.new_temp(word);
+            let (maximum, one, zero) = if ptr_size == 8 {
+                (Const::Long(-1), Const::Long(1), Const::Long(0))
+            } else {
+                (Const::Int(u32::MAX as i64), Const::Int(1), Const::Int(0))
+            };
+            builder.assign(
+                Place::Local(dest),
+                bin(BinOp::Add, maximum.clone(), one.clone()),
+            );
+            builder.assign(
+                Place::Local(dest),
+                Rvalue::CheckedBinary(BinOp::Add, Operand::Const(maximum), Operand::Const(one)),
+            );
+            builder.terminate(Terminator::Return(None));
+            let mut function = builder.finish();
+            let layouts = dream_hir::LayoutTable::new(dream_hir::TargetLayout {
+                ptr_size,
+                ptr_align: ptr_size,
+            });
+            assert!(ConstFold.run_with_layouts(&mut function, &types, &layouts));
+            assert!(matches!(&function.blocks[0].stmts[0],
+                Statement::Assign(Place::Local(local), Rvalue::Use(Operand::Const(value)))
+                    if *local == dest && *value == zero
+            ));
+            assert!(matches!(
+                function.blocks[0].stmts[1],
+                Statement::Assign(_, Rvalue::CheckedBinary(..))
+            ));
+        }
     }
 
     #[test]

@@ -65,10 +65,17 @@ impl<'a> Analyzer<'a> {
                 | Type::Long(t)
                 | Type::UInt(t)
                 | Type::ULong(t)
+                | Type::ISize(t)
+                | Type::USize(t)
                 | Type::Byte(t) = &ty
                 {
-                    if matches!(ty, Type::ULong(_)) {
-                        if dream_syntax::number::parse_u64_literal(&t.text).is_none() {
+                    if matches!(ty, Type::ULong(_) | Type::USize(_)) {
+                        let parsed = dream_syntax::number::parse_u64_literal(&t.text);
+                        if parsed.is_none()
+                            || (matches!(ty, Type::USize(_))
+                                && self.target_layout.ptr_size == 4
+                                && parsed.is_some_and(|v| v > u32::MAX as u64))
+                        {
                             diagnostics.report_error(
                                 format!(
                                     "integer literal '{}' is out of range or malformed",
@@ -83,6 +90,10 @@ impl<'a> Analyzer<'a> {
                             Type::Byte(_) => !(0i64..=255).contains(&val),
                             Type::UInt(_) => val < 0 || val > u32::MAX as i64,
                             Type::Long(_) => false,
+                            Type::ISize(_) => {
+                                self.target_layout.ptr_size == 4
+                                    && (val < i32::MIN as i64 || val > i32::MAX as i64)
+                            }
                             _ => false,
                         };
                         if err && matches!(ty, Type::Integer(_)) {
@@ -579,6 +590,8 @@ impl<'a> Analyzer<'a> {
                                     | Type::Long(_)
                                     | Type::UInt(_)
                                     | Type::ULong(_)
+                                    | Type::ISize(_)
+                                    | Type::USize(_)
                                     | Type::Byte(_)
                                     | Type::Float(_)
                                     | Type::Double(_)
@@ -940,6 +953,8 @@ impl<'a> Analyzer<'a> {
                 | Type::Long(_)
                 | Type::UInt(_)
                 | Type::ULong(_)
+                | Type::ISize(_)
+                | Type::USize(_)
         )
     }
 
@@ -1032,6 +1047,8 @@ impl<'a> Analyzer<'a> {
             (Some(Type::UInt(_)), Type::Integer(t) | Type::UInt(t)) => Type::UInt(t.clone()),
             (Some(Type::Long(_)), Type::Integer(t)) => Type::Long(t.clone()),
             (Some(Type::ULong(_)), Type::Integer(t)) => Type::ULong(t.clone()),
+            (Some(Type::ISize(_)), Type::Integer(t)) => Type::ISize(t.clone()),
+            (Some(Type::USize(_)), Type::Integer(t) | Type::UInt(t)) => Type::USize(t.clone()),
             (Some(Type::Byte(_)), Type::Integer(t)) => Type::Byte(t.clone()),
             _ => lit.clone(),
         }

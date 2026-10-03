@@ -86,7 +86,17 @@ impl<'a> Analyzer<'a> {
         }
         matches!(
             type_name,
-            "int" | "uint" | "float" | "char" | "byte" | "bool" | "long" | "ulong" | "double"
+            "int"
+                | "uint"
+                | "float"
+                | "char"
+                | "byte"
+                | "bool"
+                | "long"
+                | "ulong"
+                | "double"
+                | "isize"
+                | "usize"
         )
     }
 

@@ -35,11 +35,20 @@ impl MirPass for Sccp {
     }
 
     fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+        self.run_with_layouts(func, interner, &dream_hir::LayoutTable::default())
+    }
+
+    fn run_with_layouts(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        layouts: &dream_hir::LayoutTable,
+    ) -> bool {
         let n = func.blocks.len();
         if n == 0 {
             return false;
         }
-        let (reachable, lat) = solve(func, interner);
+        let (reachable, lat) = solve(func, interner, layouts.target.ptr_size);
 
         // Build the propagatable constant map and rewrite.
         let known: HashMap<crate::Local, Operand> = lat
@@ -77,7 +86,11 @@ impl MirPass for Sccp {
 
 /// Runs the reachability + constant fixpoint, returning which blocks are reachable and each local's
 /// lattice value.
-fn solve(func: &MirFunction, interner: &TypeInterner) -> (Vec<bool>, BTreeMap<crate::Local, Lat>) {
+fn solve(
+    func: &MirFunction,
+    interner: &TypeInterner,
+    ptr_size: u32,
+) -> (Vec<bool>, BTreeMap<crate::Local, Lat>) {
     let n = func.blocks.len();
     let mut reachable = vec![false; n];
     reachable[func.entry.0 as usize] = true;
@@ -103,7 +116,7 @@ fn solve(func: &MirFunction, interner: &TypeInterner) -> (Vec<bool>, BTreeMap<cr
             }
             for stmt in &block.stmts {
                 if let Statement::Assign(Place::Local(l), rv) = stmt {
-                    let v = eval_rvalue(rv, &lat, IntTy::of(interner, func.local_ty(*l)));
+                    let v = eval_rvalue(rv, &lat, IntTy::of(interner, func.local_ty(*l), ptr_size));
                     let merged = meet(next.get(l).cloned().unwrap_or(Lat::Top), v);
                     next.insert(*l, merged);
                 }

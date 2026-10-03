@@ -16,6 +16,7 @@ pub(crate) enum AbiTy {
     Void,
     I32,
     I64,
+    Word,
     F32,
     F64,
     Ptr,
@@ -28,6 +29,7 @@ impl AbiTy {
             AbiTy::Void => "v",
             AbiTy::I32 => "i32",
             AbiTy::I64 => "i64",
+            AbiTy::Word => "word",
             AbiTy::F32 => "f32",
             AbiTy::F64 => "f64",
             AbiTy::Ptr => "ptr",
@@ -35,7 +37,7 @@ impl AbiTy {
     }
 
     pub(crate) fn is_wide(self) -> bool {
-        matches!(self, AbiTy::I64 | AbiTy::Ptr | AbiTy::F64)
+        matches!(self, AbiTy::I64 | AbiTy::Word | AbiTy::Ptr | AbiTy::F64)
     }
 }
 
@@ -45,6 +47,7 @@ pub(crate) fn abi_ty(interner: &TypeInterner, ty: TypeId) -> AbiTy {
         TyKind::Prim(PrimTy::Double) => AbiTy::F64,
         TyKind::Prim(PrimTy::Float) => AbiTy::F32,
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => AbiTy::I64,
+        TyKind::Prim(PrimTy::ISize | PrimTy::USize) => AbiTy::Word,
         TyKind::Prim(PrimTy::Int | PrimTy::UInt | PrimTy::Bool | PrimTy::Char | PrimTy::Byte)
         | TyKind::Enum(_) => AbiTy::I32,
         _ => AbiTy::Ptr,
@@ -58,6 +61,8 @@ pub(crate) enum MemTy {
     U8,
     I32,
     I64,
+    Word,
+    UWord,
     F32,
     F64,
     Ptr,
@@ -68,6 +73,8 @@ pub(crate) fn mem_ty(cx: &Cx<'_>, ty: TypeId) -> MemTy {
         TyKind::Prim(PrimTy::Double) => MemTy::F64,
         TyKind::Prim(PrimTy::Float) => MemTy::F32,
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => MemTy::I64,
+        TyKind::Prim(PrimTy::ISize) => MemTy::Word,
+        TyKind::Prim(PrimTy::USize) => MemTy::UWord,
         TyKind::Prim(PrimTy::Byte | PrimTy::Bool | PrimTy::Char) => MemTy::U8,
         TyKind::Prim(PrimTy::Int | PrimTy::UInt) | TyKind::Enum(_) => MemTy::I32,
         _ if cx.interner.is_value_type(ty) => MemTy::I32,

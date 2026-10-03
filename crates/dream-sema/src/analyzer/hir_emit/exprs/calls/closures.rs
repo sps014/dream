@@ -15,7 +15,7 @@ impl<'a> Analyzer<'a> {
     /// ABI (a boxed `[funcidx][env]` heap value); every call site is built directly here rather than
     /// through ordinary name resolution, so the stdlib class is never referenced by user code.
     pub(in crate::analyzer) fn closure_intrinsic(&self, method: &str) -> Option<DefId> {
-        self.type_ctx.defs.lookup(
+        self.type_ctx.resolve(
             DefKind::Function,
             &dream_types::method_fn("Closure", method),
         )
@@ -89,7 +89,7 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         }
-        let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, name) else {
+        let Some(def) = self.type_ctx.resolve(DefKind::Function, name) else {
             self.hir.last = None;
             return;
         };
@@ -124,7 +124,7 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         }
-        let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, name) else {
+        let Some(def) = self.type_ctx.resolve(DefKind::Function, name) else {
             self.hir.last = None;
             return;
         };
@@ -162,7 +162,7 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         }
-        let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, name) else {
+        let Some(def) = self.type_ctx.resolve(DefKind::Function, name) else {
             self.hir.last = None;
             return;
         };
@@ -232,7 +232,7 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         }
-        let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, base_name) else {
+        let Some(def) = self.type_ctx.resolve(DefKind::Function, base_name) else {
             self.hir.last = None;
             return;
         };

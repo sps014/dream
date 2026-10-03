@@ -59,7 +59,7 @@ impl<'a> Analyzer<'a> {
         }
         match &function.return_type {
             Some(Type::Struct(tok, None)) => {
-                if let Some(info) = self.struct_table.get_struct(&tok.text) {
+                if let Some(info) = self.struct_info(&tok.text) {
                     let ok = info.fields.iter().any(|(fname, f)| {
                         let is_pos =
                             f.builtin.as_deref() == Some("position") || fname == "position";
@@ -109,7 +109,7 @@ impl<'a> Analyzer<'a> {
             }
             if let Type::Struct(tok, None) = &p.type_ {
                 if !matches!(tok.text.as_str(), "GpuTexture" | "GpuSampler") {
-                    if let Some(info) = self.struct_table.get_struct(&tok.text) {
+                    if let Some(info) = self.struct_info(&tok.text) {
                         self.check_location_duplicates(info, diagnostics, p.name.position);
                     }
                 }
@@ -137,7 +137,7 @@ impl<'a> Analyzer<'a> {
         match &function.return_type {
             Some(Type::Struct(tok, None)) if tok.text == "GpuVec4" => {}
             Some(Type::Struct(tok, None)) => {
-                if let Some(info) = self.struct_table.get_struct(&tok.text) {
+                if let Some(info) = self.struct_info(&tok.text) {
                     let mut has_color = false;
                     for (fname, field) in &info.fields {
                         if let Some(b) = field.builtin.as_deref() {
@@ -221,7 +221,7 @@ impl<'a> Analyzer<'a> {
         if let Some(first) = function.parameters.first() {
             if let Type::Struct(tok, None) = &first.type_ {
                 if !matches!(tok.text.as_str(), "GpuTexture" | "GpuSampler") {
-                    if let Some(info) = self.struct_table.get_struct(&tok.text) {
+                    if let Some(info) = self.struct_info(&tok.text) {
                         let ok = info.fields.iter().any(|(fname, f)| {
                             let is_pos =
                                 f.builtin.as_deref() == Some("position") || fname == "position";

@@ -19,7 +19,7 @@ use dream_types::{DefId, TypeId};
 
 /// The (empty) MIR body a glue function's lowering state points at.
 static GLUE_FN: MirFunction = MirFunction {
-    def: DefId(0),
+    def: DefId::root(0),
     instance: Vec::new(),
     name: String::new(),
     symbol: String::new(),

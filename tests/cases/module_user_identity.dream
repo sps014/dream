@@ -1,0 +1,8 @@
+import system;
+import helpers.module_users_a;
+import helpers.module_users_b;
+
+fun main(): void {
+    System.println(first_user_value());
+    System.println(second_user_value());
+}

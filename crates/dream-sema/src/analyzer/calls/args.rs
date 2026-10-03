@@ -369,8 +369,7 @@ impl<'a> Analyzer<'a> {
                     return None;
                 };
                 let field_ty = self
-                    .struct_table
-                    .get_struct(&struct_name)
+                    .struct_info(&struct_name)
                     .and_then(|s| s.fields.get(&member.text).map(|f| f.type_.clone()))
                     .unwrap_or(Type::Unknown);
                 self.hir_set_field(Some(obj_hir.clone()), field_idx, &field_ty);

@@ -821,7 +821,7 @@ fn unread_local_survives_until_rebind() {
 #[test]
 fn ends_last_use_string_released_after_borrow_call() {
     let i = dream_types::TypeInterner::new();
-    let peek = dream_types::DefId(0);
+    let peek = dream_types::DefId::root(0);
     let mut b = FunctionBuilder::new("f", i.void());
     let s = b.new_local(i.string(), Some("s".into()));
     let tmp = b.new_local(i.int(), Some("tmp".into()));
@@ -867,7 +867,7 @@ fn ends_last_use_string_released_after_borrow_call() {
 #[test]
 fn held_call_does_not_release_before_later_read() {
     let i = dream_types::TypeInterner::new();
-    let peek = DefId(7);
+    let peek = DefId::root(7);
     let mut b = FunctionBuilder::new("f", i.void());
     let s = b.new_local(i.string(), Some("s".into()));
     let n = b.new_local(i.int(), Some("n".into()));
@@ -927,7 +927,7 @@ fn held_call_does_not_release_before_later_read() {
 #[test]
 fn await_call_borrow_arg_not_released_before_await() {
     let i = dream_types::TypeInterner::new();
-    let read = DefId(11);
+    let read = DefId::root(11);
     let mut b = FunctionBuilder::new("f", i.void());
     b.set_async(true);
     let path = b.new_local(i.string(), Some("path".into()));

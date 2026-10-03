@@ -53,7 +53,7 @@ impl<'a> Analyzer<'a> {
     }
 
     fn sizeof_type_known(&self, type_name: &str) -> bool {
-        if self.struct_table.get_struct(type_name).is_some() {
+        if self.struct_info(type_name).is_some() {
             return true;
         }
         if type_name.ends_with("[]") {
@@ -66,10 +66,10 @@ impl<'a> Analyzer<'a> {
         {
             return true;
         }
-        if self.enum_table.contains_key(type_name) {
+        if self.enum_members(type_name).is_some() {
             return true;
         }
-        if self.interface_methods.contains_key(type_name) {
+        if self.interface_method_list(type_name).is_some() {
             return true;
         }
         if type_name.starts_with("fun(") {

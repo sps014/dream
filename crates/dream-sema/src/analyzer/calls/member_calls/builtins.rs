@@ -156,7 +156,7 @@ impl<'a> Analyzer<'a> {
                     // A C-style enum's `to_string()` renders the variant name (e.g. `Color.Green`
                     // -> "Green") by mapping the discriminant to its interned name, rather than the
                     // generic object protocol (which would stringify the underlying integer).
-                    if let Some(members) = self.enum_table.get(&receiver_name) {
+                    if let Some(members) = self.enum_members(&receiver_name) {
                         let arms: Vec<(i64, String)> = members
                             .iter()
                             .map(|(name, value)| (*value as i64, name.clone()))

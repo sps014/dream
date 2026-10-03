@@ -9,7 +9,7 @@ impl<'a> Analyzer<'a> {
     /// Pass 0: register every (non-generic) struct and its methods; stash generic templates.
     pub(in crate::analyzer) fn register_structs(
         &mut self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
         // Every struct name must lower to its own type before any method registers: overloaded
@@ -17,6 +17,8 @@ impl<'a> Analyzer<'a> {
         // merged program (a stdlib `CPtr` parameter on a user overload) would otherwise key as
         // the poison type at registration but as the real struct when its body is emitted.
         for struct_decl in node.structs.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
             self.type_ctx.register(
                 DefKind::Struct,
                 &struct_decl.name.text,
@@ -24,6 +26,8 @@ impl<'a> Analyzer<'a> {
             );
         }
         for struct_decl in node.structs.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
             diagnostics.file_path = file_path_string(&struct_decl.file_path);
             // Static classes are implicitly `sealed` on the AST so they cannot grow an instance
             // surface, but stdlib splits static helpers across `extend` files (e.g. `GpuMath`).
@@ -64,11 +68,16 @@ impl<'a> Analyzer<'a> {
                 // Async methods are supported: each monomorphization registers the method as a
                 // distinct concrete function (see `register_struct_methods`), so its async state
                 // machine is generated per instance like any other async method.
-                self.generic_structs
-                    .insert(struct_decl.name.text.clone(), struct_decl);
+                self.generic_structs.insert(def, struct_decl);
                 continue;
             }
-            if let Err(e) = self.struct_table.add_struct(struct_decl) {
+            let ty = self.type_ctx.interner.struct_ty(def, vec![]);
+            let field_types: Vec<_> = struct_decl
+                .fields
+                .iter()
+                .map(|field| self.type_ctx.lower(&field.field_type))
+                .collect();
+            if let Err(e) = self.struct_table.add_struct(ty, struct_decl, &field_types) {
                 diagnostics.report_error(e, Some(struct_decl.name.position));
             }
             self.register_struct_methods(
@@ -91,15 +100,13 @@ impl<'a> Analyzer<'a> {
         // value — that would require infinite storage. A reference (`class`) or array field breaks
         // the cycle. Generic value structs are checked per instantiation.
         for struct_decl in node.structs.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
             if struct_decl.generic_parameters.is_some() {
                 continue;
             }
             let name = &struct_decl.name.text;
-            let is_value = self
-                .struct_table
-                .get_struct(name)
-                .map(|s| s.is_value)
-                .unwrap_or(false);
+            let is_value = self.struct_info(name).map(|s| s.is_value).unwrap_or(false);
             if is_value && self.value_struct_contains_self(name) {
                 diagnostics.report_error(
                     format!(
@@ -119,6 +126,8 @@ impl<'a> Analyzer<'a> {
         // class's `is_shared`/fields are registered above, so a field referencing another
         // `@shared` class declared later in the same file still resolves.
         for struct_decl in node.structs.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
             if struct_decl.generic_parameters.is_some() {
                 continue;
             }
@@ -142,6 +151,8 @@ impl<'a> Analyzer<'a> {
         // are registered (the loop above), so a field referencing another `ref struct` declared
         // later in the same file still resolves correctly.
         for struct_decl in node.structs.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
             for field in &struct_decl.fields {
                 self.reject_ref_struct_field(&struct_decl.name.text, field, diagnostics);
                 self.check_type_not_static_class(&field.field_type, diagnostics);
@@ -240,7 +251,7 @@ impl<'a> Analyzer<'a> {
             Type::Array(elem) => self.shared_graph_field_ok(elem, depth + 1, position, diagnostics),
             Type::Struct(token, args) => {
                 let mangled = ty.get_type();
-                if let Some(info) = self.struct_table.get_struct(&mangled) {
+                if let Some(info) = self.struct_info(&mangled) {
                     // A reference class joins wholesale; a value struct's inline fields must
                     // each be joinable (their bytes — including embedded pointers — are copied).
                     if !info.is_value {
@@ -252,13 +263,12 @@ impl<'a> Analyzer<'a> {
                         .iter()
                         .all(|f| self.shared_graph_field_ok(f, depth + 1, position, diagnostics));
                 }
-                if self.union_table.contains_key(&mangled) {
+                if self.union_info(&mangled).is_some() {
                     let base = token.text.clone();
                     let arg_types = args.clone().unwrap_or_default();
                     self.ensure_union_instantiated(&base, &arg_types, position, diagnostics);
                     let payload_types: Vec<Type> = self
-                        .union_table
-                        .get(&mangled)
+                        .union_info(&mangled)
                         .map(|info| {
                             info.variants
                                 .iter()
@@ -310,7 +320,7 @@ impl<'a> Analyzer<'a> {
     /// only concrete (non-generic) declarations, matching this analysis's stated conservative scope.
     pub(in crate::analyzer) fn check_ref_struct_async_boundary(
         &mut self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
         let check_fn = |this: &mut Self,
@@ -335,19 +345,27 @@ impl<'a> Analyzer<'a> {
             }
         };
         for f in node.functions.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(f.file_path.as_deref()));
             check_fn(self, f, diagnostics);
         }
         for s in node.structs.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(s.file_path.as_deref()));
             for m in &s.methods {
                 check_fn(self, m, diagnostics);
             }
         }
         for e in node.extends.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(e.file_path.as_deref()));
             for m in &e.methods {
                 check_fn(self, m, diagnostics);
             }
         }
         for en in node.enums.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(en.file_path.as_deref()));
             for m in &en.methods {
                 check_fn(self, m, diagnostics);
             }
@@ -399,7 +417,7 @@ impl<'a> Analyzer<'a> {
     /// The names of value-struct types embedded *by value* in `name`'s fields (the inline edges of
     /// the value-containment graph). Array fields are references.
     fn value_struct_field_targets(&self, name: &str) -> Vec<String> {
-        let Some(info) = self.struct_table.get_struct(name) else {
+        let Some(info) = self.struct_info(name) else {
             return Vec::new();
         };
         if !info.is_value {
@@ -412,7 +430,7 @@ impl<'a> Analyzer<'a> {
             if base.ends_with("[]") {
                 continue;
             }
-            if let Some(field_info) = self.struct_table.get_struct(base) {
+            if let Some(field_info) = self.struct_info(base) {
                 if field_info.is_value {
                     out.push(base.to_string());
                 }
@@ -431,13 +449,14 @@ impl<'a> Analyzer<'a> {
         let mangled_name = mangle_generic(base_name, args);
         // Canonicalize the mangled bare name to the structured `(base def, args)` id so both
         // spellings of this instance lower identically.
-        self.type_ctx
+        let instance = self
+            .type_ctx
             .register_instance(DefKind::Struct, base_name, args);
-        if self.struct_table.get_struct(&mangled_name).is_some() {
+        if self.struct_info(&mangled_name).is_some() {
             return;
         }
 
-        let template = match self.generic_structs.get(base_name) {
+        let template = match self.generic_struct(base_name) {
             Some(template) => *template,
             None => return,
         };
@@ -516,7 +535,25 @@ impl<'a> Analyzer<'a> {
 
         let new_decl_ref: &'a StructDeclarationNode<'a> = self.arena.alloc(new_decl);
 
-        if let Err(e) = self.struct_table.add_struct(new_decl_ref) {
+        let concrete_ids: Vec<_> = args.iter().map(|arg| self.type_ctx.lower(arg)).collect();
+        let type_bindings = params
+            .iter()
+            .zip(concrete_ids)
+            .map(|(parameter, ty)| (parameter.text.clone(), ty))
+            .collect();
+        let scope = self.type_ctx.scope();
+        self.type_ctx
+            .set_scope(self.graph.module_for_file(template.file_path.as_deref()));
+        let field_types: Vec<_> = template
+            .fields
+            .iter()
+            .map(|field| self.type_ctx.lower_with(&field.field_type, &type_bindings))
+            .collect();
+        self.type_ctx.set_scope(scope);
+        if let Err(e) = self
+            .struct_table
+            .add_struct(instance, new_decl_ref, &field_types)
+        {
             diagnostics.report_error(e, Some(*position));
         }
 

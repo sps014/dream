@@ -119,7 +119,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         .collect();
     if !init_body.is_empty() {
         let init_fn = HFunction {
-            def: DefId(u32::MAX),
+            def: DefId::root(u32::MAX),
             name: INIT_FN_NAME.to_string(),
             symbol: INIT_FN_NAME.to_string(),
             instance: vec![],
@@ -304,9 +304,12 @@ fn init_builder(func: &HFunction, is_async: bool) -> (FunctionBuilder, HashMap<u
     b.set_inline(func.inline);
     let mut locals: HashMap<u32, Local> = HashMap::new();
     for p in &func.params {
-        let l = if p.is_ref {
+        let l = if p.mode == dream_hir::ParamMode::Ref {
             b.new_ref_param(p.ty, Some(p.name.clone()))
-        } else if p.is_take {
+        } else if matches!(
+            p.mode,
+            dream_hir::ParamMode::Sink | dream_hir::ParamMode::Share
+        ) {
             b.new_take_param(p.ty, Some(p.name.clone()))
         } else {
             b.new_param(p.ty, Some(p.name.clone()))
@@ -762,8 +765,7 @@ mod tests {
                 local: LocalId(0),
                 name: "x".into(),
                 ty: int,
-                is_ref: false,
-                is_take: false,
+                mode: dream_hir::ParamMode::Borrow,
             }],
             ret: int,
             locals: vec![],

@@ -123,7 +123,7 @@ impl<'a> Analyzer<'a> {
     /// on programs with no other errors (a poisoned program skips straight to failure).
     pub(in crate::analyzer) fn classify_receiver_modes(
         &mut self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
         let mut registry: indexmap::IndexMap<MethodKey, Entry> = indexmap::IndexMap::new();
@@ -158,7 +158,7 @@ impl<'a> Analyzer<'a> {
             // Value-struct extend targets have registered fields; primitive targets have none
             // (their methods classify as Borrow unless they take/escape `this`, which they
             // cannot — primitives have no `this` state to escape).
-            let field_names: Vec<String> = match self.struct_table.get_struct(&owner) {
+            let field_names: Vec<String> = match self.struct_info(&owner) {
                 Some(info) => info.fields.keys().cloned().collect(),
                 None => Vec::new(),
             };
@@ -218,7 +218,7 @@ impl<'a> Analyzer<'a> {
                 for (recv, name, span) in &e.raw_calls {
                     let target_owner: Option<String> = match recv {
                         RecvKind::This => Some(e.owner.clone()),
-                        RecvKind::Field(f) => match self.struct_table.get_struct(&e.owner) {
+                        RecvKind::Field(f) => match self.struct_info(&e.owner) {
                             Some(info) => {
                                 info.fields.get(f).and_then(|fi| type_owner_name(&fi.type_))
                             }
@@ -277,7 +277,7 @@ fn registry_lookup(
         .unwrap_or(dream_syntax::nodes::function::ReceiverMode::Borrow)
 }
 
-fn file_for_owner<'a>(node: &'a ProgramNode<'a>, owner: &str) -> Option<Rc<str>> {
+fn file_for_owner<'a>(node: &'a ProgramView<'a>, owner: &str) -> Option<Rc<str>> {
     for s in node.structs.iter() {
         if s.name.text == owner {
             return s.file_path.clone();

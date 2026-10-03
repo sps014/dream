@@ -46,12 +46,17 @@ pub fn type_symbol(interner: &TypeInterner, defs: &DefTable, ty: TypeId) -> Stri
                 _ => 'i',
             };
             format!(
-                "{tag}{}_{}",
+                "{tag}{}{}_{}",
+                symbol_component(&defs.get(*def).module_path),
                 symbol_component(defs.name(*def)),
                 list(interner, defs, args)
             )
         }
-        TyKind::Enum(def) => format!("e{}", symbol_component(defs.name(*def))),
+        TyKind::Enum(def) => format!(
+            "e{}{}",
+            symbol_component(&defs.get(*def).module_path),
+            symbol_component(defs.name(*def))
+        ),
     }
 }
 

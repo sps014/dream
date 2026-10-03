@@ -1,6 +1,78 @@
 use super::*;
 
 impl<'a> Analyzer<'a> {
+    pub(in crate::analyzer) fn generic_union(
+        &self,
+        name: &str,
+    ) -> Option<&&'a EnumDeclarationNode<'a>> {
+        self.generic_unions
+            .get(&self.type_ctx.resolve(DefKind::Union, name)?)
+    }
+    pub(in crate::analyzer) fn implemented_interfaces(
+        &self,
+        name: &str,
+    ) -> Option<&Vec<dream_types::TypeId>> {
+        self.implements.get(&self.type_ctx.resolved_type(name)?)
+    }
+    pub(in crate::analyzer) fn interface_method_list(
+        &self,
+        name: &str,
+    ) -> Option<&Vec<&'a FunctionNode<'a>>> {
+        self.interface_methods
+            .get(&self.type_ctx.resolved_type(name)?)
+    }
+
+    pub(in crate::analyzer) fn interface_index(&self, name: &str) -> Option<usize> {
+        self.interface_methods
+            .get_index_of(&self.type_ctx.resolved_type(name)?)
+    }
+
+    pub(in crate::analyzer) fn interface_decl(
+        &self,
+        name: &str,
+    ) -> Option<&&'a dream_syntax::nodes::InterfaceDeclarationNode<'a>> {
+        self.interface_decls
+            .get(&self.type_ctx.resolve(DefKind::Interface, name)?)
+    }
+
+    pub(in crate::analyzer) fn interface_parent_types(&self, name: &str) -> Option<&Vec<Type>> {
+        self.interface_parents
+            .get(&self.type_ctx.resolve(DefKind::Interface, name)?)
+    }
+
+    pub(in crate::analyzer) fn generic_interface(
+        &self,
+        name: &str,
+    ) -> Option<&&'a dream_syntax::nodes::InterfaceDeclarationNode<'a>> {
+        self.generic_interfaces
+            .get(&self.type_ctx.resolve(DefKind::Interface, name)?)
+    }
+    pub(in crate::analyzer) fn enum_members(&self, name: &str) -> Option<&IndexMap<String, i32>> {
+        self.enum_table
+            .get(&self.type_ctx.resolve(DefKind::Enum, name)?)
+    }
+
+    pub(in crate::analyzer) fn union_info(
+        &self,
+        name: &str,
+    ) -> Option<&crate::union_table::UnionInfo> {
+        self.union_table.get(&self.type_ctx.resolved_type(name)?)
+    }
+
+    pub(in crate::analyzer) fn generic_struct(
+        &self,
+        name: &str,
+    ) -> Option<&&'a dream_syntax::nodes::StructDeclarationNode<'a>> {
+        self.generic_structs
+            .get(&self.type_ctx.resolve(DefKind::Struct, name)?)
+    }
+    pub(in crate::analyzer) fn struct_info(
+        &self,
+        name: &str,
+    ) -> Option<&crate::struct_table::StructInfo> {
+        self.struct_table
+            .get_struct(self.type_ctx.resolved_type(name)?)
+    }
     /// Builds the `Future<T>` type carrying inner type `inner`. Async-call results are this type,
     /// and `await` unwraps it back to `inner`.
     pub(in crate::analyzer) fn future_type(inner: Type) -> Type {
@@ -84,7 +156,7 @@ impl<'a> Analyzer<'a> {
     /// real adapter is absent even for encodable types; a stub DefId keeps `main` emittable
     /// instead of falling through to the generic "no code was generated" diagnostic.
     pub(in crate::analyzer) fn ensure_json_callee(&mut self, name: &str) {
-        if self.type_ctx.defs.lookup(DefKind::Function, name).is_none() {
+        if self.type_ctx.resolve(DefKind::Function, name).is_none() {
             self.type_ctx.register(DefKind::Function, name, vec![]);
         }
     }
@@ -137,7 +209,7 @@ impl<'a> Analyzer<'a> {
         let is_json = |attrs: &[dream_syntax::nodes::AttributeNode]| {
             attrs.iter().any(|a| a.name.text == "json")
         };
-        let pgm = self.syntax_tree.get_root();
+        let pgm = self.program;
         if pgm
             .structs
             .iter()
@@ -153,14 +225,12 @@ impl<'a> Analyzer<'a> {
             return true;
         }
         if self
-            .generic_structs
-            .get(name)
+            .generic_struct(name)
             .is_some_and(|s| is_json(&s.attributes))
         {
             return true;
         }
-        self.generic_unions
-            .get(name)
+        self.generic_union(name)
             .is_some_and(|e| is_json(&e.attributes))
     }
 
@@ -177,14 +247,16 @@ impl<'a> Analyzer<'a> {
         if dream_syntax::nodes::types::is_unknown_type_name(s) {
             return s.to_string();
         }
-        let id = self.type_ctx.lower_str(s);
+        let id = self
+            .type_ctx
+            .resolved_type(s)
+            .unwrap_or_else(|| self.type_ctx.interner.error());
         dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, id)
     }
 
     pub(in crate::analyzer) fn is_static_class_name(&self, name: &str) -> bool {
         self.type_ctx
-            .defs
-            .lookup(DefKind::Struct, name)
+            .resolve(DefKind::Struct, name)
             .map(|id| self.type_ctx.defs.is_static(id))
             .unwrap_or(false)
     }
@@ -247,6 +319,6 @@ impl<'a> Analyzer<'a> {
         let Some((base, args)) = Self::resolve_struct_parts(ty) else {
             return false;
         };
-        args.is_empty() && self.enum_table.contains_key(&base)
+        args.is_empty() && self.enum_members(&base).is_some()
     }
 }

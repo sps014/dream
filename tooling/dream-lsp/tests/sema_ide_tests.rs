@@ -9,6 +9,61 @@ use common::TestHarness;
 use dream_lsp::index::SymKind;
 use dream_lsp::sema_ide;
 
+#[test]
+fn module_resolution_preserves_definition_identity_and_primary_spans() {
+    use dream_sema::analyzer::ide::IdeTarget;
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/cases/lsp_resolution.dream");
+    let source = "module editor; import helpers.module_users_a; import helpers.module_users_b; public fun second_user_value(): string { return \"local\"; } fun main(): void { first_user_value(); second_user_value(); }";
+    let outcome = dream_lsp::analysis::analyze_document(path.to_str(), source);
+    assert!(
+        outcome
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.severity != "error"),
+        "{:?}",
+        outcome.diagnostics
+    );
+    let snapshot = outcome.sema.expect("snapshot");
+    assert!(snapshot
+        .refs
+        .iter()
+        .all(|reference| reference.file.as_deref() == Some(dream_lsp::analysis::MAIN_FILE)));
+    let local_declaration = source.find("second_user_value").unwrap();
+    let local_call = source.rfind("second_user_value").unwrap();
+    let declaration = &snapshot.ref_covering(local_declaration).unwrap().target;
+    let call = &snapshot.ref_covering(local_call).unwrap().target;
+    assert!(sema_ide::target_matches(declaration, call));
+    let IdeTarget::Resolved {
+        def: local_def,
+        source: local_source,
+        ..
+    } = call
+    else {
+        panic!("typed local definition");
+    };
+    assert_eq!(local_source.start, local_declaration);
+    let imported_call = source.rfind("first_user_value").unwrap();
+    let IdeTarget::Resolved {
+        def: imported_def,
+        source: imported_source,
+        ..
+    } = &snapshot.ref_covering(imported_call).unwrap().target
+    else {
+        panic!("typed imported definition");
+    };
+    assert_ne!(local_def.module, imported_def.module);
+    assert!(imported_source
+        .file
+        .as_ref()
+        .unwrap()
+        .ends_with("helpers/module_users_a.dream"));
+    assert!(!sema_ide::target_matches(
+        call,
+        &snapshot.ref_covering(imported_call).unwrap().target
+    ));
+}
+
 fn completion_names(src: &str) -> Vec<String> {
     let harness = TestHarness::new(src);
     let snapshot = harness

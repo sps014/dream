@@ -38,10 +38,9 @@ impl<'a> Analyzer<'a> {
         let struct_name = mangle_generic(&base_name, &generic_args);
 
         let struct_file = self
-            .struct_table
-            .get_struct(&struct_name)
+            .struct_info(&struct_name)
             .and_then(|info| info.file_path.clone());
-        let field = match self.struct_table.get_struct(&struct_name) {
+        let field = match self.struct_info(&struct_name) {
             Some(info) => info
                 .fields
                 .get(&member.text)
@@ -115,7 +114,7 @@ impl<'a> Analyzer<'a> {
         }
         // Enum member access `EnumName.Member` resolves to the enum type (an i32 at runtime).
         if let ExpressionNode::Identifier(id) = obj {
-            if self.enum_table.contains_key(&id.text) {
+            if self.enum_members(&id.text).is_some() {
                 let enum_ty = Type::Struct(id.clone(), None);
                 match self.enum_member_value(&id.text, &member.text) {
                     Some(value) => self.hir_set_enum_value(value as i64, &enum_ty),
@@ -265,8 +264,7 @@ impl<'a> Analyzer<'a> {
             }
             let getter = getter_member_name(&member.text);
             let methods = self
-                .interface_methods
-                .get(&iface_name)
+                .interface_method_list(&iface_name)
                 .cloned()
                 .unwrap_or_default();
             if methods.iter().any(|m| accessor_member_name(m) == getter) {
@@ -521,7 +519,7 @@ impl<'a> Analyzer<'a> {
         struct_name: &str,
         field: &str,
     ) -> Option<usize> {
-        let info = self.struct_table.get_struct(struct_name)?;
+        let info = self.struct_info(struct_name)?;
         info.fields.get_index_of(field)
     }
 }

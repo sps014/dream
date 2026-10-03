@@ -3,10 +3,51 @@ use super::*;
 impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn analyze_pgm(
         &mut self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<SemanticInfo<'_>, SemanticError> {
         let mut symbol_table_map = HashMap::new();
+        self.type_ctx.set_scope(dream_types::ModuleId::ROOT);
+        self.type_ctx
+            .register(DefKind::Struct, FUTURE_TYPE, vec!["T".to_string()]);
+        for file in &self.graph.files {
+            self.type_ctx.set_scope(file.module);
+            for declaration in &file.program.structs {
+                let def = self.type_ctx.register(
+                    DefKind::Struct,
+                    &declaration.name.text,
+                    generic_param_names(&declaration.generic_parameters),
+                );
+                self.record_ide_definition(def, &declaration.name, Some(&file.path));
+                for field in &declaration.fields {
+                    self.record_ide_member_definition(def, &field.name, Some(&file.path));
+                }
+            }
+            for declaration in &file.program.enums {
+                let kind = if declaration.is_data_enum() {
+                    DefKind::Union
+                } else {
+                    DefKind::Enum
+                };
+                let def = self.type_ctx.register(
+                    kind,
+                    &declaration.name.text,
+                    generic_param_names(&declaration.generic_parameters),
+                );
+                self.record_ide_definition(def, &declaration.name, Some(&file.path));
+                for variant in &declaration.variants {
+                    self.record_ide_member_definition(def, &variant.name, Some(&file.path));
+                }
+            }
+            for declaration in &file.program.interfaces {
+                let def = self.type_ctx.register(
+                    DefKind::Interface,
+                    &declaration.name.text,
+                    generic_param_names(&declaration.generic_parameters),
+                );
+                self.record_ide_definition(def, &declaration.name, Some(&file.path));
+            }
+        }
 
         // Stash generic `extend` templates before any type instantiation can occur (a concrete
         // union/struct field may instantiate a generic union during `register_enums`), so the
@@ -19,6 +60,7 @@ impl<'a> Analyzer<'a> {
         self.register_structs(node, diagnostics);
         self.register_extensions(node, diagnostics);
         self.register_functions(node, diagnostics);
+        self.register_final_method_definitions();
         // `ref struct` params on an `async` function/method would need to survive a suspend point,
         // which spills the function's live locals into a heap-allocated coroutine state object —
         // exactly the escape a `ref struct` forbids. Checked once every function/method/`extend`
@@ -56,27 +98,39 @@ impl<'a> Analyzer<'a> {
         // Built before the borrow-immutable `SemanticInfo` literal below, since lowering field types
         // needs `&mut self.type_ctx`.
         let layouts = self.hir_build_layouts();
-        let object_methods = layouts
+        let object_types: Vec<_> = layouts
             .structs
             .iter()
-            .map(|(ty, layout)| (*ty, &layout.name))
-            .chain(
-                layouts
-                    .unions
-                    .iter()
-                    .map(|(ty, layout)| (*ty, &layout.name)),
-            )
+            .filter_map(|(ty, _)| {
+                self.struct_table
+                    .get_struct(*ty)
+                    .map(|info| (*ty, info.name.clone()))
+            })
+            .chain(layouts.unions.iter().filter_map(|(ty, _)| {
+                self.union_table
+                    .get(ty)
+                    .map(|info| (*ty, info.name.clone()))
+            }))
+            .collect();
+        let object_methods = object_types
+            .into_iter()
             .map(|(ty, name)| {
+                match self.type_ctx.interner.kind(ty) {
+                    dream_types::TyKind::Struct(def, _) | dream_types::TyKind::Union(def, _) => {
+                        self.type_ctx.set_scope(def.module)
+                    }
+                    _ => {}
+                }
                 (
                     ty,
                     dream_hir::ObjectMethods {
-                        to_string: self.type_ctx.defs.lookup(
+                        to_string: self.type_ctx.resolve(
                             DefKind::Function,
-                            &dream_types::method_fn(name, "to_string"),
+                            &dream_types::method_fn(&name, "to_string"),
                         ),
-                        hash_code: self.type_ctx.defs.lookup(
+                        hash_code: self.type_ctx.resolve(
                             DefKind::Function,
-                            &dream_types::method_fn(name, "hash_code"),
+                            &dream_types::method_fn(&name, "hash_code"),
                         ),
                     },
                 )
@@ -104,19 +158,16 @@ impl<'a> Analyzer<'a> {
             })
             .collect();
 
-        let enum_entries: Vec<(String, indexmap::IndexMap<String, i32>)> = self
+        let enum_entries: Vec<(dream_types::DefId, indexmap::IndexMap<String, i32>)> = self
             .enum_table
             .iter()
-            .map(|(n, m)| (n.clone(), m.clone()))
+            .map(|(n, m)| (*n, m.clone()))
             .collect();
         let mut hir_enums = indexmap::IndexMap::new();
-        for (name, members) in enum_entries {
-            if let Some(def) = self.type_ctx.defs.lookup(DefKind::Enum, &name) {
-                let tid = self.type_ctx.interner.enum_ty(def);
-                let mems: Vec<(String, i32)> =
-                    members.iter().map(|(n, v)| (n.clone(), *v)).collect();
-                hir_enums.insert(tid, (name, mems));
-            }
+        for (def, members) in enum_entries {
+            let tid = self.type_ctx.interner.enum_ty(def);
+            let mems: Vec<(String, i32)> = members.iter().map(|(n, v)| (n.clone(), *v)).collect();
+            hir_enums.insert(tid, (self.type_ctx.defs.name(def).to_string(), mems));
         }
 
         Ok(SemanticInfo {

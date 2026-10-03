@@ -71,11 +71,28 @@ impl Backend {
         let Some((idx, sema)) = self.models_for(&key, Self::file_path_of(&uri).as_deref()) else {
             return Ok(None);
         };
+        if let Some(dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. }) = sema
+            .as_ref()
+            .and_then(|snapshot| snapshot.ref_covering(offset))
+            .map(|reference| &reference.target)
+        {
+            return Ok(Self::location_at(
+                &uri,
+                &text,
+                source.start,
+                source.end,
+                source
+                    .file
+                    .as_deref()
+                    .filter(|file| *file != crate::analysis::MAIN_FILE),
+            )
+            .map(GotoDefinitionResponse::Scalar));
+        }
         let sema_loc = sema
             .as_ref()
             .and_then(|s| crate::sema_ide::definition_at(s, &idx, offset))
             .map(|(start, end)| (start, end, None::<String>));
-        if let Some((start, end, file_path)) = idx.definition(offset).or(sema_loc) {
+        if let Some((start, end, file_path)) = sema_loc.or_else(|| idx.definition(offset)) {
             return Ok(
                 Self::location_at(&uri, &text, start, end, file_path.as_deref())
                     .map(GotoDefinitionResponse::Scalar),

@@ -48,8 +48,7 @@ fn compile_sum_to() -> String {
             local: n,
             name: "n".into(),
             ty: int,
-            is_ref: false,
-            is_take: false,
+            mode: dream_hir::ParamMode::Borrow,
         }],
         ret: int,
         locals: vec![

@@ -22,7 +22,7 @@ impl<'a> Analyzer<'a> {
                         )? {
                             return Ok(t);
                         }
-                        if self.enum_table.contains_key(&base.text) {
+                        if self.enum_members(&base.text).is_some() {
                             let enum_ty = Type::Struct(base.clone(), None);
                             match self.enum_member_value(&base.text, &member.text) {
                                 Some(value) => self.hir_set_enum_value(value as i64, &enum_ty),

@@ -472,7 +472,7 @@ mod tests {
         let mut b = FunctionBuilder::new("f", i.void());
         let x = b.new_local(i.string(), Some("x".into()));
         let callee = crate::Callee {
-            def: dream_types::DefId(0),
+            def: dream_types::DefId::root(0),
             args: vec![],
             ret: i.void(),
             take_params: vec![],
@@ -599,7 +599,7 @@ mod tests {
         let else_blk = b.new_block();
         let join = b.new_block();
         let callee = crate::Callee {
-            def: dream_types::DefId(0),
+            def: dream_types::DefId::root(0),
             args: vec![],
             ret: i.void(),
             take_params: vec![],

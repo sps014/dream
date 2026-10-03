@@ -4,7 +4,9 @@
 use super::modref::ModRefTable;
 use super::RcInsertion;
 use crate::build::FunctionBuilder;
-use crate::{Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use crate::{
+    Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
+};
 use dream_hir::{LayoutTable, TypeLayout};
 use dream_types::{DefId, TypeId, TypeInterner};
 use indexmap::IndexSet;
@@ -18,8 +20,8 @@ struct Types {
 
 fn types() -> Types {
     let mut i = TypeInterner::new();
-    let node = i.struct_ty(DefId(7), vec![]);
-    let opt = i.union_ty(DefId(8), vec![node]);
+    let node = i.struct_ty(DefId::root(7), vec![]);
+    let opt = i.union_ty(DefId::root(8), vec![node]);
     let mut layouts = LayoutTable::default();
     let int = i.int();
     layouts.insert(
@@ -49,14 +51,18 @@ struct Walk {
 }
 
 /// `fun walk(head: borrow Option<Node>)`; `extra` runs in the arm after `curr = node.next`.
-fn walk(t: &Types, owned_head: bool, extra: impl FnOnce(&mut FunctionBuilder, Local, Local)) -> Walk {
+fn walk(
+    t: &Types,
+    owned_head: bool,
+    extra: impl FnOnce(&mut FunctionBuilder, Local, Local),
+) -> Walk {
     let mut b = FunctionBuilder::new("walk", t.i.void());
     let head = if owned_head {
         let h = b.new_local(t.opt, Some("head".into()));
         b.assign(
             Place::Local(h),
             Rvalue::Call {
-                callee: callee(DefId(90), t.opt, 0),
+                callee: callee(DefId::root(90), t.opt, 0),
                 args: vec![],
             },
         );
@@ -71,7 +77,10 @@ fn walk(t: &Types, owned_head: bool, extra: impl FnOnce(&mut FunctionBuilder, Lo
     let header = b.new_block();
     let arm = b.new_block();
     let exit = b.new_block();
-    b.assign(Place::Local(curr), Rvalue::Use(Operand::Copy(Place::Local(head))));
+    b.assign(
+        Place::Local(curr),
+        Rvalue::Use(Operand::Copy(Place::Local(head))),
+    );
     b.terminate(Terminator::Goto(header));
     b.switch_to(header);
     b.assign(
@@ -98,16 +107,25 @@ fn walk(t: &Types, owned_head: bool, extra: impl FnOnce(&mut FunctionBuilder, Lo
     );
     b.assign(
         Place::Local(v),
-        Rvalue::Use(Operand::Copy(Place::Field { base: node, field: 0 })),
+        Rvalue::Use(Operand::Copy(Place::Field {
+            base: node,
+            field: 0,
+        })),
     );
     b.assign(
         Place::Local(curr),
-        Rvalue::Use(Operand::Copy(Place::Field { base: node, field: 1 })),
+        Rvalue::Use(Operand::Copy(Place::Field {
+            base: node,
+            field: 1,
+        })),
     );
     extra(&mut b, head, node);
     b.terminate(Terminator::Goto(header));
     b.switch_to(exit);
-    b.assign(Place::Local(v), Rvalue::Use(Operand::Copy(Place::Local(head))));
+    b.assign(
+        Place::Local(v),
+        Rvalue::Use(Operand::Copy(Place::Local(head))),
+    );
     b.terminate(Terminator::Return(None));
     Walk {
         func: b.finish(),
@@ -128,7 +146,7 @@ fn callee(def: DefId, ret: TypeId, arity: usize) -> Callee {
 
 /// `fun <def>(n: borrow Node)`, optionally storing `n.next = null`.
 fn node_fn(t: &Types, def: DefId, stores_next: bool) -> MirFunction {
-    let mut b = FunctionBuilder::new(format!("f{}", def.0), t.i.void());
+    let mut b = FunctionBuilder::new(format!("f{}", def.index), t.i.void());
     b.set_def(def, vec![]);
     let n = b.new_param(t.node, Some("n".into()));
     if stores_next {
@@ -165,8 +183,16 @@ fn read_only_walk_is_a_cursor_family() {
     for owned in [false, true] {
         let mut w = walk(&t, owned, |_, _, _| {});
         insert(&t, &mut w, &ModRefTable::default());
-        assert!(w.func.locals[w.curr.0 as usize].is_cursor, "owned={}", owned);
-        assert!(w.func.locals[w.node.0 as usize].is_cursor, "owned={}", owned);
+        assert!(
+            w.func.locals[w.curr.0 as usize].is_cursor,
+            "owned={}",
+            owned
+        );
+        assert!(
+            w.func.locals[w.node.0 as usize].is_cursor,
+            "owned={}",
+            owned
+        );
         assert_eq!(rc_ops_on(&w.func, w.curr), 0);
         assert_eq!(rc_ops_on(&w.func, w.node), 0);
     }
@@ -177,7 +203,10 @@ fn store_to_traversed_slot_keeps_owners() {
     let t = types();
     let mut w = walk(&t, false, |b, _, node| {
         b.assign(
-            Place::Field { base: node, field: 1 },
+            Place::Field {
+                base: node,
+                field: 1,
+            },
             Rvalue::Use(Operand::Const(Const::Null)),
         );
     });
@@ -193,7 +222,7 @@ fn rebinding_the_root_mid_walk_keeps_owners() {
         b.assign(
             Place::Local(head),
             Rvalue::Call {
-                callee: callee(DefId(90), opt, 0),
+                callee: callee(DefId::root(90), opt, 0),
                 args: vec![],
             },
         );
@@ -218,7 +247,7 @@ fn walk_after_the_roots_last_use_keeps_owners() {
 fn callee_mod_ref_decides_the_family() {
     let t = types();
     for (stores, want_cursor) in [(false, true), (true, false)] {
-        let def = DefId(91);
+        let def = DefId::root(91);
         let void = t.i.void();
         let w = walk(&t, false, |b, _, node| {
             b.push(Statement::Call {
@@ -237,8 +266,7 @@ fn callee_mod_ref_decides_the_family() {
         };
         insert(&t, &mut w, &modref);
         assert_eq!(
-            w.func.locals[w.curr.0 as usize].is_cursor,
-            want_cursor,
+            w.func.locals[w.curr.0 as usize].is_cursor, want_cursor,
             "callee stores next: {}",
             stores
         );

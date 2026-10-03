@@ -122,8 +122,9 @@ impl<'a> Analyzer<'a> {
         let missing = self.function_table.get_function(&mangled_name).is_err()
             && !self.generic_functions.contains_key(&mangled_name);
         if missing {
-            if let Some(ifaces) = self.implements.get(struct_name).cloned() {
+            if let Some(ifaces) = self.implemented_interfaces(struct_name).cloned() {
                 for iface in ifaces {
+                    let iface = self.type_ctx.instance_name(iface);
                     let ext = method_fn(&iface, &method.text);
                     if self.function_table.get_function(&ext).is_ok()
                         || self.generic_functions.contains_key(&ext)

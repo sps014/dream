@@ -1,28 +1,27 @@
 use bumpalo::Bump;
 use dream_diagnostics::DiagnosticBag;
 use dream_sema::analyzer::Analyzer;
-use dream_syntax::{lexer::Lexer, parser::Parser, syntax_tree::SyntaxTree};
+use dream_syntax::{lexer::Lexer, parser::Parser};
 use std::rc::Rc;
 
 fn module_function_symbol(other_name: &str) -> String {
     let arena = Bump::new();
     let mut diagnostics = DiagnosticBag::new(None);
-    let source = format!("fun foo(): int {{ return 1; }} fun {other_name}(): int {{ return 2; }}");
-    let parsed = Parser::new(Lexer::new(source), &arena, &mut diagnostics)
-        .parse()
-        .unwrap();
-    let mut program = parsed.get_root().clone();
-    program.functions[0].file_path = Some(Rc::from("a.dream"));
-    program.functions[1].file_path = Some(Rc::from("b.dream"));
-    let tree = SyntaxTree::new(program);
-    let modules = [
-        (Rc::from("a.dream"), Rc::from("a")),
-        (Rc::from("b.dream"), Rc::from("b")),
-    ]
-    .iter()
-    .cloned()
-    .collect();
-    let mut analyzer = Analyzer::new(&tree, &arena).with_file_modules(modules);
+    let inputs = [("a", "foo"), ("b", other_name)]
+        .iter()
+        .map(|(module, name)| {
+            let source = format!("module {module}; fun {name}(): int {{ return 1; }}");
+            let parsed = Parser::new(Lexer::new(source.clone()), &arena, &mut diagnostics)
+                .parse()
+                .unwrap();
+            let mut program = parsed.get_root().clone();
+            let path = format!("{module}.dream");
+            program.functions[0].file_path = Some(Rc::from(path.as_str()));
+            (path, source, program)
+        })
+        .collect();
+    let graph = dream_sema::module_graph::ModuleGraph::new(inputs, &indexmap::IndexMap::new());
+    let mut analyzer = Analyzer::new(&graph, &arena);
     let info = analyzer.analyze(&mut diagnostics).unwrap();
     assert!(!diagnostics.has_errors());
     info.hir
@@ -41,6 +40,41 @@ fn unrelated_module_name_collision_does_not_rename_existing_symbol() {
         dream_types::function_symbol(Some("a"), "foo", &[])
     );
     assert_eq!(module_function_symbol("bar"), module_function_symbol("foo"));
+}
+
+#[test]
+fn parameter_ownership_modes_are_semantic_hir_facts() {
+    let source = format!(
+        "{}\n{}",
+        common::SYSTEM_STUB,
+        r#"
+        class Owned { public constructor() {} }
+        shared class Shared { public constructor() {} }
+        fun modes(borrow borrowed: Owned, sink: Owned, shared_value: Shared, ref number: int): void {}
+        fun main(): void {}
+    "#
+    );
+    common::compile_test_pipeline(&source, |hir, _| {
+        let function = hir
+            .functions
+            .iter()
+            .find(|function| function.name == "modes")
+            .unwrap();
+        let modes: Vec<_> = function
+            .params
+            .iter()
+            .map(|parameter| parameter.mode)
+            .collect();
+        assert_eq!(
+            modes,
+            vec![
+                dream_hir::ParamMode::Borrow,
+                dream_hir::ParamMode::Sink,
+                dream_hir::ParamMode::Share,
+                dream_hir::ParamMode::Ref
+            ]
+        );
+    });
 }
 
 #[test]

@@ -55,7 +55,7 @@ impl<'a> Analyzer<'a> {
         function: &FunctionNode<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
-        if let Some(struct_info) = self.struct_table.get_struct(name) {
+        if let Some(struct_info) = self.struct_info(name) {
             if !struct_info.visibility.is_public() {
                 diagnostics.report_error(
                     format!(

@@ -17,6 +17,7 @@ dream-abi = { path = "../dream-abi" }
 dream-stdlib = { path = "../dream-stdlib" }
 bumpalo = "3.20.3"
 indexmap = "2"
+blake3 = "1"
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"

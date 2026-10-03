@@ -2,9 +2,8 @@ use super::*;
 
 /// A struct lowered for layout: `(interned type id, name, packed, [(field name, interned field type)])`.
 type LoweredStruct = (TypeId, String, bool, Vec<(String, TypeId, bool, bool)>);
-/// One struct's fields as `(name, source type, is_weak, is_unowned)`, snapshotted from
-/// `StructFieldInfo` before `type_ctx` is re-borrowed mutably for lowering.
-type StructFieldSnapshot = (String, Type, bool, bool);
+/// Resolved fields retain type-argument provenance across module boundaries.
+type StructFieldSnapshot = (String, TypeId, bool, bool);
 
 impl<'a> Analyzer<'a> {
     /// Turns on HIR collection so a top-level variable's initializer expression is captured while it
@@ -38,7 +37,10 @@ impl<'a> Analyzer<'a> {
         type_str: &str,
         is_const: bool,
     ) {
-        let ty = self.type_ctx.lower_str(type_str);
+        let ty = self
+            .type_ctx
+            .resolved_type(type_str)
+            .unwrap_or_else(|| self.type_ctx.interner.error());
         let id = GlobalId(self.hir.globals.len() as u32);
         self.hir.globals.insert(name.to_string(), (id, ty));
         let init = self.hir.pending_global_inits.shift_remove(name);
@@ -64,52 +66,51 @@ impl<'a> Analyzer<'a> {
         // Discriminated unions are also registered in the struct table (for tagging/release), but they
         // get a variant-aware layout + `to_string` from the union table below — so exclude them here to
         // avoid a duplicate (empty) struct layout and a duplicate `$<Union>_to_string`.
-        let struct_snapshot: Vec<(String, bool, Vec<StructFieldSnapshot>)> = self
+        let struct_snapshot: Vec<(TypeId, String, bool, Vec<StructFieldSnapshot>)> = self
             .struct_table
             .structs
             .iter()
-            .filter(|(name, _)| !self.union_table.contains_key(name.as_str()))
-            .map(|(name, info)| {
+            .filter(|(ty, _)| {
+                matches!(
+                    self.type_ctx.interner.kind(**ty),
+                    dream_types::TyKind::Struct(..)
+                )
+            })
+            .map(|(ty, info)| {
                 let fields = info
                     .fields
                     .iter()
-                    .map(|(fname, f)| (fname.clone(), f.type_.clone(), f.is_weak, f.is_unowned))
+                    .map(|(fname, f)| (fname.clone(), f.ty, f.is_weak, f.is_unowned))
                     .collect();
-                (name.clone(), info.packed, fields)
+                (*ty, info.name.clone(), info.packed, fields)
             })
             .collect();
-        type VariantSnap = (String, i32, Vec<(String, Type)>);
-        let union_snapshot: Vec<(String, Vec<VariantSnap>)> = self
+        type VariantSnap = (String, i32, Vec<(String, TypeId)>);
+        let union_snapshot: Vec<(TypeId, String, Vec<VariantSnap>)> = self
             .union_table
             .iter()
-            .map(|(name, info)| {
+            .map(|(ty, info)| {
                 let variants = info
                     .variants
                     .iter()
                     .map(|v| {
-                        let fields = v
-                            .fields
-                            .iter()
-                            .map(|f| (f.name.clone(), f.type_.clone()))
-                            .collect();
+                        let fields = v.fields.iter().map(|f| (f.name.clone(), f.ty)).collect();
                         (v.name.clone(), v.discriminant, fields)
                     })
                     .collect();
-                (name.clone(), variants)
+                (*ty, info.name.clone(), variants)
             })
             .collect();
 
-        // Lower every struct's fields to interned ids up front. Keyed by the struct's interned type id
-        // (`lower_str` canonicalizes both plain names and mangled generic instances like `Box_int` to
-        // `struct_ty(def, args)`), so each monomorphization gets its own layout.
+        // Field IDs are producer facts; re-resolving their source names here loses foreign arguments.
         let mut lowered: Vec<LoweredStruct> = Vec::with_capacity(struct_snapshot.len());
-        for (name, packed, fields) in struct_snapshot {
-            let ty = self.type_ctx.lower_str(&name);
+        for (ty, name, packed, fields) in struct_snapshot {
+            if let dream_types::TyKind::Struct(def, _) = self.type_ctx.interner.kind(ty) {
+                self.type_ctx.set_scope(def.module);
+            }
             let defs: Vec<(String, TypeId, bool, bool)> = fields
                 .iter()
-                .map(|(fname, t, is_weak, is_unowned)| {
-                    (fname.clone(), self.type_ctx.lower(t), *is_weak, *is_unowned)
-                })
+                .map(|(fname, t, is_weak, is_unowned)| (fname.clone(), *t, *is_weak, *is_unowned))
                 .collect();
             lowered.push((ty, name, packed, defs));
         }
@@ -125,17 +126,28 @@ impl<'a> Analyzer<'a> {
             .collect();
         let mut struct_defs = Vec::new();
         for (ty, name, packed, defs) in lowered {
+            if let dream_types::TyKind::Struct(def, _) = self.type_ctx.interner.kind(ty) {
+                self.type_ctx.set_scope(def.module);
+            }
             let destructor = if self
                 .struct_table
-                .get_struct(&name)
+                .get_struct(ty)
                 .is_some_and(|info| info.has_destructor)
             {
-                self.type_ctx.defs.lookup(
+                self.type_ctx.resolve(
                     DefKind::Function,
                     &dream_types::method_fn(&name, dream_syntax::nodes::types::DESTRUCTOR_NAME),
                 )
             } else {
                 None
+            };
+            let name = if self.type_ctx.scope() == dream_types::ModuleId::ROOT {
+                name
+            } else {
+                format!(
+                    "_Dt{}",
+                    dream_types::type_symbol(&self.type_ctx.interner, &self.type_ctx.defs, ty)
+                )
             };
             struct_defs.push(StructLayoutDef {
                 ty,
@@ -187,8 +199,10 @@ impl<'a> Analyzer<'a> {
             });
         }
         let mut union_defs = Vec::new();
-        for (name, variants) in union_snapshot {
-            let ty = self.type_ctx.lower_str(&name);
+        for (ty, name, variants) in union_snapshot {
+            if let dream_types::TyKind::Union(def, _) = self.type_ctx.interner.kind(ty) {
+                self.type_ctx.set_scope(def.module);
+            }
             union_defs.push(UnionLayoutDef {
                 ty,
                 name,
@@ -201,7 +215,7 @@ impl<'a> Analyzer<'a> {
                             .into_iter()
                             .map(|(name, ty)| LayoutFieldDef {
                                 name,
-                                ty: self.type_ctx.lower(&ty),
+                                ty,
                                 is_weak: false,
                                 is_unowned: false,
                             })
@@ -247,7 +261,7 @@ impl<'a> Analyzer<'a> {
     /// Overloaded externs share one imported field, so entries are de-duplicated by name.
     pub(in crate::analyzer) fn hir_build_imports(
         &mut self,
-        node: &dream_syntax::nodes::ProgramNode,
+        node: &crate::module_graph::ProgramView,
     ) -> Vec<HImport> {
         use dream_types::method_fn;
         let mut imports: Vec<HImport> = Vec::new();
@@ -255,38 +269,63 @@ impl<'a> Analyzer<'a> {
         // their bare name, while class/`extend` static externs are mangled `{Type}_{method}` (the
         // name the call site resolves to). Using the bare method name for a class extern would fail
         // the def lookup and silently drop the import (its call site then falls back to `$def{N}`).
-        let top = node.functions.iter().map(|f| (f, f.name.text.clone()));
+        let graph = self.graph;
+        let top = node.functions.iter().map(|f| {
+            (
+                *f,
+                f.name.text.clone(),
+                graph.module_for_file(f.file_path.as_deref()),
+            )
+        });
         let class_methods = node.structs.iter().flat_map(|s| {
-            s.methods
-                .iter()
-                .map(move |m| (m, method_fn(&s.name.text, &m.name.text)))
+            s.methods.iter().map(move |m| {
+                (
+                    m,
+                    method_fn(&s.name.text, &m.name.text),
+                    graph.module_for_file(s.file_path.as_deref()),
+                )
+            })
         });
         let extend_methods = node.extends.iter().flat_map(|e| {
-            e.methods
-                .iter()
-                .map(move |m| (m, method_fn(&e.target.text, &m.name.text)))
+            e.methods.iter().map(move |m| {
+                (
+                    m,
+                    method_fn(&e.target.text, &m.name.text),
+                    graph.module_for_file(e.file_path.as_deref()),
+                )
+            })
         });
         // A generic class's `extern`/`@intrinsic` methods (e.g. `Cell<T>.raw_host`) are
         // duplicated per instantiation under a mangled `{Type_args}_{method}` name absent from
         // `node.structs` (which only ever holds the unmangled template) — walk
         // `generic_struct_instances` (recorded by `ensure_struct_instantiated`) for those instead.
-        let generic_instance_methods: Vec<(&dream_syntax::nodes::FunctionNode, String)> = self
+        let generic_instance_methods: Vec<(
+            &dream_syntax::nodes::FunctionNode,
+            String,
+            dream_types::ModuleId,
+        )> = self
             .generic_struct_instances
             .iter()
             .filter_map(|(base, args)| {
-                let template = *self.generic_structs.get(base.as_str())?;
+                let template = *self.generic_struct(base.as_str())?;
                 let mangled = dream_syntax::nodes::types::mangle_generic(base, args);
                 Some(
                     template
                         .methods
                         .iter()
-                        .map(move |m| (m, method_fn(&mangled, &m.name.text)))
+                        .map(move |m| {
+                            (
+                                m,
+                                method_fn(&mangled, &m.name.text),
+                                graph.module_for_file(template.file_path.as_deref()),
+                            )
+                        })
                         .collect::<Vec<_>>(),
                 )
             })
             .flatten()
             .collect();
-        for (func, sym_name) in top
+        for (func, sym_name, owner) in top
             .chain(class_methods)
             .chain(extend_methods)
             .chain(generic_instance_methods)
@@ -294,14 +333,19 @@ impl<'a> Analyzer<'a> {
             if !func.is_extern || dream_abi::intrinsics::has_intrinsic_attr(&func.attributes) {
                 continue;
             }
-            if imports.iter().any(|i| i.name == sym_name) {
-                continue;
-            }
+            self.type_ctx.set_scope(owner);
+            let sym_name = self
+                .function_table
+                .resolve_item_namespace(&graph.modules[owner.0 as usize].path, &sym_name)
+                .unwrap_or(sym_name);
             // Match the def the call site resolves to, so the emitter's symbol table maps the call
             // onto this import's `$name`. Unregistered externs (should not happen) are skipped.
-            let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, &sym_name) else {
+            let Some(def) = self.type_ctx.resolve(DefKind::Function, &sym_name) else {
                 continue;
             };
+            if imports.iter().any(|import| import.def == def) {
+                continue;
+            }
             let (module, field) = extern_import_target(func);
             let param_by_ref: Vec<bool> = func.parameters.iter().map(|p| p.is_ref).collect();
             let c_wide_strings =
@@ -355,36 +399,38 @@ impl<'a> Analyzer<'a> {
     /// call site resolves to), matching how they were registered.
     pub(in crate::analyzer) fn hir_build_intrinsics(
         &mut self,
-        node: &dream_syntax::nodes::ProgramNode,
+        node: &crate::module_graph::ProgramView,
     ) -> Vec<(dream_types::DefId, String)> {
         use dream_types::method_fn;
         let mut out: Vec<(dream_types::DefId, String)> = self.intrinsic_defs.clone();
         for func in node.functions.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(func.file_path.as_deref()));
             if let Some(key) = dream_abi::intrinsics::intrinsic_key(&func.attributes) {
-                if let Some(def) = self
-                    .type_ctx
-                    .defs
-                    .lookup(DefKind::Function, &func.name.text)
-                {
+                if let Some(def) = self.type_ctx.resolve(DefKind::Function, &func.name.text) {
                     out.push((def, key));
                 }
             }
         }
         for s in node.structs.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(s.file_path.as_deref()));
             for m in s.methods.iter() {
                 if let Some(key) = dream_abi::intrinsics::intrinsic_key(&m.attributes) {
                     let mangled = method_fn(&s.name.text, &m.name.text);
-                    if let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, &mangled) {
+                    if let Some(def) = self.type_ctx.resolve(DefKind::Function, &mangled) {
                         out.push((def, key));
                     }
                 }
             }
         }
         for e in node.extends.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(e.file_path.as_deref()));
             for m in e.methods.iter() {
                 if let Some(key) = dream_abi::intrinsics::intrinsic_key(&m.attributes) {
                     let mangled = method_fn(&e.target.text, &m.name.text);
-                    if let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, &mangled) {
+                    if let Some(def) = self.type_ctx.resolve(DefKind::Function, &mangled) {
                         out.push((def, key));
                     }
                 }
@@ -393,14 +439,14 @@ impl<'a> Analyzer<'a> {
         // See the matching comment in `hir_build_imports`: a generic class's `@intrinsic` methods
         // need one binding per monomorphization, under its mangled name, not the template's.
         for (base, args) in self.generic_struct_instances.iter() {
-            let Some(template) = self.generic_structs.get(base.as_str()) else {
+            let Some(template) = self.generic_struct(base.as_str()) else {
                 continue;
             };
             let mangled_struct = dream_syntax::nodes::types::mangle_generic(base, args);
             for m in template.methods.iter() {
                 if let Some(key) = dream_abi::intrinsics::intrinsic_key(&m.attributes) {
                     let mangled = method_fn(&mangled_struct, &m.name.text);
-                    if let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, &mangled) {
+                    if let Some(def) = self.type_ctx.resolve(DefKind::Function, &mangled) {
                         out.push((def, key));
                     }
                 }

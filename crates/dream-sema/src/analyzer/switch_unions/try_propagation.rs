@@ -97,15 +97,13 @@ impl<'a> Analyzer<'a> {
 
         let op_mangled = operand_type.get_type();
         let ret_mangled = return_type.get_type();
-        let op_info = self.union_table.get(&op_mangled).cloned();
+        let op_info = self.union_info(&op_mangled).cloned();
         let op_def = self
             .type_ctx
-            .defs
-            .lookup(dream_types::DefKind::Union, &op_mangled);
+            .resolve(dream_types::DefKind::Union, &op_mangled);
         let ret_def = self
             .type_ctx
-            .defs
-            .lookup(dream_types::DefKind::Union, &ret_mangled);
+            .resolve(dream_types::DefKind::Union, &ret_mangled);
 
         let success_ty = op_args[0].clone();
 

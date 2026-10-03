@@ -7,9 +7,10 @@ use crate::driver::ffi_shim::{CppBridge, WrittenShim, SHIM_RUNTIME_EXPORTS};
 use crate::driver::gpu_gen::{self, GpuEmitResult};
 use crate::driver::native_sets::{NativeGraph, NativeSet};
 use dream_abi::attributes::{c_import_target, c_marshal_charset, extern_import_target, has_c_attr};
+use dream_sema::module_graph::ProgramView;
 use dream_syntax::nodes::function::ParameterNode;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
-use dream_syntax::nodes::{AttributeNode, FunctionNode, ProgramNode, Type};
+use dream_syntax::nodes::{AttributeNode, FunctionNode, Type};
 
 /// One live host import after MIR pruning: `(module, field)` as emitted on the WASM import.
 pub type LiveImport = (String, String);
@@ -72,7 +73,7 @@ pub(crate) fn embed_abi_in_wasm(wat_path: &str) -> Result<(), Error> {
 /// Returns the paths of every file written so callers can surface them as build artifacts.
 pub(crate) fn emit_wasm_and_abi(
     wat_path: &str,
-    program: &ProgramNode,
+    program: &ProgramView,
     gpu: &GpuEmitResult,
     live_imports: &[LiveImport],
     native: &NativeGraph,
@@ -149,7 +150,7 @@ fn fn_tag_from_types(params: &[Type], ret: &Type, ptr_size: u32) -> String {
 /// taken from the AST (for accurate Dream names / async flags / type strings) but filtered to
 /// `(module, field)` pairs that survived MIR import pruning.
 pub(crate) fn build_abi_json(
-    program: &ProgramNode,
+    program: &ProgramView,
     gpu: &GpuEmitResult,
     live_imports: &[LiveImport],
     native: &NativeGraph,
@@ -274,6 +275,7 @@ pub(crate) fn build_abi_json(
     for func in program
         .functions
         .iter()
+        .copied()
         .chain(class_methods)
         .chain(extend_methods)
     {
@@ -411,7 +413,7 @@ fn c_sources_json(sets: &[&NativeSet], shims: &BTreeMap<String, WrittenShim>) ->
 /// tags (`struct_ptr:Name` / `out_struct:Name`), then emits a `"structs"` JSON object mapping each
 /// to its size/align/packed flag and field offsets. Empty when no `@c` import needs a struct.
 fn build_c_structs_section(
-    program: &ProgramNode,
+    program: &ProgramView,
     externs: &[String],
     layouts: &dream_hir::LayoutTable,
 ) -> String {
@@ -431,7 +433,7 @@ fn build_c_structs_section(
         .structs
         .iter()
         .filter(|s| s.is_value)
-        .map(|s| (s.name.text.as_str(), s))
+        .map(|s| (s.name.text.as_str(), *s))
         .collect();
     // Reachability closure: a wanted struct's value-struct field is itself an unmanaged type the
     // FFI must know the size of, so include it too (recursively).
@@ -544,6 +546,7 @@ mod tests {
     use bumpalo::Bump;
     use dream_diagnostics::DiagnosticBag;
     use dream_syntax::lexer::Lexer;
+    use dream_syntax::nodes::ProgramNode;
     use dream_syntax::parser::Parser;
 
     fn test_layouts(
@@ -563,7 +566,10 @@ mod tests {
             .iter()
             .filter(|decl| decl.is_value)
             .map(|decl| {
-                let ty = types.lower_str(&decl.name.text);
+                let def = types
+                    .resolve(dream_types::DefKind::Struct, &decl.name.text)
+                    .expect("registered struct");
+                let ty = types.interner.struct_ty(def, vec![]);
                 dream_hir::StructLayoutDef {
                     ty,
                     name: decl.name.text.clone(),
@@ -596,6 +602,8 @@ mod tests {
         let mut parser = Parser::new(lexer, &arena, &mut diagnostics);
         let tree = parser.parse().expect("parse should succeed");
         let program = tree.get_root();
+        let graph = dream_sema::module_graph::ModuleGraph::single(program.clone());
+        let view = graph.view();
         let layouts = test_layouts(program, target);
         let gpu = crate::driver::gpu_gen::GpuEmitResult::default();
         // Consider every extern in the source "live" so the extern actually reaches the JSON.
@@ -610,7 +618,7 @@ mod tests {
             })
             .collect();
         build_abi_json(
-            program,
+            &view,
             &gpu,
             &live,
             &NativeGraph::default(),
@@ -677,7 +685,7 @@ mod tests {
             },
         );
         let json = build_abi_json(
-            tree.get_root(),
+            &dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone()).view(),
             &crate::driver::gpu_gen::GpuEmitResult::default(),
             &live,
             &graph,
@@ -811,6 +819,8 @@ mod tests {
         let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics);
         let tree = parser.parse().expect("parse should succeed");
         let program = tree.get_root();
+        let graph = dream_sema::module_graph::ModuleGraph::single(program.clone());
+        let view = graph.view();
         let live = vec![("c/mylib".to_string(), "consume".to_string())];
         for (target, expected) in [
             (dream_hir::TargetLayout::default(), 24),
@@ -830,7 +840,7 @@ mod tests {
                 .expect("Outer layout");
             assert_eq!(outer.size, expected);
             let json = build_abi_json(
-                program,
+                &view,
                 &crate::driver::gpu_gen::GpuEmitResult::default(),
                 &live,
                 &NativeGraph::default(),
@@ -857,7 +867,8 @@ mod tests {
         let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics);
         let tree = parser.parse().expect("parse should succeed");
         for (ptr_size, expected) in [(4, 24), (8, 32)] {
-            let mut analyzer = dream_sema::analyzer::Analyzer::new(&tree, &arena)
+            let graph = dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone());
+            let mut analyzer = dream_sema::analyzer::Analyzer::new(&graph, &arena)
                 .with_crate_type(dream_sema::analyzer::CrateType::Lib, None)
                 .with_target_layout(dream_hir::TargetLayout {
                     ptr_size,
@@ -880,7 +891,7 @@ mod tests {
                     if n == expected
             )));
             let section = build_c_structs_section(
-                tree.get_root(),
+                &dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone()).view(),
                 &["\"struct_ptr:Outer\"".into()],
                 &hir.layouts,
             );

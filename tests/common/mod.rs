@@ -34,7 +34,8 @@ pub fn analyze_code(code: &str) -> DiagnosticBag {
 
     if let Ok(tree) = parser.parse() {
         let arena = bumpalo::Bump::new();
-        let mut analyzer = Analyzer::new(&tree, &arena);
+        let graph = dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone());
+        let mut analyzer = Analyzer::new(&graph, &arena);
         let _ = analyzer.analyze(&mut diagnostics);
     }
 
@@ -60,13 +61,19 @@ pub fn compile_test_pipeline_for<R>(
     let mut parser = Parser::new(lexer, &parse_arena, &mut diagnostics);
     let tree = parser.parse().expect("parse should succeed");
     let arena = bumpalo::Bump::new();
-    let mut analyzer = Analyzer::new(&tree, &arena).with_target_layout(dream_hir::TargetLayout {
+    let graph = dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone());
+    let mut analyzer = Analyzer::new(&graph, &arena).with_target_layout(dream_hir::TargetLayout {
         ptr_size: target.spec().ptr_size,
         ptr_align: target.spec().ptr_align,
     });
     let hir = analyzer
         .analyze(&mut diagnostics)
-        .expect("analysis should succeed")
+        .unwrap_or_else(|error| {
+            panic!(
+                "analysis should succeed: {error:?}; diagnostics: {:?}",
+                diagnostics.errors().collect::<Vec<_>>()
+            )
+        })
         .hir;
     assert!(!diagnostics.has_errors(), "unexpected analysis errors");
     let interner = analyzer.interner();

@@ -37,7 +37,7 @@ impl<'a> Analyzer<'a> {
                 mangle_generic(&name.text, args)
             }
             _ => {
-                if self.generic_structs.contains_key(&name.text) {
+                if self.generic_struct(&name.text).is_some() {
                     diagnostics.report_error(
                         format!(
                             "Generic class '{}' requires type arguments, e.g. {}<int>(...)",
@@ -52,7 +52,7 @@ impl<'a> Analyzer<'a> {
 
         // File/module-level visibility (Axis 2): a non-public class is only constructible from its
         // own file.
-        if let Some(info) = self.struct_table.get_struct(&struct_name) {
+        if let Some(info) = self.struct_info(&struct_name) {
             if !self.visible_across_files(
                 &info.file_path,
                 info.visibility,
@@ -63,7 +63,17 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        let init_name = constructor_fn(&struct_name);
+        let base_init_name = constructor_fn(&struct_name);
+        let init_name = self
+            .type_ctx
+            .resolve(DefKind::Struct, &name.text)
+            .and_then(|def| {
+                self.function_table.resolve_item_namespace(
+                    &self.type_ctx.defs.get(def).module_path,
+                    &base_init_name,
+                )
+            })
+            .unwrap_or(base_init_name);
         if std::env::var("DREAM_TRACE_CTOR").is_ok() {
             eprintln!(
                 "[ctor] {} init_name={} has_fn={} overloaded={}",
@@ -100,8 +110,7 @@ impl<'a> Analyzer<'a> {
                 Self::resolve_struct_parts(&Type::Struct(name.clone(), generic_args.clone()))
                     .unwrap_or_else(|| (struct_name.clone(), vec![]));
             let struct_file = self
-                .struct_table
-                .get_struct(&struct_name)
+                .struct_info(&struct_name)
                 .and_then(|info| info.file_path.clone())
                 .or_else(|| sig.declaring_file.clone());
             if !self.member_accessible(

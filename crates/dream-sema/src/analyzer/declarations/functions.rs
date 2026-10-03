@@ -15,10 +15,12 @@ impl<'a> Analyzer<'a> {
     /// Pass 1: register every (non-generic) function signature; stash generic templates.
     pub(in crate::analyzer) fn register_functions(
         &mut self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
         for function in node.functions.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(function.file_path.as_deref()));
             diagnostics.file_path = file_path_string(&function.file_path);
             self.check_reserved_name(&function.name, "function", diagnostics);
             if self.crate_type != CrateType::Lib && function.name.text == ENTRY_NAME {
@@ -95,6 +97,8 @@ impl<'a> Analyzer<'a> {
         // bare base when unique, the signature-mangled key when overloaded). Deferred to here so the
         // full overload set is known: overloaded declarations must not collide on a single base def.
         for function in node.functions.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(function.file_path.as_deref()));
             if function.generic_parameters.is_some() {
                 continue;
             }
@@ -110,7 +114,8 @@ impl<'a> Analyzer<'a> {
                 &param_types,
                 &mut self.type_ctx,
             );
-            self.type_ctx.register(DefKind::Function, &emitted, vec![]);
+            let def = self.type_ctx.register(DefKind::Function, &emitted, vec![]);
+            self.record_ide_definition(def, &function.name, function.file_path.as_deref());
         }
         // The entry point is exported under the fixed name `main`. It may be declared as `main()`
         // or `main(args: string[])`, but not overloaded or given any other signature.

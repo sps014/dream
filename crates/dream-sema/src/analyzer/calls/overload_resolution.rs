@@ -15,8 +15,12 @@ impl<'a> Analyzer<'a> {
         // re-deriving the rules from strings.
         let type_ctx = &mut self.type_ctx;
         let compat = |param: &str, arg: &str| {
-            let p = type_ctx.lower_str(param);
-            let a = type_ctx.lower_str(arg);
+            let p = type_ctx
+                .resolved_type(param)
+                .unwrap_or_else(|| type_ctx.interner.error());
+            let a = type_ctx
+                .resolved_type(arg)
+                .unwrap_or_else(|| type_ctx.interner.error());
             dream_types::overload_compatible(&type_ctx.interner, p, a)
         };
         match self.function_table.select_overload(base, arg_types, compat) {
@@ -59,8 +63,14 @@ impl<'a> Analyzer<'a> {
         {
             return true;
         }
-        let e = self.type_ctx.lower_str(expected);
-        let g = self.type_ctx.lower_str(given);
+        let e = self
+            .type_ctx
+            .resolved_type(expected)
+            .unwrap_or_else(|| self.type_ctx.interner.error());
+        let g = self
+            .type_ctx
+            .resolved_type(given)
+            .unwrap_or_else(|| self.type_ctx.interner.error());
         // Argument checking must not emit follow-on diagnostics (e.g. array-collection attach).
         let mut sink = dream_diagnostics::DiagnosticBag::new(None);
         self.value_type_assignable(e, g, &mut sink)

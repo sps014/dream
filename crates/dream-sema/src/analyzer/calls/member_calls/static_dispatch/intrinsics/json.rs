@@ -48,8 +48,7 @@ impl<'a> Analyzer<'a> {
             let sb_local = self.hir_alloc_local("__json_sb", &sb_ty);
             let ctor = self
                 .type_ctx
-                .defs
-                .lookup(DefKind::Function, &constructor_fn("StringBuilder"));
+                .resolve(DefKind::Function, &constructor_fn("StringBuilder"));
             let int_ty = self.type_ctx.interner.int();
             let capacity = HExpr::new(int_ty, HExprKind::IntLit(256));
             self.hir_set_new("StringBuilder", ctor, vec![Some(capacity)], &sb_ty);
@@ -156,7 +155,7 @@ impl<'a> Analyzer<'a> {
             let from_json_call = json_collection_de_fn(&struct_name)
                 .unwrap_or_else(|| method_fn(&struct_name, "from_json"));
             let text = arg_hirs.into_iter().next().flatten();
-            let is_union = self.union_table.contains_key(t_type.get_type().as_str());
+            let is_union = self.union_info(t_type.get_type().as_str()).is_some();
             let typed_parser = json_collection_de_fn(&struct_name).is_none() && !is_union;
 
             let parse_err = named("ParseError");
@@ -239,15 +238,13 @@ impl<'a> Analyzer<'a> {
 
             let parse_mangled = parse_result_ty.get_type();
             let result_mangled = result_ty.get_type();
-            let parse_info = self.union_table.get(&parse_mangled).cloned();
+            let parse_info = self.union_info(&parse_mangled).cloned();
             let parse_def = self
                 .type_ctx
-                .defs
-                .lookup(dream_types::DefKind::Union, &parse_mangled);
+                .resolve(dream_types::DefKind::Union, &parse_mangled);
             let result_def = self
                 .type_ctx
-                .defs
-                .lookup(dream_types::DefKind::Union, &result_mangled);
+                .resolve(dream_types::DefKind::Union, &result_mangled);
 
             let (Some(parse_info), Some(parse_def), Some(result_def)) =
                 (parse_info, parse_def, result_def)

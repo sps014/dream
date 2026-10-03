@@ -81,10 +81,11 @@ impl<'a> Analyzer<'a> {
         }
         let (subject_type, subject_hir, subject_base, union_info) =
             self.resolve_switch_subject(subject, parent_function, symbol_table, diagnostics)?;
-        let union_def = self
-            .type_ctx
-            .defs
-            .lookup(dream_types::DefKind::Union, &subject_base);
+        let subject_id = self.type_ctx.lower(&subject_type);
+        let union_def = match self.type_ctx.interner.kind(subject_id) {
+            dream_types::TyKind::Union(def, _) => Some(*def),
+            _ => None,
+        };
 
         // Or-alternatives are validated binding-free against the original arms (expansion turns each
         // alt into its own arm, which would otherwise miss this check).

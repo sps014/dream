@@ -242,13 +242,15 @@ pub struct HParam {
     pub local: LocalId,
     pub name: String,
     pub ty: TypeId,
-    /// True for a `ref` parameter backed by a value-struct box (see
-    /// `Analyzer::ref_box_type`/`docs/compiler/03-hir.md`): its MIR local must alias the caller's
-    /// storage in place rather than take a private copy (`FunctionBuilder::new_ref_param`).
-    pub is_ref: bool,
-    /// True for a `take name: T` parameter: the callee takes ownership of the caller's +1.
-    /// Unmarked / explicit `borrow` parameters leave this false (default borrow ABI).
-    pub is_take: bool,
+    pub mode: ParamMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamMode {
+    Borrow,
+    Share,
+    Sink,
+    Ref,
 }
 
 /// Declaration metadata for a function local (used by the backend to allocate slots and by RC

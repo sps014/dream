@@ -2,6 +2,7 @@ use super::*;
 
 pub(super) struct LoadedProgram<'a> {
     pub acc: ProgramAccumulator<'a>,
+    pub graph: dream_sema::module_graph::ModuleGraph<'a>,
     pub native_graph: crate::driver::native_sets::NativeGraph,
     pub cpp_bridge: crate::driver::ffi_shim::CppBridge,
 }
@@ -97,6 +98,7 @@ impl Compiler {
         }
 
         Ok(LoadedProgram {
+            graph: acc.module_graph(),
             acc,
             native_graph,
             cpp_bridge,

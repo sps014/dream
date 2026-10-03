@@ -5,13 +5,41 @@
 
 use super::*;
 use crate::function_table::FunctionTableInfo;
+use crate::module_graph::ProgramView;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::types::PRIMITIVE_TYPE_NAMES;
-use dream_syntax::nodes::{FunctionNode, ProgramNode, Type};
+use dream_syntax::nodes::{FunctionNode, Type};
 use dream_types::method_fn;
 
 impl<'a> Analyzer<'a> {
+    pub(in crate::analyzer) fn register_final_method_definitions(&mut self) {
+        for (method, _) in self.struct_methods.clone() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(method.file_path.as_deref()));
+            let module = self.module_of(method.file_path.as_ref());
+            let parameters: Vec<_> = method
+                .parameters
+                .iter()
+                .map(|parameter| parameter.type_.clone())
+                .collect();
+            let key = self.function_table.resolve_emitted_name_scoped(
+                &method.name.text,
+                module.as_ref(),
+                &parameters,
+                &mut self.type_ctx,
+            );
+            let source = self
+                .type_ctx
+                .resolve(DefKind::Function, &method.name.text)
+                .and_then(|def| self.ide_sources.get(&def).cloned());
+            let def = self.type_ctx.register(DefKind::Function, &key, vec![]);
+            if let Some(source) = source {
+                self.ide_sources.insert(def, source);
+            }
+        }
+    }
+
     pub(in crate::analyzer) fn register_struct_methods(
         &mut self,
         struct_decl: &'a StructDeclarationNode<'a>,
@@ -19,7 +47,11 @@ impl<'a> Analyzer<'a> {
         bindings: &GenericBindings,
         diagnostics: &mut DiagnosticBag,
     ) {
+        let scope = self.type_ctx.scope();
+        self.type_ctx
+            .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
         self.register_methods_for(struct_type_str, &struct_decl.methods, bindings, diagnostics);
+        self.type_ctx.set_scope(scope);
     }
 
     /// Registers a list of methods against `target_type_str` (a struct, a monomorphized generic
@@ -102,13 +134,14 @@ impl<'a> Analyzer<'a> {
                 &mangled_name,
                 diagnostics,
             );
-            self.type_ctx.register(
+            let def = self.type_ctx.register(
                 DefKind::Function,
                 &mangled_name,
                 generic_param_names(&method.generic_parameters),
             );
+            self.record_ide_definition(def, &method.name, method.file_path.as_deref());
             if let Some(key) = dream_abi::intrinsics::intrinsic_key(&method.attributes) {
-                if let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, &mangled_name) {
+                if let Some(def) = self.type_ctx.resolve(DefKind::Function, &mangled_name) {
                     self.intrinsic_defs.push((def, key));
                 }
             }
@@ -161,7 +194,8 @@ impl<'a> Analyzer<'a> {
             let method_ref = self.arena.alloc(new_method);
             self.struct_methods.push((method_ref, bindings.clone()));
 
-            let info = FunctionTableInfo::from(method_ref);
+            let mut info = FunctionTableInfo::from(method_ref);
+            info.declaring_module = self.module_of(method_ref.file_path.as_ref());
             if let Err(e) =
                 self.function_table
                     .add_overload(&mangled_name, info, &mut self.type_ctx)
@@ -204,10 +238,10 @@ impl<'a> Analyzer<'a> {
         }
         PRIMITIVE_TYPE_NAMES.contains(&name)
             || matches!(name, "object" | "js")
-            || self.struct_table.get_struct(name).is_some()
-            || self.generic_structs.contains_key(name)
-            || self.enum_table.contains_key(name)
-            || self.interface_decls.contains_key(name)
+            || self.struct_info(name).is_some()
+            || self.generic_struct(name).is_some()
+            || self.enum_members(name).is_some()
+            || self.interface_decl(name).is_some()
     }
 
     /// Pass: register every `extend Type { ... }` block's methods. Extension methods are lowered
@@ -216,10 +250,12 @@ impl<'a> Analyzer<'a> {
     /// keep their value/reference semantics.
     pub(in crate::analyzer) fn register_extensions(
         &mut self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
         for ext in node.extends.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(ext.file_path.as_deref()));
             diagnostics.file_path = file_path_string(&ext.file_path);
             let target = ext.target.text.clone();
             // `sealed` types reject user-authored `extend` blocks. Compiler-synthesized extends
@@ -253,9 +289,9 @@ impl<'a> Analyzer<'a> {
                 if target.ends_with("[]") {
                     continue;
                 }
-                if !self.generic_unions.contains_key(target)
-                    && !self.generic_structs.contains_key(target)
-                    && !self.generic_interfaces.contains_key(target)
+                if self.generic_union(target).is_none()
+                    && self.generic_struct(target).is_none()
+                    && self.generic_interface(target).is_none()
                 {
                     diagnostics.report_error(
                         format!(
@@ -299,9 +335,11 @@ impl<'a> Analyzer<'a> {
     ///
     /// Generic array templates (`extend T[] { … }`) are keyed under [`ARRAY_EXTEND_KEY`] (`"[]"`),
     /// not under the spelling `T[]`, so every concrete `Elem[]` shares one template.
-    pub(in crate::analyzer) fn stash_generic_extensions(&mut self, node: &'a ProgramNode<'a>) {
+    pub(in crate::analyzer) fn stash_generic_extensions(&mut self, node: &'a ProgramView<'a>) {
         use dream_syntax::nodes::types::ARRAY_EXTEND_KEY;
         for ext in node.extends.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(ext.file_path.as_deref()));
             if ext.generic_parameters.is_some() {
                 let key = if ext.target.text.ends_with("[]") {
                     ARRAY_EXTEND_KEY.to_string()

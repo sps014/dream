@@ -17,8 +17,7 @@ use dream_abi::attributes::CompileTargets;
 use dream_diagnostics::{format_diagnostics, render_with, DiagnosticBag};
 use dream_mir::backend::Target;
 use dream_sema::analyzer::Analyzer;
-use dream_syntax::nodes::ProgramNode;
-use dream_syntax::syntax_tree::SyntaxTree;
+use dream_sema::module_graph::ProgramView;
 
 /// The runtime a module links against: its needed catalog modules, target, and for wasm32 whether
 /// the module runs on shared memory and the guest optimization level.
@@ -297,7 +296,7 @@ use diagnostics::{fail_diagnostics, panic_message, render_internal_error};
 /// Reports every `@c` extern whose import survived MIR pruning on a wasm32 build: native C/C++
 /// only links into native binaries, so the call has no host to bind to. True when any was found.
 fn report_wasm_c_imports(
-    program: &ProgramNode<'_>,
+    program: &ProgramView<'_>,
     live_imports: &[(String, String)],
     cpp: &crate::driver::ffi_shim::CppBridge,
     diagnostics: &mut DiagnosticBag,
@@ -313,7 +312,13 @@ fn report_wasm_c_imports(
     let methods = program.structs.iter().flat_map(|s| s.methods.iter());
     let extends = program.extends.iter().flat_map(|e| e.methods.iter());
     let mut reported = std::collections::BTreeSet::new();
-    for f in program.functions.iter().chain(methods).chain(extends) {
+    for f in program
+        .functions
+        .iter()
+        .copied()
+        .chain(methods)
+        .chain(extends)
+    {
         if !f.is_extern || !dream_abi::attributes::has_c_attr(&f.attributes) {
             continue;
         }

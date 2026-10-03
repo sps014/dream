@@ -285,12 +285,12 @@ impl<'a> Analyzer<'a> {
 
     fn is_c_ptr(&self, ty: &Type) -> bool {
         matches!(ty, Type::Struct(tok, None) if tok.text == C_PTR_TYPE)
-            && self.struct_table.get_struct(C_PTR_TYPE).is_some()
+            && self.struct_info(C_PTR_TYPE).is_some()
     }
 
     fn is_owned_c_ptr(&self, ty: &Type) -> bool {
         matches!(ty, Type::Struct(tok, None) if tok.text == OWNED_C_PTR_TYPE)
-            && self.struct_table.get_struct(OWNED_C_PTR_TYPE).is_some()
+            && self.struct_info(OWNED_C_PTR_TYPE).is_some()
     }
 
     fn is_unmanaged_struct(&self, ty: &Type) -> bool {
@@ -298,7 +298,7 @@ impl<'a> Analyzer<'a> {
             return false;
         };
         tok.text != C_PTR_TYPE
-            && self.struct_table.get_struct(&tok.text).is_some()
+            && self.struct_info(&tok.text).is_some()
             && self.type_satisfies_kind(ty, ConstraintKind::Unmanaged)
     }
 }

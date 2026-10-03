@@ -1,5 +1,6 @@
 use crate::errors::SemanticError;
 use crate::function_table::FunctionTable;
+use crate::module_graph::{ModuleGraph, ProgramView};
 use crate::struct_table::StructTable;
 use crate::symbol_table::SymbolTable;
 use crate::union_table::UnionTable;
@@ -8,8 +9,7 @@ use dream_abi::attributes::{CompileTargets, RuntimeSupport};
 use dream_diagnostics::{Diagnostic, DiagnosticBag};
 use dream_syntax::nodes::types::{mangle_with_suffixes, primitive_type, FUTURE_TYPE};
 use dream_syntax::nodes::{EnumDeclarationNode, ExtendNode};
-use dream_syntax::nodes::{ExpressionNode, FunctionNode, ProgramNode, Type};
-use dream_syntax::syntax_tree::SyntaxTree;
+use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
 use dream_text::line_text::LineText;
@@ -132,7 +132,7 @@ pub type GenericBindings = IndexMap<String, Type>;
 
 /// Enum name -> (member name -> integer value). Insertion-ordered at both levels so the enum
 /// variant-name interning that feeds emitted output happens in a deterministic (declaration) order.
-pub type EnumTable = IndexMap<String, IndexMap<String, i32>>;
+pub type EnumTable = IndexMap<dream_types::DefId, IndexMap<String, i32>>;
 
 /// A resolved top-level variable, carried from semantic analysis into code generation so the
 /// generator can emit the corresponding WASM global and the module-init store (and decide whether
@@ -193,7 +193,8 @@ pub(super) enum MemberField {
 }
 
 pub struct Analyzer<'a> {
-    syntax_tree: &'a SyntaxTree<'a>,
+    graph: &'a ModuleGraph<'a>,
+    program: &'a ProgramView<'a>,
     function_table: FunctionTable,
     struct_table: StructTable,
     arena: &'a Bump,
@@ -248,8 +249,10 @@ pub struct Analyzer<'a> {
     /// — this is analysis-only sugar; the branch body's own binding is still a real local declared
     /// by `declare_is_bindings`.
     is_binding_aliases: Vec<(String, Type, &'a ExpressionNode<'a>)>,
-    generic_structs:
-        HashMap<String, &'a dream_syntax::nodes::struct_node::StructDeclarationNode<'a>>,
+    generic_structs: HashMap<
+        dream_types::DefId,
+        &'a dream_syntax::nodes::struct_node::StructDeclarationNode<'a>,
+    >,
     /// Every concrete `(base name, type args)` a generic class has been instantiated with (recorded
     /// by `ensure_struct_instantiated`). `node.structs` (the parsed AST) only ever holds the
     /// generic *template* declaration, never its monomorphizations — so `hir_build_imports`/
@@ -270,7 +273,7 @@ pub struct Analyzer<'a> {
     /// Layout of every registered (monomorphized) discriminated union.
     union_table: UnionTable,
     /// Generic discriminated-union templates (`enum Option<T> { ... }`), instantiated on demand.
-    generic_unions: HashMap<String, &'a EnumDeclarationNode<'a>>,
+    generic_unions: HashMap<dream_types::DefId, &'a EnumDeclarationNode<'a>>,
     /// Generic `extend Type<...> { ... }` templates (e.g. `extend Option<T> { ... }`), keyed by
     /// the extended type's name. Their methods are monomorphized alongside each concrete
     /// instantiation of the target generic union or struct (see `ensure_*_instantiated`).
@@ -279,16 +282,18 @@ pub struct Analyzer<'a> {
     /// local method index, used for itable slot assignment). Each entry is a body-less
     /// [`FunctionNode`] (no implicit `this`). For interfaces that extend parents, this list is the
     /// flattened closure (parent methods, then own methods; child overrides replace parents).
-    interface_methods: IndexMap<String, Vec<&'a FunctionNode<'a>>>,
+    interface_methods: IndexMap<dream_types::TypeId, Vec<&'a FunctionNode<'a>>>,
     /// Generic interface templates (`interface Container<T> { ... }`), instantiated on demand into
     /// concrete `interface_methods` entries (e.g. `Container_int`) — mirrors `generic_structs`.
-    generic_interfaces: HashMap<String, &'a dream_syntax::nodes::InterfaceDeclarationNode<'a>>,
+    generic_interfaces:
+        HashMap<dream_types::DefId, &'a dream_syntax::nodes::InterfaceDeclarationNode<'a>>,
     /// Interface base name -> parent interface types from `: Parent (+ Parent)*` (unsubstituted
     /// when the interface is generic — substituted when building a concrete instance).
-    interface_parents: HashMap<String, Vec<Type>>,
+    interface_parents: HashMap<dream_types::DefId, Vec<Type>>,
     /// All interface declarations by base name (generic templates and concrete interfaces), used
     /// when flattening inheritance and looking up parent method defaults.
-    interface_decls: HashMap<String, &'a dream_syntax::nodes::InterfaceDeclarationNode<'a>>,
+    interface_decls:
+        HashMap<dream_types::DefId, &'a dream_syntax::nodes::InterfaceDeclarationNode<'a>>,
     /// Concrete interface name (mangled) -> immediate parent concrete interface names, recorded
     /// when the child's method list is flattened. Used to expand `implements` transitively.
     interface_parent_instances: HashMap<String, Vec<String>>,
@@ -303,7 +308,7 @@ pub struct Analyzer<'a> {
     /// implements clause is validated. Names are mangled for generic instances (e.g. `Box_int` ->
     /// `Container_int`). Drives interface-typed assignability and itable emission. Includes
     /// transitive parent interfaces of each explicitly implemented interface.
-    implements: HashMap<String, Vec<String>>,
+    implements: HashMap<dream_types::TypeId, Vec<dream_types::TypeId>>,
     /// Type name (mangled for generic instances, matching `implements`'s keys) -> its
     /// `@operator`/`@cast`-tagged methods, populated by
     /// [`declarations::operator_overloads::Analyzer::validate_and_register_operator`] and consulted
@@ -369,9 +374,7 @@ pub struct Analyzer<'a> {
     current_file: Option<Rc<str>>,
     /// Maps each source file that declared a `module a.b.c;` to its dot-joined module path.
     /// Files absent from this map (the overwhelming majority: anyone who never writes `module`)
-    /// belong to the implicit, unnamed root module. Populated once, before [`Self::analyze`] runs,
-    /// via [`Self::with_file_modules`] — built from every parsed file's own `ProgramNode::module`
-    /// before `compiler.rs`/the LSP flatten all files into one merged [`ProgramNode`].
+    /// belong to the implicit, unnamed root module. Derived from the module graph.
     file_modules: HashMap<Rc<str>, Rc<str>>,
     /// Every aliased `import a.b.c as x;` collected across all files (module path, item name,
     /// alias token, importing file path), populated once via [`Self::with_aliased_imports`] before
@@ -392,6 +395,8 @@ pub struct Analyzer<'a> {
     /// IDE side table: every name/member/call resolution recorded during body analysis (see
     /// [`ide`]). Purely additive — nothing in analysis reads it, so compiler output is unaffected.
     ide_refs: Vec<ide::IdeRef>,
+    ide_sources: HashMap<dream_types::DefId, ide::IdeSource>,
+    ide_member_sources: HashMap<(dream_types::DefId, String), ide::IdeSource>,
     /// Interleaved HIR-emission state and the accumulated emitted functions.
     hir: hir_emit::HirEmit,
     /// `lib` rejects a top-level `main` in the primary compilation file; `bin` (default) allows it.
@@ -413,9 +418,13 @@ mod contexts;
 mod pipeline;
 mod type_queries;
 impl<'a> Analyzer<'a> {
-    pub fn new(tree: &'a SyntaxTree<'a>, arena: &'a Bump) -> Self {
+    pub fn new(graph: &'a ModuleGraph<'a>, arena: &'a Bump) -> Self {
+        let program = arena.alloc(graph.view());
+        let mut type_ctx = TypeCtx::new();
+        graph.configure_types(&mut type_ctx);
         Self {
-            syntax_tree: tree,
+            graph,
+            program,
             function_table: FunctionTable::new(),
             struct_table: StructTable::new(),
             arena,
@@ -466,12 +475,22 @@ impl<'a> Analyzer<'a> {
             current_function_is_gpu: false,
             overflow: dream_hir::Overflow::Wrapping,
             current_file: None,
-            file_modules: HashMap::new(),
+            file_modules: graph
+                .files
+                .iter()
+                .filter_map(|file| {
+                    let path = &graph.modules[file.module.0 as usize].path;
+                    (!path.is_empty())
+                        .then(|| (Rc::from(file.path.as_str()), Rc::from(path.as_str())))
+                })
+                .collect(),
             aliased_imports: Vec::new(),
             globals: Vec::new(),
             global_symbol_table: Rc::new(RefCell::new(SymbolTable::new(None))),
-            type_ctx: TypeCtx::new(),
+            type_ctx,
             ide_refs: Vec::new(),
+            ide_sources: HashMap::new(),
+            ide_member_sources: HashMap::new(),
             hir: hir_emit::HirEmit::default(),
             crate_type: CrateType::Bin,
             primary_file: None,
@@ -488,14 +507,6 @@ impl<'a> Analyzer<'a> {
     /// source-line markers. Call before [`Self::analyze`].
     pub fn set_debug_info(&mut self, on: bool) {
         self.hir_set_debug_info(on);
-    }
-
-    /// Records the file -> declared-module-path map built from every parsed file's own `module`
-    /// declaration, before `compiler.rs`/the LSP flatten everything into one merged `ProgramNode`
-    /// (which erases per-file structure). Call before [`Self::analyze`].
-    pub fn with_file_modules(mut self, file_modules: HashMap<Rc<str>, Rc<str>>) -> Self {
-        self.file_modules = file_modules;
-        self
     }
 
     /// Records every aliased `import a.b.c as x;` collected across all files, resolved once
@@ -530,7 +541,7 @@ impl<'a> Analyzer<'a> {
         &mut self,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<SemanticInfo<'_>, SemanticError> {
-        let pgm = self.syntax_tree.get_root();
+        let pgm = self.program;
         self.analyze_pgm(pgm, diagnostics)
     }
 }

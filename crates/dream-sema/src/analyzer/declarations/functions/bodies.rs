@@ -4,7 +4,7 @@ impl<'a> Analyzer<'a> {
     /// Pass 2: analyze the body of every concrete function.
     pub(in crate::analyzer) fn analyze_function_bodies(
         &mut self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         symbol_table_map: &mut HashMap<String, Rc<RefCell<SymbolTable>>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {

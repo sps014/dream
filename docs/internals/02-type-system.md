@@ -41,9 +41,8 @@ classDiagram
         Js
     }
     class DefTable {
-        +intern(DefKind, name, generics) DefId
+        +allocate(ModuleId, path, DefKind, name, generics) DefId
         +get(DefId) DefInfo
-        +lookup(DefKind, name) Option~DefId~
     }
     class TypeCtx {
         +interner TypeInterner
@@ -90,7 +89,9 @@ Hash-conses `TyKind → TypeId`. The nullary types (all primitives, `Object`, `V
 
 A `DefId` names a nominal declaration — a struct, union, enum, or function (`DefKind`) — and is **independent of type arguments**: `Box<int>` and `Box<string>` are `Struct(box_def, [int])` and `Struct(box_def, [string])` with the *same* `box_def`. `DefInfo` records the base `name` (never mangled) and the declared `generic_params` (`["T"]`).
 
-This is the key to monomorphization: instances are keyed by `(DefId, Vec<TypeId>)`. During HIR emission, `dream-types::function_symbol` builds the emitted name from the declaring module, function key and structural type arguments. `dream-types::type_symbol` encodes type shapes and nominal declaration names, never the numeric interner handles. Overload keys use that same structural type encoding. Length framing and byte escaping distinguish underscores, punctuation and argument boundaries; `_D`-prefixed user names are escaped into a separate namespace. Module-scoped nominal identity is still pending Phase 5's module migration.
+`DefId` contains a `ModuleId` and a module-local index. `DefTable` stores definitions by that identity; source-name resolution belongs to module scopes in `TypeCtx`. Two modules can each declare `User` without sharing a nominal type or runtime layout.
+
+Canonical type instances are keyed by `(DefId, Vec<TypeId>)`. During HIR emission, `dream-types::function_symbol` builds the emitted name from the declaring module, function key and structural type arguments. `dream-types::type_symbol` includes the nominal module path, never numeric interner handles. Length framing and byte escaping distinguish underscores, punctuation and argument boundaries; `_D`-prefixed user names are escaped into a separate namespace. Frontend mangled-instance aliases and some function/generic metadata still need migration away from name keys.
 
 ### Compatibility & widening — `src/types/compat.rs`
 
@@ -112,7 +113,7 @@ The analyzer-facing bundle: it owns the `TypeInterner` and `DefTable` and lowers
 - `lower(&Type)` lowers a type annotation with no generics in scope.
 - `lower_with(&Type, &bindings)` lowers with generic parameter substitution (`bindings: name → TypeId`), used when instantiating a generic body.
 
-Because the parser emits `Type::Struct` for *any* bare identifier (structs, unions, and enums look identical syntactically), `TypeCtx` keeps a `nominal: name → DefKind` registry so `lower` can pick `Struct`/`Union`/`Enum`. Register declarations before lowering their uses.
+Because the parser emits `Type::Struct` for any bare identifier, `TypeCtx` resolves its kind and definition in the current module and its imports. Register declarations before lowering their uses. The compiler-owned `Future<T>` definition is registered explicitly: async result types must remain reference types even though there is no source declaration for `Future`.
 
 ### `shared` classes
 

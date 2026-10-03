@@ -596,7 +596,8 @@ fn test_hir_emission_global_initializer_runs_in_start() {
     let mut parser = Parser::new(lexer, &parse_arena, &mut diagnostics);
     let tree = parser.parse().expect("parse should succeed");
     let arena = bumpalo::Bump::new();
-    let mut analyzer = Analyzer::new(&tree, &arena);
+    let graph = dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone());
+    let mut analyzer = Analyzer::new(&graph, &arena);
     let hir = analyzer
         .analyze(&mut diagnostics)
         .expect("analysis should succeed")
@@ -1074,7 +1075,7 @@ fn indirect_call_demo() -> (dream_mir::Mir, dream_types::TypeInterner) {
     let int = i.int();
     let void = i.void();
     let functy = i.func(vec![int, int], int);
-    let add_def = DefId(10);
+    let add_def = DefId::root(10);
 
     let mut ab = FunctionBuilder::new("add", int);
     ab.set_def(add_def, vec![]);
@@ -1092,7 +1093,7 @@ fn indirect_call_demo() -> (dream_mir::Mir, dream_types::TypeInterner) {
     ab.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(t)))));
 
     let mut mb = FunctionBuilder::new("main", void);
-    mb.set_def(DefId(11), vec![]);
+    mb.set_def(DefId::root(11), vec![]);
     let f = mb.new_local(int, Some("f".into()));
     let r = mb.new_local(int, Some("r".into()));
     mb.assign(
@@ -1257,7 +1258,8 @@ fn func_value_argument_is_reference_counted() {
     let mut parser = Parser::new(lexer, &parse_arena, &mut diagnostics);
     let tree = parser.parse().expect("parse should succeed");
     let arena = bumpalo::Bump::new();
-    let mut analyzer = Analyzer::new(&tree, &arena);
+    let graph = dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone());
+    let mut analyzer = Analyzer::new(&graph, &arena);
     let hir = analyzer
         .analyze(&mut diagnostics)
         .expect("analysis should succeed")

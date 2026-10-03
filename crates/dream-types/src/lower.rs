@@ -3,7 +3,7 @@
 //! of the compiler stop threading stringly-typed names around: declarations register their nominal
 //! defs here, and every AST type annotation is lowered through [`TypeCtx::lower`].
 
-use super::{DefKind, DefTable, PrimTy, TypeId, TypeInterner};
+use super::{DefId, DefKind, DefTable, ModuleId, PrimTy, TypeId, TypeInterner};
 use dream_syntax::nodes::types::{mangle_generic, Type};
 use indexmap::IndexMap;
 
@@ -15,12 +15,15 @@ pub struct TypeCtx {
     pub defs: DefTable,
     /// Base name -> declared kind, used to disambiguate `Type::Struct` (which the parser also emits
     /// for unions and enums, since they are bare identifiers syntactically).
-    nominal: IndexMap<String, DefKind>,
+    declarations: IndexMap<(ModuleId, DefKind, String), DefId>,
+    modules: IndexMap<ModuleId, String>,
+    scope: ModuleId,
+    imports: IndexMap<ModuleId, Vec<ModuleId>>,
     /// Mangled monomorphization name (`List_JsonValue`) -> the canonical interned id of that generic
     /// instance (`Struct(List_def, [JsonValue])`). The analyzer registers each instantiation here so
     /// the pre-mangled bare spelling and the structured `List<JsonValue>` spelling lower to the same
     /// [`TypeId`].
-    instances: IndexMap<String, TypeId>,
+    instances: IndexMap<(ModuleId, String), TypeId>,
 }
 
 impl TypeCtx {
@@ -28,7 +31,10 @@ impl TypeCtx {
         TypeCtx {
             interner: TypeInterner::new(),
             defs: DefTable::new(),
-            nominal: IndexMap::new(),
+            declarations: IndexMap::new(),
+            modules: IndexMap::new(),
+            scope: ModuleId::ROOT,
+            imports: IndexMap::new(),
             instances: IndexMap::new(),
         }
     }
@@ -39,12 +45,159 @@ impl TypeCtx {
         name: &str,
         generic_params: Vec<String>,
     ) -> super::DefId {
-        self.nominal.insert(name.to_string(), kind);
-        self.defs.intern(kind, name, generic_params)
+        let key = (self.scope, kind, name.to_string());
+        if let Some(&def) = self.declarations.get(&key) {
+            return def;
+        }
+        let path = self
+            .modules
+            .get(&self.scope)
+            .map(String::as_str)
+            .unwrap_or("");
+        let def = self
+            .defs
+            .allocate(self.scope, path, kind, name, generic_params);
+        self.declarations.insert(key, def);
+        match kind {
+            DefKind::Struct => {
+                self.interner.struct_ty(def, vec![]);
+            }
+            DefKind::Union => {
+                self.interner.union_ty(def, vec![]);
+            }
+            DefKind::Enum => {
+                self.interner.enum_ty(def);
+            }
+            DefKind::Interface => {
+                self.interner.interface_ty(def, vec![]);
+            }
+            DefKind::Function => {}
+        }
+        def
     }
 
     pub fn nominal_kind(&self, name: &str) -> Option<DefKind> {
-        self.nominal.get(name).copied()
+        [
+            DefKind::Struct,
+            DefKind::Union,
+            DefKind::Enum,
+            DefKind::Interface,
+        ]
+        .iter()
+        .copied()
+        .find(|kind| self.resolve(*kind, name).is_some())
+    }
+
+    pub fn define_module(&mut self, id: ModuleId, path: String, imports: Vec<ModuleId>) {
+        self.modules.insert(id, path);
+        self.imports.insert(id, imports);
+    }
+
+    pub fn set_scope(&mut self, scope: ModuleId) {
+        self.scope = scope;
+    }
+
+    pub fn scope(&self) -> ModuleId {
+        self.scope
+    }
+
+    pub fn instance_name(&self, ty: TypeId) -> String {
+        match self.interner.kind(ty) {
+            super::TyKind::Struct(def, args)
+            | super::TyKind::Union(def, args)
+            | super::TyKind::Interface(def, args) => self
+                .instances
+                .iter()
+                .find_map(|((module, name), &id)| {
+                    (id == ty && *module == def.module).then(|| name.clone())
+                })
+                .unwrap_or_else(|| {
+                    if args.is_empty() {
+                        self.defs.name(*def).to_string()
+                    } else {
+                        super::display_name(&self.interner, &self.defs, ty)
+                    }
+                }),
+            _ => super::display_name(&self.interner, &self.defs, ty),
+        }
+    }
+
+    pub fn resolve(&self, kind: DefKind, name: &str) -> Option<DefId> {
+        if let Some(ty) = self.instance_alias(name) {
+            match (kind, self.interner.kind(ty)) {
+                (DefKind::Struct, super::TyKind::Struct(def, _))
+                | (DefKind::Union, super::TyKind::Union(def, _))
+                | (DefKind::Interface, super::TyKind::Interface(def, _)) => return Some(*def),
+                _ => {}
+            }
+        }
+        if let Some((path, name)) = name.rsplit_once("::") {
+            let module = self
+                .modules
+                .iter()
+                .find_map(|(&id, module)| (module == path).then_some(id))?;
+            return self
+                .declarations
+                .get(&(module, kind, format!("{path}::{name}")))
+                .or_else(|| self.declarations.get(&(module, kind, name.to_string())))
+                .copied();
+        }
+        let lookup = |module| {
+            self.declarations
+                .get(&(module, kind, name.to_string()))
+                .copied()
+        };
+        if let Some(def) = lookup(self.scope).or_else(|| lookup(ModuleId::ROOT)) {
+            return Some(def);
+        }
+        let mut matches = self
+            .imports
+            .get(&self.scope)
+            .into_iter()
+            .flatten()
+            .filter_map(|&module| lookup(module));
+        let def = matches.next()?;
+        matches.all(|other| other == def).then_some(def)
+    }
+
+    pub fn resolved_type(&self, name: &str) -> Option<TypeId> {
+        use super::TyKind;
+        if let Some(primitive) = PrimTy::from_name(name) {
+            return self.interner.lookup(&TyKind::Prim(primitive));
+        }
+        if let Some(base) = name.strip_suffix("[]") {
+            return self
+                .interner
+                .lookup(&TyKind::Array(self.resolved_type(base)?));
+        }
+        if let Some(id) = self.instance_alias(name) {
+            return Some(id);
+        }
+        let kind = self.nominal_kind(name)?;
+        let def = self.resolve(kind, name)?;
+        self.interner.lookup(&match kind {
+            DefKind::Struct => TyKind::Struct(def, vec![]),
+            DefKind::Union => TyKind::Union(def, vec![]),
+            DefKind::Enum => TyKind::Enum(def),
+            DefKind::Interface => TyKind::Interface(def, vec![]),
+            DefKind::Function => return None,
+        })
+    }
+
+    fn instance_alias(&self, name: &str) -> Option<TypeId> {
+        let lookup = |module| self.instances.get(&(module, name.to_string())).copied();
+        lookup(self.scope)
+            .or_else(|| lookup(ModuleId::ROOT))
+            .or_else(|| {
+                let mut found = self
+                    .imports
+                    .get(&self.scope)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|&m| lookup(m));
+                let id = found.next()?;
+                found.all(|other| other == id).then_some(id)
+            })
     }
 
     /// Records a generic instantiation so its mangled bare name canonicalizes to the structured
@@ -57,38 +210,25 @@ impl TypeCtx {
     /// clobber the canonical `(base def, args)` id with a bogus nominal `struct_ty(Box_string, [])`.
     pub fn register_instance(&mut self, kind: DefKind, base: &str, args: &[Type]) -> TypeId {
         let mangled = mangle_generic(base, args);
-        if let Some(&id) = self.instances.get(&mangled) {
+        if let Some(id) = self.instance_alias(&mangled) {
             return id;
         }
         let arg_ids: Vec<TypeId> = args.iter().map(|a| self.lower(a)).collect();
-        let def = self.defs.intern(kind, base, vec![]);
+        let Some(def) = self.resolve(kind, base) else {
+            return self.interner.error();
+        };
         let id = match kind {
             DefKind::Union => self.interner.union_ty(def, arg_ids),
             DefKind::Interface => self.interner.interface_ty(def, arg_ids),
             _ => self.interner.struct_ty(def, arg_ids),
         };
-        self.instances.insert(mangled, id);
+        self.instances.insert((def.module, mangled), id);
         id
     }
 
     /// Lowers an AST type to an interned id with no generic substitution in scope.
     pub fn lower(&mut self, ty: &Type) -> TypeId {
         self.lower_with(ty, &IndexMap::new())
-    }
-
-    /// Lowers a bare type-name string (possibly suffixed `T[]`, a primitive spelling, or a
-    /// pre-mangled generic instance) to an interned id. Used where signatures/tables still carry
-    /// string type spellings.
-    pub fn lower_str(&mut self, name: &str) -> TypeId {
-        self.lower_name(name, &IndexMap::new())
-    }
-
-    /// Lowers a bare type-name string, substituting any in-scope generic parameter names (`T`) with
-    /// their bound concrete id. The string-form counterpart of [`Self::lower_with`], used where a
-    /// monomorphized body still carries a stringly-reconstructed type spelling that names a generic
-    /// parameter (`T`, `T[]`, `T?`).
-    pub fn lower_str_with(&mut self, name: &str, bindings: &IndexMap<String, TypeId>) -> TypeId {
-        self.lower_name(name, bindings)
     }
 
     /// Lowers an AST type, substituting any in-scope generic parameter names (`T`) with the bound
@@ -148,21 +288,27 @@ impl TypeCtx {
                     .unwrap_or_default();
                 match self.nominal_kind(name) {
                     Some(DefKind::Enum) => {
-                        let def = self.defs.intern(DefKind::Enum, name, vec![]);
+                        let Some(def) = self.resolve(DefKind::Enum, name) else {
+                            return self.interner.error();
+                        };
                         self.interner.enum_ty(def)
                     }
                     Some(DefKind::Union) => {
-                        let def = self.defs.intern(DefKind::Union, name, vec![]);
+                        let Some(def) = self.resolve(DefKind::Union, name) else {
+                            return self.interner.error();
+                        };
                         self.interner.union_ty(def, args)
                     }
                     Some(DefKind::Interface) => {
-                        let def = self.defs.intern(DefKind::Interface, name, vec![]);
+                        let Some(def) = self.resolve(DefKind::Interface, name) else {
+                            return self.interner.error();
+                        };
                         self.interner.interface_ty(def, args)
                     }
-                    // Default unknown nominal names to structs (forward references during
-                    // declaration registration land here before the def is seen).
                     _ => {
-                        let def = self.defs.intern(DefKind::Struct, name, vec![]);
+                        let Some(def) = self.resolve(DefKind::Struct, name) else {
+                            return self.interner.error();
+                        };
                         self.interner.struct_ty(def, args)
                     }
                 }
@@ -193,24 +339,32 @@ impl TypeCtx {
             "js" => return self.interner.js(),
             _ => {}
         }
-        if let Some(&id) = self.instances.get(name) {
+        if let Some(id) = self.instance_alias(name) {
             return id;
         }
         match self.nominal_kind(name) {
             Some(DefKind::Enum) => {
-                let def = self.defs.intern(DefKind::Enum, name, vec![]);
+                let Some(def) = self.resolve(DefKind::Enum, name) else {
+                    return self.interner.error();
+                };
                 self.interner.enum_ty(def)
             }
             Some(DefKind::Union) => {
-                let def = self.defs.intern(DefKind::Union, name, vec![]);
+                let Some(def) = self.resolve(DefKind::Union, name) else {
+                    return self.interner.error();
+                };
                 self.interner.union_ty(def, vec![])
             }
             Some(DefKind::Interface) => {
-                let def = self.defs.intern(DefKind::Interface, name, vec![]);
+                let Some(def) = self.resolve(DefKind::Interface, name) else {
+                    return self.interner.error();
+                };
                 self.interner.interface_ty(def, vec![])
             }
             Some(DefKind::Struct) => {
-                let def = self.defs.intern(DefKind::Struct, name, vec![]);
+                let Some(def) = self.resolve(DefKind::Struct, name) else {
+                    return self.interner.error();
+                };
                 self.interner.struct_ty(def, vec![])
             }
             // An unregistered name (or a function name used in type position) is not a known type.

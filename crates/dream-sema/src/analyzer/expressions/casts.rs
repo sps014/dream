@@ -72,8 +72,7 @@ impl<'a> Analyzer<'a> {
             // an unbox to the wrong primitive traps at runtime.
             Ok(target_type.clone())
         } else if expr_type_str == "int"
-            && (self.struct_table.get_struct(&target_type_str).is_some()
-                || target_type_str.ends_with("[]"))
+            && (self.struct_info(&target_type_str).is_some() || target_type_str.ends_with("[]"))
         {
             // Allow casting int to pointer types (for null pointers)
             Ok(target_type.clone())

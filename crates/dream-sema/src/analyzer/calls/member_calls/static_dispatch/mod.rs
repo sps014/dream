@@ -53,7 +53,7 @@ impl<'a> Analyzer<'a> {
 
         // File/module-level visibility (Axis 2): reaching a static member requires the type itself
         // to be visible. A non-public class/struct is only referenceable from its declaring file.
-        if let Some(info) = self.struct_table.get_struct(&type_name) {
+        if let Some(info) = self.struct_info(&type_name) {
             if !self.visible_across_files(
                 &info.file_path,
                 info.visibility,
@@ -62,7 +62,7 @@ impl<'a> Analyzer<'a> {
                 let decl_file = info.file_path.clone();
                 self.report_not_public("Type", &type_name, &decl_file, id.position, diagnostics);
             }
-        } else if let Some(template) = self.generic_structs.get(&type_name) {
+        } else if let Some(template) = self.generic_struct(&type_name) {
             let (decl_file, visibility) = (template.file_path.clone(), template.visibility);
             if !self.visible_across_files(
                 &decl_file,
@@ -85,7 +85,7 @@ impl<'a> Analyzer<'a> {
         // inferred from the expected type or the arguments. Monomorphize the class so its concrete
         // static methods (`Cache_int_make`, ...) are registered, then dispatch through the normal
         // static-call path (which enforces class-level privacy).
-        if self.generic_structs.contains_key(&type_name) {
+        if self.generic_struct(&type_name).is_some() {
             let args: Vec<Type> = match generic_args {
                 Some(a) if !a.is_empty() => a
                     .iter()

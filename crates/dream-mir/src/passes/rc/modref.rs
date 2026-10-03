@@ -81,13 +81,6 @@ impl ModRef {
         }
     }
 
-    pub(crate) fn observes_rc(&self) -> bool {
-        match self {
-            ModRef::Top => true,
-            ModRef::Known(k) => k.observes_rc,
-        }
-    }
-
     /// No stores and no calls that store. Cannot run a `del`: there is nothing it releases
     /// except a borrowed parameter, and those are not freed by the callee.
     pub(crate) fn is_quiet(&self) -> bool {

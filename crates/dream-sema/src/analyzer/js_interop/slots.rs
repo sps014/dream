@@ -87,7 +87,7 @@ impl<'a> Analyzer<'a> {
         ret: TypeId,
     ) -> Option<HExpr> {
         let mangled = method_fn(dream_abi::js_abi::JS_TYPE, bridge);
-        let def = self.type_ctx.defs.lookup(DefKind::Function, &mangled)?;
+        let def = self.type_ctx.resolve(DefKind::Function, &mangled)?;
         Some(HExpr::new(
             ret,
             HExprKind::JsCall {

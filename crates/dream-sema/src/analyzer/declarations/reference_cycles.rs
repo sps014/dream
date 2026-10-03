@@ -28,7 +28,7 @@ impl<'a> Analyzer<'a> {
     /// is registered in `self.struct_table` (so field types can be classified as value/reference).
     pub(in crate::analyzer) fn check_weak_unowned_and_cycles(
         &self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
         self.validate_weak_unowned_fields(node, diagnostics);
@@ -39,7 +39,7 @@ impl<'a> Analyzer<'a> {
     /// bare class type `T`; a field cannot be both.
     fn validate_weak_unowned_fields(
         &self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
         for struct_decl in node.structs.iter() {
@@ -68,9 +68,7 @@ impl<'a> Analyzer<'a> {
                     };
                     let is_class_option = option_inner
                         .and_then(Self::resolve_struct_parts)
-                        .and_then(|(base, _)| {
-                            self.struct_table.get_struct(&base).map(|i| !i.is_value)
-                        })
+                        .and_then(|(base, _)| self.struct_info(&base).map(|i| !i.is_value))
                         .unwrap_or(false);
                     if !is_class_option {
                         diagnostics.report_error(
@@ -84,9 +82,7 @@ impl<'a> Analyzer<'a> {
                     }
                 } else {
                     let is_class = Self::resolve_struct_parts(&field.field_type)
-                        .and_then(|(base, _)| {
-                            self.struct_table.get_struct(&base).map(|i| !i.is_value)
-                        })
+                        .and_then(|(base, _)| self.struct_info(&base).map(|i| !i.is_value))
                         .unwrap_or(false);
                     if !is_class {
                         diagnostics.report_error(
@@ -106,7 +102,7 @@ impl<'a> Analyzer<'a> {
     /// Builds the strong-reference graph over non-generic `class` declarations and hard-errors on
     /// every strongly connected component (Tarjan's SCC), unless every class in it carries
     /// `@allow_cycle`.
-    fn check_reference_cycles(&self, node: &'a ProgramNode<'a>, diagnostics: &mut DiagnosticBag) {
+    fn check_reference_cycles(&self, node: &'a ProgramView<'a>, diagnostics: &mut DiagnosticBag) {
         // Value structs holding references participate as edges (see `strong_ref_targets`).
         let mut ref_values: indexmap::IndexSet<String> = indexmap::IndexSet::new();
         self.collect_ref_holding_value_structs(node, &mut ref_values);
@@ -236,7 +232,7 @@ impl<'a> Analyzer<'a> {
                     }
                     _ => {}
                 }
-                match self.struct_table.get_struct(&token.text) {
+                match self.struct_info(&token.text) {
                     Some(info) if !info.is_value => vec![token.text.clone()],
                     // Qualifying value struct: recurse into its registered fields to reach the
                     // ultimate class targets (visited-guarded against value-struct cycles).
@@ -244,7 +240,7 @@ impl<'a> Analyzer<'a> {
                         let mut visited = indexmap::IndexSet::new();
                         visited.insert(token.text.clone());
                         let mut out = Vec::new();
-                        if let Some(info) = self.struct_table.get_struct(&token.text) {
+                        if let Some(info) = self.struct_info(&token.text) {
                             for (_fname, finfo) in info.fields.iter() {
                                 out.extend(self.strong_ref_targets_visited(
                                     &finfo.type_,
@@ -261,8 +257,12 @@ impl<'a> Analyzer<'a> {
                         if self.is_interface_name(&token.text) {
                             let mut out = Vec::new();
                             for (class_name, ifaces) in &self.implements {
-                                if ifaces.iter().any(|i| i == &token.text) {
-                                    out.push(class_name.clone());
+                                if self
+                                    .type_ctx
+                                    .resolved_type(&token.text)
+                                    .is_some_and(|iface| ifaces.contains(&iface))
+                                {
+                                    out.push(self.type_ctx.instance_name(*class_name));
                                 }
                             }
                             out
@@ -286,14 +286,14 @@ impl<'a> Analyzer<'a> {
     ) -> Vec<String> {
         match ty {
             Type::Struct(token, _) => {
-                let known = self.struct_table.get_struct(&token.text);
+                let known = self.struct_info(&token.text);
                 match known {
                     Some(i) if i.is_value && visited.contains(&token.text) => Vec::new(),
                     Some(i) if i.is_value && !ref_values.contains(&token.text) => Vec::new(),
                     _ => {
                         visited.insert(token.text.clone());
                         let mut out = Vec::new();
-                        if let Some(info) = self.struct_table.get_struct(&token.text) {
+                        if let Some(info) = self.struct_info(&token.text) {
                             if info.is_value {
                                 for (_fname, finfo) in info.fields.iter() {
                                     out.extend(self.strong_ref_targets_visited(
@@ -319,11 +319,15 @@ impl<'a> Analyzer<'a> {
     /// on declaration cycles among value structs themselves.
     fn collect_ref_holding_value_structs(
         &self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         out: &mut indexmap::IndexSet<String>,
     ) {
-        let value_decls: Vec<&StructDeclarationNode<'a>> =
-            node.structs.iter().filter(|s| s.is_value).collect();
+        let value_decls: Vec<&StructDeclarationNode<'a>> = node
+            .structs
+            .iter()
+            .copied()
+            .filter(|s| s.is_value)
+            .collect();
         loop {
             let mut grew = false;
             for decl in &value_decls {
@@ -337,7 +341,7 @@ impl<'a> Analyzer<'a> {
                     Type::Tuple(elements) => {
                         elements.iter().any(|e| self.holds_managed_shallow(e, out))
                     }
-                    Type::Struct(tok, _) => match self.struct_table.get_struct(&tok.text) {
+                    Type::Struct(tok, _) => match self.struct_info(&tok.text) {
                         // Another value struct: resolved by a later fixed-point pass.
                         Some(i) if i.is_value => out.contains(&tok.text),
                         // A class field makes the value struct managed-by-content.
@@ -357,11 +361,7 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    fn holds_managed_shallow(
-        &self,
-        ty: &Type,
-        ref_values: &indexmap::IndexSet<String>,
-    ) -> bool {
+    fn holds_managed_shallow(&self, ty: &Type, ref_values: &indexmap::IndexSet<String>) -> bool {
         match ty {
             Type::Struct(tok, _) => ref_values.contains(&tok.text),
             Type::Array(inner) => self.value_struct_array_holds(inner.as_ref(), ref_values),
@@ -375,7 +375,7 @@ impl<'a> Analyzer<'a> {
         ref_values: &indexmap::IndexSet<String>,
     ) -> bool {
         match inner {
-            Type::Struct(tok, _) => match self.struct_table.get_struct(&tok.text) {
+            Type::Struct(tok, _) => match self.struct_info(&tok.text) {
                 Some(i) if i.is_value => ref_values.contains(&tok.text),
                 Some(_) => true,
                 None => false,

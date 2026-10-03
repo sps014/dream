@@ -360,8 +360,8 @@ mod tests {
 
     fn hop_mir() -> (MirFunction, crate::Local, crate::Local, crate::Local) {
         let mut i = TypeInterner::new();
-        let node_ty = i.struct_ty(dream_types::DefId(7), vec![]);
-        let opt_ty = i.union_ty(dream_types::DefId(8), vec![node_ty]);
+        let node_ty = i.struct_ty(dream_types::DefId::root(7), vec![]);
+        let opt_ty = i.union_ty(dream_types::DefId::root(8), vec![node_ty]);
         let mut b = FunctionBuilder::new("hop", i.void());
         let curr = b.new_local(opt_ty, Some("curr".into()));
         let n = b.new_temp(node_ty);
@@ -437,7 +437,7 @@ mod tests {
     #[test]
     fn cancels_bracket_on_niche_option_hop() {
         let mut i = TypeInterner::new();
-        let node_ty = i.struct_ty(dream_types::DefId(7), vec![]);
+        let node_ty = i.struct_ty(dream_types::DefId::root(7), vec![]);
         let mut b = FunctionBuilder::new("walk", i.void());
         let curr = b.new_local(node_ty, Some("curr".into()));
         let node = b.new_temp(node_ty);
@@ -511,8 +511,8 @@ mod tests {
     #[test]
     fn cancels_bracket_on_copied_niche_hop() {
         let mut i = TypeInterner::new();
-        let node_ty = i.struct_ty(dream_types::DefId(7), vec![]);
-        let opt_ty = i.union_ty(dream_types::DefId(8), vec![node_ty]);
+        let node_ty = i.struct_ty(dream_types::DefId::root(7), vec![]);
+        let opt_ty = i.union_ty(dream_types::DefId::root(8), vec![node_ty]);
         let mut b = FunctionBuilder::new("walk", i.void());
         let curr = b.new_local(opt_ty, Some("curr".into()));
         let node = b.new_local(node_ty, Some("node".into()));
@@ -626,7 +626,7 @@ mod tests {
     #[test]
     fn keeps_bracket_when_binding_is_used_after_holder_release() {
         let mut i = TypeInterner::new();
-        let node_ty = i.struct_ty(dream_types::DefId(7), vec![]);
+        let node_ty = i.struct_ty(dream_types::DefId::root(7), vec![]);
         let mut b = FunctionBuilder::new("walk", i.void());
         let curr = b.new_local(node_ty, Some("curr".into()));
         let node = b.new_temp(node_ty);

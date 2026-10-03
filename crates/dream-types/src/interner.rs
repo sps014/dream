@@ -47,6 +47,9 @@ impl Default for TypeInterner {
 }
 
 impl TypeInterner {
+    pub fn lookup(&self, kind: &TyKind) -> Option<TypeId> {
+        self.dedup.get(kind).copied()
+    }
     pub fn new() -> Self {
         let mut interner = TypeInterner {
             kinds: Vec::new(),

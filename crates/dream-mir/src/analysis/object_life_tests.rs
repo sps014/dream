@@ -6,7 +6,7 @@ use crate::build::FunctionBuilder;
 use crate::{Callee, Const, Local, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{DefId, TypeId, TypeInterner};
 
-const NODE: DefId = DefId(7);
+const NODE: DefId = DefId::root(7);
 
 fn copy(l: Local) -> Operand {
     Operand::Copy(Place::Local(l))
@@ -68,7 +68,7 @@ fn a_take_argument_is_refused() {
     assert!(run(|b, i, o, _| {
         b.push(Statement::Call {
             callee: Callee {
-                def: DefId(40),
+                def: DefId::root(40),
                 args: vec![],
                 ret: i.void(),
                 take_params: vec![true],

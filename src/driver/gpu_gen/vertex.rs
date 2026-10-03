@@ -3,7 +3,6 @@
 use super::bind::{emit_resource_param, finalize_uniforms, BindingAlloc};
 use super::context::EmitCtx;
 use super::helpers::emit_helpers_wgsl;
-use indexmap::IndexSet;
 use super::ident::escape_wgsl_ident;
 use super::layout::{
     assign_locations_from, build_struct_field_tys, build_vertex_layout, dream_ty_to_wgsl_vec,
@@ -13,16 +12,17 @@ use super::stmt::{emit_stmts, reject_gpu_string_meta};
 use super::types::GpuShaderInfo;
 use dream_abi::attributes::has_named_attr;
 use dream_diagnostics::DiagnosticBag;
+use dream_sema::module_graph::ProgramView;
 use dream_syntax::nodes::function::FunctionNode;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::types::Type;
-use dream_syntax::nodes::ProgramNode;
 use indexmap::IndexMap;
+use indexmap::IndexSet;
 use std::cell::RefCell;
 
 pub(super) fn emit_vertex(
     func: &FunctionNode<'_>,
-    program: &ProgramNode<'_>,
+    program: &ProgramView<'_>,
     diagnostics: &mut DiagnosticBag,
 ) -> GpuShaderInfo {
     let name = func.name.text.clone();
@@ -228,4 +228,3 @@ fn emit_vertex_in_struct(
     s.push_str("}\n");
     Ok(s)
 }
-

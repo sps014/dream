@@ -8,7 +8,7 @@ fn copy(l: Local) -> Operand {
 }
 fn new(ty: TypeId) -> Rvalue {
     Rvalue::New {
-        def: dream_types::DefId(0),
+        def: dream_types::DefId::root(0),
         ty,
         ctor: None,
         args: vec![],
@@ -126,7 +126,7 @@ fn direct_callee_publication_is_checked_at_the_call_boundary() {
     publish.assign(Place::Global(crate::Global(0)), Rvalue::Use(copy(param)));
     publish.terminate(Terminator::Return(None));
     let mut caller = FunctionBuilder::new("caller", ctx.interner.void());
-    caller.set_def(dream_types::DefId(def.0 + 1), vec![]);
+    caller.set_def(dream_types::DefId::root(def.index + 1), vec![]);
     let value = caller.new_local(ty, None);
     caller.push(Statement::RegionEnter);
     caller.assign(Place::Local(value), new(ty));

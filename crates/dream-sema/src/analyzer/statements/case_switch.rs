@@ -96,8 +96,7 @@ impl<'a> Analyzer<'a> {
                 let ExpressionNode::Identifier(enum_name) = base else {
                     return None;
                 };
-                self.enum_table
-                    .get(&enum_name.text)?
+                self.enum_members(&enum_name.text)?
                     .get(&member.text)
                     .map(|v| v.to_string())
             }
@@ -123,7 +122,7 @@ impl<'a> Analyzer<'a> {
         // the case body (each label is a distinct dispatch target hitting the same code).
         let mut hir_ok = true;
         let subject_name = subject_type.get_type();
-        let subject_is_enum = self.enum_table.contains_key(&subject_name);
+        let subject_is_enum = self.enum_members(&subject_name).is_some();
         if !matches!(subject_name.as_str(), "int" | "string" | "bool") && !subject_is_enum {
             diagnostics.report_error(
                 format!(

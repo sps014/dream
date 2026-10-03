@@ -151,9 +151,7 @@ impl<'a> Cx<'a> {
             .get(&(def, args.to_vec()))
             .cloned()
             .or_else(|| self.symbols.get(&(def, vec![])).cloned())
-            .unwrap_or_else(|| {
-                crate::internal_error!("no symbol for def{} instance {args:?}", def.0)
-            })
+            .unwrap_or_else(|| crate::internal_error!("no symbol for def{def} instance {args:?}"))
     }
 
     pub(crate) fn func_index(&self, f: &MirFunction) -> usize {

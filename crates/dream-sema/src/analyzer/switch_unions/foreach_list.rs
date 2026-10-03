@@ -40,8 +40,7 @@ impl<'a> Analyzer<'a> {
             return None;
         }
         let from_std = self
-            .generic_structs
-            .get("List")
+            .generic_struct("List")
             .and_then(|t| t.file_path.as_deref())
             .is_some_and(dream_stdlib::is_std_source);
         if !from_std {
@@ -55,8 +54,7 @@ impl<'a> Analyzer<'a> {
             self.function_table.get_function(name).is_ok()
                 && self
                     .type_ctx
-                    .defs
-                    .lookup(dream_types::DefKind::Function, name)
+                    .resolve(dream_types::DefKind::Function, name)
                     .is_some()
         };
         if !resolves(&length) || !resolves(&at) {

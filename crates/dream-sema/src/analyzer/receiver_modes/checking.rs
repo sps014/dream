@@ -3,7 +3,7 @@ use super::*;
 impl<'a> Analyzer<'a> {
     pub(super) fn check_receiver_contracts(
         &mut self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
         registry: &indexmap::IndexMap<MethodKey, Entry>,
         resolved_edges: &indexmap::IndexMap<MethodKey, Vec<(MethodKey, TextSpan)>>,
@@ -90,7 +90,7 @@ impl<'a> Analyzer<'a> {
     /// `visited` guards inheritance cycles.
     pub(super) fn collect_interface_contract(
         &self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         iface_name: &str,
         out: &mut Vec<(String, ReceiverMode)>,
         visited: &mut Vec<String>,
@@ -99,7 +99,7 @@ impl<'a> Analyzer<'a> {
             return;
         }
         visited.push(iface_name.to_string());
-        if let Some(parents) = self.interface_parents.get(iface_name) {
+        if let Some(parents) = self.interface_parent_types(iface_name) {
             for parent in parents {
                 if let Type::Struct(tok, _) = parent {
                     self.collect_interface_contract(node, &tok.text, out, visited);

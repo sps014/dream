@@ -450,7 +450,7 @@ impl<'a> Analyzer<'a> {
         if dream_syntax::nodes::types::is_boxable_primitive(name) {
             return NameShape::Primitive;
         }
-        match self.struct_table.get_struct(name) {
+        match self.struct_info(name) {
             Some(info) => NameShape::Nominal(info),
             // An interface, `object`/`js`, or an unresolved/generic name: not a known value shape,
             // so it falls back to a reference type below (the pre-existing default).
@@ -469,11 +469,7 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    fn name_is_blittable_value(
-        &self,
-        name: &str,
-        seen: &mut indexmap::IndexSet<String>,
-    ) -> bool {
+    fn name_is_blittable_value(&self, name: &str, seen: &mut indexmap::IndexSet<String>) -> bool {
         match self.name_shape(name) {
             NameShape::Array | NameShape::String | NameShape::Unknown => false,
             NameShape::Primitive => true,
@@ -508,8 +504,7 @@ impl<'a> Analyzer<'a> {
                 if !info.is_value {
                     return self
                         .type_ctx
-                        .defs
-                        .lookup(dream_types::DefKind::Struct, name)
+                        .resolve(dream_types::DefKind::Struct, name)
                         .is_some_and(|def| self.type_ctx.interner.is_shared_def(def));
                 }
                 if !seen.insert(name.to_string()) {

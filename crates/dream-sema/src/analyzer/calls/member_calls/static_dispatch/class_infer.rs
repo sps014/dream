@@ -22,7 +22,7 @@ impl<'a> Analyzer<'a> {
         ctx: &AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Option<Vec<Type>> {
-        let template = *self.generic_structs.get(type_name)?;
+        let template = *self.generic_struct(type_name)?;
         let class_params = template.generic_parameters.as_deref().unwrap_or(&[]);
         if class_params.is_empty() {
             return Some(Vec::new());

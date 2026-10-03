@@ -45,7 +45,7 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         }
-        let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, name) else {
+        let Some(def) = self.type_ctx.resolve(DefKind::Function, name) else {
             self.hir.last = None;
             return;
         };
@@ -137,11 +137,10 @@ impl<'a> Analyzer<'a> {
             &mut throwaway,
         );
         let mangled = mangle_generic(base, std::slice::from_ref(elem_ty));
-        let def = self.type_ctx.defs.lookup(DefKind::Struct, base)?;
+        let def = self.type_ctx.resolve(DefKind::Struct, base)?;
         let ctor = self
             .type_ctx
-            .defs
-            .lookup(DefKind::Function, &constructor_fn(&mangled));
+            .resolve(DefKind::Function, &constructor_fn(&mangled));
         let ty = self.type_ctx.lower(&boxed_ty);
         Some(HExpr::new(
             ty,
@@ -172,7 +171,7 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         }
-        let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, base_name) else {
+        let Some(def) = self.type_ctx.resolve(DefKind::Function, base_name) else {
             self.hir.last = None;
             return;
         };

@@ -37,7 +37,7 @@ impl<'a> Analyzer<'a> {
         iface_name: &str,
         method: &str,
     ) -> Option<(usize, &'a FunctionNode<'a>)> {
-        let methods = self.interface_methods.get(iface_name)?;
+        let methods = self.interface_method_list(iface_name)?;
         methods
             .iter()
             .enumerate()
@@ -54,7 +54,7 @@ impl<'a> Analyzer<'a> {
         slot: usize,
         ret: &Type,
     ) {
-        let iface_id = self.interface_methods.get_index_of(iface_name).unwrap_or(0);
+        let iface_id = self.interface_index(iface_name).unwrap_or(0);
         let sig = self.interface_dispatch_sig(method);
         self.hir_set_interface_call(receiver, iface_id, slot, sig, vec![], ret);
     }
@@ -169,8 +169,7 @@ impl<'a> Analyzer<'a> {
         self.ensure_union_instantiated("Option", &opt_args, &element.position, diagnostics);
         let opt_key = next_ret.get_type();
         let some_variant = match self
-            .union_table
-            .get(&opt_key)
+            .union_info(&opt_key)
             .and_then(|u| u.variant("Some"))
             .filter(|v| v.fields.len() == 1)
             .cloned()
@@ -293,14 +292,7 @@ impl<'a> Analyzer<'a> {
         use dream_hir::{BinOp, HExpr, HExprKind, HStmt};
 
         if let Some(acc) = self.stdlib_list_accessors(iterable_type, diagnostics) {
-            return self.analyze_foreach_list(
-                element,
-                iter_hir,
-                acc,
-                body,
-                ctx,
-                diagnostics,
-            );
+            return self.analyze_foreach_list(element, iter_hir, acc, body, ctx, diagnostics);
         }
 
         // 1. `@iterator`: an eligible 0-arg instance method returning an enumerator object.
@@ -375,8 +367,7 @@ impl<'a> Analyzer<'a> {
         self.ensure_union_instantiated("Option", &opt_args, &element.position, diagnostics);
         let opt_key = next_ret.get_type();
         let some_variant = match self
-            .union_table
-            .get(&opt_key)
+            .union_info(&opt_key)
             .and_then(|u| u.variant("Some"))
             .filter(|v| v.fields.len() == 1)
             .cloned()

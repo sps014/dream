@@ -4,7 +4,9 @@
 use super::held::run_function;
 use super::modref::ModRefTable;
 use crate::build::FunctionBuilder;
-use crate::{Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use crate::{
+    Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
+};
 use dream_hir::{LayoutTable, TypeLayout};
 use dream_types::{DefId, TypeId, TypeInterner};
 
@@ -16,7 +18,7 @@ struct Types {
 
 fn types() -> Types {
     let mut i = TypeInterner::new();
-    let boxed = i.struct_ty(DefId(7), vec![]);
+    let boxed = i.struct_ty(DefId::root(7), vec![]);
     let s = i.string();
     let mut layouts = LayoutTable::default();
     layouts.insert(
@@ -26,7 +28,7 @@ fn types() -> Types {
     Types { i, boxed, layouts }
 }
 
-const PEEK: DefId = DefId(40);
+const PEEK: DefId = DefId::root(40);
 
 fn peek_call(t: &Types, x: Local) -> Statement {
     Statement::Call {
@@ -78,7 +80,10 @@ fn snapshot(t: &Types, mid: impl FnOnce(&mut FunctionBuilder, Local)) -> Snap {
     b.push(peek_call(t, x));
     b.push(Statement::Release(Operand::Copy(Place::Local(x))));
     b.terminate(Terminator::Return(None));
-    Snap { func: b.finish(), x }
+    Snap {
+        func: b.finish(),
+        x,
+    }
 }
 
 fn rc_ops(f: &MirFunction, x: Local) -> usize {
@@ -139,7 +144,7 @@ fn rebinding_the_owner_keeps_the_pair() {
         b.assign(
             Place::Local(base),
             Rvalue::New {
-                def: DefId(7),
+                def: DefId::root(7),
                 ty: boxed,
                 ctor: None,
                 args: vec![],

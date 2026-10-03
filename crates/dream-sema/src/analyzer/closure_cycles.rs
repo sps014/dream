@@ -20,7 +20,7 @@ impl<'a> Analyzer<'a> {
     /// Called from `analyze_pgm` on clean programs, after body analysis.
     pub(in crate::analyzer) fn check_closure_self_capture(
         &self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
         for struct_decl in node.structs.iter() {

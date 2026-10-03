@@ -19,10 +19,24 @@ use dream_text::text_span::TextSpan;
 use indexmap::IndexMap;
 use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 
+mod identity;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdeSource {
+    pub file: Option<String>,
+    pub start: usize,
+    pub end: usize,
+}
+
 /// What a recorded source range resolved to. Names are source-level; keys are the analyzer's
 /// member-lookup keys (mangled spellings like `List_int`, matching `struct_table`/`method_fn`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IdeTarget {
+    Resolved {
+        def: dream_types::DefId,
+        source: IdeSource,
+        target: Box<IdeTarget>,
+    },
     /// A function-local or parameter binding.
     Local { name: String },
     /// A top-level variable.
@@ -140,6 +154,7 @@ pub struct GlobalOut {
 /// arena references); all queries return deterministic orderings.
 #[derive(Debug, Clone, Default)]
 pub struct IdeSnapshot {
+    pub primary_file: Option<String>,
     pub refs: Vec<IdeRef>,
     pub functions: HashMap<String, FnSigOut>,
     pub structs: HashMap<String, Vec<FieldOut>>,
@@ -281,12 +296,7 @@ impl IdeSnapshot {
     /// Appends the methods of one registration family: every function whose emitted key starts
     /// with `prefix` (`{Type}_{method}`, `{elem}__arr_{method}`, …). Deduplicated through
     /// `seen`, which may already contain field/variant names.
-    fn push_methods(
-        &self,
-        prefix: String,
-        out: &mut Vec<MemberInfo>,
-        seen: &mut HashSet<String>,
-    ) {
+    fn push_methods(&self, prefix: String, out: &mut Vec<MemberInfo>, seen: &mut HashSet<String>) {
         for (emitted, sig) in &self.functions {
             let Some(rest) = emitted.strip_prefix(prefix.as_str()) else {
                 continue;
@@ -338,6 +348,29 @@ impl<'a> Analyzer<'a> {
     /// `&mut self` only because rendering lowers AST types through the interner.
     pub fn ide_snapshot(&mut self) -> IdeSnapshot {
         let mut refs = std::mem::take(&mut self.ide_refs);
+        for (&def, source) in &self.ide_sources {
+            let info = self.type_ctx.defs.get(def);
+            let target = match info.kind {
+                dream_types::DefKind::Function => IdeTarget::Callee {
+                    key: info.name.clone(),
+                    label: info.name.clone(),
+                },
+                _ => IdeTarget::Constructor {
+                    type_key: info.name.clone(),
+                },
+            };
+            refs.push(IdeRef {
+                start: source.start,
+                end: source.end,
+                file: source.file.clone(),
+                target: IdeTarget::Resolved {
+                    def,
+                    source: source.clone(),
+                    target: Box::new(target),
+                },
+                result: TypeSummary::Unknown,
+            });
+        }
         refs.sort_by_key(|r| (r.start, r.end));
 
         // Array-extend methods monomorphize lazily (on first use), so a receiver typed `int[]`
@@ -372,9 +405,9 @@ impl<'a> Analyzer<'a> {
             .struct_table
             .structs
             .iter()
-            .map(|(name, info)| {
+            .map(|(_, info)| {
                 (
-                    name.clone(),
+                    info.name.clone(),
                     info.fields
                         .iter()
                         .map(|(fname, f)| (fname.clone(), f.type_.clone(), f.visibility))
@@ -385,9 +418,9 @@ impl<'a> Analyzer<'a> {
         let union_inputs: Vec<UnionVariantInput> = self
             .union_table
             .iter()
-            .map(|(name, info)| {
+            .map(|(_, info)| {
                 (
-                    name.clone(),
+                    info.name.clone(),
                     info.variants
                         .iter()
                         .map(|v| (v.name.clone(), v.discriminant, v.fields.clone()))
@@ -452,13 +485,14 @@ impl<'a> Analyzer<'a> {
             .iter()
             .map(|(name, members)| {
                 (
-                    name.clone(),
+                    self.type_ctx.defs.name(*name).to_string(),
                     members.iter().map(|(n, v)| (n.clone(), *v)).collect(),
                 )
             })
             .collect();
 
         IdeSnapshot {
+            primary_file: None,
             refs,
             functions,
             structs,
@@ -514,6 +548,7 @@ impl<'a> Analyzer<'a> {
         if span.end <= span.start {
             return;
         }
+        let target = self.resolve_ide_target(target);
         self.ide_refs.push(IdeRef {
             start: span.start,
             end: span.end,

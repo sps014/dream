@@ -296,7 +296,7 @@ fn node(ctx: &mut TypeCtx) -> dream_types::TypeId {
 
 fn new_node(ty: dream_types::TypeId) -> Rvalue {
     Rvalue::New {
-        def: dream_types::DefId(0),
+        def: dream_types::DefId::root(0),
         ty,
         ctor: None,
         args: vec![],
@@ -375,7 +375,7 @@ fn retained_or_passed_aliases_are_not_single_token() {
     f.assign(Place::Local(z), Rvalue::Use(copy(x)));
     f.push(Statement::Call {
         callee: Callee {
-            def: dream_types::DefId(1),
+            def: dream_types::DefId::root(1),
             args: vec![],
             ret: ctx.interner.void(),
             take_params: vec![],

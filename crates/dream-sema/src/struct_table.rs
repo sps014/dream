@@ -1,10 +1,12 @@
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::{Type, Visibility};
+use dream_types::TypeId;
 use indexmap::IndexMap;
 
 #[derive(Debug, Clone)]
 pub struct StructFieldInfo {
     pub type_: Type,
+    pub ty: TypeId,
     /// Accessibility of the field. Private (default) fields may only be accessed from within the
     /// declaring type's own methods; `internal` fields from anywhere in the same module.
     pub visibility: Visibility,
@@ -52,7 +54,7 @@ pub struct StructInfo {
 #[derive(Debug, Clone)]
 pub struct StructTable {
     /// Insertion-ordered (registration order) so codegen iterates types deterministically.
-    pub structs: IndexMap<String, StructInfo>,
+    pub structs: IndexMap<TypeId, StructInfo>,
 }
 
 impl Default for StructTable {
@@ -68,9 +70,14 @@ impl StructTable {
         }
     }
 
-    pub fn add_struct(&mut self, struct_decl: &StructDeclarationNode<'_>) -> Result<(), String> {
+    pub fn add_struct(
+        &mut self,
+        ty: TypeId,
+        struct_decl: &StructDeclarationNode<'_>,
+        field_types: &[TypeId],
+    ) -> Result<(), String> {
         let name = struct_decl.name.text.clone();
-        if self.structs.contains_key(&name) {
+        if self.structs.contains_key(&ty) {
             return Err(format!("Struct '{}' is already defined", name));
         }
 
@@ -78,7 +85,8 @@ impl StructTable {
             struct_decl.is_value && dream_abi::attributes::has_packed_attr(&struct_decl.attributes);
 
         let mut fields = IndexMap::new();
-        for field in &struct_decl.fields {
+        debug_assert_eq!(struct_decl.fields.len(), field_types.len());
+        for (field, &field_ty) in struct_decl.fields.iter().zip(field_types) {
             let field_name = field.name.text.clone();
             if fields.contains_key(&field_name) {
                 return Err(format!(
@@ -95,6 +103,7 @@ impl StructTable {
                 field_name,
                 StructFieldInfo {
                     type_: field_type,
+                    ty: field_ty,
                     visibility: field.visibility,
                     is_weak: field.is_weak,
                     is_unowned: field.is_unowned,
@@ -106,7 +115,7 @@ impl StructTable {
         }
 
         self.structs.insert(
-            name.clone(),
+            ty,
             StructInfo {
                 has_destructor: struct_decl
                     .methods
@@ -130,15 +139,16 @@ impl StructTable {
     /// type, and get a (discriminant-aware) `$release_*` helper generated.
     pub fn add_union(
         &mut self,
+        ty: TypeId,
         name: &str,
         visibility: Visibility,
         file_path: Option<std::rc::Rc<str>>,
     ) -> Result<(), String> {
-        if self.structs.contains_key(name) {
+        if self.structs.contains_key(&ty) {
             return Err(format!("Type '{}' is already defined", name));
         }
         self.structs.insert(
-            name.to_string(),
+            ty,
             StructInfo {
                 has_destructor: false,
                 name: name.to_string(),
@@ -152,7 +162,7 @@ impl StructTable {
         Ok(())
     }
 
-    pub fn get_struct(&self, name: &str) -> Option<&StructInfo> {
-        self.structs.get(name)
+    pub fn get_struct(&self, ty: TypeId) -> Option<&StructInfo> {
+        self.structs.get(&ty)
     }
 }

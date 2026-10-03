@@ -46,7 +46,7 @@ fn factories_cannot_hide_region_allocations_but_identity_preserves_older_objects
         callee.terminate(Terminator::Return(Some(copy(value))));
 
         let mut caller = FunctionBuilder::new("caller", ty);
-        caller.set_def(DefId(def.0 + 1), vec![]);
+        caller.set_def(DefId::root(def.index + 1), vec![]);
         let old = caller.new_param(ty, None);
         let result = caller.new_local(ty, None);
         caller.push(Statement::RegionEnter);
@@ -85,7 +85,7 @@ fn an_opaque_call_cannot_erase_its_argument_origin() {
     );
     f.assign(
         Place::Local(output),
-        call(DefId(100), ty, vec![copy(input)]),
+        call(DefId::root(100), ty, vec![copy(input)]),
     );
     f.push(Statement::RegionLeave);
     f.terminate(Terminator::Return(Some(copy(output))));
@@ -126,7 +126,7 @@ fn call_side_effects_preserve_region_children_inserted_into_an_older_root() {
     );
     install.terminate(Terminator::Return(None));
     let mut caller = FunctionBuilder::new("caller", ty);
-    caller.set_def(DefId(def.0 + 1), vec![]);
+    caller.set_def(DefId::root(def.index + 1), vec![]);
     let root = caller.new_param(ty, None);
     caller.push(Statement::RegionEnter);
     caller.push(Statement::Call {
@@ -157,16 +157,16 @@ fn mutually_recursive_return_summaries_reach_a_fixed_point() {
     let node = ctx.register(DefKind::Struct, "Node", vec![]);
     let ty = ctx.interner.struct_ty(node, vec![]);
     let mut functions = Vec::new();
-    for def in [DefId(10), DefId(11)] {
+    for def in [DefId::root(10), DefId::root(11)] {
         let mut f = FunctionBuilder::new("recursive", ty);
         f.set_def(def, vec![]);
         let param = f.new_param(ty, None);
         let local = f.new_local(ty, None);
         f.assign(
             Place::Local(local),
-            call(DefId(21 - def.0), ty, vec![copy(param)]),
+            call(DefId::root(21 - def.index), ty, vec![copy(param)]),
         );
-        if def == DefId(11) {
+        if def == DefId::root(11) {
             f.assign(Place::Local(local), Rvalue::Use(copy(param)));
         }
         f.terminate(Terminator::Return(Some(copy(local))));
@@ -177,7 +177,7 @@ fn mutually_recursive_return_summaries_reach_a_fixed_point() {
         ..Mir::default()
     };
     let summaries = returns::summarize(&mir, &ctx.interner);
-    for def in [DefId(10), DefId(11)] {
+    for def in [DefId::root(10), DefId::root(11)] {
         let result = &summaries[&(def, vec![])].result;
         assert_eq!(result.params, std::collections::BTreeSet::from([0]));
         assert!(!result.fresh);

@@ -24,7 +24,7 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<PatternInfo, SemanticError> {
         let expected_base = expected.get_type();
-        let union_info: Option<UnionInfo> = self.union_table.get(&expected_base).cloned();
+        let union_info: Option<UnionInfo> = self.union_info(&expected_base).cloned();
 
         match pattern {
             PatternNode::Wildcard(_) => Ok(PatternInfo { irrefutable: true }),
@@ -356,7 +356,7 @@ impl<'a> Analyzer<'a> {
             }
             return saw_true && saw_false;
         }
-        let Some(info) = self.union_table.get(&base).cloned() else {
+        let Some(info) = self.union_info(&base).cloned() else {
             return false;
         };
         info.variants
@@ -399,7 +399,7 @@ impl<'a> Analyzer<'a> {
             PatternNode::Wildcard(_) => true,
             PatternNode::Binding(name) => {
                 let base = ty.get_type();
-                if let Some(info) = self.union_table.get(&base) {
+                if let Some(info) = self.union_info(&base) {
                     if let Some(v) = info.variant(&name.text) {
                         if v.fields.is_empty() {
                             return false;

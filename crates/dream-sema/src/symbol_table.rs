@@ -5,7 +5,7 @@ use dream_text::text_span::TextSpan;
 use indexmap::IndexMap;
 use indexmap::IndexSet as HashSet;
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 #[derive(Debug)]
 pub struct SymbolTable {
@@ -18,7 +18,8 @@ pub struct SymbolTable {
     tracked_locals: IndexMap<String, TextSpan>,
     /// Names that have been read (not merely assigned to) in this scope or via lookup here.
     used_locals: HashSet<String>,
-    parent: Option<Rc<RefCell<SymbolTable>>>,
+    // Children are owned by the scope tree; owning the parent too would leak every nested scope.
+    parent: Option<Weak<RefCell<SymbolTable>>>,
     pub children: Vec<Rc<RefCell<SymbolTable>>>,
 }
 
@@ -35,7 +36,7 @@ impl SymbolTable {
             const_symbols: HashSet::new(),
             tracked_locals: IndexMap::new(),
             used_locals: HashSet::new(),
-            parent,
+            parent: parent.as_ref().map(Rc::downgrade),
             children: Vec::new(),
         }
     }
@@ -54,8 +55,8 @@ impl SymbolTable {
         if self.symbols.contains_key(name) {
             return false;
         }
-        match self.parent {
-            Some(ref parent) => parent.as_ref().borrow().is_const(name),
+        match self.parent.as_ref().and_then(Weak::upgrade) {
+            Some(parent) => parent.borrow().is_const(name),
             None => false,
         }
     }
@@ -102,6 +103,7 @@ impl SymbolTable {
         }
         self.parent
             .as_ref()
+            .and_then(Weak::upgrade)
             .is_some_and(|parent| parent.borrow().is_sink_parameter(name))
     }
 
@@ -119,8 +121,8 @@ impl SymbolTable {
             self.used_locals.insert(name.to_string());
             return;
         }
-        if let Some(ref parent) = self.parent {
-            parent.as_ref().borrow_mut().mark_used(name);
+        if let Some(parent) = self.parent.as_ref().and_then(Weak::upgrade) {
+            parent.borrow_mut().mark_used(name);
         }
     }
 
@@ -145,8 +147,8 @@ impl SymbolTable {
             // Found in this scope: local unless this scope has no parent (the global root).
             return self.parent.is_some();
         }
-        match self.parent {
-            Some(ref parent) => parent.as_ref().borrow().resolves_before_global_root(name),
+        match self.parent.as_ref().and_then(Weak::upgrade) {
+            Some(parent) => parent.borrow().resolves_before_global_root(name),
             None => false,
         }
     }
@@ -156,8 +158,8 @@ impl SymbolTable {
             return Ok(symbol.ty.clone());
         }
 
-        match self.parent {
-            Some(ref parent) => parent.as_ref().borrow().get_symbol(name),
+        match self.parent.as_ref().and_then(Weak::upgrade) {
+            Some(parent) => parent.borrow().get_symbol(name),
             None => Err(SymbolError::new(format!(
                 "variable {} does not exist at: {}",
                 name.text,
@@ -170,6 +172,24 @@ impl SymbolTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scope_tree_drops_without_reference_cycles() {
+        let root = Rc::new(RefCell::new(SymbolTable::new(None)));
+        let child = Rc::new(RefCell::new(SymbolTable::new(Some(root.clone()))));
+        let grandchild = Rc::new(RefCell::new(SymbolTable::new(Some(child.clone()))));
+        root.borrow_mut().add_child(child.clone());
+        child.borrow_mut().add_child(grandchild.clone());
+        let handles = [
+            Rc::downgrade(&root),
+            Rc::downgrade(&child),
+            Rc::downgrade(&grandchild),
+        ];
+        drop(grandchild);
+        drop(child);
+        drop(root);
+        assert!(handles.iter().all(|handle| handle.upgrade().is_none()));
+    }
 
     #[test]
     fn sink_parameter_metadata_respects_lexical_shadowing() {

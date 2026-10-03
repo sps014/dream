@@ -52,7 +52,7 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         }
-        let Some(def) = self.type_ctx.defs.lookup(DefKind::Struct, name) else {
+        let Some(def) = self.type_ctx.resolve(DefKind::Struct, name) else {
             self.hir.last = None;
             return;
         };
@@ -88,10 +88,9 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         }
-        let (Some(def), Some(receiver)) = (
-            self.type_ctx.defs.lookup(DefKind::Function, mangled),
-            receiver,
-        ) else {
+        let (Some(def), Some(receiver)) =
+            (self.type_ctx.resolve(DefKind::Function, mangled), receiver)
+        else {
             self.hir.last = None;
             return;
         };
@@ -134,7 +133,7 @@ impl<'a> Analyzer<'a> {
             return;
         }
         let (Some(def), Some(receiver)) = (
-            self.type_ctx.defs.lookup(DefKind::Function, base_name),
+            self.type_ctx.resolve(DefKind::Function, base_name),
             receiver,
         ) else {
             self.hir.last = None;

@@ -23,7 +23,7 @@ pub struct FunctionBuilder {
 
 impl FunctionBuilder {
     /// Starts a function with a single empty entry block (block 0) as the current block. The def
-    /// defaults to `DefId(0)`; lowering sets the real one via [`Self::set_def`].
+    /// defaults to `DefId::root(0)`; lowering sets the real one via [`Self::set_def`].
     pub fn new(name: impl Into<String>, ret: TypeId) -> Self {
         let name = name.into();
         FunctionBuilder {
@@ -31,7 +31,7 @@ impl FunctionBuilder {
             name,
             ret,
             is_async: false,
-            def: DefId(0),
+            def: DefId::root(0),
             instance: Vec::new(),
             params: Vec::new(),
             locals: Vec::new(),

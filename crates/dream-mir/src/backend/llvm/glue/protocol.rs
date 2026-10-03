@@ -312,7 +312,10 @@ fn struct_to_string(l: &mut Lcx<'_>, ty: TypeId, fn_name: &str) {
     let start = if tuple {
         "(".to_string()
     } else {
-        format!("{} {{ ", layout.name)
+        format!(
+            "{} {{ ",
+            fx.l.mir.type_names.get(&ty).unwrap_or(&layout.name)
+        )
     };
     fx.strb_lit(&sb, &start);
     for (i, f) in layout.fields.iter().enumerate() {

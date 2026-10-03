@@ -254,8 +254,7 @@ impl<'a> Analyzer<'a> {
                 // guaranteed to dangle — the new object has no other owner and dies when
                 // this statement ends. Zero false positives by construction.
                 let is_unowned_field = self
-                    .struct_table
-                    .get_struct(&struct_name)
+                    .struct_info(&struct_name)
                     .and_then(|info| info.fields.get(&member.text))
                     .map(|f| f.is_unowned)
                     .unwrap_or(false);

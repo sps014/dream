@@ -11,7 +11,7 @@ impl<'a> Analyzer<'a> {
     /// to codegen via [`super::super::GlobalSymbol`].
     pub(in crate::analyzer) fn register_globals(
         &mut self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
         // A synthetic, parameterless, non-async "module init" supplies the parent-function context

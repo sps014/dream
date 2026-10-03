@@ -58,10 +58,9 @@ impl<'a> Analyzer<'a> {
                 };
                 self.ensure_union_instantiated(&base, &args, &function.name.position, diagnostics);
                 let mangled = return_type.get_type();
-                let def = self.type_ctx.defs.lookup(DefKind::Union, &mangled);
+                let def = self.type_ctx.resolve(DefKind::Union, &mangled);
                 let disc = self
-                    .union_table
-                    .get(&mangled)
+                    .union_info(&mangled)
                     .and_then(|u| u.variant("Ok"))
                     .map(|v| v.discriminant as usize);
                 let (Some(def), Some(disc)) = (def, disc) else {

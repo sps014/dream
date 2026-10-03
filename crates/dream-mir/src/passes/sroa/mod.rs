@@ -554,7 +554,7 @@ mod tests {
         b.assign(
             Place::Local(o),
             Rvalue::New {
-                def: DefId(0),
+                def: DefId::root(0),
                 ty: i.int(),
                 ctor: None,
                 args: vec![],
@@ -601,7 +601,7 @@ mod tests {
         b.assign(
             Place::Local(o),
             Rvalue::New {
-                def: DefId(0),
+                def: DefId::root(0),
                 ty: i.int(),
                 ctor: None,
                 args: vec![],
@@ -650,7 +650,7 @@ mod tests {
         b.assign(
             Place::Local(o),
             Rvalue::New {
-                def: DefId(0),
+                def: DefId::root(0),
                 ty: i.int(),
                 ctor: None,
                 args: vec![],
@@ -678,7 +678,7 @@ mod tests {
         b.assign(
             Place::Local(o),
             Rvalue::New {
-                def: DefId(0),
+                def: DefId::root(0),
                 ty: i.int(),
                 ctor: None,
                 args: vec![],
@@ -700,8 +700,8 @@ mod tests {
     fn expands_simple_ctor_then_promotes() {
         // Ctor: this.0 = n; Caller: o = new C(7); x = o.0; return x;
         let i = TypeInterner::new();
-        let ctor_def = DefId(1);
-        let class_def = DefId(2);
+        let ctor_def = DefId::root(1);
+        let class_def = DefId::root(2);
 
         let mut ctor_b = FunctionBuilder::new("C.constructor", i.void());
         ctor_b.set_def(ctor_def, vec![]);
@@ -770,8 +770,8 @@ mod tests {
     fn expands_string_field_ctor() {
         let mut i = TypeInterner::new();
         let str_ty = i.string();
-        let ctor_def = DefId(1);
-        let class_def = DefId(2);
+        let ctor_def = DefId::root(1);
+        let class_def = DefId::root(2);
         let class_ty = i.struct_ty(class_def, vec![]);
 
         let mut ctor_b = FunctionBuilder::new("P.constructor", i.void());

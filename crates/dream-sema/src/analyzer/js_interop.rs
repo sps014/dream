@@ -129,7 +129,7 @@ impl<'a> Analyzer<'a> {
     /// Returns `None` only if the bridge is somehow unregistered (a stdlib bug).
     fn js_bridge_call(&self, method: &str, args: Vec<HExpr>, ret: TypeId) -> Option<HExpr> {
         let mangled = method_fn(dream_abi::js_abi::JS_TYPE, method);
-        let def = self.type_ctx.defs.lookup(DefKind::Function, &mangled)?;
+        let def = self.type_ctx.resolve(DefKind::Function, &mangled)?;
         Some(HExpr::new(
             ret,
             HExprKind::Call {
@@ -317,12 +317,8 @@ impl<'a> Analyzer<'a> {
         let args = std::slice::from_ref(inner);
         self.ensure_union_instantiated("Option", args, &no_span, &mut throwaway);
         let mangled = mangle_generic("Option", args);
-        let def = self.type_ctx.defs.lookup(DefKind::Union, &mangled)?;
-        let variant = self
-            .union_table
-            .get(&mangled)?
-            .variant("None")?
-            .discriminant as usize;
+        let def = self.type_ctx.resolve(DefKind::Union, &mangled)?;
+        let variant = self.union_info(&mangled)?.variant("None")?.discriminant as usize;
         let ty = self.type_ctx.lower(&Type::Struct(
             synthetic_token(TokenKind::IdentifierToken, "Option"),
             Some(vec![inner.clone()]),

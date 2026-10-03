@@ -31,8 +31,7 @@ impl<'a> Analyzer<'a> {
         )?;
 
         let methods = self
-            .interface_methods
-            .get(iface_name)
+            .interface_method_list(iface_name)
             .cloned()
             .unwrap_or_default();
         let Some((slot, im)) = methods
@@ -86,7 +85,7 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        let iface_id = self.interface_methods.get_index_of(iface_name).unwrap_or(0);
+        let iface_id = self.interface_index(iface_name).unwrap_or(0);
         // The `call_indirect` signature is `fun(this, params...): ret`, with `this` typed as
         // `object` (an `i32` pointer, matching every concrete implementation's receiver).
         let sig = self.interface_dispatch_sig(im);

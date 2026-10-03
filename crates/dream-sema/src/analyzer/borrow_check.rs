@@ -238,7 +238,7 @@ impl<'s> Extractor<'s> {
 
 /// Computes B2 view-return summaries: `"Owner::method"` / `"fnname"` -> parameter position
 /// whose argument gets borrowed (`usize::MAX` = the method receiver).
-fn compute_view_summaries<'a>(node: &'a ProgramNode<'a>) -> HashMap<String, ViewSummary> {
+fn compute_view_summaries<'a>(node: &'a ProgramView<'a>) -> HashMap<String, ViewSummary> {
     let mut out: HashMap<String, ViewSummary> = HashMap::new();
 
     /// Classifies a returned expression: does it construct a view over `this` (method) or over
@@ -455,7 +455,7 @@ fn interpret_events(
 impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn check_borrow_collisions(
         &mut self,
-        node: &'a ProgramNode<'a>,
+        node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
         let summaries = compute_view_summaries(node);
@@ -479,7 +479,7 @@ impl<'a> Analyzer<'a> {
                 let fname = f.name.text.clone();
                 if let Some(owner1) = type_owner_name(&f.field_type) {
                     chain_owners.insert(format!("this.{fname}"), owner1.clone());
-                    if let Some(info1) = self.struct_table.get_struct(&owner1) {
+                    if let Some(info1) = self.struct_info(&owner1) {
                         for (sub_name, sub_info) in info1.fields.iter() {
                             if let Some(owner2) = type_owner_name(&sub_info.type_) {
                                 let key = format!("this.{fname}.{sub_name}");
@@ -537,12 +537,12 @@ impl<'a> Analyzer<'a> {
             // Local-rooted chains: `o.inner.items` -> resolve o's class, then walk fields.
             let mut chain_owners: StdHashMap<String, String> = StdHashMap::new();
             for (local_name, local_cls) in &ex.local_class {
-                if let Some(info) = self.struct_table.get_struct(local_cls) {
+                if let Some(info) = self.struct_info(local_cls) {
                     for (fname, finfo) in info.fields.iter() {
                         let key = format!("{local_name}.{fname}");
                         if let Some(owner1) = type_owner_name(&finfo.type_) {
                             chain_owners.insert(key.clone(), owner1.clone());
-                            if let Some(sub) = self.struct_table.get_struct(&owner1) {
+                            if let Some(sub) = self.struct_info(&owner1) {
                                 for (sub_name, sub_finfo) in sub.fields.iter() {
                                     let deep = format!("{key}.{sub_name}");
                                     if let Some(owner2) = type_owner_name(&sub_finfo.type_) {

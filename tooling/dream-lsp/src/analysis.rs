@@ -6,9 +6,7 @@ use bumpalo::Bump;
 use dream::diagnostics::{Diagnostic, DiagnosticBag, Severity};
 use dream::driver::source_loader::collect_declarations;
 use dream::syntax::lexer::Lexer;
-use dream::syntax::nodes::ProgramNode;
 use dream::syntax::parser::Parser;
-use dream::syntax::syntax_tree::SyntaxTree;
 use dream_sema::analyzer::Analyzer;
 use dream_stdlib::std_package_from_slash_path;
 
@@ -58,6 +56,10 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
 
     if let Ok(ast) = &user_ast {
         let program = ast.get_root();
+        acc.parsed_files
+            .insert(MAIN_FILE.to_string(), program.clone());
+        acc.file_contents
+            .insert(MAIN_FILE.to_string(), text.to_string());
         if let Some(module_decl) = &program.module {
             acc.file_modules.insert(
                 MAIN_FILE.to_string(),
@@ -105,6 +107,12 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
 
                 if let Some(import_path_str) = import_path.to_str() {
                     if import_path.exists() {
+                        let resolved = std::fs::canonicalize(&import_path)
+                            .unwrap_or_else(|_| import_path.clone());
+                        acc.import_edges
+                            .entry(MAIN_FILE.to_string())
+                            .or_default()
+                            .push(resolved.to_string_lossy().into_owned());
                         let _ = dream::driver::source_loader::parse_file_recursive(
                             &import_path_str.to_string(),
                             &mut acc,
@@ -172,28 +180,13 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
     // the parts that did parse. The analysis is wrapped so any residual panic degrades to
     // "syntax diagnostics only" instead of taking down the language server.
     if user_ast.is_ok() {
-        let file_modules = acc
-            .file_modules
-            .iter()
-            .map(|(k, v)| (std::rc::Rc::from(k.as_str()), v.clone()))
-            .collect();
-        let combined = ProgramNode::new(
-            vec![],
-            acc.all_structs,
-            acc.all_interfaces,
-            acc.all_functions,
-            acc.all_enums,
-            acc.all_extends,
-            acc.all_globals,
-        );
-        let tree = SyntaxTree::new(combined);
+        let graph = acc.module_graph();
         // The snapshot is extracted inside the same scope as the analyzer (it borrows the
         // arena); a panic degrades to "syntax diagnostics only" with no snapshot.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let target = dream_abi::target::TargetSpec::host();
-            let mut analyzer = Analyzer::new(&tree, &arena)
-                .with_file_modules(file_modules)
-                .with_target_layout(dream_hir::TargetLayout {
+            let mut analyzer =
+                Analyzer::new(&graph, &arena).with_target_layout(dream_hir::TargetLayout {
                     ptr_size: target.ptr_size,
                     ptr_align: target.ptr_align,
                 });
@@ -201,7 +194,31 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
             analyzer.ide_snapshot()
         }));
         match result {
-            Ok(snapshot) => sema = Some(snapshot),
+            Ok(mut snapshot) => {
+                snapshot.refs.retain(|reference| {
+                    reference
+                        .file
+                        .as_deref()
+                        .is_none_or(|file| file == MAIN_FILE)
+                });
+                snapshot.primary_file = Some(MAIN_FILE.to_string());
+                if let Some(path) = file_path {
+                    let path = std::fs::canonicalize(path)
+                        .map(|path| path.to_string_lossy().into_owned())
+                        .unwrap_or_else(|_| path.to_string());
+                    snapshot.primary_file = Some(path.clone());
+                    for reference in &mut snapshot.refs {
+                        if let dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. } =
+                            &mut reference.target
+                        {
+                            if source.file.as_deref() == Some(MAIN_FILE) {
+                                source.file = Some(path.clone());
+                            }
+                        }
+                    }
+                }
+                sema = Some(snapshot);
+            }
             Err(payload) => report_analyzer_panic(&mut diagnostics, &payload),
         }
     }

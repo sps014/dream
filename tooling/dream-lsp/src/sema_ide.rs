@@ -173,6 +173,11 @@ fn fn_signature(snapshot: &IdeSnapshot, key: &str) -> Option<String> {
 
 fn hover_body(snapshot: &IdeSnapshot, r: &IdeRef) -> String {
     match &r.target {
+        IdeTarget::Resolved { target, .. } => {
+            let mut reference = r.clone();
+            reference.target = (**target).clone();
+            hover_body(snapshot, &reference)
+        }
         IdeTarget::Local { name } | IdeTarget::Global { name } => {
             format!("let {name}: {}", r.result.display())
         }
@@ -221,7 +226,11 @@ fn hover_body(snapshot: &IdeSnapshot, r: &IdeRef) -> String {
 /// results): maps the analyzer's resolved target back to the indexed declaration.
 pub fn definition_at(snapshot: &IdeSnapshot, idx: &Index, offset: usize) -> Option<(usize, usize)> {
     let r = snapshot.ref_covering(offset)?;
+    if let IdeTarget::Resolved { source, .. } = &r.target {
+        return (source.file == snapshot.primary_file).then_some((source.start, source.end));
+    }
     let decl: Option<&Decl> = match &r.target {
+        IdeTarget::Resolved { .. } => None,
         IdeTarget::Local { name } | IdeTarget::Global { name } => idx
             .decls
             .iter()
@@ -283,6 +292,7 @@ fn method_matches_key(decl: &Decl, key: &str) -> bool {
 /// not comparable between files.
 pub fn target_matches(a: &IdeTarget, b: &IdeTarget) -> bool {
     match (a, b) {
+        (IdeTarget::Resolved { source: a, .. }, IdeTarget::Resolved { source: b, .. }) => a == b,
         (IdeTarget::Global { name: a }, IdeTarget::Global { name: b }) => a == b,
         (
             IdeTarget::Field {
@@ -339,7 +349,17 @@ pub fn references_in(snapshot: &IdeSnapshot, target: &IdeTarget) -> Vec<(usize, 
     let mut out: Vec<(usize, usize)> = snapshot
         .refs
         .iter()
-        .filter(|r| ref_in_primary_doc(r) && target_matches(&r.target, target))
+        .filter(|r| {
+            if !ref_in_primary_doc(r) || !target_matches(&r.target, target) {
+                return false;
+            }
+            !matches!(
+                &r.target,
+                IdeTarget::Resolved { source, .. }
+                    if source.file == snapshot.primary_file
+                        && (source.start, source.end) == (r.start, r.end)
+            )
+        })
         .map(|r| (r.start, r.end))
         .collect();
     out.sort_unstable();

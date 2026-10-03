@@ -9,31 +9,17 @@ impl Compiler {
 
         let load::LoadedProgram {
             acc,
+            graph,
             native_graph,
             cpp_bridge,
         } = self.load_program(main_file_path, &arena, &mut diagnostics)?;
 
-        let combined_program = ProgramNode::new(
-            vec![],
-            acc.all_structs,
-            acc.all_interfaces,
-            acc.all_functions,
-            acc.all_enums,
-            acc.all_extends,
-            acc.all_globals,
-        );
-        let ast = SyntaxTree::new(combined_program);
+        let program = graph.view();
 
         info!("finished parsing");
         info!("starting semantic analysis");
 
-        let file_modules = acc
-            .file_modules
-            .iter()
-            .map(|(file, module)| (std::rc::Rc::from(file.as_str()), module.clone()))
-            .collect();
-        let mut analyzer = Analyzer::new(&ast, &arena)
-            .with_file_modules(file_modules)
+        let mut analyzer = Analyzer::new(&graph, &arena)
             .with_aliased_imports(acc.aliased_imports)
             .with_crate_type(self.crate_type, Some(main_file_path.clone()))
             .with_compile_targets(self.compile_targets)
@@ -76,7 +62,7 @@ impl Compiler {
             if !diagnostics.diagnostics.is_empty() {
                 render_with(&diagnostics, file_contents, Some(highlight_dream_line));
             }
-            let gpu = crate::driver::gpu_gen::collect_gpu_shaders(ast.get_root(), &mut diagnostics);
+            let gpu = crate::driver::gpu_gen::collect_gpu_shaders(&program, &mut diagnostics);
             if diagnostics.has_errors() {
                 return Err("generator");
             }
@@ -92,12 +78,7 @@ impl Compiler {
                 .collect();
             let linear_memory = target.spec().capabilities.linear_memory;
             if !target.spec().capabilities.c_interop
-                && report_wasm_c_imports(
-                    ast.get_root(),
-                    &live_imports,
-                    &cpp_bridge,
-                    &mut diagnostics,
-                )
+                && report_wasm_c_imports(&program, &live_imports, &cpp_bridge, &mut diagnostics)
             {
                 return Err("semantic");
             }
@@ -203,7 +184,7 @@ impl Compiler {
             }
             let abi_artifacts = emit_wasm_and_abi(
                 out_path,
-                ast.get_root(),
+                &program,
                 &gpu,
                 &live_imports,
                 &native_graph,
@@ -251,7 +232,7 @@ impl Compiler {
         // Sibling `.abi.json` for JS/`dream.js` interop, plus `.wgsl` when GPU kernels were emitted.
         let abi_artifacts = emit_wasm_and_abi(
             out_path,
-            ast.get_root(),
+            &program,
             &gpu,
             &live_imports,
             &native_graph,

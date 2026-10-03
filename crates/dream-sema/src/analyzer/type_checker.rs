@@ -14,10 +14,12 @@ impl<'a> Analyzer<'a> {
         function: &FunctionNode<'a>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Rc<RefCell<SymbolTable>>, SemanticError> {
+        self.current_file = function.file_path.clone();
+        self.type_ctx
+            .set_scope(self.graph.module_for_file(function.file_path.as_deref()));
         let param_table = Rc::new(RefCell::new(
             self.add_function_param_table(function, diagnostics)?,
         ));
-        self.current_file = function.file_path.clone();
         let errors_before = diagnostics.errors().count();
         self.hir_begin_function(function);
         let is_unsafe = function.attributes.iter().any(|a| a.name.text == "unsafe");

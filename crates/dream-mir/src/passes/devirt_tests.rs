@@ -13,9 +13,9 @@ struct World {
 
 fn world() -> World {
     let mut interner = TypeInterner::new();
-    let a = interner.struct_ty(DefId(10), vec![]);
-    let b = interner.struct_ty(DefId(11), vec![]);
-    let iface = interner.interface_ty(DefId(12), vec![]);
+    let a = interner.struct_ty(DefId::root(10), vec![]);
+    let b = interner.struct_ty(DefId::root(11), vec![]);
+    let iface = interner.interface_ty(DefId::root(12), vec![]);
     World {
         interner,
         a,
@@ -30,7 +30,7 @@ fn local(l: Local) -> Operand {
 
 fn method(w: &World, name: &str, def: u32, this_ty: TypeId) -> MirFunction {
     let mut b = FunctionBuilder::new(name, w.interner.int());
-    b.set_def(DefId(def), vec![]);
+    b.set_def(DefId::root(def), vec![]);
     b.new_param(this_ty, Some("this".into()));
     b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(
         def as i64,
@@ -51,11 +51,11 @@ fn module(w: &World, caller: MirFunction, a_def: u32, b_def: u32) -> Mir {
             impls: vec![
                 InterfaceImpl {
                     class_ty: w.a,
-                    entries: vec![(0, vec![Some(DefId(a_def))])],
+                    entries: vec![(0, vec![Some(DefId::root(a_def))])],
                 },
                 InterfaceImpl {
                     class_ty: w.b,
-                    entries: vec![(0, vec![Some(DefId(b_def))])],
+                    entries: vec![(0, vec![Some(DefId::root(b_def))])],
                 },
             ],
         },
@@ -65,7 +65,7 @@ fn module(w: &World, caller: MirFunction, a_def: u32, b_def: u32) -> Mir {
 
 fn new_of(def: u32, ty: TypeId) -> Rvalue {
     Rvalue::New {
-        def: DefId(def),
+        def: DefId::root(def),
         ty,
         ctor: None,
         args: vec![],
@@ -86,7 +86,7 @@ fn iface_call(w: &World, recv: Local) -> Rvalue {
 /// The def of the direct callee at `(block, stmt)`, or `None` if it is still an interface call.
 fn direct_def(mir: &Mir, block: u32, stmt: usize) -> Option<u32> {
     match &mir.functions[0].blocks[block as usize].stmts[stmt] {
-        Statement::Assign(_, Rvalue::Call { callee, .. }) => Some(callee.def.0),
+        Statement::Assign(_, Rvalue::Call { callee, .. }) => Some(callee.def.index),
         Statement::Assign(_, Rvalue::InterfaceCall { .. }) => None,
         other => panic!("unexpected {:?}", other),
     }

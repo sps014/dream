@@ -169,7 +169,7 @@ impl<'a> Analyzer<'a> {
             &param_types,
             &mut self.type_ctx,
         );
-        let def = self.type_ctx.defs.lookup(DefKind::Function, &lookup_name);
+        let def = self.type_ctx.resolve(DefKind::Function, &lookup_name);
 
         // A generic template is emitted once per monomorphization: the initial (unbound) pass is
         // skipped, and each concrete instantiation is analyzed again under `current_generic_bindings`
@@ -283,8 +283,7 @@ impl<'a> Analyzer<'a> {
                     local,
                     name: param.name.text.clone(),
                     ty: box_tid,
-                    is_ref: true,
-                    is_take: false,
+                    mode: dream_hir::ParamMode::Ref,
                 });
                 self.hir.boxed.insert(param.name.text.clone(), elem_ty);
                 continue;
@@ -297,8 +296,13 @@ impl<'a> Analyzer<'a> {
                 local,
                 name: param.name.text.clone(),
                 ty,
-                is_ref: false,
-                is_take: !param.is_ref && !param.is_borrow && param.name.text != "this",
+                mode: if param.is_borrow || param.name.text == "this" {
+                    dream_hir::ParamMode::Borrow
+                } else if self.type_ctx.interner.is_shared_type(ty) {
+                    dream_hir::ParamMode::Share
+                } else {
+                    dream_hir::ParamMode::Sink
+                },
             });
         }
 

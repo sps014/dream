@@ -9,8 +9,8 @@ use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
-use std::cell::RefCell;
 use indexmap::IndexMap as HashMap;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 impl<'a> Analyzer<'a> {
@@ -27,8 +27,8 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Option<Type>, SemanticError> {
-        let is_generic = self.generic_unions.contains_key(enum_name);
-        let is_concrete = self.union_table.contains_key(enum_name);
+        let is_generic = self.generic_union(enum_name).is_some();
+        let is_concrete = self.union_info(enum_name).is_some();
         if !is_generic && !is_concrete {
             return Ok(None);
         }
@@ -45,7 +45,7 @@ impl<'a> Analyzer<'a> {
         // Declared payload names + types (templated for generic unions). Names reorder
         // `Variant(field: expr)` to positional order before the args are typed.
         let (field_names, field_types): (Vec<String>, Vec<Type>) =
-            if let Some(&template) = self.generic_unions.get(enum_name) {
+            if let Some(&template) = self.generic_union(enum_name) {
                 match template
                     .variants
                     .iter()
@@ -64,7 +64,7 @@ impl<'a> Analyzer<'a> {
                     }
                 }
             } else {
-                let info = match self.union_table.get(enum_name) {
+                let info = match self.union_info(enum_name) {
                     Some(info) => info,
                     None => {
                         return Err(report(
@@ -121,11 +121,9 @@ impl<'a> Analyzer<'a> {
             // Construct the union value: resolve its `DefId` and the variant's discriminant.
             let def = self
                 .type_ctx
-                .defs
-                .lookup(dream_types::DefKind::Union, enum_name);
+                .resolve(dream_types::DefKind::Union, enum_name);
             let disc = self
-                .union_table
-                .get(enum_name)
+                .union_info(enum_name)
                 .and_then(|i| i.variant(&variant.text))
                 .map(|v| v.discriminant as usize);
             match (def, disc) {
@@ -137,7 +135,7 @@ impl<'a> Analyzer<'a> {
 
         // Generic union: resolve the concrete type arguments, preferring an explicit expected type
         // (e.g. a `let`/`return` annotation) and otherwise inferring from the arguments.
-        let template = *self.generic_unions.get(enum_name).unwrap_or_else(|| {
+        let template = *self.generic_union(enum_name).unwrap_or_else(|| {
             crate::internal_error!(
                 "generic union '{}' reached generic-instantiation analysis without a registered template",
                 enum_name
@@ -220,11 +218,9 @@ impl<'a> Analyzer<'a> {
         );
         let def = self
             .type_ctx
-            .defs
-            .lookup(dream_types::DefKind::Union, enum_name);
+            .resolve(dream_types::DefKind::Union, enum_name);
         let disc = self
-            .union_table
-            .get(&mangled)
+            .union_info(&mangled)
             .and_then(|i| i.variant(&variant.text))
             .map(|v| v.discriminant as usize);
         match (def, disc) {

@@ -20,7 +20,7 @@ pub use display::{display_name, UNKNOWN_TYPE_NAME};
 pub use interner::TypeInterner;
 pub use kind::{PrimTy, TyKind};
 pub use lower::TypeCtx;
-pub use naming::{constructor_fn, json_from_json_fn, json_to_json_fn, method_fn, value_size_align};
+pub use naming::{constructor_fn, json_from_json_fn, json_to_json_fn, method_fn};
 
 /// A compact handle to an interned type. Equal ids denote structurally equal types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

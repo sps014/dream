@@ -77,10 +77,8 @@ impl PrimTy {
     /// Byte size and alignment of a scalar value of this primitive when stored inline (a struct
     /// field, array element, or local): `bool`/`char`/`byte` occupy a single byte;
     /// `double`/`long`/`ulong` are 8 bytes; everything else (`int`, `uint`, `float`, and `string`,
-    /// which is a 4-byte heap pointer) is a 4-byte word. Single source of truth for this rule,
-    /// shared by the string-keyed [`crate::types::naming::value_size_align`] (analyzer struct
-    /// tables) and the `TypeId`-keyed [`crate::hir::scalar_size`] (HIR/MIR layout) so the two
-    /// representations can never disagree on a primitive's width.
+    /// whose entry here is only its wasm32 representation) is a 4-byte word. The HIR layout table
+    /// replaces `string` with the selected target's pointer size and alignment.
     pub fn size_align(self) -> (u32, u32) {
         match self {
             PrimTy::Bool | PrimTy::Char | PrimTy::Byte => (1, 1),

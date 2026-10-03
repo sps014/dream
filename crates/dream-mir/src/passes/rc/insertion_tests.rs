@@ -8,9 +8,7 @@ fn point_ty(ctx: &mut TypeCtx) -> dream_types::TypeId {
     let vs_def = ctx.register(DefKind::Struct, "Point", vec![]);
     ctx.defs.mark_value(vs_def);
     ctx.interner.mark_value_def(vs_def);
-    let point = ctx.interner.struct_ty(vs_def, vec![]);
-    ctx.interner.set_value_layout(point, 8, 4);
-    point
+    ctx.interner.struct_ty(vs_def, vec![])
 }
 
 #[test]

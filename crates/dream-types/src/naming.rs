@@ -1,11 +1,8 @@
-//! Backend naming and inline-layout helpers.
+//! Backend naming helpers.
 //!
 //! These derive the internal symbol names the semantic analyzer and codegen agree on (method,
-//! constructor, and `@json` converter names) and the byte size/alignment a scalar occupies when
-//! stored inline. They are backend concerns, kept out of the `dream-syntax` surface AST so the
-//! frontend carries no mangling/layout knowledge.
+//! constructor, and `@json` converter names). Memory layout belongs to the HIR layout table.
 
-use super::PrimTy;
 use dream_syntax::nodes::types::CONSTRUCTOR_NAME;
 
 /// The internal name under which a struct method is registered in the function table and emitted in
@@ -34,23 +31,4 @@ pub fn json_to_json_fn(struct_name: &str) -> String {
 /// `User_from_json`). See [`json_to_json_fn`].
 pub fn json_from_json_fn(struct_name: &str) -> String {
     method_fn(struct_name, "from_json")
-}
-
-/// Byte size and alignment of a value of `type_name` when stored inline (array element or struct
-/// field). Delegates to [`PrimTy::size_align`] for recognized primitive names (see there for the
-/// exact rule); any other name (a `class`/`struct`/array/generic-param reference) is a 4-byte
-/// word/pointer, matching every reference type's runtime representation.
-pub fn value_size_align(type_name: &str) -> (usize, usize) {
-    // Known GPU vector value types (stdlib `system.gpu`); keep in sync with `gpu_vec.dream`.
-    match type_name {
-        "GpuVec2" => return (8, 4),
-        "GpuVec3" => return (12, 4),
-        "GpuVec4" => return (16, 4),
-        "GpuId3" => return (12, 4),
-        _ => {}
-    }
-    let (size, align) = PrimTy::from_name(type_name)
-        .map(PrimTy::size_align)
-        .unwrap_or((4, 4));
-    (size as usize, align as usize)
 }

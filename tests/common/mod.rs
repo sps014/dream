@@ -46,13 +46,24 @@ pub fn analyze_code(code: &str) -> DiagnosticBag {
 /// front half — parse -> analyze -> assert clean -> borrow the interner — that every emit helper
 /// below otherwise duplicated; each now differs only in the `emit` closure (how it lowers/runs).
 pub fn compile_test_pipeline<R>(code: &str, emit: impl FnOnce(&Hir, &TypeInterner) -> R) -> R {
+    compile_test_pipeline_for(code, Target::native(), emit)
+}
+
+pub fn compile_test_pipeline_for<R>(
+    code: &str,
+    target: Target,
+    emit: impl FnOnce(&Hir, &TypeInterner) -> R,
+) -> R {
     let mut diagnostics = DiagnosticBag::new(None);
     let lexer = Lexer::new(code.to_string());
     let parse_arena = bumpalo::Bump::new();
     let mut parser = Parser::new(lexer, &parse_arena, &mut diagnostics);
     let tree = parser.parse().expect("parse should succeed");
     let arena = bumpalo::Bump::new();
-    let mut analyzer = Analyzer::new(&tree, &arena);
+    let mut analyzer = Analyzer::new(&tree, &arena).with_target_layout(dream_hir::TargetLayout {
+        ptr_size: target.spec().ptr_size,
+        ptr_align: target.spec().ptr_align,
+    });
     let hir = analyzer
         .analyze(&mut diagnostics)
         .expect("analysis should succeed")
@@ -227,7 +238,7 @@ pub fn emit_hir_to_module_optimized(code: &str) -> String {
 
 /// [`emit_hir_to_module`] for wasm32.
 pub fn emit_hir_to_module_wasm32(code: &str) -> String {
-    compile_test_pipeline(code, |hir, interner| {
+    compile_test_pipeline_for(code, Target::wasm32(), |hir, interner| {
         let mir = dream_mir::lower::lower_program(hir, interner);
         emit_ll_for(&mir, interner, dream_mir::backend::Target::wasm32())
     })

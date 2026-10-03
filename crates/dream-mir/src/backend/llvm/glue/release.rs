@@ -31,14 +31,16 @@ fn names(l: &Lcx<'_>) -> Names {
         elems: glue_array_elems(&l.cx),
         structs: l
             .cx
-            .native
+            .mir
+            .layouts
             .structs
             .iter()
             .map(|(t, s)| (*t, s.clone()))
             .collect(),
         unions: l
             .cx
-            .native
+            .mir
+            .layouts
             .unions
             .iter()
             .map(|(t, u)| (*t, u.clone()))
@@ -462,10 +464,11 @@ fn emit_destroys(l: &mut Lcx<'_>, n: &Names) {
 fn tag_dispatch(l: &mut Lcx<'_>, name: &str, destroy: bool) {
     let mut arms: Vec<(i128, String)> = Vec::new();
     let tagged =
-        l.cx.native
+        l.cx.mir
+            .layouts
             .structs
             .keys()
-            .chain(l.cx.native.unions.keys())
+            .chain(l.cx.mir.layouts.unions.keys())
             .copied()
             .collect::<Vec<_>>();
     for ty in tagged {

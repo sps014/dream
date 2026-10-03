@@ -109,7 +109,7 @@ pub(crate) fn array_elems(cx: &Cx<'_>) -> Vec<TypeId> {
             }
         }
     };
-    for layout in cx.native.structs.values() {
+    for layout in cx.mir.layouts.structs.values() {
         for f in &layout.fields {
             push(f.ty);
         }

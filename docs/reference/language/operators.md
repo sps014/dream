@@ -275,14 +275,15 @@ meta forms:
 struct Point { public x: int; public y: int; }
 
 let bytes: int = sizeof(Point);     // 8 — byte size of the struct
-let ptr_w: int = sizeof(string);    // 4 — class, array, string, and other heap refs
+let ptr_w: int = sizeof(string);    // 4 on wasm32, 8 on 64-bit native targets
 let name: string = nameof(Point.x); // "x" — last path segment; operand is not evaluated
 let kind: string = typeof(bytes);   // "int"
 ```
 
 - **`sizeof(T)`** yields an `int`:
   - primitives and value `struct`s → their storage size in bytes
-  - class instances, arrays, `string`, and other heap refs → `4`
+  - class instances, arrays, `string`, and other heap refs → the target's pointer width
+  - nested value structs, tuples, and value unions use the same target layout as code generation
   - The result is a compile-time constant.
 - **`nameof(a.b.c)`** yields a `string` of the last identifier in a dotted path. The path is not
   type-checked or evaluated (you can write `nameof(future_api)`).

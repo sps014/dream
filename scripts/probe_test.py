@@ -9,6 +9,7 @@ import os
 import re
 import signal
 import socket
+import struct
 import subprocess
 import sys
 import threading
@@ -320,7 +321,8 @@ clearTimeout(timer);
 def one(f: Path):
     stem = f.stem
     err = f.with_suffix(".expected_error")
-    exp = f.with_suffix(".expected")
+    native_exp = f.with_suffix(".expected.native")
+    exp = native_exp if struct.calcsize("P") == 8 and native_exp.exists() else f.with_suffix(".expected")
     trap = f.with_suffix(".expected_trap")
     if err.exists():
         code, _out, _err = run_group([str(dream), *BUILD_FLAGS, str(f)], 25)

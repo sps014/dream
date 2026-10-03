@@ -368,7 +368,11 @@ impl Compiler {
             .with_file_modules(file_modules)
             .with_aliased_imports(acc.aliased_imports)
             .with_crate_type(self.crate_type, Some(main_file_path.clone()))
-            .with_compile_targets(self.compile_targets);
+            .with_compile_targets(self.compile_targets)
+            .with_target_layout(dream_hir::TargetLayout {
+                ptr_size: self.target.spec().ptr_size,
+                ptr_align: self.target.spec().ptr_align,
+            });
         analyzer.set_debug_info(self.debug_info);
         let file_contents = &acc.file_contents;
         // Analyzer panics (`internal_error!`) share this ICE net with codegen: `SemanticInfo`
@@ -501,14 +505,14 @@ impl Compiler {
                     return Err("llvm");
                 }
             };
-            Ok((bytes, live_imports, threads, need, gpu))
+            Ok((bytes, live_imports, threads, need, gpu, mir.layouts.clone()))
         }));
 
         if self.emit_mir.is_some() {
             self.write_mir_dump(out_path, dump)?;
         }
 
-        let (bytes, live_imports, threads, need, gpu) = match pipeline_result {
+        let (bytes, live_imports, threads, need, gpu, layouts) = match pipeline_result {
             Ok(Ok(tuple)) => tuple,
             Ok(Err("semantic")) => {
                 return Err(fail_diagnostics(
@@ -549,6 +553,7 @@ impl Compiler {
                 &live_imports,
                 &native_graph,
                 &cpp_bridge,
+                &layouts,
             )?;
             for p in abi_artifacts {
                 self.reporter.artifact(&p);
@@ -596,6 +601,7 @@ impl Compiler {
             &live_imports,
             &native_graph,
             &cpp_bridge,
+            &layouts,
         )?;
         for p in abi_artifacts {
             self.reporter.artifact(&p);

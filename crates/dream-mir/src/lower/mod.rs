@@ -97,7 +97,7 @@ fn is_pure_place(p: &HPlace) -> bool {
 pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
     let mut functions = Vec::new();
     let mut polls = Vec::new();
-    let const_ints = const_int_globals(hir);
+    let const_ints = const_int_globals(hir, interner);
     for f in &hir.functions {
         let (stub, poll_opt) = lower_function_with(f, interner, &hir.layouts, &const_ints);
         functions.push(stub);
@@ -256,15 +256,15 @@ pub fn lower_function(
     lower_function_with(func, interner, layouts, &HashMap::new())
 }
 
-fn const_int_globals(hir: &Hir) -> HashMap<u32, i64> {
+fn const_int_globals(hir: &Hir, interner: &TypeInterner) -> HashMap<u32, i64> {
     let mut m = HashMap::new();
     for g in &hir.globals {
         if !g.is_const {
             continue;
         }
         if let Some(init) = &g.init {
-            if let HExprKind::IntLit(v) = &init.kind {
-                m.insert(g.id.0, *v);
+            if let Some(v) = const_int_value(init, &hir.layouts, interner) {
+                m.insert(g.id.0, v);
             }
         }
     }
@@ -282,7 +282,10 @@ fn lower_function_with(
         let poll = lower_async_poll_body_with(func, interner, layouts, const_ints);
         return (stub, Some(poll));
     }
-    (lower_sync_function(func, interner, const_ints), None)
+    (
+        lower_sync_function(func, interner, layouts, const_ints),
+        None,
+    )
 }
 
 /// Creates a [`FunctionBuilder`] for `func` (return type, def, source file, async flag) and registers
@@ -327,6 +330,7 @@ fn lower_async_stub(func: &HFunction) -> MirFunction {
 fn lower_sync_function(
     func: &HFunction,
     interner: &TypeInterner,
+    layouts: &dream_hir::LayoutTable,
     const_ints: &HashMap<u32, i64>,
 ) -> MirFunction {
     let (b, locals) = init_builder(func, func.is_async);
@@ -334,6 +338,7 @@ fn lower_sync_function(
     let mut lo = Lowerer {
         b,
         interner,
+        layouts,
         const_ints,
         locals,
         loops: Vec::new(),
@@ -375,6 +380,7 @@ fn lower_async_poll_body_with(
     let mut lo = Lowerer {
         b,
         interner,
+        layouts,
         const_ints,
         locals,
         loops: Vec::new(),
@@ -408,6 +414,7 @@ struct LoopCtx {
 struct Lowerer<'a> {
     b: FunctionBuilder,
     interner: &'a TypeInterner,
+    layouts: &'a dream_hir::LayoutTable,
     /// `const` integer globals with a literal initializer, substituted at each read so later passes
     /// see a constant instead of a global load (`MAT_N` in a counted loop).
     const_ints: &'a HashMap<u32, i64>,
@@ -703,8 +710,13 @@ impl Lowerer<'_> {
     }
 }
 
-fn const_int_value(e: &HExpr) -> Option<i64> {
+fn const_int_value(
+    e: &HExpr,
+    layouts: &dream_hir::LayoutTable,
+    interner: &TypeInterner,
+) -> Option<i64> {
     match &e.kind {
+        HExprKind::SizeOf(ty) => Some(layouts.size_align(interner, *ty).0 as i64),
         HExprKind::IntLit(v) | HExprKind::EnumValue(v) => Some(*v),
         HExprKind::BoolLit(v) => Some(*v as i64),
         HExprKind::CharLit(c) => Some(*c as i64),
@@ -712,7 +724,7 @@ fn const_int_value(e: &HExpr) -> Option<i64> {
             op: dream_hir::UnOp::Neg,
             operand,
             ..
-        } => const_int_value(operand).map(|v| -v),
+        } => const_int_value(operand, layouts, interner).map(|v| -v),
         _ => None,
     }
 }

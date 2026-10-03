@@ -636,7 +636,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Records the HIR for a struct field read `obj.field`; `field` is the resolved field index
-    /// (offset order). Clears `last` if the receiver was not representable.
+    /// (declaration order). Clears `last` if the receiver was not representable.
     pub(in crate::analyzer) fn hir_set_field(
         &mut self,
         obj: Option<HExpr>,

@@ -170,7 +170,7 @@ pub(crate) struct CanonMaps {
 pub(crate) fn canonical_maps(cx: &Cx<'_>) -> CanonMaps {
     let mut rel: Vec<(String, TypeId, String)> = Vec::new();
     let mut des: Vec<(String, TypeId, String)> = Vec::new();
-    for (ty, layout) in &cx.native.structs {
+    for (ty, layout) in &cx.mir.layouts.structs {
         if layout.has_destructor() {
             continue;
         }
@@ -186,7 +186,7 @@ pub(crate) fn canonical_maps(cx: &Cx<'_>) -> CanonMaps {
             c_ident(&format!("destroy_{}", layout.name)),
         ));
     }
-    for (ty, layout) in &cx.native.unions {
+    for (ty, layout) in &cx.mir.layouts.unions {
         let key = union_profile_key(cx, layout);
         rel.push((
             format!("U|rel|{key}"),
@@ -392,7 +392,7 @@ fn collect_array_elems(
 pub(crate) fn glue_array_elems(cx: &Cx<'_>) -> BTreeSet<TypeId> {
     let interner = cx.interner;
     let mut array_elems = BTreeSet::new();
-    for layout in cx.native.structs.values() {
+    for layout in cx.mir.layouts.structs.values() {
         for f in &layout.fields {
             if let TyKind::Array(e) = interner.kind(f.ty) {
                 if interner.is_reference(*e) || interner.is_value_type(*e) {

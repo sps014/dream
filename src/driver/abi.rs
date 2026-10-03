@@ -6,9 +6,7 @@ use std::path::Path;
 use crate::driver::cpp_bridge::{CppBridge, WrittenShim, SHIM_RUNTIME_EXPORTS};
 use crate::driver::gpu_gen::{self, GpuEmitResult};
 use crate::driver::native_sets::{NativeGraph, NativeSet};
-use dream_abi::attributes::{
-    c_import_target, c_marshal_charset, extern_import_target, has_c_attr, has_packed_attr,
-};
+use dream_abi::attributes::{c_import_target, c_marshal_charset, extern_import_target, has_c_attr};
 use dream_syntax::nodes::function::ParameterNode;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::{AttributeNode, FunctionNode, ProgramNode, Type};
@@ -79,6 +77,7 @@ pub(crate) fn emit_wasm_and_abi(
     live_imports: &[LiveImport],
     native: &NativeGraph,
     cpp: &CppBridge,
+    layouts: &dream_hir::LayoutTable,
 ) -> Result<Vec<std::path::PathBuf>, Error> {
     let base = Path::new(wat_path);
     let mut written = Vec::new();
@@ -98,7 +97,7 @@ pub(crate) fn emit_wasm_and_abi(
     let shims = cpp.write(&native_root, |set| live.contains(set))?;
     fs::write(
         &abi_path,
-        build_abi_json(program, gpu, live_imports, native, &shims),
+        build_abi_json(program, gpu, live_imports, native, &shims, layouts),
     )?;
     written.push(abi_path);
     Ok(written)
@@ -148,6 +147,7 @@ pub(crate) fn build_abi_json(
     live_imports: &[LiveImport],
     native: &NativeGraph,
     shims: &BTreeMap<String, WrittenShim>,
+    layouts: &dream_hir::LayoutTable,
 ) -> String {
     let live: BTreeSet<(&str, &str)> = live_imports
         .iter()
@@ -317,7 +317,7 @@ pub(crate) fn build_abi_json(
 
     // Struct map for `@c`-referenced unmanaged value types (native host consults it to marshal
     // struct-pointer params and to size out-struct writebacks).
-    let structs_section = build_c_structs_section(program, &externs);
+    let structs_section = build_c_structs_section(program, &externs, layouts);
     let host_capabilities = dream_abi::host_capability::HostCapability::ALL
         .iter()
         .filter(|capability| host_capabilities.contains(capability))
@@ -391,7 +391,11 @@ fn c_sources_json(sets: &[&NativeSet], shims: &BTreeMap<String, WrittenShim>) ->
 /// Collects the set of unmanaged value-struct names referenced by any *live* `@c` extern's param
 /// tags (`struct_ptr:Name` / `out_struct:Name`), then emits a `"structs"` JSON object mapping each
 /// to its size/align/packed flag and field offsets. Empty when no `@c` import needs a struct.
-fn build_c_structs_section(program: &ProgramNode, externs: &[String]) -> String {
+fn build_c_structs_section(
+    program: &ProgramNode,
+    externs: &[String],
+    layouts: &dream_hir::LayoutTable,
+) -> String {
     // Names mentioned as `"struct_ptr:X"` / `"out_struct:X"` in the already-rendered externs. We
     // parse them back out rather than re-walking the AST so this stays in perfect lockstep with
     // whatever `c_param_tag` actually emitted (including future tag variants).
@@ -433,17 +437,32 @@ fn build_c_structs_section(program: &ProgramNode, externs: &[String]) -> String 
     if resolved.is_empty() {
         return String::new();
     }
-    let mut memo: BTreeMap<String, (u32, u32)> = BTreeMap::new();
     let mut entries: Vec<String> = Vec::new();
     for (name, decl) in &resolved {
-        let packed = has_packed_attr(&decl.attributes);
-        let (size, align, field_json) = compute_c_struct_layout(decl, packed, &by_name, &mut memo);
+        let Some(layout) = layouts.structs.values().find(|layout| layout.name == *name) else {
+            continue;
+        };
+        let field_json = decl
+            .fields
+            .iter()
+            .zip(&layout.fields)
+            .map(|(field, field_layout)| {
+                let tag = c_field_tag(&field.field_type, &by_name);
+                format!(
+                    "{{ \"name\": \"{}\", \"offset\": {}, \"ty\": \"{}\" }}",
+                    json_escape(&field.name.text),
+                    field_layout.offset,
+                    json_escape(&tag),
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
         entries.push(format!(
             "    \"{}\": {{ \"size\": {}, \"align\": {}, \"packed\": {}, \"fields\": [{}] }}",
             json_escape(name),
-            size,
-            align,
-            packed,
+            layout.size,
+            layout.align,
+            layout.packed,
             field_json,
         ));
     }
@@ -477,120 +496,27 @@ fn value_struct_name(ty: &Type) -> Option<&str> {
     }
 }
 
-/// C-ABI sizes for the primitives Dream currently exposes to `@c` structs.
-fn c_prim_size_align(name: &str) -> Option<(u32, u32)> {
-    match name {
-        "bool" | "byte" => Some((1, 1)),
-        "int" | "float" => Some((4, 4)),
-        "long" | "double" | "ulong" => Some((8, 8)),
-        // Everything else (`string`, arrays, class refs) is a 4-byte guest pointer.
-        _ => None,
-    }
-}
-
-/// Field type's `(size, align, wire tag)`: a value struct recurses; a primitive uses its C size;
-/// a reference is a 4-byte pointer.
-fn c_field_layout(
-    ty: &Type,
-    by_name: &BTreeMap<&str, &StructDeclarationNode<'_>>,
-    memo: &mut BTreeMap<String, (u32, u32)>,
-) -> (u32, u32, String) {
+fn c_field_tag(ty: &Type, by_name: &BTreeMap<&str, &StructDeclarationNode<'_>>) -> String {
     match ty {
         Type::Struct(tok, None) => {
             let name = tok.text.as_str();
-            if let Some(inner) = by_name.get(name) {
-                let packed = has_packed_attr(&inner.attributes);
-                let (size, align) = compute_c_struct_size(inner, packed, by_name, memo);
-                return (size, align, format!("struct:{name}"));
+            if by_name.contains_key(name) {
+                return format!("struct:{name}");
             }
-            (4, 4, "ptr".to_string())
+            "ptr".to_string()
         }
-        Type::Array(_) => (4, 4, "ptr".to_string()),
+        Type::Array(_) => "ptr".to_string(),
         _ => {
             let key = ty.get_type();
-            if let Some((s, a)) = c_prim_size_align(&key) {
-                return (s, a, key);
+            if matches!(
+                key.as_str(),
+                "bool" | "byte" | "int" | "float" | "long" | "double" | "ulong"
+            ) {
+                return key;
             }
-            (4, 4, "ptr".to_string())
+            "ptr".to_string()
         }
     }
-}
-
-/// Computes just `(size, align)` for a struct with memoization (used by nested-field sizing).
-fn compute_c_struct_size(
-    decl: &StructDeclarationNode<'_>,
-    packed: bool,
-    by_name: &BTreeMap<&str, &StructDeclarationNode<'_>>,
-    memo: &mut BTreeMap<String, (u32, u32)>,
-) -> (u32, u32) {
-    let name = decl.name.text.clone();
-    if let Some(&cached) = memo.get(&name) {
-        return cached;
-    }
-    // Insert placeholder to break potential (illegal) value-type cycles rather than looping.
-    memo.insert(name.clone(), (0, 1));
-    let mut offset = 0u32;
-    let mut max_align = 1u32;
-    for field in &decl.fields {
-        let (size, align, _tag) = c_field_layout(&field.field_type, by_name, memo);
-        if !packed {
-            let rem = offset % align;
-            if rem != 0 {
-                offset += align - rem;
-            }
-            max_align = max_align.max(align);
-        }
-        offset += size;
-    }
-    if !packed && max_align > 1 {
-        let rem = offset % max_align;
-        if rem != 0 {
-            offset += max_align - rem;
-        }
-    }
-    let result = (offset, if packed { 1 } else { max_align });
-    memo.insert(name, result);
-    result
-}
-
-/// Full layout for one struct: `(size, align, formatted field JSON)`.
-fn compute_c_struct_layout(
-    decl: &StructDeclarationNode<'_>,
-    packed: bool,
-    by_name: &BTreeMap<&str, &StructDeclarationNode<'_>>,
-    memo: &mut BTreeMap<String, (u32, u32)>,
-) -> (u32, u32, String) {
-    let mut offset = 0u32;
-    let mut max_align = 1u32;
-    let mut field_entries: Vec<String> = Vec::new();
-    for field in &decl.fields {
-        let (size, align, tag) = c_field_layout(&field.field_type, by_name, memo);
-        if !packed {
-            let rem = offset % align;
-            if rem != 0 {
-                offset += align - rem;
-            }
-        }
-        field_entries.push(format!(
-            "{{ \"name\": \"{}\", \"offset\": {}, \"ty\": \"{}\" }}",
-            json_escape(&field.name.text),
-            offset,
-            json_escape(&tag),
-        ));
-        offset += size;
-        if !packed {
-            max_align = max_align.max(align);
-        }
-    }
-    let total_align = if packed { 1 } else { max_align.max(1) };
-    if !packed && total_align > 1 {
-        let rem = offset % total_align;
-        if rem != 0 {
-            offset += total_align - rem;
-        }
-    }
-    let field_json = field_entries.join(", ");
-    (offset, total_align, field_json)
 }
 
 #[cfg(test)]
@@ -601,6 +527,45 @@ mod tests {
     use dream_syntax::lexer::Lexer;
     use dream_syntax::parser::Parser;
 
+    fn test_layouts(
+        program: &ProgramNode<'_>,
+        target: dream_hir::TargetLayout,
+    ) -> dream_hir::LayoutTable {
+        let mut types = dream_types::TypeCtx::new();
+        for decl in &program.structs {
+            let def = types.register(dream_types::DefKind::Struct, &decl.name.text, vec![]);
+            if decl.is_value {
+                types.defs.mark_value(def);
+                types.interner.mark_value_def(def);
+            }
+        }
+        let defs = program
+            .structs
+            .iter()
+            .filter(|decl| decl.is_value)
+            .map(|decl| {
+                let ty = types.lower_str(&decl.name.text);
+                dream_hir::StructLayoutDef {
+                    ty,
+                    name: decl.name.text.clone(),
+                    fields: decl
+                        .fields
+                        .iter()
+                        .map(|field| dream_hir::LayoutFieldDef {
+                            name: field.name.text.clone(),
+                            ty: types.lower(&field.field_type),
+                            is_weak: field.is_weak,
+                            is_unowned: field.is_unowned,
+                        })
+                        .collect(),
+                    packed: dream_abi::attributes::has_packed_attr(&decl.attributes),
+                    destructor: None,
+                }
+            })
+            .collect();
+        dream_hir::LayoutTable::build(target, &types.interner, defs, vec![])
+    }
+
     fn abi_json_for(source: &str) -> String {
         let mut diagnostics = DiagnosticBag::new(None);
         let lexer = Lexer::new(source.to_string());
@@ -608,6 +573,7 @@ mod tests {
         let mut parser = Parser::new(lexer, &arena, &mut diagnostics);
         let tree = parser.parse().expect("parse should succeed");
         let program = tree.get_root();
+        let layouts = test_layouts(program, dream_hir::TargetLayout::default());
         let gpu = crate::driver::gpu_gen::GpuEmitResult::default();
         // Consider every extern in the source "live" so the extern actually reaches the JSON.
         let live: Vec<LiveImport> = program
@@ -626,6 +592,7 @@ mod tests {
             &live,
             &NativeGraph::default(),
             &BTreeMap::new(),
+            &layouts,
         )
     }
 
@@ -668,6 +635,7 @@ mod tests {
             &live,
             &graph,
             &shims,
+            &dream_hir::LayoutTable::default(),
         );
         assert!(json.contains("\"c_libs\": [\"z\"]"), "{}", json);
         assert!(json.contains("\"c_sources\""), "{}", json);
@@ -774,6 +742,107 @@ mod tests {
             json
         );
         assert!(json.contains("\"align\": 1"), "expected align 1: {}", json);
+    }
+
+    #[test]
+    fn nested_struct_abi_uses_the_selected_target_layout() {
+        let source = r#"
+            struct Inner {
+                text: string;
+                count: int;
+            }
+            struct Outer {
+                tag: byte;
+                inner: Inner;
+                total: double;
+            }
+            @c("mylib", "consume")
+            extern fun consume(value: Outer): int;
+        "#;
+        let mut diagnostics = DiagnosticBag::new(None);
+        let arena = Bump::new();
+        let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics);
+        let tree = parser.parse().expect("parse should succeed");
+        let program = tree.get_root();
+        let live = vec![("c/mylib".to_string(), "consume".to_string())];
+        for (target, expected) in [
+            (dream_hir::TargetLayout::default(), 24),
+            (
+                dream_hir::TargetLayout {
+                    ptr_size: 8,
+                    ptr_align: 8,
+                },
+                32,
+            ),
+        ] {
+            let layouts = test_layouts(program, target);
+            let outer = layouts
+                .structs
+                .values()
+                .find(|layout| layout.name == "Outer")
+                .expect("Outer layout");
+            assert_eq!(outer.size, expected);
+            let json = build_abi_json(
+                program,
+                &crate::driver::gpu_gen::GpuEmitResult::default(),
+                &live,
+                &NativeGraph::default(),
+                &BTreeMap::new(),
+                &layouts,
+            );
+            assert!(
+                json.contains(&format!("\"Outer\": {{ \"size\": {expected}")),
+                "{}",
+                json
+            );
+        }
+    }
+
+    #[test]
+    fn sizeof_lowering_and_abi_agree_for_nested_value_structs() {
+        let source = r#"
+            struct Inner { public text: string; public count: int; }
+            struct Outer { public tag: byte; public inner: Inner; public total: double; }
+            public fun footprint(): int { return sizeof(Outer); }
+        "#;
+        let mut diagnostics = DiagnosticBag::new(None);
+        let arena = Bump::new();
+        let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics);
+        let tree = parser.parse().expect("parse should succeed");
+        for (ptr_size, expected) in [(4, 24), (8, 32)] {
+            let mut analyzer = dream_sema::analyzer::Analyzer::new(&tree, &arena)
+                .with_crate_type(dream_sema::analyzer::CrateType::Lib, None)
+                .with_target_layout(dream_hir::TargetLayout {
+                    ptr_size,
+                    ptr_align: ptr_size,
+                });
+            let hir = analyzer
+                .analyze(&mut diagnostics)
+                .expect("analysis should succeed")
+                .hir;
+            assert!(!diagnostics.has_errors(), "{:?}", diagnostics.diagnostics);
+            let mir = dream_mir::lower::lower_program(&hir, analyzer.interner());
+            let function = mir
+                .functions
+                .iter()
+                .find(|f| f.name == "footprint")
+                .unwrap();
+            assert!(function.blocks.iter().any(|block| matches!(
+                block.terminator,
+                dream_mir::Terminator::Return(Some(dream_mir::Operand::Const(dream_mir::Const::Int(n))))
+                    if n == expected
+            )));
+            let section = build_c_structs_section(
+                tree.get_root(),
+                &["\"struct_ptr:Outer\"".into()],
+                &hir.layouts,
+            );
+            assert!(
+                section.contains(&format!("\"Outer\": {{ \"size\": {expected}")),
+                "{}",
+                section
+            );
+        }
     }
 
     #[test]

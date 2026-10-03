@@ -166,6 +166,8 @@ pub struct HExpr {
 #[derive(Debug, Clone)]
 pub enum HExprKind {
     IntLit(i64),
+    /// Target-specific byte size of a resolved type, folded while lowering with the final layout.
+    SizeOf(TypeId),
     FloatLit(f64),
     BoolLit(bool),
     CharLit(char),

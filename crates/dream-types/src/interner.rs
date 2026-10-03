@@ -4,7 +4,7 @@
 
 use super::{DefId, PrimTy, TyKind, TypeId};
 use indexmap::IndexMap;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 /// Interns [`TyKind`]s to [`TypeId`]s. Structural equality of types reduces to `TypeId` equality
 /// because identical kinds always intern to the same id.
@@ -29,10 +29,6 @@ pub struct TypeInterner {
     shared_defs: HashSet<DefId>,
     /// `DefId`s of `static class` types — namespaces of static members, not instantiable values.
     static_defs: HashSet<DefId>,
-    /// Inline `(size, align)` in bytes of each value (`struct`) type, keyed by its interned id.
-    /// Populated once layouts are computed; consulted by `scalar_size` so a value struct stored as a
-    /// field/element/local occupies its full inline footprint rather than a 4-byte pointer.
-    value_layouts: HashMap<TypeId, (u32, u32)>,
     /// Interned ids of value *unions* (a data `enum` instance every one of whose variant payloads is
     /// value/primitive, e.g. `Option<int>`). Unlike value structs (marked per-`DefId`) value-ness is
     /// per-`TypeId`, because `Option<int>` (value) and `Option<string>` (heap) share one `DefId`.
@@ -59,7 +55,6 @@ impl TypeInterner {
             ref_struct_defs: HashSet::new(),
             shared_defs: HashSet::new(),
             static_defs: HashSet::new(),
-            value_layouts: HashMap::new(),
             value_unions: HashSet::new(),
             niche_unions: HashSet::new(),
         };
@@ -275,17 +270,6 @@ impl TypeInterner {
             TyKind::Struct(def, _) => self.value_defs.contains(def),
             _ => false,
         }
-    }
-
-    /// Records the inline `(size, align)` of a value (`struct`) type. Idempotent.
-    pub fn set_value_layout(&mut self, id: TypeId, size: u32, align: u32) {
-        self.value_layouts.insert(id, (size, align));
-    }
-
-    /// The recorded inline `(size, align)` of a value (`struct`) type, or `None` for reference types
-    /// and value structs whose layout has not been computed yet.
-    pub fn value_layout(&self, id: TypeId) -> Option<(u32, u32)> {
-        self.value_layouts.get(&id).copied()
     }
 
     /// True if a value of `id` is a heap reference. A `struct` (value) type is *not* a reference

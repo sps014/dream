@@ -38,7 +38,7 @@ fn method(w: &World, name: &str, def: u32, this_ty: TypeId) -> MirFunction {
     b.finish()
 }
 
-fn module(w: &World, caller: MirFunction, a_sym: &str, b_sym: &str) -> Mir {
+fn module(w: &World, caller: MirFunction, a_def: u32, b_def: u32) -> Mir {
     let sig = w.interner.int();
     Mir {
         functions: vec![caller, method(w, "A_f", 1, w.a), method(w, "B_f", 2, w.b)],
@@ -51,11 +51,11 @@ fn module(w: &World, caller: MirFunction, a_sym: &str, b_sym: &str) -> Mir {
             impls: vec![
                 InterfaceImpl {
                     class_ty: w.a,
-                    entries: vec![(0, vec![a_sym.into()])],
+                    entries: vec![(0, vec![Some(DefId(a_def))])],
                 },
                 InterfaceImpl {
                     class_ty: w.b,
-                    entries: vec![(0, vec![b_sym.into()])],
+                    entries: vec![(0, vec![Some(DefId(b_def))])],
                 },
             ],
         },
@@ -103,7 +103,9 @@ fn new_through_cast_devirtualizes_to_that_class() {
     b.assign(Place::Local(recv), Rvalue::Cast(local(obj), w.a, w.iface));
     b.assign(Place::Local(out), iface_call(&w, recv));
     b.terminate(Terminator::Return(Some(local(out))));
-    let mut mir = module(&w, b.finish(), "A_f", "B_f");
+    let mut mir = module(&w, b.finish(), 1, 2);
+    mir.functions[1].name = "not_an_interface_method_name".into();
+    mir.functions[1].symbol = "renamed_method_symbol".into();
     assert!(Devirt.run(&mut mir, &w.interner));
     assert_eq!(direct_def(&mir, 0, 2), Some(1));
 }
@@ -116,7 +118,7 @@ fn unknown_receiver_param_stays_dynamic() {
     let out = b.new_temp(w.interner.int());
     b.assign(Place::Local(out), iface_call(&w, recv));
     b.terminate(Terminator::Return(Some(local(out))));
-    let mut mir = module(&w, b.finish(), "A_f", "B_f");
+    let mut mir = module(&w, b.finish(), 1, 2);
     assert!(!Devirt.run(&mut mir, &w.interner));
     assert_eq!(direct_def(&mir, 0, 0), None);
 }
@@ -150,7 +152,7 @@ fn diamond(w: &World, then_ty: TypeId, else_ty: TypeId) -> MirFunction {
 #[test]
 fn join_of_distinct_classes_stays_dynamic() {
     let w = world();
-    let mut mir = module(&w, diamond(&w, w.a, w.b), "A_f", "B_f");
+    let mut mir = module(&w, diamond(&w, w.a, w.b), 1, 2);
     assert!(!Devirt.run(&mut mir, &w.interner));
     assert_eq!(direct_def(&mir, 3, 0), None);
 }
@@ -158,7 +160,7 @@ fn join_of_distinct_classes_stays_dynamic() {
 #[test]
 fn join_of_same_class_devirtualizes() {
     let w = world();
-    let mut mir = module(&w, diamond(&w, w.b, w.b), "A_f", "B_f");
+    let mut mir = module(&w, diamond(&w, w.b, w.b), 1, 2);
     assert!(Devirt.run(&mut mir, &w.interner));
     assert_eq!(direct_def(&mir, 3, 0), Some(2));
 }
@@ -187,7 +189,7 @@ fn loop_reassignment_kills_the_fact() {
     b.terminate(Terminator::Goto(head));
     b.switch_to(exit);
     b.terminate(Terminator::Return(Some(local(out))));
-    let mut mir = module(&w, b.finish(), "A_f", "B_f");
+    let mut mir = module(&w, b.finish(), 1, 2);
     assert!(!Devirt.run(&mut mir, &w.interner));
     assert_eq!(direct_def(&mir, head.0, 0), None);
 }
@@ -204,21 +206,21 @@ fn overwrite_after_new_uses_the_latest_def() {
     b.assign(Place::Local(recv), Rvalue::Use(local(other)));
     b.assign(Place::Local(out), iface_call(&w, recv));
     b.terminate(Terminator::Return(Some(local(out))));
-    let mut mir = module(&w, b.finish(), "A_f", "B_f");
+    let mut mir = module(&w, b.finish(), 1, 2);
     assert!(Devirt.run(&mut mir, &w.interner));
     assert_eq!(direct_def(&mir, 0, 1), Some(1));
     assert_eq!(direct_def(&mir, 0, 3), None);
 }
 
 #[test]
-fn shared_slot_symbol_devirtualizes_without_type_facts() {
+fn shared_slot_definition_devirtualizes_without_type_facts() {
     let w = world();
     let mut b = FunctionBuilder::new("caller", w.interner.int());
     let recv = b.new_param(w.iface, Some("s".into()));
     let out = b.new_temp(w.interner.int());
     b.assign(Place::Local(out), iface_call(&w, recv));
     b.terminate(Terminator::Return(Some(local(out))));
-    let mut mir = module(&w, b.finish(), "A_f", "A_f");
+    let mut mir = module(&w, b.finish(), 1, 1);
     assert!(Devirt.run(&mut mir, &w.interner));
     assert_eq!(direct_def(&mir, 0, 0), Some(1));
 }

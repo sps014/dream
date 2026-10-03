@@ -212,14 +212,14 @@ impl ModRefTable {
     /// those edges as a no-op so a slot summary can be built from the methods, then folded back
     /// into callers. An implementor that itself dispatches is re-joined until the slot stops moving.
     fn close_ifaces(&mut self, mir: &Mir, locals: &[LocalSummary]) {
-        let by_name: IndexMap<&str, &MirFunction> =
-            mir.functions.iter().map(|f| (f.name.as_str(), f)).collect();
+        let by_def: IndexMap<DefId, &MirFunction> =
+            mir.functions.iter().map(|f| (f.def, f)).collect();
         loop {
             let mut iface: IndexMap<(usize, usize), ModRef> = IndexMap::new();
             for imp in &mir.interfaces.impls {
                 for (iface_id, slots) in &imp.entries {
-                    for (slot, sym) in slots.iter().enumerate() {
-                        let summary = match by_name.get(sym.as_str()) {
+                    for (slot, def) in slots.iter().enumerate() {
+                        let summary = match def.and_then(|def| by_def.get(&def)) {
                             Some(f) => self.call_def(f.def, &f.instance),
                             None => ModRef::Top,
                         };

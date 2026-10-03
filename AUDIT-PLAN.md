@@ -169,18 +169,21 @@ Final #34 CI now targets de67d23f; hosted cold/warm timing improvement is not ye
 | 5.1 | Module-scoped `DefId` | TY-1 | Not started | | | |
 | 5.2 | `ModuleGraph` | MOD-1 | Not started | | | |
 | 5.3 | Remove string-keyed type paths | TY-2 | Not started | | | |
-| 5.4 | Structural symbol mangling | GEN-1 | In progress | Codex | | Local: generic functions, overload keys and C callback adapters use shared structural encoding; HIR carries resolved symbols and object-protocol override DefIds. Identifier collisions, cross-module function-name promotion and unrelated-edit stability covered. Nominal module identity still depends on 5.1/5.2. |
+| 5.4 | Structural symbol mangling | GEN-1 | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Generic functions, overload keys and C callback adapters use shared structural encoding; HIR carries resolved symbols and object-protocol override DefIds. Identifier collisions, cross-module function-name promotion and unrelated-edit stability covered. Nominal module identity still depends on 5.1/5.2. |
 | 5.5 | Parameter modes as HIR facts | OWN-1 | Not started | | | |
 | 5.6 | LSP resolves by `DefId` | TY-1 | Not started | | | |
-| 5.C1 | Delete the name-keyed identity paths | TY-1, TY-2 | In progress | Codex | | Numeric function mangling deleted; object-protocol dispatch and pruning follow resolved DefIds. Name-keyed semantic tables and lower_str remain pending 5.1/5.2/5.3. |
-| 5.C2 | Delete the MIR parameter-mode inference | OWN-1 | Not started | | | |
-| 5.C3 | Split the analyzer hotspots | — | In progress | Codex | | Local topic splits implemented and validated; all analyzer production files below 800 lines. Awaiting merge. |
-| 5.C4 | Split the LSP hotspots | — | In progress | Codex | | Local builder/query/request-family splits implemented; all LSP production files below 800 lines. Shared TypeId-based async display remains outstanding. |
-| 5.C5 | Turn analyzer `unwrap()` into `internal_error!` | — | In progress | Codex | | Verified the listed sites already use internal_error! and sema contains no unwrap() calls. Local gates pass; no new exception added. |
-| 5.C6 | Split `driver/compiler.rs` into stages | MOD-1 | In progress | Codex | | Configuration, source preparation, lowering/optimization, pipeline and diagnostics separated locally. ModuleGraph input and remaining pipeline stage extraction depend on 5.2. |
+| 5.C1 | Delete the name-keyed identity paths | TY-1, TY-2 | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Numeric function mangling deleted; object-protocol and interface dispatch, pruning, devirtualization, effect summaries and function-value ABI follow resolved DefIds. Name-keyed semantic tables and lower_str remain pending 5.1/5.2/5.3. |
+| 5.C2 | Delete the MIR parameter-mode inference | OWN-1 | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Deleted ownership.is_sink_param AST-name scanning; lexical bindings carry sink-parameter metadata and respect shadowing. MIR ParamModes inference removal still depends on 5.5. |
+| 5.C3 | Split the analyzer hotspots | — | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Topic splits implemented and validated; all analyzer production files below 800 lines. Awaiting merge. |
+| 5.C4 | Split the LSP hotspots | — | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Builder/query/request-family splits implemented; all LSP production files below 800 lines. Shared TypeId-based async display remains outstanding. |
+| 5.C5 | Turn analyzer `unwrap()` into `internal_error!` | — | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Verified the listed sites already use internal_error! and sema contains no non-test unwrap() calls. Local gates pass; no new exception added. |
+| 5.C6 | Split `driver/compiler.rs` into stages | MOD-1 | In progress | Codex | [#44](https://github.com/sps014/dream/pull/44) | Configuration, source preparation, lowering/optimization, pipeline and diagnostics separated. ModuleGraph input and remaining pipeline stage extraction depend on 5.2. |
 
 Local working-tree validation on 2026-10-03: workspace build, strict Clippy, workspace tests,
-standalone LSP tests and the full native corpus (644 passed, zero skips or failures) pass.
+standalone LSP tests and the full native corpus (645 passed, zero skips or failures) pass.
+The draft PR includes interface-slot definition identity and lexical sink-parameter metadata;
+rename regressions and the parameter-shadowing golden case pass alongside the existing
+sink/borrow ownership tests.
 Phase 5 is not complete: module-scoped identity, ModuleGraph, string-keyed lookup removal,
 HIR parameter modes and typed LSP resolution/display remain outstanding. The stdlib, tests
 and documentation now consistently spell object-protocol methods `public override fun`;

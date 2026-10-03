@@ -179,12 +179,12 @@ fn live_layout_types(mir: &Mir, interner: &TypeInterner) -> HashSet<TypeId> {
         }
     }
 
-    let kept_names: HashSet<&str> = mir.functions.iter().map(|f| f.name.as_str()).collect();
+    let kept_defs: HashSet<dream_types::DefId> = mir.functions.iter().map(|f| f.def).collect();
     for imp in &mir.interfaces.impls {
         if imp
             .entries
             .iter()
-            .any(|(_, syms)| syms.iter().any(|s| kept_names.contains(s.as_str())))
+            .any(|(_, defs)| defs.iter().flatten().any(|def| kept_defs.contains(def)))
         {
             seed(imp.class_ty, &mut live, &mut work);
         }
@@ -359,13 +359,11 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
         .map(|(i, f)| ((f.def, f.instance.clone()), i))
         .collect();
 
-    // Interface metadata still names semantic method keys. Object protocol and destructor
-    // reachability instead follows resolved definitions, so renaming symbols cannot prune them.
-    let by_name: HashMap<&str, usize> = mir
+    let by_def: HashMap<dream_types::DefId, usize> = mir
         .functions
         .iter()
         .enumerate()
-        .map(|(i, f)| (f.name.as_str(), i))
+        .map(|(i, f)| (f.def, i))
         .collect();
 
     // An `@owned("free_fn")` `@c` import constructs its `OwnedCPtr` result in backend glue, so a
@@ -464,14 +462,14 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
                 }
             }
             // An interface call may dynamically reach the concrete method of *any* class that
-            // implements that interface. Keep each such `{Class}_{method}` implementation alive
+            // implements that interface. Keep each concrete implementation alive
             // (`to_string` is likewise generated separately from ordinary call edges).
             for (iface_id, slot) in iface_uses {
                 for imp in &mir.interfaces.impls {
-                    for (id, symbols) in &imp.entries {
+                    for (id, definitions) in &imp.entries {
                         if *id == iface_id {
-                            if let Some(sym) = symbols.get(slot) {
-                                if let Some(&t) = by_name.get(sym.as_str()) {
+                            if let Some(Some(def)) = definitions.get(slot) {
+                                if let Some(&t) = by_def.get(def) {
                                     if !reachable.contains(&t) {
                                         worklist.push(t);
                                     }
@@ -538,7 +536,7 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
             break;
         }
     }
-    drop(by_name);
+    drop(by_def);
 
     let mut keep = reachable.into_iter().collect::<Vec<_>>();
     keep.sort_unstable();

@@ -1,0 +1,21 @@
+import system;
+
+class Holder {
+    public items: int[];
+    public constructor(items: int[]) { this.items = items; }
+}
+
+fun store(items: int[]): int {
+    let holder = Holder([]);
+    let original = items[0];
+    if original > 0 {
+        let items = [7];
+        holder.items = items;
+        System.println(items[0]);
+    }
+    return original + holder.items[0];
+}
+
+fun main(): void {
+    System.println(store([1]));
+}

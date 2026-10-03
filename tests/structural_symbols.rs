@@ -119,4 +119,47 @@ fn protocol_override_survives_generic_only_type_reachability() {
         assert!(ir.contains("@Label_to_string("));
     });
 }
+#[test]
+fn interface_dispatch_uses_resolved_definitions_after_symbol_rename() {
+    let source = format!(
+        "{}\n{}",
+        common::SYSTEM_STUB,
+        r#"
+        interface Named { fun name(): string; }
+        class Label : Named {
+            public constructor() {}
+            public fun name(): string { return "label"; }
+        }
+        class Other : Named {
+            public constructor() {}
+            public fun name(): string { return "other"; }
+        }
+        fun display(value: Named): string { return value.name(); }
+        fun main(): void { System.println(display(Label())); }
+    "#
+    );
+    common::compile_test_pipeline(&source, |hir, interner| {
+        let definitions: Vec<_> = hir
+            .interfaces
+            .impls
+            .iter()
+            .flat_map(|imp| imp.entries.iter())
+            .flat_map(|(_, defs)| defs.iter().flatten().copied())
+            .collect();
+        assert_eq!(definitions.len(), 2);
+        let mut mir = dream_mir::lower::lower_program(hir, interner);
+        for (idx, def) in definitions.iter().enumerate() {
+            let function = mir.functions.iter_mut().find(|f| f.def == *def).unwrap();
+            function.name = format!("unrelated_method_{idx}");
+            function.symbol = format!("resolved_interface_method_{idx}");
+        }
+        dream_mir::passes::optimize_module(&mut mir, interner);
+        for def in definitions {
+            assert!(mir.functions.iter().any(|f| f.def == def));
+        }
+        let ir = common::emit_ll(&mir, interner);
+        assert!(ir.contains("@resolved_interface_method_0("));
+        assert!(ir.contains("@resolved_interface_method_1("));
+    });
+}
 mod common;

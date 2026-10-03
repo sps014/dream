@@ -6,8 +6,9 @@
 //! through the destination (e.g. `this.items.length`, not `items.length` after
 //! `this.items = items`).
 
+use crate::symbol_table::SymbolTable;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
+use dream_syntax::nodes::{ExpressionNode, Type};
 use dream_text::text_span::TextSpan;
 use indexmap::IndexSet as HashSet;
 
@@ -41,7 +42,7 @@ impl<'a> super::Analyzer<'a> {
         &mut self,
         rhs: &ExpressionNode<'a>,
         rhs_ty: &Type,
-        parent_function: &FunctionNode<'a>,
+        symbols: &SymbolTable,
     ) {
         let ExpressionNode::Identifier(id) = rhs else {
             return;
@@ -52,7 +53,7 @@ impl<'a> super::Analyzer<'a> {
         if rhs_ty.is_unknown() || !self.type_is_rc_tracked(rhs_ty) {
             return;
         }
-        if !Self::is_sink_param(&id.text, parent_function) {
+        if !symbols.is_sink_parameter(&id.text) {
             return;
         }
         self.moved_locals.insert(id.text.clone());
@@ -76,13 +77,6 @@ impl<'a> super::Analyzer<'a> {
 
     pub(super) fn restore_moved(&mut self, saved: HashSet<String>) {
         self.moved_locals = saved;
-    }
-
-    fn is_sink_param(name: &str, parent_function: &FunctionNode<'a>) -> bool {
-        parent_function
-            .parameters
-            .iter()
-            .any(|p| p.name.text == name && !p.is_ref && !p.is_borrow && p.name.text != "this")
     }
 
     /// True when `ty` is a managed heap value that can cross a thread boundary by pointer

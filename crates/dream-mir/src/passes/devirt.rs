@@ -49,31 +49,31 @@ struct Targets {
 
 impl Targets {
     fn build(mir: &crate::Mir) -> Self {
-        let by_name: IndexMap<&str, &MirFunction> =
-            mir.functions.iter().map(|f| (f.name.as_str(), f)).collect();
-        let mut names: IndexMap<SlotKey, Option<&str>> = IndexMap::new();
+        let by_def: IndexMap<dream_types::DefId, &MirFunction> =
+            mir.functions.iter().map(|f| (f.def, f)).collect();
+        let mut definitions: IndexMap<SlotKey, Option<dream_types::DefId>> = IndexMap::new();
         let mut out = Targets::default();
         for imp in &mir.interfaces.impls {
             for (iface_id, slots) in &imp.entries {
-                for (slot, sym) in slots.iter().enumerate() {
+                for (slot, def) in slots.iter().enumerate() {
                     let key = (*iface_id, slot);
-                    names
+                    definitions
                         .entry(key)
                         .and_modify(|prev| {
-                            if *prev != Some(sym.as_str()) {
+                            if *prev != *def {
                                 *prev = None;
                             }
                         })
-                        .or_insert(Some(sym.as_str()));
-                    if let Some(f) = by_name.get(sym.as_str()) {
+                        .or_insert(*def);
+                    if let Some(f) = def.and_then(|def| by_def.get(&def)) {
                         out.by_class
                             .insert((imp.class_ty, *iface_id, slot), callee_of(f));
                     }
                 }
             }
         }
-        for (key, name) in names {
-            if let Some(f) = name.and_then(|n| by_name.get(n)) {
+        for (key, def) in definitions {
+            if let Some(f) = def.and_then(|def| by_def.get(&def)) {
                 out.unique.insert(key, callee_of(f));
             }
         }

@@ -21,19 +21,15 @@ type Arms = Vec<(i32, String)>;
 pub(crate) type GuardTable = HashMap<(usize, usize), Arms>;
 
 pub(crate) fn build_guards(cx: &Cx<'_>) -> GuardTable {
-    let by_name: IndexMap<&str, &crate::MirFunction> = cx
-        .mir
-        .functions
-        .iter()
-        .map(|f| (f.name.as_str(), f))
-        .collect();
+    let by_def: IndexMap<dream_types::DefId, &crate::MirFunction> =
+        cx.mir.functions.iter().map(|f| (f.def, f)).collect();
     let mut arms: IndexMap<(usize, usize), Option<Arms>> = IndexMap::new();
     for imp in &cx.mir.interfaces.impls {
         let tag = cx.interface_tag(imp.class_ty);
-        for (iid, symbols) in &imp.entries {
-            for (slot, sym) in symbols.iter().enumerate() {
+        for (iid, definitions) in &imp.entries {
+            for (slot, def) in definitions.iter().enumerate() {
                 let slot_arms = arms.entry((*iid, slot)).or_insert_with(|| Some(Vec::new()));
-                let resolved = tag.zip(by_name.get(sym.as_str()));
+                let resolved = tag.zip(def.and_then(|def| by_def.get(&def)));
                 let (Some(list), Some((tag, f))) = (slot_arms.as_mut(), resolved) else {
                     *slot_arms = None;
                     continue;

@@ -362,11 +362,16 @@ impl<'a> Analyzer<'a> {
                     .get(&iface)
                     .cloned()
                     .unwrap_or_default();
-                let symbols: Vec<String> = methods
+                let definitions = methods
                     .iter()
-                    .map(|m| method_fn(&class, &accessor_member_name(m)))
+                    .map(|m| {
+                        self.type_ctx.defs.lookup(
+                            DefKind::Function,
+                            &method_fn(&class, &accessor_member_name(m)),
+                        )
+                    })
                     .collect();
-                entries.push((id, symbols));
+                entries.push((id, definitions));
             }
             impls.push(InterfaceImpl { class_ty, entries });
         }

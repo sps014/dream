@@ -85,7 +85,7 @@ pub struct Mir {
     /// protocol routers, which additionally force every tagged type's `to_string`/`hash_code`.
     pub uses_type_name: bool,
     /// Interface dispatch metadata: ordered interfaces (index = `iface_id`) + per-class concrete
-    /// method symbols. Drives the itable data + dispatch trampolines emitted by the backend.
+    /// method definitions. Drives the itable data + dispatch trampolines emitted by the backend.
     pub interfaces: dream_hir::InterfaceTable,
     /// C-style enum members for debug decode (see [`dream_hir::Hir::enums`]).
     pub enums: dream_hir::EnumDebugTable,

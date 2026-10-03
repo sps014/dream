@@ -47,6 +47,10 @@ pub struct Hir {
 definitions. MIR pruning and protocol dispatch follow these `DefId`s, not generated method
 spellings, so changing an emitted symbol cannot silently select the default field formatter.
 
+`Hir.interfaces` likewise records resolved method `DefId`s per concrete interface slot.
+Pruning, devirtualization, effect summaries, function-value ownership and emitted dispatch
+tables consume those definitions; source names and emitted symbols do not determine identity.
+
 `Hir.layouts` holds the sole storage layout table, built from resolved struct, tuple and union
 field definitions with `TargetLayout { ptr_size, ptr_align }`. It records field offsets and
 aggregate size/alignment, including nested and packed value types. Semantic tables retain type

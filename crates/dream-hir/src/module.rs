@@ -73,7 +73,7 @@ pub struct InterfaceTable {
     /// The program's interfaces in registration order; the index into this vector is the stable
     /// `iface_id` referenced by [`HExprKind::InterfaceCall`].
     pub interfaces: Vec<InterfaceInfo>,
-    /// Every class that implements at least one interface, with the concrete method symbols it
+    /// Every class that implements at least one interface, with the concrete method definitions it
     /// supplies for each implemented interface.
     pub impls: Vec<InterfaceImpl>,
 }
@@ -89,13 +89,13 @@ pub struct InterfaceInfo {
 }
 
 /// One class's interface implementations: for each interface it implements, the concrete method
-/// symbol (`{Class}_{method}`) that fills each method slot, keyed by the interface's `iface_id`.
+/// definition that fills each method slot, keyed by the interface's `iface_id`.
 #[derive(Debug, Clone)]
 pub struct InterfaceImpl {
     /// The implementing class's interned struct type (its `struct_tags` key / runtime tag).
     pub class_ty: TypeId,
-    /// `(iface_id, [concrete method symbol per slot])`.
-    pub entries: Vec<(usize, Vec<String>)>,
+    /// `(iface_id, [concrete method definition per slot])`; absent definitions use generated glue.
+    pub entries: Vec<(usize, Vec<Option<DefId>>)>,
 }
 
 /// A host function the module imports: an `extern fun` (interop) or a compiler-provided host

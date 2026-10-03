@@ -6,6 +6,7 @@
 //! `(DefId, args)` rather than by mangled strings; surface spellings are reconstructed only for
 //! diagnostics via [`display::display_name`].
 
+mod c_scalar;
 mod compat;
 mod def;
 mod display;
@@ -14,6 +15,7 @@ mod kind;
 mod lower;
 mod naming;
 
+pub use c_scalar::CScalar;
 pub use compat::{assignable, numeric_widen, overload_compatible};
 pub use def::{DefInfo, DefKind, DefTable};
 pub use display::{display_name, UNKNOWN_TYPE_NAME};

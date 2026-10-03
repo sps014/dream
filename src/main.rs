@@ -499,6 +499,7 @@ fn main() -> ExitCode {
     let raw_ll = raw_ll.as_path();
     let drop_raw_ll = || {
         let _ = std::fs::remove_file(raw_ll);
+        let _ = std::fs::remove_file(dream::driver::compiler::c_shim_path(raw_ll));
     };
     let unoptimized = !cli.release && optimize.is_none() && !debug_adapter;
 

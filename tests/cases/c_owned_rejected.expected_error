@@ -1,0 +1,4 @@
+'@c' extern 'leaky' result: returning `OwnedCPtr` needs `@owned("free_fn")` naming the C function that frees the pointer
+'@c' extern 'counted' result: `@owned("free_fn")` applies only to a `@c` extern returning `OwnedCPtr`
+'@c' extern 'spaced' result: `@owned` names 'free me', which is not a C identifier
+'@c' extern 'reserved' binds 'dream_cs_x', which is not a C identifier

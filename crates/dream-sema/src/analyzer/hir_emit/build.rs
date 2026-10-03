@@ -341,6 +341,8 @@ impl<'a> Analyzer<'a> {
                 c_wide_strings,
                 c_params,
                 c_ret,
+                c_stdcall: dream_abi::attributes::c_call_conv(&func.attributes)
+                    == dream_abi::attributes::CCallConv::Stdcall,
             });
         }
         imports

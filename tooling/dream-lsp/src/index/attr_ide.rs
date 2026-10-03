@@ -1,8 +1,8 @@
 //! Attribute-aware IDE helpers: `@name` / `@name(...)` context detection, builtin completions,
-//! hover text, and signature labels — all driven by [`dream_abi::attributes::ATTRIBUTES`].
+//! hover text, and signature labels — all driven by [`dream_abi::attributes::all_specs`].
 
 use super::is_ident_byte;
-use dream_abi::attributes::{find_spec, ArgKind, ArgShape, AttributeSpec, ATTRIBUTES};
+use dream_abi::attributes::{all_specs, find_spec, ArgKind, ArgShape, AttributeSpec};
 use dream_abi::intrinsics::ATTR_KEYS;
 
 /// Cursor is after `@` / `@partial` writing an attribute name (not inside `(...)` args).
@@ -139,7 +139,7 @@ fn in_string_on_line(text: &str, at: usize) -> bool {
 pub fn attribute_name_completions(partial: &str) -> Vec<(String, String, String, Option<String>)> {
     let partial_lower = partial.to_lowercase();
     let mut out = Vec::new();
-    for spec in ATTRIBUTES {
+    for spec in all_specs() {
         if !partial_lower.is_empty() && !spec.name.starts_with(&partial_lower) {
             // Also allow case-insensitive prefix match.
             if !spec.name.to_lowercase().starts_with(&partial_lower) {

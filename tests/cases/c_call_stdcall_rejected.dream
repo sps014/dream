@@ -1,5 +1,0 @@
-// `stdcall` is not implemented by the backend, so it must be rejected rather than silently
-// compiled as the platform default convention.
-@c("c", "puts") @c_call("stdcall") extern fun puts(s: string): int;
-
-fun main(): void {}

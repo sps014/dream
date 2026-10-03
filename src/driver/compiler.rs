@@ -269,7 +269,7 @@ impl Compiler {
             .map_err(CompileError::Manifest)?;
         crate::driver::native_sets::resolve_bare_c_attrs(&mut acc, &native_graph, &mut diagnostics);
         let cpp_bridge =
-            crate::driver::cpp_bridge::expand(&arena, &mut acc, &native_graph, &mut diagnostics)?;
+            crate::driver::ffi_shim::expand(&arena, &mut acc, &native_graph, &mut diagnostics)?;
 
         // Opt-in stdlib packages (`import system.net;`, etc.) plus always-on bootstrap
         // (`system.core` / `system.primitives`). `@json` types need `system.json` for derives.
@@ -396,6 +396,8 @@ impl Compiler {
         };
         let mut llvm_err: Option<String> = None;
         let llvm_err_ref = &mut llvm_err;
+        let mut c_shim: Option<String> = None;
+        let c_shim_ref = &mut c_shim;
         let pipeline_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let symbol_info = match analyzer.analyze(&mut diagnostics) {
                 Ok(info) => info,
@@ -493,7 +495,11 @@ impl Compiler {
                         debug && target.spec().capabilities.native_entry,
                         req.target.clone(),
                     ) {
-                        Ok(ir) => ir.into_bytes(),
+                        Ok(module) => {
+                            *c_shim_ref = (!module.c_shim.is_empty())
+                                .then(|| crate::driver::ffi_shim::c_shim::render(&module.c_shim));
+                            module.ir.into_bytes()
+                        }
                         Err(e) => {
                             *llvm_err_ref =
                                 Some(format!("runtime signature cache `{cache}` is stale: {e}"));
@@ -544,6 +550,13 @@ impl Compiler {
         info!("finished code generation");
         if !self.target.spec().capabilities.linear_memory {
             fs::write(out_path, &bytes)?;
+            let shim_path = c_shim_path(Path::new(out_path));
+            match &c_shim {
+                Some(src) => fs::write(&shim_path, src)?,
+                None => {
+                    let _ = fs::remove_file(&shim_path);
+                }
+            }
             if !self.opt_ir {
                 self.reporter.artifact(Path::new(out_path));
             }
@@ -669,6 +682,11 @@ impl Compiler {
     }
 }
 
+/// The generated `@c` shim source next to a native `.ll`; absent when the program calls no C.
+pub fn c_shim_path(ll: &Path) -> std::path::PathBuf {
+    ll.with_extension("cshim.c")
+}
+
 fn fail_diagnostics(
     ctor: fn(String) -> CompileError,
     diagnostics: &DiagnosticBag,
@@ -707,7 +725,7 @@ fn render_internal_error(message: &str) {
 fn report_wasm_c_imports(
     program: &ProgramNode<'_>,
     live_imports: &[(String, String)],
-    cpp: &crate::driver::cpp_bridge::CppBridge,
+    cpp: &crate::driver::ffi_shim::CppBridge,
     diagnostics: &mut DiagnosticBag,
 ) -> bool {
     let live: std::collections::BTreeSet<(&str, &str)> = live_imports
@@ -732,7 +750,7 @@ fn report_wasm_c_imports(
         }
         let (what, at, file) = match cpp.origin(&f.name.text) {
             Some(o) => (o.what.as_str(), o.at, Some(o.file.to_string())),
-            None if crate::driver::cpp_bridge::is_generated(&f.name.text) => continue,
+            None if crate::driver::ffi_shim::is_generated(&f.name.text) => continue,
             None => (
                 f.name.text.as_str(),
                 f.name.position,

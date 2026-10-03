@@ -3,6 +3,7 @@
 
 pub mod build;
 pub mod bundle;
+mod c_shim;
 pub mod cross;
 mod icon;
 pub mod pack;

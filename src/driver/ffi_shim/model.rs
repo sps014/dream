@@ -4,18 +4,21 @@
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
+use dream_abi::attributes::{
+    cpp_attr, cpp_header, cpp_member_name, cpp_target_name, has_packed_attr, owned_result,
+    OwnedResult,
+};
 use dream_abi::c_abi::cpp_shim_symbol;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::{
-    AttributeNode, FunctionNode, StructDeclarationNode, Type, Visibility,
-};
+use dream_syntax::nodes::{AttributeNode, FunctionNode, StructDeclarationNode, Type, Visibility};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_text::text_span::TextSpan;
 use indexmap::IndexSet;
 
-use super::types::{dream_type, Known, Param, Ret, Scalar};
+use super::types::{dream_type, Known, Param, Ret};
 use crate::driver::native_sets::NativeGraph;
 use crate::driver::source_loader::ProgramAccumulator;
+use dream_types::CScalar;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum MemberKind {
@@ -59,7 +62,7 @@ pub(super) struct Struct {
     pub cpp: String,
     pub line: usize,
     pub packed: bool,
-    pub fields: Vec<(String, Scalar)>,
+    pub fields: Vec<(String, CScalar)>,
 }
 
 /// Everything one source file declares with `@cpp`; the unit the desugarer replaces.
@@ -83,24 +86,6 @@ pub(super) struct SetDecls {
 pub(super) struct Program {
     pub known: Known,
     pub sets: BTreeMap<String, SetDecls>,
-}
-
-pub(super) fn cpp_attr(attrs: &[AttributeNode]) -> Option<&AttributeNode> {
-    attrs.iter().find(|a| a.name.text == "cpp")
-}
-
-fn attr_string(attrs: &[AttributeNode], name: &str, index: usize) -> Option<String> {
-    attrs
-        .iter()
-        .find(|a| a.name.text == name)?
-        .args
-        .get(index)?
-        .as_string()
-        .map(str::to_string)
-}
-
-fn has_attr(attrs: &[AttributeNode], name: &str) -> bool {
-    attrs.iter().any(|a| a.name.text == name)
 }
 
 struct Ctx<'g> {
@@ -132,7 +117,7 @@ impl Ctx<'_> {
     }
 
     fn header(&mut self, set: &str, attrs: &[AttributeNode]) {
-        if let Some(h) = attr_string(attrs, "cpp", 0) {
+        if let Some(h) = cpp_header(attrs).map(str::to_string) {
             self.program
                 .sets
                 .entry(set.to_string())
@@ -165,7 +150,8 @@ pub(super) fn collect(
         if cpp_attr(&s.attributes).is_none() {
             continue;
         }
-        let cpp = attr_string(&s.attributes, "cpp", 1).unwrap_or_else(|| s.name.text.clone());
+        let cpp =
+            cpp_target_name(&s.attributes).map_or_else(|| s.name.text.clone(), str::to_string);
         if s.is_value {
             cx.program.known.structs.insert(s.name.text.clone(), cpp);
         } else {
@@ -212,8 +198,9 @@ pub(super) fn collect(
             .or_insert(0);
         let overload = *n;
         *n += 1;
-        let cpp = attr_string(&f.attributes, "cpp", 1)
-            .or_else(|| attr_string(&f.attributes, "cpp_name", 0))
+        let cpp = cpp_target_name(&f.attributes)
+            .or_else(|| cpp_member_name(&f.attributes))
+            .map(str::to_string)
             .unwrap_or_else(|| f.name.text.clone());
         if let Some(m) = member(
             &cx.program.known,
@@ -233,7 +220,11 @@ pub(super) fn collect(
     cx.program
 }
 
-fn file_decls<'p>(program: &'p mut Program, set: &str, file: Option<&Rc<str>>) -> &'p mut FileDecls {
+fn file_decls<'p>(
+    program: &'p mut Program,
+    set: &str,
+    file: Option<&Rc<str>>,
+) -> &'p mut FileDecls {
     let file = file.cloned().unwrap_or_else(|| Rc::from(""));
     let decls = &mut program.sets.entry(set.to_string()).or_default().files;
     let i = match decls.iter().position(|d| d.file == file) {
@@ -274,14 +265,14 @@ fn value_struct(s: &StructDeclarationNode<'_>, diagnostics: &mut DiagnosticBag) 
     }
     ok.then(|| Struct {
         name: s.name.text.clone(),
-        cpp: attr_string(&s.attributes, "cpp", 1).unwrap_or_else(|| s.name.text.clone()),
+        cpp: cpp_target_name(&s.attributes).map_or_else(|| s.name.text.clone(), str::to_string),
         line: s.name.position.line_no,
-        packed: has_attr(&s.attributes, "packed"),
+        packed: has_packed_attr(&s.attributes),
         fields,
     })
 }
 
-fn scalar_of(ty: &Type) -> Option<Scalar> {
+fn scalar_of(ty: &Type) -> Option<CScalar> {
     let known = Known::default();
     match known.param(ty, false) {
         Ok(super::types::Bridge::Scalar(s)) => Some(s),
@@ -346,14 +337,19 @@ fn class(
         let n = overloads.entry(m.name.text.clone()).or_insert(0);
         let overload = *n;
         *n += 1;
-        let cpp = attr_string(&m.attributes, "cpp_name", 0).unwrap_or_else(|| m.name.text.clone());
+        let cpp =
+            cpp_member_name(&m.attributes).map_or_else(|| m.name.text.clone(), str::to_string);
         match member(known, set, &name, m, kind, cpp, overload, diagnostics) {
             Some(mem) => members.push(mem),
             None => ok = false,
         }
     }
     ok.then(|| Class {
-        cpp: known.classes.get(&name).cloned().unwrap_or_else(|| name.clone()),
+        cpp: known
+            .classes
+            .get(&name)
+            .cloned()
+            .unwrap_or_else(|| name.clone()),
         public: s.visibility.is_public(),
         line: s.name.position.line_no,
         at: s.name.position,
@@ -399,6 +395,18 @@ fn member(
             diagnostics,
             file,
             format!("`@cpp` member '{name}' cannot be {why}"),
+            &f.name,
+        );
+        return None;
+    }
+    if let OwnedResult::FreedBy(free) = owned_result(&f.attributes) {
+        report(
+            diagnostics,
+            file,
+            format!(
+                "`@owned(\"{free}\")` names a C free function, which only applies to `@c` externs \
+                 returning `OwnedCPtr`; a `@cpp` member takes bare `@owned`"
+            ),
             &f.name,
         );
         return None;
@@ -468,7 +476,7 @@ fn member(
             .as_ref()
             .map(dream_type)
             .unwrap_or_else(|| "void".to_string()),
-        owned: has_attr(&f.attributes, "owned"),
+        owned: owned_result(&f.attributes).is_owned(),
         internal: f.visibility == Visibility::Internal,
         line: f.name.position.line_no,
         at: f.name.position,

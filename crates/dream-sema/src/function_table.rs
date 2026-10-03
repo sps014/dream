@@ -679,11 +679,7 @@ impl FunctionTableInfo {
         // `extern`: it makes the call site retain an argument nothing will ever drop. Externs pass at
         // +0 unless the declaration opts in with `@consuming` (`Buffer.free`, which really does take
         // the array).
-        let host_borrows = func.is_extern
-            && !func
-                .attributes
-                .iter()
-                .any(|a| a.name.text == dream_abi::attributes::CONSUMING);
+        let host_borrows = func.is_extern && !dream_abi::attributes::is_consuming(&func.attributes);
         for i in func.parameters.iter() {
             let j = i.clone();
             parameters.push(j.type_.get_type());

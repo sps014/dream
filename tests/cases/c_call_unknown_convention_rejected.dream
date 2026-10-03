@@ -1,0 +1,4 @@
+// An unknown convention must be rejected rather than silently compiled as the platform default.
+@c("c", "puts") @c_call("fastcall") extern fun puts(s: string): int;
+
+fun main(): void {}

@@ -5,6 +5,7 @@
 
 use super::cc::Cc;
 use crate::driver::wasi::run_captured;
+use dream_mir::runtime::runtime_abi_include_dir;
 use serde::Deserialize;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
@@ -70,6 +71,7 @@ pub fn compile_sets(
     debug: bool,
 ) -> Result<NativeObjects, String> {
     let mut out = NativeObjects::default();
+    let embed_include = runtime_abi_include_dir(&config.runtime_c);
     for set in sets {
         let dir = cache_root.join(&set.name);
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -88,7 +90,7 @@ pub fn compile_sets(
             let obj = dir.join(object_name(&src));
             let cxx = is_cxx(&src);
             out.needs_cxx |= cxx;
-            let args = compile_args(set, &src, &obj, cxx, debug);
+            let args = compile_args(set, &embed_include, &src, &obj, cxx, debug);
             let stamp_path = obj.with_extension("o.args");
             let stamp = args.join("\n");
             let fresh = object_fresh(&obj, &src, headers_t)
@@ -130,7 +132,15 @@ pub fn compile_sets(
     Ok(out)
 }
 
-fn compile_args(set: &CSourceSet, src: &Path, obj: &Path, cxx: bool, debug: bool) -> Vec<String> {
+/// `embed_include` holds the public `dream_embed.h`, after the set's own include dirs.
+fn compile_args(
+    set: &CSourceSet,
+    embed_include: &Path,
+    src: &Path,
+    obj: &Path,
+    cxx: bool,
+    debug: bool,
+) -> Vec<String> {
     let mut args = vec![
         "-c".to_string(),
         if cxx { "-std=gnu++20" } else { "-std=gnu11" }.to_string(),
@@ -144,6 +154,7 @@ fn compile_args(set: &CSourceSet, src: &Path, obj: &Path, cxx: bool, debug: bool
     for inc in &set.include {
         args.push(format!("-I{inc}"));
     }
+    args.push(format!("-I{}", embed_include.display()));
     for d in &set.defines {
         args.push(format!("-D{d}"));
     }
@@ -251,10 +262,24 @@ mod tests {
             libs: vec![],
             runtime_exports: vec![],
         };
-        let c = compile_args(&set, Path::new("a.c"), Path::new("a.o"), false, false);
+        let c = compile_args(
+            &set,
+            Path::new("/rt"),
+            Path::new("a.c"),
+            Path::new("a.o"),
+            false,
+            false,
+        );
         assert!(c.contains(&"-std=gnu11".to_string()));
         assert!(c.contains(&"-I/inc".to_string()) && c.contains(&"-DA=1".to_string()));
-        let cxx = compile_args(&set, Path::new("a.cpp"), Path::new("a.o"), true, true);
+        let cxx = compile_args(
+            &set,
+            Path::new("/rt"),
+            Path::new("a.cpp"),
+            Path::new("a.o"),
+            true,
+            true,
+        );
         assert!(cxx.contains(&"-std=gnu++20".to_string()) && cxx.contains(&"-g".to_string()));
     }
 

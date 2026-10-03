@@ -274,7 +274,7 @@ void workerTerminate(int32_t id) {
     if (busy) {
         /* Hard abort: the body is still running (e.g. Promise.cancel on a tight loop).
          * Detach so we do not hang `del()`; the thread self-frees if it ever exits. */
-        dream_thread_detach(w->th);
+        dream_thread_release(w->th);
         return;
     }
     dream_thread_join(w->th);

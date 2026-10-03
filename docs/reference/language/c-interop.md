@@ -96,17 +96,22 @@ import system;
 |-------|---|
 | `int`, `long`, `float`, `double` | `int32_t`, `int64_t`, `float`, `double` |
 | `isize`, `usize` | `intptr_t`, `uintptr_t` (`usize` also matches `size_t`) |
-| `bool`, `char`, `byte` | `int32_t` |
+| `bool`, `char`, `byte` | `bool`, `char`, `uint8_t` |
 | `string` parameter | `const char*`: NUL-terminated UTF-8, valid for the call |
 | `string` result | `const char*`, copied into a Dream `string`; C keeps ownership |
 | `CPtr` | `void*` / `T*` |
 | `Option<string>`, `Option<CPtr>` | a pointer where `NULL` is `None` |
-| `T[]` (numbers, `byte`, `@unmanaged` structs) | `T*` to the first element, valid for the call |
-| `@unmanaged` value struct | only as `ref x: T` (`T*`); by value is rejected |
+| `T[]` (numbers, `byte`, plain-data structs) | `T*` to the first element, valid for the call |
+| plain-data value struct (see [Structs](#structs)) | the C struct by value, or `T*` as `ref x: T` |
 | `ref x: T` | `T*`: C writes through it (`ref p: CPtr` is `T**`) |
 | `fun(...)` | a C function pointer (see [Callbacks](#callbacks)) |
 | `NativeCallback<F>` | a `(fn, void* user_data)` pair |
 | `Option<fun(...)>`, `Option<NativeCallback<F>>` | a nullable function pointer |
+| `OwnedCPtr` result with `@owned("free_fn")` | `void*` that Dream frees with `free_fn` |
+
+Every `@c` call goes through a small C shim the compiler generates and compiles with the pinned
+clang, so the platform C ABI (struct passing and return, `bool`/`char` widths, calling
+conventions) is clang's, not a hand-written copy.
 
 Classes, unions, and arrays of managed elements are rejected in `@c` signatures. They are heap
 references that C does not understand. Wrap them in a Dream function that passes C what it needs.
@@ -140,20 +145,39 @@ if sqlite3_open("app.db", ref db) != 0 { ... }
 `Ffi.read_ptr`, `Ffi.read_int`, `Ffi.read_long`, `Ffi.read_double`, and `Ffi.read_cstring` read
 through pointers C hands to Dream (`char**` rows and similar).
 
-### Structs
+### Owned pointers
 
-Pass C structs as `@unmanaged` value structs by `ref`, which C sees as `T*`. Passing a struct by
-value is not supported yet and is a compile error. Mark structs `@packed` when the C header uses
-`#pragma pack(1)` / `__attribute__((packed))`. Otherwise fields are naturally aligned, as in C.
+When C hands back a pointer the caller must free, return `OwnedCPtr` and name the C function that
+frees it with `@owned("free_fn")`. The object calls `free_fn(ptr)` when its last reference goes
+away. `get()` reads the pointer while the object keeps owning it; `take()` hands ownership back to
+you and leaves the object holding `NULL`.
 
 ```dream
-@unmanaged
+@c @owned("ticker_free") extern fun ticker_new(name: string): OwnedCPtr;
+@c extern fun ticker_run(t: CPtr, ticks: int): int;
+
+let t = ticker_new("demo");
+ticker_run(t.get(), 3); // ticker_free runs when `t` goes out of scope
+```
+
+`free_fn` must be a C identifier with the signature `void free_fn(void*)`. A `@c` extern returning
+`OwnedCPtr` without `@owned("free_fn")`, or `@owned("free_fn")` on any other result, is an error.
+
+### Structs
+
+A value struct whose fields are numbers, `bool`/`char`/`byte`, or other such structs maps to the C
+struct with the same fields in the same order. Pass it by value, return it by value, or pass it by
+`ref`, which C sees as `T*`. Mark structs `@packed` when the C header uses `#pragma pack(1)` /
+`__attribute__((packed))`. Otherwise fields are naturally aligned, as in C.
+
+```dream
 public struct Vec2 {
     public x: double;
     public y: double;
 }
 
-@c extern fun vec2_len(ref v: Vec2): double;       // C: double vec2_len(const Vec2* v)
+@c extern fun vec2_scale(v: Vec2, k: double): Vec2; // C: Vec2 vec2_scale(Vec2 v, double k)
+@c extern fun vec2_len(ref v: Vec2): double;        // C: double vec2_len(const Vec2* v)
 @c extern fun vec2_origin(ref out: Vec2): void;
 ```
 
@@ -168,8 +192,9 @@ public struct Vec2 {
 extern fun MessageBoxW(hwnd: CPtr, text: string, caption: string, flags: int): int;
 ```
 
-Externs use the platform C calling convention. `@c_call("cdecl")` spells that out explicitly;
-any other convention (such as `"stdcall"`) is a compile error until the backend supports it.
+Externs use the platform C calling convention. `@c_call("cdecl")` spells that out explicitly.
+`@c_call("stdcall")` selects `__stdcall` on 32-bit x86 Windows and is the default convention
+everywhere else. Any other convention is a compile error.
 
 ## Callbacks
 
@@ -216,8 +241,28 @@ The callback's lifetime is ordinary ARC. Keep the `NativeCallback` in a field fo
 call it. Pass a temporary when C only calls it during the call (`qsort_r`, `sqlite3_exec`).
 
 Each `NativeCallback` belongs to the Dream thread that constructed it. Calls and retains must
-run on that owner, even when another thread is a Dream `Task` worker. Foreign-thread calls trap
-with an owner-thread diagnostic; foreign callback-call attach support is planned.
+run on that owner, even when another thread is a Dream `Task` worker; other threads trap with an
+owner-thread diagnostic.
+
+A plain `fun` passed as a C function pointer has no owner. A thread C started itself may call it
+after `dream_thread_attach()`, and must call `dream_thread_detach()` before it exits. Calling
+without attaching traps with a message that names `dream_thread_attach`. Both functions are
+declared in `dream_embed.h`, which every `native/` source can include:
+
+```c
+#include <dream_embed.h>
+
+static void* worker(void* arg) {
+    struct job* j = arg;
+    dream_thread_attach();
+    j->result = j->fn(j->input); // a Dream `fun` passed to C
+    dream_thread_detach();
+    return 0;
+}
+```
+
+`dream_embed.h` also declares `dream_retain`/`dream_release` (for C that stores a Dream reference
+past a call) and `dream_set_panic_hook` (see [Panics](panics.md#embedding-a-panic-hook)).
 
 C++ adapters may release their retained callback from any thread. Such releases are queued
 without touching the object's non-atomic reference count; the owner drains them at scheduler

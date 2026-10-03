@@ -120,8 +120,9 @@ fn unsigned_string_reads_do_not_depend_on_abi_extension_attributes() {
     for name in ["dream_char_at_u", "dream_byte_at_u"] {
         sigs.fns.get_mut(name).unwrap().ret_attrs.clear();
     }
-    let ir =
-        dream_mir::backend::llvm::emit_llvm_module(&mir, &interner, &sigs, false, target).unwrap();
+    let ir = dream_mir::backend::llvm::emit_llvm_module(&mir, &interner, &sigs, false, target)
+        .unwrap()
+        .ir;
     let body = common::ir_func_body(&ir, "unsigned_reads");
     assert!(body.contains("zext i16"), "{}", body);
     assert!(body.contains("zext i8"), "{}", body);

@@ -10,7 +10,7 @@
 pub mod abi;
 pub mod compiler;
 pub mod compress;
-pub mod cpp_bridge;
+pub mod ffi_shim;
 pub mod diag_highlight;
 pub mod error;
 pub mod generate;

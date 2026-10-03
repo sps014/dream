@@ -5,107 +5,29 @@ use std::collections::BTreeMap;
 
 use dream_abi::c_abi::{C_PTR_TYPE, NATIVE_CALLBACK_TYPE};
 use dream_syntax::nodes::Type;
+use dream_types::CScalar;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Scalar {
-    Int,
-    UInt,
-    Long,
-    ULong,
-    Float,
-    Double,
-    Bool,
-    Char,
-    Byte,
+/// The scalar a `@cpp` signature names. Pointer-sized integers stay out: a `@cpp` struct's layout
+/// is checked against the Dream declaration before the target's pointer width is known.
+pub(super) fn scalar_of(ty: &Type) -> Option<CScalar> {
+    CScalar::of_type(ty).filter(|s| !matches!(s, CScalar::ISize | CScalar::USize))
 }
 
-impl Scalar {
-    fn of(ty: &Type) -> Option<Self> {
-        Some(match ty {
-            Type::Integer(_) => Scalar::Int,
-            Type::UInt(_) => Scalar::UInt,
-            Type::Long(_) => Scalar::Long,
-            Type::ULong(_) => Scalar::ULong,
-            Type::Float(_) => Scalar::Float,
-            Type::Double(_) => Scalar::Double,
-            Type::Boolean(_) => Scalar::Bool,
-            Type::Char(_) => Scalar::Char,
-            Type::Byte(_) => Scalar::Byte,
-            _ => return None,
-        })
-    }
-
-    pub(super) fn dream(self) -> &'static str {
-        match self {
-            Scalar::Int => "int",
-            Scalar::UInt => "uint",
-            Scalar::Long => "long",
-            Scalar::ULong => "ulong",
-            Scalar::Float => "float",
-            Scalar::Double => "double",
-            Scalar::Bool => "bool",
-            Scalar::Char => "char",
-            Scalar::Byte => "byte",
-        }
-    }
-
-    /// The C type Dream passes the value as (`bool`/`char`/`byte` widen to 32 bits).
-    pub(super) fn c_abi(self) -> &'static str {
-        match self {
-            Scalar::Int | Scalar::Bool | Scalar::Char | Scalar::Byte => "int32_t",
-            Scalar::UInt => "uint32_t",
-            Scalar::Long => "int64_t",
-            Scalar::ULong => "uint64_t",
-            Scalar::Float => "float",
-            Scalar::Double => "double",
-        }
-    }
-
-    /// The C type of the value in memory (array elements, struct fields, `ref` targets).
-    pub(super) fn c_mem(self) -> &'static str {
-        match self {
-            Scalar::Bool => "bool",
-            Scalar::Char => "char",
-            Scalar::Byte => "uint8_t",
-            other => other.c_abi(),
-        }
-    }
-
-    /// Size and alignment in a Dream value struct (`dream_types::PrimTy::size_align`).
-    pub(super) fn size_align(self) -> (u32, u32) {
-        match self {
-            Scalar::Bool | Scalar::Char | Scalar::Byte => (1, 1),
-            Scalar::Long | Scalar::ULong | Scalar::Double => (8, 8),
-            Scalar::Int | Scalar::UInt | Scalar::Float => (4, 4),
-        }
-    }
-
-    /// The C++ argument for a by-value parameter named `c`.
-    pub(super) fn cpp_arg(self, c: &str) -> String {
-        match self {
-            Scalar::Bool => format!("({c} != 0)"),
-            Scalar::Char => format!("static_cast<char>({c})"),
-            Scalar::Byte => format!("static_cast<uint8_t>({c})"),
-            _ => c.to_string(),
-        }
-    }
-
-    /// Whether a `ref` of this type binds to the same C++ lvalue type Dream stores.
-    fn ref_ok(self) -> bool {
-        !matches!(self, Scalar::Bool | Scalar::Char | Scalar::Byte)
-    }
+/// Whether a `ref` of this type binds to the same C++ lvalue type Dream stores.
+fn ref_ok(s: CScalar) -> bool {
+    !s.is_narrow()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Elem {
-    Scalar(Scalar),
+    Scalar(CScalar),
     Struct(String),
 }
 
 /// A value that crosses the boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Bridge {
-    Scalar(Scalar),
+    Scalar(CScalar),
     Str {
         optional: bool,
     },
@@ -161,7 +83,7 @@ impl Known {
         let b = self.value(ty)?;
         if is_ref {
             let ok = match &b {
-                Bridge::Scalar(s) => s.ref_ok(),
+                Bridge::Scalar(s) => ref_ok(*s),
                 Bridge::Struct(_) => true,
                 _ => false,
             };
@@ -205,14 +127,14 @@ impl Known {
     }
 
     fn value(&self, ty: &Type) -> Result<Bridge, String> {
-        if let Some(s) = Scalar::of(ty) {
+        if let Some(s) = scalar_of(ty) {
             return Ok(Bridge::Scalar(s));
         }
         match ty {
             Type::String(_) => return Ok(Bridge::Str { optional: false }),
             Type::Array(inner) => {
-                return match Scalar::of(inner) {
-                    Some(s) if !matches!(s, Scalar::Bool | Scalar::Char) => {
+                return match scalar_of(inner) {
+                    Some(s) if !matches!(s, CScalar::Bool | CScalar::Char) => {
                         Ok(Bridge::Array(Elem::Scalar(s)))
                     }
                     _ => match self.struct_name(inner) {
@@ -348,7 +270,7 @@ impl Bridge {
     /// The C type of a callback parameter/result as Dream's reverse trampoline passes it.
     pub(super) fn callback_c(&self) -> &'static str {
         match self {
-            Bridge::Scalar(s) => s.c_abi(),
+            Bridge::Scalar(s) => s.c_name(),
             Bridge::Str { .. } => "const char*",
             _ => "void*",
         }

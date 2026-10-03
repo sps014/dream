@@ -1,1 +1,0 @@
-'@c' extern 'vec2_len' parameter 'v': @unmanaged struct 'Vec2' cannot be passed to C by value yet; declare the parameter as `ref` to pass a pointer (`T*`)

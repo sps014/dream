@@ -2,7 +2,7 @@
 
 use crate::layout::LayoutTable;
 use crate::nodes::{HExpr, HStmt};
-use dream_types::{DefId, TypeId};
+use dream_types::{CScalar, DefId, TypeId};
 
 /// A local variable slot within a function (parameters and `let`-bindings), unique per function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -114,6 +114,8 @@ pub struct HImport {
     pub c_params: Vec<CShape>,
     /// `@c` only: how the C result becomes the Dream result.
     pub c_ret: CShape,
+    /// `@c_call("stdcall")`: `x86_stdcallcc` on 32-bit x86 Windows, the C convention elsewhere.
+    pub c_stdcall: bool,
 }
 
 /// How one Dream value crosses the C boundary, decided (and validated) by the analyzer so the
@@ -122,12 +124,16 @@ pub struct HImport {
 pub enum CShape {
     #[default]
     Void,
-    /// Numbers, `bool`, `char`: the Dream scalar is the C scalar.
-    Scalar,
+    /// Numbers, `bool`, `char`, `byte`, as the C scalar of the same width and signedness.
+    Scalar(CScalar),
     /// `string` as `const char*` (UTF-16 under `@marshal("lpwstr")`); `optional` maps `None` to `NULL`.
     Str { optional: bool },
     /// `CPtr` as `void*`; `optional` is `Option<CPtr>`.
     Ptr { optional: bool },
+    /// An @unmanaged struct by value, as the C struct its layout describes.
+    Struct,
+    /// An `OwnedCPtr` result: the C pointer, freed by the C function `free` when Dream drops it.
+    OwnedPtr { free: String },
     /// A `fun(...)` as a plain C function pointer.
     Func {
         params: Vec<CShape>,
@@ -162,7 +168,8 @@ impl CShape {
     /// True when a callback of this shape can be the Dream function itself (identical C ABI).
     pub fn is_abi_identity(&self) -> bool {
         match self {
-            CShape::Void | CShape::Scalar => true,
+            CShape::Void => true,
+            CShape::Scalar(s) => !s.is_narrow(),
             CShape::Func {
                 params,
                 ret,

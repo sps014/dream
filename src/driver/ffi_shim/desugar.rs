@@ -24,10 +24,25 @@ pub(super) fn dream_source(decls: &FileDecls, file_index: usize) -> String {
     let mut externs = Vec::new();
     let mut uses_result = false;
     for c in &decls.classes {
-        class_source(decls, c, file_index, &mut out, &mut externs, &mut uses_result);
+        class_source(
+            decls,
+            c,
+            file_index,
+            &mut out,
+            &mut externs,
+            &mut uses_result,
+        );
     }
     for m in &decls.free {
-        member_source(decls, None, m, file_index, &mut out, &mut externs, &mut uses_result);
+        member_source(
+            decls,
+            None,
+            m,
+            file_index,
+            &mut out,
+            &mut externs,
+            &mut uses_result,
+        );
     }
     if uses_result {
         externs.push(format!(
@@ -95,10 +110,13 @@ fn class_source(
 
 fn extern_ret(b: &Bridge) -> String {
     match b {
-        Bridge::Scalar(s) => s.dream().to_string(),
+        Bridge::Scalar(s) => s.prim().name().to_string(),
         Bridge::Str { optional: false } => "string".into(),
         Bridge::Str { optional: true } => "Option<string>".into(),
-        Bridge::Ptr { optional: false } | Bridge::Class { optional: false, .. } => "CPtr".into(),
+        Bridge::Ptr { optional: false }
+        | Bridge::Class {
+            optional: false, ..
+        } => "CPtr".into(),
         Bridge::Ptr { optional: true } | Bridge::Class { optional: true, .. } => {
             "Option<CPtr>".into()
         }

@@ -7,7 +7,7 @@ use super::super::fx::V;
 use super::super::ir::{FnTy, Ty, Value};
 use super::super::lcx::{FnSig, Lcx};
 use super::super::types::ll_ty;
-use super::{c_marshal, glue, register};
+use super::{c_marshal, c_reverse, glue, register};
 use crate::backend::shared::abi_types::{
     import_call_name, import_host_name, is_c_import, native_header_declares,
 };
@@ -111,7 +111,7 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
         register_wasm(l, &imports);
         return;
     }
-    c_marshal::register_reverse(l);
+    c_reverse::register_reverse(l);
     for imp in &imports {
         let host = import_host_name(imp);
         let name = import_call_name(imp);
@@ -148,7 +148,7 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
 pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
     let imports = l.mir.imports.clone();
     if l.cx.target.spec().capabilities.c_interop {
-        c_marshal::emit_reverse(l);
+        c_reverse::emit_reverse(l);
     }
     let mut poll_i = 0usize;
     for imp in &imports {

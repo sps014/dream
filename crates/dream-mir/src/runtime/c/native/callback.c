@@ -39,7 +39,7 @@ static _Thread_local CallbackOwner *current_owner;
 
 static void callback_failure(void) {
     dream_mutex_unlock(&callback_mu);
-    DREAM_PANIC_LITERAL(u"panic: C callbacks must run on their Dream owner thread; dream_thread_attach support for foreign callback calls is planned");
+    DREAM_PANIC_LITERAL(u"panic: a NativeCallback closure must run on the Dream thread that created it");
 }
 
 void dream_thread_attach(void) {
@@ -53,9 +53,13 @@ void dream_thread_attach(void) {
     current_owner->attached = 1;
 }
 
+void dream_thread_detach(void) {
+    dream_callback_owner_finish();
+}
+
 void dream_callback_enter(void) {
     if (!current_owner) {
-        DREAM_PANIC_LITERAL(u"panic: C callbacks must run on their Dream owner thread; dream_thread_attach support for foreign callback calls is planned");
+        DREAM_PANIC_LITERAL(u"panic: C called into Dream from a thread Dream does not know; call dream_thread_attach() first (see dream_embed.h)");
     }
 }
 

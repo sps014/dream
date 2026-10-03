@@ -27,6 +27,7 @@ tests/**/*.bin
 tests/**/*.o
 # Native C emit (`dream --native-c`) next to the entry file.
 sample/**/*.c
+!sample/**/native/**/*.c
 sample/**/*.bin
 sample/**/*.o
 

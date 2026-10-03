@@ -50,7 +50,7 @@ static inline void dream_thread_join(dream_thread t) {
     WaitForSingleObject(t, INFINITE);
     CloseHandle(t);
 }
-static inline void dream_thread_detach(dream_thread t) { CloseHandle(t); }
+static inline void dream_thread_release(dream_thread t) { CloseHandle(t); }
 static inline dream_thread_id dream_thread_self(void) { return GetCurrentThreadId(); }
 static inline int dream_thread_id_eq(dream_thread_id a, dream_thread_id b) { return a == b; }
 static inline void dream_thread_yield(void) { SwitchToThread(); }
@@ -106,7 +106,7 @@ static inline int dream_thread_start(dream_thread *t, void *(*proc)(void *), voi
     return pthread_create(t, NULL, proc, arg);
 }
 static inline void dream_thread_join(dream_thread t) { pthread_join(t, NULL); }
-static inline void dream_thread_detach(dream_thread t) { pthread_detach(t); }
+static inline void dream_thread_release(dream_thread t) { pthread_detach(t); }
 static inline dream_thread_id dream_thread_self(void) { return pthread_self(); }
 static inline int dream_thread_id_eq(dream_thread_id a, dream_thread_id b) { return pthread_equal(a, b); }
 static inline void dream_thread_yield(void) { sched_yield(); }

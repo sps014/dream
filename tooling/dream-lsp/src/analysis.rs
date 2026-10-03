@@ -124,12 +124,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                     &graph,
                     &mut diagnostics,
                 );
-                let _ = dream::driver::cpp_bridge::expand(
-                    &arena,
-                    &mut acc,
-                    &graph,
-                    &mut diagnostics,
-                );
+                let _ = dream::driver::ffi_shim::expand(&arena, &mut acc, &graph, &mut diagnostics);
             }
         }
 

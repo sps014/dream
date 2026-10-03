@@ -1,6 +1,5 @@
 //! Native C/C++ packages: `native/` sources, `@c` wrappers, and `@cpp` shims. Tests that compile C
-//! or C++ need a C/C++ compiler (Zig, or `DREAM_CXX`) and run with `--ignored`; the rest only
-//! drive the front end.
+//! or C++ need a C/C++ compiler (Zig, `DREAM_CXX`, or the system `clang++`/`c++`).
 
 use dream::driver::compiler::Compiler;
 use dream::driver::wasm_opt::OptLevel;
@@ -52,12 +51,16 @@ fn build(entry: &Path, tag: &str) -> Result<PathBuf, String> {
 }
 
 fn run(entry: &Path, tag: &str) -> Result<String, String> {
+    run_at(entry, tag, OptLevel::O0)
+}
+
+fn run_at(entry: &Path, tag: &str, level: OptLevel) -> Result<String, String> {
     let ll = build(entry, tag)?;
     // A freshly linked binary's first launch can be slow while the OS vets it.
     compile_and_capture_ex(
         &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
         ll.to_str().unwrap(),
-        OptLevel::O0,
+        level,
         &[],
         &[],
         None,
@@ -76,7 +79,6 @@ fn assert_contains(haystack: &str, needle: &str) {
 }
 
 #[test]
-#[ignore = "builds C/C++ sources; cargo test --workspace -- --ignored"]
 fn c_package_keeps_a_stored_native_callback_alive() {
     let out = run(&repo("sample/native_c/src/main.dream"), "c_sample").unwrap();
     assert_eq!(
@@ -92,7 +94,6 @@ fn c_package_keeps_a_stored_native_callback_alive() {
 }
 
 #[test]
-#[ignore = "builds C/C++ sources; cargo test --workspace -- --ignored"]
 fn cpp_package_runs_through_the_generated_shim() {
     let out = run(&repo("sample/native_cpp/src/main.dream"), "cpp_sample").unwrap();
     assert_eq!(
@@ -122,7 +123,6 @@ fn cpp_package_runs_through_the_generated_shim() {
 }
 
 #[test]
-#[ignore = "builds C/C++ sources; cargo test --workspace -- --ignored"]
 fn cpp_declaration_mismatch_is_reported_at_the_dream_line() {
     let root = project(
         "mismatch",
@@ -146,7 +146,6 @@ fn cpp_declaration_mismatch_is_reported_at_the_dream_line() {
 }
 
 #[test]
-#[ignore = "builds C/C++ sources; cargo test --workspace -- --ignored"]
 fn cpp_struct_layout_mismatch_fails_the_static_assert() {
     let root = project(
         "layout",
@@ -172,8 +171,7 @@ fn cpp_struct_layout_mismatch_fails_the_static_assert() {
 }
 
 #[test]
-#[ignore = "builds C/C++ sources; cargo test --workspace -- --ignored"]
-fn callback_from_a_foreign_thread_traps() {
+fn callback_from_an_unattached_foreign_thread_traps() {
     let root = project(
         "thread",
         &[
@@ -196,12 +194,210 @@ fn callback_from_a_foreign_thread_traps() {
         ],
     );
     let err = run(&root.join("src/main.dream"), "thread").unwrap_err();
-    assert_contains(&err, "C callbacks must run on their Dream owner thread");
+    assert_contains(
+        &err,
+        "a NativeCallback closure must run on the Dream thread that created it",
+    );
     let _ = fs::remove_dir_all(&root);
 }
 
+/// One `@c` package around `native/abi.c`, run at `level`.
+fn run_c(tag: &str, c: &str, dream: &str, level: OptLevel) -> Result<String, String> {
+    let root = project(
+        tag,
+        &[
+            ("dream.toml", "[package]\nname = \"abi\"\n"),
+            ("native/abi.c", c),
+            ("src/main.dream", dream),
+        ],
+    );
+    let out = run_at(&root.join("src/main.dream"), tag, level);
+    let _ = fs::remove_dir_all(&root);
+    out
+}
+
 #[test]
-#[ignore = "builds C/C++ sources; cargo test --workspace -- --ignored"]
+fn c_structs_pass_and_return_by_value() {
+    let c = r#"#include <stdint.h>
+typedef struct { float x, y; } Vec2;
+typedef struct { int64_t a, b, c; } Triple;
+typedef struct { double w; int32_t id; int64_t big; float f; } Wide;
+Vec2 vec2_scale(Vec2 v, float k) { Vec2 r = { v.x * k, v.y * k }; return r; }
+Triple triple_rotate(Triple t) { Triple r = { t.b, t.c, t.a }; return r; }
+Wide wide_bump(Wide w, int32_t by) { w.w += 0.5; w.id += by; w.big *= 2; w.f -= 1.0f; return w; }
+"#;
+    let dream = r#"import system;
+
+public struct Vec2 { public x: float; public y: float; }
+public struct Triple { public a: long; public b: long; public c: long; }
+public struct Wide { public w: double; public id: int; public big: long; public f: float; }
+
+@c extern fun vec2_scale(v: Vec2, k: float): Vec2;
+@c extern fun triple_rotate(t: Triple): Triple;
+@c extern fun wide_bump(w: Wide, by: int): Wide;
+
+fun main(): void {
+    let v = Vec2();
+    v.x = 1.5f;
+    v.y = -2.0f;
+    let s = vec2_scale(v, 2.0f);
+    System.println("vec2 " + s.x.to_string() + " " + s.y.to_string());
+    let t = Triple();
+    t.a = 1L;
+    t.b = 5000000000L;
+    t.c = -3L;
+    let r = triple_rotate(t);
+    System.println("triple " + r.a.to_string() + " " + r.b.to_string() + " " + r.c.to_string());
+    let w = Wide();
+    w.w = 1.25;
+    w.id = 40;
+    w.big = 21L;
+    w.f = 3.5f;
+    let b = wide_bump(w, 2);
+    System.println("wide " + b.w.to_string() + " " + b.id.to_string() + " " + b.big.to_string() + " " + b.f.to_string());
+}
+"#;
+    for (tag, level) in [("structs_o0", OptLevel::O0), ("structs_o2", OptLevel::O2)] {
+        let out = run_c(tag, c, dream, level).unwrap();
+        assert_eq!(
+            out.trim(),
+            "vec2 3 -4\ntriple 5000000000 -3 1\nwide 1.75 42 42 2.5"
+        );
+    }
+}
+
+#[test]
+fn c_bool_return_ignores_garbage_upper_bits() {
+    // Declared to Dream as returning `bool`: only the low byte carries the value. Darwin arm64 makes
+    // the callee zero-extend a `bool` return, so garbage there would break the C ABI itself.
+    let c = r#"#include <stdint.h>
+#if defined(__APPLE__) && defined(__aarch64__)
+#define GARBAGE 0u
+#else
+#define GARBAGE 0xABCDEF00u
+#endif
+uint32_t is_even_raw(int32_t x) { return GARBAGE | (uint32_t)(x % 2 == 0); }
+"#;
+    let dream = r#"import system;
+
+@c("abi", "is_even_raw") extern fun is_even(x: int): bool;
+
+fun main(): void {
+    System.println(is_even(4).to_string() + " " + is_even(7).to_string());
+    let n = 0;
+    for (let i = 0; i < 10; i++) {
+        if is_even(i) {
+            n += 1;
+        }
+    }
+    System.println(n.to_string());
+}
+"#;
+    let out = run_c("narrow_bool", c, dream, OptLevel::O2).unwrap();
+    assert_eq!(out.trim(), "true false\n5");
+}
+
+#[test]
+fn attached_foreign_thread_calls_a_dream_function() {
+    let c = r#"#include <pthread.h>
+#include <stdint.h>
+#include <dream_embed.h>
+typedef int32_t (*int_fn)(int32_t);
+struct job { int_fn fn; int32_t out; };
+static void* worker(void* p) {
+    struct job* j = p;
+    dream_thread_attach();
+    j->out = j->fn(20);
+    dream_thread_detach();
+    return 0;
+}
+int32_t call_on_thread(int_fn fn) {
+    pthread_t t; struct job j = { fn, 0 };
+    pthread_create(&t, 0, worker, &j); pthread_join(t, 0);
+    return j.out;
+}
+"#;
+    let dream = r#"import system;
+
+@c extern fun call_on_thread(f: fun(int): int): int;
+
+fun label_len(x: int): int {
+    let s = "value " + x.to_string();
+    return s.length + x;
+}
+
+fun main(): void {
+    System.println(call_on_thread(label_len).to_string());
+}
+"#;
+    let out = run_c("attach", c, dream, OptLevel::O0).unwrap();
+    assert_eq!(out.trim(), "28");
+}
+
+#[test]
+fn owned_c_pointer_is_freed_by_its_finalizer() {
+    let c = r#"#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+typedef struct { int32_t v; } Res;
+void* res_new(int32_t v) { Res* r = malloc(sizeof *r); r->v = v; return r; }
+int32_t res_value(void* r) { return ((Res*)r)->v; }
+void res_free(void* r) { printf("[c] res_free(%d)\n", ((Res*)r)->v); fflush(stdout); free(r); }
+"#;
+    let dream = r#"import system;
+
+@c @owned("res_free") extern fun res_new(v: int): OwnedCPtr;
+@c extern fun res_value(r: CPtr): int;
+@c extern fun res_free(r: CPtr): void;
+
+fun scoped(): void {
+    let r = res_new(7);
+    System.println("value " + res_value(r.get()).to_string());
+}
+
+fun main(): void {
+    scoped();
+    System.println("after scope");
+    let raw = res_new(8).take();
+    System.println("taken " + res_value(raw).to_string());
+    res_free(raw);
+}
+"#;
+    let out = run_c("owned", c, dream, OptLevel::O0).unwrap();
+    assert_eq!(
+        out.trim(),
+        "value 7\n[c] res_free(7)\nafter scope\ntaken 8\n[c] res_free(8)"
+    );
+}
+
+#[test]
+fn panic_hook_runs_then_the_process_aborts() {
+    let c = r#"#include <stdio.h>
+#include <dream_embed.h>
+static void hook(const char* message, const char* location) {
+    printf("[hook] %s (%s)\n", message, location ? location : "no location");
+    fflush(stdout);
+}
+void install_hook(void) { dream_set_panic_hook(hook); }
+"#;
+    let dream = r#"import system;
+
+@c extern fun install_hook(): void;
+
+fun main(): void {
+    install_hook();
+    System.println("before");
+    System.panic("boom é");
+    System.println("unreachable");
+}
+"#;
+    let err = run_c("panic_hook", c, dream, OptLevel::O0).unwrap_err();
+    assert_contains(&err, "before");
+    assert_contains(&err, "[hook] boom é (no location)");
+    assert!(!err.contains("unreachable"), "{}", err);
+}
+
+#[test]
 fn cpp_callback_destroyed_on_a_foreign_thread_releases_on_its_owner() {
     let root = project(
         "callback-release",
@@ -261,7 +457,6 @@ fn store_package(name: &str, class: &str) -> [(String, String); 4] {
 }
 
 #[test]
-#[ignore = "builds C/C++ sources; cargo test --workspace -- --ignored"]
 fn two_packages_can_each_bind_a_cpp_store() {
     let mut files: Vec<(String, String)> = vec![
         ("dream.toml".into(), "[package]\nname = \"app\"\n".into()),

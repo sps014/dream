@@ -8,6 +8,7 @@ use dream_types::{DefId, TypeId};
 
 pub struct FunctionBuilder {
     name: String,
+    symbol: String,
     ret: TypeId,
     is_async: bool,
     def: DefId,
@@ -24,8 +25,10 @@ impl FunctionBuilder {
     /// Starts a function with a single empty entry block (block 0) as the current block. The def
     /// defaults to `DefId(0)`; lowering sets the real one via [`Self::set_def`].
     pub fn new(name: impl Into<String>, ret: TypeId) -> Self {
+        let name = name.into();
         FunctionBuilder {
-            name: name.into(),
+            symbol: name.clone(),
+            name,
             ret,
             is_async: false,
             def: DefId(0),
@@ -41,6 +44,10 @@ impl FunctionBuilder {
 
     pub fn set_async(&mut self, is_async: bool) {
         self.is_async = is_async;
+    }
+
+    pub fn set_symbol(&mut self, symbol: String) {
+        self.symbol = symbol;
     }
 
     /// Records the source file this function was declared in (debug-info line attribution).
@@ -145,6 +152,7 @@ impl FunctionBuilder {
     pub fn finish(self) -> MirFunction {
         MirFunction {
             def: self.def,
+            symbol: self.symbol,
             instance: self.instance,
             name: self.name,
             ret: self.ret,

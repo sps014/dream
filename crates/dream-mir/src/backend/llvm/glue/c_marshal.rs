@@ -217,7 +217,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     fun_ty: callback_fun_ty(self.l, ty),
                     user_data_last,
                 };
-                let tramp = V::s(self.l.fn_ref(&rev.symbol()));
+                let tramp = V::s(self.l.fn_ref(&rev.symbol(self.l)));
                 let (fp, ud) = if optional {
                     let fp = self.null_or(a, |_| tramp.clone());
                     (fp, V::s(self.ptr(a)))
@@ -255,7 +255,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             };
             let slot = self.l.cx.func_index(f) as i64;
             let hit = self.w.icmp("eq", &idx.v, &Value::i32(slot));
-            let wrapper = self.l.fn_ref(&rev.symbol());
+            let wrapper = self.l.fn_ref(&rev.symbol(self.l));
             fp = self.w.select(&hit, &wrapper, &fp);
         }
         let fp = V::s(fp);

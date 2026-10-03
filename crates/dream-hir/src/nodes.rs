@@ -429,6 +429,7 @@ mod tests {
         let func = HFunction {
             def,
             name: "add".to_string(),
+            symbol: "add".to_string(),
             instance: vec![],
             params: vec![
                 HParam {
@@ -464,6 +465,8 @@ mod tests {
             interfaces: InterfaceTable::default(),
             enums: indexmap::IndexMap::new(),
             type_names: indexmap::IndexMap::new(),
+            type_symbols: indexmap::IndexMap::new(),
+            object_methods: indexmap::IndexMap::new(),
         };
         assert_eq!(hir.functions.len(), 1);
         assert_eq!(hir.functions[0].params.len(), 2);

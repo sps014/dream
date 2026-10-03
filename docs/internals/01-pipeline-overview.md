@@ -85,10 +85,16 @@ Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-s
 - **Out:** a textual LLVM IR module (`backend::llvm::emit_llvm_module`). The driver links it with the C runtime compiled to bitcode, runs the pinned `opt` + `llc`, then links with the host `cc` (native `.bin`, optionally PGO via `--profile` / `--use-profile`, `src/execution/native/pgo.rs`) or wasi-sdk `wasm-ld` (`.wasm`, pretty-printed to `.wat` via wasmprinter). The runtime bitcode is cached with a stamp listing every input's path, size, and mtime (`src/driver/rt_stamp.rs`), so switching between compiler checkouts rebuilds it instead of linking a stale one.
 - **How:** every MIR block becomes one LLVM block and every local an entry `alloca`; runtime calls are typed from the runtime bitcode's own signatures. The guest runtime is C under `crates/dream-mir/src/runtime/c/`. See [06-llvm-backend.md](./06-llvm-backend.md).
 
-### 8. Artifact emission — `src/driver/compiler.rs` / `src/driver/abi.rs`
+### 8. Artifact emission — `src/driver/compiler/pipeline.rs` / `src/driver/abi.rs`
 
 - **In:** linked `.wasm` plus the AST root (for ABI metadata).
 - **Out:** link → `wasm-opt` → embed the ABI custom section → print `.wat` via `wasmprinter`; the `.abi.json` sidecar describes extern imports/exports for the JS runtime.
+
+`compiler.rs` owns configuration and entry wiring. `compiler/load.rs` loads and prepares source,
+`compiler/optimize.rs` lowers HIR and runs the MIR pipelines, `compiler/pipeline.rs` coordinates
+analysis, LLVM generation and artifacts, and `compiler/diagnostics.rs` renders failures. Source
+loading still uses `ProgramAccumulator`; replacing the flattened AST with `ModuleGraph` remains
+part of Phase 5.
 
 ## Where errors come from
 

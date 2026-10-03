@@ -41,7 +41,11 @@ pub struct Hir {
 }
 ```
 
-`MonoInstance { def: DefId, args: Vec<TypeId> }` is the entire monomorphization story: a list of concrete `(generic def, type args)` pairs the backend must emit. No mangled names, no string parsing — the emitted WASM symbol is derived from the pair at the very end.
+`MonoInstance { def: DefId, args: Vec<TypeId> }` records concrete instances. `HFunction.symbol` carries each function's resolved structural symbol through MIR lowering; the backend does not append numeric type IDs. `Hir.type_symbols` carries the structural signature encodings used by C callback adapters, which likewise avoid interner numbers.
+
+`Hir.object_methods` maps each concrete type to resolved `to_string` and `hash_code` override
+definitions. MIR pruning and protocol dispatch follow these `DefId`s, not generated method
+spellings, so changing an emitted symbol cannot silently select the default field formatter.
 
 `Hir.layouts` holds the sole storage layout table, built from resolved struct, tuple and union
 field definitions with `TargetLayout { ptr_size, ptr_align }`. It records field offsets and
@@ -52,7 +56,7 @@ lowering, after the complete target-specific table exists.
 
 ## Functions, params, locals
 
-`HFunction` carries `def` (its `DefId`), the base `name`, the `instance` args (empty unless this is a monomorphized copy), typed `params`, the `ret` type, a `locals` table, the structured `body`, and `is_async`.
+`HFunction` carries `def` (its `DefId`), the source/table `name`, its resolved `symbol`, the `instance` args (empty unless this is a monomorphized copy), typed `params`, the `ret` type, a `locals` table, the structured `body`, and `is_async`.
 
 `LocalId(u32)` indexes locals uniquely within a function; parameters are just the first locals. `HLocal`/`HParam` record the declared `ty` so MIR's `RcInsertion` knows which locals are references and the backend knows how to allocate slots.
 

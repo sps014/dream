@@ -3,7 +3,7 @@
 use dream_syntax::nodes::AttributeNode;
 
 /// The kind of declaration an attribute is attached to, coarse enough to express every current
-/// placement rule (`@json` on a type, `@override` on an instance method, ...) without needing the
+/// placement rule (`@json` on a type, `@location` on a field, ...) without needing the
 /// full declaration AST at validation time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AttributeTarget {

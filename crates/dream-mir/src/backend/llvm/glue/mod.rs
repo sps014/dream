@@ -22,6 +22,7 @@ static GLUE_FN: MirFunction = MirFunction {
     def: DefId(0),
     instance: Vec::new(),
     name: String::new(),
+    symbol: String::new(),
     params: Vec::new(),
     ret: TypeId(0),
     locals: Vec::new(),

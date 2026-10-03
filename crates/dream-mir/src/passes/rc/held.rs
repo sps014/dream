@@ -342,6 +342,7 @@ fn without_rc_on(f: &MirFunction, locals: &IndexSet<u32>) -> MirFunction {
         def: f.def,
         instance: f.instance.clone(),
         name: String::new(),
+        symbol: f.symbol.clone(),
         params: f.params.clone(),
         ret: f.ret,
         locals: f.locals.clone(),

@@ -22,6 +22,26 @@ fn parse_code<'a>(code: &str, arena: &'a bumpalo::Bump) -> (ProgramNode<'a>, Dia
 }
 
 #[test]
+fn test_parse_public_override_methods() {
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(
+        r#"class Label {
+            public override fun to_string(): string { return "label"; }
+            public override fun hash_code(): int { return 7; }
+        }"#,
+        &arena,
+    );
+    assert!(!diagnostics.has_errors());
+    let methods = &program.structs[0].methods;
+    assert_eq!(methods.len(), 2);
+    for method in methods {
+        assert!(method.visibility.is_public());
+        assert!(method.is_override);
+        assert!(!method.is_static && !method.is_extern && !method.is_async);
+    }
+}
+
+#[test]
 fn test_parse_function_declaration() {
     let code = "fun main(): int { return 42; }";
     let arena = bumpalo::Bump::new();

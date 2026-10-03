@@ -432,7 +432,7 @@ public class List<T> : IndexedCollection<T> {
         return Option.None;
     }
 
-    override public fun to_string(): string {
+    public override fun to_string(): string {
         let sb = StringBuilder();
         sb.append("[");
         let i = 0;

@@ -32,6 +32,9 @@ pub struct TypeId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DefId(pub u32);
 
+mod symbols;
+pub use symbols::{function_symbol, symbol_component, type_symbol};
+
 #[cfg(test)]
 mod tests {
     use super::*;

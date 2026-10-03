@@ -49,6 +49,16 @@ pub struct Hir {
     /// `typeof` tag router. The backend has the `TypeInterner` but no `DefTable`, so it cannot
     /// reconstruct these itself.
     pub type_names: TypeNameTable,
+    /// Stable structural encodings for C callback adapters and other generated symbols.
+    pub type_symbols: TypeNameTable,
+    pub object_methods: indexmap::IndexMap<TypeId, ObjectMethods>,
+}
+
+/// Resolved overrides of the generated object protocol, independent of emitted names.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ObjectMethods {
+    pub to_string: Option<DefId>,
+    pub hash_code: Option<DefId>,
 }
 
 /// Source-level display names of tagged nominal types, keyed by interned `TypeId`.
@@ -199,8 +209,9 @@ pub struct HGlobal {
 #[derive(Debug, Clone)]
 pub struct HFunction {
     pub def: DefId,
-    /// The base (un-mangled) source name; the backend derives the emitted symbol from
-    /// `(def, instance args)`.
+    /// Resolved emitted symbol; no backend stage derives identity from numeric type handles.
+    pub symbol: String,
+    /// The semantic lookup name, retained for diagnostics and debug information.
     pub name: String,
     /// The instance args when this is a monomorphized body, empty otherwise.
     pub instance: Vec<TypeId>,

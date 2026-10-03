@@ -146,7 +146,7 @@ public class StringBuilder {
         return string.from_builder(this.bytes, n, -1);
     }
 
-    override public fun to_string(): string {
+    public override fun to_string(): string {
         return this.build();
     }
 }

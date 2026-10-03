@@ -90,7 +90,7 @@ Hash-conses `TyKind → TypeId`. The nullary types (all primitives, `Object`, `V
 
 A `DefId` names a nominal declaration — a struct, union, enum, or function (`DefKind`) — and is **independent of type arguments**: `Box<int>` and `Box<string>` are `Struct(box_def, [int])` and `Struct(box_def, [string])` with the *same* `box_def`. `DefInfo` records the base `name` (never mangled) and the declared `generic_params` (`["T"]`).
 
-This is the key to monomorphization: instead of inventing `"Box_int"`, you key instances by `(DefId, Vec<TypeId>)`. The emitted WASM symbol name is generated from that pair only at the backend.
+This is the key to monomorphization: instances are keyed by `(DefId, Vec<TypeId>)`. During HIR emission, `dream-types::function_symbol` builds the emitted name from the declaring module, function key and structural type arguments. `dream-types::type_symbol` encodes type shapes and nominal declaration names, never the numeric interner handles. Overload keys use that same structural type encoding. Length framing and byte escaping distinguish underscores, punctuation and argument boundaries; `_D`-prefixed user names are escaped into a separate namespace. Module-scoped nominal identity is still pending Phase 5's module migration.
 
 ### Compatibility & widening — `src/types/compat.rs`
 

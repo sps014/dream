@@ -313,9 +313,9 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Validates an `@override` object-protocol method: `@override` may only mark `to_string`
+    /// Validates an `override` object-protocol method: `override` may only mark `to_string`
     /// / `hash_code`, those must be exported with the exact protocol signature, and a method
-    /// that shadows a protocol name must carry `@override`.
+    /// that shadows a protocol name must carry `override`.
     pub(in crate::analyzer) fn validate_protocol_override(
         &self,
         method: &FunctionNode<'a>,

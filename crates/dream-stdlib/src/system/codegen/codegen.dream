@@ -90,7 +90,7 @@ public class CodeBuilder {
     }
 
     // Returns the accumulated source text.
-    override public fun to_string(): string {
+    public override fun to_string(): string {
         return this.buf.to_string();
     }
 }

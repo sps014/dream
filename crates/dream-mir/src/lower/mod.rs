@@ -121,6 +121,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         let init_fn = HFunction {
             def: DefId(u32::MAX),
             name: INIT_FN_NAME.to_string(),
+            symbol: INIT_FN_NAME.to_string(),
             instance: vec![],
             params: Vec::<HParam>::new(),
             ret: interner.void(),
@@ -163,6 +164,8 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         interfaces: hir.interfaces.clone(),
         enums: hir.enums.clone(),
         type_names: hir.type_names.clone(),
+        type_symbols: hir.type_symbols.clone(),
+        object_methods: hir.object_methods.clone(),
         frame_objects: Default::default(),
     }
 }
@@ -296,6 +299,7 @@ fn init_builder(func: &HFunction, is_async: bool) -> (FunctionBuilder, HashMap<u
     let mut b = FunctionBuilder::new(func.name.clone(), func.ret);
     b.set_async(is_async);
     b.set_def(func.def, func.instance.clone());
+    b.set_symbol(func.symbol.clone());
     b.set_file(func.file.clone());
     b.set_inline(func.inline);
     let mut locals: HashMap<u32, Local> = HashMap::new();
@@ -752,6 +756,7 @@ mod tests {
         let func = HFunction {
             def,
             name: "f".into(),
+            symbol: "f".into(),
             instance: vec![],
             params: vec![dream_hir::HParam {
                 local: LocalId(0),

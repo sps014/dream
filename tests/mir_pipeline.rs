@@ -42,6 +42,7 @@ fn compile_sum_to() -> String {
     let func = HFunction {
         def,
         name: "sum_to".into(),
+        symbol: "sum_to".into(),
         instance: vec![],
         params: vec![HParam {
             local: n,

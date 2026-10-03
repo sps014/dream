@@ -47,8 +47,8 @@ pub(in crate::backend::llvm) fn build(l: &Lcx<'_>) -> CShim {
         }
         let ret = c_ty(l, &mut shim, &ret, ret_ty);
         shim.reverses.push(Reverse {
-            adapter: rev.symbol(),
-            body: rev.body(),
+            adapter: rev.symbol(l),
+            body: rev.body(l),
             params,
             ret,
         });

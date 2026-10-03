@@ -524,8 +524,26 @@ impl<'a> Analyzer<'a> {
         if emittable {
             if let (Some(def), Some(ret)) = (self.hir.def, self.hir.ret) {
                 let body = self.hir.blocks.pop().unwrap_or_default();
+                let source_file = self.hir.file.as_deref().map(std::rc::Rc::from);
+                let module = self.module_of(source_file.as_ref());
+                let args = self
+                    .hir
+                    .instance
+                    .iter()
+                    .map(|&ty| {
+                        dream_types::type_symbol(&self.type_ctx.interner, &self.type_ctx.defs, ty)
+                    })
+                    .collect::<Vec<_>>();
+                // Cross-module collision promotion changes lookup keys, not declaration identity.
+                let namespace = module.as_ref().map(|m| format!("{m}::"));
+                let name = namespace
+                    .as_ref()
+                    .and_then(|prefix| self.hir.name.strip_prefix(prefix))
+                    .unwrap_or(&self.hir.name);
+                let symbol = dream_types::function_symbol(module.as_deref(), name, &args);
                 self.hir.functions.push(HFunction {
                     def,
+                    symbol,
                     name: std::mem::take(&mut self.hir.name),
                     instance: std::mem::take(&mut self.hir.instance),
                     params: std::mem::take(&mut self.hir.params),

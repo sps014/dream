@@ -92,6 +92,8 @@ pub struct Mir {
     /// Display name of every tagged nominal type (see [`dream_hir::Hir::type_names`]), which the
     /// `typeof` tag router returns.
     pub type_names: dream_hir::TypeNameTable,
+    pub type_symbols: dream_hir::TypeNameTable,
+    pub object_methods: indexmap::IndexMap<TypeId, dream_hir::ObjectMethods>,
     /// `(function def, instance, local)` whose `New` is built in the function's C frame (see
     /// `passes::frame_alloc`).
     pub frame_objects: std::collections::BTreeSet<(DefId, Vec<TypeId>, Local)>,
@@ -109,6 +111,7 @@ pub struct MirFunction {
     /// The nominal def this function (or generic instance) belongs to. The emitted symbol is derived
     /// from `(def, instance)` so call sites and headers agree and generic instances stay distinct.
     pub def: DefId,
+    pub symbol: String,
     /// Concrete type args when this is a monomorphized instance body; empty otherwise.
     pub instance: Vec<TypeId>,
     pub name: String,
@@ -699,6 +702,7 @@ mod tests {
         let func = HFunction {
             def,
             name: "add".into(),
+            symbol: "add".into(),
             instance: vec![],
             params: vec![
                 HParam {

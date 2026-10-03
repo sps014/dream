@@ -332,7 +332,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return this.slots[i].value;
     }
 
-    override public fun to_string(): string {
+    public override fun to_string(): string {
         let sb = StringBuilder();
         sb.append("{");
         let n = 0;

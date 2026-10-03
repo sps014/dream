@@ -16,7 +16,7 @@ pub struct FunctionTable {
     /// (declaring module, base name) -> the overload *namespace* for that module's declarations
     /// of `base`, once a same-name collision across two *different* declared modules has
     /// promoted both to module-qualified namespaces (see [`Self::add_overload`]/[`module_key`]).
-    /// The value is `module::base` — overload mangling then appends `.TypeId…` onto that
+    /// The value is `module::base` — overload mangling then appends structural signatures to that
     /// namespace. Absent entries mean "no cross-module collision for this name": look it up by its
     /// bare name instead. Never populated for the unnamed root module (`None`), so unmoded code
     /// keeps today's flat "same bare name always collides" behavior untouched.
@@ -42,17 +42,7 @@ pub enum OverloadResolution {
     Ambiguous(Vec<String>),
 }
 
-/// Builds the signature-mangled emitted name for one overload: the overload namespace followed by
-/// each parameter's interned [`TypeId`] (decimal), joined with `.` — a valid WAT identifier
-/// character, distinct from the `_` used by generic monomorphization so the two schemes never
-/// collide. E.g. namespace `add` with two params whose TypeIds are 0 and 0 becomes `add.0.0`; a
-/// zero-parameter overload becomes `add.`. When the namespace is already module-qualified the
-/// same rule composes: `utils.math::add.0.0`.
-///
-/// Uses structured [`Type`]s (via [`TypeCtx::lower`]) rather than `get_type()` strings: string
-/// lowering does not round-trip `fun(...)` / `Future<T>` spellings, so two overloads that differ
-/// only in a nested function return type (e.g. `fun(T): U` vs `fun(T): Future<U>`) would otherwise
-/// collide on the poison `Error` id.
+/// Structural signatures make overload keys independent of unrelated type registration.
 pub fn overload_key(
     base: &str,
     parameter_types: &[Type],
@@ -62,7 +52,12 @@ pub fn overload_key(
     key.push('.');
     let mut parts = Vec::new();
     for p in parameter_types {
-        parts.push(type_ctx.lower(p).0.to_string());
+        let id = type_ctx.lower(p);
+        parts.push(dream_types::type_symbol(
+            &type_ctx.interner,
+            &type_ctx.defs,
+            id,
+        ));
     }
     key.push_str(&parts.join("."));
     key
@@ -114,7 +109,7 @@ impl FunctionTable {
     /// its signature-mangled key and the new one is mangled too, so non-overloaded code keeps its
     /// original emitted names. A same-named declaration from a *different* declared module is not
     /// an overload conflict — both sides are promoted to module-qualified namespaces
-    /// (`module::base`), and overload mangling composes on top (`module::base.TypeId…`). Returns
+    /// (`module::base`), and structural overload mangling composes on top. Returns
     /// the emitted key chosen for `info`, or an error if an identical signature was already
     /// registered under the resolved namespace.
     pub fn add_overload(
@@ -184,7 +179,7 @@ impl FunctionTable {
     }
 
     /// Rewrites every declaration currently stored under the bare `base` namespace into
-    /// module-qualified namespaces (`module::base` / `module::base.TypeId…`), recording each in
+    /// module-qualified namespaces (with structural signatures for overloads), recording each in
     /// [`Self::by_module`]. Preserves per-module declaration order.
     fn promote_bare_to_modules(
         &mut self,

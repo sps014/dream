@@ -1342,8 +1342,17 @@ fn test_hir_emission_generic_function_instances() {
         c
     );
     let types = dream_types::TypeInterner::new();
-    let int_symbol = format!("id__{}", types.int().0);
-    let bool_symbol = format!("id__{}", types.bool().0);
+    let defs = dream_types::DefTable::new();
+    let int_symbol = dream_types::function_symbol(
+        None,
+        "id",
+        &[dream_types::type_symbol(&types, &defs, types.int())],
+    );
+    let bool_symbol = dream_types::function_symbol(
+        None,
+        "id",
+        &[dream_types::type_symbol(&types, &defs, types.bool())],
+    );
     assert!(
         c.contains(&format!("{int_symbol}(")) && c.contains(&format!("{bool_symbol}(")),
         "each monomorphization gets its own symbol:\n{}",
@@ -1355,6 +1364,30 @@ fn test_hir_emission_generic_function_instances() {
         "each generic call site should resolve to an instance symbol:\n{}",
         c
     );
+}
+
+#[test]
+fn function_symbols_survive_unrelated_declarations() {
+    let source = r#"
+        class User {}
+        fun id<T>(value: T): T { return value; }
+        fun pick(value: User): int { return 1; }
+        fun pick(value: int): int { return 2; }
+        fun driver(value: User): User { return id<User>(value); }
+    "#;
+    let symbols = |code: &str| {
+        compile_test_pipeline(code, |hir, _| {
+            hir.functions
+                .iter()
+                .filter(|f| f.name == "id" || f.name.starts_with("pick."))
+                .map(|f| (f.name.clone(), f.symbol.clone()))
+                .collect::<Vec<_>>()
+        })
+    };
+    let before = symbols(source);
+    let after = symbols(&format!("class Unrelated {{}}\n{source}"));
+    assert_eq!(before.len(), 3);
+    assert_eq!(before, after);
 }
 
 #[test]

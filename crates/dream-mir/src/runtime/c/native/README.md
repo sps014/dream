@@ -1,8 +1,9 @@
 # Native (host) C runtime
 
-Not used by `cargo test` / WAT splice. Companion to wasm `../include/dream_rt.h`.
+Linked into native programs and golden tests. Shared helpers also serve the wasm runtime.
 
-- Pointers are `uintptr_t`. Do not truncate with `(uint32_t)`.
+- Native references are byte pointers (`dream_ptr`), not integer handles. Wasm keeps linear-memory offsets.
+- Async completion's `dream_result` transports scalar bits or pointer-width addresses in a 64-bit slot; reference conversion is restricted to that transport boundary.
 - Copies use `memcpy`.
 - Heap is size-class freelists + `mmap` / `VirtualAlloc` (`heap.c`).
 - `retain`/`release` are `always_inline` in [`include/dream_rt_native.h`](include/dream_rt_native.h).

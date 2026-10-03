@@ -61,7 +61,7 @@ static void weak_free_list(dream_weak_node *dead) {
     while (dead) {
         dream_weak_node *node = dead;
         dead = node->next;
-        dream_free((dream_ptr)(uintptr_t)node);
+        dream_free((dream_ptr)node);
     }
 }
 
@@ -108,7 +108,7 @@ void dream_weak_unregister(dream_ptr target, dream_ptr slot) {
     dream_weak_node *node = weak_remove_locked(target, slot);
     weak_unlock();
     if (node != NULL) {
-        dream_free((dream_ptr)(uintptr_t)node);
+        dream_free((dream_ptr)node);
     }
 }
 
@@ -158,7 +158,7 @@ typedef struct {
 
 /* Allocates the registered slot-box for a fresh weak handle holding `value`. The box holds a
  * single raw pointer; when `value` dies, clear_all writes 0 into it (kind 2). */
-int64_t weakBind(dream_ptr value) {
+uintptr_t weakBind(dream_ptr value) {
     dream_ptr box;
     if (!value) {
         return 0;
@@ -171,13 +171,13 @@ int64_t weakBind(dream_ptr value) {
     data->value = value;
     data->immortal = immortal;
     dream_weak_register(value, box, 2, 0);
-    return (int64_t)(uintptr_t)box;
+    return (uintptr_t)box;
 }
 
 /* Loads the tracked object: NULL when dead, otherwise the payload with its refcount bumped
  * so the caller owns a reference. */
-dream_ptr weakLoad(int64_t slot) {
-    dream_ptr box = (dream_ptr)(uintptr_t)slot;
+dream_ptr weakLoad(uintptr_t slot) {
+    dream_ptr box = (dream_ptr)slot;
     dream_ptr v;
     if (!box) {
         return 0;
@@ -211,8 +211,8 @@ dream_ptr weakLoad(int64_t slot) {
     return 0;
 }
 
-int32_t weakDead(int64_t slot) {
-    dream_ptr box = (dream_ptr)(uintptr_t)slot;
+int32_t weakDead(uintptr_t slot) {
+    dream_ptr box = (dream_ptr)slot;
     if (!box) {
         return 1;
     }
@@ -228,8 +228,8 @@ int32_t weakDead(int64_t slot) {
 /* Unregisters early (handle dropped before its target) and frees the slot-box: the box
  * outlives a target-death (it holds the dead marker) but dies with the handle. A dead box
  * holds 0, which clear_all already unregistered. */
-void weakReleaseRaw(int64_t slot) {
-    dream_ptr box = (dream_ptr)(uintptr_t)slot;
+void weakReleaseRaw(uintptr_t slot) {
+    dream_ptr box = (dream_ptr)slot;
     if (!box) {
         return;
     }
@@ -239,7 +239,7 @@ void weakReleaseRaw(int64_t slot) {
     data->value = 0;
     weak_unlock();
     if (node != NULL) {
-        dream_free((dream_ptr)(uintptr_t)node);
+        dream_free((dream_ptr)node);
     }
     dream_free(box);
 }

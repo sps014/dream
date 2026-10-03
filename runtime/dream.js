@@ -9,9 +9,8 @@
 // Works as an ES module in both the browser and Node.
 
 
-// ----- core.js -----
-// Runtime type tags and marshaling helpers (heap layout mirrors object.rs).
-
+// ----- abi.js -----
+// GENERATED from abi_registry.rs; run scripts/generate-abi.sh.
 const TAGS = {
   INT: 1,
   FLOAT: 2,
@@ -26,13 +25,17 @@ const TAGS = {
   BYTE: 11,
   ISIZE: 12,
   USIZE: 13,
-  STRUCT_BASE: 14,
-  // `dream_new_future` — distinct from 0 (untagged C/weak). Mask TAG_SHARED before compare.
   FUTURE: 256,
+  FUNCBOX: 257,
+  CLOSURE_ENV: 258,
+  STRUCT_BASE: 14,
+  SHARED: 1073741824,
+  VALUE_MASK: 1073741823,
+  FROM_DATA: 8,
 };
-
 const HEAP_HEADER_SIZE = 12;
 
+// ----- core.js -----
 function elementSize(typeName) {
   if (typeName === "bool" || typeName === "char" || typeName === "byte") return 1;
   if (typeName === "double" || typeName === "long" || typeName === "ulong") return 8;

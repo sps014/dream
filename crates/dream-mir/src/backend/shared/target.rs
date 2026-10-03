@@ -25,10 +25,6 @@ impl Target {
     pub fn abi(&self) -> TargetAbi {
         TargetAbi::for_target(self.spec())
     }
-
-    pub fn is_wasm32(&self) -> bool {
-        self.spec().capabilities.linear_memory
-    }
 }
 
 #[cfg(test)]

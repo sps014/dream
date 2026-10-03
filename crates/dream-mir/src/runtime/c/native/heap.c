@@ -199,14 +199,14 @@ static char *large_try_take(size_t need) {
         void *next = large_next(block);
         if (*dream_block_magic(block) == MAGIC_FREE && *dream_block_size(block) >= need) {
             if (prev == 0) {
-                large_freelist = (dream_ptr)(uintptr_t)next;
+                large_freelist = (dream_ptr)next;
             } else {
                 large_set_next((char *)dream_p(prev), next);
             }
             return block;
         }
         prev = curr;
-        curr = (dream_ptr)(uintptr_t)next;
+        curr = (dream_ptr)next;
     }
     return NULL;
 }
@@ -334,7 +334,7 @@ dream_ptr dream_malloc_shared(dream_size size, int32_t tag) {
             }
             {
                 void *next = class_next(block);
-                freelist[idx] = (dream_ptr)(uintptr_t)next;
+                freelist[idx] = (dream_ptr)next;
             }
             break;
         }
@@ -350,7 +350,7 @@ dream_ptr dream_malloc_shared(dream_size size, int32_t tag) {
 
 int dream_heap_is_live(dream_ptr ptr) {
     char *block;
-    if (ptr == 0 || (ptr & (sizeof(dream_ptr) - 1)) != 0) {
+    if (ptr == 0 || ((uintptr_t)ptr & (sizeof(dream_ptr) - 1)) != 0) {
         return 0;
     }
     block = (char *)dream_p(ptr) - (int)NATIVE_HEAP_HEADER_SIZE;

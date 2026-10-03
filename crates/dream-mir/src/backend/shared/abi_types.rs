@@ -9,6 +9,10 @@ use std::sync::OnceLock;
 
 const NATIVE_RT_HEADER: &str = include_str!("../../runtime/c/native/include/dream_rt_native.h");
 
+#[cfg(test)]
+#[path = "ref_local_tests.rs"]
+mod ref_local_tests;
+
 /// The ABI class of a Dream value (the runtime's `int32_t`/`int64_t`/`float`/`double`/
 /// `dream_ptr`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -35,10 +39,6 @@ impl AbiTy {
             AbiTy::Ptr => "ptr",
         }
     }
-
-    pub(crate) fn is_wide(self) -> bool {
-        matches!(self, AbiTy::I64 | AbiTy::Word | AbiTy::Ptr | AbiTy::F64)
-    }
 }
 
 pub(crate) fn abi_ty(interner: &TypeInterner, ty: TypeId) -> AbiTy {
@@ -49,7 +49,8 @@ pub(crate) fn abi_ty(interner: &TypeInterner, ty: TypeId) -> AbiTy {
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => AbiTy::I64,
         TyKind::Prim(PrimTy::ISize | PrimTy::USize) => AbiTy::Word,
         TyKind::Prim(PrimTy::Int | PrimTy::UInt | PrimTy::Bool | PrimTy::Char | PrimTy::Byte)
-        | TyKind::Enum(_) => AbiTy::I32,
+        | TyKind::Enum(_)
+        | TyKind::Js => AbiTy::I32,
         _ => AbiTy::Ptr,
     }
 }
@@ -76,7 +77,7 @@ pub(crate) fn mem_ty(cx: &Cx<'_>, ty: TypeId) -> MemTy {
         TyKind::Prim(PrimTy::ISize) => MemTy::Word,
         TyKind::Prim(PrimTy::USize) => MemTy::UWord,
         TyKind::Prim(PrimTy::Byte | PrimTy::Bool | PrimTy::Char) => MemTy::U8,
-        TyKind::Prim(PrimTy::Int | PrimTy::UInt) | TyKind::Enum(_) => MemTy::I32,
+        TyKind::Prim(PrimTy::Int | PrimTy::UInt) | TyKind::Enum(_) | TyKind::Js => MemTy::I32,
         _ if cx.interner.is_value_type(ty) => MemTy::I32,
         _ => MemTy::Ptr,
     }
@@ -161,14 +162,11 @@ pub(crate) fn c_ident(name: &str) -> String {
     s
 }
 
-/// `int`/`uint` locals that are assigned a pointer-sized value. Closure envs and task ids are
-/// stored in `int` locals; on native those bits do not fit in 32 bits.
-pub(crate) fn wide_int_locals(cx: &Cx<'_>, func: &crate::MirFunction) -> Vec<bool> {
-    let n = func.locals.len();
-    let mut wide = vec![false; n];
-    if cx.target.is_wasm32() {
-        return wide;
-    }
+/// Synthetic `int` locals carrying addresses rather than language integers.
+/// Result classification must not inherit a call's argument representation: lengths,
+/// selectors and worker IDs remain integers even when their inputs are references.
+pub(crate) fn ref_int_locals(cx: &Cx<'_>, func: &crate::MirFunction) -> Vec<bool> {
+    let mut wide: Vec<bool> = func.locals.iter().map(|local| local.is_ref).collect();
     let mut changed = true;
     while changed {
         changed = false;
@@ -199,7 +197,7 @@ fn is_narrow_int(cx: &Cx<'_>, ty: TypeId) -> bool {
 }
 
 fn ty_is_wide(cx: &Cx<'_>, ty: TypeId) -> bool {
-    abi_ty(cx.interner, ty).is_wide()
+    abi_ty(cx.interner, ty) == AbiTy::Ptr
 }
 
 fn operand_is_wide(
@@ -209,14 +207,13 @@ fn operand_is_wide(
     op: &crate::Operand,
 ) -> bool {
     match op {
-        crate::Operand::Const(crate::Const::Long(_) | crate::Const::Float(_)) => true,
         crate::Operand::Copy(crate::Place::Local(l)) => {
             let ty = func.local_ty(*l);
             ty_is_wide(cx, ty)
                 || (is_narrow_int(cx, ty) && wide.get(l.0 as usize).copied().unwrap_or(false))
         }
         crate::Operand::Copy(crate::Place::Global(g)) => {
-            cx.global_ty(*g).is_some_and(|ty| ty_is_wide(cx, ty))
+            g.0 == 0 || cx.global_ty(*g).is_some_and(|ty| ty_is_wide(cx, ty))
         }
         crate::Operand::Copy(crate::Place::Field { base, field }) => cx
             .nstruct(func.local_ty(*base))
@@ -238,17 +235,17 @@ fn rvalue_is_wide(
 ) -> bool {
     let op = |o: &crate::Operand| operand_is_wide(cx, func, wide, o);
     match rv {
-        crate::Rvalue::Use(o)
-        | crate::Rvalue::Unary(_, o)
-        | crate::Rvalue::CheckedNeg(o)
-        | crate::Rvalue::ArrayLen(o)
-        | crate::Rvalue::StrLen(o)
-        | crate::Rvalue::StrByteSize(o)
-        | crate::Rvalue::Discriminant { base: o, .. }
-        | crate::Rvalue::HashCode(o)
-        | crate::Rvalue::ToString(o)
-        | crate::Rvalue::TypeName(o)
-        | crate::Rvalue::IsType(o, _) => op(o),
+        crate::Rvalue::Use(o) => op(o),
+        crate::Rvalue::Move { src, cast } => {
+            cast.is_none_or(|(_, to)| is_narrow_int(cx, to) || ty_is_wide(cx, to))
+                && operand_is_wide(
+                    cx,
+                    func,
+                    wide,
+                    &crate::Operand::Copy(crate::Place::Local(*src)),
+                )
+        }
+        crate::Rvalue::ToString(_) | crate::Rvalue::TypeName(_) => true,
         crate::Rvalue::UnionField {
             ty, variant, field, ..
         } => cx
@@ -256,37 +253,31 @@ fn rvalue_is_wide(
             .and_then(|u| u.variants.get(*variant))
             .and_then(|v| v.fields.get(*field))
             .is_some_and(|f| ty_is_wide(cx, f.ty)),
-        crate::Rvalue::Binary(_, a, b)
-        | crate::Rvalue::CheckedBinary(_, a, b)
-        | crate::Rvalue::CharAt(a, b, _)
-        | crate::Rvalue::ByteAt(a, b, _) => op(a) || op(b),
+        crate::Rvalue::Binary(crate::BinOp::Add | crate::BinOp::Sub, a, b) => op(a) || op(b),
         // The address is a widened pointer. The loaded unit is an `int`.
         crate::Rvalue::LoadU8(_, _) | crate::Rvalue::LoadU16(_, _) => false,
         crate::Rvalue::StrBytes(_) => true,
         crate::Rvalue::Select {
-            cond,
-            then_val,
-            else_val,
-        } => op(cond) || op(then_val) || op(else_val),
-        crate::Rvalue::Cast(o, _, to) => ty_is_wide(cx, *to) || op(o),
-        crate::Rvalue::Call { callee, args } => {
+            then_val, else_val, ..
+        } => op(then_val) || op(else_val),
+        crate::Rvalue::Cast(o, _, to) => ty_is_wide(cx, *to) || (is_narrow_int(cx, *to) && op(o)),
+        crate::Rvalue::Call { callee, .. } => {
             // `funcbox_env` is typed as `int` but returns a host pointer.
             cx.intrinsic_key(callee.def)
                 .is_some_and(|key| key == "funcbox_env" || key == "funcbox_new")
                 || ty_is_wide(cx, callee.ret)
-                || args.iter().any(op)
         }
-        crate::Rvalue::IndirectCall { args, .. } => args.iter().any(op),
-        crate::Rvalue::InterfaceCall {
-            receiver,
-            ret,
-            args,
-            ..
-        } => ty_is_wide(cx, *ret) || op(receiver) || args.iter().any(op),
-        crate::Rvalue::New { ty, .. }
-        | crate::Rvalue::UnionNew { ty, .. }
-        | crate::Rvalue::ArrayNew { elem_ty: ty, .. }
-        | crate::Rvalue::ArrayLit { elem_ty: ty, .. } => ty_is_wide(cx, *ty),
+        crate::Rvalue::IndirectCall { sig, .. } => match cx.interner.kind(*sig) {
+            TyKind::Func(_, ret) => ty_is_wide(cx, *ret),
+            _ => false,
+        },
+        crate::Rvalue::InterfaceCall { ret, .. } => ty_is_wide(cx, *ret),
+        crate::Rvalue::New { .. }
+        | crate::Rvalue::UnionNew { .. }
+        | crate::Rvalue::ArrayNew { .. }
+        | crate::Rvalue::ArrayLit { .. }
+        | crate::Rvalue::ToBytes { .. }
+        | crate::Rvalue::FromBytes { .. } => true,
         _ => false,
     }
 }

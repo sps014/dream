@@ -70,7 +70,7 @@ fn c_abi_fn_names(src: &str) -> Vec<String> {
             // `<Host>Async` fns are the deferred variants of an existing `@runtime`
             // host (same wire format, plus a leading future arg), not standalone
             // entry points — they share their base name's prelude declaration.
-            if !name.is_empty() && name != "dream_host_bind" && !name.ends_with("Async") {
+            if !name.is_empty() && name != "dream_host_bind_v2" && !name.ends_with("Async") {
                 out.push(name.to_string());
             }
         }

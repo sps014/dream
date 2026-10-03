@@ -1,9 +1,8 @@
 //! Per-function lowering state and the value plumbing every writer shares: C-compatible
 //! conversions, address formation, loads/stores, runtime calls and small control-flow helpers.
 //!
-//! Dream references are `dream_ptr` (`i64`) values, exactly as the runtime ABI passes them;
-//! `inttoptr` happens only at a memory access, so the representation stays one switch away from
-//! real pointers.
+//! Native references retain LLVM pointer provenance; linear-memory references are offsets.
+//! Integer conversions are restricted to explicit raw-address and untyped payload boundaries.
 
 use super::ir::{BlockRef, CallArg, CallConv, FnTy, FunctionWriter, MdRef, Tail, Ty, Value};
 use super::lcx::{FnSig, Lcx};
@@ -63,13 +62,13 @@ pub(super) struct Fx<'l, 'a> {
     pub dbg: Option<(MdRef, u32)>,
 }
 
-pub(super) fn mem_ll(m: MemTy, h: &Ty) -> (Ty, bool) {
+pub(super) fn mem_ll(m: MemTy, h: &Ty, word: &Ty) -> (Ty, bool) {
     match m {
         MemTy::U8 => (Ty::I8, true),
         MemTy::I32 => (Ty::I32, false),
         MemTy::I64 => (Ty::I64, false),
-        MemTy::Word => (h.clone(), false),
-        MemTy::UWord => (h.clone(), true),
+        MemTy::Word => (word.clone(), false),
+        MemTy::UWord => (word.clone(), true),
         MemTy::F32 => (Ty::F32, false),
         MemTy::F64 => (Ty::F64, false),
         MemTy::Ptr => (h.clone(), true),
@@ -99,7 +98,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     pub fn new(l: &'l mut Lcx<'a>, f: &'a MirFunction, w: FunctionWriter) -> Self {
         let mir = l.mir;
         let interner = l.interner;
-        let wide = crate::backend::shared::abi_types::wide_int_locals(&l.cx, f);
+        let wide = crate::backend::shared::abi_types::ref_int_locals(&l.cx, f);
         Self {
             l,
             mir,
@@ -193,6 +192,10 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.l.h()
     }
 
+    pub fn word(&self) -> Ty {
+        self.l.word()
+    }
+
     /// The value as `dream_ptr` bits.
     pub fn as_ref(&mut self, x: &V) -> V {
         let h = self.h();
@@ -224,7 +227,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     pub fn load_mem(&mut self, m: MemTy, ptr: &Value, align: u32) -> V {
-        let (ty, unsigned) = mem_ll(m, &self.h());
+        let (ty, unsigned) = mem_ll(m, &self.h(), &self.word());
         let a = align.min(natural_align(&ty));
         V {
             v: self.w.load(ty, ptr, a, &[]),
@@ -233,7 +236,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     pub fn store_mem(&mut self, m: MemTy, ptr: &Value, x: &V, align: u32) {
-        let (ty, _) = mem_ll(m, &self.h());
+        let (ty, _) = mem_ll(m, &self.h(), &self.word());
         let a = align.min(natural_align(&ty));
         let v = self.conv(x, &ty);
         self.w.store(&v, ptr, a, &[]);

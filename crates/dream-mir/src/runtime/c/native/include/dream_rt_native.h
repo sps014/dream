@@ -12,21 +12,35 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <limits.h>
+#if __STDC_HOSTED__
 #include <string.h>
+#else
+/* Declaration-only cross emission needs no target libc SDK. Clang supplies these intrinsics. */
+#define memcpy __builtin_memcpy
+#define memset __builtin_memset
+#define memmove __builtin_memmove
+#define memcmp __builtin_memcmp
+#define strlen __builtin_strlen
+#endif
 
 #ifdef DREAM_WASM32
 typedef int32_t dream_ptr;
 typedef int32_t dream_size;
+typedef int32_t dream_result;
 #define DREAM_SIZE_MAX INT32_MAX
 #else
-typedef uintptr_t dream_ptr;
+typedef unsigned char *dream_ptr;
 typedef size_t dream_size;
+/* Completion slots transport both scalar bits and reference addresses, unlike ordinary refs. */
+typedef uint64_t dream_result;
 /* Pointer differences must remain representable even though sizes are unsigned. */
 #define DREAM_SIZE_MAX PTRDIFF_MAX
 #endif
 
 /* 0 until `workerSpawn`; leftover for non-RC MT paths. RC uses `TAG_SHARED`. */
 extern int dream_rt_mt;
+void dream_llvm_leak_report(int32_t always);
+void abort(void) __attribute__((noreturn));
 
 /* `llvm_inline.c` redefines this to give every helper one external definition, so LLVM-emitted
  * programs link against the same bodies C programs inline. */
@@ -373,7 +387,7 @@ DREAM_ALWAYS_INLINE dream_ptr dream_frame_object(void *block, dream_size size, i
 #endif
     *(int32_t *)(b + DREAM_BLOCK_HEADER - TAG_FROM_DATA) = tag;
     *(int32_t *)(b + DREAM_BLOCK_HEADER - RC_FROM_DATA) = DREAM_RC_IMMORTAL;
-    return (dream_ptr)(uintptr_t)(b + DREAM_BLOCK_HEADER);
+    return (dream_ptr)(b + DREAM_BLOCK_HEADER);
 }
 
 /* Nonzero while a `defer` scope is open on this thread and no drain is running: the only
@@ -460,7 +474,7 @@ void dream_panic(dream_ptr msg);
         uint16_t text[sizeof(text_literal) / sizeof(uint16_t)]; \
     } message = {sizeof(text_literal) / sizeof(uint16_t) - 1, \
                  DREAM_STR_PAD_INLINE, text_literal}; \
-    dream_panic((dream_ptr)(uintptr_t)&message); \
+    dream_panic((dream_ptr)&message); \
     __builtin_unreachable(); \
 } while (0)
 /* The language API still returns int, even when its allocation uses machine-width bytes. */
@@ -1258,11 +1272,11 @@ void dream_panic(dream_ptr msg);
 char *dream_string_to_utf8(dream_ptr s);
 uint16_t *dream_string_to_utf16z(dream_ptr s);
 dream_ptr dream_utf8_to_string(const char *s);
-int64_t dream_ffi_read_ptr(int64_t base, int32_t index);
-int32_t dream_ffi_read_i32(int64_t base, int32_t index);
-int64_t dream_ffi_read_i64(int64_t base, int32_t index);
-double dream_ffi_read_f64(int64_t base, int32_t index);
-dream_ptr dream_ffi_read_cstring(int64_t ptr);
+uintptr_t dream_ffi_read_ptr(uintptr_t base, int32_t index);
+int32_t dream_ffi_read_i32(uintptr_t base, int32_t index);
+int64_t dream_ffi_read_i64(uintptr_t base, int32_t index);
+double dream_ffi_read_f64(uintptr_t base, int32_t index);
+dream_ptr dream_ffi_read_cstring(uintptr_t ptr);
 void dream_thread_attach(void);
 void dream_callback_enter(void);
 void dream_callback_register(dream_ptr obj);
@@ -1318,10 +1332,10 @@ void dream_lock_release(dream_ptr lock_addr);
 #ifndef DREAM_WASM32
 void dream_lock_forget(dream_ptr target);
 #endif
-void dream_async_complete(dream_ptr future, dream_ptr value);
+void dream_async_complete(dream_ptr future, dream_result value);
 void dream_resolve(dream_ptr future, dream_ptr value);
 void dream_cancel(dream_ptr future);
-int32_t dream_async_await(dream_ptr future, dream_ptr *dest, int32_t resume_pc);
+int32_t dream_async_await(dream_ptr future, dream_result *dest, int32_t resume_pc);
 void dream_async_set_waker(dream_ptr future, dream_ptr self);
 void dream_await(dream_ptr parent, dream_ptr child);
 dream_ptr dream_new_future(dream_size size, int32_t poll, int32_t kind);
@@ -1345,24 +1359,24 @@ void dream_semaphore_acquire(dream_ptr semaphore);
 void dream_semaphore_release(dream_ptr semaphore);
 int32_t dream_semaphore_try_acquire(dream_ptr semaphore);
 int32_t dream_semaphore_try_acquire_for(dream_ptr semaphore, int32_t timeout_ms);
-dream_ptr dream_js_call(dream_ptr target, dream_ptr via, dream_ptr method, int32_t argc);
+int32_t dream_js_call(int32_t target, int32_t via, dream_ptr method, int32_t argc);
 void dream_weak_clear_all(dream_ptr obj);
-int64_t weakBind(dream_ptr value);
-dream_ptr weakLoad(int64_t slot);
-int32_t weakDead(int64_t slot);
-void weakReleaseRaw(int64_t slot);
+uintptr_t weakBind(dream_ptr value);
+dream_ptr weakLoad(uintptr_t slot);
+int32_t weakDead(uintptr_t slot);
+void weakReleaseRaw(uintptr_t slot);
 void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, dream_ptr extra);
 void dream_weak_unregister(dream_ptr target, dream_ptr slot);
 
 
-int64_t regex_compile(dream_ptr pattern, int32_t flags);
-void regex_free(int64_t h);
-int32_t regex_group_count(int64_t h);
-int32_t regex_name_count(int64_t h);
-dream_ptr regex_name_at(int64_t h, int32_t i);
-int32_t regex_name_number(int64_t h, int32_t i);
-dream_ptr regex_find(int64_t h, dream_ptr input, int32_t pos);
-int32_t regex_test(int64_t h, dream_ptr input);
+uintptr_t regex_compile(dream_ptr pattern, int32_t flags);
+void regex_free(uintptr_t h);
+int32_t regex_group_count(uintptr_t h);
+int32_t regex_name_count(uintptr_t h);
+dream_ptr regex_name_at(uintptr_t h, int32_t i);
+int32_t regex_name_number(uintptr_t h, int32_t i);
+dream_ptr regex_find(uintptr_t h, dream_ptr input, int32_t pos);
+int32_t regex_test(uintptr_t h, dream_ptr input);
 
 int32_t debug_get_live_objects(void);
 int32_t debug_get_total_allocations(void);
@@ -1444,21 +1458,21 @@ dream_ptr consoleReadLine(void);
 int32_t consoleReadKey(void);
 void consoleWriteStderr(dream_ptr text);
 
-void dream_host_bind(dream_ptr (*string_alloc)(int32_t), dream_ptr (*array_new)(int32_t, int32_t),
-                     void (*complete_foreign)(dream_ptr, dream_ptr));
+void dream_host_bind_v2(dream_ptr (*string_alloc)(int32_t), dream_ptr (*array_new)(int32_t, int32_t),
+                     void (*complete_foreign)(dream_ptr, dream_result));
 /* Complete an @async_host future from a foreign thread and wake the parked loop. */
-void dream_complete_foreign(dream_ptr f, dream_ptr res);
+void dream_complete_foreign(dream_ptr f, dream_result res);
 /* Called by a delegate-shape poll thunk after handing work to a deferred host: keeps
  * dream_run_loop parked while the work is in flight. */
 void dream_foreign_work_begin(void);
 /* Undo `dream_foreign_work_begin` when the host completed inline (returned 0). */
 void dream_foreign_work_end(void);
 dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg);
-int32_t workerSpawn(int32_t fn, int64_t env);
+int32_t workerSpawn(int32_t fn, dream_ptr env);
 int32_t workerPoolSpawn(void);
 void workerPost(int32_t id, dream_ptr msg);
 dream_ptr workerRecv(int32_t id);
-dream_ptr workerPoolDispatch(int32_t id, int32_t fn, int64_t env, dream_ptr msg);
+dream_ptr workerPoolDispatch(int32_t id, int32_t fn, dream_ptr env, dream_ptr msg);
 void workerTerminate(int32_t id);
 
 #endif /* !DREAM_WASM32 */

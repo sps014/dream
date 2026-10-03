@@ -101,15 +101,19 @@ struct Cli {
     #[arg(long, value_name = "PNG", global = true, hide = true)]
     icon: Option<PathBuf>,
 
+    /// LLVM target triple; emit checked .ll and .o without linking
+    #[arg(long, value_name = "TRIPLE", global = true, conflicts_with_all = ["wasm", "web", "node", "emit_llvm", "relocatable", "profile", "use_profile", "icon"])]
+    target: Option<String>,
+
     /// Runtime availability target for semantic checks (default: native)
     #[arg(
-        long,
+        long = "runtime-target",
         value_name = "TARGET",
         value_enum,
         ignore_case = true,
         global = true
     )]
-    target: Option<TargetArg>,
+    runtime_target: Option<TargetArg>,
 
     /// Minimum macOS version encoded in the LLVM target triple
     #[arg(long, value_name = "VERSION", global = true)]
@@ -336,7 +340,7 @@ fn main() -> ExitCode {
         CrateTypeArg::Bin => CrateType::Bin,
     };
 
-    let compile_targets = match cli.target {
+    let compile_targets = match cli.runtime_target {
         Some(TargetArg::Native) => CompileTargets::native_only(),
         Some(TargetArg::Node) => CompileTargets {
             native: false,
@@ -438,13 +442,20 @@ fn main() -> ExitCode {
     let reporter = Arc::new(ConsoleReporter::new());
     // `with_release` installs RELEASE_DEFAULT wasm-opt; an explicit `-O` overrides.
     let cc_opt = OptLevel::from_cli(cli.release, optimize);
-    let target = match dream::driver::target::resolve(!native, cli.min_os) {
-        Ok(target) => target,
-        Err(error) => {
-            ui.error(&error);
-            return ExitCode::FAILURE;
-        }
-    };
+    if cli.target.is_some() && (run_after_compile || run_tests || debug_adapter) {
+        ui.error(
+            "--target emits objects only; run, test and debug-adapter require the host target",
+        );
+        return ExitCode::FAILURE;
+    }
+    let target =
+        match dream::driver::target::resolve_triple(!native, cli.target.as_deref(), cli.min_os) {
+            Ok(target) => target,
+            Err(error) => {
+                ui.error(&error);
+                return ExitCode::FAILURE;
+            }
+        };
     let mut compiler = Compiler::new_with_toolchain_config(target.clone(), config.clone())
         .with_release(cli.release)
         .with_debug_info(debug_info)
@@ -490,6 +501,18 @@ fn main() -> ExitCode {
         let _ = std::fs::remove_file(raw_ll);
     };
     let unoptimized = !cli.release && optimize.is_none() && !debug_adapter;
+
+    if cli.target.is_some() {
+        match dream::execution::llvm::cross::emit_object(&config, target.spec(), raw_ll, cc_opt) {
+            Ok(object) => artifacts.push(object),
+            Err(error) => {
+                ui.error(&error);
+                return ExitCode::FAILURE;
+            }
+        }
+        ui.finish(start.elapsed().as_secs_f64(), "", &artifacts);
+        return ExitCode::SUCCESS;
+    }
 
     if cli.emit_llvm {
         match emit_llvm_artifacts(

@@ -24,7 +24,7 @@ module system.core;
 
 public class Weak<T : class> {
     /// Registered slot-box pointer (raw; owned by the weak registry).
-    slot: long;
+    slot: usize;
 
     public constructor(target_obj: T) {
         this.slot = Weak.bind(target_obj);
@@ -52,14 +52,14 @@ public class Weak<T : class> {
     }
 
     @runtime("weakBind")
-    static extern fun bind(borrow target_obj: T): long;
+    static extern fun bind(borrow target_obj: T): usize;
 
     @runtime("weakDead")
-    static extern fun dead(slot: long): bool;
+    static extern fun dead(slot: usize): bool;
 
     @runtime("weakLoad")
-    static extern fun load(slot: long): Option<T>;
+    static extern fun load(slot: usize): Option<T>;
 
     @runtime("weakReleaseRaw")
-    static extern fun release_raw(slot: long): void;
+    static extern fun release_raw(slot: usize): void;
 }

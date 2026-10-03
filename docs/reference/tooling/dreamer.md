@@ -353,6 +353,13 @@ dreamer publish -p greeter           # one package at a time
 - `package.targets` / `dreamer run --target native|web|node` — which host runs the app
 - `dreamer pack --target macos-arm64` — which OS/arch executable to build
 
+The compiler CLI uses separate flags: `dream --runtime-target native|web|node` selects
+runtime availability for semantic checks, whereas `dream --target <LLVM-triple>` emits
+LLVM IR and an object file without linking. For example,
+`dream --target aarch64-unknown-linux-gnu -o hello.ll hello.dream` writes `hello.ll`,
+`hello.o` and ABI metadata. Cross-emitted objects are not executed; executable linking
+remains host-only. The `dreamer run` and `dreamer pack` flags above retain their meanings.
+
 ### LSP
 
 No extra setup. The language server already uses the nearest member `dream.toml` (lib vs bin

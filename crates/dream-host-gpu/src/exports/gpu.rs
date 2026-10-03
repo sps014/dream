@@ -1,9 +1,9 @@
 //! GPU guest C ABI.
 
-use dream_host_abi::*;
 use crate::gpu::{
     attach_abi_from_wat_path, buffers, caps, compute, device, error, render, surface, textures,
 };
+use dream_host_abi::*;
 use std::sync::Once;
 
 fn ensure_abi() {
@@ -21,7 +21,7 @@ pub extern "C" fn gpuIsAvailable() -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn gpuCapabilities() -> usize {
+pub extern "C" fn gpuCapabilities() -> DreamPtr {
     alloc_bytes(&caps::encode())
 }
 
@@ -31,7 +31,7 @@ pub extern "C" fn gpuReady() -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn gpuLastError() -> usize {
+pub extern "C" fn gpuLastError() -> DreamPtr {
     alloc_string(&error::take_last_error())
 }
 
@@ -71,28 +71,28 @@ pub extern "C" fn gpuBufferAllocVertexBytes(n: i32) -> i32 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gpuBufferWriteBytes(id: i32, data: usize) {
+pub unsafe extern "C" fn gpuBufferWriteBytes(id: i32, data: DreamPtr) {
     let _ = buffers::write_bytes(id, read_bytes(data));
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gpuBufferWriteBytesAt(id: i32, off: i32, data: usize) {
+pub unsafe extern "C" fn gpuBufferWriteBytesAt(id: i32, off: i32, data: DreamPtr) {
     let _ = buffers::write_bytes_at(id, off, read_bytes(data));
 }
 
 #[no_mangle]
-pub extern "C" fn gpuBufferReadBytes(id: i32, n: i32) -> usize {
+pub extern "C" fn gpuBufferReadBytes(id: i32, n: i32) -> DreamPtr {
     match buffers::read_bytes(id, n) {
         Ok(b) => alloc_bytes(&b),
-        Err(_) => 0,
+        Err(_) => std::ptr::null_mut(),
     }
 }
 
 #[no_mangle]
-pub extern "C" fn gpuBufferReadBytesAt(id: i32, off: i32, n: i32) -> usize {
+pub extern "C" fn gpuBufferReadBytesAt(id: i32, off: i32, n: i32) -> DreamPtr {
     match buffers::read_bytes_at(id, off, n) {
         Ok(b) => alloc_bytes(&b),
-        Err(_) => 0,
+        Err(_) => std::ptr::null_mut(),
     }
 }
 
@@ -108,14 +108,14 @@ pub extern "C" fn gpuBufferDestroy(id: i32) {
 
 #[no_mangle]
 pub unsafe extern "C" fn gpuDispatch(
-    kernel: usize,
-    bufs: usize,
-    tex: usize,
-    samp: usize,
+    kernel: DreamPtr,
+    bufs: DreamPtr,
+    tex: DreamPtr,
+    samp: DreamPtr,
     ex: i32,
     ey: i32,
     ez: i32,
-    uniforms: usize,
+    uniforms: DreamPtr,
 ) -> i32 {
     compute::dispatch(
         &read_string(kernel),
@@ -131,10 +131,10 @@ pub unsafe extern "C" fn gpuDispatch(
 
 #[no_mangle]
 pub unsafe extern "C" fn gpuDispatchIndirect(
-    kernel: usize,
-    bufs: usize,
-    tex: usize,
-    samp: usize,
+    kernel: DreamPtr,
+    bufs: DreamPtr,
+    tex: DreamPtr,
+    samp: DreamPtr,
     indirect: i32,
     off: i32,
 ) -> i32 {
@@ -149,7 +149,7 @@ pub unsafe extern "C" fn gpuDispatchIndirect(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gpuSurfaceCreate(title: usize, w: i32, h: i32) -> i32 {
+pub unsafe extern "C" fn gpuSurfaceCreate(title: DreamPtr, w: i32, h: i32) -> i32 {
     surface::create(&read_string(title), w, h)
 }
 
@@ -205,14 +205,14 @@ pub extern "C" fn gpuSurfaceDestroy(id: i32) {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gpuRenderPipelineCreate(vs: usize, fs: usize) -> i32 {
+pub unsafe extern "C" fn gpuRenderPipelineCreate(vs: DreamPtr, fs: DreamPtr) -> i32 {
     render::pipeline_create_ex(&read_string(vs), &read_string(fs), 0, 0, 0, 0, 0, 0, 0, 1)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn gpuRenderPipelineCreateEx(
-    vs: usize,
-    fs: usize,
+    vs: DreamPtr,
+    fs: DreamPtr,
     topology: i32,
     cull: i32,
     ff: i32,
@@ -308,14 +308,14 @@ pub extern "C" fn gpuPassBegin(query_set: i32, ts_begin: i32, ts_end: i32) -> i3
 #[no_mangle]
 pub unsafe extern "C" fn gpuPassDispatch(
     pass: i32,
-    kernel: usize,
-    bufs: usize,
-    tex: usize,
-    samp: usize,
+    kernel: DreamPtr,
+    bufs: DreamPtr,
+    tex: DreamPtr,
+    samp: DreamPtr,
     ex: i32,
     ey: i32,
     ez: i32,
-    uniforms: usize,
+    uniforms: DreamPtr,
 ) {
     compute::pass_dispatch(
         pass,
@@ -346,7 +346,7 @@ pub extern "C" fn gpuQuerySetDestroy(id: i32) {
 }
 
 #[no_mangle]
-pub extern "C" fn gpuQuerySetRead(id: i32) -> usize {
+pub extern "C" fn gpuQuerySetRead(id: i32) -> DreamPtr {
     alloc_i64s(&crate::gpu::queries::read(id))
 }
 
@@ -356,17 +356,17 @@ pub extern "C" fn gpuTimestampPeriod() -> f32 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gpuSurfaceFromCanvas(id: usize) -> i32 {
+pub unsafe extern "C" fn gpuSurfaceFromCanvas(id: DreamPtr) -> i32 {
     surface::from_canvas(&read_string(id))
 }
 
 #[no_mangle]
-pub extern "C" fn gpuSurfacePointer(id: i32) -> usize {
+pub extern "C" fn gpuSurfacePointer(id: i32) -> DreamPtr {
     alloc_bytes(&surface::pointer_bytes(id))
 }
 
 #[no_mangle]
-pub extern "C" fn gpuSurfacePointers(id: i32) -> usize {
+pub extern "C" fn gpuSurfacePointers(id: i32) -> DreamPtr {
     alloc_bytes(&surface::pointers_bytes(id))
 }
 
@@ -411,17 +411,17 @@ pub extern "C" fn gpuSurfaceFullscreen(id: i32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn gpuSurfaceMods(id: i32) -> usize {
+pub extern "C" fn gpuSurfaceMods(id: i32) -> DreamPtr {
     alloc_bytes(&surface::mods_bytes(id))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gpuSurfaceKeyDown(id: i32, code: usize) -> i32 {
+pub unsafe extern "C" fn gpuSurfaceKeyDown(id: i32, code: DreamPtr) -> i32 {
     i32::from(surface::key_down(id, &read_string(code)))
 }
 
 #[no_mangle]
-pub extern "C" fn gpuSurfaceGamepads(id: i32) -> usize {
+pub extern "C" fn gpuSurfaceGamepads(id: i32) -> DreamPtr {
     alloc_i32s(&surface::gamepads(id))
 }
 
@@ -441,7 +441,7 @@ pub extern "C" fn gpuSurfaceGamepadAxis(id: i32, pad: i32, axis: i32) -> f32 {
 }
 
 #[no_mangle]
-pub extern "C" fn gpuSurfacePollEvents(id: i32) -> usize {
+pub extern "C" fn gpuSurfacePollEvents(id: i32) -> DreamPtr {
     alloc_bytes(&surface::poll_events_bytes(id))
 }
 
@@ -451,14 +451,14 @@ pub extern "C" fn gpuRenderBlit(sid: i32, tid: i32) -> i32 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gpuShaderFromWgsl(source: usize, entry: usize) -> i32 {
+pub unsafe extern "C" fn gpuShaderFromWgsl(source: DreamPtr, entry: DreamPtr) -> i32 {
     compute::shader_from_wgsl(read_string(source), read_string(entry))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn gpuDispatchShader(
     shader_id: i32,
-    bufs: usize,
+    bufs: DreamPtr,
     wx: i32,
     wy: i32,
     wz: i32,
@@ -467,14 +467,14 @@ pub unsafe extern "C" fn gpuDispatchShader(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gpuTextureFromImageBytes(pixels: usize) -> usize {
+pub unsafe extern "C" fn gpuTextureFromImageBytes(pixels: DreamPtr) -> DreamPtr {
     alloc_i32s(&textures::from_image_bytes(read_bytes(pixels)))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn gpuTextureWriteRgba(
     id: i32,
-    pixels: usize,
+    pixels: DreamPtr,
     x: i32,
     y: i32,
     w: i32,
@@ -484,7 +484,7 @@ pub unsafe extern "C" fn gpuTextureWriteRgba(
 }
 
 #[no_mangle]
-pub extern "C" fn gpuTextureReadRgba(id: i32) -> usize {
+pub extern "C" fn gpuTextureReadRgba(id: i32) -> DreamPtr {
     alloc_bytes(&textures::texture_read_rgba(id))
 }
 
@@ -541,10 +541,10 @@ pub extern "C" fn gpuTextureGenerateMipmaps(id: i32) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn gpuPassDispatchIndirect(
     pass: i32,
-    kernel: usize,
-    bufs: usize,
-    tex: usize,
-    samp: usize,
+    kernel: DreamPtr,
+    bufs: DreamPtr,
+    tex: DreamPtr,
+    samp: DreamPtr,
     indirect: i32,
     off: i32,
 ) {
@@ -565,7 +565,7 @@ pub extern "C" fn gpuPassWriteTimestamp(pass: i32, query_set: i32, index: i32) {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gpuEncoderSubmit(stream: usize) -> i32 {
+pub unsafe extern "C" fn gpuEncoderSubmit(stream: DreamPtr) -> i32 {
     crate::gpu::encoder::submit(&read_bytes(stream))
 }
 
@@ -573,9 +573,9 @@ pub unsafe extern "C" fn gpuEncoderSubmit(stream: usize) -> i32 {
 pub unsafe extern "C" fn gpuBindGroupCreate(
     pid: i32,
     group: i32,
-    bufs: usize,
-    tex: usize,
-    samp: usize,
+    bufs: DreamPtr,
+    tex: DreamPtr,
+    samp: DreamPtr,
 ) -> i32 {
     render::bind_group_create(
         pid,

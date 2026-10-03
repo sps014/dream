@@ -38,6 +38,17 @@ pub(crate) fn link_runtime(
     bundled: Option<&Path>,
     capabilities: &[HostCapability],
 ) {
+    // A stale capability library must fail at link time, before any mixed-ABI callback runs.
+    for capability in capabilities {
+        let symbol = format!("dream_host_{}_abi_v2", capability.name());
+        if cfg!(windows) {
+            command.arg(format!("-Wl,/include:{symbol}"));
+        } else if cfg!(target_os = "macos") {
+            command.arg(format!("-Wl,-u,_{symbol}"));
+        } else {
+            command.arg(format!("-Wl,--require-defined={symbol}"));
+        }
+    }
     if cfg!(windows) {
         for capability in capabilities {
             command.arg(source_dir.join(capability.import_library_name()));
@@ -71,6 +82,37 @@ pub(crate) fn link_runtime(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_selected_capability_requires_its_current_abi_marker() {
+        let mut command = Command::new("cc");
+        link_runtime(
+            &mut command,
+            Path::new("/toolchain"),
+            None,
+            &[HostCapability::Core, HostCapability::Net],
+        );
+        let args: Vec<_> = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy())
+            .collect();
+        for name in ["core", "net"] {
+            let symbol = format!("dream_host_{name}_abi_v2");
+            let required = if cfg!(windows) {
+                format!("-Wl,/include:{symbol}")
+            } else if cfg!(target_os = "macos") {
+                format!("-Wl,-u,_{symbol}")
+            } else {
+                format!("-Wl,--require-defined={symbol}")
+            };
+            assert!(args.iter().any(|arg| *arg == required));
+        }
+        assert!(!args.iter().any(|arg| arg.contains("dream_host_gpu_abi")));
+        assert!(!args
+            .iter()
+            .any(|arg| arg.contains("dream_host_webview_abi")));
+        assert!(!args.iter().any(|arg| arg.contains("abi_v1")));
+    }
 
     #[test]
     fn core_only_staging_does_not_require_or_copy_other_libraries() {

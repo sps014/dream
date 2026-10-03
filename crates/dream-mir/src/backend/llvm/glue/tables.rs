@@ -46,13 +46,13 @@ pub(in super::super) fn emit_strings(l: &mut Lcx<'_>) {
         let units: Vec<u16> = s.encode_utf16().collect();
         let n = units.len().max(1) as u64;
         let arr = Ty::Array(n, Box::new(Ty::I16));
-        let pad = if l.cx.target.is_wasm32() {
+        let pad = if l.cx.target.spec().capabilities.linear_memory {
             ""
         } else {
             "i64 0, i32 0, i32 0, "
         };
-        let size_ty = l.h();
-        let mut fields = if l.cx.target.is_wasm32() {
+        let size_ty = l.word();
+        let mut fields = if l.cx.target.spec().capabilities.linear_memory {
             vec![Ty::I32; 5]
         } else {
             vec![
@@ -94,7 +94,7 @@ pub(in super::super) fn emit_strings(l: &mut Lcx<'_>) {
 pub(in super::super) fn emit_globals(l: &mut Lcx<'_>) {
     let globals: Vec<_> = l.mir.globals.iter().map(|g| (g.id, g.ty)).collect();
     for (id, ty) in globals {
-        if id.0 == 0 && l.cx.target.is_wasm32() {
+        if id.0 == 0 && l.cx.target.spec().capabilities.linear_memory {
             continue;
         }
         if id.0 == 0 {
@@ -105,9 +105,9 @@ pub(in super::super) fn emit_globals(l: &mut Lcx<'_>) {
                     thread_local: true,
                     constant: false,
                     unnamed_addr: false,
-                    ty: Ty::I64,
-                    init: Some("0".into()),
-                    align: 8,
+                    ty: l.h(),
+                    init: Some("null".into()),
+                    align: l.cx.target.spec().ptr_align,
                 },
             );
             continue;
@@ -117,11 +117,15 @@ pub(in super::super) fn emit_globals(l: &mut Lcx<'_>) {
             let vg = format!("__vg{}", id.0);
             data_global(l, &vg, Ty::bytes(size), "zeroinitializer".into(), false, 8);
             let h = l.h();
-            let init = format!("ptrtoint (ptr {} to {h})", fmt::global(&vg));
+            let init = if h == Ty::Ptr {
+                fmt::global(&vg)
+            } else {
+                format!("ptrtoint (ptr {} to {h})", fmt::global(&vg))
+            };
             data_global(l, &format!("g{}", id.0), h, init, false, 8);
             continue;
         }
-        let t = ll_ty(l.interner, ty, &l.h());
+        let t = ll_ty(l.interner, ty, &l.h(), &l.word());
         data_global(
             l,
             &format!("g{}", id.0),
@@ -149,7 +153,7 @@ fn ptr_array(entries: &[Option<String>]) -> (Ty, String) {
 pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
     register(l, "dream_ft_get", Ty::Ptr, vec![Ty::I32]);
     register(l, "dream_fd_get", Ty::Ptr, vec![Ty::I32]);
-    if !l.cx.target.is_wasm32() {
+    if !l.cx.target.spec().capabilities.linear_memory {
         register(l, "dream_tag_name", Ty::Ptr, vec![Ty::I32]);
     }
     register(l, "dream_drop_globals", Ty::Void, vec![]);
@@ -179,7 +183,7 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
 
 pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
     emit_ftables(l);
-    if !l.cx.target.is_wasm32() {
+    if !l.cx.target.spec().capabilities.linear_memory {
         emit_tag_names(l);
     }
     emit_itables(l);
@@ -316,8 +320,11 @@ fn dispatch_sigs(l: &Lcx<'_>) -> BTreeMap<String, (Ty, Vec<Ty>)> {
             out.entry(td).or_insert_with(|| {
                 let h = l.h();
                 (
-                    abi_ll(ret, &h),
-                    params.into_iter().map(|p| abi_ll(p, &h)).collect(),
+                    abi_ll(ret, &h, &l.word()),
+                    params
+                        .into_iter()
+                        .map(|p| abi_ll(p, &h, &l.word()))
+                        .collect(),
                 )
             });
         }
@@ -440,7 +447,7 @@ fn emit_runtime_init(l: &mut Lcx<'_>) {
     let done = fx.w.icmp("ne", &done, &Value::i32(0));
     fx.if_then(&done, |fx| fx.w.ret(None));
     fx.w.store(&Value::i32(1), &flag, 4, &[]);
-    if fx.l.cx.target.is_wasm32() {
+    if fx.l.cx.target.spec().capabilities.linear_memory {
         fx.call("dream_heap_init", &[]);
     } else {
         fx.call("dream_thread_attach", &[]);
@@ -452,7 +459,7 @@ fn emit_runtime_init(l: &mut Lcx<'_>) {
         .iter()
         .map(|n| V::s(fx.l.fn_ref(n)))
         .collect();
-        fx.call("dream_host_bind", &fns);
+        fx.call("dream_host_bind_v2", &fns);
     }
     if let Some(init) = init {
         fx.call(&init, &[]);
@@ -472,13 +479,13 @@ fn emit_worker_invoke(l: &mut Lcx<'_>) {
         .map(|f| l.cx.func_index(f))
         .collect();
 
-    let wasm = l.cx.target.is_wasm32();
+    let host_scheduled = l.cx.target.spec().capabilities.js_interop;
     let mut fx = glue(l, "dream_worker_invoke_raw");
     let (f, env, arg) = (fx.arg(0), fx.arg(1), fx.arg(2));
-    if wasm {
+    if host_scheduled {
         fx.call("dream_runtime_init", &[]);
     }
-    let none = fx.w.icmp("sle", &f.v, &Value::i32(0));
+    let none = fx.w.icmp("eq", &f.v, &Value::zero(f.ty().clone()));
     let h = fx.h();
     fx.if_then(&none, |fx| fx.w.ret(Some(&Value::zero(h.clone()))));
     if has_env {
@@ -491,7 +498,7 @@ fn emit_worker_invoke(l: &mut Lcx<'_>) {
         .call_ptr(&fp, &sig, vec![arg.v.clone()])
         .unwrap_or_else(|| crate::internal_error!("worker body returned void"));
     fx.call("dream_release", &[arg]);
-    if wasm {
+    if host_scheduled {
         // Worker bodies cross the string wire; a returned lazy Future is launched here so the JS
         // host's status polling observes progress.
         let r = V::u(r.clone());

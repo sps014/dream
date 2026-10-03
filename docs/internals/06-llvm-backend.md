@@ -157,12 +157,40 @@ whole program after `opt`, runtime included) and deletes the unoptimized `.ll` o
 `dream --emit-llvm file.dream` stops there and adds `<stem>.s`. Native `--crate-type lib` builds
 keep the unoptimized `.ll`, which is their product.
 
-### Values and handles
+### Reference values and integer boundaries
 
-A reference is a `dream_ptr` handle: `i64` on native, `i32` on wasm32, converted with `inttoptr` at
-each access. Pointer attributes such as `nonnull` or `dereferenceable` therefore do not apply.
-Field and index access compute `base + offset` from the layouts in `Mir.layouts`
-(the HIR `LayoutTable` is built once with the selected target's pointer size and alignment).
+Native `dream_ptr` values use LLVM opaque `ptr` and a C pointer typedef. Reference locals,
+arguments, returns, nullable values, stored reference fields, closure environments and future
+frames preserve that representation. Wasm32 instead retains `i32` linear-memory offsets at
+its guest/runtime/JS boundary; this difference comes from the selected target's linear-memory
+capability, not the host process architecture. `isize`/`usize` use a separate target-width
+integer representation and are never a substitute for reference types.
+
+Field, header, element and interior addresses use plain `getelementptr` with layout-derived
+byte offsets and target-width indices. Loads/stores retain their actual element types and
+proven alignment, including reference fields inside inline value aggregates. `LayoutTable`
+supplies sizes/offsets/alignment once, for the selected target. Null references are pointer
+null, compared as pointers on native. An integer function-table selector or worker ID does
+not become a pointer merely because the operation also receives an environment reference.
+Synthetic closure/string-cursor integer locals are classified by their address-producing
+operations and aliases; scalar call results, lengths and comparisons do not inherit that
+classification from their arguments. JS registry handles remain integer IDs.
+
+Integer conversions are explicit at genuine boundaries: `CPtr.raw` is a `usize` raw address
+whose C marshaller converts it to/from a foreign pointer; address hashes and allocator range
+registries use `uintptr_t`; scheduler result words and weak discriminant transport carry
+tagged scalar payload bits. Such transport does not grant ownership, extend a lifetime or
+authorize dereferencing an arbitrary integer. Normal managed field/index access does not
+round-trip its reference through an integer. The runtime ABI and host callback signatures
+must migrate together, and rebuilt `RuntimeSigs` rejects stale signatures rather than
+silently adapting the old ABI.
+
+Pointers are not an exclusivity proof. No blanket `noalias`, TBAA, alias scopes,
+`invariant.load`, `nonnull`, `dereferenceable` or `inbounds` follows from ARC, refcount one,
+parameter mode or the pointer representation. Optional facts require an identified semantic
+proof producer, lifetime scope, negative regression and measurement. Whole-program runtime
+linking already lets LLVM infer valid facts. See
+[the migration inventory and measurements](12-native-pointer-migration.md).
 
 Dream integer arithmetic wraps at its type's width, so the writers emit plain `add`/`mul`,
 never `nsw`/`nuw`. Unsigned types compare, divide and shift unsigned. Shift counts are masked,
@@ -228,7 +256,7 @@ proof was written:
 | `invariant.load` / `!range` | `invariant.load` on string lengths is unsound (`_into` rewrites the length word in place). `!range` gained nothing. Shipped instead: string literal blocks are `constant` |
 | Memory effects / allocation attributes | Redundant with the whole-program runtime |
 | `nsw` from a MIR no-wrap proof | Gained nothing on any kernel |
-| `nonnull` | Does not apply: references are integer handles that go through `inttoptr` |
+| `nonnull` | Not emitted as a blanket fact after native pointer migration; nullable/shared/interior inputs require separate proofs |
 | Value-struct returns | Shipped. Internal functions returning a value struct write into a caller `alloca` passed as a trailing `ptr`. Function tables, itables and guarded interface arms point at a `name__boxed` wrapper that keeps the heap-box ABI. 6 ns → under 1 ns per call |
 | Uniqueness alias scopes | Not built. The only alias-bound kernel is the one TBAA covers |
 

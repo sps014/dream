@@ -19,7 +19,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         method: &Option<Operand>,
         args: &[(Operand, TypeId)],
     ) -> Option<V> {
-        if !self.l.cx.target.is_wasm32() {
+        if !self.l.cx.target.spec().capabilities.js_interop {
             return Some(self.js_call_native(target, via, method, args.len()));
         }
         let mut host_args = vec![self.operand(target)];
@@ -70,7 +70,7 @@ impl<'l, 'a> Fx<'l, 'a> {
 
     /// A wasm32 cast between `js` and a primitive or struct; `None` for every other cast.
     pub fn js_cast(&mut self, src: &V, from: TypeId, to: TypeId) -> Option<V> {
-        if !self.l.cx.target.is_wasm32() {
+        if !self.l.cx.target.spec().capabilities.js_interop {
             return None;
         }
         if let Some(sym) = cast_sym(&self.l.cx, from, to) {
@@ -109,7 +109,7 @@ impl<'l, 'a> Fx<'l, 'a> {
 
     /// wasm32 `js as ValueStruct`: the marshaler writes straight into the destination.
     pub fn store_js_to_value(&mut self, place: &Place, rv: &Rvalue) -> bool {
-        if !self.l.cx.target.is_wasm32() {
+        if !self.l.cx.target.spec().capabilities.js_interop {
             return false;
         }
         let Rvalue::Cast(o, from, to) = rv else {

@@ -18,7 +18,6 @@ use dream_types::{TyKind, TypeId};
 /// Array payload elements sit at `data + 4 + i * es`, so nothing wider than 4 is guaranteed.
 pub(super) const ELEM_ALIGN: u32 = 4;
 
-
 impl<'l, 'a> Fx<'l, 'a> {
     // ---- locals and globals -------------------------------------------------------------------
 
@@ -51,13 +50,13 @@ impl<'l, 'a> Fx<'l, 'a> {
             return (self.h(), true);
         }
         (
-            super::types::ll_ty(self.interner, ty, &self.h()),
+            super::types::ll_ty(self.interner, ty, &self.h(), &self.word()),
             super::types::is_unsigned(self.interner, ty),
         )
     }
 
     pub(super) fn read_global(&mut self, g: Global) -> V {
-        if g.0 == 0 && self.l.cx.target.is_wasm32() {
+        if g.0 == 0 && self.l.cx.target.spec().capabilities.linear_memory {
             return self.call_v("dream_g0_get", &[]);
         }
         let (ty, unsigned) = self.global_ll(g);
@@ -66,7 +65,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     pub(super) fn write_global(&mut self, g: Global, x: &V) {
-        if g.0 == 0 && self.l.cx.target.is_wasm32() {
+        if g.0 == 0 && self.l.cx.target.spec().capabilities.linear_memory {
             self.call("dream_g0_set", std::slice::from_ref(x));
             return;
         }
@@ -115,7 +114,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 Const::Bool(b) => V::i32(*b as i64),
                 Const::Char(ch) => V::i32(*ch as i64),
                 Const::Str(s) => self.str_v(s),
-                Const::Null => V::i32(0),
+                Const::Null => V::s(Value::zero(self.h())),
             },
         }
     }
@@ -204,8 +203,9 @@ impl<'l, 'a> Fx<'l, 'a> {
         let b = self.read_local(base);
         let is_array = matches!(self.interner.kind(self.f.local_ty(base)), TyKind::Array(_));
         if unchecked || !is_array {
-            let i = self.conv(&idx, &Ty::I64);
-            let off = self.w.bin("mul", &i, &Value::i64(es as i64));
+            let word = self.word();
+            let i = self.conv(&idx, &word);
+            let off = self.w.bin("mul", &i, &Value::int(word, es as i128));
             let data = self.addr(&b, crate::abi::LEN_PREFIX_SIZE as i64);
             return self.w.gep_i8(&data, &off);
         }
@@ -364,7 +364,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         let retain = retain_sym(&self.l.cx, ty);
         let move_id = unique_move_src(rv);
         let borrowed = borrowed_ref_store(self.interner, rv) && move_id.is_none();
-        let (mty, _) = mem_ll(MemTy::Ptr, &self.h());
+        let (mty, _) = mem_ll(MemTy::Ptr, &self.h(), &self.word());
         let old = self.load_ty(mty.clone(), slot, align, true);
         let v = self.as_ref(rhs);
         if borrowed {
@@ -379,7 +379,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             self.call(&release, &[old]);
         }
         if let Some(id) = move_id {
-            self.write_local(Local(id), &V::i32(0));
+            self.write_local(Local(id), &V::s(Value::zero(self.h())));
         }
     }
 
@@ -396,7 +396,12 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.if_then(&nz, |fx| {
             fx.call(
                 "dream_weak_register",
-                &[new.clone(), slot_ref.clone(), V::i32(1), V::i32(0)],
+                &[
+                    new.clone(),
+                    slot_ref.clone(),
+                    V::i32(1),
+                    V::s(Value::zero(fx.h())),
+                ],
             );
         });
     }
@@ -425,7 +430,12 @@ impl<'l, 'a> Fx<'l, 'a> {
             self.if_then(&nz, |fx| {
                 fx.call(
                     "dream_weak_register",
-                    &[new.clone(), slot_ref.clone(), V::i32(2), V::i32(0)],
+                    &[
+                        new.clone(),
+                        slot_ref.clone(),
+                        V::i32(2),
+                        V::s(Value::zero(fx.h())),
+                    ],
                 );
             });
             if retain_copy {
@@ -478,5 +488,4 @@ impl<'l, 'a> Fx<'l, 'a> {
             fx.call("dream_free", std::slice::from_ref(&old));
         });
     }
-
 }

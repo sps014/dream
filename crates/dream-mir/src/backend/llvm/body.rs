@@ -216,7 +216,7 @@ pub(super) fn build_async_stub<'a>(
     let name = l.user_fn(stub);
     let mut w = l.writer(&name);
     w.attrs.extend(inline_attr(stub));
-    let wide = crate::backend::shared::abi_types::wide_int_locals(&l.cx, body);
+    let wide = crate::backend::shared::abi_types::ref_int_locals(&l.cx, body);
     let mut fx = Fx::new(l, stub, w);
     let first = fx.w.new_block("body");
     fx.w.br(first);
@@ -243,9 +243,9 @@ pub(super) fn build_async_stub<'a>(
             fx.memcpy(&at, &src, &Value::i64(sz));
         } else {
             let t = if wide[p.0 as usize] {
-                Ty::I64
+                fx.h()
             } else {
-                super::types::ll_ty(fx.interner, ty, &fx.h())
+                super::types::ll_ty(fx.interner, ty, &fx.h(), &fx.word())
             };
             fx.store_ty(&t, &at, &arg, align_at(&t, off));
         }
@@ -315,7 +315,14 @@ impl<'l, 'a> Fx<'l, 'a> {
             }
             TyKind::Prim(PrimTy::Float) => (Ty::F32, fut.wide),
             TyKind::Prim(PrimTy::Double) => (Ty::F64, fut.wide),
-            _ => (self.h(), fut.result),
+            _ => (
+                if self.l.cx.target.spec().capabilities.linear_memory {
+                    Ty::I32
+                } else {
+                    Ty::I64
+                },
+                fut.result,
+            ),
         };
         let va = self.addr(&ch, off as i64);
         let unsigned = off == fut.result;

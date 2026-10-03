@@ -463,8 +463,8 @@ mod tests {
         let sigs =
             RuntimeSigs::parse(&std::fs::read_to_string(&rt.sigs).expect("sigs")).expect("parse");
         assert!(sigs.function("dream_panic").noreturn);
-        assert_eq!(sigs.function("dream_retain").fty.params, vec![Ty::I64]);
-        assert_eq!(sigs.function("dream_malloc").fty.ret, Ty::I64);
+        assert_eq!(sigs.function("dream_retain").fty.params, vec![Ty::Ptr]);
+        assert_eq!(sigs.function("dream_malloc").fty.ret, Ty::Ptr);
         assert!(sigs.globals["g0"].thread_local);
         assert!(sigs
             .target_attrs

@@ -123,7 +123,7 @@ impl<'a> Lcx<'a> {
 
     /// Exports a function this module defines under `export` (wasm32 only).
     pub fn export(&mut self, name: &str, export: &str) {
-        if self.cx.target.is_wasm32() {
+        if self.cx.target.spec().capabilities.js_interop {
             self.exports.insert(name.to_string(), export.to_string());
         }
     }
@@ -256,16 +256,21 @@ impl<'a> Lcx<'a> {
         self.m.define(w);
     }
 
-    /// The `dream_ptr` bits of an interned string literal.
+    /// Immortal literal payload address; native references preserve LLVM pointer provenance.
     pub fn str_val(&self, s: &str) -> Value {
         let h = self.h();
+        let symbol = self.cx.str_sym(s);
+        let block = super::ir::fmt::global(&format!("{symbol}_blk"));
+        let index = self.word();
+        let offset = self.cx.target.abi().heap_header_size;
+        let address = format!("getelementptr (i8, ptr {block}, {index} {offset})");
         Value::new(
             h.clone(),
-            Repr::ConstExpr(format!(
-                "ptrtoint (ptr getelementptr (i8, ptr {}, i64 {}) to {h})",
-                super::ir::fmt::global(&format!("{}_blk", self.cx.str_sym(s))),
-                self.cx.target.abi().heap_header_size
-            )),
+            Repr::ConstExpr(if h == Ty::Ptr {
+                address
+            } else {
+                format!("ptrtoint (ptr {address} to {h})")
+            }),
         )
     }
 
@@ -283,8 +288,14 @@ impl<'a> Lcx<'a> {
         }
     }
 
-    /// `dream_ptr`: `i64` on native, `i32` on wasm32.
     pub fn h(&self) -> Ty {
+        if !self.cx.target.spec().capabilities.linear_memory {
+            return Ty::Ptr;
+        }
+        self.word()
+    }
+
+    pub fn word(&self) -> Ty {
         Ty::Int(self.cx.target.abi().ptr_size * 8)
     }
 

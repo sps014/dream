@@ -5,6 +5,7 @@ use target_lexicon::{Architecture, Environment, OperatingSystem, Triple, HOST};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TargetCapabilities {
     pub linear_memory: bool,
+    pub native_entry: bool,
     pub native_threads: bool,
     pub c_interop: bool,
     pub js_interop: bool,
@@ -107,6 +108,7 @@ impl TargetSpec {
             min_os,
             capabilities: TargetCapabilities {
                 linear_memory,
+                native_entry: !linear_memory,
                 native_threads: !linear_memory,
                 c_interop: !linear_memory,
                 js_interop: linear_memory,
@@ -126,6 +128,25 @@ impl TargetSpec {
 
     pub fn wasm32() -> Self {
         Self::parse("wasm32-unknown-wasip1").expect("built-in wasm32 target must be valid")
+    }
+
+    pub fn can_link_on_host(&self) -> bool {
+        self.link_compatible_with(&Self::host())
+    }
+
+    fn link_compatible_with(&self, host: &Self) -> bool {
+        let macos = |os| matches!(os, OperatingSystem::Darwin | OperatingSystem::MacOSX { .. });
+        // Deployment versions change availability, not the host object/linker ABI.
+        let same_os = self.os == host.os || (macos(self.os) && macos(host.os));
+        self.capabilities.native_entry
+            && host.capabilities.native_entry
+            && self.triple.architecture == host.triple.architecture
+            && self.triple.vendor == host.triple.vendor
+            && self.env == host.env
+            && self.triple.binary_format == host.triple.binary_format
+            && self.ptr_size == host.ptr_size
+            && self.ptr_align == host.ptr_align
+            && same_os
     }
 
     pub fn with_min_os(mut self, version: OsVersion) -> Result<Self, String> {
@@ -160,6 +181,13 @@ mod tests {
         assert_eq!((wasm.ptr_size, wasm.ptr_align), (4, 4));
         assert!(wasm.capabilities.linear_memory);
         assert!(!wide.capabilities.linear_memory);
+        assert!(narrow.capabilities.native_entry);
+        assert!(wide.capabilities.native_entry);
+        assert!(!wasm.capabilities.native_entry);
+        assert!(wasm.capabilities.js_interop);
+        assert!(!narrow.capabilities.js_interop);
+        assert!(narrow.capabilities.c_interop);
+        assert!(!wasm.capabilities.c_interop);
         assert_eq!(wide.env, Environment::Msvc);
     }
 
@@ -175,6 +203,33 @@ mod tests {
             .unwrap()
             .with_min_os("13".parse().unwrap())
             .is_err());
+    }
+
+    #[test]
+    fn native_link_compatibility_ignores_only_deployment_version() {
+        let host = TargetSpec::parse("aarch64-apple-darwin").unwrap();
+        let newer = host.clone().with_min_os("13.2".parse().unwrap()).unwrap();
+        assert!(newer.link_compatible_with(&host));
+        assert!(host.link_compatible_with(&newer));
+        for other in [
+            "x86_64-apple-darwin",
+            "aarch64-unknown-linux-gnu",
+            "aarch64-pc-windows-msvc",
+            "wasm32-unknown-wasip1",
+        ] {
+            assert!(!TargetSpec::parse(other)
+                .unwrap()
+                .link_compatible_with(&host));
+        }
+        let linux = TargetSpec::parse("x86_64-unknown-linux-gnu").unwrap();
+        assert!(!TargetSpec::parse("x86_64-unknown-linux-musl")
+            .unwrap()
+            .link_compatible_with(&linux));
+        assert!(!TargetSpec::parse("x86_64-unknown-linux-gnux32")
+            .unwrap()
+            .link_compatible_with(&linux));
+        assert!(!TargetSpec::wasm32().can_link_on_host());
+        assert!(TargetSpec::host().can_link_on_host());
     }
 
     #[test]

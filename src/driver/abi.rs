@@ -345,7 +345,7 @@ pub(crate) fn build_abi_json(
         .join(", ");
 
     format!(
-        "{{\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}],\n  \"host_capabilities\": [{}]{}{}{}{}\n}}\n",
+        "{{\n  \"native_abi_version\": 2,\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}],\n  \"host_capabilities\": [{}]{}{}{}{}\n}}\n",
         externs.join(",\n"),
         exports.join(", "),
         host_capabilities,

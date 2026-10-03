@@ -447,8 +447,8 @@ impl Compiler {
                 .iter()
                 .map(|imp| (imp.module.clone(), imp.field.clone()))
                 .collect();
-            let wasm = target.is_wasm32();
-            if wasm
+            let linear_memory = target.spec().capabilities.linear_memory;
+            if !target.spec().capabilities.c_interop
                 && report_wasm_c_imports(
                     ast.get_root(),
                     &live_imports,
@@ -458,7 +458,7 @@ impl Compiler {
             {
                 return Err("semantic");
             }
-            let threads = wasm && dream_mir::backend::module_needs_threads(&mir, interner);
+            let threads = linear_memory && dream_mir::backend::module_needs_threads(&mir, interner);
             let need = dream_mir::runtime::runtime_need_from_mir(&mir);
             let req = LlvmRuntimeRequest {
                 need,
@@ -475,6 +475,7 @@ impl Compiler {
                     let sigs = dream_mir::backend::llvm::RuntimeSigs::parse(&runtime.text)
                         .and_then(|sigs| {
                             sigs.validate_target(req.target.spec())?;
+                            sigs.validate_reference_abi(req.target.spec())?;
                             Ok(sigs)
                         })
                         .map_err(|e| format!("runtime signature cache `{cache}` is stale: {e}"));
@@ -489,7 +490,7 @@ impl Compiler {
                         &mir,
                         interner,
                         &sigs,
-                        debug && !wasm,
+                        debug && target.spec().capabilities.native_entry,
                         req.target.clone(),
                     ) {
                         Ok(ir) => ir.into_bytes(),
@@ -541,7 +542,7 @@ impl Compiler {
         };
 
         info!("finished code generation");
-        if !self.target.is_wasm32() {
+        if !self.target.spec().capabilities.linear_memory {
             fs::write(out_path, &bytes)?;
             if !self.opt_ir {
                 self.reporter.artifact(Path::new(out_path));

@@ -22,7 +22,11 @@ fn native_locks_use_object_identity_while_wasm_uses_the_lock_word() {
                 assert!(body.contains("@dream_lock_acquire("), "{}", body);
                 assert!(body.contains("@dream_lock_release("), "{}", body);
                 let adjusts_address = body.contains("add i64") || body.contains("add i32");
-                assert_eq!(adjusts_address, target.is_wasm32(), "{body}");
+                assert_eq!(
+                    adjusts_address,
+                    target.spec().capabilities.linear_memory,
+                    "{body}"
+                );
             }
         },
     );

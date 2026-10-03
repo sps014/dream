@@ -1,25 +1,5 @@
-// Runtime type tags and marshaling helpers (heap layout mirrors object.rs).
-
-export const TAGS = {
-  INT: 1,
-  FLOAT: 2,
-  DOUBLE: 3,
-  BOOL: 4,
-  STRING: 5,
-  ARRAY: 6,
-  CHAR: 7,
-  LONG: 8,
-  UINT: 9,
-  ULONG: 10,
-  BYTE: 11,
-  ISIZE: 12,
-  USIZE: 13,
-  STRUCT_BASE: 14,
-  // `dream_new_future` — distinct from 0 (untagged C/weak). Mask TAG_SHARED before compare.
-  FUTURE: 256,
-};
-
-export const HEAP_HEADER_SIZE = 12;
+import { TAGS, HEAP_HEADER_SIZE } from "./abi.js";
+export { TAGS, HEAP_HEADER_SIZE };
 
 export function elementSize(typeName) {
   if (typeName === "bool" || typeName === "char" || typeName === "byte") return 1;

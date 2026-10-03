@@ -238,6 +238,13 @@ pub fn compile_llvm(
         icon,
         relocatable,
     } = options;
+    if !spec.can_link_on_host() {
+        return Err(format!(
+            "native linking is host-only; use --target {} to emit .ll and .o",
+            spec.triple
+        )
+        .into());
+    }
     let tools = resolve_llvm(config)?;
     let bin = native_bin_path(ll_path);
     let abi_path = ll_path.with_extension("abi.json");
@@ -282,7 +289,7 @@ pub fn compile_llvm(
     };
     let stamp_path = bin.with_extension("flags");
     let stamp = format!(
-        "{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{}\n{:?}\n{:?}\n{:?}",
+        "native-pointer-abi-v2\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{}\n{:?}\n{:?}\n{:?}",
         pipeline(opt, debug),
         debug,
         llc_level(opt, debug),
@@ -443,7 +450,10 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
     ) -> Result<crate::driver::compiler::RuntimeSignatures, String> {
         let config = &self.config;
         let tools = resolve_llvm(config)?;
-        let sigs = if req.target.is_wasm32() {
+        if !req.target.spec().capabilities.linear_memory && !req.target.spec().can_link_on_host() {
+            return super::cross::runtime_signatures(&tools, req.target.spec());
+        }
+        let sigs = if req.target.spec().capabilities.linear_memory {
             super::wasm::wasm_runtime(&tools, req.wasm_opt, req.need, req.threads)?.sigs
         } else {
             llvm_runtime(&tools, req.target.spec(), self.opt, req.need, self.debug)?.sigs

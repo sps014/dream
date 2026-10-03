@@ -1,8 +1,7 @@
+/* GENERATED from abi_registry.rs; run scripts/generate-abi.sh. */
 #ifndef DREAM_ABI_H
 #define DREAM_ABI_H
-
-/* Numeric guest ABI. Must stay in lockstep with crates/dream-mir/src/abi.rs
- * (enforced by `dream_abi_h_matches_abi_rs`). */
+#include <stdint.h>
 
 #define TAG_INT 1
 #define TAG_FLOAT 2
@@ -21,15 +20,10 @@
 #define TAG_FUNCBOX 257
 #define TAG_CLOSURE_ENV 258
 #define TAG_STRUCT_BASE 14
-/* High bit on the header tag: object is concurrently refcounted (`@shared`, published
- * worker env/wire, foreign futures). Ordinary worker-local objects leave this clear. */
 #define TAG_SHARED 1073741824
 #define TAG_VALUE_MASK 1073741823
-/* Header tag sign bit: the object has (or had) weak/unowned registrations, so its free must
- * clear them. Masked off by `TAG_VALUE_MASK` like `TAG_SHARED`. */
-#define DREAM_TAG_WEAK_TARGET (-2147483647 - 1)
-
 #define HEAP_HEADER_SIZE 12
+#define DREAM_UNOWNED_POISON -165764356
 #define HEADER_TAG_OFFSET 4
 #define HEADER_REFCOUNT_OFFSET 8
 #define LEN_PREFIX_SIZE 4
@@ -39,28 +33,16 @@
 #define DREAM_STR_PAD_INLINE 0
 #define DREAM_STR_SLICE 1
 #define NATIVE_HEAP_HEADER_SIZE 32
-/* Written into cleared `unowned` slots (weak-registry kind 1) so a later load can tell
- * "target was destroyed" apart from "never assigned" (null). Must not be a valid pointer. */
-#define DREAM_UNOWNED_POISON (-165764356) /* 0xF601A0CC as i32 */
 #define RC_FROM_DATA 4
 #define TAG_FROM_DATA 8
-/* Refcount word encoding. `rc > 0`: plain thread-local count. Sign bit set: atomic count in the
- * low 31 bits (`TAG_SHARED` objects and tag-0 futures, stamped at allocation / publish). Exactly
- * `DREAM_RC_IMMORTAL` (the shared encoding of zero, never reached by a live shared object): never
- * mutated or freed. Keeping all three in one word makes every RC fast path one load + a sign test. */
-#define DREAM_RC_SHARED_BIT (-2147483647 - 1)
-#define DREAM_RC_IMMORTAL (-2147483647 - 1)
-
 #define WASM_PAGE_SIZE 65536
-#define SHADOW_STACK_SIZE (16 * WASM_PAGE_SIZE)
+#define SHADOW_STACK_SIZE 1048576
 #define INITIAL_HEAP_PAGES 1
 #define MAX_MEMORY_PAGES 65536
 #define STRING_BASE 1024
-
 #define DREAM_REGEX_IGNORE_CASE 2
 #define DREAM_REGEX_MULTILINE 4
 #define DREAM_REGEX_DOTALL 8
-
 #define ALLOC_LOCK_ADDR 44
 #define HEAP_PTR_ADDR 48
 #define THREAD_ID_COUNTER_ADDR 52
@@ -68,10 +50,8 @@
 #define ASYNC_RQ_TAIL_ADDR 80
 #define ASYNC_TIMER_HEAD_ADDR 84
 #define ASYNC_VCLOCK_ADDR 88
-
 #define HEADER_LOCK_WORD_SIZE 4
 #define LOCK_DEPTH_BITS 16
-
 #define FUTURE_KIND_TASK 0
 #define FUTURE_KIND_HOST 1
 #define FUTURE_KIND_ALL 2
@@ -79,8 +59,34 @@
 #define FUTURE_STATUS_PENDING 0
 #define FUTURE_STATUS_READY 1
 #define FUTURE_STATUS_CANCELLED 2
-#define HOST_POLL_INDEX (-1)
-
+#define HOST_POLL_INDEX -1
+#define DREAM_TAG_WEAK_TARGET -2147483648
+#define DREAM_RC_SHARED_BIT -2147483648
+#define DREAM_RC_IMMORTAL -2147483648
+#define DREAM_SYM_ENTRY_FN "main"
+#define DREAM_SYM_GUEST_ENTRY_FN "dream_guest_entry"
+#define DREAM_MODULE_ENV "env"
+#define DREAM_SYM_PRINT_STRING "print_string"
+#define DREAM_SYM_PRINT_INT "print_int"
+#define DREAM_SYM_PRINT_FLOAT "print_float"
+#define DREAM_SYM_PRINT_DOUBLE "print_double"
+#define DREAM_SYM_PRINT_CHAR "print_char"
+#define DREAM_SYM_PRINT_ERR_STRING "print_err_string"
+#define DREAM_SYM_PRINT_ERR_CHAR "print_err_char"
+#define DREAM_SYM_MALLOC "malloc"
+#define DREAM_SYM_FREE "free"
+#define DREAM_SYM_MEMORY "memory"
+#define DREAM_SYM_RUN_LOOP "__dream_run_loop"
+#define DREAM_SYM_RESOLVE "__dream_resolve"
+#define DREAM_SYM_NEW_FUTURE "__dream_new_future"
+#define DREAM_SYM_RUNTIME_INIT "__runtime_init"
+#define DREAM_SYM_EXPORT_WORKER_INVOKE "__dream_worker_invoke"
+#define DREAM_SYM_EXPORT_WORKER_INVOKE_RAW "__dream_worker_invoke_raw"
+#define DREAM_SYM_EXPORT_DROP_GLOBALS "__dream_drop_globals"
+#define DREAM_SYM_EXPORT_MAIN_REPORT "__dream_main_report"
+#define DREAM_SYM_EXPORT_FT_GET "dream_ft_get"
+#define DREAM_MODULE_HOST "Dream"
+#define DREAM_SYM_TIME_NOW_NANOS "timeNowNanos"
 #define F_STATE_WASM 0
 #define F_STATUS_WASM 4
 #define F_RESULT_WASM 8
@@ -95,28 +101,10 @@
 #define F_NEXT_WASM 44
 #define F_QUEUED_WASM 48
 #define F_DUE_WASM 52
+#define F_ESIZE_WASM 56
 #define F_WIDE_WASM 56
-#define F_ESIZE_WASM F_WIDE_WASM
 #define F_SLOTS_WASM 64
-
-#define DREAM_SYM_MALLOC "malloc"
-#define DREAM_SYM_FREE "free"
-#define DREAM_SYM_MEMORY "memory"
-#define DREAM_SYM_RUN_LOOP "__dream_run_loop"
-#define DREAM_SYM_NEW_FUTURE "__dream_new_future"
-#define DREAM_SYM_RESOLVE "__dream_resolve"
-#define DREAM_SYM_RUNTIME_INIT "__runtime_init"
-#define DREAM_MODULE_ENV "env"
-#define DREAM_MODULE_HOST "Dream"
-#define DREAM_SYM_PRINT_INT "print_int"
-#define DREAM_SYM_PRINT_STRING "print_string"
-#define DREAM_SYM_PRINT_CHAR "print_char"
-#define DREAM_SYM_PRINT_ERR_STRING "print_err_string"
-#define DREAM_SYM_PRINT_ERR_CHAR "print_err_char"
-#define DREAM_SYM_PRINT_FLOAT "print_float"
-#define DREAM_SYM_PRINT_DOUBLE "print_double"
-#define DREAM_SYM_TIME_NOW_NANOS "timeNowNanos"
-
+#if UINTPTR_MAX == UINT64_MAX
 #define F_STATE_NATIVE 0
 #define F_STATUS_NATIVE 4
 #define F_RESULT_NATIVE 8
@@ -134,7 +122,27 @@
 #define F_ESIZE_NATIVE 88
 #define F_WIDE_NATIVE 96
 #define F_SLOTS_NATIVE 104
-
+#elif UINTPTR_MAX == UINT32_MAX
+#define F_STATE_NATIVE 0
+#define F_STATUS_NATIVE 4
+#define F_RESULT_NATIVE 8
+#define F_POLL_NATIVE 12
+#define F_WAKER_NATIVE 16
+#define F_AWAITING_NATIVE 20
+#define F_KIND_NATIVE 24
+#define F_CHILDREN_NATIVE 28
+#define F_COUNT_NATIVE 32
+#define F_REMAINING_NATIVE 36
+#define F_RESULTS_NATIVE 40
+#define F_NEXT_NATIVE 44
+#define F_QUEUED_NATIVE 48
+#define F_DUE_NATIVE 52
+#define F_ESIZE_NATIVE 56
+#define F_WIDE_NATIVE 64
+#define F_SLOTS_NATIVE 72
+#else
+#error Unsupported Dream pointer width
+#endif
 #ifdef DREAM_NATIVE
 #define F_STATE F_STATE_NATIVE
 #define F_STATUS F_STATUS_NATIVE
@@ -168,9 +176,8 @@
 #define F_NEXT F_NEXT_WASM
 #define F_QUEUED F_QUEUED_WASM
 #define F_DUE F_DUE_WASM
-#define F_WIDE F_WIDE_WASM
 #define F_ESIZE F_ESIZE_WASM
+#define F_WIDE F_WIDE_WASM
 #define F_SLOTS F_SLOTS_WASM
 #endif
-
 #endif

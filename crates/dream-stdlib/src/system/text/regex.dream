@@ -4,22 +4,22 @@ module system.text;
 // PCRE2-compatible engine. Invalid patterns compile to a dead engine that never matches.
 
 @intrinsic("regex_compile")
-static extern fun regex_compile(borrow pattern: string, flags: RegexFlags): long;
+static extern fun regex_compile(borrow pattern: string, flags: RegexFlags): usize;
 @intrinsic("regex_free")
-static extern fun regex_free(h: long): void;
+static extern fun regex_free(h: usize): void;
 @intrinsic("regex_find")
-static extern fun regex_find(h: long, borrow input: string, pos: int): int[];
+static extern fun regex_find(h: usize, borrow input: string, pos: int): int[];
 @intrinsic("regex_group_count")
-static extern fun regex_group_count(h: long): int;
+static extern fun regex_group_count(h: usize): int;
 @intrinsic("regex_name_count")
-static extern fun regex_name_count(h: long): int;
+static extern fun regex_name_count(h: usize): int;
 @intrinsic("regex_name_at")
-static extern fun regex_name_at(h: long, i: int): string;
+static extern fun regex_name_at(h: usize, i: int): string;
 @intrinsic("regex_name_number")
-static extern fun regex_name_number(h: long, i: int): int;
+static extern fun regex_name_number(h: usize, i: int): int;
 
 public class Regex {
-    engine: long;
+    engine: usize;
     global: bool;
     ngroup: int;
     group_names: string[];

@@ -134,7 +134,13 @@ impl<'l, 'a> Fx<'l, 'a> {
                         self.call("dream_async_complete", &[s, V::i32(0)]);
                     }
                     None => {
-                        let r = self.as_ref(&result);
+                        // Settled values share an explicitly untyped integer transport slot.
+                        let result_ty = if self.l.cx.target.spec().capabilities.linear_memory {
+                            Ty::I32
+                        } else {
+                            Ty::I64
+                        };
+                        let r = V::u(self.conv(&result, &result_ty));
                         self.call("dream_async_complete", &[s, r]);
                     }
                 }

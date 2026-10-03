@@ -53,7 +53,7 @@ fn shape(imp: &HImport, i: usize) -> &CShape {
 fn c_ty(l: &Lcx<'_>, s: &CShape, ty: TypeId) -> Ty {
     match s {
         CShape::Void => Ty::Void,
-        CShape::Scalar => ll_ty(l.interner, ty, &l.h()),
+        CShape::Scalar => ll_ty(l.interner, ty, &l.h(), &l.word()),
         _ => Ty::Ptr,
     }
 }
@@ -187,13 +187,13 @@ pub(super) fn register_import(l: &mut Lcx<'_>, imp: &HImport) {
             if imp.param_by_ref.get(i).copied().unwrap_or(false) {
                 l.h()
             } else {
-                ll_ty(l.interner, *t, &l.h())
+                ll_ty(l.interner, *t, &l.h(), &l.word())
             }
         })
         .collect();
     let dream_ret = imp
         .ret
-        .map(|t| ll_ty(l.interner, t, &l.h()))
+        .map(|t| ll_ty(l.interner, t, &l.h(), &l.word()))
         .unwrap_or(Ty::Void);
     register(l, &import_call_name(imp), dream_ret, params);
 }
@@ -255,7 +255,12 @@ impl<'l, 'a> Fx<'l, 'a> {
 
     /// The `raw` word of the `CPtr` stored at `at`, as `void*`.
     fn cptr_load(&mut self, at: &Value) -> V {
-        let raw = self.load_ty(self.h(), at, self.l.cx.mir.layouts.target.ptr_align, true);
+        let raw = self.load_ty(
+            self.l.word(),
+            at,
+            self.l.cx.mir.layouts.target.ptr_align,
+            true,
+        );
         V::s(self.ptr(&raw))
     }
 
@@ -420,8 +425,13 @@ impl<'l, 'a> Fx<'l, 'a> {
             .select(&z, &Value::i32(none as i64), &Value::i32(some as i64));
         self.store_ty(&Ty::I32, &bp, &V::s(disc), 4);
         let at = self.addr(&b, off as i64);
-        let raw = V::u(self.conv(p, &self.h()));
-        self.store_ty(&self.h(), &at, &raw, self.l.cx.mir.layouts.target.ptr_align);
+        let raw = V::u(self.conv(p, &self.l.word()));
+        self.store_ty(
+            &self.l.word(),
+            &at,
+            &raw,
+            self.l.cx.mir.layouts.target.ptr_align,
+        );
         self.as_ref(&b)
     }
 
@@ -431,8 +441,13 @@ impl<'l, 'a> Fx<'l, 'a> {
         let tag = self.l.cx.type_tag(ty) as i64;
         let b = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag)]);
         let bp = self.ptr(&b);
-        let raw = V::u(self.conv(p, &self.h()));
-        self.store_ty(&self.h(), &bp, &raw, self.l.cx.mir.layouts.target.ptr_align);
+        let raw = V::u(self.conv(p, &self.l.word()));
+        self.store_ty(
+            &self.l.word(),
+            &bp,
+            &raw,
+            self.l.cx.mir.layouts.target.ptr_align,
+        );
         self.as_ref(&b)
     }
 
@@ -504,8 +519,8 @@ fn reverse_trampoline(l: &mut Lcx<'_>, rev: &Reverse, shapes: &[CShape], ret: &C
             CShape::Ptr { optional: false } => {
                 let layout = fx.l.cx.mir.layouts.target;
                 let slot = fx.alloca_bytes(layout.ptr_size as u64, layout.ptr_align);
-                let raw = V::u(fx.conv(&c, &fx.h()));
-                fx.store_ty(&fx.h(), &slot, &raw, layout.ptr_align);
+                let raw = V::u(fx.conv(&c, &fx.l.word()));
+                fx.store_ty(&fx.l.word(), &slot, &raw, layout.ptr_align);
                 fx.as_ref(&V::s(slot))
             }
             CShape::Ptr { optional: true } => {
@@ -529,7 +544,7 @@ fn reverse_trampoline(l: &mut Lcx<'_>, rev: &Reverse, shapes: &[CShape], ret: &C
                     .and_then(|s| s.fields.first())
                     .map_or(0, |f| f.offset);
             let at = fx.addr(&obj, off as i64);
-            let boxed = fx.load_ty(h.clone(), &at, 8, true);
+            let boxed = fx.load_ty(h.clone(), &at, fx.l.cx.mir.layouts.target.ptr_align, true);
             let env = fx.call_v("dream_funcbox_env", std::slice::from_ref(&boxed));
             fx.write_global(Global(0), &env);
             let idx = fx.call_v("dream_funcbox_funcidx", &[boxed]);
@@ -537,7 +552,7 @@ fn reverse_trampoline(l: &mut Lcx<'_>, rev: &Reverse, shapes: &[CShape], ret: &C
         }
         Reverse::Direct { symbol, .. } => fx.l.fn_ref(symbol),
     };
-    let sig = fn_ptr_sig(fx.interner, fun_ty, &h);
+    let sig = fn_ptr_sig(fx.interner, fun_ty, &h, &fx.l.word());
     let coerced = fx.coerce_args(&sig, &args);
     let r = fx.call_ptr(&fp, &sig, coerced);
     for (v, ty) in owned {
@@ -548,7 +563,7 @@ fn reverse_trampoline(l: &mut Lcx<'_>, rev: &Reverse, shapes: &[CShape], ret: &C
         (Some(r), CShape::Ptr { .. }) => {
             let boxed = V::u(r);
             let bp = fx.ptr(&boxed);
-            let raw = fx.load_ty(fx.h(), &bp, fx.l.cx.mir.layouts.target.ptr_align, true);
+            let raw = fx.load_ty(fx.l.word(), &bp, fx.l.cx.mir.layouts.target.ptr_align, true);
             fx.call("dream_free", &[boxed]);
             let p = fx.ptr(&raw);
             fx.w.ret(Some(&p));

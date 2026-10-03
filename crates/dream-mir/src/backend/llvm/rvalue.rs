@@ -216,7 +216,8 @@ impl<'l, 'a> Fx<'l, 'a> {
                 match self.interner.kind(*ty) {
                     TyKind::Prim(PrimTy::String) => self.call_v("dream_to_bytes", &[v, V::i32(sz)]),
                     TyKind::Prim(_) | TyKind::Enum(_) => {
-                        let (t, _) = super::fx::mem_ll(mem_ty(&self.l.cx, *ty), &self.h());
+                        let (t, _) =
+                            super::fx::mem_ll(mem_ty(&self.l.cx, *ty), &self.h(), &self.word());
                         let tmp = self.w.alloca(t.clone(), 8);
                         self.store_ty(&t, &tmp, &v, 8);
                         let addr = self.as_ref(&V::s(tmp));
@@ -366,8 +367,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         let idx = self.conv_v(&idx, &Ty::I32, false);
         let idx = self.conv(&idx, &Ty::I64);
         let off = self.w.bin("mul", &idx, &Value::i64(size));
-        let b64 = V::u(self.conv(&base, &Ty::I64));
-        let bp = self.ptr(&b64);
+        let bp = self.ptr(&base);
         let at = self.w.gep_i8(&bp, &off);
         let u = self.load_ty(ty, &at, size as u32, true);
         self.conv_v(&u, &Ty::I32, false)
@@ -695,8 +695,8 @@ impl<'l, 'a> Fx<'l, 'a> {
                 && (matches!(from_prim, PrimTy::ISize | PrimTy::USize)
                     || matches!(to_prim, PrimTy::ISize | PrimTy::USize))
             {
-                let source_ty = super::types::ll_ty(self.interner, from, &self.h());
-                let target_ty = super::types::ll_ty(self.interner, to, &self.h());
+                let source_ty = super::types::ll_ty(self.interner, from, &self.h(), &self.word());
+                let target_ty = super::types::ll_ty(self.interner, to, &self.h(), &self.word());
                 let source = self.conv_v(&src, &source_ty, from_prim.is_unsigned_integer());
                 return self.conv_v(&source, &target_ty, to_prim.is_unsigned_integer());
             }
@@ -759,7 +759,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     let tag = runtime_tag(&self.l.cx, from);
                     let boxed = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
                     let address = self.ptr(&boxed);
-                    self.store_ty(&self.h(), &address, &src, size as u32);
+                    self.store_ty(&self.word(), &address, &src, size as u32);
                     return boxed;
                 }
                 let (f, t) = match fk {

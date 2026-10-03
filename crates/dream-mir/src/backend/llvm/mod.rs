@@ -82,7 +82,7 @@ fn emit_llvm_module_unchecked(
     let mut l = Lcx::new(mir, interner, sigs, leak_checks, target);
     for f in &mir.functions {
         let name = l.user_fn(f);
-        let sig = types::fn_ll_sig(interner, f, &l.h());
+        let sig = types::fn_ll_sig(interner, f, &l.h(), &l.word());
         if body::returns_via_buffer(&l, f, &name) {
             let mut direct = sig.clone();
             direct.fty.ret = Ty::Void;

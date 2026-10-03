@@ -6,6 +6,7 @@ use super::types::fn_ptr_sig;
 use crate::backend::shared::abi_types::{c_ident, elem_size, fn_sig, runtime_c_name};
 use crate::backend::shared::glue::retain_sym;
 use crate::{Callee, Const, Operand, Place};
+use dream_abi::intrinsics::IntrinsicOp;
 use dream_types::{TyKind, TypeId};
 
 impl<'l, 'a> Fx<'l, 'a> {
@@ -30,6 +31,11 @@ impl<'l, 'a> Fx<'l, 'a> {
                     .unwrap_or(4),
             };
             vals.push(V::i32(es as i64));
+        }
+        if IntrinsicOp::from_key(&raw) == Some(IntrinsicOp::Panic) {
+            let at = self.panic_location();
+            vals.push(at);
+            return self.call("dream_panic_at", &vals);
         }
         if self.l.sret.contains(&name) {
             let size = elem_size(&self.l.cx, callee.ret) as u64;
@@ -164,7 +170,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.w.switch(&tag, fallback, &blocks);
         for ((_, b), (_, cname)) in blocks.iter().zip(&arms) {
             self.w.switch_to(*b);
-            let callee = self.l.fn_ref(&self.l.boxed_sym(cname));
+            let callee = self.l.fn_ref(&self.l.abi_sym(cname));
             let vals = self.coerce_args(&s, &call_args);
             let r = self.call_ptr(&callee, &s, vals);
             if let (Some(slot), Some(r)) = (&result, r) {

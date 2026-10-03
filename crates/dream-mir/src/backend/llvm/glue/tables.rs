@@ -193,7 +193,7 @@ fn emit_ftables(l: &mut Lcx<'_>) {
     let mut fd: Vec<Option<String>> = vec![None; n];
     let fns = &l.mir.functions;
     for f in fns {
-        ft[l.cx.func_index(f)] = Some(l.boxed_sym(&l.user_fn(f)));
+        ft[l.cx.func_index(f)] = Some(l.abi_sym(&l.user_fn(f)));
     }
     for (async_i, f) in fns.iter().filter(|f| f.is_async).enumerate() {
         let i = fns.len() + 1 + async_i;
@@ -264,27 +264,8 @@ fn emit_tag_names(l: &mut Lcx<'_>) {
             arms.push((t, n));
         }
     }
-    let mut cstrs: Vec<String> = Vec::new();
-    let mut cstr = |l: &mut Lcx<'_>, s: &str| -> Value {
-        let name = format!(".tn{}", cstrs.len());
-        cstrs.push(name.clone());
-        let bytes: Vec<u8> = s.bytes().chain(std::iter::once(0)).collect();
-        l.global(
-            &name,
-            GlobalDef {
-                linkage: Linkage::Private,
-                thread_local: false,
-                constant: true,
-                unnamed_addr: true,
-                ty: Ty::bytes(bytes.len() as u64),
-                init: Some(fmt::c_string(&bytes)),
-                align: 1,
-            },
-        );
-        Value::global(name)
-    };
-    let names: Vec<(i32, Value)> = arms.iter().map(|(t, n)| (*t, cstr(l, n))).collect();
-    let object = cstr(l, "object");
+    let names: Vec<(i32, Value)> = arms.iter().map(|(t, n)| (*t, l.cstr(n))).collect();
+    let object = l.cstr("object");
     let mut fx = glue(l, "dream_tag_name");
     let tag = fx.arg(0);
     let kind =
@@ -393,7 +374,7 @@ fn emit_itables(l: &mut Lcx<'_>) {
                 let (Some(&t), true) = (index.get(&(*iid, slot)), (tag as usize) < ntags) else {
                     continue;
                 };
-                tables[t][tag as usize] = Some(l.boxed_sym(&c_ident(&func_symbol(f))));
+                tables[t][tag as usize] = Some(l.abi_sym(&c_ident(&func_symbol(f))));
             }
         }
     }

@@ -115,7 +115,8 @@ impl<'l, 'a> Fx<'l, 'a> {
 
     pub fn stmt(&mut self, stmt: &Statement) {
         match stmt {
-            Statement::Nop | Statement::SourceLine(_) => {}
+            Statement::Nop => {}
+            Statement::SourceLine(line) => self.source_line(*line),
             Statement::DebugLine(line) => self.set_line(*line),
             Statement::Assign(place, rv) => self.assign(place, rv),
             Statement::Retain(o) => {
@@ -150,7 +151,8 @@ impl<'l, 'a> Fx<'l, 'a> {
             }
             Statement::Panic(o) => {
                 let a = self.operand(o);
-                self.call("dream_panic", &[a]);
+                let at = self.panic_location();
+                self.call("dream_panic_at", &[a, at]);
             }
             Statement::Print { arg, ty, newline } => self.print(arg, *ty, *newline),
             Statement::Call { callee, args } => {

@@ -111,9 +111,8 @@ pub enum HStmt {
     DebugLine(u32),
     /// A compile-time-only marker recording the 1-based source line of the *next* executable
     /// statement, unconditionally (unlike [`HStmt::DebugLine`], which requires `-g`). Lowers to a
-    /// `Statement::SourceLine` in MIR, which never emits any WAT: the backend just tracks it as "the
-    /// current line" so an automatic runtime check (bounds/division/cast) at that point in the
-    /// statement stream can attribute its panic message to a real source line, at zero runtime cost.
+    /// `Statement::SourceLine` in MIR, which emits no code: the backend tracks it as the current
+    /// line so a panic at that point reports a real `file:line`, at zero runtime cost.
     SourceLine(u32),
 }
 

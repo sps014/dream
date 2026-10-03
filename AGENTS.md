@@ -169,7 +169,7 @@ cargo run -- --runtime --node path/to/file.dream   # *.node.runtime.js for Node 
 node scripts/bundle-runtime.mjs            # writes runtime/dream.js
 node scripts/bundle-runtime.mjs --check    # fails if dream.js is stale
 
-# Fast default gate (unit tests + e2e smoke). Full golden corpus / DAP / wasm-opt:
+# Fast default gate (unit tests + e2e smoke). DAP / wasm-opt / dreamer e2e behind --ignored:
 # C runtime hotpath: scripts/bench-runtime.sh; language benches: scripts/run-microbenches.sh
 
 cargo test --workspace
@@ -219,11 +219,11 @@ cargo test --workspace
 ./scripts/probe_test.sh            # when implementing or fixing: full golden corpus via native run
 ```
 
-When iterating on a feature or bugfix, prefer `./scripts/probe_test.sh <case-stem…>` first for a fast signal, then run the full probe before calling the work done. The default `cargo test --workspace` gate is the fast suite (unit tests + e2e smoke). Full golden corpus, DAP, wasm-opt-every-level, and dreamer compiler/pack e2e: `cargo test --workspace -- --ignored`.
+When iterating on a feature or bugfix, prefer `./scripts/probe_test.sh <case-stem…>` first for a fast signal, then run the full probe before calling the work done. The default `cargo test --workspace` gate is the fast suite (unit tests + e2e smoke). The probe is the only full golden-corpus run. DAP, wasm-opt-every-level, and dreamer compiler/pack e2e: `cargo test --workspace -- --ignored`.
 
 ## Testing conventions
 
-- **Golden e2e tests** live in `tests/cases/`: add `<name>.dream`, plus either `<name>.expected` (exact stdout for successful compile+run) or `<name>.expected_error` (expected compile-time failure). Default `cargo test --workspace` runs a smoke subset; the full corpus is `cargo test --workspace -- --ignored`. **Agents implementing or fixing behavior must run `./scripts/probe_test.sh`** (optionally filtered by case stem while iterating; full probe before done).
+- **Golden e2e tests** live in `tests/cases/`: add `<name>.dream`, plus one of `<name>.expected` (exact stdout for successful compile+run), `<name>.expected_error` (lines the compile diagnostics must contain), or `<name>.expected_trap` (lines a failing run's output must contain, plus `exit code N`). Default `cargo test --workspace` runs a smoke subset; the full corpus is `./scripts/probe_test.sh`. **Agents implementing or fixing behavior must run `./scripts/probe_test.sh`** (optionally filtered by case stem while iterating; full probe before done).
 - **Unit tests** live next to the code they test (`dream-types`, `dream-hir`, `dream-mir` passes / `backend::llvm::ir`). Passes use `FunctionBuilder` (`dream-mir`) to build a tiny `MirFunction` and assert on the pass output.
 - **Integration tests** `dream-mir`'s `hir_to_optimized_mir` (HIR→MIR→pass pipeline) and `tests/mir_pipeline.rs` (the same through LLVM IR emission) are the fastest signal when touching lowering/passes/emission. `tests/sema_emission_tests.rs` and `tests/rc_elision_goldens.rs` assert on emitted IR (`tests/common::emit_ll`, `ir_func_body`).
 - **Determinism test** `codegen_is_deterministic` (`tests/e2e_tests.rs`) compiles the same source twice and asserts byte-identical output. Never break this.

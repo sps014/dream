@@ -159,6 +159,8 @@ pub const ATTR_ARRAY_SET_UNCHECKED: &str = "array_set_unchecked";
 pub const ATTR_WIRE_ENCODE: &str = "wire_encode";
 /// `Bytes.fromWire<T>(s)` — the inverse of [`ATTR_WIRE_ENCODE`].
 pub const ATTR_WIRE_DECODE: &str = "wire_decode";
+/// `System.panic(message)` — abort with `message`, reporting the call site's `file:line`.
+pub const ATTR_PANIC: &str = "dream_panic";
 pub const ATTR_REGEX_COMPILE: &str = "regex_compile";
 pub const ATTR_REGEX_FREE: &str = "regex_free";
 pub const ATTR_REGEX_FIND: &str = "regex_find";
@@ -213,6 +215,7 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_ARRAY_SET_UNCHECKED,
     ATTR_WIRE_ENCODE,
     ATTR_WIRE_DECODE,
+    ATTR_PANIC,
     ATTR_REGEX_COMPILE,
     ATTR_REGEX_FREE,
     ATTR_REGEX_FIND,
@@ -304,6 +307,8 @@ pub enum IntrinsicOp {
     WireEncode,
     /// `Bytes.fromWire<T>(s)` — the inverse of [`IntrinsicOp::WireEncode`].
     WireDecode,
+    /// `System.panic(message)` — the backend appends the call site's source location.
+    Panic,
     /// `system.text` PCRE2 helpers (`regex_compile` / `regex_find` / …).
     Regex,
     SimdLaneCount,
@@ -355,6 +360,7 @@ impl IntrinsicOp {
             ATTR_ARRAY_SET_UNCHECKED => IntrinsicOp::ArraySetUnchecked,
             ATTR_WIRE_ENCODE => IntrinsicOp::WireEncode,
             ATTR_WIRE_DECODE => IntrinsicOp::WireDecode,
+            ATTR_PANIC => IntrinsicOp::Panic,
             ATTR_REGEX_COMPILE
             | ATTR_REGEX_FREE
             | ATTR_REGEX_FIND

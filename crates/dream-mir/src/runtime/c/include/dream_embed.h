@@ -34,8 +34,9 @@ void dream_thread_detach(void);
 void dream_retain(void *ref);
 void dream_release(void *ref);
 
-/* `message` is the panic text in UTF-8. `location` is the Dream source location ("file:line") when
- * the panic site recorded one, and NULL otherwise. Both stay valid only for the call. */
+/* `message` is the panic text in UTF-8. `location` is the Dream source location ("file:line") of
+ * the panicking statement, or NULL for a panic the runtime raises itself (such as out of memory).
+ * Both stay valid only for the call. */
 typedef void (*dream_panic_hook)(const char *message, const char *location);
 
 /* Installs `hook` (NULL restores the default). A panic raised while the hook runs skips it. */

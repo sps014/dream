@@ -103,7 +103,7 @@ fn resolve_package_import(base_dir: &Path, module_name: &str) -> Option<std::pat
 pub fn find_dream_packages_dir(start_dir: &Path) -> Option<std::path::PathBuf> {
     let mut dir = Some(start_dir.to_path_buf());
     while let Some(d) = dir {
-        let candidate = d.join("dream_packages");
+        let candidate = d.join(dream_stdlib::PACKAGES_DIR);
         if candidate.is_dir() {
             return Some(candidate);
         }
@@ -157,6 +157,9 @@ pub fn collect_declarations<'a>(
     for enum_decl in program.enums.iter().cloned() {
         let mut enum_decl = enum_decl;
         enum_decl.file_path = Some(tag.clone());
+        for method in enum_decl.methods.iter_mut() {
+            method.file_path = Some(tag.clone());
+        }
         all_enums.push(enum_decl);
     }
     for extend_decl in program.extends.iter().cloned() {

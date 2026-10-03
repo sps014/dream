@@ -250,7 +250,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         let mut fp = Value::null();
         for f in direct_targets(self.l, fun_ty) {
             let rev = Reverse::Direct {
-                symbol: self.l.boxed_sym(&self.l.user_fn(f)),
+                symbol: self.l.abi_sym(&self.l.user_fn(f)),
                 fun_ty,
             };
             let slot = self.l.cx.func_index(f) as i64;

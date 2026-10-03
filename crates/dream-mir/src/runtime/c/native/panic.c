@@ -53,16 +53,61 @@ static void panic_utf8(dream_ptr msg, char *out, size_t cap) {
     out[n] = 0;
 }
 
-void dream_panic(dream_ptr msg) {
+/* Builds "  at <location>" as a Dream string in caller storage, so printing it needs no heap. */
+static dream_ptr panic_location_line(const char *location, void *storage, int32_t cap) {
+    struct {
+        int32_t length;
+        int32_t kind;
+        uint16_t text[];
+    } *line = storage;
+    int32_t n = 0;
+    for (const char *p = "  at "; *p; p++) {
+        line->text[n++] = (uint16_t)*p;
+    }
+    const unsigned char *s = (const unsigned char *)location;
+    while (*s) {
+        uint32_t c = *s++;
+        int extra = c >= 0xF0 ? 3 : c >= 0xE0 ? 2 : c >= 0xC0 ? 1 : 0;
+        if (c >= 0x80) {
+            c &= 0x3F >> extra;
+            for (int k = 0; k < extra && (*s & 0xC0) == 0x80; k++) {
+                c = (c << 6) | (*s++ & 0x3F);
+            }
+        }
+        int32_t w = c >= 0x10000 ? 2 : 1;
+        if (n + w > cap) {
+            break;
+        }
+        if (w == 2) {
+            c -= 0x10000;
+            line->text[n++] = (uint16_t)(0xD800 + (c >> 10));
+            line->text[n++] = (uint16_t)(0xDC00 + (c & 0x3FF));
+        } else {
+            line->text[n++] = (uint16_t)c;
+        }
+    }
+    line->length = n;
+    line->kind = DREAM_STR_PAD_INLINE;
+    return (dream_ptr)line;
+}
+
+void dream_panic_at(dream_ptr msg, const char *location) {
     dream_panic_hook hook = __atomic_load_n(&panic_hook, __ATOMIC_ACQUIRE);
     if (hook && !in_panic_hook) {
         char message[PANIC_MESSAGE_MAX];
         panic_utf8(msg, message, sizeof(message));
         in_panic_hook = 1;
-        hook(message, NULL);
+        hook(message, location);
     } else {
         print_err_string(msg);
         print_err_char(10);
+        if (location) {
+            _Alignas(8) char storage[8 + 2 * PANIC_MESSAGE_MAX];
+            print_err_string(panic_location_line(location, storage, PANIC_MESSAGE_MAX));
+            print_err_char(10);
+        }
     }
     abort();
 }
+
+void dream_panic(dream_ptr msg) { dream_panic_at(msg, NULL); }

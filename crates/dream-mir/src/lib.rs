@@ -121,9 +121,8 @@ pub struct MirFunction {
     pub is_async: bool,
     /// When `is_async`, the full typed HIR function preserved for the coroutine transform.
     pub hir_fn: Option<dream_hir::HFunction>,
-    /// Absolute source-file path this function was declared in (debug-info only; `None` otherwise or
-    /// for synthesized functions). Used by the backend to attribute `DebugLine`s to a file in the
-    /// emitted source map.
+    /// Source-file path this function was declared in; `None` for synthesized functions. Names the
+    /// file in debug info and in panic locations.
     pub file: Option<String>,
     pub inline: dream_hir::InlineHint,
 }
@@ -182,12 +181,13 @@ pub enum Statement {
     /// Decrement the refcount of a reference operand (and free at zero).
     Release(Operand),
     /// Prints `Operand` (a `string`-typed panic message, always a compile-time-known literal built
-    /// during HIR emission) via the shared `$dream_panic` runtime helper, then traps unconditionally.
+    /// during HIR emission) via the shared `dream_panic_at` runtime helper with the statement's
+    /// source location, then aborts.
     /// The single, shared halt point for every runtime failure: array/string bounds checks,
     /// division by zero, bad object-unbox casts, null-reference dereference, and the user-callable
     /// `panic(msg)` builtin. Like [`Statement::Print`], it is an observable side effect: passes must
     /// not delete, hoist, or reorder it, and code that follows it in the same block is unreachable at
-    /// runtime (though still validated, since the WASM `unreachable` inside `$dream_panic` — not this
+    /// runtime (though still validated, since the `abort` inside `dream_panic_at` — not this
     /// statement itself — is what actually diverges).
     Panic(Operand),
     /// A call evaluated for its effect only (return value discarded).
@@ -242,12 +242,10 @@ pub enum Statement {
     /// operations across it or delete it). Carries no value and reads no locals.
     DebugLine(u32),
     /// A compile-time-only source-line marker (1-based line within the function's source file),
-    /// always present (unlike [`Statement::DebugLine`], which requires `-g`). Emits no WAT at all:
-    /// the backend just records it as "the current line" so a following automatic runtime check
-    /// (bounds/division/cast) can attribute its panic message to a real line (see
-    /// [`crate::backend::wasm::panic_msgs`]). Treated identically to [`Statement::DebugLine`] by every
-    /// pass — an inert, order-preserving barrier — purely so scanning the pre-emission MIR for panic
-    /// call sites (which tracks the same marker) sees the same line the backend will.
+    /// always present (unlike [`Statement::DebugLine`], which requires `-g`). Emits no code: the
+    /// backend records it as the current line, which every following panic (automatic checks and
+    /// `System.panic`) reports as `file:line`. Passes keep it in order like [`Statement::DebugLine`];
+    /// the inliner drops a callee's markers so inlined code reports the call site's line.
     SourceLine(u32),
     /// `Buffer.elems_copy<T>(dst, dst_off, src, src_off, count)` (`@unsafe`) — bulk
     /// `memory.copy` of `count` unmanaged elements. Void-typed, so a statement (not an `Rvalue`).
@@ -395,7 +393,7 @@ pub enum Place {
         field: usize,
     },
     /// `base[index]`. `unchecked` is set by ABC / foreach lowering when `index` is already proven
-    /// in range, so emit skips the `$dream_panic` bounds check.
+    /// in range, so emit skips the `dream_array_at` bounds check.
     Index {
         base: Local,
         index: Box<Operand>,

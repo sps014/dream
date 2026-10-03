@@ -157,7 +157,7 @@ impl<'a> Analyzer<'a> {
     fn current_function_is_trusted_prelude(&self) -> bool {
         self.current_file
             .as_deref()
-            .is_some_and(|f| f.starts_with("<std>/"))
+            .is_some_and(dream_stdlib::is_std_source)
     }
 
     /// Rejects a call to an `@unsafe` function/method/constructor unless the calling function is

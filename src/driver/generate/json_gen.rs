@@ -800,7 +800,7 @@ fn is_json_static_receiver(expr: &ExpressionNode<'_>) -> bool {
 #[cfg(feature = "native")]
 fn is_user_source(path: Option<&std::rc::Rc<str>>) -> bool {
     match path {
-        Some(p) => !p.starts_with("<std>/"),
+        Some(p) => !dream_stdlib::is_std_source(p),
         None => true,
     }
 }

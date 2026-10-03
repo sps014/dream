@@ -1,0 +1,26 @@
+// A panic inside a stdlib function reports the program line that called it, also when the
+// function returns a value struct through a caller buffer.
+import system;
+
+struct Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+fun find(found: bool): Option<Point> {
+    if found {
+        return Option.Some(Point(1, 2));
+    }
+    return Option.None;
+}
+
+fun main(): void {
+    System.println(find(true).unwrap().x);
+    let missing = find(false);
+    System.println(missing.unwrap().y);
+}

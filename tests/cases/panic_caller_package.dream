@@ -1,0 +1,12 @@
+// A panic inside a dependency package (here forwarded on into the stdlib) reports the program
+// line that called into the package.
+import system;
+import system.collections;
+import mathpkg.ops;
+
+fun main(): void {
+    let xs = List<int>();
+    xs.push(7);
+    System.println(nth(xs, 0));
+    System.println(nth(xs, 3));
+}

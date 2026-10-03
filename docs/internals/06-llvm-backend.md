@@ -257,7 +257,7 @@ proof was written:
 | Memory effects / allocation attributes | Redundant with the whole-program runtime |
 | `nsw` from a MIR no-wrap proof | Gained nothing on any kernel |
 | `nonnull` | Not emitted as a blanket fact after native pointer migration; nullable/shared/interior inputs require separate proofs |
-| Value-struct returns | Shipped. Internal functions returning a value struct write into a caller `alloca` passed as a trailing `ptr`. Function tables, itables and guarded interface arms point at a `name__boxed` wrapper that keeps the heap-box ABI. 6 ns → under 1 ns per call |
+| Value-struct returns | Shipped. Internal functions returning a value struct write into a caller `alloca` passed as a trailing `ptr`. Function tables, itables and guarded interface arms point at a `name__abi` wrapper that keeps the heap-box ABI. 6 ns → under 1 ns per call |
 | Uniqueness alias scopes | Not built. The only alias-bound kernel is the one TBAA covers |
 
 Against the C build, the LLVM build ran at 0.4–0.8× the time on most kernels (sieve 0.40×,

@@ -210,8 +210,9 @@ impl<'l, 'a> Fx<'l, 'a> {
             return self.w.gep_i8(&data, &off);
         }
         let msg = self.str_v(panic_msgs::INDEX_OUT_OF_BOUNDS);
+        let at = self.panic_location();
         let i = V::s(self.conv(&idx, &Ty::I64));
-        self.call_v("dream_array_at", &[b, i, V::i32(es as i64), msg])
+        self.call_v("dream_array_at", &[b, i, V::i32(es as i64), msg, at])
             .v
     }
 

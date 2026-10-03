@@ -139,6 +139,20 @@ def leak_failure(*streams):
     return None
 
 
+def missing_needle(expected: Path, *streams):
+    """The first non-blank line of `expected` that appears in none of `streams`, if any.
+
+    `.expected_error` and `.expected_trap` list fragments the diagnostics or the trap output must
+    contain, one per line, rather than the exact text.
+    """
+    hay = _ANSI.sub("", "\n".join(s or "" for s in streams))
+    for line in expected.read_text(encoding="utf-8").splitlines():
+        needle = line.strip()
+        if needle and needle not in hay:
+            return needle
+    return None
+
+
 def run_output_body(out):
     # Program stdout only. Compiler diagnostics go to stderr; do not drop blank lines or
     # lines that happen to start with `error:` (e.g. `error: divide by zero`).
@@ -275,9 +289,11 @@ def one_node(f: Path):
         str(f),
     ]
     if err.exists():
-        code, _out, _err = run_group(compile_cmd, 60)
+        code, _out, _err = run_group(compile_cmd, 180)
         if code == 0:
             return stem, "fail", "compile should fail"
+        if code == -9:
+            return stem, "fail", "compile timed out"
         return stem, "ok", ""
     skip = node_skip_reason(stem)
     if skip:
@@ -327,9 +343,14 @@ def one(f: Path):
     exp = native_exp if struct.calcsize("P") == 8 and native_exp.exists() else f.with_suffix(".expected")
     trap = f.with_suffix(".expected_trap")
     if err.exists():
-        code, _out, _err = run_group([str(dream), *BUILD_FLAGS, str(f)], 25)
+        code, out, err_txt = run_group([str(dream), *BUILD_FLAGS, str(f)], 180)
         if code == 0:
             return stem, "fail", "compile should fail"
+        if code == -9:
+            return stem, "fail", "compile timed out"
+        needle = missing_needle(err, out, err_txt)
+        if needle:
+            return stem, "fail", f"diagnostics missing {needle!r}: {_ANSI.sub('', err_txt)[-2000:]!r}"
         return stem, "ok", ""
 
     cmd = [str(dream), *BUILD_FLAGS, "run", str(f)]
@@ -351,6 +372,9 @@ def one(f: Path):
     if trap.exists():
         if code == 0:
             return stem, "fail", "expected trap"
+        needle = missing_needle(trap, out, err, f"exit code {code}")
+        if needle:
+            return stem, "fail", f"trap output missing {needle!r}: {_ANSI.sub('', err)[-2000:]!r}"
         return stem, "ok", ""
     if code != 0:
         tail = " | ".join((err or out or "").strip().splitlines()[-2:])

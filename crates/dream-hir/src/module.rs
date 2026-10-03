@@ -209,9 +209,8 @@ pub struct HFunction {
     pub locals: Vec<HLocal>,
     pub body: Vec<HStmt>,
     pub is_async: bool,
-    /// Absolute path of the source file this function was declared in. Carried for debug-info so the
-    /// backend/source-map can attribute each `DebugLine` to the right file. `None` for synthesized
-    /// functions (module init, tests) that have no originating source file.
+    /// Path of the source file this function was declared in, naming it in debug info and panic
+    /// locations. `None` for synthesized functions (module init, tests) with no source file.
     pub file: Option<String>,
     pub inline: InlineHint,
 }

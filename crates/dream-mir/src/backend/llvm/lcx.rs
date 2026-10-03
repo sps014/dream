@@ -56,14 +56,19 @@ pub(super) struct Lcx<'a> {
     pub m: ModuleWriter,
     own: IndexMap<String, FnSig>,
     /// Internal functions returning a value struct through a trailing caller buffer instead of a
-    /// heap box. Tables and itables point at their `__boxed` wrapper, which keeps the box ABI.
+    /// heap box. Tables and itables point at their `__abi` wrapper, which keeps the box ABI.
     pub sret: IndexSet<String>,
+    /// Library functions taking the caller's panic location as a trailing hidden `ptr`
+    /// (`source_loc.rs`). Tables and itables point at their `__abi` wrapper, which passes NULL.
+    pub tracked: IndexSet<String>,
     hosts: IndexMap<String, FnSig>,
     intrinsics: IndexMap<String, FnTy>,
     /// wasm32 export names of functions this module defines.
     exports: IndexMap<String, String>,
     /// Functions the C shim calls, so they must stay visible until the shim is linked in.
     shim_callees: IndexSet<String>,
+    /// NUL-terminated constant strings by contents, each a private global.
+    cstrs: IndexMap<String, String>,
     pub dbg_cu: Option<MdRef>,
     /// Debugger view composites by name (`debug_views.rs`).
     pub dbg_views: IndexMap<String, MdRef>,
@@ -87,10 +92,12 @@ impl<'a> Lcx<'a> {
             m,
             own: IndexMap::new(),
             sret: IndexSet::new(),
+            tracked: IndexSet::new(),
             hosts: IndexMap::new(),
             intrinsics: IndexMap::new(),
             exports: IndexMap::new(),
             shim_callees: IndexSet::new(),
+            cstrs: IndexMap::new(),
             dbg_cu: None,
             dbg_views: IndexMap::new(),
         }
@@ -287,18 +294,46 @@ impl<'a> Lcx<'a> {
         )
     }
 
+    /// `ptr` to a private NUL-terminated copy of `s`, shared by every use of the same contents.
+    pub fn cstr(&mut self, s: &str) -> Value {
+        if let Some(name) = self.cstrs.get(s) {
+            return Value::global(name.clone());
+        }
+        let name = format!(".cstr{}", self.cstrs.len());
+        let bytes: Vec<u8> = s.bytes().chain(std::iter::once(0)).collect();
+        self.m.global(
+            &name,
+            GlobalDef {
+                linkage: Linkage::Private,
+                thread_local: false,
+                constant: true,
+                unnamed_addr: true,
+                ty: Ty::bytes(bytes.len() as u64),
+                init: Some(super::ir::fmt::c_string(&bytes)),
+                align: 1,
+            },
+        );
+        self.cstrs.insert(s.to_string(), name.clone());
+        Value::global(name)
+    }
+
     pub fn global(&mut self, name: &str, def: GlobalDef) {
         self.m.global(name, def);
     }
 
     /// The symbol an indirect call (function table, itable, guarded interface arm) may use: the
-    /// box-ABI wrapper for a buffer-returning function, the function itself otherwise.
-    pub fn boxed_sym(&self, name: &str) -> String {
-        if self.sret.contains(name) {
-            format!("{name}__boxed")
+    /// plain-ABI wrapper for a buffer-returning or caller-tracking function, the function itself
+    /// otherwise.
+    pub fn abi_sym(&self, name: &str) -> String {
+        if self.has_abi_wrapper(name) {
+            format!("{name}__abi")
         } else {
             name.to_string()
         }
+    }
+
+    pub fn has_abi_wrapper(&self, name: &str) -> bool {
+        self.sret.contains(name) || self.tracked.contains(name)
     }
 
     pub fn h(&self) -> Ty {

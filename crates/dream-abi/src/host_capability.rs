@@ -98,7 +98,7 @@ mod tests {
             let json =
                 format!("{{\"native_abi_version\":{version},\"host_capabilities\":[\"core\"]}}");
             let error = HostManifest::parse(&json).err().unwrap().to_string();
-            assert!(error.contains("stale native ABI manifest"), "{error}");
+            assert!(error.contains("stale native ABI manifest"), "{}", error);
         }
         let manifest =
             HostManifest::parse(r#"{"native_abi_version":2,"host_capabilities":[]}"#).unwrap();

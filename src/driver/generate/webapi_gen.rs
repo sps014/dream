@@ -196,7 +196,7 @@ fn stub_extend() -> String {
 }
 
 fn is_std_file(path: Option<&str>) -> bool {
-    path.map(|p| p.starts_with("<std>/")).unwrap_or(true)
+    path.is_none_or(dream_stdlib::is_std_source)
 }
 
 fn has_attr(attrs: &[AttributeNode], name: &str) -> bool {

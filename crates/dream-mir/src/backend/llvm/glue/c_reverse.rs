@@ -158,7 +158,7 @@ pub(super) fn reverse_trampolines(l: &Lcx<'_>) -> IndexMap<Reverse, (Vec<CShape>
                 CShape::Func { params, ret, .. } if s.needs_wrapper() => {
                     let fun_ty = fun_ty();
                     for f in direct_targets(l, fun_ty) {
-                        let symbol = l.boxed_sym(&l.user_fn(f));
+                        let symbol = l.abi_sym(&l.user_fn(f));
                         out.insert(
                             Reverse::Direct { symbol, fun_ty },
                             (params.clone(), (**ret).clone()),

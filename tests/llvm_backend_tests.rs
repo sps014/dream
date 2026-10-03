@@ -394,11 +394,11 @@ fn llvm_ir_shapes() {
     assert!(div_var.contains("@dream_panic_at(") && div_var.contains(", -1"));
 
     assert!(ll.contains("define internal void @mk(i32 %a0, ptr %a1)"));
-    assert!(function_body(&ll, "mk__boxed").contains("call void @mk("));
+    assert!(function_body(&ll, "mk__abi").contains("call void @mk("));
     assert!(ll.contains("call void @mk(i32 4, ptr "));
     assert!(ll
         .lines()
-        .any(|l| l.starts_with("@dream_ft = ") && l.contains("ptr @mk__boxed")));
+        .any(|l| l.starts_with("@dream_ft = ") && l.contains("ptr @mk__abi")));
 
     for l in ll.lines().filter(|l| l.starts_with("define ")) {
         assert!(l.contains("nounwind"), "missing nounwind: {}", l);

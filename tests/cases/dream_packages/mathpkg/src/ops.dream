@@ -1,5 +1,12 @@
 // Fixture dependency for the `package_import_subpath` golden test: a dotted `import
 // mathpkg.ops;` resolves to `dream_packages/mathpkg/src/ops.dream`.
+import system.collections;
+
 public fun times_two(n: int): int {
     return n * 2;
+}
+
+// Indexes through the stdlib, so an out-of-range `i` panics two library frames deep.
+public fun nth(xs: List<int>, i: int): int {
+    return xs[i];
 }

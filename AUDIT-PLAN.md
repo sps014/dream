@@ -1408,6 +1408,8 @@ Every fix should leave the codebase smaller or simpler, not add a second path ne
 - **6.1 Library outputs (MOB-1)**
   - `--emit staticlib` and `--emit dylib`: no `main`; export `@export` symbols plus the embedding API from 4.3.
   - Generate a C header for the exported functions.
+  - Panic locations: the library's own sources are the program, so its panics report its own lines, and its stdlib and `dream_packages/` dependencies report the library's calling line. Exported functions are entered through their plain-ABI wrapper, so a C, Swift or Kotlin caller passes no location. Record source paths relative to the package root (for example `mylib/src/parse.dream:12`) instead of the build machine's absolute path, so shipped libraries don't leak build paths and reproduce across machines.
+  - If Dream-to-Dream linking of prebuilt libraries is ever added (it needs 5.4's stable symbols), the hidden caller-location parameter of library functions becomes part of their exported ABI and must be recorded in the library's interface metadata.
 - **6.2 Mobile packaging (MOB-1)**
   - iOS: an xcframework with device and simulator slices, and an ObjC shim generator modelled on `cpp_bridge`.
   - Android: an `.aar` with `.so` libraries per ABI and a JNI glue generator.

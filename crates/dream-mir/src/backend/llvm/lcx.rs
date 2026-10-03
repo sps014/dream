@@ -56,8 +56,11 @@ pub(super) struct Lcx<'a> {
     pub m: ModuleWriter,
     own: IndexMap<String, FnSig>,
     /// Internal functions returning a value struct through a trailing caller buffer instead of a
-    /// heap box. Tables and itables point at their `__boxed` wrapper, which keeps the box ABI.
+    /// heap box. Tables and itables point at their `__abi` wrapper, which keeps the box ABI.
     pub sret: IndexSet<String>,
+    /// Library functions taking the caller's panic location as a trailing hidden `ptr`
+    /// (`source_loc.rs`). Tables and itables point at their `__abi` wrapper, which passes NULL.
+    pub tracked: IndexSet<String>,
     hosts: IndexMap<String, FnSig>,
     intrinsics: IndexMap<String, FnTy>,
     /// wasm32 export names of functions this module defines.
@@ -89,6 +92,7 @@ impl<'a> Lcx<'a> {
             m,
             own: IndexMap::new(),
             sret: IndexSet::new(),
+            tracked: IndexSet::new(),
             hosts: IndexMap::new(),
             intrinsics: IndexMap::new(),
             exports: IndexMap::new(),
@@ -318,13 +322,18 @@ impl<'a> Lcx<'a> {
     }
 
     /// The symbol an indirect call (function table, itable, guarded interface arm) may use: the
-    /// box-ABI wrapper for a buffer-returning function, the function itself otherwise.
-    pub fn boxed_sym(&self, name: &str) -> String {
-        if self.sret.contains(name) {
-            format!("{name}__boxed")
+    /// plain-ABI wrapper for a buffer-returning or caller-tracking function, the function itself
+    /// otherwise.
+    pub fn abi_sym(&self, name: &str) -> String {
+        if self.has_abi_wrapper(name) {
+            format!("{name}__abi")
         } else {
             name.to_string()
         }
+    }
+
+    pub fn has_abi_wrapper(&self, name: &str) -> bool {
+        self.sret.contains(name) || self.tracked.contains(name)
     }
 
     pub fn h(&self) -> Ty {

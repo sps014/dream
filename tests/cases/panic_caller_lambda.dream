@@ -1,0 +1,14 @@
+// A program lambda the stdlib calls back reports its own line, not the library's.
+import system;
+import system.collections;
+
+fun main(): void {
+    let xs = List<int>();
+    xs.push(2);
+    xs.push(1);
+    let empty = List<int>();
+    xs.sort_by((a: int, b: int) => {
+        return a - b + empty[0];
+    });
+    System.println("unreachable");
+}

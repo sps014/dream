@@ -33,7 +33,7 @@ panic: index out of bounds
 
 `System.panic(message)` prints exactly the `message` you pass, followed by the same location line.
 
-The location names the file as the compiler saw it and the line of the statement. A check inside a standard library function names the library source (for example `<std>/system/collections/list.dream:113`) unless the compiler inlined that function, in which case it names the calling statement. Panics raised by the runtime itself, such as running out of memory, have no location.
+The location names the file as the compiler saw it and the line of the statement. A panic inside library code — the standard library or a package in `dream_packages/` — names the line in your program that called into the library, not the library's own source: `xs[10]` on a `List`, `Option.unwrap()` on `None`, or a package function that misuses a `List` all point at your call. A library function reached only through a function value or an interface call names its own line instead. Your own lambdas keep their own lines, even when a library function calls them. Panics raised by the runtime itself, such as running out of memory, have no location.
 
 A panic never unwinds: no destructor, `defer`, or caller code runs after it, and it never crosses into C as an exception.
 

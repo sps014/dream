@@ -66,6 +66,8 @@ pub(super) struct Fx<'l, 'a> {
     pub src_lines: Vec<Option<u32>>,
     /// The source line in effect at the statement being emitted.
     pub src_line: Option<u32>,
+    /// A caller-tracking body's incoming caller location (its trailing hidden parameter).
+    pub caller_loc: Option<Value>,
 }
 
 pub(super) fn mem_ll(m: MemTy, h: &Ty, word: &Ty) -> (Ty, bool) {
@@ -121,6 +123,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             src_file: None,
             src_lines: Vec::new(),
             src_line: None,
+            caller_loc: None,
         }
     }
 
@@ -342,6 +345,14 @@ impl<'l, 'a> Fx<'l, 'a> {
     /// Calls a named function (generated, host or runtime) with C argument conversions.
     pub fn call(&mut self, name: &str, args: &[V]) -> Option<V> {
         let sig = self.l.sig(name);
+        let mut tracked;
+        let args = if self.l.tracked.contains(name) {
+            tracked = args.to_vec();
+            tracked.push(self.panic_location());
+            &tracked[..]
+        } else {
+            args
+        };
         if args.len() != sig.fty.params.len() && !sig.fty.varargs {
             crate::internal_error!(
                 "call to `{name}` passes {} arguments; its LLVM signature is {}",

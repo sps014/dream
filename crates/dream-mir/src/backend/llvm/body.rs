@@ -149,24 +149,29 @@ pub(super) fn returns_via_buffer(l: &Lcx<'_>, f: &MirFunction, name: &str) -> bo
     !f.is_async && name != "main" && !l.sigs.has_function(name) && l.interner.is_value_type(f.ret)
 }
 
-/// `name__boxed(args) -> box`: allocates the heap box indirect callers expect and fills it
-/// through the buffer-returning body.
-pub(super) fn build_boxed_wrapper<'a>(l: &mut Lcx<'a>, f: &'a MirFunction) {
+/// `name__abi(args)`, the plain signature indirect callers use: a buffer-returning body gets the
+/// heap box they expect, and a caller-tracking body gets a NULL location (`Fx::call` appends it).
+pub(super) fn build_abi_wrapper<'a>(l: &mut Lcx<'a>, f: &'a MirFunction) {
     let name = l.user_fn(f);
-    if !l.sret.contains(&name) {
+    if !l.has_abi_wrapper(&name) {
         return;
     }
-    let wrapper = l.boxed_sym(&name);
+    let wrapper = l.abi_sym(&name);
     let n = l.sig(&wrapper).fty.params.len();
     let mut fx = super::glue::glue(l, &wrapper);
-    let size = crate::backend::shared::abi_types::elem_size(&fx.l.cx, f.ret) as i64;
-    let tag = fx.l.cx.type_tag(f.ret);
-    let b = fx.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
     let mut args: Vec<V> = (0..n).map(|i| fx.arg(i)).collect();
-    args.push(V::s(fx.ptr(&b)));
-    fx.call(&name, &args);
-    let r = fx.as_ref(&b);
-    fx.w.ret(Some(&r.v));
+    if fx.l.sret.contains(&name) {
+        let size = crate::backend::shared::abi_types::elem_size(&fx.l.cx, f.ret) as i64;
+        let tag = fx.l.cx.type_tag(f.ret);
+        let b = fx.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
+        args.push(V::s(fx.ptr(&b)));
+        fx.call(&name, &args);
+        let r = fx.as_ref(&b);
+        fx.w.ret(Some(&r.v));
+    } else {
+        let r = fx.call(&name, &args);
+        fx.w.ret(r.as_ref().map(|r| &r.v));
+    }
     fx.finish();
 }
 

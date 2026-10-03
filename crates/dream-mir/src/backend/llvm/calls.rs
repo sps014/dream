@@ -170,7 +170,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.w.switch(&tag, fallback, &blocks);
         for ((_, b), (_, cname)) in blocks.iter().zip(&arms) {
             self.w.switch_to(*b);
-            let callee = self.l.fn_ref(&self.l.boxed_sym(cname));
+            let callee = self.l.fn_ref(&self.l.abi_sym(cname));
             let vals = self.coerce_args(&s, &call_args);
             let r = self.call_ptr(&callee, &s, vals);
             if let (Some(slot), Some(r)) = (&result, r) {

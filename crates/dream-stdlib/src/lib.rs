@@ -2,6 +2,9 @@ use dream_abi::host_capability::HostCapability;
 use dream_syntax::nodes::Type;
 use indexmap::IndexSet;
 
+mod source_paths;
+pub use source_paths::{is_library_source, is_std_source, PACKAGES_DIR, STD_PATH_PREFIX};
+
 /// One embedded stdlib package: dotted import name, ordered source files, and package deps.
 pub struct StdPackage {
     /// Dotted path users write in `import system.net;`.

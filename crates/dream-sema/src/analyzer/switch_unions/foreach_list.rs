@@ -43,7 +43,7 @@ impl<'a> Analyzer<'a> {
             .generic_structs
             .get("List")
             .and_then(|t| t.file_path.as_deref())
-            .is_some_and(|f| f.starts_with("<std>/"));
+            .is_some_and(dream_stdlib::is_std_source);
         if !from_std {
             return None;
         }

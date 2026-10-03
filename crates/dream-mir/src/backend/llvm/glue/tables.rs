@@ -193,7 +193,7 @@ fn emit_ftables(l: &mut Lcx<'_>) {
     let mut fd: Vec<Option<String>> = vec![None; n];
     let fns = &l.mir.functions;
     for f in fns {
-        ft[l.cx.func_index(f)] = Some(l.boxed_sym(&l.user_fn(f)));
+        ft[l.cx.func_index(f)] = Some(l.abi_sym(&l.user_fn(f)));
     }
     for (async_i, f) in fns.iter().filter(|f| f.is_async).enumerate() {
         let i = fns.len() + 1 + async_i;
@@ -374,7 +374,7 @@ fn emit_itables(l: &mut Lcx<'_>) {
                 let (Some(&t), true) = (index.get(&(*iid, slot)), (tag as usize) < ntags) else {
                     continue;
                 };
-                tables[t][tag as usize] = Some(l.boxed_sym(&c_ident(&func_symbol(f))));
+                tables[t][tag as usize] = Some(l.abi_sym(&c_ident(&func_symbol(f))));
             }
         }
     }

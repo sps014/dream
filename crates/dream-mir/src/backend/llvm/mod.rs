@@ -91,14 +91,22 @@ fn emit_llvm_module_unchecked(
     for f in &mir.functions {
         let name = l.user_fn(f);
         let sig = types::fn_ll_sig(interner, f, &l.h(), &l.word());
-        if body::returns_via_buffer(&l, f, &name) {
+        let sret = body::returns_via_buffer(&l, f, &name);
+        let tracked = source_loc::tracks_caller(&l, f, &name);
+        if sret || tracked {
             let mut direct = sig.clone();
-            direct.fty.ret = Ty::Void;
-            direct.fty.params.push(Ty::Ptr);
-            direct.ret_attrs.clear();
-            l.own(&format!("{name}__boxed"), sig);
+            if sret {
+                direct.fty.ret = Ty::Void;
+                direct.fty.params.push(Ty::Ptr);
+                direct.ret_attrs.clear();
+                l.sret.insert(name.clone());
+            }
+            if tracked {
+                direct.fty.params.push(Ty::Ptr);
+                l.tracked.insert(name.clone());
+            }
+            l.own(&l.abi_sym(&name), sig);
             l.own(&name, direct);
-            l.sret.insert(name);
             continue;
         }
         l.own(&name, sig);
@@ -125,7 +133,7 @@ fn emit_llvm_module_unchecked(
     for f in &mir.functions {
         if !f.is_async {
             body::build_sync(&mut l, f);
-            body::build_boxed_wrapper(&mut l, f);
+            body::build_abi_wrapper(&mut l, f);
             continue;
         }
         let poll_idx = mir.functions.len() + 1 + async_i;

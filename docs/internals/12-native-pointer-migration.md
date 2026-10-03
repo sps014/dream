@@ -159,14 +159,96 @@ support performance claims. No sanitizer or stress execution was part of this
 baseline. No Linux/Windows execution was available; cross-emission is not native
 execution evidence for either platform.
 
-## Completion evidence still required
+## Paired comparison after implementation
 
-Compare final optimized IR, assembly and executable size with these artifacts;
-measure the same suite and C hotpaths, explain noise and neutral/regressing
-results, and separate representation changes from unrelated optimizations.
+The stable implementation measured here is revision
+`0469ddb4f3fe90191ac2c122e57b598e976b75ad`. The workspace build, strict Clippy and
+tests had completed before measurement; no Cargo or corpus probes ran during the
+timed section. Compilation again used the existing debug compiler executable with
+guest `-O3`, LLVM 22.1.8, the same target/deployment version and dead-strip policy.
+There are no experimental optimization attributes or A/B runtime switches.
+
+`target/audit-p3-pointer-baseline/compare.sh` compiled the after executable once,
+warmed both variants, then alternated before/after starts for three repetitions
+with three measured passes each. Before uses the isolated old binding library
+described above; after uses the current host ABI. Both variants completed every
+suite family. Raw paired samples, build flags, assembly, live checks and optimizer
+remarks remain under `target/audit-p3-pointer-after/`. This directory and the
+old-ABI library are local measurement artifacts, not distribution inputs.
+
+The executable grew from 559,536 to **575,840 bytes** (+16,304 bytes, **2.9%**).
+Optimized whole-program IR grew from 3,731,607 to **3,902,779 bytes** (+4.6%);
+assembly text grew from 2,104,441 to **2,184,673 bytes** (+3.8%). Text-file sizes
+are not instruction counts. The optimized module's integer/pointer conversions
+dropped from 1,386 `inttoptr` / 848 `ptrtoint` to **9 / 29**. Remaining conversions
+include explicit result-word/address transport and are not a claim of zero address
+conversions. Removing IR casts alone does not demonstrate faster machine code.
+
+Paired process-median nanoseconds per operation, with before/after process spreads:
+
+- `linked_walk`: 1,301.00 → 1,306.75 ns (17.1% / 8.6% spread); neutral.
+- `arr_add`: 49.16 → 49.10 ns (10.4% / 12.5%); neutral.
+- `vec_add`: 23.49 → 23.74 ns (12.8% / 8.3%); neutral.
+- `matmul_64`: 52,370.00 → 52,282.50 ns (14.3% / 11.0%); neutral.
+- `char_scan`: 16.93 → 16.91 ns (11.9% / 11.8%); neutral.
+- `byte_scan`: 18.03 → 17.95 ns (7.3% / 6.2%); neutral.
+- `string_builder`: 12.73 → 12.28 ns (16.6% / 4.6%); within observed spread.
+- `binary_trees`: 43,680.00 → 41,790.00 ns (15.0% / 8.4%); within observed spread.
+- `arc_locals`: 7.29 → 7.59 ns (14.6% / 5.8%); within observed spread.
+- `map_get_set`: 4.23 → 4.91 ns (12.4% / 33.7%); candidate regression, not resolved
+  by this noisy run.
+
+Other notable candidates are `list_push` 2.36 → 0.84 ns and `string_eq` 2.96 →
+2.24 ns, larger improvements than their measured process spreads, and
+`map_clear_reuse` 1.82 → 2.11 ns with 105% after-spread. The map rows deserve a
+longer isolated rerun before claiming a performance regression or benefit. The
+paired run is substantially faster than the original busy-machine baseline on
+both variants, which demonstrates why the original absolute timings were not used
+as the comparison denominator. No universal speedup is claimed.
+
+The C hotpath executable was rebuilt with the same Apple clang 21 compiler and
+flags, and the preserved before executable was replayed beside it. Both report
+allocator 4.54 ns/op and character scan 0.10 ns/op; reserved builder append is
+3.30 → 3.31 ns/op and growing append 15.45 → 16.25 ns/op. These use the existing
+minimum-of-five protocol rather than process medians; no confidence interval is
+available. Zero-precision substring/concat samples remain uninterpretable.
+
+Separate, untimed `DREAM_DEBUG_LEAKS=1`, one-pass suite executions both reported
+**live=0**, **total_allocations=4,885,241**, and no leaked types. These include the
+suite's own warmup. Retain/release event counters are unavailable; no instrumentation
+was introduced, so allocation equality is not an ARC-call-count measurement.
+
+### Optimized IR and assembly observations
+
+Generated reference paths now preserve pointer signatures and fields; structural
+regressions cover aliases, inline managed fields, pointer null and direct niche
+`None`, closure environments versus integer selectors, async frames and the wasm
+offset boundary. The benchmark's kernels are largely inlined into `run_suite`
+already; the assembly still retains the combined function and native arithmetic
+loops. Reference casts often had no dedicated machine instruction before the
+migration, so their removal cannot be equated with instruction savings.
+
+For a repeatable remaining-opportunity inspection, the same additional
+`default<O3>` pipeline was run over each *already optimized* module with saved
+optimization remarks. These are not first-pass optimization records and cannot
+attribute the original pipeline's wins. Remaining GVN `LoadClobbered` remarks
+increase 15,018 → 18,493, while LICM invalidated-address remarks decrease
+3,073 → 3,018; additional GVN load-PRE remarks are 7 → 40 and LICM hoists 11 → 19.
+SLP stores-vectorized remarks are 28 → 61, but array/vector timing is neutral.
+No-definition inline remarks remain 391 → 454 for external declarations;
+whole-program runtime visibility is retained on both variants. This is mixed
+optimization evidence, not justification for blanket alias facts. Representation,
+synthetic-local classification and the coordinated runtime ABI changed together;
+the measurements do not isolate one of those components as the cause of a gain.
+
+## Remaining execution evidence
+
 Any optional LLVM fact needs a semantic proof producer and negative regression.
 Pointer representation alone proves neither exclusivity nor `noalias`, and this
 record supplies no justification for blanket TBAA, alias scopes, `invariant.load`,
 `nonnull` or `inbounds`. Runtime visibility already permits LLVM's own inference.
-Native/Node correctness, ABI/layout synchronization, deterministic emission,
-runtime stress/sanitizers and platform execution remain implementation gates.
+Cross-target IR emission does not prove Linux/Windows execution. The parent audit
+tracker records the final corpus, ABI/layout, determinism and platform checks;
+Windows completion must be confirmed there before declaring Phase 3.7's entire
+execution matrix complete. The map timing candidates above remain suitable for
+follow-up measurement rather than an invented speedup claim.

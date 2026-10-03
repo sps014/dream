@@ -134,7 +134,7 @@ pub unsafe extern "C" fn cryptoSecureRandomFill(bytes: DreamPtr) {
     if n <= 0 {
         return;
     }
-    let dest = std::slice::from_raw_parts_mut((bytes as *mut u8).add(4), n as usize);
+    let dest = std::slice::from_raw_parts_mut(bytes.add(4), n as usize);
     crate::crypto::secure_random_fill(dest);
 }
 

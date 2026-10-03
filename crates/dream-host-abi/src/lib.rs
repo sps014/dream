@@ -104,7 +104,7 @@ pub fn alloc_string(s: &str) -> DreamPtr {
         if p.is_null() {
             return std::ptr::null_mut();
         }
-        let dst = (p as *mut u8)
+        let dst = p
             .add(dream_mir::abi::STRING_UNITS_OFFSET as usize)
             .cast::<u16>();
         std::ptr::copy_nonoverlapping(units.as_ptr(), dst, units.len());
@@ -118,7 +118,7 @@ pub fn alloc_bytes(bytes: &[u8]) -> DreamPtr {
         if p.is_null() {
             return std::ptr::null_mut();
         }
-        std::ptr::copy_nonoverlapping(bytes.as_ptr(), (p as *mut u8).add(4), bytes.len());
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), p.add(4), bytes.len());
         p
     }
 }
@@ -129,11 +129,7 @@ pub fn alloc_i64s(xs: &[i64]) -> DreamPtr {
         if p.is_null() {
             return std::ptr::null_mut();
         }
-        std::ptr::copy_nonoverlapping(
-            xs.as_ptr().cast::<u8>(),
-            (p as *mut u8).add(4),
-            xs.len() * 8,
-        );
+        std::ptr::copy_nonoverlapping(xs.as_ptr().cast::<u8>(), p.add(4), xs.len() * 8);
         p
     }
 }
@@ -144,7 +140,7 @@ pub fn alloc_i32s(xs: &[i32]) -> DreamPtr {
         if p.is_null() {
             return std::ptr::null_mut();
         }
-        std::ptr::copy_nonoverlapping(xs.as_ptr(), (p as *mut u8).add(4).cast::<i32>(), xs.len());
+        std::ptr::copy_nonoverlapping(xs.as_ptr(), p.add(4).cast::<i32>(), xs.len());
         p
     }
 }
@@ -155,7 +151,7 @@ pub fn alloc_string_array(items: &[String]) -> DreamPtr {
         if p.is_null() {
             return std::ptr::null_mut();
         }
-        let slots = (p as *mut u8).add(4).cast::<DreamPtr>();
+        let slots = p.add(4).cast::<DreamPtr>();
         for (i, item) in items.iter().enumerate() {
             slots.add(i).write_unaligned(alloc_string(item));
         }

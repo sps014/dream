@@ -1,6 +1,7 @@
 //! Store barriers for managed references, including inline value payloads.
 
 use super::fx::{Fx, V};
+use super::ir::Value;
 use crate::backend::shared::ValueLocalKind;
 use crate::{Local, Place};
 use dream_types::TypeId;
@@ -22,7 +23,7 @@ impl Fx<'_, '_> {
             Place::Field { base, .. } | Place::Local(base) if self.private_value(*base) => return,
             Place::Local(_) => return,
             // Globals and raw/ref interiors have no recoverable owning heap header.
-            _ => V::i32(0),
+            _ => V::s(Value::zero(self.h())),
         };
         self.publish_refs(ty, rhs, &owner);
     }

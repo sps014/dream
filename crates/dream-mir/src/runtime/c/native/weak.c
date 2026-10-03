@@ -12,7 +12,7 @@
 typedef struct dream_weak_node {
     dream_ptr target;
     dream_ptr slot;
-    dream_ptr extra;
+    int32_t none_tag;
     int32_t kind;
     struct dream_weak_node *next;
 } dream_weak_node;
@@ -65,7 +65,7 @@ static void weak_free_list(dream_weak_node *dead) {
     }
 }
 
-void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, dream_ptr extra) {
+void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, int32_t none_tag) {
     dream_weak_node *node;
     dream_weak_node **head;
     dream_ptr block;
@@ -76,7 +76,7 @@ void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, dream_p
     node = (dream_weak_node *)dream_p(block);
     node->target = target;
     node->slot = slot;
-    node->extra = extra;
+    node->none_tag = none_tag;
     node->kind = kind;
     weak_lock();
     __atomic_fetch_or(dream_tag_word(target), DREAM_TAG_WEAK_TARGET, __ATOMIC_RELAXED);
@@ -124,7 +124,7 @@ void dream_weak_clear_all(dream_ptr obj) {
                 /* Weak handle: target died — mark the slot dead (null payload). */
                 *(dream_ptr *)dream_p(node->slot) = 0;
             } else if (node->kind == 0) {
-                *(dream_ptr *)dream_p(node->slot) = node->extra;
+                *(int32_t *)dream_p(node->slot) = node->none_tag;
                 *(dream_ptr *)((char *)dream_p(node->slot) + sizeof(dream_ptr)) = 0;
             } else {
                 /* unowned: poison so a later load reports "target destroyed" rather

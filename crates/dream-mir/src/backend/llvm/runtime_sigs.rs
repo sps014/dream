@@ -108,10 +108,9 @@ impl RuntimeSigs {
             ("dream_retain", false),
             ("dream_release", false),
         ] {
-            let function = self
-                .fns
-                .get(name)
-                .ok_or_else(|| format!("missing reference ABI symbol `{name}`"))?;
+            let function = self.fns.get(name).ok_or_else(|| {
+                format!("missing required runtime symbol `{name}` (reference ABI)")
+            })?;
             let actual = if returned {
                 Some(&function.fty.ret)
             } else {
@@ -586,9 +585,9 @@ attributes #2 = { nounwind }
     fn reference_abi_accepts_native_pointers_and_wasm_offsets() {
         for (triple, reference) in [
             ("x86_64-unknown-linux-gnu", "ptr"),
-            ("wasm32-wasip1", "i32"),
+            ("wasm32-unknown-wasip1", "i32"),
         ] {
-            let text = format!("declare {reference} @dream_malloc(i64, i32)\ndeclare void @dream_retain({reference})\ndeclare void @dream_release({reference})\n");
+            let text = format!("target triple = \"{triple}\"\ntarget datalayout = \"e\"\ndeclare {reference} @dream_malloc(i64, i32)\ndeclare void @dream_retain({reference})\ndeclare void @dream_release({reference})\n");
             RuntimeSigs::parse(&text)
                 .unwrap()
                 .validate_reference_abi(&TargetSpec::parse(triple).unwrap())
@@ -600,7 +599,7 @@ attributes #2 = { nounwind }
     fn reference_abi_rejects_stale_integer_native_handles() {
         let target = TargetSpec::parse("x86_64-unknown-linux-gnu").unwrap();
         for name in ["dream_malloc", "dream_retain", "dream_release"] {
-            let text = "declare ptr @dream_malloc(i64, i32)\ndeclare void @dream_retain(ptr)\ndeclare void @dream_release(ptr)\n";
+            let text = "target triple = \"x86_64-unknown-linux-gnu\"\ntarget datalayout = \"e\"\ndeclare ptr @dream_malloc(i64, i32)\ndeclare void @dream_retain(ptr)\ndeclare void @dream_release(ptr)\n";
             let old = if name == "dream_malloc" {
                 text.replace("ptr @dream_malloc", "i64 @dream_malloc")
             } else {

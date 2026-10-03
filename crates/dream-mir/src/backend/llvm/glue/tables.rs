@@ -46,31 +46,11 @@ pub(in super::super) fn emit_strings(l: &mut Lcx<'_>) {
         let units: Vec<u16> = s.encode_utf16().collect();
         let n = units.len().max(1) as u64;
         let arr = Ty::Array(n, Box::new(Ty::I16));
-        let pad = if l.cx.target.spec().capabilities.linear_memory {
-            ""
-        } else {
-            "i64 0, i32 0, i32 0, "
-        };
         let size_ty = l.word();
-        let mut fields = if l.cx.target.spec().capabilities.linear_memory {
-            vec![Ty::I32; 5]
-        } else {
-            vec![
-                size_ty.clone(),
-                Ty::I64,
-                Ty::I32,
-                Ty::I32,
-                Ty::I32,
-                Ty::I32,
-                Ty::I32,
-                Ty::I32,
-            ]
-        };
-        fields.push(arr.clone());
-        let ty = Ty::Struct {
-            packed: false,
-            fields,
-        };
+        let abi = l.cx.target.abi();
+        let padding =
+            Ty::bytes((abi.heap_header_size - abi.ptr_size - crate::abi::TAG_FROM_DATA) as u64);
+        let ty = string_block_type(abi, arr.clone());
         let elems = if units.is_empty() {
             "i16 0".to_string()
         } else {
@@ -81,13 +61,28 @@ pub(in super::super) fn emit_strings(l: &mut Lcx<'_>) {
                 .join(", ")
         };
         let init = format!(
-            "{{ {size_ty} 0, {pad}i32 {}, i32 {}, i32 {}, i32 {}, {arr} [{elems}] }}",
+            "{{ {size_ty} 0, {padding} zeroinitializer, i32 {}, i32 {}, i32 {}, i32 {}, {arr} [{elems}] }}",
             abi::TAG_STRING,
             i32::MIN,
             units.len(),
             abi::string_hash(&units),
         );
         data_global(l, &format!("{sym}_blk"), ty, init, true, 8);
+    }
+}
+
+fn string_block_type(abi: crate::abi::TargetAbi, units: Ty) -> Ty {
+    Ty::Struct {
+        packed: false,
+        fields: vec![
+            Ty::Int(abi.ptr_size * 8),
+            Ty::bytes((abi.heap_header_size - abi.ptr_size - crate::abi::TAG_FROM_DATA) as u64),
+            Ty::I32,
+            Ty::I32,
+            Ty::I32,
+            Ty::I32,
+            units,
+        ],
     }
 }
 
@@ -533,4 +528,34 @@ fn emit_worker_invoke(l: &mut Lcx<'_>) {
     let r = fx.as_ref(&result);
     fx.w.ret(Some(&r.v));
     fx.finish();
+}
+
+#[cfg(test)]
+mod string_layout_tests {
+    use super::*;
+
+    #[test]
+    fn literal_headers_follow_selected_pointer_width() {
+        for triple in [
+            "i686-unknown-linux-gnu",
+            "x86_64-unknown-linux-gnu",
+            "wasm32-wasip1",
+        ] {
+            let target = dream_abi::target::TargetSpec::parse(triple).unwrap();
+            let abi = crate::abi::TargetAbi::for_target(&target);
+            let Ty::Struct { fields, .. } = string_block_type(abi, Ty::Array(1, Box::new(Ty::I16)))
+            else {
+                unreachable!()
+            };
+            let Ty::Array(padding, _) = &fields[1] else {
+                unreachable!()
+            };
+            assert_eq!(
+                abi.ptr_size as u64 + *padding + crate::abi::TAG_FROM_DATA as u64,
+                abi.heap_header_size as u64
+            );
+            assert_eq!(fields[0], Ty::Int(target.ptr_size * 8));
+            assert_eq!(fields[2..6], vec![Ty::I32; 4]);
+        }
+    }
 }

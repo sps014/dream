@@ -460,7 +460,7 @@ pub(super) fn build_future_drop<'a>(
         let rel = release_sym(&fx.l.cx, ty);
         fx.if_then(&both, |fx| {
             fx.call(&rel, std::slice::from_ref(&v));
-            fx.store_ty(&h, &at, &V::i32(0), 8);
+            fx.store_ty(&h, &at, &V::s(Value::zero(h.clone())), 8);
         });
     }
     fx.w.ret(None);

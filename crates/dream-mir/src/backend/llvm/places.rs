@@ -396,12 +396,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.if_then(&nz, |fx| {
             fx.call(
                 "dream_weak_register",
-                &[
-                    new.clone(),
-                    slot_ref.clone(),
-                    V::i32(1),
-                    V::s(Value::zero(fx.h())),
-                ],
+                &[new.clone(), slot_ref.clone(), V::i32(1), V::i32(0)],
             );
         });
     }
@@ -430,12 +425,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             self.if_then(&nz, |fx| {
                 fx.call(
                     "dream_weak_register",
-                    &[
-                        new.clone(),
-                        slot_ref.clone(),
-                        V::i32(2),
-                        V::s(Value::zero(fx.h())),
-                    ],
+                    &[new.clone(), slot_ref.clone(), V::i32(2), V::i32(0)],
                 );
             });
             if retain_copy {
@@ -468,7 +458,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             let payload = fx.load_ty(fx.h(), &pa, ELEM_ALIGN, true);
             fx.call(
                 "dream_weak_register",
-                &[payload, box_.clone(), V::i32(0), V::i64(none as i64)],
+                &[payload, box_.clone(), V::i32(0), V::i32(none as i64)],
             );
         });
         self.store_ty(&self.h(), slot, &box_, align);

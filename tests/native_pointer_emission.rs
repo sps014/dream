@@ -65,6 +65,7 @@ fn inline_reference_fields_and_nullable_references_keep_pointer_storage() {
         struct Pair { public label: string; public cell: Cell; }
         fun label(pair: Pair): string { return pair.label; }
         fun optional(cell: Option<Cell>): Option<Cell> { return cell; }
+        fun none(): Option<Cell> { return Option.None; }
         fun value(cell: Option<Cell>): int {
             switch(cell) {
                 Some(c) => { return c.value; }
@@ -78,6 +79,9 @@ fn inline_reference_fields_and_nullable_references_keep_pointer_storage() {
         "{}",
         ir
     );
+    assert!(ir.contains("define internal ptr @none()"), "{}", ir);
+    let none = ir_func_body(&ir, "none");
+    assert!(none.contains("ptr null"), "{}", none);
     let label = ir_func_body(&ir, "label");
     assert!(label.contains("load ptr,"), "{}", label);
     let value = ir_func_body(&ir, "value");
@@ -87,7 +91,7 @@ fn inline_reference_fields_and_nullable_references_keep_pointer_storage() {
         value
     );
     assert!(value.contains("null"), "{}", value);
-    for name in ["label", "optional", "value"] {
+    for name in ["label", "optional", "none", "value"] {
         reference_path_has_no_integer_round_trip(&ir, name);
     }
 }
@@ -164,6 +168,36 @@ fn wasm_reference_boundary_remains_a_linear_memory_offset() {
                 if !target.spec().capabilities.linear_memory {
                     reference_path_has_no_integer_round_trip(&ir, "first");
                 }
+            },
+        );
+    }
+}
+
+#[test]
+fn string_literal_padding_uses_the_target_heap_header() {
+    for target in [Target::native(), Target::wasm32()] {
+        compile_test_pipeline_for(
+            "fun literal(): string { return \"hello\"; }",
+            target.clone(),
+            |hir, types| {
+                let mir = dream_mir::lower::lower_program(hir, types);
+                let ir = emit_ll_for(&mir, types, target.clone());
+                let abi = dream_mir::abi::TargetAbi::for_target(target.spec());
+                let padding = abi.heap_header_size - abi.ptr_size - dream_mir::abi::TAG_FROM_DATA;
+                assert!(
+                    ir.contains(&format!(
+                        "{{ i{}, [{} x i8], i32, i32, i32, i32,",
+                        abi.ptr_size * 8,
+                        padding
+                    )),
+                    "{}",
+                    ir
+                );
+                assert!(
+                    ir.contains(&format!("[{padding} x i8] zeroinitializer")),
+                    "{}",
+                    ir
+                );
             },
         );
     }

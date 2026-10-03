@@ -1365,7 +1365,7 @@ uintptr_t weakBind(dream_ptr value);
 dream_ptr weakLoad(uintptr_t slot);
 int32_t weakDead(uintptr_t slot);
 void weakReleaseRaw(uintptr_t slot);
-void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, dream_ptr extra);
+void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, int32_t none_tag);
 void dream_weak_unregister(dream_ptr target, dream_ptr slot);
 
 

@@ -80,6 +80,17 @@ was present; this is a noisy baseline, not evidence of a speedup or regression.
 No allocation/retain/release event counters were collected; timings do not
 substitute for those counts.
 
+For post-migration replay, the preserved old binary resolves `dream_host_bind`
+from the October 2 release `libdream_host_core.dylib`, copied into
+`target/audit-p3-pointer-baseline/host-abi-v1/`. Only the **before** process receives
+that directory through `DYLD_LIBRARY_PATH`; the after process uses the current
+adjacent development library. `nm -u` confirms the old benchmark binary's only
+Dream host-library dependency is `dream_host_bind`, called at startup: timed
+kernels, time queries, environment lookup and printing do not call core-library
+helpers. The older release host artifact is therefore a binding/setup distinction,
+not a timed-kernel implementation difference. This isolated benchmark artifact is
+not shipped and does not introduce a dual ABI into the compiler or runtime.
+
 Reproduce the language artifacts with an existing built compiler:
 
 ```bash

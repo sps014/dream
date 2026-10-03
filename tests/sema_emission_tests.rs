@@ -391,7 +391,7 @@ fn test_hir_emission_extend_nongeneric_class() {
         c
     );
     assert!(
-        c.contains("call i32 @Point_getx(i64 "),
+        c.contains("call i32 @Point_getx(ptr "),
         "call should resolve to the extend method:\n{}",
         c
     );
@@ -413,7 +413,7 @@ fn test_hir_emission_extend_generic_class() {
         c
     );
     assert!(
-        c.contains("call i32 @Box_int_peek(i64 "),
+        c.contains("call i32 @Box_int_peek(ptr "),
         "call should resolve to the instance:\n{}",
         c
     );
@@ -571,7 +571,7 @@ fn test_hir_emission_generic_struct_method_instance() {
         c
     );
     assert!(
-        c.contains("call i32 @Box_int_get(i64 "),
+        c.contains("call i32 @Box_int_get(ptr "),
         "instance call should dispatch to the mangled method:\n{}",
         c
     );
@@ -1506,7 +1506,7 @@ fn test_hir_emission_method_body_and_instance_call() {
         c
     );
     assert!(
-        c.contains("call i32 @Box_get(i64 "),
+        c.contains("call i32 @Box_get(ptr "),
         "instance call should dispatch to the method:\n{}",
         c
     );

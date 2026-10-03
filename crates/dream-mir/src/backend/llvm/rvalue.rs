@@ -311,7 +311,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         };
         let m = match method {
             Some(o) => self.operand(o),
-            None => V::i32(0),
+            None => V::s(Value::zero(self.h())),
         };
         self.call_v("dream_js_call", &[t, v, m, V::i32(argc as i64)])
     }
@@ -524,7 +524,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         if self.interner.is_niche_union(ty) {
             let arg = match args {
                 [a] => a.clone(),
-                _ => return V::i32(0),
+                _ => return V::s(Value::zero(self.h())),
             };
             let e = self.operand(&arg);
             if unique_container_move_local(self.f, self.interner, &arg).is_some() {

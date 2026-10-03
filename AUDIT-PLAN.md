@@ -45,9 +45,9 @@ This document merges two read-only reviews of the Dream compiler and turns them 
 | 0 | Safety net and quick wins | 11 | 11 | Done | —; [#8](https://github.com/sps014/dream/pull/8) merged as `b3492dec`; all required CI gates passed |
 | 1 | Memory and concurrency soundness | 18 | 18 | Done | All tasks and cleanup items merged; final task 1.7 merged in #26 as `743fee2c`. Final-head native/Node corpus verified locally at user request; macOS/Linux and hygiene CI passed; original branch protection restored after merge. |
 | 2 | Distribution correctness | 10 | 10 | Done | #34 merged as `9fe2dfb2` on 2026-10-02 after all five required CI checks passed, including Windows workspace gates and full native corpus. Follow-up Windows portability and CI caching improvements merged in [#35](https://github.com/sps014/dream/pull/35) as `87037e0d`, with all five checks green. Warm Windows CI measured 11m13s versus the prior 33m22s; the initial cold-cache run took 38m41s. |
-| 3 | Target and layout foundation | 11 | 10 | Validation pending | All implementation and cleanup delivered through #41; no remaining feature work identified. Local workspace build, strict Clippy and tests pass (1151 passed, 21 expected ignored). Manual run [37106486399](https://github.com/sps014/dream/actions/runs/37106486399), on implementation `0469ddb4`, passes Ubuntu/macOS workspace gates, macOS runtime sanitizers, hygiene, native 638/638 and Node 539 passed/99 expected skips/0 failures. Paired optimization evidence is recorded; subsequent changes are documentation only. User authorized merge while Windows continues. Only 3.7's Windows execution exit gate remains pending; do not claim the entire phase complete until it passes. Automatic CI remains disabled. |
-| 4 | FFI completion and embedding API | 10 | 0 | Not started | Phase 3 |
-| 5 | Identity, modules and symbols | 12 | 0 | Not started | Phase 3 |
+| 3 | Target and layout foundation | 11 | 11 | Done | #41 merged as `01b1e976` on 2026-10-03. Manual run [37106486399](https://github.com/sps014/dream/actions/runs/37106486399) on implementation `0469ddb4` passed Ubuntu, macOS and Windows workspace gates, macOS runtime sanitizers, hygiene, Linux native 638/638, Windows native 638/638, and Node 539 passed/99 expected skips/0 failures. Local workspace tests: 1151 passed, 21 expected ignored. Paired optimization evidence is in `docs/internals/12-native-pointer-migration.md`. Automatic CI remains disabled. |
+| 4 | FFI completion and embedding API | 10 | 0 | Not started | — |
+| 5 | Identity, modules and symbols | 12 | 0 | Not started | — |
 | 6 | Platform expansion | 9 | 1 | In progress | 6.4 merged at user request; other tasks still depend on Phases 4, 5 |
 | 7 | Scale, performance and long-term work | 8 | 0 | Not started | Phases 5, 6 |
 
@@ -141,7 +141,7 @@ Final #34 CI now targets de67d23f; hosted cold/warm timing improvement is not ye
 | 3.4 | `sizeof` and `.abi.json` read the `LayoutTable` | LAY-2 | Done | Codex | [#39](https://github.com/sps014/dream/pull/39) | `SizeOf(TypeId)` folds in MIR from the completed table; ABI field offsets, sizes and alignment read that table. Switch-label constant and duplicate checks are deferred when layout is needed. Nested-struct native/wasm goldens and ABI agreement tests pass; native 637/637, Node 538 passed/99 expected skips/0 failures. |
 | 3.5 | Pointer-sized integers and C aliases | FFI-2 | Done | Codex | [#40](https://github.com/sps014/dream/pull/40) | Distinct target-sized `isize`/`usize`; target-aware folding, LLVM widths, boxing, async values and LSP validation. CPtr, qsort and memchr signatures migrate to target-sized integers; optional C aliases deferred. Native 638/638 (interrupted run + continuation), Node 539 passed/99 expected skips/0 failures. |
 | 3.6 | Cross emission with `--target` | TGT-1 | Done | Codex | [#41](https://github.com/sps014/dream/pull/41) | Checked IR and target objects without host linking or host CPU selection; Linux AArch64, Linux i686 and Windows x64 cross emission verified. Runtime-selection flag migrated to `--runtime-target`, with no compatibility alias. Workspace and corpus gates pass. |
-| 3.7 | Native LLVM pointers and proven optimization facts | LLVM-3 | Validation pending | Codex | [#41](https://github.com/sps014/dream/pull/41) | Implementation complete: coordinated LLVM/C/Rust pointer ABI v2, typed nulls, target-correct literal headers, numeric weak discriminators and stale artifact rejection. Six structural pointer tests plus runtime stress, macOS sanitizers, determinism and native/Node corpus pass. Paired benchmark artifacts and comparison are recorded in `docs/internals/12-native-pointer-migration.md`; no blanket alias attributes or native compatibility path. User authorized merge before Windows CI finishes; Windows execution gate remains open. |
+| 3.7 | Native LLVM pointers and proven optimization facts | LLVM-3 | Done | Codex | [#41](https://github.com/sps014/dream/pull/41) | Merged as `01b1e976` on 2026-10-03. Coordinated LLVM/C/Rust pointer ABI v2, typed nulls, target-correct literal headers, numeric weak discriminators and stale artifact rejection. Six structural pointer tests plus runtime stress, macOS sanitizers, determinism and native/Node corpus pass. Paired benchmark artifacts and comparison are recorded in `docs/internals/12-native-pointer-migration.md`; no blanket alias attributes or native compatibility path. Windows execution closed by run `37106486399`: workspace build, strict Clippy, tests and native corpus 638/638 with zero skips/failures. |
 | 3.C1 | Delete the old layout authorities | LAY-1 | Done | Codex | [#39](https://github.com/sps014/dream/pull/39) | Deleted semantic size/offset fields, interner value-size storage, string-keyed `value_size_align`, semantic union offset computation and backend `native_layout.rs`; stale-authority search and hygiene pass. |
 | 3.C2 | Delete the host-derived target code | TGT-1 | Done | Codex | [#36](https://github.com/sps014/dream/pull/36) | Verified covered by merged `ac7496b3`: `Target::Llvm(TargetSpec)` is the only variant, `TargetAbi` and `FutureLayout` use `for_target`, and runtime Clang target selection reads `spec.triple`. No `size_of::<usize>()` remains in MIR. Remaining runtime host `cfg!` checks select local tools, not the emitted target. |
 | 3.C3 | Replace `is_wasm32()` with capability queries | TGT-1, CAP-1 | Done | Codex | [#41](https://github.com/sps014/dream/pull/41) | Old query deleted; branches name linear memory, C/JS interop, native entry or pointer width. Workspace gates pass; stale-query search returns no production hits. |
@@ -210,15 +210,15 @@ Final #34 CI now targets de67d23f; hosted cold/warm timing improvement is not ye
 
 | Metric | Baseline (Phase 0) | After P1 | After P2 | After P3 | After P4 | After P5 | After P6 | After P7 | Target |
 |---|---|---|---|---|---|---|---|---|---|
-| Production `.rs` files over 600 lines | 56 | 55 | 54 | | | | | | 0 without a stated reason |
-| Production `.rs` files over 1,000 lines | 18 | 17 | 16 | | | | | | 0 |
-| `#[allow(clippy::…)]` count | 40 | 40 | 40 | | | | | | Only external-API cases |
-| `unwrap`/`expect` in syntax and sema (non-test) | 0 | 0 | 0 | | | | | | 0 |
-| Name-string heuristics in passes and backend | 0 (10 allowlisted non-heuristic pattern matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | | | | | | 0 |
-| `std::collections::HashMap`/`HashSet` in mir and sema | 0 | 0 | 0 | | | | | | 0 in output paths |
-| Duplicated lines, native vs wasm32 runtime | 141 (remeasured; originally recorded as 213) | 103 | 103 | | | | | | ~0 |
-| Repair passes needed for correctness | 2 | 2 | 2 | | | | | | 0 |
-| Runtime C files over 600 lines | 3 | 3 | 2 | | | | | | 0 |
+| Production `.rs` files over 600 lines | 56 | 55 | 54 | 54 | | | | | 0 without a stated reason |
+| Production `.rs` files over 1,000 lines | 18 | 17 | 16 | 16 | | | | | 0 |
+| `#[allow(clippy::…)]` count | 40 | 40 | 40 | 40 | | | | | Only external-API cases |
+| `unwrap`/`expect` in syntax and sema (non-test) | 0 | 0 | 0 | 0 | | | | | 0 |
+| Name-string heuristics in passes and backend | 0 (10 allowlisted non-heuristic pattern matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | | | | | 0 |
+| `std::collections::HashMap`/`HashSet` in mir and sema | 0 | 0 | 0 | 0 | | | | | 0 in output paths |
+| Duplicated lines, native vs wasm32 runtime | 141 (remeasured; originally recorded as 213) | 103 | 103 | 102 | | | | | ~0 |
+| Repair passes needed for correctness | 2 | 2 | 2 | 2 | | | | | 0 |
+| Runtime C files over 600 lines | 3 | 3 | 2 | 2 | | | | | 0 |
 
 Phase 2 metrics were remeasured on 2026-10-02 at merged commit
 `9fe2dfb2445ab883e8408724d358510f74d73733` (PR #34). Both 2.C4 and 2.C5 are
@@ -235,6 +235,17 @@ measured 38m41s with cold caches and 11m13s in the one deliberate warm rerun
 zero misses and zero errors. These results measure repeat builds, not fresh-cache
 speedups. Explicit MSVC C/C++ cache wrapping is included in #36; its hosted
 warm-cache benefit remains unmeasured.
+
+Phase 3 metrics were measured on 2026-10-03 at merged commit `01b1e976`
+(PR #41), using the same method as Phase 1. All 11 steps are Done. Counts are
+unchanged from Phase 2 except shared runtime lines, which fell from 103 to 102.
+The two runtime C files over 600 lines remain `native/heap.c` (613) and
+`wasm32/heap.c` (624) under `crates/dream-mir/src/runtime/c`. Hygiene passes
+with the same ten allowlisted string patterns and zero unexpected matches.
+There are still no `std::collections::HashMap`/`HashSet` imports in MIR or sema,
+and no non-test `unwrap`/`expect` calls in syntax or sema. The two correctness
+repair paths remain `RcLastUseRepair` and `strip_escaped_regions` (task 7.6);
+target and layout completion does not remove them.
 
 Phase 0 counts exclude test Rust files and vendored PCRE2/sljit C sources. Runtime duplication is
 the normalized non-blank exact-line intersection between `runtime/c/native` and `runtime/c/wasm32`.

@@ -15,10 +15,8 @@ impl<'a> Analyzer<'a> {
     /// ABI (a boxed `[funcidx][env]` heap value); every call site is built directly here rather than
     /// through ordinary name resolution, so the stdlib class is never referenced by user code.
     pub(in crate::analyzer) fn closure_intrinsic(&self, method: &str) -> Option<DefId> {
-        self.type_ctx.resolve(
-            DefKind::Function,
-            &dream_types::method_fn("Closure", method),
-        )
+        let owner = self.type_ctx.resolved_type("Closure")?;
+        self.unique_method_def(owner, method)
     }
 
     /// Wraps a raw function-table index (`raw`, always `int`-typed) plus an optional environment
@@ -85,21 +83,27 @@ impl<'a> Analyzer<'a> {
         func_ty: &Type,
         ret: &Type,
     ) {
+        let Ok(info) = self.function_info(name) else { self.hir.last = None; return; };
+        self.hir_set_func_value_identity(&info.identity, func_ty, ret);
+    }
+
+    pub(in crate::analyzer) fn hir_set_func_value_identity(
+        &mut self,
+        identity: &crate::function_table::FunctionIdentity,
+        func_ty: &Type,
+        ret: &Type,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
         }
-        let Some(def) = self.type_ctx.resolve(DefKind::Function, name) else {
-            self.hir.last = None;
-            return;
-        };
         let int_ty = self.type_ctx.interner.int();
         let ret_ty = self.type_ctx.lower(ret);
         let raw = HExpr::new(
             int_ty,
             HExprKind::Var(Binding::Func(Callee {
-                def,
-                instance: vec![],
+                def: identity.0,
+                instance: identity.1.clone(),
                 ret: ret_ty,
                 take_params: vec![],
             })),
@@ -215,38 +219,5 @@ impl<'a> Analyzer<'a> {
         );
         let env_int = HExpr::new(int_ty, HExprKind::Cast(Box::new(array_read())));
         self.hir.last = self.build_funcbox(raw, Some(env_int), func_ty);
-    }
-
-    /// Like [`hir_set_func_value`], but for a *generic* function used as a value: the target is the
-    /// base template's shared `DefId` plus the concrete `instance` type-args (in binding order), so it
-    /// resolves to the same function-table slot the monomorphized instance body emits. Drops coverage
-    /// if the base name is unregistered.
-    pub(in crate::analyzer) fn hir_set_generic_func_value(
-        &mut self,
-        base_name: &str,
-        instance: Vec<TypeId>,
-        func_ty: &Type,
-        ret: &Type,
-    ) {
-        if !self.active() {
-            self.hir.last = None;
-            return;
-        }
-        let Some(def) = self.type_ctx.resolve(DefKind::Function, base_name) else {
-            self.hir.last = None;
-            return;
-        };
-        let int_ty = self.type_ctx.interner.int();
-        let ret_ty = self.type_ctx.lower(ret);
-        let raw = HExpr::new(
-            int_ty,
-            HExprKind::Var(Binding::Func(Callee {
-                def,
-                instance,
-                ret: ret_ty,
-                take_params: vec![],
-            })),
-        );
-        self.hir.last = self.build_funcbox(raw, None, func_ty);
     }
 }

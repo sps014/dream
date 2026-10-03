@@ -46,7 +46,7 @@ fn pointer_integer_literal_ranges_follow_the_selected_target() {
                 .with_llvm(capture.clone())
                 .compile(
                     &source.to_string_lossy().into_owned(),
-                    &output.to_string_lossy().into_owned(),
+                    &output.to_string_lossy(),
                 )
                 .unwrap_err();
             if fits {
@@ -114,7 +114,7 @@ fn selected_target_reaches_runtime_loading_unchanged() {
             .with_llvm(capture.clone())
             .compile(
                 &source.to_string_lossy().into_owned(),
-                &output.to_string_lossy().into_owned(),
+                &output.to_string_lossy(),
             )
             .unwrap_err();
         assert!(error
@@ -134,7 +134,7 @@ fn stale_runtime_symbol_is_a_toolchain_error_with_the_cache_path() {
         .with_llvm(Arc::new(StaleRuntime))
         .compile(
             &source.to_string_lossy().into_owned(),
-            &output.to_string_lossy().into_owned(),
+            &output.to_string_lossy(),
         )
         .unwrap_err();
     assert!(matches!(

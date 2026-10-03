@@ -50,6 +50,6 @@ fn value_constructor_ref_interiors_never_read_a_heap_header() {
         "{}",
         ir
     );
-    let body = ir_func_body(&ir, "Wrap_constructor");
+    let body = ir_func_body(&ir, "s0_4_Wrap_0_constructor");
     assert!(!body.contains("inttoptr"), "{}", body);
 }

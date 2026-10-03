@@ -119,6 +119,7 @@ impl Builder {
                     let ty = param.type_.display_name();
                     let detail = format!("{}: {}", param.name.text, ty);
                     self.push_decl(&param.name, SymKind::Param, detail, scope, Some(ty));
+                    self.record_decl_type(&param.type_);
                     self.add_type_ref(&param.type_, scope);
                 }
                 match &lambda.body {

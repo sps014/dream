@@ -38,19 +38,16 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Soft expected-param hint for an overloaded callee whose overloads differ by
-    /// `fun(...): T` vs `fun(...): Future<T>`: pick the overload matching whether each argument is
-    /// an async lambda. `skip` drops leading parameters (e.g. implicit `this` for instance methods).
-    pub(super) fn expected_params_preferring_fun_overload(
+    pub(super) fn expected_params_for_candidates(
         &self,
-        base: &str,
+        keys: Vec<crate::function_table::FunctionIdentity>,
         args: &[ExpressionNode<'_>],
         skip: usize,
     ) -> Option<Vec<Type>> {
-        let keys = self.function_table.overloads.get(base)?;
+        if keys.is_empty() { return None; }
         let mut matching: Vec<crate::function_table::FunctionTableInfo> = Vec::new();
         for key in keys {
-            let Ok(info) = self.function_table.get_function(key) else {
+            let Ok(info) = self.function_table.get_function(&key) else {
                 continue;
             };
             let user_params = info.parameters.len().saturating_sub(skip);
@@ -144,14 +141,7 @@ impl<'a> Analyzer<'a> {
     pub(super) fn expected_param_types(
         sig: &crate::function_table::FunctionTableInfo,
     ) -> Vec<Type> {
-        if sig.parameter_types.len() == sig.parameters.len() {
-            sig.parameter_types.clone()
-        } else {
-            sig.parameters
-                .iter()
-                .map(|p| Self::type_from_name(p))
-                .collect()
-        }
+        sig.parameter_types.clone()
     }
 
     fn current_function_is_trusted_prelude(&self) -> bool {
@@ -351,7 +341,7 @@ impl<'a> Analyzer<'a> {
         let Some(fs_name) = string_literal_text(args.get(1)) else {
             return;
         };
-        let vs = match self.function_table.get_function(&vs_name) {
+        let vs = match self.function_info(&vs_name) {
             Ok(info) if info.is_vertex => info,
             Ok(_) => {
                 diagnostics.report_error(
@@ -374,7 +364,7 @@ impl<'a> Analyzer<'a> {
                 return;
             }
         };
-        let fs = match self.function_table.get_function(&fs_name) {
+        let fs = match self.function_info(&fs_name) {
             Ok(info) if info.is_fragment => info,
             Ok(_) => {
                 diagnostics.report_error(

@@ -3,7 +3,6 @@
 
 use super::*;
 use dream_syntax::nodes::struct_node::{StructDeclarationNode, StructFieldNode};
-use dream_syntax::nodes::types::mangle_generic;
 
 impl<'a> Analyzer<'a> {
     /// Pass 0: register every (non-generic) struct and its methods; stash generic templates.
@@ -25,6 +24,29 @@ impl<'a> Analyzer<'a> {
                 generic_param_names(&struct_decl.generic_parameters),
             );
         }
+        // Conformance checks may ask whether a later-declared class (`HttpHeadersIterator`)
+        // implements an interface, so every declared clause is visible before any is validated.
+        for struct_decl in node.structs.iter() {
+            if struct_decl.generic_parameters.is_some() || struct_decl.implements.is_empty() {
+                continue;
+            }
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
+            let Some(def) = self.type_ctx.resolve(DefKind::Struct, &struct_decl.name.text) else {
+                continue;
+            };
+            let ty = self.type_ctx.interner.struct_ty(def, vec![]);
+            let lowered: Vec<_> = struct_decl
+                .implements
+                .iter()
+                .map(|iface| self.type_ctx.lower(iface))
+                .collect();
+            let declared = lowered
+                .into_iter()
+                .filter(|&iface| self.is_interface_name(iface))
+                .collect();
+            self.implements.insert(ty, declared);
+        }
         for struct_decl in node.structs.iter() {
             self.type_ctx
                 .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
@@ -33,14 +55,14 @@ impl<'a> Analyzer<'a> {
             // surface, but stdlib splits static helpers across `extend` files (e.g. `GpuMath`).
             // Those extends are allowed when every member is `static` (checked in
             // `register_extensions`).
-            if struct_decl.is_sealed && !struct_decl.is_static {
-                self.sealed_types.insert(struct_decl.name.text.clone());
-            }
             let def = self.type_ctx.register(
                 DefKind::Struct,
                 &struct_decl.name.text,
                 generic_param_names(&struct_decl.generic_parameters),
             );
+            if struct_decl.is_sealed && !struct_decl.is_static {
+                self.sealed_types.insert(def);
+            }
             if struct_decl.is_static {
                 self.type_ctx.defs.mark_static(def);
                 self.type_ctx.interner.mark_static_def(def);
@@ -80,14 +102,10 @@ impl<'a> Analyzer<'a> {
             if let Err(e) = self.struct_table.add_struct(ty, struct_decl, &field_types) {
                 diagnostics.report_error(e, Some(struct_decl.name.position));
             }
-            self.register_struct_methods(
-                struct_decl,
-                &struct_decl.name.text,
-                &GenericBindings::new(),
-                diagnostics,
-            );
+            self.register_struct_methods(struct_decl, ty, &GenericBindings::new(), diagnostics);
+            self.implements.shift_remove(&ty);
             self.validate_implements(
-                &struct_decl.name.text,
+                ty,
                 &struct_decl.implements,
                 &struct_decl.methods,
                 &GenericBindings::new(),
@@ -106,8 +124,12 @@ impl<'a> Analyzer<'a> {
                 continue;
             }
             let name = &struct_decl.name.text;
-            let is_value = self.struct_info(name).map(|s| s.is_value).unwrap_or(false);
-            if is_value && self.value_struct_contains_self(name) {
+            let ty = self
+                .type_ctx
+                .resolved_type(name)
+                .unwrap_or_else(|| self.type_ctx.interner.error());
+            let is_value = self.struct_info(ty).map(|s| s.is_value).unwrap_or(false);
+            if is_value && self.value_struct_contains_self(ty) {
                 diagnostics.report_error(
                     format!(
                         "value struct '{}' cannot contain itself by value; use a reference type ('class') or an array to break the cycle",
@@ -250,8 +272,8 @@ impl<'a> Analyzer<'a> {
         match ty {
             Type::Array(elem) => self.shared_graph_field_ok(elem, depth + 1, position, diagnostics),
             Type::Struct(token, args) => {
-                let mangled = ty.get_type();
-                if let Some(info) = self.struct_info(&mangled) {
+                let id = self.type_ctx.lower(ty);
+                if let Some(info) = self.struct_info(id) {
                     // A reference class joins wholesale; a value struct's inline fields must
                     // each be joinable (their bytes — including embedded pointers — are copied).
                     if !info.is_value {
@@ -263,12 +285,12 @@ impl<'a> Analyzer<'a> {
                         .iter()
                         .all(|f| self.shared_graph_field_ok(f, depth + 1, position, diagnostics));
                 }
-                if self.union_info(&mangled).is_some() {
+                if self.union_info(id).is_some() {
                     let base = token.text.clone();
                     let arg_types = args.clone().unwrap_or_default();
                     self.ensure_union_instantiated(&base, &arg_types, position, diagnostics);
                     let payload_types: Vec<Type> = self
-                        .union_info(&mangled)
+                        .union_info(id)
                         .map(|info| {
                             info.variants
                                 .iter()
@@ -399,24 +421,24 @@ impl<'a> Analyzer<'a> {
 
     /// True when value struct `start` transitively embeds itself by value. Only value-typed,
     /// non-array fields form inline edges; reference fields (`class`, `string`, arrays) do not.
-    fn value_struct_contains_self(&self, start: &str) -> bool {
+    fn value_struct_contains_self(&self, start: dream_types::TypeId) -> bool {
         let mut visited = indexmap::IndexSet::new();
         let mut work = self.value_struct_field_targets(start);
         while let Some(cur) = work.pop() {
             if cur == start {
                 return true;
             }
-            if !visited.insert(cur.clone()) {
+            if !visited.insert(cur) {
                 continue;
             }
-            work.extend(self.value_struct_field_targets(&cur));
+            work.extend(self.value_struct_field_targets(cur));
         }
         false
     }
 
     /// The names of value-struct types embedded *by value* in `name`'s fields (the inline edges of
     /// the value-containment graph). Array fields are references.
-    fn value_struct_field_targets(&self, name: &str) -> Vec<String> {
+    fn value_struct_field_targets(&self, name: dream_types::TypeId) -> Vec<dream_types::TypeId> {
         let Some(info) = self.struct_info(name) else {
             return Vec::new();
         };
@@ -425,14 +447,9 @@ impl<'a> Analyzer<'a> {
         }
         let mut out = Vec::new();
         for f in info.fields.values() {
-            let type_name = f.type_.get_type();
-            let base = type_name.as_str();
-            if base.ends_with("[]") {
-                continue;
-            }
-            if let Some(field_info) = self.struct_info(base) {
+            if let Some(field_info) = self.struct_info(f.ty) {
                 if field_info.is_value {
-                    out.push(base.to_string());
+                    out.push(f.ty);
                 }
             }
         }
@@ -446,23 +463,27 @@ impl<'a> Analyzer<'a> {
         position: &TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
-        let mangled_name = mangle_generic(base_name, args);
-        // Canonicalize the mangled bare name to the structured `(base def, args)` id so both
-        // spellings of this instance lower identically.
-        let instance = self
-            .type_ctx
-            .register_instance(DefKind::Struct, base_name, args);
-        if self.struct_info(&mangled_name).is_some() {
+        let Some(def) = self.type_ctx.resolve(DefKind::Struct, base_name) else {
+            return;
+        };
+        let concrete_ids: Vec<_> = args.iter().map(|arg| self.type_ctx.lower(arg)).collect();
+        let instance = self.type_ctx.instantiate(def, concrete_ids.clone());
+        if self.struct_info(instance).is_some() {
             return;
         }
-
-        let template = match self.generic_struct(base_name) {
+        let template = match self.generic_struct(def) {
             Some(template) => *template,
             None => return,
         };
-        self.generic_struct_instances
-            .push((base_name.to_string(), args.to_vec()));
-
+        self.generic_struct_instances.insert(instance);
+        let mangled_name =
+            dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, instance);
+        let args: Vec<_> = concrete_ids
+            .iter()
+            .map(|&arg| self.type_ctx.syntax_type(arg))
+            .collect();
+        let scope = self.type_ctx.scope();
+        self.type_ctx.set_scope(def.module);
         let params = template.generic_parameters.as_deref().unwrap_or(&[]);
         Self::check_generic_arity(
             "class",
@@ -472,8 +493,13 @@ impl<'a> Analyzer<'a> {
             position,
             diagnostics,
         );
-        self.reject_ref_struct_type_args(args, position, diagnostics);
-        let bindings = generic_bindings(params, args);
+        self.reject_ref_struct_type_args(&args, position, diagnostics);
+        let bindings = generic_bindings(params, &args);
+        let type_bindings: IndexMap<_, _> = params
+            .iter()
+            .zip(&concrete_ids)
+            .map(|(parameter, &ty)| (parameter.text.clone(), ty))
+            .collect();
 
         // A constrained class/struct parameter (`class Sorted<T : Comparable<T>>`) must be satisfied
         // by the concrete argument at this instantiation.
@@ -513,8 +539,11 @@ impl<'a> Analyzer<'a> {
                 visibility: field.visibility,
                 is_weak: field.is_weak,
                 is_unowned: field.is_unowned,
-                type_token: substitute_generic_token(&field.type_token, &bindings),
-                field_type: substitute_generic_type(&field.field_type, &bindings),
+                type_token: field.type_token.clone(),
+                field_type: {
+                    let ty = self.type_ctx.lower_with(&field.field_type, &type_bindings);
+                    self.type_ctx.syntax_type(ty)
+                },
             })
             .collect();
 
@@ -535,13 +564,6 @@ impl<'a> Analyzer<'a> {
 
         let new_decl_ref: &'a StructDeclarationNode<'a> = self.arena.alloc(new_decl);
 
-        let concrete_ids: Vec<_> = args.iter().map(|arg| self.type_ctx.lower(arg)).collect();
-        let type_bindings = params
-            .iter()
-            .zip(concrete_ids)
-            .map(|(parameter, ty)| (parameter.text.clone(), ty))
-            .collect();
-        let scope = self.type_ctx.scope();
         self.type_ctx
             .set_scope(self.graph.module_for_file(template.file_path.as_deref()));
         let field_types: Vec<_> = template
@@ -549,7 +571,6 @@ impl<'a> Analyzer<'a> {
             .iter()
             .map(|field| self.type_ctx.lower_with(&field.field_type, &type_bindings))
             .collect();
-        self.type_ctx.set_scope(scope);
         if let Err(e) = self
             .struct_table
             .add_struct(instance, new_decl_ref, &field_types)
@@ -570,7 +591,7 @@ impl<'a> Analyzer<'a> {
         // Value-struct soundness is checked per instantiation (the template's fields are generic, so
         // whether this monomorphization embeds itself by value is only decidable once `T` is
         // concrete).
-        if new_decl_ref.is_value && self.value_struct_contains_self(&mangled_name) {
+        if new_decl_ref.is_value && self.value_struct_contains_self(instance) {
             diagnostics.report_error(
                     format!(
                         "value struct '{}' cannot contain itself by value; use a reference type ('class') or an array to break the cycle",
@@ -580,8 +601,13 @@ impl<'a> Analyzer<'a> {
                 );
         }
 
-        self.register_struct_methods(new_decl_ref, &mangled_name, &bindings, diagnostics);
-        self.register_generic_extension_methods(base_name, &mangled_name, args, diagnostics);
+        self.register_struct_methods(new_decl_ref, instance, &bindings, diagnostics);
+        self.register_generic_extension_methods(
+            GenericExtendTarget::Nominal(def),
+            instance,
+            &args,
+            diagnostics,
+        );
 
         // Validate this monomorphization's `implements` clause: substitute the class type parameters
         // through each listed interface (`Container<T>` -> `Container<int>`) and match the (also
@@ -593,7 +619,7 @@ impl<'a> Analyzer<'a> {
                 .map(|t| substitute_generic_type(t, &bindings))
                 .collect();
             self.validate_implements(
-                &mangled_name,
+                instance,
                 &sub_impls,
                 &template.methods,
                 &bindings,
@@ -601,5 +627,6 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             );
         }
+        self.type_ctx.set_scope(scope);
     }
 }

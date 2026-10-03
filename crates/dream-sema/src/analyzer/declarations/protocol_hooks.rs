@@ -56,7 +56,7 @@ impl ProtocolRole {
 /// `MethodCall` desugar that re-enters ordinary method resolution.
 #[derive(Debug, Clone)]
 pub struct ProtocolHook {
-    pub mangled_name: String,
+    pub identity: crate::function_table::FunctionIdentity,
     pub surface_name: String,
 }
 
@@ -95,9 +95,9 @@ impl<'a> Analyzer<'a> {
     /// cannot know, and rejects a second method claiming the same role on the same type.
     pub(in crate::analyzer) fn validate_and_register_protocol_hook(
         &mut self,
-        target_type_str: &str,
+        receiver: dream_types::TypeId,
         method: &FunctionNode<'a>,
-        mangled_name: &str,
+        identity: &crate::function_table::FunctionIdentity,
         diagnostics: &mut DiagnosticBag,
     ) {
         let role = ProtocolRole::from_method(method);
@@ -203,15 +203,13 @@ impl<'a> Analyzer<'a> {
             ProtocolRole::Set => {}
         }
 
-        let hooks = self
-            .protocol_hooks
-            .entry(target_type_str.to_string())
-            .or_default();
+        let target_display = self.type_id_display(receiver);
+        let hooks = self.protocol_hooks.entry(receiver).or_default();
         if hooks.slot(role).is_some() {
             diagnostics.report_error(
                 format!(
                     "'{}' already declares an '@{}' method",
-                    self.ty_str_display(target_type_str),
+                    target_display,
                     role.role_name()
                 ),
                 Some(method.name.position),
@@ -219,7 +217,7 @@ impl<'a> Analyzer<'a> {
             return;
         }
         *hooks.slot_mut(role) = Some(ProtocolHook {
-            mangled_name: mangled_name.to_string(),
+            identity: identity.clone(),
             surface_name: method.name.text.clone(),
         });
     }
@@ -232,17 +230,16 @@ impl<'a> Analyzer<'a> {
         role: ProtocolRole,
         diagnostics: &mut DiagnosticBag,
     ) -> Option<ProtocolHook> {
-        let (base_name, generic_args) = match Self::resolve_struct_parts(obj_type) {
+        match Self::resolve_struct_parts(obj_type) {
             Some(parts) => {
                 self.ensure_type_instantiated(&parts.0, &parts.1, &empty_span(), diagnostics);
-                parts
             }
-            None if matches!(obj_type, Type::String(_)) => ("string".to_string(), Vec::new()),
+            None if matches!(obj_type, Type::String(_)) => {}
             None => return None,
         };
-        let mono_name = dream_syntax::nodes::types::mangle_generic(&base_name, &generic_args);
+        let receiver = self.type_ctx.lower(obj_type);
         self.protocol_hooks
-            .get(&mono_name)
+            .get(&receiver)
             .and_then(|h| h.slot(role).clone())
     }
 }

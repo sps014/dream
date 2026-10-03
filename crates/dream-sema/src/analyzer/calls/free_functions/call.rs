@@ -3,11 +3,9 @@
 //! Also hosts `substitute_default_args`, shared with the constructor and instance-call paths.
 
 use super::*;
-use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::ExpressionNode;
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
-use dream_types::constructor_fn;
 
 mod defaults;
 mod indirect;
@@ -21,19 +19,10 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        // An unqualified call resolves within the caller's own declaring module first: if a
-        // cross-module name collision ever promoted this base name to module-qualified keys (see
-        // `FunctionTable::add_overload`), a bare reference from inside that same module must still
-        // resolve to its own module's declaration rather than ambiguously landing on whichever
-        // other module's declaration happens to still hold the bare key (or erroring outright).
-        // A no-op (returns the name unchanged) for the overwhelming majority of names, which were
-        // never involved in such a collision.
-        let caller_module = self.module_of(parent_function.file_path.as_ref());
-        let mut function_name = self
-            .function_table
-            .resolve_in_module(caller_module.as_ref(), &name.text)
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| name.text.clone());
+        let mut function_name = name.text.clone();
+        let nominal_def = self.type_ctx.nominal_kind(&function_name).and_then(|kind| self.type_ctx.resolve(kind, &function_name));
+        let nominal_type = self.type_ctx.lower(&Type::Struct(name.clone(), generic_args.clone()));
+        let ctor_member = dream_syntax::nodes::types::CONSTRUCTOR_NAME;
         let mut params_types = vec![];
         let mut arg_hirs = vec![];
         // A named argument (`f(x, y: 2)`) must be reordered to its positional slot, and a
@@ -44,17 +33,15 @@ impl<'a> Analyzer<'a> {
         let has_named_arg = params
             .iter()
             .any(|a| matches!(a, ExpressionNode::NamedArg(..)));
-        let is_ctor_call = self.function_table.get_function(&function_name).is_err()
+        let is_ctor_call = self.function_info(&function_name).is_err()
             && generic_args.is_none()
-            && self.struct_info(&function_name).is_some();
-        let ctor_key = constructor_fn(&function_name);
+            && self.struct_info(nominal_type).is_some();
+        let ctor_key = format!("{function_name}.constructor");
         let callee_signature = |analyzer: &Self| -> Option<(Vec<String>, Vec<Option<Type>>, bool)> {
-            if let Ok(info) = analyzer.function_table.get_function(&function_name) {
+            if let Ok(info) = analyzer.function_info(&function_name) {
                 Some((info.param_names, info.defaults, info.is_variadic))
             } else if is_ctor_call {
-                analyzer
-                    .function_table
-                    .get_function(&ctor_key)
+                analyzer.method_info(nominal_type, ctor_member)
                     .ok()
                     .map(|info| {
                         (
@@ -69,15 +56,16 @@ impl<'a> Analyzer<'a> {
         };
         let normalized_params: Vec<ExpressionNode<'a>>;
         let params: &[ExpressionNode<'a>] = if has_named_arg {
-            if is_ctor_call && self.function_table.is_overloaded(&ctor_key) {
-                normalized_params = self.normalize_named_for_overloads(
+            if is_ctor_call && self.method_overloaded(nominal_type, ctor_member) {
+                normalized_params = self.normalize_named_for_candidates(
                     &ctor_key,
+                    self.function_table.method_candidates(nominal_type, ctor_member),
                     params,
                     name.position,
                     1,
                     diagnostics,
                 )?;
-            } else if self.function_table.is_overloaded(&function_name) {
+            } else if self.function_overloaded(&function_name) {
                 normalized_params = self.normalize_named_for_overloads(
                     &function_name,
                     params,
@@ -103,8 +91,8 @@ impl<'a> Analyzer<'a> {
                 )?;
             }
             &normalized_params
-        } else if !(self.function_table.is_overloaded(&function_name)
-            || (is_ctor_call && self.function_table.is_overloaded(&ctor_key)))
+        } else if !(self.function_overloaded(&function_name)
+            || (is_ctor_call && self.method_overloaded(nominal_type, ctor_member)))
         {
             if let Some((param_names, _, true)) = callee_signature(self) {
                 normalized_params = self.collect_variadic_args(param_names.len(), params);
@@ -117,9 +105,9 @@ impl<'a> Analyzer<'a> {
         };
 
         // `Some(7)` / `Ok(x)` when the expected type is a union: same path as `Option.Some(7)`.
-        if self.function_table.get_function(&function_name).is_err()
-            && !self.function_table.is_overloaded(&function_name)
-            && !self.generic_functions.contains_key(&function_name)
+        if self.function_info(&function_name).is_err()
+            && !self.function_overloaded(&function_name)
+            && self.generic_function_template(&function_name).is_none()
             && generic_args.as_ref().is_none_or(|g| g.is_empty())
         {
             if let Some(expected) = self.current_expected_type.clone() {
@@ -127,11 +115,12 @@ impl<'a> Analyzer<'a> {
                     Type::Struct(tok, _) => tok.text.clone(),
                     other => other.get_type(),
                 };
-                let variant_known = self
-                    .generic_union(enum_name.as_str())
+                let expected_id = self.type_ctx.lower(&expected);
+                let variant_known = self.type_ctx.resolve(DefKind::Union, &enum_name)
+                    .and_then(|def| self.generic_union(def))
                     .map(|t| t.variants.iter().any(|v| v.name.text == name.text))
                     .or_else(|| {
-                        self.union_info(&enum_name)
+                        self.union_info(expected_id)
                             .map(|info| info.variant(&name.text).is_some())
                     })
                     .unwrap_or(false);
@@ -157,18 +146,15 @@ impl<'a> Analyzer<'a> {
         // types, so e.g. an `Option<T>`-typed field's `None`/`Some(...)` argument can infer `T`
         // without an explicit annotation.
         let expected_params: Option<Vec<Type>> =
-            if self.function_table.is_overloaded(&function_name) {
+            if self.function_overloaded(&function_name) {
                 None
-            } else if let Ok(info) = self.function_table.get_function(&function_name) {
+            } else if let Ok(info) = self.function_info(&function_name) {
                 Some(Self::expected_param_types(&info))
             } else if generic_args.is_none()
-                && self.struct_info(&function_name).is_some()
-                && !self
-                    .function_table
-                    .is_overloaded(&constructor_fn(&function_name))
+                && self.struct_info(nominal_type).is_some()
+                && !self.method_overloaded(nominal_type, ctor_member)
             {
-                self.function_table
-                    .get_function(&constructor_fn(&function_name))
+                self.method_info(nominal_type, ctor_member)
                     .ok()
                     .map(|info| {
                         Self::expected_param_types(&info)
@@ -188,7 +174,7 @@ impl<'a> Analyzer<'a> {
                     .iter()
                     .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings))
                     .collect();
-                self.generic_struct(function_name.as_str())
+                nominal_def.and_then(|def| self.generic_struct(def))
                     .and_then(|template| {
                         let type_params = template.generic_parameters.as_deref().unwrap_or(&[]);
                         if type_params.len() != concrete_generic_args.len() {
@@ -236,11 +222,11 @@ impl<'a> Analyzer<'a> {
                 match self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics) {
                     Some((t, hir)) => {
                         arg_hirs.push(hir);
-                        params_types.push(t.get_type());
+                        params_types.push(self.type_ctx.lower(&t));
                     }
                     None => {
                         arg_hirs.push(None);
-                        params_types.push(Type::Unknown.get_type());
+                        params_types.push(self.type_ctx.interner.error());
                     }
                 }
                 continue;
@@ -249,7 +235,7 @@ impl<'a> Analyzer<'a> {
             let t = self.analyze_expression(param, parent_function, symbol_table, diagnostics)?;
             self.current_expected_type = saved_expected;
             arg_hirs.push(self.hir_take());
-            params_types.push(t.get_type());
+            params_types.push(self.type_ctx.lower(&t));
         }
         self.current_call_target_name = saved_call_target;
         // Calling a `js`-typed local (`cb(a, b)`) invokes the underlying JS value dynamically.
@@ -323,9 +309,9 @@ impl<'a> Analyzer<'a> {
                 name.position,
                 diagnostics,
             );
-            let expected_strs: Vec<String> = param_types
+            let expected_strs: Vec<dream_types::TypeId> = param_types
                 .iter()
-                .map(|t| Self::peel_ref_box(t).0.get_type())
+                .map(|t| self.type_ctx.lower(&Self::peel_ref_box(t).0))
                 .collect();
             self.validate_arguments(
                 &format!("function value '{}'", name.text),
@@ -362,17 +348,17 @@ impl<'a> Analyzer<'a> {
             eprintln!(
                 "[gate] {} fn_exists={} overloaded={} generic_fn={} is_struct={}",
                 function_name,
-                self.function_table.get_function(&function_name).is_ok(),
-                self.function_table.is_overloaded(&function_name),
-                self.generic_functions.contains_key(&function_name),
-                self.struct_info(&function_name).is_some(),
+                self.function_info(&function_name).is_ok(),
+                self.function_overloaded(&function_name),
+                self.generic_function_template(&function_name).is_some(),
+                self.struct_info(nominal_type).is_some(),
             );
         }
-        if self.function_table.get_function(&function_name).is_err()
-            && !self.function_table.is_overloaded(&function_name)
-            && !self.generic_functions.contains_key(&function_name)
-            && (self.struct_info(&function_name).is_some()
-                || self.generic_struct(&function_name).is_some())
+        if self.function_info(&function_name).is_err()
+            && !self.function_overloaded(&function_name)
+            && self.generic_function_template(&function_name).is_none()
+            && (self.struct_info(nominal_type).is_some()
+                || nominal_def.is_some_and(|def| self.generic_struct(def).is_some()))
         {
             // Substitute the enclosing monomorphization's bindings into the type arguments, so a
             // generic construction using a type parameter (`ListIterator<T>(this)` inside a
@@ -395,60 +381,14 @@ impl<'a> Analyzer<'a> {
                 symbol_table,
                 diagnostics,
             )?;
-            // The concrete struct whose layout the backend uses: a plain struct is its own name, a
-            // generic instance (`Box<int>`) its mangled name (`Box_int`), which
-            // `ensure_struct_instantiated` has already added to the struct table. A generic base with
-            // no type args is an error, not a constructor. When the instance is registered, emit
-            // `New`: if it declares a user `constructor(){}`, resolve that def so the backend calls it
-            // (its args are the constructor's); otherwise the implicit zero-arg default constructor
-            // takes no args and leaves every field at its zero value.
-            // `hir_set_new` is given the source (base) name — the registered `DefId` for both plain
-            // and generic structs — while the result type `t` supplies the per-instance layout key.
-            let concrete_name = match &concrete_generic_args {
-                Some(g) if !g.is_empty() => Some(mangle_generic(&name.text, g)),
-                _ if self.generic_struct(&name.text).is_none() => Some(name.text.clone()),
-                _ => None,
-            };
-            if let Some(concrete_name) = concrete_name {
-                if self.struct_info(&concrete_name).is_some() {
-                    // A struct with more than one `constructor` overload registers a distinct
-                    // `DefId` per overload under its signature-mangled emitted name (see
-                    // `register_methods_for`); `analyze_constructor_call` already picked which one
-                    // this call resolved to, so look that emitted name up directly instead of
-                    // re-deriving the (now ambiguous) bare `{concrete_name}_constructor` name.
-                    let ctor_def_name =
-                        resolved_ctor_name.unwrap_or_else(|| constructor_fn(&concrete_name));
-                    if std::env::var("DREAM_TRACE_CTOR").is_ok() {
-                        eprintln!(
-                            "[new] {} ctor_def={} found={}",
-                            concrete_name,
-                            ctor_def_name,
-                            self.type_ctx
-                                .resolve(dream_types::DefKind::Function, &ctor_def_name)
-                                .is_some()
-                        );
-                    }
-                    let ctor = self
-                        .type_ctx
-                        .resolve(dream_types::DefKind::Function, &ctor_def_name);
-                    let ctor_summary = self.ide_summary(&t);
-                    self.record_ide_ref(
-                        name.position,
-                        ide::IdeTarget::Constructor {
-                            type_key: t.get_type(),
-                        },
-                        ctor_summary,
-                    );
-                    self.hir_set_new(&name.text, ctor, arg_hirs, &t);
-                    if let Ok(info) = self.function_table.get_function(&ctor_def_name) {
-                        self.note_sink_arg_moves(
-                            params,
-                            &params_types,
-                            &info.is_take,
-                            true,
-                            diagnostics,
-                        );
-                    }
+            let concrete_type = self.type_ctx.lower(&t);
+            if self.struct_info(concrete_type).is_some() {
+                let ctor = resolved_ctor_name.as_ref().map(|key| key.0);
+                let ctor_summary = self.ide_summary(&t);
+                self.record_ide_ref(name.position, ide::IdeTarget::Constructor { type_key: t.get_type() }, ctor_summary);
+                self.hir_set_new(&name.text, ctor, arg_hirs, &t);
+                if let Some(info) = resolved_ctor_name.as_ref().and_then(|key| self.function_table.functions.get(key)).cloned() {
+                    self.note_sink_arg_moves(params, &params_types, &info.is_take, true, diagnostics);
                 }
             }
             return Ok(t);
@@ -457,13 +397,13 @@ impl<'a> Analyzer<'a> {
         // (generic function instantiation is factored into `register_generic_function_instance`.)
 
         // The template and structured arguments must select the same monomorphization as its body.
-        let mut generic_instance: Option<(String, Vec<Type>)> = None;
+        let mut generic_instance: Option<crate::function_table::FunctionIdentity> = None;
 
         // Monomorphization: bind every generic parameter to a concrete type, then register
         // (once) a specialized signature under the mangled name.
-        if self.generic_functions.contains_key(&function_name) {
-            let template = match self.generic_functions.get(&function_name) {
-                Some(template) => *template,
+        if self.generic_function_template(&function_name).is_some() {
+            let template = match self.generic_function_template(&function_name) {
+                Some(template) => template,
                 None => {
                     diagnostics.report_error(
                         format!("Generic function '{}' could not be resolved", function_name),
@@ -488,13 +428,14 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             );
             let mangled_name = self.register_generic_function_instance(template, &bindings);
-            generic_instance = Some((function_name.clone(), bindings.values().cloned().collect()));
-            function_name = mangled_name;
+            generic_instance = Some(mangled_name);
         }
 
         // Overloaded free functions resolve by argument types; non-overloaded names keep the
         // direct single-signature lookup (and its precise per-argument diagnostics below).
-        let store_sig = if self.function_table.is_overloaded(&function_name) {
+        let store_sig = if let Some(identity) = generic_instance.as_ref() {
+            self.function_table.get_function(identity).map_err(|error| report(diagnostics, error.to_string(), Some(name.position)))?
+        } else if self.function_overloaded(&function_name) {
             match self.select_function_overload(&function_name, &params_types) {
                 Ok(sig) => sig,
                 Err(message) => {
@@ -502,7 +443,7 @@ impl<'a> Analyzer<'a> {
                 }
             }
         } else {
-            match self.function_table.get_function(&function_name) {
+            match self.function_info(&function_name) {
                 Ok(sig) => sig,
                 Err(e) => {
                     return Err(report_with_code(
@@ -548,7 +489,7 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
         self.check_compute_call(&store_sig, name.position, diagnostics);
-        self.check_c_fun_args(&store_sig.name, params, symbol_table, diagnostics);
+        self.check_c_fun_args(store_sig.identity.0, params, symbol_table, diagnostics);
 
         self.validate_ref_arguments(
             &format!("function '{}'", function_name),
@@ -597,26 +538,12 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
 
-        let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type);
+        let ret_type = Self::async_return_type(store_sig.is_async, Some(self.type_ctx.syntax_type(store_sig.resolved_return)));
         // Emit a resolved direct call. A generic call resolves to the template's base `DefId` plus
         // the monomorphization args (so it targets the emitted instance). Overloaded free functions
         // resolve to the selected overload's emitted name (each is a distinct `DefId`);
         // non-overloaded ones resolve directly by their base name.
-        if let Some((base_name, instance_types)) = generic_instance {
-            let instance = instance_types
-                .iter()
-                .map(|t| self.type_ctx.lower(t))
-                .collect();
-            self.hir_set_generic_call(
-                &base_name,
-                instance,
-                arg_hirs,
-                &ret_type,
-                store_sig.is_take.clone(),
-            );
-        } else {
-            self.hir_set_call(&store_sig.name, arg_hirs, &ret_type);
-        }
+        self.hir_set_call_identity(&store_sig.identity, arg_hirs, &ret_type);
         self.note_sink_arg_moves(
             params,
             &params_types,
@@ -628,7 +555,7 @@ impl<'a> Analyzer<'a> {
         self.record_ide_ref(
             name.position,
             ide::IdeTarget::Callee {
-                key: store_sig.name.clone(),
+                key: store_sig.identity.clone(),
                 label: name.text.clone(),
             },
             call_summary,

@@ -121,12 +121,7 @@ impl<'a> Analyzer<'a> {
                 // bool/numeric/integer rules below so a struct's overload always wins.
                 if let Some(op_method) = self.operator_unary_fn(&right_type, opr.kind) {
                     let return_type = op_method.return_type;
-                    self.hir_set_method_call(
-                        operand,
-                        &op_method.mangled_name,
-                        vec![],
-                        &return_type,
-                    );
+                    self.hir_set_method_call(operand, &op_method.identity, vec![], &return_type);
                     return Ok(return_type);
                 }
                 match opr.kind {

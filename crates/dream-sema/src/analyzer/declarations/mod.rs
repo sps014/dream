@@ -30,5 +30,6 @@ pub(in crate::analyzer) mod operator_overloads;
 pub(in crate::analyzer) mod protocol_hooks;
 mod reference_cycles;
 mod register_interfaces;
+mod array_interfaces;
 mod register_methods;
 mod structs;

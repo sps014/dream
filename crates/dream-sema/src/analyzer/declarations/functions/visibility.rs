@@ -37,8 +37,8 @@ impl<'a> Analyzer<'a> {
                 }
                 self.check_public_type_exposed(ret, function, diagnostics);
             }
-            Type::Struct(token, args) => {
-                self.check_nominal_not_private(&token.text, function, diagnostics);
+            Type::Struct(_token, args) => {
+                self.check_nominal_not_private(ty, function, diagnostics);
                 if let Some(args) = args {
                     for a in args {
                         self.check_public_type_exposed(a, function, diagnostics);
@@ -51,11 +51,16 @@ impl<'a> Analyzer<'a> {
 
     pub(in crate::analyzer) fn check_nominal_not_private(
         &self,
-        name: &str,
+        ty: &Type,
         function: &FunctionNode<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
-        if let Some(struct_info) = self.struct_info(name) {
+        let Type::Struct(token, _) = ty else {
+            return;
+        };
+        let name = &token.text;
+        if let Some(struct_info) = self.type_ctx.lookup_type(ty)
+            .and_then(|ty| self.struct_info(ty)) {
             if !struct_info.visibility.is_public() {
                 diagnostics.report_error(
                     format!(
@@ -66,7 +71,11 @@ impl<'a> Analyzer<'a> {
                 );
             }
         }
-        if let Some((_, visibility)) = self.type_visibility.get(name) {
+        let def = self
+            .type_ctx
+            .nominal_kind(name)
+            .and_then(|kind| self.type_ctx.resolve(kind, name));
+        if let Some((_, visibility)) = def.and_then(|def| self.type_visibility.get(&def)) {
             if !visibility.is_public() {
                 diagnostics.report_error(
                     format!(

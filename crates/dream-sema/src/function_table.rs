@@ -1,447 +1,187 @@
 use crate::errors::SymbolError;
-use dream_stdlib::StdlibFunction;
-use dream_syntax::nodes::{FunctionNode, Type, Visibility};
-use indexmap::IndexMap as HashMap;
-use std::rc::Rc;
+use dream_types::{DefId, ModuleId, TyKind, TypeCtx, TypeId, TypeInterner};
+use indexmap::IndexMap;
 
-#[derive(Debug, Clone)]
+mod info;
+pub use info::FunctionTableInfo;
+
+pub type FunctionIdentity = (DefId, Vec<TypeId>);
+
+#[derive(Debug, Clone, Default)]
 pub struct FunctionTable {
-    pub functions: HashMap<String, FunctionTableInfo>,
-    /// Overload namespace -> the emitted keys of every overload registered under it, in
-    /// declaration order. The namespace is the bare base when no cross-module collision occurred,
-    /// or `module::base` after promotion (see [`module_key`]). A namespace with a single entry
-    /// keeps that name as-is; a namespace with 2+ entries stores each under a signature-mangled
-    /// key (see [`overload_key`]).
-    pub overloads: HashMap<String, Vec<String>>,
-    /// (declaring module, base name) -> the overload *namespace* for that module's declarations
-    /// of `base`, once a same-name collision across two *different* declared modules has
-    /// promoted both to module-qualified namespaces (see [`Self::add_overload`]/[`module_key`]).
-    /// The value is `module::base` — overload mangling then appends structural signatures to that
-    /// namespace. Absent entries mean "no cross-module collision for this name": look it up by its
-    /// bare name instead. Never populated for the unnamed root module (`None`), so unmoded code
-    /// keeps today's flat "same bare name always collides" behavior untouched.
-    by_module: HashMap<(Option<Rc<str>>, String), String>,
+    pub functions: IndexMap<FunctionIdentity, FunctionTableInfo>,
+    // Names only index lexical source scopes; selected functions retain their typed identity.
+    scopes: IndexMap<(ModuleId, String), Vec<FunctionIdentity>>,
+    pub methods: IndexMap<(TypeId, String), Vec<FunctionIdentity>>,
+    pub generic_methods: IndexMap<(TypeId, String), DefId>,
+    declarations: IndexMap<usize, FunctionIdentity>,
 }
 
-/// Builds the overload namespace for a declaration named `base` once a same-name collision with a
-/// *different* declared module has forced both onto module-qualified namespaces, e.g. base `add`
-/// in module `utils.math` becomes `utils.math::add`. Overload mangling composes on top via
-/// [`overload_key`] (e.g. `utils.math::add.0.1`). `::` is a valid WAT identifier character
-/// disjoint from the `.` [`overload_key`] uses, so the two mangling schemes compose safely.
-fn module_key(base: &str, module: Option<&str>) -> String {
-    match module {
-        Some(m) => format!("{m}::{base}"),
-        None => base.to_string(),
-    }
-}
-
-/// Result of resolving an overloaded call against the argument types present at a call site.
 pub enum OverloadResolution {
-    Unique(String),
+    Unique(FunctionIdentity),
     None,
-    Ambiguous(Vec<String>),
-}
-
-/// Structural signatures make overload keys independent of unrelated type registration.
-pub fn overload_key(
-    base: &str,
-    parameter_types: &[Type],
-    type_ctx: &mut dream_types::TypeCtx,
-) -> String {
-    let mut key = String::from(base);
-    key.push('.');
-    let mut parts = Vec::new();
-    for p in parameter_types {
-        let id = type_ctx.lower(p);
-        parts.push(dream_types::type_symbol(
-            &type_ctx.interner,
-            &type_ctx.defs,
-            id,
-        ));
-    }
-    key.push_str(&parts.join("."));
-    key
-}
-
-impl Default for FunctionTable {
-    fn default() -> Self {
-        Self::new()
-    }
+    Ambiguous(Vec<FunctionIdentity>),
 }
 
 impl FunctionTable {
-    pub fn new() -> FunctionTable {
-        let mut table = FunctionTable {
-            functions: HashMap::new(),
-            overloads: HashMap::new(),
-            by_module: HashMap::new(),
-        };
-
-        for std_func in StdlibFunction::get_all() {
-            let info = FunctionTableInfo::new(
-                std_func.name.clone(),
-                std_func.return_type,
-                std_func.parameters,
-            );
-            table.functions.insert(std_func.name, info);
-        }
-
-        table
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub fn add_function(
-        &mut self,
-        name: String,
-        function_info: FunctionTableInfo,
-    ) -> Result<(), SymbolError> {
-        if self.functions.contains_key(&name) {
-            return Err(SymbolError::new(format!(
-                "Function already exists ({})",
-                name
-            )));
-        }
-        self.functions.insert(name, function_info);
-        Ok(())
+    pub fn record_declaration(&mut self, node: &dream_syntax::nodes::FunctionNode<'_>, identity: FunctionIdentity) {
+        self.declarations.insert(node as *const _ as usize, identity);
     }
 
-    /// Registers one (possibly overloaded) declaration under `base`. The first declaration of a
-    /// namespace keeps that name; when a second declaration arrives the original is *promoted* to
-    /// its signature-mangled key and the new one is mangled too, so non-overloaded code keeps its
-    /// original emitted names. A same-named declaration from a *different* declared module is not
-    /// an overload conflict — both sides are promoted to module-qualified namespaces
-    /// (`module::base`), and structural overload mangling composes on top. Returns
-    /// the emitted key chosen for `info`, or an error if an identical signature was already
-    /// registered under the resolved namespace.
+    pub fn declaration_node(&self, node: &dream_syntax::nodes::FunctionNode<'_>) -> Option<FunctionIdentity> {
+        self.declarations.get(&(node as *const _ as usize)).cloned()
+    }
+
+    pub fn method_candidates(&self, owner: TypeId, member: &str) -> Vec<FunctionIdentity> {
+        self.methods.get(&(owner, member.to_string())).cloned().unwrap_or_default()
+    }
+
+    pub fn add_method(&mut self, owner: TypeId, member: &str, info: FunctionTableInfo) -> Result<FunctionIdentity, SymbolError> {
+        let identity = info.identity.clone();
+        let functions = &self.functions;
+        let candidates = self.methods.entry((owner, member.to_string())).or_default();
+        if candidates.iter().any(|key| functions.get(key).is_some_and(|old| old.parameters == info.parameters)) {
+            return Err(SymbolError::new(format!("Duplicate overload: '{member}' with the same parameter types is already defined")));
+        }
+        candidates.push(identity.clone());
+        self.functions.insert(identity.clone(), info);
+        Ok(identity)
+    }
+
     pub fn add_overload(
         &mut self,
         base: &str,
         info: FunctionTableInfo,
-        type_ctx: &mut dream_types::TypeCtx,
-    ) -> Result<String, SymbolError> {
-        if info.declaring_module.is_some() && self.needs_promote_bare(base, &info.declaring_module)
-        {
-            self.promote_bare_to_modules(base, type_ctx)?;
-        }
-
-        let ns = self.namespace_for(base, info.declaring_module.as_ref());
-        if ns != base {
-            self.by_module.insert(
-                (info.declaring_module.clone(), base.to_string()),
-                ns.clone(),
-            );
-        }
-        self.register_under_namespace(&ns, info, type_ctx, base)
-    }
-
-    /// True when `base` is still held under its bare name/overload set by a *different* declared
-    /// module than `incoming`, so the bare entries must be rewritten to module-qualified
-    /// namespaces before `incoming` can register.
-    fn needs_promote_bare(&self, base: &str, incoming: &Option<Rc<str>>) -> bool {
-        // Already recorded under a module-qualified namespace for this module — nothing bare left
-        // to promote for the incoming side.
-        if self
-            .by_module
-            .contains_key(&(incoming.clone(), base.to_string()))
-        {
-            return false;
-        }
-        matches!(
-            self.bare_holder_module(base),
-            Some(holder) if holder.is_some() && holder != *incoming
-        )
-    }
-
-    /// The declaring module of whatever currently owns the bare `base` namespace (singleton or
-    /// overload set), if any.
-    fn bare_holder_module(&self, base: &str) -> Option<Option<Rc<str>>> {
-        if let Some(info) = self.functions.get(base) {
-            return Some(info.declaring_module.clone());
-        }
-        let keys = self.overloads.get(base)?;
-        let first = keys.first()?;
-        self.functions
-            .get(first)
-            .map(|info| info.declaring_module.clone())
-    }
-
-    /// Overload namespace for `base` as declared in `module`: the module-qualified namespace when a
-    /// cross-module collision has forced qualification, otherwise the bare base.
-    fn namespace_for(&self, base: &str, module: Option<&Rc<str>>) -> String {
-        if let Some(ns) = self.resolve_in_module(module, base) {
-            return ns.to_string();
-        }
-        // Another module already forced qualification for this bare name — this module must
-        // qualify too, even if it has not yet recorded a by_module entry.
-        if self.by_module.keys().any(|(_, n)| n == base) {
-            return module_key(base, module.map(|m| m.as_ref()));
-        }
-        base.to_string()
-    }
-
-    /// Rewrites every declaration currently stored under the bare `base` namespace into
-    /// module-qualified namespaces (with structural signatures for overloads), recording each in
-    /// [`Self::by_module`]. Preserves per-module declaration order.
-    fn promote_bare_to_modules(
-        &mut self,
-        base: &str,
-        type_ctx: &mut dream_types::TypeCtx,
-    ) -> Result<(), SymbolError> {
-        let keys: Vec<String> = match self.overloads.shift_remove(base) {
-            Some(keys) => keys,
-            None if self.functions.contains_key(base) => vec![base.to_string()],
-            None => return Ok(()),
-        };
-        let mut infos = Vec::with_capacity(keys.len());
-        for key in &keys {
-            if let Some(info) = self.functions.shift_remove(key) {
-                infos.push(info);
-            }
-        }
-
-        // Group by declaring module while preserving first-seen module order and per-group
-        // declaration order (HashMap iteration must not decide emit-facing order).
-        let mut module_order: Vec<Option<Rc<str>>> = Vec::new();
-        let mut groups: HashMap<Option<Rc<str>>, Vec<FunctionTableInfo>> = HashMap::new();
-        for info in infos {
-            let module = info.declaring_module.clone();
-            if !groups.contains_key(&module) {
-                module_order.push(module.clone());
-            }
-            groups.entry(module).or_default().push(info);
-        }
-
-        for module in module_order {
-            let group = groups.shift_remove(&module).unwrap_or_default();
-            let ns = module_key(base, module.as_deref());
-            self.by_module
-                .insert((module, base.to_string()), ns.clone());
-            self.insert_group_under_namespace(&ns, group, type_ctx, base)?;
-        }
-        Ok(())
-    }
-
-    /// Inserts an already-collected same-module group under `ns` (singleton keeps `ns`; 2+
-    /// entries are signature-mangled).
-    fn insert_group_under_namespace(
-        &mut self,
-        ns: &str,
-        group: Vec<FunctionTableInfo>,
-        type_ctx: &mut dream_types::TypeCtx,
-        error_name: &str,
-    ) -> Result<(), SymbolError> {
-        if group.is_empty() {
-            return Ok(());
-        }
-        if group.len() == 1 {
-            let Some(mut info) = group.into_iter().next() else {
-                crate::internal_error!("singleton overload group was empty");
-            };
-            if self.functions.contains_key(ns) {
-                return Err(SymbolError::new(format!(
-                    "Function '{}' is already defined in module '{}'",
-                    error_name,
-                    info.declaring_module.as_deref().unwrap_or("")
-                )));
-            }
-            info.name = ns.to_string();
-            self.overloads.insert(ns.to_string(), vec![ns.to_string()]);
-            self.functions.insert(ns.to_string(), info);
-            return Ok(());
-        }
-        let mut keys = Vec::with_capacity(group.len());
-        for mut info in group {
-            let key = overload_key(ns, &info.parameter_types, type_ctx);
-            if self.functions.contains_key(&key) {
-                return Err(SymbolError::new(format!(
-                    "Duplicate overload: '{}' with the same parameter types is already defined",
-                    error_name
-                )));
-            }
-            info.name = key.clone();
-            keys.push(key.clone());
-            self.functions.insert(key, info);
-        }
-        self.overloads.insert(ns.to_string(), keys);
-        Ok(())
-    }
-
-    /// Registers `info` under overload namespace `ns`, promoting a singleton to a signature-mangled
-    /// key when a second overload arrives. Default parameter values are allowed; overload
-    /// resolution ([`select_overload`]) prefers an exact-arity match over one that fills defaults.
-    fn register_under_namespace(
-        &mut self,
-        ns: &str,
-        mut info: FunctionTableInfo,
-        type_ctx: &mut dream_types::TypeCtx,
-        error_name: &str,
-    ) -> Result<String, SymbolError> {
-        let existing = self.overloads.entry(ns.to_string()).or_default();
-        if existing.is_empty() {
-            if self.functions.contains_key(ns) {
-                return Err(SymbolError::new(format!(
-                    "Function already exists ({})",
-                    error_name
-                )));
-            }
-            info.name = ns.to_string();
-            existing.push(ns.to_string());
-            self.functions.insert(ns.to_string(), info);
-            return Ok(ns.to_string());
-        }
-        // Promote a lone singleton to its mangled key the moment a second overload appears.
-        if existing.len() == 1 && existing[0] == ns {
-            if let Some(mut first) = self.functions.shift_remove(ns) {
-                let first_key = overload_key(ns, &first.parameter_types, type_ctx);
-                first.name = first_key.clone();
-                self.functions.insert(first_key.clone(), first);
-                existing[0] = first_key;
-            }
-        }
-        let key = overload_key(ns, &info.parameter_types, type_ctx);
-        if self.functions.contains_key(&key) {
+        _type_ctx: &mut TypeCtx,
+    ) -> Result<FunctionIdentity, SymbolError> {
+        let identity = info.identity.clone();
+        let scope = (identity.0.module, base.to_string());
+        let functions = &self.functions;
+        let candidates = self.scopes.entry(scope).or_default();
+        if candidates.iter().any(|key| {
+            functions.get(key).is_some_and(|old| old.parameters == info.parameters)
+        }) {
             return Err(SymbolError::new(format!(
-                "Duplicate overload: '{}' with the same parameter types is already defined",
-                error_name
+                "Duplicate overload: '{base}' with the same parameter types is already defined"
             )));
         }
-        info.name = key.clone();
-        existing.push(key.clone());
-        self.functions.insert(key.clone(), info);
-        Ok(key)
+        candidates.push(identity.clone());
+        self.functions.insert(identity.clone(), info);
+        Ok(identity)
     }
 
-    /// The overload namespace registered for `base` as declared in `module`, if a cross-module
-    /// collision ever forced it onto a module-qualified namespace. Returns `None` when no such
-    /// collision occurred for this name (the common case): callers should then fall back to
-    /// looking `base` up by its bare name, unchanged from before `module` existed.
-    pub fn resolve_in_module(&self, module: Option<&Rc<str>>, base: &str) -> Option<&str> {
-        self.by_module
-            .get(&(module.cloned(), base.to_string()))
-            .map(|s| s.as_str())
+    pub fn add_instance(&mut self, mut info: FunctionTableInfo, def: DefId, args: Vec<TypeId>) -> FunctionIdentity {
+        let identity = (def, args);
+        info.identity = identity.clone();
+        self.functions.entry(identity.clone()).or_insert(info);
+        identity
     }
 
-    /// Resolves `item` as declared in `module_path` to its overload namespace (module-qualified
-    /// after a cross-module collision, otherwise the bare name when that bare namespace belongs to
-    /// the requested module). Used by aliased imports, including overloaded items whose functions
-    /// table entries live under signature-mangled keys rather than the namespace itself.
-    pub fn resolve_item_namespace(&self, module_path: &str, item: &str) -> Option<String> {
-        let module: Rc<str> = Rc::from(module_path);
-        if let Some(ns) = self.resolve_in_module(Some(&module), item) {
-            return Some(ns.to_string());
+    pub fn add_function(&mut self, name: String, info: FunctionTableInfo) -> Result<FunctionIdentity, SymbolError> {
+        let identity = info.identity.clone();
+        let scope = (identity.0.module, name.clone());
+        if self.scopes.contains_key(&scope) {
+            return Err(SymbolError::new(format!("Function already exists ({name})")));
         }
-        if let Some(keys) = self.overloads.get(item) {
-            let first = keys.first()?;
-            let info = self.functions.get(first)?;
-            if info.declaring_module.as_deref() == Some(module_path) {
-                return Some(item.to_string());
-            }
-            return None;
+        self.scopes.insert(scope, vec![identity.clone()]);
+        self.functions.insert(identity.clone(), info);
+        Ok(identity)
+    }
+
+    pub fn bind_alias(&mut self, module: ModuleId, name: &str, identities: Vec<FunctionIdentity>) -> Result<(), SymbolError> {
+        let key = (module, name.to_string());
+        if self.scopes.contains_key(&key) {
+            return Err(SymbolError::new(format!("Function already exists ({name})")));
         }
-        self.functions
-            .get(item)
-            .filter(|info| info.declaring_module.as_deref() == Some(module_path))
-            .map(|info| info.name.clone())
+        self.scopes.insert(key, identities);
+        Ok(())
     }
 
-    /// Whether `base` has more than one overload (i.e. its declarations are signature-mangled).
-    pub fn is_overloaded(&self, base: &str) -> bool {
-        self.overloads
-            .get(base)
-            .map(|v| v.len() > 1)
-            .unwrap_or(false)
+    pub fn candidates_in(&self, module: ModuleId, name: &str) -> &[FunctionIdentity] {
+        self.scopes.get(&(module, name.to_string())).map(Vec::as_slice).unwrap_or(&[])
     }
 
-    /// The key of the non-variadic overload of `base` whose parameter type names are exactly
-    /// `params` — how a `fun(...)` expected type selects an overloaded function taken as a value.
-    pub fn overload_with_params(&self, base: &str, params: &[String]) -> Option<&str> {
-        self.overloads
-            .get(base)?
-            .iter()
-            .find(|key| {
-                self.functions
-                    .get(*key)
-                    .is_some_and(|info| !info.is_variadic && info.parameters == params)
-            })
-            .map(String::as_str)
-    }
-
-    /// The emitted name of the declaration of `base` whose parameter list is `parameter_types`:
-    /// the bare base when `base` is not overloaded, otherwise the signature-mangled key.
-    pub fn resolve_emitted_name(
-        &self,
-        base: &str,
-        parameter_types: &[Type],
-        type_ctx: &mut dream_types::TypeCtx,
-    ) -> String {
-        if self.is_overloaded(base) {
-            overload_key(base, parameter_types, type_ctx)
-        } else {
-            base.to_string()
+    pub fn candidates(&self, ctx: &TypeCtx, name: &str) -> Vec<FunctionIdentity> {
+        if let Some((path, item)) = name.rsplit_once("::") {
+            return self.scopes.iter().find_map(|((module, source), keys)| {
+                (source == item && ctx.module_path(*module) == Some(path)).then(|| keys.clone())
+            }).unwrap_or_default();
         }
-    }
-
-    /// The emitted name of the declaration of `base` as declared in `module`: when a cross-module
-    /// collision promoted it, resolves against the module-qualified overload namespace (applying
-    /// signature mangling when that namespace is overloaded); otherwise
-    /// [`Self::resolve_emitted_name`]'s ordinary bare-name/overload-mangled result.
-    pub fn resolve_emitted_name_scoped(
-        &self,
-        base: &str,
-        module: Option<&Rc<str>>,
-        parameter_types: &[Type],
-        type_ctx: &mut dream_types::TypeCtx,
-    ) -> String {
-        if let Some(ns) = self.resolve_in_module(module, base) {
-            return self.resolve_emitted_name(ns, parameter_types, type_ctx);
-        }
-        self.resolve_emitted_name(base, parameter_types, type_ctx)
-    }
-
-    /// Selects the overload of `base` that best matches `args`. Exact type matches are preferred;
-    /// `compat` supplies the fallback compatibility (object widening, enum/int, numeric, nullable).
-    /// A single best candidate wins; ties yield `Ambiguous`; no viable candidate yields `None`.
-    /// When `base` is not an overload set, falls back to the plain function keyed by `base`.
-    ///
-    /// Variadic overloads (`...name: T[]`) accept any argument count from the fixed-prefix minimum
-    /// upward: trailing args are matched against the array element type. A call that already packed
-    /// the variadic slot into a single `T[]` argument (named-arg path) also matches via the normal
-    /// fixed-arity zip against the full parameter list.
-    pub fn select_overload(
-        &self,
-        base: &str,
-        args: &[String],
-        mut compat: impl FnMut(&str, &str) -> bool,
-    ) -> OverloadResolution {
-        let keys = match self.overloads.get(base) {
-            Some(keys) => keys,
-            None => {
-                return if self.functions.contains_key(base) {
-                    OverloadResolution::Unique(base.to_string())
-                } else {
-                    OverloadResolution::None
-                };
-            }
-        };
-        let mut scored: Vec<(i32, &String)> = Vec::new();
-        for key in keys {
-            let info = match self.functions.get(key) {
-                Some(info) => info,
-                None => continue,
-            };
-            let Some(score) = Self::score_overload_candidate(info, args, &mut compat) else {
+        let mut imported = Vec::new();
+        for module in ctx.visible_modules() {
+            let keys = self.candidates_in(module, name);
+            if keys.is_empty() {
                 continue;
-            };
-            scored.push((score, key));
+            }
+            if module == ctx.scope() || module == ModuleId::ROOT {
+                return keys.to_vec();
+            }
+            imported.extend_from_slice(keys);
         }
-        let max_score = match scored.iter().map(|(s, _)| *s).max() {
-            Some(max) => max,
-            None => return OverloadResolution::None,
+        imported
+    }
+
+    pub fn lookup(&self, ctx: &TypeCtx, name: &str) -> Result<FunctionTableInfo, SymbolError> {
+        let candidates = self.candidates(ctx, name);
+        match candidates.as_slice() {
+            [identity] => self.get_function(identity),
+            [] => Err(SymbolError::new(format!("Function does not exist ({name})"))),
+            _ => Err(SymbolError::new(format!("Function does not resolve uniquely ({name})"))),
+        }
+    }
+
+    pub fn get_function(&self, identity: &FunctionIdentity) -> Result<FunctionTableInfo, SymbolError> {
+        self.functions.get(identity).cloned().ok_or_else(|| {
+            SymbolError::new(format!("Function does not exist ({identity:?})"))
+        })
+    }
+
+    pub fn is_overloaded(&self, ctx: &TypeCtx, name: &str) -> bool {
+        self.candidates(ctx, name).len() > 1
+    }
+
+    pub fn emitted_name(&self, ctx: &TypeCtx, identity: &FunctionIdentity) -> String {
+        let Some(info) = self.functions.get(identity) else { return ctx.defs.name(identity.0).to_string(); };
+        let overloaded = self.candidates_in(identity.0.module, &info.name).len() > 1
+            || self.methods.values().any(|keys| keys.len() > 1 && keys.contains(identity));
+        let method = self.methods.values().any(|keys| keys.contains(identity));
+        let name = if method { ctx.defs.name(identity.0) } else { &info.name };
+        if !overloaded {
+            return name.to_string();
+        }
+        let parts: Vec<_> = info.parameters.iter().map(|&ty| dream_types::type_symbol(&ctx.interner, &ctx.defs, ty)).collect();
+        format!("{}.{}", name, parts.join("."))
+    }
+
+    pub fn declaration(&self, ctx: &TypeCtx, name: &str, parameters: &[TypeId]) -> Option<FunctionIdentity> {
+        self.candidates(ctx, name).into_iter().find(|key| {
+            self.functions.get(key).is_some_and(|info| info.parameters == parameters && key.1.is_empty())
+        })
+    }
+
+    pub fn overload_with_params(&self, ctx: &TypeCtx, name: &str, parameters: &[TypeId]) -> Option<FunctionIdentity> {
+        self.candidates(ctx, name).into_iter().find(|key| {
+            self.functions.get(key).is_some_and(|info| !info.is_variadic && info.parameters == parameters)
+        })
+    }
+
+    pub fn select_overload(&self, ctx: &TypeCtx, base: &str, args: &[TypeId], mut compatible: impl FnMut(TypeId, TypeId) -> bool) -> OverloadResolution {
+        self.select_candidates(ctx, self.candidates(ctx, base), args, &mut compatible)
+    }
+
+    pub fn select_candidates(&self, ctx: &TypeCtx, candidates: Vec<FunctionIdentity>, args: &[TypeId], mut compatible: impl FnMut(TypeId, TypeId) -> bool) -> OverloadResolution {
+        let scored: Vec<_> = candidates.into_iter().filter_map(|key| {
+            let info = self.functions.get(&key)?;
+            Self::score(info, args, &ctx.interner, &mut compatible).map(|score| (score, key))
+        }).collect();
+        let Some(max) = scored.iter().map(|(score, _)| *score).max() else {
+            return OverloadResolution::None;
         };
-        let mut best: Vec<String> = scored
-            .iter()
-            .filter(|(s, _)| *s == max_score)
-            .map(|(_, k)| (*k).clone())
-            .collect();
+        let mut best: Vec<_> = scored.into_iter().filter(|(score, _)| *score == max).map(|(_, key)| key).collect();
         if best.len() == 1 {
             OverloadResolution::Unique(best.remove(0))
         } else {
@@ -449,293 +189,41 @@ impl FunctionTable {
         }
     }
 
-    /// Scores one overload against `args`, or `None` if it is not viable.
-    fn score_overload_candidate(
-        info: &FunctionTableInfo,
-        args: &[String],
-        compat: &mut impl FnMut(&str, &str) -> bool,
-    ) -> Option<i32> {
-        if info.is_variadic {
-            let fixed = info.parameters.len().saturating_sub(1);
-            let min_args = info
-                .defaults
-                .iter()
-                .take(fixed)
-                .position(|d| d.is_some())
-                .unwrap_or(fixed);
-            if args.len() < min_args {
-                return None;
-            }
-            // Already-packed form: last argument is the `T[]` variadic slot itself.
-            if args.len() == info.parameters.len() {
-                let mut score = 0i32;
-                for (param, arg) in info.parameters.iter().zip(args.iter()) {
-                    if param == arg {
-                        score += 1;
-                    } else if compat(param, arg) {
-                    } else {
-                        return None;
-                    }
-                }
-                score += 1;
-                return Some(score);
-            }
-            let elem = dream_syntax::nodes::types::strip_array(
-                info.parameters.get(fixed).map(|s| s.as_str()).unwrap_or(""),
-            );
-            if fixed < info.parameters.len() && elem.is_empty() {
-                return None;
-            }
-            let mut score = 0i32;
-            for i in 0..fixed {
-                let Some(arg) = args.get(i) else {
-                    break;
-                };
-                let param = &info.parameters[i];
+    fn score(info: &FunctionTableInfo, args: &[TypeId], interner: &TypeInterner, compatible: &mut impl FnMut(TypeId, TypeId) -> bool) -> Option<i32> {
+        let mut score_pairs = |parameters: &[TypeId], arguments: &[TypeId]| {
+            parameters.iter().zip(arguments).try_fold(0, |score, (&param, &arg)| {
                 if param == arg {
-                    score += 1;
-                } else if compat(param, arg) {
+                    Some(score + 1)
+                } else if compatible(param, arg) {
+                    Some(score)
                 } else {
-                    return None;
+                    None
                 }
+            })
+        };
+        if !info.is_variadic {
+            if args.len() < info.required_params() || args.len() > info.parameters.len() {
+                return None;
             }
-            for arg in args.iter().skip(fixed) {
-                if arg == elem {
-                    score += 1;
-                } else if compat(elem, arg) {
-                } else {
-                    return None;
-                }
-            }
-            if args.len() == fixed {
-                score += 1;
-            }
-            return Some(score);
+            return score_pairs(&info.parameters, args).map(|score| score + i32::from(args.len() == info.parameters.len()));
         }
-
-        // A defaulted overload matches any argument count from its required count up to its
-        // full arity; the omitted trailing parameters are filled from their defaults later.
-        if args.len() < info.required_params() || args.len() > info.parameters.len() {
+        let fixed = info.parameters.len().checked_sub(1)?;
+        let required = info.defaults.iter().take(fixed).position(Option::is_some).unwrap_or(fixed);
+        if args.len() < required {
             return None;
         }
-        let mut score = 0i32;
-        for (param, arg) in info.parameters.iter().zip(args.iter()) {
-            if param == arg {
-                score += 1;
-            } else if compat(param, arg) {
-            } else {
-                return None;
+        if args.len() == info.parameters.len() {
+            if let Some(score) = score_pairs(&info.parameters, args) {
+                return Some(score + 1);
             }
         }
-        if args.len() == info.parameters.len() {
-            score += 1;
-        }
-        Some(score)
-    }
-
-    pub fn get_function(&self, name: &str) -> Result<FunctionTableInfo, SymbolError> {
-        match self.functions.get(name) {
-            Some(info) => Ok(info.clone()),
-            None => Err(SymbolError::new(format!(
-                "Function does not exist ({})",
-                name
-            ))),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct FunctionTableInfo {
-    pub name: String,
-    pub return_type: Option<Type>,
-    pub parameters: Vec<String>,
-    /// The fully structured (never string-mangled) counterpart of `parameters`, parallel to it.
-    /// Populated by [`FunctionTableInfo::from`] straight from the declaration's (possibly
-    /// generic-substituted) `ParameterNode::type_`, so a generic-struct-typed parameter (e.g.
-    /// `List<T>`, concretized to `List<int>` on a monomorphized method) keeps its `Struct(name,
-    /// Some(args))` shape instead of collapsing to the opaque mangled name `parameters` stores.
-    /// Used to publish `current_expected_type` per call argument (see `analyze_call_arguments_expecting`),
-    /// which a string round-trip through `parameters` cannot do losslessly for generic structs.
-    /// Empty for synthesized/stdlib entries built via [`FunctionTableInfo::new`] (host functions
-    /// only ever take primitive parameters, so the string form round-trips losslessly there).
-    pub parameter_types: Vec<Type>,
-    /// Per-parameter declared names, parallel to `parameters`, used to resolve named arguments
-    /// (`f(name: value)`) at call sites back to a positional index. Empty for entries with no
-    /// source-level parameter names (synthesized/stdlib entries built via
-    /// [`FunctionTableInfo::new`]) — a named-argument call to one of those is rejected with a clear
-    /// diagnostic rather than silently misresolving.
-    pub param_names: Vec<String>,
-    /// True when the last declared parameter is `...name: T[]` (variadic): a call may supply zero
-    /// or more trailing arguments of the array's element type in that slot, which the analyzer
-    /// collects into an array before argument type-checking. `false` for every synthesized/stdlib
-    /// entry and every declaration with no variadic parameter.
-    pub is_variadic: bool,
-    /// Per-parameter `ref` flag, parallel to `parameters`: true when the declaration is `ref
-    /// name: T`, requiring the call site to pass a matching `ref` argument (see
-    /// `Analyzer::analyze_ref_argument`). Always all-`false` for synthesized/stdlib entries.
-    pub is_ref: Vec<bool>,
-    /// Per-parameter sink (`take`) flag, parallel to `parameters`: true when the parameter is
-    /// unmarked (neither `ref` nor `borrow`) and not the synthetic `this` receiver — the callee
-    /// takes ownership of the caller's +1. Explicit `borrow` is share ABI and is `false` here.
-    pub is_take: Vec<bool>,
-    /// Per-parameter constant-literal default values, parallel to `parameters`. `None` means the
-    /// parameter is required. Defaults are always trailing (enforced by the parser), so a call may
-    /// omit the trailing defaulted arguments and the analyzer substitutes these literals.
-    pub defaults: Vec<Option<Type>>,
-    /// True when the declaration is `async fun`: calling it eagerly starts a task and yields
-    /// `Future<T>` (where `T` is `return_type`). Awaiting a call to it produces `T`.
-    pub is_async: bool,
-    /// True when the declaration is a `static fun` method (no implicit `this`, dispatched as
-    /// `Type.method(...)`). Used by the indexer/enumerator sugar sites to reject static methods as
-    /// `[]`/`for..in` hooks. Always `false` for free functions and synthesized/stdlib entries.
-    pub is_static: bool,
-    /// True when the declaration carries `@unsafe`: it performs a manual-memory-management
-    /// operation (raw `Pointer<T>` alloc/free/realloc/read/write) with no compiler-enforced safety
-    /// net. Calling it is only permitted from another `@unsafe` function/method — checked at every
-    /// call site (see `Analyzer::check_unsafe_call`, `src/semantics/analyzer/calls/mod.rs`).
-    pub is_unsafe: bool,
-    /// Runtimes this declaration is available on (`@native`/`@node`/`@web`). Absent all three
-    /// means every runtime; checked at call sites via `Analyzer::check_runtime_call`.
-    pub runtime_support: dream_abi::attributes::RuntimeSupport,
-    /// True when the declaration carries `@compute`: it is a WebGPU compute kernel (body emitted as
-    /// WGSL, not WASM). Calling it like a CPU function is rejected; kernels may only call other
-    /// `@compute` helpers (see `Analyzer::check_compute_call`).
-    pub is_compute: bool,
-    /// True when the declaration carries `@vertex`.
-    pub is_vertex: bool,
-    /// True when the declaration carries `@fragment`.
-    pub is_fragment: bool,
-    /// True when the declaration carries `@gpu` (callable from shaders as a WGSL helper).
-    pub is_gpu_helper: bool,
-    /// True when the declaration carries `@shader_only`: only callable from GPU code.
-    pub is_shader_only: bool,
-    pub intrinsic_name: Option<String>,
-    /// Accessibility of the declaration. For methods this gates external calls (private methods
-    /// may only be called from within their declaring type; `internal` ones from anywhere in the
-    /// same module). Defaults to `Public` for synthesized/stdlib entries so they are callable
-    /// everywhere.
-    pub visibility: Visibility,
-    /// Source file the declaration came from, used for file/module-level visibility: a non-public
-    /// declaration is only reachable from its own file. `None` for synthesized/stdlib entries,
-    /// which are always visible.
-    pub declaring_file: Option<std::rc::Rc<str>>,
-    /// The declaring file's `module a.b.c;` path, if any — `None` for a file with no `module`
-    /// declaration (the implicit root module) as well as for synthesized/stdlib entries. Set by
-    /// the analyzer's registration pass (`FunctionTableInfo::from` cannot see the file/module map
-    /// on its own); drives the cross-module duplicate-name resolution in [`FunctionTable::add_overload`].
-    pub declaring_module: Option<std::rc::Rc<str>>,
-}
-
-impl FunctionTableInfo {
-    pub fn new(
-        name: String,
-        return_type: Option<Type>,
-        parameters: Vec<String>,
-    ) -> FunctionTableInfo {
-        let defaults = vec![None; parameters.len()];
-        let is_ref = vec![false; parameters.len()];
-        let is_take = vec![false; parameters.len()];
-        let param_names = Vec::new();
-        FunctionTableInfo {
-            name,
-            return_type,
-            parameters,
-            parameter_types: Vec::new(),
-            param_names,
-            is_variadic: false,
-            is_ref,
-            is_take,
-            defaults,
-            is_async: false,
-            is_static: false,
-            is_unsafe: false,
-            runtime_support: dream_abi::attributes::RuntimeSupport::ALL,
-            is_compute: false,
-            is_vertex: false,
-            is_fragment: false,
-            is_gpu_helper: false,
-            is_shader_only: false,
-            intrinsic_name: None,
-            visibility: Visibility::Public,
-            declaring_file: None,
-            declaring_module: None,
-        }
-    }
-    pub fn from(func: &FunctionNode) -> Self {
-        let name = func.name.clone();
-        let return_type = func.return_type.clone();
-        let mut parameters: Vec<String> = vec![];
-        let mut parameter_types: Vec<Type> = vec![];
-        let mut param_names: Vec<String> = vec![];
-        let mut defaults: Vec<Option<Type>> = vec![];
-        let mut is_ref: Vec<bool> = vec![];
-        let mut is_take: Vec<bool> = vec![];
-        // A host function cannot release a Dream reference, so the sink default is backwards for an
-        // `extern`: it makes the call site retain an argument nothing will ever drop. Externs pass at
-        // +0 unless the declaration opts in with `@consuming` (`Buffer.free`, which really does take
-        // the array).
-        let host_borrows = func.is_extern && !dream_abi::attributes::is_consuming(&func.attributes);
-        for i in func.parameters.iter() {
-            let j = i.clone();
-            parameters.push(j.type_.get_type());
-            parameter_types.push(j.type_);
-            defaults.push(j.default);
-            is_ref.push(j.is_ref);
-            is_take.push(!j.is_ref && !j.is_borrow && j.name.text != "this" && !host_borrows);
-            param_names.push(j.name.text);
-        }
-        let intrinsic_name = dream_abi::intrinsics::intrinsic_key(&func.attributes);
-        let is_variadic = func
-            .parameters
-            .last()
-            .map(|p| p.is_variadic)
-            .unwrap_or(false);
-        let mut info = FunctionTableInfo::new(name.text, return_type, parameters);
-        info.parameter_types = parameter_types;
-        info.param_names = param_names;
-        info.is_variadic = is_variadic;
-        info.is_ref = is_ref;
-        info.is_take = is_take;
-        info.defaults = defaults;
-        info.is_async = func.is_async;
-        info.is_static = func.is_static;
-        info.is_unsafe = func.attributes.iter().any(|a| a.name.text == "unsafe");
-        info.runtime_support =
-            dream_abi::attributes::RuntimeSupport::from_attributes(&func.attributes);
-        info.is_compute = dream_abi::attributes::has_compute_attr(&func.attributes);
-        info.is_vertex = dream_abi::attributes::has_vertex_attr(&func.attributes);
-        info.is_fragment = dream_abi::attributes::has_fragment_attr(&func.attributes);
-        info.is_gpu_helper = dream_abi::attributes::has_gpu_helper_attr(&func.attributes);
-        info.is_shader_only = dream_abi::attributes::has_shader_only_attr(&func.attributes);
-        info.intrinsic_name = intrinsic_name;
-        // `extern` functions/methods are interop entry points (WASM imports): they cannot be
-        // host-exported and privacy is meaningless for them, so they are always call-visible.
-        info.visibility = if func.is_extern {
-            Visibility::Public
-        } else {
-            func.visibility
+        let TyKind::Array(element) = interner.kind(info.parameters[fixed]) else {
+            return None;
         };
-        info.declaring_file = func.file_path.clone();
-        info
-    }
-
-    /// True for `@compute` / `@vertex` / `@fragment` (WGSL-emitted, no WASM body).
-    pub fn is_gpu_shader(&self) -> bool {
-        self.is_compute || self.is_vertex || self.is_fragment
-    }
-
-    /// The number of leading required parameters: the index of the first parameter that has a
-    /// default value, or the full parameter count when none do. A call must supply at least this
-    /// many arguments; the remaining trailing parameters may be omitted (their defaults are used).
-    pub fn required_params(&self) -> usize {
-        self.defaults
-            .iter()
-            .position(|d| d.is_some())
-            .unwrap_or(self.parameters.len())
-    }
-
-    /// True if any parameter carries a default value.
-    pub fn has_defaults(&self) -> bool {
-        self.defaults.iter().any(|d| d.is_some())
+        let mut score = score_pairs(&info.parameters[..fixed], &args[..args.len().min(fixed)])?;
+        for &arg in args.iter().skip(fixed) {
+            score += score_pairs(std::slice::from_ref(element), &[arg])?;
+        }
+        Some(score + i32::from(args.len() == fixed))
     }
 }

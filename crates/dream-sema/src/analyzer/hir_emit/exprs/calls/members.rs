@@ -80,7 +80,7 @@ impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn hir_set_method_call(
         &mut self,
         receiver: Option<HExpr>,
-        mangled: &str,
+        identity: &crate::function_table::FunctionIdentity,
         args: Vec<Option<HExpr>>,
         ret: &Type,
     ) {
@@ -88,9 +88,7 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         }
-        let (Some(def), Some(receiver)) =
-            (self.type_ctx.resolve(DefKind::Function, mangled), receiver)
-        else {
+        let Some(receiver) = receiver else {
             self.hir.last = None;
             return;
         };
@@ -99,54 +97,10 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let ret_ty = self.type_ctx.lower(ret);
-        let take_params = self.take_params_for(mangled);
+        let take_params = self.function_table.functions.get(identity).map(|info| info.is_take.clone()).unwrap_or_default();
         let callee = Callee {
-            def,
-            instance: vec![],
-            ret: ret_ty,
-            take_params,
-        };
-        self.hir.last = Some(HExpr::new(
-            ret_ty,
-            HExprKind::MethodCall {
-                receiver: Box::new(receiver),
-                callee,
-                args: collected,
-            },
-        ));
-    }
-
-    /// Like [`hir_set_method_call`], but populates `Callee.instance` for a method-level generic
-    /// monomorphization (`obj.method<T>(...)`). `base_name` is the shared template DefId
-    /// (`{Type}_{method}`); `instance` disambiguates the emitted WASM symbol.
-    pub(in crate::analyzer) fn hir_set_generic_method_call(
-        &mut self,
-        receiver: Option<HExpr>,
-        base_name: &str,
-        instance: Vec<TypeId>,
-        args: Vec<Option<HExpr>>,
-        ret: &Type,
-        take_params: Vec<bool>,
-    ) {
-        if !self.active() {
-            self.hir.last = None;
-            return;
-        }
-        let (Some(def), Some(receiver)) = (
-            self.type_ctx.resolve(DefKind::Function, base_name),
-            receiver,
-        ) else {
-            self.hir.last = None;
-            return;
-        };
-        let Some(collected) = Self::collect_hir_args(args) else {
-            self.hir.last = None;
-            return;
-        };
-        let ret_ty = self.type_ctx.lower(ret);
-        let callee = Callee {
-            def,
-            instance,
+            def: identity.0,
+            instance: identity.1.clone(),
             ret: ret_ty,
             take_params,
         };

@@ -122,7 +122,7 @@ impl OperatorSymbol {
 /// return type.
 #[derive(Debug, Clone)]
 pub struct OperatorMethod {
-    pub mangled_name: String,
+    pub identity: crate::function_table::FunctionIdentity,
     pub param_type: Option<Type>,
     pub return_type: Type,
 }
@@ -148,8 +148,8 @@ impl CastKind {
 #[derive(Debug, Clone)]
 pub struct CastMethod {
     pub kind: CastKind,
-    pub target: Type,
-    pub mangled_name: String,
+    pub target_id: dream_types::TypeId,
+    pub identity: crate::function_table::FunctionIdentity,
 }
 
 /// One type's full set of operator/cast overloads, keyed the same way as
@@ -170,11 +170,12 @@ impl<'a> Analyzer<'a> {
     /// type may claim the same operator/cast.
     pub(in crate::analyzer) fn validate_and_register_operator(
         &mut self,
-        target_type_str: &str,
+        receiver: dream_types::TypeId,
         method: &FunctionNode<'a>,
-        mangled_name: &str,
+        identity: &crate::function_table::FunctionIdentity,
         diagnostics: &mut DiagnosticBag,
     ) {
+        let target_display = self.type_id_display(receiver);
         if let Some(symbol_text) = method.operator_symbol.as_deref() {
             let arity = method.parameters.len();
             let Some(symbol) = OperatorSymbol::from_attr_str(symbol_text, arity) else {
@@ -188,10 +189,7 @@ impl<'a> Analyzer<'a> {
                 return;
             };
             let return_type = method.return_type.clone().unwrap_or(Type::Void);
-            let overloads = self
-                .operator_overloads
-                .entry(target_type_str.to_string())
-                .or_default();
+            let overloads = self.operator_overloads.entry(receiver).or_default();
             let table = if symbol.is_unary() {
                 &mut overloads.unary
             } else {
@@ -201,9 +199,9 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(
                     format!(
                         "'{}' already declares an operator overload for '{}' on '{}'",
-                        self.ty_str_display(target_type_str),
+                        target_display,
                         symbol.symbol_str(),
-                        self.ty_str_display(target_type_str)
+                        target_display
                     ),
                     Some(method.name.position),
                 );
@@ -217,7 +215,7 @@ impl<'a> Analyzer<'a> {
             table.insert(
                 symbol,
                 OperatorMethod {
-                    mangled_name: mangled_name.to_string(),
+                    identity: identity.clone(),
                     param_type,
                     return_type,
                 },
@@ -234,10 +232,7 @@ impl<'a> Analyzer<'a> {
             };
             if !method.parameters.is_empty() {
                 diagnostics.report_error(
-                    format!(
-                        "cast method '{}' must not declare parameters",
-                        kind_text
-                    ),
+                    format!("cast method '{}' must not declare parameters", kind_text),
                     Some(method.name.position),
                 );
                 return;
@@ -252,21 +247,14 @@ impl<'a> Analyzer<'a> {
                 );
                 return;
             };
-            let target_str = target.get_type();
-            let overloads = self
-                .operator_overloads
-                .entry(target_type_str.to_string())
-                .or_default();
-            if overloads
-                .casts
-                .iter()
-                .any(|c| c.target.get_type() == target_str)
-            {
+            let target_id = self.type_ctx.lower(&target);
+            let cast_display = self.type_id_display(target_id);
+            let overloads = self.operator_overloads.entry(receiver).or_default();
+            if overloads.casts.iter().any(|c| c.target_id == target_id) {
                 diagnostics.report_error(
                     format!(
                         "'{}' already declares a cast to '{}'",
-                        self.ty_str_display(target_type_str),
-                        self.ty_str_display(&target_str)
+                        target_display, cast_display
                     ),
                     Some(method.name.position),
                 );
@@ -274,8 +262,8 @@ impl<'a> Analyzer<'a> {
             }
             overloads.casts.push(CastMethod {
                 kind,
-                target,
-                mangled_name: mangled_name.to_string(),
+                target_id,
+                identity: identity.clone(),
             });
         }
     }
@@ -285,12 +273,11 @@ impl<'a> Analyzer<'a> {
     /// small) so callers can freely make further `&mut self` calls (type-checking the other
     /// operand, emitting HIR) without fighting the borrow checker over a borrowed lookup result.
     pub(in crate::analyzer) fn operator_binary_fn(
-        &self,
+        &mut self,
         left: &Type,
         opr_kind: TokenKind,
     ) -> Option<OperatorMethod> {
-        let (base, args) = Self::resolve_struct_parts(left)?;
-        let recv = dream_syntax::nodes::types::mangle_generic(&base, &args);
+        let recv = self.type_ctx.lower(left);
         let symbol = OperatorSymbol::from_binary_token(opr_kind)?;
         self.operator_overloads
             .get(&recv)?
@@ -303,12 +290,11 @@ impl<'a> Analyzer<'a> {
     /// struct/class that declared one via `@operator(...)`. See [`Self::operator_binary_fn`] for
     /// why this returns an owned clone.
     pub(in crate::analyzer) fn operator_unary_fn(
-        &self,
+        &mut self,
         operand: &Type,
         opr_kind: TokenKind,
     ) -> Option<OperatorMethod> {
-        let (base, args) = Self::resolve_struct_parts(operand)?;
-        let recv = dream_syntax::nodes::types::mangle_generic(&base, &args);
+        let recv = self.type_ctx.lower(operand);
         let symbol = OperatorSymbol::from_unary_token(opr_kind)?;
         self.operator_overloads
             .get(&recv)?
@@ -323,22 +309,18 @@ impl<'a> Analyzer<'a> {
     /// cast may always invoke an implicit conversion. See [`Self::operator_binary_fn`] for why this
     /// returns an owned clone.
     pub(in crate::analyzer) fn operator_cast_fn(
-        &self,
+        &mut self,
         from: &Type,
         to: &Type,
         only_implicit: bool,
     ) -> Option<CastMethod> {
-        let (base, args) = Self::resolve_struct_parts(from)?;
-        let recv = dream_syntax::nodes::types::mangle_generic(&base, &args);
-        let target_str = to.get_type();
+        let recv = self.type_ctx.lower(from);
+        let target_id = self.type_ctx.lower(to);
         self.operator_overloads
             .get(&recv)?
             .casts
             .iter()
-            .find(|c| {
-                c.target.get_type() == target_str
-                    && (!only_implicit || c.kind == CastKind::Implicit)
-            })
+            .find(|c| c.target_id == target_id && (!only_implicit || c.kind == CastKind::Implicit))
             .cloned()
     }
 }

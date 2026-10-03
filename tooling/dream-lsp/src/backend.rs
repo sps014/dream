@@ -199,7 +199,7 @@ impl Backend {
     ) -> Option<(dream_sema::analyzer::ide::IdeTarget, Vec<(usize, usize)>)> {
         use dream_sema::analyzer::ide::IdeTarget;
         let r = snapshot.ref_covering(offset)?;
-        if matches!(r.target, IdeTarget::Local { .. } | IdeTarget::Expr) {
+        if !matches!(r.target, IdeTarget::Resolved { .. }) {
             return None;
         }
         let mut spans = crate::sema_ide::references_in(snapshot, &r.target);

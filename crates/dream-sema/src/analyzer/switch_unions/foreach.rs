@@ -13,28 +13,26 @@ use std::rc::Rc;
 impl<'a> Analyzer<'a> {
     /// True when `ty` is an interface-typed `Iterator<…>`, `Collection<…>`, or
     /// `IndexedCollection<…>` (including mangled instances like `Collection_int`).
-    pub(in crate::analyzer) fn is_foreach_interface_type(&self, ty: &Type) -> bool {
-        let name = ty.get_type();
-        if !self.is_interface_name(&name) {
+    pub(in crate::analyzer) fn is_foreach_interface_type(&mut self, ty: &Type) -> bool {
+        let ty = self.type_ctx.lower(ty);
+        let dream_types::TyKind::Interface(def, _) = self.type_ctx.interner.kind(ty) else {
             return false;
-        }
-        // Prefer demangling the concrete name (`Collection_int` → `Collection`): a mangled
-        // `Type::Struct` token may spell the full instance name with no separate generic args.
-        let base = self
-            .demangle_generic_interface(&name)
-            .map(|(b, _)| b)
-            .or_else(|| Self::resolve_struct_parts(ty).map(|(b, _)| b))
-            .unwrap_or_else(|| name.clone());
+        };
+        let info = self.type_ctx.defs.get(*def);
         matches!(
-            base.as_str(),
+            info.name.as_str(),
             "Iterator" | "Collection" | "IndexedCollection"
-        )
+        ) && self.interface_decl(*def).is_some_and(|decl| {
+            decl.file_path
+                .as_deref()
+                .is_some_and(dream_stdlib::is_std_source)
+        })
     }
 
     /// Looks up a 0-arg instance method on a concrete interface instance by name.
     fn iface_method_slot(
         &self,
-        iface_name: &str,
+        iface_name: dream_types::TypeId,
         method: &str,
     ) -> Option<(usize, &'a FunctionNode<'a>)> {
         let methods = self.interface_method_list(iface_name)?;
@@ -49,12 +47,12 @@ impl<'a> Analyzer<'a> {
     fn hir_iface_call0(
         &mut self,
         receiver: Option<dream_hir::HExpr>,
-        iface_name: &str,
+        iface: dream_types::TypeId,
         method: &FunctionNode<'a>,
         slot: usize,
         ret: &Type,
     ) {
-        let iface_id = self.interface_index(iface_name).unwrap_or(0);
+        let iface_id = self.interface_index(iface).unwrap_or(0);
         let sig = self.interface_dispatch_sig(method);
         self.hir_set_interface_call(receiver, iface_id, slot, sig, vec![], ret);
     }
@@ -86,31 +84,29 @@ impl<'a> Analyzer<'a> {
     ) -> Result<(), SemanticError> {
         use dream_hir::{BinOp, HExpr, HExprKind, HStmt};
 
-        let iface_name = iterable_type.get_type();
+        let iface_name = self.type_ctx.lower(iterable_type);
         if let Some((base, args)) = Self::resolve_struct_parts(iterable_type) {
-            if !args.is_empty() && self.is_generic_interface(&base) {
-                self.ensure_interface_instantiated(&base, &args, &element.position, diagnostics);
-            }
-        } else if let Some((base, arg_str)) = self.demangle_generic_interface(&iface_name) {
-            // Parameter types may already be mangled (`Collection_int`); still ensure slots exist.
-            let _ = (base, arg_str);
+            self.ensure_interface_instantiated(&base, &args, &element.position, diagnostics);
         }
-
-        let base = Self::resolve_struct_parts(iterable_type)
-            .map(|(b, _)| b)
-            .or_else(|| self.demangle_generic_interface(&iface_name).map(|(b, _)| b))
-            .unwrap_or_else(|| iface_name.clone());
+        let base = match self.type_ctx.interner.kind(iface_name) {
+            dream_types::TyKind::Interface(def, _) => self.type_ctx.defs.name(*def).to_string(),
+            _ => return Ok(()),
+        };
 
         let (enumerator_type, it_recv_hir) = if base == "Iterator" {
             (iterable_type.clone(), iter_hir)
         } else {
             // Collection / IndexedCollection: `$it = recv.iterator()`.
-            let Some((slot, method)) = self.iface_method_slot(&iface_name, "iterator") else {
+            let Some((slot, method)) = self.iface_method_slot(iface_name, "iterator") else {
                 self.hir_fail();
                 diagnostics.report_error(
                     format!(
                         "interface '{}' has no 0-arg 'iterator' method for for-each",
-                        self.ty_str_display(&iface_name)
+                        dream_types::display_name(
+                            &self.type_ctx.interner,
+                            &self.type_ctx.defs,
+                            iface_name
+                        )
                     ),
                     Some(element.position),
                 );
@@ -118,7 +114,12 @@ impl<'a> Analyzer<'a> {
             };
             let enum_ty = method.return_type.clone().unwrap_or(Type::Unknown);
             if let Some((ebase, eargs)) = Self::resolve_struct_parts(&enum_ty) {
-                if !eargs.is_empty() && self.is_generic_interface(&ebase) {
+                if !eargs.is_empty()
+                    && self
+                        .type_ctx
+                        .resolve(DefKind::Interface, &ebase)
+                        .is_some_and(|def| self.is_generic_interface(def))
+                {
                     self.ensure_interface_instantiated(
                         &ebase,
                         &eargs,
@@ -127,24 +128,29 @@ impl<'a> Analyzer<'a> {
                     );
                 }
             }
-            self.hir_iface_call0(iter_hir, &iface_name, method, slot, &enum_ty);
+            self.hir_iface_call0(iter_hir, iface_name, method, slot, &enum_ty);
             let it_call = self.hir_take();
             (enum_ty, it_call)
         };
 
-        let enum_iface = enumerator_type.get_type();
+        let enum_iface = self.type_ctx.lower(&enumerator_type);
         if let Some((ebase, eargs)) = Self::resolve_struct_parts(&enumerator_type) {
-            if !eargs.is_empty() && self.is_generic_interface(&ebase) {
+            if !eargs.is_empty()
+                && self
+                    .type_ctx
+                    .resolve(DefKind::Interface, &ebase)
+                    .is_some_and(|def| self.is_generic_interface(def))
+            {
                 self.ensure_interface_instantiated(&ebase, &eargs, &element.position, diagnostics);
             }
         }
 
-        let Some((next_slot, next_method)) = self.iface_method_slot(&enum_iface, "next") else {
+        let Some((next_slot, next_method)) = self.iface_method_slot(enum_iface, "next") else {
             self.hir_fail();
             diagnostics.report_error(
                 format!(
                     "for-each requires enumerator '{}' to have a 0-arg 'next' method returning Option<T>",
-                    self.ty_str_display(&enum_iface)
+                    dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, enum_iface)
                 ),
                 Some(element.position),
             );
@@ -152,7 +158,13 @@ impl<'a> Analyzer<'a> {
         };
         let next_ret = next_method.return_type.clone().unwrap_or(Type::Void);
         let opt_args = match Self::resolve_struct_parts(&next_ret) {
-            Some((b, args)) if b == "Option" && args.len() == 1 => args,
+            Some((b, args))
+                if self.type_ctx.resolve(DefKind::Union, &b)
+                    == self.type_ctx.resolve(DefKind::Union, "Option")
+                    && args.len() == 1 =>
+            {
+                args
+            }
             _ => {
                 self.hir_fail();
                 diagnostics.report_error(
@@ -167,9 +179,9 @@ impl<'a> Analyzer<'a> {
         };
 
         self.ensure_union_instantiated("Option", &opt_args, &element.position, diagnostics);
-        let opt_key = next_ret.get_type();
+        let opt_key = self.type_ctx.lower(&next_ret);
         let some_variant = match self
-            .union_info(&opt_key)
+            .union_info(opt_key)
             .and_then(|u| u.variant("Some"))
             .filter(|v| v.fields.len() == 1)
             .cloned()
@@ -218,7 +230,7 @@ impl<'a> Analyzer<'a> {
             let field_ty_id = self.type_ctx.lower(&element_type);
 
             let recv = self.hx_local(it_l, enum_ty_id);
-            self.hir_iface_call0(Some(recv), &enum_iface, next_method, next_slot, &next_ret);
+            self.hir_iface_call0(Some(recv), enum_iface, next_method, next_slot, &next_ret);
             let next_call = self.hir_take();
             self.hir_assign_local_id(opt_l, next_call);
 
@@ -349,7 +361,13 @@ impl<'a> Analyzer<'a> {
 
         let next_ret = next_info.return_type.clone().unwrap_or(Type::Void);
         let opt_args = match Self::resolve_struct_parts(&next_ret) {
-            Some((base, args)) if base == "Option" && args.len() == 1 => args,
+            Some((base, args))
+                if self.type_ctx.resolve(DefKind::Union, &base)
+                    == self.type_ctx.resolve(DefKind::Union, "Option")
+                    && args.len() == 1 =>
+            {
+                args
+            }
             _ => {
                 self.hir_fail();
                 diagnostics.report_error(
@@ -365,9 +383,9 @@ impl<'a> Analyzer<'a> {
 
         // Ensure the concrete `Option<T>` layout is registered so its discriminant/field are known.
         self.ensure_union_instantiated("Option", &opt_args, &element.position, diagnostics);
-        let opt_key = next_ret.get_type();
+        let opt_key = self.type_ctx.lower(&next_ret);
         let some_variant = match self
-            .union_info(&opt_key)
+            .union_info(opt_key)
             .and_then(|u| u.variant("Some"))
             .filter(|v| v.fields.len() == 1)
             .cloned()
@@ -411,7 +429,12 @@ impl<'a> Analyzer<'a> {
         let elem_slot = self.hir_alloc_local(&element.text, &element_type);
 
         // `$it = <iterable>.iterator();` (emitted into the enclosing block).
-        self.hir_set_method_call(iter_hir, &iterator_info.name, vec![], &enumerator_type);
+        self.hir_set_method_call(
+            iter_hir,
+            &iterator_info.identity,
+            vec![],
+            &enumerator_type,
+        );
         let it_call = self.hir_take();
         if let Some(it_l) = it_local {
             self.hir_assign_local_id(it_l, it_call);
@@ -427,7 +450,7 @@ impl<'a> Analyzer<'a> {
 
             // `$opt = $it.next();`
             let recv = self.hx_local(it_l, enum_ty_id);
-            self.hir_set_method_call(Some(recv), &next_info.name, vec![], &next_ret);
+            self.hir_set_method_call(Some(recv), &next_info.identity, vec![], &next_ret);
             let next_call = self.hir_take();
             self.hir_assign_local_id(opt_l, next_call);
 

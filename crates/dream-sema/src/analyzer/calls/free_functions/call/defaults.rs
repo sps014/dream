@@ -11,7 +11,7 @@ impl<'a> Analyzer<'a> {
     pub(crate) fn substitute_default_args(
         &mut self,
         defaults_and_param_tys: (&[Option<Type>], &[Type]),
-        params_types: &mut Vec<String>,
+        params_types: &mut Vec<dream_types::TypeId>,
         arg_hirs: &mut Vec<Option<dream_hir::HExpr>>,
         parent_function: &FunctionNode<'a>,
         symbol_table: &Rc<RefCell<SymbolTable>>,
@@ -29,7 +29,7 @@ impl<'a> Analyzer<'a> {
                     self.analyze_expression(&lit, parent_function, symbol_table, diagnostics)?;
                 self.current_expected_type = saved_expected;
                 arg_hirs.push(self.hir_take());
-                params_types.push(t.get_type());
+                params_types.push(self.type_ctx.lower(&t));
             }
         }
         Ok(())

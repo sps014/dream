@@ -8,7 +8,6 @@ use crate::symbol_table::SymbolTable;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
-use dream_syntax::token::token_kind::TokenKind;
 use indexmap::IndexMap as HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -27,8 +26,12 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Option<Type>, SemanticError> {
-        let is_generic = self.generic_union(enum_name).is_some();
-        let is_concrete = self.union_info(enum_name).is_some();
+        let Some(def) = self.type_ctx.resolve(DefKind::Union, enum_name) else {
+            return Ok(None);
+        };
+        let nominal = self.type_ctx.instantiate(def, vec![]);
+        let is_generic = self.generic_union(def).is_some();
+        let is_concrete = self.union_info(nominal).is_some();
         if !is_generic && !is_concrete {
             return Ok(None);
         }
@@ -45,7 +48,7 @@ impl<'a> Analyzer<'a> {
         // Declared payload names + types (templated for generic unions). Names reorder
         // `Variant(field: expr)` to positional order before the args are typed.
         let (field_names, field_types): (Vec<String>, Vec<Type>) =
-            if let Some(&template) = self.generic_union(enum_name) {
+            if let Some(&template) = self.generic_union(def) {
                 match template
                     .variants
                     .iter()
@@ -64,7 +67,7 @@ impl<'a> Analyzer<'a> {
                     }
                 }
             } else {
-                let info = match self.union_info(enum_name) {
+                let info = match self.union_info(nominal) {
                     Some(info) => info,
                     None => {
                         return Err(report(
@@ -116,14 +119,13 @@ impl<'a> Analyzer<'a> {
                 variant.position,
                 diagnostics,
             );
-            let result_ty =
-                Type::Struct(synthetic_token(TokenKind::IdentifierToken, enum_name), None);
+            let result_ty = self.type_ctx.syntax_type(nominal);
             // Construct the union value: resolve its `DefId` and the variant's discriminant.
             let def = self
                 .type_ctx
                 .resolve(dream_types::DefKind::Union, enum_name);
             let disc = self
-                .union_info(enum_name)
+                .union_info(nominal)
                 .and_then(|i| i.variant(&variant.text))
                 .map(|v| v.discriminant as usize);
             match (def, disc) {
@@ -135,7 +137,7 @@ impl<'a> Analyzer<'a> {
 
         // Generic union: resolve the concrete type arguments, preferring an explicit expected type
         // (e.g. a `let`/`return` annotation) and otherwise inferring from the arguments.
-        let template = *self.generic_union(enum_name).unwrap_or_else(|| {
+        let template = *self.generic_union(def).unwrap_or_else(|| {
             crate::internal_error!(
                 "generic union '{}' reached generic-instantiation analysis without a registered template",
                 enum_name
@@ -149,21 +151,33 @@ impl<'a> Analyzer<'a> {
 
         let mut concrete_args: Option<Vec<Type>> = None;
         if let Some(Type::Struct(b, Some(eargs))) = &self.current_expected_type {
-            if b.text == enum_name && eargs.len() == params.len() {
+            if self.type_ctx.resolve(DefKind::Union, &b.text) == Some(def)
+                && eargs.len() == params.len()
+            {
                 concrete_args = Some(eargs.clone());
             }
         }
         if concrete_args.is_none() {
+            let arg_ids: Vec<_> = arg_types
+                .iter()
+                .map(|arg| self.type_ctx.lower(arg))
+                .collect();
+            let scope = self.type_ctx.scope();
+            self.type_ctx.set_scope(def.module);
             let mut binding: HashMap<String, Type> = HashMap::new();
-            for (ft, at) in field_types.iter().zip(arg_types.iter()) {
-                let name = ft.get_type();
-                if params.contains(&name) {
-                    binding.entry(name).or_insert_with(|| at.clone());
+            for param in &params {
+                if let Some(id) = field_types
+                    .iter()
+                    .zip(&arg_ids)
+                    .find_map(|(formal, &actual)| self.match_generic_type(formal, actual, param))
+                {
+                    binding.insert(param.clone(), self.type_ctx.syntax_type(id));
                 }
             }
-            let resolved: Vec<Type> = params
+            self.type_ctx.set_scope(scope);
+            let resolved: Vec<_> = params
                 .iter()
-                .filter_map(|p| binding.get(p).cloned())
+                .filter_map(|param| binding.get(param).cloned())
                 .collect();
             if resolved.len() == params.len() {
                 concrete_args = Some(resolved);
@@ -188,10 +202,18 @@ impl<'a> Analyzer<'a> {
             template.generic_parameters.as_deref().unwrap_or(&[]),
             &concrete_args,
         );
+        let scope = self.type_ctx.scope();
+        self.type_ctx.set_scope(def.module);
         let expected_fields: Vec<Type> = field_types
             .iter()
-            .map(|ft| substitute_generic_type(ft, &bindings))
+            .map(|field| {
+                let ty = self
+                    .type_ctx
+                    .lower(&substitute_generic_type(field, &bindings));
+                self.type_ctx.syntax_type(ty)
+            })
             .collect();
+        self.type_ctx.set_scope(scope);
         self.validate_variant_payload(
             enum_name,
             &variant.text,
@@ -202,25 +224,17 @@ impl<'a> Analyzer<'a> {
         );
 
         self.ensure_union_instantiated(enum_name, &concrete_args, &variant.position, diagnostics);
-        // Construct the monomorphized union value. Its interned type (`union_ty(def, args)`) matches
-        // the layout keyed by the mangled instance, so the backend resolves variant offsets. The
-        // shared template `DefId` + the discriminant from the concrete instance name select the arm.
-        let result_ty = Type::Struct(
-            synthetic_token(TokenKind::IdentifierToken, enum_name),
-            Some(concrete_args),
-        );
-        let mangled = dream_syntax::nodes::types::mangle_generic(
-            enum_name,
-            match &result_ty {
-                Type::Struct(_, Some(a)) => a,
-                _ => unreachable!(),
-            },
-        );
+        let ids = concrete_args
+            .iter()
+            .map(|arg| self.type_ctx.lower(arg))
+            .collect();
+        let instance = self.type_ctx.instantiate(def, ids);
+        let result_ty = self.type_ctx.syntax_type(instance);
         let def = self
             .type_ctx
             .resolve(dream_types::DefKind::Union, enum_name);
         let disc = self
-            .union_info(&mangled)
+            .union_info(instance)
             .and_then(|i| i.variant(&variant.text))
             .map(|v| v.discriminant as usize);
         match (def, disc) {

@@ -6,9 +6,7 @@
 //! - [`plain`]: plain (non-generic) static-method resolution (`analyze_static_call`).
 
 use super::super::super::*;
-use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::ExpressionNode;
-use dream_types::method_fn;
 
 mod class_infer;
 mod intrinsics;
@@ -49,11 +47,13 @@ impl<'a> Analyzer<'a> {
         }
 
         let type_name = id.text.clone();
-        let base = method_fn(&type_name, &method.text);
+        let owner = self.type_ctx.lower(&Self::type_from_name(&type_name));
+        let base = format!("{type_name}.{}", method.text);
+        let nominal_def = self.type_ctx.nominal_kind(&type_name).and_then(|kind| self.type_ctx.resolve(kind, &type_name));
 
         // File/module-level visibility (Axis 2): reaching a static member requires the type itself
         // to be visible. A non-public class/struct is only referenceable from its declaring file.
-        if let Some(info) = self.struct_info(&type_name) {
+        if let Some(info) = self.struct_info(owner) {
             if !self.visible_across_files(
                 &info.file_path,
                 info.visibility,
@@ -62,7 +62,7 @@ impl<'a> Analyzer<'a> {
                 let decl_file = info.file_path.clone();
                 self.report_not_public("Type", &type_name, &decl_file, id.position, diagnostics);
             }
-        } else if let Some(template) = self.generic_struct(&type_name) {
+        } else if let Some(template) = nominal_def.and_then(|def| self.generic_struct(def)) {
             let (decl_file, visibility) = (template.file_path.clone(), template.visibility);
             if !self.visible_across_files(
                 &decl_file,
@@ -85,7 +85,7 @@ impl<'a> Analyzer<'a> {
         // inferred from the expected type or the arguments. Monomorphize the class so its concrete
         // static methods (`Cache_int_make`, ...) are registered, then dispatch through the normal
         // static-call path (which enforces class-level privacy).
-        if self.generic_struct(&type_name).is_some() {
+        if nominal_def.and_then(|def| self.generic_struct(def)).is_some() {
             let args: Vec<Type> = match generic_args {
                 Some(a) if !a.is_empty() => a
                     .iter()
@@ -103,9 +103,10 @@ impl<'a> Analyzer<'a> {
                 },
             };
             self.ensure_struct_instantiated(&type_name, &args, &id.position, diagnostics);
-            let mangled_type = mangle_generic(&type_name, &args);
+            let concrete = Type::Struct(id.clone(), Some(args));
+            let concrete_id = self.type_ctx.lower(&concrete);
             let ret = self.analyze_static_call(
-                &mangled_type,
+                concrete_id,
                 method,
                 params,
                 ctx.parent_function,
@@ -116,7 +117,7 @@ impl<'a> Analyzer<'a> {
         }
 
         // Support generic static method calls by monomorphizing them on the fly.
-        if let Some(&template) = self.generic_functions.get(&base) {
+        if let Some(&template) = self.function_table.generic_methods.get(&(owner, method.text.clone())).and_then(|def| self.generic_functions.get(def)) {
             let t = self.analyze_generic_static_method(
                 intrinsics::GenericStaticMethodCall {
                     template,
@@ -132,11 +133,11 @@ impl<'a> Analyzer<'a> {
             return Ok(Some(t));
         }
 
-        if self.function_table.is_overloaded(&base)
-            || self.function_table.get_function(&base).is_ok()
+        if self.method_overloaded(owner, &method.text)
+            || self.method_info(owner, &method.text).is_ok()
         {
             return Ok(Some(self.analyze_static_call(
-                &type_name,
+                owner,
                 method,
                 params,
                 ctx.parent_function,

@@ -131,8 +131,8 @@ fn sink_store_skips_retain_vs_borrow() {
     let borrow_c = emit_hir_to_module_optimized(&code("borrow value: string"));
     // Count `dream_retain` inside the constructor body only (the module scaffold's
     // object-protocol retain is constant noise otherwise).
-    let sink_body = ir_func_body(&sink_c, "Box_constructor");
-    let borrow_body = ir_func_body(&borrow_c, "Box_constructor");
+    let sink_body = ir_func_body(&sink_c, "s0_3_Box_0_constructor");
+    let borrow_body = ir_func_body(&borrow_c, "s0_3_Box_0_constructor");
     // Guard the premise: an inlined-away constructor would leave both bodies empty and make the
     // retain comparison below vacuous.
     assert!(

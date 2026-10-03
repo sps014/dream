@@ -64,7 +64,7 @@ impl<'a> super::Analyzer<'a> {
     pub(super) fn note_sink_arg_moves(
         &mut self,
         _args: &[ExpressionNode<'a>],
-        _arg_type_names: &[String],
+        _arg_type_names: &[dream_types::TypeId],
         _is_take: &[bool],
         _skip_receiver: bool,
         _diagnostics: &mut DiagnosticBag,

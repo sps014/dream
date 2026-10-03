@@ -13,6 +13,7 @@ impl Builder {
                 let detail = type_str.clone();
                 let resolved_ty = ty.as_ref().map(|t| t.display_name()).or(inferred);
                 self.push_decl(name, SymKind::Variable, detail, scope, resolved_ty.clone());
+                self.record_binding_type(ty.as_ref(), expr, scope);
                 if let Some(t) = ty {
                     self.add_type_ref(t, scope);
                 } else if let Some(t_str) = resolved_ty {

@@ -4,7 +4,6 @@
 
 use super::*;
 use dream_abi::intrinsics;
-use dream_syntax::nodes::types::is_unknown_type_name;
 
 fn json_collection_write_fn(mangled: &str) -> Option<String> {
     json_collection_adapter(mangled, "write")
@@ -25,8 +24,7 @@ fn json_collection_adapter(mangled: &str, kind: &str) -> Option<String> {
         return None;
     }
     let suffix = base.replace("[]", "__arr");
-    let method = format!("__col_{}_{}", kind, suffix);
-    Some(dream_types::method_fn("Json", &method))
+    Some(format!("__col_{}_{}", kind, suffix))
 }
 
 /// Call-site bundle for [`Analyzer::analyze_generic_static_method`]: the parsed pieces of a
@@ -65,6 +63,7 @@ impl<'a> Analyzer<'a> {
             generic_args,
             params,
         } = call;
+        let owner = self.function_table.declaration_node(template).and_then(|key| self.function_table.generic_methods.iter().find_map(|((owner, _), def)| (*def == key.0).then_some(*owner))).unwrap_or_else(|| self.type_ctx.lower(&Self::type_from_name(type_name)));
         let mut params_types = vec![];
         let mut arg_hirs = vec![];
         let call_target = format!("{}.{}", type_name, method.text);
@@ -77,7 +76,7 @@ impl<'a> Analyzer<'a> {
                 .any(|p| matches!(p, ExpressionNode::Lambda(_)));
             if has_lambda && generic_args.as_ref().is_none_or(|g| g.is_empty()) {
                 let (paused_collecting, paused_ok) = self.hir_pause_collection();
-                let mut probe = vec![String::new(); params.len()];
+                let mut probe = vec![self.type_ctx.interner.error(); params.len()];
                 for (i, param) in params.iter().enumerate() {
                     if matches!(param, ExpressionNode::Lambda(_)) {
                         continue;
@@ -88,7 +87,7 @@ impl<'a> Analyzer<'a> {
                         ctx.symbol_table,
                         diagnostics,
                     ) {
-                        probe[i] = t.get_type();
+                        probe[i] = self.type_ctx.lower(&t);
                     }
                     let _ = self.hir_take();
                 }
@@ -102,12 +101,12 @@ impl<'a> Analyzer<'a> {
                             .iter()
                             .enumerate()
                             .find_map(|(i, formal)| {
-                                probe.get(i).filter(|s| !s.is_empty()).and_then(|arg| {
-                                    Self::match_generic_type(&formal.type_, arg, &param.text)
+                                probe.get(i).filter(|&&ty| ty != self.type_ctx.interner.error()).and_then(|arg| {
+                                    self.match_generic_type(&formal.type_, *arg, &param.text)
                                 })
                             });
                     if let Some(c) = concrete {
-                        bindings.insert(param.text.clone(), Self::concrete_type_from_str(&c));
+                        bindings.insert(param.text.clone(), self.type_ctx.syntax_type(c));
                     }
                 }
                 if bindings.is_empty() {
@@ -139,7 +138,7 @@ impl<'a> Analyzer<'a> {
                 self.analyze_expression(param, ctx.parent_function, ctx.symbol_table, diagnostics)?;
             self.current_expected_type = saved_expected;
             arg_hirs.push(self.hir_take());
-            params_types.push(t.get_type());
+            params_types.push(self.type_ctx.lower(&t));
         }
         self.current_call_target_name = saved_call_target;
         // `System.print`/`println` are generic builtins (not real monomorphizations): they lower
@@ -245,7 +244,17 @@ impl<'a> Analyzer<'a> {
             // combinator intrinsic so the MIR backend lowers it to `$dream_all/$dream_any`
             // (rather than emitting only the array, which would await the raw array pointer).
             let arg_hir = self.hir_take();
-            self.hir_set_call(base, vec![arg_hir], &ret);
+            let identity = self.function_table.declaration_node(template);
+            let key = dream_abi::intrinsics::intrinsic_key(&template.attributes);
+            match identity.zip(key) {
+                Some((identity, key)) => {
+                    if !self.intrinsic_defs.iter().any(|(def, _)| *def == identity.0) {
+                        self.intrinsic_defs.push((identity.0, key));
+                    }
+                    self.hir_set_call_identity(&identity, vec![arg_hir], &ret);
+                }
+                None => self.hir_none(),
+            }
             return Ok(ret);
         }
 
@@ -276,13 +285,13 @@ impl<'a> Analyzer<'a> {
             template.visibility,
             &template.file_path,
             ctx.parent_function.file_path.as_ref(),
-            self.in_methods_of(ctx.parent_function, type_name),
+            self.in_methods_of(ctx.parent_function, owner),
         ) {
             diagnostics.report_error(
                 format!(
                     "'{}' is private to '{}'",
                     method.text,
-                    self.ty_str_display(type_name)
+                    self.type_id_display(owner)
                 ),
                 Some(method.position),
             );
@@ -294,13 +303,13 @@ impl<'a> Analyzer<'a> {
             &method.position,
             diagnostics,
         );
-        let mangled_name = self.register_generic_function_instance(template, &bindings);
+        let instance = self.register_generic_function_instance(template, &bindings);
 
-        let store_sig = match self.function_table.get_function(&mangled_name) {
+        let store_sig = match self.function_table.get_function(&instance) {
             Ok(sig) => sig,
             Err(_) => {
                 diagnostics.report_error(
-                    format!("Function '{}' could not be instantiated", mangled_name),
+                    format!("Function '{}' could not be instantiated", template.name.text),
                     Some(method.position),
                 );
                 return Ok(Type::Unknown);
@@ -314,12 +323,12 @@ impl<'a> Analyzer<'a> {
             let message = if required == total {
                 format!(
                     "Function {} has {} params but {} params are given",
-                    mangled_name, total, given
+                    template.name.text, total, given
                 )
             } else {
                 format!(
                     "Function {} expects between {} and {} arguments, got {}",
-                    mangled_name, required, total, given
+                    template.name.text, required, total, given
                 )
             };
             diagnostics.report_error(message, Some(method.position));
@@ -336,23 +345,15 @@ impl<'a> Analyzer<'a> {
         )?;
 
         self.validate_arguments(
-            &format!("function '{}'", mangled_name),
+            &format!("function '{}'", template.name.text),
             &store_sig.parameters,
             &params_types,
             method.position,
             diagnostics,
         );
 
-        let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type);
-        let instance = bindings.values().map(|t| self.type_ctx.lower(t)).collect();
-        // `base` is the template's `{Type}_{method}` DefId shared by every monomorphization.
-        self.hir_set_generic_call(
-            base,
-            instance,
-            arg_hirs,
-            &ret_type,
-            store_sig.is_take.clone(),
-        );
+        let ret_type = Self::async_return_type(store_sig.is_async, Some(self.type_ctx.syntax_type(store_sig.resolved_return)));
+        self.hir_set_call_identity(&store_sig.identity, arg_hirs, &ret_type);
         Ok(ret_type)
     }
 }

@@ -8,7 +8,6 @@ use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
-use dream_types::method_fn;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -171,8 +170,13 @@ impl<'a> Analyzer<'a> {
         if let ExpressionNode::Identifier(id) = obj {
             let is_local = symbol_table.borrow().get_symbol(id).is_ok();
             if !is_local {
-                let setter = method_fn(&id.text, &setter_member_name(&member.text));
-                if self.function_table.get_function(&setter).is_ok() {
+                let has_setter = self.type_ctx.resolved_type(&id.text).is_some_and(|owner| {
+                    !self
+                        .function_table
+                        .method_candidates(owner, &setter_member_name(&member.text))
+                        .is_empty()
+                });
+                if has_setter {
                     let set_tok = synthetic_token(
                         TokenKind::IdentifierToken,
                         &setter_member_name(&member.text),
@@ -247,14 +251,15 @@ impl<'a> Analyzer<'a> {
 
         match self.resolve_member_field(&obj_type, member, parent_function, diagnostics) {
             MemberField::Field {
-                struct_name,
+                struct_ty,
                 field_type,
+                ..
             } => {
                 // Lint: assigning a freshly constructed object into an `unowned` field is
                 // guaranteed to dangle — the new object has no other owner and dies when
                 // this statement ends. Zero false positives by construction.
                 let is_unowned_field = self
-                    .struct_info(&struct_name)
+                    .struct_info(struct_ty)
                     .and_then(|info| info.fields.get(&member.text))
                     .map(|f| f.is_unowned)
                     .unwrap_or(false);
@@ -282,16 +287,17 @@ impl<'a> Analyzer<'a> {
                 let mut value_hir = value_hir;
                 if field_type.get_type() == "string" {
                     let obj_tid = self.type_ctx.lower(&obj_type);
+                    let string_id = self.type_ctx.interner.string();
                     if self.type_ctx.interner.is_shared_type(obj_tid)
-                        && self.function_table.get_function("string_clone").is_ok()
+                        && self.unique_method_def(string_id, "clone").is_some()
                     {
                         let string_ty = field_type.clone();
-                        self.hir_set_call("string_clone", vec![value_hir], &string_ty);
+                        self.hir_set_type_method_call(string_id, "clone", vec![value_hir], &string_ty);
                         value_hir = self.hir_take();
                     }
                 }
 
-                match self.struct_field_index(&struct_name, &member.text) {
+                match self.struct_field_index(struct_ty, &member.text) {
                     Some(index) => {
                         let target = self.type_ctx.lower(&field_type);
                         self.hir_assign_field(obj_hir, index, value_hir, Some(target));
@@ -314,17 +320,17 @@ impl<'a> Analyzer<'a> {
             MemberField::StructNotFound { struct_name } => {
                 self.hir_fail();
                 diagnostics.report_error(
-                    format!("Struct '{}' not found", self.ty_str_display(&struct_name)),
+                    format!("Struct '{}' not found", struct_name),
                     Some(member.position),
                 );
                 Ok(())
             }
-            MemberField::NotAField { struct_name } => {
+            MemberField::NotAField { struct_name, struct_ty } => {
                 // Not a field: `obj.prop = v` may write a property setter, which desugars to a call
                 // of the (internally named) setter method. The call carries its own privacy/type
                 // check, and its (discarded) result becomes the assignment statement.
-                let setter = method_fn(&struct_name, &setter_member_name(&member.text));
-                if self.function_table.get_function(&setter).is_ok() {
+                let setter = setter_member_name(&member.text);
+                if self.function_table.methods.contains_key(&(struct_ty, setter)) {
                     let set_tok = synthetic_token(
                         TokenKind::IdentifierToken,
                         &setter_member_name(&member.text),
@@ -341,7 +347,7 @@ impl<'a> Analyzer<'a> {
                         format!(
                             "Field '{}' not found in class '{}'",
                             member.text,
-                            self.ty_str_display(&struct_name)
+                            struct_name
                         ),
                         Some(member.position),
                     );
@@ -451,10 +457,10 @@ impl<'a> Analyzer<'a> {
                     } else {
                         self.hir_fail();
                     }
-                } else if let MemberField::Field { struct_name, .. } =
+                } else if let MemberField::Field { struct_ty, .. } =
                     self.resolve_member_field(&obj_type, member, parent_function, diagnostics)
                 {
-                    match self.struct_field_index(&struct_name, &member.text) {
+                    match self.struct_field_index(struct_ty, &member.text) {
                         Some(index) => {
                             self.hir_assign_field(obj_hir, index, new_val.clone(), Some(slot))
                         }

@@ -12,14 +12,15 @@
 
 use super::*;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
-use indexmap::IndexMap;
+use dream_types::{DefKind, TyKind, TypeId};
+use indexmap::{IndexMap, IndexSet};
 
 /// One strong-reference edge in the class reference-cycle graph: field `field_name` (declared at
 /// `field_position`) of the owning class holds a class-typed value of `to`.
 struct ClassEdge {
     field_name: String,
     field_position: Option<TextSpan>,
-    to: String,
+    to: TypeId,
 }
 
 impl<'a> Analyzer<'a> {
@@ -27,7 +28,7 @@ impl<'a> Analyzer<'a> {
     /// reference-cycle check. Called from [`Self::register_structs`] once every non-generic class
     /// is registered in `self.struct_table` (so field types can be classified as value/reference).
     pub(in crate::analyzer) fn check_weak_unowned_and_cycles(
-        &self,
+        &mut self,
         node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
@@ -35,14 +36,31 @@ impl<'a> Analyzer<'a> {
         self.check_reference_cycles(node, diagnostics);
     }
 
+    /// The registered type of a non-generic struct/class declaration, resolved in its own module.
+    fn declared_struct_type(&self, decl: &StructDeclarationNode<'a>) -> Option<TypeId> {
+        let module = self.graph.module_for_file(decl.file_path.as_deref());
+        let def = self
+            .type_ctx
+            .declared_in(module, DefKind::Struct, &decl.name.text)?;
+        self.type_ctx
+            .interner
+            .lookup(&TyKind::Struct(def, Vec::new()))
+    }
+
+    fn is_class_type(&self, ty: TypeId) -> bool {
+        self.struct_info(ty).is_some_and(|info| !info.is_value)
+    }
+
     /// `weak` fields must be `Option<T>` for a class `T`; `unowned` fields must themselves be a
     /// bare class type `T`; a field cannot be both.
     fn validate_weak_unowned_fields(
-        &self,
+        &mut self,
         node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
         for struct_decl in node.structs.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
             for field in &struct_decl.fields {
                 if !field.is_weak && !field.is_unowned {
                     continue;
@@ -57,19 +75,15 @@ impl<'a> Analyzer<'a> {
                     );
                     continue;
                 }
+                let ty = self.type_ctx.lower(&field.field_type);
                 if field.is_weak {
-                    let option_inner = match &field.field_type {
-                        Type::Struct(token, Some(args))
-                            if token.text == "Option" && args.len() == 1 =>
-                        {
-                            Some(&args[0])
+                    let is_class_option = match self.type_ctx.interner.kind(ty) {
+                        TyKind::Union(def, args) if args.len() == 1 => {
+                            self.type_ctx.defs.name(*def) == "Option"
+                                && self.is_class_type(args[0])
                         }
-                        _ => None,
+                        _ => false,
                     };
-                    let is_class_option = option_inner
-                        .and_then(Self::resolve_struct_parts)
-                        .and_then(|(base, _)| self.struct_info(&base).map(|i| !i.is_value))
-                        .unwrap_or(false);
                     if !is_class_option {
                         diagnostics.report_error(
                             format!(
@@ -80,20 +94,15 @@ impl<'a> Analyzer<'a> {
                             Some(field.name.position),
                         );
                     }
-                } else {
-                    let is_class = Self::resolve_struct_parts(&field.field_type)
-                        .and_then(|(base, _)| self.struct_info(&base).map(|i| !i.is_value))
-                        .unwrap_or(false);
-                    if !is_class {
-                        diagnostics.report_error(
-                            format!(
-                                "'unowned' field '{}' must have a class type, got '{}'",
-                                field.name.text,
-                                field.field_type.display_name()
-                            ),
-                            Some(field.name.position),
-                        );
-                    }
+                } else if !self.is_class_type(ty) {
+                    diagnostics.report_error(
+                        format!(
+                            "'unowned' field '{}' must have a class type, got '{}'",
+                            field.name.text,
+                            field.field_type.display_name()
+                        ),
+                        Some(field.name.position),
+                    );
                 }
             }
         }
@@ -104,12 +113,11 @@ impl<'a> Analyzer<'a> {
     /// `@allow_cycle`.
     fn check_reference_cycles(&self, node: &'a ProgramView<'a>, diagnostics: &mut DiagnosticBag) {
         // Value structs holding references participate as edges (see `strong_ref_targets`).
-        let mut ref_values: indexmap::IndexSet<String> = indexmap::IndexSet::new();
-        self.collect_ref_holding_value_structs(node, &mut ref_values);
+        let ref_values = self.ref_holding_value_structs();
 
-        let mut edges: IndexMap<String, Vec<ClassEdge>> = IndexMap::new();
-        let mut allow_cycle: indexmap::IndexSet<String> = indexmap::IndexSet::new();
-        let mut positions: indexmap::IndexMap<String, TextSpan> = indexmap::IndexMap::new();
+        let mut edges: IndexMap<TypeId, Vec<ClassEdge>> = IndexMap::new();
+        let mut allow_cycle: IndexSet<TypeId> = IndexSet::new();
+        let mut names: IndexMap<TypeId, (String, TextSpan)> = IndexMap::new();
 
         for struct_decl in node.structs.iter() {
             // Generic templates aren't monomorphized here (their field types aren't concrete
@@ -118,14 +126,22 @@ impl<'a> Analyzer<'a> {
             if struct_decl.generic_parameters.is_some() || struct_decl.is_value {
                 continue;
             }
-            let name = struct_decl.name.text.clone();
-            positions.insert(name.clone(), struct_decl.name.position);
+            let Some(ty) = self.declared_struct_type(struct_decl) else {
+                continue;
+            };
+            let Some(info) = self.struct_info(ty) else {
+                continue;
+            };
+            names.insert(
+                ty,
+                (struct_decl.name.text.clone(), struct_decl.name.position),
+            );
             if struct_decl
                 .attributes
                 .iter()
                 .any(|a| a.name.text == "allow_cycle")
             {
-                allow_cycle.insert(name.clone());
+                allow_cycle.insert(ty);
             }
 
             let mut out = Vec::new();
@@ -133,7 +149,10 @@ impl<'a> Analyzer<'a> {
                 if field.is_weak || field.is_unowned {
                     continue;
                 }
-                for target in self.strong_ref_targets(&field.field_type, &ref_values) {
+                let Some(field_info) = info.fields.get(&field.name.text) else {
+                    continue;
+                };
+                for target in self.strong_ref_targets(field_info.ty, &ref_values, &mut IndexSet::new()) {
                     out.push(ClassEdge {
                         field_name: field.name.text.clone(),
                         field_position: Some(field.name.position),
@@ -141,10 +160,10 @@ impl<'a> Analyzer<'a> {
                     });
                 }
             }
-            edges.entry(name).or_default().extend(out);
+            edges.entry(ty).or_default().extend(out);
         }
 
-        let nodes: Vec<String> = edges.keys().cloned().collect();
+        let nodes: Vec<TypeId> = edges.keys().copied().collect();
         let sccs = tarjan_scc(&nodes, &edges);
 
         for scc in sccs {
@@ -163,15 +182,18 @@ impl<'a> Analyzer<'a> {
                 continue;
             }
 
-            let scc_set: indexmap::IndexSet<&str> = scc.iter().map(String::as_str).collect();
+            let scc_set: IndexSet<TypeId> = scc.iter().copied().collect();
             let mut culprits: Vec<(String, Option<TextSpan>)> = Vec::new();
             for class in &scc {
+                let Some((class_name, class_pos)) = names.get(class) else {
+                    continue;
+                };
                 if let Some(es) = edges.get(class) {
                     for e in es {
-                        if scc_set.contains(e.to.as_str()) {
+                        if scc_set.contains(&e.to) {
                             culprits.push((
-                                format!("'{}.{}'", class, e.field_name),
-                                e.field_position.or_else(|| positions.get(class).copied()),
+                                format!("'{}.{}'", class_name, e.field_name),
+                                e.field_position.or(Some(*class_pos)),
                             ));
                         }
                     }
@@ -196,288 +218,160 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// The class names transitively strong-referenced by `ty`: `ty` itself if it names a class,
-    /// or (recursively) the element type of `T[]` / tuples / the payload of `Option<T>` /
-    /// `List<T>` / `Set<T>` / both type args of `Map<K, V>`. A **value struct** whose fields
-    /// transitively hold references counts too — its inline storage keeps those elements alive,
-    /// so `class C { h: Holder }` + `struct Holder { d: Data }` + `Data -> C` is a detected
-    /// cycle. Primitives, reference-free value structs, unresolved types, `object`, and
-    /// callbacks contribute no edge.
+    /// The classes transitively strong-referenced by `ty`: `ty` itself if it is a class, or
+    /// (recursively) the element type of `T[]` / tuples / the type arguments of `Option`, `List`,
+    /// `Set` and `Map`. A **value struct** whose fields transitively hold references counts too —
+    /// its inline storage keeps those elements alive, so `class C { h: Holder }` +
+    /// `struct Holder { d: Data }` + `Data -> C` is a detected cycle. Interface-typed values resolve
+    /// to every implementing class (a conservative over-approximation that catches cross-interface
+    /// cycles). Primitives, reference-free value structs, `object`, and callbacks contribute no
+    /// edge. `visited` guards re-entering value structs that reference each other.
     fn strong_ref_targets(
         &self,
-        ty: &Type,
-        ref_values: &indexmap::IndexSet<String>,
-    ) -> Vec<String> {
-        match ty {
-            Type::Array(inner) => self.strong_ref_targets(inner, ref_values),
-            Type::Tuple(elements) => {
-                let mut out = Vec::new();
-                for e in elements {
-                    out.extend(self.strong_ref_targets(e, ref_values));
-                }
-                out
+        ty: TypeId,
+        ref_values: &IndexSet<TypeId>,
+        visited: &mut IndexSet<TypeId>,
+    ) -> Vec<TypeId> {
+        match self.type_ctx.interner.kind(ty) {
+            TyKind::Array(inner) => self.strong_ref_targets(*inner, ref_values, visited),
+            TyKind::Tuple(elements) => elements
+                .iter()
+                .flat_map(|&e| self.strong_ref_targets(e, ref_values, visited))
+                .collect(),
+            TyKind::Struct(def, args) | TyKind::Union(def, args)
+                if matches!(self.type_ctx.defs.name(*def), "Option" | "List" | "Set" | "Map") =>
+            {
+                args.iter()
+                    .flat_map(|&a| self.strong_ref_targets(a, ref_values, visited))
+                    .collect()
             }
-            Type::Struct(token, args) => {
-                match (token.text.as_str(), args.as_ref()) {
-                    ("Option", Some(a)) if a.len() == 1 => {
-                        return self.strong_ref_targets(&a[0], ref_values);
-                    }
-                    ("List" | "Set", Some(a)) if a.len() == 1 => {
-                        return self.strong_ref_targets(&a[0], ref_values);
-                    }
-                    ("Map", Some(a)) if a.len() == 2 => {
-                        let mut out = self.strong_ref_targets(&a[0], ref_values);
-                        out.extend(self.strong_ref_targets(&a[1], ref_values));
-                        return out;
-                    }
-                    _ => {}
-                }
-                match self.struct_info(&token.text) {
-                    Some(info) if !info.is_value => vec![token.text.clone()],
-                    // Qualifying value struct: recurse into its registered fields to reach the
-                    // ultimate class targets (visited-guarded against value-struct cycles).
-                    Some(_) if ref_values.contains(&token.text) => {
-                        let mut visited = indexmap::IndexSet::new();
-                        visited.insert(token.text.clone());
-                        let mut out = Vec::new();
-                        if let Some(info) = self.struct_info(&token.text) {
-                            for (_fname, finfo) in info.fields.iter() {
-                                out.extend(self.strong_ref_targets_visited(
-                                    &finfo.type_,
-                                    ref_values,
-                                    &mut visited,
-                                ));
-                            }
-                        }
-                        out
-                    }
-                    // Interface-typed fields: resolve to every implementing class —
-                    // a conservative over-approximation that catches cross-interface cycles.
-                    _ => {
-                        if self.is_interface_name(&token.text) {
-                            let mut out = Vec::new();
-                            for (class_name, ifaces) in &self.implements {
-                                if self
-                                    .type_ctx
-                                    .resolved_type(&token.text)
-                                    .is_some_and(|iface| ifaces.contains(&iface))
-                                {
-                                    out.push(self.type_ctx.instance_name(*class_name));
-                                }
-                            }
-                            out
-                        } else {
-                            Vec::new()
-                        }
-                    }
-                }
-            }
+            TyKind::Struct(..) => match self.struct_info(ty) {
+                Some(info) if !info.is_value => vec![ty],
+                Some(info) if ref_values.contains(&ty) && visited.insert(ty) => info
+                    .fields
+                    .values()
+                    .flat_map(|f| self.strong_ref_targets(f.ty, ref_values, visited))
+                    .collect(),
+                _ => Vec::new(),
+            },
+            TyKind::Interface(..) => self
+                .implements
+                .iter()
+                .filter(|(_, ifaces)| ifaces.contains(&ty))
+                .map(|(class, _)| *class)
+                .collect(),
             _ => Vec::new(),
-        }
-    }
-
-    /// [`Self::strong_ref_targets`] variant that skips re-entering already-expanded value
-    /// structs (they can reference each other, so plain recursion could loop forever).
-    fn strong_ref_targets_visited(
-        &self,
-        ty: &Type,
-        ref_values: &indexmap::IndexSet<String>,
-        visited: &mut indexmap::IndexSet<String>,
-    ) -> Vec<String> {
-        match ty {
-            Type::Struct(token, _) => {
-                let known = self.struct_info(&token.text);
-                match known {
-                    Some(i) if i.is_value && visited.contains(&token.text) => Vec::new(),
-                    Some(i) if i.is_value && !ref_values.contains(&token.text) => Vec::new(),
-                    _ => {
-                        visited.insert(token.text.clone());
-                        let mut out = Vec::new();
-                        if let Some(info) = self.struct_info(&token.text) {
-                            if info.is_value {
-                                for (_fname, finfo) in info.fields.iter() {
-                                    out.extend(self.strong_ref_targets_visited(
-                                        &finfo.type_,
-                                        ref_values,
-                                        visited,
-                                    ));
-                                }
-                                return out;
-                            }
-                        }
-                        out.push(token.text.clone());
-                        out
-                    }
-                }
-            }
-            other => self.strong_ref_targets(other, ref_values),
         }
     }
 
     /// Value structs whose fields transitively hold an RC-tracked value. Computed to a fixed
     /// point so nested value structs (`struct Outer { inner: Cell }`) resolve without looping
     /// on declaration cycles among value structs themselves.
-    fn collect_ref_holding_value_structs(
-        &self,
-        node: &'a ProgramView<'a>,
-        out: &mut indexmap::IndexSet<String>,
-    ) {
-        let value_decls: Vec<&StructDeclarationNode<'a>> = node
+    fn ref_holding_value_structs(&self) -> IndexSet<TypeId> {
+        let value_types: Vec<TypeId> = self
+            .struct_table
             .structs
             .iter()
-            .copied()
-            .filter(|s| s.is_value)
+            .filter(|(_, info)| info.is_value)
+            .map(|(&ty, _)| ty)
             .collect();
+        let mut out = IndexSet::new();
         loop {
             let mut grew = false;
-            for decl in &value_decls {
-                let name = decl.name.text.clone();
-                if out.contains(&name) {
+            for &ty in &value_types {
+                if out.contains(&ty) {
                     continue;
                 }
-                let holds = decl.fields.iter().any(|f| match &f.field_type {
-                    Type::String(_) | Type::Object(_) | Type::Generic(_) => true,
-                    Type::Array(inner) => self.value_struct_array_holds(inner.as_ref(), out),
-                    Type::Tuple(elements) => {
-                        elements.iter().any(|e| self.holds_managed_shallow(e, out))
-                    }
-                    Type::Struct(tok, _) => match self.struct_info(&tok.text) {
-                        // Another value struct: resolved by a later fixed-point pass.
-                        Some(i) if i.is_value => out.contains(&tok.text),
-                        // A class field makes the value struct managed-by-content.
-                        Some(_) => true,
-                        None => false,
-                    },
-                    _ => false,
-                });
-                if holds {
-                    out.insert(name);
+                let Some(info) = self.struct_info(ty) else {
+                    continue;
+                };
+                if info.fields.values().any(|f| self.holds_managed(f.ty, &out)) {
+                    out.insert(ty);
                     grew = true;
                 }
             }
             if !grew {
-                return;
+                return out;
             }
         }
     }
 
-    fn holds_managed_shallow(&self, ty: &Type, ref_values: &indexmap::IndexSet<String>) -> bool {
-        match ty {
-            Type::Struct(tok, _) => ref_values.contains(&tok.text),
-            Type::Array(inner) => self.value_struct_array_holds(inner.as_ref(), ref_values),
-            other => !self.strong_ref_targets(other, ref_values).is_empty(),
-        }
-    }
-
-    fn value_struct_array_holds(
-        &self,
-        inner: &Type,
-        ref_values: &indexmap::IndexSet<String>,
-    ) -> bool {
-        match inner {
-            Type::Struct(tok, _) => match self.struct_info(&tok.text) {
-                Some(i) if i.is_value => ref_values.contains(&tok.text),
+    fn holds_managed(&self, ty: TypeId, ref_values: &IndexSet<TypeId>) -> bool {
+        match self.type_ctx.interner.kind(ty) {
+            TyKind::Prim(dream_types::PrimTy::String) | TyKind::Object => true,
+            TyKind::Array(_) => true,
+            TyKind::Tuple(elements) => elements.iter().any(|&e| self.holds_managed(e, ref_values)),
+            TyKind::Struct(..) => match self.struct_info(ty) {
+                // Another value struct: resolved by a later fixed-point pass.
+                Some(info) if info.is_value => ref_values.contains(&ty),
                 Some(_) => true,
                 None => false,
             },
-            Type::String(_) | Type::Object(_) | Type::Generic(_) => true,
-            Type::Array(deeper) => self.value_struct_array_holds(deeper.as_ref(), ref_values),
-            Type::Tuple(elements) => elements
-                .iter()
-                .any(|e| self.value_struct_array_holds(e, ref_values)),
-            _ => false,
+            _ => !self
+                .strong_ref_targets(ty, ref_values, &mut IndexSet::new())
+                .is_empty(),
         }
     }
 }
 
 /// Tarjan's strongly-connected-components algorithm over the class strong-reference graph.
 /// Returns every SCC (including singletons with no self-loop, which callers filter out).
-fn tarjan_scc(nodes: &[String], edges: &IndexMap<String, Vec<ClassEdge>>) -> Vec<Vec<String>> {
-    #[allow(clippy::too_many_arguments)]
-    fn strongconnect(
-        v: &str,
-        edges: &IndexMap<String, Vec<ClassEdge>>,
-        index_counter: &mut usize,
-        stack: &mut Vec<String>,
-        indices: &mut indexmap::IndexMap<String, usize>,
-        lowlink: &mut indexmap::IndexMap<String, usize>,
-        on_stack: &mut indexmap::IndexMap<String, bool>,
-        result: &mut Vec<Vec<String>>,
-    ) {
-        let idx = *index_counter;
-        indices.insert(v.to_string(), idx);
-        lowlink.insert(v.to_string(), idx);
-        *index_counter += 1;
-        stack.push(v.to_string());
-        on_stack.insert(v.to_string(), true);
+fn tarjan_scc(nodes: &[TypeId], edges: &IndexMap<TypeId, Vec<ClassEdge>>) -> Vec<Vec<TypeId>> {
+    #[derive(Default)]
+    struct State {
+        index_counter: usize,
+        stack: Vec<TypeId>,
+        indices: IndexMap<TypeId, usize>,
+        lowlink: IndexMap<TypeId, usize>,
+        on_stack: IndexSet<TypeId>,
+        result: Vec<Vec<TypeId>>,
+    }
 
-        if let Some(es) = edges.get(v) {
-            for e in es {
-                let w = e.to.as_str();
-                if !indices.contains_key(w) {
-                    strongconnect(
-                        w,
-                        edges,
-                        index_counter,
-                        stack,
-                        indices,
-                        lowlink,
-                        on_stack,
-                        result,
-                    );
-                    let w_low = lowlink[w];
-                    let Some(v_low) = lowlink.get_mut(v) else {
-                        crate::internal_error!("Tarjan node '{v}' lost its lowlink");
-                    };
-                    *v_low = (*v_low).min(w_low);
-                } else if *on_stack.get(w).unwrap_or(&false) {
-                    let w_idx = indices[w];
-                    let Some(v_low) = lowlink.get_mut(v) else {
-                        crate::internal_error!("Tarjan node '{v}' lost its lowlink");
-                    };
-                    *v_low = (*v_low).min(w_idx);
-                }
-            }
+    fn strongconnect(v: TypeId, edges: &IndexMap<TypeId, Vec<ClassEdge>>, st: &mut State) {
+        let idx = st.index_counter;
+        st.indices.insert(v, idx);
+        st.lowlink.insert(v, idx);
+        st.index_counter += 1;
+        st.stack.push(v);
+        st.on_stack.insert(v);
+
+        for e in edges.get(&v).into_iter().flatten() {
+            let w = e.to;
+            let candidate = if !st.indices.contains_key(&w) {
+                strongconnect(w, edges, st);
+                st.lowlink[&w]
+            } else if st.on_stack.contains(&w) {
+                st.indices[&w]
+            } else {
+                continue;
+            };
+            let Some(v_low) = st.lowlink.get_mut(&v) else {
+                crate::internal_error!("Tarjan node {v:?} lost its lowlink");
+            };
+            *v_low = (*v_low).min(candidate);
         }
 
-        if lowlink[v] == indices[v] {
+        if st.lowlink[&v] == st.indices[&v] {
             let mut component = Vec::new();
             loop {
-                let Some(w) = stack.pop() else {
-                    crate::internal_error!("Tarjan stack emptied before node '{v}'");
+                let Some(w) = st.stack.pop() else {
+                    crate::internal_error!("Tarjan stack emptied before node {v:?}");
                 };
-                on_stack.insert(w.clone(), false);
-                let done = w == v;
+                st.on_stack.swap_remove(&w);
                 component.push(w);
-                if done {
+                if w == v {
                     break;
                 }
             }
-            result.push(component);
+            st.result.push(component);
         }
     }
 
-    let mut index_counter = 0usize;
-    let mut stack = Vec::new();
-    let mut indices = indexmap::IndexMap::new();
-    let mut lowlink = indexmap::IndexMap::new();
-    let mut on_stack = indexmap::IndexMap::new();
-    let mut result = Vec::new();
-
-    for n in nodes {
-        if !indices.contains_key(n.as_str()) {
-            strongconnect(
-                n,
-                edges,
-                &mut index_counter,
-                &mut stack,
-                &mut indices,
-                &mut lowlink,
-                &mut on_stack,
-                &mut result,
-            );
+    let mut st = State::default();
+    for &n in nodes {
+        if !st.indices.contains_key(&n) {
+            strongconnect(n, edges, &mut st);
         }
     }
-
-    result
+    st.result
 }

@@ -96,7 +96,7 @@ impl<'a> Analyzer<'a> {
                 let ExpressionNode::Identifier(enum_name) = base else {
                     return None;
                 };
-                self.enum_members(&enum_name.text)?
+                self.enum_members(self.type_ctx.resolve(DefKind::Enum, &enum_name.text)?)?
                     .get(&member.text)
                     .map(|v| v.to_string())
             }
@@ -121,13 +121,18 @@ impl<'a> Analyzer<'a> {
         // A multi-label case (`case 1, 2, 3:`) becomes one `HArm` per label, all sharing a clone of
         // the case body (each label is a distinct dispatch target hitting the same code).
         let mut hir_ok = true;
-        let subject_name = subject_type.get_type();
-        let subject_is_enum = self.enum_members(&subject_name).is_some();
-        if !matches!(subject_name.as_str(), "int" | "string" | "bool") && !subject_is_enum {
+        let subject_id = self.type_ctx.lower(&subject_type);
+        if !matches!(
+            self.type_ctx.interner.kind(subject_id),
+            dream_types::TyKind::Prim(
+                dream_types::PrimTy::Int | dream_types::PrimTy::String | dream_types::PrimTy::Bool
+            ) | dream_types::TyKind::Enum(_)
+                | dream_types::TyKind::Error
+        ) {
             diagnostics.report_error(
                 format!(
                     "switch subject must be int, string, bool, or an enum, got {}",
-                    self.ty_str_display(&subject_name)
+                    self.type_id_display(subject_id)
                 ),
                 subject.position(),
             );

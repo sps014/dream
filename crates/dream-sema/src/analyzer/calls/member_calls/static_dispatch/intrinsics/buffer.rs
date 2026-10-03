@@ -4,7 +4,7 @@ impl<'a> Analyzer<'a> {
     pub(super) fn analyze_buffer_intrinsic(
         &mut self,
         call: &GenericStaticMethodCall<'a, '_>,
-        params_types: Vec<String>,
+        params_types: Vec<dream_types::TypeId>,
         arg_hirs: Vec<Option<dream_hir::HExpr>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
@@ -40,11 +40,11 @@ impl<'a> Analyzer<'a> {
                     ),
                     Some(method.position),
                 );
-            } else if params_types[0] != "int" && !is_unknown_type_name(&params_types[0]) {
+            } else if params_types[0] != self.type_ctx.interner.int() && params_types[0] != self.type_ctx.interner.error() {
                 diagnostics.report_error(
                     format!(
                         "'Buffer.alloc' length must be int, got {}",
-                        self.ty_str_display(&params_types[0])
+                        self.type_id_display(params_types[0])
                     ),
                     Some(method.position),
                 );
@@ -74,12 +74,7 @@ impl<'a> Analyzer<'a> {
                 Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
                 None => params_types
                     .first()
-                    .map(|s| s.trim_end_matches("[]").to_string())
-                    .map(|s| {
-                        let mut t = method.clone();
-                        t.text = s;
-                        Type::from_token(t).unwrap_or(Type::Unknown)
-                    })
+                    .and_then(|&ty| match self.type_ctx.interner.kind(ty) { dream_types::TyKind::Array(elem) => Some(self.type_ctx.syntax_type(*elem)), _ => None })
                     .unwrap_or(Type::Unknown),
             };
             if params_types.len() != 2 {
@@ -256,15 +251,15 @@ impl<'a> Analyzer<'a> {
                 );
                 return Ok(Type::Unknown);
             }
-            let element = match params_types[0].strip_suffix("[]") {
-                Some(elem) => Self::concrete_type_from_str(elem),
-                None if is_unknown_type_name(&params_types[0]) => Type::Unknown,
-                None => {
+            let element = match self.type_ctx.interner.kind(params_types[0]) {
+                dream_types::TyKind::Array(elem) => self.type_ctx.syntax_type(*elem),
+                dream_types::TyKind::Error => Type::Unknown,
+                _ => {
                     diagnostics.report_error(
                         format!(
                             "'{}' expects an array as its first argument, got {}",
                             name,
-                            self.ty_str_display(&params_types[0])
+                            self.type_id_display(params_types[0])
                         ),
                         Some(method.position),
                     );

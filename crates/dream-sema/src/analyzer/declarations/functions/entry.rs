@@ -57,10 +57,12 @@ impl<'a> Analyzer<'a> {
                     return;
                 };
                 self.ensure_union_instantiated(&base, &args, &function.name.position, diagnostics);
-                let mangled = return_type.get_type();
-                let def = self.type_ctx.resolve(DefKind::Union, &mangled);
+                let def = match self.type_ctx.interner.kind(target) {
+                    dream_types::TyKind::Union(def, _) => Some(*def),
+                    _ => None,
+                };
                 let disc = self
-                    .union_info(&mangled)
+                    .union_info(target)
                     .and_then(|u| u.variant("Ok"))
                     .map(|v| v.discriminant as usize);
                 let (Some(def), Some(disc)) = (def, disc) else {

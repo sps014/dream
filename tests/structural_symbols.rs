@@ -117,8 +117,8 @@ fn object_protocol_uses_resolved_definitions_after_symbol_rename() {
         let ir = common::emit_ll(&mir, interner);
         assert!(ir.contains("@custom_display("));
         assert!(ir.contains("@custom_hash("));
-        assert!(!ir.contains("@Label_to_string("));
-        assert!(!ir.contains("@Label_hash_code("));
+        assert!(!ir.contains("@s0_5_Label_0_to_string("));
+        assert!(!ir.contains("@s0_5_Label_0_hash_code("));
     });
 }
 
@@ -150,7 +150,7 @@ fn protocol_override_survives_generic_only_type_reachability() {
         assert!(mir.layouts.structs.contains_key(&ty));
         assert!(mir.functions.iter().any(|f| f.def == formatter));
         let ir = common::emit_ll(&mir, interner);
-        assert!(ir.contains("@Label_to_string("));
+        assert!(ir.contains("@s0_5_Label_0_to_string("));
     });
 }
 #[test]

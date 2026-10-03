@@ -142,6 +142,6 @@ Type identity, equality, and display fall out for free once the `PrimTy` arm exi
 ## Common pitfalls
 
 - **Don't compare types by `display_name`.** Display is lossy/for-humans. Use `TypeId == TypeId`.
-- **Register defs before lowering their uses**, or `lower` will default an unknown nominal name to a struct.
+- **Register defs before lowering their uses.** An unresolved nominal name lowers to the poison type; lowering must never invent a definition.
 - **Reference-ness goes through the interner** (`is_reference`), which strips nullability. Don't re-implement it with string suffix checks.
 - **Monomorphization keys are `(DefId, Vec<TypeId>)`.** Never reintroduce mangled-string keys.

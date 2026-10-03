@@ -1,1 +1,1 @@
-No overload of 'Point_constructor' matches argument types (Point, string)
+No overload of 'Point.constructor' matches argument types (Point, string)

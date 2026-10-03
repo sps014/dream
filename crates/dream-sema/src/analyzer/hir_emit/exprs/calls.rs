@@ -7,14 +7,6 @@ mod closures;
 mod indirect;
 mod members;
 impl<'a> Analyzer<'a> {
-    /// Per-parameter `take` flags for a function/method registered under `name` (empty if unknown).
-    pub(in crate::analyzer) fn take_params_for(&self, name: &str) -> Vec<bool> {
-        self.function_table
-            .functions
-            .get(name)
-            .map(|f| f.is_take.clone())
-            .unwrap_or_default()
-    }
 
     /// Per-argument `take` flags for a resolved constructor def, aligned with the constructor's user
     /// arguments. A registered constructor signature carries `this` as parameter 0, which the `New`
@@ -23,7 +15,7 @@ impl<'a> Analyzer<'a> {
         let Some(ctor) = ctor else {
             return Vec::new();
         };
-        let mut flags = self.take_params_for(self.type_ctx.defs.name(ctor));
+        let mut flags = self.function_table.functions.get(&(ctor, Vec::new())).map(|info| info.is_take.clone()).unwrap_or_default();
         if flags.is_empty() {
             return flags;
         }
@@ -31,13 +23,36 @@ impl<'a> Analyzer<'a> {
         flags
     }
 
-    /// Records the HIR for a direct free-function call `name(args)`. Resolves `name` to its function
-    /// `DefId`; if it is not a registered (non-generic, non-overloaded) function or any argument is
-    /// not representable, the call is dropped from HIR coverage (enclosing function may fail
-    /// backend support).
-    pub(in crate::analyzer) fn hir_set_call(
+    /// Records a direct call to `owner`'s method `member`, passing any receiver as the first
+    /// argument. Generator-provided methods (`@json`) are absent when analysis runs without the
+    /// generator (LSP); a stub definition keeps the caller emittable there.
+    pub(in crate::analyzer) fn hir_set_type_method_call(
         &mut self,
-        name: &str,
+        owner: TypeId,
+        member: &str,
+        args: Vec<Option<HExpr>>,
+        ret: &Type,
+    ) {
+        let identity = match self.function_table.method_candidates(owner, member).as_slice() {
+            [identity] => identity.clone(),
+            [] => {
+                let name = dream_types::method_fn(
+                    &dream_types::type_symbol(&self.type_ctx.interner, &self.type_ctx.defs, owner),
+                    member,
+                );
+                (self.type_ctx.register(DefKind::Function, &name, vec![]), Vec::new())
+            }
+            _ => {
+                self.hir.last = None;
+                return;
+            }
+        };
+        self.hir_set_call_identity(&identity, args, ret);
+    }
+
+    pub(in crate::analyzer) fn hir_set_call_identity(
+        &mut self,
+        identity: &crate::function_table::FunctionIdentity,
         args: Vec<Option<HExpr>>,
         ret: &Type,
     ) {
@@ -45,19 +60,15 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         }
-        let Some(def) = self.type_ctx.resolve(DefKind::Function, name) else {
-            self.hir.last = None;
-            return;
-        };
         let Some(collected) = Self::collect_hir_args(args) else {
             self.hir.last = None;
             return;
         };
         let ret_ty = self.type_ctx.lower(ret);
-        let take_params = self.take_params_for(name);
+        let take_params = self.function_table.functions.get(identity).map(|info| info.is_take.clone()).unwrap_or_default();
         let callee = Callee {
-            def,
-            instance: vec![],
+            def: identity.0,
+            instance: identity.1.clone(),
             ret: ret_ty,
             take_params,
         };
@@ -121,8 +132,6 @@ impl<'a> Analyzer<'a> {
         elem_ty: &Type,
         value: HExpr,
     ) -> Option<HExpr> {
-        use dream_syntax::nodes::types::mangle_generic;
-        use dream_types::constructor_fn;
         let mut throwaway = dream_diagnostics::DiagnosticBag::new(None);
         let no_span = TextSpan {
             start: 0,
@@ -136,12 +145,9 @@ impl<'a> Analyzer<'a> {
             &no_span,
             &mut throwaway,
         );
-        let mangled = mangle_generic(base, std::slice::from_ref(elem_ty));
         let def = self.type_ctx.resolve(DefKind::Struct, base)?;
-        let ctor = self
-            .type_ctx
-            .resolve(DefKind::Function, &constructor_fn(&mangled));
         let ty = self.type_ctx.lower(&boxed_ty);
+        let ctor = self.unique_method_def(ty, dream_syntax::nodes::types::CONSTRUCTOR_NAME);
         Some(HExpr::new(
             ty,
             HExprKind::New {
@@ -152,46 +158,5 @@ impl<'a> Analyzer<'a> {
                 take_params: self.ctor_take_params(ctor),
             },
         ))
-    }
-
-    /// Records the HIR for a resolved call to a generic free function. `base_name` is the template's
-    /// (unmangled) name — the `DefId` shared by every instance — and `instance` is the concrete
-    /// type-args (in binding order) that select the monomorphization. The backend combines
-    /// `(def, instance)` into the same symbol the instance body emits. Drops out of coverage if the
-    /// base name is unregistered or any argument is not representable.
-    pub(in crate::analyzer) fn hir_set_generic_call(
-        &mut self,
-        base_name: &str,
-        instance: Vec<TypeId>,
-        args: Vec<Option<HExpr>>,
-        ret: &Type,
-        take_params: Vec<bool>,
-    ) {
-        if !self.active() {
-            self.hir.last = None;
-            return;
-        }
-        let Some(def) = self.type_ctx.resolve(DefKind::Function, base_name) else {
-            self.hir.last = None;
-            return;
-        };
-        let Some(collected) = Self::collect_hir_args(args) else {
-            self.hir.last = None;
-            return;
-        };
-        let ret_ty = self.type_ctx.lower(ret);
-        let callee = Callee {
-            def,
-            instance,
-            ret: ret_ty,
-            take_params,
-        };
-        self.hir.last = Some(HExpr::new(
-            ret_ty,
-            HExprKind::Call {
-                callee,
-                args: collected,
-            },
-        ));
     }
 }

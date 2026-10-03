@@ -50,19 +50,21 @@ impl<'a> Analyzer<'a> {
                         Some(function.name.position),
                     );
                 }
-                self.type_ctx.register(
+                let def = self.type_ctx.register(
                     DefKind::Function,
                     &function.name.text,
                     generic_param_names(&function.generic_parameters),
                 );
                 self.generic_functions
-                    .insert(function.name.text.clone(), function);
+                    .insert(def, function);
                 continue;
             }
             if function.visibility.is_public() {
                 self.check_public_visibility(function, diagnostics);
             }
-            let mut info = FunctionTableInfo::from(function);
+            let mut info = FunctionTableInfo::from(function, &mut self.type_ctx);
+            self.function_table.record_declaration(function, info.identity.clone());
+            self.record_ide_definition(info.identity.0, &function.name, function.file_path.as_deref());
             info.declaring_module = self.module_of(function.file_path.as_ref());
             if let Some(ret) = &function.return_type {
                 self.check_type_not_static_class(ret, diagnostics);
@@ -74,8 +76,7 @@ impl<'a> Analyzer<'a> {
                 self.validate_test_function(function, diagnostics);
             }
             if function.is_extern && dream_abi::attributes::has_c_attr(&function.attributes) {
-                let name = function.name.text.clone();
-                self.validate_c_extern_signature(function, &name, diagnostics);
+                self.validate_c_extern_signature(function, info.identity.0, diagnostics);
             }
             if info.is_compute {
                 self.validate_compute_shader(function, &info, diagnostics);
@@ -93,35 +94,11 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(e.to_string(), Some(function.name.position));
             }
         }
-        // Register a distinct `DefId` for every non-generic function under its *emitted* name (the
-        // bare base when unique, the signature-mangled key when overloaded). Deferred to here so the
-        // full overload set is known: overloaded declarations must not collide on a single base def.
-        for function in node.functions.iter() {
-            self.type_ctx
-                .set_scope(self.graph.module_for_file(function.file_path.as_deref()));
-            if function.generic_parameters.is_some() {
-                continue;
-            }
-            let param_types: Vec<Type> = function
-                .parameters
-                .iter()
-                .map(|p| p.type_.clone())
-                .collect();
-            let module = self.module_of(function.file_path.as_ref());
-            let emitted = self.function_table.resolve_emitted_name_scoped(
-                &function.name.text,
-                module.as_ref(),
-                &param_types,
-                &mut self.type_ctx,
-            );
-            let def = self.type_ctx.register(DefKind::Function, &emitted, vec![]);
-            self.record_ide_definition(def, &function.name, function.file_path.as_deref());
-        }
         // The entry point is exported under the fixed name `main`. It may be declared as `main()`
         // or `main(args: string[])`, but not overloaded or given any other signature.
         // Library crates reject a top-level `main` in the primary compilation file.
         if self.crate_type == CrateType::Lib {
-            if let Ok(info) = self.function_table.get_function("main") {
+            if let Ok(info) = self.function_info("main") {
                 let in_primary = match (&info.declaring_file, &self.primary_file) {
                     (Some(decl), Some(primary)) => paths_equal(decl.as_ref(), primary),
                     _ => true,
@@ -135,11 +112,11 @@ impl<'a> Analyzer<'a> {
                     );
                 }
             }
-        } else if self.function_table.is_overloaded("main") {
+        } else if self.function_overloaded("main") {
             diagnostics.report_error("'main' cannot be overloaded".to_string(), None);
-        } else if let Ok(info) = self.function_table.get_function("main") {
-            let ok = info.parameters.is_empty()
-                || (info.parameters.len() == 1 && info.parameters[0] == "string[]");
+        } else if let Ok(info) = self.function_info("main") {
+            let string_array = self.type_ctx.interner.array(self.type_ctx.interner.string());
+            let ok = info.parameters.is_empty() || info.parameters == [string_array];
             if !ok {
                 diagnostics.report_error(
                     "'main' must be declared as 'main()' or 'main(args: string[])'".to_string(),

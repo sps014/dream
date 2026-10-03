@@ -60,7 +60,6 @@ impl<'a> Analyzer<'a> {
         self.register_structs(node, diagnostics);
         self.register_extensions(node, diagnostics);
         self.register_functions(node, diagnostics);
-        self.register_final_method_definitions();
         // `ref struct` params on an `async` function/method would need to survive a suspend point,
         // which spills the function's live locals into a heap-allocated coroutine state object —
         // exactly the escape a `ref struct` forbids. Checked once every function/method/`extend`
@@ -98,40 +97,17 @@ impl<'a> Analyzer<'a> {
         // Built before the borrow-immutable `SemanticInfo` literal below, since lowering field types
         // needs `&mut self.type_ctx`.
         let layouts = self.hir_build_layouts();
-        let object_types: Vec<_> = layouts
+        let object_methods = layouts
             .structs
-            .iter()
-            .filter_map(|(ty, _)| {
-                self.struct_table
-                    .get_struct(*ty)
-                    .map(|info| (*ty, info.name.clone()))
-            })
-            .chain(layouts.unions.iter().filter_map(|(ty, _)| {
-                self.union_table
-                    .get(ty)
-                    .map(|info| (*ty, info.name.clone()))
-            }))
-            .collect();
-        let object_methods = object_types
-            .into_iter()
-            .map(|(ty, name)| {
-                match self.type_ctx.interner.kind(ty) {
-                    dream_types::TyKind::Struct(def, _) | dream_types::TyKind::Union(def, _) => {
-                        self.type_ctx.set_scope(def.module)
-                    }
-                    _ => {}
-                }
+            .keys()
+            .filter(|ty| self.struct_table.get_struct(**ty).is_some())
+            .chain(layouts.unions.keys().filter(|ty| self.union_table.contains_key(*ty)))
+            .map(|&ty| {
                 (
                     ty,
                     dream_hir::ObjectMethods {
-                        to_string: self.type_ctx.resolve(
-                            DefKind::Function,
-                            &dream_types::method_fn(&name, "to_string"),
-                        ),
-                        hash_code: self.type_ctx.resolve(
-                            DefKind::Function,
-                            &dream_types::method_fn(&name, "hash_code"),
-                        ),
+                        to_string: self.unique_method_def(ty, dream_abi::intrinsics::TO_STRING),
+                        hash_code: self.unique_method_def(ty, dream_abi::intrinsics::HASH_CODE),
                     },
                 )
             })

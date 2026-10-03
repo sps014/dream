@@ -19,10 +19,12 @@
 //! in fields. ARC keeps all of these memory-safe; this pass is a logic-bug preventer.
 
 use super::*;
+use crate::function_table::{FunctionIdentity, FunctionTable};
 use dream_syntax::nodes::function::ReceiverMode;
 use dream_syntax::nodes::statement::StatementNode;
 use dream_text::text_span::TextSpan;
-use indexmap::{IndexMap as StdHashMap, IndexSet as HashSet};
+use dream_types::{TypeCtx, TypeId};
+use indexmap::IndexSet as HashSet;
 
 /// Flat events emitted in source order by the structural walk; interpreted afterwards.
 #[derive(Debug, Clone)]
@@ -59,25 +61,6 @@ fn is_self_expr(expr: &ExpressionNode, aliases: &[String]) -> bool {
     match expr {
         ExpressionNode::Identifier(t) => t.text == "this" || aliases.contains(&t.text),
         _ => false,
-    }
-}
-
-fn type_owner_name(ty: &Type) -> Option<String> {
-    match ty {
-        Type::Struct(token, _) => Some(token.text.clone()),
-        Type::String(_) => Some("string".to_string()),
-        Type::Integer(_) => Some("int".to_string()),
-        Type::Float(_) => Some("float".to_string()),
-        Type::Double(_) => Some("double".to_string()),
-        Type::Boolean(_) => Some("bool".to_string()),
-        Type::Byte(_) => Some("byte".to_string()),
-        Type::Char(_) => Some("char".to_string()),
-        Type::Long(_) => Some("long".to_string()),
-        Type::UInt(_) => Some("uint".to_string()),
-        Type::ULong(_) => Some("ulong".to_string()),
-        Type::ISize(_) => Some("isize".to_string()),
-        Type::USize(_) => Some("usize".to_string()),
-        _ => None,
     }
 }
 
@@ -126,7 +109,7 @@ enum ViewKind {
 
 /// A method/free-function whose body returns a view of its receiver (methods) or of one of its
 /// parameters (free functions): calling it opens a borrow on that receiver/argument.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ViewSource {
     /// The returned view points into the method's own receiver.
     Receiver,
@@ -139,21 +122,21 @@ struct ViewSummary {
 }
 
 struct Extractor<'s> {
-    summaries: &'s HashMap<String, ViewSummary>,
-    /// Names of declared classes — used to infer local types from constructor calls.
+    summaries: &'s HashMap<FunctionIdentity, ViewSummary>,
+    functions: &'s FunctionTable,
+    type_ctx: &'s TypeCtx,
+    struct_table: &'s StructTable,
+    local_types: &'s IndexMap<String, TypeId>,
+    // Lexical walker hints are not semantic type facts.
     class_names: &'s HashSet<String>,
     /// Owner class of the method being walked ("this").
-    _owner: String,
+    _owner: Option<TypeId>,
     aliases_this: Vec<String>,
     events: Vec<Ev>,
-    /// Locals whose class was inferred from constructor calls / literals
-    /// (`let m = Map<int, int>();` -> "Map"), used for callee-mode resolution.
     local_class: Vec<(String, String)>,
 }
 
 impl<'s> Extractor<'s> {
-    /// Canonical key for a receiver we can track; also records local-class inference for
-    /// constructor-initialized locals.
     fn recv_key(&mut self, expr: &ExpressionNode) -> Option<String> {
         canonical_chain_from(expr)
     }
@@ -188,17 +171,29 @@ impl<'s> Extractor<'s> {
             return;
         }
         // B2 summary call: `let cur = get_view(list);` / `let v = obj.view();`
-        let summary = match init {
-            ExpressionNode::FunctionCall(callee, _, _) => self.summaries.get(&callee.text),
-            ExpressionNode::MethodCall(recv, nm, _, _) => match &**recv {
-                ExpressionNode::Identifier(t) if t.text == "this" => {
-                    let key = format!("{}::{}", self._owner, nm.text);
-                    self.summaries.get(&key)
-                }
-                _ => None,
-            },
-            _ => None,
+        let candidates = match init {
+            ExpressionNode::FunctionCall(callee, _, _) => {
+                self.functions.candidates(self.type_ctx, &callee.text)
+            }
+            ExpressionNode::MethodCall(recv, name, _, _) => canonical_chain_from(recv)
+                .and_then(|chain| {
+                    chain_type(self.struct_table, self._owner, self.local_types, &chain)
+                })
+                .and_then(|owner| self.functions.methods.get(&(owner, name.text.clone())))
+                .cloned()
+                .unwrap_or_default(),
+            _ => Vec::new(),
         };
+        let summary = candidates
+            .first()
+            .and_then(|identity| self.summaries.get(identity))
+            .filter(|first| {
+                candidates.iter().all(|identity| {
+                    self.summaries
+                        .get(identity)
+                        .is_some_and(|summary| summary.source == first.source)
+                })
+            });
         if let Some(summary) = summary {
             let borrowed: Option<&ExpressionNode> = match init {
                 ExpressionNode::FunctionCall(_, _, args) => match summary.source {
@@ -236,68 +231,55 @@ impl<'s> Extractor<'s> {
     }
 }
 
-/// Computes B2 view-return summaries: `"Owner::method"` / `"fnname"` -> parameter position
-/// whose argument gets borrowed (`usize::MAX` = the method receiver).
-fn compute_view_summaries<'a>(node: &'a ProgramView<'a>) -> HashMap<String, ViewSummary> {
-    let mut out: HashMap<String, ViewSummary> = HashMap::new();
-
-    /// Classifies a returned expression: does it construct a view over `this` (method) or over
-    /// one of the function's parameters?
-    fn view_return_source(
-        e: &ExpressionNode,
-        is_method: bool,
-        param_positions: &[&str],
-    ) -> Option<ViewSource> {
-        let (_kind, recv) = view_construction(e)?;
-        let ExpressionNode::Identifier(t) = recv else {
-            return None;
+fn view_summary(function: &FunctionNode, is_method: bool) -> Option<ViewSummary> {
+    let parameters: Vec<_> = function
+        .parameters
+        .iter()
+        .filter(|parameter| !is_method || parameter.name.text != "this")
+        .map(|parameter| parameter.name.text.as_str())
+        .collect();
+    for statement in function.body {
+        let StatementNode::Return(Some(expression)) = statement else {
+            continue;
         };
-        if t.text == "this" && is_method {
-            return Some(ViewSource::Receiver);
+        let Some((_, receiver)) = view_construction(expression) else {
+            continue;
+        };
+        let ExpressionNode::Identifier(name) = receiver else {
+            continue;
+        };
+        let source = if is_method && name.text == "this" {
+            Some(ViewSource::Receiver)
+        } else {
+            parameters
+                .iter()
+                .position(|parameter| *parameter == name.text)
+                .map(ViewSource::Param)
+        };
+        if let Some(source) = source {
+            return Some(ViewSummary { source });
         }
-        param_positions
-            .iter()
-            .position(|p| **p == t.text)
-            .map(ViewSource::Param)
     }
+    None
+}
 
-    fn scan_fn(
-        f: &FunctionNode,
-        owner: Option<&str>,
-        key: String,
-        out: &mut HashMap<String, ViewSummary>,
-    ) {
-        if f.is_static || f.body.is_empty() {
-            return;
-        }
-        let param_positions: Vec<&str> =
-            f.parameters.iter().map(|p| p.name.text.as_str()).collect();
-        for stmt in f.body {
-            if let StatementNode::Return(Some(e)) = stmt {
-                if let Some(source) = view_return_source(e, owner.is_some(), &param_positions) {
-                    out.insert(key.clone(), ViewSummary { source });
-                    return;
-                }
-            }
-        }
+fn chain_type(
+    structs: &StructTable,
+    owner: Option<TypeId>,
+    locals: &IndexMap<String, TypeId>,
+    chain: &str,
+) -> Option<TypeId> {
+    let mut parts = chain.split('.');
+    let root = parts.next()?;
+    let mut ty = if root == "this" {
+        owner?
+    } else {
+        *locals.get(root)?
+    };
+    for field in parts {
+        ty = structs.get_struct(ty)?.fields.get(field)?.ty;
     }
-
-    for s in node.structs.iter() {
-        for m in &s.methods {
-            let key = format!("{}::{}", s.name.text, m.name.text);
-            scan_fn(m, Some(&s.name.text), key, &mut out);
-        }
-    }
-    for e in node.extends.iter() {
-        for m in &e.methods {
-            let key = format!("{}::{}", e.target.text, m.name.text);
-            scan_fn(m, Some(&e.target.text), key, &mut out);
-        }
-    }
-    for f in node.functions.iter() {
-        scan_fn(f, None, f.name.text.clone(), &mut out);
-    }
-    out
+    Some(ty)
 }
 
 /// Interprets the flat event stream with **group-keyed** tracking: names proven to reference
@@ -305,10 +287,9 @@ fn compute_view_summaries<'a>(node: &'a ProgramView<'a>) -> HashMap<String, View
 /// one name conflicts with live views opened through any other name in the group.
 fn interpret_events(
     events: &[Ev],
-    owner: &str,
-    receiver_modes: &HashMap<String, ReceiverMode>,
-    chain_owners: &StdHashMap<String, String>,
-    local_class: &[(String, String)],
+    analyzer: &Analyzer<'_>,
+    owner: Option<TypeId>,
+    local_types: &IndexMap<String, TypeId>,
     file_path: &Option<Rc<str>>,
     diagnostics: &mut DiagnosticBag,
 ) {
@@ -376,25 +357,14 @@ fn interpret_events(
                 name: callee,
                 span,
             } => {
-                // Resolve receiver's class + its group root. Deep chains (`this.a.b`) walk
-                // the precomputed chain-owner table.
-                let cls = if recv == "this" {
-                    Some(owner.to_string())
-                } else if !recv.contains('.') {
-                    local_class
-                        .iter()
-                        .rev()
-                        .find(|(n, _)| n == recv)
-                        .map(|(_, c)| c.clone())
-                } else {
-                    chain_owners.get(recv).cloned()
+                let Some(ty) = chain_type(&analyzer.struct_table, owner, local_types, recv) else {
+                    continue;
                 };
-                let Some(cls) = cls else { continue };
-                let mode = receiver_modes
-                    .get(&format!("{cls}::{callee}"))
-                    .copied()
-                    .unwrap_or(ReceiverMode::Borrow);
-                if mode != ReceiverMode::Unique {
+                let unique = analyzer
+                    .receiver_method_keys(ty, callee)
+                    .iter()
+                    .any(|key| analyzer.receiver_modes.get(key) == Some(&ReceiverMode::Unique));
+                if !unique {
                     continue;
                 }
                 let recv_root = recv.clone();
@@ -458,112 +428,99 @@ impl<'a> Analyzer<'a> {
         node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
-        let summaries = compute_view_summaries(node);
-        let class_names: HashSet<String> =
-            node.structs.iter().map(|s| s.name.text.clone()).collect();
-
-        for s in node.structs.iter() {
-            let mut field_types: indexmap::IndexMap<String, String> = indexmap::IndexMap::new();
-            let mut class_fields: Vec<String> = Vec::new();
-            for f in s.fields.iter() {
-                if let Some(owner) = type_owner_name(&f.field_type) {
-                    field_types.insert(f.name.text.clone(), owner);
-                }
-                class_fields.push(f.name.text.clone());
+        let scope = self.type_ctx.scope();
+        let mut summaries = HashMap::new();
+        let functions: Vec<_> = self
+            .struct_methods
+            .iter()
+            .map(|(function, _)| (*function, true))
+            .chain(node.functions.iter().map(|function| (*function, false)))
+            .chain(self.instantiated_generics.values().map(|(_, function)| {
+                (
+                    *function,
+                    function
+                        .parameters
+                        .first()
+                        .is_some_and(|parameter| parameter.name.text == "this"),
+                )
+            }))
+            .collect();
+        for (function, is_method) in &functions {
+            if function.is_static || function.is_extern || function.body.is_empty() {
+                continue;
             }
-
-            // Deep-chain owner table: `"this.a.b" -> OwnerOfB` for chains of fields whose
-            // types resolve through the struct table (depth ≤ 3).
-            let mut chain_owners: StdHashMap<String, String> = StdHashMap::new();
-            for f in s.fields.iter() {
-                let fname = f.name.text.clone();
-                if let Some(owner1) = type_owner_name(&f.field_type) {
-                    chain_owners.insert(format!("this.{fname}"), owner1.clone());
-                    if let Some(info1) = self.struct_info(&owner1) {
-                        for (sub_name, sub_info) in info1.fields.iter() {
-                            if let Some(owner2) = type_owner_name(&sub_info.type_) {
-                                let key = format!("this.{fname}.{sub_name}");
-                                chain_owners.insert(key, owner2);
-                            }
-                        }
-                    }
-                }
-            }
-
-            for m in &s.methods {
-                if m.is_static || m.is_extern || m.body.is_empty() {
-                    continue;
-                }
-                let mut ex = Extractor {
-                    summaries: &summaries,
-                    class_names: &class_names,
-                    _owner: s.name.text.clone(),
-                    aliases_this: Vec::new(),
-                    events: Vec::new(),
-                    local_class: Vec::new(),
-                };
-                ex.walk_block(m.body, &field_types, &class_fields);
-
-                interpret_events(
-                    &ex.events,
-                    &s.name.text,
-                    &self.receiver_modes,
-                    &chain_owners,
-                    &ex.local_class,
-                    &s.file_path,
-                    diagnostics,
-                );
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(function.file_path.as_deref()));
+            if let (Some(identity), Some(summary)) = (
+                self.function_declaration(function),
+                view_summary(function, *is_method),
+            ) {
+                summaries.insert(identity, summary);
             }
         }
 
-        // Top-level free functions (including `main`): no receiver — only local-based borrows.
-        for f in node.functions.iter() {
-            if f.is_static || f.is_extern || f.body.is_empty() {
+        for (function, is_method) in functions {
+            if function.is_static || function.is_extern || function.body.is_empty() {
                 continue;
             }
-            let mut ex = Extractor {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(function.file_path.as_deref()));
+            let Some(identity) = self.function_declaration(function) else {
+                continue;
+            };
+            let Some(hir) = self
+                .hir
+                .functions
+                .iter()
+                .find(|hir| hir.def == identity.0 && hir.instance == identity.1)
+            else {
+                continue;
+            };
+            let local_types: IndexMap<_, _> = hir
+                .params
+                .iter()
+                .map(|parameter| (parameter.name.clone(), parameter.ty))
+                .chain(
+                    hir.locals
+                        .iter()
+                        .map(|local| (local.name.clone(), local.ty)),
+                )
+                .collect();
+            let owner = if is_method {
+                self.receiver_function_key(&identity).map(|(key, _)| key.0)
+            } else {
+                None
+            };
+            let fields: Vec<_> = owner
+                .and_then(|ty| self.struct_table.get_struct(ty))
+                .map(|info| info.fields.keys().cloned().collect())
+                .unwrap_or_default();
+            // The structural walker retains lexical hints, but semantic receiver identity
+            // comes exclusively from the analyzed HIR locals and registered field types.
+            let class_names = HashSet::new();
+            let mut extractor = Extractor {
                 summaries: &summaries,
+                functions: &self.function_table,
+                type_ctx: &self.type_ctx,
+                struct_table: &self.struct_table,
+                local_types: &local_types,
                 class_names: &class_names,
-                _owner: String::new(),
+                _owner: owner,
                 aliases_this: Vec::new(),
                 events: Vec::new(),
                 local_class: Vec::new(),
             };
-            ex.walk_block(f.body, &indexmap::IndexMap::new(), &[]);
-            if std::env::var("DREAM_TRACE_BORROW").is_ok() {
-                eprintln!("[free-fn {}] {} events", f.name.text, ex.events.len());
-            }
-
-            // Local-rooted chains: `o.inner.items` -> resolve o's class, then walk fields.
-            let mut chain_owners: StdHashMap<String, String> = StdHashMap::new();
-            for (local_name, local_cls) in &ex.local_class {
-                if let Some(info) = self.struct_info(local_cls) {
-                    for (fname, finfo) in info.fields.iter() {
-                        let key = format!("{local_name}.{fname}");
-                        if let Some(owner1) = type_owner_name(&finfo.type_) {
-                            chain_owners.insert(key.clone(), owner1.clone());
-                            if let Some(sub) = self.struct_info(&owner1) {
-                                for (sub_name, sub_finfo) in sub.fields.iter() {
-                                    let deep = format!("{key}.{sub_name}");
-                                    if let Some(owner2) = type_owner_name(&sub_finfo.type_) {
-                                        chain_owners.insert(deep, owner2.clone());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            extractor.walk_block(function.body, &IndexMap::new(), &fields);
             interpret_events(
-                &ex.events,
-                "",
-                &self.receiver_modes,
-                &chain_owners,
-                &ex.local_class,
-                &f.file_path,
+                &extractor.events,
+                self,
+                owner,
+                &local_types,
+                &function.file_path,
                 diagnostics,
             );
         }
+        self.type_ctx.set_scope(scope);
     }
 }
 

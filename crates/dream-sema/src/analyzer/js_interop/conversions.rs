@@ -159,9 +159,14 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// True when `def` is the mangled `js.<method>` bridge.
+    /// The definition of the non-overloaded stdlib `js.<method>` bridge.
+    pub(in crate::analyzer) fn js_bridge_def(&self, method: &str) -> Option<DefId> {
+        self.unique_method_def(self.type_ctx.interner.js(), method)
+    }
+
+    /// True when `def` is the `js.<method>` bridge.
     pub(in crate::analyzer) fn is_js_bridge_def(&self, def: DefId, method: &str) -> bool {
-        self.type_ctx.defs.name(def) == method_fn(dream_abi::js_abi::JS_TYPE, method)
+        self.js_bridge_def(method) == Some(def)
     }
 
     /// Peels a trivial `Cast` wrapper so fusion can see the underlying bridge call.

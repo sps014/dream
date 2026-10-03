@@ -95,15 +95,17 @@ impl<'a> Analyzer<'a> {
             ("Some", "None")
         };
 
-        let op_mangled = operand_type.get_type();
-        let ret_mangled = return_type.get_type();
-        let op_info = self.union_info(&op_mangled).cloned();
-        let op_def = self
-            .type_ctx
-            .resolve(dream_types::DefKind::Union, &op_mangled);
-        let ret_def = self
-            .type_ctx
-            .resolve(dream_types::DefKind::Union, &ret_mangled);
+        let op_id = self.type_ctx.lower(&operand_type);
+        let ret_id = self.type_ctx.lower(&return_type);
+        let op_info = self.union_info(op_id).cloned();
+        let op_def = match self.type_ctx.interner.kind(op_id) {
+            dream_types::TyKind::Union(def, _) => Some(*def),
+            _ => None,
+        };
+        let ret_def = match self.type_ctx.interner.kind(ret_id) {
+            dream_types::TyKind::Union(def, _) => Some(*def),
+            _ => None,
+        };
 
         let success_ty = op_args[0].clone();
 

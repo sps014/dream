@@ -4,7 +4,7 @@ impl<'a> Analyzer<'a> {
     pub(super) fn analyze_bytes_intrinsic(
         &mut self,
         call: &GenericStaticMethodCall<'a, '_>,
-        params_types: Vec<String>,
+        params_types: Vec<dream_types::TypeId>,
         arg_hirs: Vec<Option<dream_hir::HExpr>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
@@ -37,7 +37,7 @@ impl<'a> Analyzer<'a> {
                 Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
                 None => params_types
                     .first()
-                    .map(|s| named(s))
+                    .map(|&ty| self.type_ctx.syntax_type(ty))
                     .unwrap_or(Type::Unknown),
             };
             self.require_unmanaged_or_array(&payload, "Bytes.of", &method.position, diagnostics);
@@ -75,7 +75,7 @@ impl<'a> Analyzer<'a> {
                 Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
                 None => params_types
                     .first()
-                    .map(|s| named(s))
+                    .map(|&ty| self.type_ctx.syntax_type(ty))
                     .unwrap_or(Type::Unknown),
             };
             let value = arg_hirs.into_iter().next().flatten();
@@ -89,6 +89,9 @@ impl<'a> Analyzer<'a> {
             if self.is_unresolved_generic_type(&payload) || payload.get_type() == "string" {
                 self.hir_set_last(value);
             } else if payload.get_type() == "void" {
+                if value.is_some() {
+                    self.hir_expr_stmt(value);
+                }
                 let string_ty = named("string");
                 let ty_id = self.type_ctx.lower(&string_ty);
                 self.hir_set_last(Some(dream_hir::HExpr::new(
@@ -104,7 +107,8 @@ impl<'a> Analyzer<'a> {
                 );
                 self.hir_set_to_bytes(value);
                 let bytes = self.hir_take();
-                self.hir_set_call("Bytes_toWireString", vec![bytes], &named("string"));
+                let bytes_ty = self.bytes_type();
+                self.hir_set_type_method_call(bytes_ty, "toWireString", vec![bytes], &named("string"));
             }
             return Ok(named("string"));
         }
@@ -123,11 +127,12 @@ impl<'a> Analyzer<'a> {
             let text = arg_hirs.into_iter().next().flatten();
             // See the matching comment in the `WireEncode` arm above: a dead placeholder body from
             // a generic struct's declaration-time analysis pass, never reached by a real call site.
-            if self.is_unresolved_generic_type(&target) || target.get_type() == "string" {
+            // `void` payloads travel as the empty wire string; passing it through keeps a
+            // `Task.spawn` body returning `void` emittable without a value-less local.
+            if self.is_unresolved_generic_type(&target)
+                || matches!(target.get_type().as_str(), "string" | "void")
+            {
                 self.hir_set_last(text);
-            } else if target.get_type() == "void" {
-                self.hir_none();
-                return Ok(Type::Void);
             } else {
                 self.require_unmanaged_or_array(
                     &target,
@@ -140,8 +145,10 @@ impl<'a> Analyzer<'a> {
                     t.text = name.to_string();
                     Type::from_token(t).unwrap_or(Type::Unknown)
                 };
-                self.hir_set_call(
-                    "Bytes_fromWireString",
+                let bytes_ty = self.bytes_type();
+                self.hir_set_type_method_call(
+                    bytes_ty,
+                    "fromWireString",
                     vec![text],
                     &Type::Array(Box::new(named("byte"))),
                 );
@@ -152,5 +159,11 @@ impl<'a> Analyzer<'a> {
         }
 
         crate::internal_error!("unclassified bytes intrinsic")
+    }
+
+    fn bytes_type(&self) -> dream_types::TypeId {
+        self.type_ctx
+            .resolved_type("Bytes")
+            .unwrap_or_else(|| self.type_ctx.interner.error())
     }
 }

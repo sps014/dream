@@ -23,8 +23,9 @@ impl<'a> Analyzer<'a> {
         scope: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<PatternInfo, SemanticError> {
-        let expected_base = expected.get_type();
-        let union_info: Option<UnionInfo> = self.union_info(&expected_base).cloned();
+        let expected_base = self.ty_display(expected);
+        let expected_id = self.type_ctx.lower(expected);
+        let union_info: Option<UnionInfo> = self.union_info(expected_id).cloned();
 
         match pattern {
             PatternNode::Wildcard(_) => Ok(PatternInfo { irrefutable: true }),
@@ -47,15 +48,15 @@ impl<'a> Analyzer<'a> {
                 Ok(PatternInfo { irrefutable: true })
             }
             PatternNode::Literal(lit) => {
-                if !lit.is_unknown()
-                    && !expected.is_unknown()
-                    && !self.type_str_assignable(&expected_base, &lit.get_type())
-                {
+                if !lit.is_unknown() && !expected.is_unknown() && {
+                    let lit_id = self.type_ctx.lower(lit);
+                    !self.value_type_assignable(expected_id, lit_id, diagnostics)
+                } {
                     diagnostics.report_error(
                         format!(
                             "Pattern literal of type '{}' cannot match a value of type '{}'",
                             self.ty_display(lit),
-                            self.ty_str_display(&expected_base)
+                            expected_base
                         ),
                         lit.get_span(),
                     );
@@ -69,7 +70,7 @@ impl<'a> Analyzer<'a> {
                         diagnostics.report_error(
                             format!(
                                 "Variant pattern '{}' can only match a discriminated union, not '{}'",
-                                variant.text, self.ty_str_display(&expected_base)
+                                variant.text, expected_base
                             ),
                             Some(variant.position),
                         );
@@ -82,12 +83,15 @@ impl<'a> Analyzer<'a> {
                 };
 
                 if let Some(q) = qualifier {
-                    if q.text != expected_base {
+                    let expected_def = match self.type_ctx.interner.kind(expected_id) {
+                        dream_types::TyKind::Union(def, _) => Some(*def),
+                        _ => None,
+                    };
+                    if self.type_ctx.resolve(DefKind::Union, &q.text) != expected_def {
                         diagnostics.report_error(
                             format!(
                                 "Variant qualifier '{}' does not match the matched enum '{}'",
-                                q.text,
-                                self.ty_str_display(&expected_base)
+                                q.text, expected_base
                             ),
                             Some(q.position),
                         );
@@ -98,11 +102,7 @@ impl<'a> Analyzer<'a> {
                     Some(v) => v.clone(),
                     None => {
                         diagnostics.report_error(
-                            format!(
-                                "Enum '{}' has no variant '{}'",
-                                self.ty_str_display(&expected_base),
-                                variant.text
-                            ),
+                            format!("Enum '{}' has no variant '{}'", expected_base, variant.text),
                             Some(variant.position),
                         );
                         for sub in subs {
@@ -116,7 +116,7 @@ impl<'a> Analyzer<'a> {
                     diagnostics.report_error(
                         format!(
                             "Variant '{}.{}' has {} field(s), but the pattern binds {}",
-                            self.ty_str_display(&expected_base),
+                            expected_base,
                             variant.text,
                             var_info.fields.len(),
                             subs.len()
@@ -181,28 +181,27 @@ impl<'a> Analyzer<'a> {
             },
             PatternNode::Range(lo, hi) => {
                 for bound in [lo, hi] {
-                    if !bound.is_unknown()
-                        && !expected.is_unknown()
-                        && !self.type_str_assignable(&expected_base, &bound.get_type())
-                    {
+                    if !bound.is_unknown() && !expected.is_unknown() && {
+                        let bound_id = self.type_ctx.lower(bound);
+                        !self.value_type_assignable(expected_id, bound_id, diagnostics)
+                    } {
                         diagnostics.report_error(
                             format!(
                                 "Range pattern bound of type '{}' cannot match a value of type '{}'",
                                 self.ty_display(bound),
-                                self.ty_str_display(&expected_base)
+                                expected_base
                             ),
                             bound.get_span(),
                         );
                     }
                 }
-                const ORDERED_SCALARS: &[&str] = &[
-                    "int", "long", "uint", "ulong", "byte", "char", "float", "double",
-                ];
-                if !expected.is_unknown() && !ORDERED_SCALARS.contains(&expected_base.as_str()) {
+                if !expected.is_unknown()
+                    && !matches!(self.type_ctx.interner.kind(expected_id), dream_types::TyKind::Prim(primitive) if primitive.is_numeric() || *primitive == dream_types::PrimTy::Char)
+                {
                     diagnostics.report_error(
                         format!(
                             "Range pattern requires an ordered numeric or char subject, got '{}'",
-                            self.ty_str_display(&expected_base)
+                            expected_base
                         ),
                         lo.get_span(),
                     );
@@ -250,8 +249,8 @@ impl<'a> Analyzer<'a> {
             );
         }
 
-        let expected_strs: Vec<String> = field_types.iter().map(|t| t.get_type()).collect();
-        let given_strs: Vec<String> = arg_types.iter().map(|t| t.get_type()).collect();
+        let expected_strs: Vec<_> = field_types.iter().map(|t| self.type_ctx.lower(t)).collect();
+        let given_strs: Vec<_> = arg_types.iter().map(|t| self.type_ctx.lower(t)).collect();
 
         self.validate_arguments(
             &format!("Variant '{}.{}'", enum_name, variant_name),
@@ -338,10 +337,9 @@ impl<'a> Analyzer<'a> {
         if patterns.iter().any(|p| self.pattern_is_irrefutable(p, ty)) {
             return true;
         }
-        let base = ty.get_type();
         // `bool` has exactly two constructors; `true` + `false` arms (possibly combined in
         // or-patterns) cover it without a `_`.
-        if base == "bool" {
+        if ty.is_bool() {
             let alts = patterns.iter().flat_map(|p| p.or_alternatives());
             let mut saw_true = false;
             let mut saw_false = false;
@@ -356,7 +354,12 @@ impl<'a> Analyzer<'a> {
             }
             return saw_true && saw_false;
         }
-        let Some(info) = self.union_info(&base).cloned() else {
+        let Some(info) = self
+            .type_ctx
+            .lookup_type(ty)
+            .and_then(|id| self.union_info(id))
+            .cloned()
+        else {
             return false;
         };
         info.variants
@@ -398,8 +401,11 @@ impl<'a> Analyzer<'a> {
         match p {
             PatternNode::Wildcard(_) => true,
             PatternNode::Binding(name) => {
-                let base = ty.get_type();
-                if let Some(info) = self.union_info(&base) {
+                if let Some(info) = self
+                    .type_ctx
+                    .lookup_type(ty)
+                    .and_then(|id| self.union_info(id))
+                {
                     if let Some(v) = info.variant(&name.text) {
                         if v.fields.is_empty() {
                             return false;

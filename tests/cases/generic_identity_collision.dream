@@ -1,0 +1,28 @@
+import system;
+
+class B {
+    public value: string;
+    public constructor(value: string) { this.value = value; }
+}
+
+class A<T> {
+    public value: T;
+    public constructor(value: T) { this.value = value; }
+}
+
+class A_B {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+}
+
+class Box<T> {
+    public value: T;
+    public constructor(value: T) { this.value = value; }
+}
+
+fun main(): void {
+    let flat = Box<A_B>(A_B(17));
+    let nested = Box<A<B>>(A<B>(B("second")));
+    System.println(flat.value.value);
+    System.println(nested.value.value.value);
+}

@@ -27,7 +27,7 @@ use dream_syntax::nodes::{ExpressionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
 use dream_text::text_span::TextSpan;
-use dream_types::{method_fn, DefId, DefKind, PrimTy, TyKind, TypeId};
+use dream_types::{DefId, PrimTy, TyKind, TypeId};
 
 mod conversions;
 mod slots;
@@ -88,9 +88,8 @@ impl<'a> Analyzer<'a> {
     }
 
     fn def_is_capturing_fun(&self, def: DefId) -> bool {
-        let name = self.type_ctx.defs.name(def);
         self.closure_captures
-            .get(name)
+            .get(&def)
             .is_some_and(|caps| !caps.is_empty())
     }
 
@@ -128,8 +127,7 @@ impl<'a> Analyzer<'a> {
     /// Builds a call to a `js` bridge extern (`js.__something`), resolved by its mangled def name.
     /// Returns `None` only if the bridge is somehow unregistered (a stdlib bug).
     fn js_bridge_call(&self, method: &str, args: Vec<HExpr>, ret: TypeId) -> Option<HExpr> {
-        let mangled = method_fn(dream_abi::js_abi::JS_TYPE, method);
-        let def = self.type_ctx.resolve(DefKind::Function, &mangled)?;
+        let def = self.js_bridge_def(method)?;
         Some(HExpr::new(
             ret,
             HExprKind::Call {
@@ -155,10 +153,11 @@ impl<'a> Analyzer<'a> {
         ctx: &super::AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        let mangled = method_fn(dream_abi::js_abi::JS_TYPE, &method.text);
         // Cloned up front (rather than re-looked-up below) because the argument analysis loop needs
         // `&mut self`, which would otherwise conflict with a borrow held from this lookup.
-        let known_sig = self.function_table.get_function(&mangled).ok();
+        let known_sig = self
+            .method_info(self.type_ctx.interner.js(), &method.text)
+            .ok();
 
         let mut arg_hirs = Vec::with_capacity(params.len());
         for (i, param) in params.iter().enumerate() {
@@ -190,7 +189,7 @@ impl<'a> Analyzer<'a> {
                 }
             }
             let ret = sig.return_type.clone().unwrap_or(Type::Void);
-            self.hir_set_method_call(recv, &sig.name, arg_hirs, &ret);
+            self.hir_set_method_call(recv, &sig.identity, arg_hirs, &ret);
             return Ok(ret);
         }
 
@@ -306,7 +305,6 @@ impl<'a> Analyzer<'a> {
 
     /// `Option<inner>.None` as HIR, instantiating `Option<inner>` if this is its first use.
     fn option_none(&mut self, inner: &Type) -> Option<HExpr> {
-        use dream_syntax::nodes::types::mangle_generic;
         let mut throwaway = DiagnosticBag::new(None);
         let no_span = TextSpan {
             start: 0,
@@ -316,13 +314,14 @@ impl<'a> Analyzer<'a> {
         };
         let args = std::slice::from_ref(inner);
         self.ensure_union_instantiated("Option", args, &no_span, &mut throwaway);
-        let mangled = mangle_generic("Option", args);
-        let def = self.type_ctx.resolve(DefKind::Union, &mangled)?;
-        let variant = self.union_info(&mangled)?.variant("None")?.discriminant as usize;
         let ty = self.type_ctx.lower(&Type::Struct(
             synthetic_token(TokenKind::IdentifierToken, "Option"),
             Some(vec![inner.clone()]),
         ));
+        let TyKind::Union(def, _) = *self.type_ctx.interner.kind(ty) else {
+            return None;
+        };
+        let variant = self.union_info(ty)?.variant("None")?.discriminant as usize;
         Some(HExpr::new(
             ty,
             HExprKind::UnionNew {

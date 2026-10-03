@@ -2,9 +2,10 @@ use super::*;
 
 impl<'a> Analyzer<'a> {
     /// If `obj_type` names an interface, returns that interface's name; otherwise `None`.
-    pub(crate) fn interface_receiver_name(&self, obj_type: &Type) -> Option<String> {
-        let name = obj_type.get_type();
-        if self.is_interface_name(&name) {
+    pub(crate) fn interface_receiver_name(&mut self, obj_type: &Type) -> Option<String> {
+        let ty = self.type_ctx.lower(obj_type);
+        let name = self.type_id_display(ty);
+        if self.is_interface_name(ty) {
             Some(name)
         } else {
             None
@@ -16,13 +17,15 @@ impl<'a> Analyzer<'a> {
     /// type-checks the arguments, and emits a dynamically-dispatched `InterfaceCall` HIR node.
     pub(crate) fn analyze_interface_method(
         &mut self,
-        iface_name: &str,
+        iface_ty: dream_types::TypeId,
         method: &SyntaxToken,
         params: &Vec<ExpressionNode<'a>>,
         ctx: &super::super::super::AnalyzerContext<'a, '_>,
         receiver: Option<dream_hir::HExpr>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
+        let iface_name = self.type_id_display(iface_ty);
+        let iface_name = iface_name.as_str();
         let (arg_types, arg_hirs) = self.analyze_call_arguments(
             params,
             ctx.parent_function,
@@ -31,7 +34,7 @@ impl<'a> Analyzer<'a> {
         )?;
 
         let methods = self
-            .interface_method_list(iface_name)
+            .interface_method_list(iface_ty)
             .cloned()
             .unwrap_or_default();
         let Some((slot, im)) = methods
@@ -50,7 +53,7 @@ impl<'a> Analyzer<'a> {
             ));
         };
 
-        let expected: Vec<String> = im.parameters.iter().map(|p| p.type_.get_type()).collect();
+        let expected: Vec<_> = im.parameters.iter().map(|p| self.type_ctx.lower(&p.type_)).collect();
         // Calling an `async` interface method is eager and yields a `Future<T>` handle (just like an
         // async instance method); the concrete implementation dispatches to a `Future`-producing
         // constructor. The caller must `await` the result.
@@ -70,22 +73,22 @@ impl<'a> Analyzer<'a> {
             return Ok(ret_type);
         }
         for (i, given) in arg_types.iter().enumerate() {
-            if !self.type_str_assignable(&expected[i], given) {
+            if !self.value_type_assignable(expected[i], *given, diagnostics) {
                 diagnostics.report_error(
                     format!(
                         "interface method '{}.{}' expects parameter {} to be {}, got {}",
                         self.ty_str_display(iface_name),
                         method.text,
                         i + 1,
-                        self.ty_str_display(&expected[i]),
-                        self.ty_str_display(given)
+                        self.type_id_display(expected[i]),
+                        self.type_id_display(*given)
                     ),
                     Some(method.position),
                 );
             }
         }
 
-        let iface_id = self.interface_index(iface_name).unwrap_or(0);
+        let iface_id = self.interface_index(iface_ty).unwrap_or(0);
         // The `call_indirect` signature is `fun(this, params...): ret`, with `this` typed as
         // `object` (an `i32` pointer, matching every concrete implementation's receiver).
         let sig = self.interface_dispatch_sig(im);

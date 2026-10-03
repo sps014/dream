@@ -41,11 +41,44 @@ impl Builder {
     }
 
     pub(crate) fn walk_program_for_imports(&mut self, program: &ProgramNode) {
+        {
+            let mut ctx = self.type_ctx.borrow_mut();
+            ctx.register(
+                DefKind::Struct,
+                dream::syntax::nodes::types::FUTURE_TYPE,
+                vec!["T".into()],
+            );
+            for st in &program.structs {
+                ctx.register(
+                    DefKind::Struct,
+                    &st.name.text,
+                    param_names_from_tokens(&st.generic_parameters),
+                );
+            }
+            for en in &program.enums {
+                ctx.register(
+                    if en.is_data_enum() {
+                        DefKind::Union
+                    } else {
+                        DefKind::Enum
+                    },
+                    &en.name.text,
+                    param_names_from_tokens(&en.generic_parameters),
+                );
+            }
+            for iface in &program.interfaces {
+                ctx.register(
+                    DefKind::Interface,
+                    &iface.name.text,
+                    param_names_from_tokens(&iface.generic_parameters),
+                );
+            }
+        }
         for func in &program.functions {
             self.set_current_file(func.file_path.as_deref());
             let detail = signature(func);
-            let fn_ty = fn_value_type(func);
-            self.push_decl(&func.name, SymKind::Function, detail, GLOBAL, Some(fn_ty));
+            self.push_decl(&func.name, SymKind::Function, detail, GLOBAL, None);
+            self.record_callable(func, None);
             self.fn_params
                 .insert(func.name.text.clone(), param_names(func));
         }
@@ -81,18 +114,17 @@ impl Builder {
                 let field_ty = field.field_type.display_name();
                 let detail = format!("{}.{}: {}", st.name.text, field.name.text, field_ty);
                 self.push_decl(&field.name, SymKind::Field, detail, GLOBAL, Some(field_ty));
+                self.record_decl_type(&field.field_type);
+                self.member_owners
+                    .insert(self.decls.len() - 1, st.name.text.clone());
             }
             for method in &st.methods {
                 let detail = method_detail(&st.name.text, method);
                 self.push_decl(&method.name, SymKind::Method, detail, GLOBAL, None);
+                self.record_callable(method, Some(&st.name.text));
                 if method.name.text == CONSTRUCTOR_NAME {
                     self.ctor_params
                         .insert(st.name.text.clone(), param_names(method));
-                } else {
-                    self.method_params.insert(
-                        format!("{}.{}", st.name.text, method.name.text),
-                        param_names(method),
-                    );
                 }
             }
         }
@@ -142,10 +174,7 @@ impl Builder {
             for method in &en.methods {
                 let detail = method_detail(&en.name.text, method);
                 self.push_decl(&method.name, SymKind::Method, detail, GLOBAL, None);
-                self.method_params.insert(
-                    format!("{}.{}", en.name.text, method.name.text),
-                    param_names(method),
-                );
+                self.record_callable(method, Some(&en.name.text));
             }
         }
         for iface in &program.interfaces {
@@ -167,10 +196,7 @@ impl Builder {
             for method in &iface.methods {
                 let detail = method_detail(&iface.name.text, method);
                 self.push_decl(&method.name, SymKind::Method, detail, GLOBAL, None);
-                self.method_params.insert(
-                    format!("{}.{}", iface.name.text, method.name.text),
-                    param_names(method),
-                );
+                self.record_callable(method, Some(&iface.name.text));
             }
         }
         for ext in &program.extends {
@@ -200,10 +226,7 @@ impl Builder {
             for method in &ext.methods {
                 let detail = method_detail(&ext.target.text, method);
                 self.push_decl(&method.name, SymKind::Method, detail, GLOBAL, None);
-                self.method_params.insert(
-                    format!("{}.{}", ext.target.text, method.name.text),
-                    param_names(method),
-                );
+                self.record_callable(method, Some(&ext.target.text));
             }
         }
         // Top-level `let`/`const` variables live at file scope and are visible from every
@@ -221,6 +244,7 @@ impl Builder {
                 None => format!("{} {}", keyword, global.name.text),
             };
             self.push_decl(&global.name, SymKind::Variable, detail, GLOBAL, ty);
+            self.record_binding_type(global.declared_type.as_ref(), &global.initializer, GLOBAL);
         }
         self.current_file = None;
     }
@@ -329,6 +353,9 @@ impl Builder {
                 is_main: self.is_main,
                 file_path: self.current_file.clone(),
             });
+            let mut owner_token = func.name.clone();
+            owner_token.text = owner.to_string();
+            self.record_decl_type(&Type::Struct(owner_token, None));
         }
         self.walk_params_and_body(func, scope);
     }
@@ -343,6 +370,7 @@ impl Builder {
             let ty = param.type_.display_name();
             let detail = format!("(parameter) {}: {}", param.name.text, ty);
             self.push_decl(&param.name, SymKind::Param, detail, scope, Some(ty));
+            self.record_decl_type(&param.type_);
             self.add_type_ref(&param.type_, scope);
         }
         if let Some(rt) = &func.return_type {

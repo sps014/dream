@@ -13,6 +13,7 @@ mod display;
 mod interner;
 mod kind;
 mod lower;
+mod syntax;
 mod naming;
 
 pub use c_scalar::CScalar;

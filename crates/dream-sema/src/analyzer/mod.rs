@@ -7,7 +7,7 @@ use crate::union_table::UnionTable;
 use bumpalo::Bump;
 use dream_abi::attributes::{CompileTargets, RuntimeSupport};
 use dream_diagnostics::{Diagnostic, DiagnosticBag};
-use dream_syntax::nodes::types::{mangle_with_suffixes, primitive_type, FUTURE_TYPE};
+use dream_syntax::nodes::types::FUTURE_TYPE;
 use dream_syntax::nodes::{EnumDeclarationNode, ExtendNode};
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
@@ -96,9 +96,7 @@ pub(in crate::analyzer) fn synthetic_token(kind: TokenKind, text: &str) -> Synta
 
 mod generic_types;
 pub use generic_types::{generic_bindings, substitute_generic_type};
-use generic_types::{
-    generic_param_names, lookup_binding, mangle_bindings, substitute_generic_token,
-};
+use generic_types::{generic_param_names, lookup_binding};
 
 /// The `$` keeps synthesized property getters distinct from source identifiers.
 pub fn getter_member_name(prop: &str) -> String {
@@ -130,6 +128,12 @@ pub fn accessor_member_name(method: &FunctionNode) -> String {
 /// substitutes and lowers it directly rather than round-tripping through `get_type()`/reparse.
 pub type GenericBindings = IndexMap<String, Type>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum GenericExtendTarget {
+    Nominal(dream_types::DefId),
+    Array,
+}
+
 /// Enum name -> (member name -> integer value). Insertion-ordered at both levels so the enum
 /// variant-name interning that feeds emitted output happens in a deterministic (declaration) order.
 pub type EnumTable = IndexMap<dream_types::DefId, IndexMap<String, i32>>;
@@ -140,8 +144,7 @@ pub type EnumTable = IndexMap<dream_types::DefId, IndexMap<String, i32>>;
 #[derive(Debug, Clone)]
 pub struct GlobalSymbol {
     pub name: String,
-    /// The resolved (non-generic) type name, e.g. `int`, `string`, `Point`.
-    pub type_str: String,
+    pub ty: dream_types::TypeId,
     pub is_const: bool,
     pub visibility: dream_syntax::nodes::Visibility,
     /// Source file this global was declared in, for file/module-level visibility. `None` for
@@ -153,7 +156,8 @@ pub struct SemanticInfo<'a> {
     pub hash_map: HashMap<String, Rc<RefCell<SymbolTable>>>,
     pub function_table: &'a FunctionTable,
     pub struct_table: &'a StructTable,
-    pub instantiated_generics: IndexMap<String, (GenericBindings, &'a FunctionNode<'a>)>,
+    pub instantiated_generics:
+        IndexMap<crate::function_table::FunctionIdentity, (GenericBindings, &'a FunctionNode<'a>)>,
     pub struct_methods: Vec<(&'a FunctionNode<'a>, GenericBindings)>,
     pub enums: EnumTable,
     /// Layout of every (monomorphized) discriminated union, surfaced to codegen so it can
@@ -181,6 +185,7 @@ pub(super) enum MemberField {
     /// field" diagnostic has already been reported.
     Field {
         struct_name: String,
+        struct_ty: dream_types::TypeId,
         field_type: Type,
     },
     /// The receiver's type is not a class/struct.
@@ -189,7 +194,10 @@ pub(super) enum MemberField {
     StructNotFound { struct_name: String },
     /// `member` is not a declared field of `struct_name` (the caller may still resolve it as a
     /// getter/setter accessor).
-    NotAField { struct_name: String },
+    NotAField {
+        struct_name: String,
+        struct_ty: dream_types::TypeId,
+    },
 }
 
 pub struct Analyzer<'a> {
@@ -198,8 +206,9 @@ pub struct Analyzer<'a> {
     function_table: FunctionTable,
     struct_table: StructTable,
     arena: &'a Bump,
-    generic_functions: HashMap<String, &'a FunctionNode<'a>>,
-    instantiated_generics: IndexMap<String, (GenericBindings, &'a FunctionNode<'a>)>,
+    generic_functions: IndexMap<dream_types::DefId, &'a FunctionNode<'a>>,
+    instantiated_generics:
+        IndexMap<crate::function_table::FunctionIdentity, (GenericBindings, &'a FunctionNode<'a>)>,
     /// Arrow-lambdas (capturing or not) lowered to synthesized top-level functions (`__lambda_0`,
     /// ...), keyed by their synthesized name, paired with the generic bindings active at the
     /// lambda literal's own use site (e.g. `TOut` -> `int` for a lambda written inside a
@@ -208,7 +217,7 @@ pub struct Analyzer<'a> {
     /// (see `analyze_pending_instantiations`), since a function's body cannot be analyzed while
     /// another function's analysis is already in progress. The lambda literal itself is never
     /// generic in v1 - only the *enclosing* context it was written in can be.
-    pending_lambdas: IndexMap<String, (&'a FunctionNode<'a>, GenericBindings)>,
+    pending_lambdas: IndexMap<dream_types::DefId, (&'a FunctionNode<'a>, GenericBindings)>,
     /// Counter used to name synthesized lambda functions uniquely (`__lambda_<n>`).
     lambda_counter: usize,
     /// Names, local to the function currently being analyzed, that a nested lambda captures — and
@@ -228,12 +237,12 @@ pub struct Analyzer<'a> {
     /// captured name's reads/writes through `env.<field>.value` instead of a plain local (see
     /// `identifiers::resolve_identifier`/`bindings::analyze_assignment`), and by
     /// `expressions::lambda` to build the matching `Closure_env_<n>` class + construction site.
-    closure_captures: HashMap<String, Vec<(String, Type)>>,
-    /// Resolved receiver modes (`"Owner::method"` -> Borrow/Unique) from the receiver-
+    closure_captures: HashMap<dream_types::DefId, Vec<(String, Type)>>,
+    /// Resolved receiver modes (concrete owner and method slot -> Borrow/Unique) from the receiver-
     /// exclusivity pass. Populated by `classify_receiver_modes` after body analysis on clean
     /// programs; consulted by dispatch metadata and borrow-collision checking.
     pub(in crate::analyzer) receiver_modes:
-        HashMap<String, dream_syntax::nodes::function::ReceiverMode>,
+        HashMap<(dream_types::TypeId, usize), dream_syntax::nodes::function::ReceiverMode>,
     /// Fun-typed locals whose initializer/last assignment was a *capturing* `fun(...)` value
     /// (`true`) or a known captureless one (`false`). Used at the JS boundary to reject stashed
     /// capturing lambdas (`let h: fun(js): void = (e) => { use(x); }; el.addEventListener(..., h)`)
@@ -259,10 +268,10 @@ pub struct Analyzer<'a> {
     /// `hir_build_intrinsics` (which need to emit a per-instantiation `(import ...)` or intrinsic
     /// binding for each of a generic class's `extern`/`@intrinsic` methods, mangled per instance)
     /// consult this list instead of `node.structs` to find every instantiation that needs one.
-    generic_struct_instances: Vec<(String, Vec<Type>)>,
+    generic_struct_instances: indexmap::IndexSet<dream_types::TypeId>,
     /// `@c` externs (by registered name) whose listed `fun` parameters need a per-target C wrapper,
     /// so a call site must pass a named function or a lambda literal there.
-    c_wrapped_fun_params: HashMap<String, Vec<usize>>,
+    c_wrapped_fun_params: HashMap<dream_types::DefId, Vec<usize>>,
     /// `@intrinsic` methods recorded at registration (`{Type}_{method}` DefId + key), including
     /// each generic monomorphization. [`hir_build_intrinsics`] merges this with free-function
     /// scan so codegen can dispatch by DefId.
@@ -277,7 +286,7 @@ pub struct Analyzer<'a> {
     /// Generic `extend Type<...> { ... }` templates (e.g. `extend Option<T> { ... }`), keyed by
     /// the extended type's name. Their methods are monomorphized alongside each concrete
     /// instantiation of the target generic union or struct (see `ensure_*_instantiated`).
-    generic_extends: HashMap<String, Vec<&'a ExtendNode<'a>>>,
+    generic_extends: IndexMap<GenericExtendTarget, Vec<&'a ExtendNode<'a>>>,
     /// Interface name -> its method signatures in declaration order (the order is the interface's
     /// local method index, used for itable slot assignment). Each entry is a body-less
     /// [`FunctionNode`] (no implicit `this`). For interfaces that extend parents, this list is the
@@ -296,14 +305,14 @@ pub struct Analyzer<'a> {
         HashMap<dream_types::DefId, &'a dream_syntax::nodes::InterfaceDeclarationNode<'a>>,
     /// Concrete interface name (mangled) -> immediate parent concrete interface names, recorded
     /// when the child's method list is flattened. Used to expand `implements` transitively.
-    interface_parent_instances: HashMap<String, Vec<String>>,
+    interface_parent_instances: HashMap<dream_types::TypeId, Vec<dream_types::TypeId>>,
     /// Mangled interface instances that already received `extend Iface<T>` package methods. Parent
     /// flattening can create `Collection_int` before `ensure_interface_instantiated("Collection")`
     /// runs; without this set the early-return would skip attaching `to_list`/`filter`/….
-    interface_extensions_attached: HashSet<String>,
+    interface_extensions_attached: HashSet<dream_types::TypeId>,
     /// Concrete array types (`int[]`, `Point[]`, …) that have already been monomorphized from the
     /// generic `extend T[] : IndexedCollection<T>` template.
-    array_collections_attached: HashSet<String>,
+    array_collections_attached: HashSet<dream_types::TypeId>,
     /// Class name -> the interfaces it implements (in `class C : A, B` order), recorded after the
     /// implements clause is validated. Names are mangled for generic instances (e.g. `Box_int` ->
     /// `Container_int`). Drives interface-typed assignability and itable emission. Includes
@@ -314,17 +323,19 @@ pub struct Analyzer<'a> {
     /// [`declarations::operator_overloads::Analyzer::validate_and_register_operator`] and consulted
     /// by `expressions::operators`/`expressions::dispatch`/`expressions::casts` to dispatch
     /// operators and user-defined conversions to the right method.
-    operator_overloads: HashMap<String, declarations::operator_overloads::OperatorOverloads>,
+    operator_overloads:
+        HashMap<dream_types::TypeId, declarations::operator_overloads::OperatorOverloads>,
     /// Type name (mangled for generic instances) -> `@get_indexer`/`@set_indexer`/`@iterator`/`@next` hooks,
     /// populated by [`declarations::protocol_hooks`] and consulted by indexer/`for..in` desugar.
-    protocol_hooks: HashMap<String, declarations::protocol_hooks::ProtocolHooks>,
+    protocol_hooks: HashMap<dream_types::TypeId, declarations::protocol_hooks::ProtocolHooks>,
     /// Names of types declared `sealed` (class/struct/enum). A user `extend` block may not target
     /// any of these; compiler-synthesized extends (interface defaults) are exempt.
-    sealed_types: HashSet<String>,
+    sealed_types: HashSet<dream_types::DefId>,
     /// File/module-level visibility for enums and interfaces (types not tracked in the struct
     /// table): type name -> (declaring file, visibility). A non-public entry is only referenceable
     /// per [`Analyzer::visible_across_files`]. Absent or `None` file means always visible.
-    type_visibility: HashMap<String, (Option<Rc<str>>, dream_syntax::nodes::Visibility)>,
+    type_visibility:
+        HashMap<dream_types::DefId, (Option<Rc<str>>, dream_syntax::nodes::Visibility)>,
     /// Sink RC params moved into a field/index store; further uses of the binding are errors.
     moved_locals: HashSet<String>,
     /// An optional expected type for the expression currently being analyzed (from a `let`
@@ -440,7 +451,7 @@ impl<'a> Analyzer<'a> {
             capturing_fun_locals: HashMap::new(),
             is_binding_aliases: Vec::new(),
             generic_structs: HashMap::new(),
-            generic_struct_instances: Vec::new(),
+            generic_struct_instances: indexmap::IndexSet::new(),
             c_wrapped_fun_params: HashMap::new(),
             intrinsic_defs: Vec::new(),
             struct_methods: Vec::new(),

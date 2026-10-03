@@ -17,35 +17,8 @@ pub(super) fn lookup_binding(bindings: &GenericBindings, name: &str) -> Option<T
     bindings.get(name).cloned()
 }
 
-/// Builds a mangled function name by appending each concrete type from the bindings in order,
-/// e.g. base `swap` with bindings `[(T,int),(V,string)]` becomes `swap_int_string`. The mangled
-/// spelling is a WASM-symbol concern, so the concrete `Type`s are stringified only here.
-pub(super) fn mangle_bindings(base: &str, bindings: &GenericBindings) -> String {
-    mangle_with_suffixes(base, bindings.values().map(|concrete| concrete.get_type()))
-}
-
-/// Rewrites a field type token that refers to a generic parameter (e.g. `T`, `T[]`)
-/// into its concrete form, preserving the array suffix. Tokens that do not name a
-/// generic parameter are returned unchanged.
-pub(super) fn substitute_generic_token(
-    token: &SyntaxToken,
-    bindings: &GenericBindings,
-) -> SyntaxToken {
-    let mut result = token.clone();
-    let (base, suffix) = if let Some(base) = token.text.strip_suffix("[]") {
-        (base, "[]")
-    } else {
-        (token.text.as_str(), "")
-    };
-    if let Some(concrete) = lookup_binding(bindings, base) {
-        result.text = format!("{}{}", concrete.get_type(), suffix);
-    }
-    result
-}
-
 /// Rewrites a structured field type, substituting any generic parameter that appears in it with
-/// its bound concrete type. Unlike `substitute_generic_token` (which only understands `T`, `T[]`
-/// on a flat token), this recurses through arrays, generic arguments, and function types, so a
+/// its bound concrete type. This recurses through arrays, generic arguments, and function types, so a
 /// field like `List<T>` becomes `List<JsonValue>` rather than being flattened.
 pub fn substitute_generic_type(ty: &Type, bindings: &GenericBindings) -> Type {
     match ty {

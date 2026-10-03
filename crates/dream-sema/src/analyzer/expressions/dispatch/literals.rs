@@ -22,9 +22,17 @@ impl<'a> Analyzer<'a> {
                         )? {
                             return Ok(t);
                         }
-                        if self.enum_members(&base.text).is_some() {
+                        if let Some(def) = self
+                            .type_ctx
+                            .resolve(dream_types::DefKind::Enum, &base.text)
+                            .filter(|&def| self.enum_members(def).is_some())
+                        {
                             let enum_ty = Type::Struct(base.clone(), None);
-                            match self.enum_member_value(&base.text, &member.text) {
+                            match self
+                                .enum_members(def)
+                                .and_then(|members| members.get(&member.text))
+                                .copied()
+                            {
                                 Some(value) => self.hir_set_enum_value(value as i64, &enum_ty),
                                 None => {
                                     diagnostics.report_error(

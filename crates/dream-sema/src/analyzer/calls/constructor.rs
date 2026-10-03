@@ -2,11 +2,8 @@ use super::super::*;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::{FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
-use dream_syntax::token::token_kind::TokenKind;
-use dream_types::constructor_fn;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -25,34 +22,24 @@ impl<'a> Analyzer<'a> {
         &mut self,
         name: &SyntaxToken,
         generic_args: &Option<Vec<Type>>,
-        params_types: &mut Vec<String>,
+        params_types: &mut Vec<dream_types::TypeId>,
         arg_hirs: &mut Vec<Option<dream_hir::HExpr>>,
         parent_function: &FunctionNode<'a>,
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
-    ) -> Result<(Type, Option<String>), SemanticError> {
-        let struct_name = match generic_args {
-            Some(args) if !args.is_empty() => {
-                self.ensure_struct_instantiated(&name.text, args, &name.position, diagnostics);
-                mangle_generic(&name.text, args)
-            }
-            _ => {
-                if self.generic_struct(&name.text).is_some() {
-                    diagnostics.report_error(
-                        format!(
-                            "Generic class '{}' requires type arguments, e.g. {}<int>(...)",
-                            name.text, name.text
-                        ),
-                        Some(name.position),
-                    );
-                }
-                name.text.clone()
-            }
-        };
+    ) -> Result<(Type, Option<crate::function_table::FunctionIdentity>), SemanticError> {
+        if let Some(args) = generic_args { self.ensure_struct_instantiated(&name.text, args, &name.position, diagnostics); }
+        let result = Type::Struct(name.clone(), generic_args.clone());
+        let owner = self.type_ctx.lower(&result);
+        let struct_name = self.type_id_display(owner);
+        let ctor_member = dream_syntax::nodes::types::CONSTRUCTOR_NAME;
+        if generic_args.is_none() && self.type_ctx.resolve(DefKind::Struct, &name.text).is_some_and(|def| self.generic_struct(def).is_some()) {
+            diagnostics.report_error(format!("Generic class '{}' requires type arguments", name.text), Some(name.position));
+        }
 
         // File/module-level visibility (Axis 2): a non-public class is only constructible from its
         // own file.
-        if let Some(info) = self.struct_info(&struct_name) {
+        if let Some(info) = self.struct_info(owner) {
             if !self.visible_across_files(
                 &info.file_path,
                 info.visibility,
@@ -63,35 +50,15 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        let base_init_name = constructor_fn(&struct_name);
-        let init_name = self
-            .type_ctx
-            .resolve(DefKind::Struct, &name.text)
-            .and_then(|def| {
-                self.function_table.resolve_item_namespace(
-                    &self.type_ctx.defs.get(def).module_path,
-                    &base_init_name,
-                )
-            })
-            .unwrap_or(base_init_name);
-        if std::env::var("DREAM_TRACE_CTOR").is_ok() {
-            eprintln!(
-                "[ctor] {} init_name={} has_fn={} overloaded={}",
-                struct_name,
-                init_name,
-                self.function_table.get_function(&init_name).is_ok(),
-                self.function_table.is_overloaded(&init_name),
-            );
-        }
         // A struct with more than one `constructor` overload is resolved exactly like an
         // overloaded free function/method: the implicit `this` (the struct itself) plus the given
         // argument types are matched against every registered overload's full parameter list.
         let resolved_ctor: Option<crate::function_table::FunctionTableInfo> =
-            if self.function_table.is_overloaded(&init_name) {
+            if self.method_overloaded(owner, ctor_member) {
                 let mut selection_args = Vec::with_capacity(params_types.len() + 1);
-                selection_args.push(struct_name.clone());
+                selection_args.push(owner);
                 selection_args.extend(params_types.iter().cloned());
-                match self.select_function_overload(&init_name, &selection_args) {
+                match self.select_method_overload(owner, ctor_member, &selection_args) {
                     Ok(sig) => Some(sig),
                     Err(message) => {
                         diagnostics.report_error(message, Some(name.position));
@@ -99,7 +66,7 @@ impl<'a> Analyzer<'a> {
                     }
                 }
             } else {
-                self.function_table.get_function(&init_name).ok()
+                self.method_info(owner, ctor_member).ok()
             };
 
         // Class-member visibility (Axis 2): a private constructor is only callable from the
@@ -110,14 +77,14 @@ impl<'a> Analyzer<'a> {
                 Self::resolve_struct_parts(&Type::Struct(name.clone(), generic_args.clone()))
                     .unwrap_or_else(|| (struct_name.clone(), vec![]));
             let struct_file = self
-                .struct_info(&struct_name)
+                .struct_info(owner)
                 .and_then(|info| info.file_path.clone())
                 .or_else(|| sig.declaring_file.clone());
             if !self.member_accessible(
                 sig.visibility,
                 &struct_file,
                 parent_function.file_path.as_ref(),
-                self.in_methods_of(parent_function, &base_name),
+                self.in_methods_of(parent_function, owner),
             ) {
                 diagnostics.report_error(
                     format!("constructor of '{}' is not accessible here", base_name),
@@ -132,9 +99,9 @@ impl<'a> Analyzer<'a> {
         // An overloaded constructor whose resolution already failed above skips the redundant
         // arity/type re-check below (its own error was already reported).
         let overload_resolution_failed =
-            resolved_ctor.is_none() && self.function_table.is_overloaded(&init_name);
+            resolved_ctor.is_none() && self.method_overloaded(owner, ctor_member);
         let (expected, expected_defaults, expected_param_tys): (
-            Vec<String>,
+            Vec<dream_types::TypeId>,
             Vec<Option<Type>>,
             Vec<Type>,
         ) = match &resolved_ctor {
@@ -186,11 +153,8 @@ impl<'a> Analyzer<'a> {
         }
 
         Ok((
-            Type::Struct(
-                synthetic_token(TokenKind::IdentifierToken, &struct_name),
-                None,
-            ),
-            resolved_ctor.map(|sig| sig.name),
+            result,
+            resolved_ctor.map(|sig| sig.identity),
         ))
     }
 }

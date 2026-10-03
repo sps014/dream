@@ -34,9 +34,12 @@ impl<'a> Analyzer<'a> {
         // through a boxed closure value (see `hir_set_indirect_call`/`hir_read_closure_env`).
         // Registered here, first, so it exists before any function body can reference it and never
         // collides with a user global's id (this loop assigns ids by registration order below).
-        self.hir_register_global("__closure_env", "int", false);
+        let env_ty = self.type_ctx.interner.int();
+        self.hir_register_global("__closure_env", env_ty, false);
 
         for global in node.globals.iter() {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(global.file_path.as_deref()));
             diagnostics.file_path = file_path_string(&global.file_path);
             self.check_reserved_name(&global.name, "variable", diagnostics);
 
@@ -57,18 +60,18 @@ impl<'a> Analyzer<'a> {
             self.current_expected_type = global.declared_type.clone();
             let init_type = self
                 .analyze_expression(&global.initializer, &init_fn, &gtable, diagnostics)
-                .unwrap_or(Type::Void);
+                .unwrap_or(Type::Unknown);
             self.current_expected_type = saved_expected;
             self.hir_global_init_finish(&global.name.text);
 
             let resolved = match &global.declared_type {
                 Some(declared) => {
                     self.check_type_not_static_class(declared, diagnostics);
-                    let dt = declared.get_type();
-                    let it = init_type.get_type();
-                    let numeric = dream_syntax::nodes::types::is_numeric_primitive(&dt)
-                        && dream_syntax::nodes::types::is_numeric_primitive(&it);
-                    if !numeric && it != "void" && !self.type_str_assignable(&dt, &it) {
+                    let expected = self.type_ctx.lower(declared);
+                    let given = self.type_ctx.lower(&init_type);
+                    let numeric = matches!(self.type_ctx.interner.kind(expected), dream_types::TyKind::Prim(p) if p.is_numeric())
+                        && matches!(self.type_ctx.interner.kind(given), dream_types::TyKind::Prim(p) if p.is_numeric());
+                    if !numeric && !self.value_type_assignable(expected, given, diagnostics) {
                         diagnostics.report_error(
                             format!(
                                 "Top-level variable '{}' is declared '{}' but initialized with '{}'",
@@ -92,16 +95,17 @@ impl<'a> Analyzer<'a> {
                 }
             }
 
+            let ty = self.type_ctx.lower(&resolved);
             self.globals.push(GlobalSymbol {
                 name: global.name.text.clone(),
-                type_str: resolved.get_type(),
+                ty,
                 is_const: global.is_const,
                 visibility: global.visibility,
                 file_path: global.file_path.clone(),
             });
             // Register the HIR slot now (in declaration order) so a subsequent global's initializer
             // can resolve this one as a `Binding::Global`.
-            self.hir_register_global(&global.name.text, &resolved.get_type(), global.is_const);
+            self.hir_register_global(&global.name.text, ty, global.is_const);
         }
     }
 }

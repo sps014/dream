@@ -5,11 +5,9 @@ use super::*;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::{StatementNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
-use dream_types::method_fn;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -17,8 +15,8 @@ use std::rc::Rc;
 pub(super) struct ListAccessors {
     list: Type,
     element: Type,
-    length: String,
-    at: String,
+    length: crate::function_table::FunctionIdentity,
+    at: crate::function_table::FunctionIdentity,
 }
 
 impl<'a> Analyzer<'a> {
@@ -28,38 +26,32 @@ impl<'a> Analyzer<'a> {
         ty: &Type,
         diagnostics: &mut DiagnosticBag,
     ) -> Option<ListAccessors> {
-        let (mut base, mut args) = Self::resolve_struct_parts(ty)?;
-        if args.is_empty() {
-            let (b, a) = self
-                .generic_struct_instances
-                .iter()
-                .find(|(b, a)| b == "List" && mangle_generic(b, a) == base)?;
-            (base, args) = (b.clone(), a.clone());
-        }
-        if base != "List" || args.len() != 1 {
+        let id = self.type_ctx.lower(ty);
+        let dream_types::TyKind::Struct(def, args) = self.type_ctx.interner.kind(id).clone() else {
             return None;
-        }
-        let from_std = self
-            .generic_struct("List")
-            .and_then(|t| t.file_path.as_deref())
-            .is_some_and(dream_stdlib::is_std_source);
-        if !from_std {
-            return None;
-        }
-        self.ensure_type_instantiated(&base, &args, &empty_span(), diagnostics);
-        let mono = mangle_generic(&base, &args);
-        let length = method_fn(&mono, &getter_member_name("length"));
-        let at = method_fn(&mono, "at_unchecked");
-        let resolves = |name: &str| {
-            self.function_table.get_function(name).is_ok()
-                && self
-                    .type_ctx
-                    .resolve(dream_types::DefKind::Function, name)
-                    .is_some()
         };
-        if !resolves(&length) || !resolves(&at) {
+        let template = *self.generic_struct(def)?;
+        if template.name.text != "List"
+            || args.len() != 1
+            || !template
+                .file_path
+                .as_deref()
+                .is_some_and(dream_stdlib::is_std_source)
+        {
             return None;
         }
+        let base = self.type_ctx.syntax_type(id);
+        let (name, arguments) = Self::resolve_struct_parts(&base)?;
+        self.ensure_type_instantiated(&name, &arguments, &empty_span(), diagnostics);
+        let length = self
+            .method_info(id, &getter_member_name("length"))
+            .ok()?
+            .identity;
+        let at = self.method_info(id, "at_unchecked").ok()?.identity;
+        let args: Vec<_> = args
+            .iter()
+            .map(|&arg| self.type_ctx.syntax_type(arg))
+            .collect();
         Some(ListAccessors {
             list: ty.clone(),
             element: args[0].clone(),

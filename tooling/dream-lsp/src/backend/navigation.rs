@@ -76,6 +76,9 @@ impl Backend {
             .and_then(|snapshot| snapshot.ref_covering(offset))
             .map(|reference| &reference.target)
         {
+            let own_source = sema
+                .as_ref()
+                .is_some_and(|snapshot| source.file == snapshot.primary_file);
             return Ok(Self::location_at(
                 &uri,
                 &text,
@@ -84,7 +87,7 @@ impl Backend {
                 source
                     .file
                     .as_deref()
-                    .filter(|file| *file != crate::analysis::MAIN_FILE),
+                    .filter(|file| !own_source && *file != crate::analysis::MAIN_FILE),
             )
             .map(GotoDefinitionResponse::Scalar));
         }
@@ -194,6 +197,42 @@ impl Backend {
                 },
             });
         }
+        if include_decl {
+            if let Some(snapshot) = &sema {
+                if let Some(dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. }) =
+                    snapshot.ref_covering(offset).map(|r| &r.target)
+                {
+                    if source.file != snapshot.primary_file {
+                        if let Some(location) = Self::location_at(
+                            &uri,
+                            &text,
+                            source.start,
+                            source.end,
+                            source.file.as_deref(),
+                        ) {
+                            locations.push(location);
+                        }
+                    }
+                }
+            }
+        }
+        locations.sort_by(|a, b| {
+            a.uri.as_str().cmp(b.uri.as_str()).then_with(|| {
+                (
+                    a.range.start.line,
+                    a.range.start.character,
+                    a.range.end.line,
+                    a.range.end.character,
+                )
+                    .cmp(&(
+                        b.range.start.line,
+                        b.range.start.character,
+                        b.range.end.line,
+                        b.range.end.character,
+                    ))
+            })
+        });
+        locations.dedup();
         Ok(Some(locations))
     }
 
@@ -250,10 +289,14 @@ impl Backend {
         };
         let line_index = LineIndex::new(&text);
         let offset = line_index.offset(params.position.line, params.position.character);
-        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
+        let Some((idx, sema)) = self.models_for(&key, Self::file_path_of(&uri).as_deref()) else {
             return Ok(None);
         };
-        let Some(decl) = idx.decl_for_offset(offset) else {
+        let decl = match &sema {
+            Some(snapshot) => crate::sema_ide::rename_decl_at(snapshot, &idx, offset),
+            None => idx.decl_for_offset(offset),
+        };
+        let Some(decl) = decl else {
             return Ok(None);
         };
         // Only rename symbols whose declaration lives in this document.
@@ -264,8 +307,11 @@ impl Backend {
             return Ok(None);
         }
         // Prefer the identifier under the cursor (ref or decl span).
-        let (start, end) = idx
-            .references(offset, true)
+        let (start, end) = sema
+            .as_ref()
+            .and_then(|s| Self::precise_references(&idx, s, offset))
+            .map(|(_, spans)| spans)
+            .unwrap_or_else(|| idx.references(offset, true))
             .into_iter()
             .find(|(s, e)| *s <= offset && offset <= *e)
             .unwrap_or((decl.start, decl.end));
@@ -292,7 +338,11 @@ impl Backend {
         let Some((idx, sema)) = self.models_for(&key, Self::file_path_of(&uri).as_deref()) else {
             return Ok(None);
         };
-        let Some(decl) = idx.decl_for_offset(offset) else {
+        let decl = match &sema {
+            Some(snapshot) => crate::sema_ide::rename_decl_at(snapshot, &idx, offset),
+            None => idx.decl_for_offset(offset),
+        };
+        let Some(decl) = decl else {
             return Ok(None);
         };
         if !decl.is_main || decl.file_path.is_some() {
@@ -367,7 +417,14 @@ impl Backend {
                 let Some(other_sema) = other_sema else {
                     continue;
                 };
-                let spans = crate::sema_ide::references_in(&other_sema, target);
+                let mut spans = crate::sema_ide::references_in(&other_sema, target);
+                if let dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. } = target {
+                    if source.file == other_sema.primary_file {
+                        spans.push((source.start, source.end));
+                    }
+                }
+                spans.sort_unstable();
+                spans.dedup();
                 push_edits(&other_key, spans);
             }
         }

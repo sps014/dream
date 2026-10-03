@@ -18,22 +18,10 @@ impl<'a> Analyzer<'a> {
             }
             diagnostics.file_path = file_path_string(&function.file_path);
             let table = self.analyze_function(function, diagnostics)?;
-            // Key the symbol table by the emitted name so overloaded functions (which share a
-            // base name but emit distinct mangled names) each get their own entry, matching the
-            // name codegen uses.
-            let param_types: Vec<Type> = function
-                .parameters
-                .iter()
-                .map(|p| p.type_.clone())
-                .collect();
-            let module = self.module_of(function.file_path.as_ref());
-            let key = self.function_table.resolve_emitted_name_scoped(
-                &function.name.text,
-                module.as_ref(),
-                &param_types,
-                &mut self.type_ctx,
-            );
-            symbol_table_map.insert(key, table);
+            if let Some(identity) = self.function_declaration(function) {
+                let key = self.function_table.emitted_name(&self.type_ctx, &identity);
+                symbol_table_map.insert(key, table);
+            }
         }
         Ok(())
     }
@@ -51,7 +39,7 @@ impl<'a> Analyzer<'a> {
         symbol_table_map: &mut HashMap<String, Rc<RefCell<SymbolTable>>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
-        let mut processed_generics: indexmap::IndexSet<String> = indexmap::IndexSet::new();
+        let mut processed_generics: indexmap::IndexSet<crate::function_table::FunctionIdentity> = indexmap::IndexSet::new();
         let mut method_index = 0;
         // A generic whose field types amplify under substitution (e.g. a `List<fun(T): bool>`
         // field on `class C<T>` combined with something returning `C<fun(T): bool>`) expands
@@ -64,7 +52,7 @@ impl<'a> Analyzer<'a> {
             let mut progressed = false;
 
             // Monomorphized generic function instances (e.g. `List<JsonValue>`, `swap_int_string`).
-            let pending: Vec<String> = self
+            let pending: Vec<crate::function_table::FunctionIdentity> = self
                 .instantiated_generics
                 .keys()
                 .filter(|k| !processed_generics.contains(*k))
@@ -85,29 +73,29 @@ impl<'a> Analyzer<'a> {
                 check_instantiation_bounds(
                     &mut max_mangled_len,
                     &mut items_processed,
-                    &mangled_name,
+                    &self.function_table.emitted_name(&self.type_ctx, &mangled_name),
                     diagnostics,
                 )?;
-                symbol_table_map.insert(mangled_name, table);
+                symbol_table_map.insert(self.function_table.emitted_name(&self.type_ctx, &mangled_name), table);
             }
 
             // Arrow-lambdas lowered to synthesized top-level functions (see `expressions::lambda`).
             // The lambda literal itself is never generic in v1, but the *enclosing* method it was
             // written in might be (e.g. a lambda inside a `Task.map<T, TOut>` method) - re-apply
             // the bindings captured at its use site so its body sees the same substitution.
-            let pending_lambdas: Vec<String> = self
+            let pending_lambdas: Vec<dream_types::DefId> = self
                 .pending_lambdas
                 .keys()
-                .filter(|k| !processed_generics.contains(*k))
+                .filter(|k| !processed_generics.contains(&(**k, Vec::new())))
                 .cloned()
                 .collect();
             for name in pending_lambdas {
-                processed_generics.insert(name.clone());
+                processed_generics.insert((name, Vec::new()));
                 items_processed += 1;
                 check_instantiation_bounds(
                     &mut max_mangled_len,
                     &mut items_processed,
-                    &name,
+                    self.type_ctx.defs.name(name),
                     diagnostics,
                 )?;
                 let (template, bindings) = match self.pending_lambdas.get(&name) {
@@ -118,7 +106,7 @@ impl<'a> Analyzer<'a> {
                 let table = self.with_generic_bindings(bindings, |s| {
                     s.analyze_function(template, diagnostics)
                 })?;
-                symbol_table_map.insert(name, table);
+                symbol_table_map.insert(self.type_ctx.defs.name(name).to_string(), table);
                 progressed = true;
             }
 
@@ -129,15 +117,8 @@ impl<'a> Analyzer<'a> {
                 diagnostics.file_path = file_path_string(&method.file_path);
                 let table = self
                     .with_generic_bindings(bindings, |s| s.analyze_function(method, diagnostics))?;
-                // Key by the emitted name so overloaded methods each get a distinct entry (the
-                // parameter list includes the implicit `this`).
-                let param_types: Vec<Type> =
-                    method.parameters.iter().map(|p| p.type_.clone()).collect();
-                let key = self.function_table.resolve_emitted_name(
-                    &method.name.text,
-                    &param_types,
-                    &mut self.type_ctx,
-                );
+                let Some(identity) = self.function_declaration(method) else { continue; };
+                let key = self.function_table.emitted_name(&self.type_ctx, &identity);
                 items_processed += 1;
                 check_instantiation_bounds(
                     &mut max_mangled_len,

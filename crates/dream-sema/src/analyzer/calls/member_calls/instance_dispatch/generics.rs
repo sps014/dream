@@ -8,7 +8,7 @@ impl<'a> Analyzer<'a> {
     pub(crate) fn analyze_generic_instance_method(
         &mut self,
         template: &'a FunctionNode<'a>,
-        base: &str,
+        _base: &str,
         struct_name: &str,
         method: &SyntaxToken,
         generic_args: &Option<Vec<Type>>,
@@ -56,8 +56,9 @@ impl<'a> Analyzer<'a> {
         self.current_call_target_name = saved_call_target;
 
         // Align with the template's parameter list (index 0 is `this`) for inference.
-        let mut inference_types: Vec<String> = Vec::with_capacity(arg_types.len() + 1);
-        inference_types.push(struct_name.to_string());
+        let owner = receiver.as_ref().map(|hir| hir.ty).unwrap_or_else(|| self.type_ctx.lower(&template.parameters[0].type_));
+        let mut inference_types = Vec::with_capacity(arg_types.len() + 1);
+        inference_types.push(owner);
         inference_types.extend(arg_types.iter().cloned());
 
         let bindings = early_bindings.unwrap_or_else(|| {
@@ -74,13 +75,13 @@ impl<'a> Analyzer<'a> {
             template.visibility,
             &template.file_path,
             ctx.parent_function.file_path.as_ref(),
-            self.in_methods_of(ctx.parent_function, struct_name),
+            self.in_methods_of(ctx.parent_function, owner),
         ) {
             diagnostics.report_error(
                 format!(
                     "'{}' is private to '{}'",
                     method.text,
-                    self.ty_str_display(struct_name)
+                    self.type_id_display(owner)
                 ),
                 Some(method.position),
             );
@@ -92,13 +93,13 @@ impl<'a> Analyzer<'a> {
             &method.position,
             diagnostics,
         );
-        let mangled_name = self.register_generic_function_instance(template, &bindings);
+        let instance = self.register_generic_function_instance(template, &bindings);
 
-        let store_sig = match self.function_table.get_function(&mangled_name) {
+        let store_sig = match self.function_table.get_function(&instance) {
             Ok(sig) => sig,
             Err(_) => {
                 diagnostics.report_error(
-                    format!("Function '{}' could not be instantiated", mangled_name),
+                    format!("Function '{}' could not be instantiated", template.name.text),
                     Some(method.position),
                 );
                 return Ok(Type::Unknown);
@@ -154,12 +155,12 @@ impl<'a> Analyzer<'a> {
             let message = if required == total {
                 format!(
                     "function {} expects {} parameters, got {}",
-                    mangled_name, total, given
+                    method.text, total, given
                 )
             } else {
                 format!(
                     "function {} expects between {} and {} parameters, got {}",
-                    mangled_name, required, total, given
+                    method.text, required, total, given
                 )
             };
             diagnostics.report_error(message, Some(method.position));
@@ -177,30 +178,20 @@ impl<'a> Analyzer<'a> {
         )?;
 
         self.validate_arguments(
-            &format!("function {}", mangled_name),
+            &format!("function {}", method.text),
             &expected_params,
             &arg_types,
             method.position,
             diagnostics,
         );
 
-        let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type.clone());
-        let instance = bindings.values().map(|t| self.type_ctx.lower(t)).collect();
-        // `base` is the template's `{Type}_{method}` DefId shared by every monomorphization.
-        // `store_sig.is_take` is the instance's sink ABI (`take_params_for(base)` is empty).
-        self.hir_set_generic_method_call(
-            receiver,
-            base,
-            instance,
-            arg_hirs,
-            &ret_type,
-            store_sig.is_take.clone(),
-        );
+        let ret_type = Self::async_return_type(store_sig.is_async, Some(self.type_ctx.syntax_type(store_sig.resolved_return)));
+        self.hir_set_method_call(receiver, &store_sig.identity, arg_hirs, &ret_type);
         let call_summary = self.ide_summary(&ret_type);
         self.record_ide_ref(
             method.position,
             ide::IdeTarget::Callee {
-                key: mangled_name,
+                key: store_sig.identity.clone(),
                 label: method.text.clone(),
             },
             call_summary,

@@ -170,8 +170,8 @@ impl<'a> Analyzer<'a> {
         if ty.is_string() {
             return e;
         }
-        let base = ty.get_type();
-        if let Some(members) = self.enum_members(&base) {
+        if let dream_types::TyKind::Enum(def) = self.type_ctx.interner.kind(e.ty) {
+            let Some(members) = self.enum_members(*def) else { return e; };
             let arms: Vec<(i64, String)> = members
                 .iter()
                 .map(|(name, value)| (*value as i64, name.clone()))

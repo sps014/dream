@@ -304,7 +304,7 @@ fn test_empty_array_literal_infers_from_context() {
         c
     );
     assert!(
-        c.contains("Bag_constructor("),
+        c.contains("s0_3_Bag_0_constructor("),
         "field-init empty array should emit:\n{}",
         c
     );
@@ -386,12 +386,12 @@ fn test_hir_emission_extend_nongeneric_class() {
     ";
     let (c, _count) = emit_hir_to_ir(code);
     assert!(
-        c.contains("define internal i32 @Point_getx("),
+        c.contains("define internal i32 @s0_5_Point_0_getx("),
         "extend method body should emit:\n{}",
         c
     );
     assert!(
-        c.contains("call i32 @Point_getx(ptr "),
+        c.contains("call i32 @s0_5_Point_0_getx(ptr "),
         "call should resolve to the extend method:\n{}",
         c
     );
@@ -408,12 +408,12 @@ fn test_hir_emission_extend_generic_class() {
     ";
     let (c, _count) = emit_hir_to_ir(code);
     assert!(
-        c.contains("define internal i32 @Box_int_peek("),
+        c.contains("define internal i32 @s0_3_Box_1_6_p3_5fint_peek("),
         "generic extend method should emit:\n{}",
         c
     );
     assert!(
-        c.contains("call i32 @Box_int_peek(ptr "),
+        c.contains("call i32 @s0_3_Box_1_6_p3_5fint_peek(ptr "),
         "call should resolve to the instance:\n{}",
         c
     );
@@ -434,7 +434,7 @@ fn test_hir_emission_destructor_body() {
     ";
     let (c, _count) = emit_hir_to_ir(code);
     assert!(
-        c.contains("define internal void @Res_del("),
+        c.contains("define internal void @s0_3_Res_0_del("),
         "destructor body should emit:\n{}",
         c
     );
@@ -464,7 +464,7 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
         c
     );
     assert!(
-        c.contains("call void @Node_del("),
+        c.contains("call void @s0_4_Node_0_del("),
         "destructor not invoked from release:\n{}",
         c
     );
@@ -505,7 +505,7 @@ fn test_hir_emission_user_constructor() {
         c
     );
     assert!(
-        c.contains("define internal void @Point_constructor("),
+        c.contains("define internal void @s0_5_Point_0_constructor("),
         "constructor body should emit:\n{}",
         c
     );
@@ -515,7 +515,7 @@ fn test_hir_emission_user_constructor() {
         c
     );
     assert!(
-        c.contains("call void @Point_constructor(") && c.contains("i32 1, i32 2)"),
+        c.contains("call void @s0_5_Point_0_constructor(") && c.contains("i32 1, i32 2)"),
         "construction should invoke the user constructor:\n{}",
         c
     );
@@ -543,7 +543,7 @@ fn test_hir_emission_generic_struct_construction_and_field() {
         c
     );
     assert!(
-        c.contains("define internal void @Box_int_constructor("),
+        c.contains("define internal void @s0_3_Box_1_6_p3_5fint_constructor("),
         "the monomorphized constructor should emit:\n{}",
         c
     );
@@ -566,12 +566,12 @@ fn test_hir_emission_generic_struct_method_instance() {
     ";
     let (c, _count) = emit_hir_to_ir(code);
     assert!(
-        c.contains("define internal i32 @Box_int_get("),
+        c.contains("define internal i32 @s0_3_Box_1_6_p3_5fint_get("),
         "generic-struct method body should emit under its mangled name:\n{}",
         c
     );
     assert!(
-        c.contains("call i32 @Box_int_get(ptr "),
+        c.contains("call i32 @s0_3_Box_1_6_p3_5fint_get(ptr "),
         "instance call should dispatch to the mangled method:\n{}",
         c
     );
@@ -1531,7 +1531,7 @@ fn test_hir_emission_method_body_and_instance_call() {
         c
     );
     assert!(
-        c.contains("define internal i32 @Box_get("),
+        c.contains("define internal i32 @s0_3_Box_0_get("),
         "missing emitted method body:\n{}",
         c
     );
@@ -1541,7 +1541,7 @@ fn test_hir_emission_method_body_and_instance_call() {
         c
     );
     assert!(
-        c.contains("call i32 @Box_get(ptr "),
+        c.contains("call i32 @s0_3_Box_0_get(ptr "),
         "instance call should dispatch to the method:\n{}",
         c
     );
@@ -1562,12 +1562,12 @@ fn test_hir_emission_static_call() {
         c
     );
     assert!(
-        c.contains("define internal i32 @M_id("),
+        c.contains("define internal i32 @s0_1_M_0_id("),
         "missing emitted static method:\n{}",
         c
     );
     assert!(
-        c.contains("call i32 @M_id(i32 7)"),
+        c.contains("call i32 @s0_1_M_0_id(i32 7)"),
         "static call should dispatch to the method:\n{}",
         c
     );

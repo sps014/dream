@@ -85,7 +85,10 @@ impl<'a> Analyzer<'a> {
         // locals as far as the body is concerned (its runtime storage, an unboxed `.value` read
         // through a `CaptureCell<T>` populated from `$__closure_env`, is purely a `hir_begin_function`
         // concern; see the capturing-lambda prologue there).
-        if let Some(captures) = self.closure_captures.get(&function.name.text) {
+        let function_def = self
+            .function_declaration(function)
+            .map(|identity| identity.0);
+        if let Some(captures) = function_def.and_then(|def| self.closure_captures.get(&def)) {
             for (cap_name, cap_ty) in captures.clone() {
                 let _ = param_table.add_symbol(cap_name, cap_ty);
             }

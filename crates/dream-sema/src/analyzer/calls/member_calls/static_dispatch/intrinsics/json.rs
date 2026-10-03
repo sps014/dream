@@ -4,7 +4,7 @@ impl<'a> Analyzer<'a> {
     pub(super) fn analyze_json_intrinsic(
         &mut self,
         call: &GenericStaticMethodCall<'a, '_>,
-        params_types: Vec<String>,
+        params_types: Vec<dream_types::TypeId>,
         arg_hirs: Vec<Option<dream_hir::HExpr>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
@@ -21,9 +21,12 @@ impl<'a> Analyzer<'a> {
         // through the typed parser (no `JsonValue` tree); unions and collection `T` keep parse +
         // `from_json`.
         let json_op = intrinsics::IntrinsicOp::from_attributes(&template.attributes);
+        let json_ty = self
+            .type_ctx
+            .resolved_type("Json")
+            .unwrap_or_else(|| self.type_ctx.interner.error());
         if json_op == Some(intrinsics::IntrinsicOp::JsonSerialize) {
             use dream_hir::{Binding, HExpr, HExprKind};
-            use dream_types::{constructor_fn, DefKind};
 
             let named = |name: &str| -> Type {
                 let mut t = method.clone();
@@ -32,12 +35,13 @@ impl<'a> Analyzer<'a> {
             };
             let struct_name = params_types
                 .first()
-                .map(|s| s.trim_end_matches('?').to_string())
+                .map(|&ty| self.type_ctx.syntax_type(ty).get_type())
                 .unwrap_or_default();
             let value = arg_hirs.into_iter().next().flatten();
             if struct_name == "JsonValue" {
-                self.hir_set_call(
-                    &method_fn("Json", "_stringify"),
+                self.hir_set_type_method_call(
+                    json_ty,
+                    "_stringify",
                     vec![value],
                     &named("string"),
                 );
@@ -46,9 +50,9 @@ impl<'a> Analyzer<'a> {
             let sb_ty = named("StringBuilder");
             let string_ty = named("string");
             let sb_local = self.hir_alloc_local("__json_sb", &sb_ty);
-            let ctor = self
-                .type_ctx
-                .resolve(DefKind::Function, &constructor_fn("StringBuilder"));
+            let sb_id = self.type_ctx.lower(&sb_ty);
+            let ctor =
+                self.unique_method_def(sb_id, dream_syntax::nodes::types::CONSTRUCTOR_NAME);
             let int_ty = self.type_ctx.interner.int();
             let capacity = HExpr::new(int_ty, HExprKind::IntLit(256));
             self.hir_set_new("StringBuilder", ctor, vec![Some(capacity)], &sb_ty);
@@ -57,10 +61,13 @@ impl<'a> Analyzer<'a> {
                 self.hir_assign_local_id(local, new_sb);
                 let sb_ty_id = self.type_ctx.lower(&sb_ty);
                 let sb_read = HExpr::new(sb_ty_id, HExprKind::Var(Binding::Local(local)));
-                let write_call = if let Some(adapter) = json_collection_write_fn(&struct_name) {
-                    adapter
-                } else {
-                    method_fn(&struct_name, "write_json")
+                let value_ty = params_types
+                    .first()
+                    .copied()
+                    .unwrap_or_else(|| self.type_ctx.interner.error());
+                let (write_owner, write_member) = match json_collection_write_fn(&struct_name) {
+                    Some(adapter) => (json_ty, adapter),
+                    None => (value_ty, "write_json".to_string()),
                 };
                 // Diagnose from the *type*, not from whether the generator has already emitted a
                 // writer. LSP analysis skips generators, so `Map<string, string>` has no adapter
@@ -70,7 +77,7 @@ impl<'a> Analyzer<'a> {
                         diagnostics.report_error(
                             format!(
                                 "'{}' cannot be serialized to JSON: it has no compile-time JSON encoding. Use 'JsonValue' for mixed or unknown data, or mark a named type '@json'",
-                                self.ty_str_display(&struct_name),
+                                self.type_id_display(arg.ty),
                             ),
                             Some(method.position),
                         );
@@ -97,7 +104,7 @@ impl<'a> Analyzer<'a> {
                         diagnostics.report_error(
                             format!(
                                 "'{}' cannot be the top-level type of 'Json.serialize': use int, double, bool, or string, or wrap it in a '@json' class",
-                                self.ty_str_display(&struct_name),
+                                self.type_id_display(value_ty),
                             ),
                             Some(method.position),
                         );
@@ -106,22 +113,28 @@ impl<'a> Analyzer<'a> {
                         return Ok(string_ty);
                     }
                     Some(writer) => {
-                        self.hir_set_call(
-                            &method_fn("Json", writer),
+                        self.hir_set_type_method_call(
+                            json_ty,
+                            writer,
                             vec![Some(sb_read), value],
                             &Type::Void,
                         );
                     }
                     None => {
-                        self.ensure_json_callee(&write_call);
-                        self.hir_set_call(&write_call, vec![value, Some(sb_read)], &Type::Void);
+                        self.hir_set_type_method_call(
+                            write_owner,
+                            &write_member,
+                            vec![value, Some(sb_read)],
+                            &Type::Void,
+                        );
                     }
                 }
                 let write_hir = self.hir_take();
                 self.hir_expr_stmt(write_hir);
                 let sb_read2 = HExpr::new(sb_ty_id, HExprKind::Var(Binding::Local(local)));
-                self.hir_set_call(
-                    &method_fn("StringBuilder", "build"),
+                self.hir_set_type_method_call(
+                    sb_ty_id,
+                    "build",
                     vec![Some(sb_read2)],
                     &string_ty,
                 );
@@ -152,10 +165,13 @@ impl<'a> Analyzer<'a> {
                 }
             };
             let struct_name = t_type.get_type().trim_end_matches('?').to_string();
-            let from_json_call = json_collection_de_fn(&struct_name)
-                .unwrap_or_else(|| method_fn(&struct_name, "from_json"));
             let text = arg_hirs.into_iter().next().flatten();
-            let is_union = self.union_info(t_type.get_type().as_str()).is_some();
+            let t_id = self.type_ctx.lower(&t_type);
+            let (from_json_owner, from_json_member) = match json_collection_de_fn(&struct_name) {
+                Some(adapter) => (json_ty, adapter),
+                None => (t_id, "from_json".to_string()),
+            };
+            let is_union = self.union_info(t_id).is_some();
             let typed_parser = json_collection_de_fn(&struct_name).is_none() && !is_union;
 
             let parse_err = named("ParseError");
@@ -198,7 +214,7 @@ impl<'a> Analyzer<'a> {
             }
 
             if struct_name == "JsonValue" {
-                self.hir_set_call(&method_fn("Json", "_parse"), vec![text], &result_ty);
+                self.hir_set_type_method_call(json_ty, "_parse", vec![text], &result_ty);
                 return Ok(result_ty);
             }
 
@@ -223,28 +239,22 @@ impl<'a> Analyzer<'a> {
             }
 
             if typed_parser {
-                let parser = method_fn(&struct_name, "from_json_parser_text");
-                self.ensure_json_callee(&parser);
-                self.hir_set_call(&parser, vec![text], &result_ty);
+                self.hir_set_type_method_call(t_id, "from_json_parser_text", vec![text], &result_ty);
                 return Ok(result_ty);
             }
 
-            self.ensure_json_callee(&from_json_call);
-            if is_union {
-                self.ensure_json_callee(&method_fn(&struct_name, "__json_check_variant"));
-            }
-            self.hir_set_call(&method_fn("Json", "_parse"), vec![text], &parse_result_ty);
+            self.hir_set_type_method_call(json_ty, "_parse", vec![text], &parse_result_ty);
             let parse_hir = self.hir_take();
 
-            let parse_mangled = parse_result_ty.get_type();
-            let result_mangled = result_ty.get_type();
-            let parse_info = self.union_info(&parse_mangled).cloned();
-            let parse_def = self
-                .type_ctx
-                .resolve(dream_types::DefKind::Union, &parse_mangled);
-            let result_def = self
-                .type_ctx
-                .resolve(dream_types::DefKind::Union, &result_mangled);
+            let parse_result_id = self.type_ctx.lower(&parse_result_ty);
+            let result_id = self.type_ctx.lower(&result_ty);
+            let parse_info = self.union_info(parse_result_id).cloned();
+            let union_def = |ctx: &dream_types::TypeCtx, ty| match ctx.interner.kind(ty) {
+                dream_types::TyKind::Union(def, _) => Some(*def),
+                _ => None,
+            };
+            let parse_def = union_def(&self.type_ctx, parse_result_id);
+            let result_def = union_def(&self.type_ctx, result_id);
 
             let (Some(parse_info), Some(parse_def), Some(result_def)) =
                 (parse_info, parse_def, result_def)
@@ -286,8 +296,9 @@ impl<'a> Analyzer<'a> {
                 let ty_id = self.type_ctx.lower(&json_value);
                 let read = HExpr::new(ty_id, HExprKind::Var(Binding::Local(local)));
                 if is_union {
-                    self.hir_set_call(
-                        &method_fn(&struct_name, "__json_check_variant"),
+                    self.hir_set_type_method_call(
+                        t_id,
+                        "__json_check_variant",
                         vec![Some(read)],
                         &parse_result_ty,
                     );
@@ -301,7 +312,12 @@ impl<'a> Analyzer<'a> {
                             let ty_id = self.type_ctx.lower(&json_value);
                             let read2 =
                                 HExpr::new(ty_id, HExprKind::Var(Binding::Local(inner_local)));
-                            self.hir_set_call(&from_json_call, vec![Some(read2)], &t_type);
+                            self.hir_set_type_method_call(
+                                from_json_owner,
+                                &from_json_member,
+                                vec![Some(read2)],
+                                &t_type,
+                            );
                             let from_json = self.hir_take();
                             self.hir_set_union_new(
                                 result_def,
@@ -353,7 +369,12 @@ impl<'a> Analyzer<'a> {
                         ok = false;
                     }
                 } else {
-                    self.hir_set_call(&from_json_call, vec![Some(read)], &t_type);
+                    self.hir_set_type_method_call(
+                        from_json_owner,
+                        &from_json_member,
+                        vec![Some(read)],
+                        &t_type,
+                    );
                     let from_json = self.hir_take();
                     self.hir_set_union_new(result_def, ok_disc, vec![from_json], &result_ty);
                     let wrapped = self.hir_take();
@@ -429,10 +450,10 @@ impl<'a> Analyzer<'a> {
                 self.hir_none();
                 return Ok(t_type);
             }
-            let from_json_call = json_collection_de_fn(&struct_name)
-                .unwrap_or_else(|| method_fn(&struct_name, "from_json"));
-            self.ensure_json_callee(&from_json_call);
-            self.hir_set_call(&from_json_call, vec![value], &t_type);
+            match json_collection_de_fn(&struct_name) {
+                Some(adapter) => self.hir_set_type_method_call(json_ty, &adapter, vec![value], &t_type),
+                None => self.hir_set_type_method_call(t_ty_id, "from_json", vec![value], &t_type),
+            }
             return Ok(t_type);
         }
 

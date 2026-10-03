@@ -34,13 +34,9 @@ impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn hir_register_global(
         &mut self,
         name: &str,
-        type_str: &str,
+        ty: TypeId,
         is_const: bool,
     ) {
-        let ty = self
-            .type_ctx
-            .resolved_type(type_str)
-            .unwrap_or_else(|| self.type_ctx.interner.error());
         let id = GlobalId(self.hir.globals.len() as u32);
         self.hir.globals.insert(name.to_string(), (id, ty));
         let init = self.hir.pending_global_inits.shift_remove(name);
@@ -134,15 +130,14 @@ impl<'a> Analyzer<'a> {
                 .get_struct(ty)
                 .is_some_and(|info| info.has_destructor)
             {
-                self.type_ctx.resolve(
-                    DefKind::Function,
-                    &dream_types::method_fn(&name, dream_syntax::nodes::types::DESTRUCTOR_NAME),
-                )
+                self.method_info(ty, dream_syntax::nodes::types::DESTRUCTOR_NAME).ok().map(|info| info.identity.0)
             } else {
                 None
             };
-            let name = if self.type_ctx.scope() == dream_types::ModuleId::ROOT {
-                name
+            let name = if matches!(self.type_ctx.interner.kind(ty), dream_types::TyKind::Struct(def, args)
+                if def.module == dream_types::ModuleId::ROOT && args.is_empty())
+            {
+                dream_types::function_symbol(None, &name, &[])
             } else {
                 format!(
                     "_Dt{}",
@@ -203,6 +198,16 @@ impl<'a> Analyzer<'a> {
             if let dream_types::TyKind::Union(def, _) = self.type_ctx.interner.kind(ty) {
                 self.type_ctx.set_scope(def.module);
             }
+            let name = if matches!(self.type_ctx.interner.kind(ty), dream_types::TyKind::Union(def, args)
+                if def.module == dream_types::ModuleId::ROOT && args.is_empty())
+            {
+                dream_types::function_symbol(None, &name, &[])
+            } else {
+                format!(
+                    "_Dt{}",
+                    dream_types::type_symbol(&self.type_ctx.interner, &self.type_ctx.defs, ty)
+                )
+            };
             union_defs.push(UnionLayoutDef {
                 ty,
                 name,
@@ -263,86 +268,19 @@ impl<'a> Analyzer<'a> {
         &mut self,
         node: &crate::module_graph::ProgramView,
     ) -> Vec<HImport> {
-        use dream_types::method_fn;
         let mut imports: Vec<HImport> = Vec::new();
-        // Each candidate is paired with the name it was *registered* under: top-level externs keep
-        // their bare name, while class/`extend` static externs are mangled `{Type}_{method}` (the
-        // name the call site resolves to). Using the bare method name for a class extern would fail
-        // the def lookup and silently drop the import (its call site then falls back to `$def{N}`).
-        let graph = self.graph;
-        let top = node.functions.iter().map(|f| {
-            (
-                *f,
-                f.name.text.clone(),
-                graph.module_for_file(f.file_path.as_deref()),
-            )
-        });
-        let class_methods = node.structs.iter().flat_map(|s| {
-            s.methods.iter().map(move |m| {
-                (
-                    m,
-                    method_fn(&s.name.text, &m.name.text),
-                    graph.module_for_file(s.file_path.as_deref()),
-                )
-            })
-        });
-        let extend_methods = node.extends.iter().flat_map(|e| {
-            e.methods.iter().map(move |m| {
-                (
-                    m,
-                    method_fn(&e.target.text, &m.name.text),
-                    graph.module_for_file(e.file_path.as_deref()),
-                )
-            })
-        });
-        // A generic class's `extern`/`@intrinsic` methods (e.g. `Cell<T>.raw_host`) are
-        // duplicated per instantiation under a mangled `{Type_args}_{method}` name absent from
-        // `node.structs` (which only ever holds the unmangled template) — walk
-        // `generic_struct_instances` (recorded by `ensure_struct_instantiated`) for those instead.
-        let generic_instance_methods: Vec<(
-            &dream_syntax::nodes::FunctionNode,
-            String,
-            dream_types::ModuleId,
-        )> = self
-            .generic_struct_instances
-            .iter()
-            .filter_map(|(base, args)| {
-                let template = *self.generic_struct(base.as_str())?;
-                let mangled = dream_syntax::nodes::types::mangle_generic(base, args);
-                Some(
-                    template
-                        .methods
-                        .iter()
-                        .map(move |m| {
-                            (
-                                m,
-                                method_fn(&mangled, &m.name.text),
-                                graph.module_for_file(template.file_path.as_deref()),
-                            )
-                        })
-                        .collect::<Vec<_>>(),
-                )
-            })
-            .flatten()
+        let candidates: Vec<_> = node.functions.iter().copied()
+            .chain(self.struct_methods.iter().map(|(func, _)| *func))
+            .chain(self.instantiated_generics.values().map(|(_, func)| *func))
             .collect();
-        for (func, sym_name, owner) in top
-            .chain(class_methods)
-            .chain(extend_methods)
-            .chain(generic_instance_methods)
-        {
+        for func in candidates {
             if !func.is_extern || dream_abi::intrinsics::has_intrinsic_attr(&func.attributes) {
                 continue;
             }
-            self.type_ctx.set_scope(owner);
-            let sym_name = self
-                .function_table
-                .resolve_item_namespace(&graph.modules[owner.0 as usize].path, &sym_name)
-                .unwrap_or(sym_name);
-            // Match the def the call site resolves to, so the emitter's symbol table maps the call
-            // onto this import's `$name`. Unregistered externs (should not happen) are skipped.
-            let Some(def) = self.type_ctx.resolve(DefKind::Function, &sym_name) else {
-                continue;
-            };
+            let Some(identity) = self.function_table.declaration_node(func) else { continue; };
+            let def = identity.0;
+            self.type_ctx.set_scope(self.graph.module_for_file(func.file_path.as_deref()));
+            let sym_name = self.function_table.emitted_name(&self.type_ctx, &identity);
             if imports.iter().any(|import| import.def == def) {
                 continue;
             }
@@ -401,54 +339,18 @@ impl<'a> Analyzer<'a> {
         &mut self,
         node: &crate::module_graph::ProgramView,
     ) -> Vec<(dream_types::DefId, String)> {
-        use dream_types::method_fn;
-        let mut out: Vec<(dream_types::DefId, String)> = self.intrinsic_defs.clone();
+        let mut out = self.intrinsic_defs.clone();
         for func in node.functions.iter() {
-            self.type_ctx
-                .set_scope(self.graph.module_for_file(func.file_path.as_deref()));
             if let Some(key) = dream_abi::intrinsics::intrinsic_key(&func.attributes) {
-                if let Some(def) = self.type_ctx.resolve(DefKind::Function, &func.name.text) {
-                    out.push((def, key));
+                if let Some(identity) = self.function_table.declaration_node(func) {
+                    out.push((identity.0, key));
                 }
             }
         }
-        for s in node.structs.iter() {
-            self.type_ctx
-                .set_scope(self.graph.module_for_file(s.file_path.as_deref()));
-            for m in s.methods.iter() {
-                if let Some(key) = dream_abi::intrinsics::intrinsic_key(&m.attributes) {
-                    let mangled = method_fn(&s.name.text, &m.name.text);
-                    if let Some(def) = self.type_ctx.resolve(DefKind::Function, &mangled) {
-                        out.push((def, key));
-                    }
-                }
-            }
-        }
-        for e in node.extends.iter() {
-            self.type_ctx
-                .set_scope(self.graph.module_for_file(e.file_path.as_deref()));
-            for m in e.methods.iter() {
-                if let Some(key) = dream_abi::intrinsics::intrinsic_key(&m.attributes) {
-                    let mangled = method_fn(&e.target.text, &m.name.text);
-                    if let Some(def) = self.type_ctx.resolve(DefKind::Function, &mangled) {
-                        out.push((def, key));
-                    }
-                }
-            }
-        }
-        // See the matching comment in `hir_build_imports`: a generic class's `@intrinsic` methods
-        // need one binding per monomorphization, under its mangled name, not the template's.
-        for (base, args) in self.generic_struct_instances.iter() {
-            let Some(template) = self.generic_struct(base.as_str()) else {
-                continue;
-            };
-            let mangled_struct = dream_syntax::nodes::types::mangle_generic(base, args);
-            for m in template.methods.iter() {
-                if let Some(key) = dream_abi::intrinsics::intrinsic_key(&m.attributes) {
-                    let mangled = method_fn(&mangled_struct, &m.name.text);
-                    if let Some(def) = self.type_ctx.resolve(DefKind::Function, &mangled) {
-                        out.push((def, key));
-                    }
+        for (identity, info) in &self.function_table.functions {
+            if let Some(key) = &info.intrinsic_name {
+                if !out.iter().any(|(def, _)| *def == identity.0) {
+                    out.push((identity.0, key.clone()));
                 }
             }
         }

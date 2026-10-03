@@ -11,7 +11,7 @@ use dream_text::text_span::TextSpan;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-type CallArgAnalysis = (Vec<String>, Vec<Option<HExpr>>, Vec<bool>);
+type CallArgAnalysis = (Vec<dream_types::TypeId>, Vec<Option<HExpr>>, Vec<bool>);
 
 impl<'a> Analyzer<'a> {
     /// Reorders a call's raw AST arguments into pure positional order when the source used named
@@ -206,7 +206,7 @@ impl<'a> Analyzer<'a> {
     pub(crate) fn pack_variadic_analyzed_args(
         &mut self,
         sig: &crate::function_table::FunctionTableInfo,
-        params_types: &mut Vec<String>,
+        params_types: &mut Vec<dream_types::TypeId>,
         arg_hirs: &mut Vec<Option<HExpr>>,
         arg_is_ref: &mut Vec<bool>,
         skip: usize,
@@ -222,18 +222,14 @@ impl<'a> Analyzer<'a> {
         if params_types.len() < fixed_user {
             return;
         }
-        let array_ty_name = sig
-            .parameters
-            .get(skip + fixed_user)
-            .cloned()
-            .unwrap_or_default();
-        let array_ty = Self::type_from_name(&array_ty_name);
+        let Some(&array_ty_id) = sig.parameters.get(skip + fixed_user) else { return; };
+        let array_ty = self.type_ctx.syntax_type(array_ty_id);
         let tail_hirs: Vec<Option<HExpr>> = arg_hirs.drain(fixed_user..).collect();
         params_types.truncate(fixed_user);
         arg_is_ref.truncate(fixed_user);
         self.hir_set_array_lit(tail_hirs, &array_ty);
         arg_hirs.push(self.hir_take());
-        params_types.push(array_ty.get_type());
+        params_types.push(array_ty_id);
         arg_is_ref.push(false);
     }
 
@@ -251,17 +247,20 @@ impl<'a> Analyzer<'a> {
         user_param_offset: usize,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Vec<ExpressionNode<'a>>, SemanticError> {
-        let keys: Vec<String> = if let Some(keys) = self.function_table.overloads.get(base) {
-            keys.clone()
-        } else if self.function_table.functions.contains_key(base) {
-            vec![base.to_string()]
-        } else {
-            return Err(report(
-                diagnostics,
-                format!("named arguments are not supported for '{}'", base),
-                Some(call_position),
-            ));
-        };
+        let keys = self.function_candidates(base);
+        self.normalize_named_for_candidates(base, keys, raw_args, call_position, user_param_offset, diagnostics)
+    }
+
+    pub(crate) fn normalize_named_for_candidates(
+        &self,
+        base: &str,
+        keys: Vec<crate::function_table::FunctionIdentity>,
+        raw_args: &[ExpressionNode<'a>],
+        call_position: TextSpan,
+        user_param_offset: usize,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<Vec<ExpressionNode<'a>>, SemanticError> {
+        if keys.is_empty() { return Err(report(diagnostics, format!("named arguments are not supported for '{}'", base), Some(call_position))); }
         let mut successes: Vec<Vec<ExpressionNode<'a>>> = Vec::new();
         let mut last_err: Option<(String, Option<TextSpan>)> = None;
         for key in &keys {
@@ -352,15 +351,12 @@ impl<'a> Analyzer<'a> {
                     .analyze_expression(obj, parent_function, symbol_table, diagnostics)
                     .ok()?;
                 let obj_hir = self.hir_take()?;
-                let struct_name = match Self::resolve_struct_parts(&obj_ty) {
-                    Some((base, _)) => base,
-                    None => obj_ty.get_type(),
-                };
-                let Some(field_idx) = self.struct_field_index(&struct_name, &member.text) else {
+                let owner = self.type_ctx.lower(&obj_ty);
+                let Some(field_idx) = self.struct_field_index(owner, &member.text) else {
                     diagnostics.report_error(
                         format!(
                             "'{}' has no field '{}'",
-                            self.ty_str_display(&struct_name),
+                            self.type_id_display(owner),
                             member.text
                         ),
                         Some(member.position),
@@ -369,8 +365,8 @@ impl<'a> Analyzer<'a> {
                     return None;
                 };
                 let field_ty = self
-                    .struct_info(&struct_name)
-                    .and_then(|s| s.fields.get(&member.text).map(|f| f.type_.clone()))
+                    .struct_info(owner)
+                    .and_then(|s| s.fields.get(&member.text).map(|f| self.type_ctx.syntax_type(f.ty)))
                     .unwrap_or(Type::Unknown);
                 self.hir_set_field(Some(obj_hir.clone()), field_idx, &field_ty);
                 let value = self.hir_take()?;
@@ -484,7 +480,7 @@ impl<'a> Analyzer<'a> {
         parent_function: &FunctionNode<'a>,
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
-    ) -> Result<(Vec<String>, Vec<Option<HExpr>>), SemanticError> {
+    ) -> Result<(Vec<dream_types::TypeId>, Vec<Option<HExpr>>), SemanticError> {
         self.analyze_call_arguments_expecting(
             params,
             None,
@@ -515,7 +511,7 @@ impl<'a> Analyzer<'a> {
         parent_function: &FunctionNode<'a>,
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
-    ) -> Result<(Vec<String>, Vec<Option<HExpr>>), SemanticError> {
+    ) -> Result<(Vec<dream_types::TypeId>, Vec<Option<HExpr>>), SemanticError> {
         let (arg_types, arg_hirs, _is_ref) = self.analyze_call_arguments_expecting_ref(
             params,
             expected_params,
@@ -556,11 +552,11 @@ impl<'a> Analyzer<'a> {
                 match self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics) {
                     Some((t, hir)) => {
                         arg_hirs.push(hir);
-                        arg_types.push(t.get_type());
+                        arg_types.push(self.type_ctx.lower(&t));
                     }
                     None => {
                         arg_hirs.push(None);
-                        arg_types.push(Type::Unknown.get_type());
+                        arg_types.push(self.type_ctx.interner.error());
                     }
                 }
                 continue;
@@ -569,7 +565,7 @@ impl<'a> Analyzer<'a> {
             let t = self.analyze_expression(param, parent_function, symbol_table, diagnostics)?;
             self.current_expected_type = saved_expected;
             arg_hirs.push(self.hir_take());
-            arg_types.push(t.get_type());
+            arg_types.push(self.type_ctx.lower(&t));
         }
         Ok((arg_types, arg_hirs, arg_is_ref))
     }

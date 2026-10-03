@@ -3,7 +3,6 @@
 use super::*;
 use crate::analyzer::GenericBindings;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::types::is_unknown_type_name;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, LambdaNode, Type};
 use indexmap::IndexMap;
 
@@ -22,7 +21,8 @@ impl<'a> Analyzer<'a> {
         ctx: &AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Option<Vec<Type>> {
-        let template = *self.generic_struct(type_name)?;
+        let def = self.type_ctx.resolve(DefKind::Struct, type_name)?;
+        let template = *self.generic_struct(def)?;
         let class_params = template.generic_parameters.as_deref().unwrap_or(&[]);
         if class_params.is_empty() {
             return Some(Vec::new());
@@ -128,7 +128,7 @@ impl<'a> Analyzer<'a> {
     ) -> Option<Vec<Type>> {
         let param_names: Vec<String> = class_params.iter().map(|p| p.text.clone()).collect();
         let mut bindings: GenericBindings = IndexMap::new();
-        let mut arg_types: Vec<Option<String>> = vec![None; args.len()];
+        let mut arg_types: Vec<Option<dream_types::TypeId>> = vec![None; args.len()];
 
         let paused = self.hir_pause_collection();
         for (i, arg) in args.iter().enumerate() {
@@ -143,15 +143,15 @@ impl<'a> Analyzer<'a> {
             let _ = self.hir_take();
             self.current_expected_type = saved_expected;
             if let Some(t) = ty {
-                let s = t.get_type();
-                if !is_unknown_type_name(&s) {
-                    arg_types[i] = Some(s);
+                let ty = self.type_ctx.lower(&t);
+                if ty != self.type_ctx.interner.error() {
+                    arg_types[i] = Some(ty);
                 }
             }
         }
         self.hir_resume_collection(paused.0, paused.1);
 
-        Self::bind_class_params_from_args(&param_names, method, &arg_types, &mut bindings);
+        self.bind_class_params_from_args(&param_names, method, &arg_types, &mut bindings);
 
         for (i, arg) in args.iter().enumerate() {
             let Some(lambda) = Self::as_lambda(arg) else {
@@ -206,11 +206,11 @@ impl<'a> Analyzer<'a> {
             } else {
                 body_ret
             };
-            let actual = Type::Function(param_tys, Box::new(ret)).get_type();
+            let actual = self.type_ctx.lower(&Type::Function(param_tys, Box::new(ret)));
             arg_types[i] = Some(actual);
         }
 
-        Self::bind_class_params_from_args(&param_names, method, &arg_types, &mut bindings);
+        self.bind_class_params_from_args(&param_names, method, &arg_types, &mut bindings);
 
         if param_names.iter().any(|p| !bindings.contains_key(p)) {
             return None;
@@ -219,9 +219,10 @@ impl<'a> Analyzer<'a> {
     }
 
     fn bind_class_params_from_args(
+        &self,
         param_names: &[String],
         method: &FunctionNode<'_>,
-        arg_types: &[Option<String>],
+        arg_types: &[Option<dream_types::TypeId>],
         bindings: &mut GenericBindings,
     ) {
         for name in param_names {
@@ -235,12 +236,12 @@ impl<'a> Analyzer<'a> {
                 .find_map(|(i, formal)| {
                     arg_types.get(i).and_then(|arg| {
                         arg.as_ref()
-                            .and_then(|a| Self::match_generic_type(&formal.type_, a, name))
+                            .and_then(|a| self.match_generic_type(&formal.type_, *a, name))
                     })
                 });
             if let Some(concrete) = concrete {
-                if !is_unknown_type_name(&concrete) {
-                    bindings.insert(name.clone(), Self::concrete_type_from_str(&concrete));
+                if concrete != self.type_ctx.interner.error() {
+                    bindings.insert(name.clone(), self.type_ctx.syntax_type(concrete));
                 }
             }
         }

@@ -131,4 +131,24 @@ mod tests {
             function_symbol(Some("a_b"), "foo", &[])
         );
     }
+
+    #[test]
+    fn same_named_module_types_have_distinct_stable_structural_symbols() {
+        use crate::ModuleId;
+        let mut ctx = TypeCtx::new();
+        ctx.define_module(ModuleId(1), "users.a".into(), vec![]);
+        ctx.define_module(ModuleId(2), "users.b".into(), vec![]);
+        ctx.set_scope(ModuleId(1));
+        let a = ctx.register(DefKind::Struct, "User", vec![]);
+        ctx.set_scope(ModuleId(2));
+        let b = ctx.register(DefKind::Struct, "User", vec![]);
+        let a = ctx.interner.struct_ty(a, vec![]);
+        let b = ctx.interner.struct_ty(b, vec![]);
+        let a_symbol = type_symbol(&ctx.interner, &ctx.defs, a);
+        let b_symbol = type_symbol(&ctx.interner, &ctx.defs, b);
+        assert_ne!(a_symbol, b_symbol);
+        ctx.register(DefKind::Struct, "Unrelated", vec![]);
+        assert_eq!(a_symbol, type_symbol(&ctx.interner, &ctx.defs, a));
+        assert_eq!(b_symbol, type_symbol(&ctx.interner, &ctx.defs, b));
+    }
 }

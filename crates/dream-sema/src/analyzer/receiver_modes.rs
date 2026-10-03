@@ -1,79 +1,40 @@
-//! Inferred receiver exclusivity (W6-A2): classifies every non-static method's implicit `this`
-//! receiver as [`ReceiverMode::Borrow`] or [`ReceiverMode::Unique`].
-//!
-//! Modes are computed by a fixpoint over all method bodies in the program (classes, extend
-//! blocks, interface default impls):
-//!
-//! - **direct mutation** — any write to a field of `this` (`this.count += 1`, `items[i] = v`,
-//!   bare `count = 0` when `count` is a field) makes the method Unique;
-//! - **field-chain mutation** — calling an already-Unique method through a field of `this`
-//!   (`this.items.sort()`) mutates the instance's observable state and forces Unique too;
-//! - **escaping `this`** — passing/storing `this` into another call may let the callee mutate
-//!   it, so the caller becomes Unique conservatively;
-//! - **sibling calls** propagate: a Borrow method cannot call a Unique sibling through shared
-//!   `this` (the reentrant direction — Unique calling Borrow — stays legal).
-//!
-//! Explicit `[borrow | unique] fun` qualifiers pin the contract: pinned methods feed their
-//! declared mode into the graph unchanged, and a declared `borrow` whose body resolves to
-//! Unique is a dual-span error. Signature-only interface methods must declare a qualifier.
-//!
-//! The pass runs once, after body analysis, on clean programs. It reports diagnostics only —
-//! the resolved modes land in `Analyzer::receiver_modes` for later consumers (dispatch
-//! metadata, borrow-collision checking).
+//! Receiver exclusivity is a fixpoint over resolved receiver types and method slots.
+//! Explicit qualifiers pin the contract; inferred mutation propagates through sibling
+//! calls and registered field types. Source spellings never identify graph vertices.
 
 use super::*;
+use crate::function_table::FunctionIdentity;
 use dream_syntax::nodes::function::{FunctionNode, ReceiverMode};
 use dream_syntax::nodes::statement::StatementNode;
 use dream_text::text_span::TextSpan;
+use dream_types::TypeId;
 
-/// Registry key for one method: `"Owner::name"` where Owner is a class, an extended type's
-/// spelling (`int`, `string`, ...), or an interface name.
-type MethodKey = String;
+type MethodKey = (TypeId, usize);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum RecvKind {
-    /// Bare `this` receiver (or an alias of it): the call targets a sibling.
     This,
-    /// One-level field chain: `this.<field>.<method>(...)`.
     Field(String),
 }
 
-/// One registry entry: everything known about a single method.
 struct Entry {
-    owner: String,
+    owner: TypeId,
     name: String,
-    /// Explicit `[borrow | unique]` qualifier; pins the mode.
+    file: Option<Rc<str>>,
     explicit: Option<ReceiverMode>,
     decl_span: TextSpan,
-    /// Body writes a field of `this`.
     direct_unique: bool,
     first_mutate_span: Option<TextSpan>,
-    /// Unresolved calls: `(receiver kind, callee name, call span)`. Resolved to registry keys
-    /// after all entries exist.
     raw_calls: Vec<(RecvKind, String, TextSpan)>,
-    /// Set by the fixpoint when inference concludes Unique (explicitly-pinned `unique` methods
-    /// are already unique via `effective_mode`; pinned `borrow` methods never get marked here,
-    /// but their *body facts* still trigger the contradiction diagnostic below).
     inferred_unique: bool,
-    /// True for signature-only interface methods (no body to infer from; explicit mode required).
-    is_interface_signature: bool,
 }
 
 impl Entry {
     fn effective_mode(&self) -> ReceiverMode {
         match self.explicit {
-            Some(m) => m,
-            None => {
-                // NOTE: handing `this` to another call (takes_this) deliberately does NOT
-                // force Unique — sharing a reference grants no mutation rights under ARC, and
-                // treating it as mutation mis-flagged `List.iterator()` (which retains the list
-                // inside its cursor) against Borrow-declaring interfaces.
-                if self.inferred_unique || self.direct_unique {
-                    ReceiverMode::Unique
-                } else {
-                    ReceiverMode::Borrow
-                }
-            }
+            Some(mode) => mode,
+            None if self.inferred_unique || self.direct_unique => ReceiverMode::Unique,
+            None => ReceiverMode::Borrow,
         }
     }
 
@@ -82,179 +43,189 @@ impl Entry {
     }
 }
 
-fn new_entry(owner: String, method: &FunctionNode) -> Entry {
-    Entry {
+fn new_entry(owner: TypeId, name: &str, method: &FunctionNode, fields: &[String]) -> Entry {
+    let mut entry = Entry {
         owner,
-        name: method.name.text.clone(),
+        name: name.to_string(),
+        file: method.file_path.clone(),
         explicit: method.receiver_mode,
         decl_span: method.name.position,
         direct_unique: false,
         first_mutate_span: None,
         raw_calls: Vec::new(),
         inferred_unique: false,
-        is_interface_signature: false,
-    }
-}
-
-/// The owner name a field's declared type routes method calls to: classes, primitives covered
-/// by extend blocks (`string`, `int`, ...), interfaces — anything whose methods live in the
-/// registry under `Owner::name`.
-fn type_owner_name(ty: &Type) -> Option<String> {
-    match ty {
-        Type::Struct(token, _) => Some(token.text.clone()),
-        Type::String(_) => Some("string".to_string()),
-        Type::Integer(_) => Some("int".to_string()),
-        Type::Float(_) => Some("float".to_string()),
-        Type::Double(_) => Some("double".to_string()),
-        Type::Boolean(_) => Some("bool".to_string()),
-        Type::Byte(_) => Some("byte".to_string()),
-        Type::Char(_) => Some("char".to_string()),
-        Type::Long(_) => Some("long".to_string()),
-        Type::UInt(_) => Some("uint".to_string()),
-        Type::ULong(_) => Some("ulong".to_string()),
-        Type::ISize(_) => Some("isize".to_string()),
-        Type::USize(_) => Some("usize".to_string()),
-        _ => None,
-    }
+    };
+    walk_body_for_facts(
+        method.body,
+        fields,
+        &mut entry.direct_unique,
+        &mut entry.first_mutate_span,
+        &mut entry.raw_calls,
+    );
+    entry
 }
 
 impl<'a> Analyzer<'a> {
-    /// Classifies every method's receiver mode. Called from `analyze_pgm` after body analysis,
-    /// on programs with no other errors (a poisoned program skips straight to failure).
+    // Interface slots retain their dispatch order. Concrete methods follow in stable
+    // registration order, including overloads and methods attached by extend blocks.
+    fn receiver_function_slots(
+        &self,
+        owner: TypeId,
+    ) -> impl Iterator<Item = (MethodKey, &str, &FunctionIdentity)> {
+        let offset = self.interface_methods.get(&owner).map_or(0, Vec::len);
+        self.function_table
+            .methods
+            .iter()
+            .filter(move |((ty, _), _)| *ty == owner)
+            .flat_map(|((_, name), identities)| {
+                identities
+                    .iter()
+                    .map(move |identity| (name.as_str(), identity))
+            })
+            .enumerate()
+            .map(move |(slot, (name, identity))| ((owner, offset + slot), name, identity))
+    }
+
+    pub(super) fn receiver_function_key(
+        &self,
+        identity: &FunctionIdentity,
+    ) -> Option<(MethodKey, String)> {
+        self.receiver_slot_entries()
+            .find(|(_, _, candidate)| *candidate == identity)
+            .map(|(key, name, _)| (key, name.to_string()))
+    }
+
+    /// Every concrete method slot, numbered per owner after that owner's interface slots, in one
+    /// pass over the method table.
+    fn receiver_slot_entries(
+        &self,
+    ) -> impl Iterator<Item = (MethodKey, &str, &FunctionIdentity)> {
+        let mut next: IndexMap<TypeId, usize> = IndexMap::new();
+        self.function_table
+            .methods
+            .iter()
+            .flat_map(|((owner, name), identities)| {
+                identities
+                    .iter()
+                    .map(move |identity| (*owner, name.as_str(), identity))
+            })
+            .map(move |(owner, name, identity)| {
+                let slot = next.entry(owner).or_insert_with(|| {
+                    self.interface_methods.get(&owner).map_or(0, Vec::len)
+                });
+                let key = (owner, *slot);
+                *slot += 1;
+                (key, name, identity)
+            })
+    }
+
+    pub(super) fn receiver_method_keys(&self, owner: TypeId, name: &str) -> Vec<MethodKey> {
+        let mut keys: Vec<_> = self
+            .interface_methods
+            .get(&owner)
+            .into_iter()
+            .flatten()
+            .enumerate()
+            .filter(|(_, method)| method.name.text == name)
+            .map(|(slot, _)| (owner, slot))
+            .collect();
+        keys.extend(
+            self.receiver_function_slots(owner)
+                .filter(|(_, member, _)| *member == name)
+                .map(|(key, _, _)| key),
+        );
+        keys
+    }
+
     pub(in crate::analyzer) fn classify_receiver_modes(
         &mut self,
-        node: &'a ProgramView<'a>,
+        _node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
-        let mut registry: indexmap::IndexMap<MethodKey, Entry> = indexmap::IndexMap::new();
-
-        // --- Collect entries + raw facts ----------------------------------------------------
-        for struct_decl in node.structs.iter() {
-            let owner = struct_decl.name.text.clone();
-            let field_names: Vec<String> = struct_decl
-                .fields
-                .iter()
-                .map(|f| f.name.text.clone())
-                .collect();
-            for method in &struct_decl.methods {
-                if method.is_static {
-                    continue;
-                }
-                let key = format!("{owner}::{}", method.name.text);
-                let mut entry = new_entry(owner.clone(), method);
-                walk_body_for_facts(
-                    method.body,
-                    &field_names,
-                    &mut entry.direct_unique,
-                    &mut entry.first_mutate_span,
-                    &mut entry.raw_calls,
-                );
-                registry.insert(key, entry);
+        let scope = self.type_ctx.scope();
+        let mut registry: IndexMap<MethodKey, Entry> = IndexMap::new();
+        let slots: IndexMap<FunctionIdentity, (MethodKey, String)> = self
+            .receiver_slot_entries()
+            .map(|(key, name, identity)| (identity.clone(), (key, name.to_string())))
+            .collect();
+        let methods: Vec<_> = self
+            .struct_methods
+            .iter()
+            .map(|(method, _)| *method)
+            .chain(
+                self.instantiated_generics
+                    .values()
+                    .map(|(_, method)| *method),
+            )
+            .collect();
+        for method in methods {
+            if method.is_static {
+                continue;
             }
-        }
-
-        for ext in node.extends.iter() {
-            let owner = ext.target.text.clone();
-            // Value-struct extend targets have registered fields; primitive targets have none
-            // (their methods classify as Borrow unless they take/escape `this`, which they
-            // cannot — primitives have no `this` state to escape).
-            let field_names: Vec<String> = match self.struct_info(&owner) {
-                Some(info) => info.fields.keys().cloned().collect(),
-                None => Vec::new(),
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(method.file_path.as_deref()));
+            let Some(identity) = self.function_declaration(method) else {
+                continue;
             };
-            for method in &ext.methods {
-                if method.is_static {
-                    continue;
-                }
-                let key = format!("{owner}::{}", method.name.text);
-                let mut entry = new_entry(owner.clone(), method);
-                walk_body_for_facts(
-                    method.body,
-                    &field_names,
-                    &mut entry.direct_unique,
-                    &mut entry.first_mutate_span,
-                    &mut entry.raw_calls,
+            let Some((key, name)) = slots.get(&identity).cloned() else {
+                continue;
+            };
+            let fields = self
+                .struct_table
+                .get_struct(key.0)
+                .map(|info| info.fields.keys().cloned().collect::<Vec<_>>())
+                .unwrap_or_default();
+            registry.insert(key, new_entry(key.0, &name, method, &fields));
+        }
+        for (&owner, methods) in &self.interface_methods {
+            for (slot, method) in methods.iter().enumerate() {
+                registry.insert(
+                    (owner, slot),
+                    new_entry(owner, &method.name.text, method, &[]),
                 );
-                registry.insert(key, entry);
             }
         }
+        self.type_ctx.set_scope(scope);
 
-        for iface in node.interfaces.iter() {
-            let owner = iface.name.text.clone();
-            for method in &iface.methods {
-                if method.is_static {
-                    continue;
-                }
-                let key = format!("{owner}::{}", method.name.text);
-                let has_body = !method.body.is_empty();
-                let mut entry = new_entry(owner.clone(), method);
-                entry.is_interface_signature = !has_body;
-                // Signature-only methods default to Borrow — the overwhelmingly common
-                // contract. Mutating contracts opt in with `unique` (e.g. `Iterator.next`
-                // advancing its cursor). If an implementor's body turns out Unique, the
-                // conformance mismatch surfaces there instead of breaking the interface.
-                if has_body {
-                    walk_body_for_facts(
-                        method.body,
-                        &[],
-                        &mut entry.direct_unique,
-                        &mut entry.first_mutate_span,
-                        &mut entry.raw_calls,
-                    );
-                }
-                registry.insert(key, entry);
-            }
-        }
-
-        // --- Resolve raw calls to registry keys ---------------------------------------------
-        // `This` calls resolve against the entry's owner; `Field(f)` calls resolve against the
-        // field's declared owner type (class / extended primitive / interface). Unresolvable
-        // calls (generics, unknown types) contribute no edge — conservative toward Borrow.
-        let resolved_edges: indexmap::IndexMap<MethodKey, Vec<(MethodKey, TextSpan)>> = {
-            let mut out: indexmap::IndexMap<MethodKey, Vec<(MethodKey, TextSpan)>> =
-                indexmap::IndexMap::new();
-            for (key, e) in &registry {
+        let resolved_edges: IndexMap<MethodKey, Vec<(MethodKey, TextSpan)>> = registry
+            .iter()
+            .map(|(&key, entry)| {
                 let mut edges = Vec::new();
-                for (recv, name, span) in &e.raw_calls {
-                    let target_owner: Option<String> = match recv {
-                        RecvKind::This => Some(e.owner.clone()),
-                        RecvKind::Field(f) => match self.struct_info(&e.owner) {
-                            Some(info) => {
-                                info.fields.get(f).and_then(|fi| type_owner_name(&fi.type_))
-                            }
-                            None => None,
-                        },
+                for (recv, name, span) in &entry.raw_calls {
+                    let owner = match recv {
+                        RecvKind::This => Some(entry.owner),
+                        RecvKind::Field(field) => self
+                            .struct_table
+                            .get_struct(entry.owner)
+                            .and_then(|info| info.fields.get(field))
+                            .map(|info| info.ty),
                     };
-                    if let Some(owner) = target_owner {
-                        let k = format!("{owner}::{name}");
-                        if registry.contains_key(&k) {
-                            edges.push((k, *span));
-                        }
+                    if let Some(owner) = owner {
+                        edges.extend(
+                            self.receiver_method_keys(owner, name)
+                                .into_iter()
+                                .filter(|target| registry.contains_key(target))
+                                .map(|target| (target, *span)),
+                        );
                     }
                 }
-                out.insert(key.clone(), edges);
-            }
-            out
-        };
+                (key, edges)
+            })
+            .collect();
 
-        // --- Fixpoint -----------------------------------------------------------------------
         loop {
             let mut changed = false;
-            let keys: Vec<MethodKey> = registry.keys().cloned().collect();
-            for key in &keys {
-                let should_mark = {
-                    let e = &registry[key];
-                    if e.explicit.is_some() || e.inferred_unique {
-                        false
-                    } else {
-                        e.direct_unique
-                            || resolved_edges[key]
-                                .iter()
-                                .any(|(t, _)| registry[t].is_unique())
-                    }
-                };
+            let keys: Vec<_> = registry.keys().copied().collect();
+            for key in keys {
+                let entry = &registry[&key];
+                let should_mark = entry.explicit.is_none()
+                    && !entry.inferred_unique
+                    && (entry.direct_unique
+                        || resolved_edges[&key]
+                            .iter()
+                            .any(|(target, _)| registry[target].is_unique()));
                 if should_mark {
-                    registry[key].inferred_unique = true;
+                    registry[&key].inferred_unique = true;
                     changed = true;
                 }
             }
@@ -262,42 +233,120 @@ impl<'a> Analyzer<'a> {
                 break;
             }
         }
-
-        self.check_receiver_contracts(node, diagnostics, &registry, &resolved_edges);
+        self.check_receiver_contracts(diagnostics, &registry, &resolved_edges);
     }
 }
 
-fn registry_lookup(
-    modes: &HashMap<String, dream_syntax::nodes::function::ReceiverMode>,
-    key: &str,
-) -> dream_syntax::nodes::function::ReceiverMode {
-    modes
-        .get(key)
-        .copied()
-        .unwrap_or(dream_syntax::nodes::function::ReceiverMode::Borrow)
-}
-
-fn file_for_owner<'a>(node: &'a ProgramView<'a>, owner: &str) -> Option<Rc<str>> {
-    for s in node.structs.iter() {
-        if s.name.text == owner {
-            return s.file_path.clone();
-        }
-    }
-    for e in node.extends.iter() {
-        if e.target.text == owner {
-            return e.methods.first().and_then(|m| m.file_path.clone());
-        }
-    }
-    for i in node.interfaces.iter() {
-        if i.name.text == owner {
-            return i.file_path.clone();
-        }
-    }
-    None
-}
-
-/// True when `expr` reads `this` directly or through a tracked alias.
 mod walking;
 use walking::walk_body_for_facts;
-
 mod checking;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::function_table::FunctionTableInfo;
+    use dream_types::ModuleId;
+
+    fn add_method(
+        analyzer: &mut Analyzer<'_>,
+        owner: TypeId,
+        argument: TypeId,
+    ) -> FunctionIdentity {
+        let parameters = vec![owner, argument];
+        let def = analyzer
+            .type_ctx
+            .register_method(owner, "update", &parameters);
+        let identity = (def, Vec::new());
+        let void = analyzer.type_ctx.interner.void();
+        let info = FunctionTableInfo::new("update".into(), None, parameters, identity.clone(), void);
+        analyzer
+            .function_table
+            .add_method(owner, "update", info)
+            .unwrap();
+        identity
+    }
+
+    #[test]
+    fn same_named_module_receivers_and_overloads_have_distinct_slots() {
+        let graph = ModuleGraph::new(Vec::new(), &IndexMap::new());
+        let arena = Bump::new();
+        let mut analyzer = Analyzer::new(&graph, &arena);
+        let mut owners = Vec::new();
+        for module in [ModuleId(1), ModuleId(2)] {
+            analyzer
+                .type_ctx
+                .define_module(module, format!("module{}", module.0), Vec::new());
+            analyzer.type_ctx.set_scope(module);
+            let def = analyzer
+                .type_ctx
+                .register(DefKind::Struct, "Counter", Vec::new());
+            owners.push(analyzer.type_ctx.interner.struct_ty(def, Vec::new()));
+        }
+        let int = analyzer.type_ctx.interner.int();
+        let string = analyzer.type_ctx.interner.string();
+        let first = add_method(&mut analyzer, owners[0], int);
+        let second = add_method(&mut analyzer, owners[1], int);
+        let overload = add_method(&mut analyzer, owners[0], string);
+        assert_eq!(
+            analyzer.receiver_function_key(&first).unwrap().0,
+            (owners[0], 0)
+        );
+        assert_eq!(
+            analyzer.receiver_function_key(&second).unwrap().0,
+            (owners[1], 0)
+        );
+        assert_eq!(
+            analyzer.receiver_function_key(&overload).unwrap().0,
+            (owners[0], 1)
+        );
+        assert_eq!(
+            analyzer.receiver_method_keys(owners[0], "update"),
+            vec![(owners[0], 0), (owners[0], 1)]
+        );
+        analyzer
+            .receiver_modes
+            .insert((owners[0], 0), ReceiverMode::Unique);
+        analyzer
+            .receiver_modes
+            .insert((owners[1], 0), ReceiverMode::Borrow);
+        assert_eq!(
+            analyzer.receiver_modes[&(owners[0], 0)],
+            ReceiverMode::Unique
+        );
+        assert_eq!(
+            analyzer.receiver_modes[&(owners[1], 0)],
+            ReceiverMode::Borrow
+        );
+    }
+
+    #[test]
+    fn interface_extensions_follow_dispatch_slots() {
+        let graph = ModuleGraph::new(Vec::new(), &IndexMap::new());
+        let arena = Bump::new();
+        let mut analyzer = Analyzer::new(&graph, &arena);
+        let def = analyzer
+            .type_ctx
+            .register(DefKind::Interface, "Counter", Vec::new());
+        let owner = analyzer.type_ctx.interner.interface_ty(def, Vec::new());
+        let method = arena.alloc(FunctionNode::new(
+            Vec::new(),
+            synthetic_token(TokenKind::IdentifierToken, "update"),
+            None,
+            None,
+            Vec::new(),
+            &[],
+            dream_syntax::nodes::Visibility::Public,
+        ));
+        analyzer.interface_methods.insert(owner, vec![method]);
+        let int = analyzer.type_ctx.interner.int();
+        let extension = add_method(&mut analyzer, owner, int);
+        assert_eq!(
+            analyzer.receiver_function_key(&extension).unwrap().0,
+            (owner, 1)
+        );
+        assert_eq!(
+            analyzer.receiver_method_keys(owner, "update"),
+            vec![(owner, 0), (owner, 1)]
+        );
+    }
+}

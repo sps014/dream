@@ -99,6 +99,13 @@ impl DefTable {
         &self.defs[&id]
     }
 
+    pub fn set_generic_params(&mut self, id: DefId, params: Vec<String>) {
+        self.defs
+            .get_mut(&id)
+            .expect("registered definition")
+            .generic_params = params;
+    }
+
     pub fn name(&self, id: DefId) -> &str {
         &self.defs[&id].name
     }

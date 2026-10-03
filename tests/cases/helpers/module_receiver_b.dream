@@ -1,0 +1,21 @@
+module receivers.b;
+
+public class Counter {
+    public value: string;
+    public constructor(value: string) { this.value = value; }
+    public fun operator +(other: Counter): string { return this.value + other.value; }
+}
+
+extend Counter {
+    public fun read(): string { return this.value; }
+}
+
+public enum Payload { Value(Counter), Empty }
+
+public fun second_counter(): string {
+    let payload = Payload.Value(Counter("second"));
+    switch (payload) {
+        Value(counter) => { return counter + Counter(""); }
+        Empty => { return "empty"; }
+    }
+}

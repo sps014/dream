@@ -58,8 +58,9 @@ impl<'a> Analyzer<'a> {
             );
         }
         match &function.return_type {
-            Some(Type::Struct(tok, None)) => {
-                if let Some(info) = self.struct_info(&tok.text) {
+            Some(ty @ Type::Struct(tok, None)) => {
+                let ty_id = self.type_ctx.lower(ty);
+                if let Some(info) = self.struct_info(ty_id) {
                     let ok = info.fields.iter().any(|(fname, f)| {
                         let is_pos =
                             f.builtin.as_deref() == Some("position") || fname == "position";
@@ -109,7 +110,8 @@ impl<'a> Analyzer<'a> {
             }
             if let Type::Struct(tok, None) = &p.type_ {
                 if !matches!(tok.text.as_str(), "GpuTexture" | "GpuSampler") {
-                    if let Some(info) = self.struct_info(&tok.text) {
+                    let ty_id = self.type_ctx.lower(&p.type_);
+                    if let Some(info) = self.struct_info(ty_id) {
                         self.check_location_duplicates(info, diagnostics, p.name.position);
                     }
                 }
@@ -136,8 +138,9 @@ impl<'a> Analyzer<'a> {
         }
         match &function.return_type {
             Some(Type::Struct(tok, None)) if tok.text == "GpuVec4" => {}
-            Some(Type::Struct(tok, None)) => {
-                if let Some(info) = self.struct_info(&tok.text) {
+            Some(ret @ Type::Struct(tok, None)) => {
+                let ty_id = self.type_ctx.lower(ret);
+                if let Some(info) = self.struct_info(ty_id) {
                     let mut has_color = false;
                     for (fname, field) in &info.fields {
                         if let Some(b) = field.builtin.as_deref() {
@@ -221,7 +224,8 @@ impl<'a> Analyzer<'a> {
         if let Some(first) = function.parameters.first() {
             if let Type::Struct(tok, None) = &first.type_ {
                 if !matches!(tok.text.as_str(), "GpuTexture" | "GpuSampler") {
-                    if let Some(info) = self.struct_info(&tok.text) {
+                    let ty_id = self.type_ctx.lower(&first.type_);
+                    if let Some(info) = self.struct_info(ty_id) {
                         let ok = info.fields.iter().any(|(fname, f)| {
                             let is_pos =
                                 f.builtin.as_deref() == Some("position") || fname == "position";

@@ -2,6 +2,9 @@
 //! references, infers variable types, and emits inlay hints. Best-effort and tolerant of
 //! partially-broken trees.
 
+use dream_types::{DefKind, TyKind, TypeCtx, TypeId};
+use indexmap::IndexMap;
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use dream::syntax::nodes::struct_node::StructDeclarationNode;
@@ -13,13 +16,16 @@ use dream::syntax::nodes::{
 use dream::syntax::token::syntax_token::SyntaxToken;
 
 use super::{
-    base_struct, detail_belongs_to, fn_value_type, method_detail, method_generic_param_names,
-    param_names, parse_angle_type_args, parse_method_signature, signature, split_fun_type_str,
-    substitute_named_type_params, type_base, type_mentions_param, unify_type_param, Decl, Index,
-    InlayHintOut, InlayKind, Ref, SymKind, GLOBAL,
+    base_struct, method_detail, param_names, parse_angle_type_args, signature,
+    substitute_named_type_params, type_base, Decl, InlayHintOut, InlayKind, Ref, SymKind, GLOBAL,
 };
 
 pub(crate) struct Builder {
+    pub(crate) type_ctx: RefCell<TypeCtx>,
+    pub(crate) decl_types: HashMap<usize, Type>,
+    pub(crate) inferred_types: HashMap<usize, TypeId>,
+    pub(crate) callables: HashMap<usize, Callable>,
+    pub(crate) member_owners: HashMap<usize, String>,
     pub(crate) decls: Vec<Decl>,
     pub(crate) refs: Vec<Ref>,
     pub(crate) inlay_hints: Vec<InlayHintOut>,
@@ -29,16 +35,23 @@ pub(crate) struct Builder {
     pub(crate) current_file: Option<String>,
     /// Parameter names per free function name, used to render parameter-name inlay hints at calls.
     pub(crate) fn_params: HashMap<String, Vec<String>>,
-    /// Parameter names per method name (the implicit `this` is not a parsed parameter).
-    pub(crate) method_params: HashMap<String, Vec<String>>,
     /// Constructor parameter names per struct name (only when a custom `constructor` is declared).
     pub(crate) ctor_params: HashMap<String, Vec<String>>,
+}
+
+pub(crate) struct Callable {
+    params: Vec<dream::syntax::nodes::function::ParameterNode>,
+    ret: Type,
+    generics: Vec<String>,
+    owner: Option<String>,
+    is_async: bool,
 }
 
 mod declarations;
 mod expressions;
 mod generics;
 mod inference;
+use inference::{call_result, param_names_from_tokens};
 mod statements;
 impl Builder {
     fn fresh_scope(&mut self) -> usize {

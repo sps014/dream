@@ -70,11 +70,11 @@ impl<'a> Analyzer<'a> {
                 match self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics) {
                     Some((t, hir)) => {
                         arg_hirs.push(hir);
-                        params_types.push(t.get_type());
+                        params_types.push(self.type_ctx.lower(&t));
                     }
                     None => {
                         arg_hirs.push(None);
-                        params_types.push(Type::Unknown.get_type());
+                        params_types.push(self.type_ctx.interner.error());
                     }
                 }
                 continue;
@@ -82,7 +82,7 @@ impl<'a> Analyzer<'a> {
             arg_is_ref.push(false);
             let t = self.analyze_expression(param, parent_function, symbol_table, diagnostics)?;
             arg_hirs.push(self.hir_take());
-            params_types.push(t.get_type());
+            params_types.push(self.type_ctx.lower(&t));
         }
 
         if self.is_js_type(&callee_ty) {
@@ -115,9 +115,9 @@ impl<'a> Analyzer<'a> {
                 span.unwrap_or_else(empty_span),
                 diagnostics,
             );
-            let expected_strs: Vec<String> = param_types
+            let expected_strs: Vec<dream_types::TypeId> = param_types
                 .iter()
-                .map(|t| Self::peel_ref_box(t).0.get_type())
+                .map(|t| self.type_ctx.lower(&Self::peel_ref_box(t).0))
                 .collect();
             self.validate_arguments(
                 "function value",

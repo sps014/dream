@@ -1,7 +1,6 @@
 //! Plain (non-generic) static-method resolution: `analyze_static_call`.
 
 use super::*;
-use dream_syntax::nodes::types::{is_numeric_primitive, is_unknown_type_name};
 
 impl<'a> Analyzer<'a> {
     /// Analyzes a static-method call `Type.method(args)` (resolved by the caller to the type
@@ -9,26 +8,29 @@ impl<'a> Analyzer<'a> {
     /// the declared parameters.
     pub(crate) fn analyze_static_call(
         &mut self,
-        type_name: &str,
+        owner: dream_types::TypeId,
         method: &SyntaxToken,
         params: &Vec<ExpressionNode<'a>>,
         parent_function: &FunctionNode<'a>,
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        let base = method_fn(type_name, &method.text);
-        let is_overloaded = self.function_table.is_overloaded(&base);
+        let type_name = self.type_id_display(owner);
+        let type_name = type_name.as_str();
+        let base = format!("{type_name}.{}", method.text);
+        let is_overloaded = self.method_overloaded(owner, &method.text);
 
         let has_named_arg = params
             .iter()
             .any(|a| matches!(a, ExpressionNode::NamedArg(..)));
-        let method_info = self.function_table.get_function(&base).ok();
+        let method_info = self.method_info(owner, &method.text).ok();
         let is_variadic = method_info.as_ref().is_some_and(|info| info.is_variadic);
         let normalized_params: Vec<ExpressionNode<'a>>;
         let params: &[ExpressionNode<'a>] = if has_named_arg {
             if is_overloaded {
-                normalized_params = self.normalize_named_for_overloads(
+                normalized_params = self.normalize_named_for_candidates(
                     &base,
+                    self.function_table.method_candidates(owner, &method.text),
                     params,
                     method.position,
                     0,
@@ -40,7 +42,7 @@ impl<'a> Analyzer<'a> {
                         diagnostics,
                         format!(
                             "Type '{}' has no static method '{}'",
-                            self.ty_str_display(type_name),
+                            type_name,
                             method.text
                         ),
                         Some(method.position),
@@ -73,10 +75,9 @@ impl<'a> Analyzer<'a> {
         // annotation. An overloaded callee can't do this (the signature isn't known until the
         // arguments are typed), so it falls back to no expected-type context, as before.
         let expected_params: Option<Vec<Type>> = if is_overloaded {
-            self.expected_params_preferring_fun_overload(&base, params, 0)
+            self.expected_params_for_candidates(self.function_table.method_candidates(owner, &method.text), params, 0)
         } else {
-            self.function_table
-                .get_function(&base)
+            self.method_info(owner, &method.text)
                 .ok()
                 .map(|s| Self::expected_param_types(&s))
         };
@@ -97,21 +98,21 @@ impl<'a> Analyzer<'a> {
         self.current_call_target_name = saved_call_target;
 
         let store_sig = if is_overloaded {
-            match self.select_function_overload(&base, &arg_types) {
+            match self.select_method_overload(owner, &method.text, &arg_types) {
                 Ok(sig) => sig,
                 Err(message) => {
                     return Err(report(diagnostics, message, Some(method.position)));
                 }
             }
         } else {
-            match self.function_table.get_function(&base) {
+            match self.method_info(owner, &method.text) {
                 Ok(s) => s.clone(),
                 Err(_) => {
                     return Err(report_with_code(
                         diagnostics,
                         format!(
                             "Type '{}' has no static method '{}'",
-                            self.ty_str_display(type_name),
+                            type_name,
                             method.text
                         ),
                         Some(method.position),
@@ -130,8 +131,8 @@ impl<'a> Analyzer<'a> {
                 format!(
                     "'{}' is an instance method of '{}'; call it on a '{}' value, not on the type name",
                     method.text,
-                    self.ty_str_display(type_name),
-                    self.ty_str_display(type_name)
+                    type_name,
+                    type_name
                 ),
                 Some(method.position),
             ));
@@ -149,13 +150,13 @@ impl<'a> Analyzer<'a> {
             store_sig.visibility,
             &store_sig.declaring_file,
             parent_function.file_path.as_ref(),
-            self.in_methods_of(parent_function, type_name),
+            self.in_methods_of(parent_function, owner),
         ) {
             diagnostics.report_error(
                 format!(
                     "'{}' is private to '{}'",
                     method.text,
-                    self.ty_str_display(type_name)
+                    type_name
                 ),
                 Some(method.position),
             );
@@ -235,40 +236,20 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         )?;
 
-        for (i, given_type) in arg_types.iter().enumerate() {
-            let expected = &expected_params[i];
-            if expected == "object" || is_unknown_type_name(given_type) {
-                continue;
-            }
-            if is_numeric_primitive(expected) && is_numeric_primitive(given_type) {
-                continue;
-            }
-            if given_type != expected {
-                diagnostics.report_error(
-                    format!(
-                        "static method {} expects parameter {} to be {}, got {}",
-                        base,
-                        i + 1,
-                        self.ty_str_display(expected),
-                        self.ty_str_display(given_type)
-                    ),
-                    Some(method.position),
-                );
-            }
-        }
+        self.validate_arguments(&format!("static method {base}"), &expected_params, &arg_types, method.position, diagnostics);
 
         // An async static method (e.g. `File.read`) eagerly starts a task; the call yields a
         // `Future<T>` that must be `await`ed, just like any other async call.
-        let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type);
+        let ret_type = Self::async_return_type(store_sig.is_async, Some(self.type_ctx.syntax_type(store_sig.resolved_return)));
         // A static method is an unbound function under its mangled `{Type}_{method}` name (no
         // receiver). Overloaded names resolve to the selected overload's emitted key (each a
         // distinct `DefId`), matching free-function / instance-method overload emission.
-        self.hir_set_call(&store_sig.name, arg_hirs, &ret_type);
+        self.hir_set_call_identity(&store_sig.identity, arg_hirs, &ret_type);
         let call_summary = self.ide_summary(&ret_type);
         self.record_ide_ref(
             method.position,
             ide::IdeTarget::Callee {
-                key: store_sig.name.clone(),
+                key: store_sig.identity.clone(),
                 label: method.text.clone(),
             },
             call_summary,

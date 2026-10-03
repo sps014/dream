@@ -1425,6 +1425,8 @@ dependencies = [
  "dream-hir",
  "dream-sema",
  "dream-stdlib",
+ "dream-types",
+ "indexmap",
  "serde",
  "serde_json",
  "tokio",

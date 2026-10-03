@@ -7,9 +7,7 @@
 use super::*;
 use crate::module_graph::ProgramView;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::types::mangle_generic;
-use dream_syntax::nodes::{ExtendNode, FunctionNode, Type};
-use dream_types::method_fn;
+use dream_syntax::nodes::{FunctionNode, Type};
 use indexmap::IndexMap as HashMap;
 
 impl<'a> Analyzer<'a> {
@@ -31,15 +29,13 @@ impl<'a> Analyzer<'a> {
             self.type_ctx
                 .set_scope(self.graph.module_for_file(iface.file_path.as_deref()));
             diagnostics.file_path = file_path_string(&iface.file_path);
-            self.type_visibility.insert(
-                iface.name.text.clone(),
-                (iface.file_path.clone(), iface.visibility),
-            );
             let def = self.type_ctx.register(
                 DefKind::Interface,
                 &iface.name.text,
                 generic_param_names(&iface.generic_parameters),
             );
+            self.type_visibility
+                .insert(def, (iface.file_path.clone(), iface.visibility));
             for method in iface.methods.iter() {
                 if method.is_static {
                     diagnostics.report_error(
@@ -88,22 +84,18 @@ impl<'a> Analyzer<'a> {
     /// so their `interface_methods` entries include the inherited closure (and diagnose cycles /
     /// ambiguous defaults).
     fn finalize_interface_inheritance(&mut self, diagnostics: &mut DiagnosticBag) {
-        let names: Vec<(dream_types::DefId, String)> = self
+        let defs: Vec<_> = self
             .interface_decls
             .iter()
-            .filter(|(_, d)| d.generic_parameters.is_none())
-            .map(|(id, declaration)| (*id, declaration.name.text.clone()))
+            .filter(|(_, decl)| decl.generic_parameters.is_none())
+            .map(|(&def, _)| def)
             .collect();
-        for (def, name) in names {
-            self.type_ctx.set_scope(def.module);
-            let _ = self.flatten_interface_methods(&name, &[], diagnostics, &mut Vec::new());
+        for def in defs {
+            let ty = self.type_ctx.instantiate(def, vec![]);
+            let _ = self.flatten_interface_methods(ty, diagnostics, &mut Vec::new());
         }
     }
 
-    /// Instantiates a generic interface `base<args>` into a concrete `interface_methods` entry
-    /// (e.g. `Container<int>` -> `Container_int`) by substituting the type parameters through every
-    /// method signature (including inherited parents). Mirrors [`ensure_struct_instantiated`];
-    /// idempotent.
     pub(in crate::analyzer) fn ensure_interface_instantiated(
         &mut self,
         base_name: &str,
@@ -111,86 +103,82 @@ impl<'a> Analyzer<'a> {
         position: &TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
-        if args.is_empty() {
-            // Non-generic interfaces are flattened in `finalize_interface_inheritance`.
+        let Some(def) = self.type_ctx.resolve(DefKind::Interface, base_name) else {
             return;
-        }
-        let mangled = mangle_generic(base_name, args);
-        self.type_ctx
-            .register_instance(DefKind::Interface, base_name, args);
-        self.type_ctx
-            .register(DefKind::Interface, &mangled, Vec::new());
-        if self.interface_method_list(&mangled).is_none() {
-            let template = match self.interface_decl(base_name) {
-                Some(t) => *t,
-                None => return,
-            };
-            let params = template.generic_parameters.as_deref().unwrap_or(&[]);
+        };
+        let ids = args.iter().map(|arg| self.type_ctx.lower(arg)).collect();
+        let ty = self.type_ctx.instantiate(def, ids);
+        if let Some(template) = self.interface_decl(def) {
             Self::check_generic_arity(
                 "interface",
                 base_name,
-                params.len(),
+                template.generic_parameters.as_deref().unwrap_or(&[]).len(),
                 args.len(),
                 position,
                 diagnostics,
             );
-            self.flatten_interface_methods(base_name, args, diagnostics, &mut Vec::new());
         }
-        // Parent flattening (IndexedCollection → Collection) may have created `Collection_int`
-        // already; still attach package `extend Collection<T>` methods onto that name.
-        if self.interface_extensions_attached.insert(mangled.clone()) {
-            self.register_generic_extension_methods(base_name, &mangled, args, diagnostics);
+        let _ = self.flatten_interface_methods(ty, diagnostics, &mut Vec::new());
+        if self.interface_extensions_attached.insert(ty) {
+            let args = match self.type_ctx.interner.kind(ty) {
+                dream_types::TyKind::Interface(_, args) => args
+                    .iter()
+                    .map(|&arg| self.type_ctx.syntax_type(arg))
+                    .collect::<Vec<_>>(),
+                _ => return,
+            };
+            self.register_generic_extension_methods(
+                GenericExtendTarget::Nominal(def),
+                ty,
+                &args,
+                diagnostics,
+            );
         }
     }
 
-    /// Builds (or rebuilds) the flattened method list for interface `base_name` with concrete
-    /// `args` (empty for non-generic). Returns the mangled/concrete interface name.
-    /// `stack` tracks the base names currently being flattened to diagnose inheritance cycles.
+    /// Tracks template definitions rather than instances so expanding generic inheritance cycles
+    /// are rejected even when each recursive step introduces different type arguments.
     fn flatten_interface_methods(
         &mut self,
-        base_name: &str,
-        args: &[Type],
+        key: dream_types::TypeId,
         diagnostics: &mut DiagnosticBag,
-        stack: &mut Vec<String>,
-    ) -> Option<String> {
-        let key = if args.is_empty() {
-            base_name.to_string()
-        } else {
-            mangle_generic(base_name, args)
+        stack: &mut Vec<dream_types::DefId>,
+    ) -> Option<dream_types::TypeId> {
+        let dream_types::TyKind::Interface(def, ids) = self.type_ctx.interner.kind(key).clone()
+        else {
+            return None;
         };
-
-        if stack.iter().any(|s| s == base_name) {
-            if let Some(decl) = self.interface_decl(base_name) {
-                diagnostics.file_path = file_path_string(&decl.file_path);
-            }
+        let template = *self.interface_decl(def)?;
+        let base_name = template.name.text.clone();
+        if stack.contains(&def) {
+            let names = stack
+                .iter()
+                .chain(std::iter::once(&def))
+                .map(|&id| self.type_ctx.defs.name(id))
+                .collect::<Vec<_>>()
+                .join(" -> ");
             diagnostics.report_error(
-                format!(
-                    "interface inheritance cycle involving '{}'",
-                    stack.join(" -> ") + " -> " + base_name
-                ),
-                self.interface_decl(base_name).map(|d| d.name.position),
+                format!("interface inheritance cycle involving '{}'", names),
+                Some(template.name.position),
             );
             return None;
         }
-
-        // Generic instance already flattened.
-        if !args.is_empty() && self.interface_method_list(&key).is_some() {
+        if self.interface_parent_instances.contains_key(&key) {
             return Some(key);
         }
-
-        let template = *self.interface_decl(base_name)?;
+        let scope = self.type_ctx.scope();
+        self.type_ctx.set_scope(def.module);
+        let args: Vec<_> = ids
+            .iter()
+            .map(|&id| self.type_ctx.syntax_type(id))
+            .collect();
         let params = template.generic_parameters.as_deref().unwrap_or(&[]);
-        let bindings = if params.is_empty() {
-            Default::default()
-        } else {
-            generic_bindings(params, args)
-        };
-
-        stack.push(base_name.to_string());
+        let bindings = generic_bindings(params, &args);
+        stack.push(def);
 
         let mut merged: Vec<&'a FunctionNode<'a>> = Vec::new();
-        let mut from_parent: HashMap<String, (bool, String)> = HashMap::new();
-        let mut parent_keys: Vec<String> = Vec::new();
+        let mut from_parent: HashMap<String, (bool, dream_types::TypeId)> = HashMap::new();
+        let mut parent_keys: Vec<dream_types::TypeId> = Vec::new();
 
         let parents = template.parents.clone();
         for parent_ty in &parents {
@@ -205,7 +193,7 @@ impl<'a> Analyzer<'a> {
                 );
                 continue;
             };
-            if self.interface_decl(&pbase).is_none() {
+            let Some(parent_def) = self.type_ctx.resolve(DefKind::Interface, &pbase) else {
                 diagnostics.report_error(
                     format!(
                         "interface '{}' cannot extend '{}': not an interface",
@@ -214,30 +202,23 @@ impl<'a> Analyzer<'a> {
                     parent_ty.get_span().or(Some(template.name.position)),
                 );
                 continue;
-            }
+            };
             let pargs: Vec<Type> = pargs_raw
                 .iter()
                 .map(|t| substitute_generic_type(t, &bindings))
                 .collect();
-            if !pargs.is_empty() {
-                self.type_ctx
-                    .register_instance(DefKind::Interface, &pbase, &pargs);
-                self.type_ctx.register(
-                    DefKind::Interface,
-                    &mangle_generic(&pbase, &pargs),
-                    Vec::new(),
-                );
-            }
-            let Some(parent_key) =
-                self.flatten_interface_methods(&pbase, &pargs, diagnostics, stack)
+            let arg_ids = pargs.iter().map(|arg| self.type_ctx.lower(arg)).collect();
+            let parent = self.type_ctx.instantiate(parent_def, arg_ids);
+            let Some(parent_key) = self.flatten_interface_methods(parent, diagnostics, stack)
             else {
                 continue;
             };
+            self.type_ctx.set_scope(def.module);
             if !parent_keys.contains(&parent_key) {
-                parent_keys.push(parent_key.clone());
+                parent_keys.push(parent_key);
             }
             let parent_methods = self
-                .interface_method_list(&parent_key)
+                .interface_method_list(parent_key)
                 .cloned()
                 .unwrap_or_default();
             for pm in parent_methods {
@@ -247,25 +228,31 @@ impl<'a> Analyzer<'a> {
                         diagnostics.report_error(
                             format!(
                                 "interface '{}': ambiguous default for method '{}' inherited from both '{}' and '{}'; override it on '{}'",
-                                base_name, name, prev_src, parent_key, base_name
+                                base_name, name, dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, *prev_src), dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, parent_key), base_name
                             ),
                             Some(template.name.position),
                         );
                     }
                     continue;
                 }
-                from_parent.insert(name, (pm.is_default_impl, parent_key.clone()));
+                from_parent.insert(name, (pm.is_default_impl, parent_key));
                 merged.push(pm);
             }
         }
 
-        let own: Vec<&'a FunctionNode<'a>> = if args.is_empty() {
-            template.methods.iter().filter(|m| !m.is_static).collect()
-        } else {
+        let own: Vec<&'a FunctionNode<'a>> = {
             let mut owned = Vec::new();
             for method in template.methods.iter().filter(|m| !m.is_static) {
                 let mut m = method.clone();
                 Self::substitute_generic_signature(&mut m, &bindings);
+                for parameter in &mut m.parameters {
+                    let id = self.type_ctx.lower(&parameter.type_);
+                    parameter.type_ = self.type_ctx.syntax_type(id);
+                }
+                if let Some(ret) = &m.return_type {
+                    let id = self.type_ctx.lower(ret);
+                    m.return_type = Some(self.type_ctx.syntax_type(id));
+                }
                 let method_ref: &'a FunctionNode<'a> = self.arena.alloc(m);
                 owned.push(method_ref);
             }
@@ -284,26 +271,24 @@ impl<'a> Analyzer<'a> {
         }
 
         stack.pop();
-        self.interface_parent_instances
-            .insert(key.clone(), parent_keys);
-        let ty = self.type_ctx.resolved_type(&key)?;
-        self.interface_methods.insert(ty, merged);
+        self.interface_parent_instances.insert(key, parent_keys);
+        self.interface_methods.insert(key, merged);
+        self.type_ctx.set_scope(scope);
         Some(key)
     }
 
-    /// Appends `iface_name` and all interfaces it extends (transitively) into `out`.
     pub(in crate::analyzer) fn collect_interface_ancestors(
         &self,
-        iface_name: &str,
-        out: &mut Vec<String>,
+        ty: dream_types::TypeId,
+        out: &mut Vec<dream_types::TypeId>,
     ) {
-        if out.iter().any(|n| n == iface_name) {
+        if out.contains(&ty) {
             return;
         }
-        out.push(iface_name.to_string());
-        if let Some(parents) = self.interface_parent_instances.get(iface_name) {
-            for p in parents.clone() {
-                self.collect_interface_ancestors(&p, out);
+        out.push(ty);
+        if let Some(parents) = self.interface_parent_instances.get(&ty) {
+            for &parent in parents {
+                self.collect_interface_ancestors(parent, out);
             }
         }
     }
@@ -329,7 +314,11 @@ impl<'a> Analyzer<'a> {
                 .map(|m| self.interface_dispatch_sig(m))
                 .collect();
             interfaces.push(InterfaceInfo {
-                name: self.type_ctx.instance_name(*name),
+                name: dream_types::display_name(
+                    &self.type_ctx.interner,
+                    &self.type_ctx.defs,
+                    *name,
+                ),
                 method_count: methods.len(),
                 sigs,
             });
@@ -343,7 +332,6 @@ impl<'a> Analyzer<'a> {
         class_impls.sort();
         let mut impls = Vec::new();
         for (class_ty, ifaces) in class_impls {
-            let class = self.type_ctx.instance_name(class_ty);
             if let dream_types::TyKind::Struct(def, _) | dream_types::TyKind::Union(def, _) =
                 self.type_ctx.interner.kind(class_ty)
             {
@@ -362,10 +350,11 @@ impl<'a> Analyzer<'a> {
                 let definitions = methods
                     .iter()
                     .map(|m| {
-                        self.type_ctx.resolve(
-                            DefKind::Function,
-                            &method_fn(&class, &accessor_member_name(m)),
-                        )
+                        self.function_table
+                            .methods
+                            .get(&(class_ty, accessor_member_name(m)))
+                            .and_then(|methods| methods.first())
+                            .map(|function| function.0)
                     })
                     .collect();
                 entries.push((id, definitions));
@@ -376,159 +365,36 @@ impl<'a> Analyzer<'a> {
         InterfaceTable { interfaces, impls }
     }
 
-    /// True when `name` (a bare type name, no array suffix) is a registered interface.
-    /// Recognizes both plain interfaces (`Animal`) and mangled generic interface instances
-    /// (`Container_int`), even before the latter has been instantiated.
-    pub(in crate::analyzer) fn is_interface_name(&self, name: &str) -> bool {
-        self.type_ctx.nominal_kind(name) == Some(DefKind::Interface)
-            || self.demangle_generic_interface(name).is_some()
+    pub(in crate::analyzer) fn is_interface_name(&self, ty: dream_types::TypeId) -> bool {
+        matches!(
+            self.type_ctx.interner.kind(ty),
+            dream_types::TyKind::Interface(_, _)
+        )
     }
-
-    /// True when `name` is the base name of a declared generic interface (`Container`).
-    pub(in crate::analyzer) fn is_generic_interface(&self, name: &str) -> bool {
-        self.generic_interface(name).is_some()
+    pub(in crate::analyzer) fn is_generic_interface(&self, def: dream_types::DefId) -> bool {
+        self.generic_interface(def).is_some()
     }
-
-    /// Splits a mangled generic interface name (e.g. `Container_int`) into its base name and
-    /// concrete type argument, choosing the split so the base is a registered generic interface.
-    /// Mirrors [`demangle_generic_struct`].
-    pub(in crate::analyzer) fn demangle_generic_interface(
+    pub(in crate::analyzer) fn class_implements(
         &self,
-        mangled: &str,
-    ) -> Option<(String, String)> {
-        let parts: Vec<&str> = mangled.split('_').collect();
-        for split in 1..parts.len() {
-            let base = parts[..split].join("_");
-            if self.generic_interface(&base).is_some() {
-                return Some((base, parts[split..].join("_")));
-            }
-        }
-        None
-    }
-
-    /// True when class `class_name` was validated as implementing interface `iface_name`.
-    pub(in crate::analyzer) fn class_implements(&self, class_name: &str, iface_name: &str) -> bool {
-        let Some(iface) = self.type_ctx.resolved_type(iface_name) else {
-            return false;
-        };
-        self.implemented_interfaces(class_name)
+        class: dream_types::TypeId,
+        iface: dream_types::TypeId,
+    ) -> bool {
+        self.implemented_interfaces(class)
             .is_some_and(|ifaces| ifaces.contains(&iface))
     }
-
-    /// True when `class_name` may be implicitly/explicitly widened to an interface *reference*
-    /// (`iface_name`). A reference class upcasts by identity (same tagged pointer); a value
-    /// (`struct`) type is *boxed* into a fresh tagged heap object at the upcast site (see the value
-    /// struct case in `emit_cast`), so it too may become an interface reference.
-    ///
-    /// Array types (`int[]`, `Point[]`, …) are instantiated from `extend T[]` on first probe so
-    /// they participate in `Collection`/`IndexedCollection` assignability.
     pub(in crate::analyzer) fn implements_as_interface_ref(
         &mut self,
-        class_name: &str,
-        iface_name: &str,
+        class: dream_types::TypeId,
+        iface: dream_types::TypeId,
         diagnostics: &mut DiagnosticBag,
     ) -> bool {
-        if class_name.ends_with("[]") {
-            self.ensure_array_collection(class_name, diagnostics);
+        if matches!(
+            self.type_ctx.interner.kind(class),
+            dream_types::TyKind::Array(_)
+        ) {
+            self.ensure_array_collection(class, diagnostics);
         }
-        self.class_implements(class_name, iface_name)
-    }
-
-    /// Monomorphizes `extend T[] : IndexedCollection<T>` onto a concrete array type (`int[]`,
-    /// `Point[]`, …): required methods, `implements` recording, interface defaults, and package
-    /// `extend Collection` helpers.
-    pub(in crate::analyzer) fn ensure_array_collection(
-        &mut self,
-        array_ty: &str,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        use dream_syntax::nodes::types::{strip_array, ARRAY_EXTEND_KEY};
-
-        if !array_ty.ends_with("[]") {
-            return;
-        }
-        if !self.array_collections_attached.insert(array_ty.to_string()) {
-            return;
-        }
-        if !self.generic_extends.contains_key(ARRAY_EXTEND_KEY) {
-            return;
-        }
-
-        let elem_name = strip_array(array_ty);
-        let elem_ty = Self::concrete_type_from_str(elem_name);
-        let args = vec![elem_ty];
-
-        self.register_generic_extension_methods(ARRAY_EXTEND_KEY, array_ty, &args, diagnostics);
-
-        let exts: Vec<&'a ExtendNode<'a>> = self
-            .generic_extends
-            .get(ARRAY_EXTEND_KEY)
-            .cloned()
-            .unwrap_or_default();
-        for ext in exts {
-            if ext.implements.is_empty() {
-                continue;
-            }
-            let params = ext.generic_parameters.as_deref().unwrap_or(&[]);
-            let bindings = generic_bindings(params, &args);
-            let sub_impls: Vec<Type> = ext
-                .implements
-                .iter()
-                .map(|t| substitute_generic_type(t, &bindings))
-                .collect();
-            self.validate_implements(
-                array_ty,
-                &sub_impls,
-                &ext.methods,
-                &bindings,
-                ext.target.position,
-                diagnostics,
-            );
-        }
-
-        self.attach_array_interface_defaults(array_ty, diagnostics);
-    }
-
-    /// Registers inherited interface default bodies (`is_empty`, `all`, `first`, …) onto a
-    /// concrete array type after its `implements` entry is recorded.
-    fn attach_array_interface_defaults(&mut self, array_ty: &str, diagnostics: &mut DiagnosticBag) {
-        let ifaces = self
-            .implemented_interfaces(array_ty)
-            .cloned()
-            .unwrap_or_default();
-        let mut owned: Vec<FunctionNode<'a>> = Vec::new();
-        for iface in &ifaces {
-            let methods = self
-                .interface_methods
-                .get(iface)
-                .cloned()
-                .unwrap_or_default();
-            for m in methods {
-                if !m.is_default_impl || m.is_static {
-                    continue;
-                }
-                let key = accessor_member_name(m);
-                let mangled = method_fn(array_ty, &key);
-                if self.function_table.get_function(&mangled).is_ok() {
-                    continue;
-                }
-                if owned.iter().any(|p| accessor_member_name(p) == key) {
-                    continue;
-                }
-                let mut cloned = (*m).clone();
-                cloned.is_default_impl = false;
-                owned.push(cloned);
-            }
-        }
-        for method in owned {
-            let node: &'a FunctionNode<'a> = self.arena.alloc(method);
-            self.register_methods_for(
-                array_ty,
-                std::slice::from_ref(node),
-                &GenericBindings::new(),
-                diagnostics,
-            );
-        }
+        self.class_implements(class, iface)
     }
 
     /// True when `iface_method` and `class_method` have matching signatures (same parameter types
@@ -539,47 +405,50 @@ impl<'a> Analyzer<'a> {
     /// different code shapes (a `Future`-producing constructor vs. a plain call).
     fn interface_method_matches(
         &mut self,
-        iface_method: &FunctionNode,
-        class_method: &FunctionNode,
+        iface: &FunctionNode,
+        class: &FunctionNode,
         bindings: &GenericBindings,
-        _diagnostics: &mut DiagnosticBag,
+        diagnostics: &mut DiagnosticBag,
     ) -> bool {
-        if iface_method.accessor != class_method.accessor {
-            return false;
-        }
-        if iface_method.is_async != class_method.is_async {
-            return false;
-        }
-        if iface_method.parameters.len() != class_method.parameters.len() {
-            return false;
-        }
-        for (a, b) in iface_method
-            .parameters
-            .iter()
-            .zip(class_method.parameters.iter())
+        if iface.accessor != class.accessor
+            || iface.is_async != class.is_async
+            || iface.parameters.len() != class.parameters.len()
         {
-            let a_ty = substitute_generic_type(&a.type_, bindings);
-            let b_ty = substitute_generic_type(&b.type_, bindings);
-            if a_ty.get_type() != b_ty.get_type() {
+            return false;
+        }
+        let scope = self.type_ctx.scope();
+        for (a, b) in iface.parameters.iter().zip(&class.parameters) {
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(iface.file_path.as_deref()));
+            let a = self.type_ctx.lower(&a.type_);
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(class.file_path.as_deref()));
+            let b = self
+                .type_ctx
+                .lower(&substitute_generic_type(&b.type_, bindings));
+            if a != b {
+                self.type_ctx.set_scope(scope);
                 return false;
             }
         }
-        let iface_ret = iface_method
-            .return_type
-            .as_ref()
-            .map(|t| substitute_generic_type(t, bindings))
-            .unwrap_or(Type::Void);
-        let class_ret = class_method
-            .return_type
-            .as_ref()
-            .map(|t| substitute_generic_type(t, bindings))
-            .unwrap_or(Type::Void);
-        // Exact match, or the class return type is assignable to the interface return
-        // (e.g. `ListIterator<T>` implementing `Iterator<T>`).
-        if iface_ret.get_type() == class_ret.get_type() {
-            return true;
+        self.type_ctx
+            .set_scope(self.graph.module_for_file(iface.file_path.as_deref()));
+        let a = self
+            .type_ctx
+            .lower(&iface.return_type.clone().unwrap_or(Type::Void));
+        self.type_ctx
+            .set_scope(self.graph.module_for_file(class.file_path.as_deref()));
+        let class_ret =
+            substitute_generic_type(&class.return_type.clone().unwrap_or(Type::Void), bindings);
+        if let Some((base, args)) = Self::resolve_struct_parts(&class_ret) {
+            if !args.is_empty() {
+                let position = class.name.position;
+                self.ensure_type_instantiated(&base, &args, &position, diagnostics);
+            }
         }
-        self.type_str_assignable(&iface_ret.get_type(), &class_ret.get_type())
+        let b = self.type_ctx.lower(&class_ret);
+        self.type_ctx.set_scope(scope);
+        self.value_type_assignable(a, b, diagnostics)
     }
 
     /// Validates a class's `implements` clause: every listed type must name an interface, and the
@@ -593,7 +462,7 @@ impl<'a> Analyzer<'a> {
     /// Generic interfaces named in the clause are instantiated on demand.
     pub(in crate::analyzer) fn validate_implements(
         &mut self,
-        class_name: &str,
+        class: dream_types::TypeId,
         implements: &[Type],
         methods: &[FunctionNode<'a>],
         bindings: &GenericBindings,
@@ -603,14 +472,17 @@ impl<'a> Analyzer<'a> {
         if implements.is_empty() {
             return;
         }
-        let mut validated: Vec<String> = Vec::new();
+        let class_name =
+            dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, class);
+        let mut validated = Vec::new();
         for iface_ty in implements {
             let span = iface_ty.get_span().unwrap_or(class_pos);
             let (base, args) = match Self::resolve_struct_parts(iface_ty) {
                 Some(parts) => parts,
                 None => continue,
             };
-            if !self.is_interface_name(&base) {
+            let iface = self.type_ctx.lower(iface_ty);
+            if !self.is_interface_name(iface) {
                 diagnostics.report_error(
                     format!(
                         "'{}' is not an interface (class '{}' can only implement interfaces)",
@@ -620,14 +492,11 @@ impl<'a> Analyzer<'a> {
                 );
                 continue;
             }
-            let iface_name = if args.is_empty() {
-                base.clone()
-            } else {
-                self.ensure_interface_instantiated(&base, &args, &span, diagnostics);
-                mangle_generic(&base, &args)
-            };
-            let iface_methods = match self.interface_method_list(&iface_name) {
-                Some(m) => m.clone(),
+            self.ensure_interface_instantiated(&base, &args, &span, diagnostics);
+            let iface_name =
+                dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, iface);
+            let iface_methods = match self.interface_method_list(iface) {
+                Some(methods) => methods.clone(),
                 None => continue,
             };
             for im in &iface_methods {
@@ -648,7 +517,7 @@ impl<'a> Analyzer<'a> {
                             diagnostics.report_error(
                                 format!(
                                     "class '{}' method '{}' does not match the signature required by interface '{}'",
-                                    class_name, im.name.text, self.ty_str_display(&iface_name)
+                                    class_name, im.name.text, iface_name
                                 ),
                                 Some(cm.name.position),
                             );
@@ -663,17 +532,17 @@ impl<'a> Analyzer<'a> {
                         diagnostics.report_error(
                             format!(
                                 "class '{}' does not implement method '{}' required by interface '{}'",
-                                class_name, im.name.text, self.ty_str_display(&iface_name)
+                                class_name, im.name.text, iface_name
                             ),
                             Some(class_pos),
                         );
                     }
                 }
             }
-            if !validated.contains(&iface_name) {
+            if !validated.contains(&iface) {
                 // Explicit implement plus every parent interface (subtype relationship).
                 let mut ancestors = Vec::new();
-                self.collect_interface_ancestors(&iface_name, &mut ancestors);
+                self.collect_interface_ancestors(iface, &mut ancestors);
                 for a in ancestors {
                     if !validated.contains(&a) {
                         validated.push(a);
@@ -682,17 +551,10 @@ impl<'a> Analyzer<'a> {
             }
             // Attach `extend Collection<T>`-style package methods onto this class so
             // `list.to_list()` resolves without going through the interface receiver.
-            self.attach_interface_extension_methods(&base, &args, class_name, diagnostics);
+            self.attach_interface_extension_methods(iface, class, diagnostics);
         }
         // Merge into any interfaces already recorded for this type (a class may gain further
         // interfaces through an `extend : Iface` block) rather than replacing them.
-        let Some(class) = self.type_ctx.resolved_type(class_name) else {
-            return;
-        };
-        let validated: Vec<_> = validated
-            .iter()
-            .filter_map(|name| self.type_ctx.resolved_type(name))
-            .collect();
         let entry = self.implements.entry(class).or_default();
         for iface in validated {
             if !entry.contains(&iface) {
@@ -706,42 +568,28 @@ impl<'a> Analyzer<'a> {
     /// only declares `IndexedCollection<T>`.
     fn attach_interface_extension_methods(
         &mut self,
-        base_name: &str,
-        args: &[Type],
-        target: &str,
+        iface: dream_types::TypeId,
+        target: dream_types::TypeId,
         diagnostics: &mut DiagnosticBag,
     ) {
-        let mut stack = vec![(base_name.to_string(), args.to_vec())];
-        let mut seen = Vec::new();
-        while let Some((base, args)) = stack.pop() {
-            if seen.iter().any(|s| s == &base) {
+        let mut ancestors = Vec::new();
+        self.collect_interface_ancestors(iface, &mut ancestors);
+        for iface in ancestors {
+            let dream_types::TyKind::Interface(def, args) =
+                self.type_ctx.interner.kind(iface).clone()
+            else {
                 continue;
-            }
-            seen.push(base.clone());
-            self.register_generic_extension_methods(&base, target, &args, diagnostics);
-            let parents = self
-                .interface_parent_types(&base)
-                .cloned()
-                .unwrap_or_default();
-            let params = self
-                .interface_decl(&base)
-                .and_then(|d| d.generic_parameters.clone())
-                .unwrap_or_default();
-            let bindings = if params.is_empty() {
-                Default::default()
-            } else {
-                generic_bindings(&params, &args)
             };
-            for parent_ty in &parents {
-                let Some((pbase, pargs_raw)) = Self::resolve_struct_parts(parent_ty) else {
-                    continue;
-                };
-                let pargs: Vec<Type> = pargs_raw
-                    .iter()
-                    .map(|t| substitute_generic_type(t, &bindings))
-                    .collect();
-                stack.push((pbase, pargs));
-            }
+            let args: Vec<_> = args
+                .iter()
+                .map(|&arg| self.type_ctx.syntax_type(arg))
+                .collect();
+            self.register_generic_extension_methods(
+                GenericExtendTarget::Nominal(def),
+                target,
+                &args,
+                diagnostics,
+            );
         }
     }
 }

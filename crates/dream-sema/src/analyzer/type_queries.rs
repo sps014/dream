@@ -3,75 +3,60 @@ use super::*;
 impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn generic_union(
         &self,
-        name: &str,
+        def: dream_types::DefId,
     ) -> Option<&&'a EnumDeclarationNode<'a>> {
-        self.generic_unions
-            .get(&self.type_ctx.resolve(DefKind::Union, name)?)
+        self.generic_unions.get(&def)
     }
     pub(in crate::analyzer) fn implemented_interfaces(
         &self,
-        name: &str,
+        ty: dream_types::TypeId,
     ) -> Option<&Vec<dream_types::TypeId>> {
-        self.implements.get(&self.type_ctx.resolved_type(name)?)
+        self.implements.get(&ty)
     }
     pub(in crate::analyzer) fn interface_method_list(
         &self,
-        name: &str,
+        ty: dream_types::TypeId,
     ) -> Option<&Vec<&'a FunctionNode<'a>>> {
-        self.interface_methods
-            .get(&self.type_ctx.resolved_type(name)?)
+        self.interface_methods.get(&ty)
     }
-
-    pub(in crate::analyzer) fn interface_index(&self, name: &str) -> Option<usize> {
-        self.interface_methods
-            .get_index_of(&self.type_ctx.resolved_type(name)?)
+    pub(in crate::analyzer) fn interface_index(&self, ty: dream_types::TypeId) -> Option<usize> {
+        self.interface_methods.get_index_of(&ty)
     }
-
     pub(in crate::analyzer) fn interface_decl(
         &self,
-        name: &str,
+        def: dream_types::DefId,
     ) -> Option<&&'a dream_syntax::nodes::InterfaceDeclarationNode<'a>> {
-        self.interface_decls
-            .get(&self.type_ctx.resolve(DefKind::Interface, name)?)
+        self.interface_decls.get(&def)
     }
-
-    pub(in crate::analyzer) fn interface_parent_types(&self, name: &str) -> Option<&Vec<Type>> {
-        self.interface_parents
-            .get(&self.type_ctx.resolve(DefKind::Interface, name)?)
-    }
-
     pub(in crate::analyzer) fn generic_interface(
         &self,
-        name: &str,
+        def: dream_types::DefId,
     ) -> Option<&&'a dream_syntax::nodes::InterfaceDeclarationNode<'a>> {
-        self.generic_interfaces
-            .get(&self.type_ctx.resolve(DefKind::Interface, name)?)
+        self.generic_interfaces.get(&def)
     }
-    pub(in crate::analyzer) fn enum_members(&self, name: &str) -> Option<&IndexMap<String, i32>> {
-        self.enum_table
-            .get(&self.type_ctx.resolve(DefKind::Enum, name)?)
+    pub(in crate::analyzer) fn enum_members(
+        &self,
+        def: dream_types::DefId,
+    ) -> Option<&IndexMap<String, i32>> {
+        self.enum_table.get(&def)
     }
-
     pub(in crate::analyzer) fn union_info(
         &self,
-        name: &str,
+        ty: dream_types::TypeId,
     ) -> Option<&crate::union_table::UnionInfo> {
-        self.union_table.get(&self.type_ctx.resolved_type(name)?)
+        self.union_table.get(&ty)
     }
-
     pub(in crate::analyzer) fn generic_struct(
         &self,
-        name: &str,
+        def: dream_types::DefId,
     ) -> Option<&&'a dream_syntax::nodes::StructDeclarationNode<'a>> {
-        self.generic_structs
-            .get(&self.type_ctx.resolve(DefKind::Struct, name)?)
+        self.generic_structs.get(&def)
     }
     pub(in crate::analyzer) fn struct_info(
         &self,
-        name: &str,
+        ty: dream_types::TypeId,
     ) -> Option<&crate::struct_table::StructInfo> {
-        self.struct_table
-            .get_struct(self.type_ctx.resolved_type(name)?)
+        self.struct_table.get_struct(ty)
     }
     /// Builds the `Future<T>` type carrying inner type `inner`. Async-call results are this type,
     /// and `await` unwraps it back to `inner`.
@@ -140,27 +125,6 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Builds a concrete `Type` from a type name, used when substituting a generic
-    /// parameter `T` with the concrete type chosen at the call/instantiation site. Array
-    /// spellings (`int[]`, `Point[][]`) recurse so `T[] = int[]` binds `T` to a real array
-    /// type, not a struct that merely prints as one.
-    pub(in crate::analyzer) fn concrete_type_from_str(name: &str) -> Type {
-        if let Some(base) = name.strip_suffix("[]") {
-            return Type::Array(Box::new(Self::concrete_type_from_str(base)));
-        }
-        let token = synthetic_token(TokenKind::DataTypeToken, name);
-        primitive_type(name, token.clone()).unwrap_or(Type::Struct(token, None))
-    }
-
-    /// Interns a JSON writer/reader so HIR can name it. LSP skips `@json` generators, so the
-    /// real adapter is absent even for encodable types; a stub DefId keeps `main` emittable
-    /// instead of falling through to the generic "no code was generated" diagnostic.
-    pub(in crate::analyzer) fn ensure_json_callee(&mut self, name: &str) {
-        if self.type_ctx.resolve(DefKind::Function, name).is_none() {
-            self.type_ctx.register(DefKind::Function, name, vec![]);
-        }
-    }
-
     /// True when `@json` derive (or a built-in JSON leaf / collection of those) can encode `ty`.
     /// Used by `Json.serialize` so analysis without the generator (LSP) still accepts
     /// `Map<string, string>` and still rejects `object`.
@@ -184,13 +148,30 @@ impl<'a> Analyzer<'a> {
             TyKind::Tuple(elems) => elems.iter().all(|e| self.json_type_encodable(*e)),
             TyKind::Struct(def, args) | TyKind::Union(def, args) => {
                 let name = self.type_ctx.defs.name(*def);
-                if name == "JsonValue" {
+                let builtin = self.program.structs.iter().any(|declaration| {
+                    declaration.name.text == name
+                        && self.graph.module_for_file(declaration.file_path.as_deref())
+                            == def.module
+                        && declaration
+                            .file_path
+                            .as_deref()
+                            .is_some_and(dream_stdlib::is_std_source)
+                }) || self.program.enums.iter().any(|declaration| {
+                    declaration.name.text == name
+                        && self.graph.module_for_file(declaration.file_path.as_deref())
+                            == def.module
+                        && declaration
+                            .file_path
+                            .as_deref()
+                            .is_some_and(dream_stdlib::is_std_source)
+                });
+                if builtin && name == "JsonValue" {
                     return true;
                 }
-                if matches!(name, "List" | "Set" | "Option") {
+                if builtin && matches!(name, "List" | "Set" | "Option") {
                     return args.len() == 1 && self.json_type_encodable(args[0]);
                 }
-                if matches!(name, "Map" | "SortedMap") {
+                if builtin && matches!(name, "Map" | "SortedMap") {
                     return args.len() == 2
                         && matches!(
                             self.type_ctx.interner.kind(args[0]),
@@ -198,40 +179,27 @@ impl<'a> Analyzer<'a> {
                         )
                         && self.json_type_encodable(args[1]);
                 }
-                self.json_decl_has_attr(name)
+                self.json_decl_has_attr(*def)
             }
-            TyKind::Enum(def) => self.json_decl_has_attr(self.type_ctx.defs.name(*def)),
+            TyKind::Enum(def) => self.json_decl_has_attr(*def),
             _ => false,
         }
     }
 
-    pub(in crate::analyzer) fn json_decl_has_attr(&self, name: &str) -> bool {
+    pub(in crate::analyzer) fn json_decl_has_attr(&self, def: dream_types::DefId) -> bool {
         let is_json = |attrs: &[dream_syntax::nodes::AttributeNode]| {
-            attrs.iter().any(|a| a.name.text == "json")
+            attrs.iter().any(|attribute| attribute.name.text == "json")
         };
-        let pgm = self.program;
-        if pgm
-            .structs
-            .iter()
-            .any(|s| s.name.text == name && is_json(&s.attributes))
-        {
-            return true;
-        }
-        if pgm
-            .enums
-            .iter()
-            .any(|e| e.name.text == name && is_json(&e.attributes))
-        {
-            return true;
-        }
-        if self
-            .generic_struct(name)
-            .is_some_and(|s| is_json(&s.attributes))
-        {
-            return true;
-        }
-        self.generic_union(name)
-            .is_some_and(|e| is_json(&e.attributes))
+        let info = self.type_ctx.defs.get(def);
+        self.program.structs.iter().any(|declaration| {
+            declaration.name.text == info.name
+                && self.graph.module_for_file(declaration.file_path.as_deref()) == def.module
+                && is_json(&declaration.attributes)
+        }) || self.program.enums.iter().any(|declaration| {
+            declaration.name.text == info.name
+                && self.graph.module_for_file(declaration.file_path.as_deref()) == def.module
+                && is_json(&declaration.attributes)
+        })
     }
 
     /// Pretty-prints an AST type for diagnostics via the interned type graph.
@@ -242,7 +210,7 @@ impl<'a> Analyzer<'a> {
         dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, id)
     }
 
-    /// Pretty-prints a (possibly mangled) type spelling for diagnostics.
+    /// Pretty-prints a lexical source name for diagnostics.
     pub(in crate::analyzer) fn ty_str_display(&mut self, s: &str) -> String {
         if dream_syntax::nodes::types::is_unknown_type_name(s) {
             return s.to_string();
@@ -319,6 +287,10 @@ impl<'a> Analyzer<'a> {
         let Some((base, args)) = Self::resolve_struct_parts(ty) else {
             return false;
         };
-        args.is_empty() && self.enum_members(&base).is_some()
+        args.is_empty()
+            && self
+                .type_ctx
+                .resolve(DefKind::Enum, &base)
+                .is_some_and(|def| self.enum_members(def).is_some())
     }
 }

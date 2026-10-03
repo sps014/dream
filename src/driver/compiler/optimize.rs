@@ -1,14 +1,12 @@
 use super::*;
 
 impl Compiler {
-    pub(super) fn lower_and_optimize(
+    pub(super) fn optimize_mir(
         &self,
-        hir: &dream_hir::Hir,
+        mut mir: dream_mir::Mir,
         interner: &dream_types::TypeInterner,
         dump: &mut dream_mir::passes::MirDump,
     ) -> dream_mir::Mir {
-        let mut mir = dream_mir::lower::lower_program(hir, interner);
-        dump.module(dream_mir::passes::STAGE_LOWER, &mir, interner);
         // Whole-module optimization: simple-ctor expand, RC insertion, inlining, last-use RC
         // repair on fused bodies (see `mir::passes::optimize_module`). Per-function only elides pairs.
         // Debug-info builds skip inlining and use a value-preserving per-function pipeline so

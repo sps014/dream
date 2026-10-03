@@ -143,13 +143,15 @@ impl<'a> Analyzer<'a> {
                     self.analyze_expression(left, parent_function, symbol_table, diagnostics)?;
                 self.check_type_not_static_class(right_type, diagnostics);
                 let left_hir = self.hir_take();
-                let left_name = left_type.get_type();
+                let left_id = left_hir
+                    .as_ref()
+                    .map(|hir| hir.ty)
+                    .unwrap_or_else(|| self.type_ctx.lower(&left_type));
                 if left_type.is_unknown() {
                     self.hir_none();
-                } else if left_name == "object" || self.is_interface_name(&left_name) {
+                } else if left_type.is_object() || self.is_interface_name(left_id) {
                     self.hir_set_is_type(left_hir, right_type);
                 } else {
-                    let left_id = self.type_ctx.lower(&left_type);
                     let right_id = self.type_ctx.lower(right_type);
                     self.hir_set_bool(left_id == right_id);
                 }

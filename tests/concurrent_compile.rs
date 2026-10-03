@@ -50,7 +50,7 @@ fn concurrent_native_compiles_all_succeed() {
             compiler
                 .compile(
                     &src.to_string_lossy().to_string(),
-                    &out.to_string_lossy().to_string(),
+                    &out.to_string_lossy(),
                 )
                 .map_err(|e| format!("{e}"))
         }));

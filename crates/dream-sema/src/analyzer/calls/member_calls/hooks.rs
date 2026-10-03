@@ -18,25 +18,7 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Option<(ProtocolHook, FunctionTableInfo)> {
         let hook = self.protocol_hook(obj_type, role, diagnostics)?;
-        let info = self
-            .function_table
-            .get_function(&hook.mangled_name)
-            .ok()
-            .or_else(|| {
-                // Overloaded methods are stored under signature-mangled keys; fall back to the
-                // first overload that matches the role's arity (excl. `this`).
-                let keys = self.function_table.overloads.get(&hook.mangled_name)?;
-                let expected = match role {
-                    ProtocolRole::Get => 1,
-                    ProtocolRole::Set => 2,
-                    ProtocolRole::Iterator | ProtocolRole::Next => 0,
-                };
-                keys.iter().find_map(|k| {
-                    let info = self.function_table.get_function(k).ok()?;
-                    let declared = info.parameters.len().saturating_sub(1);
-                    (declared == expected && !info.is_static && !info.is_async).then_some(info)
-                })
-            })?;
+        let info = self.function_table.get_function(&hook.identity).ok()?;
         Some((hook, info))
     }
 

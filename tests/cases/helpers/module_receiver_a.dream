@@ -1,0 +1,17 @@
+module receivers.a;
+
+public sealed class Counter {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+    public fun operator +(other: Counter): int { return this.value + other.value; }
+}
+
+public enum Payload { Value(Counter), Empty }
+
+public fun first_counter(): int {
+    let payload = Payload.Value(Counter(10));
+    switch (payload) {
+        Value(counter) => { return counter + Counter(7); }
+        Empty => { return 0; }
+    }
+}

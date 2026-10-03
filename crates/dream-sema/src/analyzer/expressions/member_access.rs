@@ -7,11 +7,10 @@ use crate::function_table::FunctionTableInfo;
 use crate::symbol_table::SymbolTable;
 use dream_diagnostics::DiagnosticBag;
 use dream_hir::HExpr;
-use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, ParameterNode, StatementNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
-use dream_types::{method_fn, DefKind};
+use dream_types::DefKind;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -35,22 +34,23 @@ impl<'a> Analyzer<'a> {
         };
 
         self.ensure_struct_instantiated(&base_name, &generic_args, &member.position, diagnostics);
-        let struct_name = mangle_generic(&base_name, &generic_args);
+        let struct_ty = self.type_ctx.lower(obj_type);
+        let struct_name = self.type_id_display(struct_ty);
 
         let struct_file = self
-            .struct_info(&struct_name)
+            .struct_info(struct_ty)
             .and_then(|info| info.file_path.clone());
-        let field = match self.struct_info(&struct_name) {
+        let field = match self.struct_info(struct_ty) {
             Some(info) => info
                 .fields
                 .get(&member.text)
-                .map(|f| (f.type_.clone(), f.visibility)),
+                .map(|f| (self.type_ctx.syntax_type(f.ty), f.visibility)),
             None => return MemberField::StructNotFound { struct_name },
         };
 
         let (field_type, field_visibility) = match field {
             Some(f) => f,
-            None => return MemberField::NotAField { struct_name },
+            None => return MemberField::NotAField { struct_name, struct_ty },
         };
 
         // Private fields (the default) may only be accessed from within the declaring type's own
@@ -59,7 +59,7 @@ impl<'a> Analyzer<'a> {
             field_visibility,
             &struct_file,
             parent_function.file_path.as_ref(),
-            self.in_methods_of(parent_function, &base_name),
+            self.in_methods_of(parent_function, struct_ty),
         ) {
             diagnostics.report_error(
                 format!(
@@ -73,6 +73,7 @@ impl<'a> Analyzer<'a> {
 
         MemberField::Field {
             struct_name,
+            struct_ty,
             field_type,
         }
     }
@@ -101,8 +102,10 @@ impl<'a> Analyzer<'a> {
             )? {
                 // `analyze_variant_construction` records the `UnionNew` (or clears `last`) itself.
                 let summary = self.ide_summary(&t);
-                self.record_ide_ref(
-                    member.position,
+                let owner = self.type_ctx.lower(&t);
+                self.record_ide_member_ref(
+                    owner,
+                    member,
                     ide::IdeTarget::UnionVariant {
                         union_key: t.get_type(),
                         variant: member.text.clone(),
@@ -114,7 +117,7 @@ impl<'a> Analyzer<'a> {
         }
         // Enum member access `EnumName.Member` resolves to the enum type (an i32 at runtime).
         if let ExpressionNode::Identifier(id) = obj {
-            if self.enum_members(&id.text).is_some() {
+            if self.type_ctx.resolve(DefKind::Enum, &id.text).is_some_and(|def| self.enum_members(def).is_some()) {
                 let enum_ty = Type::Struct(id.clone(), None);
                 match self.enum_member_value(&id.text, &member.text) {
                     Some(value) => self.hir_set_enum_value(value as i64, &enum_ty),
@@ -127,8 +130,10 @@ impl<'a> Analyzer<'a> {
                     }
                 }
                 let enum_summary = self.ide_summary(&enum_ty);
-                self.record_ide_ref(
-                    member.position,
+                let owner = self.type_ctx.lower(&enum_ty);
+                self.record_ide_member_ref(
+                    owner,
+                    member,
                     ide::IdeTarget::EnumMember {
                         enum_name: id.text.clone(),
                         member: member.text.clone(),
@@ -153,8 +158,8 @@ impl<'a> Analyzer<'a> {
         if let ExpressionNode::Identifier(id) = obj {
             let is_local = symbol_table.borrow().get_symbol(id).is_ok();
             if !is_local {
-                let getter = method_fn(&id.text, &getter_member_name(&member.text));
-                if self.function_table.get_function(&getter).is_ok() {
+                let getter = getter_member_name(&member.text);
+                if self.type_ctx.resolved_type(&id.text).is_some_and(|owner| self.function_table.methods.contains_key(&(owner, getter))) {
                     let get_tok = synthetic_token(
                         TokenKind::IdentifierToken,
                         &getter_member_name(&member.text),
@@ -171,7 +176,9 @@ impl<'a> Analyzer<'a> {
                 // method, with no receiver to capture — identical in shape to a bare function
                 // value (see `Analyzer::hir_set_func_value`), just looked up under its mangled
                 // `{Type}_{method}` name instead of its own bare source name.
-                if let Some(func_ty) = self.resolve_static_method_group_value(&id.text, member) {
+                if let Some(func_ty) = self.type_ctx.resolved_type(&id.text)
+                    .and_then(|owner| self.resolve_static_method_group_value(owner, member))
+                {
                     return Ok(func_ty);
                 }
             }
@@ -226,12 +233,13 @@ impl<'a> Analyzer<'a> {
         // `arr.length` / `str.length`: builtin element-count property (same spelling collections use).
         // Inside `@compute`, `GpuBuffer<T>.length` maps to WGSL `arrayLength` (not the host getter).
         if member.text == dream_abi::intrinsics::LENGTH {
-            let base = obj_type.get_type();
-            if base.ends_with("[]") || base == "string" {
+            let obj_ty = self.type_ctx.lower(&obj_type);
+            if matches!(self.type_ctx.interner.kind(obj_ty), dream_types::TyKind::Array(_) | dream_types::TyKind::Prim(dream_types::PrimTy::String)) {
                 self.record_ide_ref(
                     member.position,
                     ide::IdeTarget::Expr,
                     TypeSummary::Named {
+                        ty: self.type_ctx.interner.int(),
                         key: Some("int".to_string()),
                         display: "int".to_string(),
                     },
@@ -256,15 +264,19 @@ impl<'a> Analyzer<'a> {
 
         // Interface-typed receiver: `iface.prop` may be a property getter (`get prop`), desugared
         // to a method call of `get$prop` (same path as class getters / interface method dispatch).
-        if let Some(iface_name) = self.interface_receiver_name(&obj_type) {
+        if self.interface_receiver_name(&obj_type).is_some() {
             if let Some((base, args)) = Self::resolve_struct_parts(&obj_type) {
-                if !args.is_empty() && self.is_generic_interface(&base) {
+                if !args.is_empty()
+                    && self.type_ctx.resolve(DefKind::Interface, &base)
+                        .is_some_and(|def| self.is_generic_interface(def))
+                {
                     self.ensure_interface_instantiated(&base, &args, &member.position, diagnostics);
                 }
             }
             let getter = getter_member_name(&member.text);
+            let iface_ty = self.type_ctx.lower(&obj_type);
             let methods = self
-                .interface_method_list(&iface_name)
+                .interface_method_list(iface_ty)
                 .cloned()
                 .unwrap_or_default();
             if methods.iter().any(|m| accessor_member_name(m) == getter) {
@@ -277,15 +289,17 @@ impl<'a> Analyzer<'a> {
         match self.resolve_member_field(&obj_type, member, parent_function, diagnostics) {
             MemberField::Field {
                 struct_name,
+                struct_ty,
                 field_type,
             } => {
-                match self.struct_field_index(&struct_name, &member.text) {
+                match self.struct_field_index(struct_ty, &member.text) {
                     Some(index) => self.hir_set_field(obj_hir, index, &field_type),
                     None => self.hir_none(),
                 }
                 let field_summary = self.ide_summary(&field_type);
-                self.record_ide_ref(
-                    member.position,
+                self.record_ide_member_ref(
+                    struct_ty,
+                    member,
                     ide::IdeTarget::Field {
                         type_key: struct_name,
                         name: member.text.clone(),
@@ -305,19 +319,19 @@ impl<'a> Analyzer<'a> {
                     Some(member.position),
                 ))
             }
-            MemberField::StructNotFound { struct_name } => {
+            MemberField::StructNotFound { struct_name, .. } => {
                 self.hir_none();
                 Err(report(
                     diagnostics,
-                    format!("Struct '{}' not found", self.ty_str_display(&struct_name)),
+                    format!("Struct '{}' not found", struct_name),
                     Some(member.position),
                 ))
             }
-            MemberField::NotAField { struct_name } => {
+            MemberField::NotAField { struct_name, struct_ty } => {
                 // Not a field: `obj.prop` may read a property getter, which desugars to a call of
                 // the (internally named) getter method. The call carries its own privacy/type check.
-                let getter = method_fn(&struct_name, &getter_member_name(&member.text));
-                if self.function_table.get_function(&getter).is_ok() {
+                let getter = getter_member_name(&member.text);
+                if self.function_table.methods.contains_key(&(struct_ty, getter)) {
                     let get_tok = synthetic_token(
                         TokenKind::IdentifierToken,
                         &getter_member_name(&member.text),
@@ -366,27 +380,19 @@ impl<'a> Analyzer<'a> {
     /// static method or it is part of an overload set (ambiguous without a call's argument types).
     fn resolve_static_method_group_value(
         &mut self,
-        type_name: &str,
+        owner: dream_types::TypeId,
         member: &SyntaxToken,
     ) -> Option<Type> {
-        let mangled = method_fn(type_name, &member.text);
-        if self
-            .function_table
-            .overloads
-            .get(&mangled)
-            .map(Vec::len)
-            .unwrap_or(0)
-            > 1
-        {
+        if self.method_overloaded(owner, &member.text) {
             return None;
         }
-        let sig = self.function_table.get_function(&mangled).ok()?;
+        let sig = self.method_info(owner, &member.text).ok()?;
         if !sig.is_static {
             return None;
         }
-        let box_ret = Self::async_return_type(sig.is_async, sig.return_type.clone());
+        let box_ret = Self::async_return_type(sig.is_async, Some(self.type_ctx.syntax_type(sig.resolved_return)));
         let func_ty = Type::Function(sig.parameter_types.clone(), Box::new(box_ret.clone()));
-        self.hir_set_func_value(&mangled, &func_ty, &box_ret);
+        self.hir_set_func_value_identity(&sig.identity, &func_ty, &box_ret);
         Some(func_ty)
     }
 
@@ -405,24 +411,17 @@ impl<'a> Analyzer<'a> {
     /// analyzed.
     fn resolve_method_group_value(
         &mut self,
-        struct_name: &str,
+        _struct_name: &str,
         member: &SyntaxToken,
         receiver_ty: &Type,
         receiver_hir: Option<HExpr>,
         parent_function: &FunctionNode<'a>,
     ) -> Option<Type> {
-        let mangled = method_fn(struct_name, &member.text);
-        if self
-            .function_table
-            .overloads
-            .get(&mangled)
-            .map(Vec::len)
-            .unwrap_or(0)
-            > 1
-        {
+        let owner = self.type_ctx.lower(receiver_ty);
+        if self.method_overloaded(owner, &member.text) {
             return None;
         }
-        let sig = self.function_table.get_function(&mangled).ok()?;
+        let sig = self.method_info(owner, &member.text).ok()?;
         if sig.is_static {
             return None;
         }
@@ -494,17 +493,18 @@ impl<'a> Analyzer<'a> {
         };
         let func_ref: &'a FunctionNode<'a> = self.arena.alloc(func_node);
 
-        let info = FunctionTableInfo::from(func_ref);
+        let info = FunctionTableInfo::from(func_ref, &mut self.type_ctx);
+        let def = info.identity.0;
+        self.function_table.record_declaration(func_ref, info.identity.clone());
         // Synthesized names are always fresh (a monotonically increasing counter, shared with
         // `expressions::lambda`'s own `__lambda_<n>` names), so this cannot collide.
         let _ = self.function_table.add_function(name.clone(), info);
-        self.type_ctx.register(DefKind::Function, &name, vec![]);
         self.pending_lambdas.insert(
-            name.clone(),
+            def,
             (func_ref, self.current_generic_bindings.clone()),
         );
         self.closure_captures
-            .insert(name.clone(), vec![(recv_name, receiver_ty.clone())]);
+            .insert(def, vec![(recv_name, receiver_ty.clone())]);
 
         let cell = self.hir_build_cell_new(receiver_ty, receiver_hir)?;
         self.hir_set_capturing_func_value(&name, cell, &func_ty, &box_ret);
@@ -516,10 +516,10 @@ impl<'a> Analyzer<'a> {
     /// `None` if the struct or field is unknown.
     pub(in crate::analyzer) fn struct_field_index(
         &self,
-        struct_name: &str,
+        struct_ty: dream_types::TypeId,
         field: &str,
     ) -> Option<usize> {
-        let info = self.struct_info(struct_name)?;
+        let info = self.struct_info(struct_ty)?;
         info.fields.get_index_of(field)
     }
 }

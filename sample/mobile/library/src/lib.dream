@@ -1,0 +1,7 @@
+import system;
+
+@export
+fun answer(seed: int): int {
+    let values: int[] = [seed, 22];
+    return values[0] + values[1];
+}

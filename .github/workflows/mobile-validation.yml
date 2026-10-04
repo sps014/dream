@@ -1,0 +1,88 @@
+name: Mobile sample apps
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DREAM_VERIFY_MIR: "1"
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_OPT_LEVEL: "1"
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'ndk;28.2.13676358' 'platforms;android-34' 'build-tools;34.0.0' 'platform-tools'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mobile-android
+      - uses: actions/cache@v4
+        with:
+          path: ~/.dream/toolchains/llvm-22.1.8
+          key: mobile-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
+      - run: scripts/fetch-dev-llvm.sh
+      - run: cargo build --locked -p dream --no-default-features --features native -p dreamer
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Link staticlibs, package AAR and run the sample app
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: default
+          disable-animations: true
+          script: python3 scripts/mobile/android.py --ndk "$ANDROID_HOME/ndk/28.2.13676358"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-android
+          path: |
+            target/mobile-validation/android/result.json
+            target/mobile-validation/android/logcat.txt
+            target/mobile-validation/android/app/*.apk
+            target/mobile-validation/android/library/target/pack/*.aar
+          if-no-files-found: warn
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mobile-ios
+      - uses: actions/cache@v4
+        with:
+          path: ~/.dream/toolchains/llvm-22.1.8
+          key: mobile-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
+      - run: scripts/fetch-dev-llvm.sh
+      - run: cargo build --locked -p dream --no-default-features --features native -p dreamer
+      - name: Link staticlibs, package XCFramework and run the sample app
+        run: python3 scripts/mobile/ios.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-ios
+          path: |
+            target/mobile-validation/ios/result.json
+            target/mobile-validation/ios/app/
+            target/mobile-validation/ios/library/target/pack/*.xcframework/
+          if-no-files-found: warn

@@ -98,6 +98,32 @@ try {
 See the NDK's [other build systems guide](https://developer.android.com/ndk/guides/other_build_systems)
 and [Android library archive structure](https://developer.android.com/studio/projects/android-library#aar-contents).
 
+## SDK-equipped sample-app validation
+
+The manual **Mobile sample apps** GitHub Actions workflow builds the real Rust core and
+Dream static library for both iOS slices and both Android ABIs. It packages an XCFramework
+and an AAR, links the library into the sample apps in `sample/mobile/`, and executes an
+iPhone simulator app and an Android x86_64 emulator app. Each app attaches a thread, calls
+the generated bridge, checks the array-based Dream function returns 42, and detaches.
+The workflow preserves packages, app binaries, runtime evidence and `result.json` reports.
+Device iOS and Android arm64 slices are built; execution is on simulators/emulators.
+
+To repeat the checks on an SDK-equipped machine, first install the pinned LLVM and build
+the compiler and packager:
+
+```sh
+scripts/fetch-dev-llvm.sh
+cargo build --locked -p dream --no-default-features --features native -p dreamer
+python3 scripts/mobile/ios.py # Apple Silicon Mac with Xcode and an iOS simulator
+python3 scripts/mobile/android.py --ndk "$ANDROID_HOME/ndk/28.2.13676358"
+```
+
+Android validation requires a running emulator/device, JDK 21, SDK platform/build-tools 34,
+platform-tools and the NDK; it runs on Linux or macOS. The sample APK uses a generated local
+debug signing key. Both checks write outputs under `target/mobile-validation/`, and fail
+if the app never reports the expected result. Cross-target core capability binaries are
+built from the repository rather than substituted with test stubs.
+
 ## Ownership and threading
 
 The bridges forward the generated plain C ABI without a hidden caller location. Scalar types

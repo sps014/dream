@@ -273,7 +273,8 @@ DREAM_ALWAYS_INLINE uint32_t *dream_block_magic(char *block) {
 }
 
 /* Per-thread alloc/free tallies behind `Debug.live_objects`. Heap-allocated and never freed so
- * the process-wide sum stays valid after a worker exits; atomic updates permit concurrent snapshots. */
+ * the process-wide sum stays valid after a worker exits. Only the owning thread writes its tallies;
+ * atomic loads/stores permit concurrent diagnostic readers without a locked RMW on each allocation. */
 typedef struct dream_heap_counters {
     uint64_t allocs;
     uint64_t frees;
@@ -317,8 +318,9 @@ DREAM_ALWAYS_INLINE void dream_block_activate(char *block, int32_t tag) {
     header->rc = dream_rc_init(tag);
 }
 
-DREAM_ALWAYS_INLINE void dream_heap_count(uint64_t *c) {
-    __atomic_fetch_add(c, UINT64_C(1), __ATOMIC_RELAXED);
+DREAM_ALWAYS_INLINE void dream_heap_count(uint64_t *c, uint64_t n) {
+    uint64_t value = __atomic_load_n(c, __ATOMIC_RELAXED);
+    __atomic_store_n(c, value + n, __ATOMIC_RELAXED);
 }
 
 DREAM_ALWAYS_INLINE dream_ptr dream_malloc(dream_size size, int32_t tag) {
@@ -332,7 +334,7 @@ DREAM_ALWAYS_INLINE dream_ptr dream_malloc(dream_size size, int32_t tag) {
             memcpy(&next, block + 8, sizeof(next));
             h->free[idx] = next;
             dream_block_activate(block, tag);
-            dream_heap_count(&c->allocs);
+            dream_heap_count(&c->allocs, UINT64_C(1));
             return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
         }
     }
@@ -365,7 +367,7 @@ DREAM_ALWAYS_INLINE void dream_recycle(dream_ptr ptr) {
     }
     idx = dream_size_class((uint32_t)sz);
     *dream_block_magic(block) = DREAM_MAGIC_FREE;
-    dream_heap_count(&c->frees);
+    dream_heap_count(&c->frees, UINT64_C(1));
     memcpy(block + 8, &h->free[idx], sizeof(char *));
     h->free[idx] = block;
 }

@@ -13,24 +13,37 @@ void dream_release_object(dream_ptr ptr) { dream_release(ptr); }
 const dream_platform dream_default_platform = {0};
 static int fail_allocate, fail_resize, fail_map;
 static int allocations, resizes, mappings, frees, locked[2];
+static dream_mutex locks[2] = {DREAM_MUTEX_INIT, DREAM_MUTEX_INIT};
 
 static DREAM_THREAD_PROC(increment_counter) {
-    uint64_t *counter = (uint64_t *)arg;
-    for (int i = 0; i < 100000; ++i) { dream_heap_count(counter); }
+    for (int i = 0; i < 100000; ++i) {
+        dream_ptr object = dream_malloc(16, 1);
+        dream_recycle(object);
+    }
+    __atomic_fetch_add((int *)arg, 1, __ATOMIC_RELEASE);
     return 0;
 }
-static void *allocate(size_t size) { ++allocations; return fail_allocate ? NULL : malloc(size); }
-static void *resize(void *ptr, size_t size) { ++resizes; return fail_resize ? NULL : realloc(ptr, size); }
-static void deallocate(void *ptr) { ++frees; free(ptr); }
-static void *map(size_t size) { ++mappings; return fail_map ? NULL : calloc(1, size); }
+static void *allocate(size_t size) { __atomic_fetch_add(&allocations, 1, __ATOMIC_RELAXED); return fail_allocate ? NULL : malloc(size); }
+static void *resize(void *ptr, size_t size) { __atomic_fetch_add(&resizes, 1, __ATOMIC_RELAXED); return fail_resize ? NULL : realloc(ptr, size); }
+static void deallocate(void *ptr) { __atomic_fetch_add(&frees, 1, __ATOMIC_RELAXED); free(ptr); }
+static void *map(size_t size) { __atomic_fetch_add(&mappings, 1, __ATOMIC_RELAXED); return fail_map ? NULL : calloc(1, size); }
 static void write_bytes(int stream, const void *bytes, size_t size, int encoding) {
     assert(stream == 2);
     if (encoding == DREAM_TEXT_UTF16) { dream_write_utf16(stream, bytes, (int32_t)size); return; }
     fwrite(bytes, 1, size, stderr);
 }
 static void terminal_abort(void) { fputs("PLATFORM_ABORT\n", stderr); fflush(stderr); _Exit(86); }
-static void lock(unsigned domain) { assert(domain < 2 && !locked[domain]); locked[domain] = 1; }
-static void unlock(unsigned domain) { assert(domain < 2 && locked[domain]); locked[domain] = 0; }
+static void lock(unsigned domain) {
+    assert(domain < 2);
+    dream_mutex_lock(&locks[domain]);
+    assert(!locked[domain]);
+    locked[domain] = 1;
+}
+static void unlock(unsigned domain) {
+    assert(domain < 2 && locked[domain]);
+    locked[domain] = 0;
+    dream_mutex_unlock(&locks[domain]);
+}
 static void object_drop(void *ptr) { (void)ptr; }
 static void panic_hook(const char *text, const char *location) {
     assert(strcmp(text, "unicode: \xF0\x9F\x98\x80") == 0);
@@ -64,18 +77,26 @@ int main(int argc, char **argv) {
         int64_t live = debug_get_live_objects();
         int64_t total = debug_get_total_allocations();
         uint64_t offset = UINT64_C(1) << 32;
-        __atomic_fetch_add(&counters->allocs, offset, __ATOMIC_RELAXED);
-        __atomic_fetch_add(&counters->frees, offset, __ATOMIC_RELAXED);
+        dream_heap_count(&counters->allocs, offset);
+        dream_heap_count(&counters->frees, offset);
         assert(debug_get_live_objects() == live);
         assert(debug_get_total_allocations() == total + (int64_t)offset);
         dream_thread workers[8];
+        int completed = 0;
         for (int i = 0; i < 8; ++i) {
-            assert(dream_thread_start(&workers[i], increment_counter, &counters->allocs) == 0);
+            assert(dream_thread_start(&workers[i], increment_counter, &completed) == 0);
+        }
+        int64_t previous = debug_get_total_allocations();
+        while (__atomic_load_n(&completed, __ATOMIC_ACQUIRE) != 8) {
+            int64_t snapshot = debug_get_total_allocations();
+            assert(snapshot >= previous);
+            previous = snapshot;
+            assert(debug_get_live_objects() >= 0);
+            dream_thread_yield();
         }
         for (int i = 0; i < 8; ++i) { dream_thread_join(workers[i]); }
         assert(debug_get_total_allocations() == total + (int64_t)offset + 800000);
-        assert(debug_get_live_objects() == live + 800000);
-        __atomic_fetch_add(&counters->frees, UINT64_C(800000), __ATOMIC_RELAXED);
+        assert(debug_get_live_objects() == live);
     }
     if (strcmp(argv[1], "long") == 0) {
         dream_ptr message = dream_string_alloc(3000);

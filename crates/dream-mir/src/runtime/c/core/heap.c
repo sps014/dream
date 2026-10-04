@@ -159,12 +159,12 @@ static void class_set_next(char *block, void *next) {
 
 static void activate(char *block, int32_t tag) {
     dream_block_activate(block, tag);
-    dream_heap_count(&thread_counters()->allocs);
+    dream_heap_count(&thread_counters()->allocs, UINT64_C(1));
 }
 
 static void account_frees(uint32_t n) {
     dream_heap_counters *c = thread_counters();
-    __atomic_fetch_add(&c->frees, (uint64_t)n, __ATOMIC_RELAXED);
+    dream_heap_count(&c->frees, (uint64_t)n);
 }
 
 /* Re-arm the inline fast path once the thread is registered and no region is open. */

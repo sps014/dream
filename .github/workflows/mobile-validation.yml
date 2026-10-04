@@ -2,12 +2,18 @@ name: Mobile sample apps
 
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        type: choice
+        default: both
+        options: [both, android, ios]
+        description: Sample apps to validate
 
 permissions:
   contents: read
 
 concurrency:
-  group: mobile-validation-${{ github.ref }}
+  group: mobile-validation-${{ github.ref }}-${{ inputs.platform }}
   cancel-in-progress: true
 
 env:
@@ -17,6 +23,7 @@ env:
 
 jobs:
   android:
+    if: inputs.platform != 'ios'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -27,6 +34,9 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - run: sdkmanager 'ndk;28.2.13676358' 'platforms;android-34' 'build-tools;34.0.0' 'platform-tools'
       - uses: Swatinem/rust-cache@v2
         with:
@@ -61,6 +71,7 @@ jobs:
             target/mobile-validation/android/library/target/pack/*.aar
           if-no-files-found: warn
   ios:
+    if: inputs.platform != 'android'
     runs-on: macos-15
     timeout-minutes: 60
     steps:

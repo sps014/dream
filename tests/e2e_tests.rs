@@ -280,7 +280,7 @@ fn run_native_case(dream_file: &Path) {
     if expected_error_file.exists() {
         let err = match compile_result {
             Err(e) => e,
-            Ok(()) => panic!("Expected compilation to fail for {:?}", dream_file),
+            Ok(_) => panic!("Expected compilation to fail for {:?}", dream_file),
         };
         let rendered = err.diagnostic_text().unwrap_or("").to_string();
         let expected = fs::read_to_string(&expected_error_file).unwrap_or_default();

@@ -6,7 +6,6 @@ impl<'a> Analyzer<'a> {
         node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<SemanticInfo<'_>, SemanticError> {
-        let mut symbol_table_map = HashMap::new();
         self.type_ctx.set_scope(dream_types::ModuleId::ROOT);
         self.type_ctx
             .register(DefKind::Struct, FUTURE_TYPE, vec!["T".to_string()]);
@@ -74,8 +73,8 @@ impl<'a> Analyzer<'a> {
         // HIR global slots are assigned incrementally inside `register_globals` (in declaration
         // order) so both later initializers and function bodies can resolve global identifiers.
         self.register_globals(node, diagnostics);
-        self.analyze_function_bodies(node, &mut symbol_table_map, diagnostics)?;
-        self.analyze_pending_instantiations(&mut symbol_table_map, diagnostics)?;
+        self.analyze_function_bodies(node, diagnostics)?;
+        self.analyze_pending_instantiations(diagnostics)?;
 
         // Inferred receiver exclusivity: classify every method's `this` contract once bodies
         // are fully analyzed and all types are registered. Runs only on otherwise-clean
@@ -147,7 +146,6 @@ impl<'a> Analyzer<'a> {
         }
 
         Ok(SemanticInfo {
-            hash_map: symbol_table_map,
             function_table: &self.function_table,
             struct_table: &self.struct_table,
             instantiated_generics: self.instantiated_generics.clone(),

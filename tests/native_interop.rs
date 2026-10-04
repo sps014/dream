@@ -42,6 +42,7 @@ fn compile(target: Target, entry: &Path, out: &Path) -> Result<(), String> {
                 .map(str::to_string)
                 .unwrap_or_else(|| e.to_string())
         })
+        .map(drop)
 }
 
 fn build(entry: &Path, tag: &str) -> Result<PathBuf, String> {

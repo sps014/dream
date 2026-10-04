@@ -82,22 +82,31 @@ impl Analyzer<'_> {
         }
     }
 
+    /// The un-applied nominal type of `def`; `None` for functions.
+    pub(super) fn nominal_type_of(&mut self, def: DefId) -> Option<TypeId> {
+        let interner = &mut self.type_ctx.interner;
+        Some(match self.type_ctx.defs.get(def).kind {
+            DefKind::Struct => interner.struct_ty(def, Vec::new()),
+            DefKind::Interface => interner.interface_ty(def, Vec::new()),
+            DefKind::Union => interner.union_ty(def, Vec::new()),
+            DefKind::Enum => interner.enum_ty(def),
+            DefKind::Function => return None,
+        })
+    }
+
     pub(super) fn append_ide_member_declarations(&mut self, refs: &mut Vec<super::IdeRef>) {
-        for ((def, name), source) in &self.ide_member_sources {
-            let kind = self.type_ctx.defs.get(*def).kind;
+        let members: Vec<_> = self
+            .ide_member_sources
+            .iter()
+            .map(|((def, name), source)| (*def, name.clone(), source.clone()))
+            .collect();
+        for (def, name, source) in members {
+            let kind = self.type_ctx.defs.get(def).kind;
+            let Some(owner) = self.nominal_type_of(def) else { continue };
             let target = match kind {
-                DefKind::Struct | DefKind::Interface => IdeTarget::Field {
-                    type_key: self.type_ctx.defs.name(*def).to_string(),
-                    name: name.clone(),
-                },
-                DefKind::Enum => IdeTarget::EnumMember {
-                    enum_name: self.type_ctx.defs.name(*def).to_string(),
-                    member: name.clone(),
-                },
-                DefKind::Union => IdeTarget::UnionVariant {
-                    union_key: self.type_ctx.defs.name(*def).to_string(),
-                    variant: name.clone(),
-                },
+                DefKind::Struct | DefKind::Interface => IdeTarget::Field { owner, name },
+                DefKind::Enum => IdeTarget::EnumMember { owner, member: name },
+                DefKind::Union => IdeTarget::UnionVariant { owner, variant: name },
                 DefKind::Function => continue,
             };
             refs.push(super::IdeRef {
@@ -105,8 +114,8 @@ impl Analyzer<'_> {
                 end: source.end,
                 file: source.file.clone(),
                 target: IdeTarget::Resolved {
-                    def: *def,
-                    source: source.clone(),
+                    def,
+                    source,
                     target: Box::new(target),
                 },
                 result: super::TypeSummary::Unknown,

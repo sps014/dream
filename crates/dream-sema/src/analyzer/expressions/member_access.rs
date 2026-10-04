@@ -72,7 +72,6 @@ impl<'a> Analyzer<'a> {
         }
 
         MemberField::Field {
-            struct_name,
             struct_ty,
             field_type,
         }
@@ -107,7 +106,7 @@ impl<'a> Analyzer<'a> {
                     owner,
                     member,
                     ide::IdeTarget::UnionVariant {
-                        union_key: t.get_type(),
+                        owner,
                         variant: member.text.clone(),
                     },
                     summary,
@@ -135,7 +134,7 @@ impl<'a> Analyzer<'a> {
                     owner,
                     member,
                     ide::IdeTarget::EnumMember {
-                        enum_name: id.text.clone(),
+                        owner,
                         member: member.text.clone(),
                     },
                     enum_summary,
@@ -240,7 +239,6 @@ impl<'a> Analyzer<'a> {
                     ide::IdeTarget::Expr,
                     TypeSummary::Named {
                         ty: self.type_ctx.interner.int(),
-                        key: Some("int".to_string()),
                         display: "int".to_string(),
                     },
                 );
@@ -288,9 +286,9 @@ impl<'a> Analyzer<'a> {
 
         match self.resolve_member_field(&obj_type, member, parent_function, diagnostics) {
             MemberField::Field {
-                struct_name,
                 struct_ty,
                 field_type,
+                ..
             } => {
                 match self.struct_field_index(struct_ty, &member.text) {
                     Some(index) => self.hir_set_field(obj_hir, index, &field_type),
@@ -301,7 +299,7 @@ impl<'a> Analyzer<'a> {
                     struct_ty,
                     member,
                     ide::IdeTarget::Field {
-                        type_key: struct_name,
+                        owner: struct_ty,
                         name: member.text.clone(),
                     },
                     field_summary,

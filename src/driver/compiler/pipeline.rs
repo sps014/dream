@@ -2,18 +2,33 @@ use super::*;
 
 #[path = "analyze.rs"]
 mod analyze;
+#[path = "cache.rs"]
+mod cache;
 #[path = "emit.rs"]
 mod emit;
 #[path = "lower.rs"]
 mod lower;
 
+pub use cache::{BuildOutcome, BuildStamp};
+
 impl Compiler {
-    pub fn compile(&self, main_file_path: &String, out_path: &str) -> Result<(), CompileError> {
+    pub fn compile(
+        &self,
+        main_file_path: &String,
+        out_path: &str,
+    ) -> Result<BuildOutcome, CompileError> {
         info!("starting parsing and multi-file resolution");
         let arena = Bump::new();
         let mut diagnostics = DiagnosticBag::new(None);
         let loaded = self.load_program(main_file_path, &arena, &mut diagnostics)?;
         info!("finished parsing");
+        let stamp = self.build_cache.as_deref().and_then(|link_key| {
+            self.build_stamp(link_key, &loaded, main_file_path, out_path)
+        });
+        if let Some(artifacts) = stamp.as_ref().and_then(BuildStamp::lookup) {
+            info!("reusing cached build");
+            return Ok(BuildOutcome::Cached(artifacts));
+        }
 
         let mut analyzer = self.prepare_analyzer(&loaded, main_file_path, &arena);
         let mut dump = match &self.emit_mir {
@@ -60,6 +75,10 @@ impl Compiler {
                 return Err(CompileError::Internal(message));
             }
         };
-        self.emit_artifacts(out_path, &loaded, emitted, gpu, layouts, llvm.as_deref())
+        self.emit_artifacts(out_path, &loaded, emitted, gpu, layouts, llvm.as_deref())?;
+        // A reused build would silently drop warnings this compile printed.
+        Ok(BuildOutcome::Built(
+            stamp.filter(|_| diagnostics.diagnostics.is_empty()),
+        ))
     }
 }

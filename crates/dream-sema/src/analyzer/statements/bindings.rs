@@ -119,6 +119,18 @@ impl<'a> Analyzer<'a> {
             .unwrap_or(Type::Unknown);
         let mut value = self.hir_take();
         self.current_expected_type = saved_expected;
+        let void = self.type_ctx.interner.void();
+        let right_type = if value.as_ref().is_some_and(|v| v.ty == void)
+            && !Self::is_discard_binding(&left.text)
+        {
+            diagnostics.report_error(
+                format!("cannot bind '{}' to a void value", left.text),
+                Some(left.position),
+            );
+            Type::Unknown
+        } else {
+            right_type
+        };
 
         let var_type = if let Some(t) = type_annotation {
             // A user-defined `@cast("implicit")` conversion is tried before the built-in

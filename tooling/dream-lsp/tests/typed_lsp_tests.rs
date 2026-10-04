@@ -4,7 +4,7 @@ use dream_lsp::{
     sema_ide,
 };
 use dream_sema::analyzer::ide::{IdeRef, IdeSnapshot, IdeSource, IdeTarget, TypeSummary};
-use dream_types::{DefId, ModuleId};
+use dream_types::{DefId, ModuleId, TypeId};
 
 fn variable_type(source: &str, name: &str) -> String {
     let index = Index::build(None, source);
@@ -52,7 +52,7 @@ fn resolved_sources_match_across_snapshot_local_ids_but_not_member_spans() {
         },
         source,
         target: Box::new(IdeTarget::Field {
-            type_key: "Box<int>".into(),
+            owner: TypeId(40),
             name: "value".into(),
         }),
     };
@@ -88,7 +88,7 @@ fn chained_field_rename_uses_the_resolved_source_span() {
             end: declaration + 5,
         },
         target: Box::new(IdeTarget::Field {
-            type_key: "Item".into(),
+            owner: TypeId(41),
             name: "value".into(),
         }),
     };

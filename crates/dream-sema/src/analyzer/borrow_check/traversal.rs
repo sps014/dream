@@ -4,22 +4,20 @@ impl<'s> Extractor<'s> {
     pub(super) fn walk_block(
         &mut self,
         stmts: &[StatementNode],
-        field_types: &indexmap::IndexMap<String, String>,
         class_fields: &[String],
     ) {
         for s in stmts {
-            self.walk_stmt(s, field_types, class_fields);
+            self.walk_stmt(s, class_fields);
         }
     }
 
     pub(super) fn walk_args(
         &mut self,
         args: &[ExpressionNode],
-        field_types: &indexmap::IndexMap<String, String>,
         class_fields: &[String],
     ) {
         for a in args {
-            self.walk_expr(a, field_types, class_fields);
+            self.walk_expr(a, class_fields);
         }
     }
 
@@ -28,7 +26,6 @@ impl<'s> Extractor<'s> {
         receiver: &ExpressionNode,
         name: &str,
         args: &[ExpressionNode],
-        field_types: &indexmap::IndexMap<String, String>,
         class_fields: &[String],
     ) {
         match canonical_chain_from(receiver) {
@@ -46,16 +43,15 @@ impl<'s> Extractor<'s> {
                 }
             }
             // Chained receivers (`a.b(c).d(e)`): recurse so every nested call is seen.
-            None => self.walk_expr(receiver, field_types, class_fields),
+            None => self.walk_expr(receiver, class_fields),
         }
-        self.walk_args(args, field_types, class_fields);
+        self.walk_args(args, class_fields);
     }
 
     #[allow(clippy::too_many_arguments)]
     pub(super) fn walk_stmt(
         &mut self,
         stmt: &StatementNode,
-        field_types: &indexmap::IndexMap<String, String>,
         class_fields: &[String],
     ) {
         match stmt {
@@ -104,10 +100,10 @@ impl<'s> Extractor<'s> {
                     }
                     _ => {}
                 }
-                self.emit_binding_and_init(&name_tok.text, init, field_types, class_fields);
+                self.emit_binding_and_init(&name_tok.text, init, class_fields);
             }
             StatementNode::TupleDeclaration { init, .. } => {
-                self.walk_expr(init, field_types, class_fields);
+                self.walk_expr(init, class_fields);
             }
             StatementNode::Assignment(name_tok, value) => {
                 if class_fields.contains(&name_tok.text) {
@@ -119,7 +115,7 @@ impl<'s> Extractor<'s> {
                         });
                     }
                 }
-                self.emit_binding_and_init(&name_tok.text, value, field_types, class_fields);
+                self.emit_binding_and_init(&name_tok.text, value, class_fields);
             }
             StatementNode::MemberAssignment(target, name, value) => {
                 if let Some(key) = canonical_chain_from(target) {
@@ -138,9 +134,9 @@ impl<'s> Extractor<'s> {
                         }
                     }
                 } else {
-                    self.walk_expr(target, field_types, class_fields);
+                    self.walk_expr(target, class_fields);
                 }
-                self.walk_expr(value, field_types, class_fields);
+                self.walk_expr(value, class_fields);
             }
             StatementNode::IndexAssignment(target, index, value) => {
                 if let Some(key) = canonical_chain_from(target) {
@@ -159,48 +155,48 @@ impl<'s> Extractor<'s> {
                         }
                     }
                 } else {
-                    self.walk_expr(target, field_types, class_fields);
+                    self.walk_expr(target, class_fields);
                 }
-                self.walk_expr(index, field_types, class_fields);
-                self.walk_expr(value, field_types, class_fields);
+                self.walk_expr(index, class_fields);
+                self.walk_expr(value, class_fields);
             }
             StatementNode::FunctionInvocation(callee, _, args) => {
-                self.walk_args(args, field_types, class_fields);
+                self.walk_args(args, class_fields);
                 let _ = callee;
             }
             StatementNode::MethodInvocation(receiver, name, _, args) => {
-                self.emit_call_events(receiver, &name.text, args, field_types, class_fields);
+                self.emit_call_events(receiver, &name.text, args, class_fields);
             }
-            StatementNode::AwaitStmt(e) => self.walk_expr(e, field_types, class_fields),
-            StatementNode::Return(Some(e)) => self.walk_expr(e, field_types, class_fields),
+            StatementNode::AwaitStmt(e) => self.walk_expr(e, class_fields),
+            StatementNode::Return(Some(e)) => self.walk_expr(e, class_fields),
             StatementNode::IfElse(cond, then_b, elifs, else_b) => {
-                self.walk_expr(cond, field_types, class_fields);
-                self.walk_block(then_b, field_types, class_fields);
+                self.walk_expr(cond, class_fields);
+                self.walk_block(then_b, class_fields);
                 for (c, b) in elifs {
-                    self.walk_expr(c, field_types, class_fields);
-                    self.walk_block(b, field_types, class_fields);
+                    self.walk_expr(c, class_fields);
+                    self.walk_block(b, class_fields);
                 }
                 if let Some(b) = else_b {
-                    self.walk_block(b, field_types, class_fields);
+                    self.walk_block(b, class_fields);
                 }
             }
             StatementNode::While(cond, body) | StatementNode::DoWhile(body, cond) => {
-                self.walk_expr(cond, field_types, class_fields);
-                self.walk_block(body, field_types, class_fields);
+                self.walk_expr(cond, class_fields);
+                self.walk_block(body, class_fields);
             }
             StatementNode::For(init, cond, step, body) => {
                 if let Some(s) = init {
-                    self.walk_stmt(s, field_types, class_fields);
+                    self.walk_stmt(s, class_fields);
                 }
                 if let Some(c) = cond {
-                    self.walk_expr(c, field_types, class_fields);
+                    self.walk_expr(c, class_fields);
                 }
                 if let Some(s) = step {
-                    self.walk_stmt(s, field_types, class_fields);
+                    self.walk_stmt(s, class_fields);
                 }
-                self.walk_block(body, field_types, class_fields);
+                self.walk_block(body, class_fields);
             }
-            StatementNode::Labeled(_, inner) => self.walk_stmt(inner, field_types, class_fields),
+            StatementNode::Labeled(_, inner) => self.walk_stmt(inner, class_fields),
             StatementNode::ForEach(_, iterable, _, _, body) => {
                 if let (Some(u), Some(span)) = (canonical_chain_from(iterable), init_span(iterable))
                 {
@@ -208,28 +204,28 @@ impl<'s> Extractor<'s> {
                         underlying: u,
                         span,
                     });
-                    self.walk_block(body, field_types, class_fields);
+                    self.walk_block(body, class_fields);
                     self.events.push(Ev::ScopedClose);
                 } else {
-                    self.walk_expr(iterable, field_types, class_fields);
-                    self.walk_block(body, field_types, class_fields);
+                    self.walk_expr(iterable, class_fields);
+                    self.walk_block(body, class_fields);
                 }
             }
             StatementNode::Switch(subject, arms, default_b) => {
-                self.walk_expr(subject, field_types, class_fields);
+                self.walk_expr(subject, class_fields);
                 for (_, body) in arms {
-                    self.walk_block(body, field_types, class_fields);
+                    self.walk_block(body, class_fields);
                 }
                 if let Some(b) = default_b {
-                    self.walk_block(b, field_types, class_fields);
+                    self.walk_block(b, class_fields);
                 }
             }
             StatementNode::Lock(target, body) => {
-                self.walk_expr(target, field_types, class_fields);
-                self.walk_block(body, field_types, class_fields);
+                self.walk_expr(target, class_fields);
+                self.walk_block(body, class_fields);
             }
-            StatementNode::Overflow(_, _, body) => self.walk_block(body, field_types, class_fields),
-            StatementNode::ExpressionStatement(e) => self.walk_expr(e, field_types, class_fields),
+            StatementNode::Overflow(_, _, body) => self.walk_block(body, class_fields),
+            StatementNode::ExpressionStatement(e) => self.walk_expr(e, class_fields),
             _ => {}
         }
     }
@@ -237,7 +233,6 @@ impl<'s> Extractor<'s> {
     pub(super) fn walk_expr(
         &mut self,
         e: &ExpressionNode,
-        field_types: &indexmap::IndexMap<String, String>,
         class_fields: &[String],
     ) {
         match e {
@@ -247,17 +242,17 @@ impl<'s> Extractor<'s> {
                 });
             }
             ExpressionNode::Binary(lhs, _, rhs) => {
-                self.walk_expr(lhs, field_types, class_fields);
-                self.walk_expr(rhs, field_types, class_fields);
+                self.walk_expr(lhs, class_fields);
+                self.walk_expr(rhs, class_fields);
             }
             ExpressionNode::Ternary(cond, then_e, else_e) => {
-                self.walk_expr(cond, field_types, class_fields);
-                self.walk_expr(then_e, field_types, class_fields);
-                self.walk_expr(else_e, field_types, class_fields);
+                self.walk_expr(cond, class_fields);
+                self.walk_expr(then_e, class_fields);
+                self.walk_expr(else_e, class_fields);
             }
             ExpressionNode::Unary(_, inner)
             | ExpressionNode::Parenthesized(_, inner)
-            | ExpressionNode::Try(inner) => self.walk_expr(inner, field_types, class_fields),
+            | ExpressionNode::Try(inner) => self.walk_expr(inner, class_fields),
             ExpressionNode::IncDec { target, .. } => {
                 if let Some(key) = canonical_chain_from(target) {
                     if let Some(span) = target_span_opt(target) {
@@ -268,49 +263,49 @@ impl<'s> Extractor<'s> {
                         });
                     }
                 }
-                self.walk_expr(target, field_types, class_fields);
+                self.walk_expr(target, class_fields);
             }
             ExpressionNode::ArrayLiteral(_, elems)
             | ExpressionNode::TupleLiteral(_, elems)
             | ExpressionNode::SetLiteral(_, elems) => {
-                self.walk_args(elems, field_types, class_fields);
+                self.walk_args(elems, class_fields);
             }
             ExpressionNode::MapLiteral(_, pairs) => {
                 for (k, v) in pairs {
-                    self.walk_expr(k, field_types, class_fields);
-                    self.walk_expr(v, field_types, class_fields);
+                    self.walk_expr(k, class_fields);
+                    self.walk_expr(v, class_fields);
                 }
             }
             ExpressionNode::FunctionCall(callee, _, args) => {
-                self.walk_args(args, field_types, class_fields);
+                self.walk_args(args, class_fields);
                 let _ = callee;
             }
             ExpressionNode::Call(callee, _, args) => {
-                self.walk_expr(callee, field_types, class_fields);
-                self.walk_args(args, field_types, class_fields);
+                self.walk_expr(callee, class_fields);
+                self.walk_args(args, class_fields);
             }
             ExpressionNode::MethodCall(receiver, name, _, args) => {
-                self.emit_call_events(receiver, &name.text, args, field_types, class_fields);
+                self.emit_call_events(receiver, &name.text, args, class_fields);
             }
             ExpressionNode::IndexAccess(base, index) => {
-                self.walk_expr(base, field_types, class_fields);
-                self.walk_expr(index, field_types, class_fields);
+                self.walk_expr(base, class_fields);
+                self.walk_expr(index, class_fields);
             }
             ExpressionNode::Cast(_, _, inner)
             | ExpressionNode::IsExpression(inner, _, _)
-            | ExpressionNode::Await(_, inner) => self.walk_expr(inner, field_types, class_fields),
+            | ExpressionNode::Await(_, inner) => self.walk_expr(inner, class_fields),
             ExpressionNode::MemberAccess(base, _) => {
-                self.walk_expr(base, field_types, class_fields)
+                self.walk_expr(base, class_fields)
             }
             ExpressionNode::Switch(_, subject, arms) => {
-                self.walk_expr(subject, field_types, class_fields);
+                self.walk_expr(subject, class_fields);
                 for arm in arms {
                     match &arm.body {
                         dream_syntax::nodes::expression::SwitchArmBody::Expr(expr) => {
-                            self.walk_expr(expr, field_types, class_fields)
+                            self.walk_expr(expr, class_fields)
                         }
                         dream_syntax::nodes::expression::SwitchArmBody::Block(stmts) => {
-                            self.walk_block(stmts, field_types, class_fields)
+                            self.walk_block(stmts, class_fields)
                         }
                     }
                 }
@@ -319,7 +314,7 @@ impl<'s> Extractor<'s> {
                 // Lifted bodies analyzed separately.
             }
             ExpressionNode::NamedArg(_, inner) | ExpressionNode::RefArgument(_, inner) => {
-                self.walk_expr(inner, field_types, class_fields)
+                self.walk_expr(inner, class_fields)
             }
             _ => {}
         }

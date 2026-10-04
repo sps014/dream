@@ -115,9 +115,8 @@ pub fn member_completions(
                 })
                 .collect()
         }
-        TypeSummary::Named { key, ty, .. } => {
-            let key = key.as_deref()?;
-            let mut members = snapshot.members_of(key);
+        TypeSummary::Named { ty, .. } => {
+            let mut members = snapshot.members_of(*ty);
             if snapshot.future_types.contains(ty) {
                 members.insert(
                     0,
@@ -170,6 +169,18 @@ fn fn_signature(
     Some(format!("{prefix}fun {}({params}){ret}", sig.label))
 }
 
+fn type_name<'s>(
+    snapshot: &'s IdeSnapshot,
+    ty: dream_types::TypeId,
+    r: &'s IdeRef,
+) -> &'s str {
+    snapshot
+        .type_names
+        .get(&ty)
+        .map(String::as_str)
+        .unwrap_or_else(|| r.result.display())
+}
+
 fn hover_body(snapshot: &IdeSnapshot, r: &IdeRef) -> String {
     match &r.target {
         IdeTarget::Resolved { target, .. } => {
@@ -183,25 +194,30 @@ fn hover_body(snapshot: &IdeSnapshot, r: &IdeRef) -> String {
         IdeTarget::Callee { key, .. } => {
             fn_signature(snapshot, key).unwrap_or_else(|| r.result.display().to_string())
         }
-        IdeTarget::Constructor { type_key } => type_key.clone(),
-        IdeTarget::Field { type_key, name } => {
+        IdeTarget::Constructor { display, .. } => display.clone(),
+        IdeTarget::Field { owner, name } => {
             let ty = snapshot
                 .structs
-                .get(type_key)
+                .get(owner)
                 .and_then(|fields| fields.iter().find(|f| &f.name == name))
                 .map(|f| f.display.as_str())
                 .unwrap_or_else(|| r.result.display());
             format!("{name}: {ty}")
         }
-        IdeTarget::EnumMember { enum_name, member } => match snapshot.enums.get(enum_name) {
-            Some(members) => match members.iter().find(|(n, _)| n == member) {
+        IdeTarget::EnumMember { owner, member } => {
+            let enum_name = type_name(snapshot, *owner, r);
+            match snapshot
+                .enums
+                .get(owner)
+                .and_then(|members| members.iter().find(|(n, _)| n == member))
+            {
                 Some((_, value)) => format!("{enum_name}.{member} = {value}"),
                 None => format!("{enum_name}.{member}"),
-            },
-            None => format!("{enum_name}.{member}"),
-        },
-        IdeTarget::UnionVariant { union_key, variant } => {
-            match snapshot.unions.get(union_key).and_then(|vs| {
+            }
+        }
+        IdeTarget::UnionVariant { owner, variant } => {
+            let union_key = type_name(snapshot, *owner, r);
+            match snapshot.unions.get(owner).and_then(|vs| {
                 vs.iter()
                     .find(|v| v.name == *variant)
                     .map(|v| v.fields.clone())

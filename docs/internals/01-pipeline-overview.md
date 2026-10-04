@@ -91,10 +91,21 @@ Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-s
 - **Out:** link → `wasm-opt` → embed the ABI custom section → print `.wat` via `wasmprinter`; the `.abi.json` sidecar describes extern imports/exports for the JS runtime.
 
 `compiler.rs` owns configuration and entry wiring. `compiler/load.rs` loads and prepares source,
-`compiler/optimize.rs` lowers HIR and runs the MIR pipelines, `compiler/pipeline.rs` coordinates
-analysis, LLVM generation and artifacts, and `compiler/diagnostics.rs` renders failures. Source
-loading still uses `ProgramAccumulator`; replacing the flattened AST with `ModuleGraph` remains
-part of Phase 5.
+`compiler/analyze.rs`, `compiler/lower.rs` and `compiler/optimize.rs` run analysis, HIR → MIR
+lowering and the MIR pipelines, `compiler/emit.rs` produces LLVM IR and artifacts,
+`compiler/pipeline.rs` sequences the stages, and `compiler/diagnostics.rs` renders failures.
+
+### Build cache — `src/driver/compiler/cache.rs`
+
+The CLI enables `Compiler::with_build_cache`. After loading, the key is computed from every
+`ModuleGraph` module key and file source, the compiler binary, the C runtime tree, compile and
+link options, toolchain configuration, `DREAM_*` environment variables and `dream.toml`. When
+`<out>.dream-cache` holds that key and every recorded artifact still has its recorded hash, the
+build returns `BuildOutcome::Cached` and analysis, emission, LLVM and linking are skipped. A
+fresh build is recorded only after its final artifacts exist, and only when it printed no
+diagnostics, so warnings are never hidden. Builds with native C/C++ sets, PGO or `--emit-mir`
+bypass the cache because their inputs live outside the key. Analysis is whole-program
+(monomorphization crosses modules), so the whole build, not a single module, is the unit of reuse.
 
 ## Where errors come from
 

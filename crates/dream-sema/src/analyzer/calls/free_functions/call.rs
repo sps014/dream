@@ -385,7 +385,7 @@ impl<'a> Analyzer<'a> {
             if self.struct_info(concrete_type).is_some() {
                 let ctor = resolved_ctor_name.as_ref().map(|key| key.0);
                 let ctor_summary = self.ide_summary(&t);
-                self.record_ide_ref(name.position, ide::IdeTarget::Constructor { type_key: t.get_type() }, ctor_summary);
+                self.record_ide_ref(name.position, ide::IdeTarget::Constructor { ty: concrete_type, display: self.type_id_display(concrete_type) }, ctor_summary);
                 self.hir_set_new(&name.text, ctor, arg_hirs, &t);
                 if let Some(info) = resolved_ctor_name.as_ref().and_then(|key| self.function_table.functions.get(key)).cloned() {
                     self.note_sink_arg_moves(params, &params_types, &info.is_take, true, diagnostics);

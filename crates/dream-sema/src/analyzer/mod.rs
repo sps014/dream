@@ -153,7 +153,6 @@ pub struct GlobalSymbol {
 }
 
 pub struct SemanticInfo<'a> {
-    pub hash_map: HashMap<String, Rc<RefCell<SymbolTable>>>,
     pub function_table: &'a FunctionTable,
     pub struct_table: &'a StructTable,
     pub instantiated_generics:
@@ -181,10 +180,9 @@ pub struct AnalyzerContext<'a, 'b> {
 /// accessor (getter/setter) policy to the non-`Field` variants, which differs between read and write
 /// positions.
 pub(super) enum MemberField {
-    /// `member` is a declared field of the (possibly monomorphized) `struct_name`. Any "private
+    /// `member` is a declared field of the (possibly monomorphized) `struct_ty`. Any "private
     /// field" diagnostic has already been reported.
     Field {
-        struct_name: String,
         struct_ty: dream_types::TypeId,
         field_type: Type,
     },

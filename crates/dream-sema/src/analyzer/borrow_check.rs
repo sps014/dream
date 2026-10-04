@@ -147,7 +147,6 @@ impl<'s> Extractor<'s> {
         &mut self,
         name: &str,
         init: &ExpressionNode,
-        field_types: &indexmap::IndexMap<String, String>,
         class_fields: &[String],
     ) {
         self.events.push(Ev::Rebind {
@@ -217,17 +216,7 @@ impl<'s> Extractor<'s> {
                 }
             }
         }
-        self.walk_expression_pub(init, field_types, class_fields);
-    }
-
-    /// Public shim so statement-level walkers can reuse the expression walker.
-    fn walk_expression_pub(
-        &mut self,
-        e: &ExpressionNode,
-        field_types: &indexmap::IndexMap<String, String>,
-        class_fields: &[String],
-    ) {
-        self.walk_expr(e, field_types, class_fields);
+        self.walk_expr(init, class_fields);
     }
 }
 
@@ -510,7 +499,7 @@ impl<'a> Analyzer<'a> {
                 events: Vec::new(),
                 local_class: Vec::new(),
             };
-            extractor.walk_block(function.body, &IndexMap::new(), &fields);
+            extractor.walk_block(function.body, &fields);
             interpret_events(
                 &extractor.events,
                 self,

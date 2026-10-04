@@ -167,8 +167,8 @@ Final #34 CI now targets de67d23f; hosted cold/warm timing improvement is not ye
 | Step | Title | Findings | Status | Owner | PR | Notes |
 |---|---|---|---|---|---|---|
 | 5.1 | Module-scoped `DefId` | TY-1 | Done | Codex / Cursor agent | [#44](https://github.com/sps014/dream/pull/44) | DefIds carry ModuleId and a module-local index; source resolution follows module imports. Same-named nominal definitions in different modules stay distinct (`module_receiver_identity`, `generic_identity_collision` goldens). |
-| 5.2 | `ModuleGraph` | MOD-1 | In progress | Codex / Cursor agent | [#44](https://github.com/sps014/dream/pull/44) | Driver keeps per-file ASTs, module edges, export signatures and content/interface hashes; `ModuleGraph::cache_key()` is computed and unit-tested (`tests/module_graph_cache.rs`). **Remaining:** the driver does not yet consume the key — no on-disk cache, no skip of unchanged modules, no invalidation from dependency interface hashes. |
-| 5.3 | Remove string-keyed type paths | TY-2 | In progress | Codex / Cursor agent | [#44](https://github.com/sps014/dream/pull/44) | Function, method, generic and inference identity is typed: `FunctionIdentity = (DefId, Vec<TypeId>)`, methods via `TypeCtx::register_method(owner, member, …)` and `method_candidates`/`select_method_overload`/`hir_set_type_method_call`; mangled `Type_method` lookups and `hir_set_call` deleted. **Remaining:** per-function `SymbolTable` map keyed by emitted symbol string (`declarations/functions/bodies.rs`, `Analyzer.hash_map`); borrow-check field types passed as `IndexMap<String, String>` type strings (`borrow_check/`); IDE summary maps keyed by type-name strings (`analyzer/ide.rs` `methods`/`structs`/`enums`/`unions`). |
+| 5.2 | `ModuleGraph` | MOD-1 | Done | Codex / Cursor agent | [#44](https://github.com/sps014/dream/pull/44), [#45](https://github.com/sps014/dream/pull/45) | Driver keeps per-file ASTs, module edges, export signatures and content/interface hashes. The CLI build cache (`src/driver/compiler/cache.rs`) keys a build by every `ModuleGraph` module key and file source, the compiler binary, the C runtime tree, compile and link options, toolchain config, `DREAM_*` env and `dream.toml`; an unchanged rebuild skips analysis, IR emission, LLVM and linking after verifying artifact hashes (`tests/build_cache.rs`). Builds with native C/C++ sets, PGO, `--emit-mir` or any diagnostic are never cached. Per-module analysis reuse is out of scope: whole-program monomorphization makes analysis ~20% of a build, so the build is the reuse unit. |
+| 5.3 | Remove string-keyed type paths | TY-2 | Done | Codex / Cursor agent | [#44](https://github.com/sps014/dream/pull/44), [#45](https://github.com/sps014/dream/pull/45) | Function, method, generic and inference identity is typed (`FunctionIdentity = (DefId, Vec<TypeId>)`, `TypeCtx::register_method`, `method_candidates`/`select_method_overload`). The unused per-function `SymbolTable` map and the borrow checker's unread string field-type map are deleted; IDE summaries, `IdeTarget` and `TypeSummary` are keyed by `TypeId`, with names rendered only for display. |
 | 5.4 | Structural symbol mangling | GEN-1 | Done | Codex / Cursor agent | [#44](https://github.com/sps014/dream/pull/44) | Methods, generics, overload keys and C callback adapters use one structural encoding (`s0_3_Box_0_get`, `s0_3_Box_1_6_p3_5fint_get`); symbols are unique by construction with no downstream dedupe. Collision, cross-module and unrelated-edit stability covered. |
 | 5.5 | Parameter modes as HIR facts | OWN-1 | Done | Codex / Cursor agent | [#44](https://github.com/sps014/dream/pull/44) | HParam carries Borrow/Share/Sink/Ref; MIR lowering consumes these facts directly. |
 | 5.6 | LSP resolves by `DefId` | TY-1 | Done | Codex / Cursor agent | [#44](https://github.com/sps014/dream/pull/44) | References carry resolved DefIds and source locations; navigation uses source identity across documents, including generic method templates. Typed LSP tests in `tooling/dream-lsp/tests/typed_lsp_tests.rs`. String-keyed IDE summaries tracked under 5.3. |
@@ -180,17 +180,12 @@ Final #34 CI now targets de67d23f; hosted cold/warm timing improvement is not ye
 | 5.C6 | Split `driver/compiler.rs` into stages | MOD-1 | Done | Codex / Cursor agent | [#44](https://github.com/sps014/dream/pull/44) | `src/driver/compiler/{load,analyze,lower,optimize,emit,pipeline,diagnostics}.rs`, with the module graph as input. |
 
 Validation for #44 (2026-10-04): full native corpus 648/648 on the merged code (zero skips,
-failures or guest leak reports); workspace build, strict Clippy, workspace tests and hygiene
-passed on the revision before the final diagnostic-label edit.
+failures or guest leak reports). Validation for #45: workspace build, strict Clippy, workspace
+tests and the full native corpus (649/649, including the new `let_void_value` golden).
 Production files over 600 lines: 38 (baseline 53).
 
-**Phase 5 remaining work** (blocks the exit criterion "no string-keyed type or def lookups in `dream-sema`"):
-
-1. **5.2 cache integration:** have the driver persist per-module analysis keyed by `ModuleGraph::cache_key()`, reuse it for unchanged modules, and invalidate dependents when an interface hash changes. Add a test that an unrelated edit re-analyzes only the edited module.
-2. **5.3 per-function scope tables:** key the `SymbolTable` map by `DefId` / `FunctionIdentity` instead of emitted symbol strings.
-3. **5.3 borrow-check field types:** pass `TypeId`s instead of type-name strings.
-4. **5.3 IDE summaries:** key `methods`/`structs`/`enums`/`unions` by `TypeId`/`DefId` and render names only at the LSP boundary.
-5. **Known ICE (out of scope, found during validation):** `let r = f();` where `f` returns `void` reaches the backend as "void call used as a value" instead of producing a sema diagnostic.
+Phase 5 is complete. Binding a `void` call result (`let r = f();`) is now a sema diagnostic
+instead of a backend ICE.
 
 ### Phase 6: Platform expansion
 

@@ -225,6 +225,19 @@ Mobile validation preparation is committed in `7b21e2cf` and `1454306f`: real sa
 | 7.7 | Remaining size hotspots | — | Not started | | | |
 | 7.8 | Re-evaluate self-hosting | BOOT-1 | Not started | | | |
 
+Performance follow-up (2026-10-04): [3209e97b](https://github.com/sps014/dream/commit/3209e97b96ceafa00be91336401268ed3632bb8f)
+batches global PCRE2 searches, exposes List constructor initialization to optimization,
+and avoids zero-filling private StringBuilder buffers before writing them. Six alternating
+Windows baseline/updated process pairs measured regex -59.1%, List push -19.6% and
+StringBuilder -16.7%; other paired changes stayed between -5.0% and +4.6% (zero timings
+are unresolved). Full tables and measurement qualifications are in
+`tests/bench/results/windows-stdlib-perf-2026-10-04.md`. The original binary-tree row
+is retained; a separate row explicitly includes C# reclamation, with its synthetic
+collection overhead documented. This does not claim that all C# gaps are eliminated.
+Workspace build, strict Clippy, 1,222 tests/15 expected ignored, native 656/656,
+Node 586 passed/70 expected skips/zero failures, hygiene and freestanding checks pass.
+Phase 7 remains 2/8 complete; automated performance budgets remain task 7.3.
+
 ### Cleanliness metrics
 
 | Metric | Baseline (Phase 0) | After P1 | After P2 | After P3 | After P4 | After P5 | After P6 | After P7 | Target |

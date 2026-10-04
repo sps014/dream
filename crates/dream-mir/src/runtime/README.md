@@ -4,12 +4,18 @@ The guest runtime for every target is **C** under this directory. The driver com
 bitcode and links it with the generated module before `opt` (see
 [`docs/internals/06-llvm-backend.md`](../../../../docs/internals/06-llvm-backend.md)).
 
-- **wasm32 guest** (`dream --wasm` / `--web` / `--node`): [`wasm32/`](wasm32/) (heap, libc, g0, sync/weak stubs) plus shared units from [`native/`](native/) (strings, object, format, panic, closure, async, defer, simd, ffi). `dream_mir::runtime::wasm32_runtime_c_files()` is the list; wasi-sdk clang compiles them to bitcode (see `src/execution/llvm/wasm.rs` and `src/driver/wasi.rs`).
-- **Native hosts** (`dream run`): [`native/`](native/) (`uintptr_t`, mmap size-class heap, platform SIMD width) via `native_runtime_units()`, compiled to bitcode by the pinned clang (`src/execution/llvm/runtime.rs`). [`native/llvm_inline.c`](native/llvm_inline.c) holds the hot helpers the optimizer should inline.
-- **Linked libraries** (PCRE2 regex): [`regex.c`](regex.c) + [`pcre2/`](pcre2/), compiled per target from the catalog in `crates/dream-mir/src/runtime/modules.rs` when `RuntimeNeed::REGEX` is set.
+- [`c/core/`](c/core/) owns portable heap/ARC, strings, regions, weak references and panic.
+  `core/inlines.c` supplies external definitions of the ABI header's inline helpers.
+- [`c/sys/native/`](c/sys/native/) owns POSIX/Win32 services and the native platform table.
+- [`c/sys/wasi/`](c/sys/wasi/) owns linear-memory pages, allocation bridges, globals,
+  synchronization and the WASI/JS platform table.
+- [`c/sys/shared/`](c/sys/shared/) owns scheduling shared by native and wasm32.
+- [`c/regex.c`](c/regex.c) and vendored [`c/pcre2/`](c/pcre2/) provide optional regex units.
+  Native host capabilities remain separate `dream-host-*` crates.
 
-`TAG_*` / heap offsets / `DREAM_REGEX_*` live in [`include/dream_abi.h`](include/dream_abi.h) and
-[`../../abi.rs`](../../abi.rs) (lockstep test `dream_abi_h_matches_abi_rs`).
+[`modules.rs`](modules.rs) lists units by layer and supplies each target's compile inventory.
+Numeric ABI constants live in [`c/include/dream_abi.h`](c/include/dream_abi.h) and
+[`../abi.rs`](../abi.rs) (lockstep test `dream_abi_h_matches_abi_rs`).
 
 ## Toolchains
 
@@ -20,8 +26,5 @@ dreamer toolchain install llvm  # pinned LLVM (clang, llvm-link, opt, llc)
 dreamer toolchain install cc    # pinned Zig → zig cc, when there is no system cc
 ```
 
-See [`native/README.md`](native/README.md). For wasm32 compilation install wasi-sdk:
-
-```bash
-dreamer toolchain install wasi-sdk
-```
+See [`c/README.md`](c/README.md) for the embedding platform table and freestanding gate.
+The pinned LLVM tools compile native and wasm32 runtime bitcode; wasm builds use the bundled WASI headers.

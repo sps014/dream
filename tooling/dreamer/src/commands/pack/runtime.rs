@@ -2,7 +2,11 @@ use anyhow::{Context, Result};
 use dream_abi::host_capability::HostManifest;
 use std::path::Path;
 
-pub(super) fn copy(binary: &Path, directory: &Path) -> Result<()> {
+pub(super) fn copy(
+    binary: &Path,
+    directory: &Path,
+    spec: &dream_abi::target::TargetSpec,
+) -> Result<()> {
     let abi_path = binary.with_extension("abi.json");
     let manifest = HostManifest::parse(
         &std::fs::read_to_string(&abi_path)
@@ -11,8 +15,8 @@ pub(super) fn copy(binary: &Path, directory: &Path) -> Result<()> {
     std::fs::create_dir_all(directory)
         .with_context(|| format!("creating {}", directory.display()))?;
     for capability in manifest.host_capabilities {
-        let source = binary.with_file_name(capability.library_name());
-        let destination = directory.join(capability.library_name());
+        let source = binary.with_file_name(capability.library_name(spec));
+        let destination = directory.join(capability.library_name(spec));
         std::fs::copy(&source, &destination).with_context(|| {
             format!("bundling {} into {}", source.display(), directory.display())
         })?;
@@ -36,12 +40,25 @@ mod tests {
         )
         .unwrap();
         for capability in HostCapability::ALL {
-            std::fs::write(binary.with_file_name(capability.library_name()), b"runtime").unwrap();
+            std::fs::write(
+                binary.with_file_name(
+                    capability.library_name(&dream_abi::target::TargetSpec::host()),
+                ),
+                b"runtime",
+            )
+            .unwrap();
         }
-        copy(&binary, &destination).unwrap();
+        copy(
+            &binary,
+            &destination,
+            &dream_abi::target::TargetSpec::host(),
+        )
+        .unwrap();
         for capability in HostCapability::ALL {
             assert_eq!(
-                destination.join(capability.library_name()).is_file(),
+                destination
+                    .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
+                    .is_file(),
                 capability == HostCapability::Core
             );
         }
@@ -57,18 +74,34 @@ mod tests {
             r#"{"native_abi_version":2,"host_capabilities":["core","net","gpu","webview"]}"#,
         )
         .unwrap();
-        assert!(copy(&binary, &destination).is_err());
+        assert!(copy(
+            &binary,
+            &destination,
+            &dream_abi::target::TargetSpec::host()
+        )
+        .is_err());
         for capability in HostCapability::ALL {
             std::fs::write(
-                binary.with_file_name(capability.library_name()),
+                binary.with_file_name(
+                    capability.library_name(&dream_abi::target::TargetSpec::host()),
+                ),
                 b"host runtime",
             )
             .unwrap();
         }
-        copy(&binary, &destination).unwrap();
+        copy(
+            &binary,
+            &destination,
+            &dream_abi::target::TargetSpec::host(),
+        )
+        .unwrap();
         for capability in HostCapability::ALL {
             assert_eq!(
-                std::fs::read(destination.join(capability.library_name())).unwrap(),
+                std::fs::read(
+                    destination
+                        .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
+                )
+                .unwrap(),
                 b"host runtime"
             );
         }

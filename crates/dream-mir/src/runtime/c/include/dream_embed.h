@@ -19,6 +19,8 @@
 #ifndef DREAM_EMBED_H
 #define DREAM_EMBED_H
 
+#include "dream_platform.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -41,6 +43,10 @@ typedef void (*dream_panic_hook)(const char *message, const char *location);
 
 /* Installs `hook` (NULL restores the default). A panic raised while the hook runs skips it. */
 void dream_set_panic_hook(dream_panic_hook hook);
+
+/* Configure once before attaching threads or calling exports. The table and its allocation
+ * domain must remain valid for the lifetime of the runtime; changing it after use is invalid. */
+void dream_set_platform(const dream_platform *platform);
 
 #ifdef __cplusplus
 }

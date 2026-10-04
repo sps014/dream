@@ -1,0 +1,12 @@
+import system;
+
+@unsafe
+fun failAllocation(): void {
+    System.println("before allocation");
+    let xs = Buffer.alloc<int>(1);
+    xs = Buffer.realloc<int>(xs, -1);
+    System.println(xs.length);
+}
+
+@unsafe
+fun main(): void { failAllocation(); }

@@ -379,7 +379,15 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
     manifest.package_mut().unwrap().icon = Some("assets/icon.png".into());
     manifest.save(&manifest_path).unwrap();
     commands::pack::run(&bin_dir, &[], None, pack_flags).unwrap();
-    let pack_dir = bin_dir.join("target").join("pack");
+    let pack_dir = bin_dir.join("target").join("pack").join(format!(
+        "{}-{}",
+        std::env::consts::OS,
+        if std::env::consts::ARCH == "x86_64" {
+            "x64"
+        } else {
+            "arm64"
+        }
+    ));
     let entries: Vec<_> = std::fs::read_dir(&pack_dir)
         .unwrap()
         .filter_map(|e| e.ok())
@@ -396,7 +404,7 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
             assert_eq!(
                 contents
                     .join("Frameworks")
-                    .join(capability.library_name())
+                    .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
                     .is_file(),
                 capability == dream_abi::host_capability::HostCapability::Core
             );
@@ -411,7 +419,9 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
     }
     for capability in dream_abi::host_capability::HostCapability::ALL {
         assert_eq!(
-            pack_dir.join(capability.library_name()).is_file(),
+            pack_dir
+                .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
+                .is_file(),
             capability == dream_abi::host_capability::HostCapability::Core
         );
     }

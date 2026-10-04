@@ -177,6 +177,11 @@ fn mobile_library_objects_have_the_selected_architecture_and_typed_exports() {
     ] {
         use object::Object;
         let directory = tempfile::tempdir().unwrap();
+        std::fs::write(
+            directory.path().join("dream.toml"),
+            "[package]\nname = \"mobile\"\ntype = \"lib\"\n[lib]\noutput-type = \"staticlib\"\n",
+        )
+        .unwrap();
         let source = directory.path().join("lib.dream");
         let ir = directory.path().join("lib.ll");
         std::fs::write(
@@ -185,7 +190,7 @@ fn mobile_library_objects_have_the_selected_architecture_and_typed_exports() {
         )
         .unwrap();
         let output = std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
-            .args(["--crate-type", "lib", "--target", triple, "-o"])
+            .args(["--object", "--target", triple, "-o"])
             .arg(&ir)
             .arg(source)
             .output()
@@ -207,4 +212,33 @@ fn mobile_library_objects_have_the_selected_architecture_and_typed_exports() {
         assert_eq!(abi["export_functions"][0]["name"], "add");
         assert_eq!(abi["export_functions"][0]["ret"]["kind"], "Int");
     }
+}
+
+#[test]
+#[cfg(feature = "native")]
+fn toolchain_doctor_reports_missing_foreign_libraries_without_host_fallback() {
+    let directory = tempfile::tempdir().unwrap();
+    let targets = directory.path().join("foreign");
+    let triple = if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        "aarch64-unknown-linux-gnu"
+    } else {
+        "x86_64-unknown-linux-gnu"
+    };
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
+        .args(["toolchain-doctor", "--target", triple, "--json"])
+        .env("DREAM_TARGETS", &targets)
+        .env("DREAM_NO_AUTO_INSTALL", "1")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["healthy"], false);
+    assert_eq!(report["target"], triple);
+    assert_eq!(
+        report["paths"]["targets"],
+        targets.to_string_lossy().as_ref()
+    );
+    assert_eq!(report["tools"]["dream_host_core"]["available"], false);
+    assert!(report["configuration_hash"].as_str().unwrap().len() == 64);
+    assert!(!targets.exists());
 }

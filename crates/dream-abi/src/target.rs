@@ -166,6 +166,21 @@ impl TargetSpec {
         self.os == OperatingSystem::Ios
     }
 
+    pub fn is_windows(&self) -> bool {
+        self.os == OperatingSystem::Windows
+    }
+
+    pub fn is_apple(&self) -> bool {
+        matches!(
+            self.os,
+            OperatingSystem::Darwin | OperatingSystem::MacOSX { .. } | OperatingSystem::Ios
+        )
+    }
+
+    pub fn is_msvc(&self) -> bool {
+        self.is_windows() && self.env == Environment::Msvc
+    }
+
     pub fn is_android(&self) -> bool {
         matches!(self.env, Environment::Android | Environment::Androideabi)
     }

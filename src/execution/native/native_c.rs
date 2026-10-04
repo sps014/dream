@@ -66,6 +66,7 @@ fn is_cxx(path: &Path) -> bool {
 pub fn compile_sets(
     config: &crate::driver::toolchain::ToolchainConfig,
     cc: &Cc,
+    spec: &dream_abi::target::TargetSpec,
     sets: &[CSourceSet],
     cache_root: &Path,
     debug: bool,
@@ -90,16 +91,27 @@ pub fn compile_sets(
             let obj = dir.join(object_name(&src));
             let cxx = is_cxx(&src);
             out.needs_cxx |= cxx;
-            let args = compile_args(set, &embed_include, &src, &obj, cxx, debug);
+            let args = compile_args(set, &embed_include, &src, &obj, cxx, debug, spec);
+            let driver = if cxx {
+                cc.cxx_command(config, spec)?
+            } else {
+                cc.cc_command(config, spec)?
+            };
             let stamp_path = obj.with_extension("o.args");
-            let stamp = args.join("\n");
+            let stamp = format!(
+                "{}\n{cc:?}\n{spec:?}\n{}\n{:?}\n{}",
+                args.join("\n"),
+                config.fingerprint(),
+                driver.get_args().collect::<Vec<_>>(),
+                crate::driver::rt_stamp::fingerprint(vec![PathBuf::from(driver.get_program())])
+            );
             let fresh = object_fresh(&obj, &src, headers_t)
                 && std::fs::read_to_string(&stamp_path).is_ok_and(|s| s == stamp);
             if !fresh {
                 let mut cmd = if cxx {
-                    cc.cxx_command(config)?
+                    cc.cxx_command(config, spec)?
                 } else {
-                    cc.cc_command()
+                    cc.cc_command(config, spec)?
                 };
                 cmd.args(&args);
                 if let Err(e) = run_captured(&mut cmd, &format!("compiling {}", src.display())) {
@@ -112,7 +124,7 @@ pub fn compile_sets(
             out.objects.push(obj);
         }
         for fw in &set.frameworks {
-            if cfg!(target_os = "macos") {
+            if spec.is_apple() {
                 out.link_args.push("-framework".into());
                 out.link_args.push(fw.clone());
             }
@@ -126,7 +138,7 @@ pub fn compile_sets(
             }
         }
     }
-    if out.needs_cxx && !cfg!(all(windows, target_env = "msvc")) {
+    if out.needs_cxx && !spec.is_msvc() {
         out.link_args.push("-lc++".into());
     }
     Ok(out)
@@ -140,12 +152,15 @@ fn compile_args(
     obj: &Path,
     cxx: bool,
     debug: bool,
+    spec: &dream_abi::target::TargetSpec,
 ) -> Vec<String> {
     let mut args = vec![
         "-c".to_string(),
         if cxx { "-std=gnu++20" } else { "-std=gnu11" }.to_string(),
-        "-fPIC".to_string(),
     ];
+    if !spec.is_windows() {
+        args.push("-fPIC".to_string());
+    }
     if debug {
         args.extend(["-O0".to_string(), "-g".to_string()]);
     } else {
@@ -269,8 +284,10 @@ mod tests {
             Path::new("a.o"),
             false,
             false,
+            &dream_abi::target::TargetSpec::host(),
         );
         assert!(c.contains(&"-std=gnu11".to_string()));
+        assert_eq!(c.contains(&"-fPIC".to_string()), !cfg!(windows));
         assert!(c.contains(&"-I/inc".to_string()) && c.contains(&"-DA=1".to_string()));
         let cxx = compile_args(
             &set,
@@ -279,6 +296,7 @@ mod tests {
             Path::new("a.o"),
             true,
             true,
+            &dream_abi::target::TargetSpec::host(),
         );
         assert!(cxx.contains(&"-std=gnu++20".to_string()) && cxx.contains(&"-g".to_string()));
     }

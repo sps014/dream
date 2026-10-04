@@ -188,6 +188,13 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum ToolchainCmd {
+    /// Diagnose the compiler toolchain without installing components.
+    Doctor {
+        #[arg(long)]
+        target: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
     /// Download the pinned Zig for this OS/arch. `dream` does this itself when it finds no linker.
     Install {
         /// `cc` (Zig). Omit to install every component.
@@ -346,6 +353,9 @@ fn main() -> ExitCode {
         Cmd::Tree { package } => commands::tree::run(&cwd, package.as_deref()),
         Cmd::Toolchain { cmd } => match cmd {
             ToolchainCmd::Install { component } => commands::toolchain::install(component),
+            ToolchainCmd::Doctor { target, json } => {
+                commands::toolchain::doctor(target.as_deref(), json)
+            }
             ToolchainCmd::List => commands::toolchain::list(),
             ToolchainCmd::Uninstall { component } => commands::toolchain::uninstall(component),
         },

@@ -189,7 +189,11 @@ pub(super) fn export_functions(l: &super::lcx::Lcx<'_>) -> Vec<dream_abi::export
 
 pub(super) fn export_header(exports: &[dream_abi::exports::ExportFunction]) -> String {
     let mut out = String::from("#pragma once\n#include <stdint.h>\n");
-    out.push_str(include_str!("../../runtime/c/include/dream_embed.h"));
+    out.push_str(include_str!("../../runtime/c/include/dream_platform.h"));
+    out.push_str(
+        &include_str!("../../runtime/c/include/dream_embed.h")
+            .replace("#include \"dream_platform.h\"", ""),
+    );
     out.push_str("\n#ifdef __cplusplus\nextern \"C\" {\n#endif\n");
     out.push_str("/* Take parameters consume one reference; borrow/ref parameters do not.\n * Returned references own one count. Attach each calling thread; serialize the first call. */\n");
     for f in exports {

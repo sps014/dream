@@ -12,7 +12,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 - **No narrating comments.** Comments explain *why* (invariants, trade-offs, non-obvious constraints), never *what* the next line does. Don't add "explaining the diff" comments.
 - **Clippy is a hard gate at `-D warnings`.** Fix the root cause; don't `#[allow]` your way out except for genuine external-API constraints (with a comment saying why).
 - **Probe the golden corpus when implementing or fixing.** After language/runtime/codegen changes, run `./scripts/probe_test.sh` (filter by case stem while iterating; full probe before calling the work done). It rebuilds `dream` then parallel-runs `tests/cases`.
-- **The guest runtime is C only.** wasm32 units live under `runtime/c/wasm32/` + shared `runtime/c/native/` (list in `runtime/modules.rs::WASM32_CORE_C`, compiled to bitcode by wasi-sdk clang via `src/execution/llvm/wasm.rs`); native helpers under `runtime/c/native/` (compiled to bitcode by the pinned clang via `src/execution/llvm/runtime.rs`). Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`. There is no WAT runtime — do not reintroduce one.
+- **The guest runtime is C only.** Portable units live under `runtime/c/core/`, native OS services under `runtime/c/sys/native/`, WASI/JS services under `runtime/c/sys/wasi/`, and shared scheduling under `runtime/c/sys/shared/`. The layered catalog in `runtime/modules.rs` supplies native and wasm32 inventories compiled by the pinned clang via `src/execution/llvm/runtime.rs` and `wasm.rs`. Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`. There is no WAT runtime — do not reintroduce one.
 
 ## What Dream is
 
@@ -235,7 +235,7 @@ When iterating on a feature or bugfix, prefer `./scripts/probe_test.sh <case-ste
 3. `crates/dream-sema/`: type-check + validate; emit HIR via `hir_emit/`.
 4. `crates/dream-types/`: add/extend `TyKind` if a new type shape is needed.
 5. `crates/dream-mir/src/lower/`: lower the new HIR shape into MIR.
-6. `crates/dream-mir/src/backend/llvm/`: emit if new lowering is needed (IR text only through the `ir/` writers). New runtime helpers: wasm32 units under `runtime/c/wasm32/` (+ shared `native/`, registered in `runtime/modules.rs::WASM32_CORE_C`); native-only helpers under `runtime/c/native/`. Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`.
+6. `crates/dream-mir/src/backend/llvm/`: emit if new lowering is needed (IR text only through the `ir/` writers). New runtime helpers: portable units under `runtime/c/core/`; platform services under `runtime/c/sys/{native,wasi,shared}/`, registered by layer in `runtime/modules.rs`. Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`.
 7. `tests/cases/`: add a golden test (`.dream` + `.expected`/`.expected_error`).
 8. If it's a stdlib API: define the signature under `crates/dream-stdlib/system/…`, register the file in `STD_PACKAGES`, and wire native hosts in `crates/dream-host` if needed.
 9. Run `./scripts/probe_test.sh` (and the full pre-commit gate above). See `docs/internals/07-adding-a-language-feature.md` for a worked example.

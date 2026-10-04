@@ -7,7 +7,7 @@ use dream_types::{PrimTy, TyKind, TypeId, TypeInterner};
 use indexmap::IndexSet as HashSet;
 use std::sync::OnceLock;
 
-const NATIVE_RT_HEADER: &str = include_str!("../../runtime/c/native/include/dream_rt_native.h");
+const NATIVE_RT_HEADER: &str = include_str!("../../runtime/c/core/include/dream_core.h");
 
 #[cfg(test)]
 #[path = "ref_local_tests.rs"]
@@ -101,7 +101,7 @@ pub(crate) fn fn_sig(interner: &TypeInterner, ty: TypeId) -> (String, AbiTy, Vec
     }
 }
 
-/// Names declared in `dream_rt_native.h` (including `static inline` helpers).
+/// Names declared in `dream_core.h` (including `static inline` helpers).
 pub(crate) fn native_header_declares(name: &str) -> bool {
     static NAMES: OnceLock<HashSet<String>> = OnceLock::new();
     NAMES.get_or_init(parse_native_header_fns).contains(name)

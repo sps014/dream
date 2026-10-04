@@ -19,18 +19,27 @@ fn command(mut cmd: Command) -> std::process::Output {
 fn build(root: &Path, kind: OutputKind, extra: &[&str]) -> std::path::PathBuf {
     let ll = root.join("lib.ll");
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_dream"));
-    cmd.arg("--emit")
-        .arg(if kind == OutputKind::Staticlib {
-            "staticlib"
-        } else {
-            "dylib"
-        })
-        .arg(root.join("src/lib.dream"))
+    let manifest_path = root.join("dream.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    let package = manifest.split("[lib]").next().unwrap();
+    fs::write(
+        &manifest_path,
+        format!(
+            "{package}\n[lib]\noutput-type = \"{}\"\n",
+            if kind == OutputKind::Staticlib {
+                "staticlib"
+            } else {
+                "cdylib"
+            }
+        ),
+    )
+    .unwrap();
+    cmd.arg(root.join("src/lib.dream"))
         .arg("-o")
-        .arg(kind.artifact_path(&ll))
+        .arg(kind.artifact_path(&ll, &dream_abi::target::TargetSpec::host()))
         .args(extra);
     command(cmd);
-    kind.artifact_path(&ll)
+    kind.artifact_path(&ll, &dream_abi::target::TargetSpec::host())
 }
 
 fn consumer(root: &Path, product: &Path, kind: OutputKind, source: &str) -> std::path::PathBuf {
@@ -90,7 +99,7 @@ fn project(root: &Path, source: &str) {
     fs::create_dir_all(root.join("src")).unwrap();
     fs::write(
         root.join("dream.toml"),
-        "[package]\nname = \"mylib\"\nentry = \"src/lib.dream\"\n",
+        "[package]\nname = \"mylib\"\ntype = \"lib\"\n",
     )
     .unwrap();
     fs::write(root.join("src/lib.dream"), source).unwrap();
@@ -248,11 +257,47 @@ fn moving_the_package_preserves_library_ir_and_headers() {
     project(&b, source);
     build(&a, OutputKind::Staticlib, &[]);
     build(&b, OutputKind::Staticlib, &[]);
-    for file in ["lib.opt.ll", "lib.h", "lib.a"] {
+    let archive = OutputKind::Staticlib.artifact_path(Path::new("lib.ll"), &dream_abi::target::TargetSpec::host());
+    for file in [Path::new("lib.opt.ll"), Path::new("lib.h"), &archive] {
         assert!(
             fs::read(a.join(file)).unwrap() == fs::read(b.join(file)).unwrap(),
             "{} differs",
-            file
+            file.display()
         );
     }
+}
+
+#[test]
+fn manifest_selects_default_source_and_rejects_array_outputs() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir(root.join("src")).unwrap();
+    fs::write(
+        root.join("src/mylib.dream"),
+        "@export fun answer(): int { return 42; }",
+    )
+    .unwrap();
+    let manifest =
+        "[package]\nname = \"mylib\"\ntype = \"lib\"\n[lib]\noutput-type = \"staticlib\"\n";
+    fs::write(root.join("dream.toml"), manifest).unwrap();
+    let ll = root.join("out.ll");
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_dream"));
+    cmd.current_dir(root.join("src"))
+        .arg("build")
+        .arg("-o")
+        .arg(&ll);
+    command(cmd);
+    assert!(OutputKind::Staticlib.artifact_path(&ll, &dream_abi::target::TargetSpec::host()).is_file());
+    fs::write(
+        root.join("dream.toml"),
+        manifest.replace("\"staticlib\"", "[\"staticlib\"]"),
+    )
+    .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_dream"))
+        .current_dir(root)
+        .arg("build")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("[lib]"));
 }

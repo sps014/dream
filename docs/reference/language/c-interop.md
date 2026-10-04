@@ -11,6 +11,8 @@ idiomatic Dream API it wants on top. Consumers just `import` the package.
   and go-to-definition work on them.
 - **Native-only.** A wasm32 build that still calls a `@c`/`@cpp` declaration is a compile error that
   names it. Bind the browser/Node equivalent with [`@js`](interop.md) or guard the call with `@native`.
+  Unused declarations and calls in unreachable functions are pruned before this check, so a
+  shared package can contain native bindings without forcing a wasm32 consumer to link them.
 
 Zig (installed by `dreamer toolchain install cc`) compiles the C/C++ and links it with the Dream
 object, so no other toolchain is needed. `DREAM_CXX` / `CXX` override the C++ compiler.

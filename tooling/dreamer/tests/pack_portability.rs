@@ -185,7 +185,19 @@ fn packed_application_has_no_builder_runtime_dependency() {
             .current_dir(&project),
     );
     let moved = temporary.path().join("relocated package");
-    std::fs::rename(project.join("target/pack"), &moved).unwrap();
+    std::fs::rename(
+        project.join("target/pack").join(format!(
+            "{}-{}",
+            std::env::consts::OS,
+            if std::env::consts::ARCH == "x86_64" {
+                "x64"
+            } else {
+                "arm64"
+            }
+        )),
+        &moved,
+    )
+    .unwrap();
     let empty_home = temporary.path().join("empty home");
     std::fs::create_dir(&empty_home).unwrap();
     let executable = std::fs::read_dir(&moved)
@@ -200,11 +212,11 @@ fn packed_application_has_no_builder_runtime_dependency() {
                     .starts_with("portable-")
         })
         .unwrap();
-    let library_name = HostCapability::Core.library_name();
+    let library_name = HostCapability::Core.library_name(&dream_abi::target::TargetSpec::host());
     let library = moved.join(&library_name);
     inspect_loader(&executable, true);
     for capability in HostCapability::ALL {
-        let path = moved.join(capability.library_name());
+        let path = moved.join(capability.library_name(&dream_abi::target::TargetSpec::host()));
         assert_eq!(path.is_file(), capability == HostCapability::Core);
         if path.is_file() {
             inspect_loader(&path, false);
@@ -217,7 +229,9 @@ fn packed_application_has_no_builder_runtime_dependency() {
         let app_executable = contents.join("MacOS/portable");
         inspect_loader(&app_executable, true);
         for capability in HostCapability::ALL {
-            let path = contents.join("Frameworks").join(capability.library_name());
+            let path = contents
+                .join("Frameworks")
+                .join(capability.library_name(&dream_abi::target::TargetSpec::host()));
             assert_eq!(path.is_file(), capability == HostCapability::Core);
             if path.is_file() {
                 inspect_loader(&path, false);

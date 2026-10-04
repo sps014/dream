@@ -2,16 +2,15 @@ use super::{bridge, command, Slice};
 use anyhow::{bail, Context, Result};
 use dream_abi::exports::ExportFunction;
 use std::collections::BTreeMap;
-use std::path::Path;
 use std::process::Command;
 
 pub(super) fn pack(
     name: &str,
     slices: &BTreeMap<String, Slice>,
     functions: &[ExportFunction],
-    stage: &Path,
-    output: &Path,
+    writer: &super::super::bundle::BundleWriter,
 ) -> Result<()> {
+    let stage = writer.root();
     if !cfg!(target_os = "macos") {
         bail!("iOS packaging requires macOS and Xcode");
     }
@@ -84,11 +83,8 @@ pub(super) fn pack(
     }
     let product = stage.join(format!("{name}.xcframework"));
     command(create.arg("-output").arg(&product), "creating XCFramework")?;
-    let destination = output.join(format!("{name}.xcframework"));
-    if destination.exists() {
-        std::fs::remove_dir_all(&destination)?;
+    for destination in writer.publish(&[format!("{name}.xcframework").into()])? {
+        println!("packed {}", destination.display());
     }
-    std::fs::rename(product, &destination)?;
-    println!("packed {}", destination.display());
     Ok(())
 }

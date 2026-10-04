@@ -25,7 +25,7 @@ pub(super) fn shim_bitcode(
     // `-disable-llvm-passes` keeps clang from tagging functions `optnone`; `opt` optimizes the
     // linked program at its own level. `-fno-builtin` keeps a bound libc name (`free`, `strlen`)
     // an ordinary call under whatever prototype the extern gave it.
-    cmd.arg(format!("--target={}", spec.triple))
+    cmd.arg(format!("--target={}", spec.llvm_triple()))
         .args([
             "-std=gnu11",
             "-ffreestanding",

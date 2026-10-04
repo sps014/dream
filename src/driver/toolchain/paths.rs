@@ -40,7 +40,7 @@ pub(super) fn runtime_sources(
         return p.into();
     }
     let source = PathBuf::from(dream_mir::runtime::SOURCE_RUNTIME_C_DIR);
-    if source.join("native/include/dream_rt_native.h").is_file() {
+    if source.join("core/include/dream_core.h").is_file() {
         return source;
     }
     let mut roots = Vec::new();
@@ -57,7 +57,7 @@ pub(super) fn runtime_sources(
     }
     roots
         .into_iter()
-        .find(|p| p.join("native/include/dream_rt_native.h").is_file())
+        .find(|p| p.join("core/include/dream_core.h").is_file())
         .unwrap_or(source)
 }
 

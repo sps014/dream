@@ -73,8 +73,8 @@ fn core_only_toolchain_compiles_and_runs_without_optional_hosts() {
     let isolated = directory.path().join("dream");
     std::fs::copy(compiler, &isolated).unwrap();
     std::fs::copy(
-        compiler.with_file_name(HostCapability::Core.library_name()),
-        directory.path().join(HostCapability::Core.library_name()),
+        compiler.with_file_name(HostCapability::Core.library_name(&dream_abi::target::TargetSpec::host())),
+        directory.path().join(HostCapability::Core.library_name(&dream_abi::target::TargetSpec::host())),
     )
     .unwrap();
     let source = directory.path().join("main.dream");

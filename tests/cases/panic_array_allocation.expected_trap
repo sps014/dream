@@ -1,0 +1,2 @@
+before allocation
+panic: array size exceeds the supported limit

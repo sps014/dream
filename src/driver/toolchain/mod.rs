@@ -1,6 +1,7 @@
 //! One environment snapshot shared by compilation, linking and generator harnesses.
 
 mod environment;
+mod fingerprint;
 mod paths;
 #[cfg(test)]
 mod tests;
@@ -24,13 +25,16 @@ pub struct ToolchainConfig {
     pub cc: Option<OsString>,
     pub cxx: Option<OsString>,
     pub zig: Option<PathBuf>,
+    pub targets: PathBuf,
+    pub sysroot: Option<PathBuf>,
     pub no_auto_install: bool,
     pub native_sanitize: Option<OsString>,
     pub asan_options: Option<OsString>,
     pub loader_path: Option<OsString>,
     #[cfg(feature = "native")]
-    pub(crate) sdkroot_args: OnceLock<Vec<String>>,
+    pub(crate) sdkroot_args: std::sync::Mutex<std::collections::BTreeMap<String, Vec<String>>>,
     pub sdkroot: Option<OsString>,
+    pub developer_dir: Option<OsString>,
     #[cfg(windows)]
     pub windir: Option<PathBuf>,
     #[cfg(feature = "native")]

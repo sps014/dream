@@ -5,6 +5,7 @@ pub mod build;
 pub mod bundle;
 mod c_shim;
 pub mod cross;
+pub mod doctor;
 mod icon;
 pub mod pack;
 pub mod runtime;

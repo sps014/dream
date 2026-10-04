@@ -16,7 +16,7 @@ pub fn resolve_triple(
         let spec = TargetSpec::parse(triple)?;
         if spec.capabilities.linear_memory {
             return Err(
-                "--target emits native objects; use --wasm for linear-memory output".into(),
+                "--target selects native output; use --wasm for linear-memory output".into(),
             );
         }
         spec

@@ -325,7 +325,7 @@ fn emit_itables(l: &mut Lcx<'_>) {
         let tag = fx.conv(&tag, &Ty::I32);
         let oob = fx.w.icmp("uge", &tag, &Value::i32(ntags as i64));
         fx.if_then(&oob, |fx| {
-            fx.call("abort", &[]);
+            fx.call("dream_platform_abort", &[]);
             if !fx.w.is_terminated() {
                 fx.w.unreachable();
             }
@@ -337,7 +337,7 @@ fn emit_itables(l: &mut Lcx<'_>) {
         let f = fx.w.load(Ty::Ptr, &at, ps as u32, &[]);
         let missing = fx.w.icmp("eq", &f, &Value::null());
         fx.if_then(&missing, |fx| {
-            fx.call("abort", &[]);
+            fx.call("dream_platform_abort", &[]);
             if !fx.w.is_terminated() {
                 fx.w.unreachable();
             }

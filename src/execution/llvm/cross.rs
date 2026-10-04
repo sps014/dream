@@ -44,7 +44,7 @@ pub fn runtime_signatures(
             ])
             .arg(format!(
                 "-I{}",
-                dream_mir::runtime::native_runtime_include_dir(&tools.config.runtime_c).display()
+                dream_mir::runtime::core_runtime_include_dir(&tools.config.runtime_c).display()
             ))
             .arg(source);
         cmd
@@ -65,7 +65,7 @@ pub fn runtime_signatures(
             "cross runtime ABI header",
         )
     };
-    let anchor = anchor_unit(&dir, "dream_rt_native.h", &check, &compile)?;
+    let anchor = anchor_unit(&dir, "dream_core.h", &check, &compile)?;
     let ir = dir.join("anchor.ll");
     run_captured(
         tools.command("llvm-dis").arg(&anchor).arg("-o").arg(&ir),

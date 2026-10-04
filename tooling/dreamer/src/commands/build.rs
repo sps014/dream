@@ -34,12 +34,24 @@ pub fn compile_entry(
     flags: &CompileFlags,
     only: Option<RunTarget>,
 ) -> Result<()> {
+    compile_target(workspace, flags, only, None)
+}
+
+pub fn compile_target(
+    workspace: &Workspace,
+    flags: &CompileFlags,
+    only: Option<RunTarget>,
+    target: Option<(&str, &Path)>,
+) -> Result<()> {
     let dream_bin = crate::dream_bin::locate()?;
     let compile_root = workspace.compile_root_path()?;
     let pkg = workspace.manifest.package()?;
 
     let mut cmd = Command::new(&dream_bin);
     flags.apply(&mut cmd);
+    if let Some((triple, output)) = target {
+        cmd.args(["--target", triple, "-o"]).arg(output);
+    }
     if flags.native {
         if let Some(icon) = crate::app_icon::resolve(workspace)? {
             cmd.arg("--icon").arg(icon);

@@ -44,7 +44,7 @@ impl ToolchainConfig {
             bin: value("DREAM_BIN").map(PathBuf::from),
             llvm: value("DREAM_LLVM").map(PathBuf::from),
             toolchains,
-            prefix,
+            prefix: prefix.clone(),
             user_home,
             exe,
             cwd,
@@ -54,13 +54,18 @@ impl ToolchainConfig {
             cc: value("DREAM_CC").or_else(|| value("CC")),
             cxx: value("DREAM_CXX").or_else(|| value("CXX")),
             zig: value("DREAM_ZIG").map(PathBuf::from),
+            targets: value("DREAM_TARGETS")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| prefix.join("targets")),
+            sysroot: value("DREAM_SYSROOT").map(PathBuf::from),
             no_auto_install: value("DREAM_NO_AUTO_INSTALL").is_some(),
             native_sanitize: value("DREAM_NATIVE_SANITIZE"),
             asan_options: lookup("ASAN_OPTIONS"),
             loader_path: lookup(Self::loader_path_key()),
             sdkroot: value("SDKROOT"),
+            developer_dir: value("DEVELOPER_DIR"),
             #[cfg(feature = "native")]
-            sdkroot_args: OnceLock::new(),
+            sdkroot_args: Default::default(),
             #[cfg(windows)]
             windir: value("WINDIR").map(PathBuf::from),
             #[cfg(feature = "native")]

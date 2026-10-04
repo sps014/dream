@@ -223,11 +223,12 @@ registry version selection. Conflicting requirements produce a clear error namin
 | `dreamer build [--release] [--profile \| --use-profile[=<path>]] [-p <name>]` | Install, then compile the package. Wasm lands in `target/web/`; native binaries in `target/debug` or `target/release`. When `targets` includes `node`, also copies into `target/node/`. PGO flags: see [Profile-guided native builds](#profile-guided-native-builds). |
 | `dreamer run [--release] [--profile \| --use-profile[=<path>]] [--port <n>] [--target native\|web\|node] [-p <name>] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile. Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
 | `dreamer test [--release] [--filter <substr>] [-p <name>]` | Install (incl. dev-deps), then run `dream test tests/` — discovers `@test` functions under the project's `tests/` directory. |
-| `dreamer pack [--release] [-O<lvl>] [--target <os>-<arch>]… [-p <name>]` | Build a **bin** package into a native executable → `target/pack/<name>-<os>-<arch>[.exe]`, plus a macOS `.app` or Linux `.desktop` entry. Default is `--release` (LLVM `-O3`); `-O` / `--optimize` override like `dreamer run`. Only the host OS/arch can be packed. Distinct from registry `publish`. |
+| `dreamer pack [--release] [-O<lvl>] [--target <os>-<arch>]… [-p <name>]` | Build a **bin** package into a native executable → `target/pack/<os>-<arch>/<name>-<os>-<arch>[.exe]`, plus a macOS `.app` or Linux `.desktop` entry. Default is `--release` (LLVM `-O3`); `-O` / `--optimize` override like `dreamer run`. Cross targets use Zig plus target-built capability libraries and any required platform SDK. Distinct from registry `publish`. |
 | `dreamer publish [--registry <url>] [--token <tok>] [-p <name>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). Rejects path-only dependencies. |
 | `dreamer search <query>` | Search the registry by name / description / keywords. |
 | `dreamer tree [-p <name>]` | Print the resolved dependency tree from `dream.lock`. |
 | `dreamer toolchain install [llvm\|cc\|wasi-sdk]` | Download pinned host toolchains into `~/.dream/toolchains/`: `llvm` (the code generator every build needs), `cc` (Zig, the native linker driver when there is no system `cc`), `wasi-sdk` (wasm32 runtime and linker). With no argument, installs every component available for the host. |
+| `dreamer toolchain doctor [--target <LLVM-triple>] [--json]` | Print resolved compiler/linker paths, SDK arguments, capability libraries and configuration hash. Missing requirements produce a failure exit code; diagnosis never installs components. |
 | `dreamer toolchain list` | Show which of those components are installed. |
 | `dreamer toolchain uninstall <component>` | Remove that component. |
 
@@ -235,11 +236,11 @@ registry version selection. Conflicting requirements produce a clear error namin
 
 ### Native `dreamer pack`
 
-Builds the package natively and writes the executable to `target/pack/<name>-<os>-<arch>`
+Builds the package natively and writes the executable to `target/pack/<os>-<arch>/<name>-<os>-<arch>`
 (`.exe` on Windows). Browser and Node still load `.wasm`. The `[package].icon` is already compiled
 into the executable; around it, each OS gets what it needs to show the app with that icon:
 
-| Host | Output in `target/pack/` |
+| Target | Output in `target/pack/<os>-<arch>/` |
 |---|---|
 | macOS | `<name>-macos-<arch>` with selected adjacent `libdream_host_*.dylib` libraries, and `<name>.app/Contents/{MacOS/<name>, Frameworks/, Info.plist, Resources/icon.icns}` with the same libraries in Frameworks |
 | Linux | `<name>-linux-<arch>`, selected adjacent `libdream_host_*.so` libraries, `<name>.desktop`, and `<name>.png` when an icon is set |
@@ -256,11 +257,11 @@ so copy them into `~/.local/share/applications` and an icon theme folder to inst
 ```bash
 dreamer pack                         # --release / -O3 for the host
 dreamer pack -O2                     # same `-O` / `--release` tokens as `dreamer run`
-dreamer pack --target macos-arm64    # must name the host
+dreamer pack --target linux-arm64   # cross target with its capability libraries installed
+dreamer pack --target all           # build each desktop target; all dependencies must be available
 ```
 
-Only the host OS/arch can be packed: naming another target (or `all`) is an error, never a
-silent skip. Libraries cannot be packed. Copy the whole pack folder, or the macOS `.app`, to
+Each target builds in `target/<LLVM-triple>/<debug|release>/` and publishes into its own pack directory. Desktop pack requires a bin package; mobile library packaging uses the slice workflow below. Copy the target pack folder, or the macOS `.app`, to
 redistribute it: packed executables use loader-relative paths to their bundled capability libraries, not
 the builder's toolchain directory. The macOS libraries have `@rpath` install names and
 an ad-hoc signature; distribution signing/notarization is a separate step. Target machines
@@ -354,11 +355,24 @@ dreamer publish -p greeter           # one package at a time
 - `dreamer pack --target macos-arm64` — which OS/arch executable to build
 
 The compiler CLI uses separate flags: `dream --runtime-target native|web|node` selects
-runtime availability for semantic checks, whereas `dream --target <LLVM-triple>` emits
-LLVM IR and an object file without linking. For example,
-`dream --target aarch64-unknown-linux-gnu -o hello.ll hello.dream` writes `hello.ll`,
-`hello.o` and ABI metadata. Cross-emitted objects are not executed; executable linking
-remains host-only. The `dreamer run` and `dreamer pack` flags above retain their meanings.
+runtime availability for semantic checks. `dream --target <LLVM-triple>` compiles and links
+for that target. Add `--object` to stop at checked LLVM IR, an unlinked object and ABI metadata,
+without a platform SDK. Foreign executables cannot be run by `dream run`, `test`, or the debug adapter.
+
+Cross builds use the installed Zig unless `DREAM_CC` / `CC` names a target-capable compiler.
+Install Zig with `dreamer toolchain install cc`. Place target-built capability libraries in
+`~/.dream/targets/<LLVM-triple>/lib/` (override the targets root with `DREAM_TARGETS`),
+including Windows import libraries where applicable. The compiler validates architecture,
+file format and the current ABI marker before linking; it never substitutes host libraries.
+Set `DREAM_SYSROOT` to the target SDK sysroot, or `SDKROOT` for Apple SDKs. `DEVELOPER_DIR` selects an Xcode installation. On macOS,
+`xcrun` resolves the selected macOS/iOS SDK. Android builds can select the NDK Clang driver
+with `DREAM_CC`. Cross builds require runtime C sources and a full pinned LLVM installation.
+
+Use `dreamer toolchain doctor --target aarch64-unknown-linux-gnu` to inspect these requirements.
+Windows icon resources use pinned `llvm-rc` or the selected/installed Zig resource compiler.
+The configuration hash and resolved tool/library identities, including resolved SDK arguments, enter build stamps, so changing
+the compiler, SDK or capability libraries invalidates cached outputs. Cross-target PGO requires
+running profiles on the target and is currently rejected.
 
 ### LSP
 

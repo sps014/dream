@@ -211,7 +211,7 @@ fn llvm_relocatable_binary_runs_after_move() {
     .unwrap();
     for capability in dream_abi::host_capability::HostCapability::ALL {
         assert_eq!(
-            build.join(capability.library_name()).is_file(),
+            build.join(capability.library_name(&dream_abi::target::TargetSpec::host())).is_file(),
             capability == dream_abi::host_capability::HostCapability::Core
         );
     }

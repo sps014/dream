@@ -54,7 +54,7 @@ fn capabilities_share_core_binding_allocation_completion_and_icon() {
         let libraries: Vec<_> = HostCapability::ALL
             .iter()
             .copied()
-            .map(|capability| Library::new(directory.join(capability.library_name())).unwrap())
+            .map(|capability| Library::new(directory.join(capability.library_name(&dream_abi::target::TargetSpec::host()))).unwrap())
             .collect();
         for (capability, library) in HostCapability::ALL.iter().zip(&libraries) {
             let marker = format!("dream_host_{}_abi_v2", capability.name());

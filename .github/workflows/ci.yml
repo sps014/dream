@@ -82,6 +82,10 @@ jobs:
         with:
           path: ~/.dream/toolchains/llvm-22.1.8
           key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
+      - name: Freestanding runtime core (no SDK, CRT or libc)
+        shell: bash
+        run: |
+          python scripts/check_freestanding.py --clang "$HOME/.dream/toolchains/llvm-22.1.8/bin/clang" --linker "$HOME/.dream/toolchains/llvm-22.1.8/bin/lld"
       - name: Use the MSVC-compatible pinned C driver
         if: runner.os == 'Windows'
         shell: pwsh
@@ -138,10 +142,12 @@ jobs:
         shell: bash
         run: |
           stress_dir=$(mktemp -d)
-          native=crates/dream-mir/src/runtime/c/native
-          clang -std=gnu11 -O1 -g -pthread -fsanitize=thread \
-            "$native/heap.c" "$native/heap_maps.c" "$native/publish.c" \
-            "$native/region.c" "$native/weak.c" "$native/sync.c" "$native/strings.c" tests/runtime_weak.c \
+          native=crates/dream-mir/src/runtime/c/sys/native
+          core=crates/dream-mir/src/runtime/c/core
+          clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -I"$core/include" -I"$native/include" -I"$core/../include" \
+            "$core/platform.c" "$core/utf8.c" "$native/platform.c" \
+            "$core/heap.c" "$core/heap_maps.c" "$core/publish.c" \
+            "$core/region.c" "$core/weak.c" "$native/sync.c" "$core/strings.c" tests/runtime_weak.c \
             -o "$stress_dir/weak"
           DREAM_DEBUG_LEAKS=1 "$stress_dir/weak"
       - name: Lock registry stress under ThreadSanitizer
@@ -149,10 +155,12 @@ jobs:
         shell: bash
         run: |
           stress_dir=$(mktemp -d)
-          native=crates/dream-mir/src/runtime/c/native
-          clang -std=gnu11 -O1 -g -pthread -fsanitize=thread \
-            "$native/heap.c" "$native/heap_maps.c" "$native/publish.c" \
-            "$native/region.c" "$native/weak.c" "$native/strings.c" tests/runtime_sync.c \
+          native=crates/dream-mir/src/runtime/c/sys/native
+          core=crates/dream-mir/src/runtime/c/core
+          clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -I"$core/include" -I"$native/include" -I"$core/../include" \
+            "$core/platform.c" "$core/utf8.c" "$native/platform.c" \
+            "$core/heap.c" "$core/heap_maps.c" "$core/publish.c" \
+            "$core/region.c" "$core/weak.c" "$core/strings.c" tests/runtime_sync.c \
             -o "$stress_dir/sync"
           DREAM_DEBUG_LEAKS=1 "$stress_dir/sync"
 
@@ -161,10 +169,12 @@ jobs:
         shell: bash
         run: |
           stress_dir=$(mktemp -d)
-          native=crates/dream-mir/src/runtime/c/native
-          clang -std=gnu11 -O1 -g -pthread -fsanitize=thread \
-            "$native/heap.c" "$native/heap_maps.c" "$native/publish.c" \
-            "$native/region.c" "$native/weak.c" "$native/sync.c" "$native/strings.c" tests/runtime_worker.c \
+          native=crates/dream-mir/src/runtime/c/sys/native
+          core=crates/dream-mir/src/runtime/c/core
+          clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -I"$core/include" -I"$native/include" -I"$core/../include" \
+            "$core/platform.c" "$core/utf8.c" "$native/platform.c" \
+            "$core/heap.c" "$core/heap_maps.c" "$core/publish.c" \
+            "$core/region.c" "$core/weak.c" "$native/sync.c" "$core/strings.c" tests/runtime_worker.c \
             -o "$stress_dir/worker"
           DREAM_DEBUG_LEAKS=1 "$stress_dir/worker"
 

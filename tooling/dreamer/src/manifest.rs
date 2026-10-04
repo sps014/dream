@@ -157,6 +157,8 @@ pub struct WorkspaceMeta {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lib: Option<dream_abi::library::LibraryConfig>,
     /// Present on package manifests; absent on a virtual workspace root (`[workspace]` only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package: Option<PackageMeta>,
@@ -381,6 +383,7 @@ impl Manifest {
     /// Create a `bin` package manifest with the given entry point.
     pub fn new(name: String, version: String, entry: String) -> Self {
         Manifest {
+            lib: None,
             package: Some(PackageMeta {
                 name,
                 version,
@@ -408,6 +411,9 @@ impl Manifest {
     /// Create a `lib` package manifest (no entry).
     pub fn new_lib(name: String, version: String) -> Self {
         Manifest {
+            lib: Some(dream_abi::library::LibraryConfig {
+                output_type: dream_abi::library::LibraryKind::Staticlib,
+            }),
             package: Some(PackageMeta {
                 name,
                 version,
@@ -435,6 +441,7 @@ impl Manifest {
     /// Virtual workspace root (`[workspace]` only, no `[package]`).
     pub fn new_workspace(members: Vec<String>) -> Self {
         Manifest {
+            lib: None,
             package: None,
             workspace: Some(WorkspaceMeta { members }),
             dependencies: BTreeMap::new(),
@@ -511,6 +518,9 @@ impl Manifest {
             }
         }
         let Some(pkg) = &self.package else {
+            if self.lib.is_some() {
+                bail!("[lib] requires [package].type = \"lib\"");
+            }
             return Ok(());
         };
         validate_package_name(&pkg.name)?;
@@ -541,6 +551,14 @@ impl Manifest {
                         );
                     }
                 }
+            }
+        }
+        if self.lib.is_some() {
+            if pkg.package_type != PackageType::Lib {
+                bail!("[lib] requires [package].type = \"lib\"");
+            }
+            if pkg.targets.iter().any(|t| t != "native") || pkg.icon.is_some() {
+                bail!("[lib].output-type requires native targets and no package.icon");
             }
         }
         let mut seen = Vec::new();
@@ -638,6 +656,25 @@ impl Manifest {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_library_output_round_trips_and_rejects_arrays() {
+        let mut manifest = Manifest::new_lib("embed".into(), "0.1.0".into());
+        manifest.lib = Some(dream_abi::library::LibraryConfig {
+            output_type: dream_abi::library::LibraryKind::Cdylib,
+        });
+        let text = toml::to_string(&manifest).unwrap();
+        let parsed: Manifest = toml::from_str(&text).unwrap();
+        parsed.validate().unwrap();
+        assert_eq!(parsed.lib, manifest.lib);
+        assert!(toml::from_str::<Manifest>(
+            &text.replace("output-type = \"cdylib\"", "output-type = [\"cdylib\"]")
+        )
+        .is_err());
+        let mut invalid = parsed;
+        invalid.package.as_mut().unwrap().targets = vec!["web".into()];
+        assert!(invalid.validate().is_err());
+    }
 
     #[test]
     fn validates_package_names() {

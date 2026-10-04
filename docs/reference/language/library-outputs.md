@@ -7,18 +7,37 @@ Mark functions with `@export`, then build either library kind:
 fun add(a: int, b: int): int { return a + b; }
 ```
 
+Select one native library output in `dream.toml`:
+
+```toml
+[package]
+name = "mylib"
+version = "0.1.0"
+type = "lib"
+
+[lib]
+output-type = "staticlib"
+```
+
+Use `output-type = "cdylib"` for a shared C ABI library. The value is a single string.
+The default source is `src/mylib.dream` (hyphens and dots in package names become underscores).
+Build with `dreamer build` or `dream build`; an explicit source path and `-o` may override
+input and output paths without changing the manifest's output kind.
+
 ```sh
-dream --emit staticlib src/lib.dream
-dream --emit dylib --release src/lib.dream
-dream --emit staticlib src/lib.dream -o target/mylib.a
+dreamer build
+dream build --release
+dream build src/mylib.dream -o target/mylib.a
 ```
 
 These builds reject `main`. Exports must be synchronous, non-generic, non-variadic functions
 with distinct C identifiers; runtime and compiler names are reserved. Public Dream visibility
-alone does not export a C symbol. Library outputs link for the compiler's host target.
-`--crate-type lib --target TRIPLE` emits the library interface and a cross-target object;
+alone does not export a C symbol. Library outputs link for the host by default.
+`dream --target TRIPLE` links the configured library for that target; add `--object` to emit only its interface and an unlinked object.
+Target builds require matching capability libraries and SDKs;
 [mobile packaging](mobile-packaging.md) consumes target-built libraries.
-`--crate-type lib` selects a static library.
+Native library output selection belongs to `[lib].output-type`; `--crate-type` only selects
+semantic checks for intermediate LLVM/cross-target emission.
 
 Outputs include `<stem>.h`, `<stem>.abi.json`, `<stem>.opt.ll` and either an archive
 (`.a`, or `.lib` on Windows) or a shared library (`.dylib`, `.so`, or `.dll`). Windows shared

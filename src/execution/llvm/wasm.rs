@@ -35,7 +35,6 @@ struct Unit {
 }
 
 fn units(root: &Path, need: RuntimeNeed) -> Vec<Unit> {
-    let native_inc = dream_mir::runtime::native_runtime_include_dir(root);
     let mut out: Vec<Unit> = dream_mir::runtime::wasm32_runtime_c_files(root)
         .into_iter()
         .map(|path| Unit {
@@ -44,13 +43,6 @@ fn units(root: &Path, need: RuntimeNeed) -> Vec<Unit> {
             include_dirs: Vec::new(),
         })
         .collect();
-    if let Some(native) = native_inc.parent() {
-        out.push(Unit {
-            path: native.join("llvm_inline.c"),
-            defines: Vec::new(),
-            include_dirs: vec![native_inc.clone()],
-        });
-    }
     out.extend(
         dream_mir::runtime::wasm32_linked_units(root, need)
             .into_iter()

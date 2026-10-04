@@ -28,7 +28,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
   `DREAM_RC_IMMORTAL` = never mutated or freed (interned strings, frame-allocated objects), so
   every RC fast path is one load plus a sign test.
 - `weak` / `unowned` + structural cycle check; weak teardown via a target-indexed registry
-  (`runtime/c/native/weak.c`, shared by native and wasm32). Registered targets carry
+  (`runtime/c/core/weak.c`, shared by native and wasm32). Registered targets carry
   `DREAM_TAG_WEAK_TARGET`, so frees of every other object never touch the registry.
 - `RcElision` over Goto chains, transparent diamonds, transparent natural loops, postdom regions
   (never under-retain); `RcInsertion` is CFG **ownership-token** dataflow plus a **Unique/Shared**
@@ -123,7 +123,7 @@ construction** — no lint, no annotation, any number of buffers or counters:
   full length prefix and releases every slot. Reclamation is deferred to free time for any
   shape; worst-case retention is bounded by live arrays' capacity.
 - Shrinking via `Buffer.realloc` releases dropped tail slots (`dream_array_realloc_rc`,
-  `runtime/c/native/strings.c`) so truncation never strands retained elements.
+  `runtime/c/core/strings.c`) so truncation never strands retained elements.
 - Ownership-transferring pops zero their vacated slot (List/Queue/PriorityQueue) purely to
   reclaim eagerly, not for safety.
 

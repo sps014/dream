@@ -2,7 +2,7 @@
 //! development build compiles it with the dev LLVM's clang into the same layout under the
 //! native runtime cache.
 //!
-//! `dream_rt.bc` holds the core units, `llvm_inline.c` (external definitions of the header's
+//! `dream_rt.bc` holds the core units, `core/inlines.c` (external definitions of the header's
 //! always-inline helpers) and each needed module's own wrapper (`regex.c`), so `opt` sees every
 //! runtime function the program calls. Vendored libraries (PCRE2) only call libc and stay in a
 //! native archive. `dream_rt.sigs` is the reduced disassembly the backend types runtime calls
@@ -18,7 +18,7 @@ use crate::driver::wasi::run_captured;
 use crate::driver::wasm_opt::OptLevel;
 use dream_abi::target::TargetSpec;
 use dream_mir::runtime::{
-    native_runtime_include_dir, runtime_abi_include_dir, RuntimeNeed, RUNTIME_MODULES,
+    core_runtime_include_dir, runtime_abi_include_dir, RuntimeNeed, RUNTIME_MODULES,
 };
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
@@ -52,35 +52,84 @@ fn clang_level_flags(opt: OptLevel) -> Vec<&'static str> {
 }
 
 /// `-isysroot` for the pinned clang on macOS, which (unlike Apple's) doesn't find the SDK itself.
-fn sysroot_args(config: &crate::driver::toolchain::ToolchainConfig) -> &[String] {
-    config.sdkroot_args.get_or_init(|| {
-        if !cfg!(target_os = "macos") {
-            return Vec::new();
-        }
-        let sdk = config
-            .sdkroot
-            .as_ref()
-            .map(|s| s.to_string_lossy().into_owned())
-            .or_else(|| {
-                let out = Command::new("xcrun").arg("--show-sdk-path").output().ok()?;
-                out.status
-                    .success()
-                    .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
-            });
-        sdk.map(|s| vec!["-isysroot".to_string(), s])
-            .unwrap_or_default()
-    })
+pub(crate) fn sysroot_args(
+    config: &crate::driver::toolchain::ToolchainConfig,
+    spec: &TargetSpec,
+) -> Vec<String> {
+    if let Some(root) = &config.sysroot {
+        return vec![format!("--sysroot={}", root.display())];
+    }
+    if !spec.is_apple() {
+        return Vec::new();
+    }
+    let mut cached = config
+        .sdkroot_args
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    cached
+        .entry(spec.triple.to_string())
+        .or_insert_with(|| {
+            let sdk = config
+                .sdkroot
+                .as_ref()
+                .map(|s| s.to_string_lossy().into_owned())
+                .or_else(|| {
+                    let mut command = Command::new(config.find_on_path("xcrun")?);
+                    if let Some(dir) = &config.developer_dir {
+                        command.env("DEVELOPER_DIR", dir);
+                    } else {
+                        command.env_remove("DEVELOPER_DIR");
+                    }
+                    let out = command
+                        .args([
+                            "--sdk",
+                            if spec.is_ios() {
+                                if spec.triple.to_string().ends_with("-sim") {
+                                    "iphonesimulator"
+                                } else {
+                                    "iphoneos"
+                                }
+                            } else {
+                                "macosx"
+                            },
+                            "--show-sdk-path",
+                        ])
+                        .output()
+                        .ok()?;
+                    out.status
+                        .success()
+                        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+                });
+            sdk.map(|s| vec!["-isysroot".to_string(), s])
+                .unwrap_or_default()
+        })
+        .clone()
+}
+
+fn runtime_command(
+    config: &crate::driver::toolchain::ToolchainConfig,
+    spec: &TargetSpec,
+    clang: &Path,
+) -> Result<Command, String> {
+    let mut command = if spec.can_link_on_host() {
+        let mut command = Command::new(clang);
+        command.arg(native_target_arg(spec));
+        command
+    } else {
+        crate::execution::native::cc::resolve_target_cc(config, spec)?.cc_command(config, spec)?
+    };
+    command.args(sysroot_args(config, spec));
+    Ok(command)
 }
 
 /// Clang's default may describe its runner rather than the compiler's selected target.
 fn native_target_arg(spec: &TargetSpec) -> String {
-    format!("--target={}", spec.triple)
+    format!("--target={}", spec.llvm_triple())
 }
 
 fn bitcode_units(root: &Path, need: RuntimeNeed) -> (Vec<Unit>, Vec<Unit>) {
     let c = root.to_path_buf();
-    let native = c.join("native");
-    let native_inc = native_runtime_include_dir(root);
+    let native_inc = core_runtime_include_dir(root);
     let mut bc: Vec<Unit> = dream_mir::runtime::native_runtime_units(root, RuntimeNeed::CORE)
         .into_iter()
         .map(|u| Unit {
@@ -89,11 +138,6 @@ fn bitcode_units(root: &Path, need: RuntimeNeed) -> (Vec<Unit>, Vec<Unit>) {
             include_dirs: u.include_dirs,
         })
         .collect();
-    bc.push(Unit {
-        path: native.join("llvm_inline.c"),
-        defines: vec!["DREAM_NATIVE".into()],
-        include_dirs: vec![native_inc.clone()],
-    });
     let mut vendored = Vec::new();
     for m in RUNTIME_MODULES {
         if m.need == RuntimeNeed::CORE || !need.contains(m.need) {
@@ -132,11 +176,9 @@ fn clang_unit(
     flags: &[&str],
     out: &Path,
 ) -> Result<(), String> {
-    let mut cmd = Command::new(clang);
-    cmd.arg(native_target_arg(spec))
-        .args(sysroot_args(config))
-        .args(["-std=gnu11", "-w", "-c"])
-        .args(if cfg!(windows) {
+    let mut cmd = runtime_command(config, spec, clang)?;
+    cmd.args(["-std=gnu11", "-w", "-c"])
+        .args(if spec.is_windows() {
             &[][..]
         } else {
             &["-pthread"][..]
@@ -164,16 +206,27 @@ pub fn llvm_runtime(
     // the Dream one.
     let opt = if debug { OptLevel::O0 } else { opt };
     match rt_dir(&tools.config, "native", opt, need) {
-        RtDir::Prebuilt(dir) if *spec != TargetSpec::host() => Err(format!(
-            "prebuilt native runtime {} does not support target {}; rebuild the runtime for this target",
-            dir.display(), spec.triple
-        )),
+        RtDir::Prebuilt(_) if !spec.can_link_on_host() => build_native_runtime(
+            tools,
+            spec,
+            opt,
+            need,
+            &tools
+                .config
+                .native_rt_cache_root()
+                .join("cross")
+                .join(spec.triple.to_string())
+                .join(opt.native_rt_subdir())
+                .join(format!("need_{:x}", need.bits())),
+        ),
         RtDir::Prebuilt(dir) => Ok(LlvmRuntime {
             bc: prebuilt_file(&dir, "dream_rt.bc")?,
             sigs: prebuilt_file(&dir, "dream_rt.sigs")?,
             archive: Some(dir.join(VENDOR_ARCHIVE)).filter(|a| a.is_file()),
         }),
-        RtDir::Cache(dir) => build_native_runtime(tools, spec, opt, need, &dir.join(spec.triple.to_string())),
+        RtDir::Cache(dir) => {
+            build_native_runtime(tools, spec, opt, need, &dir.join(spec.triple.to_string()))
+        }
     }
 }
 
@@ -208,8 +261,9 @@ pub(super) fn build_native_runtime(
     let stamp = dir.join(".stamp");
     let level = clang_level_flags(opt);
     let headers: Vec<PathBuf> = [
-        native_runtime_include_dir(root),
+        core_runtime_include_dir(root),
         runtime_abi_include_dir(root),
+        root.join("sys/native/include"),
     ]
     .iter()
     .filter_map(|d| std::fs::read_dir(d).ok())
@@ -223,12 +277,20 @@ pub(super) fn build_native_runtime(
         .chain(headers)
         .collect();
     inputs.push(clang.clone());
+    if !spec.can_link_on_host() {
+        inputs.push(
+            crate::execution::native::cc::resolve_target_cc(config, spec)?
+                .path()
+                .to_path_buf(),
+        );
+    }
     let fingerprint = format!(
-        "{}{}\n{}\n{}\n",
+        "{}{}\n{}\n{}|{}\n",
         rt_stamp::fingerprint(inputs),
         level.join(" "),
         native_target_arg(spec),
-        sysroot_args(config).join(" ")
+        sysroot_args(config, spec).join(" "),
+        config.fingerprint()
     );
     let fresh = bc.exists()
         && sigs.exists()
@@ -346,11 +408,18 @@ fn build_anchor(
     flags: &[&str],
 ) -> Result<PathBuf, String> {
     let root = &config.runtime_c;
-    let inc = format!("-I{}", native_runtime_include_dir(root).display());
+    let inc = format!("-I{}", core_runtime_include_dir(root).display());
+    let anchor_command = || -> Result<Command, String> {
+        if spec.can_link_on_host() {
+            runtime_command(config, spec, clang)
+        } else {
+            let mut cmd = Command::new(clang);
+            cmd.arg(native_target_arg(spec)).arg("-ffreestanding");
+            Ok(cmd)
+        }
+    };
     let check = |src: &Path| {
-        Command::new(clang)
-            .arg(native_target_arg(spec))
-            .args(sysroot_args(config))
+        anchor_command()?
             .args([
                 "-std=gnu11",
                 "-w",
@@ -365,14 +434,18 @@ fn build_anchor(
             .map_err(|e| e.to_string())
     };
     let compile = |src: &Path, out: &Path| {
-        let unit = Unit {
-            path: src.to_path_buf(),
-            defines: vec!["DREAM_NATIVE".into()],
-            include_dirs: vec![native_runtime_include_dir(root)],
-        };
-        clang_unit(config, spec, clang, &unit, flags, out)
+        run_captured(
+            anchor_command()?
+                .args(["-std=gnu11", "-w", "-c", "-DDREAM_NATIVE"])
+                .args(flags)
+                .arg(&inc)
+                .arg(src)
+                .arg("-o")
+                .arg(out),
+            "runtime ABI anchor",
+        )
     };
-    anchor_unit(dir, "dream_rt_native.h", &check, &compile)
+    anchor_unit(dir, "dream_core.h", &check, &compile)
 }
 
 /// A unit that takes the address of every header-declared function, so functions only the

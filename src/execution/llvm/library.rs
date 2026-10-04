@@ -48,14 +48,15 @@ pub(super) fn shared_flags(
     ll: &Path,
     out: &Path,
     exports: &[String],
+    spec: &dream_abi::target::TargetSpec,
 ) -> Result<PathBuf, String> {
     let mut public = EMBED_EXPORTS
         .iter()
         .map(|s| s.to_string())
         .collect::<Vec<_>>();
     public.extend(exports.iter().cloned());
-    let list = ll.with_extension(if cfg!(windows) { "def" } else { "exports" });
-    let content = if cfg!(target_os = "macos") {
+    let list = ll.with_extension(if spec.is_windows() { "def" } else { "exports" });
+    let content = if spec.is_apple() {
         cmd.arg("-dynamiclib")
             .arg(format!(
                 "-Wl,-install_name,@rpath/{}",
@@ -63,13 +64,15 @@ pub(super) fn shared_flags(
             ))
             .arg(format!("-Wl,-exported_symbols_list,{}", list.display()));
         public.iter().map(|s| format!("_{s}\n")).collect::<String>()
-    } else if cfg!(windows) {
-        cmd.arg("-shared").arg(&list);
+    } else if spec.is_windows() {
+        cmd.arg("-shared");
         let import = out.with_extension("lib");
-        if cfg!(target_env = "msvc") {
-            cmd.arg(format!("-Wl,/implib:{}", import.display()));
+        if spec.is_msvc() {
+            cmd.arg(format!("-Wl,/def:{}", list.display()))
+                .arg(format!("-Wl,/implib:{}", import.display()));
         } else {
-            cmd.arg(format!("-Wl,--out-implib,{}", import.display()));
+            cmd.arg(&list)
+                .arg(format!("-Wl,--out-implib,{}", import.display()));
         }
         format!("EXPORTS\n{}", public.join("\n"))
     } else {

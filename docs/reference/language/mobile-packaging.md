@@ -3,7 +3,7 @@
 `dreamer pack` can package target-built Dream libraries as an iOS XCFramework or an Android AAR.
 The input libraries must already include the guest runtime and their target-specific host
 capability dependencies. Cross-target library linking and host builds are separate steps;
-`dream --target` emits an object, rather than a fully linked mobile library.
+`dream --object --target` emits an unlinked object without a platform SDK. `dream --target` links the library selected in dream.toml and requires the platform SDK and target capability libraries.
 
 ## Compile an interface and object
 
@@ -14,11 +14,24 @@ A mobile package uses `type = "lib"` in `dream.toml` and `@export` functions. Fo
 fun add(a: int, b: int): int { return a + b; }
 ```
 
+```toml
+[package]
+name = "demo"
+version = "0.1.0"
+type = "lib"
+
+[lib]
+output-type = "staticlib"
+```
+
+Use `output-type = "cdylib"` when building a host shared library. Cross emission produces
+an object for either kind; the SDK linker determines the final mobile slice format.
+
 ```sh
-dream --crate-type lib --target arm64-apple-ios --min-os 13.0 src/lib.dream -o build/device/libdemo.ll
-dream --crate-type lib --target arm64-apple-ios-simulator --min-os 13.0 src/lib.dream -o build/simulator/libdemo.ll
-dream --crate-type lib --target aarch64-linux-android src/lib.dream -o build/arm64/libdemo.ll
-dream --crate-type lib --target x86_64-linux-android src/lib.dream -o build/x64/libdemo.ll
+dream --object --target arm64-apple-ios --min-os 13.0 src/lib.dream -o build/device/libdemo.ll
+dream --object --target arm64-apple-ios-simulator --min-os 13.0 src/lib.dream -o build/simulator/libdemo.ll
+dream --object --target aarch64-linux-android src/lib.dream -o build/arm64/libdemo.ll
+dream --object --target x86_64-linux-android src/lib.dream -o build/x64/libdemo.ll
 ```
 
 Create the output directories first. Each command produces `.o`, `.ll`, `.h` and `.abi.json`.

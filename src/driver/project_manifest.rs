@@ -1,4 +1,4 @@
-//! `dream.toml` as the compiler reads it: `[package]` (name, entry, links), `[[generators]]`, and
+//! `dream.toml` as the compiler reads it: `[package]` (name, entry, links), `[lib].output-type`, `[[generators]]`, and
 //! `[native.<set>]` tables. Parsed with `toml`; `dreamer`'s own `Manifest` owns validation of the
 //! package-manager keys, so unknown top-level tables are ignored here.
 
@@ -49,6 +49,7 @@ impl NativeSetSpec {
 
 #[derive(Debug, Clone, Default)]
 pub struct ProjectManifest {
+    pub library: Option<dream_abi::library::LibraryConfig>,
     pub package_name: Option<String>,
     pub entry: Option<String>,
     pub links: Option<String>,
@@ -68,6 +69,19 @@ impl ProjectManifest {
     pub fn parse(text: &str) -> Result<Self, String> {
         let root: toml::Table = text.parse().map_err(|e: toml::de::Error| e.to_string())?;
         let mut m = ProjectManifest::default();
+        if let Some(lib) = root.get("lib") {
+            let config: dream_abi::library::LibraryConfig =
+                lib.clone().try_into().map_err(|e| format!("[lib]: {e}"))?;
+            if root
+                .get("package")
+                .and_then(|p| p.get("type"))
+                .and_then(toml::Value::as_str)
+                != Some("lib")
+            {
+                return Err("[lib] requires [package].type = \"lib\"".into());
+            }
+            m.library = Some(config);
+        }
         if let Some(pkg) = root.get("package") {
             let pkg = pkg.as_table().ok_or("[package] must be a table")?;
             m.package_name = opt_string(pkg, "name", "package")?;
@@ -79,7 +93,9 @@ impl ProjectManifest {
                 .as_array()
                 .ok_or("[[generators]] must be an array of tables")?;
             for g in gens {
-                let t = g.as_table().ok_or("[[generators]] entries must be tables")?;
+                let t = g
+                    .as_table()
+                    .ok_or("[[generators]] entries must be tables")?;
                 if let Some(p) = opt_string(t, "path", "generators")? {
                     if !p.is_empty() {
                         m.generators.push(p);
@@ -88,7 +104,9 @@ impl ProjectManifest {
             }
         }
         if let Some(native) = root.get("native") {
-            let native = native.as_table().ok_or("[native] must be a table of sets")?;
+            let native = native
+                .as_table()
+                .ok_or("[native] must be a table of sets")?;
             let mut names: Vec<&String> = native.keys().collect();
             names.sort();
             for name in names {
@@ -103,7 +121,14 @@ impl ProjectManifest {
 }
 
 const OS_KEYS: [&str; 3] = ["macos", "linux", "windows"];
-const LIST_KEYS: [&str; 6] = ["sources", "include", "defines", "cflags", "frameworks", "libs"];
+const LIST_KEYS: [&str; 6] = [
+    "sources",
+    "include",
+    "defines",
+    "cflags",
+    "frameworks",
+    "libs",
+];
 
 fn parse_set(name: &str, set: &toml::Table) -> Result<NativeSetSpec, String> {
     let mut spec = NativeSetSpec::default();
@@ -211,6 +236,28 @@ pub fn import_segment(package_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn library_output_is_one_validated_manifest_string() {
+        let prefix = "[package]\nname = \"embed\"\ntype = \"lib\"\n[lib]\n";
+        for (value, kind) in [
+            ("staticlib", dream_abi::library::LibraryKind::Staticlib),
+            ("cdylib", dream_abi::library::LibraryKind::Cdylib),
+        ] {
+            let manifest =
+                ProjectManifest::parse(&format!("{prefix}output-type = \"{value}\"\n")).unwrap();
+            assert_eq!(manifest.library.unwrap().output_type, kind);
+        }
+        for setting in [
+            "output-type = []",
+            "output-type = [\"staticlib\"]",
+            "output-type = \"unknown\"",
+            "crate-type = \"staticlib\"",
+        ] {
+            assert!(ProjectManifest::parse(&format!("{prefix}{setting}\n")).is_err());
+        }
+        assert!(ProjectManifest::parse("[lib]\noutput-type = \"staticlib\"").is_err());
+    }
 
     #[test]
     fn parses_package_generators_and_native_sets() {

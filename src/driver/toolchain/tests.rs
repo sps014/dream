@@ -143,3 +143,21 @@ fn execution_and_runtime_catalog_do_not_read_environment_again() {
         assert!(!source.contains("std::env::var"));
     }
 }
+
+#[test]
+fn target_sysroot_and_driver_changes_invalidate_configuration_hash() {
+    let base = config(&[], None, PathBuf::from("/project"));
+    assert_eq!(base.targets, base.prefix.join("targets"));
+    for values in [
+        [("DREAM_TARGETS", "/foreign")],
+        [("DREAM_SYSROOT", "/sdk")],
+        [("DREAM_CC", "other-clang")],
+    ] {
+        let changed = config(&values, None, PathBuf::from("/project"));
+        assert_ne!(base.fingerprint(), changed.fingerprint());
+        assert_eq!(
+            changed.fingerprint(),
+            config(&values, None, PathBuf::from("/project")).fingerprint()
+        );
+    }
+}

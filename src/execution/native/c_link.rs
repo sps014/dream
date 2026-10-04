@@ -43,60 +43,48 @@ pub fn read_c_libs_from_abi(abi_path: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
-pub fn library_file_names(lib_name: &str) -> Vec<String> {
-    #[cfg(target_os = "windows")]
-    {
-        vec![format!("{lib_name}.dll"), format!("lib{lib_name}.dll")]
-    }
-    #[cfg(target_os = "macos")]
-    {
+pub fn library_file_names(lib_name: &str, spec: &dream_abi::target::TargetSpec) -> Vec<String> {
+    if spec.is_windows() {
         vec![
-            format!("lib{lib_name}.dylib"),
+            format!("{lib_name}.lib"),
+            format!("lib{lib_name}.dll.a"),
+            format!("{lib_name}.dll"),
             format!("lib{lib_name}.a"),
-            format!("{lib_name}.dylib"),
         ]
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        vec![
-            format!("lib{lib_name}.so"),
-            format!("lib{lib_name}.a"),
-            format!("{lib_name}.so"),
-        ]
+    } else if spec.is_apple() {
+        vec![format!("lib{lib_name}.dylib"), format!("lib{lib_name}.a")]
+    } else {
+        vec![format!("lib{lib_name}.so"), format!("lib{lib_name}.a")]
     }
 }
 
-pub fn system_library_dirs(_config: &crate::driver::toolchain::ToolchainConfig) -> Vec<PathBuf> {
-    #[cfg(target_os = "macos")]
-    {
-        vec![
-            PathBuf::from("/opt/homebrew/lib"),
-            PathBuf::from("/usr/local/lib"),
-            PathBuf::from("/opt/local/lib"),
-            PathBuf::from("/usr/lib"),
-        ]
+pub fn system_library_dirs(
+    config: &crate::driver::toolchain::ToolchainConfig,
+    spec: &dream_abi::target::TargetSpec,
+) -> Vec<PathBuf> {
+    let mut dirs = vec![config.targets.join(spec.triple.to_string()).join("lib")];
+    if let Some(root) = &config.sysroot {
+        dirs.extend([root.join("lib"), root.join("usr/lib")]);
     }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        vec![
-            PathBuf::from("/usr/local/lib"),
-            PathBuf::from("/usr/lib/x86_64-linux-gnu"),
-            PathBuf::from("/usr/lib/aarch64-linux-gnu"),
-            PathBuf::from("/usr/lib64"),
-            PathBuf::from("/usr/lib"),
-            PathBuf::from("/lib"),
-        ]
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let mut dirs = Vec::new();
-        if let Some(win) = &_config.windir {
-            dirs.push(PathBuf::from(win).join("System32"));
+    if spec.can_link_on_host() {
+        if spec.is_windows() {
+            #[cfg(windows)]
+            if let Some(win) = &config.windir {
+                dirs.push(PathBuf::from(win).join("System32"));
+            }
         } else {
-            dirs.push(PathBuf::from("C:\\Windows\\System32"));
+            dirs.extend(["/usr/local/lib", "/usr/lib", "/lib"].map(PathBuf::from));
+            if spec.is_apple() {
+                dirs.extend(["/opt/homebrew/lib", "/opt/local/lib"].map(PathBuf::from));
+            } else {
+                dirs.push(PathBuf::from(format!(
+                    "/usr/lib/{}-linux-gnu",
+                    spec.triple.architecture
+                )));
+            }
         }
-        dirs
     }
+    dirs
 }
 
 /// Resolves `lib_name` to a filesystem path. Does not probe the OS loader (that's the caller's
@@ -105,8 +93,9 @@ pub fn find_library_path(
     config: &crate::driver::toolchain::ToolchainConfig,
     lib_name: &str,
     search_roots: &[PathBuf],
+    spec: &dream_abi::target::TargetSpec,
 ) -> Option<PathBuf> {
-    let file_names = library_file_names(lib_name);
+    let file_names = library_file_names(lib_name, spec);
     for root in search_roots {
         for name in &file_names {
             let native = root.join("native").join(name);
@@ -125,7 +114,7 @@ pub fn find_library_path(
             return Some(path);
         }
     }
-    for dir in system_library_dirs(config) {
+    for dir in system_library_dirs(config, spec) {
         for name in &file_names {
             let candidate = dir.join(name);
             if candidate.exists() {
@@ -143,15 +132,16 @@ pub fn cc_link_flags(
     config: &crate::driver::toolchain::ToolchainConfig,
     libs: &[String],
     search_roots: &[PathBuf],
+    spec: &dream_abi::target::TargetSpec,
 ) -> Vec<String> {
     let mut flags = Vec::new();
     let mut rpaths = BTreeSet::new();
     for lib in libs {
         // The MSVC CRT supplies both C and math symbols; there are no c.lib/m.lib archives.
-        if cfg!(all(windows, target_env = "msvc")) && matches!(lib.as_str(), "c" | "m") {
+        if spec.is_msvc() && matches!(lib.as_str(), "c" | "m") {
             continue;
         }
-        if let Some(path) = find_library_path(config, lib, search_roots) {
+        if let Some(path) = find_library_path(config, lib, search_roots, spec) {
             if let Some(dir) = path.parent() {
                 flags.push(format!("-L{}", dir.display()));
                 rpaths.insert(dir.to_path_buf());
@@ -159,7 +149,7 @@ pub fn cc_link_flags(
         }
         flags.push(format!("-l{lib}"));
     }
-    if !cfg!(target_os = "windows") {
+    if !spec.is_windows() {
         for dir in rpaths {
             flags.push(format!("-Wl,-rpath,{}", dir.display()));
         }
@@ -174,7 +164,12 @@ mod tests {
     #[test]
     fn platform_crt_libraries() {
         let config = crate::driver::toolchain::ToolchainConfig::default();
-        let flags = cc_link_flags(&config, &["c".into(), "m".into()], &[]);
+        let flags = cc_link_flags(
+            &config,
+            &["c".into(), "m".into()],
+            &[],
+            &dream_abi::target::TargetSpec::host(),
+        );
         if cfg!(all(windows, target_env = "msvc")) {
             assert!(flags.is_empty());
         } else {

@@ -2,7 +2,7 @@
 #define DREAM_GUEST_H
 
 #ifdef DREAM_NATIVE
-#include "dream_rt_native.h"
+#include "dream_core.h"
 
 #define dream_alloc dream_malloc
 #define dream_drop dream_release

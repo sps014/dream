@@ -2,6 +2,7 @@
 
 pub(crate) mod bundle;
 pub(crate) mod c_link;
+pub(crate) mod capability_abi;
 pub(crate) mod cc;
 pub(crate) mod native_c;
 pub(crate) mod pgo;
@@ -212,7 +213,11 @@ pub(crate) fn native_run_env_pairs(
 ) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
     let mut out = vec![("DREAM_NATIVE_MODULE".to_string(), module.to_string())];
     let capabilities = read_host_capabilities(Path::new(module))?;
-    if let Some(dir) = host_library_dir(config, &capabilities) {
+    if let Some(dir) = host_library_dir(
+        config,
+        &capabilities,
+        &dream_abi::target::TargetSpec::host(),
+    ) {
         let key = crate::driver::toolchain::ToolchainConfig::loader_path_key();
         let mut paths = dir.display().to_string();
         if let Some(prev) = &config.loader_path {
@@ -232,14 +237,19 @@ pub(crate) fn native_run_env_pairs(
 pub(crate) fn host_library_dir(
     config: &crate::driver::toolchain::ToolchainConfig,
     capabilities: &[HostCapability],
+    spec: &dream_abi::target::TargetSpec,
 ) -> Option<PathBuf> {
-    config
-        .host_library_dirs()
+    let directories = if spec.can_link_on_host() {
+        config.host_library_dirs()
+    } else {
+        vec![config.targets.join(spec.triple.to_string()).join("lib")]
+    };
+    directories
         .into_iter()
         .find(|d| {
             capabilities
                 .iter()
-                .all(|c| d.join(c.library_name()).is_file())
+                .all(|c| d.join(c.library_name(spec)).is_file())
         })
         .and_then(|d| d.canonicalize().ok())
 }

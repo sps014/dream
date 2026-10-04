@@ -1,4 +1,4 @@
-#include "../crates/dream-mir/src/runtime/c/native/include/dream_rt_native.h"
+#include "../crates/dream-mir/src/runtime/c/core/include/dream_core.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,18 +7,14 @@
 
 static int fail_mapping;
 static int fail_counters;
-static void *test_calloc(size_t count, size_t size) {
-    return fail_counters ? NULL : calloc(count, size);
+#include "dream_platform_internal.h"
+static void *test_allocate(size_t size) {
+    return fail_counters ? NULL : dream_default_platform.allocate(size);
 }
-static void *test_mmap(void *address, size_t size, int protection, int flags,
-                       int fd, off_t offset) {
-    return fail_mapping ? MAP_FAILED : mmap(address, size, protection, flags, fd, offset);
+static void *test_map(size_t size) {
+    return fail_mapping ? NULL : dream_default_platform.map(size);
 }
-#define calloc test_calloc
-#define mmap test_mmap
-#include "../crates/dream-mir/src/runtime/c/native/heap.c"
-#undef calloc
-#undef mmap
+#include "../crates/dream-mir/src/runtime/c/core/heap.c"
 
 void dream_future_fini(dream_ptr ptr) { (void)ptr; }
 void dream_panic(dream_ptr message) {
@@ -32,6 +28,10 @@ void dream_panic(dream_ptr message) {
 }
 
 int main(int argc, char **argv) {
+    dream_platform platform = dream_default_platform;
+    platform.allocate = test_allocate;
+    platform.map = test_map;
+    dream_set_platform(&platform);
     alarm(5);
     assert(argc == 2);
     if (strcmp(argv[1], "private-size") == 0) { dream_malloc_slow(SIZE_MAX, 0); }

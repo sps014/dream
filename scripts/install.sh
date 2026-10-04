@@ -209,7 +209,7 @@ done
 
 # Native-C runtime sources (packed next to the binaries in the release archive).
 RT_SRC="$(find "${WORK}/out" -type d -path '*/lib/runtime/c' 2>/dev/null | head -n1 || true)"
-if [ -n "$RT_SRC" ] && [ -f "${RT_SRC}/native/include/dream_rt_native.h" ]; then
+if [ -n "$RT_SRC" ] && [ -f "${RT_SRC}/core/include/dream_core.h" ]; then
   mkdir -p "${PREFIX}/lib/runtime"
   rm -rf "${PREFIX}/lib/runtime/c"
   cp -R "$RT_SRC" "${PREFIX}/lib/runtime/c"

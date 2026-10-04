@@ -8,6 +8,11 @@ use dream_mir::backend::Target;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod common;
+
+const THREAD_HEADER: &str =
+    include_str!("../crates/dream-mir/src/runtime/c/sys/native/include/dream_thread.h");
+
 fn repo(rel: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join(rel)
 }
@@ -33,10 +38,7 @@ fn project(tag: &str, files: &[(&str, &str)]) -> PathBuf {
 
 fn compile(target: Target, entry: &Path, out: &Path) -> Result<(), String> {
     Compiler::new(target)
-        .compile(
-            &entry.to_str().unwrap().to_string(),
-            out.to_str().unwrap(),
-        )
+        .compile(&entry.to_str().unwrap().to_string(), out.to_str().unwrap())
         .map_err(|e| {
             e.diagnostic_text()
                 .map(str::to_string)
@@ -67,6 +69,7 @@ fn run_at(entry: &Path, tag: &str, level: OptLevel) -> Result<String, String> {
         None,
         60,
     )
+    .map(common::normalize_stdout)
     .map_err(|e| e.to_string())
 }
 
@@ -177,15 +180,16 @@ fn callback_from_an_unattached_foreign_thread_traps() {
         "thread",
         &[
             ("dream.toml", "[package]\nname = \"threads\"\n"),
+            ("native/include/dream_thread.h", THREAD_HEADER),
             (
                 "native/thread.c",
-                "#include <pthread.h>\n\
+                "#include \"dream_thread.h\"\n#include <stdlib.h>\n\
                  typedef int (*cb_fn)(void*, int);\n\
                  struct job { cb_fn fn; void* user; };\n\
-                 static void* worker(void* p) { struct job* j = p; j->fn(j->user, 7); return 0; }\n\
+                 static DREAM_THREAD_PROC(worker) { struct job* j = arg; j->fn(j->user, 7); return 0; }\n\
                  void call_from_thread(cb_fn fn, void* user) {\n\
-                     pthread_t t; struct job j = { fn, user };\n\
-                     pthread_create(&t, 0, worker, &j); pthread_join(t, 0);\n\
+                     dream_thread t; struct job j = { fn, user };\n\
+                     if (dream_thread_start(&t, worker, &j)) abort(); dream_thread_join(t);\n\
                  }\n",
             ),
             (
@@ -209,6 +213,7 @@ fn run_c(tag: &str, c: &str, dream: &str, level: OptLevel) -> Result<String, Str
         &[
             ("dream.toml", "[package]\nname = \"abi\"\n"),
             ("native/abi.c", c),
+            ("native/include/dream_thread.h", THREAD_HEADER),
             ("src/main.dream", dream),
         ],
     );
@@ -300,21 +305,22 @@ fun main(): void {
 
 #[test]
 fn attached_foreign_thread_calls_a_dream_function() {
-    let c = r#"#include <pthread.h>
+    let c = r#"#include "dream_thread.h"
+#include <stdlib.h>
 #include <stdint.h>
 #include <dream_embed.h>
 typedef int32_t (*int_fn)(int32_t);
 struct job { int_fn fn; int32_t out; };
-static void* worker(void* p) {
-    struct job* j = p;
+static DREAM_THREAD_PROC(worker) {
+    struct job* j = arg;
     dream_thread_attach();
     j->out = j->fn(20);
     dream_thread_detach();
     return 0;
 }
 int32_t call_on_thread(int_fn fn) {
-    pthread_t t; struct job j = { fn, 0 };
-    pthread_create(&t, 0, worker, &j); pthread_join(t, 0);
+    dream_thread t; struct job j = { fn, 0 };
+    if (dream_thread_start(&t, worker, &j)) abort(); dream_thread_join(t);
     return j.out;
 }
 "#;
@@ -395,7 +401,7 @@ fun main(): void {
     let err = run_c("panic_hook", c, dream, OptLevel::O0).unwrap_err();
     assert_contains(&err, "before");
     assert_contains(&err, "[hook] boom é (");
-    assert_contains(&err, "src/main.dream:8)");
+    assert_contains(&err.replace('\\', "/"), "src/main.dream:8)");
     assert!(!err.contains("unreachable"), "{}", err);
 }
 
@@ -537,4 +543,42 @@ fn wasm32_rejects_a_live_cpp_member_by_its_dream_name() {
     );
     assert_contains(&err, "kvstore.dream");
     assert!(!err.contains("dream__"), "{}", err);
+}
+
+#[test]
+fn wasm32_rejects_a_live_c_import_before_loading_the_toolchain() {
+    let root = project(
+        "wasm-live-c",
+        &[(
+            "main.dream",
+            "@c(\"libc\", \"abs\") extern fun cAbs(x: int): int;\nfun main(): int { return cAbs(-7); }\n",
+        )],
+    );
+    let err = compile(
+        Target::wasm32(),
+        &root.join("main.dream"),
+        &out_dir("wasm-live-c").join("main.wat"),
+    )
+    .unwrap_err();
+    assert_contains(
+        &err,
+        "'cAbs' is a native C/C++ import and cannot be called from a wasm32 build",
+    );
+    assert_contains(&err, "main.dream:1");
+    assert_contains(&err, "@js");
+}
+
+#[test]
+fn wasm32_prunes_an_unused_c_import() {
+    let root = project(
+        "wasm-dead-c",
+        &[(
+            "main.dream",
+            "@c(\"libc\", \"abs\") extern fun cAbs(x: int): int;\nfun unused(): int { return cAbs(-7); }\nfun main(): int { return 0; }\n",
+        )],
+    );
+    let out = out_dir("wasm-dead-c").join("main.wat");
+    compile(Target::wasm32(), &root.join("main.dream"), &out).unwrap();
+    let wat = fs::read_to_string(out).unwrap();
+    assert!(!wat.contains("\"c/libc\""), "{}", wat);
 }

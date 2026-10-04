@@ -1,5 +1,5 @@
-#include "../crates/dream-mir/src/runtime/c/native/include/dream_region.h"
-#include "../crates/dream-mir/src/runtime/c/native/include/dream_thread.h"
+#include "../crates/dream-mir/src/runtime/c/core/include/dream_region.h"
+#include "../crates/dream-mir/src/runtime/c/sys/native/include/dream_thread.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

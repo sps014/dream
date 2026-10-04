@@ -53,10 +53,7 @@ fn module_resolution_preserves_definition_identity_and_primary_spans() {
         panic!("typed imported definition");
     };
     assert_ne!(local_def.module, imported_def.module);
-    assert!(imported_source
-        .file
-        .as_ref()
-        .unwrap()
+    assert!(std::path::Path::new(imported_source.file.as_ref().unwrap())
         .ends_with("helpers/module_users_a.dream"));
     assert!(!sema_ide::target_matches(
         call,

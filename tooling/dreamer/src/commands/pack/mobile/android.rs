@@ -38,9 +38,9 @@ pub(super) fn pack(
     slices: &BTreeMap<String, Slice>,
     functions: &[ExportFunction],
     options: &Options,
-    stage: &Path,
-    output: &Path,
+    writer: &super::super::bundle::BundleWriter,
 ) -> Result<()> {
+    let stage = writer.root();
     if options.android_api < 21 {
         bail!("64-bit Android requires API 21 or newer");
     }
@@ -128,12 +128,9 @@ pub(super) fn pack(
     }
     let staged = stage.join(format!("{name}.aar"));
     write_zip(&staged, &files)?;
-    let destination = output.join(format!("{name}.aar"));
-    if destination.exists() {
-        std::fs::remove_file(&destination)?;
+    for destination in writer.publish(&[format!("{name}.aar").into()])? {
+        println!("packed {}", destination.display());
     }
-    std::fs::rename(staged, &destination)?;
-    println!("packed {}", destination.display());
     Ok(())
 }
 

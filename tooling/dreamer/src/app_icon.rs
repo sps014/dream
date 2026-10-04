@@ -122,59 +122,15 @@ pub fn info_plist(name: &str, version: &str, executable: &str, has_icon: bool) -
     )
 }
 
-/// `<Name>.app/Contents/{MacOS/<name>, Info.plist, Resources/icon.icns}` in `pack_dir`.
-pub fn write_macos_app(
-    pack_dir: &Path,
-    name: &str,
-    version: &str,
-    bin: &Path,
-    icon: Option<&Path>,
-) -> Result<PathBuf> {
-    let app = pack_dir.join(format!("{name}.app"));
-    if app.exists() {
-        std::fs::remove_dir_all(&app).with_context(|| format!("replacing {}", app.display()))?;
-    }
-    let contents = app.join("Contents");
-    let macos = contents.join("MacOS");
-    std::fs::create_dir_all(&macos).with_context(|| format!("creating {}", macos.display()))?;
-    let exe = macos.join(name);
-    std::fs::copy(bin, &exe).with_context(|| format!("copying into {}", exe.display()))?;
-    make_executable(&exe)?;
-    if let Some(icon) = icon {
-        let resources = contents.join("Resources");
-        std::fs::create_dir_all(&resources)?;
-        write_icns(icon, &resources.join("icon.icns"))?;
-    }
-    std::fs::write(
-        contents.join("Info.plist"),
-        info_plist(name, version, name, icon.is_some()),
-    )?;
-    Ok(app)
-}
-
 pub fn desktop_entry(name: &str, exe_name: &str, has_icon: bool) -> String {
     let icon = if has_icon {
         format!("Icon={name}\n")
     } else {
         String::new()
     };
-    format!("[Desktop Entry]\nType=Application\nName={name}\nExec={exe_name}\n{icon}Terminal=false\n")
-}
-
-/// `<name>.desktop` (and `<name>.png`) next to the packed Linux executable.
-pub fn write_linux_desktop(
-    pack_dir: &Path,
-    name: &str,
-    exe_name: &str,
-    icon: Option<&Path>,
-) -> Result<PathBuf> {
-    if let Some(icon) = icon {
-        std::fs::copy(icon, pack_dir.join(format!("{name}.png")))
-            .with_context(|| format!("copying {}", icon.display()))?;
-    }
-    let entry = pack_dir.join(format!("{name}.desktop"));
-    std::fs::write(&entry, desktop_entry(name, exe_name, icon.is_some()))?;
-    Ok(entry)
+    format!(
+        "[Desktop Entry]\nType=Application\nName={name}\nExec={exe_name}\n{icon}Terminal=false\n"
+    )
 }
 
 pub fn make_executable(path: &Path) -> Result<()> {
@@ -193,6 +149,7 @@ pub fn make_executable(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::pack::{bundle::BundleWriter, desktop};
 
     fn write_png(path: &Path, w: u32, h: u32) {
         RgbaImage::from_pixel(w, h, image::Rgba([200, 40, 40, 255]))
@@ -223,7 +180,8 @@ mod tests {
         write_png(&png, 300, 300);
         let bin = tmp.path().join("demo.bin");
         std::fs::write(&bin, b"binary").unwrap();
-        let app = write_macos_app(tmp.path(), "demo", "0.1.0", &bin, Some(&png)).unwrap();
+        let writer = BundleWriter::new(tmp.path()).unwrap();
+        let app = desktop::write_macos_app(&writer, "demo", "0.1.0", &bin, Some(&png)).unwrap();
         let contents = app.join("Contents");
         assert!(contents.join("MacOS/demo").is_file());
         assert!(contents.join("Info.plist").is_file());
@@ -238,11 +196,13 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let png = tmp.path().join("icon.png");
         write_png(&png, 256, 256);
-        let entry = write_linux_desktop(tmp.path(), "demo", "demo-linux-x64", Some(&png)).unwrap();
+        let writer = BundleWriter::new(tmp.path()).unwrap();
+        let entry =
+            desktop::write_linux_desktop(&writer, "demo", "demo-linux-x64", Some(&png)).unwrap();
         let text = std::fs::read_to_string(entry).unwrap();
         assert!(text.contains("Exec=demo-linux-x64\n"));
         assert!(text.contains("Icon=demo\n"));
-        assert!(tmp.path().join("demo.png").is_file());
+        assert!(writer.root().join("demo.png").is_file());
     }
 
     #[test]

@@ -78,6 +78,10 @@ The full golden corpus runs through `./scripts/probe_test.sh`: it compiles every
 
 `tests/e2e_tests.rs` compiles real `.dream` programs through the in-process driver. Default `cargo test --workspace` runs a smoke subset (`run_smoke_e2e_cases`) and a few host-parity subsets. DAP and Binaryen-every-level live behind `#[ignore]` — run them with `cargo test --workspace -- --ignored`.
 
+The `--node` probe checks the same diagnostic fragments and panic goldens as native runs.
+Panic messages and source locations must match on both targets. `exit code N` is checked when
+specified; fatal panics use each host's abort status. A timeout never satisfies a panic golden.
+
 ### Determinism test — `codegen_is_deterministic` (`tests/e2e_tests.rs`)
 
 Compiles the same input twice and asserts byte-identical output. This guards the contract below.
@@ -144,3 +148,16 @@ flowchart LR
     c --> t[cargo test --workspace]
     t --> d[update this handbook / GEMINI.md if architecture changed]
 ```
+
+The runtime layering gate is `python scripts/check_freestanding.py` (clang and lld required).
+It compiles every portable core unit without SDK headers and links every function without
+CRT, libc, sys objects or section collection. `tests/runtime_platform.rs` separately runs
+core with an injected allocator, locks, text writer and abort callback, checking allocation
+exhaustion and allocation-free panic output. Native libraries are selected with a scalar
+`[lib].output-type` in `dream.toml`; the CLI/library tests cover manifest discovery, both
+C-consumer link modes, panic locations, moved-package determinism and invalid arrays.
+
+`tests/runtime_wasi_platform.rs` fixes the imported memory's maximum at its initial size,
+then forces a guest allocation beyond that limit. It checks the exact panic output and abort
+trap while memory stays unchanged. The freestanding gate also enforces the 600-line limit
+for first-party runtime C units; vendored PCRE2/SLJIT files are excluded.

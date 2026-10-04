@@ -97,14 +97,25 @@ pub(crate) fn png_to_ico(png: &[u8]) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-/// Compiles the icon into a `.res` with the pinned `llvm-rc`, for the Windows link.
-#[cfg(windows)]
+pub(super) fn resource_command(
+    tools: &super::tools::LlvmTools,
+) -> Result<std::process::Command, String> {
+    if let Ok(path) = tools.optional_tool("llvm-rc") {
+        return Ok(std::process::Command::new(path));
+    }
+    let zig = crate::execution::native::cc::installed_zig(&tools.config)
+        .ok_or("Windows icons require llvm-rc or Zig; run dreamer toolchain install cc")?;
+    let mut command = std::process::Command::new(zig);
+    command.arg("rc");
+    Ok(command)
+}
+
+/// Resource files have no machine code, so the same resource compiler serves each Windows target.
 pub(super) fn windows_resource(
     tools: &super::tools::LlvmTools,
     ll_path: &Path,
     png: &[u8],
 ) -> Result<PathBuf, String> {
-    let rc_tool = tools.optional_tool("llvm-rc")?;
     let ico = ll_path.with_extension("ico");
     std::fs::write(&ico, png_to_ico(png)?).map_err(|e| format!("write {}: {e}", ico.display()))?;
     let rc = ll_path.with_extension("rc");
@@ -115,7 +126,7 @@ pub(super) fn windows_resource(
     std::fs::write(&rc, format!("1 ICON \"{ico_name}\"\n"))
         .map_err(|e| format!("write {}: {e}", rc.display()))?;
     let res = ll_path.with_extension("res");
-    let mut cmd = std::process::Command::new(rc_tool);
+    let mut cmd = resource_command(tools)?;
     cmd.arg("/fo").arg(&res).arg(&rc);
     if let Some(dir) = rc.parent() {
         cmd.current_dir(dir);

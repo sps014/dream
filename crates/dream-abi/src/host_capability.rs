@@ -30,19 +30,23 @@ impl HostCapability {
         }
     }
 
-    pub fn library_name(self) -> String {
+    pub fn library_name(self, target: &crate::target::TargetSpec) -> String {
         let name = self.link_name();
-        if cfg!(windows) {
+        if target.is_windows() {
             format!("{name}.dll")
-        } else if cfg!(target_os = "macos") {
+        } else if target.is_apple() {
             format!("lib{name}.dylib")
         } else {
             format!("lib{name}.so")
         }
     }
 
-    pub fn import_library_name(self) -> String {
-        format!("{}.dll.lib", self.link_name())
+    pub fn import_library_name(self, target: &crate::target::TargetSpec) -> String {
+        if target.is_msvc() {
+            format!("{}.dll.lib", self.link_name())
+        } else {
+            format!("lib{}.dll.a", self.link_name())
+        }
     }
 }
 

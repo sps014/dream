@@ -83,12 +83,11 @@ pub(crate) fn wasm_ld_command(wasm_ld: &Path, threads: bool, opt: OptLevel) -> C
 
 /// The runtime include directories every guest unit compiles against.
 pub(crate) fn guest_include_dirs(root: &Path) -> Vec<PathBuf> {
-    let inc_native = dream_mir::runtime::native_runtime_include_dir(root);
-    let inc_native_parent = inc_native.parent().unwrap_or(&inc_native).to_path_buf();
+    let inc_native = dream_mir::runtime::core_runtime_include_dir(root);
     vec![
         dream_mir::runtime::wasm32_runtime_include_dir(root),
         dream_mir::runtime::runtime_abi_include_dir(root),
-        inc_native_parent,
+        inc_native,
     ]
 }
 

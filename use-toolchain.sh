@@ -224,7 +224,7 @@ for _dream_lib in libdream_host_core.so libdream_host_core.dylib dream_host_core
 done
 
 _dream_rt_src="${_dream_root}/crates/dream-mir/src/runtime/c"
-if [ -f "${_dream_rt_src}/native/include/dream_rt_native.h" ]; then
+if [ -f "${_dream_rt_src}/core/include/dream_core.h" ]; then
   mkdir -p "${_dream_user_dir}/lib/runtime"
   rm -rf "${_dream_user_dir}/lib/runtime/c"
   cp -R "${_dream_rt_src}" "${_dream_user_dir}/lib/runtime/c"

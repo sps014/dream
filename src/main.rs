@@ -3,7 +3,7 @@ use dream::driver::compiler::{BuildOutcome, Compiler};
 use dream::driver::js_runtime::JsRuntimeTarget;
 use dream::driver::ui::{ConsoleReporter, Ui};
 use dream::driver::wasm_opt::OptLevel;
-use dream::execution::llvm::build::{emit_llvm_artifacts, native_bin_path};
+use dream::execution::llvm::build::emit_llvm_artifacts;
 use dream::execution::llvm::compile_llvm;
 use dream::execution::native::{run_native_bin, GuestAborted, Pgo};
 use dream_abi::attributes::CompileTargets;
@@ -35,12 +35,6 @@ enum TargetArg {
     Native,
     Node,
     Web,
-}
-
-#[derive(Copy, Clone, ValueEnum)]
-enum EmitArg {
-    Staticlib,
-    Dylib,
 }
 
 #[derive(Copy, Clone, ValueEnum)]
@@ -99,10 +93,6 @@ struct Cli {
     #[arg(long = "emit-llvm", global = true)]
     emit_llvm: bool,
 
-    /// Emit a native archive or shared library and its C header
-    #[arg(long, value_enum, global = true, conflicts_with_all = ["wasm", "web", "node", "emit_llvm", "target", "profile", "use_profile", "icon", "relocatable"])]
-    emit: Option<EmitArg>,
-
     /// Bundle required host libraries beside the native binary with package-relative lookup
     #[arg(long, global = true, conflicts_with_all = ["wasm", "emit_llvm"])]
     relocatable: bool,
@@ -111,9 +101,13 @@ struct Cli {
     #[arg(long, value_name = "PNG", global = true, hide = true)]
     icon: Option<PathBuf>,
 
-    /// LLVM target triple; emit checked .ll and .o without linking
-    #[arg(long, value_name = "TRIPLE", global = true, conflicts_with_all = ["wasm", "web", "node", "emit_llvm", "relocatable", "profile", "use_profile", "icon"])]
+    /// LLVM target triple for compilation and linking
+    #[arg(long, value_name = "TRIPLE", global = true, conflicts_with_all = ["wasm", "web", "node"])]
     target: Option<String>,
+
+    /// Stop at an unlinked target object (SDK and capability libraries are not required)
+    #[arg(long, global = true, conflicts_with_all = ["wasm", "web", "node", "emit_llvm", "relocatable", "profile", "use_profile", "icon"])]
+    object: bool,
 
     /// Runtime availability target for semantic checks (default: native)
     #[arg(
@@ -185,6 +179,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    #[command(hide = true)]
+    ToolchainDoctor {
+        #[arg(long)]
+        json: bool,
+    },
     /// Compile only (the default when no subcommand is given)
     Build {
         /// Source .dream file
@@ -247,6 +246,20 @@ fn main() -> ExitCode {
 
     let ui = Ui::new();
 
+    if let Some(Command::ToolchainDoctor { json }) = &cli.command {
+        return match dream::execution::llvm::doctor::run(
+            config.clone(),
+            cli.target.as_deref(),
+            *json,
+        ) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::FAILURE,
+            Err(error) => {
+                ui.error(&error);
+                ExitCode::FAILURE
+            }
+        };
+    }
     if let Some(Command::PackRuntime { out }) = &cli.command {
         return match dream::execution::llvm::pack_runtime(&config, out) {
             Ok(()) => ExitCode::SUCCESS,
@@ -268,7 +281,9 @@ fn main() -> ExitCode {
         | Some(Command::Run { file, .. })
         | Some(Command::Test { file, .. })
         | Some(Command::DebugAdapter { file }) => file.clone(),
-        Some(Command::Fmt { .. }) | Some(Command::PackRuntime { .. }) => None,
+        Some(Command::Fmt { .. })
+        | Some(Command::PackRuntime { .. })
+        | Some(Command::ToolchainDoctor { .. }) => None,
         None => cli.file.clone(),
     };
     let program_args = match &cli.command {
@@ -345,19 +360,52 @@ fn main() -> ExitCode {
         None => None,
     };
 
-    let output_kind = if cli.emit.is_some()
-        || (native && matches!(cli.crate_type, Some(CrateTypeArg::Lib)))
-    {
-        if !native || run_after_compile || run_tests || debug_adapter || cli.emit_llvm {
-            ui.error("library outputs require a native build without run, test, debug-adapter or --emit-llvm");
+    let manifest_start = file_name
+        .as_deref()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let manifest = match dream::driver::project_manifest::find_project_root_from(&manifest_start) {
+        Some(root) => match dream::driver::project_manifest::ProjectManifest::load(&root) {
+            Ok(manifest) => Some(manifest),
+            Err(error) => {
+                ui.error(&error);
+                return ExitCode::FAILURE;
+            }
+        },
+        None => None,
+    };
+    let library = manifest.as_ref().and_then(|m| m.library.as_ref());
+    let output_kind = if let Some(library) = library {
+        if !native
+            || run_after_compile
+            || run_tests
+            || debug_adapter
+            || cli.emit_llvm
+            || cli.relocatable
+            || cli.profile
+            || cli.use_profile.is_some()
+            || cli.icon.is_some()
+            || matches!(cli.crate_type, Some(CrateTypeArg::Bin))
+        {
+            ui.error(
+                "[lib].output-type requires a native library build without executable-only options",
+            );
             return ExitCode::FAILURE;
         }
-        if matches!(cli.emit, Some(EmitArg::Dylib)) {
-            dream::driver::output::OutputKind::Dylib
-        } else {
-            dream::driver::output::OutputKind::Staticlib
+        match library.output_type {
+            dream_abi::library::LibraryKind::Staticlib => {
+                dream::driver::output::OutputKind::Staticlib
+            }
+            dream_abi::library::LibraryKind::Cdylib => dream::driver::output::OutputKind::Dylib,
         }
     } else if native {
+        if matches!(cli.crate_type, Some(CrateTypeArg::Lib))
+            && cli.target.is_none()
+            && !cli.emit_llvm
+        {
+            ui.error("native libraries require [lib].output-type = \"staticlib\" or \"cdylib\" in dream.toml");
+            return ExitCode::FAILURE;
+        }
         dream::driver::output::OutputKind::Executable
     } else {
         dream::driver::output::OutputKind::Wasm
@@ -392,6 +440,25 @@ fn main() -> ExitCode {
 
     if let Some(Command::Fmt { files, check }) = &cli.command {
         return run_fmt(&ui, files, *check);
+    }
+
+    let target =
+        match dream::driver::target::resolve_triple(!native, cli.target.as_deref(), cli.min_os) {
+            Ok(target) => target,
+            Err(error) => {
+                ui.error(&error);
+                return ExitCode::FAILURE;
+            }
+        };
+    if (run_after_compile || run_tests || debug_adapter)
+        && (cli.object || (native && !target.spec().can_link_on_host()))
+    {
+        ui.error("run, test and debug-adapter require a linked host executable");
+        return ExitCode::FAILURE;
+    }
+    if cli.object && (!native || cli.emit_llvm) {
+        ui.error("--object requires native output and cannot be combined with --emit-llvm");
+        return ExitCode::FAILURE;
     }
 
     if run_tests {
@@ -477,20 +544,6 @@ fn main() -> ExitCode {
     let reporter = Arc::new(ConsoleReporter::new());
     // `with_release` installs RELEASE_DEFAULT wasm-opt; an explicit `-O` overrides.
     let cc_opt = OptLevel::from_cli(cli.release, optimize);
-    if cli.target.is_some() && (run_after_compile || run_tests || debug_adapter) {
-        ui.error(
-            "--target emits objects only; run, test and debug-adapter require the host target",
-        );
-        return ExitCode::FAILURE;
-    }
-    let target =
-        match dream::driver::target::resolve_triple(!native, cli.target.as_deref(), cli.min_os) {
-            Ok(target) => target,
-            Err(error) => {
-                ui.error(&error);
-                return ExitCode::FAILURE;
-            }
-        };
     // Profiles change between runs without touching any compiler input, so PGO builds never reuse.
     let build_cache = (!cli.profile && cli.use_profile.is_none()).then(|| {
         let icon = cli
@@ -503,7 +556,7 @@ fn main() -> ExitCode {
             cc_opt.as_cli_flag(),
             cli.target,
             cli.emit_llvm,
-            (cli.relocatable, output_kind),
+            (cli.relocatable, output_kind, cli.object),
         )
     });
     let mut compiler = Compiler::new_with_toolchain_config(target.clone(), config.clone())
@@ -544,13 +597,15 @@ fn main() -> ExitCode {
         BuildOutcome::Built(stamp) => stamp,
         BuildOutcome::Cached(artifacts) => {
             ui.finish(start.elapsed().as_secs_f64(), "", &artifacts);
-            let linked =
-                native && cli.target.is_none() && !cli.emit_llvm && !output_kind.is_library();
+            let linked = native && !cli.object && !cli.emit_llvm && !output_kind.is_library();
             if unoptimized {
                 ui.debug_build_note(!linked);
             }
             if linked {
-                return launch.run(&ui, &native_bin_path(Path::new(&out_path)));
+                return launch.run(
+                    &ui,
+                    &output_kind.artifact_path(Path::new(&out_path), target.spec()),
+                );
             }
             return ExitCode::SUCCESS;
         }
@@ -574,7 +629,7 @@ fn main() -> ExitCode {
         let _ = std::fs::remove_file(dream::driver::compiler::c_shim_path(raw_ll));
     };
 
-    if cli.target.is_some() {
+    if cli.object {
         match dream::execution::llvm::cross::emit_object(&config, target.spec(), raw_ll, cc_opt) {
             Ok(object) => artifacts.push(object),
             Err(error) => {
@@ -610,7 +665,7 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     if native {
-        let bin = output_kind.artifact_path(Path::new(&out_path));
+        let bin = output_kind.artifact_path(Path::new(&out_path), target.spec());
         ui.step(
             "Linking",
             &format!("{} ({})", bin.display(), cc_opt.as_cli_flag()),
@@ -642,7 +697,9 @@ fn main() -> ExitCode {
                 artifacts.push(bin.clone());
                 if output_kind == dream::driver::output::OutputKind::Staticlib {
                     artifacts.push(raw_ll.with_extension("link.json"));
-                } else if cfg!(windows) && output_kind == dream::driver::output::OutputKind::Dylib {
+                } else if target.spec().is_windows()
+                    && output_kind == dream::driver::output::OutputKind::Dylib
+                {
                     artifacts.push(bin.with_extension("lib"));
                 }
                 record(&artifacts);

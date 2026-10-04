@@ -289,17 +289,18 @@ def one_node(f: Path):
         str(f),
     ]
     if err.exists():
-        code, _out, _err = run_group(compile_cmd, 180)
+        code, out, err_txt = run_group(compile_cmd, 180)
         if code == 0:
             return stem, "fail", "compile should fail"
         if code == -9:
             return stem, "fail", "compile timed out"
+        needle = missing_needle(err, out, err_txt)
+        if needle:
+            return stem, "fail", f"diagnostics missing {needle!r}: {_ANSI.sub('', err_txt)[-2000:]!r}"
         return stem, "ok", ""
     skip = node_skip_reason(stem)
     if skip:
         return stem, "skip", skip
-    if trap.exists():
-        return stem, "skip", "expected trap (native)"
 
     code, out, err_txt = run_group(compile_cmd, 180)
     if code != 0:
@@ -315,12 +316,24 @@ def one_node(f: Path):
     runner.write_text(
         f"""import {{ run }} from {js_url};
 const timer = setTimeout(() => {{ console.error('probe --node timeout'); process.exit(2); }}, 25000);
-await run({wasm_url}, {{ stdout: (s) => process.stdout.write(s) }});
-clearTimeout(timer);
+try {{
+  await run({wasm_url}, {{ stdout: (s) => process.stdout.write(s) }});
+}} finally {{
+  clearTimeout(timer);
+}}
 """,
         encoding="utf-8",
     )
     code, out, err_txt = run_group(["node", str(runner)], 35)
+    if code == -9 or (code == 2 and "probe --node timeout" in err_txt):
+        return stem, "fail", "node timed out"
+    if trap.exists():
+        if code == 0:
+            return stem, "fail", "expected trap"
+        needle = missing_needle(trap, out, err_txt, f"exit code {code}")
+        if needle:
+            return stem, "fail", f"trap output missing {needle!r}: {_ANSI.sub('', err_txt)[-2000:]!r}"
+        return stem, "ok", ""
     if code != 0:
         tail = " | ".join((err_txt or out or "").strip().splitlines()[-2:])
         return stem, "fail", f"node {code} {tail}"
@@ -368,6 +381,8 @@ def one(f: Path):
     # Debug `cc -O0` of large `@json` units is slow; leave headroom for a cold
     # `libdream_rt.a` rebuild and a loaded machine.
     code, out, err = run_group(cmd, 180, stdin=stdin, env=env)
+    if code == -9:
+        return stem, "fail", "run timed out"
 
     if trap.exists():
         if code == 0:

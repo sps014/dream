@@ -8,11 +8,12 @@ pub(crate) fn stage_runtime(
     source_dir: &Path,
     output_dir: &Path,
     capabilities: &[HostCapability],
+    spec: &dream_abi::target::TargetSpec,
 ) -> Result<PathBuf, String> {
     // Validate the whole family before copying, especially when output is a toolchain directory.
     for capability in capabilities {
-        let source = source_dir.join(capability.library_name());
-        let destination = output_dir.join(capability.library_name());
+        let source = source_dir.join(capability.library_name(spec));
+        let destination = output_dir.join(capability.library_name(spec));
         let canonical_source = source
             .canonicalize()
             .map_err(|e| format!("locating {}: {e}", source.display()))?;
@@ -24,8 +25,8 @@ pub(crate) fn stage_runtime(
         }
     }
     for capability in capabilities {
-        let source = source_dir.join(capability.library_name());
-        let destination = output_dir.join(capability.library_name());
+        let source = source_dir.join(capability.library_name(spec));
+        let destination = output_dir.join(capability.library_name(spec));
         std::fs::copy(&source, &destination)
             .map_err(|e| format!("bundling {}: {e}", source.display()))?;
     }
@@ -37,32 +38,39 @@ pub(crate) fn link_runtime(
     source_dir: &Path,
     bundled: Option<&Path>,
     capabilities: &[HostCapability],
+    spec: &dream_abi::target::TargetSpec,
 ) {
     // A stale capability library must fail at link time, before any mixed-ABI callback runs.
     for capability in capabilities {
         let symbol = format!("dream_host_{}_abi_v2", capability.name());
-        if cfg!(windows) {
-            command.arg(format!("-Wl,/include:{symbol}"));
-        } else if cfg!(target_os = "macos") {
+        if spec.is_windows() {
+            command.arg(if spec.is_msvc() {
+                format!("-Wl,/include:{symbol}")
+            } else {
+                format!("-Wl,-u,{symbol}")
+            });
+        } else if spec.is_apple() {
             command.arg(format!("-Wl,-u,_{symbol}"));
         } else {
-            command.arg(format!("-Wl,--require-defined={symbol}"));
+            command.arg(format!("-Wl,-u,{symbol}"));
         }
     }
-    if cfg!(windows) {
+    if spec.is_windows() {
         for capability in capabilities {
-            command.arg(source_dir.join(capability.import_library_name()));
+            command.arg(source_dir.join(capability.import_library_name(spec)));
         }
-        command.arg("-loldnames");
+        if spec.is_msvc() {
+            command.arg("-loldnames");
+        }
         return;
     }
     if let Some(directory) = bundled {
         // Zig turns -L directories into native rpaths; direct inputs preserve the
         // libraries' package-relative install names without leaking the build path.
         for capability in capabilities {
-            command.arg(directory.join(capability.library_name()));
+            command.arg(directory.join(capability.library_name(spec)));
         }
-        if cfg!(target_os = "macos") {
+        if spec.is_apple() {
             command.args([
                 "-Wl,-rpath,@executable_path",
                 "-Wl,-rpath,@executable_path/../Frameworks",
@@ -91,6 +99,7 @@ mod tests {
             Path::new("/toolchain"),
             None,
             &[HostCapability::Core, HostCapability::Net],
+            &dream_abi::target::TargetSpec::host(),
         );
         let args: Vec<_> = command
             .get_args()
@@ -103,7 +112,7 @@ mod tests {
             } else if cfg!(target_os = "macos") {
                 format!("-Wl,-u,_{symbol}")
             } else {
-                format!("-Wl,--require-defined={symbol}")
+                format!("-Wl,-u,{symbol}")
             };
             assert!(args.iter().any(|arg| *arg == required));
         }
@@ -119,11 +128,19 @@ mod tests {
         let source = tempfile::tempdir().unwrap();
         let output = tempfile::tempdir().unwrap();
         std::fs::write(
-            source.path().join(HostCapability::Core.library_name()),
+            source
+                .path()
+                .join(HostCapability::Core.library_name(&dream_abi::target::TargetSpec::host())),
             b"runtime",
         )
         .unwrap();
-        stage_runtime(source.path(), output.path(), &[HostCapability::Core]).unwrap();
+        stage_runtime(
+            source.path(),
+            output.path(),
+            &[HostCapability::Core],
+            &dream_abi::target::TargetSpec::host(),
+        )
+        .unwrap();
         assert_eq!(std::fs::read_dir(output.path()).unwrap().count(), 1);
         let mut command = Command::new("cc");
         link_runtime(
@@ -131,6 +148,7 @@ mod tests {
             source.path(),
             Some(output.path()),
             &[HostCapability::Core],
+            &dream_abi::target::TargetSpec::host(),
         );
         let args = format!("{command:?}");
         for capability in [
@@ -150,13 +168,16 @@ mod tests {
             Path::new("/toolchain"),
             Some(Path::new("/package")),
             &HostCapability::ALL,
+            &dream_abi::target::TargetSpec::host(),
         );
         let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy()).collect();
         for capability in HostCapability::ALL {
             let expected = if cfg!(windows) {
-                Path::new("/toolchain").join(capability.import_library_name())
+                Path::new("/toolchain")
+                    .join(capability.import_library_name(&dream_abi::target::TargetSpec::host()))
             } else {
-                Path::new("/package").join(capability.library_name())
+                Path::new("/package")
+                    .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
             };
             assert!(args
                 .iter()
@@ -178,15 +199,28 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         for capability in HostCapability::ALL {
             std::fs::write(
-                directory.path().join(capability.library_name()),
+                directory
+                    .path()
+                    .join(capability.library_name(&dream_abi::target::TargetSpec::host())),
                 b"compiler runtime",
             )
             .unwrap();
         }
-        assert!(stage_runtime(directory.path(), directory.path(), &HostCapability::ALL).is_err());
+        assert!(stage_runtime(
+            directory.path(),
+            directory.path(),
+            &HostCapability::ALL,
+            &dream_abi::target::TargetSpec::host()
+        )
+        .is_err());
         for capability in HostCapability::ALL {
             assert_eq!(
-                std::fs::read(directory.path().join(capability.library_name())).unwrap(),
+                std::fs::read(
+                    directory
+                        .path()
+                        .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
+                )
+                .unwrap(),
                 b"compiler runtime"
             );
         }
@@ -203,11 +237,12 @@ mod tests {
             Path::new("/toolchain"),
             Some(Path::new(".")),
             &HostCapability::ALL,
+            &dream_abi::target::TargetSpec::host(),
         );
         for capability in HostCapability::ALL {
-            assert!(command
-                .get_args()
-                .any(|arg| arg == Path::new(".").join(capability.library_name())));
+            assert!(command.get_args().any(|arg| arg
+                == Path::new(".")
+                    .join(capability.library_name(&dream_abi::target::TargetSpec::host()))));
         }
         assert!(!command.get_args().any(|arg| arg == "-L."));
     }

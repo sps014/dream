@@ -1,6 +1,6 @@
 /* libc/Dream-heap bridge for wasm32 PCRE2. `malloc`/`free` are 1-arg libc;
  * `malloc_tagged`/`free_tagged` are the Dream `$malloc`/`$free` (size, tag). */
-#include "include/dream_abi.h"
+#include "dream_abi.h"
 #include <stddef.h>
 #include <stdint.h>
 

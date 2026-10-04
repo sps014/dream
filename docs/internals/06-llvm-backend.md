@@ -154,8 +154,8 @@ Building SSA in the printer would duplicate `mem2reg`, and replacing the `abort`
 
 Review performance on the optimized module instead: every build writes `<stem>.opt.ll` (the
 whole program after `opt`, runtime included) and deletes the unoptimized `.ll` once linked;
-`dream --emit-llvm file.dream` stops there and adds `<stem>.s`. Native `--emit staticlib` and `--emit dylib` build an archive or shared library, respectively,
-plus a C header and ABI sidecar. `--crate-type lib` selects a static library. There is no process
+`dream --emit-llvm file.dream` stops there and adds `<stem>.s`. Native `[lib].output-type = "staticlib"` and `"cdylib"` in `dream.toml` build an archive or shared library, respectively,
+plus a C header and ABI sidecar. The manifest selects one library output. There is no process
 entry; `@export` definitions are reachability roots. Their private bodies have separate structural
 symbols, and public wrappers use the plain ABI (including the value-box return convention), with
 no caller-location argument. The wrappers initialize module globals once and check that the
@@ -241,9 +241,9 @@ that validated table. A missing entry rejects the stale runtime cache before any
   publication. This does not change MIR's retain/release or move decisions.
 - **String literals** are interned into `constant` heap-object blocks (`__ds<n>_blk`: header plus
   UTF-16 payload). The runtime never writes an immortal block, so `constant` is sound.
-- **Runtime units** are C under `crates/dream-mir/src/runtime/c/` (`wasm32/` for the wasm32 guest,
-  shared `native/` units for every target). `TAG_*` constants and heap offsets live in `mir::abi`,
-  kept in lockstep with `runtime/c/include/dream_abi.h`. `native/llvm_inline.c` holds the hot
+- **Runtime units** are C under `crates/dream-mir/src/runtime/c/` (`core/` for portable logic,
+  `sys/native/`, `sys/wasi/` and `sys/shared/` for platform services). `TAG_*` constants and heap offsets live in `mir::abi`,
+  kept in lockstep with `runtime/c/include/dream_abi.h`. `core/inlines.c` holds the hot
   helpers the optimizer should see.
 
 ## Optimization record
@@ -330,7 +330,7 @@ internalize, so C linked into it can call them.
 
 `--wasm` uses the same writers with a 32-bit handle and the `wasm32-wasip1` layout:
 
-- **Runtime bitcode.** wasi-sdk's clang compiles `WASM32_CORE_C` plus `native/llvm_inline.c`
+- **Runtime bitcode.** wasi-sdk's clang compiles shared `CORE_C` plus `WASI_SYS_C`
   with `-emit-llvm` (the `-pthread` variant for threaded modules). The pinned `llvm-link` merges
   the units, and an anchor unit over `dream_rt_wasm32.h` adds declarations for the header-only
   imports. The signature table keeps `wasm-import-module`/`wasm-import-name`, so host imports

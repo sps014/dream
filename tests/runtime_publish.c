@@ -1,5 +1,5 @@
-#include "../crates/dream-mir/src/runtime/c/native/include/dream_rt_native.h"
-#include "../crates/dream-mir/src/runtime/c/native/include/dream_heap_maps.h"
+#include "../crates/dream-mir/src/runtime/c/core/include/dream_core.h"
+#include "../crates/dream-mir/src/runtime/c/core/include/dream_heap_maps.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

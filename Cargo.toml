@@ -57,23 +57,25 @@ oxc_semantic = "0.146"
 flate2 = "1.1.9"
 brotli = "8.0.4"
 
+object = { version = "0.37", default-features = false, features = ["read"], optional = true }
+
 [features]
 default = ["native", "wasm-opt"]
 # Native compiler execution/linking tools; runtime hosts are built separately.
-native = ["dep:serde", "dep:serde_json", "dep:image"]
+native = ["dep:serde", "dep:serde_json", "dep:image", "dep:object"]
 # `wasm-opt` pulls in Binaryen bindings for the CLI's `-O`/`--optimize` flag. Separate from `native`
 # since it's a build-time optimization concern rather than a runtime-execution one, but excluded
 # from the wasm32 analyzer build the same way.
 wasm-opt = ["dep:wasm-opt"]
 
 [dev-dependencies]
-object = { version = "0.37", default-features = false, features = ["read"] }
 libloading = "0.8"
 tempfile = "3"
 pretty_assertions = "1.4.1"
 rayon = "1"
 # Parses the emitted `.wat` text back into a module in wasm-opt / e2e assertions.
 wat = "1.252.0"
+wasmparser = "0.252"
 rcgen = "0.13"
 
 [profile.dev]

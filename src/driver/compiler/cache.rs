@@ -111,21 +111,61 @@ impl Compiler {
         field("options", options.as_bytes());
         field("link", link_key.as_bytes());
         let toolchain = &self.toolchain_config;
-        field(
-            "toolchain",
-            format!(
-                "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
-                toolchain.llvm,
-                toolchain.toolchains,
-                toolchain.cc,
-                toolchain.cxx,
-                toolchain.zig,
-                toolchain.native_sanitize,
-                toolchain.sdkroot,
-                toolchain.path,
-            )
-            .as_bytes(),
-        );
+        field("toolchain", toolchain.fingerprint().as_bytes());
+        #[cfg(feature = "native")]
+        {
+            let spec = self.target.spec();
+            let tools = crate::execution::llvm::resolve_llvm(toolchain).ok()?;
+            if spec.is_apple() {
+                field(
+                    "resolved-sdk",
+                    format!(
+                        "{:?}",
+                        crate::execution::llvm::runtime::sysroot_args(toolchain, spec)
+                    )
+                    .as_bytes(),
+                );
+            }
+            let mut paths = [
+                "opt",
+                "llc",
+                "llvm-link",
+                "llvm-dis",
+                "clang",
+                "llvm-ar",
+                "llvm-rc",
+            ]
+            .map(|name| tools.tool(name))
+            .to_vec();
+            if !spec.capabilities.linear_memory {
+                if spec.is_windows() {
+                    paths.extend(crate::execution::native::cc::installed_zig(toolchain));
+                }
+                paths.push(
+                    crate::execution::native::cc::resolve_existing_target_cc(toolchain, spec)
+                        .ok()?
+                        .path()
+                        .to_path_buf(),
+                );
+                let directories = if spec.can_link_on_host() {
+                    toolchain.host_library_dirs()
+                } else {
+                    vec![toolchain.targets.join(spec.triple.to_string()).join("lib")]
+                };
+                for dir in directories {
+                    for capability in dream_abi::host_capability::HostCapability::ALL {
+                        paths.push(dir.join(capability.library_name(spec)));
+                        if spec.is_windows() {
+                            paths.push(dir.join(capability.import_library_name(spec)));
+                        }
+                    }
+                }
+            }
+            field(
+                "resolved-tools",
+                crate::driver::rt_stamp::fingerprint(paths).as_bytes(),
+            );
+        }
         let env: BTreeMap<String, String> = std::env::vars()
             .filter(|(name, _)| name.starts_with("DREAM_"))
             .collect();

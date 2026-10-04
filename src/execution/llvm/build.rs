@@ -1,5 +1,5 @@
-//! `.ll` → native binary: `llvm-link` with the runtime bitcode, `opt` (internalize to `main`, then
-//! the standard pipeline), `llc` to an object, and the system C compiler as the linker only.
+//! Native outputs share runtime linking and optimization; their ABI manifests supply the
+//! public roots before the output kind selects an executable, archive or shared library.
 
 use super::c_shim::shim_bitcode;
 use super::icon;
@@ -20,49 +20,13 @@ use crate::execution::native::{
 use dream_abi::c_abi::EMBED_EXPORTS;
 #[path = "library.rs"]
 mod library;
+#[path = "build_policy.rs"]
+mod policy;
 use dream_mir::runtime::runtime_need_from_module_text;
+use policy::{cpu_args, dead_strip_args, section_args};
+pub(super) use policy::{llc_level, pipeline};
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
-
-/// The new-pass-manager pipeline for a level. Debug builds stay at `O0` so values survive.
-pub(super) fn pipeline(opt: OptLevel, debug: bool) -> &'static str {
-    if debug {
-        return "internalize,default<O0>";
-    }
-    match opt {
-        OptLevel::O0 => "internalize,default<O0>",
-        OptLevel::O1 => "internalize,default<O1>",
-        OptLevel::O2 => "internalize,default<O2>",
-        OptLevel::O3 | OptLevel::O4 => "internalize,default<O3>",
-        OptLevel::Size => "internalize,default<Os>",
-        OptLevel::SizeAggressive => "internalize,default<Oz>",
-    }
-}
-
-pub(super) fn llc_level(opt: OptLevel, debug: bool) -> &'static str {
-    if debug {
-        return "-O0";
-    }
-    match opt {
-        OptLevel::O0 => "-O0",
-        OptLevel::O1 => "-O1",
-        OptLevel::O2 | OptLevel::Size | OptLevel::SizeAggressive => "-O2",
-        OptLevel::O3 | OptLevel::O4 => "-O3",
-    }
-}
-
-/// The CPU for the program and its runtime (whose bitcode carries none): the host's own at
-/// `-O3`/`-O4`, where the binary is built to run here; otherwise the target's baseline, which on
-/// Apple silicon is the M1 every arm64 Mac has.
-pub(super) fn cpu_args(opt: OptLevel, debug: bool) -> &'static [&'static str] {
-    if !debug && matches!(opt, OptLevel::O3 | OptLevel::O4) {
-        &["-mcpu=native"]
-    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-        &["-mcpu=apple-m1"]
-    } else {
-        &[]
-    }
-}
 
 /// `opt`'s PGO pipeline kind and its profile file (see `pgo::llvm_pgo`).
 type PgoPipeline = Option<(&'static str, PathBuf)>;
@@ -71,16 +35,21 @@ type PgoPipeline = Option<(&'static str, PathBuf)>;
 fn optimize_linked(
     tools: &LlvmTools,
     linked: &Path,
-    opt: OptLevel,
-    debug: bool,
+    level: (OptLevel, bool),
     pgo: &PgoPipeline,
     exports: &[String],
+    spec: &dream_abi::target::TargetSpec,
 ) -> Result<PathBuf, String> {
+    let (opt, debug) = level;
     let out = linked.with_extension("opt.bc");
     let mut cmd = tools.command("opt");
     cmd.arg(format!("-passes={}", pipeline(opt, debug)))
-        .args(cpu_args(opt, debug))
+        .args(cpu_args(opt, debug, spec))
         .arg(public_api_list(exports));
+    if !debug {
+        // COFF CodeView records llc's output path even for runtime-only debug units.
+        cmd.arg("-strip-debug");
+    }
     if let Some((kind, file)) = pgo {
         cmd.arg(format!("-pgo-kind={kind}"))
             .arg(format!("-profile-file={}", file.display()));
@@ -102,25 +71,21 @@ fn public_api_list(exports: &[String]) -> String {
     format!("-internalize-public-api-list={}", list.join(","))
 }
 
-pub fn native_bin_path(ll_path: &Path) -> PathBuf {
-    ll_path.with_extension("bin")
-}
-
 /// Links `ll_path` with the extra bitcode/IR `modules` (runtime first), then optimizes.
 fn link_and_optimize(
     tools: &LlvmTools,
     ll_path: &Path,
     modules: &[&Path],
-    opt: OptLevel,
-    debug: bool,
+    level: (OptLevel, bool),
     pgo: &PgoPipeline,
     exports: &[String],
+    spec: &dream_abi::target::TargetSpec,
 ) -> Result<PathBuf, String> {
     let linked = ll_path.with_extension("linked.bc");
     let mut link = tools.command("llvm-link");
     link.arg(ll_path).args(modules).arg("-o").arg(&linked);
     run_captured(&mut link, &format!("llvm-link ({})", ll_path.display()))?;
-    let optimized = optimize_linked(tools, &linked, opt, debug, pgo, exports);
+    let optimized = optimize_linked(tools, &linked, level, pgo, exports, spec);
     let _ = std::fs::remove_file(&linked);
     optimized
 }
@@ -132,35 +97,18 @@ fn run_llc(
     debug: bool,
     filetype: &str,
     out: &Path,
+    spec: &dream_abi::target::TargetSpec,
 ) -> Result<(), String> {
     let mut llc = tools.command("llc");
     llc.arg(llc_level(opt, debug))
-        .args(section_args())
-        .args(cpu_args(opt, debug))
+        .args(section_args(spec))
+        .args(cpu_args(opt, debug, spec))
         .arg(format!("-filetype={filetype}"))
         .arg("-relocation-model=pic")
         .arg(input)
         .arg("-o")
         .arg(out);
     run_captured(&mut llc, "llc")
-}
-
-fn section_args() -> &'static [&'static str] {
-    if cfg!(target_os = "linux") {
-        &["-function-sections", "-data-sections"]
-    } else {
-        &[]
-    }
-}
-
-fn dead_strip_args() -> &'static [&'static str] {
-    if cfg!(target_os = "macos") {
-        &["-Wl,-dead_strip"]
-    } else if cfg!(target_os = "linux") {
-        &["-Wl,--gc-sections"]
-    } else {
-        &[]
-    }
 }
 
 /// Disassembles bitcode `bc` to textual IR at `out`.
@@ -214,10 +162,10 @@ pub fn emit_llvm_artifacts(
             .flatten()
             .copied()
             .collect::<Vec<_>>(),
-        opt,
-        debug,
+        (opt, debug),
         &None,
         &library::exports(&ll_path.with_extension("abi.json"))?,
+        target,
     );
     for p in icon_ll.iter().chain(&shim) {
         let _ = std::fs::remove_file(p);
@@ -226,7 +174,7 @@ pub fn emit_llvm_artifacts(
     let opt_ll = ll_path.with_extension("opt.ll");
     write_ir(&tools, &optimized, &opt_ll)?;
     let asm = ll_path.with_extension("s");
-    run_llc(&tools, &optimized, opt, debug, "asm", &asm)?;
+    run_llc(&tools, &optimized, opt, debug, "asm", &asm, target)?;
     let _ = std::fs::remove_file(&optimized);
     Ok(vec![opt_ll, asm])
 }
@@ -259,12 +207,8 @@ pub fn compile_llvm(
         relocatable,
         output_kind,
     } = options;
-    if !spec.can_link_on_host() {
-        return Err(format!(
-            "native linking is host-only; use --target {} to emit .ll and .o",
-            spec.triple
-        )
-        .into());
+    if !spec.can_link_on_host() && *pgo != Pgo::Off {
+        return Err("cross-target PGO requires running the profile on its target".into());
     }
     let tools = resolve_llvm(config)?;
     if output_kind == OutputKind::Wasm {
@@ -273,13 +217,14 @@ pub fn compile_llvm(
     if output_kind.is_library() && (*pgo != Pgo::Off || icon.is_some()) {
         return Err("native libraries do not support PGO or app icons".into());
     }
-    let bin = output_kind.artifact_path(ll_path);
+    let bin = output_kind.artifact_path(ll_path, &spec);
     let abi_path = ll_path.with_extension("abi.json");
     let capabilities = read_host_capabilities(ll_path)?;
-    let dir = host_library_dir(config, &capabilities).ok_or(
+    let dir = host_library_dir(config, &capabilities, &spec).ok_or(
         "native capability libraries not found next to the dream binary. \
          Build with cargo build --workspace, or set DREAM_HOME or DREAM_BIN to the installed toolchain.",
-    )?;
+    ).map_err(|error: &str| format!("{error} Target {} requires capability libraries in {}", spec.triple, config.targets.join(spec.triple.to_string()).join("lib").display()))?;
+    crate::execution::native::capability_abi::validate(&dir, &capabilities, &spec)?;
     let lock_file = OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -292,6 +237,7 @@ pub fn compile_llvm(
             &dir,
             bin.parent().unwrap_or_else(|| Path::new(".")),
             &capabilities,
+            &spec,
         )?)
     } else {
         None
@@ -312,11 +258,18 @@ pub fn compile_llvm(
             .parent()
             .unwrap_or_else(|| Path::new("."))
             .join("native-c");
-        compile_sets(config, &cc::resolve_cc(config)?, &c_sources, &cache, debug)?
+        compile_sets(
+            config,
+            &cc::resolve_target_cc(config, &spec)?,
+            &spec,
+            &c_sources,
+            &cache,
+            debug,
+        )?
     };
     let stamp_path = bin.with_extension("flags");
     let stamp = format!(
-        "native-c-shim-v3\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
+        "native-c-shim-v4\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
         pipeline(opt, debug),
         debug,
         llc_level(opt, debug),
@@ -328,8 +281,31 @@ pub fn compile_llvm(
         native.link_args,
         (relocatable, output_kind),
         capabilities,
-        section_args(),
-        dead_strip_args()
+        section_args(&spec),
+        dead_strip_args(&spec)
+    );
+    let driver = cc::resolve_target_cc(config, &spec)?;
+    let mut resolved_inputs = vec![driver.path().to_path_buf()];
+    if icon_png.is_some() && spec.is_windows() {
+        resolved_inputs.push(PathBuf::from(icon::resource_command(&tools)?.get_program()));
+    }
+    for name in ["llc", "opt", "llvm-link", "llvm-ar"] {
+        resolved_inputs.push(tools.tool(name));
+    }
+    for capability in &capabilities {
+        resolved_inputs.push(dir.join(capability.library_name(&spec)));
+        if spec.is_windows() {
+            resolved_inputs.push(dir.join(capability.import_library_name(&spec)));
+        }
+    }
+    let stamp = format!(
+        "{stamp}\n{}\n{spec:?}\n{driver:?}\n{:?}\n{}",
+        config.fingerprint(),
+        driver
+            .cc_command(config, &spec)?
+            .get_args()
+            .collect::<Vec<_>>(),
+        crate::driver::rt_stamp::fingerprint(resolved_inputs)
     );
     let input = match (pgo, &profile) {
         (Pgo::Use(_), Some((_, p))) => Some(p.as_path()),
@@ -362,10 +338,10 @@ pub fn compile_llvm(
             .flatten()
             .copied()
             .collect::<Vec<_>>(),
-        opt,
-        debug,
+        (opt, debug),
         &profile,
         &exports,
+        &spec,
     );
     for p in icon_ll.iter().chain(&shim) {
         let _ = std::fs::remove_file(p);
@@ -375,15 +351,15 @@ pub fn compile_llvm(
         write_ir(&tools, &optimized, out)?;
     }
     let obj = ll_path.with_extension("o");
-    run_llc(&tools, &optimized, opt, debug, "obj", &obj)?;
+    run_llc(&tools, &optimized, opt, debug, "obj", &obj, &spec)?;
 
     if output_kind == OutputKind::Staticlib {
         library::archive(&tools, &bin, &obj, &native.objects, rt.archive.as_deref())?;
         let mut flags = Vec::new();
         let mut host = std::process::Command::new("cc");
-        link_runtime(&mut host, &dir, None, &capabilities);
+        link_runtime(&mut host, &dir, None, &capabilities, &spec);
         flags.extend(host.get_args().map(|a| a.to_string_lossy().into_owned()));
-        if !cfg!(windows) {
+        if !spec.is_windows() {
             flags.extend(["-lm".to_string(), "-lpthread".to_string()]);
         }
         let libs = read_c_libs_from_abi(&abi_path);
@@ -391,6 +367,7 @@ pub fn compile_llvm(
             config,
             &libs,
             &search_roots_for_artifact(config, ll_path),
+            &spec,
         ));
         flags.extend(native.link_args.clone());
         if let Err(error) = library::link_metadata(ll_path, &flags) {
@@ -407,11 +384,11 @@ pub fn compile_llvm(
         c.arg(&obj).args(profile_link_args(&tools)?);
         c
     } else {
-        let cc = cc::resolve_cc(config)?;
-        let mut c = if native.needs_cxx && cfg!(all(windows, target_env = "msvc")) {
-            cc.cxx_command(config)?
+        let cc = cc::resolve_target_cc(config, &spec)?;
+        let mut c = if native.needs_cxx && spec.is_msvc() {
+            cc.cxx_command(config, &spec)?
         } else {
-            cc.cc_command()
+            cc.cc_command(config, &spec)?
         };
         c.arg(&obj);
         c
@@ -419,8 +396,19 @@ pub fn compile_llvm(
     lcmd.args(&native.objects);
     if let Some(version) = spec.min_os {
         lcmd.arg(format!(
-            "-mmacosx-version-min={}.{}.{}",
-            version.major, version.minor, version.patch
+            "-m{}-version-min={}.{}.{}",
+            if spec.is_ios() {
+                if spec.triple.to_string().ends_with("-sim") {
+                    "ios-simulator"
+                } else {
+                    "iphoneos"
+                }
+            } else {
+                "macosx"
+            },
+            version.major,
+            version.minor,
+            version.patch
         ));
     }
     let export_file = if output_kind == OutputKind::Dylib {
@@ -429,26 +417,26 @@ pub fn compile_llvm(
             ll_path,
             &bin,
             &library::exports(&abi_path)?,
+            &spec,
         )?)
     } else {
         None
     };
-    lcmd.args(dead_strip_args());
+    lcmd.args(dead_strip_args(&spec));
     if let Some(a) = &rt.archive {
         lcmd.arg(a);
     }
-    #[cfg(windows)]
-    if let Some(png) = &icon_png {
+    if let Some(png) = &icon_png.as_ref().filter(|_| spec.is_windows()) {
         lcmd.arg(icon::windows_resource(&tools, ll_path, png)?);
     }
-    if !cfg!(windows) {
+    if !spec.is_windows() {
         lcmd.args(["-lm", "-lpthread"]);
     }
-    link_runtime(&mut lcmd, &dir, bundled.as_deref(), &capabilities);
+    link_runtime(&mut lcmd, &dir, bundled.as_deref(), &capabilities, &spec);
     let c_libs = read_c_libs_from_abi(&abi_path);
     if !c_libs.is_empty() {
         let roots = search_roots_for_artifact(config, ll_path);
-        lcmd.args(cc_link_flags(config, &c_libs, &roots));
+        lcmd.args(cc_link_flags(config, &c_libs, &roots, &spec));
     }
     lcmd.args(&native.link_args);
     lcmd.arg("-o").arg(&bin);
@@ -553,24 +541,5 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
             req.threads,
             req.wasm_opt,
         )
-    }
-}
-
-#[cfg(test)]
-mod size_tests {
-    use super::*;
-
-    #[test]
-    fn native_dead_stripping_matches_object_section_policy() {
-        if cfg!(target_os = "linux") {
-            assert_eq!(section_args(), &["-function-sections", "-data-sections"]);
-            assert_eq!(dead_strip_args(), &["-Wl,--gc-sections"]);
-        } else if cfg!(target_os = "macos") {
-            assert!(section_args().is_empty());
-            assert_eq!(dead_strip_args(), &["-Wl,-dead_strip"]);
-        } else {
-            assert!(section_args().is_empty());
-            assert!(dead_strip_args().is_empty());
-        }
     }
 }

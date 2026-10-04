@@ -42,9 +42,7 @@ pub fn run(start: &Path, package: Option<&str>, options: Options) -> Result<()> 
     }
     let output = workspace.root.join("target/pack");
     std::fs::create_dir_all(&output)?;
-    let staging = tempfile::Builder::new()
-        .prefix("mobile-")
-        .tempdir_in(&output)?;
+    let writer = super::super::bundle::BundleWriter::new(&output)?;
     let functions = &slices
         .values()
         .next()
@@ -52,8 +50,8 @@ pub fn run(start: &Path, package: Option<&str>, options: Options) -> Result<()> 
         .abi
         .export_functions;
     match options.platform.as_str() {
-        "ios" => ios::pack(&name, &slices, functions, staging.path(), &output)?,
-        "android" => android::pack(&name, &slices, functions, &options, staging.path(), &output)?,
+        "ios" => ios::pack(&name, &slices, functions, &writer)?,
+        "android" => android::pack(&name, &slices, functions, &options, &writer)?,
         _ => bail!("mobile platform must be ios or android"),
     }
     Ok(())

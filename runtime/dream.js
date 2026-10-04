@@ -857,6 +857,8 @@ function nodeStderrWrite(s) {
 }
 
 function defaultEnv(getInstance, options) {
+  const utf8 = new TextDecoder("utf-8");
+  const utf16 = new TextDecoder("utf-16le");
   const writeOut = options.stdout || nodeStdoutWrite;
   const writeErr = options.stderr || nodeStderrWrite;
   const writeLine = options.stdout
@@ -864,6 +866,12 @@ function defaultEnv(getInstance, options) {
     : (s) => console.log(s);
 
   return {
+    write_text: (stream, ptr, size, encoding) => {
+      const start = ptr >>> 0;
+      const length = (size >>> 0) * (encoding === 1 ? 2 : 1);
+      const text = (encoding === 1 ? utf16 : utf8).decode(getInstance().bytes.subarray(start, start + length));
+      (stream === 2 ? writeErr : writeOut)(text);
+    },
     print_string: (ptr) => writeOut(getInstance().readString(ptr)),
     println: (ptr) => writeLine(getInstance().readString(ptr)),
     print_int: (v) => writeOut(String(v)),

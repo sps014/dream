@@ -1,6 +1,4 @@
-//! Linked C libraries (today: PCRE2 regex) plus native compile file lists.
-//! Native builds use `runtime/c/native/`; the wasm32 guest uses `runtime/c/wasm32/` + shared `native/`
-//! units.
+//! Core/sys runtime layers and optional linked C libraries (PCRE2 regex).
 
 use std::path::{Path, PathBuf};
 
@@ -108,22 +106,32 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[RuntimeModule {
     ],
 }];
 
-const NATIVE_CORE_C: &[&str] = &[
-    "heap.c",
-    "heap_maps.c",
+/// Portable runtime logic; no OS headers or direct hosted allocator calls.
+pub const CORE_C: &[&str] = &[
     "publish.c",
     "region.c",
     "strings.c",
     "ffi.c",
-    "callback.c",
     "object.c",
     "format.c",
     "panic.c",
     "weak.c",
     "closure.c",
-    "async.c",
-    "sync.c",
     "simd.c",
+    "defer.c",
+    "platform.c",
+    "inlines.c",
+    "memory.c",
+    "utf8.c",
+];
+const NATIVE_HEAP_C: &[&str] = &["heap.c", "heap_maps.c"];
+const SHARED_SYS_C: &[&str] = &["async.c"];
+const NATIVE_SYS_C: &[&str] = &[
+    "platform.c",
+    "heap_debug.c",
+    "leak_report.c",
+    "callback.c",
+    "sync.c",
     "host_support.c",
     "fs.c",
     "file_handle.c",
@@ -134,56 +142,48 @@ const NATIVE_CORE_C: &[&str] = &[
     "stdio.c",
     "math.c",
     "worker.c",
-    "defer.c",
+];
+const WASI_SYS_C: &[&str] = &[
+    "heap.c",
+    "heap_memory.c",
+    "allocation.c",
+    "g0.c",
+    "g0.s",
+    "sync.c",
+    "interns.c",
+    "platform.c",
 ];
 
 pub const SOURCE_RUNTIME_C_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/runtime/c");
 
-pub fn native_runtime_include_dir(root: &Path) -> PathBuf {
-    root.to_path_buf().join("native/include")
+pub fn core_runtime_include_dir(root: &Path) -> PathBuf {
+    root.to_path_buf().join("core/include")
 }
 
 pub fn wasm32_runtime_include_dir(root: &Path) -> PathBuf {
-    root.to_path_buf().join("wasm32/include")
-}
-
-pub fn wasm32_heap_c(root: &Path) -> PathBuf {
-    root.to_path_buf().join("wasm32/heap.c")
+    root.to_path_buf().join("sys/wasi/include")
 }
 
 pub fn runtime_abi_include_dir(root: &Path) -> PathBuf {
     root.to_path_buf().join("include")
 }
 
-pub fn wasm32_libc_c(root: &Path) -> PathBuf {
-    root.to_path_buf().join("wasm32/libc.c")
-}
-
-const WASM32_CORE_C: &[&str] = &[
-    "wasm32/heap.c",
-    "native/publish.c",
-    "native/region.c",
-    "wasm32/libc.c",
-    "wasm32/g0.c",
-    "wasm32/g0.s",
-    "wasm32/sync_stub.c",
-    "native/weak.c",
-    "wasm32/interns.c",
-    "native/strings.c",
-    "native/object.c",
-    "native/format.c",
-    "native/panic.c",
-    "native/closure.c",
-    "native/async.c",
-    "native/defer.c",
-    "native/simd.c",
-    "native/ffi.c",
-];
-
-/// Guest runtime C units for wasm32. Skips native mmap heap, libc host, and pthreads.
+/// Shared core plus the WASI/JS platform services and target heap representation.
 pub fn wasm32_runtime_c_files(root: &Path) -> Vec<PathBuf> {
-    let c = root.to_path_buf();
-    WASM32_CORE_C.iter().map(|rel| c.join(rel)).collect()
+    CORE_C
+        .iter()
+        .map(|name| root.join("core").join(name))
+        .chain(
+            WASI_SYS_C
+                .iter()
+                .map(|name| root.join("sys/wasi").join(name)),
+        )
+        .chain(
+            SHARED_SYS_C
+                .iter()
+                .map(|name| root.join("sys/shared").join(name)),
+        )
+        .collect()
 }
 
 /// One catalog C unit to compile into the wasm32 guest beyond the always-on core
@@ -205,7 +205,7 @@ pub fn wasm32_linked_units(root: &Path, need: RuntimeNeed) -> Vec<Wasm32LinkedUn
         if !need.contains(m.need) {
             continue;
         }
-        let mut dirs: Vec<PathBuf> = vec![c.join("include"), native_runtime_include_dir(root)];
+        let mut dirs: Vec<PathBuf> = vec![c.join("include"), core_runtime_include_dir(root)];
         for rel in m.include_dirs {
             let d = c.join(rel);
             if !dirs.contains(&d) {
@@ -285,7 +285,7 @@ pub struct NativeCompileUnit {
 
 fn catalog_include_dirs(root: &Path, m: &RuntimeModule) -> Vec<PathBuf> {
     let c = root.to_path_buf();
-    let mut dirs = vec![native_runtime_include_dir(root), c.join("include")];
+    let mut dirs = vec![core_runtime_include_dir(root), c.join("include")];
     for rel in m.include_dirs {
         let p = c.join(rel);
         if !dirs.iter().any(|d| d == &p) {
@@ -306,15 +306,25 @@ fn push_unit(root: &Path, units: &mut Vec<NativeCompileUnit>, path: PathBuf, m: 
 /// Native objects for `need`: always-on host C plus catalog `shared_c`/`native_extra_c`/`SOURCES`
 /// for live linked modules.
 pub fn native_runtime_units(root: &Path, need: RuntimeNeed) -> Vec<NativeCompileUnit> {
-    let native = root.to_path_buf().join("native");
-    let native_inc = native_runtime_include_dir(root);
+    let native_inc = core_runtime_include_dir(root);
     let mut units = Vec::new();
-    for name in NATIVE_CORE_C {
-        units.push(NativeCompileUnit {
-            path: native.join(name),
-            defines: vec!["DREAM_NATIVE".into()],
-            include_dirs: vec![native_inc.clone()],
-        });
+    for (layer, files) in [
+        ("core", CORE_C),
+        ("core", NATIVE_HEAP_C),
+        ("sys/shared", SHARED_SYS_C),
+        ("sys/native", NATIVE_SYS_C),
+    ] {
+        for name in files {
+            units.push(NativeCompileUnit {
+                path: root.join(layer).join(name),
+                defines: vec!["DREAM_NATIVE".into()],
+                include_dirs: vec![
+                    native_inc.clone(),
+                    root.join("sys/native/include"),
+                    root.join("include"),
+                ],
+            });
+        }
     }
     let c = root.to_path_buf();
     for m in RUNTIME_MODULES {
@@ -364,8 +374,11 @@ mod tests {
                 }
             }
         }
-        for name in NATIVE_CORE_C {
-            assert!(c.join("native").join(name).is_file(), "native/{}", name);
+        for unit in native_runtime_units(&c, RuntimeNeed::CORE) {
+            assert!(unit.path.is_file(), "{}", unit.path.display());
+        }
+        for path in wasm32_runtime_c_files(&c) {
+            assert!(path.is_file(), "{}", path.display());
         }
     }
 

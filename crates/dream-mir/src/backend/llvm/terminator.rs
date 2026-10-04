@@ -72,7 +72,9 @@ impl<'l, 'a> Fx<'l, 'a> {
                 if self.l.sret.contains(&self.l.user_fn(self.f)) {
                     let size = elem_size(&self.l.cx, self.f.ret) as i64;
                     let src = self.operand(o);
-                    let buf = self.w.param(self.w.param_count() - 1 - self.tracks_caller() as usize);
+                    let buf = self
+                        .w
+                        .param(self.w.param_count() - 1 - self.tracks_caller() as usize);
                     let sp = self.ptr(&src);
                     self.memcpy(&buf, &sp, &Value::i64(size));
                     self.w.ret(None);
@@ -90,7 +92,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 }
             }
             Terminator::Unreachable => {
-                self.call("abort", &[]);
+                self.call("dream_platform_abort", &[]);
                 if !self.w.is_terminated() {
                     self.w.unreachable();
                 }

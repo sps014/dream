@@ -1,21 +1,38 @@
-# Guest C (wasm32 + native + linked libs)
+# Layered C runtime
 
-The guest runtime is **C only** — there is no WAT runtime anymore. This directory holds:
+- `core/`: portable heap/ARC, regions, strings, formatting, weak references, deferred drops,
+  closures, FFI conversion, panic and memory primitives. `core/include/dream_core.h` defines
+  the target-shaped ABI; `include/dream_abi.h` supplies shared numeric constants.
+- `sys/native/`: POSIX/Win32 adapters using `dream_thread.h`, mapped pages, stdio, files,
+  environment, clocks, callbacks and scheduling. Native OS choices stay here.
+- `sys/wasi/`: wasm linear-memory heap representation, JS/WASI adapters, globals, allocation
+  bridge and synchronization. Shared core logic is compiled once for each target ABI.
+- `sys/shared/`: scheduling compiled for native and wasm32, with target-specific wakeup services.
+- Host capabilities (`net`, `gpu`, `webview`) remain separate `dream-host-*` crates, selected
+  by the existing capability registry. Regex remains the optional vendored PCRE2 module.
 
-- **wasm32 guest** — [`wasm32/`](wasm32/) (heap, libc, g0, sync/weak stubs) plus shared units from [`native/`](native/). Compiled to bitcode by wasi-sdk clang (`dreamer toolchain install wasi-sdk`); see `src/execution/llvm/wasm.rs` and `src/driver/wasi.rs`.
-- **Native host runtime** — [`native/`](native/) for `dream run`, compiled to bitcode by the pinned clang (`src/execution/llvm/runtime.rs`).
-- **Linked libraries** — today PCRE2 ([`regex.c`](regex.c), [`regex_wasm_libc.c`](regex_wasm_libc.c), [`pcre2/`](pcre2/)), compiled per target when the catalog (`../modules.rs`) says `RuntimeNeed::REGEX`.
+`../modules.rs` lists shared core and sys units by layer. LLVM runtime caches fingerprint
+sources and headers from all layers. Guest code remains C only.
 
-## Do
+`include/dream_platform.h` defines the embedding platform table. Install it through
+`dream_set_platform` before any runtime use. Keep the table and allocation domain valid for
+its entire lifetime; replacing a live allocator is invalid. Every callback is required.
+Mapped regions are zeroed and aligned to 16 bytes. Heap and weak locks are distinct domains;
+weak operations may take the heap lock. `object_drop` retires sys synchronization state.
+Writes receive UTF-8 bytes or native-endian UTF-16 units and a stream number; abort must terminate without returning.
+Native defaults use libc allocation, OS maps and the existing POSIX/Win32 lock abstraction.
+Wasm defaults use the guest heap and the JS host text writer. Panic output needs no guest allocation.
 
-- Share numeric ABI via `include/dream_abi.h`. Portable wrappers (wasm regex + native) include `include/dream_guest.h`.
-- Native-only files live in [`native/`](native/).
-- Native references use byte pointers; wasm32 references remain linear-memory offsets. Counts and raw foreign addresses remain integers with their declared widths.
-- Native capability libraries export their ABI v2 marker; linking requires every selected marker and binds callbacks through `dream_host_bind_v2`, rejecting stale libraries before execution.
-- Keep the wasm32 unit list in `../modules.rs` (`WASM32_CORE_C`) in sync with new helper files.
+Panics use fixed storage, including allocator exhaustion while a lock is held. Default
+output streams the complete message; panic hooks receive a bounded UTF-8 copy. There is no
+stdio constructor, so embedding does not change the host application's buffering policy.
 
-## Don't
-
-- Do not run clang from default CI paths that lack toolchains (the e2e wasm32 tests gate on wasi-sdk presence; `cargo test --workspace` stays green without it).
-- Do not add a WAT authoring path for guest helpers; edit the C.
-- Do not use clang `-O4` / wasm-opt `-O4`.
+Run `python scripts/check_freestanding.py` with clang and lld. It compiles every core unit
+with `-ffreestanding -nostdlib -nostdinc`, using only clang's builtin headers and declaration
+adapters for vendor headers, then links all functions without section collection, a target
+SDK, CRT, sys objects or libc. The anchor supplies only program-generated glue and the
+embedding platform symbol. The same check runs in CI. Runtime behavior and deterministic
+allocation failures are covered by `tests/runtime_platform.rs` on native hosts. The gate
+also rejects first-party C units over 600 lines (vendored PCRE2/SLJIT are excluded).
+`tests/runtime_wasi_platform.rs` bounds imported memory to verify page-growth failure reports
+through the WASI text/abort callbacks without allocating or growing memory.

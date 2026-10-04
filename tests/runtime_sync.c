@@ -1,4 +1,4 @@
-#include "../crates/dream-mir/src/runtime/c/native/sync.c"
+#include "../crates/dream-mir/src/runtime/c/sys/native/sync.c"
 #include <assert.h>
 #include <stdio.h>
 #include <unistd.h>

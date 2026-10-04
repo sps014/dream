@@ -111,7 +111,7 @@ mod abi_h_lockstep {
     fn string_hash_is_fnv1a_folded_off_pad_markers() {
         assert_eq!(string_hash(&[]) as u32, 0x811c_9dc5);
         assert_eq!(string_hash(&[u16::from(b'a')]) as u32, 0xe40c_292c);
-        let obj = include_str!("runtime/c/native/object.c");
+        let obj = include_str!("runtime/c/core/object.c");
         assert!(obj.contains("2166136261u") && obj.contains("16777619u"));
         for units in [&[][..], &[1, 2, 3], &[0xffff; 9]] {
             assert!(!matches!(

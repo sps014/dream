@@ -16,3 +16,18 @@ pub fn list() -> Result<()> {
 pub fn uninstall(component: String) -> Result<()> {
     toolchain::uninstall(Component::parse_name(&component)?)
 }
+
+pub fn doctor(target: Option<&str>, json: bool) -> Result<()> {
+    let mut command = std::process::Command::new(crate::dream_bin::locate()?);
+    command.arg("toolchain-doctor");
+    if let Some(target) = target {
+        command.args(["--target", target]);
+    }
+    if json {
+        command.arg("--json");
+    }
+    if !command.status()?.success() {
+        anyhow::bail!("toolchain diagnosis found missing requirements");
+    }
+    Ok(())
+}

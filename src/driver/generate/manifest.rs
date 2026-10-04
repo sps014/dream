@@ -48,7 +48,23 @@ pub fn load_manifest_generators(entry_file: &str) -> Vec<String> {
 
 /// `[package].entry` from `dream.toml`, resolved against the manifest directory.
 pub fn package_entry_path(project_root: &Path) -> Option<PathBuf> {
-    let rel = ProjectManifest::load(project_root).ok()?.entry?;
+    let manifest = ProjectManifest::load(project_root).ok()?;
+    let ProjectManifest {
+        entry,
+        library,
+        package_name,
+        ..
+    } = manifest;
+    let rel = entry.or_else(|| {
+        library.map(|_| {
+            format!(
+                "src/{}.dream",
+                crate::driver::project_manifest::import_segment(
+                    package_name.as_deref().unwrap_or_default()
+                )
+            )
+        })
+    })?;
     if rel.trim().is_empty() {
         return None;
     }

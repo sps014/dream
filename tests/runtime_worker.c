@@ -1,4 +1,4 @@
-#include "../crates/dream-mir/src/runtime/c/native/include/dream_thread.h"
+#include "../crates/dream-mir/src/runtime/c/sys/native/include/dream_thread.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +11,7 @@ static int start_worker(dream_thread *thread, void *(*body)(void *), void *arg) 
 }
 
 #define dream_thread_start start_worker
-#include "../crates/dream-mir/src/runtime/c/native/worker.c"
+#include "../crates/dream-mir/src/runtime/c/sys/native/worker.c"
 #undef dream_thread_start
 
 void dream_future_fini(dream_ptr ptr) { (void)ptr; }

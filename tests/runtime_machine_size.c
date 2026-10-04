@@ -1,9 +1,9 @@
-#include "../crates/dream-mir/src/runtime/c/native/include/dream_rt_native.h"
+#include "../crates/dream-mir/src/runtime/c/core/include/dream_core.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include "../crates/dream-mir/src/runtime/c/native/heap.c"
+#include "../crates/dream-mir/src/runtime/c/core/heap.c"
 
 /* Verify the full byte count handed to initialization without committing gigabytes of RAM. */
 static size_t zeroed_bytes;
@@ -13,8 +13,8 @@ static void *sparse_memset(void *ptr, int value, size_t size) {
 }
 #undef memset
 #define memset sparse_memset
-#include "../crates/dream-mir/src/runtime/c/native/strings.c"
-#include "../crates/dream-mir/src/runtime/c/native/async.c"
+#include "../crates/dream-mir/src/runtime/c/core/strings.c"
+#include "../crates/dream-mir/src/runtime/c/sys/shared/async.c"
 #undef memset
 
 void *dream_ft_get(int32_t index) { (void)index; return NULL; }

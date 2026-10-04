@@ -1,6 +1,8 @@
 //! `dreamer pack`: compile a bin package and copy the native `.bin`, plus the OS bundle around it
 //! and selected host libraries (a macOS `.app`, a Linux `.desktop` entry). The Windows `.exe` carries its icon already.
 
+pub mod bundle;
+pub mod desktop;
 pub mod mobile;
 mod runtime;
 
@@ -11,7 +13,7 @@ use crate::workspace::Workspace;
 use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 
-/// Supported pack triples (Dream name → rustc target). Host-only until cross-cc is wired.
+/// Supported pack triples (Dream name → rustc target). Cross linking uses the compiler toolchain.
 const PACK_TRIPLES: &[(&str, &str)] = &[
     ("linux-x64", "x86_64-unknown-linux-gnu"),
     ("linux-arm64", "aarch64-unknown-linux-gnu"),
@@ -39,73 +41,76 @@ pub fn run(
     }
 
     let triples = resolve_pack_targets(target_args)?;
-    let host_triple = host_rustc_triple()?;
-    for (dream_triple, rust_triple) in &triples {
-        if rust_triple.as_str() != host_triple {
-            bail!(
-                "cross-pack to {dream_triple} is not supported (native pack is host-only; host is {host_triple})"
-            );
-        }
-    }
     flags.relocatable = true;
-    super::build::compile_entry(&workspace, &flags, Some(crate::manifest::RunTarget::Native))?;
-
-    let bin_path = artifact_native_bin(&workspace, &flags)?;
-    if !bin_path.is_file() {
-        bail!(
-            "expected native binary at {} after build",
-            bin_path.display()
-        );
-    }
-
-    let pack_dir = workspace.root.join("target").join("pack");
-    std::fs::create_dir_all(&pack_dir)
-        .with_context(|| format!("creating {}", pack_dir.display()))?;
-
     let pkg_name = pkg.name.clone();
     let icon = app_icon::resolve(&workspace)?;
-    runtime::copy(&bin_path, &pack_dir)?;
-    for (dream_triple, _) in &triples {
+    for (dream_triple, rust_triple) in &triples {
+        let spec = dream_abi::target::TargetSpec::parse(rust_triple).map_err(anyhow::Error::msg)?;
+        let entry = workspace.compile_root_path()?;
+        let stem = entry.file_stem().context("entry stem")?;
+        let build_dir = workspace
+            .root
+            .join("target")
+            .join(rust_triple)
+            .join(flags.native_artifact_subdir());
+        std::fs::create_dir_all(&build_dir)?;
+        let ir = build_dir.join(stem).with_extension("ll");
+        super::build::compile_target(
+            &workspace,
+            &flags,
+            Some(crate::manifest::RunTarget::Native),
+            Some((rust_triple, &ir)),
+        )?;
+        let bin_path = ir.with_extension("bin");
+        if !bin_path.is_file() {
+            bail!(
+                "expected native binary at {} after build",
+                bin_path.display()
+            );
+        }
+        let pack_dir = workspace.root.join("target/pack").join(dream_triple);
+        let writer = bundle::BundleWriter::new(&pack_dir)?;
+        let mut products = Vec::new();
+        runtime::copy(&bin_path, writer.root(), &spec)?;
+        for capability in dream_abi::host_capability::HostCapability::ALL {
+            let name = capability.library_name(&spec);
+            if writer.root().join(&name).is_file() {
+                products.push(PathBuf::from(name));
+            }
+        }
         let out_name = if dream_triple.starts_with("windows-") {
             format!("{pkg_name}-{dream_triple}.exe")
         } else {
             format!("{pkg_name}-{dream_triple}")
         };
-        let dest = pack_dir.join(&out_name);
+        let dest = writer.path(&out_name)?;
+        products.push(PathBuf::from(&out_name));
         std::fs::copy(&bin_path, &dest)
             .with_context(|| format!("copy {} → {}", bin_path.display(), dest.display()))?;
         app_icon::make_executable(&dest)?;
-        println!("packed {}", dest.display());
         if dream_triple.starts_with("macos-") {
-            let app = app_icon::write_macos_app(
-                &pack_dir,
+            let app = desktop::write_macos_app(
+                &writer,
                 &pkg_name,
                 &pkg.version,
                 &bin_path,
                 icon.as_deref(),
             )?;
-            runtime::copy(&bin_path, &app.join("Contents").join("Frameworks"))?;
-            println!("packed {}", app.display());
+            runtime::copy(&bin_path, &app.join("Contents").join("Frameworks"), &spec)?;
+            products.push(app.file_name().context("app name")?.into());
         } else if dream_triple.starts_with("linux-") {
             let entry =
-                app_icon::write_linux_desktop(&pack_dir, &pkg_name, &out_name, icon.as_deref())?;
-            println!("packed {}", entry.display());
+                desktop::write_linux_desktop(&writer, &pkg_name, &out_name, icon.as_deref())?;
+            products.push(entry.file_name().context("desktop name")?.into());
+            if icon.is_some() {
+                products.push(format!("{pkg_name}.png").into());
+            }
+        }
+        for product in writer.publish(&products)? {
+            println!("packed {}", product.display());
         }
     }
     Ok(())
-}
-
-fn artifact_native_bin(workspace: &Workspace, flags: &CompileFlags) -> Result<PathBuf> {
-    let entry = workspace.compile_root_path()?;
-    let stem = entry
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| anyhow::anyhow!("entry has no file stem"))?;
-    Ok(workspace
-        .root
-        .join("target")
-        .join(flags.native_artifact_subdir())
-        .join(format!("{stem}.bin")))
 }
 
 fn resolve_pack_targets(args: &[String]) -> Result<Vec<(String, String)>> {
@@ -119,7 +124,13 @@ fn resolve_pack_targets(args: &[String]) -> Result<Vec<(String, String)>> {
         return Ok(vec![(host, rust)]);
     }
     if args.iter().any(|a| a == "all") {
-        bail!("pack 'all' requires cross-compilation; native pack is host-only");
+        if args.len() != 1 {
+            bail!("pack all cannot be combined with individual targets");
+        }
+        return Ok(PACK_TRIPLES
+            .iter()
+            .map(|(d, r)| (d.to_string(), r.to_string()))
+            .collect());
     }
     let mut out = Vec::new();
     for a in args {
@@ -138,7 +149,9 @@ fn resolve_pack_targets(args: &[String]) -> Result<Vec<(String, String)>> {
                         .join(", ")
                 )
             })?;
-        out.push((a.clone(), rust));
+        if !out.iter().any(|(name, _)| name == a) {
+            out.push((a.clone(), rust));
+        }
     }
     Ok(out)
 }
@@ -155,14 +168,26 @@ fn host_pack_triple() -> Result<String> {
     })
 }
 
-fn host_rustc_triple() -> Result<String> {
-    Ok(match (std::env::consts::OS, std::env::consts::ARCH) {
-        ("linux", "x86_64") => "x86_64-unknown-linux-gnu".into(),
-        ("linux", "aarch64") => "aarch64-unknown-linux-gnu".into(),
-        ("macos", "x86_64") => "x86_64-apple-darwin".into(),
-        ("macos", "aarch64") => "aarch64-apple-darwin".into(),
-        ("windows", "x86_64") => "x86_64-pc-windows-msvc".into(),
-        ("windows", "aarch64") => "aarch64-pc-windows-msvc".into(),
-        (os, arch) => bail!("unsupported host OS/arch for pack: {os}/{arch}"),
-    })
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn expands_cross_targets_and_deduplicates_explicit_targets() {
+        assert_eq!(
+            resolve_pack_targets(&["all".into()]).unwrap().len(),
+            PACK_TRIPLES.len()
+        );
+        assert_eq!(
+            resolve_pack_targets(&[
+                "linux-x64".into(),
+                "linux-x64".into(),
+                "windows-arm64".into()
+            ])
+            .unwrap()
+            .len(),
+            2
+        );
+        assert!(resolve_pack_targets(&["all".into(), "linux-x64".into()]).is_err());
+        assert!(resolve_pack_targets(&["unknown".into()]).is_err());
+    }
 }

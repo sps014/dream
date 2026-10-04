@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
-use dream::driver::compiler::Compiler;
+use dream::driver::compiler::{BuildOutcome, Compiler};
 use dream::driver::js_runtime::JsRuntimeTarget;
 use dream::driver::ui::{ConsoleReporter, Ui};
 use dream::driver::wasm_opt::OptLevel;
@@ -456,7 +456,23 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
+    // Profiles change between runs without touching any compiler input, so PGO builds never reuse.
+    let build_cache = (!cli.profile && cli.use_profile.is_none()).then(|| {
+        let icon = cli
+            .icon
+            .clone()
+            .map(|icon| dream::driver::rt_stamp::fingerprint(vec![icon]))
+            .unwrap_or_default();
+        format!(
+            "{}|{debug_info}|{:?}|{}|{}|{native}|{icon}",
+            cc_opt.as_cli_flag(),
+            cli.target,
+            cli.emit_llvm,
+            cli.relocatable,
+        )
+    });
     let mut compiler = Compiler::new_with_toolchain_config(target.clone(), config.clone())
+        .with_build_cache(build_cache)
         .with_release(cli.release)
         .with_debug_info(debug_info)
         .with_runtimes(runtimes)
@@ -474,20 +490,43 @@ fn main() -> ExitCode {
     let result = compiler.compile(&file_name, &out_path);
     drop(compiler);
 
-    if let Err(e) = result {
-        use dream::driver::error::CompileError;
-        match e {
-            CompileError::Syntax(_) | CompileError::Semantic(_) | CompileError::Generator(_) => {}
-            CompileError::Io(err) => ui.error(&format!("{err}")),
-            CompileError::Manifest(msg) => ui.error(&msg),
-            CompileError::Toolchain(msg) => ui.error(&msg),
-            CompileError::Internal(msg) => {
-                report_tool_error(&ui, &msg);
-                ui.help("this is an internal compiler error — please report it");
-            }
+    let outcome = match result {
+        Ok(outcome) => outcome,
+        Err(e) => {
+            report_compile_error(&ui, e);
+            return ExitCode::FAILURE;
         }
-        return ExitCode::FAILURE;
-    }
+    };
+    let unoptimized = !cli.release && optimize.is_none() && !debug_adapter;
+    let launch = Launch {
+        config: &config,
+        out_path: &out_path,
+        program_args: &program_args,
+        debug_adapter,
+        run_after_compile,
+    };
+    let stamp = match outcome {
+        BuildOutcome::Built(stamp) => stamp,
+        BuildOutcome::Cached(artifacts) => {
+            ui.finish(start.elapsed().as_secs_f64(), "", &artifacts);
+            let linked = native
+                && cli.target.is_none()
+                && !cli.emit_llvm
+                && !matches!(crate_type, CrateType::Lib);
+            if unoptimized {
+                ui.debug_build_note(!linked);
+            }
+            if linked {
+                return launch.run(&ui, &native_bin_path(Path::new(&out_path)));
+            }
+            return ExitCode::SUCCESS;
+        }
+    };
+    let record = |artifacts: &[PathBuf]| {
+        if let Some(stamp) = &stamp {
+            stamp.store(artifacts);
+        }
+    };
 
     let elapsed = start.elapsed().as_secs_f64();
     let mut artifacts = reporter.take_artifacts();
@@ -501,7 +540,6 @@ fn main() -> ExitCode {
         let _ = std::fs::remove_file(raw_ll);
         let _ = std::fs::remove_file(dream::driver::compiler::c_shim_path(raw_ll));
     };
-    let unoptimized = !cli.release && optimize.is_none() && !debug_adapter;
 
     if cli.target.is_some() {
         match dream::execution::llvm::cross::emit_object(&config, target.spec(), raw_ll, cc_opt) {
@@ -511,6 +549,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         }
+        record(&artifacts);
         ui.finish(start.elapsed().as_secs_f64(), "", &artifacts);
         return ExitCode::SUCCESS;
     }
@@ -533,11 +572,13 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         }
+        record(&artifacts);
         ui.finish(start.elapsed().as_secs_f64(), "", &artifacts);
         return ExitCode::SUCCESS;
     }
     // A library has no `main` to link; its build is the checked `.ll` plus `.abi.json`.
     if native && matches!(crate_type, CrateType::Lib) {
+        record(&artifacts);
         ui.finish(elapsed, "", &artifacts);
         return ExitCode::SUCCESS;
     }
@@ -554,7 +595,7 @@ fn main() -> ExitCode {
             None => Pgo::Off,
         };
         let opt_ll = raw_ll.with_extension("opt.ll");
-        match compile_llvm(
+        return match compile_llvm(
             &config,
             raw_ll,
             dream::execution::llvm::NativeBuildOptions {
@@ -571,54 +612,83 @@ fn main() -> ExitCode {
                 drop_raw_ll();
                 artifacts.push(opt_ll);
                 artifacts.push(bin.clone());
+                record(&artifacts);
                 ui.finish(elapsed, "", &artifacts);
                 if unoptimized {
                     ui.debug_build_note(false);
                 }
-                if debug_adapter {
-                    if let Err(e) =
-                        dream::execution::debugger::run_debug_adapter(&config, &bin, &out_path)
-                    {
-                        ui.error(&format!("debug adapter failed: {e}"));
-                        return ExitCode::FAILURE;
-                    }
-                    return ExitCode::SUCCESS;
-                }
-                if run_after_compile {
-                    ui.step("Running", &bin.display().to_string());
-                    // The guest's exit status is the program's own (`main(): int`, or a failing
-                    // `Result`), so forward it instead of reporting a tool failure.
-                    match run_native_bin(&config, &bin, &out_path, &program_args) {
-                        Ok(0) => {}
-                        Ok(code) => return ExitCode::from(code.clamp(1, 255) as u8),
-                        Err(e) if e.downcast_ref::<GuestAborted>().is_some() => {
-                            // `dream_panic` / `abort()` already printed the crash on stderr.
-                            return ExitCode::FAILURE;
-                        }
-                        Err(e) => {
-                            ui.error(&format!("execution failed: {e}"));
-                            return ExitCode::FAILURE;
-                        }
-                    }
-                }
+                launch.run(&ui, &bin)
             }
             Err(e) => {
                 report_tool_error(&ui, &e.to_string());
                 if let Some(hint) = dream::driver::wasi::hint_for_failure(&e.to_string()) {
                     ui.help(hint);
                 }
-                return ExitCode::FAILURE;
+                ExitCode::FAILURE
             }
-        }
-        return ExitCode::SUCCESS;
+        };
     }
 
     drop_raw_ll();
+    record(&artifacts);
     ui.finish(elapsed, "", &artifacts);
     if unoptimized {
         ui.debug_build_note(true);
     }
     ExitCode::SUCCESS
+}
+
+/// What to do with a linked native binary once the build (fresh or cached) is in place.
+struct Launch<'a> {
+    config: &'a Arc<dream::driver::toolchain::ToolchainConfig>,
+    out_path: &'a str,
+    program_args: &'a [String],
+    debug_adapter: bool,
+    run_after_compile: bool,
+}
+
+impl Launch<'_> {
+    fn run(&self, ui: &Ui, bin: &Path) -> ExitCode {
+        if self.debug_adapter {
+            if let Err(e) =
+                dream::execution::debugger::run_debug_adapter(self.config, bin, self.out_path)
+            {
+                ui.error(&format!("debug adapter failed: {e}"));
+                return ExitCode::FAILURE;
+            }
+            return ExitCode::SUCCESS;
+        }
+        if !self.run_after_compile {
+            return ExitCode::SUCCESS;
+        }
+        ui.step("Running", &bin.display().to_string());
+        // The guest's exit status is the program's own (`main(): int`, or a failing `Result`),
+        // so forward it instead of reporting a tool failure.
+        match run_native_bin(self.config, bin, self.out_path, self.program_args) {
+            Ok(0) => ExitCode::SUCCESS,
+            Ok(code) => ExitCode::from(code.clamp(1, 255) as u8),
+            // `dream_panic` / `abort()` already printed the crash on stderr.
+            Err(e) if e.downcast_ref::<GuestAborted>().is_some() => ExitCode::FAILURE,
+            Err(e) => {
+                ui.error(&format!("execution failed: {e}"));
+                ExitCode::FAILURE
+            }
+        }
+    }
+}
+
+fn report_compile_error(ui: &Ui, e: dream::driver::error::CompileError) {
+    use dream::driver::error::CompileError;
+    match e {
+        CompileError::Syntax(_) | CompileError::Semantic(_) | CompileError::Generator(_) => {}
+        CompileError::Io(err) => ui.error(&format!("{err}")),
+        CompileError::Manifest(msg) => ui.error(&msg),
+        CompileError::Toolchain(msg) => ui.error(&msg),
+        CompileError::Internal(msg) => {
+            report_tool_error(ui, &msg);
+            ui.help("this is an internal compiler error — please report it");
+        }
+    }
 }
 
 /// Reports a compiler/toolchain failure: the first line becomes the bold `error:` header and any

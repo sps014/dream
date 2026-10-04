@@ -31,6 +31,8 @@ dream-stdlib = { path = "crates/dream-stdlib" }
 dream-sema = { path = "crates/dream-sema" }
 dream-mir = { path = "crates/dream-mir" }
 bumpalo = "3.20.3"
+# Content keys and artifact hashes for the build cache.
+blake3 = "1"
 # Insertion-ordered map used for the codegen tables whose iteration order reaches emitted
 # `.wat` output, so compilation is reproducible (std `HashMap` randomizes iteration per run).
 indexmap = "2"

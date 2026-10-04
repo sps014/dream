@@ -5,7 +5,6 @@ impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn analyze_function_bodies(
         &mut self,
         node: &'a ProgramView<'a>,
-        symbol_table_map: &mut HashMap<String, Rc<RefCell<SymbolTable>>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
         for function in node.functions.iter() {
@@ -17,11 +16,7 @@ impl<'a> Analyzer<'a> {
                 continue;
             }
             diagnostics.file_path = file_path_string(&function.file_path);
-            let table = self.analyze_function(function, diagnostics)?;
-            if let Some(identity) = self.function_declaration(function) {
-                let key = self.function_table.emitted_name(&self.type_ctx, &identity);
-                symbol_table_map.insert(key, table);
-            }
+            self.analyze_function(function, diagnostics)?;
         }
         Ok(())
     }
@@ -36,7 +31,6 @@ impl<'a> Analyzer<'a> {
     /// idempotent (guarded by the struct/function tables), so this terminates.
     pub(in crate::analyzer) fn analyze_pending_instantiations(
         &mut self,
-        symbol_table_map: &mut HashMap<String, Rc<RefCell<SymbolTable>>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
         let mut processed_generics: indexmap::IndexSet<crate::function_table::FunctionIdentity> = indexmap::IndexSet::new();
@@ -65,7 +59,7 @@ impl<'a> Analyzer<'a> {
                     None => continue,
                 };
                 diagnostics.file_path = file_path_string(&template.file_path);
-                let table = self.with_generic_bindings(bindings, |s| {
+                self.with_generic_bindings(bindings, |s| {
                     s.analyze_function(template, diagnostics)
                 })?;
                 progressed = true;
@@ -76,7 +70,6 @@ impl<'a> Analyzer<'a> {
                     &self.function_table.emitted_name(&self.type_ctx, &mangled_name),
                     diagnostics,
                 )?;
-                symbol_table_map.insert(self.function_table.emitted_name(&self.type_ctx, &mangled_name), table);
             }
 
             // Arrow-lambdas lowered to synthesized top-level functions (see `expressions::lambda`).
@@ -103,10 +96,9 @@ impl<'a> Analyzer<'a> {
                     None => continue,
                 };
                 diagnostics.file_path = file_path_string(&template.file_path);
-                let table = self.with_generic_bindings(bindings, |s| {
+                self.with_generic_bindings(bindings, |s| {
                     s.analyze_function(template, diagnostics)
                 })?;
-                symbol_table_map.insert(self.type_ctx.defs.name(name).to_string(), table);
                 progressed = true;
             }
 
@@ -115,8 +107,7 @@ impl<'a> Analyzer<'a> {
                 let (method, bindings) = self.struct_methods[method_index].clone();
                 method_index += 1;
                 diagnostics.file_path = file_path_string(&method.file_path);
-                let table = self
-                    .with_generic_bindings(bindings, |s| s.analyze_function(method, diagnostics))?;
+                self.with_generic_bindings(bindings, |s| s.analyze_function(method, diagnostics))?;
                 let Some(identity) = self.function_declaration(method) else { continue; };
                 let key = self.function_table.emitted_name(&self.type_ctx, &identity);
                 items_processed += 1;
@@ -126,7 +117,6 @@ impl<'a> Analyzer<'a> {
                     &key,
                     diagnostics,
                 )?;
-                symbol_table_map.insert(key, table);
                 progressed = true;
             }
 

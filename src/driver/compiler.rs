@@ -89,9 +89,12 @@ pub struct Compiler {
     /// as an artifact, and wasm32 builds write the optimized module as `<stem>.opt.ll` instead.
     opt_ir: bool,
     llvm: Option<Arc<dyn LlvmToolchain>>,
+    /// Link-stage options folded into the build key; `None` disables the build cache.
+    build_cache: Option<String>,
 }
 
 mod pipeline;
+pub use pipeline::{BuildOutcome, BuildStamp};
 impl Compiler {
     pub fn new(target: Target) -> Self {
         Self::new_with_toolchain_config(
@@ -118,6 +121,7 @@ impl Compiler {
             emit_mir: None,
             opt_ir: false,
             llvm: None,
+            build_cache: None,
         }
     }
 
@@ -244,6 +248,14 @@ impl Compiler {
 
     /// Builder: dump MIR snapshots selected by `spec` into a `<out>.mir/` directory next to the
     /// output (`None` disables).
+    /// Builder: reuse an earlier build's artifacts when every input, including the caller's
+    /// link-stage options in `link_key`, is unchanged. The caller records fresh artifacts through
+    /// the returned [`BuildStamp`] after its own post-processing succeeds.
+    pub fn with_build_cache(mut self, link_key: Option<String>) -> Self {
+        self.build_cache = link_key;
+        self
+    }
+
     pub fn with_emit_mir(mut self, spec: Option<dream_mir::passes::MirDumpSpec>) -> Self {
         self.emit_mir = spec;
         self

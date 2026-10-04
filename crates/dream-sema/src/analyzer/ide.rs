@@ -47,14 +47,14 @@ pub enum IdeTarget {
         key: FunctionIdentity,
         label: String,
     },
-    /// A `new T(...)` constructor call; `type_key` is the concrete (possibly monomorphized) type.
-    Constructor { type_key: String },
-    /// An `obj.field` access; `type_key` is the receiver's member-lookup key.
-    Field { type_key: String, name: String },
+    /// A `new T(...)` constructor call on the concrete (possibly monomorphized) type.
+    Constructor { ty: dream_types::TypeId, display: String },
+    /// An `obj.field` access on the receiver type `owner`.
+    Field { owner: dream_types::TypeId, name: String },
     /// An `Enum.MEMBER` read on a C-style enum.
-    EnumMember { enum_name: String, member: String },
-    /// A `Union.Variant` construction; `union_key` is the concrete union's lookup key.
-    UnionVariant { union_key: String, variant: String },
+    EnumMember { owner: dream_types::TypeId, member: String },
+    /// A `Union.Variant` construction on the concrete union `owner`.
+    UnionVariant { owner: dream_types::TypeId, variant: String },
     /// A typed expression with no more specific target (tuple element, `.length`, index result).
     Expr,
 }
@@ -64,9 +64,6 @@ pub enum IdeTarget {
 pub enum TypeSummary {
     Named {
         ty: dream_types::TypeId,
-        /// Member-lookup key (`int`, `List_int`, `Point[]`, ...) when the type is addressable in
-        /// the signature tables; `None` for unknown/poison types.
-        key: Option<String>,
         display: String,
     },
     Tuple {
@@ -84,9 +81,9 @@ impl TypeSummary {
         }
     }
 
-    pub fn key(&self) -> Option<&str> {
+    pub fn ty(&self) -> Option<dream_types::TypeId> {
         match self {
-            TypeSummary::Named { key, .. } => key.as_deref(),
+            TypeSummary::Named { ty, .. } => Some(*ty),
             _ => None,
         }
     }
@@ -161,11 +158,15 @@ pub struct IdeSnapshot {
     pub primary_file: Option<String>,
     pub refs: Vec<IdeRef>,
     pub functions: HashMap<FunctionIdentity, FnSigOut>,
-    pub methods: HashMap<String, Vec<MemberInfo>>,
+    pub methods: IndexMap<dream_types::TypeId, Vec<MemberInfo>>,
     pub future_types: HashSet<dream_types::TypeId>,
-    pub structs: HashMap<String, Vec<FieldOut>>,
-    pub enums: IndexMap<String, Vec<(String, i32)>>,
-    pub unions: IndexMap<String, Vec<VariantOut>>,
+    /// Arrays and `string`, which carry the builtin `length` property.
+    pub length_types: HashSet<dream_types::TypeId>,
+    pub structs: IndexMap<dream_types::TypeId, Vec<FieldOut>>,
+    pub enums: IndexMap<dream_types::TypeId, Vec<(String, i32)>>,
+    pub unions: IndexMap<dream_types::TypeId, Vec<VariantOut>>,
+    /// Source-level display name of every type keyed in the member tables.
+    pub type_names: IndexMap<dream_types::TypeId, String>,
     pub globals: Vec<GlobalOut>,
 }
 
@@ -220,13 +221,12 @@ impl IdeSnapshot {
         (offset < r.end).then_some(r)
     }
 
-    /// Every completable member of the type addressed by `key` (a member-lookup key such as
-    /// `Point`, `List_int`, `string`, `int[]`). Sorted by name; deterministic across runs.
-    pub fn members_of(&self, key: &str) -> Vec<MemberInfo> {
+    /// Every completable member of `ty`. Sorted by name; deterministic across runs.
+    pub fn members_of(&self, key: dream_types::TypeId) -> Vec<MemberInfo> {
         let mut out: Vec<MemberInfo> = Vec::new();
         let mut seen = HashSet::new();
 
-        if let Some(fields) = self.structs.get(key) {
+        if let Some(fields) = self.structs.get(&key) {
             for f in fields {
                 if seen.insert(f.name.clone()) {
                     out.push(MemberInfo {
@@ -239,7 +239,7 @@ impl IdeSnapshot {
             }
         }
 
-        if let Some(methods) = self.methods.get(key) {
+        if let Some(methods) = self.methods.get(&key) {
             for method in methods {
                 if seen.insert(method.name.clone()) {
                     out.push(method.clone());
@@ -247,7 +247,7 @@ impl IdeSnapshot {
             }
         }
 
-        if let Some(variants) = self.enums.get(key) {
+        if let Some(variants) = self.enums.get(&key) {
             for (name, value) in variants {
                 if seen.insert(name.clone()) {
                     out.push(MemberInfo {
@@ -260,7 +260,7 @@ impl IdeSnapshot {
             }
         }
 
-        if let Some(variants) = self.unions.get(key) {
+        if let Some(variants) = self.unions.get(&key) {
             for v in variants {
                 let fields = v
                     .fields
@@ -285,7 +285,7 @@ impl IdeSnapshot {
         }
 
         // `length` on arrays/strings is a builtin property (see `analyze_member_access`).
-        if (key.ends_with("[]") || key == "string") && seen.insert("length".to_string()) {
+        if self.length_types.contains(&key) && seen.insert("length".to_string()) {
             out.push(MemberInfo {
                 kind: MemberKind::Property,
                 name: "length".to_string(),
@@ -304,16 +304,19 @@ impl<'a> Analyzer<'a> {
     /// `&mut self` only because rendering lowers AST types through the interner.
     pub fn ide_snapshot(&mut self) -> IdeSnapshot {
         let mut refs = std::mem::take(&mut self.ide_refs);
-        for (&def, source) in &self.ide_sources {
-            let info = self.type_ctx.defs.get(def);
-            let target = match info.kind {
-                dream_types::DefKind::Function => IdeTarget::Callee {
+        let sources: Vec<(dream_types::DefId, IdeSource)> = self
+            .ide_sources
+            .iter()
+            .map(|(def, source)| (*def, source.clone()))
+            .collect();
+        for (def, source) in sources {
+            let name = self.type_ctx.defs.name(def).to_string();
+            let target = match self.nominal_type_of(def) {
+                None => IdeTarget::Callee {
                     key: (def, vec![]),
-                    label: info.name.clone(),
+                    label: name,
                 },
-                _ => IdeTarget::Constructor {
-                    type_key: info.name.clone(),
-                },
+                Some(ty) => IdeTarget::Constructor { ty, display: name },
             };
             refs.push(IdeRef {
                 start: source.start,
@@ -374,7 +377,7 @@ impl<'a> Analyzer<'a> {
             .iter()
             .map(|(ty, info)| {
                 (
-                    dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, *ty),
+                    *ty,
                     info.fields
                         .iter()
                         .map(|(fname, f)| (fname.clone(), f.ty, f.visibility))
@@ -387,7 +390,7 @@ impl<'a> Analyzer<'a> {
             .iter()
             .map(|(ty, info)| {
                 (
-                    dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, *ty),
+                    *ty,
                     info.variants
                         .iter()
                         .map(|v| (v.name.clone(), v.discriminant, v.fields.clone()))
@@ -405,11 +408,11 @@ impl<'a> Analyzer<'a> {
         for (key, info) in fn_inputs {
             functions.insert(key, self.render_fn_sig(&info));
         }
-        let mut methods = HashMap::new();
+        let mut type_names = IndexMap::new();
+        let mut methods = IndexMap::new();
         for ((receiver, member), identities) in &self.function_table.methods {
-            let key =
-                dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, *receiver);
-            let entries = methods.entry(key).or_insert_with(Vec::new);
+            type_names.entry(*receiver).or_insert_with(|| self.type_id_display(*receiver));
+            let entries = methods.entry(*receiver).or_insert_with(Vec::new);
             for identity in identities {
                 if let Some(sig) = functions.get(identity) {
                     if let Some(method) = render_method(member, sig) {
@@ -419,8 +422,9 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        let mut structs = HashMap::with_capacity(struct_inputs.len());
-        for (name, fields) in struct_inputs {
+        let mut structs = IndexMap::with_capacity(struct_inputs.len());
+        for (owner, fields) in struct_inputs {
+            type_names.entry(owner).or_insert_with(|| self.type_id_display(owner));
             let mut out: Vec<FieldOut> = fields
                 .into_iter()
                 .map(|(fname, ty, visibility)| FieldOut {
@@ -434,11 +438,12 @@ impl<'a> Analyzer<'a> {
                 })
                 .collect();
             out.sort_by(|a, b| a.name.cmp(&b.name));
-            structs.insert(name, out);
+            structs.insert(owner, out);
         }
 
         let mut unions = IndexMap::with_capacity(union_inputs.len());
-        for (name, variants) in union_inputs {
+        for (owner, variants) in union_inputs {
+            type_names.entry(owner).or_insert_with(|| self.type_id_display(owner));
             let rendered = variants
                 .into_iter()
                 .map(|(vname, discriminant, fields)| VariantOut {
@@ -457,7 +462,7 @@ impl<'a> Analyzer<'a> {
                     discriminant,
                 })
                 .collect();
-            unions.insert(name, rendered);
+            unions.insert(owner, rendered);
         }
 
         let globals = global_inputs
@@ -472,16 +477,17 @@ impl<'a> Analyzer<'a> {
             })
             .collect();
 
-        let enums: IndexMap<String, Vec<(String, i32)>> = self
+        let enum_inputs: Vec<(dream_types::DefId, Vec<(String, i32)>)> = self
             .enum_table
             .iter()
-            .map(|(name, members)| {
-                (
-                    self.type_ctx.defs.name(*name).to_string(),
-                    members.iter().map(|(n, v)| (n.clone(), *v)).collect(),
-                )
-            })
+            .map(|(def, members)| (*def, members.iter().map(|(n, v)| (n.clone(), *v)).collect()))
             .collect();
+        let mut enums = IndexMap::with_capacity(enum_inputs.len());
+        for (def, members) in enum_inputs {
+            let owner = self.type_ctx.interner.enum_ty(def);
+            type_names.insert(owner, self.type_ctx.defs.name(def).to_string());
+            enums.insert(owner, members);
+        }
 
         let future_types = self
             .type_ctx
@@ -496,15 +502,30 @@ impl<'a> Analyzer<'a> {
                 _ => None,
             })
             .collect();
+        let length_types = self
+            .type_ctx
+            .interner
+            .iter_kinds()
+            .filter_map(|(ty, kind)| {
+                matches!(
+                    kind,
+                    dream_types::TyKind::Array(_)
+                        | dream_types::TyKind::Prim(dream_types::PrimTy::String)
+                )
+                .then_some(ty)
+            })
+            .collect();
         IdeSnapshot {
             primary_file: None,
             refs,
             functions,
             methods,
             future_types,
+            length_types,
             structs,
             enums,
             unions,
+            type_names,
             globals,
         }
     }
@@ -599,11 +620,7 @@ impl<'a> Analyzer<'a> {
             _ => {}
         }
         let display = dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, id);
-        TypeSummary::Named {
-            ty: id,
-            key: Some(display.clone()),
-            display,
-        }
+        TypeSummary::Named { ty: id, display }
     }
 
     /// Like [`Self::ide_summary`] for a tuple's element list.
@@ -623,8 +640,8 @@ fn render_label(emitted: &str) -> String {
     no_module.split('.').next().unwrap_or(no_module).to_string()
 }
 
-type StructFieldInput = (String, Vec<(String, dream_types::TypeId, Visibility)>);
-type UnionVariantInput = (String, Vec<(String, i32, Vec<UnionFieldInfo>)>);
+type StructFieldInput = (dream_types::TypeId, Vec<(String, dream_types::TypeId, Visibility)>);
+type UnionVariantInput = (dream_types::TypeId, Vec<(String, i32, Vec<UnionFieldInfo>)>);
 
 fn render_method(name: &str, sig: &FnSigOut) -> Option<MemberInfo> {
     if name == dream_syntax::nodes::types::CONSTRUCTOR_NAME || name.starts_with("set$") {

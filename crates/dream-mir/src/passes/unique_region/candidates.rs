@@ -58,6 +58,7 @@ pub(super) fn wrap_sites(
     fi: usize,
     ctor_only: &IndexSet<DefId>,
     memo: &IndexMap<(DefId, Vec<TypeId>), bool>,
+    index: &FunctionIndex,
 ) -> Vec<WrapSite> {
     let f = &mir.functions[fi];
     let mut births: BTreeMap<u32, (usize, usize, Callee)> = BTreeMap::new();
@@ -112,6 +113,7 @@ pub(super) fn wrap_sites(
             interner,
             ctor_only,
             memo,
+            index,
         };
         if !callee_safe(&mut cx, &callee) {
             continue;

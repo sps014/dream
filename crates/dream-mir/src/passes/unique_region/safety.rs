@@ -5,12 +5,37 @@ pub(super) struct SafeCx<'a> {
     pub(super) interner: &'a TypeInterner,
     pub(super) ctor_only: &'a IndexSet<DefId>,
     pub(super) memo: &'a IndexMap<(DefId, Vec<TypeId>), bool>,
+    pub(super) index: &'a FunctionIndex,
 }
 
-pub(super) fn find_fn<'a>(mir: &'a Mir, def: DefId, args: &[TypeId]) -> Option<&'a MirFunction> {
-    mir.functions
-        .iter()
-        .find(|f| f.def == def && f.instance == args)
+pub(super) struct FunctionIndex {
+    instances: IndexMap<(DefId, Vec<TypeId>), usize>,
+    definitions: IndexMap<DefId, Vec<usize>>,
+}
+
+impl FunctionIndex {
+    pub(super) fn new(mir: &Mir) -> Self {
+        let mut index = Self {
+            instances: IndexMap::new(),
+            definitions: IndexMap::new(),
+        };
+        for (i, f) in mir.functions.iter().enumerate() {
+            index.instances.insert((f.def, f.instance.clone()), i);
+            index.definitions.entry(f.def).or_default().push(i);
+        }
+        index
+    }
+
+    pub(super) fn find<'a>(
+        &self,
+        mir: &'a Mir,
+        def: DefId,
+        args: &[TypeId],
+    ) -> Option<&'a MirFunction> {
+        self.instances
+            .get(&(def, args.to_vec()))
+            .map(|&i| &mir.functions[i])
+    }
 }
 
 pub(super) fn region_safe(cx: &mut SafeCx<'_>, f: &MirFunction) -> bool {
@@ -22,13 +47,8 @@ pub(super) fn compute_safety(
     mir: &Mir,
     interner: &TypeInterner,
     ctor_only: &IndexSet<DefId>,
+    index: &FunctionIndex,
 ) -> IndexMap<(DefId, Vec<TypeId>), bool> {
-    let index: IndexMap<_, _> = mir
-        .functions
-        .iter()
-        .enumerate()
-        .map(|(i, f)| ((f.def, f.instance.clone()), i))
-        .collect();
     let mut adjacency = vec![Vec::new(); mir.functions.len()];
     for (i, f) in mir.functions.iter().enumerate() {
         walk_fn(f, |statement| {
@@ -43,17 +63,15 @@ pub(super) fn compute_safety(
                         ctor: Some(ctor), ..
                     },
                 ) => {
-                    for (target, function) in mir.functions.iter().enumerate() {
-                        if function.def == ctor.def {
-                            adjacency[i].push(target);
-                        }
+                    if let Some(targets) = index.definitions.get(&ctor.def) {
+                        adjacency[i].extend(targets);
                     }
                     None
                 }
                 _ => None,
             };
             if let Some(key) = key {
-                if let Some(&target) = index.get(&key) {
+                if let Some(&target) = index.instances.get(&key) {
                     adjacency[i].push(target);
                 }
             }
@@ -80,6 +98,7 @@ pub(super) fn compute_safety(
                     interner,
                     ctor_only,
                     memo: &memo,
+                    index,
                 };
                 if !region_safe_body(&mut cx, f) {
                     memo.insert(key, false);
@@ -196,7 +215,7 @@ pub(super) fn callee_safe(cx: &mut SafeCx<'_>, callee: &Callee) -> bool {
     if cx.mir.intrinsics.iter().any(|(d, _)| *d == callee.def) {
         return false;
     }
-    let Some(g) = find_fn(cx.mir, callee.def, &callee.args) else {
+    let Some(g) = cx.index.find(cx.mir, callee.def, &callee.args) else {
         return false;
     };
     region_safe(cx, g)

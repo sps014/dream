@@ -1,5 +1,6 @@
 #include "dream_core.h"
 #include "dream_platform_internal.h"
+#include "dream_thread.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,6 +13,12 @@ void dream_release_object(dream_ptr ptr) { dream_release(ptr); }
 const dream_platform dream_default_platform = {0};
 static int fail_allocate, fail_resize, fail_map;
 static int allocations, resizes, mappings, frees, locked[2];
+
+static DREAM_THREAD_PROC(increment_counter) {
+    uint64_t *counter = (uint64_t *)arg;
+    for (int i = 0; i < 100000; ++i) { dream_heap_count(counter); }
+    return 0;
+}
 static void *allocate(size_t size) { ++allocations; return fail_allocate ? NULL : malloc(size); }
 static void *resize(void *ptr, size_t size) { ++resizes; return fail_resize ? NULL : realloc(ptr, size); }
 static void deallocate(void *ptr) { ++frees; free(ptr); }
@@ -51,6 +58,25 @@ int main(int argc, char **argv) {
         return 0;
     }
     dream_ptr hello = dream_utf8_to_string("hello");
+    if (strcmp(argv[1], "wide-counters") == 0) {
+        dream_heap_counters *counters = dream_heap.fast;
+        assert(counters != NULL);
+        int64_t live = debug_get_live_objects();
+        int64_t total = debug_get_total_allocations();
+        uint64_t offset = UINT64_C(1) << 32;
+        __atomic_fetch_add(&counters->allocs, offset, __ATOMIC_RELAXED);
+        __atomic_fetch_add(&counters->frees, offset, __ATOMIC_RELAXED);
+        assert(debug_get_live_objects() == live);
+        assert(debug_get_total_allocations() == total + (int64_t)offset);
+        dream_thread workers[8];
+        for (int i = 0; i < 8; ++i) {
+            assert(dream_thread_start(&workers[i], increment_counter, &counters->allocs) == 0);
+        }
+        for (int i = 0; i < 8; ++i) { dream_thread_join(workers[i]); }
+        assert(debug_get_total_allocations() == total + (int64_t)offset + 800000);
+        assert(debug_get_live_objects() == live + 800000);
+        __atomic_fetch_add(&counters->frees, UINT64_C(800000), __ATOMIC_RELAXED);
+    }
     if (strcmp(argv[1], "long") == 0) {
         dream_ptr message = dream_string_alloc(3000);
         uint16_t *text = (uint16_t *)((char *)dream_p(message) + STRING_UNITS_OFFSET);

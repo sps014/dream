@@ -150,5 +150,5 @@ Cargo enforces: `dream-sema` never depends on `dream-mir`, and `dream-syntax` ne
 
 ## Doc conventions
 
-- File references look like `src/mir/lower/mod.rs` and, where useful, name the function.
+- File references look like `crates/dream-mir/src/lower/mod.rs` and, where useful, name the function.
 - Mermaid diagrams are used for graphs and flows; read them top-to-bottom / left-to-right.

@@ -19,7 +19,12 @@ fn core_runs_and_reports_exhaustion_through_the_injected_platform() {
     command
         .args(["-std=gnu11", "-O1"])
         .arg("-I")
-        .arg(core.join("include"));
+        .arg(core.join("include"))
+        .arg("-I")
+        .arg(root.join("crates/dream-mir/src/runtime/c/sys/native/include"));
+    if !cfg!(windows) {
+        command.arg("-pthread");
+    }
     let mut sources = std::fs::read_dir(&core)
         .unwrap()
         .map(|e| e.unwrap().path())
@@ -41,6 +46,8 @@ fn core_runs_and_reports_exhaustion_through_the_injected_platform() {
     let output = Command::new(&binary).arg("normal").output().unwrap();
     assert!(output.status.success(), "{:?}", output);
     assert!(String::from_utf8_lossy(&output.stdout).contains("injected platform passed"));
+    let wide = Command::new(&binary).arg("wide-counters").output().unwrap();
+    assert!(wide.status.success(), "wide counters: {:?}", wide);
     let nul = Command::new(&binary).arg("nul").output().unwrap();
     assert!(nul.status.success());
     assert_eq!(nul.stderr, b"a\0b");

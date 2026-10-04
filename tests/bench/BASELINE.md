@@ -17,7 +17,7 @@ the per-rep files `out/native.repN.txt` / `out/csharp.repN.txt`. Rules for hones
 
 Recorded with `./scripts/run-microbenches.sh` (Dream `--release` native C, optional
 `dotnet run -c Release` from `tests/bench/csharp`). Absolute values vary by host — use
-relative deltas. Dream and C# are **different substrates** (Wasm+ARC vs native JIT+GC);
+relative deltas. Dream and C# are **different substrates** (native LLVM+ARC vs native JIT+GC);
 ratios are not an ARC-only scoreboard.
 
 ## API fairness notes

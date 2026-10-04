@@ -1,4 +1,4 @@
-# 04 — CFG MIR (`src/mir/`)
+# 04 — CFG MIR (`crates/dream-mir/src/`)
 
 MIR is where Dream becomes optimizable. It replaces structured control flow with an explicit **control-flow graph** and replaces implicit memory management with **explicit refcount operations**. Once a program is in MIR, ordinary dataflow analysis can reason about it.
 
@@ -25,7 +25,7 @@ flowchart TD
 - Each block is `stmts: Vec<Statement>` then exactly one `terminator: Terminator`. Control can branch *only* at the terminator.
 - Values live in `Local`s. Every intermediate result is materialized into a local, so an `Operand` is always a local/global read or a constant — never a nested computation. This flattening is what makes passes simple.
 
-## Core types (`src/mir/mod.rs`)
+## Core types (`crates/dream-mir/src/mod.rs`)
 
 ### Statements — straight-line, no control flow
 
@@ -78,7 +78,7 @@ pub enum Rvalue {
 
 `Callee { def, args, ret }` carries the resolved def, the concrete type args (for monomorphization), and the site return type. The emitted symbol name is derived from `(def, args)` at the backend.
 
-## Lowering HIR → MIR (`src/mir/lower/`)
+## Lowering HIR → MIR (`crates/dream-mir/src/lower/`)
 
 `lower_program(hir, interner)` lowers each `HFunction` via `lower_function`; the `Lowerer` holds the block list and a "current block" cursor and appends statements as it walks the structured HIR.
 
@@ -125,7 +125,7 @@ flowchart LR
 
 See [05-writing-passes.md](./05-writing-passes.md) for the module-pass order.
 
-## Building MIR by hand — `src/mir/build.rs`
+## Building MIR by hand — `crates/dream-mir/src/build.rs`
 
 `FunctionBuilder` is the ergonomic constructor used by tests and anything that synthesizes MIR directly (e.g. compiler-generated trampolines). It hands out fresh `Local`s and `BlockId`s, lets you push statements into the current block, and finalizes a `MirFunction`. Use it instead of building the structs by hand — it keeps the locals/blocks vectors consistent.
 

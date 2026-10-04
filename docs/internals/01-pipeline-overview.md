@@ -20,7 +20,7 @@ flowchart TD
     mir --> rc["ExpandSimpleCtors, RcInsertion\n(make ownership explicit)"]
     rc --> opt["module optimize\ndevirt + inline rounds, post-inline RC,\nregions / sroa-managed"]
     opt --> perfn["per-function pipeline (fixpoint)"]
-    perfn --> late["late module passes\nstrip-escaped-regions, frame-alloc,\n(debug compiler) MIR verifier"]
+    perfn --> late["late module passes\nstrip-escaped-regions, frame-alloc,\ndebug / DREAM_VERIFY_MIR=1 verifier"]
     late --> emit["backend::llvm\nMIR → textual LLVM IR (.ll)"]
 
     emit --> link["llvm-link + runtime bitcode\n→ opt → llc"]
@@ -50,7 +50,7 @@ The `hir → mir → emit` pipeline is the **only** backend.
 - **AST shape:** `ProgramNode` → declarations (`FunctionNode`, `StructDeclarationNode`, `EnumDeclarationNode`, …); bodies are `StatementNode`/`ExpressionNode`; type annotations are the `Type` enum (`crates/dream-syntax/src/nodes/types.rs`).
 - **Guarantees:** lexical/syntactic errors go into a `DiagnosticBag`. The AST is *faithful* to source — no desugaring beyond the parser's `for-each` index locals.
 
-### 3. Semantic analysis — `src/semantics/analyzer/`
+### 3. Semantic analysis — `crates/dream-sema/src/analyzer/`
 
 - **In:** the module graph and its borrowed declaration view.
 - **Out:** `SemanticInfo`, or a `CompileError::Semantic` after errors.
@@ -61,23 +61,23 @@ The `hir → mir → emit` pipeline is the **only** backend.
   - `EnumTable` — `DefId → (member → i32)`
   - `FunctionTable` / `FunctionTableInfo` — signatures + overloads
   - symbol tables — per-scope `name → Type`
-- **Type identity:** nominal definitions use `(ModuleId, local index)`. Struct/union instances and interface methods use `TypeId` keys; enum and nominal-template tables use `DefId`. Source-name resolution is module scoped. Some frontend function, generic and receiver metadata still uses name keys; the Phase 5 migration is not yet complete. User-facing diagnostics use `display_name` (`Box<int>`), while backend symbols use structural encodings.
+- **Type identity:** nominal definitions use `(ModuleId, local index)`. Struct/union instances and interface methods use `TypeId` keys; enum and nominal-template tables use `DefId`. Source-name resolution is module scoped. Function and generic metadata use typed definition/instance identities; source names are used for resolution and display, not backend identity. User-facing diagnostics use `display_name` (`Box<int>`), while backend symbols use structural encodings.
 
-### 4. Type system — `src/types/` (cross-cutting)
+### 4. Type system — `crates/dream-types/src/` (cross-cutting)
 
 Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-system.md](./02-type-system.md). The `TypeCtx` (interner + def table + lowering) is threaded through analysis and lowering.
 
-### 5. HIR emission — `src/semantics/analyzer/hir_emit/`
+### 5. HIR emission — `crates/dream-sema/src/analyzer/hir_emit/`
 
 - **In:** AST plus the facts the analyzer computed.
 - **Out:** `Hir` — typed and name-resolved (see [03-hir.md](./03-hir.md)).
 - **Why:** persist what `analyze_expression`/overload selection would otherwise discard, so the backend never re-derives types or resolutions.
 
-### 6. MIR lowering & optimization — `src/mir/`
+### 6. MIR lowering & optimization — `crates/dream-mir/src/`
 
 - **In:** HIR.
 - **Out:** optimized MIR (a CFG per function).
-- **Steps:** `mir::lower` desugars structured control flow into blocks; `ExpandSimpleCtors`, `ParamModes` (borrow inference), then `RcInsertion` make ownership explicit (module-wide, before inlining); `optimize_module_opts` alternates `Devirt` with inliner rounds, then runs the post-inline RC and placement stages (`RcLastUseRepair`, `UniqueRegion`, `rc-held-by-owner`, `SroaManaged`); the per-function `PassManager` runs to a fixpoint (including bounds-check elimination and loop versioning in `Abc`); `run_late_module_passes` strips unsafe regions, stack-allocates non-escaping objects (`frame-alloc`), and — in a debug build of the compiler — runs the MIR verifier. `--emit-mir` snapshots any of these stages. See [04-mir.md](./04-mir.md) and [05-writing-passes.md](./05-writing-passes.md).
+- **Steps:** `mir::lower` desugars structured control flow into blocks; `ExpandSimpleCtors`, then `RcInsertion` (parameter ownership modes are already HIR facts) make ownership explicit (module-wide, before inlining); `optimize_module_opts` alternates `Devirt` with inliner rounds, then runs the post-inline RC and placement stages (`RcLastUseRepair`, `UniqueRegion`, `rc-held-by-owner`, `SroaManaged`); the per-function `PassManager` runs to a fixpoint (including bounds-check elimination and loop versioning in `Abc`); `run_late_module_passes` strips unsafe regions, stack-allocates non-escaping objects (`frame-alloc`), and runs the MIR verifier in debug builds or with `DREAM_VERIFY_MIR=1`. `--emit-mir` snapshots any of these stages. See [04-mir.md](./04-mir.md) and [05-writing-passes.md](./05-writing-passes.md).
 
 ### 7. Backend — `crates/dream-mir/src/backend/llvm/` + `src/execution/llvm/`
 

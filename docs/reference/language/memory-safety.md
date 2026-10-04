@@ -204,6 +204,11 @@ Debug builds (including `-g`) always print heap counters at exit:
 
 Use `Debug.live_objects` deltas to assert balance in tests:
 
+`Debug.live_objects` and `Debug.total_allocations` return `long` on native and wasm32.
+Their 64-bit counters use relaxed atomic operations. Concurrent snapshots are diagnostic
+observations rather than a synchronized view of every thread; check balances after workers
+have completed. Pinned immortal singletons are excluded from the live count.
+
 ```dream
 let before = Debug.live_objects;
 churn();

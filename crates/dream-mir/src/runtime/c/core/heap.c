@@ -22,7 +22,7 @@ static size_t arena_len;
 /* Registry of every thread's counters (see `dream_heap_counters`); guarded by the platform heap lock.
  * `pinned` counts immortal singletons that left `Debug.live_objects` without being freed. */
 static dream_heap_counters *counters_head;
-static uint32_t pinned;
+static uint64_t pinned;
 
 int dream_rt_mt;
 
@@ -78,10 +78,10 @@ static dream_heap_counters *thread_counters(void) {
     return c;
 }
 
-static void heap_sums(uint32_t *allocs, uint32_t *frees) {
+static void heap_sums(uint64_t *allocs, uint64_t *frees) {
     dream_heap_counters *c;
-    uint32_t a = 0;
-    uint32_t f = 0;
+    uint64_t a = 0;
+    uint64_t f = 0;
     heap_lock();
     for (c = counters_head; c != NULL; c = c->next) {
         a += __atomic_load_n(&c->allocs, __ATOMIC_RELAXED);
@@ -164,7 +164,7 @@ static void activate(char *block, int32_t tag) {
 
 static void account_frees(uint32_t n) {
     dream_heap_counters *c = thread_counters();
-    __atomic_store_n(&c->frees, c->frees + n, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&c->frees, (uint64_t)n, __ATOMIC_RELAXED);
 }
 
 /* Re-arm the inline fast path once the thread is registered and no region is open. */
@@ -339,19 +339,17 @@ int dream_heap_is_live(dream_ptr ptr) {
     return *dream_block_magic(block) == MAGIC_LIVE;
 }
 
-int32_t debug_get_live_objects(void) {
-    uint32_t a;
-    uint32_t f;
-    int32_t live;
+int64_t debug_get_live_objects(void) {
+    uint64_t a;
+    uint64_t f;
     heap_sums(&a, &f);
-    live = (int32_t)(a - f);
-    return live > 0 ? live : 0;
+    return a > f ? (int64_t)(a - f) : 0;
 }
-int32_t debug_get_total_allocations(void) {
-    uint32_t a;
-    uint32_t f;
+int64_t debug_get_total_allocations(void) {
+    uint64_t a;
+    uint64_t f;
     heap_sums(&a, &f);
-    return (int32_t)a;
+    return (int64_t)a;
 }
 
 int32_t debug_get_ref_count(dream_ptr ptr) {
@@ -359,8 +357,8 @@ int32_t debug_get_ref_count(dream_ptr ptr) {
 }
 int32_t debug_get_heap_ptr(void) { return (int32_t)arena_off; }
 int32_t debug_get_free_list_head(void) {
-    uint32_t a;
-    uint32_t f;
+    uint64_t a;
+    uint64_t f;
     heap_sums(&a, &f);
     return (int32_t)(f - __atomic_load_n(&pinned, __ATOMIC_RELAXED));
 }

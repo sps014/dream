@@ -9,8 +9,8 @@
 #define IMPORT(name) __attribute__((import_module("env"), import_name(name)))
 
 extern int32_t free_list_head;
-extern int32_t live_objects;
-extern int32_t total_allocations;
+extern int64_t live_objects;
+extern int64_t total_allocations;
 extern int32_t weak_list_head;
 
 /* Emitter globals are WASM `global`s, not C data. Import tiny getters spliced in
@@ -20,8 +20,8 @@ IMPORT("__rt_str_true_get") int32_t intern_true(void);
 IMPORT("__rt_str_false_get") int32_t intern_false(void);
 IMPORT("__rt_str_minus_get") int32_t intern_minus(void);
 IMPORT("free_list_head_get") int32_t wasm_free_list_head(void);
-IMPORT("live_objects_get") int32_t wasm_live_objects(void);
-IMPORT("total_allocations_get") int32_t wasm_total_allocations(void);
+IMPORT("live_objects_get") int64_t wasm_live_objects(void);
+IMPORT("total_allocations_get") int64_t wasm_total_allocations(void);
 
 static inline int32_t i32_load(int32_t addr) {
     return *(int32_t *)(uintptr_t)(uint32_t)addr;

@@ -24,7 +24,7 @@ ABI change than a self-contained follow-up. Heap-pointer strings stay the model:
 
 ## 2. Opt-in `@stack` class-instance stack allocation — **rejected**
 
-**What exists and stays:** `src/mir/passes/sroa.rs` silently promotes non-escaping,
+**What exists and stays:** `crates/dream-mir/src/passes/sroa.rs` silently promotes non-escaping,
 default-constructed class instances' fields to scalar locals. `enum struct` on **discriminated
 unions** (checked inline contract) is the value-union spelling — see [Enums & unions](../reference/language/enums-unions.md).
 
@@ -41,7 +41,7 @@ only differ by size could theoretically share codegen keyed by size class.
 
 **Why rejected:** Dream's `unmanaged`-shaped stdlib (`Pointer<T>`, `Span<T>`, buffers) already
 avoids bloat by computing offsets from a **runtime** element size (`scalar_size` / `esize` in
-`src/mir/emit/emitter/rvalue/mod.rs`), not monomorphization-time field offsets. Monomorphization
+`crates/dream-mir/src/emit/emitter/rvalue/mod.rs`), not monomorphization-time field offsets. Monomorphization
 stays nominal: `(DefId, Vec<TypeId>)` via `MonoInstance`. No compiler size-class key.
 
 **Stdlib authoring rule:** write `unmanaged`-generic code so every `T`-sized access goes through

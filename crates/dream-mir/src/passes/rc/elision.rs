@@ -28,7 +28,8 @@ impl MirPass for RcElision {
     fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
         let mut changed = false;
         // Fixpoint: diamond/loop/postdom elision can expose new Goto-chain pairs and vice versa.
-        for _ in 0..8 {
+        const MAX_ROUNDS: usize = 8;
+        for iteration in 0..MAX_ROUNDS {
             let mut round = false;
             round |= elide_goto_chains(func);
             round |= elide_transparent_diamonds(func);
@@ -38,6 +39,13 @@ impl MirPass for RcElision {
                 break;
             }
             changed = true;
+            if iteration + 1 == MAX_ROUNDS {
+                crate::passes::limits::reached(
+                    crate::passes::limits::Limit::RcElision,
+                    MAX_ROUNDS,
+                    Some(func),
+                );
+            }
         }
         changed
     }

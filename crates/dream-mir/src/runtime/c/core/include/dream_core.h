@@ -273,10 +273,10 @@ DREAM_ALWAYS_INLINE uint32_t *dream_block_magic(char *block) {
 }
 
 /* Per-thread alloc/free tallies behind `Debug.live_objects`. Heap-allocated and never freed so
- * the process-wide sum stays valid after a worker exits; plain (non-RMW) updates by the owner. */
+ * the process-wide sum stays valid after a worker exits; atomic updates permit concurrent snapshots. */
 typedef struct dream_heap_counters {
-    uint32_t allocs;
-    uint32_t frees;
+    uint64_t allocs;
+    uint64_t frees;
     struct dream_heap_counters *next;
 } dream_heap_counters;
 
@@ -317,8 +317,8 @@ DREAM_ALWAYS_INLINE void dream_block_activate(char *block, int32_t tag) {
     header->rc = dream_rc_init(tag);
 }
 
-DREAM_ALWAYS_INLINE void dream_heap_count(uint32_t *c) {
-    __atomic_store_n(c, *c + 1u, __ATOMIC_RELAXED);
+DREAM_ALWAYS_INLINE void dream_heap_count(uint64_t *c) {
+    __atomic_fetch_add(c, UINT64_C(1), __ATOMIC_RELAXED);
 }
 
 DREAM_ALWAYS_INLINE dream_ptr dream_malloc(dream_size size, int32_t tag) {
@@ -1382,8 +1382,8 @@ int32_t regex_name_number(uintptr_t h, int32_t i);
 dream_ptr regex_find(uintptr_t h, dream_ptr input, int32_t pos);
 int32_t regex_test(uintptr_t h, dream_ptr input);
 
-int32_t debug_get_live_objects(void);
-int32_t debug_get_total_allocations(void);
+int64_t debug_get_live_objects(void);
+int64_t debug_get_total_allocations(void);
 int32_t debug_get_ref_count(dream_ptr ptr);
 int32_t debug_get_heap_ptr(void);
 int32_t debug_get_free_list_head(void);

@@ -21,7 +21,7 @@ second "absence" literal to replace the one it removed.
 
 Concretely:
 - The `null` keyword/token is deleted from the lexer and parser (`crates/dream-syntax`), not just
-  its type. `Type::Nullable(Void)`/`is_null_literal` in `src/types/compat.rs` and the parser's
+  its type. `Type::Nullable(Void)`/`is_null_literal` in `crates/dream-types/src/compat.rs` and the parser's
   null-literal production (`crates/dream-syntax/src/parser/expressions.rs`) go away together.
 - Every former `T?` field/variable becomes `Option<T>`, initialized with `None` and read via
   `switch`/`.unwrap_or(...)`/`.is_some()` — the same API the stdlib's `Map`/`List` already expose,
@@ -49,7 +49,7 @@ waved through for implicit/explicit interface upcasts (Part 1, "intentional flex
 different from the `null`-vs-`None` case above because `??`/`.unwrap_or` are an operator/method
 pair, not two ways to construct the same *value*.
 
-Mechanically, this changes `??`'s lowering (`src/mir/lower/expr.rs`) from "type-check against
+Mechanically, this changes `??`'s lowering (`crates/dream-mir/src/lower/expr.rs`) from "type-check against
 `Type::Nullable`, lower to a MIR comparison against `Const::Null`" to "type-check the LHS as
 `Option<T>`, lower to the same call-`unwrap_or` MIR shape the method call itself already produces."
 No new MIR node; the analyzer just picks a different desugaring target.
@@ -103,7 +103,7 @@ With these three decisions fixed, `removal-nullable-implementation` reduces to:
 1. Delete the `null` token/literal and `TyKind::Nullable` plus its interner methods
    (`nullable()`, `strip_nullable()`, `unwrap_nullable()`, `is_nullable_boxed_value()`).
 2. Follow every compile error at each `strip_nullable`/`Type::Nullable` call site (~25 files under
-   `src/semantics/analyzer/**`, plus MIR/codegen: `src/mir/lower/expr.rs`,
+   `crates/dream-sema/src/analyzer/**`, plus MIR/codegen: `crates/dream-mir/src/lower/expr.rs`,
    `emitter/rvalue/casts.rs`, `emitter/value_struct.rs`, `release.rs`, `valuetype.rs`,
    `wasm_types.rs`, `js_marshal.rs`, `js_abi.rs`, and `tooling/dream-lsp/src/index/model.rs`) and
    either delete the nullable-specific branch (if `Option<T>` already handles it structurally) or

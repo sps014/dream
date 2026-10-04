@@ -46,18 +46,18 @@ StatementNode::Repeat { count: ExpressionNode, body: Vec<StatementNode>, span: T
 
 Update any exhaustive `match` over `StatementNode` (the compiler will list them) across the parser, analyzer, and HIR emission so the crate still compiles.
 
-### 4. Analyzer — `src/semantics/analyzer/statements/`
+### 4. Analyzer — `crates/dream-sema/src/analyzer/statements/`
 
 Type-check it:
 
 - analyze `count`, require an integer type (`assignable` to `int`); emit a diagnostic otherwise.
 - open a loop scope (so `break`/`continue` are legal inside), analyze `body`, close the scope.
 
-### 5. Type system — `src/types/`
+### 5. Type system — `crates/dream-types/src/`
 
 Nothing: `repeat` introduces no new type. (If your feature *did* — e.g. a tuple type — you would add a `TyKind` variant and a `lower` arm; see [02-type-system.md](./02-type-system.md).)
 
-### 6. HIR — `src/hir/mod.rs`
+### 6. HIR — `crates/dream-hir/src/mod.rs`
 
 You have a choice: add a dedicated `HStmt::Repeat`, or **desugar to an existing node**. Prefer desugaring when the semantics are exactly an existing construct — fewer nodes means fewer cases in every downstream consumer. `repeat (n) { body }` is exactly:
 
@@ -70,15 +70,15 @@ So the analyzer emits the existing `HStmt::While` (or `HStmt::For`) with a synth
 
 > Add a new HIR/MIR node only when the construct is genuinely irreducible to existing ones (a new kind of value, a new effect, or something the optimizer must treat specially).
 
-### 7. MIR lowering — `src/mir/lower/`
+### 7. MIR lowering — `crates/dream-mir/src/lower/`
 
 Nothing, if you desugared to `While`. If you instead added `HStmt::Repeat`, add a `lower_stmt` arm that builds the header/body/exit blocks (copy the `While` lowering and append the counter increment to the body).
 
-### 8. Passes — `src/mir/passes/`
+### 8. Passes — `crates/dream-mir/src/passes/`
 
 Usually nothing: passes operate on generic blocks/statements, not surface constructs. A constant `repeat (3)` even gets unroll-ish benefits indirectly via const-prop/fold + simplify-cfg without special-casing.
 
-### 9. Backend — `src/mir/emit/`
+### 9. Backend — `crates/dream-mir/src/emit/`
 
 Nothing, if you desugared. New MIR nodes (not the case here) would need emit arms.
 
@@ -102,7 +102,7 @@ Most "new syntax" is sugar. Reserve new IR nodes for new *semantics*. When you m
 
 ## Special cases worth knowing
 
-- **New binary/unary operator:** add to `hir::BinOp`/`UnOp` (`src/hir/ops.rs`), map the token in the analyzer, fold it in `ConstFold`, and emit it in `binop_instr` — those four spots.
+- **New binary/unary operator:** add to `hir::BinOp`/`UnOp` (`crates/dream-hir/src/ops.rs`), map the token in the analyzer, fold it in `ConstFold`, and emit it in `binop_instr` — those four spots.
 - **New type:** the dedicated checklist is in [02-type-system.md](./02-type-system.md#how-to-add-a-new-type-to-the-language).
 - **New heap-allocated value:** add the `Rvalue` (e.g. a `New`-like), wire its layout/alloc through the runtime layer in the backend (see [06](./06-llvm-backend.md)), and update `RcInsertion` so it is retained/released.
 - **New control-flow construct that is *not* sugar:** add `HStmt` + a `lower` arm; ensure `Terminator::successors()` still describes all edges so passes and the backend stay correct.

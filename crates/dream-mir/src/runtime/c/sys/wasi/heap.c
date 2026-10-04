@@ -9,8 +9,8 @@ int dream_rt_mt = 1;
 #else
 int dream_rt_mt;
 #endif
-int32_t live_objects;
-int32_t total_allocations;
+int64_t live_objects;
+int64_t total_allocations;
 int32_t last_freed;
 int32_t free_list_head;
 
@@ -166,8 +166,8 @@ static void account_alloc(void) {
 }
 
 static void account_free_n(int32_t n) {
-    int32_t v;
-    int32_t next;
+    int64_t v;
+    int64_t next;
     __atomic_fetch_add(&last_freed, n, __ATOMIC_RELAXED);
     if (n <= 0) {
         return;
@@ -298,10 +298,10 @@ static dream_ptr malloc_locked(int32_t size, int32_t tag) {
     return (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
 }
 
-int32_t debug_get_live_objects(void) {
+int64_t debug_get_live_objects(void) {
     return __atomic_load_n(&live_objects, __ATOMIC_RELAXED);
 }
-int32_t debug_get_total_allocations(void) {
+int64_t debug_get_total_allocations(void) {
     return __atomic_load_n(&total_allocations, __ATOMIC_RELAXED);
 }
 int32_t debug_get_ref_count(dream_ptr ptr) {
@@ -311,8 +311,9 @@ int32_t debug_get_ref_count(dream_ptr ptr) {
 void dream_pin_immortal(dream_ptr s) {
     if (s) {
         *dream_rc_word(s) = DREAM_RC_IMMORTAL;
-        if (live_objects > 0) {
-            live_objects -= 1;
+        int64_t live = __atomic_load_n(&live_objects, __ATOMIC_RELAXED);
+        while (live > 0 && !__atomic_compare_exchange_n(
+            &live_objects, &live, live - 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
         }
     }
 }

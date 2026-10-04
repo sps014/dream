@@ -1,4 +1,4 @@
-# 03 — Typed HIR (`src/hir/`)
+# 03 — Typed HIR (`crates/dream-hir/src/`)
 
 The HIR is the AST **after type-checking and name resolution**. Its one job is to *persist everything the analyzer learned* so nothing downstream has to re-derive it. If you ever find the backend "figuring out" a type or which function a call refers to, that fact belongs in HIR.
 
@@ -31,7 +31,7 @@ Control flow stays **structured** (`if`/`while`/`for`/`foreach`/`switch`). Flatt
 
 ## The top-level container
 
-`Hir` (`src/hir/mod.rs`) holds three lists:
+`Hir` (`crates/dream-hir/src/mod.rs`) holds three lists:
 
 ```rust
 pub struct Hir {
@@ -103,7 +103,7 @@ Pattern-matching `switch` lowering (analyzer):
 
 - Literals: `IntLit`, `FloatLit`, `BoolLit`, `CharLit`, `StringLit`.
 - `Var(Binding)` — resolved read.
-- `Binary { op, lhs, rhs }`, `Unary { op, operand }` using the canonical `hir::BinOp`/`UnOp` (`src/hir/ops.rs`) — *not* syntax tokens.
+- `Binary { op, lhs, rhs }`, `Unary { op, operand }` using the canonical `hir::BinOp`/`UnOp` (`crates/dream-hir/src/ops.rs`) — *not* syntax tokens.
 - Calls: `Call { callee, args }`, `MethodCall { receiver, callee, args }`, `IndirectCall { target, args }`.
 - Construction: `New { def, instance, args }`, `UnionNew { def, variant, args }`, `ArrayLit { elem_ty, elems }`.
 - Access: `Field { obj, field }`, `Index { array, index }`, `ArrayLen`.
@@ -113,7 +113,7 @@ Pattern-matching `switch` lowering (analyzer):
 
 ## How the analyzer emits HIR
 
-The analyzer builds the `Hir` as it type-checks (in `src/semantics/analyzer/hir_emit/`):
+The analyzer builds the `Hir` as it type-checks (in `crates/dream-sema/src/analyzer/hir_emit/`):
 
 ```mermaid
 sequenceDiagram

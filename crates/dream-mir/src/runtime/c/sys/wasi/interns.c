@@ -4,8 +4,8 @@
 #include "dream_rt_wasm32.h"
 
 extern int32_t debug_get_free_list_head(void);
-extern int32_t debug_get_live_objects(void);
-extern int32_t debug_get_total_allocations(void);
+extern int64_t debug_get_live_objects(void);
+extern int64_t debug_get_total_allocations(void);
 
 static dream_ptr interned[4]; /* empty, true, false, minus */
 
@@ -37,8 +37,8 @@ int32_t intern_false(void) { return intern_slot(2, "false"); }
 int32_t intern_minus(void) { return intern_slot(3, "-"); }
 
 int32_t wasm_free_list_head(void) { return debug_get_free_list_head(); }
-int32_t wasm_live_objects(void) { return debug_get_live_objects(); }
-int32_t wasm_total_allocations(void) { return debug_get_total_allocations(); }
+int64_t wasm_live_objects(void) { return debug_get_live_objects(); }
+int64_t wasm_total_allocations(void) { return debug_get_total_allocations(); }
 
 /* Old WAT-ABI shims: `dream_guest.h` declares these as env imports ("malloc"/"free");
  * providing definitions here turns them into plain internal calls. */

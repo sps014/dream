@@ -9,10 +9,10 @@ public static class Debug {
     static extern fun host_heap_ptr(): int;
 
     @intrinsic("debug_get_live_objects")
-    static extern fun host_live_objects(): int;
+    static extern fun host_live_objects(): long;
 
     @intrinsic("debug_get_total_allocations")
-    static extern fun host_total_allocations(): int;
+    static extern fun host_total_allocations(): long;
 
     @intrinsic("debug_get_ref_count")
     static extern fun ref_count(borrow o: object): int;
@@ -25,11 +25,11 @@ public static class Debug {
         return Debug.host_heap_ptr();
     }
 
-    public static get live_objects(): int {
+    public static get live_objects(): long {
         return Debug.host_live_objects();
     }
 
-    public static get total_allocations(): int {
+    public static get total_allocations(): long {
         return Debug.host_total_allocations();
     }
 }

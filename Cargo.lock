@@ -1450,6 +1450,7 @@ dependencies = [
  "dream-types",
  "indexmap",
  "pretty_assertions",
+ "tracing",
  "wasmprinter",
 ]
 

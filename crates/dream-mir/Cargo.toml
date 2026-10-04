@@ -14,6 +14,7 @@ dream-abi = { path = "../dream-abi" }
 dream-stdlib = { path = "../dream-stdlib" }
 dream-syntax = { path = "../dream-syntax" }
 indexmap = "2"
+tracing = "0.1"
 wasmprinter = "0.252"
 
 [dev-dependencies]

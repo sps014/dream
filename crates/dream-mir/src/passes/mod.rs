@@ -18,6 +18,9 @@ mod gvn;
 pub(crate) mod inline;
 mod iv;
 mod licm;
+mod limits;
+#[cfg(test)]
+mod limits_tests;
 mod loop_unroll;
 mod overflow_elim;
 mod ownership_args;
@@ -235,6 +238,9 @@ impl PassManager {
             if !changed {
                 break;
             }
+            if iteration + 1 == self.max_iterations {
+                limits::reached(limits::Limit::Function, self.max_iterations, Some(func));
+            }
         }
     }
 }
@@ -275,7 +281,16 @@ pub fn optimize_module_opts(
     inline: bool,
     dump: &mut MirDump,
 ) {
-    const MAX_ROUNDS: usize = 8;
+    optimize_module_rounds(mir, interner, inline, dump, 8);
+}
+
+fn optimize_module_rounds(
+    mir: &mut Mir,
+    interner: &TypeInterner,
+    inline: bool,
+    dump: &mut MirDump,
+    max_rounds: usize,
+) {
     crate::prune_module(mir, interner);
     let _ = ExpandSimpleCtors.run(mir, interner);
     dump.module(ExpandSimpleCtors.name(), mir, interner);
@@ -305,7 +320,7 @@ pub fn optimize_module_opts(
         let _ = Devirt.run(mir, interner);
         dump.module(Devirt.name(), mir, interner);
         let inliner = Inliner;
-        for _ in 0..MAX_ROUNDS {
+        for round in 0..max_rounds {
             let changed = inliner.run(mir, interner);
             // Drop callees left with no remaining call sites after inlining (plus their transitively
             // dead callees), then loop: the smaller module may expose more inlining.
@@ -316,6 +331,9 @@ pub fn optimize_module_opts(
             }
             let _ = Devirt.run(mir, interner);
             dump.module(Devirt.name(), mir, interner);
+            if round + 1 == max_rounds {
+                limits::reached(limits::Limit::Inline, max_rounds, None);
+            }
         }
     }
     for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {

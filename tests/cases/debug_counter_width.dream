@@ -1,0 +1,12 @@
+import system;
+
+fun read_live(): long { return Debug.live_objects; }
+fun read_total(): long { return Debug.total_allocations; }
+
+fun main(): void {
+    let before: long = read_total();
+    let values: int[] = [20, 22];
+    System.println(values[0] + values[1]);
+    System.println(read_total() >= before);
+    System.println(read_live() >= 0L);
+}

@@ -969,7 +969,19 @@ mod tests {
             functions: vec![make, caller, main],
             ..Default::default()
         };
-        crate::passes::optimize_module(&mut mir, &ctx.interner);
+        let cap_hits = crate::passes::limits::hits(crate::passes::limits::Limit::Inline);
+        crate::passes::optimize_module_rounds(
+            &mut mir,
+            &ctx.interner,
+            true,
+            &mut crate::passes::MirDump::disabled(),
+            1,
+        );
+        assert_eq!(
+            crate::passes::limits::hits(crate::passes::limits::Limit::Inline),
+            cap_hits + 1
+        );
+        assert!(crate::verify::verify_module(&mir, &ctx.interner).is_empty());
         let caller = mir
             .functions
             .iter()

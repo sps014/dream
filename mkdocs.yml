@@ -132,6 +132,7 @@ nav:
         - DateTime: reference/stdlib/datetime.md
         - Logging: reference/stdlib/logging.md
         - Testing: reference/stdlib/testing.md
+        - Debug: reference/stdlib/debug.md
         - Process: reference/stdlib/process.md
         - WebView: reference/stdlib/webview.md
         - Desktop: reference/stdlib/desktop.md

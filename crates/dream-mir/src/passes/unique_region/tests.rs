@@ -5,6 +5,37 @@ use dream_hir::{LayoutTable, TypeLayout};
 use dream_types::{DefKind, TypeCtx};
 
 #[test]
+fn function_index_distinguishes_definitions_and_generic_instances() {
+    let mut ctx = TypeCtx::new();
+    let a = ctx.register(DefKind::Function, "same_name", vec![]);
+    let b = ctx.register(DefKind::Function, "other_definition", vec![]);
+    let int = ctx.interner.int();
+    let string = ctx.interner.string();
+    let functions = [(a, int), (b, int), (a, string)].map(|(def, ty)| {
+        let mut builder = FunctionBuilder::new("same_name", ctx.interner.void());
+        builder.set_def(def, vec![ty]);
+        builder.terminate(Terminator::Return(None));
+        builder.finish()
+    });
+    let mir = Mir {
+        functions: functions.into(),
+        ..Default::default()
+    };
+    let index = FunctionIndex::new(&mir);
+    for (position, (def, ty)) in [(a, int), (b, int), (a, string)]
+        .iter()
+        .copied()
+        .enumerate()
+    {
+        assert!(std::ptr::eq(
+            index.find(&mir, def, &[ty]).unwrap(),
+            &mir.functions[position]
+        ));
+    }
+    assert!(index.find(&mir, b, &[string]).is_none());
+}
+
+#[test]
 fn recursive_safety_resolves_entire_component_before_caching() {
     let mut ctx = TypeCtx::new();
     let a = ctx.register(DefKind::Function, "a", vec![]);
@@ -54,7 +85,12 @@ fn recursive_safety_resolves_entire_component_before_caching() {
                 }],
                 ..Default::default()
             };
-            let safety = compute_safety(&mir, &ctx.interner, &ctor_only_defs(&mir));
+            let safety = compute_safety(
+                &mir,
+                &ctx.interner,
+                &ctor_only_defs(&mir),
+                &FunctionIndex::new(&mir),
+            );
             for def in [a, b, caller] {
                 assert_eq!(safety[&(def, vec![])], !escapes);
             }
@@ -549,9 +585,13 @@ fn ordinary_release_does_not_prove_a_stored_root_unique() {
         Statement::Assign(Place::Local(root), _) => root,
         _ => unreachable!(),
     };
-    bench.blocks[0].stmts.insert(1, Statement::Assign(
-        Place::Global(crate::Global(0)), Rvalue::Use(Operand::Copy(Place::Local(root))),
-    ));
+    bench.blocks[0].stmts.insert(
+        1,
+        Statement::Assign(
+            Place::Global(crate::Global(0)),
+            Rvalue::Use(Operand::Copy(Place::Local(root))),
+        ),
+    );
     assert!(!UniqueRegion.run(&mut mir, &ctx.interner));
 }
 
@@ -566,11 +606,22 @@ fn ordinary_release_does_not_prove_a_rebound_root_unique() {
     };
     let ty = bench.locals[root.0 as usize].ty;
     let param = Local(bench.locals.len() as u32);
-    bench.locals.push(crate::LocalDecl {ty, name: None, is_ref: false, is_take: false, is_cursor: false, manual_drop: false});
+    bench.locals.push(crate::LocalDecl {
+        ty,
+        name: None,
+        is_ref: false,
+        is_take: false,
+        is_cursor: false,
+        manual_drop: false,
+    });
     bench.params.push(param);
-    bench.blocks[0].stmts.insert(1, Statement::Assign(
-        Place::Local(root), Rvalue::Use(Operand::Copy(Place::Local(param))),
-    ));
+    bench.blocks[0].stmts.insert(
+        1,
+        Statement::Assign(
+            Place::Local(root),
+            Rvalue::Use(Operand::Copy(Place::Local(param))),
+        ),
+    );
     assert!(!UniqueRegion.run(&mut mir, &ctx.interner));
 }
 
@@ -607,7 +658,12 @@ fn strip_escaped_keeps_region_when_only_pre_region_locals_are_used_after() {
     let value = alloc.new_local(ty, None);
     alloc.assign(
         Place::Local(value),
-        Rvalue::New { def: node_def, ty, ctor: None, args: vec![] },
+        Rvalue::New {
+            def: node_def,
+            ty,
+            ctor: None,
+            args: vec![],
+        },
     );
     alloc.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(value)))));
     let mut f = FunctionBuilder::new("drop_it", ctx.interner.void());

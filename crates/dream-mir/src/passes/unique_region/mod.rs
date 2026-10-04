@@ -31,14 +31,15 @@ impl ModulePass for UniqueRegion {
 
     fn run(&self, mir: &mut Mir, interner: &TypeInterner) -> bool {
         let ctor_only = ctor_only_defs(mir);
-        let safe = compute_safety(mir, interner, &ctor_only);
+        let index = FunctionIndex::new(mir);
+        let safe = compute_safety(mir, interner, &ctor_only, &index);
         let mut changed = false;
         let n = mir.functions.len();
         for i in 0..n {
             if mir.functions[i].is_async {
                 continue;
             }
-            let sites = wrap_sites(mir, interner, i, &ctor_only, &safe);
+            let sites = wrap_sites(mir, interner, i, &ctor_only, &safe, &index);
             if sites.is_empty() {
                 continue;
             }

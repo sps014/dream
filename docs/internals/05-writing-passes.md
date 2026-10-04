@@ -1,10 +1,10 @@
-# 05 — Writing Optimization Passes (`src/mir/passes/`)
+# 05 — Writing Optimization Passes (`crates/dream-mir/src/passes/`)
 
 Read this when you want to **make the compiler produce better code**. It covers the pass infrastructure, the whole-module driver, the passes that ship today, and a step-by-step tutorial for adding your own. Passes operate on MIR — read [04-mir.md](./04-mir.md) first.
 
 ## Two contracts: `MirPass` and `ModulePass`
 
-Most passes are **function-local** and implement `MirPass` (`src/mir/passes/mod.rs`):
+Most passes are **function-local** and implement `MirPass` (`crates/dream-mir/src/passes/mod.rs`):
 
 ```rust
 pub trait MirPass {
@@ -30,11 +30,11 @@ Two rules make the system work:
 
 ## The whole-module driver
 
-`optimize_module` (`src/mir/passes/mod.rs`) sequences the module-wide phases, and the order is **correctness-relevant**, not just an optimization choice:
+`optimize_module` (`crates/dream-mir/src/passes/mod.rs`) sequences the module-wide phases, and the order is **correctness-relevant**, not just an optimization choice:
 
 ```mermaid
 flowchart LR
-    prune1[prune_module] --> expand[ExpandSimpleCtors] --> fbox[FuncboxAbi] --> pm[ParamModes] --> args[ownership-args] --> rc[RcInsertion\n+ token verification] --> inline[Devirt + Inliner\nrounds + prune] --> repair[RcLastUseRepair] --> ur[UniqueRegion] --> held[rc-held-by-owner] --> sm[SroaManaged] --> perfn[per-function\nPassManager] --> late[strip-escaped-regions\n+ frame-alloc] --> verify[final verification\ndebug or DREAM_VERIFY_MIR=1]
+    prune1[prune_module] --> expand[ExpandSimpleCtors] --> fbox[FuncboxAbi] --> args[ownership-args] --> rc[RcInsertion\n+ token verification] --> inline[Devirt + Inliner\nrounds + prune] --> repair[RcLastUseRepair] --> ur[UniqueRegion] --> held[rc-held-by-owner] --> sm[SroaManaged] --> perfn[per-function\nPassManager] --> late[strip-escaped-regions\n+ frame-alloc] --> verify[final verification\ndebug or DREAM_VERIFY_MIR=1]
 ```
 
 `driver/compiler.rs` calls three entry points in order: `optimize_module_opts` (everything up to `SroaManaged`), `run_function_pipelines` (the per-function fixpoint), and `run_late_module_passes`. Every stage reports to the `--emit-mir` sink under its name (see [04-mir.md](./04-mir.md#pretty-printing-and-emit-mir-cratesdream-mirsrcprettyrs-passesdumprs)).
@@ -42,7 +42,7 @@ flowchart LR
 - `prune_module` tree-shakes unreachable functions.
 - `ExpandSimpleCtors` runs **before** `RcInsertion` so field stores (including strings) get retain/move at the call site. Expanding after RC left `New` args as fake sinks and UAFed take-ctors like `JsonParser`.
 - `FuncboxAbi` moves parameter retains of address-taken functions into the callee so funcbox call sites pass at +0.
-- `ParamModes` flips read-only sink parameters to borrowed (callee and every direct call site) when every caller is known, so `RcInsertion` emits neither the caller's retain nor the callee's release. It is a call-graph fixpoint; see its module doc for the refusal list.
+- Parameter modes are typed HIR facts (`Borrow`, `Share`, `Sink`, `Ref`), consumed directly by MIR lowering. The deleted `ParamModes` inference pass is not part of this pipeline.
 - `RcInsertion` runs **before** inlining. Callee scope-exit `Release`s stay on the original bodies (and keep inliner size budgets honest). Inserting after inlining on a fused `generated_dispatch` is too expensive. It reads a module `ModRefTable` (`rc/modref.rs`: which `(type, field)` / element / global slots each function may overwrite, closed over calls) to keep snapshot cursors and loop-carried cursor families (`rc/cursor_family.rs`) retain-free.
 - `Devirt` + `Inliner` alternate for up to 8 rounds with pruning in between. `Devirt` turns an interface call direct when every implementor maps the slot to one method, or when a forward dataflow proves the receiver's exact class (so factories exposed by inlining devirtualize on the next round). Receivers with up to four known implementors stay interface calls in MIR; the backend emits a tag switch to direct calls for them (policy in `backend/shared/iface_guard.rs`).
 - `RcLastUseRepair` walks fused CFGs once: last-use `a[i] = s` / field stores become moves so inlined `split` temps do not leak.
@@ -60,6 +60,18 @@ Debug-info builds call `optimize_module_opts(.., inline = false)`: RC insertion 
 ## The per-function pipeline
 
 `PassManager` runs a configured list of `MirPass`es **repeatedly until none reports a change** (or the cap is hit). `PassManager::default_pipeline` is ordered so cheap simplifications expose work for the later ones:
+
+The function fixpoint (16 rounds), module inliner (8 rounds) and RC-elision inner fixpoint
+(8 rounds) report exhausted limits through `tracing` at info level (`dream -v`). A cap
+event is recorded only when the final permitted round still changed the program. Events
+include the stage, iteration limit, function when applicable, and that stage's cumulative
+hit count on the current compiler thread. A capped pipeline still runs subsequent ownership
+repair and verification stages; hitting a limit alone does not imply invalid MIR.
+
+Unique-region safety builds an insertion-ordered index of `(DefId, concrete type arguments)`
+once per module pass. Constructor adjacency also uses a definition index; generic instances
+and same-named definitions remain distinct. The index survives only this pass invocation,
+so pruning or inlining in another pass cannot leave stale function positions.
 
 ```mermaid
 flowchart LR
@@ -109,7 +121,7 @@ Dream already ships `Algebraic`; rebuilding a slice of it is the clearest way to
 
 ### Step 1 — the pass file
 
-`src/mir/passes/algebraic.rs`:
+`crates/dream-mir/src/passes/algebraic.rs`:
 
 ```rust
 //! Algebraic identities: x+0, x-0, x*1, x*0, x/1.
@@ -161,7 +173,7 @@ fn simplify(rvalue: &Rvalue) -> Option<Rvalue> {
 
 ### Step 2 — register it
 
-In `src/mir/passes/mod.rs`, add the `mod`/`pub use` lines and place it in the pipeline where it composes well — after `ConstFold` so folded constants feed it, and its output feeds folding on the next fixpoint iteration:
+In `crates/dream-mir/src/passes/mod.rs`, add the `mod`/`pub use` lines and place it in the pipeline where it composes well — after `ConstFold` so folded constants feed it, and its output feeds folding on the next fixpoint iteration:
 
 ```rust
 mod algebraic;
@@ -174,7 +186,7 @@ pm.add(Gvn);
 
 ### Step 3 — test it
 
-Use `FunctionBuilder` (`src/mir/build.rs`) to construct a minimal function, run the pass, and assert on the result:
+Use `FunctionBuilder` (`crates/dream-mir/src/build.rs`) to construct a minimal function, run the pass, and assert on the result:
 
 ```rust
 #[cfg(test)]

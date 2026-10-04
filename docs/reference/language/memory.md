@@ -3,7 +3,7 @@
 Dream manages heap memory with **automatic reference counting (ARC)**.
 You never call `free` — memory is reclaimed the moment the last reference to an object drops.
 
-Native allocation byte sizes use an unsigned, machine-width runtime type (`dream_size`, C `size_t`), including heap headers and reallocation. Native buffers can exceed 2 GiB when memory is available. Requests must fit within the target's pointer-difference range after header and alignment overhead; arithmetic overflow and allocation failure produce a panic diagnostic without allocating from the Dream heap. wasm32 retains its 32-bit allocation ABI and linear-memory constraints. Array and string lengths remain Dream `int` values; machine-width byte sizes do not change that element-count limit. Dream does not yet expose a language-level `usize` type.
+Native allocation byte sizes use an unsigned, machine-width runtime type (`dream_size`, C `size_t`), including heap headers and reallocation. Native buffers can exceed 2 GiB when memory is available. Requests must fit within the target's pointer-difference range after header and alignment overhead; arithmetic overflow and allocation failure produce a panic diagnostic without allocating from the Dream heap. wasm32 retains its 32-bit allocation ABI and linear-memory constraints. Array and string lengths remain Dream `int` values; machine-width byte sizes do not change that element-count limit. Dream exposes `isize` and `usize` for target-width signed and unsigned integers.
 
 ## What lives on the heap
 
@@ -166,6 +166,11 @@ A field marked either way is not part of the cycle check.
 #### Runtime behavior
 
 Neither modifier keeps the other object alive:
+
+Weak loads and target clearing use the same runtime lock. A successful load retains the
+target before unlocking, so concurrent destruction cannot leave the reader with a dangling
+reference. This lifetime protection does not synchronize application fields: shared mutation
+still needs `Lock` or another explicit synchronization mechanism.
 
 - **`weak`** fields become `Option.None` the instant the last strong reference is gone — you never observe a dangling pointer:
 

@@ -32,7 +32,10 @@ impl<'a> Analyzer<'a> {
             }
             self.type_ctx
                 .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
-            let Some(def) = self.type_ctx.resolve(DefKind::Struct, &struct_decl.name.text) else {
+            let Some(def) = self
+                .type_ctx
+                .resolve(DefKind::Struct, &struct_decl.name.text)
+            else {
                 continue;
             };
             let ty = self.type_ctx.interner.struct_ty(def, vec![]);
@@ -68,19 +71,6 @@ impl<'a> Analyzer<'a> {
                 self.type_ctx.interner.mark_static_def(def);
                 self.validate_static_class(struct_decl, diagnostics);
             }
-            // A `struct` is a value type: record it on the def table and the interner so
-            // reference-classification (RC, layout, codegen) treats its instances as inline values.
-            if struct_decl.is_value {
-                self.type_ctx.defs.mark_value(def);
-                self.type_ctx.interner.mark_value_def(def);
-                // A value struct may implement interfaces (e.g. `Comparable`/`Equatable`): its
-                // methods dispatch *statically* through direct calls and generic constraints with no
-                // boxing. Widening it to an interface *reference* (or `object`) boxes it into a fresh
-                // tagged heap copy at the upcast site — see the value struct case in `emit_cast`.
-            }
-            if struct_decl.is_ref_struct {
-                self.type_ctx.interner.mark_ref_struct_def(def);
-            }
             if struct_decl.is_shared {
                 self.type_ctx.interner.mark_shared_def(def);
             }
@@ -90,7 +80,6 @@ impl<'a> Analyzer<'a> {
                 // Async methods are supported: each monomorphization registers the method as a
                 // distinct concrete function (see `register_struct_methods`), so its async state
                 // machine is generated per instance like any other async method.
-                self.generic_structs.insert(def, struct_decl);
                 continue;
             }
             let ty = self.type_ctx.interner.struct_ty(def, vec![]);
@@ -436,24 +425,40 @@ impl<'a> Analyzer<'a> {
         false
     }
 
-    /// The names of value-struct types embedded *by value* in `name`'s fields (the inline edges of
-    /// the value-containment graph). Array fields are references.
-    fn value_struct_field_targets(&self, name: dream_types::TypeId) -> Vec<dream_types::TypeId> {
-        let Some(info) = self.struct_info(name) else {
-            return Vec::new();
-        };
-        if !info.is_value {
+    /// Only inline edges contribute to infinite-size cycles; references and arrays break them.
+    fn value_struct_field_targets(&self, ty: dream_types::TypeId) -> Vec<dream_types::TypeId> {
+        if !self.type_ctx.interner.is_value_type(ty) {
             return Vec::new();
         }
-        let mut out = Vec::new();
-        for f in info.fields.values() {
-            if let Some(field_info) = self.struct_info(f.ty) {
-                if field_info.is_value {
-                    out.push(f.ty);
-                }
+        let fields = if let Some(info) = self.union_info(ty) {
+            info.variants
+                .iter()
+                .flat_map(|v| v.fields.iter().map(|f| f.ty))
+                .collect::<Vec<_>>()
+        } else if let Some(info) = self.struct_info(ty) {
+            info.fields.values().map(|f| f.ty).collect()
+        } else if let dream_types::TyKind::Tuple(fields) = self.type_ctx.interner.kind(ty) {
+            fields.clone()
+        } else {
+            Vec::new()
+        };
+        fields
+            .into_iter()
+            .filter(|t| self.type_ctx.interner.is_value_type(*t))
+            .collect()
+    }
+
+    pub(in crate::analyzer) fn validate_value_containment(&self, diagnostics: &mut DiagnosticBag) {
+        // An enum can instantiate a generic struct before its own payload table is complete.
+        // Recheck once every concrete field graph is available, before computing layouts.
+        for (ty, kind) in self.type_ctx.interner.iter_kinds() {
+            if matches!(kind, dream_types::TyKind::Struct(..))
+                && self.type_ctx.interner.is_value_type(ty)
+                && self.value_struct_contains_self(ty)
+            {
+                diagnostics.report_error(format!("value struct '{}' cannot contain itself by value; use a reference type ('class') or an array to break the cycle", self.type_id_display(ty)), None);
             }
         }
-        out
     }
 
     pub(in crate::analyzer) fn ensure_struct_instantiated(

@@ -454,6 +454,7 @@ mod tests {
         };
 
         let hir = Hir {
+            exports: vec![],
             functions: vec![func],
             globals: vec![],
             instances: vec![],

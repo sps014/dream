@@ -17,20 +17,24 @@ impl Compiler {
         main_file_path: &String,
         out_path: &str,
     ) -> Result<BuildOutcome, CompileError> {
+        if self.output_kind.is_library() && self.target.spec().capabilities.linear_memory {
+            return Err(CompileError::Manifest("staticlib and dylib require a native target".into()));
+        }
         info!("starting parsing and multi-file resolution");
         let arena = Bump::new();
         let mut diagnostics = DiagnosticBag::new(None);
         let loaded = self.load_program(main_file_path, &arena, &mut diagnostics)?;
         info!("finished parsing");
-        let stamp = self.build_cache.as_deref().and_then(|link_key| {
-            self.build_stamp(link_key, &loaded, main_file_path, out_path)
-        });
+        let stamp = self
+            .build_cache
+            .as_deref()
+            .and_then(|link_key| self.build_stamp(link_key, &loaded, main_file_path, out_path));
         if let Some(artifacts) = stamp.as_ref().and_then(BuildStamp::lookup) {
             info!("reusing cached build");
             return Ok(BuildOutcome::Cached(artifacts));
         }
 
-        let mut analyzer = self.prepare_analyzer(&loaded, main_file_path, &arena);
+        let mut analyzer = self.prepare_analyzer(&loaded, &arena);
         let mut dump = match &self.emit_mir {
             Some(spec) => dream_mir::passes::MirDump::new(spec.clone()),
             None => dream_mir::passes::MirDump::disabled(),
@@ -40,7 +44,10 @@ impl Compiler {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let analyzed = self.analyze_graph(&mut analyzer, &loaded, &mut diagnostics)?;
             let interner = analyzer.interner();
-            let mir = self.lower_hir(&analyzed.hir, interner, &mut dump);
+            let mut mir = self.lower_hir(&analyzed.hir, interner, &mut dump);
+            if self.output_kind.is_library() {
+                library::relativize_sources(&mut mir, main_file_path)?;
+            }
             let mir = self.optimize_mir(mir, interner, &mut dump);
             let live_imports: Vec<_> = mir
                 .imports

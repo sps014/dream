@@ -5,6 +5,7 @@ use super::c_shim::shim_bitcode;
 use super::icon;
 use super::runtime::llvm_runtime;
 use super::tools::{resolve_llvm, LlvmTools};
+use crate::driver::output::OutputKind;
 use crate::driver::wasi::run_captured;
 use crate::driver::wasm_opt::OptLevel;
 use crate::execution::native::bundle::{link_runtime, stage_runtime};
@@ -17,6 +18,8 @@ use crate::execution::native::{
     cc, host_library_dir, native_bin_fresh, read_host_capabilities, Pgo,
 };
 use dream_abi::c_abi::EMBED_EXPORTS;
+#[path = "library.rs"]
+mod library;
 use dream_mir::runtime::runtime_need_from_module_text;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
@@ -87,10 +90,9 @@ fn optimize_linked(
     Ok(out)
 }
 
-/// `main`, the embedding API, and the runtime functions compiled native sources call into.
+/// Explicit module exports, the embedding API, and native-source runtime anchors.
 fn public_api_list(exports: &[String]) -> String {
-    let mut list = vec!["main"];
-    list.extend(EMBED_EXPORTS);
+    let mut list = EMBED_EXPORTS.to_vec();
     list.extend(
         exports
             .iter()
@@ -165,7 +167,15 @@ fn dead_strip_args() -> &'static [&'static str] {
 pub(super) fn write_ir(tools: &LlvmTools, bc: &Path, out: &Path) -> Result<(), String> {
     let mut dis = tools.command("llvm-dis");
     dis.arg(bc).arg("-o").arg(out);
-    run_captured(&mut dis, "llvm-dis")
+    run_captured(&mut dis, "llvm-dis")?;
+    // llvm-dis writes its input path as ModuleID, which otherwise leaks the build directory.
+    let text = std::fs::read_to_string(out).map_err(|e| e.to_string())?;
+    let text = text
+        .lines()
+        .filter(|line| !line.starts_with("; ModuleID = "))
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(out, format!("{text}\n")).map_err(|e| e.to_string())
 }
 
 /// `--emit-llvm`: the optimized whole-program module as `<stem>.opt.ll` and its assembly as
@@ -207,7 +217,7 @@ pub fn emit_llvm_artifacts(
         opt,
         debug,
         &None,
-        &[],
+        &library::exports(&ll_path.with_extension("abi.json"))?,
     );
     for p in icon_ll.iter().chain(&shim) {
         let _ = std::fs::remove_file(p);
@@ -231,6 +241,7 @@ pub struct NativeBuildOptions<'a> {
     pub pgo: &'a Pgo,
     pub icon: Option<&'a Path>,
     pub relocatable: bool,
+    pub output_kind: OutputKind,
 }
 
 pub fn compile_llvm(
@@ -246,6 +257,7 @@ pub fn compile_llvm(
         pgo,
         icon,
         relocatable,
+        output_kind,
     } = options;
     if !spec.can_link_on_host() {
         return Err(format!(
@@ -255,7 +267,13 @@ pub fn compile_llvm(
         .into());
     }
     let tools = resolve_llvm(config)?;
-    let bin = native_bin_path(ll_path);
+    if output_kind == OutputKind::Wasm {
+        return Err("native linking cannot emit wasm".into());
+    }
+    if output_kind.is_library() && (*pgo != Pgo::Off || icon.is_some()) {
+        return Err("native libraries do not support PGO or app icons".into());
+    }
+    let bin = output_kind.artifact_path(ll_path);
     let abi_path = ll_path.with_extension("abi.json");
     let capabilities = read_host_capabilities(ll_path)?;
     let dir = host_library_dir(config, &capabilities).ok_or(
@@ -298,7 +316,7 @@ pub fn compile_llvm(
     };
     let stamp_path = bin.with_extension("flags");
     let stamp = format!(
-        "native-c-shim-v3\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{}\n{:?}\n{:?}\n{:?}",
+        "native-c-shim-v3\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
         pipeline(opt, debug),
         debug,
         llc_level(opt, debug),
@@ -308,7 +326,7 @@ pub fn compile_llvm(
         icon_png.as_deref().map(icon::fingerprint),
         native.objects,
         native.link_args,
-        relocatable,
+        (relocatable, output_kind),
         capabilities,
         section_args(),
         dead_strip_args()
@@ -320,6 +338,7 @@ pub fn compile_llvm(
     if native_bin_fresh(&bin, ll_path, &rt.bc, input)
         && native.objects.iter().all(|o| !newer_than(o, &bin))
         && opt_ll.is_none_or(Path::exists)
+        && (output_kind != OutputKind::Staticlib || ll_path.with_extension("link.json").is_file())
         && std::fs::read_to_string(&stamp_path).is_ok_and(|s| s == stamp)
     {
         return Ok(bin);
@@ -332,6 +351,8 @@ pub fn compile_llvm(
         Some(png) => Some(icon::write_icon_module(ll_path, png, &src)?),
         None => None,
     };
+    let mut exports = native.runtime_exports.clone();
+    exports.extend(library::exports(&abi_path)?);
     let shim = shim_bitcode(&tools, &spec, ll_path)?;
     let optimized = link_and_optimize(
         &tools,
@@ -344,7 +365,7 @@ pub fn compile_llvm(
         opt,
         debug,
         &profile,
-        &native.runtime_exports,
+        &exports,
     );
     for p in icon_ll.iter().chain(&shim) {
         let _ = std::fs::remove_file(p);
@@ -356,6 +377,31 @@ pub fn compile_llvm(
     let obj = ll_path.with_extension("o");
     run_llc(&tools, &optimized, opt, debug, "obj", &obj)?;
 
+    if output_kind == OutputKind::Staticlib {
+        library::archive(&tools, &bin, &obj, &native.objects, rt.archive.as_deref())?;
+        let mut flags = Vec::new();
+        let mut host = std::process::Command::new("cc");
+        link_runtime(&mut host, &dir, None, &capabilities);
+        flags.extend(host.get_args().map(|a| a.to_string_lossy().into_owned()));
+        if !cfg!(windows) {
+            flags.extend(["-lm".to_string(), "-lpthread".to_string()]);
+        }
+        let libs = read_c_libs_from_abi(&abi_path);
+        flags.extend(cc_link_flags(
+            config,
+            &libs,
+            &search_roots_for_artifact(config, ll_path),
+        ));
+        flags.extend(native.link_args.clone());
+        if let Err(error) = library::link_metadata(ll_path, &flags) {
+            let _ = std::fs::remove_file(&bin);
+            return Err(error);
+        }
+        std::fs::write(&stamp_path, stamp)?;
+        let _ = std::fs::remove_file(&optimized);
+        let _ = std::fs::remove_file(&obj);
+        return Ok(bin);
+    }
     let mut lcmd = if *pgo == Pgo::Generate {
         let mut c = std::process::Command::new(cc::resolve_system_cc(config).ok_or(PGO_NEEDS_CC)?);
         c.arg(&obj).args(profile_link_args(&tools)?);
@@ -377,6 +423,16 @@ pub fn compile_llvm(
             version.major, version.minor, version.patch
         ));
     }
+    let export_file = if output_kind == OutputKind::Dylib {
+        Some(library::shared_flags(
+            &mut lcmd,
+            ll_path,
+            &bin,
+            &library::exports(&abi_path)?,
+        )?)
+    } else {
+        None
+    };
     lcmd.args(dead_strip_args());
     if let Some(a) = &rt.archive {
         lcmd.arg(a);
@@ -399,6 +455,9 @@ pub fn compile_llvm(
     if let Err(e) = run_captured(&mut lcmd, &format!("cc link ({})", obj.display())) {
         let _ = std::fs::remove_file(&bin);
         return Err(e.into());
+    }
+    if let Some(path) = export_file {
+        let _ = std::fs::remove_file(path);
     }
     std::fs::write(&stamp_path, stamp)?;
     let _ = std::fs::remove_file(&optimized);

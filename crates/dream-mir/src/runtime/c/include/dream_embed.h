@@ -1,5 +1,5 @@
-/* Public embedding API for C linked into a native Dream program (`native/` sources and the
- * libraries they wrap). Every native Dream binary exports these symbols; the compiler puts this
+/* Public embedding API for native Dream executables and libraries. Every native output
+ * exports these symbols; the compiler puts this
  * header on the include path of every `native/` source, so `#include <dream_embed.h>` works as-is.
  *
  * Threads. Dream code runs on threads the Dream runtime knows: the main thread and Dream workers.

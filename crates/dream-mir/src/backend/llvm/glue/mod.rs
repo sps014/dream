@@ -5,6 +5,7 @@ pub(super) mod c_marshal;
 pub(super) mod c_reverse;
 pub(super) mod c_shim;
 pub(super) mod entry;
+pub(super) mod exports;
 pub(super) mod imports;
 pub(super) mod js_marshal;
 pub(super) mod protocol;

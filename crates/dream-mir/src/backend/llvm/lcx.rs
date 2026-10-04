@@ -137,11 +137,9 @@ impl<'a> Lcx<'a> {
         self.hosts.insert(name.to_string(), sig);
     }
 
-    /// Exports a function this module defines under `export` (wasm32 only).
+    /// Marks a public definition, with its JS export name on wasm32.
     pub fn export(&mut self, name: &str, export: &str) {
-        if self.cx.target.spec().capabilities.js_interop {
-            self.exports.insert(name.to_string(), export.to_string());
-        }
+        self.exports.insert(name.to_string(), export.to_string());
     }
 
     /// The signature of a callable symbol, declaring it when it lives outside this module.
@@ -237,7 +235,7 @@ impl<'a> Lcx<'a> {
         for (k, v) in &self.sigs.target_attrs {
             w.attrs.push(FnAttr::Str(k.clone(), v.clone()));
         }
-        if let Some(e) = export {
+        if let Some(e) = export.filter(|_| self.cx.target.spec().capabilities.js_interop) {
             w.attrs
                 .push(FnAttr::Str("wasm-export-name".into(), e.clone()));
         }

@@ -84,3 +84,133 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.interner.is_rc_tracked(ty)
     }
 }
+
+pub(super) fn export_functions(l: &super::lcx::Lcx<'_>) -> Vec<dream_abi::exports::ExportFunction> {
+    fn c_type(ty: Ty, source: TypeId, interner: &TypeInterner) -> &'static str {
+        let unsigned = matches!(
+            interner.kind(source),
+            dream_types::TyKind::Prim(
+                dream_types::PrimTy::UInt
+                    | dream_types::PrimTy::ULong
+                    | dream_types::PrimTy::USize
+                    | dream_types::PrimTy::Bool
+                    | dream_types::PrimTy::Byte
+                    | dream_types::PrimTy::Char
+            )
+        );
+        if matches!(ty, Ty::I32 | Ty::I64) {
+            if matches!(
+                interner.kind(source),
+                dream_types::TyKind::Prim(dream_types::PrimTy::ISize | dream_types::PrimTy::USize)
+            ) {
+                return if unsigned { "uintptr_t" } else { "intptr_t" };
+            }
+            if unsigned {
+                return if ty == Ty::I32 {
+                    "uint32_t"
+                } else {
+                    "uint64_t"
+                };
+            }
+        }
+        match ty {
+            Ty::Void => "void",
+            Ty::I32 => "int32_t",
+            Ty::I64 => "int64_t",
+            Ty::F32 => "float",
+            Ty::F64 => "double",
+            Ty::Ptr => "void *",
+            _ => crate::internal_error!("unsupported export ABI type"),
+        }
+    }
+    let mut out = Vec::new();
+    for (def, export) in &l.mir.exports {
+        let f = l
+            .mir
+            .functions
+            .iter()
+            .find(|f| f.def == *def)
+            .unwrap_or_else(|| crate::internal_error!("exported function was pruned"));
+        let sig = fn_ll_sig(l.interner, f, &l.h(), &l.word());
+        let classify = |abi: Ty, ty: TypeId| {
+            let kind = if abi == Ty::Void {
+                dream_abi::exports::ExportKind::Void
+            } else if abi == Ty::Ptr {
+                dream_abi::exports::ExportKind::Opaque
+            } else {
+                match l.interner.kind(ty) {
+                    dream_types::TyKind::Prim(p) => {
+                        use dream_abi::exports::ExportKind as K;
+                        use dream_types::PrimTy as P;
+                        match p {
+                            P::Int => K::Int,
+                            P::UInt => K::UInt,
+                            P::Long => K::Long,
+                            P::ULong => K::ULong,
+                            P::Bool => K::Bool,
+                            P::Byte => K::Byte,
+                            P::Char => K::Char,
+                            P::ISize => K::ISize,
+                            P::USize => K::USize,
+                            P::Float => K::Float,
+                            P::Double => K::Double,
+                            P::String => K::Opaque,
+                        }
+                    }
+                    _ => dream_abi::exports::ExportKind::Int,
+                }
+            };
+            dream_abi::exports::ExportType {
+                c_type: c_type(abi, ty, l.interner).into(),
+                kind,
+            }
+        };
+        out.push(dream_abi::exports::ExportFunction {
+            name: export.clone(),
+            ret: classify(sig.fty.ret, f.ret),
+            params: sig
+                .fty
+                .params
+                .into_iter()
+                .enumerate()
+                .map(|(i, abi)| {
+                    let local = &f.locals[f.params[i].0 as usize];
+                    dream_abi::exports::ExportParam {
+                        ty: classify(abi, local.ty),
+                        take: local.is_take,
+                        is_ref: local.is_ref,
+                    }
+                })
+                .collect(),
+        });
+    }
+    out
+}
+
+pub(super) fn export_header(exports: &[dream_abi::exports::ExportFunction]) -> String {
+    let mut out = String::from("#pragma once\n#include <stdint.h>\n");
+    out.push_str(include_str!("../../runtime/c/include/dream_embed.h"));
+    out.push_str("\n#ifdef __cplusplus\nextern \"C\" {\n#endif\n");
+    out.push_str("/* Take parameters consume one reference; borrow/ref parameters do not.\n * Returned references own one count. Attach each calling thread; serialize the first call. */\n");
+    for f in exports {
+        for (i, p) in f.params.iter().enumerate() {
+            if p.ty.kind == dream_abi::exports::ExportKind::Opaque {
+                let mode = if p.take { "take" } else { "borrow/ref" };
+                out.push_str(&format!("/* arg{i}: {mode} */\n"));
+            }
+        }
+        let params = if f.params.is_empty() {
+            "void".to_string()
+        } else {
+            f.params
+                .iter()
+                .enumerate()
+                .map(|(i, p)| format!("{} arg{i}", p.ty.c_type))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        out.push_str(&format!("{} {}({params});\n", f.ret.c_type, f.name));
+    }
+    out.push_str("#ifdef __cplusplus\n}\n#endif\n");
+    out
+}

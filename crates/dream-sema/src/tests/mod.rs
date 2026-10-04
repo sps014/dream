@@ -3,3 +3,4 @@
 
 mod analysis_tests;
 mod harness;
+mod value_classification;

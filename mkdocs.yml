@@ -113,6 +113,8 @@ nav:
       - The js type: reference/language/js-type.md
       - Callbacks: reference/language/callbacks.md
       - C: reference/language/c-interop.md
+      - Native libraries: reference/language/library-outputs.md
+      - Mobile packaging: reference/language/mobile-packaging.md
     - Standard library:
       - Overview: reference/stdlib/index.md
       - Core:

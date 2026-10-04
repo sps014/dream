@@ -2,6 +2,9 @@ use super::*;
 
 pub(super) struct EmittedModule {
     bytes: Vec<u8>,
+    header: String,
+    exports: Vec<String>,
+    export_functions: Vec<dream_abi::exports::ExportFunction>,
     c_shim: Option<String>,
     live_imports: Vec<(String, String)>,
     threads: bool,
@@ -48,6 +51,24 @@ impl Compiler {
                 Ok(sigs)
             })
             .map_err(stale)?;
+        let mut diagnostics = DiagnosticBag::new(None);
+        for (_, export) in &mir.exports {
+            if sigs.has_function(export) || mir.functions.iter().any(|f| f.symbol == *export) {
+                diagnostics.report_error(
+                    format!(
+                        "@export symbol '{export}' conflicts with another function or the runtime"
+                    ),
+                    None,
+                );
+            }
+        }
+        if diagnostics.has_errors() {
+            return Err(fail_diagnostics(
+                CompileError::Semantic,
+                &diagnostics,
+                &Default::default(),
+            ));
+        }
         let module = dream_mir::backend::llvm::emit_llvm_module(
             mir,
             interner,
@@ -60,6 +81,19 @@ impl Compiler {
             .then(|| crate::driver::ffi_shim::c_shim::render(&module.c_shim));
         Ok(EmittedModule {
             bytes: module.ir.into_bytes(),
+            header: module.header,
+            export_functions: module.exports,
+            exports: mir
+                .exports
+                .iter()
+                .map(|(_, name)| name.clone())
+                .chain(
+                    mir.functions
+                        .iter()
+                        .filter(|f| f.name == dream_mir::abi::ENTRY_FN)
+                        .map(|_| dream_mir::abi::ENTRY_FN.to_string()),
+                )
+                .collect(),
             c_shim,
             live_imports,
             threads,
@@ -79,6 +113,11 @@ impl Compiler {
         info!("finished code generation");
         if !self.target.spec().capabilities.linear_memory {
             fs::write(out_path, &emitted.bytes)?;
+            if self.output_kind.is_library() {
+                let header = Path::new(out_path).with_extension("h");
+                fs::write(&header, &emitted.header)?;
+                self.reporter.artifact(&header);
+            }
             let shim_path = c_shim_path(Path::new(out_path));
             match &emitted.c_shim {
                 Some(src) => fs::write(&shim_path, src)?,
@@ -96,7 +135,12 @@ impl Compiler {
                 &emitted.live_imports,
                 &loaded.native_graph,
                 &loaded.cpp_bridge,
-                &layouts,
+                &crate::driver::abi::ModuleAbi {
+                    layouts: &layouts,
+                    exports: &emitted.exports,
+                    export_functions: &emitted.export_functions,
+                    target_triple: &self.target.spec().llvm_triple(),
+                },
             )?;
             for p in abi_artifacts {
                 self.reporter.artifact(&p);
@@ -143,7 +187,12 @@ impl Compiler {
             &emitted.live_imports,
             &loaded.native_graph,
             &loaded.cpp_bridge,
-            &layouts,
+            &crate::driver::abi::ModuleAbi {
+                layouts: &layouts,
+                exports: &emitted.exports,
+                export_functions: &emitted.export_functions,
+                target_triple: &self.target.spec().llvm_triple(),
+            },
         )?;
         for p in abi_artifacts {
             self.reporter.artifact(&p);

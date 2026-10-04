@@ -39,7 +39,7 @@ mod type_checker;
 pub use ide::{IdeSnapshot, TypeSummary};
 
 mod source;
-use source::{file_path_string, paths_equal};
+use source::file_path_string;
 
 mod diagnostics;
 use diagnostics::{report, report_noted, report_with_code, report_with_notes};
@@ -408,10 +408,8 @@ pub struct Analyzer<'a> {
     ide_member_sources: HashMap<(dream_types::DefId, String), ide::IdeSource>,
     /// Interleaved HIR-emission state and the accumulated emitted functions.
     hir: hir_emit::HirEmit,
-    /// `lib` rejects a top-level `main` in the primary compilation file; `bin` (default) allows it.
+    /// Library units have no process entry point.
     crate_type: CrateType,
-    /// Absolute/relative path of the file passed as the compile root (for lib `main` checks).
-    primary_file: Option<String>,
 }
 
 /// Whether the compilation unit is a library or a binary.
@@ -502,7 +500,6 @@ impl<'a> Analyzer<'a> {
             ide_member_sources: HashMap::new(),
             hir: hir_emit::HirEmit::default(),
             crate_type: CrateType::Bin,
-            primary_file: None,
         }
     }
 
@@ -530,9 +527,8 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Library vs binary compilation unit. Call before [`Self::analyze`].
-    pub fn with_crate_type(mut self, crate_type: CrateType, primary_file: Option<String>) -> Self {
+    pub fn with_crate_type(mut self, crate_type: CrateType) -> Self {
         self.crate_type = crate_type;
-        self.primary_file = primary_file;
         self
     }
 

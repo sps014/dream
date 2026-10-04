@@ -38,6 +38,12 @@ enum TargetArg {
 }
 
 #[derive(Copy, Clone, ValueEnum)]
+enum EmitArg {
+    Staticlib,
+    Dylib,
+}
+
+#[derive(Copy, Clone, ValueEnum)]
 enum CrateTypeArg {
     Lib,
     Bin,
@@ -92,6 +98,10 @@ struct Cli {
     /// Stop after the native module's LLVM IR: writes the optimized .opt.ll and .s
     #[arg(long = "emit-llvm", global = true)]
     emit_llvm: bool,
+
+    /// Emit a native archive or shared library and its C header
+    #[arg(long, value_enum, global = true, conflicts_with_all = ["wasm", "web", "node", "emit_llvm", "target", "profile", "use_profile", "icon", "relocatable"])]
+    emit: Option<EmitArg>,
 
     /// Bundle required host libraries beside the native binary with package-relative lookup
     #[arg(long, global = true, conflicts_with_all = ["wasm", "emit_llvm"])]
@@ -335,7 +345,28 @@ fn main() -> ExitCode {
         None => None,
     };
 
-    let crate_type = match cli.crate_type.unwrap_or(CrateTypeArg::Bin) {
+    let output_kind = if cli.emit.is_some()
+        || (native && matches!(cli.crate_type, Some(CrateTypeArg::Lib)))
+    {
+        if !native || run_after_compile || run_tests || debug_adapter || cli.emit_llvm {
+            ui.error("library outputs require a native build without run, test, debug-adapter or --emit-llvm");
+            return ExitCode::FAILURE;
+        }
+        if matches!(cli.emit, Some(EmitArg::Dylib)) {
+            dream::driver::output::OutputKind::Dylib
+        } else {
+            dream::driver::output::OutputKind::Staticlib
+        }
+    } else if native {
+        dream::driver::output::OutputKind::Executable
+    } else {
+        dream::driver::output::OutputKind::Wasm
+    };
+    let crate_type = match cli.crate_type.unwrap_or(if output_kind.is_library() {
+        CrateTypeArg::Lib
+    } else {
+        CrateTypeArg::Bin
+    }) {
         CrateTypeArg::Lib => CrateType::Lib,
         CrateTypeArg::Bin => CrateType::Bin,
     };
@@ -416,6 +447,10 @@ fn main() -> ExitCode {
     );
 
     let out_path = match &cli.output {
+        Some(path) if output_kind.is_library() => Path::new(path)
+            .with_extension("ll")
+            .to_string_lossy()
+            .into_owned(),
         Some(path) => path.clone(),
         None => match get_path_from_file_path(&file_name, cli.release, native) {
             Some(path) => path,
@@ -464,11 +499,11 @@ fn main() -> ExitCode {
             .map(|icon| dream::driver::rt_stamp::fingerprint(vec![icon]))
             .unwrap_or_default();
         format!(
-            "{}|{debug_info}|{:?}|{}|{}|{native}|{icon}",
+            "{}|{debug_info}|{:?}|{}|{:?}|{native}|{icon}",
             cc_opt.as_cli_flag(),
             cli.target,
             cli.emit_llvm,
-            cli.relocatable,
+            (cli.relocatable, output_kind),
         )
     });
     let mut compiler = Compiler::new_with_toolchain_config(target.clone(), config.clone())
@@ -478,9 +513,9 @@ fn main() -> ExitCode {
         .with_runtimes(runtimes)
         .with_compile_targets(compile_targets)
         .with_crate_type(crate_type)
+        .with_output_kind(output_kind)
         .with_emit_mir(emit_mir)
-        // A native library's product is its unoptimized `.ll`; every other build links it away.
-        .with_opt_ir(!(native && matches!(crate_type, CrateType::Lib)))
+        .with_opt_ir(true)
         .with_reporter(reporter.clone());
     if let Some(level) = optimize {
         compiler = compiler.with_optimize(Some(level));
@@ -509,10 +544,8 @@ fn main() -> ExitCode {
         BuildOutcome::Built(stamp) => stamp,
         BuildOutcome::Cached(artifacts) => {
             ui.finish(start.elapsed().as_secs_f64(), "", &artifacts);
-            let linked = native
-                && cli.target.is_none()
-                && !cli.emit_llvm
-                && !matches!(crate_type, CrateType::Lib);
+            let linked =
+                native && cli.target.is_none() && !cli.emit_llvm && !output_kind.is_library();
             if unoptimized {
                 ui.debug_build_note(!linked);
             }
@@ -576,14 +609,8 @@ fn main() -> ExitCode {
         ui.finish(start.elapsed().as_secs_f64(), "", &artifacts);
         return ExitCode::SUCCESS;
     }
-    // A library has no `main` to link; its build is the checked `.ll` plus `.abi.json`.
-    if native && matches!(crate_type, CrateType::Lib) {
-        record(&artifacts);
-        ui.finish(elapsed, "", &artifacts);
-        return ExitCode::SUCCESS;
-    }
     if native {
-        let bin = native_bin_path(Path::new(&out_path));
+        let bin = output_kind.artifact_path(Path::new(&out_path));
         ui.step(
             "Linking",
             &format!("{} ({})", bin.display(), cc_opt.as_cli_flag()),
@@ -606,18 +633,28 @@ fn main() -> ExitCode {
                 pgo: &pgo,
                 icon: cli.icon.as_deref(),
                 relocatable: cli.relocatable,
+                output_kind,
             },
         ) {
             Ok(bin) => {
                 drop_raw_ll();
                 artifacts.push(opt_ll);
                 artifacts.push(bin.clone());
+                if output_kind == dream::driver::output::OutputKind::Staticlib {
+                    artifacts.push(raw_ll.with_extension("link.json"));
+                } else if cfg!(windows) && output_kind == dream::driver::output::OutputKind::Dylib {
+                    artifacts.push(bin.with_extension("lib"));
+                }
                 record(&artifacts);
                 ui.finish(elapsed, "", &artifacts);
                 if unoptimized {
                     ui.debug_build_note(false);
                 }
-                launch.run(&ui, &bin)
+                if output_kind.is_library() {
+                    ExitCode::SUCCESS
+                } else {
+                    launch.run(&ui, &bin)
+                }
             }
             Err(e) => {
                 report_tool_error(&ui, &e.to_string());

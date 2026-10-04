@@ -12,7 +12,12 @@ impl Compiler {
         // Debug-info builds skip inlining and use a value-preserving per-function pipeline so
         // user variables and per-function call frames survive for the debugger; release builds
         // use the full optimizing pipeline.
-        dream_mir::passes::optimize_module_opts(&mut mir, interner, !self.debug_info, dump);
+        dream_mir::passes::optimize_module_opts(
+            &mut mir,
+            interner,
+            !self.debug_info && !self.output_kind.is_library(),
+            dump,
+        );
         let pipeline = if self.debug_info {
             dream_mir::passes::PassManager::debug_pipeline()
         } else {

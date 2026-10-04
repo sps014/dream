@@ -1,0 +1,6 @@
+@export fun generic<T>(x: T): T { return x; }
+@export async fun pending(): int { return 1; }
+@export fun dream_retain(): void {}
+@export fun duplicated(x: int): int { return x; }
+@export fun duplicated(x: long): long { return x; }
+fun main(): void {}

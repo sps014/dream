@@ -175,6 +175,7 @@ fn run_one_file(
             pgo: &crate::execution::native::Pgo::Off,
             icon: None,
             relocatable: false,
+            output_kind: crate::driver::output::OutputKind::Executable,
         },
     )
     .map_err(|e| format!("link '{}': {}", path.display(), e))?;

@@ -382,7 +382,11 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
         .functions
         .iter()
         .enumerate()
-        .filter(|(_, f)| f.name == crate::abi::ENTRY_FN || f.name == lower::INIT_FN_NAME)
+        .filter(|(_, f)| {
+            f.name == crate::abi::ENTRY_FN
+                || f.name == lower::INIT_FN_NAME
+                || mir.exports.iter().any(|(def, _)| *def == f.def)
+        })
         .map(|(i, _)| i)
         .collect();
 

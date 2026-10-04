@@ -61,8 +61,35 @@ pub struct TargetSpec {
 
 impl TargetSpec {
     pub fn parse(triple: &str) -> Result<Self, String> {
-        let triple = triple.parse::<Triple>().map_err(|e| e.to_string())?;
-        Self::from_triple(triple)
+        let normalized = triple.replace("-simulator", "-sim");
+        let (normalized, ios_version) =
+            if let Some((prefix, suffix)) = normalized.split_once("-ios") {
+                let (version, env) = suffix.split_once('-').unwrap_or((suffix, ""));
+                if !version.is_empty() {
+                    let version = version.parse::<OsVersion>()?;
+                    (
+                        format!(
+                            "{prefix}-ios{}",
+                            if env.is_empty() {
+                                String::new()
+                            } else {
+                                format!("-{env}")
+                            }
+                        ),
+                        Some(version),
+                    )
+                } else {
+                    (normalized, None)
+                }
+            } else {
+                (normalized, None)
+            };
+        let triple = normalized.parse::<Triple>().map_err(|e| e.to_string())?;
+        let spec = Self::from_triple(triple)?;
+        match ios_version {
+            Some(version) => spec.with_min_os(version),
+            None => Ok(spec),
+        }
     }
 
     fn from_triple(triple: Triple) -> Result<Self, String> {
@@ -91,6 +118,11 @@ impl TargetSpec {
                 major,
                 minor,
                 patch,
+            }),
+            OperatingSystem::Ios => Some(OsVersion {
+                major: 13,
+                minor: 0,
+                patch: 0,
             }),
             OperatingSystem::Darwin => Some(OsVersion {
                 major: 11,
@@ -130,6 +162,34 @@ impl TargetSpec {
         Self::parse("wasm32-unknown-wasip1").expect("built-in wasm32 target must be valid")
     }
 
+    pub fn is_ios(&self) -> bool {
+        self.os == OperatingSystem::Ios
+    }
+
+    pub fn is_android(&self) -> bool {
+        matches!(self.env, Environment::Android | Environment::Androideabi)
+    }
+
+    pub fn llvm_triple(&self) -> String {
+        if self.is_ios() {
+            let v = self.min_os.expect("iOS target has a deployment version");
+            let triple = self.triple.to_string();
+            let (prefix, suffix) = triple.split_once("-ios").expect("iOS target spelling");
+            return format!(
+                "{prefix}-ios{}.{}.{}{}",
+                v.major,
+                v.minor,
+                v.patch,
+                if suffix == "-sim" {
+                    "-simulator"
+                } else {
+                    suffix
+                }
+            );
+        }
+        self.triple.to_string()
+    }
+
     pub fn can_link_on_host(&self) -> bool {
         self.link_compatible_with(&Self::host())
     }
@@ -152,11 +212,14 @@ impl TargetSpec {
     pub fn with_min_os(mut self, version: OsVersion) -> Result<Self, String> {
         if !matches!(
             self.os,
-            OperatingSystem::Darwin | OperatingSystem::MacOSX { .. }
+            OperatingSystem::Darwin | OperatingSystem::MacOSX { .. } | OperatingSystem::Ios
         ) {
-            return Err("minimum OS version currently requires a macOS target".into());
+            return Err("minimum OS version requires a macOS or iOS target".into());
         }
         self.min_os = Some(version);
+        if self.os == OperatingSystem::Ios {
+            return Ok(self);
+        }
         self.os = OperatingSystem::MacOSX {
             major: version.major,
             minor: version.minor,
@@ -203,6 +266,26 @@ mod tests {
             .unwrap()
             .with_min_os("13".parse().unwrap())
             .is_err());
+    }
+
+    #[test]
+    fn mobile_target_spellings_and_deployment_versions_are_explicit() {
+        for triple in ["arm64-apple-ios", "arm64-apple-ios-simulator"] {
+            let target = TargetSpec::parse(triple).unwrap();
+            assert!(target.is_ios());
+            assert_eq!((target.ptr_size, target.ptr_align), (8, 8));
+            assert!(!target.can_link_on_host());
+            let updated = target.with_min_os("15.2".parse().unwrap()).unwrap();
+            assert!(updated.llvm_triple().contains("ios15.2.0"));
+            assert_eq!(TargetSpec::parse(&updated.llvm_triple()).unwrap(), updated);
+        }
+        for triple in ["aarch64-linux-android", "x86_64-linux-android"] {
+            let target = TargetSpec::parse(triple).unwrap();
+            assert!(target.is_android());
+            assert_eq!(target.ptr_size, 8);
+            assert!(!target.can_link_on_host());
+        }
+        assert!(TargetSpec::parse("arm64-apple-iosgarbage").is_err());
     }
 
     #[test]

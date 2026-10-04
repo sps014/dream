@@ -154,8 +154,24 @@ Building SSA in the printer would duplicate `mem2reg`, and replacing the `abort`
 
 Review performance on the optimized module instead: every build writes `<stem>.opt.ll` (the
 whole program after `opt`, runtime included) and deletes the unoptimized `.ll` once linked;
-`dream --emit-llvm file.dream` stops there and adds `<stem>.s`. Native `--crate-type lib` builds
-keep the unoptimized `.ll`, which is their product.
+`dream --emit-llvm file.dream` stops there and adds `<stem>.s`. Native `--emit staticlib` and `--emit dylib` build an archive or shared library, respectively,
+plus a C header and ABI sidecar. `--crate-type lib` selects a static library. There is no process
+entry; `@export` definitions are reachability roots. Their private bodies have separate structural
+symbols, and public wrappers use the plain ABI (including the value-box return convention), with
+no caller-location argument. The wrappers initialize module globals once and check that the
+calling thread is attached. Consumers serialize the first call and attach each additional thread.
+
+Library source locations use the manifest package name and paths relative to the package root.
+The library's sources supply their own panic lines; stdlib and `dream_packages/` functions forward
+the library caller's location. Library builds skip MIR inlining to preserve each source body's
+line markers; LLVM can inline after locations have become constant operands. LLVM disassembly
+omits the input-path ModuleID comment. Prebuilt Dream-to-Dream library linking is not implemented;
+its future interface metadata must describe the hidden caller-location ABI explicitly.
+
+Static archives include compiled native sources and any vendored runtime archive. A `.link.json`
+sidecar lists additional linker arguments for system libraries and required capability libraries.
+Shared libraries retain exactly the explicit exports and embedding API in their dynamic symbol
+list. Both kinds use PIC objects.
 
 ### Reference values and integer boundaries
 
@@ -341,3 +357,19 @@ The writers must be a pure function of the MIR. Iterate `Vec`s in order and neve
 debug views) is an `IndexMap` or `BTreeMap`. Two compiles to the same output path produce
 byte-identical `.ll` and `.wasm`; the output file name is part of the module, so only compare
 builds written to the same path. `codegen_is_deterministic` in `tests/e2e_tests.rs` enforces this.
+
+## Mobile packaging boundary
+
+`dream-abi::target` accepts iOS device/simulator and Android arm64/x86_64 targets. iOS
+deployment versions are stored separately from target-lexicon's OS enum and are rendered
+by `TargetSpec::llvm_triple`; runtime signature validation checks deployment versions too.
+Cross library object emission uses the selected target and emits its C header/ABI sidecar.
+The sidecar's typed `export_functions` carries the plain ABI's C types, bridge kinds and
+ownership, so mobile bridges do not parse source or C declarations.
+
+`dreamer pack --target ios|android --slice TRIPLE=LIBRARY` consumes already linked
+target-specific slices with their adjacent generated interfaces. It generates Objective-C
+or JNI/Java wrappers, compiles them with Xcode or the NDK/JDK, and assembles XCFrameworks
+or deterministic AAR archives. Mobile runtime/capability linking is explicit; desktop
+host libraries are never substituted for mobile dependencies. SDK-backed full packaging
+requires Xcode iOS SDKs or an Android NDK, independently of object-emission tests.

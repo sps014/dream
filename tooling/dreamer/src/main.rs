@@ -153,15 +153,24 @@ enum Cmd {
         #[arg(short = 'p', long = "package", value_name = "NAME")]
         package: Option<String>,
     },
-    /// Build a native executable and its OS app bundle (default `--release` / `-O3`; `-O` overrides).
+    /// Build a host app bundle, or package target-built iOS/Android libraries.
     Pack {
         #[command(flatten)]
         opt: OptFlags,
-        /// Pack triple (`linux-x64`, `macos-arm64`, …); must be the host. Default = host.
+        /// Pack target: a host triple, ios, or android. Default = host.
         #[arg(long = "target", value_name = "TRIPLE")]
         targets: Vec<String>,
         #[arg(short = 'p', long = "package", value_name = "NAME")]
         package: Option<String>,
+        /// Target-built mobile library, TRIPLE=PATH, with adjacent .h and .abi.json
+        #[arg(long = "slice", value_name = "TRIPLE=LIBRARY")]
+        slices: Vec<String>,
+        #[arg(long, value_name = "JAVA_PACKAGE")]
+        android_package: Option<String>,
+        #[arg(long)]
+        ndk: Option<std::path::PathBuf>,
+        #[arg(long, default_value_t = 21)]
+        android_api: u32,
     },
     /// Search a registry for packages by name.
     Search { query: String },
@@ -284,7 +293,43 @@ fn main() -> ExitCode {
             opt,
             targets,
             package,
+            slices,
+            android_package,
+            ndk,
+            android_api,
         } => {
+            if targets.len() == 1 && matches!(targets[0].as_str(), "ios" | "android") {
+                if opt.release
+                    || opt.optimize.is_some()
+                    || opt.wasm
+                    || opt.profile
+                    || opt.use_profile.is_some()
+                {
+                    print_error("mobile pack consumes target-built libraries; compilation flags do not apply");
+                    return ExitCode::FAILURE;
+                }
+                return match commands::pack::mobile::run(
+                    &cwd,
+                    package.as_deref(),
+                    commands::pack::mobile::Options {
+                        platform: targets[0].clone(),
+                        slices,
+                        android_package,
+                        ndk,
+                        android_api,
+                    },
+                ) {
+                    Ok(()) => ExitCode::SUCCESS,
+                    Err(error) => {
+                        print_error(error);
+                        ExitCode::FAILURE
+                    }
+                };
+            }
+            if !slices.is_empty() || android_package.is_some() || ndk.is_some() {
+                print_error("--slice, --android-package and --ndk require --target ios or android");
+                return ExitCode::FAILURE;
+            }
             if opt.profile || opt.use_profile.is_some() {
                 print_error("pack does not support --profile / --use-profile");
                 return ExitCode::FAILURE;

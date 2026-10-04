@@ -43,6 +43,12 @@ pub struct Hir {
 
 `MonoInstance { def: DefId, args: Vec<TypeId> }` records concrete instances. `HFunction.symbol` carries each function's resolved structural symbol through MIR lowering; the backend does not append numeric type IDs. `Hir.type_symbols` carries the structural signature encodings used by C callback adapters, which likewise avoid interner numbers.
 
+`Hir.exports` records explicit `@export` functions as `(DefId, C symbol)` pairs. Only emitted,
+non-generic synchronous definitions enter this list. MIR carries it through pruning as a set of
+reachability roots; LLVM uses the resolved definition and lowered signature to generate the plain
+ABI wrapper and C header. Export spellings identify the external ABI, rather than semantic types
+or definitions.
+
 `Hir.object_methods` maps each concrete type to resolved `to_string` and `hash_code` override
 definitions. MIR pruning and protocol dispatch follow these `DefId`s, not generated method
 spellings, so changing an emitted symbol cannot silently select the default field formatter.

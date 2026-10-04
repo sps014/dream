@@ -1,0 +1,3 @@
+@export functions must be synchronous, non-generic and non-variadic
+@export name 'dream_retain' is reserved or is not a C identifier
+duplicate @export symbol 'duplicated'

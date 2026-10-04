@@ -148,11 +148,17 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
             ty: g.ty,
         })
         .collect();
+    for f in &mut functions {
+        if hir.exports.iter().any(|(def, _)| *def == f.def) {
+            f.symbol = format!("_Dx{}", dream_types::symbol_component(&f.symbol));
+        }
+    }
     let uses_type_name = functions
         .iter()
         .chain(polls.iter())
         .any(func_reads_type_name);
     Mir {
+        exports: hir.exports.clone(),
         functions,
         polls,
         globals,

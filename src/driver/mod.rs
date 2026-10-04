@@ -10,14 +10,15 @@
 pub mod abi;
 pub mod compiler;
 pub mod compress;
-pub mod ffi_shim;
 pub mod diag_highlight;
 pub mod error;
+pub mod ffi_shim;
 pub mod generate;
 pub mod gpu_gen;
 pub mod interface_defaults;
 pub mod js_runtime;
 pub mod native_sets;
+pub mod output;
 pub mod prelude;
 pub mod project_manifest;
 pub mod quiet_panic;

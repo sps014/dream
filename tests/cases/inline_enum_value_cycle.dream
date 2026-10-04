@@ -1,0 +1,10 @@
+enum Choice {
+    Some(Value<int>),
+    None,
+}
+
+struct Value<T> {
+    public choice: Choice;
+}
+
+fun main() {}

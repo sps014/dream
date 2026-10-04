@@ -18,7 +18,39 @@ impl<'a> Analyzer<'a> {
         node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
+        let mut exported = indexmap::IndexSet::new();
         for function in node.functions.iter() {
+            diagnostics.file_path = file_path_string(&function.file_path);
+            if dream_abi::attributes::has_export_attr(&function.attributes) {
+                let name = &function.name.text;
+                if !dream_abi::c_abi::is_c_identifier(name)
+                    || name == "main"
+                    || name.starts_with("dream_")
+                    || name.starts_with("__")
+                    || name.starts_with("_D")
+                {
+                    diagnostics.report_error(
+                        format!("@export name '{name}' is reserved or is not a C identifier"),
+                        Some(function.name.position),
+                    );
+                }
+                if !exported.insert(name.clone()) {
+                    diagnostics.report_error(
+                        format!("duplicate @export symbol '{name}'"),
+                        Some(function.name.position),
+                    );
+                }
+                if function.generic_parameters.is_some()
+                    || function.is_async
+                    || function.parameters.iter().any(|p| p.is_variadic)
+                {
+                    diagnostics.report_error(
+                        "@export functions must be synchronous, non-generic and non-variadic"
+                            .to_string(),
+                        Some(function.name.position),
+                    );
+                }
+            }
             self.type_ctx
                 .set_scope(self.graph.module_for_file(function.file_path.as_deref()));
             diagnostics.file_path = file_path_string(&function.file_path);
@@ -55,16 +87,20 @@ impl<'a> Analyzer<'a> {
                     &function.name.text,
                     generic_param_names(&function.generic_parameters),
                 );
-                self.generic_functions
-                    .insert(def, function);
+                self.generic_functions.insert(def, function);
                 continue;
             }
             if function.visibility.is_public() {
                 self.check_public_visibility(function, diagnostics);
             }
             let mut info = FunctionTableInfo::from(function, &mut self.type_ctx);
-            self.function_table.record_declaration(function, info.identity.clone());
-            self.record_ide_definition(info.identity.0, &function.name, function.file_path.as_deref());
+            self.function_table
+                .record_declaration(function, info.identity.clone());
+            self.record_ide_definition(
+                info.identity.0,
+                &function.name,
+                function.file_path.as_deref(),
+            );
             info.declaring_module = self.module_of(function.file_path.as_ref());
             if let Some(ret) = &function.return_type {
                 self.check_type_not_static_class(ret, diagnostics);
@@ -96,26 +132,22 @@ impl<'a> Analyzer<'a> {
         }
         // The entry point is exported under the fixed name `main`. It may be declared as `main()`
         // or `main(args: string[])`, but not overloaded or given any other signature.
-        // Library crates reject a top-level `main` in the primary compilation file.
+        // A library has no process entry point, including in its imported modules.
         if self.crate_type == CrateType::Lib {
-            if let Ok(info) = self.function_info("main") {
-                let in_primary = match (&info.declaring_file, &self.primary_file) {
-                    (Some(decl), Some(primary)) => paths_equal(decl.as_ref(), primary),
-                    _ => true,
-                };
-                if in_primary {
-                    diagnostics.report_error(
-                        "library crates must not declare a top-level 'main' \
-                         (use --crate-type bin for runnable programs)"
-                            .to_string(),
-                        None,
-                    );
-                }
+            for function in node.functions.iter().filter(|f| f.name.text == ENTRY_NAME) {
+                diagnostics.file_path = file_path_string(&function.file_path);
+                diagnostics.report_error(
+                    "library crates must not declare a top-level 'main' (use --crate-type bin for runnable programs)".to_string(),
+                    Some(function.name.position),
+                );
             }
         } else if self.function_overloaded("main") {
             diagnostics.report_error("'main' cannot be overloaded".to_string(), None);
         } else if let Ok(info) = self.function_info("main") {
-            let string_array = self.type_ctx.interner.array(self.type_ctx.interner.string());
+            let string_array = self
+                .type_ctx
+                .interner
+                .array(self.type_ctx.interner.string());
             let ok = info.parameters.is_empty() || info.parameters == [string_array];
             if !ok {
                 diagnostics.report_error(

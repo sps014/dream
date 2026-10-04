@@ -1,6 +1,7 @@
 //! `dreamer pack`: compile a bin package and copy the native `.bin`, plus the OS bundle around it
 //! and selected host libraries (a macOS `.app`, a Linux `.desktop` entry). The Windows `.exe` carries its icon already.
 
+pub mod mobile;
 mod runtime;
 
 use crate::app_icon;

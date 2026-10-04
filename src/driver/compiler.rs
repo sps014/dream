@@ -88,6 +88,7 @@ pub struct Compiler {
     /// When `true`, the unoptimized `.ll` is an intermediate the caller deletes: it is not reported
     /// as an artifact, and wasm32 builds write the optimized module as `<stem>.opt.ll` instead.
     opt_ir: bool,
+    output_kind: crate::driver::output::OutputKind,
     llvm: Option<Arc<dyn LlvmToolchain>>,
     /// Link-stage options folded into the build key; `None` disables the build cache.
     build_cache: Option<String>,
@@ -108,6 +109,11 @@ impl Compiler {
         toolchain_config: Arc<crate::driver::toolchain::ToolchainConfig>,
     ) -> Self {
         Self {
+            output_kind: if target.spec().capabilities.linear_memory {
+                crate::driver::output::OutputKind::Wasm
+            } else {
+                crate::driver::output::OutputKind::Executable
+            },
             target,
             toolchain_config,
             debug: true,
@@ -240,7 +246,15 @@ impl Compiler {
         self
     }
 
-    /// Builder: `lib` rejects a top-level `main` in the primary file; `bin` is the default.
+    /// Library output selects a unit without a process entry point.
+    pub fn with_output_kind(mut self, kind: crate::driver::output::OutputKind) -> Self {
+        self.output_kind = kind;
+        if kind.is_library() {
+            self.crate_type = dream_sema::analyzer::CrateType::Lib;
+        }
+        self
+    }
+
     pub fn with_crate_type(mut self, crate_type: dream_sema::analyzer::CrateType) -> Self {
         self.crate_type = crate_type;
         self
@@ -378,5 +392,6 @@ fn program_uses_gpu_shader_attr(acc: &ProgramAccumulator<'_>) -> bool {
         .any(|f| dream_abi::attributes::is_gpu_shader_attr(&f.attributes))
 }
 
+mod library;
 mod load;
 mod optimize;

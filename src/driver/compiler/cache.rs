@@ -29,7 +29,11 @@ impl BuildStamp {
                 let _ = fs::remove_file(&self.path);
                 return;
             };
-            text.push_str(&format!("{} {}\n", blake3::hash(&bytes).to_hex(), artifact.display()));
+            text.push_str(&format!(
+                "{} {}\n",
+                blake3::hash(&bytes).to_hex(),
+                artifact.display()
+            ));
         }
         let partial = self.path.with_extension("dream-cache.partial");
         if fs::write(&partial, text).is_ok() && fs::rename(&partial, &self.path).is_err() {
@@ -82,14 +86,17 @@ impl Compiler {
         };
         field("header", STAMP_HEADER.as_bytes());
         let exe = std::env::current_exe().ok()?;
-        field("compiler", crate::driver::rt_stamp::fingerprint(vec![exe]).as_bytes());
+        field(
+            "compiler",
+            crate::driver::rt_stamp::fingerprint(vec![exe]).as_bytes(),
+        );
         field(
             "runtime",
             crate::driver::rt_stamp::fingerprint(files_under(&self.toolchain_config.runtime_c))
                 .as_bytes(),
         );
         let options = format!(
-            "{:?}|{}|{}|{:?}|{}|{:?}|{:?}|{:?}|{}",
+            "{:?}|{}|{}|{:?}|{}|{:?}|{:?}|{:?}|{}|{:?}",
             self.target,
             self.debug,
             self.debug_info,
@@ -99,6 +106,7 @@ impl Compiler {
             self.compile_targets,
             self.crate_type,
             self.opt_ir,
+            self.output_kind,
         );
         field("options", options.as_bytes());
         field("link", link_key.as_bytes());
@@ -124,13 +132,12 @@ impl Compiler {
         field("env", format!("{env:?}").as_bytes());
         field("entry", main_file_path.as_bytes());
         field("output", out_path.as_bytes());
-        let manifest = crate::driver::project_manifest::find_project_root_from(Path::new(
-            main_file_path,
-        ))
-        .and_then(|root| {
-            fs::read(root.join(crate::driver::project_manifest::MANIFEST_FILE_NAME)).ok()
-        })
-        .unwrap_or_default();
+        let manifest =
+            crate::driver::project_manifest::find_project_root_from(Path::new(main_file_path))
+                .and_then(|root| {
+                    fs::read(root.join(crate::driver::project_manifest::MANIFEST_FILE_NAME)).ok()
+                })
+                .unwrap_or_default();
         field("manifest", &manifest);
         for file in &loaded.graph.files {
             field("file", file.path.as_bytes());

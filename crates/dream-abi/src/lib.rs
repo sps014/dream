@@ -5,6 +5,7 @@
 
 pub mod attributes;
 pub mod c_abi;
+pub mod exports;
 pub mod gpu_format;
 pub mod gpu_swizzle;
 pub mod host_capability;

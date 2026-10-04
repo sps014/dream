@@ -15,7 +15,7 @@ fn test_analyze_valid_types() {
 #[test]
 fn test_lib_crate_rejects_main() {
     let code = "fun main(): void {}";
-    let diagnostics = analyze_code_with_crate_type(code, CrateType::Lib, None);
+    let diagnostics = analyze_code_with_crate_type(code, CrateType::Lib);
     assert!(diagnostics.has_errors());
     assert!(diagnostics
         .diagnostics
@@ -26,7 +26,7 @@ fn test_lib_crate_rejects_main() {
 #[test]
 fn test_lib_crate_allows_non_main() {
     let code = "public fun hello(): int { return 1; }";
-    let diagnostics = analyze_code_with_crate_type(code, CrateType::Lib, None);
+    let diagnostics = analyze_code_with_crate_type(code, CrateType::Lib);
     assert_eq!(diagnostics.has_errors(), false);
 }
 

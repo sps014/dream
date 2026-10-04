@@ -149,3 +149,62 @@ fn stale_runtime_symbol_is_a_toolchain_error_with_the_cache_path() {
     );
     assert!(message.contains("required runtime symbol"), "{}", message);
 }
+
+#[test]
+#[cfg(feature = "native")]
+fn mobile_library_objects_have_the_selected_architecture_and_typed_exports() {
+    for (triple, architecture, format) in [
+        (
+            "arm64-apple-ios",
+            object::Architecture::Aarch64,
+            object::BinaryFormat::MachO,
+        ),
+        (
+            "arm64-apple-ios-simulator",
+            object::Architecture::Aarch64,
+            object::BinaryFormat::MachO,
+        ),
+        (
+            "aarch64-linux-android",
+            object::Architecture::Aarch64,
+            object::BinaryFormat::Elf,
+        ),
+        (
+            "x86_64-linux-android",
+            object::Architecture::X86_64,
+            object::BinaryFormat::Elf,
+        ),
+    ] {
+        use object::Object;
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("lib.dream");
+        let ir = directory.path().join("lib.ll");
+        std::fs::write(
+            &source,
+            "@export fun add(a: int, b: int): int { return a + b; }",
+        )
+        .unwrap();
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
+            .args(["--crate-type", "lib", "--target", triple, "-o"])
+            .arg(&ir)
+            .arg(source)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let bytes = std::fs::read(ir.with_extension("o")).unwrap();
+        let object = object::File::parse(bytes.as_slice()).unwrap();
+        assert_eq!(object.architecture(), architecture);
+        assert_eq!(object.format(), format);
+        assert!(std::fs::read_to_string(ir.with_extension("h"))
+            .unwrap()
+            .contains("int32_t add(int32_t arg0, int32_t arg1)"));
+        let abi: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(ir.with_extension("abi.json")).unwrap()).unwrap();
+        assert_eq!(abi["export_functions"][0]["name"], "add");
+        assert_eq!(abi["export_functions"][0]["ret"]["kind"], "Int");
+    }
+}

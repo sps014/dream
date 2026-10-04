@@ -19,6 +19,8 @@ pub struct InstanceId(pub u32);
 /// A whole compiled program in HIR form.
 #[derive(Debug, Default)]
 pub struct Hir {
+    /// Explicit native/wasm exports, resolved before lowering.
+    pub exports: Vec<(DefId, String)>,
     /// Non-generic functions and already-monomorphized function bodies, in emission order.
     pub functions: Vec<HFunction>,
     /// Module-level variables.

@@ -69,7 +69,7 @@ impl RuntimeSigs {
     /// Rejects runtime artifacts built for a different target before their signatures shape IR.
     pub fn validate_target(&self, target: &TargetSpec) -> Result<(), String> {
         let runtime = parse_runtime_target(&self.triple)?;
-        if runtime.triple != target.triple {
+        if runtime.triple != target.triple || runtime.min_os != target.min_os {
             return Err(format!(
                 "target triple `{}` does not match selected target `{}`",
                 self.triple, target.triple

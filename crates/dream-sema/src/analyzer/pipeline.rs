@@ -17,6 +17,18 @@ impl<'a> Analyzer<'a> {
                     &declaration.name.text,
                     generic_param_names(&declaration.generic_parameters),
                 );
+                // Enum payload representation is chosen before struct fields/methods are
+                // registered, so value identity must already be known for forward references.
+                if declaration.is_value {
+                    self.type_ctx.defs.mark_value(def);
+                    self.type_ctx.interner.mark_value_def(def);
+                }
+                if declaration.is_ref_struct {
+                    self.type_ctx.interner.mark_ref_struct_def(def);
+                }
+                if declaration.generic_parameters.is_some() {
+                    self.generic_structs.insert(def, declaration);
+                }
                 self.record_ide_definition(def, &declaration.name, Some(&file.path));
                 for field in &declaration.fields {
                     self.record_ide_member_definition(def, &field.name, Some(&file.path));
@@ -76,6 +88,10 @@ impl<'a> Analyzer<'a> {
         self.analyze_function_bodies(node, diagnostics)?;
         self.analyze_pending_instantiations(diagnostics)?;
 
+        if !diagnostics.has_errors() {
+            self.validate_value_containment(diagnostics);
+        }
+
         // Inferred receiver exclusivity: classify every method's `this` contract once bodies
         // are fully analyzed and all types are registered. Runs only on otherwise-clean
         // programs — a poisoned program fails before codegen anyway.
@@ -100,7 +116,12 @@ impl<'a> Analyzer<'a> {
             .structs
             .keys()
             .filter(|ty| self.struct_table.get_struct(**ty).is_some())
-            .chain(layouts.unions.keys().filter(|ty| self.union_table.contains_key(*ty)))
+            .chain(
+                layouts
+                    .unions
+                    .keys()
+                    .filter(|ty| self.union_table.contains_key(*ty)),
+            )
             .map(|&ty| {
                 (
                     ty,
@@ -154,6 +175,17 @@ impl<'a> Analyzer<'a> {
             unions: self.union_table.clone(),
             globals: self.globals.clone(),
             hir: dream_hir::Hir {
+                exports: node
+                    .functions
+                    .iter()
+                    .filter(|f| dream_abi::attributes::has_export_attr(&f.attributes))
+                    .filter_map(|f| {
+                        self.function_table
+                            .declaration_node(f)
+                            .map(|(def, _)| (def, f.name.text.clone()))
+                    })
+                    .filter(|(def, _)| hir_functions.iter().any(|f| f.def == *def))
+                    .collect(),
                 functions: hir_functions,
                 globals: hir_globals,
                 instances: vec![],

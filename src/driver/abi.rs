@@ -15,6 +15,13 @@ use dream_syntax::nodes::{AttributeNode, FunctionNode, Type};
 /// One live host import after MIR pruning: `(module, field)` as emitted on the WASM import.
 pub type LiveImport = (String, String);
 
+pub(crate) struct ModuleAbi<'a> {
+    pub layouts: &'a dream_hir::LayoutTable,
+    pub target_triple: &'a str,
+    pub exports: &'a [String],
+    pub export_functions: &'a [dream_abi::exports::ExportFunction],
+}
+
 /// WASM custom-section name the JS loader reads with `WebAssembly.Module.customSections`.
 pub const ABI_CUSTOM_SECTION: &str = "dream-abi";
 
@@ -78,7 +85,7 @@ pub(crate) fn emit_wasm_and_abi(
     live_imports: &[LiveImport],
     native: &NativeGraph,
     cpp: &CppBridge,
-    layouts: &dream_hir::LayoutTable,
+    module: &ModuleAbi<'_>,
 ) -> Result<Vec<std::path::PathBuf>, Error> {
     let base = Path::new(wat_path);
     let mut written = Vec::new();
@@ -98,7 +105,7 @@ pub(crate) fn emit_wasm_and_abi(
     let shims = cpp.write(&native_root, |set| live.contains(set))?;
     fs::write(
         &abi_path,
-        build_abi_json(program, gpu, live_imports, native, &shims, layouts),
+        build_abi_json(program, gpu, live_imports, native, &shims, module),
     )?;
     written.push(abi_path);
     Ok(written)
@@ -155,8 +162,9 @@ pub(crate) fn build_abi_json(
     live_imports: &[LiveImport],
     native: &NativeGraph,
     shims: &BTreeMap<String, WrittenShim>,
-    layouts: &dream_hir::LayoutTable,
+    module: &ModuleAbi<'_>,
 ) -> String {
+    let layouts = module.layouts;
     let live: BTreeSet<(&str, &str)> = live_imports
         .iter()
         .map(|(m, f)| (m.as_str(), f.as_str()))
@@ -300,18 +308,11 @@ pub(crate) fn build_abi_json(
         }
     }
 
-    let mut exports = Vec::new();
-    for func in program.functions.iter() {
-        if func.is_extern || func.generic_parameters.is_some() {
-            continue;
-        }
-        if dream_abi::attributes::is_gpu_shader_attr(&func.attributes) {
-            continue;
-        }
-        if func.visibility.is_public() || func.name.text == dream_mir::abi::ENTRY_FN {
-            exports.push(format!("\"{}\"", json_escape(&func.name.text)));
-        }
-    }
+    let exports = module
+        .exports
+        .iter()
+        .map(|name| format!("\"{}\"", json_escape(name)))
+        .collect::<Vec<_>>();
 
     let gpu_section = if gpu.is_empty() {
         String::new()
@@ -347,9 +348,11 @@ pub(crate) fn build_abi_json(
         .join(", ");
 
     format!(
-        "{{\n  \"native_abi_version\": 2,\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}],\n  \"host_capabilities\": [{}]{}{}{}{}\n}}\n",
+        "{{\n  \"target_triple\": \"{}\",\n  \"native_abi_version\": 2,\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}],\n  \"export_functions\": {},\n  \"host_capabilities\": [{}]{}{}{}{}\n}}\n",
+        json_escape(module.target_triple),
         externs.join(",\n"),
         exports.join(", "),
+        dream_abi::exports::to_json(module.export_functions),
         host_capabilities,
         gpu_section,
         c_libs_section,
@@ -623,7 +626,12 @@ mod tests {
             &live,
             &NativeGraph::default(),
             &BTreeMap::new(),
-            &layouts,
+            &ModuleAbi {
+                layouts: &layouts,
+                exports: &[],
+                export_functions: &[],
+                target_triple: "",
+            },
         )
     }
 
@@ -690,7 +698,12 @@ mod tests {
             &live,
             &graph,
             &shims,
-            &dream_hir::LayoutTable::default(),
+            &ModuleAbi {
+                layouts: &dream_hir::LayoutTable::default(),
+                exports: &[],
+                export_functions: &[],
+                target_triple: "",
+            },
         );
         assert!(json.contains("\"c_libs\": [\"z\"]"), "{}", json);
         assert!(json.contains("\"c_sources\""), "{}", json);
@@ -845,7 +858,12 @@ mod tests {
                 &live,
                 &NativeGraph::default(),
                 &BTreeMap::new(),
-                &layouts,
+                &ModuleAbi {
+                    layouts: &layouts,
+                    exports: &[],
+                    export_functions: &[],
+                    target_triple: "",
+                },
             );
             assert!(
                 json.contains(&format!("\"Outer\": {{ \"size\": {expected}")),
@@ -869,7 +887,7 @@ mod tests {
         for (ptr_size, expected) in [(4, 24), (8, 32)] {
             let graph = dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone());
             let mut analyzer = dream_sema::analyzer::Analyzer::new(&graph, &arena)
-                .with_crate_type(dream_sema::analyzer::CrateType::Lib, None)
+                .with_crate_type(dream_sema::analyzer::CrateType::Lib)
                 .with_target_layout(dream_hir::TargetLayout {
                     ptr_size,
                     ptr_align: ptr_size,

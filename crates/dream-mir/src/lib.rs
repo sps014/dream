@@ -63,6 +63,7 @@ pub struct Global(pub u32);
 /// A whole program in MIR form.
 #[derive(Debug, Default)]
 pub struct Mir {
+    pub exports: Vec<(DefId, String)>,
     pub functions: Vec<MirFunction>,
     /// Pre-lowered async poll bodies corresponding to the async functions in `functions`
     /// (in the exact same order). Separated so `functions.len()` maps 1:1 to user functions.

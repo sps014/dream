@@ -2,7 +2,20 @@
 
 use super::*;
 
+pub const EXPORT_ATTR: &str = "export";
+
+pub fn has_export_attr(attributes: &[AttributeNode]) -> bool {
+    has_named_attr(attributes, EXPORT_ATTR)
+}
+
 pub(super) const SPECS: &[AttributeSpec] = &[
+    AttributeSpec {
+        name: EXPORT_ATTR,
+        targets: &[AttributeTarget::Function],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Exports a non-generic synchronous function through a plain C ABI wrapper.",
+    },
     AttributeSpec {
         name: "intrinsic",
         targets: &[AttributeTarget::ExternFunction],

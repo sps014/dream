@@ -33,7 +33,7 @@ pub fn runtime_signatures(
     let clang = tools.clang()?;
     let command = |source: &Path| {
         let mut cmd = std::process::Command::new(&clang);
-        cmd.arg(format!("--target={}", target.triple))
+        cmd.arg(format!("--target={}", target.llvm_triple()))
             .args([
                 "-std=gnu11",
                 "-ffreestanding",
@@ -115,7 +115,7 @@ pub fn emit_object(
     let r = run_captured(
         tools
             .command("llc")
-            .arg(format!("-mtriple={}", target.triple))
+            .arg(format!("-mtriple={}", target.llvm_triple()))
             .arg(super::build::llc_level(level, false))
             .args(["-filetype=obj", "-relocation-model=pic"])
             .arg(input)

@@ -52,6 +52,7 @@ pub fn compile_and_capture_ex(
             pgo: &Pgo::Off,
             icon: None,
             relocatable: false,
+            output_kind: crate::driver::output::OutputKind::Executable,
         },
     )?;
     capture_native_bin(

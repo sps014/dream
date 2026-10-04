@@ -9,12 +9,11 @@ impl Compiler {
     pub(super) fn prepare_analyzer<'a>(
         &self,
         loaded: &'a load::LoadedProgram<'a>,
-        main_file_path: &str,
         arena: &'a Bump,
     ) -> Analyzer<'a> {
         let mut analyzer = Analyzer::new(&loaded.graph, arena)
             .with_aliased_imports(loaded.acc.aliased_imports.clone())
-            .with_crate_type(self.crate_type, Some(main_file_path.to_string()))
+            .with_crate_type(self.crate_type)
             .with_compile_targets(self.compile_targets)
             .with_target_layout(dream_hir::TargetLayout {
                 ptr_size: self.target.spec().ptr_size,

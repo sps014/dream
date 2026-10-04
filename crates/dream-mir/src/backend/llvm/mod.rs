@@ -57,6 +57,8 @@ pub fn native_header_function_names() -> Vec<String> {
 pub struct LlvmModule {
     pub ir: String,
     pub c_shim: dream_abi::c_abi::shim::CShim,
+    pub header: String,
+    pub exports: Vec<dream_abi::exports::ExportFunction>,
 }
 
 /// Lowers optimized MIR to one `.ll` module typed against the runtime's signature table.
@@ -126,6 +128,7 @@ fn emit_llvm_module_unchecked(
     glue::imports::register_all(&mut l);
     glue::js_marshal::register_all(&mut l);
     glue::entry::register_all(&mut l);
+    glue::exports::register_all(&mut l);
 
     glue::tables::emit_strings(&mut l);
     glue::tables::emit_globals(&mut l);
@@ -155,12 +158,16 @@ fn emit_llvm_module_unchecked(
     glue::js_marshal::emit_all(&mut l);
     glue::tables::emit_all(&mut l);
     glue::entry::emit_all(&mut l);
+    glue::exports::emit_all(&mut l);
     let c_shim = if l.cx.target.spec().capabilities.c_interop {
         glue::c_shim::build(&l)
     } else {
         Default::default()
     };
+    let exports = types::export_functions(&l);
     LlvmModule {
+        header: types::export_header(&exports),
+        exports,
         ir: l.m.finish(),
         c_shim,
     }

@@ -39,6 +39,12 @@ This document merges two read-only reviews of the Dream compiler and turns them 
 - A phase is `Done` only when all its steps are `Done`, its exit criteria are met, and its deletion-ledger items are gone (see §4).
 - Step details are in §4, finding details in §2.
 
+**Next priority (user request, 2026-10-05): task 7.9, minimal native packaging (BLD-3).**
+Take this before the other unfinished Phase 7 tasks. Remove the unnecessary core DLL
+dependency from programs that do not use host services, then separate optional core
+services so unused implementations and data are not shipped. Android/iOS validation
+remains on hold; this priority change does not resume mobile work.
+
 ### Phase summary
 
 | Phase | Title | Steps | Done | Status | Blocked by |
@@ -50,7 +56,7 @@ This document merges two read-only reviews of the Dream compiler and turns them 
 | 4 | FFI completion and embedding API | 10 | 10 | Done | #42 merged as `04d5c085` on 2026-10-03; panic source locations (4.4) completed in a follow-up PR. Local gates: workspace tests, native probe 640/640, Node 539 passed/101 expected skips/0 failures. |
 | 5 | Identity, modules and symbols | 12 | 12 | Done | Merged in #44 and #45; detailed tracker, exit criteria and deletion ledger verified below. |
 | 6 | Platform expansion | 9 | 9 | On hold | All implementation steps and cleanup deliverables completed in [3b9f8529](https://github.com/sps014/dream/commit/3b9f8529849edb36e3a0dbf5ba7b3e98583766d5) (direct main commit). Workspace build, strict Clippy, 1,220 tests, native 653/653 and Node 583 passed/70 native-only skips/zero failures pass (2026-10-04). iOS/Android end-to-end validation and release readiness are on hold for a future version at the user's request (2026-10-04); they are not verified or claimed complete. |
-| 7 | Scale, performance and long-term work | 8 | 2 | In progress | Easy tasks 7.2 and 7.5 completed in [125c9f1a](https://github.com/sps014/dream/commit/125c9f1a824c40c4acc026f4f23ed5b6b7be9453). Windows workspace build, strict Clippy, 1,222 tests, native 654/654 and Node 584 passed/70 expected skips/zero failures pass (2026-10-04). Six tasks remain; Phase 6 mobile validation stays on hold. |
+| 7 | Scale, performance and long-term work | 9 | 2 | In progress | Easy tasks 7.2 and 7.5 completed in [125c9f1a](https://github.com/sps014/dream/commit/125c9f1a824c40c4acc026f4f23ed5b6b7be9453). Latest implementation gates in [61f05b84](https://github.com/sps014/dream/commit/61f05b846e8b8ef0b985da05a5f77dfa054a5ca4): workspace build, strict Clippy, 1,230 tests, native 657/657 and Node 592 passed/65 expected skips/zero failures. Seven tasks remain. Task 7.9 is the next priority (user request, 2026-10-05); Phase 6 mobile validation stays on hold. |
 
 ### Phase 0: Safety net and quick wins
 
@@ -224,6 +230,7 @@ Mobile validation preparation is committed in `7b21e2cf` and `1454306f`: real sa
 | 7.6 | Delete the repair passes | OWN-2, OPT-3 | Not started | | | |
 | 7.7 | Remaining size hotspots | — | Not started | | | |
 | 7.8 | Re-evaluate self-hosting | BOOT-1 | Not started | | | |
+| 7.9 | Minimal native packaging and optional core services | BLD-3 | Not started | | | Next priority, ahead of other unfinished Phase 7 tasks (user request, 2026-10-05). Windows x64 Hello World with zero package dependencies: exe 161,280 bytes (157.5 KiB), required release core DLL 1,788,928 bytes (1.71 MiB), bundle 1,950,208 bytes (1.86 MiB). Make core binding/linking conditional on actual host use and separate optional timezone, Unicode, crypto and process services. Completion requires a runnable Hello World pack with no Dream DLL imports or bundled Dream DLLs, preserved host/FFI behavior, and measured artifact-size regression coverage. See §2 BLD-3 and §4 task 7.9. |
 
 Performance follow-up (2026-10-04): [3209e97b](https://github.com/sps014/dream/commit/3209e97b96ceafa00be91336401268ed3632bb8f)
 batches global PCRE2 searches, exposes List constructor initialization to optimization,
@@ -897,6 +904,15 @@ The remaining function-index work is resolved by task 7.2 in `125c9f1a` (2026-10
 - Configuration is spread across `DREAM_LLVM`, `DREAM_TOOLCHAINS`, `DREAM_RUNTIME_C`, `DREAM_CC`/`CC`, `DREAM_HOME`, `DREAM_BIN` and `DREAM_STACK_SIZE`, and nothing prints the resolved result.
 - **Fix:** `dreamer toolchain doctor`, plus a hash of the resolved configuration in the `.flags` build stamp.
 
+**BLD-3: mandatory core DLL inflates minimal native bundles (P2) [C]**
+
+- **Priority:** next implementation task, ahead of other unfinished Phase 7 work (user request, 2026-10-05). Implementation has not started.
+- **Where:** `crates/dream-mir/src/backend/llvm/glue/tables.rs` unconditionally calls `dream_host_bind_v2` for native runtime initialization; `crates/dream-abi/src/host_capability.rs` forces Core into the host manifest even when no host extern survives pruning. Core exports and dependencies live in `crates/dream-host-core/`.
+- **Measured baseline:** Windows x64, default `dreamer pack` (`-O3`), a program printing `Hello, world!`, no package dependencies, and a release-built core DLL: executable 161,280 bytes; core DLL 1,788,928 bytes; total 1,950,208 bytes. The packed program runs successfully. PE import inspection confirms `dream_host_core.dll` is required. The DLL's largest section is `.rdata` (1,401,856 bytes); timezone and Unicode tables are present, but individual service contributions have not been isolated by measurement.
+- **Impact:** an application that needs no Rust host service still ships the whole core DLL, including exported timezone, Unicode, crypto and process implementations. Pruning unused Dream declarations cannot remove exported implementations from this shared library.
+- **Fix:** derive core initialization, linking and packaging from the live host capability inventory. Keep shared guest callback/icon state in one thin core library when any capability requires it. Separate optional services into capability libraries selected only when used; do not duplicate that state or embed Rust hosts into the compiler.
+- **Validation:** inspect PE/ELF/Mach-O imports and packaged contents; execute minimal packs with no Dream libraries available; exercise each optional capability and combinations of them, including foreign callbacks and async completion. Record executable, library and total bundle sizes with release settings and enforce a meaningful size regression budget. Task 7.9 defines the completion gate.
+
 **BOOT-1: self-hosting blockers (P3) [A]**
 
 - Self-hosting is blocked by FFI-2 (no `usize`), ABI-1 (2 GiB cap), MOB-1 (no library output) and GEN-1 (unstable symbols).
@@ -1549,9 +1565,17 @@ no string-keyed type/def lookups, and every analyzer/LSP production file under 8
   - `src/driver/gpu_gen/expr.rs` (901) is split and moves with the GPU capability if it is only host-related.
 - **7.8 Self-hosting (BOOT-1)**
   - Re-evaluate once Phases 3 to 6 are complete.
+- **7.9 Minimal native packaging and optional core services (BLD-3) — next priority**
+  - Implement before the other unfinished Phase 7 tasks, per the user's 2026-10-05 request. Android/iOS validation remains on hold.
+  - Make the host manifest, runtime binding, native link inputs and pack contents agree on actual live host use. Programs needing no host services must not import or bundle the core DLL.
+  - Keep guest callback and icon state in one thin core capability whenever a host capability needs it. Move timezone, Unicode, crypto and process services into optional capabilities with one registry for selection, library discovery and packaging; migrate all consumers without compatibility aliases.
+  - Measure each service's contribution before choosing split boundaries. Keep release executable and DLL sizes separate from compiler binaries, debug libraries and intermediate build files.
+  - Add regressions for minimal and empty programs; each optional service and capability combinations; native C/C++ callbacks; host callbacks and async completion; and executable/staticlib/cdylib outputs. Use import inspection and execution to verify the dependency inventory, including after repacking the same directory from a capability-heavy program to a minimal one.
+  - Completion: Windows x64 `dreamer pack` of the measured Hello World produces one executable with no Dream DLL import or bundled Dream DLL and runs with no Dream library on its search path. Verify equivalent native library selection on Linux/macOS through platform gates. Publish before/after executable, library and bundle sizes and establish size regression coverage; rerun workspace build, strict Clippy, workspace tests, full native/Node corpus, hygiene and freestanding gates.
 
 **Phase 7 exit criteria**
 
+- Task 7.9's minimal native pack and optional capability selection gates pass; unused Dream libraries are not linked or left in published packs.
 - No production Rust file is over 600 lines without a one-line reason in the file header.
 - There are no repair passes that correctness depends on.
 - Every metric in the clean-codebase rules is at or below its Phase 0 baseline, and most are at zero.
@@ -1607,6 +1631,8 @@ Everything that must be *gone* by the end of each phase. A phase isn't done whil
   - the "native pack is host-only" error;
   - the stdio constructor in core.
 - **Phase 7:**
+  - unconditional native core binding/linking/packaging when no host capability is needed;
+  - optional timezone, Unicode, crypto and process implementations in the mandatory shared-state core;
   - `strip_escaped_regions`;
   - `RcLastUseRepair`;
   - the remaining files over 600 lines without a stated reason.

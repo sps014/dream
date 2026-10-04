@@ -47,8 +47,8 @@ This document merges two read-only reviews of the Dream compiler and turns them 
 | 2 | Distribution correctness | 10 | 10 | Done | #34 merged as `9fe2dfb2` on 2026-10-02 after all five required CI checks passed, including Windows workspace gates and full native corpus. Follow-up Windows portability and CI caching improvements merged in [#35](https://github.com/sps014/dream/pull/35) as `87037e0d`, with all five checks green. Warm Windows CI measured 11m13s versus the prior 33m22s; the initial cold-cache run took 38m41s. |
 | 3 | Target and layout foundation | 11 | 11 | Done | #41 merged as `01b1e976` on 2026-10-03. Manual run [37106486399](https://github.com/sps014/dream/actions/runs/37106486399) on implementation `0469ddb4` passed Ubuntu, macOS and Windows workspace gates, macOS runtime sanitizers, hygiene, Linux native 638/638, Windows native 638/638, and Node 539 passed/99 expected skips/0 failures. Local workspace tests: 1151 passed, 21 expected ignored. Paired optimization evidence is in `docs/internals/12-native-pointer-migration.md`. Automatic CI remains disabled. |
 | 4 | FFI completion and embedding API | 10 | 10 | Done | #42 merged as `04d5c085` on 2026-10-03; panic source locations (4.4) completed in a follow-up PR. Local gates: workspace tests, native probe 640/640, Node 539 passed/101 expected skips/0 failures. |
-| 5 | Identity, modules and symbols | 12 | 0 | In progress | Local structural symbols and analyzer/LSP splits; module-scoped identity migration remains outstanding. |
-| 6 | Platform expansion | 9 | 1 | In progress | 6.4 merged; 6.1, 6.2 and output-kind cleanup committed locally as `18b3f5f7`. Library gates pass on macOS; mobile assembly needs iOS SDK/NDK validation. Publication/merge and remaining runtime/toolchain work are outstanding. |
+| 5 | Identity, modules and symbols | 12 | 12 | Done | Merged in #44 and #45; detailed tracker, exit criteria and deletion ledger verified below. |
+| 6 | Platform expansion | 9 | 9 | In progress | All implementation steps and cleanup deliverables completed in [3b9f8529](https://github.com/sps014/dream/commit/3b9f8529849edb36e3a0dbf5ba7b3e98583766d5) (direct main commit). Workspace build, strict Clippy, 1,220 tests, native 653/653 and Node 583 passed/70 native-only skips/zero failures pass (2026-10-04). Phase exit criteria still require SDK-equipped sample iOS and Android apps linking and running a Dream staticlib. |
 | 7 | Scale, performance and long-term work | 8 | 0 | Not started | Phases 5, 6 |
 
 ### Phase 0: Safety net and quick wins
@@ -197,15 +197,17 @@ outside Phase 5; the build cache already makes unchanged rebuilds skip analysis 
 
 | Step | Title | Findings | Status | Owner | PR | Notes |
 |---|---|---|---|---|---|---|
-| 6.1 | Library outputs (`staticlib`/`dylib`) | MOB-1 | In progress | Codex | `18b3f5f7` (local main) | Local implementation complete: typed `@export` roots, plain ABI wrappers, native archive/shared linking, generated C headers, package-relative panic paths and C-consumer/reproducibility regressions. macOS workspace build, strict Clippy, tests (1,218 passed), native corpus (652/652) and Node corpus (548 passed, 104 skipped, zero failures) passed. Fixed preexisting HEAD `struct_container_rc` duplicate-drop bug by registering value-struct identity before enum representation; recursive inline payload cycles now report diagnostics. Linux/Windows linking unverified locally; committed on local main, not pushed or PR-merged. |
-| 6.2 | iOS xcframework and Android `.aar` | MOB-1 | In progress | Codex | `18b3f5f7` (local main) | Local packaging implementation consumes prebuilt target slices with matching C headers and typed ABI metadata; generates Objective-C/JNI bridges and assembles XCFramework/AAR outputs. All four mobile targets emit verified architecture-specific objects; generated bridges compile against macOS Foundation and JDK JNI. Workspace build, strict Clippy, tests (1,218 passed), native corpus (652/652) and Node corpus (548 passed, 104 skipped, zero failures) passed. Full iOS/Android assembly awaits SDK-equipped validation (iOS SDKs/NDK unavailable locally); cross-target runtime/host library linking remains separate under 6.6; committed on local main, not pushed or PR-merged. |
-| 6.3 | Layered runtime (core/sys/host) | FS-1 | Not started | | | |
+| 6.1 | Library outputs (`staticlib`/`dylib`) | MOB-1 | Done | Codex | [18b3f5f7](https://github.com/sps014/dream/commit/18b3f5f76b0c8e879db63998ca19756f97db3c5d) (direct main commit) | Implementation landed on remote main: typed `@export` roots, plain ABI wrappers, native archive/shared linking, generated C headers, package-relative panic paths and C-consumer/reproducibility regressions. macOS workspace build, strict Clippy, tests (1,218 passed), native corpus (652/652) and Node corpus (548 passed, 104 skipped, zero failures) passed. Fixed preexisting HEAD `struct_container_rc` duplicate-drop bug by registering value-struct identity before enum representation; recursive inline payload cycles now report diagnostics. Windows C-consumer, library panic-location and archive reproducibility regressions now pass locally with the pinned MSVC-compatible clang after local fixes to PIC/export flags and non-debug CodeView stripping. Remote main ancestry verified on 2026-10-04 at `31ffaef5`; no PR was used. Windows follow-up fixes and Zig cross-linking to Linux executable/staticlib/cdylib outputs are completed and validated in [3b9f8529](https://github.com/sps014/dream/commit/3b9f8529849edb36e3a0dbf5ba7b3e98583766d5) (direct main commit). The Linux fixtures validate linking, binary architecture and ABI rejection; native Linux execution remains unverified locally. |
+| 6.2 | iOS xcframework and Android `.aar` | MOB-1 | Done | Codex | [18b3f5f7](https://github.com/sps014/dream/commit/18b3f5f76b0c8e879db63998ca19756f97db3c5d) (direct main commit) | Packaging implementation on remote main consumes prebuilt target slices with matching C headers and typed ABI metadata; generates Objective-C/JNI bridges and assembles XCFramework/AAR outputs. All four mobile targets emit verified architecture-specific objects; generated bridges compile against macOS Foundation and JDK JNI. Workspace build, strict Clippy, tests (1,218 passed), native corpus (652/652) and Node corpus (548 passed, 104 skipped, zero failures) passed. Full iOS/Android assembly awaits SDK-equipped validation (iOS SDKs/NDK unavailable locally); target-aware runtime/host library linking is implemented under 6.6; Remote main ancestry verified on 2026-10-04 at `31ffaef5`; no PR was used. SDK-equipped end-to-end validation remains outstanding for the Phase 6 exit criteria. |
+| 6.3 | Layered runtime (core/sys/host) | FS-1 | Done | Codex | [3b9f8529](https://github.com/sps014/dream/commit/3b9f8529849edb36e3a0dbf5ba7b3e98583766d5) (direct main commit) | Implementation completed in the linked main commit. Portable core uses an injected allocator/map, abort, encoded write, lock and object-drop table; native/WASI defaults live in sys, and existing host capability crates remain separate. Deleted the stdio constructor. CI now includes a freestanding compile/link gate; locally all 17 core units link without OS/libc imports. Custom-platform regressions cover allocation exhaustion, mapping/index-resize failures, panic hooks, Unicode and embedded NUL output. Library selection is the scalar `[lib].output-type` in dream.toml (`staticlib` or `cdylib`); old CLI output selection deleted. |
 | 6.4 | 64-bit sizes on native | ABI-1 | Done | Codex | [#21](https://github.com/sps014/dream/pull/21) | Merged into main as `da9baffc1d24d47a6cff42b469c37ae689e0ae31`; CI `36884379458` passed hygiene, Ubuntu/macOS workspace gates and full native/Node corpus. Native allocation uses machine-width unsigned size_t; wasm32 ABI and language int counts remain unchanged; native headers +16 bytes. GCC signedness fixed in `029039a1`; includes #22 cleanup. |
-| 6.5 | Native/wasm parity suite | PAR-1 | Not started | | | |
-| 6.6 | Cross-linking and `toolchain doctor` | BLD-2, TGT-2 | Not started | | | |
-| 6.C1 | Runtime directory layout by layer | FS-1 | Not started | | | |
-| 6.C2 | One `OutputKind` abstraction | MOB-1 | In progress | Codex | `18b3f5f7` (local main) | Driver now owns one enum for executable/staticlib/dylib/wasm outputs; native linking and CLI use it. Remaining backend entry-point special cases need review before this cleanup is complete. |
-| 6.C3 | Shared packaging interface | MOB-1 | Not started | | | |
+| 6.5 | Native/wasm parity suite | PAR-1 | Done | Codex | [3b9f8529](https://github.com/sps014/dream/commit/3b9f8529849edb36e3a0dbf5ba7b3e98583766d5) (direct main commit) | Node probe now executes panic/exit-status goldens and checks every expected compile diagnostic; timeouts cannot satisfy trap goldens. Added deterministic rejected-allocation coverage and live/dead C-import regressions; native C bindings remain unsupported on wasm32 and docs explain pruning. Local gates pass: workspace build, strict Clippy, 1,220 workspace tests (15 expected ignores), native 653/653 and Node 583 passed/70 native-only skips/zero failures, with MIR verification enabled. Native allocator exhaustion is covered through the 6.3 platform table; a bounded imported-memory regression now verifies WASI page-growth exhaustion reaches the allocation-free platform panic path. |
+| 6.6 | Cross-linking and `toolchain doctor` | BLD-2, TGT-2 | Done | Codex | [3b9f8529](https://github.com/sps014/dream/commit/3b9f8529849edb36e3a0dbf5ba7b3e98583766d5) (direct main commit) | Implemented target-aware runtime/C-source compilation and linking through Zig or an explicitly configured compiler. `dream --target` links executable/staticlib/cdylib outputs; `--object` provides SDK-free object emission. Capability libraries resolve only from the selected target directory and are checked for architecture, format and ABI marker; no host fallback. Doctor prints actual tools, SDK arguments, runtime/library paths and configuration hash without installing components. Config/tool/library identities invalidate frontend caches and `.flags`; desktop pack supports cross targets/all with separate target build and bundle directories. Implementation and all required gates complete on 2026-10-04: workspace build, strict Clippy, 1,220 tests (15 expected ignores), native 653/653 and Node 583 passed/70 native-only skips/zero failures, with MIR verification enabled. Cross executable/staticlib/cdylib linking, stale ABI rejection, foreign pack, doctor, and Windows icon-pack regressions pass. SDK-equipped Apple/Android end-to-end validation remains outstanding. |
+| 6.C1 | Runtime directory layout by layer | FS-1 | Done | Codex | [3b9f8529](https://github.com/sps014/dream/commit/3b9f8529849edb36e3a0dbf5ba7b3e98583766d5) (direct main commit) | Core moved to runtime/c/core; native OS services and WASI adapters moved to sys/native and sys/wasi. Registry lists core and sys units separately; all build/install/test consumers migrated. Native POSIX/Win32 share the existing platform abstraction; host capabilities remain separate dream-host crates. Cleanup complete: deleted unused WASI printf/libc code, moved required allocation bridges into allocation.c, replaced sync_stub.c with the actual sync.c module, and removed its unused JS trap shim. Shared scheduling lives in sys/shared; heap page growth/metadata live in heap_memory.c; heap locks use the platform table. Every first-party runtime C unit is under 600 lines, enforced by the freestanding CI gate (vendored PCRE2/SLJIT excluded). |
+| 6.C2 | One `OutputKind` abstraction | MOB-1 | Done | Codex | [3b9f8529](https://github.com/sps014/dream/commit/3b9f8529849edb36e3a0dbf5ba7b3e98583766d5) (direct main commit) | Reviewed native and wasm link pipelines: manifest/module exports supply public roots; wasm uses `--no-entry`, with no `main` assumption. Deleted the remaining `native_bin_path` helper and migrated cached launches to `OutputKind::artifact_path`. Windows library consumer, panic-location and moved-package reproducibility tests pass after fixing MSVC DLL export flags, native-source PIC flags and path-bearing CodeView metadata in non-debug builds. Implementation and all gates complete on 2026-10-04: workspace build, strict Clippy, 1,220 workspace tests (15 expected ignores), native 653/653 and Node 583 passed/70 native-only skips/zero failures. |
+| 6.C3 | Shared packaging interface | MOB-1 | Done | Codex | [3b9f8529](https://github.com/sps014/dream/commit/3b9f8529849edb36e3a0dbf5ba7b3e98583766d5) (direct main commit) | macOS `.app`, Linux `.desktop`, iOS XCFramework and Android AAR packaging share BundleWriter staging, path validation and locked publication. Existing products are backed up and restored on publication failure; failed rollback preserves the recovery directory. Desktop bundle assembly moved out of app_icon.rs. Implementation and all required gates complete on 2026-10-04: workspace build, strict Clippy, 1,220 tests (15 expected ignores), native 653/653 and Node 583 passed/70 native-only skips/zero failures. Replacement/path validation and locked-file publication rollback tests pass, as do foreign desktop and Windows icon-pack regressions. Freestanding core (17 units) and structural hygiene gates pass. |
+
+Windows validation on 2026-10-04 uses the pinned MSVC-compatible `clang.exe` for both `DREAM_CC` and `DREAM_CXX` (C++ source extensions select C++ compilation), plus `DREAM_VERIFY_MIR=1`. Native interop fixtures now reuse the existing `dream_thread.h` platform abstraction and shared stdout normalization; LSP path assertions compare filesystem components. Nine probe-runner regression tests and the hygiene gate pass. Validation logs are under `target/audit-validation/`. Native allocator fault injection and the 17-unit freestanding core link gate pass; the bounded-memory WASI exhaustion regression now passes too. The linked main commit completes the remaining implementation steps; SDK-equipped mobile sample-app validation remains outstanding for the phase exit criteria.
 
 ### Phase 7: Scale, performance and long-term work
 
@@ -270,7 +272,7 @@ structs by value, narrow returns, an attached foreign-thread callback and an own
 finalizer (plus the panic hook and its source location); one shim generator; attributes split.
 
 Phase 0 counts exclude test Rust files and vendored PCRE2/sljit C sources. Runtime duplication is
-the normalized non-blank exact-line intersection between `runtime/c/native` and `runtime/c/wasm32`.
+the normalized non-blank exact-line intersection between `runtime/c/sys/native` and `runtime/c/sys/wasi`.
 The hygiene ratchet allowlists ten existing string-pattern matches used for symbol construction or
 LLVM attribute parsing; none decides semantics from a function or type name.
 
@@ -290,7 +292,7 @@ their deletion remains task 7.6. This metrics-only update does not require rerun
 Phase 5 measured on 2026-10-04 at merged commit `8069977d` (PR #45) with the Phase 1 method
 (`scripts/check_hygiene.py` production files; allowance and unwrap/expect counts exclude
 `#[cfg(test)]` tails; runtime duplication is the distinct trimmed non-blank line intersection of
-`runtime/c/native` and `runtime/c/wasm32`). The same script applied to the pre-Phase 5 commit
+`runtime/c/sys/native` and `runtime/c/sys/wasi`). The same script applied to the pre-Phase 5 commit
 `dfe30c4a` reproduces the recorded P4 file-size counts (53 and 15) but gives 47 Clippy
 allowances and 103 shared runtime lines, so the recorded P4 values of 40 and 102 were measured
 differently; the P5 values are comparable to those remeasured figures. Phase 5 added nine
@@ -379,12 +381,12 @@ ten. Hygiene passes with zero unexpected string-pattern matches.
 **RT-1: race in `weakLoad` (P0) [C][R]**
 
 - **Where:**
-  - `crates/dream-mir/src/runtime/c/native/weak.c`: `weakLoad`, `weakDead`, `weakReleaseRaw`.
+  - `crates/dream-mir/src/runtime/c/core/weak.c`: `weakLoad`, `weakDead`, `weakReleaseRaw`.
   - The same file is shared with wasm32 threads.
 - **Evidence:**
   - `v = *(dream_ptr *)dream_p(box); … dream_retain(v);` runs without holding `weak_lock()`.
   - `dream_weak_clear_all` clears the slot *under* `weak_lock()`, so the lock is only held on one side.
-  - The fast path of `dream_retain` (`dream_rt_native.h:219`) is a plain `*rc = v + 1` when `v >= 0`.
+  - The fast path of `dream_retain` (`dream_rt.h:219`) is a plain `*rc = v + 1` when `v >= 0`.
 - **How it fails:**
   - Thread B's last release drops rc to 0 and starts destroying the object.
   - Thread A's `weakLoad` reads a non-null `v`.
@@ -599,7 +601,7 @@ ten. Hygiene passes with zero unexpected string-pattern matches.
 
 **OWN-5: possible resurrection from `del` (P2) [R]**
 
-- `dream_rc_revive` (`dream_rt_native.h:422`) writes `*rc` non-atomically.
+- `dream_rc_revive` (`dream_rt.h:422`) writes `*rc` non-atomically.
 - Open question: is a weak reference to `this` cleared before or after `del` runs? If after, `weak.get()` inside `del` could lead to a double destroy.
 
 **FOWN-1: foreign resource lifetimes rely on convention (P2) [C]**
@@ -757,7 +759,7 @@ ten. Hygiene passes with zero unexpected string-pattern matches.
 - `public_api_list` always contains `main`.
 - There is no `--emit staticlib`/`dylib`/framework mode and no ObjC or JNI bridge.
 - iOS needs a static library or embedded framework with the host owning `UIApplicationMain`. Android needs a `.so` with JNI entry points.
-- **Fix:** `--emit staticlib` first, then xcframework and `.aar` packaging with ObjC/JNI shim generation modelled on `cpp_bridge`.
+- **Fix:** manifest-selected `staticlib` first, then xcframework and `.aar` packaging with ObjC/JNI shim generation modelled on `cpp_bridge`.
 
 **GUI-1: GUI host compiled into the compiler crate (P2) [C][A]**
 
@@ -1005,7 +1007,7 @@ Every fix should leave the codebase smaller or simpler, not add a second path ne
 - The number of `.unwrap()`/`.expect()` calls in `dream-syntax` and `dream-sema` that are not in tests.
 - Name-string lookups: `format!("{}_del"`, `.name ==`, `contains("…")` in `dream-mir/src/passes` and `backend`.
 - `std::collections::HashMap`/`HashSet` in `dream-mir` and `dream-sema`.
-- Lines duplicated between `runtime/c/native` and `runtime/c/wasm32`.
+- Lines duplicated between `runtime/c/sys/native` and `runtime/c/sys/wasi`.
 - The number of repair and fallback passes (`RcLastUseRepair`, `strip_escaped_regions`) that are still required for correctness.
 
 ### Phase 0: Safety Net and Quick Wins
@@ -1117,7 +1119,7 @@ Every fix should leave the codebase smaller or simpler, not add a second path ne
 **Phase 1 cleanup deliverables**
 
 - **1.C1 One implementation of publish and regions.**
-  - Move the new worklist `publish` and the chained-region allocator into shared runtime units, for example `runtime/c/native/publish.c` and `region.c`, which wasm32 already includes through `WASM32_CORE_C`.
+  - Move the new worklist `publish` and the chained-region allocator into shared runtime units, for example `runtime/c/core/publish.c` and `region.c`, which wasm32 already includes through `WASM32_CORE_C`.
   - Delete the duplicate copies in `wasm32/heap.c`. Both heaps then keep only allocation and freeing.
 - **1.C2 Delete the fixed-size tables** `PUBLISH_SEEN_MAX`, `heap_maps[64]` and `chunks[32]`, and the silent-drop branches with them.
 - **1.C3 Split `passes/unique_region.rs` (1466 lines)** into a `unique_region/` module:
@@ -1432,7 +1434,7 @@ no string-keyed type/def lookups, and every analyzer/LSP production file under 8
 **Goal:** library outputs, mobile targets and freestanding targets.
 
 - **6.1 Library outputs (MOB-1)**
-  - `--emit staticlib` and `--emit dylib`: no `main`; export `@export` symbols plus the embedding API from 4.3.
+  - `dream.toml` selects one library kind with `[lib] output-type = "staticlib"` or `"cdylib"` (a scalar string); no `main`; export `@export` symbols plus the embedding API from 4.3.
   - Generate a C header for the exported functions.
   - Panic locations: the library's own sources are the program, so its panics report its own lines, and its stdlib and `dream_packages/` dependencies report the library's calling line. Exported functions are entered through their plain-ABI wrapper, so a C, Swift or Kotlin caller passes no location. Record source paths relative to the package root (for example `mylib/src/parse.dream:12`) instead of the build machine's absolute path, so shipped libraries don't leak build paths and reproduce across machines.
   - If Dream-to-Dream linking of prebuilt libraries is ever added (it needs 5.4's stable symbols), the hidden caller-location parameter of library functions becomes part of their exported ABI and must be recorded in the library's interface metadata.
@@ -1446,6 +1448,8 @@ no string-keyed type/def lookups, and every analyzer/LSP production file under 8
   - **host:** net, gpu, webview, one per capability (from 2.3).
   - Remove the stdio constructor from core.
   - CI builds core with `-ffreestanding -nostdlib`.
+  - Local implementation: `dream_set_platform` installs the embedding callbacks before runtime use; core has no OS/libc imports. `scripts/check_freestanding.py` compiles and links all 17 core units with freestanding headers, and the CI workflow runs that gate. Native fault injection and encoded panic-output regressions pass locally; implementation is committed on main, while hosted CI has not been run for this commit.
+  - Runtime cleanup is complete: shared scheduling lives in sys/shared, WASI allocation bridges and synchronization replace libc/stub files, and heap metadata/page growth live in their own adapter. Heap locking uses the injected platform table; bounded-memory growth failure reports through it without allocating. The freestanding gate enforces the first-party C file-size limit.
 - **6.4 64-bit sizes on native (ABI-1, long term)**
   - Introduce `dream_size` (pointer-width) in the heap, arrays and strings on native; wasm32 keeps i32.
   - Update `dream_abi.h`, `abi.rs` and the backend helpers together; the ABI sync test enforces this.
@@ -1460,8 +1464,8 @@ no string-keyed type/def lookups, and every analyzer/LSP production file under 8
 
 **Phase 6 cleanup deliverables**
 
-- **6.C1 Runtime directory layout that matches the layering:** `runtime/c/core/`, `runtime/c/sys/{posix,win32,wasi}/`, and `runtime/c/host/<capability>/`.
-  - Delete the separate `wasm32/libc.c` and `sync_stub.c` wherever the `sys/wasi` layer covers the same ground.
+- **6.C1 Runtime directory layout that matches the layering:** `runtime/c/core/`, `runtime/c/sys/{native,wasi,shared}/`, and existing `dream-host-*` capability crates. POSIX/Win32 adapters share the established dream_thread.h abstraction rather than duplicating whole service implementations.
+  - Delete the separate `libc.c` and `sync_stub.c`: required allocation bridges belong in sys/wasi/allocation.c, actual synchronization belongs in sys/wasi/sync.c, and unused formatting/stub code is removed.
   - `runtime/modules.rs` lists modules per layer, not per target.
 - **6.C2 One output-kind abstraction.** Executable, staticlib, dylib and `.wasm` are variants of a single `OutputKind` in the driver. Delete the special cases in `build.rs` and `wasm.rs` that assume `main`.
 - **6.C3 Shared packaging.** The macOS `.app`, xcframework, `.aar` and Linux `.desktop` packagers in `dreamer` share one bundle-writer interface instead of per-platform ad-hoc code in `pack.rs` and `app_icon.rs`.
@@ -1470,7 +1474,7 @@ no string-keyed type/def lookups, and every analyzer/LSP production file under 8
 
 - A Dream staticlib is linked and runs inside a sample iOS app and a sample Android app.
 - The core runtime builds freestanding in CI.
-- No runtime C file is over 600 lines, and there is no logic duplicated between targets.
+- No first-party runtime C file is over 600 lines (vendored PCRE2/SLJIT excluded), and there is no portable runtime logic duplicated between targets.
 
 ### Phase 7: Scale, Performance and Long-Term Work
 

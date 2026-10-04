@@ -1,6 +1,6 @@
 # Arrays
 
-An array is a fixed-size, ordered block of same-typed values. Arrays are reference types, so passing one around shares the same buffer rather than copying it. For a growable sequence, reach for [`List<T>`](../stdlib/collections.md).
+An array holds a fixed number of values of the same type, in order. Passing an array shares its contents rather than copying them. Use a [List](../stdlib/collections/list.md) when you need to add or remove items.
 
 ## Creating, reading, writing
 
@@ -78,7 +78,7 @@ A zero value (`0`, `0.0`, `false`) fills the array with zeros.
 
 ## Fixed-size buffers
 
-Array literals produce a fixed-size `T[]`; you cannot push or pop. For an explicitly zero-initialized buffer of a runtime length, use `Array.alloc<T>(n)` (bootstrap; no extra import). `Buffer.alloc<T>(n)` is the same intrinsic underneath:
+Array literals produce a fixed-size `T[]`; you cannot push or pop. For an explicitly zero-initialized buffer of a runtime length, use `Array.alloc<T>(n)` (no extra import needed). `Buffer.alloc<T>(n)` is the another way to request the same array:
 
 ```dream
 let buf = Array.alloc<int>(4);   // int[] of length 4, all zero
@@ -97,11 +97,11 @@ while r < 5 {
 grid[0][0] = 32;
 ```
 
-`Buffer.realloc<T>(arr, new_len)` and `Buffer.free<T>(arr)` (both [`@unsafe`](memory.md#unsafe-manual-memory-management)) manage an array's backing block directly through the allocator instead of through ARC: `realloc` resizes it in place (preserving the overlapping prefix, zero-filling any grown tail) and `free` returns it immediately, bypassing reference counting. `arr` must have exactly one owner going into either call — the old value must never be read again afterward. Most code should reach for [`Pointer<T>`](arrays.md#pointert-manual-allocation-unsafe) instead of calling these directly.
+`Buffer.realloc<T>(arr, new_len)` and `Buffer.free<T>(arr)` (both [`@unsafe`](memory-buffers.md#unsafe-manual-memory-management)) manage an array's backing block directly through the allocator instead of through ARC: `realloc` resizes it in place (preserving the overlapping prefix, zero-filling any grown tail) and `free` returns it immediately, bypassing reference counting. `arr` must have exactly one owner going into either call — the old value must never be read again afterward. Most code should reach for [`Pointer<T>`](arrays.md#pointert-manual-allocation-unsafe) instead of calling these directly.
 
 !!! note "Arrays own their slots"
     Every slot of a `T[]` is released when the array is dropped, even if your own bookkeeping
-    stopped tracking it earlier — see [Raw buffers and custom containers](memory.md#raw-buffers-and-custom-containers).
+    stopped tracking it earlier — see [Raw buffers and custom containers](memory-buffers.md#raw-buffers-and-custom-containers).
     Overwriting a slot releases its previous occupant immediately.
 
 ## `Span<T>`: a bounds-checked view without copying
@@ -124,7 +124,7 @@ let owned = mid.to_array();        // copies into a fresh, independently-owned a
 
 ## `Pointer<T>`: manual allocation (`@unsafe`)
 
-`Pointer<T>` is a manually-managed handle to a `T[]` block, allocated, resized, and released through the allocator directly (`Buffer.alloc` / `Buffer.realloc` / `Buffer.free`) rather than through [automatic reference counting](memory.md). Every operation that touches the block's lifetime is [`@unsafe`](memory.md#unsafe-manual-memory-management): the compiler cannot verify the block has exactly one owner, that `free()` runs at most once, or that no access happens after a `free()`.
+`Pointer<T>` is a manually-managed handle to a `T[]` block, allocated, resized, and released through the allocator directly (`Buffer.alloc` / `Buffer.realloc` / `Buffer.free`) rather than through [automatic reference counting](memory.md). Every operation that touches the block's lifetime is [`@unsafe`](memory-buffers.md#unsafe-manual-memory-management): the compiler cannot verify the block has exactly one owner, that `free()` runs at most once, or that no access happens after a `free()`.
 
 ```dream
 @unsafe

@@ -1,6 +1,6 @@
 # Ownership
 
-You never call `free`. Dream frees a heap value when nothing still points at it ([Memory](memory.md)).
+Ownership explains what happens when you assign a value or pass it to a function. Objects can be shared, while simple values and structs are copied. Dream handles cleanup automatically; use `borrow` when a call should use an object without taking ownership.
 
 This page is only about **who owns that value** when you pass or assign something. There is no `move` keyword. Dream moves for you when it can see you are done with a name.
 
@@ -47,7 +47,7 @@ Mark a parameter `borrow` when the function only **looks** — you keep the valu
 |------------------|---------|
 | *(nothing)* | Sink — callee takes it. Move if this is the last use, otherwise copy. |
 | `borrow` | Share — callee reads it; you still own it. |
-| `ref` | Alias the **variable** itself so the callee can assign to your local. See [Functions](functions.md#ref-parameters). |
+| `ref` | Alias the **variable** itself so the callee can assign to your local. See [Functions](function-parameters.md#ref-parameters). |
 
 ```dream
 fun take(s: string): void {

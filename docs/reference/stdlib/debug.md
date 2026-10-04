@@ -1,22 +1,18 @@
-# Debug
+# Check memory use while developing
 
-`Debug` exposes allocator diagnostics from `system`.
+`Debug` helps you inspect memory use. Import `system` to use it. These values are development aids; they do not coordinate work running in different tasks.
 
 | Member | Type | Meaning |
-|---|---|---|
-| `live_objects` | `long` | Current live heap allocations, excluding pinned immortal singletons |
-| `total_allocations` | `long` | Cumulative allocations, including recycled blocks |
-| `ref_count(borrow value)` | `int` | Strong reference count of a managed object |
-| `heap_ptr` | `int` | Allocator position probe; its interpretation depends on the target |
-| `free_list_head` | `int` | Free-activity probe, not a portable heap address |
+| --- | --- | --- |
+| `live_objects` | `long` | Number of live allocated objects, excluding permanent shared values |
+| `total_allocations` | `long` | Total allocation count, including reused storage |
+| `ref_count(value)` | `int` | Number of strong references to a managed value |
+| `heap_ptr` | `int` | A memory-position probe; its meaning depends on the environment |
+| `free_list_head` | `int` | A memory-reuse probe, not a portable address |
 
-Allocation counters are 64-bit and atomically updated on native and wasm32. Native totals
-combine per-thread tallies that remain registered after a worker exits. Each native tally
-has one writer: its owning thread. Atomic loads/stores allow diagnostic readers without
-locked read-modify-write instructions on allocation/free paths; shared wasm32 counters
-use atomic read-modify-write updates. Relaxed reads may
-observe different threads at different instants; join workers before asserting a final
-balance. These counters do not order or synchronize application data.
+## Compare before and after
+
+The following is a snippet for a function that already defines `churn()`:
 
 ```dream
 let before: long = Debug.live_objects;
@@ -25,5 +21,8 @@ let delta: long = Debug.live_objects - before;
 System.println(delta);
 ```
 
-Native debug executables print a leak report at exit. Release executables opt in with
-`DREAM_DEBUG_LEAKS=1`. Embedded libraries leave reporting to their host.
+Finish worker tasks before comparing a final count. During concurrent work, different counters may reflect different instants. A changed count alone does not prove a leak: values may still be alive intentionally.
+
+Desktop debug programs print a leak report at exit. Release programs can enable it with `DREAM_DEBUG_LEAKS=1`. Embedded libraries leave reporting to their host application.
+
+See [Debug declarations](../api/debug.md) and [Memory management](../language/memory.md).

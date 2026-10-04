@@ -1,6 +1,6 @@
 # Source generator: `quote { … }`
 
-A generator runs **at compile time**. This one turns `quote { Hello }` into the string `"Hello"`.
+Make a small source generator that turns custom quote notation into a string while your program is built. Follow its registration steps before running the app.
 
 You need three files in one project.
 

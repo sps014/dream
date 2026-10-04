@@ -1,0 +1,104 @@
+[
+  {
+    "name": "readme-hello",
+    "page": "README.md",
+    "block": 0,
+    "stdout": "Hello, world!\n"
+  },
+  {
+    "name": "readme-total",
+    "page": "README.md",
+    "block": 1,
+    "stdout": "35\n"
+  },
+  {
+    "name": "readme-result",
+    "page": "README.md",
+    "block": 2,
+    "stdout": "42\n"
+  },
+  {
+    "name": "shopping",
+    "page": "docs/learn/first-project.md",
+    "block": 0,
+    "stdout": "35\nWithin budget\n"
+  },
+  {
+    "name": "collection-intro",
+    "page": "docs/reference/stdlib/collections.md",
+    "block": 0,
+    "stdout": "Ada\nSam\nLee\n"
+  },
+  {
+    "name": "list",
+    "page": "docs/reference/stdlib/collections/list.md",
+    "block": 0,
+    "stdout": "1, 2, 3, 4\n"
+  },
+  {
+    "name": "map",
+    "page": "docs/reference/stdlib/collections/map.md",
+    "block": 0,
+    "stdout": "No score yet\n"
+  },
+  {
+    "name": "sorted-map",
+    "page": "docs/reference/stdlib/collections/sorted-map.md",
+    "block": 0,
+    "stdout": "Ada\nSam\n"
+  },
+  {
+    "name": "set",
+    "page": "docs/reference/stdlib/collections/set.md",
+    "block": 0,
+    "stdout": "2\ntrue\n"
+  },
+  {
+    "name": "queue",
+    "page": "docs/reference/stdlib/collections/queue.md",
+    "block": 0,
+    "stdout": "first\n"
+  },
+  {
+    "name": "stack",
+    "page": "docs/reference/stdlib/collections/stack.md",
+    "block": 0,
+    "stdout": "second\n"
+  },
+  {
+    "name": "priority-queue",
+    "page": "docs/reference/stdlib/collections/priority-queue.md",
+    "block": 0,
+    "stdout": "10\n20\n"
+  },
+  {
+    "name": "sequence",
+    "page": "docs/reference/stdlib/collections/seq.md",
+    "block": 0,
+    "stdout": "3, 4\n"
+  },
+  {
+    "name": "format",
+    "page": "docs/reference/stdlib/formatting.md",
+    "block": 0,
+    "stdout": "Hello Ada, you have 3 items.\n"
+  },
+  {
+    "name": "nested-options",
+    "page": "docs/reference/stdlib/option-result.md",
+    "block": 4,
+    "stdout": "7\n"
+  },
+  {
+    "name": "logging-handler",
+    "page": "docs/reference/stdlib/logging.md",
+    "block": 1,
+    "stdout": "app: ready\n"
+  },
+  {
+    "name": "project-hello",
+    "page": "docs/reference/tooling/create-project.md",
+    "block": 0,
+    "stdout": "Hello from my project!\n"
+  }
+]

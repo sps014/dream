@@ -1,5 +1,8 @@
 # JSON
 
+
+JSON lets your program exchange structured data as text. Mark your own data type with `@json` for convenient conversion, or use JsonValue when the data's structure is not known in advance.
+
 **Import:** `import system.json;` (also loaded when a type has `@json`)
 
 Mark a class `@json` to serialize and parse it. Works on value structs too.

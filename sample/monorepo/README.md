@@ -1,5 +1,9 @@
 # Monorepo sample
 
+This example keeps a command-line app and a reusable library in one workspace. The app uses the library through a local dependency, while both packages share installed dependencies and one lockfile.
+
+## About this example
+
 Minimal Dream `[workspace]` layout:
 
 ```text

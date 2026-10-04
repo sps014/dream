@@ -1,5 +1,9 @@
 # Reaction–diffusion (WebGPU)
 
+This example simulates two chemicals spreading and reacting. GPU functions update the fields and draw the result. It needs a working GPU and a browser canvas or desktop display. Follow the run commands below before changing the simulation settings.
+
+## About this example
+
 Gray–Scott continuous chemical simulation: fields `u` / `v` diffuse and react on the GPU
 (`rd_step`), then `rd_paint` writes a storage texture. Eight steps are batched per frame in
 one `ComputePass`. This replaces the old Game of Life demo with a richer evolving system.

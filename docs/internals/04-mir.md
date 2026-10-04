@@ -1,6 +1,6 @@
 # 04 — CFG MIR (`crates/dream-mir/src/`)
 
-MIR is where Dream becomes optimizable. It replaces structured control flow with an explicit **control-flow graph** and replaces implicit memory management with **explicit refcount operations**. Once a program is in MIR, ordinary dataflow analysis can reason about it.
+MIR describes execution as blocks connected by jumps. It also records memory operations explicitly. That makes it possible to improve a program before writing its final output.
 
 ## Mental model
 
@@ -121,7 +121,7 @@ flowchart LR
 - `ExpandSimpleCtors` and `RcInsertion` run module-wide before inlining. Parameter ownership has already been recorded by sema in HIR and applied by lowering. Insertion assigns each owned RC local a compile-time ownership token and emits `Retain` only on a real share and `Release` when that token dies. It consults a type-level mod-ref table (`rc/modref.rs`) so snapshots and loop-carried traversal variables (`rc/cursor_family.rs`) stay cursors when no call can overwrite the slot they came from.
 - After inlining, `RcLastUseRepair` turns last-use container stores on the fused CFG into moves (null the source; drop a `Retain` that only existed to share into a now-dead store). Re-running full insertion on inlined `generated_dispatch` is too expensive. `rc-held-by-owner` (`rc/held.rs`) then drops retain/release pairs on snapshots whose owner provably outlives every read, now that the intervening calls are inlined or summarized.
 - Allocation placement is decided on the post-inline module from escape analysis (`analysis/escape.rs`) and a static per-object count (`analysis/object_life.rs`): `UniqueRegion` (bump region for unique `del`-free graphs), `SroaManaged` (objects with reference fields become per-field locals), and late `frame-alloc` (non-escaping instances built in the stack frame with an immortal count).
-- `RcElision` (in the per-function pipeline) cancels redundant `Retain`/`Release` pairs along Goto chains, transparent diamonds, and transparent natural loops (see [Nim-hard ARC](./11-swift-like-arc-roadmap.md)).
+- `RcElision` (in the per-function pipeline) cancels redundant `Retain`/`Release` pairs along Goto chains, transparent diamonds, and transparent natural loops (see [Ownership and memory performance](./11-swift-like-arc-roadmap.md)).
 
 See [05-writing-passes.md](./05-writing-passes.md) for the module-pass order.
 

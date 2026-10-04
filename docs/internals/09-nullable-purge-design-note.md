@@ -1,6 +1,6 @@
 # Design note: purging `T?` in favor of `Option<T>`
 
-This is a decision record, not a tutorial. It exists to settle three questions *before* touching
+This is a decision record, a record of the decision. It exists to answer three questions before changing
 the ~50-file blast radius of removing `TyKind::Nullable` (see
 [07 — Adding a Feature](./07-adding-a-language-feature.md) for the general shape of a
 pipeline-wide change, and the redundancy-audit plan for the full file inventory). Once these three

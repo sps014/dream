@@ -1,32 +1,17 @@
-# Next steps
+# What to learn next
 
-You can install Dream and print a line. Here is a sensible order from here:
+Choose a topic that helps with the program you want to build.
 
-1. [Variables](../reference/language/variables.md) — `let`, `const`, types, scope
-2. [Control flow](../reference/language/control-flow.md) — `if`, `while`, `for`, `switch`
-3. [Functions](../reference/language/functions.md) — parameters, returns, defaults
-4. [Ownership](../reference/language/ownership.md) — sink, `borrow`, last-use move
-5. [Collections](../reference/stdlib/collections.md) — `List`, `Map`, `Set`
-6. [Cookbook](../cookbook/index.md) — lists, GPU, source generators
-7. [Package manager](../reference/tooling/dreamer.md) — `dreamer add` and registries
+| Your next task | Guide |
+| --- | --- |
+| Keep several values together | [Collections](../reference/stdlib/collections.md) |
+| Handle missing values and failures | [Option and Result](../reference/stdlib/option-result.md) |
+| Organize a growing program | [Imports and modules](../reference/language/imports.md) |
+| Save data | [Files](../reference/stdlib/file.md) and [JSON](../reference/stdlib/json.md) |
+| Talk to a web service | [HTTP](../reference/stdlib/http.md) |
+| Write a server | [Web APIs](../reference/stdlib/webapi.md) |
+| Create a window | [WebView](../reference/stdlib/webview.md) |
+| Draw or calculate on a GPU | [GPU](../reference/stdlib/gpu.md) |
+| Share an app | [Packaging](../reference/tooling/pack/index.md) |
 
-Ownership is not in the tour. A sink parameter takes the value; `borrow` only looks:
-
-```dream
-fun take(s: string): void { /* owns s */ }
-fun peek(borrow s: string): void {
-    System.println(s);
-}
-```
-
-See the [Ownership](../reference/language/ownership.md) page for the full rules.
-
-When you need the browser or Node, read [JavaScript interop](../reference/language/interop.md). When you need a native C library, read [C interop](../reference/language/c-interop.md). The rest of the language and every stdlib package live under [Reference](../reference/stdlib/index.md).
-
-## Community
-
-- Bugs and questions: [GitHub Issues](https://github.com/sps014/dream/issues)
-- Discussions: coming soon
-- Discord: coming soon
-
-People changing the compiler can read [Internals](../internals/README.md).
+Use the [cookbook](../cookbook/index.md) for worked examples. Use the [API catalog](../reference/api/index.md) when you need an exact parameter or result type. If you want to change Dream itself, read the [contributor handbook](../internals/README.md).

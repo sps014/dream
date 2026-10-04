@@ -18,125 +18,16 @@ async fun main(): void {
 }
 ```
 
-## Device and time
+## Explore this topic
 
-| Call | Meaning |
-| --- | --- |
-| `Gpu.is_available` | adapter present? |
-| `Gpu.try_init().await` | request device (high-performance adapter) |
-| `Gpu.try_init(GpuPowerPreference.LowPower).await` | same, preferring battery-friendly GPUs |
-| `Gpu.ready` | init succeeded (false after device-lost until `try_init` again) |
-| `Gpu.check()` | pending uncaptured error or device-lost, else `Ok` |
-| `Gpu.frame().await` | wait a display frame |
-| `Gpu.timestamp().await` | host monotonic clock (CPU), not GPU |
-| `Gpu.timestamp_period()` | nanoseconds per GPU timestamp tick |
-| `Gpu.capabilities()` | optional features and limits the device got |
+- [Set up a GPU device](gpu-device.md)
+- [GPU buffers](gpu-buffers.md)
+- [Run GPU calculations](gpu-compute.md)
+- [Textures and rendering](gpu-rendering.md)
+- [Vectors and matrices](gpu-math.md)
 
-## Capabilities
+## Input and complete API lookup
 
-- WebGPU only lets a shader or resource touch a feature the *device* opted into when it was created.
-- Reaching for an un-requested one is device-loss-grade rather than a recoverable validation error.
-- Dream requests every optional feature the adapter offers, so `Gpu.capabilities()` is the authoritative answer to "may I use this?" — gate on it rather than trying and recovering.
-- Everything reads as `false` / `0` until `try_init` succeeds, since capabilities describe the negotiated device rather than the raw adapter.
+Use [Surfaces and input](gpu-input.md) for window, canvas, pointer, keyboard, and gamepad state. The [GPU API catalog](../api/system-gpu.md) lists all public resource methods, settings, and enum choices.
 
-```dream
-let caps = Gpu.capabilities();
-if caps.texture_compression_astc {
-    // mobile-sized asset path
-}
-let tile = caps.max_invocations_per_workgroup;
-```
-
-| Field | Meaning |
-| --- | --- |
-| `shader_float16` | half-precision arithmetic in shaders |
-| `subgroup`, `subgroup_barrier` | subgroup intrinsics; the barrier is native-only |
-| `min_subgroup_size`, `max_subgroup_size` | subgroup width range, `0` when unreported |
-| `tile_float16`, `tile_float`, `tile_n` | cooperative-matrix tiles; reserved, always off today |
-| `texture_compression_bc` / `_etc2` / `_astc` | compressed format families (BC desktop, ETC2/ASTC mobile) |
-| `float32_filterable` | linear filtering of 32-bit float textures |
-| `timestamp_query` | GPU timestamp query sets (`ComputePass.begin_timed`, `GpuRenderTarget.timestamps`) |
-| `timestamp_query_inside_encoders` | `GpuEncoder.write_timestamp` between passes |
-| `timestamp_query_inside_passes` | `write_timestamp` inside an open compute or render pass |
-| `max_buffer_bytes`, `max_storage_binding_bytes` | allocation and storage-binding ceilings |
-| `max_workgroup_storage_bytes` | `var<workgroup>` bytes per workgroup |
-| `max_invocations_per_workgroup`, `max_workgroup_size_x/y/z` | `@workgroup_size` ceilings |
-| `max_workgroups_per_dimension` | per-dimension dispatch ceiling |
-
-- Buffer sizes and the compute workgroup limits are raised to the adapter maximum.
-- Every other limit stays at the portable WebGPU default, so a program developed against a large GPU still runs on a small one.
-- Creating a `Bc*` / `Etc2*` / `Astc*` texture without the matching flag fails with `GpuError.unsupported`.
-
-`GpuError` implements [`Error`](option-result.md). Headless machines often have no adapter. Async GPU methods take an optional last `token`; cancelled `Result` calls return `GpuError` `ECANCELLED`. A lost device (`DEVICE_LOST`) is distinct from `VALIDATION`: recover with `Gpu.try_init().await` and recreate GPU resources. `Gpu.check()` drains a pending lost / uncaptured event without waiting for the next submit.
-
-- `Gpu.try_init(GpuPowerPreference.LowPower)` (or `Default`) is only consulted when no device is alive yet; after a loss, a different preference re-picks the adapter.
-- `try_init()` keeps high-performance.
-
-### Surfaces and input
-
-- Swapchain drawable size is CSS/logical pixels unless `GpuSurfaceDesc.max_pixel_ratio` is greater than `1`: then `width`/`height` become `client × min(devicePixelRatio, max_pixel_ratio)` (typical game clamp is `2`).
-- Read the used scale with `surface.pixel_ratio` and the uncapped window/DPR with `surface.scale_factor`.
-- `request_pointer_lock()` feeds relative `dx`/`dy` for FPS cameras; `request_fullscreen()` is borderless. Both need a user gesture in the browser.
-- `pointers()` is the multi-touch list (`pointer()` stays the primary latch).
-- Gamepad sticks still poll via `gamepad_axis`; `poll_events` also yields `GamepadAxis` when a value changes.
-
-## Buffers
-
-`GpuBuffer<T>.alloc(n)`, `.from(data)`, `.vertex_from(data)`. Then `.length`, `write` / `write_at`, `read.await` / `read_at`, `copy_to`. `GpuSwap<T>` is a front/back pair (`swap()`).
-
-## Dispatch (`@compute`)
-
-`Compute.run_1d(name, buffers, count)`, `run_2d` / `run_3d`, `run_2d_uniforms`, `run_resources`, `dispatch_indirect`, `run_shader`. Bind with `GpuBindList`. Pack CPU values with `Uniforms.pack`. `ComputePass` batches several dispatches then `submit()`.
-
-## Textures, surfaces, draw
-
-`GpuTexture.rgba8` (and depth / float / cube variants), `GpuTexture.from_image_bytes(png_or_jpeg).await` for PNG/JPEG decode, `GpuSampler.linear()` / `nearest()`. `GpuSurface.create` / `from_canvas`, `configure(w, h)` or `configure(GpuSurfaceDesc)` (`present_mode`, `alpha_mode`, `color_space`, `max_pixel_ratio`), `present()`, input helpers (`pointer()`, `pointers()`, pointer lock, fullscreen, gamepad axes), `GpuRenderPass.draw` / `blit`. Vertex path: `GpuRenderPipeline.create_ex`, `GpuVec2` / `GpuVec4`, `@builtin("position")`. GPU pass timing: `GpuQuerySet.timestamps(n)` then `ComputePass.begin_timed(qs, 0, 1)`, `GpuRenderTarget.timestamps(qs, 0, 1)`, `GpuEncoder.write_timestamp(qs, i)` (`timestamp_query_inside_encoders`), or `pass.write_timestamp(qs, i)` (`timestamp_query_inside_passes`); `qs.read()` after submit.
-
-Shader-only (calling them from CPU code is a compile error): `Gpu.workgroup_barrier` / `storage_barrier`, `Gpu.atomic_*` (`atomic_load`, `atomic_store`, `atomic_add`, `atomic_sub`, `atomic_min`, `atomic_max`, `atomic_and`, `atomic_or`, `atomic_xor`, `atomic_exchange`, `atomic_compare_exchange`), `Gpu.dpdx` / `dpdy` / `fwidth` (derivatives), and every `Gpu.texture_*` read or write except `texture_dimensions` (`texture_load*`, `texture_store`, `texture_sample*`, `texture_gather`, `texture_num_levels` / `texture_num_layers`).
-
-`GpuMath` works in shaders and on the CPU, where it computes the same result with host `Math`.
-
-## Vector math
-
-`GpuVec2` / `GpuVec3` / `GpuVec4` are packed float vectors (`vecN<f32>` in WGSL). The
-same operators work in `@compute` / `@vertex` / `@fragment` and on the CPU:
-
-| Expression | Meaning (WGSL) |
-| --- | --- |
-| `v + w`, `v - w`, `v * w`, `v / w` | component-wise |
-| `v * s`, `s * v`, `v / s` | scale / divide by `float` |
-| `s + v`, `v + s`, `v - s`, `s - v`, `s / v` | scalar on either side |
-| `-v` | negate |
-| `m * v`, `m * n` | `GpuMatN` × vector / matrix |
-| `GpuVecN.of(...)` | `vecN(x, y, …)` |
-| `GpuVecN.splat(s)` | `vecN(s)` |
-| `GpuMatN.of(c0, …)` | `matNxN(c0, …)` column-major |
-| `GpuMatN.identity()` | identity matrix |
-| `GpuMat4.perspective(fov_y, aspect, near, far)` | WebGPU clip Z in `[0, 1]`, `fov_y` in radians |
-| `GpuMat4.ortho(l, r, b, t, near, far)` | orthographic projection |
-| `GpuMat4.look_at(eye, center, up)` | right-handed view matrix |
-| `GpuMat4.translation` / `rotation` / `scaling` | TRS builders |
-| `GpuMat3.normal_matrix(m)` | inverse-transpose of `m`'s upper 3×3 |
-| `GpuQuat.xyzw` / `from_axis_angle` / `rotate` / `to_mat4` | CPU-side rotation (turn into a matrix for shaders) |
-
-`GpuMath` overloads (same names as the scalar builtins):
-
-| Call | Vector args |
-| --- | --- |
-| `mix(a, b, t)` | `vec, vec, float` or `vec, vec, vec` |
-| `min` / `max` | `vec, vec` |
-| `abs` / `sign` / `floor` / `ceil` / `fract` / `sqrt` / `exp` / `exp2` / `log2` / `round` / `trunc` / `radians` / `degrees` / `saturate` | `vec` |
-| `clamp(x, lo, hi)` | `vec, float, float` or `vec, vec, vec` |
-| `pow(x, e)` | `vec, float` or `vec, vec` |
-| `normalize` / `length` / `dot` | `GpuVec2` / `GpuVec3` / `GpuVec4` |
-| `distance(a, b)` | `GpuVec2` / `GpuVec3` / `GpuVec4` |
-| `refract(i, n, eta)` / `faceforward(n, i, nref)` | `GpuVec3` |
-| `transpose` / `inverse` | `GpuMat2` / `GpuMat3` / `GpuMat4` |
-| `determinant` | `GpuMat2` / `GpuMat3` / `GpuMat4` |
-| `mul` | `GpuMatN × GpuVecN` or `GpuMatN × GpuMatN` |
-| `count_one_bits` / `reverse_bits` / `count_leading_zeros` / `count_trailing_zeros` | `int` bitwise |
-
-Near-zero `normalize` on the CPU returns a unit axis (`(1,0)`, `(0,1,0)`, or `(0,0,0,1)`);
-shaders use WGSL `normalize`.
-
-`dream run` uses the machine's GPU. The browser uses the page's GPU. More samples: [`life/`](https://github.com/sps014/dream/tree/main/sample/compute/life), [`fluid/`](https://github.com/sps014/dream/tree/main/sample/fluid), [`ocean/`](https://github.com/sps014/dream/tree/main/sample/graphics/ocean), [`elevated/`](https://github.com/sps014/dream/tree/main/sample/graphics/elevated).
+GPU operations need an available device in the selected environment. Portable CPU math helpers do not require the device. Check errors and capabilities rather than assuming another machine supports the same features.

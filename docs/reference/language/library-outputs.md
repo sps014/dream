@@ -37,7 +37,7 @@ alone does not export a C symbol. Library outputs link for the host by default.
 Target builds require matching capability libraries and SDKs;
 [mobile packaging](mobile-packaging.md) consumes target-built libraries.
 Native library output selection belongs to `[lib].output-type`; `--crate-type` only selects
-semantic checks for intermediate LLVM/cross-target emission.
+validation for intermediate output or a different target.
 
 Outputs include `<stem>.h`, `<stem>.abi.json`, `<stem>.opt.ll` and either an archive
 (`.a`, or `.lib` on Windows) or a shared library (`.dylib`, `.so`, or `.dll`). Windows shared

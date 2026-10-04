@@ -1,6 +1,10 @@
 # Quote sample
 
-Tiny compile-time `quote { … }` syntax DSL: opaque text in the braces becomes a Dream string literal.
+This small generator turns `quote { ... }` into a Dream string while the program is built. It is a good first example for learning generator registration and replacement.
+
+## About this example
+
+Small build-time `quote { … }` custom notation: opaque text in the braces becomes a Dream string literal.
 
 ## User-facing code
 

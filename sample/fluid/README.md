@@ -1,5 +1,9 @@
 # Dream fluid (WebGPU)
 
+This example lets you interact with a two-dimensional fluid simulation. It performs the calculations and drawing on a GPU. Start with the smaller [compute examples](../compute/README.md) if this is your first GPU program.
+
+## About this example
+
 Jos Stam–style 2D stable fluids. The sim runs on the GPU: splat → advect → project
 (Jacobi) → decay → paint, batched with `ComputePass` (a few submits per frame, no CPU
 field loops or RGBA upload). For a smaller multi-kernel demo, see

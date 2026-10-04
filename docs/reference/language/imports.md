@@ -1,6 +1,6 @@
 # Imports & Modules
 
-A Dream program can span several `.dream` files. `import` at the top of a file pulls in the public declarations — functions, classes, enums — of another file (or of an embedded stdlib package).
+Split a program into `.dream` files as it grows. An `import` makes another file's public declarations available. You can also import a built-in library package or an installed external package.
 
 ## Standard library packages
 

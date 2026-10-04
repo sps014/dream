@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - "docs/**"
+      - "README.md"
+      - "tooling/docs/**"
+      - "crates/dream-stdlib/src/**"
       - "scripts/install.sh"
       - "scripts/install.ps1"
       - "mkdocs.yml"
@@ -39,6 +42,8 @@ jobs:
 
       - name: Build docs
         run: |
+          python -m unittest discover -s tooling/docs -p 'test_*.py'
+          python tooling/docs/api_inventory.py
           mkdocs build --strict
           cp scripts/install.sh scripts/install.ps1 site/
           chmod +x site/install.sh

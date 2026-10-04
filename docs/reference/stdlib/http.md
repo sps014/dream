@@ -1,5 +1,8 @@
 # HTTP
 
+
+Use HttpClient to request data from a web service. Calls are async, so await their result and handle a possible error. For an HTTP server, use [Web APIs](webapi.md).
+
 **Import:** `import system.net;`
 
 ```dream
@@ -65,3 +68,11 @@ Per-call headers override client defaults from `set_header` on a name collision;
 `Url.parse`, `to_string()`, `with_path`, `join`.
 
 Pair with [JSON](json.md). Example: [`sample/interop/http.dream`](https://github.com/sps014/dream/blob/main/sample/interop/http.dream).
+
+## Change a URL
+
+`Url.parse(text)` returns `Result<Url, ParseError>`. A parsed URL exposes `scheme`, `host`, optional `port`, `path`, `query`, and `fragment`.
+
+`with_host`, `with_path`, `with_query`, and `with_fragment` return a changed URL. The query text excludes its leading `?`, and the fragment excludes its leading `#`. `query_params()` returns decoded query names and values in a map. `join(path)` resolves a path using this URL.
+
+See [URL signatures](../api/net-url.md) for exact argument and return types, and [HTTP errors](errors.md) for handling failures.

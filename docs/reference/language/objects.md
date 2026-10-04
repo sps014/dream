@@ -1,6 +1,6 @@
 # The `object` Type
 
-`object` is a universal container — it can hold any value: an `int`, a `string`, a class, an array, anything. Use it for heterogeneous data and runtime type dispatch.
+Use `object` when a value may have different types, such as a number, text, or a class instance. Check the value's type before using operations that need a particular type.
 
 ## Storing and reading a value
 

@@ -1,57 +1,40 @@
-# Quickstart
+# Install Dream and run your first program
 
-From a blank machine to a running program in a few minutes.
-
-<div class="dream-steps" markdown>
-
-1. **Install Dream** with the command for your OS (below).
-2. **Open a new terminal** so `dream` and `dreamer` are on your PATH.
-3. **Create and run** a project with `dreamer init hello`.
-
-</div>
+Follow these steps to install Dream, create a project, and run a small program. You can use the terminal on Windows, macOS, or Linux.
 
 ## Install
 
-### macOS / Linux
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/dream/install.sh | sh
-```
-
-### Windows (PowerShell)
+On Windows, open PowerShell:
 
 ```powershell
 irm https://sps014.github.io/dream/install.ps1 | iex
 ```
 
-What the installer does:
+On macOS or Linux:
 
-- Puts `dream` (compile and run), `dreamer` (projects and packages), and `dream-lsp` (editor support) under `~/.dream/bin`.
-- Runs `dreamer toolchain install llvm` (the pinned LLVM that compiles every program) unless LLVM is already installed. Set `DREAM_SKIP_LLVM=1` to skip that download.
-- If no C compiler (`cc` / `clang` / Zig) is already on the machine, runs `dreamer toolchain install cc` (pinned Zig, used to link native binaries). Set `DREAM_SKIP_CC=1` to skip that download.
-- On Linux, also installs WebKitGTK/GTK when `dream` cannot load (needed for `system.webview`). Set `DREAM_SKIP_LIBS=1` to skip.
-- Linux binaries need glibc 2.36+ (Debian 12, Ubuntu 24.04, Fedora 39, or newer).
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/dream/install.sh | sh
+```
 
-Open a **new terminal**, then check:
+The installer puts Dream, Dreamer, and the editor support program in `~/.dream/bin`. It also installs the build tools your programs need. On Linux it may install system libraries needed by desktop windows.
 
-```bash
+Open a new terminal so it can find the installed commands, then check:
+
+```sh
 dream --help
 dreamer --help
 ```
 
-Pin a version with `DREAM_VERSION=0.0.1` before running the installer.
+If a command cannot be found, use [Troubleshooting](troubleshooting.md).
 
-## Hello, World!
+## Create a project
 
-```bash
+```sh
 dreamer init hello
 cd hello
-dreamer run
 ```
 
-`dream run` with no file argument uses `[package].entry` from the nearest `dream.toml`. Prefer `dreamer run` for packages (dependencies and web/node hosts).
-
-`dreamer init` creates `dream.toml`, `src/main.dream`, and a `.gitignore`. Edit `src/main.dream`:
+The project has a settings file, `dream.toml`, and a program in `src/main.dream`. Open the program and make it look like this:
 
 ```dream
 import system;
@@ -61,68 +44,38 @@ fun main() {
 }
 ```
 
+`import system;` makes console helpers available. `fun main()` is where execution begins. `System.println` writes the text followed by a new line.
+
+## Run it
+
+```sh
+dreamer run
 ```
+
+You should see:
+
+```text
 Hello, world!
 ```
 
-- `fun main()` — the program starts here.
-- `System.println(...)` — print a line, then a newline (`import system;`).
+Change the message and run the command again. Dream builds your current source each time.
 
-Without a project folder you can still run a single file:
+## Run one file without a project
 
-```bash
+Save the same program as `hello.dream`, then use:
+
+```sh
 dream run hello.dream
 ```
 
-Compile without running (writes a native executable):
+Use `dream hello.dream` to build without running. For a project with dependencies, prefer `dreamer run` so its packages are installed too.
 
-```bash
-dream hello.dream
-```
+## Next steps
 
-## Going further
+Continue with the [language tour](tour.md) and [your first small project](first-project.md). Choose the browser or Node later using [Environments](environments.md). Set up completion and error messages with [Editor support](../reference/tooling/editor.md).
 
-### Browser or Node
+## Installation options
 
-```bash
-dreamer init hello --runtime web,node && cd hello
-dreamer run --target web
-dreamer run --target node
-```
+Set `DREAM_VERSION` before running the installer to request a particular release. `DREAM_SKIP_LLVM=1` skips the build-tools download, and `DREAM_SKIP_CC=1` skips the native linker download; use these only when you already have suitable tools. On Linux, `DREAM_SKIP_LIBS=1` skips installing desktop system libraries.
 
-Or with `dream`:
-
-```bash
-dream --runtime --web hello.dream
-dream --runtime --node hello.dream
-```
-
-```javascript
-import { run } from "./target/web/hello.web.runtime.js";
-await run("target/web/hello.wasm");
-```
-
-See [JavaScript interop](../reference/language/interop.md).
-
-### Target checks and cross emission
-
-`dream --runtime-target native|web|node` selects runtime availability for semantic checks.
-Use `--web` or `--node` to produce the corresponding WebAssembly and JavaScript artifacts.
-The `dreamer run --target web|node` spelling above is unchanged.
-
-`dream --target` takes an LLVM triple and links for that target. To emit checked LLVM IR and an unlinked object without a target SDK:
-
-```bash
-dream --object --target aarch64-unknown-linux-gnu -o hello.ll hello.dream
-```
-
-This writes `hello.ll`, `hello.o` and ABI metadata without linking or running them.
-Linked cross builds require target capability libraries and a suitable SDK. Inspect requirements
-with `dreamer toolchain doctor --target aarch64-unknown-linux-gnu`. Foreign binaries cannot be
-executed with `run`, `test`, or `debug-adapter`.
-
-## Next
-
-- [Language tour](tour.md)
-- [Cookbook](../cookbook/index.md)
-- [Package manager](../reference/tooling/dreamer.md)
+Linux release downloads require glibc 2.36 or later. Read [Toolchain setup](../reference/tooling/toolchain.md) to inspect or change your tools, and [the compiler command guide](../reference/tooling/compiler.md) for advanced output and target options.

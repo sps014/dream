@@ -1,7 +1,6 @@
 # Source generators
 
-Dream has **no runtime reflection**.
-When you need a DSL, compile-time rewriting, or boilerplate that depends on types, write a **compile-time source generator**.
+A source generator writes or replaces Dream code while your program is being built. Use it for repeated code or a small custom notation. Dream does not inspect arbitrary type definitions at runtime.
 
 Generators run during compilation — before type-checking on the final program — and do one of two things:
 

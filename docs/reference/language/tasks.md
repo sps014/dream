@@ -1,5 +1,8 @@
 # Tasks
 
+
+Use tasks when work should run in parallel. Async functions let work take turns while waiting; tasks can do work at the same time. Start with the examples below, then read the separate guides for sharing state and cancellation.
+
 **Package:** `system.task` — `import system.task;` for `Task` / `TaskPool`. Console examples below also use `import system;`.
 
 Dream's [`async`/`await`](async.md) is a *single-threaded* scheduler: work interleaves at `await` points but never runs at the same instant.
@@ -34,6 +37,12 @@ Capturing them by shared reference is a compile error.
 
 !!! note "Browser status"
     The browser runtime (`runtime/dream.js`) shares memory across every spawned `Worker`, matching native — but the host page must be served with the [Cross-Origin Isolation](https://developer.mozilla.org/en-US/docs/Web/API/crossOriginIsolated) headers (`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, or `credentialless`) or shared memory allocation fails silently in some browsers. `shared` capture across tasks needs those headers.
+
+## Explore this topic
+
+- [Share state between tasks](tasks-sharing.md)
+- [Cancel task work](tasks-cancellation.md)
+- [Reuse workers with TaskPool](task-pool.md)
 
 ## The model
 
@@ -140,108 +149,6 @@ async fun main(): void {
 
 The `body` argument follows the same capture rules as `spawn`.
 
-## Sharing state safely
-
-A task body may be a **capturing lambda** — as long as everything it captures is either `shared` or **moved**:
-
-- a blittable / unmanaged local,
-- a `string`,
-- a value struct of `shared` fields,
-- a **`shared class`** instance (captured by reference, guarded by its lock word), or
-- a **managed heap value moved by pointer hand-off** — an ordinary class instance, an array (`int[]`, `Job[]`), `List<T>`, … Tasks share the parent's memory, so the move is zero-copy: the object's ownership transfers and **the sender's binding cannot be used afterwards** (a use after the move is a compile error until it is reassigned).
-
-What stays rejected: anything that would copy a non-shared *reference* across the boundary without transferring ownership — e.g. a value struct embedding an ordinary class field.
-
-```dream
-async fun main(): void {
-    let nums = [1, 2, 3];
-    let r = Task.spawn(() => nums.length);        // nums moves into the task
-    // System.println(nums.length);               // error: use of 'nums' after move
-    System.println(r.await);                      // 3
-}
-```
-
-```dream
-shared class Counter {
-    public value: int;
-    public constructor() { this.value = 0; }
-
-    public fun increment(): void {
-        lock (this) {
-            this.value = this.value + 1;
-        }
-    }
-}
-
-async fun main(): void {
-    let counter = Counter();
-
-    let a = Task.spawn(() => { counter.increment(); return 0; });
-    let b = Task.spawn(() => { counter.increment(); return 0; });
-
-    a.await;
-    b.await;
-
-    System.println(counter.value);   // 2
-}
-```
-
-`lock (obj) { ... }` is a reentrant mutual-exclusion block and requires a `shared class` (a lock word), not every `shared` type.
-A `shared class`'s fields must be `shared` or managed heap references whose graph joins the object's shared region — see the [closed-graph field rule](classes-structs.md).
-
-## Cancellation
-
-Two layers:
-
-**Cooperative (preferred):** capture a `shared` `CancellationToken` and poll it; the owner calls `CancellationSource.cancel()`.
-
-```dream
-let src = CancellationSource();
-let tok = src.token;
-let w = Task.spawn(() => {
-    while !tok.is_cancelled { /* work */ }
-    return 0;
-});
-src.cancel();
-let _ = w.await;
-```
-
-**Hard abort:** `Promise.cancel(w)` (or dropping the Future) stops the task immediately. The browser terminates the worker; native `dream run` detaches the OS thread if the body is still running. Hard abort does **not** unwind the task — its pending releases and `del` destructors never run, and its private memory may be abandoned — prefer the token when `shared` state must stay consistent.
-
-A task that has already finished its body is joined and its env is released (`Debug.live_objects` stays flat across repeated `spawn`).
-
-## Async task bodies
-
-A task body may `await` via `spawn_async` (named `async fun` or `async` lambda):
-
-```dream
-async fun main(): void {
-    let n = 6;
-    let squarer = Task.spawn_async(async () => {
-        Time.sleep(1).await;
-        return n * n;
-    });
-    System.println((squarer.await).to_string()); // 36
-}
-```
-
-## `TaskPool` — reuse threads (advanced)
-
-For many short jobs over time, a `TaskPool` keeps a fixed set of threads and **dispatches** work round-robin.
-Prefer `spawn` / `map` for typical one-shot parallelism; reach for a pool when spawn/teardown cost dominates.
-
-```dream
-async fun main(): void {
-    let pool = TaskPool(4);
-    let a = pool.dispatch(() => 3 * 3);
-    System.println((a.await).to_string()); // 9
-    pool.shutdown();
-}
-```
-
-Capture rules match `spawn`.
-Async bodies use `dispatch_async`.
-
 ## Runtimes
 
 | Runtime | Notes |
@@ -254,7 +161,7 @@ Async bodies use `dispatch_async`.
 
 - The native worker registry grows with the number of live tasks and pool members; there is no 64-worker limit. OS thread or memory exhaustion stops execution with a diagnostic rather than returning an unusable worker handle.
 - Body is `fun(): TOut` (`spawn`) or `fun(): Future<TOut>` (`spawn_async`).
-- `TOut` must be `shared`. Captures must be `shared` **or moved** (ordinary arrays / `List` / classes transfer ownership; see [Sharing state safely](#sharing-state-safely)).
+- `TOut` must be `shared`. Captures must be `shared` **or moved** (ordinary arrays / `List` / classes transfer ownership; see [Sharing state safely](tasks-sharing.md#sharing-state-safely)).
 - A moved or captured heap value is visible to both sides while both can observe it. Task-local `new` / strings stay in that task's private memory.
 - `T : shared` is the generic kind constraint (same family as `T : unmanaged`).
 

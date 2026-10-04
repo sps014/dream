@@ -1,6 +1,6 @@
 # Variables
 
-Variables hold values. Declare them with `let` (mutable) or `const` (immutable). Dream usually figures out the type for you.
+Use variables to give values a name. Declare a value with `let` when it can change, or `const` when it should stay the same. Dream usually works out its type from the value you provide.
 
 Console examples elsewhere use `System.println` after `import system;` — see [Imports](imports.md#standard-library-packages). Short language snippets sometimes omit that import for brevity.
 

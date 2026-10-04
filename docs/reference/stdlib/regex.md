@@ -1,5 +1,8 @@
 # Regex
 
+
+Use a regular expression to find text matching a pattern. Create it once, then test text, extract matches, or replace them. An invalid pattern never matches; check your pattern with a small example first.
+
 **Import:** `import system.text;`
 
 Compile a pattern once, then test, replace, or extract matches. Patterns use familiar regex syntax (`\d`, groups, lookaround). An invalid pattern never matches.

@@ -68,107 +68,195 @@ markdown_extensions:
   - toc:
       permalink: true
 
+validation:
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+
 nav:
-  - Home: index.md
-  - Learn:
-    - Overview: learn/index.md
-    - Quickstart: learn/quickstart.md
-    - Language tour: learn/tour.md
-    - Next steps: learn/next-steps.md
-  - Reference:
-    - Language:
-      - Basics:
-        - Variables: reference/language/variables.md
-        - Operators: reference/language/operators.md
-        - Control Flow: reference/language/control-flow.md
-        - Functions: reference/language/functions.md
-        - Ownership: reference/language/ownership.md
-        - Comments: reference/language/comments.md
-        - Panics: reference/language/panics.md
-      - Types:
-        - Overview: reference/language/types.md
-        - Primitives: reference/language/primitives.md
-        - Arrays: reference/language/arrays.md
-        - Enums & Unions: reference/language/enums-unions.md
-        - Classes & Structs: reference/language/classes-structs.md
-        - The object Type: reference/language/objects.md
-      - Structure:
-        - Imports & Modules: reference/language/imports.md
-        - Language Rules: reference/language/invariants.md
-      - Features:
-        - Generics: reference/language/generics.md
-        - Interfaces: reference/language/interfaces.md
-        - Async/Await: reference/language/async.md
-        - Tasks: reference/language/tasks.md
-        - Compute shaders: reference/language/compute.md
-        - Vertex & fragment shaders: reference/language/shaders.md
-        - Memory Management: reference/language/memory.md
-        - Memory Safety Guide: reference/language/memory-safety.md
-        - Ownership: reference/language/ownership.md
-      - Metaprogramming:
-        - Source Generators: reference/language/generators.md
-        - CodeBuilder: reference/stdlib/codegen.md
-    - Interop:
-      - JavaScript: reference/language/interop.md
-      - The js type: reference/language/js-type.md
-      - Callbacks: reference/language/callbacks.md
-      - C: reference/language/c-interop.md
-      - Native libraries: reference/language/library-outputs.md
-      - Mobile packaging: reference/language/mobile-packaging.md
-    - Standard library:
-      - Overview: reference/stdlib/index.md
-      - Core:
-        - Built-ins: reference/stdlib/builtins.md
-        - Option & Result: reference/stdlib/option-result.md
-        - Lock & Semaphore: reference/stdlib/sync.md
-      - Text & Data:
-        - Strings: reference/stdlib/string.md
-        - Regex: reference/stdlib/regex.md
-        - SIMD: reference/stdlib/simd.md
-        - Encoding: reference/stdlib/encoding.md
-      - Collections: reference/stdlib/collections.md
-      - System:
-        - Random: reference/stdlib/random.md
-        - DateTime: reference/stdlib/datetime.md
-        - Logging: reference/stdlib/logging.md
-        - Testing: reference/stdlib/testing.md
-        - Debug: reference/stdlib/debug.md
-        - Process: reference/stdlib/process.md
-        - WebView: reference/stdlib/webview.md
-        - Desktop: reference/stdlib/desktop.md
-      - I/O:
-        - File I/O: reference/stdlib/file.md
-        - HTTP: reference/stdlib/http.md
-        - Web API: reference/stdlib/webapi.md
-        - Raw sockets: reference/stdlib/net.md
-      - GPU & compute:
-        - system.gpu: reference/stdlib/gpu.md
-      - Serialization:
-        - JSON: reference/stdlib/json.md
-      - Security:
-        - Crypto: reference/stdlib/crypto.md
-    - Tooling:
-      - Package Manager: reference/tooling/dreamer.md
-  - Cookbook:
-    - Overview: cookbook/index.md
-    - Hello, World: cookbook/hello-world.md
-    - Greet by name: cookbook/greet.md
-    - Sum a list: cookbook/sum-a-list.md
-    - GPU SAXPY: cookbook/gpu-saxpy.md
-    - GPU triangle: cookbook/gpu-triangle.md
-    - Quote generator: cookbook/quote-generator.md
-    - JSON HTTP API: cookbook/webapi.md
-  - Internals:
-    - Overview: internals/README.md
-    - Pipeline: internals/01-pipeline-overview.md
-    - Type System: internals/02-type-system.md
-    - HIR: internals/03-hir.md
-    - MIR: internals/04-mir.md
-    - Writing Passes: internals/05-writing-passes.md
-    - LLVM Backend: internals/06-llvm-backend.md
-    - Adding a Feature: internals/07-adding-a-language-feature.md
-    - Testing & Determinism: internals/08-testing-and-determinism.md
-    - Design notes:
-      - Nullable purge: internals/09-nullable-purge-design-note.md
-      - Stack alloc & mono: internals/10-stack-alloc-and-mono-design-note.md
-      - Swift-like ARC: internals/11-swift-like-arc-roadmap.md
+- Home: index.md
+- Learn:
+  - Overview: learn/index.md
+  - Quickstart: learn/quickstart.md
+  - Language tour: learn/tour.md
+  - Build a small project: learn/first-project.md
+  - Choose an environment: learn/environments.md
+  - Next steps: learn/next-steps.md
+  - Troubleshooting: learn/troubleshooting.md
+- Reference:
+  - Language:
+    - Basics:
+      - Variables: reference/language/variables.md
+      - Operators: reference/language/operators.md
+      - Custom operators: reference/language/operator-overloading.md
+      - Names, types, and sizes: reference/language/type-queries.md
+      - Control Flow: reference/language/control-flow.md
+      - Functions: reference/language/functions.md
+      - Function parameters: reference/language/function-parameters.md
+      - Function values: reference/language/function-values.md
+      - Ownership: reference/language/ownership.md
+      - Comments: reference/language/comments.md
+      - Panics: reference/language/panics.md
+    - Types:
+      - Overview: reference/language/types.md
+      - Primitives: reference/language/primitives.md
+      - Arrays: reference/language/arrays.md
+      - Enums & Unions: reference/language/enums-unions.md
+      - Classes & Structs: reference/language/classes-structs.md
+      - The object Type: reference/language/objects.md
+    - Structure:
+      - Imports & Modules: reference/language/imports.md
+      - Language Rules: reference/language/invariants.md
+    - Features:
+      - Generics: reference/language/generics.md
+      - Interfaces: reference/language/interfaces.md
+      - Async/Await: reference/language/async.md
+      - Tasks: reference/language/tasks.md
+      - Compute shaders: reference/language/compute.md
+      - Vertex & fragment shaders: reference/language/shaders.md
+      - Memory Management: reference/language/memory.md
+      - Memory Safety Guide: reference/language/memory-safety.md
+      - Reference cycles: reference/language/memory-cycles.md
+      - Raw buffers: reference/language/memory-buffers.md
+      - Cleanup timing: reference/language/memory-cleanup.md
+      - Task sharing: reference/language/tasks-sharing.md
+      - Task cancellation: reference/language/tasks-cancellation.md
+      - Task pools: reference/language/task-pool.md
+      - Compute examples: reference/language/compute-examples.md
+      - Compute rules: reference/language/compute-rules.md
+      - Compute passes: reference/language/compute-passes.md
+      - Rendering data: reference/language/shader-resources.md
+      - Rendering functions: reference/language/shader-functions.md
+    - Metaprogramming:
+      - Source Generators: reference/language/generators.md
+      - CodeBuilder: reference/stdlib/codegen.md
+  - Interop:
+    - JavaScript: reference/language/interop.md
+    - The js type: reference/language/js-type.md
+    - Callbacks: reference/language/callbacks.md
+    - C: reference/language/c-interop.md
+    - Native callbacks: reference/language/native-callbacks.md
+    - C++ libraries: reference/language/cpp-interop.md
+    - Native libraries: reference/language/library-outputs.md
+    - Mobile packaging: reference/language/mobile-packaging.md
+  - Standard library:
+    - Overview: reference/stdlib/index.md
+    - Core:
+      - Built-ins: reference/stdlib/builtins.md
+      - Option & Result: reference/stdlib/option-result.md
+      - Lock & Semaphore: reference/stdlib/sync.md
+      - API errors: reference/stdlib/errors.md
+    - Text & Data:
+      - Strings: reference/stdlib/string.md
+      - Formatting: reference/stdlib/formatting.md
+      - Regex: reference/stdlib/regex.md
+      - SIMD: reference/stdlib/simd.md
+      - Encoding: reference/stdlib/encoding.md
+    - Collections:
+      - Overview: reference/stdlib/collections.md
+      - List: reference/stdlib/collections/list.md
+      - Map: reference/stdlib/collections/map.md
+      - SortedMap: reference/stdlib/collections/sorted-map.md
+      - Set: reference/stdlib/collections/set.md
+      - Queue: reference/stdlib/collections/queue.md
+      - Stack: reference/stdlib/collections/stack.md
+      - PriorityQueue: reference/stdlib/collections/priority-queue.md
+      - Queries and Seq: reference/stdlib/collections/seq.md
+    - System:
+      - Random: reference/stdlib/random.md
+      - DateTime: reference/stdlib/datetime.md
+      - Logging: reference/stdlib/logging.md
+      - Testing: reference/stdlib/testing.md
+      - Debug: reference/stdlib/debug.md
+      - Process: reference/stdlib/process.md
+      - WebView: reference/stdlib/webview.md
+      - Desktop: reference/stdlib/desktop.md
+      - Window events: reference/stdlib/webview-events.md
+      - Window messaging: reference/stdlib/webview-messaging.md
+    - I/O:
+      - File I/O: reference/stdlib/file.md
+      - Streams: reference/stdlib/file-streams.md
+      - Paths: reference/stdlib/paths.md
+      - HTTP: reference/stdlib/http.md
+      - Web API: reference/stdlib/webapi.md
+      - Raw sockets: reference/stdlib/net.md
+    - GPU & compute:
+      - Overview: reference/stdlib/gpu.md
+      - Device and capabilities: reference/stdlib/gpu-device.md
+      - Buffers: reference/stdlib/gpu-buffers.md
+      - Compute dispatch: reference/stdlib/gpu-compute.md
+      - Textures and rendering: reference/stdlib/gpu-rendering.md
+      - Surfaces and input: reference/stdlib/gpu-input.md
+      - Vector and matrix math: reference/stdlib/gpu-math.md
+    - Serialization:
+      - JSON: reference/stdlib/json.md
+    - Security:
+      - Crypto: reference/stdlib/crypto.md
+  - Tooling:
+    - Dreamer overview: reference/tooling/dreamer.md
+    - Create a project: reference/tooling/create-project.md
+    - Project settings: reference/tooling/project-settings.md
+    - Dependencies: reference/tooling/dependencies.md
+    - Build and run: reference/tooling/build-run.md
+    - Single-file commands: reference/tooling/compiler.md
+    - Testing: reference/tooling/testing.md
+    - Workspaces: reference/tooling/workspaces.md
+    - Toolchain: reference/tooling/toolchain.md
+    - Editor setup: reference/tooling/editor.md
+    - Publishing: reference/tooling/publishing.md
+    - Registries: reference/tooling/registries.md
+    - Command reference: reference/tooling/commands.md
+    - Packaging:
+      - Overview: reference/tooling/pack/index.md
+      - Desktop: reference/tooling/pack/desktop.md
+      - Browser and Node: reference/tooling/pack/web-node.md
+      - Mobile libraries: reference/tooling/pack/mobile.md
+      - Options and troubleshooting: reference/tooling/pack/options.md
+- API lookup:
+  - Overview: reference/api/index.md
+  - system.codegen: reference/api/system-codegen.md
+  - system.collections: reference/api/system-collections.md
+  - system.core: reference/api/system-core.md
+  - system.crypto: reference/api/system-crypto.md
+  - system.desktop: reference/api/system-desktop.md
+  - system.encoding: reference/api/system-encoding.md
+  - system.gpu: reference/api/system-gpu.md
+  - system.io: reference/api/system-io.md
+  - system.json: reference/api/system-json.md
+  - system.logging: reference/api/system-logging.md
+  - system.net: reference/api/system-net.md
+  - system.primitives: reference/api/system-primitives.md
+  - system.process: reference/api/system-process.md
+  - system.simd: reference/api/system-simd.md
+  - system.task: reference/api/system-task.md
+  - system.testing: reference/api/system-testing.md
+  - system.text: reference/api/system-text.md
+  - system.webapi: reference/api/system-webapi.md
+  - system.webview: reference/api/system-webview.md
+  - system: reference/api/package-system.md
+- Cookbook:
+  - Overview: cookbook/index.md
+  - Hello, World: cookbook/hello-world.md
+  - Greet by name: cookbook/greet.md
+  - Sum a list: cookbook/sum-a-list.md
+  - GPU SAXPY: cookbook/gpu-saxpy.md
+  - GPU triangle: cookbook/gpu-triangle.md
+  - Quote generator: cookbook/quote-generator.md
+  - JSON HTTP API: cookbook/webapi.md
+- Contributors:
+  - Overview: internals/README.md
+  - Pipeline: internals/01-pipeline-overview.md
+  - Type System: internals/02-type-system.md
+  - HIR: internals/03-hir.md
+  - MIR: internals/04-mir.md
+  - Writing Passes: internals/05-writing-passes.md
+  - LLVM Backend: internals/06-llvm-backend.md
+  - Adding a Feature: internals/07-adding-a-language-feature.md
+  - Testing & Determinism: internals/08-testing-and-determinism.md
+  - Design notes:
+    - Nullable purge: internals/09-nullable-purge-design-note.md
+    - Stack alloc & mono: internals/10-stack-alloc-and-mono-design-note.md
+    - Ownership and memory: internals/11-swift-like-arc-roadmap.md
+  - Native pointer migration: internals/12-native-pointer-migration.md
+  - Documentation: internals/documentation.md

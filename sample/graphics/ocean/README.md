@@ -1,5 +1,9 @@
 # Dream ocean (WebGPU) — Seascape raymarch
 
+Explore a GPU-rendered ocean scene with animated waves. This is an advanced graphics example. The original scene, attribution, and implementation notes are described below.
+
+## About this example
+
 Faithful port of [Alexander Alekseev / TDM “Seascape”](https://www.shadertoy.com/view/Ms2SD1):
 fullscreen fragment raymarch (`heightMapTracing`), choppy `sea_octave` height field,
 fresnel sky reflection + water refraction, horizon sky mix, soft gamma.

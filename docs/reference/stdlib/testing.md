@@ -1,5 +1,8 @@
 # Testing
 
+
+Tests describe behavior you want to keep working. Mark a function with `@test`, use assertions to check its results, and run it with `dreamer test` or `dream test`. A failed assertion stops the test and reports the problem.
+
 **Import:** `import system.testing;`
 
 Mark tests with `@test`, then run `dream test` or `dreamer test`. A failed assertion prints a message and exits (no exceptions).

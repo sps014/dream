@@ -1,5 +1,8 @@
 # Async / Await
 
+
+Use `async` for work that may need to wait. Calling an async function creates a future: a result that will be available later. Its work starts when you await it, start it explicitly, or pass it to a Promise helper.
+
 **Packages:** `Promise` / `Future` are bootstrap (`system.core`). `Time.sleep` needs `import system;`. HTTP examples need `import system.net;`.
 
 Dream has cooperative concurrency with `async`/`await`.
@@ -166,7 +169,7 @@ Async methods work on **generic** classes too: each concrete type gets its own a
 
 ### Async lambdas and `fun(...): Future<T>` values
 
-An `async (params) => …` arrow lambda is typed as `fun(...): Future<T>` — see [Functions](functions.md#async-lambdas).
+An `async (params) => …` arrow lambda is typed as `fun(...): Future<T>` — see [Functions](function-values.md#async-lambdas).
 Calling the boxed value returns a `Future` just like calling a named `async fun`; `await` unwraps it.
 Named async functions used as first-class values (`let f: fun(int): Future<int> = delayed;`) use the same shape.
 

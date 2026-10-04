@@ -1,11 +1,11 @@
 # Learn Dream
 
-This path assumes little programming experience. Read in order:
+Start here if you are new to Dream. Each step builds on the previous one.
 
-1. [Quickstart](quickstart.md) — install Dream and print `Hello, world!`
-2. [Language tour](tour.md) — variables, control flow, functions, lists
-3. [Next steps](next-steps.md) — where to go after the tour
+1. [Install and run your first program](quickstart.md).
+2. [Take the language tour](tour.md): values, decisions, loops, functions, and collections.
+3. [Build a shopping total](first-project.md): combine the basics in a complete project.
+4. [Choose where your program runs](environments.md).
+5. [Pick your next topic](next-steps.md).
 
-Dream programs are `.dream` files. `fun main()` is where execution starts. `import system;` brings in `System.println` so you can print.
-
-For a lookup table, open [Reference](../reference/language/variables.md). For finished snippets, open the [Cookbook](../cookbook/index.md).
+Keep [Troubleshooting](troubleshooting.md) nearby when a command or example fails. Once you know the basics, use the [standard-library guides](../reference/stdlib/index.md), [API catalog](../reference/api/index.md), and [cookbook](../cookbook/index.md) as references.

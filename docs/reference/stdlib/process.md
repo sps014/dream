@@ -1,5 +1,8 @@
 # Process
 
+
+Use Process to start another program and read its result. It is available on desktop and Node, where the environment allows starting processes. Browser programs cannot use these operations.
+
 **Import:** `import system.process;`
 
 Run other programs. **Native and Node only** — a web build that mentions these APIs is a compile error.

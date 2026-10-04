@@ -1,8 +1,11 @@
 # Primitives
 
-**Package:** `system.primitives` (bootstrap — no import required)
 
-Primitive types are the built-in scalars: integers, floats, booleans, and characters. Their methods ship in the always-on prelude, so you can call them anywhere without an import. For the full type list and literal suffixes, see [Types](types.md).
+Primitive types hold simple values: whole numbers, decimal numbers, booleans, and characters. Their methods are available without imports. See [Types](types.md) for sizes and literal forms.
+
+**Package:** `system.primitives` (available without an import)
+
+Primitive types are the built-in scalars: integers, floats, booleans, and characters. Their methods ship in the built-in library, so you can call them anywhere without an import. For the full type list and literal suffixes, see [Types](types.md).
 
 ## Integers
 

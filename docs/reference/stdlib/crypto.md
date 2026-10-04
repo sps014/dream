@@ -1,5 +1,8 @@
 # Crypto
 
+
+Use these APIs for hashes, secure random bytes, and authenticated encryption. They produce byte arrays; use [Encoding](encoding.md) to display or store those bytes as text. Check the availability table before choosing encryption for a browser app.
+
 **Import:** `import system.crypto;`
 
 Host-backed hashes, a secure RNG, and AES-256-GCM. Digests and the CSPRNG run on your machine (native or Node) or via Web Crypto in the browser. APIs return raw `byte[]` — format with [encoding](encoding.md). Not TLS.

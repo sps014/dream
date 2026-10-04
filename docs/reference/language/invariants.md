@@ -1,6 +1,6 @@
 # Language rules
 
-These rules are part of Dream. Breaking one is an error.
+These rules explain why certain declarations or expressions are rejected. Use this page alongside the feature guides when an error points to a language restriction.
 
 ## Reserved identifiers
 
@@ -54,7 +54,7 @@ public fun to_string(): string { return "x"; }
 
 - `fun operator +(...)` only applies to a method; the method's own parameter count (0 or 1) fixes whether it overloads the unary or binary form of that symbol.
 - `fun implicit(): T` / `fun explicit(): T` only apply to a no-parameter method; its return type is the cast's target type.
-- A type may declare at most one operator overload per (symbol, arity) and at most one cast per target type. See [Operators § Operator overloading](operators.md#operator-overloading).
+- A type may declare at most one operator overload per (symbol, arity) and at most one cast per target type. See [Operators § Operator overloading](operator-overloading.md#operator-overloading).
 
 ## Indexers and enumerators
 

@@ -1,6 +1,6 @@
 # Sum a list
 
-Build a `List<int>`, walk it, and print the total.
+Add several numbers stored in a list. This example combines creating a collection, visiting its items, and updating a running total.
 
 ```dream
 import system;

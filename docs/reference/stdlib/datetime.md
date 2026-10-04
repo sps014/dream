@@ -1,5 +1,8 @@
 # DateTime
 
+
+Use DateTime to represent an instant and display it in UTC or another time zone. Use Duration for a length of time, and Stopwatch to measure how long a task takes.
+
 **Import:** `import system;`
 
 An instant in time, shown in UTC or a zone offset. Same package as `Time` and `Stopwatch`.

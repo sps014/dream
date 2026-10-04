@@ -1,6 +1,6 @@
 # Panics
 
-A **panic** is a fatal, non-recoverable runtime error: the program prints a message and halts immediately. There is no `try`/`catch` for panics — Dream has no exception mechanism at all. If you can anticipate a failure and want to handle it, use [`Option<T>`/`Result<T, E>`](../stdlib/option-result.md) instead; reach for a panic only for "this should never happen" conditions.
+A panic stops the program immediately and prints an error. Use returned `Result` values for failures your program should handle. Panics are for situations where continuing would be wrong.
 
 ## What triggers a panic
 
@@ -12,7 +12,7 @@ Dream inserts automatic checks for the operations below. Each prints a message a
 | Integer division or remainder by zero | `10 / 0`, `10 % 0` |
 | Integer overflow inside a `checked { }` block (see [Primitives](primitives.md#integer-overflow)) | `checked { 2147483647 + 1; }`, `0u - 1u`, `1 << 32` |
 | Casting an `object` to the wrong concrete type | `let o: object = "hi"; (int)o;` |
-| Reading an `unowned` field after its referent was freed | see [Memory > `weak`/`unowned`](memory.md#advanced-reference-cycles) |
+| Reading an `unowned` field after its referent was freed | see [Memory > `weak`/`unowned`](memory-cycles.md#advanced-reference-cycles) |
 
 You can also panic explicitly:
 

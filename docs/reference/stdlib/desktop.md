@@ -1,5 +1,8 @@
 # Desktop
 
+
+Use these desktop helpers to open dialogs, read or write the clipboard, and open a URL or file in its usual application. They can work on their own or alongside a WebView window.
+
 **Import:** `import system.desktop;` — **native only** (`dream run`). Browser and Node report unsupported: dialogs read as cancelled, the clipboard as empty, and `Shell.open` returns an error.
 
 Native file and message dialogs, the system clipboard, and opening URLs or files in their default app. Works on its own or next to a [WebView](webview.md).

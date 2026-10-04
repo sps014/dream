@@ -1,6 +1,6 @@
 # 02 — The Structured Type System (`crates/dream-types/src/`)
 
-This is the foundation everything else builds on. Read it before HIR and MIR.
+Start here before working on HIR or MIR. The type system gives every type a stable identity and records the facts later stages need. This chapter explains those identities and how to add or compare types.
 
 ## The problem it replaces
 

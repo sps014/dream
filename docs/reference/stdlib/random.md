@@ -1,5 +1,8 @@
 # Random
 
+
+Use Random for repeatable tests, games, and shuffling. Giving it the same seed reproduces the same sequence. Use [SecureRandom](crypto.md) when unpredictability is a security requirement.
+
 **Import:** `import system;`
 
 A seedable generator for games, tests, and shuffling — **not** for secrets. For cryptographic randomness use [SecureRandom](crypto.md).

@@ -1,10 +1,6 @@
 # 06 — LLVM Backend (`backend/llvm/`)
 
-The backend lowers optimized Dream MIR straight to textual LLVM IR
-(`crates/dream-mir/src/backend/llvm/`). The driver links that IR with the C runtime compiled to
-bitcode, then runs the pinned LLVM toolchain (`llvm-link` → `opt` → `llc`). Native builds link the
-object with the system `cc`. wasm32 builds link with wasi-sdk's `wasm-ld`, then pretty-print `.wat`
-with `wasmprinter`.
+The LLVM backend turns validated MIR into textual LLVM instructions. The execution tools then combine that output with the runtime and build a native program or WebAssembly module. This chapter explains the boundary and its invariants.
 
 Ownership is decided by MIR, and LLVM never decides it. Every `Retain`  /
 `Release` / `ValueDrop` that MIR emits becomes exactly one runtime call or one inlined

@@ -1,78 +1,41 @@
-# Collections
+# Choose a collection
+
+Collections hold several values. Choose the type based on how you will read and change those values.
 
 **Import:** `import system.collections;`
 
-Growable `List<T>`, `Map<K, V>`, `Set<T>`, `Queue<T>`, and `Stack<T>`. All have `.length` and work with `for..in`.
+| You need… | Use |
+| --- | --- |
+| Items you can read by position | [List](collections/list.md) |
+| Values you look up by a key | [Map](collections/map.md) |
+| Keys kept in sorted order | [SortedMap](collections/sorted-map.md) |
+| Unique values | [Set](collections/set.md) |
+| Items processed in arrival order | [Queue](collections/queue.md) |
+| The most recently added item first | [Stack](collections/stack.md) |
+| The smallest or highest-priority item first | [PriorityQueue](collections/priority-queue.md) |
+| Filtering and transforming items | [Queries and Seq](collections/seq.md) |
+
+## Start with a list
 
 ```dream
 import system;
 import system.collections;
 
 fun main() {
-    let nums: List<int> = [1, 2, 3];
-    nums.push(4);
-
-    let users: Set<string> = {"alice", "bob"};
-    let scores: Map<string, int> = {"alice": 95, "bob": 80};
-
-    for (let n in nums) {
-        System.println(n);
+    let names: List<string> = ["Ada", "Sam"];
+    names.push("Lee");
+    for (let name in names) {
+        System.println(name);
     }
 }
 ```
 
-- `[1, 2, 3]` is a `List` only when the expected type is `List<T>`; otherwise it is an array (`int[]`).
-- `{a, b}` is a `Set`. `{k: v}` is a `Map`.
-- Empty `[]` / `{}` need a type: `let xs: Set<int> = {};`.
+This prints each name on a separate line. The `List<string>` type tells Dream to make a growable list. Without that expected type, square brackets create a fixed [array](../language/arrays.md).
 
-## Query helpers
+Typed `{value, value}` creates a set, and typed `{key: value}` creates a map. Empty collections need a type, such as `let names: Set<string> = {};`.
 
-Always available (no import): `all`, `any`, `none`, `count_where`, `find_where`, `for_each`, `is_empty`.
+## Missing items and positions
 
-```dream
-let nums: List<int> = [1, 2, 3, 4];
-let ok = nums.all(fun(n: int): bool => n > 0);
-System.println(ok);   // true
-```
+Check each collection's result type before assuming an item exists. Map lookups and queue removals can return `None`. List indexing uses a position and stops the program if that position is outside the list.
 
-Need this package: `filter`, `map`, and related helpers that return a `List`.
-
-## `List<T>`
-
-`List<T>()`, `List.with_capacity(n)`, or a typed `[…]` literal.
-
-| Area | Calls |
-| --- | --- |
-| Size | `.length`, `is_empty()` |
-| Change | `push`, `pop`, `insert`, `remove_at`, `clear`, `set`, `reverse`, `concat`, `slice` |
-| Read | `get`, `[]`, `index_of`, `last_index_of`, `contains`, `join` |
-| Order | `sort`, `binary_search` |
-
-### Sorting and search
-
-`List<T : Comparable<T>>.sort()` and `List<T>.sort_by(cmp)` use `compare` from [interfaces](../language/interfaces.md). `binary_search` needs a sorted list.
-
-## `Map<K, V>`
-
-Typed `{k: v, …}` literal, or `Map<K, V>()`.
-
-| Area | Calls |
-| --- | --- |
-| Size | `.length`, `is_empty()` |
-| Change | `set`, `remove`, `clear` |
-| Read | `m[k]` (panics on missing key), `get` → `Option<V>`, `get_or`, `get_or_insert`, `contains`, `keys`, `values`, `entries` |
-
-`m[k]` compiles to `at(k)` and panics on an absent key — the same semantics as `list[i]`; use
-`get(k)` when absence is expected.
-
-`for (let pair in map)` yields `KeyValuePair<K, V>` (`.key`, `.value`).
-
-## `Set<T>`
-
-Typed `{e, …}` literal, or `Set<T>()`.
-
-`add`, `remove`, `contains`, `clear`, `.length`, `is_empty()`, plus `union` / `intersection` / `difference` / `is_subset` / `is_disjoint`.
-
-## `Queue<T>` / `Stack<T>`
-
-Queue: `enqueue` / `dequeue` / `peek` (FIFO). Stack: `push` / `pop` / `peek` (LIFO).
+See [Option and Result](option-result.md) for handling absence and [the API catalog](../api/system-collections.md) for all public members.

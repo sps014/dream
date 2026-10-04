@@ -1,30 +1,32 @@
-# Guest runtime C sources
+# Runtime sources
 
-The guest runtime for every target is **C** under this directory. The driver compiles it to LLVM
-bitcode and links it with the generated module before `opt` (see
-[`docs/internals/06-llvm-backend.md`](../../../../docs/internals/06-llvm-backend.md)).
+This directory contains the C code that supports running Dream programs on each target. Use this guide when changing the runtime or the way a program is built. For writing Dream programs, start with the [user documentation](../../../../docs/index.md).
 
-- [`c/core/`](c/core/) owns portable heap/ARC, strings, regions, weak references and panic.
-  `core/inlines.c` supplies external definitions of the ABI header's inline helpers.
-- [`c/sys/native/`](c/sys/native/) owns POSIX/Win32 services and the native platform table.
-- [`c/sys/wasi/`](c/sys/wasi/) owns linear-memory pages, allocation bridges, globals,
-  synchronization and the WASI/JS platform table.
-- [`c/sys/shared/`](c/sys/shared/) owns scheduling shared by native and wasm32.
-- [`c/regex.c`](c/regex.c) and vendored [`c/pcre2/`](c/pcre2/) provide optional regex units.
-  Native host capabilities remain separate `dream-host-*` crates.
+## Find the right layer
 
-[`modules.rs`](modules.rs) lists units by layer and supplies each target's compile inventory.
-Numeric ABI constants live in [`c/include/dream_abi.h`](c/include/dream_abi.h) and
-[`../abi.rs`](../abi.rs) (lockstep test `dream_abi_h_matches_abi_rs`).
+| Location | Responsibility |
+| --- | --- |
+| `c/core/` | Portable allocation, strings, weak references, regions, and panic handling |
+| `c/sys/native/` | Windows and POSIX system services |
+| `c/sys/wasi/` | WebAssembly memory and browser/Node service adapters |
+| `c/sys/shared/` | Scheduling used by both native and WebAssembly builds |
+| `c/regex.c` and `c/pcre2/` | Optional regular-expression support |
 
-## Toolchains
+`modules.rs` selects the units for each target. Native networking, GPU, and window capabilities remain separate `dream-host-*` crates. Do not add a second runtime implementation for another output format.
 
-Every build needs the pinned LLVM; native builds also need a linker driver (`cc`):
+The build driver compiles these units with the pinned Clang and combines their bitcode with the program before optimization. Read the [backend handbook](../../../../docs/internals/06-llvm-backend.md) before changing this boundary.
 
-```bash
-dreamer toolchain install llvm  # pinned LLVM (clang, llvm-link, opt, llc)
-dreamer toolchain install cc    # pinned Zig → zig cc, when there is no system cc
+## Shared definitions
+
+Keep `c/include/dream_abi.h` and `../abi.rs` in sync. The `dream_abi_h_matches_abi_rs` test checks shared numeric constants. Runtime call signatures come from the compiled runtime itself.
+
+## Required tools
+
+```sh
+dreamer toolchain install llvm
+dreamer toolchain install cc
 ```
 
-See [`c/README.md`](c/README.md) for the embedding platform table and freestanding gate.
-The pinned LLVM tools compile native and wasm32 runtime bitcode; wasm builds use the bundled WASI headers.
+Every build needs the pinned LLVM tools. Native output also needs a suitable linker. WebAssembly output needs its target headers and libraries. See [Toolchain setup](../../../../docs/reference/tooling/toolchain.md).
+
+Read [the core runtime guide](c/README.md) for the embedding table and freestanding checks.

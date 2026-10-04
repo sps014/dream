@@ -1,6 +1,6 @@
 # Option and Result
 
-No import. These two unions stand in for “missing” and “failed” — Dream has no `null`.
+Option represents a value that may be missing. Result represents an operation that may have failed. Both make you consider the other outcome instead of assuming a value exists. No import is needed.
 
 ```dream
 import system;
@@ -98,3 +98,30 @@ An `Option` main is rejected — bridge it with `ok_or` as above. `main(): int` 
 ## Errors
 
 Types that implement `Error` have `.message()` and `.code()`. Common ones: `ParseError` (bootstrap), `ArgError` (`import system;`), `IoError` (`system.io`).
+
+## Flatten nested optional values
+
+Use `and_then` to turn `Option<Option<T>>` into `Option<T>`. It keeps the inner optional value when the outside is `Some`, and returns `None` when the outside is `None`.
+
+```dream
+import system;
+
+fun main() {
+    let inner: Option<int> = Some(7);
+    let nested: Option<Option<int>> = Some(inner);
+    let value: Option<int> = nested.and_then((item: Option<int>) => item);
+    System.println(value.unwrap_or(0));
+}
+```
+
+This prints `7`.
+
+The library also declares the static helper `Option.flatten`, but the current build rejects calls to it. Use the example above until that helper is available.
+
+## Recover from a failure
+
+`result.or_else(handler)` calls the handler only for `Err`. The handler receives the error and returns a new `Result` with the same success type. It can provide a replacement success value or return another error. An `Ok` passes through unchanged.
+
+Use `unwrap_or` for a fixed fallback value, `map_err` to change an error, and `or_else` when recovery itself can succeed or fail.
+
+See the [Option signatures](../api/core-option.md), [Result signatures](../api/core-result.md), and [error guide](errors.md).

@@ -1,6 +1,10 @@
 # HTML sample
 
-Compile-time `html { <tags>… }` syntax DSL. Prefer **quote** if you are learning generators.
+This example turns `html { ... }` notation into text while the program is built. Try the smaller quote generator first, then use this example to explore structured custom notation.
+
+## About this example
+
+Compile-time `html { <tags>… }` custom notation. Prefer **quote** if you are learning generators.
 
 ## User-facing code
 

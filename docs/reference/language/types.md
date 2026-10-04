@@ -1,6 +1,6 @@
 # Types
 
-Dream is statically typed: every value has a type known at compile time. This page is the map of the type system — primitives, arrays, optionals, user types, aliases, and casting. Each area links to a deeper page.
+A type describes the values a variable can hold and the operations it supports. Dream checks these rules before your program runs. This page helps you choose a type and find its detailed guide.
 
 ## Primitives
 
@@ -45,7 +45,7 @@ Decimal scientific notation (`1e-3`, `2.5e10`) is a `float` unless given a `d` s
 
 Bare decimal literals default to `float`. When the surrounding expected type is `double` (typed binding, parameter, return, field, …), an unsuffixed float or int literal is treated as `double`. So `let x: double = 3.14` works without a `d` suffix.
 
-`byte`, `uint`, `ulong`, and `usize` are **unsigned** — division, remainder, comparisons, and right shift use unsigned semantics. `int`, `long`, and `isize` are signed. `isize`/`usize` are 32 bits on wasm32 and 64 bits on 64-bit native targets; their width comes from the selected target, not the compiler host. For storage sizes, use [`sizeof`](operators.md#sizeof-nameof-and-typeof).
+`byte`, `uint`, `ulong`, and `usize` are **unsigned** — division, remainder, comparisons, and right shift use unsigned semantics. `int`, `long`, and `isize` are signed. `isize`/`usize` are 32 bits on wasm32 and 64 bits on 64-bit native targets; their width comes from the selected target, not the compiler host. For storage sizes, use [`sizeof`](type-queries.md#sizeof-nameof-and-typeof).
 
 ### Implicit widening
 

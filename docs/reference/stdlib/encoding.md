@@ -1,5 +1,8 @@
 # Encoding
 
+
+Encoding converts text and bytes between representations, including UTF-8, hexadecimal, and Base64. Decoding hexadecimal or Base64 returns a Result so you can handle invalid input.
+
 **Import:** `import system.encoding;`
 
 Convert between `string`, `byte[]`, hex, and Base64. Hex and Base64 **decode** return `Result` on bad input.

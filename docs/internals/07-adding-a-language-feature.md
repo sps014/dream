@@ -1,6 +1,6 @@
 # 07 — Adding a Language Feature (end to end)
 
-This is the "I want to add syntax X to Dream" checklist. It walks one feature through *every* stage so you can see which files each stage lives in and what each must contribute. Use it as a template and a completeness check.
+Use this worked example when adding syntax or behavior. Follow the feature through each stage, keeping the checks with the stage that owns them.
 
 ## The mental checklist
 

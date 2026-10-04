@@ -1,5 +1,8 @@
 # Files
 
+
+Use File to read or write a whole file, inspect a path, or manage directories. Methods that wait for work are async and return Result values. Handle the error when the file cannot be accessed.
+
 **Import:** `import system.io;`
 
 Whole-file helpers are `async` and return `Result`. Call them from `async fun main()`.
@@ -20,6 +23,11 @@ async fun main(): void {
 | Native / Node | Real disk |
 | Browser | In-memory, gone on reload |
 
+## Explore this topic
+
+- [Read and write streams](file-streams.md)
+- [Work with file paths](paths.md)
+
 ## Whole file (`File`)
 
 | Call | Meaning |
@@ -38,19 +46,3 @@ async fun main(): void {
 `File.stat` returns `FileStats` (`size`, `mtime_millis` / `ctime_millis` / `atime_millis`, `mode`, `kind`) with `is_file` / `is_dir` / `is_symlink`. With `import system;`, `modified()` / `created()` yield `DateTime`.
 
 Async `File` / `FileHandle` methods take an optional last `token: Option<CancellationToken>`; a cancelled token yields `IoError` with code `ECANCELLED`.
-
-## `FileHandle` / `FileStream`
-
-Open with a mode (`"r"`, `"w"`, `"a"`, `"r+"`, `"w+"`, `"a+"`), then `read` / `write` / `seek` / `tell` / `seek_end` / `read_line` / `write_text` / `close` (sync, plus `*_async` variants except `close`). `FileStream` also has `read_all`, `has_more`, `position`, `.length`, `reset`.
-
-## `Path`
-
-`Path.join`, `Path.of(parts)`, `file_name`, `stem`, `extension`, `with_extension`, `with_file_name`, `parent`, `is_absolute` / `is_relative`, `has_extension`, `components`, `normalize`, `absolute`, `relative_to`, `separator`.
-
-```dream
-let p = Path.join("docs", "notes.txt");
-System.println(Path.file_name(p).unwrap_or(""));
-System.println(Path.extension(p).unwrap_or(""));
-```
-
-Errors are [`IoError`](option-result.md). Example: [`sample/interop/file_io.dream`](https://github.com/sps014/dream/blob/main/sample/interop/file_io.dream).

@@ -1,6 +1,6 @@
 # GPU: colored triangle
 
-A **vertex + fragment** shader that draws one triangle. Open a window (native) or a canvas (browser).
+Draw one triangle with a vertex function and a fragment function. Run it in a desktop window or on a browser canvas, using the setup below.
 
 ```dream
 import system;

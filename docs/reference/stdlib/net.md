@@ -1,5 +1,8 @@
 # Raw sockets
 
+
+Use TcpClient or WebSocket when you need a connection that stays open for several messages. For ordinary web requests, [HttpClient](http.md) is usually the simpler choice.
+
 **Import:** `import system.net;` (same package as [HTTP](http.md))
 
 Use `TcpClient` or `WebSocket` when you need a lasting connection or a non-HTTP protocol. Use `HttpClient` for ordinary request/response.

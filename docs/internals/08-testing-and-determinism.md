@@ -1,6 +1,6 @@
 # 08 — Testing, Determinism & Conventions
 
-This chapter covers how the compiler is tested, the determinism contract the whole back end must honor, and the conventions every contributor is expected to follow.
+This chapter explains which tests to run and how to make output repeatable. A repeated build of the same source to the same path must produce identical output bytes.
 
 CI validates pull requests and merge-queue candidates, with manual dispatch available for
 main or other refs. It does not automatically rerun the same suite after merging a validated

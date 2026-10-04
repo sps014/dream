@@ -1,12 +1,16 @@
 # sample/webapi
 
-Native FastAPI-style server (`dream run` only).
+This example runs a local HTTP service on your computer. It shows routes, JSON request bodies, grouped handlers, cross-origin settings, and generated API documentation. Run it from the repository root using the command below.
+
+## About this example
+
+This is a desktop HTTP server.
 
 ```bash
 dream run sample/webapi/app.dream
 ```
 
-- CORS (`CORS(CorsOptions())`, FastAPI-style)
+- CORS (`CORS(CorsOptions())`)
 - `GET /health` — plain text
 - `GET /api/items/{id}` — JSON (`@http_group`)
 - `POST /api/items` — JSON body

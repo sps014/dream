@@ -1,6 +1,6 @@
 # 03 — Typed HIR (`crates/dream-hir/src/`)
 
-The HIR is the AST **after type-checking and name resolution**. Its one job is to *persist everything the analyzer learned* so nothing downstream has to re-derive it. If you ever find the backend "figuring out" a type or which function a call refers to, that fact belongs in HIR.
+HIR stores a program after its types and names have been checked. Later stages use these recorded facts instead of repeating the analysis. This chapter explains its structure and the rules its producer must satisfy.
 
 ## What HIR adds over the AST
 

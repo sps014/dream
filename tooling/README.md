@@ -1,56 +1,39 @@
-# Dream Tooling
+# Dream editor and project tools
 
-This directory contains developer tooling for the Dream language, focused around the native Language Server Protocol (LSP) and editor extensions.
+This folder contains the tools used to work on Dream programs: the language server, editor extension, package manager, and documentation checks.
 
-## Layout
+| Folder | Purpose |
+| --- | --- |
+| `dream-lsp/` | Completion, errors, navigation, and formatting for editors |
+| `vscode/` | Dream extension for VS Code-compatible editors |
+| `dreamer/` | Creating, building, testing, and packaging projects |
+| `docs/` | Documentation highlighting, API coverage, and example checks |
 
-- [`dream-lsp/`](dream-lsp) — A native Rust Language Server Protocol (LSP) server binary powered by `tower-lsp`. It reuses the compiler's frontend (lexer, parser, semantic analyzer) to provide rich IntelliSense features.
-- [`vscode/`](vscode) — A Visual Studio Code extension client written in TypeScript that connects to the `dream-lsp` server.
-- [`dreamer/`](dreamer) — The Dream package manager: reads/writes `dream.toml` manifests and `dream.lock` lockfiles, resolves and installs dependencies into `dream_packages/`, and wraps the `dream` compiler for `build`/`run`. See [`docs/reference/tooling/dreamer.md`](../docs/reference/tooling/dreamer.md) for the beginner walkthrough.
+## Use the editor tools
 
-## Features Supported
+Install Dream and the Dream editor extension, then open your project folder. See [Editor setup](../docs/reference/tooling/editor.md) for executable discovery and settings.
 
-The `dream-lsp` server provides the following capabilities:
-- **Real-time Diagnostics**: Reports syntax and semantic errors/warnings directly in the editor. Diagnostics keep flowing even while a document has a syntax error — the parser recovers and the analyzer runs over whatever parsed — and are debounced so a burst of keystrokes triggers a single analysis pass.
-- **Semantic Tokens**: AST-driven, perfectly accurate syntax highlighting (functions, classes, fields, parameters, etc.).
-- **Autocomplete (IntelliSense)**: Intelligent completions for keywords, data types, and scoped symbols (locals, parameters, top-level `let`/`const` globals, and cross-file imports).
-- **Hover**: Rich Markdown hover tooltips displaying symbol signatures and documentation comments (functions, types, members, and top-level globals).
-- **Signature Help**: Pop-up parameter hints and active parameter tracking when writing function or constructor calls.
-- **Go to Definition / Find References**: Jump to a symbol's declaration (including on-disk imports) or list every usage of it in the open file.
-- **Rename**: Rename a local or same-file declaration and all of its references in the document.
-- **Document Highlight**: Highlight every occurrence of the symbol under the cursor.
-- **Document Symbols**: An outline of a file's top-level declarations (functions, types, enum members, fields, methods, and globals).
-- **Workspace Symbols**: Search named declarations across currently open documents.
-- **Code Actions**: Auto-import quick fixes for unresolved names.
-- **CodeLens**: Run / Debug lenses on `main` (skipped for `type = "lib"` packages).
-- **Inlay Hints**: Inferred variable types and parameter-name hints at call sites.
-- **Formatting**: Token-stream pretty-printer (indent, spacing around operators/commas/colons, blank lines between top-level decls). Comments are preserved via lexer trivia; this is not a lossy AST round-trip. The VS Code extension sets `[dream].editor.defaultFormatter` to this extension so **Format Document** works without manual config. Rebuild/reinstall `dream-lsp` after formatter changes (`source ./use-toolchain.sh` from the repo root) so Cursor/VS Code pick up the current server binary.
+The extension offers completion, hover documentation, parameter hints, definition navigation, reference search, rename within a document, outlines, quick fixes, run/debug actions, and formatting. It reads installed packages from your project; run `dreamer install` when adding dependencies.
 
-Documents are synced **incrementally** (only the changed range is applied) and the symbol index is **cached per document version**, so repeated navigation on an unchanged file is free.
+## Build the extension
 
-## Building and Running the Extension
+From the repository root:
 
-To test or develop the VS Code extension:
+```sh
+cd tooling/vscode
+npm install
+npm run compile
+npx @vscode/vsce package
+```
 
-1. Ensure you have Node.js, `npm`, and `cargo` installed.
-2. Navigate to the `vscode/` folder:
-   ```bash
-   cd vscode
-   npm install
-   npm run compile
-   ```
-3. You can either open the workspace in VS Code and press **F5** to launch the Extension Development Host, or build a `.vsix` package to install it globally:
-   ```bash
-   npx @vscode/vsce package
-   code --install-extension dream-lang-0.1.0.vsix
-   ```
+Install the resulting `.vsix` through your editor's extension menu. Its filename includes the extension's current version. For development, open the extension project and press F5 to start an extension development window.
 
-*(Note: The VS Code extension automatically attempts to invoke `cargo run` from the `dream-lsp` crate when starting, so you must have the Rust toolchain installed locally).*
+Build the server from the repository root with `cargo build -p dream-lsp`. Ensure the editor uses the rebuilt binary before testing changes; an older installed server will keep its older behavior.
 
-## Testing the LSP Server
+## Check changes
 
-The LSP server contains standalone tests to verify the compiler and analysis pipeline works without needing an editor:
-
-```bash
+```sh
 cargo test -p dream-lsp
 ```
+
+See [Documentation maintenance](../docs/internals/documentation.md) for API and example checks, and [Dreamer](../docs/reference/tooling/dreamer.md) for project commands.

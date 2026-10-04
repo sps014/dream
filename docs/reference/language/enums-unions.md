@@ -1,6 +1,6 @@
 # Enums & Unions
 
-`enum` covers two related ideas: a simple enum is a set of named integer constants, and a *discriminated union* is an enum whose variants carry typed data. You take unions apart with a pattern-matching `switch`.
+Use an enum to name a fixed set of choices. A choice can also carry data, such as a success value or an error. Use `switch` to handle the choices explicitly.
 
 ## Enums
 

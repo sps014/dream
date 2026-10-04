@@ -1,6 +1,10 @@
 # DTO sample
 
-Compile-time emit generator: types marked `@dto` get a synthesized `describe()` method via
+This generator adds a `describe()` method to types marked with `@dto`. It runs while building the program. Follow the project registration and run steps below to see the generated method in use.
+
+## About this example
+
+Compile-time emit generator: types marked `@dto` get a generated `describe()` method via
 `GenContext.emit_extend`.
 
 ## User-facing code

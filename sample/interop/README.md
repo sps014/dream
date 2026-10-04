@@ -1,5 +1,9 @@
 # Dream JS interop samples
 
+These examples connect Dream programs to JavaScript in a browser or Node. Build the example first, then run its matching launcher. They cover text, arrays, structs, callbacks, async requests, and the dynamic `js` type.
+
+## About this example
+
 Each `*.dream` here compiles to WebAssembly and talks to JavaScript through the shared runtime in
 [`runtime/dream.js`](../../runtime/dream.js) — automatic value marshaling for strings, arrays,
 `List<T>`, structs, callbacks, the dynamic `js` type, `fetch`, and `extern async`.
@@ -11,10 +15,10 @@ none. Build the one you want before running it:
 
 ```sh
 # from the repository root
-cargo run -- sample/interop/interop.dream      # writes target/web/interop.{wasm,wat,abi.json}
+cargo run -- --wasm sample/interop/interop.dream      # writes target/web/interop.{wasm,wat,abi.json}
 ```
 
-Optionally emit a tree-shaken sibling `*.web.runtime.js` / `*.node.runtime.js` (only the host chunks
+Optionally emit a generated sibling `*.web.runtime.js` / `*.node.runtime.js` (only the host chunks
 this program needs):
 
 ```sh
@@ -27,7 +31,7 @@ Or build them all at once:
 
 ```sh
 for f in async_fetch async_js callback_multi callbacks http interop js regex slots structs; do
-  cargo run -- "sample/interop/$f.dream"
+  cargo run -- --wasm "sample/interop/$f.dream"
 done
 ```
 

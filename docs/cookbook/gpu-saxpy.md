@@ -1,6 +1,6 @@
 # GPU: SAXPY
 
-Run a tiny **compute** shader: `out[i] = 2 * x[i] + y[i]`, then print the result. Needs a GPU (or `gpu unavailable`).
+Run a small calculation on your GPU and read the result. This example needs a working GPU device; it reports when none is available.
 
 ```dream
 import system;

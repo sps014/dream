@@ -1,5 +1,8 @@
 # Built-ins
 
+
+Use these helpers for console input and output, basic calculations, time, and information about the running program. Console and system helpers need `import system;`; Math and primitive methods are available automatically.
+
 **Import:** `import system;` for console, env, and process helpers. `Math`, `Buffer`, and primitive methods need no import.
 
 ```dream

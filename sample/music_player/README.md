@@ -1,5 +1,9 @@
 # Dream music player (browser-only)
 
+This browser example is a working music player with a playlist, playback controls, seeking, and volume. The Dream program uses page elements and the browser audio API. Follow the setup below to serve it through a web server.
+
+## About this example
+
 A playable music player — playlist, play/pause, prev/next, seek bar, volume, live time display —
 written entirely in [`music_player.dream`](music_player.dream). Every DOM query, `<audio>`
 element, event listener, and property get/set is ordinary Dream code compiled to WebAssembly via

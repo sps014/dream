@@ -1,10 +1,10 @@
 # Classes & Structs
 
-Classes and structs both group related data with fields, constructors, and methods. They share every feature — the one difference is **how they are stored and copied**: a `class` is a reference type, a `struct` is a value type.
+Classes and structs keep related fields and methods together. A class shares the same object when assigned to another variable. A struct creates an independent value copy. Choose the behavior your data needs.
 
 ## Classes are reference types
 
-A `class` lives on the heap, and a variable holds a *reference* to it. Assigning or passing a class shares the same object. Heap values also follow [ownership](ownership.md) (sink parameters, last-use move):
+A `class` lives on the heap, and a variable holds a *reference* to it. Assigning or passing a class shares the same object. Heap values also follow [ownership](ownership.md) (parameters that take ownership, last-use move):
 
 ```dream
 class Point(x: int, y: int);
@@ -64,7 +64,7 @@ v2.x = 10;
 System.println(v1.x);  // 3 (unaffected)
 ```
 
-Structs need no heap allocation and no retain/release, so a struct held by value is never absent and cannot recursively contain itself by value. Use `Option<S>` when a struct slot may be empty.
+Structs need no heap allocation and no automatic reference tracking, so a struct held by value is never absent and cannot recursively contain itself by value. Use `Option<S>` when a struct slot may be empty.
 
 ### `ref struct`: a stack-only value type
 
@@ -116,7 +116,7 @@ public class Counter {
 }
 ```
 
-A field may also carry `weak` or `unowned` (combinable with visibility in any order) to opt a strong-reference-cycle-prone field out of the compiler's cycle check — see [Memory > Reference cycles](memory.md#advanced-reference-cycles).
+A field may also carry `weak` or `unowned` (combinable with visibility in any order) to opt a strong-reference-cycle-prone field out of the compiler's cycle check — see [Memory > Reference cycles](memory-cycles.md#advanced-reference-cycles).
 
 ### Methods
 
@@ -252,7 +252,7 @@ shared class Bad {
 
 `shared struct` is not allowed — value structs become `shared` automatically when their fields are. Wrap a reference graph in a `shared class` if it needs to be shared by pointer.
 
-`lock (x)` still requires a `shared class` (a lock word), not every `shared` type. See [`lock (obj) { ... }`](tasks.md#sharing-state-safely).
+`lock (x)` still requires a `shared class` (a lock word), not every `shared` type. See [`lock (obj) { ... }`](tasks-sharing.md#sharing-state-safely).
 
 ## Advanced: boxing a struct
 

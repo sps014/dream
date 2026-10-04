@@ -1,6 +1,6 @@
 # Cookbook
 
-Small programs you can copy. Start with the first three if you are new; GPU and generators need a bit more setup.
+Choose a small working example, run it, and change one part to see what happens. Start with console programs before trying examples that need a GPU, window, or server.
 
 <div class="dream-compact-cards" markdown>
 

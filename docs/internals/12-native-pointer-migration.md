@@ -1,6 +1,6 @@
 # Native pointer migration: inventory and measurements
 
-This is the Phase 3.7 engineering record, not a claim that the migration or its
+This engineering record tracks Phase 3.7. It does not establish that the migration or its
 cross-platform execution gates are complete. The pre-migration artifacts remain
 under `target/audit-p3-pointer-baseline/` locally; they are ignored build products.
 

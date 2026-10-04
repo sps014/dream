@@ -1,6 +1,6 @@
 # Comments as documentation
 
-Dream uses ordinary contiguous `//` comments as API documentation. There is no `///` syntax and no block-comment syntax — a short sentence above each public type, constructor, and method is the convention.
+Use `//` to leave a note for readers. A short group of comments directly above a public declaration also becomes its API documentation in the editor. Dream does not use `///` or block comments.
 
 ```dream
 // Number of elements currently stored.

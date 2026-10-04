@@ -1,11 +1,11 @@
 # Native system services
 
-POSIX and Win32 services share the existing `include/dream_thread.h` abstraction. This
-layer owns OS page maps, platform locks, stdio, filesystem, environment, time, callbacks,
-workers. Shared async scheduling lives in `../shared/`. Portable allocation and ARC logic live in `../../core/`.
-The default embedding platform table is defined in `platform.c`; leak formatting lives in
-`heap_debug.c` and `leak_report.c`, keeping stdio/getenv out of core.
+This layer connects the runtime to Windows and POSIX services. Put platform-dependent behavior here and keep portable allocation and reference-counting logic in `../../core/`.
 
-Use `scripts/bench-runtime.sh` for runtime microbenchmarks. `../../../modules.rs` registers
-native sys units alongside the shared core; runtime sources compile to LLVM bitcode with
-the pinned clang. Regex/host capability libraries keep their separate registries.
+It owns mapped pages, platform locks, standard streams, files, environment variables, clocks, callbacks, and workers. The platforms share the `include/dream_thread.h` abstraction. Scheduling common to native and WebAssembly lives in `../shared/`.
+
+`platform.c` defines the default embedding table. `heap_debug.c` and `leak_report.c` handle leak-report formatting, keeping standard I/O and environment access outside the core layer.
+
+`../../../modules.rs` registers these units. The pinned Clang builds them into runtime bitcode. Regular expressions and host capabilities keep their own registries.
+
+Run `scripts/bench-runtime.sh` from the repository root for runtime benchmarks. Read the [runtime layer guide](../../README.md) before changing an embedding callback or allocation contract.

@@ -1,5 +1,8 @@
 # SIMD (`system.simd`)
 
+
+Vector operations process several numeric values together. Start with ordinary loops; use Vector when you need direct control over groups of values.
+
 **Import:** `import system.simd;`
 
 A plain loop can use vector math; `Vector` is for when you want lanes yourself.

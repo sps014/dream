@@ -1,6 +1,6 @@
 # JSON HTTP API
 
-A tiny native server with `@get` / `@post`, JSON bodies, and Swagger at `/docs`.
+Build a small local HTTP service with a health route and a JSON response. It runs as a desktop program and keeps serving requests until stopped.
 
 ```dream
 import system;

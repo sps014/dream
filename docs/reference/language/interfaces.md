@@ -1,6 +1,6 @@
 # Interfaces
 
-An interface is a contract — a named set of method signatures that a type promises to provide. A value typed as an interface can hold *any* type that implements it. Calls go to the concrete implementation at runtime.
+An interface names the methods a type must provide. Use one when different types should be usable through the same set of operations. A call uses the implementation belonging to the actual value.
 
 That is how Dream does polymorphism.
 
@@ -214,7 +214,7 @@ let d = (Container<int>)b;     // explicit upcast to a generic interface
 ### Async interface methods
 
 An interface method may be `async`.
-Calling it through an interface receiver goes to the concrete async implementation, which returns a `Future<T>` to `await`:
+Calling it through an interface value you call the method on goes to the concrete async implementation, which returns a `Future<T>` to `await`:
 
 ```dream
 interface Fetcher {
@@ -252,8 +252,8 @@ By convention `compare` returns a negative number, zero, or a positive number wh
 Every numeric primitive plus `char` and `string` already implements `Comparable` (via prelude `extend` blocks), so with `import system.collections;` — `List<int>().sort()`, `binary_search`, and comparisons in generic code work with no extra code.
 
 - **`==` / `!=` route to `equals`** when both operands are the same user type implementing `Equatable<Self>`. Primitives and strings keep built-in equality.
-- **`<` / `<=` / `>` / `>=` use `compare`** when the left operand's type implements `Comparable<Self>` (`a < b` means `a.compare(b) < 0`). A more specific [`@operator("...")`](operators.md#operator-overloading) for a different symbol is unaffected.
-- **`compare` powers sorting** via `List<T : Comparable<T>>.sort()` and `List<T>.sort_by(cmp)`. See [List sorting](../stdlib/collections.md#sorting-and-search).
+- **`<` / `<=` / `>` / `>=` use `compare`** when the left operand's type implements `Comparable<Self>` (`a < b` means `a.compare(b) < 0`). A more specific [`@operator("...")`](operator-overloading.md#operator-overloading) for a different symbol is unaffected.
+- **`compare` powers sorting** via `List<T : Comparable<T>>.sort()` and `List<T>.sort_by(cmp)`. See [List sorting](../stdlib/collections/list.md#copy-join-and-sort).
 
 Both interfaces work with [value structs](classes-structs.md).
 When the concrete type is known, calls are direct.

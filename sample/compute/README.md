@@ -1,5 +1,9 @@
 # Compute samples
 
+These examples show how to run calculations on a GPU with Dream. Start with `saxpy.dream`, then try the multi-pass simulations. You need a working GPU device; read the [compute guide](../../docs/reference/language/compute.md) for setup.
+
+## About this example
+
 Progressive `@compute` / `system.gpu` examples. Language guide:
 [Compute shaders](../../docs/reference/language/compute.md).
 
@@ -10,7 +14,7 @@ Progressive `@compute` / `system.gpu` examples. Language guide:
 | [`life/`](life/) | Complex — Gray–Scott reaction–diffusion |
 | [`../fluid/`](../fluid/) | Larger demo — interactive stable fluids |
 
-Golden coverage for mixed `GpuBuffer` element types (`float` via `run_1d`, `int` / `Vec2`
+Behavior tests for mixed `GpuBuffer` element types (`float` via `run_1d`, `int` / `Vec2`
 via `run_resources`) lives in
 [`tests/cases/compute_struct_buffer.dream`](../../tests/cases/compute_struct_buffer.dream).
 

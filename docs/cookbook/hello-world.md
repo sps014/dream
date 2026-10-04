@@ -1,6 +1,6 @@
 # Hello, World
 
-Print one line, then stop.
+Print a line to check that Dream is installed and working. This is the smallest useful program to start with.
 
 ```dream
 import system;

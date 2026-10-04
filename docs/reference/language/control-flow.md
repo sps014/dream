@@ -1,6 +1,6 @@
 # Control Flow
 
-Control flow decides which code runs and how often. Dream has `if`, loops, and `switch`, plus labeled loops for nested cases.
+Use `if` to choose what happens, loops to repeat work, and `switch` to handle different cases. Each example shows how the decision affects your program.
 
 ## if / else
 

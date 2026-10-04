@@ -1,7 +1,6 @@
 # Memory Safety Guide
 
-Dream is designed so that **memory corruption is impossible in safe code** and **reference-cycle leaks are rejected at compile time**.
-This guide covers every safety feature the language provides, what it catches, and how to use it.
+Dream checks ordinary code to prevent invalid memory access and rejects many reference cycles before running the program. This guide explains the rules you will meet while writing safe code and the boundaries that still need care.
 
 ## Quick reference: what the compiler checks
 
@@ -13,7 +12,7 @@ This guide covers every safety feature the language provides, what it catches, a
 | Interface-field cycles (conservative) | error | `Node { h: Option<Handler> }` + impl back-ref |
 | Closure self-capture (`this` into fn-field) | error | `b.onClick = () => this.label` |
 | Borrow contract violation | error | declared `borrow fun` that mutates |
-| Interface receiver-mode mismatch | error | implementor mode ≠ interface mode |
+| Interface value you call the method on-mode mismatch | error | implementor mode ≠ interface mode |
 | Iterator/Span invalidation (same function) | error | `xs.push(2)` while cursor live |
 | Cross-function stale view | error | view returned from method, then mutation |
 | Container rewind without clearing slots | safe | old elements stay until overwrite or drop |
@@ -166,7 +165,7 @@ public class Engine {
 }
 ```
 
-- `Weak<T>(obj)` does not increment the target's refcount.
+- `Weak<T>(obj)` does not keep its target alive.
 - When the target drops, `is_dead()` flips to true automatically.
 - `get()` returns `Option<T>`, retaining a live target atomically. An `is_dead()`
   check followed by a separate load cannot protect against concurrent destruction.

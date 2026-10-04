@@ -1,5 +1,9 @@
 # Dream elevated (WebGPU) — terrain raymarch
 
+Explore a GPU-rendered terrain scene. This is an advanced graphics example; begin with the triangle example if you are new to rendering. The original scene and its attribution are described below.
+
+## About this example
+
 Faithful port of [Inigo Quilez “Elevated”](https://www.shadertoy.com/view/MdX3Rr)
 (CC BY-NC-SA 3.0): fullscreen fragment heightfield march (`interesct`),
 derivative fbm terrain (`terrainH` / `M` / `L` octaves), rock/snow shading,

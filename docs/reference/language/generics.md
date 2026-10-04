@@ -1,8 +1,6 @@
 # Generics
 
-Generics let you write code once and use it for many types.
-Dream picks a concrete type at compile time for each use.
-There is no boxing and no extra runtime cost.
+Type parameters let the same function or data type work with different kinds of values. For example, a list can hold integers or strings without needing a different list implementation for each.
 
 ## Generic functions
 
@@ -29,15 +27,13 @@ Classes and structs can be generic.
 Type arguments can themselves be generic or arrays, so generics nest freely:
 
 ```dream
-class Pair<A, B> {
-    first: A;
-    second: B;
-}
+class Pair<A, B>(first: A, second: B);
+class ValueBox<T>(v: T);
 
 let p = Pair<int, string>(1, "one");
 System.println(p.first);   // 1
 
-let nested = Pair<Box<int>, int>(Box<int>(7), 5);
+let nested = Pair<ValueBox<int>, int>(ValueBox<int>(7), 5);
 System.println(nested.first.v);   // 7
 ```
 
@@ -46,10 +42,9 @@ System.println(nested.first.v);   // 7
 A method automatically sees its class's type parameters:
 
 ```dream
-class Box<T> {
-    value: T;
-    fun get(): T { return this.value; }
-    fun set(v: T): void { this.value = v; }
+class Box<T>(value: T) {
+    public fun get(): T { return this.value; }
+    public fun set(v: T): void { this.value = v; }
 }
 
 let b = Box<int>(42);

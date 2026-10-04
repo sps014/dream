@@ -1,6 +1,6 @@
 # 01 — Pipeline Overview
 
-This chapter is the map. It walks the whole compilation pipeline stage by stage: what each stage consumes, what it produces, where it lives, and what it guarantees the next stage. Later chapters zoom into individual regions.
+This chapter follows a program from its source file to its final output. For each step, it explains the input, result, source location, and promises the next step relies on.
 
 ## End-to-end flow
 

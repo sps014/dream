@@ -1,6 +1,6 @@
 # system.webapi
 
-Native HTTP server (`dream run`). Browser and wasm32 cannot bind a TCP listener; calling `WebApp.listen` there is a compile error.
+Use WebApp to serve HTTP requests from a desktop program. Route functions handle incoming requests and return a response. Browser programs cannot open a listening server socket.
 
 **Import:** `import system.webapi;`
 

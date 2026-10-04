@@ -1,5 +1,9 @@
 # Colored triangle (`@vertex` / `@fragment`)
 
+Draw a colored triangle using Dream vertex and fragment functions. This example needs a GPU and a desktop window or browser canvas. Start here before trying the larger graphics demos.
+
+## About this example
+
 Minimal programmable graphics sample: a Dream `@vertex` + `@fragment` pair draws a
 colored triangle to a canvas. Uses `@builtin("position")`, `@interpolate`,
 `front_facing`, and `GpuRenderPipeline.create_ex`.

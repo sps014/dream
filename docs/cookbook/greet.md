@@ -1,6 +1,6 @@
 # Greet by name
 
-A function takes a `string` and returns a `string`.
+Write a function that builds a greeting from a name. This example shows how a parameter enters a function and how a result comes back.
 
 ```dream
 import system;

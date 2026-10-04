@@ -1,8 +1,7 @@
-# Design note: Nim-hard ARC
+# Design note: Ownership and memory performance
 
 Decision record for ARC performance. **Sink-default ABI**, **cursor locals**, and
-**use-after-move** diagnostics are the active model (Nim `--mm:arc` style: compile-time
-move/copy/destroy on top of non-atomic RC).
+**use-after-move** diagnostics are the active model (moves, copies, and cleanup are selected while compiling, above non-atomic reference counting).
 
 Sibling permanent non-goals remain in force:
 [`10-stack-alloc-and-mono-design-note.md`](./10-stack-alloc-and-mono-design-note.md) — no string
@@ -13,7 +12,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - Implicit HIR ownership; explicit MIR `Retain` / `Release` / `New` after `RcInsertion`.
 - Call ABI: **unmarked RC params sink; `borrow` shares; caller owns the result (`+1`)**.
   Implicit `this` is never a sink. Call sites **move on last use**, otherwise **retain a copy**
-  (Nim sink semantics).
+  (ownership-transfer semantics).
 - Cursor locals: non-escaping field/index loads skip retain/release when no call before their
   last read can overwrite the source slot (type-level `ModRefTable`, `rc/modref.rs`). Loop-carried
   traversal variables (`curr = curr.next`) form **cursor families** (`rc/cursor_family.rs`) and
@@ -73,7 +72,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - Weak teardown header side-tables (the target-indexed registry plus the header tag bit suffice)
 
 Opt-in `defer { }` / `defer(q) { }` (native destroy queue, bounded drain) is shipped; see
-[`memory.md`](../reference/language/memory.md#defer-wait-until-after-the-important-work-to-run-destructors). WASM last-ref
+[`memory.md`](../reference/language/memory-cleanup.md#defer-wait-until-after-the-important-work-to-run-destructors). WASM last-ref
 stays immediate.
 
 ## Heap throughput (shipped levers)

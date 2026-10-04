@@ -1,6 +1,6 @@
 # Language tour
 
-Four short programs. Each comment (and the numbered notes) explains one idea. Run them with `dreamer run` inside a project, or `dream run file.dream`.
+Learn the basics through four short programs. Run each one before moving on, then change a value or add a statement. The examples introduce one idea at a time.
 
 ## 1. Variables
 

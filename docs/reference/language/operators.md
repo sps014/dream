@@ -1,6 +1,11 @@
 # Operators
 
-This page covers the operators Dream provides, grouped by what they do, plus string interpolation and the precedence table at the end.
+Operators calculate values, compare them, or update a variable. Start with the everyday operators below. The later sections explain custom operators and the order in which expressions are evaluated.
+
+## Explore this topic
+
+- [Define operators for your types](operator-overloading.md)
+- [Inspect names, types, and sizes](type-queries.md)
 
 ## Arithmetic
 
@@ -162,174 +167,6 @@ let _ = fetch().await;
 Unread `let`/`const` locals produce a warning (compile still succeeds). Use `_` when the value is intentionally ignored.
 
 Any expression can be used as a statement (`expr;`); the result is evaluated and dropped.
-
-## Operator overloading
-
-A class or struct can give `+`, `-`, `*`, `/`, `%`, `&`, `|`, `^`, `<<`, `>>`, `==`, unary `-`, `!`,
-`~`, and both implicit and explicit casts their own meaning with `fun operator +(...)` and
-`fun implicit(): T` / `fun explicit(): T`.
-
-```dream
-class Vector2 {
-    public x: int;
-    public y: int;
-
-    public constructor(x: int, y: int) {
-        this.x = x;
-        this.y = y;
-    }
-
-    fun operator +(other: Vector2): Vector2 {
-        return Vector2(this.x + other.x, this.y + other.y);
-    }
-
-    fun operator -(other: Vector2): Vector2 {
-        return Vector2(this.x - other.x, this.y - other.y);
-    }
-
-    // A one-parameter method takes the binary `-`; a zero-parameter method (same symbol) takes
-    // unary `-`. Arity tells them apart.
-    fun operator -(): Vector2 {
-        return Vector2(-this.x, -this.y);
-    }
-
-    fun operator ==(other: Vector2): bool {
-        return this.x == other.x && this.y == other.y;
-    }
-}
-
-fun main(): void {
-    let a = Vector2(1, 2);
-    let b = Vector2(3, 4);
-    let c = a + b;        // Vector2(4, 6)
-    let d = -a;            // Vector2(-1, -2)
-    let same = a == a;     // true
-    let diff = a != b;     // true — `!=` reuses `operator ==`, negated
-}
-```
-
-Rules:
-
-- A tagged method's own parameter list fixes the operator's arity: one parameter is a binary
-  overload (the right-hand operand), zero parameters is a unary overload. `+`/`*`/`/`/`%`/the
-  bitwise operators/`==` are binary-only; `!`/`~` are unary-only; `-` may be either.
-- `!=` has no operator of its own — a registered `operator ==` also powers it, negated.
-- `<`, `<=`, `>`, `>=` are **not** tagged individually. Implement `Comparable<Self>` (see
-  [Interfaces § Built-in `Equatable` and `Comparable`](interfaces.md#built-in-equatable-and-comparable))
-  instead; all four ordering operators dispatch to its single `compare` method.
-- A type may declare at most one overload per operator symbol/arity, and at most one cast per
-  target type.
-
-### User-defined casts
-
-`fun implicit(): T` / `fun explicit(): T` on a no-parameter method defines a conversion from the
-declaring type to the method's return type:
-
-```dream
-class Meters {
-    public value: float;
-
-    public constructor(value: float) {
-        this.value = value;
-    }
-
-    // Explicit only: `(float)meters`, never inferred.
-    fun explicit(): float {
-        return this.value;
-    }
-}
-
-class Money {
-    public cents: int;
-
-    public constructor(cents: int) {
-        this.cents = cents;
-    }
-
-    // Implicit: assignable anywhere an `int` is expected, no cast syntax needed.
-    fun implicit(): int {
-        return this.cents;
-    }
-}
-
-fun main(): void {
-    let m = Meters(2.5);
-    let f = (float)m;          // explicit cast required
-
-    let money = Money(150);
-    let cents: int = money;    // implicit conversion at a typed `let` binding
-}
-```
-
-An explicit `(T)expr` cast accepts either `implicit` or `explicit` — implicit
-conversions are always also spellable explicitly. Implicit conversions themselves are currently
-recognized at typed `let x: T = expr;` bindings; elsewhere, cast explicitly.
-
-## `sizeof`, `nameof`, and `typeof`
-
-None of these names is a reserved keyword — each takes on its meaning only immediately before `(`,
-so you can still declare a variable or function called `typeof`. Written as a call, they are
-meta forms:
-
-```dream
-struct Point { public x: int; public y: int; }
-
-let bytes: int = sizeof(Point);     // 8 — byte size of the struct
-let ptr_w: int = sizeof(string);    // 4 on wasm32, 8 on 64-bit native targets
-let name: string = nameof(Point.x); // "x" — last path segment; operand is not evaluated
-let kind: string = typeof(bytes);   // "int"
-```
-
-- **`sizeof(T)`** yields an `int`:
-  - primitives and value `struct`s → their storage size in bytes
-  - class instances, arrays, `string`, and other heap refs → the target's pointer width
-  - nested value structs, tuples, and value unions use the same target layout as code generation
-  - The result is a compile-time constant.
-- **`nameof(a.b.c)`** yields a `string` of the last identifier in a dotted path. The path is not
-  type-checked or evaluated (you can write `nameof(future_api)`).
-- **`typeof(expr)`** yields a `string` naming the operand's concrete type. See below.
-
-### `typeof`
-
-`typeof` answers "what did I actually get?", which is most useful when a value has been widened to
-`object` or to an interface:
-
-```dream
-let d: Map<string, object> = { "ok": "ko" };
-System.println(typeof(d));        // "Map<string, object>" — the source spelling, not a mangled name
-
-let boxed: object = 5;
-System.println(typeof(boxed));    // "int" — the payload type, not "object"
-
-let shape: Shape = Circle();
-System.println(typeof(shape));    // "Circle" — the implementing class
-```
-
-There are two resolution paths, and which one applies is decided at compile time:
-
-| Operand's static type | How it resolves |
-|---|---|
-| `object`, or an interface | Reads the value's type tag and returns a string |
-| everything else | Folds to a compile-time string constant |
-
-The folded path costs nothing at runtime and, like `nameof`, **does not evaluate its operand** —
-`typeof(f())` will not call `f`. The runtime path does not allocate.
-
-Three type tags are shared across every instantiation of their shape, so `typeof` reports a
-coarse name for them when the static type was erased: an array reports `"array"`, a lambda or
-function value reports `"function"`, and a `Future<T>` reports `"future"`. A statically typed
-operand of those shapes still reports precisely (`typeof(nums)` on an `int[]` is `"int[]"`). A null
-reference reports `"null"`.
-
-### GPU shaders (`@compute` / `@vertex` / `@fragment` / `@gpu`)
-
-These forms work differently inside shader bodies:
-
-| Form | In shaders |
-|------|------------|
-| `sizeof(T)` | Becomes a number (same sizes as host `sizeof` for scalars and `GpuVec*` / `GpuMat*` / `GpuId3`). Useful for strides and byte offsets inside a kernel. |
-| `nameof(...)` | **Compile error.** It produces a `string`, and strings are forbidden in GPU code — keep `nameof` on the CPU (or hard-code a constant in the shader if you only need a fixed name). |
-| `typeof(...)` | **Compile error**, for the same reason as `nameof` — keep it on the CPU host. |
 
 ## Precedence
 

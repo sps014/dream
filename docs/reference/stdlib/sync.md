@@ -1,6 +1,6 @@
 # Lock and Semaphore
 
-Coordinate [Task](../language/tasks.md) threads that share objects. Both types are `shared class`, so a worker body can capture them.
+Use locks and semaphores to coordinate tasks that share work or data. A lock protects changes to a shared value. A semaphore limits how many tasks may enter a section at once.
 
 ```dream
 import system;

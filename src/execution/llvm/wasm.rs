@@ -78,7 +78,7 @@ fn asm_objs(dir: &Path, units: &[Unit]) -> Vec<PathBuf> {
 }
 
 /// The WASI libc headers `scripts/fetch-dev-llvm.sh` unpacks beside the development LLVM.
-fn wasi_sysroot(clang: &Path) -> Result<PathBuf, String> {
+pub(super) fn wasi_sysroot(clang: &Path) -> Result<PathBuf, String> {
     let root = clang
         .parent()
         .and_then(Path::parent)
@@ -268,18 +268,29 @@ pub fn link_wasm(
     opt: OptLevel,
 ) -> Result<(), String> {
     let rt = wasm_runtime(tools, opt, need, threads)?;
+    let packages = super::wasm_sources::compile(tools, ll_path, threads, opt)?;
     let src = std::fs::read_to_string(ll_path).map_err(|e| e.to_string())?;
     let sigs_text = std::fs::read_to_string(&rt.sigs).map_err(|e| e.to_string())?;
     let sigs = RuntimeSigs::parse(&sigs_text)?;
     let mut public: Vec<String> = KEEP_PUBLIC.iter().map(|s| s.to_string()).collect();
     public.extend(sigs.exports.iter().cloned());
     public.extend(module_exports(&src).map(str::to_string));
+    public.extend(packages.public);
     public.sort();
     public.dedup();
 
     let linked = ll_path.with_extension("linked.bc");
     let mut link = tools.command("llvm-link");
-    link.arg(ll_path).arg(&rt.bc).arg("-o").arg(&linked);
+    link.arg(ll_path).arg(&rt.bc).args(&packages.bitcode);
+    if let Some(shim) =
+        super::c_shim::shim_bitcode(tools, &dream_abi::target::TargetSpec::wasm32(), ll_path)?
+    {
+        let mut modules = packages.bitcode.clone();
+        modules.push(rt.bc.clone());
+        super::wasm_sources::validate_signatures(tools, &modules, &shim)?;
+        link.arg(shim);
+    }
+    link.arg("-o").arg(&linked);
     run_captured(&mut link, &format!("llvm-link ({})", ll_path.display()))?;
     let optimized = ll_path.with_extension("opt.bc");
     let mut o = tools.command("opt");
@@ -304,6 +315,13 @@ pub fn link_wasm(
         .arg(&optimized)
         .arg("-o")
         .arg(&obj);
+    if packages.exceptions {
+        llc.args([
+            "-wasm-enable-eh",
+            "-exception-model=wasm",
+            "-wasm-use-legacy-eh=false",
+        ]);
+    }
     let r = run_captured(&mut llc, "llc");
     let _ = std::fs::remove_file(&optimized);
     r?;
@@ -313,12 +331,23 @@ pub fn link_wasm(
     // instantiation. As an archive after the objects, only referenced members are linked.
     let builtins = clang_rt(tools, ClangRt::WasmBuiltins { threads })?;
     let mut cmd = wasm_ld_command(&tools.optional_tool("wasm-ld")?, threads, opt);
+    if !packages.libraries.is_empty() {
+        cmd.arg("--fatal-warnings");
+    }
     cmd.arg("-o")
         .arg(wasm_path)
         .arg(&obj)
         .args(&rt.objs)
+        .args(&packages.libraries)
         .arg(builtins);
     let r = run_captured(&mut cmd, "wasm-ld");
     let _ = std::fs::remove_file(&obj);
-    r
+    r?;
+    if !packages.libraries.is_empty() {
+        if let Err(e) = super::wasm_sources::validate_imports(ll_path, wasm_path, &sigs) {
+            let _ = std::fs::remove_file(wasm_path);
+            return Err(e);
+        }
+    }
+    Ok(())
 }

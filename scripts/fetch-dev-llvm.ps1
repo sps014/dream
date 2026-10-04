@@ -1,7 +1,7 @@
 # Windows counterpart of scripts/fetch-dev-llvm.sh: the full LLVM a development build needs
 # (releases ship a minimal one instead). The official LLVM release supplies clang, which builds
 # the C runtime a release ships prebuilt; the wasi-sdk archive supplies compiler-rt's wasm32
-# builtins (into clang's resource directory) and the WASI libc headers (share\wasi-sysroot).
+# builtins (into clang's resource directory) and WASI libc/C++ headers and archives (share\wasi-sysroot).
 #
 # Installs to $env:DREAM_TOOLCHAINS or ~\.dream\toolchains\llvm-<version>. Idempotent.
 # Usage: powershell -ExecutionPolicy Bypass -File scripts\fetch-dev-llvm.ps1
@@ -66,15 +66,16 @@ $resource = Join-Path $Dest "lib\clang\$LlvmMajor\lib"
 $targets = @("wasm32-unknown-wasip1", "wasm32-unknown-wasip1-threads")
 $sysroot = Join-Path $Dest "share\wasi-sysroot"
 $missing = ($targets | Where-Object { -not (Test-Path (Join-Path $resource "$_\libclang_rt.builtins.a")) }) -or
-    -not (Test-Path (Join-Path $sysroot "include\wasm32-wasip1\string.h"))
+    -not (Test-Path (Join-Path $sysroot "include\wasm32-wasip1\eh\c++\v1\string")) -or
+    -not (Test-Path (Join-Path $sysroot "lib\wasm32-wasip1\eh\libc++.a"))
 if ($missing) {
     $archive = Get-Verified "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$($WasiSdkVersion.Split('.')[0])/$WasiSdkArchive" $WasiSdkArchive $WasiSdkSha
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ("dream-wasi-" + [Guid]::NewGuid())
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
     try {
         $patterns = ($targets | ForEach-Object { "*/lib/clang/$LlvmMajor/lib/$_/libclang_rt.builtins.a" }) +
-            @("*/share/wasi-sysroot/include/wasm32-wasip1/*")
-        Expand-Tar $archive $tmp $patterns @("--exclude", "*/c++/*")
+            @("*/share/wasi-sysroot/include/wasm32-wasip1/*", "*/share/wasi-sysroot/lib/wasm32-wasip1/*")
+        Expand-Tar $archive $tmp $patterns
         foreach ($t in $targets) {
             New-Item -ItemType Directory -Force -Path (Join-Path $resource $t) | Out-Null
             Copy-Item -Force (Join-Path $tmp "lib\clang\$LlvmMajor\lib\$t\libclang_rt.builtins.a") (Join-Path $resource $t)

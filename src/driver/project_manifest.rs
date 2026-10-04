@@ -24,15 +24,18 @@ pub struct NativeSetSpec {
     pub macos: NativeTable,
     pub linux: NativeTable,
     pub windows: NativeTable,
+    pub wasm: NativeTable,
 }
 
 impl NativeSetSpec {
-    /// `base` with the current host's OS overlay appended.
-    pub fn for_host(&self) -> NativeTable {
-        let os = if cfg!(target_os = "macos") {
-            &self.macos
-        } else if cfg!(target_os = "windows") {
+    /// Shared settings plus the build target's overlay, independent of the host OS.
+    pub fn for_target(&self, target: &dream_abi::target::TargetSpec) -> NativeTable {
+        let os = if target.capabilities.linear_memory {
+            &self.wasm
+        } else if target.is_windows() {
             &self.windows
+        } else if target.is_apple() {
+            &self.macos
         } else {
             &self.linux
         };
@@ -120,7 +123,7 @@ impl ProjectManifest {
     }
 }
 
-const OS_KEYS: [&str; 3] = ["macos", "linux", "windows"];
+const OS_KEYS: [&str; 4] = ["macos", "linux", "windows", "wasm"];
 const LIST_KEYS: [&str; 6] = [
     "sources",
     "include",
@@ -146,7 +149,8 @@ fn parse_set(name: &str, set: &toml::Table) -> Result<NativeSetSpec, String> {
             match key.as_str() {
                 "macos" => spec.macos = parsed,
                 "linux" => spec.linux = parsed,
-                _ => spec.windows = parsed,
+                "windows" => spec.windows = parsed,
+                _ => spec.wasm = parsed,
             }
         } else if !LIST_KEYS.contains(&key.as_str()) {
             return Err(format!(
@@ -296,7 +300,7 @@ sources = ["third_party/x.c"]
         assert_eq!(kv.base.cflags, vec!["-O2"]);
         assert_eq!(kv.macos.frameworks, vec!["Security"]);
         assert_eq!(kv.linux.libs, vec!["dl"]);
-        let host = kv.for_host();
+        let host = kv.for_target(&dream_abi::target::TargetSpec::host());
         assert_eq!(host.defines, vec!["A=1"]);
     }
 

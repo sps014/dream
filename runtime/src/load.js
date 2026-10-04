@@ -275,8 +275,9 @@ export async function load(source, options = {}) {
   }
 
   let workerStack = 0;
-  const wasmInstance = await withBootstrapLock(stackGate, async () => {
+  await withBootstrapLock(stackGate, async () => {
     const inst = await WebAssembly.instantiate(wasmModule, importObject);
+    instance = new DreamInstance(inst);
     if (stackGate || options.memory) {
       workerStack = attachGuestStack(inst);
     } else if (typeof inst.exports.__runtime_init === "function") {
@@ -284,7 +285,6 @@ export async function load(source, options = {}) {
     }
     return inst;
   });
-  instance = new DreamInstance(wasmInstance);
   instance.workerStack = workerStack;
   return instance;
 }

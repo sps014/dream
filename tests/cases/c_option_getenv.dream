@@ -5,7 +5,7 @@ import system;
 extern fun getenv(name: string): Option<string>;
 
 @c("c", "strlen")
-extern fun strlen(s: string): long;
+extern fun strlen(s: string): usize;
 
 fun main(): void {
     System.println(getenv("DREAM_SURELY_UNSET_VARIABLE").unwrap_or("(unset)"));

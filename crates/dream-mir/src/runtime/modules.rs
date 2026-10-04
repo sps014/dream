@@ -146,7 +146,9 @@ const NATIVE_SYS_C: &[&str] = &[
     "worker.c",
 ];
 const WASI_SYS_C: &[&str] = &[
+    "callback.c",
     "heap.c",
+    "interop_libc.c",
     "heap_memory.c",
     "allocation.c",
     "g0.c",

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the minimal LLVM that ships inside the Dream release archive: opt, llc, llvm-link,
+# Build the minimal LLVM that ships inside the Dream release archive: clang, opt, llc, llvm-link,
 # llvm-dis, llvm-ar, llvm-profdata and lld (wasm-ld), plus llvm-rc on Windows, for the host
 # target plus WebAssembly only.
 #
@@ -23,7 +23,7 @@ case "$ARCH" in
   *) echo "unsupported arch: $ARCH" >&2; exit 1 ;;
 esac
 
-COMPONENTS="opt;llc;llvm-link;llvm-dis;llvm-ar;llvm-profdata;lld"
+COMPONENTS="clang;clang-resource-headers;opt;llc;llvm-link;llvm-dis;llvm-ar;llvm-profdata;lld"
 EXTRA=()
 case "$(uname -s)" in
   MINGW* | MSYS* | CYGWIN*)
@@ -50,7 +50,7 @@ esac
 cmake -G Ninja -S "$SRC/llvm" -B "$BUILD" \
   -DCMAKE_BUILD_TYPE=MinSizeRel \
   -DCMAKE_INSTALL_PREFIX="$PREFIX" \
-  -DLLVM_ENABLE_PROJECTS=lld \
+  -DLLVM_ENABLE_PROJECTS="clang;lld" \
   -DLLVM_TARGETS_TO_BUILD="${HOST_TARGET};WebAssembly" \
   -DLLVM_DISTRIBUTION_COMPONENTS="$COMPONENTS" \
   -DLLVM_ENABLE_ASSERTIONS=OFF \

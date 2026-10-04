@@ -1,0 +1,6 @@
+import system;
+
+fun main(): void {
+    System.println(Ffi.read_ptr(CPtr.null(), 0).is_null());
+    System.println(Ffi.read_cstring(CPtr.null()).is_none());
+}

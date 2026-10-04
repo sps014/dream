@@ -17,8 +17,9 @@ impl Compiler {
         let mut acc = ProgramAccumulator::default();
         parse_file_recursive(main_file_path, &mut acc, arena, diagnostics)?;
 
-        let native_graph = crate::driver::native_sets::NativeGraph::load(main_file_path, &acc)
-            .map_err(CompileError::Manifest)?;
+        let native_graph =
+            crate::driver::native_sets::NativeGraph::load(main_file_path, &acc, self.target.spec())
+                .map_err(CompileError::Manifest)?;
         crate::driver::native_sets::resolve_bare_c_attrs(&mut acc, &native_graph, diagnostics);
         let cpp_bridge =
             crate::driver::ffi_shim::expand(arena, &mut acc, &native_graph, diagnostics)?;

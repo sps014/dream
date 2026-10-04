@@ -11,6 +11,7 @@ pub mod pack;
 pub mod runtime;
 pub mod tools;
 pub mod wasm;
+mod wasm_sources;
 
 pub use build::{compile_llvm, NativeBuildOptions, Toolchain};
 pub use pack::pack_runtime;

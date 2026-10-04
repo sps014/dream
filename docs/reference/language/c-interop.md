@@ -1,6 +1,6 @@
 # C and C++ Interop
 
-Dream calls C and C++ directly on native builds. A package puts portable C or C++ sources in `native/`,
+Dream calls C and C++ directly on native and single-instance wasm32 builds. A package puts portable C or C++ sources in `native/`,
 then writes a thin Dream wrapper: one declaration per native function or method, plus whatever
 idiomatic Dream API it wants on top. Consumers just `import` the package.
 
@@ -9,13 +9,14 @@ idiomatic Dream API it wants on top. Consumers just `import` the package.
   them, and the C++ compiler checks each declaration against the real header.
 - The compiler never parses headers. Declarations are ordinary Dream source, so completion, hover,
   and go-to-definition work on them.
-- **Native-only.** A wasm32 build that still calls a `@c`/`@cpp` declaration is a compile error that
-  names it. Bind the browser/Node equivalent with [`@js`](interop.md) or guard the call with `@native`.
-  Unused declarations and calls in unreachable functions are pruned before this check, so a
-  shared package can contain native bindings without forcing a wasm32 consumer to link them.
+- Native builds can link package sources or host system libraries. WASM builds compile portable
+  package sources into the same guest module; WASI libc/libm bindings (`@c("c", ...)` / `@c("m", ...)`) also work. Host libraries such as
+  system libsqlite3 cannot be linked into it. Unused bindings are pruned before checking target availability.
 
-Zig (installed by `dreamer toolchain install cc`) compiles the C/C++ and links it with the Dream
-object, so no other toolchain is needed. `DREAM_CXX` / `CXX` override the C++ compiler.
+
+For native builds, Zig (installed by `dreamer toolchain install cc`) compiles the C/C++ and links
+it with the Dream object. `DREAM_CXX` / `CXX` override the native C++ compiler. WASM package builds
+use the pinned clang.
 
 Runnable samples: [`sample/native_c/`](../../../sample/native_c) and
 [`sample/native_cpp/`](../../../sample/native_cpp).
@@ -36,8 +37,9 @@ Everything under `native/` compiles as one **native set** named after the packag
 `kv_store`). `native/include/` is on the include path. `.c` files compile as `gnu11`, and `.cpp` /
 `.cc` / `.cxx` files as `gnu++20`. libc++ is linked only when the set contains C++.
 
-A set is built only when the program calls into it, into `target/<profile>/native-c/<set>/`. Objects
-are rebuilt only when a source is newer.
+A set is built only when the program calls into it. Native objects live in
+`target/<profile>/native-c/<set>/` and are rebuilt when a source is newer. WASM package bitcode
+is rebuilt beside the module in its `.wasm-c/` directory.
 
 ### `dream.toml`
 
@@ -69,10 +71,41 @@ libs = ["dl"]
 | `frameworks` | macOS frameworks to link |
 | `libs` | System libraries to link (`-l`) |
 
-Per-OS subtables (`macos`, `linux`, `windows`) take the same keys and are appended on that host.
-A set with no sources on the current host, or a source that does not exist, is an error. So are an
+Target subtables (`macos`, `linux`, `windows`, `wasm`) take the same keys and are appended for the build target. A WASM build never inherits the host OS overlay.
+A set with no sources for the selected target, or a source that does not exist, is an error. So are an
 unknown key, two packages declaring the same set name, and two packages declaring the same
 `[package] links` value. Each of these errors names the manifests involved.
+
+## WebAssembly
+
+The existing `native/` directory and `@c` / `@cpp` declarations also work for portable WASM
+packages. Add guest-only flags with `[native.<set>.wasm]`. Use `usize` / `isize` for C `size_t` /
+`ptrdiff_t`; `long` in Dream is always 64 bits. Scalar signature mismatches between a binding
+and its compiled package implementation produce a build diagnostic.
+
+Package sources and generated shims compile with the pinned clang to wasm32 LLVM bitcode and
+join Dream and its runtime **before optimization**. LLVM can inline across the language boundary;
+that is an optimization opportunity, not a guarantee. WASI libc and C++ runtime archives link
+statically afterward. Prebuilt host binaries do not receive this treatment.
+
+C++ uses the WASI SDK 33 exception-enabled libc++, libc++abi and libunwind. Generated `@cpp`
+shims preserve exception-to-`Result` conversion. Global constructors run after Dream heap
+initialization; exit hooks run registered destructors and flush stdio after `main` completes.
+The JS loader supports output during constructors in both full and selective runtimes.
+
+C allocation uses the same linear memory and heap as Dream, with C-compatible alignment.
+Pointers and callbacks remain within that module. Stored callbacks must be invoked and released
+on the instance that created them. Owned pointers, UTF-8 strings, array data, unmanaged structs,
+and callbacks use the same bindings as native builds.
+
+Supported libc services include stdout/stderr and an empty process environment. OS-specific
+functions or unresolved library symbols fail during the build, instead of becoming broken host
+imports. Use `@js` for browser/Node platform services. C/C++ package interop in `Task` / shared-memory
+modules is currently rejected because WASI library TLS and initialization require further work.
+
+Development installs need the full WASI sysroot next to the pinned LLVM; update it with
+`scripts/fetch-dev-llvm.sh` or `scripts/fetch-dev-llvm.ps1` on Windows. Release packaging includes
+clang, its resource headers, and the wasm32 WASI headers/libraries needed by package builds.
 
 ## C: `@c`
 
@@ -422,7 +455,7 @@ set the program uses.
 
 ## Linking system libraries
 
-`@c("lib", ...)` with a library that is not a native set links `-l<lib>`. Search order:
+On native targets, `@c("lib", ...)` with a library that is not a native set links `-l<lib>`. Search order:
 
 1. `native/<lib>` next to the source (vendored shared libraries).
 2. The directory containing the source, then the current working directory.
@@ -443,7 +476,7 @@ dream run sample/sqlite/db.dream
 
 | Concern | `@js("mod", "field")` | `@runtime("name")` | `@c` / `@cpp` |
 |---------|-----------------------|--------------------|---------------|
-| Host | JS (Node / browser) | Dream runtime (WASM + native) | Native builds |
+| Host | JS (Node / browser) | Dream runtime (WASM + native) | Native and portable wasm32 package builds |
 | Async | `async` + `Promise` bridge | `async` + host future | Not supported; C runs on the caller's thread |
 | Out-params | Return a wrapper struct / tuple | Return a wrapper struct / tuple | `ref` parameters |
 | Callbacks into Dream | `fun(...)` values | host-defined | `fun` pointers, `NativeCallback`, `std::function` |

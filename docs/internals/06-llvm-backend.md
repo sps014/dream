@@ -77,7 +77,7 @@ root explicitly and never read the environment. `DREAM_HOME`, `DREAM_BIN`, `DREA
 documented search roles. Windows uses `USERPROFILE` for the default install prefix.
 
 The runtime bitcode (`src/execution/llvm/runtime.rs`, `wasm.rs`) is built by the pinned clang for
-native targets and by wasi-sdk's clang for wasm32. It is cached per LLVM version, opt level and
+native targets and by the pinned clang with WASI headers for wasm32. It is cached per LLVM version, opt level and
 `RuntimeNeed` under `target/dream-native-rt/` (in the repo) or `~/.dream/cache/native-rt/`, and
 guarded by a file lock so concurrent compiles share one build.
 
@@ -373,3 +373,17 @@ or JNI/Java wrappers, compiles them with Xcode or the NDK/JDK, and assembles XCF
 or deterministic AAR archives. Mobile runtime/capability linking is explicit; desktop
 host libraries are never substituted for mobile dependencies. SDK-backed full packaging
 requires Xcode iOS SDKs or an Android NDK, independently of object-emission tests.
+
+### WASM package interop
+
+`wasm_sources` compiles live package C/C++ sources and generated `@cpp` adapters to target
+bitcode before the combined LLVM optimization pipeline. Generated forward/reverse C shims join
+the same module. ABI sidecars and shim sources are written before linking; unresolved package
+functions are checked against runtime and declared JS imports after linking. Scalar ABI mismatches
+are checked against clang's bitcode signatures before linking.
+
+WASI libc and exception-enabled C++ archives remain linker inputs. Their allocator entry points
+use the guest heap with aligned C payloads; stdio syscall adapters use Dream's encoded output
+platform service. Package constructors run after heap initialization, and registered destructors
+and stdio exit hooks run after Dream global drops. Shared-memory package builds are rejected until
+WASI TLS and initialization can honor Dream's per-instance worker model.

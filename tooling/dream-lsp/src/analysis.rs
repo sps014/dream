@@ -123,7 +123,11 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                 }
             }
 
-            if let Ok(mut graph) = dream::driver::native_sets::NativeGraph::load(path_str, &acc) {
+            if let Ok(mut graph) = dream::driver::native_sets::NativeGraph::load(
+                path_str,
+                &acc,
+                &dream_abi::target::TargetSpec::host(),
+            ) {
                 graph
                     .aliases
                     .insert(MAIN_FILE.to_string(), path_str.to_string());

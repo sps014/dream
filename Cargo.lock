@@ -1236,6 +1236,7 @@ dependencies = [
  "dream-syntax",
  "dream-text",
  "dream-types",
+ "dunce",
  "flate2",
  "image",
  "indexmap",

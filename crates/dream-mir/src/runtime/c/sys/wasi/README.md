@@ -10,5 +10,8 @@ C libraries, using the Dream heap. It contains no printf implementation. `sync.c
 locks and semaphores for both single-threaded and shared-memory guests; single-threaded waits
 that cannot complete report a panic. `g0.c` and `g0.s` own per-instance globals.
 
+`callback.c` tracks C callback ownership by guest instance. `interop_libc.c` bridges the pinned
+WASI libc stdout/stderr and empty-environment syscalls to Dream platform services.
+
 `platform.c` supplies the default allocation, abort, encoded text-output and lock callbacks.
 Shared scheduling lives in `../shared/async.c`; portable ARC and strings live in `../../core/`.

@@ -50,11 +50,10 @@ impl LlvmTools {
         }
     }
 
-    /// clang builds the runtime from its C sources, which only a development toolchain does; a
-    /// release links the prebuilt runtime and ships no clang.
+    /// clang builds development runtimes and package C/C++ bitcode; releases prebuild the runtime.
     pub fn clang(&self) -> Result<PathBuf, String> {
         self.optional_tool("clang").map_err(|e| {
-            format!("{e}; building the runtime from source needs a full LLVM (scripts/fetch-dev-llvm.sh)")
+            format!("{e}; package C/C++ and runtime source builds need clang from the pinned LLVM (scripts/fetch-dev-llvm.sh)")
         })
     }
 }

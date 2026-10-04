@@ -10,7 +10,7 @@ import system;
 @c extern fun ticker_on_tick(t: CPtr, cb: NativeCallback<fun(int): int>): void;
 @c extern fun ticker_run(t: CPtr, ticks: int): int;
 @c extern fun ticker_label(t: CPtr, tick: int): Option<string>;
-@c extern fun checksum(data: byte[], len: long): int;
+@c extern fun checksum(data: byte[], len: usize): int;
 
 public class Ticker {
     handle: CPtr;
@@ -46,5 +46,5 @@ public class Ticker {
 }
 
 public fun fingerprint(data: byte[]): int {
-    return checksum(data, data.length);
+    return checksum(data, (usize)data.length);
 }

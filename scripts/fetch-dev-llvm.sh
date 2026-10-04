@@ -3,7 +3,7 @@
 # LLVM release — clang builds the C runtime, which a release ships prebuilt — plus two pieces of
 # the wasi-sdk archive the LLVM release lacks: compiler-rt's wasm32 builtins, placed in clang's
 # resource directory where `clang --target=wasm32-wasip1 -print-libgcc-file-name` finds them, and
-# the WASI libc headers (share/wasi-sysroot) the guest runtime units compile against.
+# the WASI libc/C++ headers and archives (share/wasi-sysroot) for guest runtime and package code.
 #
 # Installs to ${DREAM_TOOLCHAINS:-~/.dream/toolchains}/llvm-<version>; the compiler finds it there.
 # Idempotent. Usage: scripts/fetch-dev-llvm.sh
@@ -77,13 +77,15 @@ fi
 resource="$DEST/lib/clang/${LLVM_MAJOR}/lib"
 if [[ ! -f "$resource/wasm32-unknown-wasip1/libclang_rt.builtins.a" \
    || ! -f "$resource/wasm32-unknown-wasip1-threads/libclang_rt.builtins.a" \
-   || ! -f "$DEST/share/wasi-sysroot/include/wasm32-wasip1/string.h" ]]; then
+   || ! -f "$DEST/share/wasi-sysroot/include/wasm32-wasip1/eh/c++/v1/string" \
+   || ! -f "$DEST/share/wasi-sysroot/lib/wasm32-wasip1/eh/libc++.a" ]]; then
   archive="$(fetch "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION%%.*}/${WASI_SDK_ARCHIVE}" "$WASI_SDK_ARCHIVE" "$WASI_SDK_SHA")"
   tmp="$(mktemp -d)"
-  tar -xzf "$archive" -C "$tmp" --strip-components=1 --exclude "*/c++/*" ${WILDCARDS[@]+"${WILDCARDS[@]}"} \
+  tar -xzf "$archive" -C "$tmp" --strip-components=1 ${WILDCARDS[@]+"${WILDCARDS[@]}"} \
     "*/lib/clang/${LLVM_MAJOR}/lib/wasm32-unknown-wasip1/libclang_rt.builtins.a" \
     "*/lib/clang/${LLVM_MAJOR}/lib/wasm32-unknown-wasip1-threads/libclang_rt.builtins.a" \
-    "*/share/wasi-sysroot/include/wasm32-wasip1/*"
+    "*/share/wasi-sysroot/include/wasm32-wasip1/*" \
+    "*/share/wasi-sysroot/lib/wasm32-wasip1/*"
   for t in wasm32-unknown-wasip1 wasm32-unknown-wasip1-threads; do
     mkdir -p "$resource/$t"
     cp "$tmp/lib/clang/${LLVM_MAJOR}/lib/$t/libclang_rt.builtins.a" "$resource/$t/"

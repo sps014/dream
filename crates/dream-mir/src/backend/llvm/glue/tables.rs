@@ -153,6 +153,23 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
     }
     register(l, "dream_drop_globals", Ty::Void, vec![]);
     register(l, "dream_runtime_init", Ty::Void, vec![]);
+    if l.cx.target.spec().capabilities.linear_memory
+        && l.mir
+            .imports
+            .iter()
+            .any(crate::backend::shared::abi_types::is_c_import)
+    {
+        l.host(
+            "__wasm_call_ctors",
+            super::super::lcx::FnSig::plain(super::super::ir::FnTy::new(Ty::Void, vec![])),
+        );
+        for name in ["__funcs_on_exit", "__stdio_exit"] {
+            l.host(
+                name,
+                super::super::lcx::FnSig::plain(super::super::ir::FnTy::new(Ty::Void, vec![])),
+            );
+        }
+    }
     let h = l.h();
     let worker = vec![Ty::I32, h.clone(), h.clone()];
     register(l, "dream_worker_invoke_raw", h.clone(), worker.clone());
@@ -406,6 +423,18 @@ fn emit_drop_globals(l: &mut Lcx<'_>) {
         let (t, _) = fx.global_ll(id);
         fx.write_global(id, &V::s(Value::zero(t)));
     }
+    if fx.l.cx.target.spec().capabilities.linear_memory
+        && fx
+            .l
+            .mir
+            .imports
+            .iter()
+            .any(crate::backend::shared::abi_types::is_c_import)
+    {
+        // WASI libc implements __cxa_finalize as a no-op; exit hooks own registered destructors.
+        fx.call("__funcs_on_exit", &[]);
+        fx.call("__stdio_exit", &[]);
+    }
     fx.w.ret(None);
     fx.finish();
 }
@@ -426,6 +455,15 @@ fn emit_runtime_init(l: &mut Lcx<'_>) {
     fx.w.store(&Value::i32(1), &flag, 4, &[]);
     if fx.l.cx.target.spec().capabilities.linear_memory {
         fx.call("dream_heap_init", &[]);
+        if fx
+            .l
+            .mir
+            .imports
+            .iter()
+            .any(crate::backend::shared::abi_types::is_c_import)
+        {
+            fx.call("__wasm_call_ctors", &[]);
+        }
     } else {
         fx.call("dream_thread_attach", &[]);
         let fns: Vec<V> = [

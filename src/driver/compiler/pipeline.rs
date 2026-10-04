@@ -18,7 +18,9 @@ impl Compiler {
         out_path: &str,
     ) -> Result<BuildOutcome, CompileError> {
         if self.output_kind.is_library() && self.target.spec().capabilities.linear_memory {
-            return Err(CompileError::Manifest("staticlib and dylib require a native target".into()));
+            return Err(CompileError::Manifest(
+                "staticlib and dylib require a native target".into(),
+            ));
         }
         info!("starting parsing and multi-file resolution");
         let arena = Bump::new();
@@ -54,11 +56,12 @@ impl Compiler {
                 .iter()
                 .map(|imp| (imp.module.clone(), imp.field.clone()))
                 .collect();
-            if !self.target.spec().capabilities.c_interop
+            if self.target.spec().capabilities.linear_memory
                 && report_wasm_c_imports(
                     &loaded.graph.view(),
                     &live_imports,
                     &loaded.cpp_bridge,
+                    &loaded.native_graph,
                     &mut diagnostics,
                 )
             {

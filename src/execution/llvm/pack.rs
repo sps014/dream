@@ -38,7 +38,31 @@ pub fn pack_runtime(
         let dst = crt.join(kind.bundled_name());
         std::fs::copy(&src, &dst).map_err(|e| format!("copying {}: {e}", src.display()))?;
     }
+    let sysroot = super::wasm::wasi_sysroot(&clang)?;
+    for dir in ["include/wasm32-wasip1", "lib/wasm32-wasip1"] {
+        copy_tree(&sysroot.join(dir), &out.join("wasi-sysroot").join(dir))?;
+    }
     remove_bookkeeping(out)
+}
+
+fn copy_tree(source: &Path, dest: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(dest).map_err(|e| e.to_string())?;
+    let mut entries = std::fs::read_dir(source)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let path = entry.path();
+        let output = dest.join(entry.file_name());
+        if path.is_dir() {
+            copy_tree(&path, &output)?;
+        } else {
+            std::fs::copy(&path, &output)
+                .map_err(|e| format!("copying {}: {e}", path.display()))?;
+        }
+    }
+    Ok(())
 }
 
 /// Drops the build locks, freshness stamps and signature anchors; a prebuilt tree is never

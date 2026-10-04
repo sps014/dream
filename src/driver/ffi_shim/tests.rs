@@ -29,7 +29,7 @@ fn expand(tag: &str, source: &str, with_native: bool) -> (Option<String>, String
     let mut diagnostics = DiagnosticBag::new(None);
     let path = main.to_str().unwrap().to_string();
     parse_file_recursive(&path, &mut acc, &arena, &mut diagnostics).unwrap();
-    let graph = NativeGraph::load(&path, &acc).unwrap();
+    let graph = NativeGraph::load(&path, &acc, &dream_abi::target::TargetSpec::host()).unwrap();
     let bridge = super::expand(&arena, &mut acc, &graph, &mut diagnostics).unwrap();
     let messages = diagnostics
         .errors()

@@ -142,7 +142,7 @@ impl TargetSpec {
                 linear_memory,
                 native_entry: !linear_memory,
                 native_threads: !linear_memory,
-                c_interop: !linear_memory,
+                c_interop: true,
                 js_interop: linear_memory,
             },
         };
@@ -265,7 +265,7 @@ mod tests {
         assert!(wasm.capabilities.js_interop);
         assert!(!narrow.capabilities.js_interop);
         assert!(narrow.capabilities.c_interop);
-        assert!(!wasm.capabilities.c_interop);
+        assert!(wasm.capabilities.c_interop);
         assert_eq!(wide.env, Environment::Msvc);
     }
 

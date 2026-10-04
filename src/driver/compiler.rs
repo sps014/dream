@@ -319,17 +319,22 @@ pub fn c_shim_path(ll: &Path) -> std::path::PathBuf {
 mod diagnostics;
 use diagnostics::{fail_diagnostics, panic_message, render_internal_error};
 
-/// Reports every `@c` extern whose import survived MIR pruning on a wasm32 build: native C/C++
-/// only links into native binaries, so the call has no host to bind to. True when any was found.
+/// Host libraries have no implementation in a guest; only package source sets can cross targets.
 fn report_wasm_c_imports(
     program: &ProgramView<'_>,
     live_imports: &[(String, String)],
     cpp: &crate::driver::ffi_shim::CppBridge,
+    native: &crate::driver::native_sets::NativeGraph,
     diagnostics: &mut DiagnosticBag,
 ) -> bool {
     let live: std::collections::BTreeSet<(&str, &str)> = live_imports
         .iter()
-        .filter(|(m, _)| m.starts_with("c/"))
+        .filter(|(m, _)| {
+            m.strip_prefix("c/").is_some_and(|set| {
+                !native.sets.contains_key(set)
+                    && !crate::driver::native_sets::WASM_C_LIBRARIES.contains(&set)
+            })
+        })
         .map(|(m, f)| (m.as_str(), f.as_str()))
         .collect();
     if live.is_empty() {
@@ -364,8 +369,9 @@ fn report_wasm_c_imports(
         };
         diagnostics.report(dream_diagnostics::Diagnostic::new(
             format!(
-                "'{what}' is a native C/C++ import and cannot be called from a wasm32 build; \
-                 bind the browser/Node equivalent with `@js` (or guard the call with `@native`)"
+                "'{what}' has no package C/C++ source set for wasm32; \
+                 provide portable sources in `native/`, bind the browser/Node equivalent with `@js`, \
+                 or guard the call with `@native`"
             ),
             Some(at),
             file,

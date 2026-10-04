@@ -18,6 +18,7 @@ use crate::driver::source_loader::{find_dream_packages_dir, ProgramAccumulator};
 
 pub const C_EXTENSIONS: [&str; 1] = ["c"];
 pub const CXX_EXTENSIONS: [&str; 3] = ["cpp", "cc", "cxx"];
+pub const WASM_C_LIBRARIES: &[&str] = &["c", "m"];
 
 /// One resolved set, with absolute paths, ready to compile on this host.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,7 +66,11 @@ impl NativeGraph {
     /// Loads sets from the entry project, every installed `dream_packages/*` package, and the
     /// package root of every loaded source file. Duplicate set names and duplicate
     /// `[package] links` values are errors naming both manifests.
-    pub fn load(entry_file: &str, acc: &ProgramAccumulator<'_>) -> Result<Self, String> {
+    pub fn load(
+        entry_file: &str,
+        acc: &ProgramAccumulator<'_>,
+        target: &dream_abi::target::TargetSpec,
+    ) -> Result<Self, String> {
         let mut roots: BTreeSet<PathBuf> = BTreeSet::new();
         let entry = canonical(Path::new(entry_file));
         if let Some(root) = entry.parent().and_then(find_project_root_from) {
@@ -106,7 +111,7 @@ impl NativeGraph {
                     ));
                 }
             }
-            for set in sets_for_package(&root, &manifest)? {
+            for set in sets_for_package(&root, &manifest, target)? {
                 if let Some(prev) = set_owner.insert(set.name.clone(), manifest_path.clone()) {
                     return Err(format!(
                         "native set '{}' is declared by two packages: {} and {}",
@@ -153,7 +158,11 @@ fn implicit_set_name(root: &Path, manifest: &ProjectManifest) -> Option<String> 
 
 /// The implicit `native/` set (when it holds sources) merged with a same-named table, then every
 /// other `[native.<set>]` table.
-fn sets_for_package(root: &Path, manifest: &ProjectManifest) -> Result<Vec<NativeSet>, String> {
+fn sets_for_package(
+    root: &Path,
+    manifest: &ProjectManifest,
+    target: &dream_abi::target::TargetSpec,
+) -> Result<Vec<NativeSet>, String> {
     let mut out = Vec::new();
     let implicit = implicit_set_name(root, manifest);
     if let Some(name) = &implicit {
@@ -164,7 +173,7 @@ fn sets_for_package(root: &Path, manifest: &ProjectManifest) -> Result<Vec<Nativ
             .native
             .iter()
             .find(|(n, _)| n == name)
-            .map(|(_, s)| s.for_host())
+            .map(|(_, s)| s.for_target(target))
             .unwrap_or_default();
         let mut include = Vec::new();
         if native_dir.join("include").is_dir() {
@@ -180,7 +189,7 @@ fn sets_for_package(root: &Path, manifest: &ProjectManifest) -> Result<Vec<Nativ
         if implicit.as_deref() == Some(name.as_str()) {
             continue;
         }
-        let table = spec.for_host();
+        let table = spec.for_target(target);
         let set = build_set(root, name, Vec::new(), Vec::new(), &table)?;
         if set.sources.is_empty() {
             return Err(format!(
@@ -254,8 +263,14 @@ pub fn resolve_bare_c_attrs(
     diagnostics: &mut DiagnosticBag,
 ) {
     let functions = acc.all_functions.iter_mut();
-    let methods = acc.all_structs.iter_mut().flat_map(|s| s.methods.iter_mut());
-    let extends = acc.all_extends.iter_mut().flat_map(|e| e.methods.iter_mut());
+    let methods = acc
+        .all_structs
+        .iter_mut()
+        .flat_map(|s| s.methods.iter_mut());
+    let extends = acc
+        .all_extends
+        .iter_mut()
+        .flat_map(|e| e.methods.iter_mut());
     for f in functions.chain(methods).chain(extends) {
         resolve_one(f, graph, diagnostics);
     }
@@ -320,7 +335,11 @@ mod tests {
 
     fn load(root: &Path) -> Result<NativeGraph, String> {
         let entry = root.join("src/main.dream");
-        NativeGraph::load(entry.to_str().unwrap(), &ProgramAccumulator::default())
+        NativeGraph::load(
+            entry.to_str().unwrap(),
+            &ProgramAccumulator::default(),
+            &dream_abi::target::TargetSpec::host(),
+        )
     }
 
     #[test]
@@ -382,7 +401,11 @@ mod tests {
             );
         }
         let err = load(&root).unwrap_err();
-        assert!(err.contains("native library 'sqlite3' is provided by two packages"), "{}", err);
+        assert!(
+            err.contains("native library 'sqlite3' is provided by two packages"),
+            "{}",
+            err
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -398,7 +421,11 @@ mod tests {
             write(&root.join(format!("dream_packages/{pkg}/x.c")), "");
         }
         let err = load(&root).unwrap_err();
-        assert!(err.contains("native set 'shared' is declared by two packages"), "{}", err);
+        assert!(
+            err.contains("native set 'shared' is declared by two packages"),
+            "{}",
+            err
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 }

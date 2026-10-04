@@ -111,6 +111,27 @@ impl Compiler {
         llvm: Option<&dyn LlvmToolchain>,
     ) -> Result<(), CompileError> {
         info!("finished code generation");
+        let shim_path = c_shim_path(&Path::new(out_path).with_extension("ll"));
+        match &emitted.c_shim {
+            Some(src) => fs::write(&shim_path, src)?,
+            None => {
+                let _ = fs::remove_file(&shim_path);
+            }
+        }
+        let abi_artifacts = emit_wasm_and_abi(
+            out_path,
+            &loaded.graph.view(),
+            &gpu,
+            &emitted.live_imports,
+            &loaded.native_graph,
+            &loaded.cpp_bridge,
+            &crate::driver::abi::ModuleAbi {
+                layouts: &layouts,
+                exports: &emitted.exports,
+                export_functions: &emitted.export_functions,
+                target_triple: &self.target.spec().llvm_triple(),
+            },
+        )?;
         if !self.target.spec().capabilities.linear_memory {
             fs::write(out_path, &emitted.bytes)?;
             if self.output_kind.is_library() {
@@ -118,30 +139,9 @@ impl Compiler {
                 fs::write(&header, &emitted.header)?;
                 self.reporter.artifact(&header);
             }
-            let shim_path = c_shim_path(Path::new(out_path));
-            match &emitted.c_shim {
-                Some(src) => fs::write(&shim_path, src)?,
-                None => {
-                    let _ = fs::remove_file(&shim_path);
-                }
-            }
             if !self.opt_ir {
                 self.reporter.artifact(Path::new(out_path));
             }
-            let abi_artifacts = emit_wasm_and_abi(
-                out_path,
-                &loaded.graph.view(),
-                &gpu,
-                &emitted.live_imports,
-                &loaded.native_graph,
-                &loaded.cpp_bridge,
-                &crate::driver::abi::ModuleAbi {
-                    layouts: &layouts,
-                    exports: &emitted.exports,
-                    export_functions: &emitted.export_functions,
-                    target_triple: &self.target.spec().llvm_triple(),
-                },
-            )?;
             for p in abi_artifacts {
                 self.reporter.artifact(&p);
             }
@@ -159,7 +159,7 @@ impl Compiler {
         };
         llvm.ok_or_else(|| CompileError::Internal("no LLVM toolchain configured".into()))?
             .link_wasm(&ll_path, &wasm_path, opt_ll.as_deref(), &req)
-            .map_err(CompileError::Internal)?;
+            .map_err(CompileError::Toolchain)?;
         self.reporter
             .artifact(opt_ll.as_deref().unwrap_or(&ll_path));
         self.reporter.artifact(&wasm_path);
@@ -179,21 +179,6 @@ impl Compiler {
             }
         }
 
-        // Sibling `.abi.json` for JS/`dream.js` interop, plus `.wgsl` when GPU kernels were emitted.
-        let abi_artifacts = emit_wasm_and_abi(
-            out_path,
-            &loaded.graph.view(),
-            &gpu,
-            &emitted.live_imports,
-            &loaded.native_graph,
-            &loaded.cpp_bridge,
-            &crate::driver::abi::ModuleAbi {
-                layouts: &layouts,
-                exports: &emitted.exports,
-                export_functions: &emitted.export_functions,
-                target_triple: &self.target.spec().llvm_triple(),
-            },
-        )?;
         for p in abi_artifacts {
             self.reporter.artifact(&p);
         }

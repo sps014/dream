@@ -1,6 +1,6 @@
 //! Extern imports: `@c` trampolines (Dream types → C ABI), host functions the runtime header does
 //! not declare, and lazy async host bridges (stub + poll). On wasm32 every host function is a
-//! wasm import named by its extern, `@c` imports do not exist, and an async bridge hands its future
+//! wasm import named by its extern, C functions link into the guest, and an async bridge hands its future
 //! to the JS host, which settles it through `__dream_resolve`.
 
 use super::super::fx::V;
@@ -107,11 +107,14 @@ fn register_wasm(l: &mut Lcx<'_>, imports: &[HImport]) {
 
 pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
     let imports = l.mir.imports.clone();
+    c_reverse::register_reverse(l);
     if l.cx.target.spec().capabilities.js_interop {
         register_wasm(l, &imports);
+        for imp in imports.iter().filter(|imp| is_c_import(imp)) {
+            c_marshal::register_import(l, imp);
+        }
         return;
     }
-    c_reverse::register_reverse(l);
     for imp in &imports {
         let host = import_host_name(imp);
         let name = import_call_name(imp);

@@ -238,6 +238,27 @@ Workspace build, strict Clippy, 1,222 tests/15 expected ignored, native 656/656,
 Node 586 passed/70 expected skips/zero failures, hygiene and freestanding checks pass.
 Phase 7 remains 2/8 complete; automated performance budgets remain task 7.3.
 
+WASM C/C++ interop follow-up (2026-10-04): portable package sources and generated
+`@c`/`@cpp` shims now join the guest as LLVM bitcode before optimization, enabling
+cross-language inlining. `[native.<set>.wasm]` selects guest settings independently
+of the build host. WASI libc/libm bindings, owned pointers, callbacks, C++ standard
+library types, exception-to-Result conversion, and global constructor/destructor
+hooks are covered by executable Node tests. C allocation shares Dream's heap with
+C-compatible alignment. Scalar ABI mismatches and unavailable platform imports
+produce build diagnostics. This supersedes the earlier 6.5 restriction on live
+C imports for portable packages and WASI libc/libm.
+
+Release runtime packaging includes the WASI headers and archives; the LLVM
+distribution build now includes clang and its resource headers. The full runtime
+pack matrix and a C++ sample using the packaged runtime/sysroot pass locally.
+The packaged Windows sysroot uses ordinary paths for Clang's nested-header lookup.
+Full native corpus: 657/657. Full Node corpus: 592 passed, 65 expected skips,
+zero failures. Workspace build, strict Clippy, 1,230 tests (15 expected ignores),
+runtime bundle freshness, hygiene, and the 17-unit freestanding core gate pass.
+Task/shared-memory C/C++ modules remain explicitly unsupported pending WASI TLS
+initialization support. Android/iOS SDK validation remains on hold. Phase 7 remains
+2/8 complete; this interop extension does not close the remaining Phase 7 tasks.
+
 ### Cleanliness metrics
 
 | Metric | Baseline (Phase 0) | After P1 | After P2 | After P3 | After P4 | After P5 | After P6 | After P7 | Target |

@@ -533,16 +533,12 @@ fn cpp_shim_and_ir_are_deterministic() {
 }
 
 #[test]
-fn wasm32_rejects_a_live_cpp_member_by_its_dream_name() {
+fn wasm32_compiles_cpp_package() {
     let entry = repo("sample/native_cpp/src/main.dream");
-    let out = out_dir("wasm").join("main.wat");
-    let err = compile(Target::wasm32(), &entry, &out).unwrap_err();
-    assert_contains(
-        &err,
-        "'Store.put' is a native C/C++ import and cannot be called from a wasm32 build",
-    );
-    assert_contains(&err, "kvstore.dream");
-    assert!(!err.contains("dream__"), "{}", err);
+    let out = out_dir("wasm-cpp").join("main.wat");
+    compile(Target::wasm32(), &entry, &out).unwrap();
+    let wat = fs::read_to_string(out).unwrap();
+    assert!(!wat.contains("(import \"c/"), "{}", wat);
 }
 
 #[test]
@@ -560,10 +556,7 @@ fn wasm32_rejects_a_live_c_import_before_loading_the_toolchain() {
         &out_dir("wasm-live-c").join("main.wat"),
     )
     .unwrap_err();
-    assert_contains(
-        &err,
-        "'cAbs' is a native C/C++ import and cannot be called from a wasm32 build",
-    );
+    assert_contains(&err, "'cAbs' has no package C/C++ source set for wasm32");
     assert_contains(&err, "main.dream:1");
     assert_contains(&err, "@js");
 }

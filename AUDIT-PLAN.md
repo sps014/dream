@@ -50,7 +50,7 @@ This document merges two read-only reviews of the Dream compiler and turns them 
 | 4 | FFI completion and embedding API | 10 | 10 | Done | #42 merged as `04d5c085` on 2026-10-03; panic source locations (4.4) completed in a follow-up PR. Local gates: workspace tests, native probe 640/640, Node 539 passed/101 expected skips/0 failures. |
 | 5 | Identity, modules and symbols | 12 | 12 | Done | Merged in #44 and #45; detailed tracker, exit criteria and deletion ledger verified below. |
 | 6 | Platform expansion | 9 | 9 | On hold | All implementation steps and cleanup deliverables completed in [3b9f8529](https://github.com/sps014/dream/commit/3b9f8529849edb36e3a0dbf5ba7b3e98583766d5) (direct main commit). Workspace build, strict Clippy, 1,220 tests, native 653/653 and Node 583 passed/70 native-only skips/zero failures pass (2026-10-04). iOS/Android end-to-end validation and release readiness are on hold for a future version at the user's request (2026-10-04); they are not verified or claimed complete. |
-| 7 | Scale, performance and long-term work | 8 | 0 | Not started | Phases 5, 6 |
+| 7 | Scale, performance and long-term work | 8 | 2 | In progress | Easy tasks 7.2 and 7.5 completed in [125c9f1a](https://github.com/sps014/dream/commit/125c9f1a824c40c4acc026f4f23ed5b6b7be9453). Windows workspace build, strict Clippy, 1,222 tests, native 654/654 and Node 584 passed/70 expected skips/zero failures pass (2026-10-04). Six tasks remain; Phase 6 mobile validation stays on hold. |
 
 ### Phase 0: Safety net and quick wins
 
@@ -217,10 +217,10 @@ Mobile validation preparation is committed in `7b21e2cf` and `1454306f`: real sa
 | Step | Title | Findings | Status | Owner | PR | Notes |
 |---|---|---|---|---|---|---|
 | 7.1 | Analysis manager | ANA-1 | Not started | | | |
-| 7.2 | Optimizer hygiene (cap counters, `find_fn` index) | OPT-4, OPT-5 | Not started | | | |
+| 7.2 | Optimizer hygiene (cap counters, `find_fn` index) | OPT-4, OPT-5 | Done | Codex | [125c9f1a](https://github.com/sps014/dream/commit/125c9f1a824c40c4acc026f4f23ed5b6b7be9453) | Function, module-inlining and RC-elision exhausted caps increment per-thread counters and report with `-v`; stable final rounds do not count as hits. Unique-region safety builds a deterministic `(DefId, instance)` index once per invocation, including constructor adjacency. Regression tests cover caps, partial-inlining RC repair/verification and distinct generic instances with identical display names. Full Windows gates and native/Node corpus pass. |
 | 7.3 | Compile-time observability | — | Not started | | | |
 | 7.4 | Fuzzing and property tests | — | Not started | | | |
-| 7.5 | Counters and docs clean-up | RT-7, DOC-1 | Not started | | | |
+| 7.5 | Counters and docs clean-up | RT-7, DOC-1 | Done | Codex | [125c9f1a](https://github.com/sps014/dream/commit/125c9f1a824c40c4acc026f4f23ed5b6b7be9453) | Native/wasm heap allocation counters use 64-bit atomic updates; Debug allocation APIs return `long`, and native leak reporting, wasm declarations and LSP fixtures are migrated. Tests cross the 32-bit boundary and verify concurrent increments, plus native/Node API goldens. Debug, weak-reference, memory and internals docs reflect the implemented behavior. Windows microbenchmarks before/after are recorded in `tests/bench/results/windows-2026-10-04.md`; allocation-heavy regressions are explicitly documented. Full gates, hygiene and freestanding checks pass. |
 | 7.6 | Delete the repair passes | OWN-2, OPT-3 | Not started | | | |
 | 7.7 | Remaining size hotspots | — | Not started | | | |
 | 7.8 | Re-evaluate self-hosting | BOOT-1 | Not started | | | |
@@ -473,6 +473,8 @@ ten. Hygiene passes with zero unexpected string-pattern matches.
 
 **RT-7: 32-bit counters (P3) [C]**
 
+Resolved by task 7.5 in `125c9f1a` (2026-10-04); the original evidence below is retained.
+
 - `dream_heap_counters.allocs/frees` are `uint32_t`, and the update in `account_frees` is not an atomic read-modify-write.
 - This only affects diagnostics. Fix: 64-bit atomic counters.
 
@@ -525,12 +527,16 @@ ten. Hygiene passes with zero unexpected string-pattern matches.
 
 **OPT-4: silent iteration caps (P2) [C]**
 
+Resolved by task 7.2 in `125c9f1a` (2026-10-04), including a verified partial-inlining regression. The original evidence below is retained.
+
 - The caps are `PassManager.max_iterations = 16`, `MAX_ROUNDS = 8`, and the RcElision inner loop of 8.
 - Hitting a cap silently stops optimizing.
 - It is unconfirmed whether `RcLastUseRepair` stays correct after an incomplete inlining round.
 - **Fix:** a debug counter or log when a cap is hit, plus a test that the repair pass is still correct after partial inlining.
 
 **OPT-5: compile-time scaling and determinism (P2) [C]**
+
+The remaining function-index work is resolved by task 7.2 in `125c9f1a` (2026-10-04); deterministic collections were completed earlier. The original evidence below is retained.
 
 - `find_fn` is a linear scan called inside `region_safe`, so the pass is roughly O(N²) in the size of the module.
 - `ctor_only` is a `std::collections::HashSet`. Check whether its iteration order can affect the output.
@@ -863,6 +869,8 @@ ten. Hygiene passes with zero unexpected string-pattern matches.
 - Running the LLVM tools as subprocesses is fine; it actually makes self-hosting easier.
 
 **DOC-1: undocumented behavior (P3) [C]**
+
+Resolved through earlier FFI/concurrency documentation and task 7.5 in `125c9f1a` (2026-10-04). Weak loads retain under the runtime lock, shared application data still needs synchronization, lock ownership errors panic, and allocation diagnostics are 64-bit. The original evidence below is retained.
 
 - `docs/reference/language/memory.md` doesn't mention:
   - the region limits;

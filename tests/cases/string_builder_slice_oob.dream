@@ -1,0 +1,6 @@
+import system;
+fun main(): void {
+    let builder = StringBuilder();
+    builder.append_utf8_slice("", 0, 2);
+    System.println(builder.build());
+}

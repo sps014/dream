@@ -4,6 +4,11 @@
 
 Compile a pattern once, then test, replace, or extract matches. Patterns use familiar regex syntax (`\d`, groups, lookaround). An invalid pattern never matches.
 
+Native matching uses PCRE2 JIT; wasm32 uses its interpreter. Global `match` searches
+reuse PCRE2 match storage within that call and collect offsets before constructing the
+returned strings. Concurrent searches keep independent match storage. Empty matches
+advance past a whole UTF-16 character, including a surrogate pair.
+
 ```dream
 import system;
 import system.text;

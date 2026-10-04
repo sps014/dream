@@ -1,0 +1,17 @@
+import system;
+import system.text;
+
+fun main(): void {
+    let digits = Regex("(?<digit>\\d)", RegexFlags.Global);
+    let matches = digits.match("123456789012345678901");
+    System.println(matches.length);
+    System.println(matches[0]);
+    System.println(matches[20]);
+    System.println(digits.match("none").length);
+    System.println(Regex("(?:)", RegexFlags.Global).match("😀a").length);
+    System.println(Regex("(?:)", RegexFlags.Global).match("").length);
+    let groups = Regex("(a)(b)").match("ab");
+    System.println(groups.length);
+    System.println(groups[1]);
+    System.println(groups[2]);
+}

@@ -13,7 +13,7 @@ namespace DreamBench;
 /// Pass --dream-scores path/to/native.txt (from run-microbenches.sh) for live ratios.
 /// Dream runs as native LLVM + ARC; this is Release JIT + GC — substrate differs.
 /// JSON uses the compile-time source generator, matching Dream's `@json` codegen.
-/// Regex is the interpreted matcher, matching Dream's Pike VM.
+/// Regex uses the interpreted .NET matcher; Dream uses PCRE2 JIT on native targets.
 /// </summary>
 public static class Program
 {
@@ -279,8 +279,8 @@ public static class Program
         Sink = acc;
     }
 
-    // Interpreted matcher. Dream's `regex_find` is the Pike VM, not a compiled
-    // automaton, so this is `new Regex` and not `[GeneratedRegex]` / `RegexOptions.Compiled`.
+    // Interpreted .NET matcher versus Dream's native PCRE2 JIT; this row measures each public
+    // matching engine. Dream returns strings; C# reads lengths from Match objects.
     // The pattern is intentionally not bare `\d+` (that hits a digit-run fast path).
     static void BenchRegexFind(int iters)
     {
@@ -680,8 +680,14 @@ public static class Program
     static TreeNode? MakeTree(int depth) =>
         depth <= 0 ? null : new TreeNode(MakeTree(depth - 1), MakeTree(depth - 1));
 
-    static void BenchBinaryTrees(int iters)
+    static void BenchBinaryTrees(int iters, bool reclaim = false)
     {
+        if (reclaim)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
         var sw = Stopwatch.StartNew();
         long acc = 0;
         for (int i = 0; i < iters; i++)
@@ -690,8 +696,15 @@ public static class Program
             if (root != null) acc++;
             else acc--;
         }
+        // This separate row includes explicit reclamation; its collection overhead is synthetic.
+        if (reclaim)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
         sw.Stop();
-        Report("binary_trees", ElapsedNs(sw), iters);
+        Report(reclaim ? "binary_trees_reclaim" : "binary_trees", ElapsedNs(sw), iters);
         Sink = (int)acc;
     }
 
@@ -857,6 +870,7 @@ public static class Program
         BenchJsonDeserialize(scale / 2);
         BenchArrAdd(scale * 5);
         BenchVecAdd(scale * 10);
+        BenchBinaryTrees(scale / 200, true);
     }
 
     static void LoadDreamScores(string path)

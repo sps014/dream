@@ -312,7 +312,7 @@ fun bench_scratch_arena(iters: int): void {
     report("scratch_arena", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
-// Pike-VM find-all — pattern is intentionally NOT bare `\d+` (that hits a digit-run
+// Public find-all API — pattern is intentionally NOT bare `\d+` (that hits a digit-run
 // fast path and would benchmax the score).
 fun bench_regex_find(iters: int): void {
     let re = Regex("[a-z]+\\d+", RegexFlags.Global);
@@ -873,7 +873,7 @@ fun make_tree(depth: int): Option<TreeNode> {
 }
 
 // One op = build a depth-12 tree (4095 nodes) then drop it (full recursive ARC release).
-fun bench_binary_trees(iters: int): void {
+fun bench_binary_trees(iters: int, reclaim: bool = false): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
@@ -885,7 +885,9 @@ fun bench_binary_trees(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("binary_trees", sw.elapsed_nanos, iters);
+    let label = "binary_trees";
+    if reclaim { label = "binary_trees_reclaim"; }
+    report(label, sw.elapsed_nanos, iters);
     sink_int(acc);
 }
 
@@ -1095,6 +1097,7 @@ fun run_suite(scale: int): void {
     bench_json_deserialize(scale / 2);
     bench_arr_add(scale * 5);
     bench_vec_add(scale * 10);
+    bench_binary_trees(scale / 200, true);
 }
 
 fun bench_passes(): int {

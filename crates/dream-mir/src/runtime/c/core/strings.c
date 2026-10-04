@@ -75,6 +75,10 @@ __attribute__((cold, noinline)) static dream_ptr sb_realloc_no_zero(dream_ptr by
     return p;
 }
 
+dream_ptr dream_sb_buffer(int32_t capacity) {
+    return sb_realloc_no_zero(0, capacity);
+}
+
 __attribute__((cold, noinline)) dream_ptr dream_sb_grow_bytes(dream_sb *sb, dream_ptr bytes,
                                                               int32_t need) {
     int32_t cap = bytes ? dream_i32(bytes)[0] : 0;

@@ -314,6 +314,7 @@ pub(crate) fn runtime_c_name(sym: &str) -> String {
         "string_eq" => "dream_string_eq".into(),
         "string_alloc" => "dream_string_alloc".into(),
         "substring" | "string_substring_raw" => "dream_substring".into(),
+        dream_abi::intrinsics::ATTR_STRING_BUILDER_BUFFER => "dream_sb_buffer".into(),
         "string_builder_push" => "dream_sb_push".into(),
         "string_builder_push_int" => "dream_sb_push_int".into(),
         "string_builder_push_long" => "dream_sb_push_long".into(),

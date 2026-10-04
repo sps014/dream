@@ -3,8 +3,8 @@
 use std::path::{Path, PathBuf};
 
 use dream_abi::intrinsics::{
-    ATTR_REGEX_COMPILE, ATTR_REGEX_FIND, ATTR_REGEX_FREE, ATTR_REGEX_GROUP_COUNT,
-    ATTR_REGEX_NAME_AT, ATTR_REGEX_NAME_COUNT, ATTR_REGEX_NAME_NUMBER,
+    ATTR_REGEX_COMPILE, ATTR_REGEX_FIND, ATTR_REGEX_FIND_ALL, ATTR_REGEX_FREE,
+    ATTR_REGEX_GROUP_COUNT, ATTR_REGEX_NAME_AT, ATTR_REGEX_NAME_COUNT, ATTR_REGEX_NAME_NUMBER,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,12 +93,14 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[RuntimeModule {
         "regex_name_at",
         "regex_name_number",
         "regex_find",
+        "regex_find_all",
         "regex_test",
     ],
     intrinsic_keys: &[
         ATTR_REGEX_COMPILE,
         ATTR_REGEX_FREE,
         ATTR_REGEX_FIND,
+        ATTR_REGEX_FIND_ALL,
         ATTR_REGEX_GROUP_COUNT,
         ATTR_REGEX_NAME_COUNT,
         ATTR_REGEX_NAME_AT,

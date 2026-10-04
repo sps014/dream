@@ -9,6 +9,8 @@ static extern fun regex_compile(borrow pattern: string, flags: RegexFlags): usiz
 static extern fun regex_free(h: usize): void;
 @intrinsic("regex_find")
 static extern fun regex_find(h: usize, borrow input: string, pos: int): int[];
+@intrinsic("regex_find_all")
+static extern fun regex_find_all(h: usize, borrow input: string): int[];
 @intrinsic("regex_group_count")
 static extern fun regex_group_count(h: usize): int;
 @intrinsic("regex_name_count")
@@ -174,34 +176,15 @@ public class Regex {
     }
 
     public fun match(input: string): string[] {
-        let n = input.length;
         if this.global {
-            let scratch = List<string>(8);
-            let pos = 0;
-            let going = true;
-            while going {
-                if pos > n {
-                    going = false;
-                } else {
-                    let m_opt = this.find_at(input, pos);
-                    switch (m_opt) {
-                        Some(m) => {
-                            scratch.push(m.group_text(input, 0));
-                            let s = m.start();
-                            let e = m.end();
-                            if e > s {
-                                pos = e;
-                            } else {
-                                pos = s + 1;
-                            }
-                        },
-                        None => {
-                            going = false;
-                        },
-                    }
-                }
+            let offsets = regex_find_all(this.engine, input);
+            let matches = Buffer.alloc<string>(offsets.length / 2);
+            let i = 0;
+            while i < matches.length {
+                matches[i] = input.substring(offsets[i * 2], offsets[i * 2 + 1]);
+                i = i + 1;
             }
-            return this.to_array(scratch);
+            return matches;
         }
         let m_opt = this.find_at(input, 0);
         return switch (m_opt) {

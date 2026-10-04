@@ -108,6 +108,7 @@ pub const ATTR_ARRAY_NEW: &str = "array_new";
 pub const ATTR_SLEEP: &str = "sleep";
 /// `String.alloc(n)` / `String.set(s, i, c)` — low-level string buffer primitives.
 pub const ATTR_STRING_ALLOC: &str = "string_alloc";
+pub const ATTR_STRING_BUILDER_BUFFER: &str = "string_builder_buffer";
 pub const ATTR_STRING_SET: &str = "string_set";
 /// `string.from_utf8(bytes)` — build a string from a full `byte[]` UTF-8 payload.
 pub const ATTR_STRING_FROM_UTF8: &str = "string_from_utf8";
@@ -164,6 +165,7 @@ pub const ATTR_PANIC: &str = "dream_panic";
 pub const ATTR_REGEX_COMPILE: &str = "regex_compile";
 pub const ATTR_REGEX_FREE: &str = "regex_free";
 pub const ATTR_REGEX_FIND: &str = "regex_find";
+pub const ATTR_REGEX_FIND_ALL: &str = "regex_find_all";
 pub const ATTR_REGEX_GROUP_COUNT: &str = "regex_group_count";
 pub const ATTR_REGEX_NAME_COUNT: &str = "regex_name_count";
 pub const ATTR_REGEX_NAME_AT: &str = "regex_name_at";
@@ -193,6 +195,7 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_ARRAY_NEW,
     ATTR_SLEEP,
     ATTR_STRING_ALLOC,
+    ATTR_STRING_BUILDER_BUFFER,
     ATTR_STRING_SET,
     ATTR_STRING_FROM_UTF8,
     ATTR_STRING_FROM_UTF8_PREFIX,
@@ -219,6 +222,7 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_REGEX_COMPILE,
     ATTR_REGEX_FREE,
     ATTR_REGEX_FIND,
+    ATTR_REGEX_FIND_ALL,
     ATTR_REGEX_GROUP_COUNT,
     ATTR_REGEX_NAME_COUNT,
     ATTR_REGEX_NAME_AT,
@@ -276,6 +280,7 @@ pub enum IntrinsicOp {
     StringCopyUtf8,
     /// `string.compare_raw(a, b)` — UTF-8 lexicographic compare.
     StringCompare,
+    StringBuilderBuffer,
     /// `Debug.free_list_head()` — head of the allocator free list.
     DebugFreeList,
     /// `Debug.heap_ptr()` — current bump-pointer value.
@@ -338,6 +343,7 @@ impl IntrinsicOp {
             ATTR_ARRAY_NEW => IntrinsicOp::ArrayNew,
             ATTR_SLEEP => IntrinsicOp::Sleep,
             ATTR_STRING_ALLOC => IntrinsicOp::StringAlloc,
+            ATTR_STRING_BUILDER_BUFFER => IntrinsicOp::StringBuilderBuffer,
             ATTR_STRING_SET => IntrinsicOp::StringSet,
             ATTR_STRING_FROM_UTF8 => IntrinsicOp::StringFromUtf8,
             ATTR_STRING_FROM_UTF8_PREFIX => IntrinsicOp::StringFromUtf8Prefix,
@@ -363,6 +369,7 @@ impl IntrinsicOp {
             ATTR_PANIC => IntrinsicOp::Panic,
             ATTR_REGEX_COMPILE
             | ATTR_REGEX_FREE
+            | ATTR_REGEX_FIND_ALL
             | ATTR_REGEX_FIND
             | ATTR_REGEX_GROUP_COUNT
             | ATTR_REGEX_NAME_COUNT

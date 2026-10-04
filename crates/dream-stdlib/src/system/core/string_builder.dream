@@ -12,12 +12,13 @@ public class StringBuilder {
     cap: int;
 
     // Allocates an empty builder with an initial backing buffer capacity in payload bytes (defaults to 16).
+    @inline
     public constructor(capacity: int = 16) {
         let c = capacity;
         if c < sequence_min_capacity() {
             c = sequence_min_capacity();
         }
-        this.bytes = Buffer.alloc<byte>(c + 4);
+        this.bytes = StringBuilder.new_buffer(c + 4);
         this.count = 0;
         this.cap = c + 4;
     }
@@ -77,6 +78,10 @@ public class StringBuilder {
     @intrinsic("string_builder_push")
     static extern fun push_raw(borrow sb: StringBuilder, borrow text: string): void;
 
+    @intrinsic("string_builder_buffer")
+    // Only initialized bytes below `count` can become a built string.
+    static extern fun new_buffer(capacity: int): byte[];
+
     @intrinsic("string_builder_push_int")
     static extern fun push_int(borrow sb: StringBuilder, n: int): void;
 
@@ -93,6 +98,10 @@ public class StringBuilder {
     public fun append_utf8_slice(borrow text: string, start: int, byte_len: int): void {
         if byte_len <= 0 {
             return;
+        }
+        let size = text.byte_size();
+        if start < 0 || start > size || byte_len > size - start {
+            System.panic("StringBuilder slice out of bounds");
         }
         this.ensure(byte_len);
         string.copy_utf8(this.bytes, this.count + 4, text, start, byte_len);

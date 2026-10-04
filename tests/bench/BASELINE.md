@@ -22,6 +22,14 @@ ratios are not an ARC-only scoreboard.
 
 ## API fairness notes
 
+`regex_find` measures public result APIs: Dream returns matched strings, while C# reads
+`Match.Length` without materializing those strings. Native Dream uses PCRE2 JIT.
+`binary_trees` includes immediate ARC reclamation in Dream but permits deferred C# GC.
+`binary_trees_reclaim` is a separate measurement with C# collection explicitly inside
+the timer and a clean heap beforehand. Forced full collections add synthetic overhead;
+this row does not model normal GC scheduling or establish a general ARC/GC ranking.
+The reclamation row runs last so its forced GC cannot perturb other rows in that pass.
+
 | Bench | Dream | C# |
 |-------|-------|-----|
 | `char_scan` | indexed `char_at` over UTF-16 code units | indexed `s[j]` over the same units |
@@ -29,7 +37,7 @@ ratios are not an ARC-only scoreboard.
 | `substring` | `substring(start, end)`, an O(1) slice | `AsSpan(start, length)`, the same slice (not `Substring`, which copies) |
 | `sieve` | scalar loop writes `flags[t] = 1` | same scalar fill (not `Array.Fill`) |
 | `scratch_arena` | `bump` / `set_at` / `at` (no Span RC) | same index API |
-| `regex_find` | Global `[a-z]+\d+` via Pike VM (not bare `\d+`) | same pattern, interpreted `Regex` (not source-generated or `Compiled`) |
+| `regex_find` | Global `[a-z]+\d+` via PCRE2 JIT (not bare `\d+`) | same pattern, interpreted `Regex` (not source-generated or `Compiled`) |
 | `json_serialize` / `json_deserialize` | Nested `@json` User+Address, payload built once; deserialize text outside timer; scale `/10` | `System.Text.Json` source generation |
 | `arr_add` | Scalar `c[i]=a[i]+b[i]` (`float[]`+`int[]`, n=256); Dream autovecs to `v128` | same scalar `for` (RyuJIT autovec) |
 | `vec_add` | `Vector<float>` stride + scalar tail (`count()` lanes; WASM `v128` locals) | `System.Numerics.Vector<float>` |

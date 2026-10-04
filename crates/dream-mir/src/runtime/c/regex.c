@@ -5,6 +5,8 @@
 #include "dream_guest.h"
 
 #include <stdlib.h>
+#include <string.h>
+#include <limits.h>
 
 typedef struct {
     pcre2_code *code;
@@ -174,6 +176,56 @@ dream_ptr regex_find(uintptr_t h, dream_ptr input, int32_t pos) {
         dst[2 * i] = a == PCRE2_UNSET ? -1 : (int32_t)a;
         dst[2 * i + 1] = b == PCRE2_UNSET ? -1 : (int32_t)b;
     }
+    pcre2_match_data_free(md);
+    return out;
+}
+
+dream_ptr regex_find_all(uintptr_t h, dream_ptr input) {
+    DreamRe *re = as_re(h);
+    int32_t local[32];
+    int32_t *offsets = local;
+    int32_t count = 0, capacity = 32;
+    int32_t n = dream_str_len(input);
+    PCRE2_SIZE pos = 0;
+    uint32_t options = 0;
+    pcre2_match_data *md;
+    dream_ptr out;
+    const PCRE2_UCHAR *subject;
+    if (re == NULL || !input) { return dream_array_i32(0); }
+    md = pcre2_match_data_create_from_pattern(re->code, NULL);
+    if (md == NULL) { return dream_array_i32(0); }
+    subject = (const PCRE2_UCHAR *)dream_str_units(input);
+    while (pos <= (PCRE2_SIZE)n && pcre2_match(re->code, subject, (PCRE2_SIZE)n,
+                                             pos, options, md, NULL) >= 0) {
+        PCRE2_SIZE *ov = pcre2_get_ovector_pointer(md);
+        if (count == capacity) {
+            int32_t next;
+            int32_t *grown;
+            if (capacity > (INT32_MAX / 4 - 4) / 2) { count = 0; break; }
+            next = capacity * 2;
+            grown = (int32_t *)malloc((size_t)next * sizeof(*grown));
+            if (grown == NULL) { count = 0; break; }
+            memcpy(grown, offsets, (size_t)count * sizeof(*grown));
+            if (offsets != local) { free(offsets); }
+            offsets = grown;
+            capacity = next;
+        }
+        offsets[count++] = (int32_t)ov[0];
+        offsets[count++] = (int32_t)ov[1];
+        /* The first successful search validates the entire UTF-16 subject. */
+        options = PCRE2_NO_UTF_CHECK;
+        if (ov[1] > ov[0]) {
+            pos = ov[1];
+        } else {
+            pos = ov[0] + 1;
+            if (pos < (PCRE2_SIZE)n && subject[pos - 1] >= 0xd800 &&
+                subject[pos - 1] <= 0xdbff && subject[pos] >= 0xdc00 &&
+                subject[pos] <= 0xdfff) { ++pos; }
+        }
+    }
+    out = dream_array_i32(count);
+    if (count) { memcpy(dream_i32s(out) + 1, offsets, (size_t)count * sizeof(*offsets)); }
+    if (offsets != local) { free(offsets); }
     pcre2_match_data_free(md);
     return out;
 }

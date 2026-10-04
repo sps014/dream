@@ -100,7 +100,11 @@ and [Android library archive structure](https://developer.android.com/studio/pro
 
 ## SDK-equipped sample-app validation
 
-The manual **Mobile sample apps** GitHub Actions workflow builds the real Rust core and
+iOS/Android end-to-end validation is **on hold for a future version** (2026-10-04).
+The sample apps and manual workflow are retained; simulator/emulator execution has not
+completed, so mobile release readiness is unverified.
+
+The manual **Mobile sample apps** GitHub Actions workflow is prepared to build the real Rust core and
 Dream static library for both iOS slices and both Android ABIs. It packages an XCFramework
 and an AAR, links the library into the sample apps in `sample/mobile/`, and executes an
 iPhone simulator app and an Android x86_64 emulator app. Each app attaches a thread, calls

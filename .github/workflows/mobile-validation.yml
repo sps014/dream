@@ -46,6 +46,8 @@ jobs:
           path: ~/.dream/toolchains/llvm-22.1.8
           key: mobile-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - run: scripts/fetch-dev-llvm.sh
+      - name: Verify freestanding runtime core
+        run: python3 scripts/check_freestanding.py --clang "$HOME/.dream/toolchains/llvm-22.1.8/bin/clang" --linker "$HOME/.dream/toolchains/llvm-22.1.8/bin/lld"
       - run: cargo build --locked -p dream --no-default-features --features native -p dreamer
       - name: Enable emulator acceleration
         run: |
@@ -85,6 +87,8 @@ jobs:
           path: ~/.dream/toolchains/llvm-22.1.8
           key: mobile-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - run: scripts/fetch-dev-llvm.sh
+      - name: Verify freestanding runtime core
+        run: python3 scripts/check_freestanding.py --clang "$HOME/.dream/toolchains/llvm-22.1.8/bin/clang" --linker "$HOME/.dream/toolchains/llvm-22.1.8/bin/lld"
       - run: cargo build --locked -p dream --no-default-features --features native -p dreamer
       - name: Link staticlibs, package XCFramework and run the sample app
         run: python3 scripts/mobile/ios.py

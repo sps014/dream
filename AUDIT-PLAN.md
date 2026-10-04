@@ -184,8 +184,14 @@ failures or guest leak reports). Validation for #45: workspace build, strict Cli
 tests and the full native corpus (649/649, including the new `let_void_value` golden).
 Production files over 600 lines: 38 (baseline 53).
 
-Phase 5 is complete. Binding a `void` call result (`let r = f();`) is now a sema diagnostic
-instead of a backend ICE.
+**Phase 5 is complete** (merged in #44 and #45). Every step and cleanup deliverable is done, the
+exit criteria are met, and the Phase 5 deletion list is verified empty: no `DefTable.by_name`,
+`lower_str`, name-keyed sema tables, `TypeId`-number mangling, MIR parameter-mode inference,
+name-compared sink parameters (sink metadata is a scoped symbol-table lookup), analyzer
+`.unwrap()` on internal state, or hand-built LSP type strings. Binding a `void` call result
+(`let r = f();`) is now a sema diagnostic instead of a backend ICE. Follow-ups that need
+separate compilation (per-module analysis reuse, Dream-to-Dream prebuilt library linking) are
+outside Phase 5; the build cache already makes unchanged rebuilds skip analysis and LLVM.
 
 ### Phase 6: Platform expansion
 
@@ -218,15 +224,15 @@ instead of a backend ICE.
 
 | Metric | Baseline (Phase 0) | After P1 | After P2 | After P3 | After P4 | After P5 | After P6 | After P7 | Target |
 |---|---|---|---|---|---|---|---|---|---|
-| Production `.rs` files over 600 lines | 56 | 55 | 54 | 54 | 53 | | | | 0 without a stated reason |
-| Production `.rs` files over 1,000 lines | 18 | 17 | 16 | 16 | 15 | | | | 0 |
-| `#[allow(clippy::…)]` count | 40 | 40 | 40 | 40 | 40 | | | | Only external-API cases |
-| `unwrap`/`expect` in syntax and sema (non-test) | 0 | 0 | 0 | 0 | 0 | | | | 0 |
-| Name-string heuristics in passes and backend | 0 (10 allowlisted non-heuristic pattern matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | | | | 0 |
-| `std::collections::HashMap`/`HashSet` in mir and sema | 0 | 0 | 0 | 0 | 0 | | | | 0 in output paths |
-| Duplicated lines, native vs wasm32 runtime | 141 (remeasured; originally recorded as 213) | 103 | 103 | 102 | 102 | | | | ~0 |
-| Repair passes needed for correctness | 2 | 2 | 2 | 2 | 2 | | | | 0 |
-| Runtime C files over 600 lines | 3 | 3 | 2 | 2 | 2 | | | | 0 |
+| Production `.rs` files over 600 lines | 56 | 55 | 54 | 54 | 53 | 38 | | | 0 without a stated reason |
+| Production `.rs` files over 1,000 lines | 18 | 17 | 16 | 16 | 15 | 8 | | | 0 |
+| `#[allow(clippy::…)]` count | 40 | 40 | 40 | 40 | 40 | 46 (47 at the pre-P5 commit, remeasured) | | | Only external-API cases |
+| `unwrap`/`expect` in syntax and sema (non-test) | 0 | 0 | 0 | 0 | 0 | 0 | | | 0 |
+| Name-string heuristics in passes and backend | 0 (10 allowlisted non-heuristic pattern matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | 0 (same 10 allowlisted matches) | | | 0 |
+| `std::collections::HashMap`/`HashSet` in mir and sema | 0 | 0 | 0 | 0 | 0 | 0 | | | 0 in output paths |
+| Duplicated lines, native vs wasm32 runtime | 141 (remeasured; originally recorded as 213) | 103 | 103 | 102 | 102 | 103 (103 at the pre-P5 commit, remeasured) | | | ~0 |
+| Repair passes needed for correctness | 2 | 2 | 2 | 2 | 2 | 2 | | | 0 |
+| Runtime C files over 600 lines | 3 | 3 | 2 | 2 | 2 | 2 | | | 0 |
 
 Phase 2 metrics were remeasured on 2026-10-02 at merged commit
 `9fe2dfb2445ab883e8408724d358510f74d73733` (PR #34). Both 2.C4 and 2.C5 are
@@ -280,6 +286,16 @@ sources and headers, recursively. Reapplying this method to the Phase 0 merge `b
 141, not the previously recorded 213; the corrected baseline makes the P1 value comparable.
 The remaining two containment/repair paths are `RcLastUseRepair` and `strip_escaped_regions`;
 their deletion remains task 7.6. This metrics-only update does not require rerunning compiler tests.
+
+Phase 5 measured on 2026-10-04 at merged commit `8069977d` (PR #45) with the Phase 1 method
+(`scripts/check_hygiene.py` production files; allowance and unwrap/expect counts exclude
+`#[cfg(test)]` tails; runtime duplication is the distinct trimmed non-blank line intersection of
+`runtime/c/native` and `runtime/c/wasm32`). The same script applied to the pre-Phase 5 commit
+`dfe30c4a` reproduces the recorded P4 file-size counts (53 and 15) but gives 47 Clippy
+allowances and 103 shared runtime lines, so the recorded P4 values of 40 and 102 were measured
+differently; the P5 values are comparable to those remeasured figures. Phase 5 added nine
+allowances (mostly `too_many_arguments` on functions moved by the hotspot splits) and removed
+ten. Hygiene passes with zero unexpected string-pattern matches.
 
 ---
 
@@ -1401,7 +1417,9 @@ Every fix should leave the codebase smaller or simpler, not add a second path ne
 - **5.C5 Turn the analyzer `.unwrap()` calls into `internal_error!`** (`calls/args.rs:166`, `instance_dispatch.rs:327`, `hir_emit/stmts.rs:256`). The Phase 0 lint then passes with no exceptions.
 - **5.C6 Split `src/driver/compiler.rs`** into pipeline stages (load, analyze, lower, optimize, emit), with the `ModuleGraph` as the input.
 
-**Phase 5 exit criteria**
+**Phase 5 exit criteria** (all met at PR #45: `module_receiver_identity` and
+`generic_identity_collision` goldens, `tests/structural_symbols.rs`, `cargo test -p dream-lsp`,
+no string-keyed type/def lookups, and every analyzer/LSP production file under 800 lines)
 
 - Two modules can each define `User`.
 - A symbol-stability golden exists.

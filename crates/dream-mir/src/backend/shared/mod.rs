@@ -12,7 +12,6 @@ pub(crate) mod panic_msgs;
 pub(crate) mod place_policy;
 mod print;
 pub(crate) mod protocol_names;
-pub(crate) mod rc_store;
 pub(crate) mod reach;
 mod symbols;
 pub(crate) mod tables;
@@ -20,7 +19,6 @@ mod target;
 mod valuetype;
 
 pub use print::print_wasm;
-pub(crate) use rc_store::unique_container_move_local;
 pub(crate) use symbols::func_symbol;
 pub use target::Target;
 pub(crate) use valuetype::{ValueFrame, ValueLocalKind};

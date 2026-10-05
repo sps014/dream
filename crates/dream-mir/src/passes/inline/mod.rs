@@ -6,9 +6,9 @@
 //! block (assigning the returned value into the call's destination first).
 //!
 //! Inlining runs as a [`ModulePass`] *after* module-wide [`crate::passes::rc::RcInsertion`]
-//! (see `optimize_module_opts`): each callee already carries its scope-exit `Release`s. A follow-up
-//! [`crate::passes::rc::RcLastUseRepair`] turns inlined last-use copies and container stores into
-//! moves so spliced `return x` / `a[i] = s` do not leak. Value-struct teardown is emitter-side for
+//! (see `optimize_module_opts`): each callee already carries its scope-exit `Release`s. Returned
+//! reference tokens transfer explicitly to the call destination, including container slots.
+//! Value-struct teardown is emitter-side for
 //! standalone functions; the inliner inserts [`Statement::ValueDrop`] at each remapped
 //! return→continuation edge so owning value locals still die at the call site (not the caller's
 //! frame exit). Call-result dests are forced Owning (`__vret`) so the return `Assign` deep-copies
@@ -23,6 +23,8 @@ use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 
 pub(crate) mod graph;
 mod remap;
+#[cfg(test)]
+mod return_tests;
 
 use graph::{address_taken, count_call_sites, recursive_set};
 use remap::{arg_type, remap_block, wasm_kind, WasmKind};
@@ -125,6 +127,11 @@ fn find_site(
                 ),
                 _ => continue,
             };
+            // Weak/unowned slots have their own ABI-result disposal rules; they cannot adopt
+            // the owning return token like a local or strong container slot.
+            if super::rc::field_store_is_non_strong(f, &mir.layouts, stmt) {
+                continue;
+            }
             let Some(&ci) = index.get(&key) else { continue };
             if !eligible(
                 mir,
@@ -393,8 +400,25 @@ fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeIn
                             decl.is_ref = false;
                         }
                     }
-                    bb.stmts
-                        .push(Statement::Assign(dest.clone(), Rvalue::Use(o)));
+                    // RC insertion normalizes borrowed returns into owning locals. A call hands
+                    // that +1 to its destination; a borrowed copy into a container would retain
+                    // again and strand the callee's token. Nulling also prevents loop re-entry
+                    // from releasing the previous invocation's returned value.
+                    let (rvalue, moved) = match o {
+                        Operand::Copy(Place::Local(src))
+                            if interner.is_rc_tracked(f.local_ty(src)) =>
+                        {
+                            (Rvalue::Move { src, cast: None }, Some(src))
+                        }
+                        other => (Rvalue::Use(other), None),
+                    };
+                    bb.stmts.push(Statement::Assign(dest.clone(), rvalue));
+                    if let Some(src) = moved {
+                        bb.stmts.push(Statement::Assign(
+                            Place::Local(src),
+                            Rvalue::Use(Operand::Const(Const::Null)),
+                        ));
+                    }
                 }
             }
             other => bb.terminator = other,

@@ -14,7 +14,6 @@ mod insertion;
 pub(crate) mod lifetime;
 pub(crate) mod liveness;
 pub(crate) mod modref;
-mod repair;
 mod sink;
 mod tokens;
 mod uniqueness;
@@ -33,9 +32,8 @@ pub use elision::RcElision;
 pub use hop::HopElision;
 pub use insertion::RcInsertion;
 pub(crate) use liveness::stmt_reads_local;
-pub use repair::RcLastUseRepair;
 pub use sink::ReleaseSink;
-pub(crate) use uniqueness::container_move_locals;
+pub(crate) use uniqueness::field_store_is_non_strong;
 
 use crate::{Global, Local, Operand, Place, Rvalue, Statement};
 use dream_types::TypeInterner;

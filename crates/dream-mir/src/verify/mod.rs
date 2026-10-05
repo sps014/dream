@@ -8,7 +8,6 @@ mod call_effects;
 mod operands;
 mod ownership;
 mod ref_types;
-mod region_guard;
 mod region_graph;
 mod region_values;
 mod regions;
@@ -32,9 +31,11 @@ mod token_tests;
 #[cfg(test)]
 mod region_tests;
 
+#[cfg(test)]
+mod region_rejection_tests;
+
 use crate::{Mir, MirFunction};
 use dream_types::TypeInterner;
-pub(crate) use region_guard::RegionVerifier;
 
 /// One verifier finding, located by function, block, and statement index (`stmts.len()` = the
 /// terminator).

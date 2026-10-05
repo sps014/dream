@@ -1,0 +1,63 @@
+import system;
+
+class Holder {
+    public value: string;
+    public constructor() {
+        this.value = "";
+    }
+}
+
+fun fresh(text: string, first: bool): string {
+    if first {
+        return text.substring(0, 2);
+    }
+    return text.substring(2, 4);
+}
+
+fun borrowed(text: string): string {
+    return text;
+}
+
+enum Chain {
+    Cons(head: int, tail: Chain),
+    Nil,
+}
+
+fun make_chain(n: int): Chain {
+    let result = Chain.Nil;
+    let i = 0;
+    while i < n {
+        result = Chain.Cons(i, result);
+        i = i + 1;
+    }
+    return result;
+}
+
+fun length(borrow value: Chain): int {
+    return switch (value) {
+        Cons(_, tail) => 1 + length(tail),
+        Nil => 0,
+    };
+}
+
+fun exercise(): void {
+    let values: string[] = ["", ""];
+    let holder = Holder();
+    let chains: Chain[] = [Chain.Nil];
+    let i = 0;
+    while i < 3 {
+        values[0] = fresh("abcd", true);
+        values[1] = fresh("abcd", false);
+        holder.value = borrowed(values[0]);
+        chains[0] = make_chain(3);
+        System.println(holder.value + values[1]);
+        i = i + 1;
+    }
+    System.println(length(chains[0]));
+}
+
+fun main(): void {
+    let before = Debug.live_objects;
+    exercise();
+    System.println(Debug.live_objects - before);
+}

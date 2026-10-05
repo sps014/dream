@@ -1,6 +1,9 @@
 //! Snapshot helpers + diagnostics for syntax-DSL generators that were not executed via
 //! `@generator(ctx: GenContext)`. Markup/DSL logic lives in Dream generator bodies — not here.
 
+#[cfg(feature = "native")]
+use super::quote::json_string;
+
 use super::context::GeneratorContext;
 use super::registration::RegisteredGenerator;
 #[cfg(feature = "native")]
@@ -83,9 +86,9 @@ pub(super) fn build_snapshot(ctx: &GeneratorContext, site_ids: &[SyntaxNodeId]) 
         blocks.push_str("{\"id\":");
         blocks.push_str(&id.0.to_string());
         blocks.push_str(",\"name\":");
-        blocks.push_str(&json_escape(&site.name));
+        blocks.push_str(&json_string(&site.name));
         blocks.push_str(",\"body\":");
-        blocks.push_str(&json_escape(&site.body_text));
+        blocks.push_str(&json_string(&site.body_text));
         blocks.push_str(",\"splices\":");
         blocks.push_str(&json_string_array(&site.splice_sources));
         blocks.push('}');
@@ -103,15 +106,15 @@ fn snapshot_type(t: &TypeSymbol) -> String {
             fields.push(',');
         }
         fields.push_str("{\"name\":");
-        fields.push_str(&json_escape(&f.name));
+        fields.push_str(&json_string(&f.name));
         fields.push_str(",\"type_name\":");
-        fields.push_str(&json_escape(&f.type_name));
+        fields.push_str(&json_string(&f.type_name));
         fields.push('}');
     }
     fields.push(']');
     format!(
         "{{\"name\":{},\"attributes\":{},\"fields\":{}}}",
-        json_escape(&t.name),
+        json_string(&t.name),
         json_string_array(&attr_names),
         fields,
     )
@@ -124,26 +127,9 @@ fn json_string_array(items: &[String]) -> String {
         if i > 0 {
             out.push(',');
         }
-        out.push_str(&json_escape(s));
+        out.push_str(&json_string(s));
     }
     out.push(']');
-    out
-}
-
-#[cfg(feature = "native")]
-fn json_escape(s: &str) -> String {
-    let mut out = String::from("\"");
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
     out
 }
 

@@ -1,6 +1,13 @@
-use super::*;
+use super::pipeline::Inliner;
 use crate::build::FunctionBuilder;
+use crate::passes::ModulePass;
 use crate::passes::{MirPass, RcInsertion};
+use crate::Const;
+use crate::Operand;
+use crate::Place;
+use crate::Rvalue;
+use crate::Statement;
+use crate::Terminator;
 use dream_types::{DefKind, TypeCtx};
 
 #[test]

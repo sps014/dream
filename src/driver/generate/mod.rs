@@ -5,6 +5,7 @@ mod context;
 mod context_gen;
 mod json_gen;
 mod manifest;
+mod quote;
 mod registration;
 mod rewrite;
 mod semantic;

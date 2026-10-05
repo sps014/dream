@@ -54,7 +54,7 @@ Every function pass must declare `preserves()`:
 
 - `ControlFlow` keeps block identities, entry and ordered successor edges intact. Copy/global
   propagation, constant folding, algebraic rewrites, overflow elimination, GVN, scalar replacement,
-  dead stores, tail-call conversion and RC elision/sinking/repair preserve these analyses.
+  dead stores, tail-call conversion and RC elision/sinking preserve these analyses.
   Converting a return into a tail call preserves the same terminal CFG node.
 - `None` is required for SCCP, CFG simplification, DCE, LICM, bounds-check loop versioning,
   induction-variable preheaders, vectorization, unrolling, string cursor preheaders and RC
@@ -295,3 +295,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 - [ ] Use `Terminator::successors()` for CFG traversal; don't hand-match terminator variants for edges.
 - [ ] Determinism: iterate blocks/stmts in `Vec` order; if you need a set/map, use `IndexMap`/`BTreeMap`, never `std::HashMap` (see [08](./08-testing-and-determinism.md)).
 - [ ] Add a focused unit test with `FunctionBuilder` and keep the workspace green and clippy-clean.
+
+## Ownership implementation modules
+
+`inline/eligibility.rs` decides which calls can inline, `pipeline.rs` drives module rounds and
+`splice.rs` remaps the callee and transfers return ownership. `rc/tokens/analysis.rs` runs the
+dataflow worklist; `flow.rs` handles joins and block transfer, `aliases.rs` orders leftover releases,
+`destroy.rs` checks destruction safety, and `calls.rs` handles call ownership effects.
+`rc/elision/` separates straight-line chains, branch/loop regions and postdominance proofs.
+The inliner and elision tests live in sibling test modules.

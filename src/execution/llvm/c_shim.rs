@@ -40,6 +40,10 @@ pub(super) fn shim_bitcode(
         .arg(&src)
         .arg("-o")
         .arg(&out);
+    // A non-PIC shim's module flags can force local-exec TLS in the linked runtime.
+    if !spec.is_windows() && !spec.capabilities.linear_memory {
+        cmd.arg("-fPIC");
+    }
     run_captured(&mut cmd, &format!("clang ({})", src.display()))?;
     strip_target_cpu(tools, &out)?;
     Ok(Some(out))

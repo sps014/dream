@@ -69,6 +69,7 @@ impl Compiler {
                 &Default::default(),
             ));
         }
+        let _phase = tracing::info_span!("compile_phase", phase = "ir_emission").entered();
         let module = dream_mir::backend::llvm::emit_llvm_module(
             mir,
             interner,

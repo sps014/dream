@@ -4,6 +4,11 @@ on:
   # pull_request:
   # merge_group:
   workflow_dispatch:
+    inputs:
+      compile_baseline:
+        description: Git ref for the compile-time budget baseline
+        default: origin/main
+        type: string
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -28,6 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: python3 scripts/check_hygiene.py
       - run: python3 scripts/test_probe.py
+      - run: python3 scripts/test_compile_budget.py
 
   build-clippy-test:
     name: Build, clippy, test (${{ matrix.os }})
@@ -46,6 +52,8 @@ jobs:
             build-essential clang cmake libclang-dev libgtk-3-dev libssl-dev \
             libudev-dev libwebkit2gtk-4.1-dev ninja-build pkg-config python3 xz-utils
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
       - uses: actions/setup-python@v5
@@ -97,6 +105,34 @@ jobs:
       - name: Check runnable documentation examples
         run: python tooling/docs/check_examples.py
       - run: cargo test --workspace --no-fail-fast --timings
+      - name: Compile-time and memory regression budget
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          COMPILE_BASELINE: ${{ inputs.compile_baseline || 'origin/main' }}
+        run: |
+          baseline_commit=$(git rev-parse --verify --end-of-options "${COMPILE_BASELINE}^{commit}")
+          baseline_tree="$RUNNER_TEMP/dream-compile-baseline"
+          cargo build --locked -p dream --bin dream
+          cp target/debug/dream "$RUNNER_TEMP/dream-compile-candidate"
+          git worktree add --detach "$baseline_tree" "$baseline_commit"
+          cargo build --locked -p dream --bin dream --manifest-path "$baseline_tree/Cargo.toml" --target-dir "$PWD/target"
+          cp target/debug/dream "$RUNNER_TEMP/dream-compile-baseline-bin"
+          cp "$RUNNER_TEMP/dream-compile-candidate" target/debug/dream
+          python3 scripts/check_compile_budget.py \
+            --baseline "$RUNNER_TEMP/dream-compile-baseline-bin" \
+            --candidate "$RUNNER_TEMP/dream-compile-candidate" \
+            --baseline-revision "$baseline_commit" --candidate-revision "$GITHUB_SHA" \
+            --report target/compile-budget.json
+          git worktree remove --force "$baseline_tree"
+      - name: Preserve compile budget measurements
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: compile-budget-Linux
+          path: target/compile-budget.json
+          retention-days: 7
+          if-no-files-found: ignore
       - name: Build release host capabilities
         run: cargo build --locked --release -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone
       - name: Native distribution measurements and isolation

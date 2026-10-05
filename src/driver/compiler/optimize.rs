@@ -12,12 +12,15 @@ impl Compiler {
         // Debug-info builds skip inlining and use a value-preserving per-function pipeline so
         // user variables and per-function call frames survive for the debugger; release builds
         // use the full optimizing pipeline.
-        dream_mir::passes::optimize_module_opts(
-            &mut mir,
-            interner,
-            !self.debug_info && !self.output_kind.is_library(),
-            dump,
-        );
+        {
+            let _phase = tracing::info_span!("compile_phase", phase = "module_passes").entered();
+            dream_mir::passes::optimize_module_opts(
+                &mut mir,
+                interner,
+                !self.debug_info && !self.output_kind.is_library(),
+                dump,
+            );
+        }
         let pipeline = if self.debug_info {
             dream_mir::passes::PassManager::debug_pipeline()
         } else {
@@ -29,14 +32,22 @@ impl Compiler {
             dream_mir::passes::PassManager::async_poll_pipeline()
         };
 
-        dream_mir::passes::run_function_pipelines(
-            &mut mir,
-            interner,
-            &pipeline,
-            &poll_pipeline,
-            dump,
-        );
-        dream_mir::passes::run_late_module_passes(&mut mir, interner, dump);
+        {
+            let _phase =
+                tracing::info_span!("compile_phase", phase = "per_function_passes").entered();
+            dream_mir::passes::run_function_pipelines(
+                &mut mir,
+                interner,
+                &pipeline,
+                &poll_pipeline,
+                dump,
+            );
+        }
+        {
+            let _phase =
+                tracing::info_span!("compile_phase", phase = "late_module_passes").entered();
+            dream_mir::passes::run_late_module_passes(&mut mir, interner, dump);
+        }
         mir
     }
 }

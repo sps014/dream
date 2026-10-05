@@ -7,6 +7,7 @@ impl Compiler {
         interner: &dream_types::TypeInterner,
         dump: &mut dream_mir::passes::MirDump,
     ) -> dream_mir::Mir {
+        let _phase = tracing::info_span!("compile_phase", phase = "lowering").entered();
         let mir = dream_mir::lower::lower_program(hir, interner);
         dump.module(dream_mir::passes::STAGE_LOWER, &mir, interner);
         mir

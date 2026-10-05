@@ -261,7 +261,10 @@ struct Global {
     ~Global() { std::puts("destroyed"); }
 };
 static Global global;
-int value() { return ++counter; }
+int value() {
+    try { throw counter; }
+    catch (int previous) { return counter = previous + 1; }
+}
 "#,
     );
     write(

@@ -50,3 +50,17 @@ _Noreturn void __imported_wasi_snapshot_preview1_proc_exit(int32_t code) {
     (void)code;
     dream_platform_abort();
 }
+
+int32_t __imported_wasi_snapshot_preview1_clock_time_get(int32_t id, int64_t precision, int32_t out) {
+    (void)precision;
+    uint64_t now;
+    if (id == __WASI_CLOCKID_REALTIME) {
+        now = (uint64_t)dateNowMillis() * 1000000;
+    } else if (id == __WASI_CLOCKID_MONOTONIC) {
+        now = (uint64_t)timeNowNanos();
+    } else {
+        return __WASI_ERRNO_INVAL;
+    }
+    *(uint64_t *)(uintptr_t)(uint32_t)out = now;
+    return 0;
+}

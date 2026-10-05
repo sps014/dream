@@ -87,6 +87,7 @@
 #define DREAM_SYM_EXPORT_FT_GET "dream_ft_get"
 #define DREAM_MODULE_HOST "Dream"
 #define DREAM_SYM_TIME_NOW_NANOS "timeNowNanos"
+#define DREAM_SYM_DATE_NOW_MILLIS "dateNowMillis"
 #define F_STATE_WASM 0
 #define F_STATUS_WASM 4
 #define F_RESULT_WASM 8

@@ -260,7 +260,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       if (!s) return;
       const releaseStack = () => {
         if (s.stack && typeof getInstance === "function") {
-          getInstance().exports.dream_free(s.stack);
+          getInstance().exports.free(s.stack);
         }
       };
       try {

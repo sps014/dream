@@ -137,6 +137,7 @@ pub(super) fn compile(
         "fd_close",
         "fd_seek",
         "proc_exit",
+        "clock_time_get",
     ] {
         out.public
             .push(format!("__imported_wasi_snapshot_preview1_{name}"));

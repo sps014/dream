@@ -187,6 +187,7 @@ EXPORT_MAIN_REPORT: &str = "__dream_main_report" => "DREAM_SYM_EXPORT_MAIN_REPOR
 EXPORT_FT_GET: &str = "dream_ft_get" => "DREAM_SYM_EXPORT_FT_GET";
 HOST_MODULE: &str = "Dream" => "DREAM_MODULE_HOST";
 TIME_NOW_NANOS: &str = "timeNowNanos" => "DREAM_SYM_TIME_NOW_NANOS";
+DATE_NOW_MILLIS: &str = "dateNowMillis" => "DREAM_SYM_DATE_NOW_MILLIS";
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

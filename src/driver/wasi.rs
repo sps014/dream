@@ -56,7 +56,6 @@ pub(crate) fn wasm_ld_command(wasm_ld: &Path, threads: bool, opt: OptLevel) -> C
         "--export=__stack_pointer",
         "--export=__tls_base",
         "--export=dream_malloc",
-        "--export=dream_free",
         "--export=dream_heap_init",
         "--gc-sections",
         "--strip-debug",

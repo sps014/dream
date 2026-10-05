@@ -238,7 +238,9 @@ fn main() -> ExitCode {
         } else {
             Level::ERROR
         })
-        .without_time()
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+        .with_timer(())
+        .with_ansi(dream::driver::ui::color_enabled())
         .with_target(false)
         .with_writer(std::io::stderr)
         .finish();
@@ -574,6 +576,7 @@ fn main() -> ExitCode {
         compiler = compiler.with_optimize(Some(level));
     }
 
+    let _memory = dream::driver::metrics::PeakMemoryReport::new(cli.verbose);
     let start = Instant::now();
     let result = compiler.compile(&file_name, &out_path);
     drop(compiler);
@@ -601,6 +604,7 @@ fn main() -> ExitCode {
             if unoptimized {
                 ui.debug_build_note(!linked);
             }
+            drop(_memory);
             if linked {
                 return launch.run(
                     &ui,
@@ -707,6 +711,7 @@ fn main() -> ExitCode {
                 if unoptimized {
                     ui.debug_build_note(false);
                 }
+                drop(_memory);
                 if output_kind.is_library() {
                     ExitCode::SUCCESS
                 } else {

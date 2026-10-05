@@ -50,6 +50,45 @@ restore caches from unrelated PR refs or reintroduce a full post-merge suite sol
 for cache warming. The first run after changing cache/profile settings is also cold;
 measure both cold and warm runs before setting a wall-clock target.
 
+## Compiler observability
+
+`dream -v --emit-llvm example.dream` reports closing tracing spans for parse (including
+source resolution and generated source), sema, monomorphization, lowering, module
+passes, per-function passes, late module passes and IR emission. Each function pipeline
+also reports its symbol and each pass reports its name and fixpoint iteration. Captured
+LLVM and linker invocations report their tool labels, including `opt`, `llc`, `llvm-link`
+and the final native or wasm linker. Span `time.busy` is time inside that span and
+`time.idle` is time outside it; their sum is its elapsed duration. Parent timings include
+nested work: monomorphization measures the deferred instantiation fixpoint inside sema,
+not an independent pipeline stage. Runtime signature preparation precedes IR emission
+and can include separately timed tool invocations on a cold runtime cache.
+
+Verbose builds also report `peak_resident_bytes`: the OS process-lifetime resident
+high-water mark of the compiler, excluding toolchain children. Linux reports KiB, macOS
+reports bytes, and Windows reports peak working-set bytes; the CLI normalizes all to
+bytes. It reports before launching a guest or debugger and on compilation failure.
+Normal builds emit neither timing nor memory reports. Cached builds report only executed
+phases. Profiling does not alter artifacts.
+
+Linux CI compares the candidate compiler with `compile_baseline` (default `origin/main`)
+on the same generated 200-function program, including generic instantiation, loops and
+branches. Both binaries use the same Cargo profile, verifier settings and pinned LLVM.
+Each warms its runtime cache before five alternating fresh builds; deleted output
+artifacts prevent build-cache hits. The budget uses median wall time and median resident
+high-water mark from Unix child resource accounting. This benchmark includes waited-for
+LLVM/linker children; its peak is the largest resident high-water mark, not the concurrent
+sum of the process tree. It is distinct from the CLI's compiler-only memory report.
+The candidate may use at most 1.25 times baseline time and 1.20 times baseline memory.
+These relative limits and sample scale are configurable in `scripts/check_compile_budget.py`;
+there are no fixed artifact-size limits. CI preserves raw trials, medians, ratios and the
+source hash and both revisions in `compile-budget.json`, including on a budget failure. Run locally with:
+
+```bash
+python3 scripts/check_compile_budget.py --baseline /path/to/base/dream \
+  --candidate target/debug/dream --report target/compile-budget.json
+python3 scripts/test_compile_budget.py
+```
+
 ## The test pyramid
 
 ```mermaid

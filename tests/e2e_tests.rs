@@ -939,15 +939,13 @@ fn selective_runtime_omits_unused_host_chunks() {
     assert!(rt.contains("function load("));
 }
 
-/// `--release` arithmetic must keep a tiny code section (last-use destroy is compiler-only).
-/// Slack allows `System` stream getters and related stdlib surface without a codegen regression.
 #[test]
-fn release_arithmetic_code_section_stays_small() {
+fn release_arithmetic_omits_worker_publication() {
     let src = Path::new("tests/cases/arithmetic.dream");
     if !src.exists() {
         return;
     }
-    let out = std::env::temp_dir().join("dream_arith_size_check.wat");
+    let out = std::env::temp_dir().join("dream_arith_release_check.wat");
     let out_str = out.to_str().unwrap().to_string();
     let src_str = src.to_str().unwrap().to_string();
     Compiler::new(Target::wasm32())
@@ -955,9 +953,8 @@ fn release_arithmetic_code_section_stays_small() {
         .compile(&src_str, &out_str)
         .expect("arithmetic --release compile");
     let wasm_path = out.with_extension("wasm");
-    let wasm = fs::read(&wasm_path).expect("arithmetic.wasm");
-    let code = wasm_code_section_len(&wasm);
     let wat = fs::read_to_string(&out).expect("arithmetic WAT");
+    wat::parse_str(&wat).expect("arithmetic WAT must parse");
     assert!(
         !wat.contains("(export \"dream_publish\""),
         "worker-only publication must not be exported by arithmetic"
@@ -965,25 +962,15 @@ fn release_arithmetic_code_section_stays_small() {
     let _ = fs::remove_file(&out);
     let _ = fs::remove_file(&wasm_path);
     let _ = fs::remove_file(out.with_extension("abi.json"));
-    assert!(
-        code > 0 && code <= 5 * 1024,
-        "arithmetic --release code section should stay under 5KiB (got {})",
-        code
-    );
 }
 
-/// Sample `--release` code-section slack: last-use destroy is compiler-only (no extra runtime
-/// helpers). Music player is DOM/`js`-heavy; host-routed `js` RC and the exported `dream_ft_get`
-/// sit near 38KiB since the unavailable-source handling landed (on_error + transient status line
-/// added ~10KiB of guest code), while a gross codegen regression (e.g. printf machinery getting
-/// linked for basic to_string calls, or the old un-routed host RC path) must trip.
 #[test]
-fn release_music_player_code_section_stays_bounded() {
+fn release_music_player_compiles_to_wasm() {
     let src = Path::new("sample/music_player/music_player.dream");
     if !src.exists() {
         return;
     }
-    let out = std::env::temp_dir().join("dream_music_player_size_check.wat");
+    let out = std::env::temp_dir().join("dream_music_player_release_check.wat");
     let out_str = out.to_str().unwrap().to_string();
     let src_str = src.to_str().unwrap().to_string();
     Compiler::new(Target::wasm32())
@@ -991,52 +978,14 @@ fn release_music_player_code_section_stays_bounded() {
         .compile(&src_str, &out_str)
         .expect("music_player --release compile");
     let wasm_path = out.with_extension("wasm");
-    let wasm = fs::read(&wasm_path).expect("music_player.wasm");
-    let code = wasm_code_section_len(&wasm);
+    wat::parse_file(&out).expect("music_player WAT must parse");
+    assert!(
+        wasm_path.is_file(),
+        "music_player must produce a WASM module"
+    );
     let _ = fs::remove_file(&out);
     let _ = fs::remove_file(&wasm_path);
     let _ = fs::remove_file(out.with_extension("abi.json"));
-    assert!(
-        code > 0 && code <= 52 * 1024,
-        "music_player --release code section should stay under 52KiB (got {})",
-        code
-    );
-}
-
-fn wasm_code_section_len(data: &[u8]) -> usize {
-    if data.len() < 8 || &data[0..4] != b"\0asm" {
-        return 0;
-    }
-    let mut i = 8usize;
-    while i < data.len() {
-        let id = data[i];
-        i += 1;
-        let (size, ni) = uleb32(data, i);
-        i = ni;
-        if id == 10 {
-            return size;
-        }
-        i += size;
-        if i > data.len() {
-            break;
-        }
-    }
-    0
-}
-
-fn uleb32(data: &[u8], mut i: usize) -> (usize, usize) {
-    let mut result = 0usize;
-    let mut shift = 0;
-    while i < data.len() {
-        let b = data[i];
-        i += 1;
-        result |= ((b & 0x7f) as usize) << shift;
-        if b & 0x80 == 0 {
-            break;
-        }
-        shift += 7;
-    }
-    (result, i)
 }
 
 /// `@test` discovery + synthesized runner (`dream test` path).

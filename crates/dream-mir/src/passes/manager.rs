@@ -136,11 +136,16 @@ impl PassManager {
         layouts: &dream_hir::LayoutTable,
         dump: &mut MirDump,
     ) {
+        let _function = tracing::info_span!("function_passes", function = %func.symbol).entered();
         let mut analyses = FunctionAnalyses::default();
         for iteration in 0..self.max_iterations {
             let mut changed = false;
             for pass in &self.passes {
-                let pass_changed = analyses.run_pass(pass.as_ref(), func, interner, layouts);
+                let pass_changed = {
+                    let _pass =
+                        tracing::info_span!("mir_pass", pass = pass.name(), iteration).entered();
+                    analyses.run_pass(pass.as_ref(), func, interner, layouts)
+                };
                 if dump.is_active() {
                     dump.function_pass(pass.as_ref(), iteration, pass_changed, func, interner);
                 }

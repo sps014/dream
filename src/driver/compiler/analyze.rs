@@ -29,6 +29,7 @@ impl Compiler {
         loaded: &load::LoadedProgram<'_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<AnalyzedProgram, CompileError> {
+        let _phase = tracing::info_span!("compile_phase", phase = "sema").entered();
         info!("starting semantic analysis");
         let hir = match analyzer.analyze(diagnostics) {
             Ok(info) => info.hir,

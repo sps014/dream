@@ -24,6 +24,11 @@ Read the chapters in order the first time; afterward, use this page as an index.
 | 10 | [Rejected: SSO / class `@stack` / size-class mono](./10-stack-alloc-and-mono-design-note.md) | Permanent non-goals: no small-string SSO, no `@stack` class alloc, no size-class-keyed unmanaged mono |
 | 11 | [Ownership and memory performance](./11-swift-like-arc-roadmap.md) | Sink-default ABI, last-use move, RC elision; user `=copy`/`=sink` and CoW-by-default stay non-goals |
 
+Additional engineering records:
+
+- [Native pointer migration](./12-native-pointer-migration.md): inventory and paired measurements.
+- [Self-hosting readiness](./13-self-hosting-readiness.md): resolved foundations and bootstrap acceptance gates.
+
 ## Why a multi-pass architecture
 
 The original Dream backend walked the AST directly and re-derived semantic facts (types, resolved callees, ownership) inside code generation. That works for a small language but has three structural problems:

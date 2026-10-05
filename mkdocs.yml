@@ -259,4 +259,5 @@ nav:
     - Stack alloc & mono: internals/10-stack-alloc-and-mono-design-note.md
     - Ownership and memory: internals/11-swift-like-arc-roadmap.md
   - Native pointer migration: internals/12-native-pointer-migration.md
+  - Self-hosting readiness: internals/13-self-hosting-readiness.md
   - Documentation: internals/documentation.md

@@ -78,6 +78,7 @@ libc = { version = "0.2", optional = true }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_ProcessStatus", "Win32_System_Threading"], optional = true }
 
 [dev-dependencies]
+proptest = "1"
 libloading = "0.8"
 tempfile = "3"
 pretty_assertions = "1.4.1"

@@ -125,6 +125,39 @@ The `--node` probe checks the same diagnostic fragments and panic goldens as nat
 Panic messages and source locations must match on both targets. `exit code N` is checked when
 specified; fatal panics use each host's abort status. A timeout never satisfies a panic golden.
 
+### Source properties and target parity
+
+`tests/compiler_properties.rs` uses proptest to generate bounded valid programs with
+recursive arithmetic expressions, generic calls, branches, loops and managed object
+lifetimes, alongside arbitrary Unicode and single-edit mutations. Each case runs from
+lexer/parser through semantic analysis; rejected input stops at diagnostics. Accepted
+input runs the production module, function and late MIR pipelines, explicitly verifies
+final MIR, and emits LLVM IR. Valid programs run independently twice on each target
+(native and wasm32), asserting byte-identical IR. No panic is accepted as a diagnostic.
+A 120-second per-case subprocess timeout also catches hangs and aborts; proptest shrinks
+failures and persists regression seeds beside the integration test. Commit a discovered
+regression as a focused golden or unit test after fixing it.
+
+The default suite runs 32 cases per property. Increase coverage or reproduce a run with:
+
+```bash
+PROPTEST_CASES=512 cargo test --test compiler_properties
+PROPTEST_RNG_SEED=123 cargo test --test compiler_properties
+./scripts/probe_test.sh --parity
+```
+
+The parity probe validates both targets against their goldens and directly compares
+actual guest stdout, including cases without an output golden. Only subprocess text-mode
+newline normalization applies to the parity comparison; leading/trailing whitespace and
+program ANSI sequences remain significant. Compile-error cases validate diagnostic
+fragments; expected traps also compare guest stdout and validate their diagnostic
+fragments and target exit statuses. Native-only services and cases with explicit
+`.expected.native` width-dependent output are reported as skips. Linux CI runs this
+paired corpus check in addition to the full native probe; new corpus cases are
+discovered automatically, without fixed corpus-count or output-size assertions.
+Release arithmetic checks worker-export isolation and the music-player sample checks
+compilation and WAT parsing; neither pins a code-section byte limit.
+
 ### Determinism test — `codegen_is_deterministic` (`tests/e2e_tests.rs`)
 
 Compiles the same input twice and asserts byte-identical output. This guards the contract below.

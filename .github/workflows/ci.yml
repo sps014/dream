@@ -208,7 +208,7 @@ jobs:
           DREAM_DEBUG_LEAKS=1 "$stress_dir/worker"
 
   golden-corpus:
-    name: Full native and Node corpus
+    name: Full native corpus and WASM parity
     runs-on: ubuntu-latest
     env:
       WGPU_BACKEND: vulkan
@@ -251,9 +251,9 @@ jobs:
         run: |
           mkdir -p target
           ./scripts/probe_test.sh 2>&1 | tee target/probe-native.log
-      - name: Full Node corpus using the same build
+      - name: Full native/WASM stdout parity using the same build
         shell: bash
-        run: python3 scripts/probe_test.py --node 2>&1 | tee target/probe-node.log
+        run: python3 scripts/probe_test.py --parity 2>&1 | tee target/probe-parity.log
       - name: Preserve corpus results and compilation timings
         if: always()
         uses: actions/upload-artifact@v4
@@ -261,7 +261,7 @@ jobs:
           name: corpus-Linux
           path: |
             target/probe-native.log
-            target/probe-node.log
+            target/probe-parity.log
             target/cargo-timings/*.html
           retention-days: 7
           if-no-files-found: ignore

@@ -107,5 +107,72 @@ class FailureGoldenTests(unittest.TestCase):
                 self.assertEqual(probe.one(case)[1:], ("fail", "run timed out"))
 
 
+class ParityTests(unittest.TestCase):
+    def test_compares_stdout_before_expected_traps(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            case = root / "parity.dream"
+            case.with_suffix(".expected_trap").write_text("boom\nexit code 1\n")
+            destination = root / "target/probe-wasm/parity"
+            destination.mkdir(parents=True)
+            (destination / "parity.wasm").write_bytes(b"")
+            for output, status in [("before\n", "ok"), ("different\n", "fail")]:
+                with self.subTest(output=output), patch.object(probe, "root", root), patch.object(
+                    probe, "run_group", side_effect=[
+                        (1, "before\n", "boom"), (0, "", ""), (1, output, "boom")
+                    ]
+                ):
+                    self.assertEqual(probe.one_parity(case)[1], status)
+
+    def test_native_stdout_record_preserves_program_whitespace_and_ansi(self):
+        output = "\n\x1b[31mred\x1b[0m \n"
+        with tempfile.TemporaryDirectory() as directory:
+            case = Path(directory) / "parity.dream"
+            record = []
+            with patch.object(probe, "run_group", return_value=(0, output, "")):
+                self.assertEqual(probe.one(case, record), ("parity", "ok", ""))
+            self.assertEqual(record, [output])
+
+    def test_wasm_failure_is_not_hidden_by_native_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            case = Path(directory) / "parity.dream"
+            with patch.object(probe, "one", return_value=("parity", "ok", "")), patch.object(
+                probe, "one_node", return_value=("parity", "fail", "node timed out")
+            ):
+                self.assertEqual(probe.one_parity(case), ("parity", "fail", "node timed out"))
+
+    def parity(self, native_output, wasm_output):
+        def success(output):
+            def run(case, record):
+                record.append(output)
+                return case.stem, "ok", ""
+            return run
+        with tempfile.TemporaryDirectory() as directory:
+            case = Path(directory) / "parity.dream"
+            with patch.object(probe, "one", side_effect=success(native_output)), patch.object(
+                probe, "one_node", side_effect=success(wasm_output)
+            ):
+                return probe.one_parity(case)
+
+    def test_compares_actual_stdout_even_without_a_golden(self):
+        self.assertEqual(self.parity("same", "same"), ("parity", "ok", ""))
+        self.assertEqual(self.parity("native", "wasm")[1], "fail")
+
+    def test_native_failure_is_not_hidden_by_wasm_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            case = Path(directory) / "parity.dream"
+            with patch.object(probe, "one", return_value=("parity", "fail", "timeout")), patch.object(
+                probe, "one_node"
+            ) as wasm:
+                self.assertEqual(probe.one_parity(case), ("parity", "fail", "timeout"))
+                wasm.assert_not_called()
+
+    def test_target_width_goldens_are_explicitly_skipped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            case = Path(directory) / "parity.dream"
+            case.with_suffix(".expected.native").write_text("native width")
+            self.assertEqual(probe.one_parity(case)[1:], ("skip", "documented target-width output"))
+
+
 if __name__ == "__main__":
     unittest.main()

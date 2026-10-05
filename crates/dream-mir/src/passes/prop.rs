@@ -51,11 +51,21 @@ impl MirPass for CopyConstProp {
 
 /// Resolves an operand through the known-value map (chasing copies transitively).
 fn resolve(op: &Operand, known: &HashMap<Local, Operand>) -> Option<Operand> {
-    if let Operand::Copy(Place::Local(l)) = op {
-        if let Some(v) = known.get(l) {
-            // Chase further in case `v` is itself a propagated copy.
-            return Some(resolve(v, known).unwrap_or_else(|| v.clone()));
+    let start = match op {
+        Operand::Copy(Place::Local(local)) => local,
+        _ => return None,
+    };
+    let mut value = op;
+    // At most one visit per binding can resolve a copy chain. A cycle carries no known value.
+    for _ in 0..=known.len() {
+        if let Operand::Copy(Place::Local(local)) = value {
+            if let Some(next) = known.get(local) {
+                value = next;
+                continue;
+            }
         }
+        return (!matches!(value, Operand::Copy(Place::Local(local)) if local == start))
+            .then(|| value.clone());
     }
     None
 }
@@ -297,7 +307,7 @@ pub(super) fn update_known(
         if let Rvalue::Use(op @ (Operand::Const(_) | Operand::Copy(Place::Local(_)))) = rvalue {
             let value_typed =
                 is_value(*dest) || matches!(op, Operand::Copy(Place::Local(src)) if is_value(*src));
-            if !value_typed {
+            if !value_typed && !matches!(op, Operand::Copy(Place::Local(src)) if src == dest) {
                 known.insert(*dest, op.clone());
             }
         }
@@ -323,6 +333,34 @@ mod tests {
     use super::*;
     use crate::build::FunctionBuilder;
     use crate::{Const, Operand, Place, Rvalue, Terminator};
+
+    #[test]
+    fn self_copy_does_not_record_a_cycle_or_claim_a_change() {
+        let i = TypeInterner::new();
+        let mut builder = FunctionBuilder::new("f", i.int());
+        let local = builder.new_temp(i.int());
+        builder.assign(
+            Place::Local(local),
+            Rvalue::Use(Operand::Copy(Place::Local(local))),
+        );
+        builder.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(local)))));
+        let mut function = builder.finish();
+        assert!(!CopyConstProp.run(&mut function, &i));
+    }
+
+    #[test]
+    fn copy_resolution_handles_chains_and_cycles() {
+        let mut known = HashMap::new();
+        let first = Operand::Copy(Place::Local(Local(0)));
+        known.insert(Local(0), Operand::Copy(Place::Local(Local(1))));
+        known.insert(Local(1), Operand::Const(Const::Int(7)));
+        assert!(matches!(
+            resolve(&first, &known),
+            Some(Operand::Const(Const::Int(7)))
+        ));
+        known.insert(Local(1), first.clone());
+        assert!(resolve(&first, &known).is_none());
+    }
 
     #[test]
     fn propagates_const_into_return() {

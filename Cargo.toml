@@ -50,6 +50,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 wasm-opt = { version = "0.116", optional = true }
 oxc_minifier = "0.146"
 oxc_parser = "0.146"
+oxc_ast = "0.146"
 oxc_allocator = "0.146"
 oxc_codegen = "0.146"
 oxc_span = "0.146"

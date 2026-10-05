@@ -87,13 +87,6 @@ impl RuntimeSupport {
     };
 
     pub fn from_attributes(attributes: &[AttributeNode]) -> Self {
-        if has_c_attr(attributes) {
-            return Self {
-                native: true,
-                node: false,
-                web: false,
-            };
-        }
         let has_native = attributes.iter().any(|a| a.name.text == "native");
         let has_node = attributes.iter().any(|a| a.name.text == "node");
         let has_web = attributes.iter().any(|a| a.name.text == "web");

@@ -1,6 +1,6 @@
 # C and C++ Interop
 
-Dream calls C and C++ directly on native and single-instance wasm32 builds. A package puts portable C or C++ sources in `native/`,
+Dream calls C and C++ directly on native and wasm32 builds, including Dream Task workers. A package puts portable C or C++ sources in `native/`,
 then writes a thin Dream wrapper: one declaration per native function or method, plus whatever
 idiomatic Dream API it wants on top. Consumers just `import` the package.
 
@@ -100,10 +100,13 @@ Pointers and callbacks remain within that module. Stored callbacks must be invok
 on the instance that created them. Owned pointers, UTF-8 strings, array data, unmanaged structs,
 and callbacks use the same bindings as native builds.
 
-Supported libc services include stdout/stderr and an empty process environment. OS-specific
+Supported libc services include stdout/stderr, realtime/monotonic clocks and an empty process environment. OS-specific
 functions or unresolved library symbols fail during the build, instead of becoming broken host
-imports. Use `@js` for browser/Node platform services. C/C++ package interop in `Task` / shared-memory
-modules is currently rejected because WASI library TLS and initialization require further work.
+imports. Use `@js` for browser/Node platform services. In `Task` / shared-memory modules,
+each instance gets initialized, aligned C thread-local storage. A worker pool retains its
+thread-local values between dispatches. Global constructors run once after the primary
+instance's TLS is ready. Workers come from Dream's Task runtime; WASI `pthread_create` is
+not supplied. Use `@native`, `@node` or `@web` to restrict a binding to specific runtimes.
 
 Development installs need the full WASI sysroot next to the installed build tools; update it with
 `scripts/fetch-dev-llvm.sh` or `scripts/fetch-dev-llvm.ps1` on Windows. Release packaging includes

@@ -10,7 +10,7 @@
 # <factory> is the host-factory function defined by <file> (`-` when the chunk has
 # none; `workers` is wired inside load.js instead). Each <field> maps a WASM import
 # field to this chunk by prefix; a leading `=` marks an exact-match field.
-always platform.js urls.js core.js instance.js marshal.js hosts/env.js
+always abi.js platform.js urls.js core.js instance.js marshal.js hosts/env.js
 order js http fs crypto gpu console_process datetime_text net_sockets workers
 chunk js hosts/js.js makeJsHost js
 chunk http hosts/http.js makeHttpHost http

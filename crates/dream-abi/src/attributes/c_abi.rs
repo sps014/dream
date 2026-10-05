@@ -12,7 +12,7 @@ pub(super) const SPECS: &[AttributeSpec] = &[
             max: 2,
         },
         repeatable: false,
-        doc: "Binds an extern function to a native C ABI library/symbol: `@c(\"lib\", \"symbol\")`. `@c(\"lib\")` uses the Dream name as the symbol; bare `@c` also binds to the declaring package's `native/` sources. Native-only (`@native` is optional; `@node`/`@web` are rejected).",
+        doc: "Binds an extern function to a C ABI library/symbol: `@c(\"lib\", \"symbol\")`. `@c(\"lib\")` uses the Dream name as the symbol; bare `@c` also binds to the declaring package's `native/` sources. Native and portable WASM builds are supported; runtime annotations restrict availability.",
     },
     AttributeSpec {
         name: "c_call",
@@ -99,7 +99,6 @@ pub fn c_call_conv(attributes: &[AttributeNode]) -> CCallConv {
 /// Reports `@c`-family placement errors on one extern's attribute list:
 /// - `@c` combined with `@js` / `@runtime` / `@intrinsic` (incompatible binding hosts),
 /// - `@runtime` combined with `@js` / `@c` / `@intrinsic`,
-/// - `@c` combined with `@node` or `@web` (`@c` is native-only; `@native` is allowed),
 /// - `@marshal(...)` without `@c` (only meaningful for the C ABI),
 /// - `@c_call(...)` without `@c` (ditto),
 /// - `@c_call` naming a convention other than `"cdecl"` / `"stdcall"`.
@@ -116,16 +115,6 @@ pub fn validate_c_extern_attrs(attrs: &[AttributeNode], diagnostics: &mut Diagno
                 .to_string(),
             pos,
         );
-    }
-    if has_c_attr(attrs) {
-        for name in ["node", "web"] {
-            if let Some(attr) = attrs.iter().find(|a| a.name.text == name) {
-                diagnostics.report_error(
-                    format!("'@c' is native-only and cannot be combined with '@{name}'"),
-                    Some(attr.name.position),
-                );
-            }
-        }
     }
     if !has_c_attr(attrs) {
         for name in ["marshal", "c_call"] {

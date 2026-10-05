@@ -437,4 +437,7 @@ Node worker termination completes before its allocation is freed.
 `tests/wasm_interop.rs` checks initialized and zero-filled TLS, 256-byte alignment, a TLS block
 larger than the worker stack, WASI libc `errno`, concurrent-worker isolation, worker-pool
 persistence and C++ constructor/destructor behavior. TLS tests execute at O0, O3 and `-Os`.
+Threaded C++ exception handling uses WASI clock adapters backed by Dream's existing time hosts.
+Selective JS runtime chunks come from the final WASM import section, including imports added
+by C/C++ libraries after MIR pruning. Release runtime packaging includes both WASI sysroots.
 Dream Task workers provide the threads; this does not add a WASI `pthread_create` host service.

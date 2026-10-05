@@ -11,6 +11,7 @@ fn compile(entry: &Path, output: &Path, optimize: Option<OptLevel>) -> Result<()
     Compiler::new(Target::wasm32())
         .with_optimize(optimize)
         .with_opt_ir(true)
+        .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Node])
         .compile(
             &entry.to_string_lossy().to_string(),
             &output.to_string_lossy(),
@@ -24,10 +25,14 @@ fn compile(entry: &Path, output: &Path, optimize: Option<OptLevel>) -> Result<()
 }
 
 fn run(wat: &Path) -> String {
+    run_with_runtime(wat, &repo("runtime/dream.js"))
+}
+
+fn run_with_runtime(wat: &Path, runtime: &Path) -> String {
     let script = wat.with_extension("mjs");
     std::fs::write(&script, format!(
         "import {{pathToFileURL}} from 'node:url';\nconst {{run}} = await import(pathToFileURL({}));\nawait run(pathToFileURL({}), {{stdout: s => process.stdout.write(s)}});\n",
-        serde_json::to_string(&repo("runtime/dream.js").to_string_lossy()).unwrap(),
+        serde_json::to_string(&runtime.to_string_lossy()).unwrap(),
         serde_json::to_string(&wat.with_extension("wasm").to_string_lossy()).unwrap(),
     )).unwrap();
     let output = std::process::Command::new("node")
@@ -291,6 +296,10 @@ async fun main(): void {
     let out = root.join("main.wat");
     compile(&root.join("main.dream"), &out, Some(OptLevel::O3)).unwrap();
     assert_eq!(run(&out), "constructed\n101\n42\n102\ndestroyed\n");
+    assert_eq!(
+        run_with_runtime(&out, &out.with_extension("node.runtime.js")),
+        "constructed\n101\n42\n102\ndestroyed\n"
+    );
 }
 
 #[test]

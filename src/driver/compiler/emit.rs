@@ -203,7 +203,7 @@ impl Compiler {
         if !self.runtimes.is_empty() {
             let runtime_paths = crate::driver::js_runtime::emit_selective_runtimes(
                 out_path,
-                &emitted.live_imports,
+                &wasm_bytes,
                 &self.runtimes,
                 self.optimize.is_some(),
             )?;

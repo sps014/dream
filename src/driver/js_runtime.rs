@@ -101,47 +101,35 @@ fn runtime_src_dir() -> PathBuf {
 }
 
 /// Strip ESM imports / rewrite exports so modules can share one scope when concatenated.
-fn transform_module(text: &str, rel: &str) -> String {
-    let mut cleaned = String::new();
-    // Multi-line `import { … } from "…";` statements span several lines; skip until the
-    // terminating `;` once one starts.
-    let mut in_import = false;
-    for line in text.lines() {
-        let trimmed = line.trim_start();
-        if in_import {
-            if trimmed.contains(';') {
-                in_import = false;
-            }
-            continue;
-        }
-        if trimmed.starts_with("import ") {
-            if !trimmed.ends_with(';') {
-                in_import = true;
-            }
-            continue;
-        }
-        if trimmed.starts_with("export {") || trimmed.starts_with("export default") {
-            continue;
-        }
-        let mut line = line.to_string();
-        for (from, to) in [
-            ("export async function ", "async function "),
-            ("export function ", "function "),
-            ("export class ", "class "),
-            ("export const ", "const "),
-            ("export let ", "let "),
-        ] {
-            if let Some(rest) = line.trim_start().strip_prefix(from) {
-                let indent_len = line.len() - line.trim_start().len();
-                line = format!("{}{}{}", &line[..indent_len], to, rest);
-                break;
-            }
-        }
-        cleaned.push_str(&line);
-        cleaned.push('\n');
-    }
+fn transform_module(text: &str, rel: &str) -> Result<String, Error> {
+    use oxc_ast::ast::Statement;
+    use oxc_span::GetSpan;
 
-    format!("\n// ----- {} -----\n{}", rel, cleaned.trim())
+    let allocator = oxc_allocator::Allocator::default();
+    let parsed = oxc_parser::Parser::new(&allocator, text, oxc_span::SourceType::mjs()).parse();
+    if let Some(diagnostic) = parsed.diagnostics.first() {
+        return Err(Error::other(format!("{rel}: {diagnostic}")));
+    }
+    let mut cleaned = String::new();
+    let mut cursor = 0;
+    // Module declarations alone are rewritten; worker source inside template strings stays intact.
+    for statement in &parsed.program.body {
+        let (start, end) = match statement {
+            Statement::ImportDeclaration(import) => (import.span.start, import.span.end),
+            Statement::ExportDeclaration(export) => {
+                (export.span.start, export.declaration.span().start)
+            }
+            Statement::ExportNamedDeclaration(export) => (export.span.start, export.span.end),
+            Statement::ExportFromDeclaration(export) => (export.span.start, export.span.end),
+            Statement::ExportDefaultDeclaration(export) => (export.span.start, export.span.end),
+            Statement::ExportAllDeclaration(export) => (export.span.start, export.span.end),
+            _ => continue,
+        };
+        cleaned.push_str(&text[cursor..start as usize]);
+        cursor = end as usize;
+    }
+    cleaned.push_str(&text[cursor..]);
+    Ok(format!("\n// ----- {} -----\n{}", rel, cleaned.trim()))
 }
 
 /// Pin `isNode` for the selected host so host chunks take the right branch without probing.
@@ -195,7 +183,7 @@ pub(crate) fn assemble_selective_runtime(
     for rel in &manifest.always {
         let path = src.join(rel);
         let text = fs::read_to_string(&path)?;
-        let mut transformed = transform_module(&text, rel);
+        let mut transformed = transform_module(&text, rel)?;
         if rel == "platform.js" {
             transformed = pin_is_node(&transformed, target);
         }
@@ -212,7 +200,7 @@ pub(crate) fn assemble_selective_runtime(
         };
         let path = src.join(&chunk.file);
         let text = fs::read_to_string(&path)?;
-        out.push_str(&transform_module(&text, &chunk.file));
+        out.push_str(&transform_module(&text, &chunk.file)?);
         out.push('\n');
     }
 
@@ -233,7 +221,7 @@ pub(crate) fn assemble_selective_runtime(
     out.push_str("  return parts;\n}\n");
 
     let loader = fs::read_to_string(src.join("load.js"))?;
-    out.push_str(&transform_module(&loader, "load.js"));
+    out.push_str(&transform_module(&loader, "load.js")?);
     out.push_str(
         "\nexport { load, run, DreamInstance, TAGS, HEAP_HEADER_SIZE };\n\
          export default { load, run, DreamInstance, TAGS, HEAP_HEADER_SIZE };\n",
@@ -261,14 +249,26 @@ fn chunk_for_field<'a>(manifest: &'a Manifest, field: &str) -> Option<&'a str> {
 /// falls back to the readable form rather than failing the compile. Returns the paths written.
 pub(crate) fn emit_selective_runtimes(
     wat_path: &str,
-    live_imports: &[LiveImport],
+    wasm_bytes: &[u8],
     targets: &[JsRuntimeTarget],
     minify: bool,
 ) -> Result<Vec<std::path::PathBuf>, Error> {
+    // WASI archives and runtime adapters can add host imports after MIR import pruning.
+    let mut live_imports = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(wasm_bytes) {
+        if let wasmparser::Payload::ImportSection(imports) = payload.map_err(Error::other)? {
+            for import in imports.into_imports() {
+                let import = import.map_err(Error::other)?;
+                if matches!(import.ty, wasmparser::TypeRef::Func(_)) {
+                    live_imports.push((import.module.to_string(), import.name.to_string()));
+                }
+            }
+        }
+    }
     let mut written = Vec::new();
     for &target in targets {
         let path = Path::new(wat_path).with_extension(target.runtime_extension());
-        let text = assemble_selective_runtime(live_imports, target)?;
+        let text = assemble_selective_runtime(&live_imports, target)?;
         let final_text = if minify {
             match minify_js_source(&text) {
                 Ok(m) => m,

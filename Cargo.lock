@@ -1245,6 +1245,7 @@ dependencies = [
  "naga 30.0.0",
  "object",
  "oxc_allocator",
+ "oxc_ast",
  "oxc_codegen",
  "oxc_minifier",
  "oxc_parser",

@@ -39,7 +39,12 @@ pub fn pack_runtime(
         std::fs::copy(&src, &dst).map_err(|e| format!("copying {}: {e}", src.display()))?;
     }
     let sysroot = super::wasm::wasi_sysroot(&clang)?;
-    for dir in ["include/wasm32-wasip1", "lib/wasm32-wasip1"] {
+    for dir in [
+        "include/wasm32-wasip1",
+        "lib/wasm32-wasip1",
+        "include/wasm32-wasip1-threads",
+        "lib/wasm32-wasip1-threads",
+    ] {
         copy_tree(&sysroot.join(dir), &out.join("wasi-sysroot").join(dir))?;
     }
     remove_bookkeeping(out)

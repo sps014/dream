@@ -1,0 +1,16 @@
+[package]
+name = "dream-host-crypto"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "dream_host_crypto"
+crate-type = ["cdylib"]
+
+[dependencies]
+dream-host-core = { path = "../dream-host-core" }
+dream-host-abi = { path = "../dream-host-abi" }
+sha2 = "0.10"
+hmac = "0.12"
+getrandom = "0.2"
+aes-gcm = "0.10"

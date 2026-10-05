@@ -39,6 +39,19 @@ fn build(root: &Path, kind: OutputKind, extra: &[&str]) -> std::path::PathBuf {
         .arg(kind.artifact_path(&ll, &dream_abi::target::TargetSpec::host()))
         .args(extra);
     command(cmd);
+    let manifest = dream_abi::host_capability::HostManifest::parse(
+        &fs::read_to_string(ll.with_extension("abi.json")).unwrap(),
+    )
+    .unwrap();
+    if manifest.host_capabilities.is_empty() {
+        let ir = fs::read_to_string(ll.with_extension("opt.ll")).unwrap();
+        assert!(!ir.contains("call void @dream_host_bind_v2("));
+        if kind == OutputKind::Staticlib {
+            assert!(!fs::read_to_string(ll.with_extension("link.json"))
+                .unwrap()
+                .contains("dream_host"));
+        }
+    }
     kind.artifact_path(&ll, &dream_abi::target::TargetSpec::host())
 }
 
@@ -257,7 +270,8 @@ fn moving_the_package_preserves_library_ir_and_headers() {
     project(&b, source);
     build(&a, OutputKind::Staticlib, &[]);
     build(&b, OutputKind::Staticlib, &[]);
-    let archive = OutputKind::Staticlib.artifact_path(Path::new("lib.ll"), &dream_abi::target::TargetSpec::host());
+    let archive = OutputKind::Staticlib
+        .artifact_path(Path::new("lib.ll"), &dream_abi::target::TargetSpec::host());
     for file in [Path::new("lib.opt.ll"), Path::new("lib.h"), &archive] {
         assert!(
             fs::read(a.join(file)).unwrap() == fs::read(b.join(file)).unwrap(),
@@ -287,7 +301,9 @@ fn manifest_selects_default_source_and_rejects_array_outputs() {
         .arg("-o")
         .arg(&ll);
     command(cmd);
-    assert!(OutputKind::Staticlib.artifact_path(&ll, &dream_abi::target::TargetSpec::host()).is_file());
+    assert!(OutputKind::Staticlib
+        .artifact_path(&ll, &dream_abi::target::TargetSpec::host())
+        .is_file());
     fs::write(
         root.join("dream.toml"),
         manifest.replace("\"staticlib\"", "[\"staticlib\"]"),
@@ -300,4 +316,33 @@ fn manifest_selects_default_source_and_rejects_array_outputs() {
         .unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("[lib]"));
+}
+
+#[test]
+fn optional_service_binding_works_in_static_and_shared_libraries() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("service");
+    project(
+        &root,
+        r#"
+        import system.text;
+        @export fun normalized_len(): int { return Unicode.normalize("é", UnicodeNormForm.Nfc).length; }
+    "#,
+    );
+    for kind in [OutputKind::Staticlib, OutputKind::Dylib] {
+        let product = build(&root, kind, &["--release"]);
+        let manifest = dream_abi::host_capability::HostManifest::parse(
+            &fs::read_to_string(root.join("lib.abi.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            manifest.host_capabilities,
+            vec![
+                dream_abi::host_capability::HostCapability::Core,
+                dream_abi::host_capability::HostCapability::Unicode
+            ]
+        );
+        let exe = consumer(&root, &product, kind, "#include \"lib.h\"\n#include <assert.h>\nint main(void) { dream_thread_attach(); assert(normalized_len() == 1); dream_thread_detach(); return 0; }\n");
+        command(run_consumer(&exe));
+    }
 }

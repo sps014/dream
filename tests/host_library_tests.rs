@@ -54,7 +54,12 @@ fn capabilities_share_core_binding_allocation_completion_and_icon() {
         let libraries: Vec<_> = HostCapability::ALL
             .iter()
             .copied()
-            .map(|capability| Library::new(directory.join(capability.library_name(&dream_abi::target::TargetSpec::host()))).unwrap())
+            .map(|capability| {
+                Library::new(
+                    directory.join(capability.library_name(&dream_abi::target::TargetSpec::host())),
+                )
+                .unwrap()
+            })
             .collect();
         for (capability, library) in HostCapability::ALL.iter().zip(&libraries) {
             let marker = format!("dream_host_{}_abi_v2", capability.name());
@@ -84,6 +89,24 @@ fn capabilities_share_core_binding_allocation_completion_and_icon() {
             std::slice::from_raw_parts((bytes as *const u8).add(4), length),
             b"Shell.open: empty target"
         );
+
+        let unicode: Symbol<unsafe extern "C" fn(*mut u8) -> *mut u8> =
+            libraries[4].get(b"unicodeToLower").unwrap();
+        let crypto: Symbol<unsafe extern "C" fn(i32) -> *mut u8> =
+            libraries[5].get(b"cryptoSecureRandomBytes").unwrap();
+        let process: Symbol<unsafe extern "C" fn(i32) -> *mut u8> =
+            libraries[6].get(b"processWait").unwrap();
+        let timezone: Symbol<unsafe extern "C" fn() -> *mut u8> =
+            libraries[7].get(b"dateLocalZoneName").unwrap();
+        let before_strings = STRINGS.load(Ordering::Relaxed);
+        let before_arrays = ARRAYS.load(Ordering::Relaxed);
+        assert!(!unicode(std::ptr::null_mut()).is_null());
+        let random = crypto(7);
+        assert_eq!(*(random as *const i32), 7);
+        assert!(!process(-1).is_null());
+        assert!(!timezone().is_null());
+        assert_eq!(STRINGS.load(Ordering::Relaxed), before_strings + 2);
+        assert_eq!(ARRAYS.load(Ordering::Relaxed), before_arrays + 2);
 
         let (sender, receiver) = mpsc::channel();
         *COMPLETION.lock().unwrap() = Some(sender);

@@ -25,6 +25,7 @@ fn publishes_cyclic_diamond_and_million_node_task_graphs() {
     for unit in [
         "heap.c",
         "heap_maps.c",
+        "heap_debug.c",
         "publish.c",
         "region.c",
         "weak.c",

@@ -275,7 +275,11 @@ pub(crate) fn build_abi_json(
     }
 
     let mut externs = Vec::new();
-    let mut host_capabilities = vec![dream_abi::host_capability::HostCapability::Core];
+    let host_capabilities = dream_abi::host_capability::HostCapability::required_for_imports(
+        live_imports
+            .iter()
+            .map(|(module, field)| (module.as_str(), field.as_str())),
+    );
     let mut c_lib_set: BTreeSet<String> = BTreeSet::new();
     let mut seen_fields: BTreeSet<(String, String)> = BTreeSet::new();
     let class_methods = program.structs.iter().flat_map(|s| s.methods.iter());
@@ -290,13 +294,6 @@ pub(crate) fn build_abi_json(
         if let Some((module, field, entry, c_lib)) = extern_entry(func, layouts.target.ptr_size) {
             if !live.contains(&(module.as_str(), field.as_str())) {
                 continue;
-            }
-            if let Some(package) = func
-                .file_path
-                .as_deref()
-                .and_then(dream_stdlib::package_for_source)
-            {
-                host_capabilities.extend_from_slice(package.host_capabilities);
             }
             if let Some(lib) = c_lib {
                 c_lib_set.insert(lib);

@@ -230,7 +230,7 @@ Mobile validation preparation is committed in `7b21e2cf` and `1454306f`: real sa
 | 7.6 | Delete the repair passes | OWN-2, OPT-3 | Not started | | | |
 | 7.7 | Remaining size hotspots | — | Not started | | | |
 | 7.8 | Re-evaluate self-hosting | BOOT-1 | Not started | | | |
-| 7.9 | Minimal native packaging and optional core services | BLD-3 | Not started | | | Next priority, ahead of other unfinished Phase 7 tasks (user request, 2026-10-05). Windows x64 Hello World with zero package dependencies: exe 161,280 bytes (157.5 KiB), required release core DLL 1,788,928 bytes (1.71 MiB), bundle 1,950,208 bytes (1.86 MiB). Make core binding/linking conditional on actual host use and separate optional timezone, Unicode, crypto and process services. Completion requires a runnable Hello World pack with no Dream DLL imports or bundled Dream DLLs, preserved host/FFI behavior, and measured artifact-size regression coverage. See §2 BLD-3 and §4 task 7.9. |
+| 7.9 | Minimal native packaging and optional core services | BLD-3 | In progress | Codex | | Working-tree implementation: exact live-import registry; conditional core initialization/discovery/linking; separate Unicode, crypto, process and timezone cdylibs; transactional stale-pack cleanup. Focused inventory, shared callback/icon/async completion, relocated pack and real heavy-to-minimal repack regressions pass locally. macOS arm64 release core 386,544 bytes (was 1,922,512); `-O3` Hello World 52,984 bytes, no Dream imports/libraries, runs with no Dream library search path. Windows GNU x64 PE (195,072 bytes) and Linux x64 ELF (17,792 bytes) cross-link/import inspection pass; their native execution remains unverified. Final local gates pass: workspace build, strict Clippy, 1,248 workspace tests (four workers), native 657/657, Node 592 passed/65 expected skips, size budgets, hygiene and freestanding checks. Cross-link/pack regressions also pass. Repaired existing C harness setup and a malformed bounds-trap golden uncovered by these gates. Windows/MSVC and Linux platform gates and merge still required. See `docs/internals/06-llvm-backend.md` for service measurements and budgets. Original baseline: Windows x64 Hello World with zero package dependencies: exe 161,280 bytes (157.5 KiB), required release core DLL 1,788,928 bytes (1.71 MiB), bundle 1,950,208 bytes (1.86 MiB). Make core binding/linking conditional on actual host use and separate optional timezone, Unicode, crypto and process services. Completion requires a runnable Hello World pack with no Dream DLL imports or bundled Dream DLLs, preserved host/FFI behavior, and measured artifact-size regression coverage. See §2 BLD-3 and §4 task 7.9. |
 
 Performance follow-up (2026-10-04): [3209e97b](https://github.com/sps014/dream/commit/3209e97b96ceafa00be91336401268ed3632bb8f)
 batches global PCRE2 searches, exposes List constructor initialization to optimization,
@@ -264,7 +264,7 @@ zero failures. Workspace build, strict Clippy, 1,230 tests (15 expected ignores)
 runtime bundle freshness, hygiene, and the 17-unit freestanding core gate pass.
 Task/shared-memory C/C++ modules remain explicitly unsupported pending WASI TLS
 initialization support. Android/iOS SDK validation remains on hold. Phase 7 remains
-2/8 complete; this interop extension does not close the remaining Phase 7 tasks.
+2/9 complete; this interop extension does not close the remaining Phase 7 tasks.
 
 ### Cleanliness metrics
 
@@ -906,7 +906,7 @@ The remaining function-index work is resolved by task 7.2 in `125c9f1a` (2026-10
 
 **BLD-3: mandatory core DLL inflates minimal native bundles (P2) [C]**
 
-- **Priority:** next implementation task, ahead of other unfinished Phase 7 work (user request, 2026-10-05). Implementation has not started.
+- **Priority:** next implementation task, ahead of other unfinished Phase 7 work (user request, 2026-10-05). Implementation in progress: live-import capability registry, conditional guest binding/linking, four optional service libraries and stale-pack cleanup. Completion requires the platform and corpus gates below.
 - **Where:** `crates/dream-mir/src/backend/llvm/glue/tables.rs` unconditionally calls `dream_host_bind_v2` for native runtime initialization; `crates/dream-abi/src/host_capability.rs` forces Core into the host manifest even when no host extern survives pruning. Core exports and dependencies live in `crates/dream-host-core/`.
 - **Measured baseline:** Windows x64, default `dreamer pack` (`-O3`), a program printing `Hello, world!`, no package dependencies, and a release-built core DLL: executable 161,280 bytes; core DLL 1,788,928 bytes; total 1,950,208 bytes. The packed program runs successfully. PE import inspection confirms `dream_host_core.dll` is required. The DLL's largest section is `.rdata` (1,401,856 bytes); timezone and Unicode tables are present, but individual service contributions have not been isolated by measurement.
 - **Impact:** an application that needs no Rust host service still ships the whole core DLL, including exported timezone, Unicode, crypto and process implementations. Pruning unused Dream declarations cannot remove exported implementations from this shared library.

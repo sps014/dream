@@ -14,12 +14,34 @@ pub(super) fn copy(
     )?;
     std::fs::create_dir_all(directory)
         .with_context(|| format!("creating {}", directory.display()))?;
-    for capability in manifest.host_capabilities {
+    if binary
+        .parent()
+        .is_some_and(|source| source.canonicalize().ok() == directory.canonicalize().ok())
+    {
+        anyhow::bail!("package must not overwrite its source runtime directory");
+    }
+    let capabilities = &manifest.host_capabilities;
+    for capability in capabilities {
+        let source = binary.with_file_name(capability.library_name(spec));
+        let destination = directory.join(capability.library_name(spec));
+        let canonical = source
+            .canonicalize()
+            .with_context(|| format!("locating {}", source.display()))?;
+        if destination.canonicalize().is_ok_and(|p| p == canonical) {
+            anyhow::bail!("package must not overwrite its source runtime");
+        }
+    }
+    for capability in capabilities {
         let source = binary.with_file_name(capability.library_name(spec));
         let destination = directory.join(capability.library_name(spec));
         std::fs::copy(&source, &destination).with_context(|| {
             format!("bundling {} into {}", source.display(), directory.display())
         })?;
+    }
+    for capability in dream_abi::host_capability::HostCapability::ALL {
+        if !capabilities.contains(&capability) {
+            crate::package_fs::remove_entry(&directory.join(capability.library_name(spec)))?;
+        }
     }
     Ok(())
 }
@@ -71,7 +93,7 @@ mod tests {
         let destination = root.path().join("package").join("Frameworks");
         std::fs::write(
             binary.with_extension("abi.json"),
-            r#"{"native_abi_version":2,"host_capabilities":["core","net","gpu","webview"]}"#,
+            r#"{"native_abi_version":2,"host_capabilities":["core","net","gpu","webview","unicode","crypto","process","timezone"]}"#,
         )
         .unwrap();
         assert!(copy(

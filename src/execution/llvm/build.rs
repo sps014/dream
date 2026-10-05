@@ -220,11 +220,16 @@ pub fn compile_llvm(
     let bin = output_kind.artifact_path(ll_path, &spec);
     let abi_path = ll_path.with_extension("abi.json");
     let capabilities = read_host_capabilities(ll_path)?;
-    let dir = host_library_dir(config, &capabilities, &spec).ok_or(
-        "native capability libraries not found next to the dream binary. \
-         Build with cargo build --workspace, or set DREAM_HOME or DREAM_BIN to the installed toolchain.",
-    ).map_err(|error: &str| format!("{error} Target {} requires capability libraries in {}", spec.triple, config.targets.join(spec.triple.to_string()).join("lib").display()))?;
-    crate::execution::native::capability_abi::validate(&dir, &capabilities, &spec)?;
+    let dir = if capabilities.is_empty() {
+        None
+    } else {
+        let directory = host_library_dir(config, &capabilities, &spec).ok_or_else(|| format!(
+            "native capability libraries not found for {}; build the host distribution or install it in {}",
+            spec.triple, config.targets.join(spec.triple.to_string()).join("lib").display(),
+        ))?;
+        crate::execution::native::capability_abi::validate(&directory, &capabilities, &spec)?;
+        Some(directory)
+    };
     let lock_file = OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -232,9 +237,9 @@ pub fn compile_llvm(
         .write(true)
         .open(bin.with_extension("lock"))?;
     lock_file.lock()?;
-    let bundled = if relocatable {
+    let bundled = if let Some(dir) = dir.as_ref().filter(|_| relocatable) {
         Some(stage_runtime(
-            &dir,
+            dir,
             bin.parent().unwrap_or_else(|| Path::new(".")),
             &capabilities,
             &spec,
@@ -292,10 +297,12 @@ pub fn compile_llvm(
     for name in ["llc", "opt", "llvm-link", "llvm-ar"] {
         resolved_inputs.push(tools.tool(name));
     }
-    for capability in &capabilities {
-        resolved_inputs.push(dir.join(capability.library_name(&spec)));
-        if spec.is_windows() {
-            resolved_inputs.push(dir.join(capability.import_library_name(&spec)));
+    if let Some(dir) = &dir {
+        for capability in &capabilities {
+            resolved_inputs.push(dir.join(capability.library_name(&spec)));
+            if spec.is_windows() {
+                resolved_inputs.push(dir.join(capability.import_library_name(&spec)));
+            }
         }
     }
     let stamp = format!(
@@ -324,8 +331,8 @@ pub fn compile_llvm(
     }
 
     let icon_ll = match &icon_png {
-        Some(png) => Some(icon::write_icon_module(ll_path, png, &src)?),
-        None => None,
+        Some(png) if !capabilities.is_empty() => Some(icon::write_icon_module(ll_path, png, &src)?),
+        _ => None,
     };
     let mut exports = native.runtime_exports.clone();
     exports.extend(library::exports(&abi_path)?);
@@ -357,7 +364,9 @@ pub fn compile_llvm(
         library::archive(&tools, &bin, &obj, &native.objects, rt.archive.as_deref())?;
         let mut flags = Vec::new();
         let mut host = std::process::Command::new("cc");
-        link_runtime(&mut host, &dir, None, &capabilities, &spec);
+        if let Some(dir) = &dir {
+            link_runtime(&mut host, dir, None, &capabilities, &spec);
+        }
         flags.extend(host.get_args().map(|a| a.to_string_lossy().into_owned()));
         if !spec.is_windows() {
             flags.extend(["-lm".to_string(), "-lpthread".to_string()]);
@@ -432,7 +441,9 @@ pub fn compile_llvm(
     if !spec.is_windows() {
         lcmd.args(["-lm", "-lpthread"]);
     }
-    link_runtime(&mut lcmd, &dir, bundled.as_deref(), &capabilities, &spec);
+    if let Some(dir) = &dir {
+        link_runtime(&mut lcmd, dir, bundled.as_deref(), &capabilities, &spec);
+    }
     let c_libs = read_c_libs_from_abi(&abi_path);
     if !c_libs.is_empty() {
         let roots = search_roots_for_artifact(config, ll_path);

@@ -75,7 +75,6 @@ pub(super) fn write_icon_module(
 }
 
 /// A multi-size `.ico` (16, 32, 48 and 256 px) for the Windows executable.
-#[cfg(any(windows, test))]
 pub(crate) fn png_to_ico(png: &[u8]) -> Result<Vec<u8>, String> {
     use image::codecs::ico::{IcoEncoder, IcoFrame};
     use image::imageops::FilterType;

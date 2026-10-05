@@ -239,6 +239,9 @@ pub(crate) fn host_library_dir(
     capabilities: &[HostCapability],
     spec: &dream_abi::target::TargetSpec,
 ) -> Option<PathBuf> {
+    if capabilities.is_empty() {
+        return None;
+    }
     let directories = if spec.can_link_on_host() {
         config.host_library_dirs()
     } else {

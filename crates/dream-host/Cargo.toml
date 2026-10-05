@@ -9,9 +9,18 @@ dream-host-net = { path = "../dream-host-net", optional = true }
 dream-host-gpu = { path = "../dream-host-gpu", optional = true }
 dream-host-webview = { path = "../dream-host-webview", optional = true }
 
+dream-host-unicode = { path = "../dream-host-unicode", optional = true }
+dream-host-crypto = { path = "../dream-host-crypto", optional = true }
+dream-host-process = { path = "../dream-host-process", optional = true }
+dream-host-timezone = { path = "../dream-host-timezone", optional = true }
+
 [features]
-default = ["core", "net", "gpu", "webview"]
+default = ["core", "net", "gpu", "webview", "unicode", "crypto", "process", "timezone"]
 core = ["dep:dream-host-core"]
 net = ["core", "dep:dream-host-net"]
 gpu = ["core", "dep:dream-host-gpu"]
 webview = ["core", "dep:dream-host-webview"]
+unicode = ["core", "dep:dream-host-unicode"]
+crypto = ["core", "dep:dream-host-crypto"]
+process = ["core", "dep:dream-host-process"]
+timezone = ["core", "dep:dream-host-timezone"]

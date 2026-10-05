@@ -98,20 +98,14 @@ jobs:
         run: python tooling/docs/check_examples.py
       - run: cargo test --workspace --no-fail-fast --timings
       - name: Native distribution size budget
-        if: runner.os != 'Windows'
         shell: bash
         run: |
           python3 scripts/test_binary_size.py
-          cargo build --locked --release -p dream-host-core
-          if [[ "$RUNNER_OS" == "macOS" ]]; then
-            host_library=target/release/libdream_host_core.dylib
-          else
-            host_library=target/release/libdream_host_core.so
-          fi
-          python3 scripts/check-binary-size.py --compiler target/debug/dream \
-            --host-library "$host_library" --report target/binary-size.json
+          cargo build --locked --release -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone
+          python3 scripts/check-binary-size.py --compiler "target/debug/dream${{ runner.os == 'Windows' && '.exe' || '' }}" \
+            --host-directory target/release --report target/binary-size.json
       - name: Preserve native size measurements
-        if: always() && runner.os != 'Windows'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: binary-size-${{ runner.os }}-${{ runner.arch }}

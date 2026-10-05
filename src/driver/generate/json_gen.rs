@@ -1096,6 +1096,7 @@ fn cached_harness_ll(
         HARNESS_SOURCE,
         include_str!("../abi.rs"),
         include_str!("../../../crates/dream-abi/src/host_capability.rs"),
+        include_str!("../../../crates/dream-abi/src/host_capability_fields.rs"),
         include_str!("../../../crates/dream-stdlib/src/lib.rs"),
         include_str!("../../../crates/dream-stdlib/src/system/json/json_generator.dream"),
         include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream"),

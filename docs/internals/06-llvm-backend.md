@@ -44,12 +44,13 @@ version suffix is accepted without weakening architecture, OS, environment, widt
 checks. A mismatch, malformed table, or missing runtime symbol reports `CompileError::Toolchain`
 with the exact `dream_rt.sigs` cache path, so stale artifacts are actionable rather than ICEs.
 
-Native Rust hosts live in `crates/dream-host-{core,net,gpu,webview}`, not in the compiler.
+Native Rust hosts live in `crates/dream-host-{core,net,gpu,webview,unicode,crypto,process,timezone}`, not in the compiler.
 The root `dream` library is an rlib only and has no GUI/network host dependencies.
-`cargo build --workspace` builds the compiler and all four native capability libraries:
-`dream_host_core`, `dream_host_net`, `dream_host_gpu`, and `dream_host_webview` (with the
+`cargo build --workspace` builds the compiler and all eight native capability libraries:
+`dream_host_core`, `dream_host_net`, `dream_host_gpu`, `dream_host_webview`,
+`dream_host_unicode`, `dream_host_crypto`, `dream_host_process`, and `dream_host_timezone` (with the
 platform's shared-library prefix/suffix). `dream-host` is a distribution feature set, not
-another host implementation: its independent `core`, `net`, `gpu`, and `webview` features
+another host implementation: its independent capability features
 select these packages. Core-only builds do not compile networking or GUI dependencies.
 For direct package builds, name the required capability packages as primary targets to put
 their artifacts next to the compiler; dependency-only artifacts live in Cargo's `deps/`.
@@ -77,11 +78,42 @@ native targets and by the pinned clang with WASI headers for wasm32. It is cache
 `RuntimeNeed` under `target/dream-native-rt/` (in the repo) or `~/.dream/cache/native-rt/`, and
 guarded by a file lock so concurrent compiles share one build.
 
-Native links select host libraries from the ABI sidecar's `host_capabilities` inventory. Each
-embedded stdlib package declares its native capabilities; only externs surviving MIR import
-pruning contribute them. Core always binds guest callbacks. Importing an unused GUI package or
-calling CPU-only GPU helpers does not select a GUI library. The linker and packager share the
-typed manifest reader and canonical core/net/gpu/webview ordering.
+Native links select host libraries from the ABI sidecar's `host_capabilities` inventory.
+The exact native export inventory in `dream-abi::host_capability` selects libraries from live
+`(module, field)` imports after MIR pruning; loading a stdlib package alone does not select a
+host. Core owns only shared guest callbacks and icon state. Each optional service depends on
+that single core instance. Programs with no live host imports skip core binding, library
+discovery and linking, including staticlib and cdylib outputs. Native executable icon resources
+remain available without a host; an icon registration constructor is emitted only when a host
+capability needs core. Repacking removes obsolete host libraries in the same transaction as
+publishing the new products. The linker and packager share the typed manifest reader and
+canonical capability ordering.
+
+Release measurements on macOS arm64 (2026-10-05), with no manual stripping:
+
+- Before splitting, the core library was 1,922,512 bytes. An isolated shared-state build was
+  386,448 bytes; adding one service measured Unicode at 574,304 bytes, crypto at 423,504 bytes,
+  process at 474,256 bytes, and timezone at 1,611,728 bytes. These isolated builds retain the
+  same shared-state implementation and release dependency settings; differences identify
+  service contributions, rather than claiming independently additive bundle sizes.
+- After splitting, core is 386,544 bytes, Unicode 555,408, crypto 420,912, process 472,880,
+  and timezone 1,592,832. A native `-O3` Hello World is 52,984 bytes and ships no Dream library;
+  its executable-plus-library bundle therefore also totals 52,984 bytes.
+  Compiler binaries, debug libraries, intermediate outputs and filesystem allocation units
+  are excluded from these artifact measurements.
+- Separate Rust cdylibs repeat some standard-library support. Selecting all four optional
+  services plus core totals 3,428,576 bytes; the split favors programs using only selected
+  services and does not promise that an all-service bundle shrinks.
+
+`scripts/check-binary-size.py` executes Hello World without a Dream library search path,
+inspects PE/ELF/Mach-O dependencies, and applies separate release budgets to the executable,
+core and each optional service. `dreamer`'s minimal-pack regression also performs a real
+capability-heavy to minimal repack. Local cross-link checks also produce a 195,072-byte
+Windows GNU x64 PE and a 17,792-byte Linux x64 ELF with empty host inventories and no Dream dependencies. Their native execution
+is unverified; the GNU PE is not a like-for-like comparison with the earlier MSVC baseline.
+Windows x64 and Linux execution/size validation must pass
+on their platform runners before the cross-platform packaging audit can be closed.
+
 ABI sidecars are mandatory, including generator harnesses and `dream test` runners; harness
 cache fingerprints include the ABI emitter and capability schema/registry.
 

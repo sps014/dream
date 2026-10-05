@@ -19,6 +19,8 @@ fn foreign_callback_releases_keep_arc_on_the_owner() {
         ])
         .arg("-I")
         .arg(root.join("crates/dream-mir/src/runtime/c/core/include"))
+        .arg("-I")
+        .arg(root.join("crates/dream-mir/src/runtime/c/sys/native/include"))
         .arg(root.join("crates/dream-mir/src/runtime/c/sys/native/callback.c"))
         .arg(root.join("tests/runtime_callback.c"))
         .arg("-o")

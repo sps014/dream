@@ -1,5 +1,8 @@
 //! Native host link artifacts, shared by the compiler and package manager.
 
+#[path = "host_capability_fields.rs"]
+mod fields;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HostCapability {
@@ -7,10 +10,23 @@ pub enum HostCapability {
     Net,
     Gpu,
     WebView,
+    Unicode,
+    Crypto,
+    Process,
+    Timezone,
 }
 
 impl HostCapability {
-    pub const ALL: [Self; 4] = [Self::Core, Self::Net, Self::Gpu, Self::WebView];
+    pub const ALL: [Self; 8] = [
+        Self::Core,
+        Self::Net,
+        Self::Gpu,
+        Self::WebView,
+        Self::Unicode,
+        Self::Crypto,
+        Self::Process,
+        Self::Timezone,
+    ];
 
     pub const fn name(self) -> &'static str {
         match self {
@@ -18,6 +34,10 @@ impl HostCapability {
             Self::Net => "net",
             Self::Gpu => "gpu",
             Self::WebView => "webview",
+            Self::Unicode => "unicode",
+            Self::Crypto => "crypto",
+            Self::Process => "process",
+            Self::Timezone => "timezone",
         }
     }
 
@@ -27,7 +47,44 @@ impl HostCapability {
             Self::Net => "dream_host_net",
             Self::Gpu => "dream_host_gpu",
             Self::WebView => "dream_host_webview",
+            Self::Unicode => "dream_host_unicode",
+            Self::Crypto => "dream_host_crypto",
+            Self::Process => "dream_host_process",
+            Self::Timezone => "dream_host_timezone",
         }
+    }
+
+    pub fn fields(self) -> &'static [&'static str] {
+        fields::fields(self)
+    }
+
+    pub fn for_import(module: &str, field: &str) -> Option<Self> {
+        (module == crate::js_abi::HOST_MODULE)
+            .then(|| {
+                Self::ALL
+                    .iter()
+                    .copied()
+                    .find(|c| c.fields().contains(&field))
+            })
+            .flatten()
+    }
+
+    pub fn required_for_imports<'a>(
+        imports: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> Vec<Self> {
+        let selected: Vec<_> = imports
+            .into_iter()
+            .filter_map(|(module, field)| Self::for_import(module, field))
+            .collect();
+        Self::canonicalize(&selected)
+    }
+
+    fn canonicalize(selected: &[Self]) -> Vec<Self> {
+        Self::ALL
+            .iter()
+            .copied()
+            .filter(|c| selected.contains(c) || (*c == Self::Core && !selected.is_empty()))
+            .collect()
     }
 
     pub fn library_name(self, target: &crate::target::TargetSpec) -> String {
@@ -67,12 +124,7 @@ impl HostManifest {
         }
         Ok(Self {
             native_abi_version: 2,
-            // Core binds guest callbacks even when no stdlib extern survives pruning.
-            host_capabilities: HostCapability::ALL
-                .iter()
-                .copied()
-                .filter(|c| *c == HostCapability::Core || manifest.host_capabilities.contains(c))
-                .collect(),
+            host_capabilities: HostCapability::canonicalize(&manifest.host_capabilities),
         })
     }
 }
@@ -92,7 +144,15 @@ mod tests {
             r#"{"native_abi_version":2,"host_capabilities":["webview","gpu","net","gpu"]}"#,
         )
         .unwrap();
-        assert_eq!(manifest.host_capabilities, HostCapability::ALL);
+        assert_eq!(
+            manifest.host_capabilities,
+            vec![
+                HostCapability::Core,
+                HostCapability::Net,
+                HostCapability::Gpu,
+                HostCapability::WebView
+            ]
+        );
     }
 
     #[test]
@@ -107,6 +167,6 @@ mod tests {
         let manifest =
             HostManifest::parse(r#"{"native_abi_version":2,"host_capabilities":[]}"#).unwrap();
         assert_eq!(manifest.native_abi_version, 2);
-        assert_eq!(manifest.host_capabilities, vec![HostCapability::Core]);
+        assert!(manifest.host_capabilities.is_empty());
     }
 }

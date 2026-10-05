@@ -55,10 +55,30 @@ fn packages_foreign_elf_and_its_target_libraries() {
             .arg("-o")
             .arg(&library),
     );
+    let unicode_source = root.path().join("unicode.c");
+    std::fs::write(&unicode_source, "void dream_host_unicode_abi_v2(void) {}\nvoid *unicodeToLower(void *text) { return text; }\n").unwrap();
+    checked(
+        Command::new(&zig)
+            .args([
+                "cc",
+                "-target",
+                &format!("{}-linux-gnu", arch),
+                "-shared",
+                "-fPIC",
+                "-Wl,-soname,libdream_host_unicode.so",
+            ])
+            .arg(&unicode_source)
+            .arg("-o")
+            .arg(library.with_file_name("libdream_host_unicode.so")),
+    );
     let project = root.path().join("project");
     std::fs::create_dir_all(project.join("src")).unwrap();
     std::fs::write(project.join("dream.toml"), "[package]\nname = \"foreign\"\nversion = \"0.1.0\"\ntype = \"bin\"\nentry = \"src/main.dream\"\n").unwrap();
-    std::fs::write(project.join("src/main.dream"), "fun main(): void {}").unwrap();
+    std::fs::write(
+        project.join("src/main.dream"),
+        "import system.text; fun main(): void { let x = Unicode.to_lower_unicode(\"X\"); }",
+    )
+    .unwrap();
     checked(
         Command::new(env!("CARGO_BIN_EXE_dreamer"))
             .args(["pack", "--target", target, "-O0"])

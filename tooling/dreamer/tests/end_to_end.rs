@@ -401,13 +401,10 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
         let contents = pack_dir.join("binpack.app").join("Contents");
         assert!(contents.join("MacOS").join("binpack").is_file());
         for capability in dream_abi::host_capability::HostCapability::ALL {
-            assert_eq!(
-                contents
-                    .join("Frameworks")
-                    .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
-                    .is_file(),
-                capability == dream_abi::host_capability::HostCapability::Core
-            );
+            assert!(!contents
+                .join("Frameworks")
+                .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
+                .is_file());
         }
         assert!(contents.join("Resources").join("icon.icns").is_file());
         let plist = std::fs::read_to_string(contents.join("Info.plist")).unwrap();
@@ -418,12 +415,9 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
         assert!(pack_dir.join("binpack.png").is_file());
     }
     for capability in dream_abi::host_capability::HostCapability::ALL {
-        assert_eq!(
-            pack_dir
-                .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
-                .is_file(),
-            capability == dream_abi::host_capability::HostCapability::Core
-        );
+        assert!(!pack_dir
+            .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
+            .is_file());
     }
     let moved = tmp.path().join("relocated package");
     std::fs::rename(&pack_dir, &moved).unwrap();

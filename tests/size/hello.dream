@@ -1,5 +1,5 @@
 import system;
 
 fun main(): void {
-    System.println("hello size budget");
+    System.println("Hello, world!");
 }

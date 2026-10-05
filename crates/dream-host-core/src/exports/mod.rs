@@ -4,4 +4,3 @@
 
 mod abi;
 mod app_icon;
-mod core;

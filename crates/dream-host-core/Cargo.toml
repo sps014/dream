@@ -9,17 +9,7 @@ name = "dream_host_core"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-indexmap = "2"
 dream-host-abi = { path = "../dream-host-abi" }
-chrono = { version = "0.4" }
-chrono-tz = { version = "0.10.4" }
-iana-time-zone = { version = "0.1.65" }
-sha2 = { version = "0.10" }
-hmac = { version = "0.12" }
-getrandom = { version = "0.2" }
-unicode-normalization = { version = "0.1" }
-unicode-segmentation = { version = "1.12" }
-aes-gcm = { version = "0.10" }
 
 [dev-dependencies]
 dream-abi = { path = "../dream-abi" }

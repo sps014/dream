@@ -49,7 +49,28 @@ impl BundleWriter {
         Ok(path)
     }
 
+    pub fn publish_native(
+        &self,
+        products: &[PathBuf],
+        spec: &dream_abi::target::TargetSpec,
+    ) -> Result<Vec<PathBuf>> {
+        let obsolete = dream_abi::host_capability::HostCapability::ALL
+            .into_iter()
+            .map(|c| PathBuf::from(c.library_name(spec)))
+            .filter(|p| !products.contains(p))
+            .collect::<Vec<_>>();
+        self.publish_replacing(products, &obsolete)
+    }
+
     pub fn publish(&self, products: &[PathBuf]) -> Result<Vec<PathBuf>> {
+        self.publish_replacing(products, &[])
+    }
+
+    fn publish_replacing(
+        &self,
+        products: &[PathBuf],
+        obsolete: &[PathBuf],
+    ) -> Result<Vec<PathBuf>> {
         let mut unique = std::collections::BTreeSet::new();
         for product in products {
             if product.components().count() != 1 || !unique.insert(product) {
@@ -70,7 +91,7 @@ impl BundleWriter {
             .prefix(".previous-")
             .tempdir_in(&self.output)?;
         let mut moved: Vec<(PathBuf, Option<PathBuf>)> = Vec::new();
-        for product in products {
+        for product in obsolete.iter().chain(products) {
             let destination = self.output.join(product);
             let previous = backup.path().join(product);
             let existed = std::fs::symlink_metadata(&destination).is_ok();
@@ -79,7 +100,9 @@ impl BundleWriter {
                     std::fs::rename(&destination, &previous)?;
                 }
                 moved.push((destination.clone(), existed.then_some(previous)));
-                std::fs::rename(self.path(product)?, &destination)?;
+                if products.contains(product) {
+                    std::fs::rename(self.path(product)?, &destination)?;
+                }
                 Ok(())
             })();
             if let Err(error) = result {
@@ -106,6 +129,31 @@ impl BundleWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn minimal_repack_removes_old_capabilities_and_preserves_other_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let spec = dream_abi::target::TargetSpec::host();
+        for capability in dream_abi::host_capability::HostCapability::ALL {
+            std::fs::write(temp.path().join(capability.library_name(&spec)), b"old").unwrap();
+        }
+        std::fs::write(temp.path().join("notes.txt"), b"keep").unwrap();
+        let writer = BundleWriter::new(temp.path()).unwrap();
+        writer.write("hello", b"new").unwrap();
+        assert!(writer.publish_native(&["missing".into()], &spec).is_err());
+        assert!(temp
+            .path()
+            .join(dream_abi::host_capability::HostCapability::Core.library_name(&spec))
+            .is_file());
+        writer.publish_native(&["hello".into()], &spec).unwrap();
+        for capability in dream_abi::host_capability::HostCapability::ALL {
+            assert!(!temp.path().join(capability.library_name(&spec)).exists());
+        }
+        assert_eq!(
+            std::fs::read(temp.path().join("notes.txt")).unwrap(),
+            b"keep"
+        );
+    }
 
     #[test]
     #[cfg(windows)]

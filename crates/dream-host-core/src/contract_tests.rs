@@ -4,7 +4,10 @@ use dream_abi::js_abi::HOST_MODULE;
 use std::collections::HashSet;
 
 const HOST_SOURCES: &[&str] = &[
-    include_str!("exports/core.rs"),
+    include_str!("../../dream-host-unicode/src/exports.rs"),
+    include_str!("../../dream-host-crypto/src/exports.rs"),
+    include_str!("../../dream-host-process/src/exports.rs"),
+    include_str!("../../dream-host-timezone/src/exports.rs"),
     include_str!("../../dream-host-gpu/src/exports/gpu.rs"),
     include_str!("../../dream-host-net/src/exports/net.rs"),
     include_str!("../../dream-host-webview/src/exports/webview.rs"),
@@ -97,6 +100,38 @@ fn every_native_dream_host_fn_is_declared_in_the_prelude() {
         "native C host functions have no matching `@runtime(\"…\")` / `@js(\"Dream\", …)` declaration in the stdlib prelude: {:?}",
         orphaned
     );
+}
+
+#[test]
+fn capability_inventory_matches_each_library_exports() {
+    use dream_abi::host_capability::HostCapability;
+    for (capability, sources) in [
+        (HostCapability::Unicode, vec![HOST_SOURCES[0]]),
+        (HostCapability::Crypto, vec![HOST_SOURCES[1]]),
+        (HostCapability::Process, vec![HOST_SOURCES[2]]),
+        (HostCapability::Timezone, vec![HOST_SOURCES[3]]),
+        (HostCapability::Gpu, vec![HOST_SOURCES[4]]),
+        (HostCapability::Net, vec![HOST_SOURCES[5]]),
+        (
+            HostCapability::WebView,
+            vec![HOST_SOURCES[6], HOST_SOURCES[7]],
+        ),
+    ] {
+        let exported: HashSet<_> = sources.iter().flat_map(|s| c_abi_fn_names(s)).collect();
+        let registered: HashSet<_> = capability.fields().iter().map(|s| s.to_string()).collect();
+        assert_eq!(
+            exported,
+            registered,
+            "{} export inventory",
+            capability.name()
+        );
+        for field in capability.fields() {
+            assert_eq!(
+                HostCapability::for_import(HOST_MODULE, field),
+                Some(capability)
+            );
+        }
+    }
 }
 
 const JS_HOST_SOURCES: &[&str] = &[

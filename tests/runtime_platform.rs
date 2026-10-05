@@ -15,7 +15,11 @@ fn core_runs_and_reports_exhaustion_through_the_injected_platform() {
     });
     let config = std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default());
     let tools = dream::execution::llvm::resolve_llvm(&config).unwrap();
-    let mut command = Command::new(tools.clang().unwrap());
+    let mut command = Command::new(if cfg!(windows) {
+        tools.clang().unwrap().into_os_string()
+    } else {
+        std::env::var_os("CC").unwrap_or_else(|| "cc".into())
+    });
     command
         .args(["-std=gnu11", "-O1"])
         .arg("-I")

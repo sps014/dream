@@ -1,9 +1,6 @@
-//! Native host implementations and guest C ABI, separate from the compiler.
+//! Shared guest callbacks and icon state, owned by one core cdylib.
 
-mod crypto;
 mod exports;
-mod process_host;
-mod tz;
 
 #[no_mangle]
 pub extern "C" fn dream_host_core_abi_v2() {}

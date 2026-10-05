@@ -18,7 +18,7 @@ class BudgetTests(unittest.TestCase):
             self.assertEqual(len(binary_size.check_budget(sizes)), 1)
 
     def test_empty_artifacts_fail(self):
-        self.assertEqual(len(binary_size.check_budget({"hello": 0, "core": 0})), 2)
+        self.assertEqual(len(binary_size.check_budget({name: 0 for name in binary_size.BUDGETS})), len(binary_size.BUDGETS))
 
 
 if __name__ == "__main__":

@@ -91,7 +91,7 @@ debug-assertions = true
 overflow-checks = true
 
 [workspace]
-default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-net", "crates/dream-host-gpu", "crates/dream-host-webview"]
+default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-unicode", "crates/dream-host-crypto", "crates/dream-host-process", "crates/dream-host-timezone", "crates/dream-host-net", "crates/dream-host-gpu", "crates/dream-host-webview"]
 members = [
     ".",
     "crates/dream-text",
@@ -106,6 +106,10 @@ members = [
     "crates/dream-mir",
     "crates/dream-host",
     "crates/dream-host-core",
+    "crates/dream-host-unicode",
+    "crates/dream-host-crypto",
+    "crates/dream-host-process",
+    "crates/dream-host-timezone",
     "crates/dream-host-abi",
     "crates/dream-host-gui",
     "crates/dream-host-net",

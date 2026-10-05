@@ -1305,8 +1305,12 @@ name = "dream-host"
 version = "0.1.0"
 dependencies = [
  "dream-host-core",
+ "dream-host-crypto",
  "dream-host-gpu",
  "dream-host-net",
+ "dream-host-process",
+ "dream-host-timezone",
+ "dream-host-unicode",
  "dream-host-webview",
 ]
 
@@ -1321,19 +1325,21 @@ dependencies = [
 name = "dream-host-core"
 version = "0.1.0"
 dependencies = [
- "aes-gcm",
- "chrono",
- "chrono-tz",
  "dream-abi",
  "dream-host-abi",
  "dream-stdlib",
+]
+
+[[package]]
+name = "dream-host-crypto"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "dream-host-abi",
+ "dream-host-core",
  "getrandom 0.2.17",
  "hmac",
- "iana-time-zone",
- "indexmap",
  "sha2",
- "unicode-normalization",
- "unicode-segmentation",
 ]
 
 [[package]]
@@ -1392,6 +1398,36 @@ dependencies = [
  "tokio-rustls",
  "tokio-tungstenite",
  "tungstenite",
+]
+
+[[package]]
+name = "dream-host-process"
+version = "0.1.0"
+dependencies = [
+ "dream-host-abi",
+ "dream-host-core",
+ "indexmap",
+]
+
+[[package]]
+name = "dream-host-timezone"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "chrono-tz",
+ "dream-host-abi",
+ "dream-host-core",
+ "iana-time-zone",
+]
+
+[[package]]
+name = "dream-host-unicode"
+version = "0.1.0"
+dependencies = [
+ "dream-host-abi",
+ "dream-host-core",
+ "unicode-normalization",
+ "unicode-segmentation",
 ]
 
 [[package]]

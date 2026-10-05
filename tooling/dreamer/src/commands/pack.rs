@@ -106,7 +106,7 @@ pub fn run(
                 products.push(format!("{pkg_name}.png").into());
             }
         }
-        for product in writer.publish(&products)? {
+        for product in writer.publish_native(&products, &spec)? {
             println!("packed {}", product.display());
         }
     }

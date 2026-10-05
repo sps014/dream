@@ -59,10 +59,30 @@ fn zig_links_foreign_executable_and_rejects_stale_capability_abi() {
                 .arg(&library),
         );
     };
+    let unicode_source = root.path().join("unicode.c");
+    std::fs::write(&unicode_source, "void dream_host_unicode_abi_v2(void) {}\nvoid *unicodeToLower(void *text) { return text; }\n").unwrap();
+    checked(
+        Command::new(&tools)
+            .args([
+                "cc",
+                "-target",
+                &format!("{}-linux-gnu", spec.triple.architecture),
+                "-shared",
+                "-fPIC",
+                "-Wl,-soname,libdream_host_unicode.so",
+            ])
+            .arg(&unicode_source)
+            .arg("-o")
+            .arg(libs.join("libdream_host_unicode.so")),
+    );
     build_host("dream_host_core_abi_v2");
     let source = root.path().join("main.dream");
     let ir = root.path().join("main.ll");
-    std::fs::write(&source, "fun main(): void {}").unwrap();
+    std::fs::write(
+        &source,
+        "import system.text; fun main(): void { let x = Unicode.to_lower_unicode(\"X\"); }",
+    )
+    .unwrap();
     let compile = || {
         let mut command = Command::new(env!("CARGO_BIN_EXE_dream"));
         command

@@ -174,7 +174,7 @@ fn packed_application_has_no_builder_runtime_dependency() {
     dreamer::commands::init::run(&project, Some("portable".into()), None, false).unwrap();
     std::fs::write(
         project.join("src/main.dream"),
-        format!("import system;\nfun main(): void {{ System.println(\"{MESSAGE}\"); }}\n"),
+        format!("import system;\nimport system.text;\nfun main(): void {{ System.println(Unicode.normalize(\"{MESSAGE}\", UnicodeNormForm.Nfc)); }}\n"),
     )
     .unwrap();
     checked_text(
@@ -217,7 +217,10 @@ fn packed_application_has_no_builder_runtime_dependency() {
     inspect_loader(&executable, true);
     for capability in HostCapability::ALL {
         let path = moved.join(capability.library_name(&dream_abi::target::TargetSpec::host()));
-        assert_eq!(path.is_file(), capability == HostCapability::Core);
+        assert_eq!(
+            path.is_file(),
+            matches!(capability, HostCapability::Core | HostCapability::Unicode)
+        );
         if path.is_file() {
             inspect_loader(&path, false);
         }
@@ -232,7 +235,10 @@ fn packed_application_has_no_builder_runtime_dependency() {
             let path = contents
                 .join("Frameworks")
                 .join(capability.library_name(&dream_abi::target::TargetSpec::host()));
-            assert_eq!(path.is_file(), capability == HostCapability::Core);
+            assert_eq!(
+                path.is_file(),
+                matches!(capability, HostCapability::Core | HostCapability::Unicode)
+            );
             if path.is_file() {
                 inspect_loader(&path, false);
             }

@@ -1,0 +1,15 @@
+[package]
+name = "dream-host-timezone"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "dream_host_timezone"
+crate-type = ["cdylib"]
+
+[dependencies]
+dream-host-core = { path = "../dream-host-core" }
+dream-host-abi = { path = "../dream-host-abi" }
+chrono = "0.4"
+chrono-tz = "0.10.4"
+iana-time-zone = "0.1.65"

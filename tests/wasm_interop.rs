@@ -202,6 +202,8 @@ fn shared_memory_package_interop_initializes_tls() {
 import system;
 import system.task;
 @c extern fun value(): int;
+@c extern fun set_error(n: int): void;
+@c extern fun get_error(): int;
 async fun main(): void {
     System.println(value());
     let first = Task.spawn(() => value());
@@ -213,6 +215,9 @@ async fun main(): void {
     System.println(pool.dispatch(() => value().to_string()).await);
     System.println(pool.dispatch(() => value().to_string()).await);
     pool.shutdown();
+    set_error(1234);
+    System.println(Task.spawn(() => get_error()).await);
+    System.println(get_error());
 }
 
 "#,
@@ -226,6 +231,8 @@ async fun main(): void {
 #include <stdlib.h>
 static _Thread_local int counter = 41;
 static _Thread_local _Alignas(256) volatile unsigned char scratch[70000];
+void set_error(int n) { errno = n; }
+int get_error(void) { return errno; }
 int value(void) {
     if ((uintptr_t)scratch % 256 || scratch[69999] != counter - 41) return -1;
     char *end;
@@ -240,7 +247,7 @@ int value(void) {
     for level in [None, Some(OptLevel::O3), Some(OptLevel::Size)] {
         let out = root.join("main.wat");
         compile(&root.join("main.dream"), &out, level).unwrap();
-        assert_eq!(run(&out), "42\n42\n42\n43\n42\n43\n");
+        assert_eq!(run(&out), "42\n42\n42\n43\n42\n43\n0\n1234\n");
     }
 }
 

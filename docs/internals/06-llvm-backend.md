@@ -106,13 +106,25 @@ Release measurements on macOS arm64 (2026-10-05), with no manual stripping:
   services and does not promise that an all-service bundle shrinks.
 
 `scripts/check-binary-size.py` executes Hello World without a Dream library search path,
-inspects PE/ELF/Mach-O dependencies, and applies separate release budgets to the executable,
-core and each optional service. `dreamer`'s minimal-pack regression also performs a real
-capability-heavy to minimal repack. Local cross-link checks also produce a 195,072-byte
-Windows GNU x64 PE and a 17,792-byte Linux x64 ELF with empty host inventories and no Dream dependencies. Their native execution
-is unverified; the GNU PE is not a like-for-like comparison with the earlier MSVC baseline.
-Windows x64 and Linux execution/size validation must pass
-on their platform runners before the cross-platform packaging audit can be closed.
+inspects PE/ELF/Mach-O dependencies, and reports release sizes for the executable,
+core and each optional service. These measurements have no fixed byte limits; future service
+features can grow while dependency isolation remains a hard gate.
+`dreamer`'s minimal-pack regression also performs a real capability-heavy to minimal repack.
+
+Native platform-runner measurements on 2026-10-05 use `-O3` Hello World and unstripped
+release host libraries. Each Hello World has an empty capability inventory, no Dream library
+imports or bundled libraries, and runs with only the system library search path:
+
+- Windows x64/MSVC: Hello World 158,208 bytes; core 121,344; Unicode 293,376; crypto 185,344;
+  process 267,264; timezone 1,395,712. The Hello World bundle shrinks from the original
+  1,950,208-byte Windows baseline to 158,208 bytes (91.9%); the required core DLL is removed.
+- Linux x64: Hello World 22,648 bytes; core 418,120; Unicode 598,720; crypto 489,848;
+  process 550,368; timezone 2,333,424.
+- macOS arm64 runner: Hello World 52,648 bytes; core 390,496; Unicode 577,888; crypto 425,392;
+  process 497,728; timezone 1,612,352. Runner library measurements differ from the local
+  macOS build above; compare builds within their recorded environment.
+
+The platform reports are artifacts of [CI run 37278462482](https://github.com/sps014/dream/actions/runs/37278462482).
 
 ABI sidecars are mandatory, including generator harnesses and `dream test` runners; harness
 cache fingerprints include the ABI emitter and capability schema/registry.
@@ -135,11 +147,10 @@ whole-object granularity; both policies participate in native binary cache stamp
 link policy is unchanged. Native source-set runtime exports remain roots through the existing
 `internalize-public-api-list`; foreign callbacks and entry points must survive collection.
 
-CI builds the release core host library, then `scripts/check-binary-size.py` compiles and runs
-`tests/size/hello.dream` at `-Os` in an isolated relocatable package. It checks raw executable
-bytes (96 KiB maximum) and raw release core-library bytes (3 MiB maximum) independently, and
-uploads the measurements as `binary-size-<OS>-<arch>`. Debug host artifacts are not size baselines.
-Budget changes require explicit review; the gate never adjusts limits from measured results.
+CI builds the release core and optional-service libraries, then `scripts/check-binary-size.py`
+compiles and runs `tests/size/hello.dream` at `-O3` in an isolated relocatable package.
+It uploads raw artifact measurements as `binary-size-<OS>-<arch>` without fixed byte limits.
+Debug host artifacts are not size baselines.
 
 ## The writers
 

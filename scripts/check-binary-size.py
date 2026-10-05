@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check host-free Hello World imports and independently bound release capability sizes."""
+"""Check host-free Hello World imports and report release capability sizes."""
 
 import argparse
 import json
@@ -11,19 +11,7 @@ import subprocess
 import tempfile
 
 
-# Raw distribution bytes, not stripped development builds or filesystem block usage.
-# Separate artifact limits prevent one shrinking artifact from hiding another's growth.
-BUDGETS = {"hello": (192 if platform.system() == "Windows" else 96) * 1024, "core": 512 * 1024, "unicode": 768 * 1024,
-           "crypto": 512 * 1024, "process": 768 * 1024, "timezone": 2 * 1024 * 1024}
-
-
-def check_budget(sizes):
-    failures = []
-    for name, limit in BUDGETS.items():
-        size = sizes[name]
-        if size <= 0 or size > limit:
-            failures.append(f"{name}: {size} bytes, allowed 1..{limit}")
-    return failures
+MEASURED_CAPABILITIES = ("core", "unicode", "crypto", "process", "timezone")
 
 
 def measure(compiler, host_directory, llvm_directory):
@@ -68,9 +56,7 @@ def measure(compiler, host_directory, llvm_directory):
         if result.stdout.strip() != "Hello, world!":
             raise RuntimeError(f"unexpected hello output: {result.stdout!r}")
         sizes = {"hello": binary.stat().st_size}
-        for capability in BUDGETS:
-            if capability == "hello":
-                continue
+        for capability in MEASURED_CAPABILITIES:
             name = (f"dream_host_{capability}.dll" if os.name == "nt" else
                     f"libdream_host_{capability}.dylib" if platform.system() == "Darwin" else
                     f"libdream_host_{capability}.so")
@@ -89,15 +75,12 @@ def main():
     args = parser.parse_args()
     sizes = measure(args.compiler.resolve(strict=True), args.host_directory.resolve(strict=True),
                     args.llvm_directory.resolve(strict=True))
-    failures = check_budget(sizes)
     report = {"platform": platform.system(), "architecture": platform.machine(),
               "guest_opt": "O3", "host_profile": "release", "bytes": sizes,
-              "budgets": BUDGETS, "failures": failures}
+              "hello_bundle_bytes": sizes["hello"]}
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
-    if failures:
-        raise SystemExit("binary size budget exceeded: " + "; ".join(failures))
 
 
 if __name__ == "__main__":

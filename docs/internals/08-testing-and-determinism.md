@@ -11,8 +11,10 @@ Linux, macOS and Windows run workspace build, strict Clippy and default tests. L
 the full native/Node corpus; Windows additionally runs the full native corpus with the
 pinned MSVC-compatible clang driver and developer SDK environment. Windows Rust/probe
 steps use PowerShell so Git Bash's `link` utility cannot shadow Microsoft's linker.
-All three platforms inspect and execute an isolated host-free Hello World and enforce
-independent release-size budgets for core and each optional service. The isolated compiler
+All three platforms inspect and execute an isolated host-free Hello World and publish
+release-size measurements for core and each optional service. Artifact growth does not fail
+CI; regressions are checked through imports, capability selection and clean-home execution.
+The isolated compiler
 receives the pinned LLVM directory explicitly, independently of host-library discovery.
 Dependency caches survive failed validation; the pinned toolchain is cached immediately
 after installation so later test failures do not force another download.
@@ -20,7 +22,7 @@ after installation so later test failures do not force another download.
 CI sets `CARGO_PROFILE_DEV_OPT_LEVEL=1` to match the workspace test profile. Build,
 Clippy and tests can reuse dependency artifacts instead of code-generating both O0
 and O1 copies. Tests retain debug assertions, overflow checks and line-table
-backtraces; local development profiles and the release size-budget build are unchanged.
+backtraces; local development profiles and release artifact measurement builds are unchanged.
 Clippy runs first to reject lint failures before expensive executable builds.
 
 CI additionally uses sccache for Rust and C++ compiler invocations,

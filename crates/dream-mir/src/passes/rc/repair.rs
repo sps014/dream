@@ -35,11 +35,21 @@ impl RcLastUseRepair {
 }
 
 impl MirPass for RcLastUseRepair {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::ControlFlow
+    }
+
     fn name(&self) -> &'static str {
         "rc-last-use-repair"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        _analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         repair(func, interner, None)
     }
 }
@@ -133,11 +143,7 @@ fn defines_borrow(stmts: &[Statement], local: u32) -> bool {
     }) == Some(true)
 }
 
-fn repair(
-    func: &mut MirFunction,
-    interner: &TypeInterner,
-    layouts: Option<&LayoutTable>,
-) -> bool {
+fn repair(func: &mut MirFunction, interner: &TypeInterner, layouts: Option<&LayoutTable>) -> bool {
     let nloc = func.locals.len();
     if nloc == 0 {
         return false;

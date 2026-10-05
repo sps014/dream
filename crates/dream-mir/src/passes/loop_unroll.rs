@@ -12,7 +12,7 @@
 //! `Retain`/`Release` — are cloned verbatim per iteration, so effects and refcount balance match the
 //! original loop exactly.
 
-use super::cfg::{self, DomTree};
+use super::cfg::DomTree;
 use super::licm::{stmt_reads, terminator_reads};
 use super::MirPass;
 use crate::{
@@ -30,16 +30,27 @@ const MAX_TOTAL_STMTS: usize = 96;
 pub struct LoopUnroll;
 
 impl MirPass for LoopUnroll {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::None
+    }
+
     fn name(&self) -> &'static str {
         "loop-unroll"
     }
 
-    fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        _interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         // Unroll one loop per call; the pass-manager fixpoint reruns for the rest with fresh CFG
         // analysis. Bounded so it can never spin.
         let mut changed = false;
         for _ in 0..func.blocks.len() + 1 {
-            if unroll_one(func) {
+            if unroll_one(func, analyses) {
+                analyses.invalidate();
                 changed = true;
             } else {
                 break;
@@ -58,8 +69,8 @@ struct Counted {
     trips: i64,
 }
 
-fn unroll_one(func: &mut MirFunction) -> bool {
-    let Some(c) = find_counted_loop(func) else {
+fn unroll_one(func: &mut MirFunction, analyses: &mut crate::passes::FunctionAnalyses) -> bool {
+    let Some(c) = find_counted_loop(func, analyses) else {
         return false;
     };
 
@@ -98,11 +109,14 @@ fn unroll_one(func: &mut MirFunction) -> bool {
 }
 
 /// Matches the narrow counted-loop shape and computes the trip count, or `None`.
-fn find_counted_loop(func: &MirFunction) -> Option<Counted> {
-    let loops = cfg::natural_loops(func);
-    let dom = DomTree::new(func);
+fn find_counted_loop(
+    func: &MirFunction,
+    analyses: &mut crate::passes::FunctionAnalyses,
+) -> Option<Counted> {
+    let loops = analyses.natural_loops(func);
+    let dom = analyses.dominators(func);
 
-    for l in &loops {
+    for l in loops.iter() {
         if l.latches.len() != 1 {
             continue;
         }

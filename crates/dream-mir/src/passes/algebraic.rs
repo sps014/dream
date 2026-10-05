@@ -10,11 +10,21 @@ use dream_types::{PrimTy, TyKind, TypeId, TypeInterner};
 pub struct Algebraic;
 
 impl MirPass for Algebraic {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::ControlFlow
+    }
+
     fn name(&self) -> &'static str {
         "algebraic"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        _analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         // Snapshot local types so the mutable walk of `func.blocks` below doesn't re-borrow `func`.
         let local_tys: Vec<TypeId> = func.locals.iter().map(|d| d.ty).collect();
         let mut changed = false;

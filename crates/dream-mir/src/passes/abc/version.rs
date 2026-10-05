@@ -7,8 +7,10 @@
 //! `i` can precede within the iteration, and `i` only grows from a non-negative start.
 
 use super::facts::{self, Defs};
-use super::{as_local, block_id, const_int, visit_stmt_accesses, visit_terminator_accesses, Access};
-use crate::passes::cfg::{natural_loops, predecessors, reverse_postorder, DomTree, NaturalLoop};
+use super::{
+    as_local, block_id, const_int, visit_stmt_accesses, visit_terminator_accesses, Access,
+};
+use crate::passes::cfg::{DomTree, NaturalLoop};
 use crate::{
     BasicBlock, BinOp, BlockId, Const, Local, LocalDecl, MirFunction, Operand, Place, Rvalue,
     Statement, Terminator,
@@ -33,7 +35,11 @@ struct Plan {
 }
 
 /// Versions at most one loop; the pass manager's fixpoint picks up the rest.
-pub(super) fn version_one_loop(func: &mut MirFunction, interner: &TypeInterner) -> bool {
+pub(super) fn version_one_loop(
+    func: &mut MirFunction,
+    interner: &TypeInterner,
+    analyses: &mut crate::passes::FunctionAnalyses,
+) -> bool {
     if func.blocks.len() > MAX_FUNC_BLOCKS
         || func.blocks.iter().any(|b| {
             matches!(
@@ -44,19 +50,19 @@ pub(super) fn version_one_loop(func: &mut MirFunction, interner: &TypeInterner) 
     {
         return false;
     }
-    let loops = natural_loops(func);
+    let loops = analyses.natural_loops(func);
     if loops.is_empty() {
         return false;
     }
     let headers: BTreeSet<BlockId> = loops.iter().map(|l| l.header).collect();
-    let preds = predecessors(func);
-    let dom = DomTree::new(func);
+    let preds = analyses.predecessors(func);
+    let dom = analyses.dominators(func);
     let defs = Defs::new(func);
-    for l in &loops {
+    for l in loops.iter() {
         if l.body.iter().any(|b| *b != l.header && headers.contains(b)) {
             continue;
         }
-        if let Some(plan) = plan_loop(func, interner, &defs, &preds, &dom, l) {
+        if let Some(plan) = plan_loop(func, interner, &defs, &preds, &dom, l, analyses) {
             apply(func, interner, l, plan);
             return true;
         }
@@ -71,6 +77,7 @@ fn plan_loop(
     preds: &[Vec<BlockId>],
     dom: &DomTree,
     l: &NaturalLoop,
+    analyses: &mut crate::passes::FunctionAnalyses,
 ) -> Option<Plan> {
     let h = l.header.0 as usize;
     let body: BTreeSet<usize> = l.body.iter().map(|b| b.0 as usize).collect();
@@ -147,7 +154,7 @@ fn plan_loop(
             }
         }
     }
-    let redef_in = redefined_since_header(func, &body, h, s, iv);
+    let redef_in = redefined_since_header(func, &body, h, s, iv, analyses);
     let invariant = |a: Local| !defs.blocks(a.0).iter().any(|b| body.contains(b)) && available(a);
     let mut arrays: BTreeSet<Local> = BTreeSet::new();
     let mut sites = BTreeSet::new();
@@ -194,14 +201,16 @@ fn plan_loop(
     if arrays.is_empty() || arrays.len() > MAX_ARRAYS {
         return None;
     }
-    if const_int(&bound).is_some() && facts::sole_array_news(func, defs).iter().any(|(a, rv)| {
-        arrays.contains(&Local(*a))
-            && match rv {
-                Rvalue::ArrayNew { len, .. } => defs.const_value(func, len).is_some(),
-                Rvalue::ArrayLit { .. } => true,
-                _ => false,
-            }
-    }) {
+    if const_int(&bound).is_some()
+        && facts::sole_array_news(func, defs).iter().any(|(a, rv)| {
+            arrays.contains(&Local(*a))
+                && match rv {
+                    Rvalue::ArrayNew { len, .. } => defs.const_value(func, len).is_some(),
+                    Rvalue::ArrayLit { .. } => true,
+                    _ => false,
+                }
+        })
+    {
         return None;
     }
     Some(Plan {
@@ -303,6 +312,7 @@ fn redefined_since_header(
     h: usize,
     s: usize,
     iv: Local,
+    analyses: &mut crate::passes::FunctionAnalyses,
 ) -> BTreeMap<usize, bool> {
     let defines = |b: usize| {
         func.blocks[b]
@@ -310,9 +320,9 @@ fn redefined_since_header(
             .iter()
             .any(|st| matches!(st, Statement::Assign(Place::Local(d), _) if *d == iv))
     };
-    let preds = predecessors(func);
+    let preds = analyses.predecessors(func);
     let mut out: BTreeMap<usize, bool> = BTreeMap::new();
-    for b in reverse_postorder(func) {
+    for b in analyses.reverse_postorder(func).iter() {
         let b = b.0 as usize;
         if !body.contains(&b) || b == h {
             continue;

@@ -220,7 +220,7 @@ Mobile validation preparation is committed in `7b21e2cf` and `1454306f`: real sa
 
 | Step | Title | Findings | Status | Owner | PR | Notes |
 |---|---|---|---|---|---|---|
-| 7.1 | Analysis manager | ANA-1 | Not started | | | |
+| 7.1 | Analysis manager | ANA-1 | In progress | Codex | | Function-scoped caches reuse predecessors, traversal order, dominators, postdominators and loops across passes and fixpoint rounds. Every function pass declares CFG preservation; CFG edits invalidate caches, including between local loop rewrites. Verification rejects incorrect preservation declarations and unreported CFG edits. Metadata and value-fact lifetime rules are documented in `docs/internals/05-writing-passes.md`. Local workspace build, strict Clippy, 1,255 tests and full native 657/657 pass; six focused regressions cover reuse, invalidation, function isolation and contract failures. |
 | 7.2 | Optimizer hygiene (cap counters, `find_fn` index) | OPT-4, OPT-5 | Done | Codex | [125c9f1a](https://github.com/sps014/dream/commit/125c9f1a824c40c4acc026f4f23ed5b6b7be9453) | Function, module-inlining and RC-elision exhausted caps increment per-thread counters and report with `-v`; stable final rounds do not count as hits. Unique-region safety builds a deterministic `(DefId, instance)` index once per invocation, including constructor adjacency. Regression tests cover caps, partial-inlining RC repair/verification and distinct generic instances with identical display names. Full Windows gates and native/Node corpus pass. |
 | 7.3 | Compile-time observability | — | Not started | | | |
 | 7.4 | Fuzzing and property tests | — | Not started | | | |
@@ -620,8 +620,8 @@ The remaining function-index work is resolved by task 7.2 in `125c9f1a` (2026-10
 
 **ANA-1: no analysis manager (P3) [C]**
 
-- Every pass recomputes dominators and predecessors (`passes/cfg.rs`).
-- Facts cached on MIR (`prefer_inline`, `is_cursor`, region markers, parameter modes) have no rules for when they must be invalidated.
+- Original finding: every pass recomputed dominators and predecessors (`passes/cfg.rs`). Task 7.1 now adds a function-scoped cache, explicit preservation declarations and verification of CFG preservation. Local gates pass; see the task tracker for review status.
+- Original finding: MIR annotations had no documented lifetime rules. The task 7.1 handbook update now separates semantic/ownership/proof annotations from cached CFG analyses and defines what transformations must preserve.
 - **Fix:** first document which facts each pass must preserve. Later, add a `PassManager` with cached analyses and invalidation.
 
 ### 2.3 Ownership and ARC

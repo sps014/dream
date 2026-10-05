@@ -10,7 +10,6 @@
 //! Receivers with up to four statically known implementors still dispatch through the itable in
 //! MIR; the backend emits a tag switch to direct calls for those (`backend/shared/iface_guard.rs`).
 
-use super::cfg::reverse_postorder;
 use super::ModulePass;
 use crate::{Callee, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{TypeId, TypeInterner};
@@ -169,10 +168,10 @@ impl ExactFacts {
             entry: vec![None; f.blocks.len()],
         };
         facts.entry[f.entry.0 as usize] = Some(vec![None; width]);
-        let rpo = reverse_postorder(f);
+        let rpo = super::FunctionAnalyses::default().reverse_postorder(f);
         loop {
             let mut changed = false;
-            for &b in &rpo {
+            for &b in rpo.iter() {
                 let Some(mut state) = facts.entry[b.0 as usize].clone() else {
                     continue;
                 };

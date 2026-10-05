@@ -8,7 +8,6 @@ use super::lifetime::{call_args_kept_across_await, may_die_after, stmt_borrow, S
 use super::liveness::{self, live_after_stmt, live_in_of, stmt_reads_local};
 use super::uniqueness::{apply_stmt_unique, collect_container_moves, meet_unique};
 use super::{is_borrowed_copy, is_pure_rvalue, rvalue_reads_local};
-use crate::passes::cfg;
 use crate::{Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{DefId, TyKind, TypeInterner};
 use indexmap::{IndexMap, IndexSet};
@@ -90,6 +89,7 @@ impl TokenAnalysis {
         layouts: &dream_hir::LayoutTable,
         holds: &IndexSet<DefId>,
         modref: &super::modref::ModRefTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
     ) -> TokenAnalysis {
         let n = func.blocks.len();
         let nloc = func.locals.len();
@@ -218,9 +218,9 @@ impl TokenAnalysis {
             }
         }
 
-        let preds = cfg::predecessors(func);
+        let preds = analyses.predecessors(func);
         let entry = func.entry.0 as usize;
-        let natural_loops = cfg::natural_loops(func);
+        let natural_loops = analyses.natural_loops(func);
         let loop_headers: IndexSet<usize> = natural_loops
             .iter()
             .map(|lp| lp.header.0 as usize)

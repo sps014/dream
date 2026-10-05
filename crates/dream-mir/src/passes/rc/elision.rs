@@ -11,6 +11,10 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct RcElision;
 
 impl MirPass for RcElision {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::ControlFlow
+    }
+
     fn name(&self) -> &'static str {
         "rc-elision"
     }
@@ -25,16 +29,22 @@ impl MirPass for RcElision {
     /// **any** statement that could call into other code, allocate, or itself retain/release a
     /// (possibly aliased) object is a hard barrier. Only a small whitelist may pass through.
     /// Rule: never under-retain.
-    fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        _interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         let mut changed = false;
         // Fixpoint: diamond/loop/postdom elision can expose new Goto-chain pairs and vice versa.
         const MAX_ROUNDS: usize = 8;
         for iteration in 0..MAX_ROUNDS {
             let mut round = false;
-            round |= elide_goto_chains(func);
-            round |= elide_transparent_diamonds(func);
-            round |= elide_around_transparent_loops(func);
-            round |= elide_postdom_transparent(func);
+            round |= elide_goto_chains(func, analyses);
+            round |= elide_transparent_diamonds(func, analyses);
+            round |= elide_around_transparent_loops(func, analyses);
+            round |= elide_postdom_transparent(func, analyses);
             if !round {
                 break;
             }
@@ -51,8 +61,11 @@ impl MirPass for RcElision {
     }
 }
 
-fn elide_goto_chains(func: &mut MirFunction) -> bool {
-    let preds = cfg::predecessors(func);
+fn elide_goto_chains(
+    func: &mut MirFunction,
+    analyses: &mut crate::passes::FunctionAnalyses,
+) -> bool {
+    let preds = analyses.predecessors(func);
     let n = func.blocks.len();
     let mut visited = vec![false; n];
     let mut changed = false;
@@ -76,8 +89,11 @@ fn elide_goto_chains(func: &mut MirFunction) -> bool {
 }
 
 /// `Retain` in the If-block  in the unique join, with both arms transparent.
-fn elide_transparent_diamonds(func: &mut MirFunction) -> bool {
-    let preds = cfg::predecessors(func);
+fn elide_transparent_diamonds(
+    func: &mut MirFunction,
+    analyses: &mut crate::passes::FunctionAnalyses,
+) -> bool {
+    let preds = analyses.predecessors(func);
     let n = func.blocks.len();
     let mut changed = false;
     for bi in 0..n {
@@ -129,11 +145,14 @@ fn elide_transparent_diamonds(func: &mut MirFunction) -> bool {
 }
 
 /// `Retain` in the unique preheader  in the unique exit, with a transparent loop body.
-fn elide_around_transparent_loops(func: &mut MirFunction) -> bool {
-    let preds = cfg::predecessors(func);
-    let loops = cfg::natural_loops(func);
+fn elide_around_transparent_loops(
+    func: &mut MirFunction,
+    analyses: &mut crate::passes::FunctionAnalyses,
+) -> bool {
+    let preds = analyses.predecessors(func);
+    let loops = analyses.natural_loops(func);
     let mut changed = false;
-    for lp in loops {
+    for lp in loops.iter() {
         if !lp.body.iter().all(|&b| block_stmts_transparent(func, b)) {
             continue;
         }
@@ -173,9 +192,12 @@ fn elide_around_transparent_loops(func: &mut MirFunction) -> bool {
 
 /// Cancel `Retain`/`Release` when the release postdominates the retain, the retain dominates the
 /// release, and every block on the SESE region between them is transparent (generalizes diamonds).
-fn elide_postdom_transparent(func: &mut MirFunction) -> bool {
-    let dom = cfg::DomTree::new(func);
-    let pdom = cfg::PostDomTree::new(func);
+fn elide_postdom_transparent(
+    func: &mut MirFunction,
+    analyses: &mut crate::passes::FunctionAnalyses,
+) -> bool {
+    let dom = analyses.dominators(func);
+    let pdom = analyses.postdominators(func);
     let n = func.blocks.len();
 
     // Collect retain/release sites as (block, stmt_idx, key).

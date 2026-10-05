@@ -6,7 +6,6 @@ use super::super::{
         funcbox_env_rc_roots, is_owned_local, leftover_alias_parent, leftover_keep, TokenAnalysis,
     },
 };
-use crate::passes::cfg;
 use crate::{Global, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{DefId, TypeInterner};
 use indexmap::{IndexMap, IndexSet};
@@ -54,6 +53,7 @@ impl State {
         layouts: &dream_hir::LayoutTable,
         holds: &IndexSet<DefId>,
         modref: &ModRefTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
     ) -> Self {
         cursor::infer_cursors(func, interner, layouts, modref);
 
@@ -62,7 +62,7 @@ impl State {
             .iter()
             .map(|d| interner.is_rc_tracked(d.ty))
             .collect();
-        let analysis = TokenAnalysis::analyze(func, interner, layouts, holds, modref);
+        let analysis = TokenAnalysis::analyze(func, interner, layouts, holds, modref, analyses);
         let leftover_parent = leftover_alias_parent(func, interner, true);
         let env_defer = funcbox_env_rc_roots(func, interner);
         let start_keep: Vec<IndexSet<u32>> = analysis
@@ -108,7 +108,8 @@ impl State {
                 resume_futures[resume.0 as usize].insert(f.0);
             }
         }
-        let in_loop: IndexSet<usize> = cfg::natural_loops(func)
+        let in_loop: IndexSet<usize> = analyses
+            .natural_loops(func)
             .iter()
             .flat_map(|lp| lp.body.iter().map(|b| b.0 as usize))
             .collect();

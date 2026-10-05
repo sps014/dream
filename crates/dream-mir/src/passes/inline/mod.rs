@@ -970,7 +970,7 @@ mod tests {
             ..Default::default()
         };
         let cap_hits = crate::passes::limits::hits(crate::passes::limits::Limit::Inline);
-        crate::passes::optimize_module_rounds(
+        crate::passes::module_pipeline::optimize_module_rounds(
             &mut mir,
             &ctx.interner,
             true,

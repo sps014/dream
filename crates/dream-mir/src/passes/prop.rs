@@ -16,11 +16,21 @@ use indexmap::IndexMap as HashMap;
 pub struct CopyConstProp;
 
 impl MirPass for CopyConstProp {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::ControlFlow
+    }
+
     fn name(&self) -> &'static str {
         "copy-const-prop"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        _analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         let value_local: Vec<bool> = func
             .locals
             .iter()

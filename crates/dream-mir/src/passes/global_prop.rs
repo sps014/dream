@@ -9,7 +9,7 @@
 //! local drops that fact from the meet.
 
 use super::prop::{invalidate, subst_stmt_reads, subst_terminator_reads, update_known};
-use super::{cfg, MirPass};
+use super::MirPass;
 use crate::{Local, MirFunction, Operand, Place, Terminator};
 use dream_types::TypeInterner;
 use indexmap::IndexMap as HashMap;
@@ -19,11 +19,21 @@ pub struct GlobalProp;
 type Facts = HashMap<Local, Operand>;
 
 impl MirPass for GlobalProp {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::ControlFlow
+    }
+
     fn name(&self) -> &'static str {
         "global-prop"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         let n = func.blocks.len();
         if n == 0 {
             return false;
@@ -33,8 +43,8 @@ impl MirPass for GlobalProp {
             .iter()
             .map(|d| interner.is_value_type(d.ty))
             .collect();
-        let preds = cfg::predecessors(func);
-        let rpo = cfg::reverse_postorder(func);
+        let preds = analyses.predecessors(func);
+        let rpo = analyses.reverse_postorder(func);
 
         // Forward "available copies/constants" dataflow to a fixpoint.
         let mut entry: Vec<Facts> = vec![Facts::new(); n];
@@ -42,7 +52,7 @@ impl MirPass for GlobalProp {
         let mut changed = true;
         while changed {
             changed = false;
-            for &b in &rpo {
+            for &b in rpo.iter() {
                 let bi = b.0 as usize;
                 let in_state = if b == func.entry {
                     Facts::new()
@@ -71,7 +81,7 @@ impl MirPass for GlobalProp {
 
         // Rewrite reads using each block's entry facts, tracking within-block updates as we go.
         let mut rewrote = false;
-        for &b in &rpo {
+        for &b in rpo.iter() {
             let mut st = entry[b.0 as usize].clone();
             let block = func.block_mut(b);
             for stmt in &mut block.stmts {

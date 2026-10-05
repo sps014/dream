@@ -18,11 +18,21 @@ use indexmap::IndexMap as HashMap;
 pub struct Dse;
 
 impl MirPass for Dse {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::ControlFlow
+    }
+
     fn name(&self) -> &'static str {
         "dse"
     }
 
-    fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        _interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        _analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         let mut changed = false;
         for block in &mut func.blocks {
             let mut pending: HashMap<PKey, usize> = HashMap::new();

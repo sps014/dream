@@ -21,7 +21,6 @@
 
 use super::is_transparent_stmt;
 use super::liveness::{add_terminator_reads, stmt_reads_local};
-use crate::passes::cfg::predecessors;
 use crate::passes::MirPass;
 use crate::{BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement};
 use dream_types::TypeInterner;
@@ -30,16 +29,26 @@ use indexmap::IndexSet;
 pub struct ReleaseSink;
 
 impl MirPass for ReleaseSink {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::ControlFlow
+    }
+
     fn name(&self) -> &'static str {
         "release-sink"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         let mut changed = false;
         // Each sink moves a pair one edge forward; the cap only matters for an unreachable cycle
         // of single-predecessor blocks, where the pair could circulate forever.
         let mut budget = func.blocks.len() * 4;
-        while budget > 0 && sink_one(func) {
+        while budget > 0 && sink_one(func, analyses) {
             budget -= 1;
             changed = true;
         }
@@ -119,8 +128,8 @@ fn sink_candidate(func: &MirFunction, preds: &[Vec<BlockId>]) -> Option<(usize, 
     None
 }
 
-fn sink_one(func: &mut MirFunction) -> bool {
-    let preds = predecessors(func);
+fn sink_one(func: &mut MirFunction, analyses: &mut crate::passes::FunctionAnalyses) -> bool {
+    let preds = analyses.predecessors(func);
     let Some((bi, si)) = sink_candidate(func, &preds) else {
         return false;
     };

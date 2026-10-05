@@ -8,7 +8,7 @@
 
 use super::special;
 use super::{as_local, const_int, str_base};
-use crate::passes::cfg::{predecessors, DomTree};
+use crate::passes::cfg::DomTree;
 use crate::{BinOp, Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -226,9 +226,12 @@ pub(super) struct FactEngine {
 }
 
 impl FactEngine {
-    pub(super) fn new(func: &MirFunction) -> FactEngine {
+    pub(super) fn new(
+        func: &MirFunction,
+        analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> FactEngine {
         let defs = Defs::new(func);
-        let entry = guard_entry_facts(func, &defs);
+        let entry = guard_entry_facts(func, &defs, analyses);
         let empty = Globals::default();
         let mut bounded_incr = BTreeSet::new();
         let mut nonneg_decr = BTreeSet::new();
@@ -288,10 +291,14 @@ pub(super) fn scan(
     }
 }
 
-fn guard_entry_facts(func: &MirFunction, defs: &Defs) -> Vec<BTreeSet<Fact>> {
+fn guard_entry_facts(
+    func: &MirFunction,
+    defs: &Defs,
+    analyses: &mut crate::passes::FunctionAnalyses,
+) -> Vec<BTreeSet<Fact>> {
     let n = func.blocks.len();
     let mut entry = vec![BTreeSet::new(); n];
-    let preds = predecessors(func);
+    let preds = analyses.predecessors(func);
     let mut children: Option<Vec<Vec<usize>>> = None;
     for (gi, block) in func.blocks.iter().enumerate() {
         let Terminator::If {
@@ -303,11 +310,15 @@ fn guard_entry_facts(func: &MirFunction, defs: &Defs) -> Vec<BTreeSet<Fact>> {
             continue;
         };
         let (then_facts, else_facts) = guard_facts(func, defs, gi, *c);
-        for (succ, facts) in [(then_blk.0 as usize, then_facts), (else_blk.0 as usize, else_facts)] {
+        for (succ, facts) in [
+            (then_blk.0 as usize, then_facts),
+            (else_blk.0 as usize, else_facts),
+        ] {
             if facts.is_empty() || succ == gi || preds[succ].len() != 1 {
                 continue;
             }
-            let children = children.get_or_insert_with(|| dom_children(func, &DomTree::new(func)));
+            let children =
+                children.get_or_insert_with(|| dom_children(func, &analyses.dominators(func)));
             propagate(func, defs, children, succ, facts, &mut entry);
         }
     }

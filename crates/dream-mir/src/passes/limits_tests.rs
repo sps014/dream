@@ -6,11 +6,21 @@ use dream_types::TypeCtx;
 struct Toggle;
 
 impl MirPass for Toggle {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::ControlFlow
+    }
+
     fn name(&self) -> &'static str {
         "toggle-test"
     }
 
-    fn run(&self, function: &mut MirFunction, _: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        function: &mut MirFunction,
+        _: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        _analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         let Statement::Assign(_, Rvalue::Use(Operand::Const(Const::Int(value)))) =
             &mut function.blocks[0].stmts[0]
         else {

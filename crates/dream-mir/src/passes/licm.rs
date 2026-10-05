@@ -14,7 +14,7 @@
 //! block; latch (back) edges keep targeting the header. Empty leftover statements become `Nop`s for
 //! DCE to clear.
 
-use super::cfg::{self, DomTree};
+use super::cfg::DomTree;
 use super::MirPass;
 use crate::{
     BasicBlock, BinOp, BlockId, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
@@ -26,16 +26,27 @@ use std::collections::BTreeSet;
 pub struct Licm;
 
 impl MirPass for Licm {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::None
+    }
+
     fn name(&self) -> &'static str {
         "licm"
     }
 
-    fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        _interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         let mut changed = false;
         // Re-derive loops/dominators after each hoist (the CFG changes), processing one loop at a
         // time. Capped so a bug can never spin forever.
         for _ in 0..func.blocks.len() + 1 {
-            if hoist_one_loop(func) {
+            if hoist_one_loop(func, analyses) {
+                analyses.invalidate();
                 changed = true;
             } else {
                 break;
@@ -46,15 +57,15 @@ impl MirPass for Licm {
 }
 
 /// Hoists the invariant statements of the first loop that has any, returning whether it did.
-fn hoist_one_loop(func: &mut MirFunction) -> bool {
-    let loops = cfg::natural_loops(func);
+fn hoist_one_loop(func: &mut MirFunction, analyses: &mut crate::passes::FunctionAnalyses) -> bool {
+    let loops = analyses.natural_loops(func);
     if loops.is_empty() {
         return false;
     }
-    let dom = DomTree::new(func);
+    let dom = analyses.dominators(func);
     let use_blocks = use_block_map(func);
 
-    for l in &loops {
+    for l in loops.iter() {
         let body = &l.body;
         let def_counts = def_counts_in(func, body);
 

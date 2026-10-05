@@ -1,7 +1,6 @@
 //! Induction-variable strength reduction: `arr[idx]` in a counted `idx += 1` loop becomes a bump
 //! pointer ([`Place::Deref`]) so emit does not recompute `base + 4 + idx * esize` each iteration.
 
-use super::cfg;
 use super::MirPass;
 use crate::{
     BinOp, BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
@@ -12,23 +11,24 @@ use std::collections::BTreeSet;
 pub struct IvCanon;
 
 impl MirPass for IvCanon {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::None
+    }
+
     fn name(&self) -> &'static str {
         "iv"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
-        self.run_with_layouts(func, interner, &dream_hir::LayoutTable::default())
-    }
-
-    fn run_with_layouts(
+    fn transform(
         &self,
         func: &mut MirFunction,
         interner: &TypeInterner,
         layouts: &dream_hir::LayoutTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
     ) -> bool {
-        let loops = cfg::natural_loops(func);
+        let loops = analyses.natural_loops(func);
         let mut changed = false;
-        for l in loops {
+        for l in loops.iter() {
             changed |= rewrite_loop(func, interner, layouts, &l.body, l.header, &l.latches);
         }
         changed

@@ -49,17 +49,15 @@ pub(crate) fn reverse_postorder(func: &MirFunction) -> Vec<BlockId> {
 
 /// The immediate dominator of every block, indexed by block position. `None` marks the entry
 /// (which has no dominator) and any block unreachable from the entry.
-pub(crate) struct DomTree {
+pub struct DomTree {
     idom: Vec<Option<BlockId>>,
     rpo_index: Vec<u32>,
 }
 
 impl DomTree {
     /// Computes the dominator tree via the Cooper-Harvey-Kennedy iterative algorithm.
-    pub(crate) fn new(func: &MirFunction) -> DomTree {
+    pub(crate) fn compute(func: &MirFunction, preds: &[Vec<BlockId>], rpo: &[BlockId]) -> DomTree {
         let n = func.blocks.len();
-        let preds = predecessors(func);
-        let rpo = reverse_postorder(func);
         let mut rpo_index = vec![u32::MAX; n];
         for (i, b) in rpo.iter().enumerate() {
             rpo_index[b.0 as usize] = i as u32;
@@ -71,7 +69,7 @@ impl DomTree {
         let mut changed = true;
         while changed {
             changed = false;
-            for &b in &rpo {
+            for &b in rpo {
                 if b == func.entry {
                     continue;
                 }
@@ -96,13 +94,13 @@ impl DomTree {
     }
 
     /// The immediate dominator of `b` (the entry maps to itself; unreachable blocks to `None`).
-    pub(crate) fn idom(&self, b: BlockId) -> Option<BlockId> {
+    pub fn idom(&self, b: BlockId) -> Option<BlockId> {
         self.idom[b.0 as usize]
     }
 
     /// True if `a` dominates `b` (every path from entry to `b` passes through `a`). A block always
     /// dominates itself. Unreachable blocks dominate nothing but themselves.
-    pub(crate) fn dominates(&self, a: BlockId, b: BlockId) -> bool {
+    pub fn dominates(&self, a: BlockId, b: BlockId) -> bool {
         if self.rpo_index[b.0 as usize] == u32::MAX {
             return a == b;
         }
@@ -122,7 +120,7 @@ impl DomTree {
 /// Immediate postdominator of every block. Built as dominators of the reverse CFG with a synthetic
 /// exit that every function-exit terminator edges to. `a` postdominates `b` when every path from
 /// `b` to a function exit passes through `a`.
-pub(crate) struct PostDomTree {
+pub struct PostDomTree {
     /// Immediate postdominator per block; `None` for the synthetic exit and unreachable-from-exit
     /// blocks. Real blocks that only exit through `Return`/`Unreachable`/… postdominate themselves
     /// via the chain ending at the synthetic exit.
@@ -215,7 +213,7 @@ impl PostDomTree {
     }
 
     /// True if `a` postdominates `b` (every path from `b` to a function exit passes through `a`).
-    pub(crate) fn postdominates(&self, a: BlockId, b: BlockId) -> bool {
+    pub fn postdominates(&self, a: BlockId, b: BlockId) -> bool {
         if a == b {
             return true;
         }
@@ -270,7 +268,7 @@ fn intersect(
 
 /// A natural loop: its header, the set of blocks in its body (header included), and the latch
 /// blocks whose terminators branch back to the header.
-pub(crate) struct NaturalLoop {
+pub struct NaturalLoop {
     pub header: BlockId,
     pub body: BTreeSet<BlockId>,
     pub latches: Vec<BlockId>,
@@ -278,10 +276,11 @@ pub(crate) struct NaturalLoop {
 
 /// Finds every natural loop, one per header (loops sharing a header are merged). Result is ordered
 /// by header for determinism.
-pub(crate) fn natural_loops(func: &MirFunction) -> Vec<NaturalLoop> {
-    let dom = DomTree::new(func);
-    let preds = predecessors(func);
-
+pub(crate) fn natural_loops(
+    func: &MirFunction,
+    preds: &[Vec<BlockId>],
+    dom: &DomTree,
+) -> Vec<NaturalLoop> {
     // Group back edges by header: an edge `tail -> header` is a back edge iff `header` dominates
     // `tail`.
     let mut loops: Vec<NaturalLoop> = Vec::new();
@@ -291,7 +290,7 @@ pub(crate) fn natural_loops(func: &MirFunction) -> Vec<NaturalLoop> {
             if !dom.dominates(header, tail) {
                 continue;
             }
-            let body = loop_body(&preds, header, tail);
+            let body = loop_body(preds, header, tail);
             match loops.iter_mut().find(|l| l.header == header) {
                 Some(existing) => {
                     existing.body.extend(body);
@@ -359,7 +358,7 @@ mod tests {
     #[test]
     fn detects_single_natural_loop() {
         let func = loop_fn();
-        let loops = natural_loops(&func);
+        let loops = super::super::FunctionAnalyses::default().natural_loops(&func);
         assert_eq!(loops.len(), 1, "one loop expected");
         let l = &loops[0];
         assert_eq!(l.header, BlockId(1), "header is the cond block");
@@ -374,7 +373,7 @@ mod tests {
     #[test]
     fn dominator_relationships() {
         let func = loop_fn();
-        let dom = DomTree::new(&func);
+        let dom = super::super::FunctionAnalyses::default().dominators(&func);
         assert!(dom.dominates(BlockId(0), BlockId(3)), "entry dominates all");
         assert!(
             dom.dominates(BlockId(1), BlockId(2)),

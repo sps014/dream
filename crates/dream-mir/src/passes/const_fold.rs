@@ -9,19 +9,20 @@ use dream_types::TypeInterner;
 pub struct ConstFold;
 
 impl MirPass for ConstFold {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::ControlFlow
+    }
+
     fn name(&self) -> &'static str {
         "const-fold"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
-        self.run_with_layouts(func, interner, &dream_hir::LayoutTable::default())
-    }
-
-    fn run_with_layouts(
+    fn transform(
         &self,
         func: &mut MirFunction,
         interner: &TypeInterner,
         layouts: &dream_hir::LayoutTable,
+        _analyses: &mut crate::passes::FunctionAnalyses,
     ) -> bool {
         let mut changed = false;
         let locals = &func.locals;

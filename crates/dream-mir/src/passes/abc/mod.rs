@@ -24,24 +24,34 @@ use facts::{Bound, Fact, FactEngine, StrBase};
 pub struct Abc;
 
 impl MirPass for Abc {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::None
+    }
+
     fn name(&self) -> &'static str {
         "abc"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
-        let mut changed = mark_function(func);
-        if version::version_one_loop(func, interner) {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
+        let mut changed = mark_function(func, analyses);
+        if version::version_one_loop(func, interner, analyses) {
             changed = true;
         }
         changed
     }
 }
 
-fn mark_function(func: &mut MirFunction) -> bool {
+fn mark_function(func: &mut MirFunction, analyses: &mut crate::passes::FunctionAnalyses) -> bool {
     if !has_checked_access(func) {
         return false;
     }
-    let engine = FactEngine::new(func);
+    let engine = FactEngine::new(func, analyses);
     let mut changed = false;
     for (bi, block) in func.blocks.iter_mut().enumerate() {
         let mut view = engine.entry_view(bi);
@@ -273,7 +283,11 @@ fn mark_rvalue(rv: &mut Rvalue, facts: &facts::FactView<'_>) -> bool {
             cond,
             then_val,
             else_val,
-        } => mark_operand(cond, facts) | mark_operand(then_val, facts) | mark_operand(else_val, facts),
+        } => {
+            mark_operand(cond, facts)
+                | mark_operand(then_val, facts)
+                | mark_operand(else_val, facts)
+        }
         Rvalue::Call { args, .. } | Rvalue::New { args, .. } => {
             let mut c = false;
             for a in args {

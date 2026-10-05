@@ -9,13 +9,14 @@
 //! - a dominating `x < y` / `x > y` branch edge for a local that is not redefined between that
 //!   edge and the use — the loop-counter case, where the counter has several definitions.
 
-use super::cfg::{predecessors, DomTree};
+use super::cfg::DomTree;
 use super::MirPass;
 use crate::int_ty::IntTy;
 use crate::{
     BinOp, BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator, UnOp,
 };
 use dream_types::TypeInterner;
+use std::rc::Rc;
 
 type Range = (i128, i128);
 
@@ -25,19 +26,20 @@ const MAX_DEPTH: u32 = 6;
 pub struct OverflowElim;
 
 impl MirPass for OverflowElim {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::ControlFlow
+    }
+
     fn name(&self) -> &'static str {
         "overflow-elim"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
-        self.run_with_layouts(func, interner, &dream_hir::LayoutTable::default())
-    }
-
-    fn run_with_layouts(
+    fn transform(
         &self,
         func: &mut MirFunction,
         interner: &TypeInterner,
         layouts: &dream_hir::LayoutTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
     ) -> bool {
         let has_checked = func.blocks.iter().flat_map(|b| &b.stmts).any(|s| {
             matches!(
@@ -48,7 +50,7 @@ impl MirPass for OverflowElim {
         if !has_checked {
             return false;
         }
-        let cx = Cx::new(func, interner, layouts.target.ptr_size);
+        let cx = Cx::new(func, interner, layouts.target.ptr_size, analyses);
         let mut rewrites = Vec::new();
         for (bi, block) in func.blocks.iter().enumerate() {
             for (si, stmt) in block.stmts.iter().enumerate() {
@@ -96,13 +98,18 @@ struct Cx<'f> {
     interner: &'f TypeInterner,
     /// Every definition site of each local (`Await` destinations count as a def without a site).
     defs: Vec<Vec<Option<Site>>>,
-    preds: Vec<Vec<BlockId>>,
-    dom: DomTree,
+    preds: Rc<Vec<Vec<BlockId>>>,
+    dom: Rc<DomTree>,
     guards: Vec<Guard<'f>>,
 }
 
 impl<'f> Cx<'f> {
-    fn new(func: &'f MirFunction, interner: &'f TypeInterner, ptr_size: u32) -> Self {
+    fn new(
+        func: &'f MirFunction,
+        interner: &'f TypeInterner,
+        ptr_size: u32,
+        analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> Self {
         let mut defs = vec![Vec::new(); func.locals.len()];
         for (bi, block) in func.blocks.iter().enumerate() {
             for (si, stmt) in block.stmts.iter().enumerate() {
@@ -114,8 +121,8 @@ impl<'f> Cx<'f> {
                 defs[d.0 as usize].push(None);
             }
         }
-        let preds = predecessors(func);
-        let dom = DomTree::new(func);
+        let preds = analyses.predecessors(func);
+        let dom = analyses.dominators(func);
         let mut cx = Cx {
             ptr_size,
             func,

@@ -39,11 +39,9 @@ This document merges two read-only reviews of the Dream compiler and turns them 
 - A phase is `Done` only when all its steps are `Done`, its exit criteria are met, and its deletion-ledger items are gone (see §4).
 - Step details are in §4, finding details in §2.
 
-**Next priority (user request, 2026-10-05): task 7.9, minimal native packaging (BLD-3).**
-Take this before the other unfinished Phase 7 tasks. Remove the unnecessary core DLL
-dependency from programs that do not use host services, then separate optional core
-services so unused implementations and data are not shipped. Android/iOS validation
-remains on hold; this priority change does not resume mobile work.
+**Task 7.9 completed (2026-10-05): minimal native packaging (BLD-3).**
+Merged in [#46](https://github.com/sps014/dream/pull/46) as `90c474b1` after all
+platform gates passed. Six Phase 7 tasks remain. Android/iOS validation stays on hold.
 
 ### Phase summary
 
@@ -56,7 +54,7 @@ remains on hold; this priority change does not resume mobile work.
 | 4 | FFI completion and embedding API | 10 | 10 | Done | #42 merged as `04d5c085` on 2026-10-03; panic source locations (4.4) completed in a follow-up PR. Local gates: workspace tests, native probe 640/640, Node 539 passed/101 expected skips/0 failures. |
 | 5 | Identity, modules and symbols | 12 | 12 | Done | Merged in #44 and #45; detailed tracker, exit criteria and deletion ledger verified below. |
 | 6 | Platform expansion | 9 | 9 | On hold | All implementation steps and cleanup deliverables completed in [3b9f8529](https://github.com/sps014/dream/commit/3b9f8529849edb36e3a0dbf5ba7b3e98583766d5) (direct main commit). Workspace build, strict Clippy, 1,220 tests, native 653/653 and Node 583 passed/70 native-only skips/zero failures pass (2026-10-04). iOS/Android end-to-end validation and release readiness are on hold for a future version at the user's request (2026-10-04); they are not verified or claimed complete. |
-| 7 | Scale, performance and long-term work | 9 | 2 | In progress | Easy tasks 7.2 and 7.5 completed in [125c9f1a](https://github.com/sps014/dream/commit/125c9f1a824c40c4acc026f4f23ed5b6b7be9453). Latest implementation gates in [61f05b84](https://github.com/sps014/dream/commit/61f05b846e8b8ef0b985da05a5f77dfa054a5ca4): workspace build, strict Clippy, 1,230 tests, native 657/657 and Node 592 passed/65 expected skips/zero failures. Seven tasks remain. Task 7.9 is the next priority (user request, 2026-10-05); Phase 6 mobile validation stays on hold. |
+| 7 | Scale, performance and long-term work | 9 | 3 | In progress | Tasks 7.2, 7.5 and 7.9 are complete. Task 7.9 and threaded WASM C/C++ TLS merged in [#46](https://github.com/sps014/dream/pull/46) as `90c474b1`. Exact-head [CI](https://github.com/sps014/dream/actions/runs/37287095626) passed all five jobs; local workspace build, strict Clippy, 1,249 tests and native 657/657 pass. CI native: Linux and Windows 657/657 each; Node: 592 passed/65 expected skips/zero failures. Six tasks remain; Phase 6 mobile validation stays on hold. |
 
 ### Phase 0: Safety net and quick wins
 
@@ -222,7 +220,7 @@ Mobile validation preparation is committed in `7b21e2cf` and `1454306f`: real sa
 
 | Step | Title | Findings | Status | Owner | PR | Notes |
 |---|---|---|---|---|---|---|
-| 7.1 | Analysis manager | ANA-1 | Not started | | | |
+| 7.1 | Analysis manager | ANA-1 | Review | Codex | [#47](https://github.com/sps014/dream/pull/47) | Function-scoped caches reuse predecessors, traversal order, dominators, postdominators and loops across passes and fixpoint rounds. Every function pass declares CFG preservation; CFG edits invalidate caches, including between local loop rewrites. Verification rejects incorrect preservation declarations and unreported CFG edits. Metadata and value-fact lifetime rules are documented in `docs/internals/05-writing-passes.md`. Local workspace build, strict Clippy, 1,255 tests and full native 657/657 pass; six focused regressions cover reuse, invalidation, function isolation and contract failures. |
 | 7.2 | Optimizer hygiene (cap counters, `find_fn` index) | OPT-4, OPT-5 | Done | Codex | [125c9f1a](https://github.com/sps014/dream/commit/125c9f1a824c40c4acc026f4f23ed5b6b7be9453) | Function, module-inlining and RC-elision exhausted caps increment per-thread counters and report with `-v`; stable final rounds do not count as hits. Unique-region safety builds a deterministic `(DefId, instance)` index once per invocation, including constructor adjacency. Regression tests cover caps, partial-inlining RC repair/verification and distinct generic instances with identical display names. Full Windows gates and native/Node corpus pass. |
 | 7.3 | Compile-time observability | — | Not started | | | |
 | 7.4 | Fuzzing and property tests | — | Not started | | | |
@@ -230,7 +228,7 @@ Mobile validation preparation is committed in `7b21e2cf` and `1454306f`: real sa
 | 7.6 | Delete the repair passes | OWN-2, OPT-3 | Not started | | | |
 | 7.7 | Remaining size hotspots | — | Not started | | | |
 | 7.8 | Re-evaluate self-hosting | BOOT-1 | Not started | | | |
-| 7.9 | Minimal native packaging and optional core services | BLD-3 | In progress | Codex | [#46](https://github.com/sps014/dream/pull/46) | Implemented in `4b3850d8`, with platform fixes in `9b224340` and `914e27b2`: exact live-import registry; conditional core initialization/discovery/linking; separate Unicode, crypto, process and timezone cdylibs; transactional stale-pack cleanup. Shared callback/icon/async completion, C/C++ interop, static/shared library consumers, relocated packs and real heavy-to-minimal repacking are covered. Workspace build, strict Clippy and workspace tests pass on Linux, macOS and Windows/MSVC. Local: 1,248 tests, native 657/657; Linux and Windows CI: native 657/657, Node 592 passed/65 expected skips/zero failures. Isolated native Hello World executes without Dream imports or libraries on all three runners: Windows/MSVC 158,208 bytes (baseline bundle 1,950,208; 91.9% reduction), Linux 22,648, macOS 52,648. Service measurements are in `docs/internals/06-llvm-backend.md`. Fixed byte limits and budget-only tests are removed per user direction; CI reports sizes and gates dependency isolation. Fixed-limit removal is committed in `c31157b7`; platform execution and functional regression validation are complete. Merge remains. |
+| 7.9 | Minimal native packaging and optional core services | BLD-3 | Done | Codex | [#46](https://github.com/sps014/dream/pull/46) | Implemented in `4b3850d8`, with platform fixes in `9b224340` and `914e27b2`: exact live-import registry; conditional core initialization/discovery/linking; separate Unicode, crypto, process and timezone cdylibs; transactional stale-pack cleanup. Shared callback/icon/async completion, C/C++ interop, static/shared library consumers, relocated packs and real heavy-to-minimal repacking are covered. Workspace build, strict Clippy and workspace tests pass on Linux, macOS and Windows/MSVC. Local: 1,249 tests, native 657/657; Linux and Windows CI: native 657/657, Node 592 passed/65 expected skips/zero failures. Isolated native Hello World executes without Dream imports or libraries on all three runners: Windows/MSVC 158,208 bytes (baseline bundle 1,950,208; 91.9% reduction), Linux 22,648, macOS 52,648. Service measurements are in `docs/internals/06-llvm-backend.md`. Fixed byte limits and budget-only tests are removed per user direction; CI reports sizes and gates dependency isolation. Fixed-limit removal is committed in `c31157b7`; Merged as `90c474b1` on 2026-10-05; exact-head [CI](https://github.com/sps014/dream/actions/runs/37287095626) passed all five jobs. Threaded WASM C/C++ interop also has aligned per-instance TLS, isolated errno, worker-safe allocation cleanup, selective-runtime support and packaged threaded WASI sysroots; nine interop regressions pass, including C++ exceptions and constructor/destructor lifetime. Freestanding checks pass for all 17 portable C units. |
 
 Performance follow-up (2026-10-04): [3209e97b](https://github.com/sps014/dream/commit/3209e97b96ceafa00be91336401268ed3632bb8f)
 batches global PCRE2 searches, exposes List constructor initialization to optimization,
@@ -622,8 +620,8 @@ The remaining function-index work is resolved by task 7.2 in `125c9f1a` (2026-10
 
 **ANA-1: no analysis manager (P3) [C]**
 
-- Every pass recomputes dominators and predecessors (`passes/cfg.rs`).
-- Facts cached on MIR (`prefer_inline`, `is_cursor`, region markers, parameter modes) have no rules for when they must be invalidated.
+- Original finding: every pass recomputed dominators and predecessors (`passes/cfg.rs`). Task 7.1 now adds a function-scoped cache, explicit preservation declarations and verification of CFG preservation. Local gates pass; see the task tracker for review status.
+- Original finding: MIR annotations had no documented lifetime rules. The task 7.1 handbook update now separates semantic/ownership/proof annotations from cached CFG analyses and defines what transformations must preserve.
 - **Fix:** first document which facts each pass must preserve. Later, add a `PassManager` with cached analyses and invalidation.
 
 ### 2.3 Ownership and ARC
@@ -1568,7 +1566,7 @@ no string-keyed type/def lookups, and every analyzer/LSP production file under 8
   - `src/driver/gpu_gen/expr.rs` (901) is split and moves with the GPU capability if it is only host-related.
 - **7.8 Self-hosting (BOOT-1)**
   - Re-evaluate once Phases 3 to 6 are complete.
-- **7.9 Minimal native packaging and optional core services (BLD-3) — next priority**
+- **7.9 Minimal native packaging and optional core services (BLD-3) — completed in #46**
   - Implement before the other unfinished Phase 7 tasks, per the user's 2026-10-05 request. Android/iOS validation remains on hold.
   - Make the host manifest, runtime binding, native link inputs and pack contents agree on actual live host use. Programs needing no host services must not import or bundle the core DLL.
   - Keep guest callback and icon state in one thin core capability whenever a host capability needs it. Move timezone, Unicode, crypto and process services into optional capabilities with one registry for selection, library discovery and packaging; migrate all consumers without compatibility aliases.

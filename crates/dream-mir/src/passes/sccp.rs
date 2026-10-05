@@ -30,19 +30,20 @@ enum Lat {
 }
 
 impl MirPass for Sccp {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::None
+    }
+
     fn name(&self) -> &'static str {
         "sccp"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
-        self.run_with_layouts(func, interner, &dream_hir::LayoutTable::default())
-    }
-
-    fn run_with_layouts(
+    fn transform(
         &self,
         func: &mut MirFunction,
         interner: &TypeInterner,
         layouts: &dream_hir::LayoutTable,
+        _analyses: &mut crate::passes::FunctionAnalyses,
     ) -> bool {
         let n = func.blocks.len();
         if n == 0 {

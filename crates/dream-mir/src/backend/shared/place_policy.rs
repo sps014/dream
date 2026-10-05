@@ -72,7 +72,7 @@ pub(crate) fn borrowed_ref_store(interner: &TypeInterner, rv: &Rvalue) -> bool {
 }
 
 /// The local whose reference-count token this store adopts, as recorded by `RcInsertion` or
-/// `RcLastUseRepair` (see [`crate::Rvalue::Move`]). `None` is an ordinary copy: the slot takes its
+/// the inliner (see [`crate::Rvalue::Move`]). `None` is an ordinary copy: the slot takes its
 /// own reference, so the store retains.
 pub(crate) fn unique_move_src(rv: &Rvalue) -> Option<u32> {
     match rv {

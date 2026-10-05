@@ -49,7 +49,7 @@ pub use dce::Dce;
 pub use devirt::Devirt;
 pub use dse::Dse;
 pub use dump::{
-    dumpable_pass_names, MirDump, MirDumpFile, MirDumpSpec, STAGE_FIXPOINT, STAGE_LATE, STAGE_LOWER,
+    dumpable_pass_names, MirDump, MirDumpFile, MirDumpSpec, STAGE_FIXPOINT, STAGE_LOWER,
 };
 pub use funcbox_abi::FuncboxAbi;
 pub use global_prop::GlobalProp;
@@ -64,8 +64,8 @@ pub use module_pipeline::{
 };
 pub use overflow_elim::OverflowElim;
 pub use prop::CopyConstProp;
-pub(crate) use rc::{container_move_locals, rvalue_reads_local, stmt_reads_local};
-pub use rc::{HopElision, RcElision, RcInsertion, RcLastUseRepair, ReleaseSink};
+pub(crate) use rc::{rvalue_reads_local, stmt_reads_local};
+pub use rc::{HopElision, RcElision, RcInsertion, ReleaseSink};
 pub use sccp::Sccp;
 pub use simplify_cfg::SimplifyCfg;
 pub use sroa::{ExpandSimpleCtors, Sroa, SroaManaged};

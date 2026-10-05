@@ -16,8 +16,6 @@ use std::fmt::Write;
 pub const STAGE_LOWER: &str = "lower";
 /// After every function (and poll body) reached its per-function [`PassManager`] fixpoint.
 pub const STAGE_FIXPOINT: &str = "fixpoint";
-/// After [`super::run_late_module_passes`].
-pub const STAGE_LATE: &str = "strip-escaped-regions";
 
 /// Module-level stages in pipeline order (names of the passes run by `optimize_module_opts`).
 const MODULE_STAGES: &[&str] = &[
@@ -29,13 +27,11 @@ const MODULE_STAGES: &[&str] = &[
     "rc-insertion",
     "devirt",
     "inline",
-    "rc-last-use-repair",
     "unique-region",
     super::rc::held::STAGE,
     "sroa-managed",
     super::slice_measure::STAGE,
     STAGE_FIXPOINT,
-    STAGE_LATE,
     super::frame_alloc::STAGE,
 ];
 
@@ -296,7 +292,7 @@ mod tests {
     fn every_module_pass_name_is_registered() {
         use super::super::{
             Devirt, ExpandSimpleCtors, FuncboxAbi, Inliner, ModulePass, RcInsertion,
-            RcLastUseRepair, UniqueRegion,
+            UniqueRegion,
         };
         let names = dumpable_pass_names();
         for n in [
@@ -306,7 +302,6 @@ mod tests {
             Inliner.name(),
             UniqueRegion.name(),
             MirPass::name(&RcInsertion),
-            MirPass::name(&RcLastUseRepair),
         ] {
             assert!(names.contains(&n), "{} missing from {:?}", n, names);
         }

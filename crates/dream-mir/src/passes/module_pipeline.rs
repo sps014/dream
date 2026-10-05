@@ -10,12 +10,11 @@ use super::*;
 /// not at the caller's scope exit. Inserting RC first bakes each callee's scope-exit `Release`s into
 /// its body, so inlining copies them to the return site (the continuation), preserving object
 /// lifetimes exactly. Inlining a callee whose value it *returns* moves the transferred `+1` into the
-/// call's destination via a plain copy, which is balanced because the callee already skipped
+/// call's destination via an explicit `Move`, which is balanced because the callee already skipped
 /// releasing the returned value.
 ///
 /// [`ExpandSimpleCtors`] runs *before* [`RcInsertion`] so `o.field = arg` is what RC sees, not a
-/// `New` whose args are all treated as sinks. After inlining, [`RcLastUseRepair`] fixes last-use
-/// container stores of owned RC values on the fused CFG (inlined `split` temps). Then
+/// `New` whose args are all treated as sinks. Then
 /// [`crate::driver`] runs the per-function [`PassManager`].
 pub fn optimize_module(mir: &mut Mir, interner: &TypeInterner) {
     optimize_module_opts(mir, interner, true, &mut MirDump::disabled())
@@ -87,10 +86,6 @@ pub(super) fn optimize_module_rounds(
             }
         }
     }
-    for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
-        RcLastUseRepair::run_with_layouts(f, interner, &layouts);
-    }
-    dump.module(MirPass::name(&RcLastUseRepair), mir, interner);
     let _ = UniqueRegion.run(mir, interner);
     dump.module(UniqueRegion.name(), mir, interner);
     let _ = rc::held::run(mir, interner);
@@ -119,13 +114,10 @@ pub fn run_function_pipelines(
     dump.module(STAGE_FIXPOINT, mir, interner);
 }
 
-/// After per-function opts, reject escaped inferred regions in debug builds or remove them with
-/// a warning in release (CFG simplify can merge a join with payload use after wrap), then give
-/// objects that never outlive their frame stack storage ([`frame_alloc`]). The final MIR is then
+/// After per-function opts, give objects that never outlive their frame stack storage
+/// ([`frame_alloc`]). Invalid ownership or allocation regions are compiler bugs; final MIR is then
 /// checked by [`crate::verify`] in debug builds of the compiler, or when `DREAM_VERIFY_MIR=1`.
 pub fn run_late_module_passes(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirDump) {
-    let _ = unique_region::strip_escaped_regions(mir, interner);
-    dump.module(STAGE_LATE, mir, interner);
     let _ = frame_alloc::run(mir, interner);
     dump.module(frame_alloc::STAGE, mir, interner);
     if crate::verify::enabled() {

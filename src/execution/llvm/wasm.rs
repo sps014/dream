@@ -26,7 +26,15 @@ pub struct WasmRuntime {
 
 /// Libcalls `llc` may emit after `opt` ran; internalizing them would let `opt` drop the runtime
 /// libc's definitions and turn the calls into host imports.
-const KEEP_PUBLIC: &[&str] = &["memcpy", "memmove", "memset", "memcmp"];
+/// Heap bootstrap and raw deallocation also remain callable by the JS worker loader.
+const KEEP_PUBLIC: &[&str] = &[
+    "memcpy",
+    "memmove",
+    "memset",
+    "memcmp",
+    "dream_heap_init",
+    "dream_free",
+];
 
 struct Unit {
     path: PathBuf,

@@ -67,14 +67,17 @@ $targets = @("wasm32-unknown-wasip1", "wasm32-unknown-wasip1-threads")
 $sysroot = Join-Path $Dest "share\wasi-sysroot"
 $missing = ($targets | Where-Object { -not (Test-Path (Join-Path $resource "$_\libclang_rt.builtins.a")) }) -or
     -not (Test-Path (Join-Path $sysroot "include\wasm32-wasip1\eh\c++\v1\string")) -or
-    -not (Test-Path (Join-Path $sysroot "lib\wasm32-wasip1\eh\libc++.a"))
+    -not (Test-Path (Join-Path $sysroot "lib\wasm32-wasip1\eh\libc++.a")) -or
+    -not (Test-Path (Join-Path $sysroot "include\wasm32-wasip1-threads\eh\c++\v1\string")) -or
+    -not (Test-Path (Join-Path $sysroot "lib\wasm32-wasip1-threads\eh\libc++.a"))
 if ($missing) {
     $archive = Get-Verified "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$($WasiSdkVersion.Split('.')[0])/$WasiSdkArchive" $WasiSdkArchive $WasiSdkSha
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ("dream-wasi-" + [Guid]::NewGuid())
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
     try {
         $patterns = ($targets | ForEach-Object { "*/lib/clang/$LlvmMajor/lib/$_/libclang_rt.builtins.a" }) +
-            @("*/share/wasi-sysroot/include/wasm32-wasip1/*", "*/share/wasi-sysroot/lib/wasm32-wasip1/*")
+            @("*/share/wasi-sysroot/include/wasm32-wasip1/*", "*/share/wasi-sysroot/lib/wasm32-wasip1/*",
+              "*/share/wasi-sysroot/include/wasm32-wasip1-threads/*", "*/share/wasi-sysroot/lib/wasm32-wasip1-threads/*")
         Expand-Tar $archive $tmp $patterns
         foreach ($t in $targets) {
             New-Item -ItemType Directory -Force -Path (Join-Path $resource $t) | Out-Null

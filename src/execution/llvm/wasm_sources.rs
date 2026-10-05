@@ -31,9 +31,6 @@ pub(super) fn compile(
     {
         return Ok(out);
     }
-    if threads {
-        return Err("WASM C/C++ package interop currently requires a single-instance module; Task/shared-memory builds cannot initialize WASI library TLS safely".into());
-    }
     let clang = tools.clang()?;
     let sysroot = match super::bundle::prebuilt_rt(&tools.config) {
         Some(root) => root.join("wasi-sysroot"),
@@ -41,7 +38,11 @@ pub(super) fn compile(
     };
     // Clang resolves nested system headers incorrectly with Windows verbatim paths.
     let sysroot = dunce::simplified(&sysroot);
-    let target = "wasm32-wasip1";
+    let target = if threads {
+        "wasm32-wasip1-threads"
+    } else {
+        "wasm32-wasip1"
+    };
     let lib = sysroot.join("lib").join(target);
     let root = ll.with_extension("wasm-c");
     std::fs::create_dir_all(&root).map_err(|e| format!("{}: {e}", root.display()))?;
@@ -83,6 +84,9 @@ pub(super) fn compile(
                     "-mllvm",
                     "-wasm-use-legacy-eh=false",
                 ]);
+            }
+            if threads {
+                cmd.arg("-pthread");
             }
             for inc in &set.include {
                 cmd.arg("-I").arg(inc);

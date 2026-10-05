@@ -191,16 +191,96 @@ fn unsupported_package_function_is_a_link_diagnostic() {
 }
 
 #[test]
-fn shared_memory_package_interop_reports_the_tls_limit() {
+fn shared_memory_package_interop_initializes_tls() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     write(root, "dream.toml", "[package]\nname = \"parallel\"\n");
-    write(root, "main.dream", "import system;\nimport system.task;\n@c extern fun value(): int;\nasync fun main(): void { System.println(Task.spawn(() => value()).await); }\n");
-    write(root, "native/value.c", "int value(void) { return 42; }\n");
+    write(
+        root,
+        "main.dream",
+        r#"
+import system;
+import system.task;
+@c extern fun value(): int;
+async fun main(): void {
+    System.println(value());
+    let first = Task.spawn(() => value());
+    let second = Task.spawn(() => value());
+    System.println(first.await);
+    System.println(second.await);
+    System.println(value());
+    let pool = TaskPool(1);
+    System.println(pool.dispatch(() => value().to_string()).await);
+    System.println(pool.dispatch(() => value().to_string()).await);
+    pool.shutdown();
+}
+
+"#,
+    );
+    write(
+        root,
+        "native/value.c",
+        r#"
+#include <stdint.h>
+#include <errno.h>
+#include <stdlib.h>
+static _Thread_local int counter = 41;
+static _Thread_local _Alignas(256) volatile unsigned char scratch[70000];
+int value(void) {
+    if ((uintptr_t)scratch % 256 || scratch[69999] != counter - 41) return -1;
+    char *end;
+    errno = 0;
+    (void)strtol("999999999999999999999999999", &end, 10);
+    if (errno != ERANGE) return -2;
+    scratch[69999]++;
+    return ++counter;
+}
+"#,
+    );
+    for level in [None, Some(OptLevel::O3), Some(OptLevel::Size)] {
+        let out = root.join("main.wat");
+        compile(&root.join("main.dream"), &out, level).unwrap();
+        assert_eq!(run(&out), "42\n42\n42\n43\n42\n43\n");
+    }
+}
+
+#[test]
+fn shared_memory_cpp_initialization_runs_once_after_tls_setup() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(root, "dream.toml", "[package]\nname = \"parallel_cpp\"\n");
+    write(root, "native/include/value.hpp", "int value();\n");
+    write(
+        root,
+        "native/value.cpp",
+        r#"
+#include <cstdio>
+static thread_local int counter = 41;
+struct Global {
+    Global() { counter = 100; std::puts("constructed"); }
+    ~Global() { std::puts("destroyed"); }
+};
+static Global global;
+int value() { return ++counter; }
+"#,
+    );
+    write(
+        root,
+        "main.dream",
+        r#"
+import system;
+import system.task;
+@cpp("value.hpp", "value") extern fun value(): int;
+async fun main(): void {
+    System.println(value());
+    System.println(Task.spawn(() => value()).await);
+    System.println(value());
+}
+"#,
+    );
     let out = root.join("main.wat");
-    let err = compile(&root.join("main.dream"), &out, None).unwrap_err();
-    assert!(err.contains("requires a single-instance module"), "{}", err);
-    assert!(!out.with_extension("wasm").exists());
+    compile(&root.join("main.dream"), &out, Some(OptLevel::O3)).unwrap();
+    assert_eq!(run(&out), "constructed\n101\n42\n102\ndestroyed\n");
 }
 
 #[test]

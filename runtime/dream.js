@@ -6130,18 +6130,24 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     workerTerminate: (id) => {
       const s = reg.get(id);
       if (!s) return;
+      const releaseStack = () => {
+        if (s.stack && typeof getInstance === "function") {
+          getInstance().exports.dream_free(s.stack);
+        }
+      };
       try {
         if (s.worker) {
           s.worker.postMessage({ t: "term" });
-          s.worker.terminate();
+          const stopped = s.worker.terminate();
+          // Node termination is asynchronous; its TLS and stack remain live until it stops.
+          if (stopped && typeof stopped.then === "function") {
+            stopped.then(releaseStack, () => {});
+          } else {
+            releaseStack();
+          }
         }
       } catch (_) {
         /* already gone */
-      }
-      const stack = s.stack;
-      if (stack && typeof getInstance === "function") {
-        const free = getInstance().exports && getInstance().exports.free;
-        if (typeof free === "function") free(stack);
       }
       if (s.blobUrl) {
         try {
@@ -6473,17 +6479,20 @@ function attachGuestStack(wasmInstance) {
     }
     return 0;
   }
-  if (typeof wasmInstance.exports.__runtime_init === "function") {
-    wasmInstance.exports.__runtime_init();
-  }
-  const ptr = guestMalloc(wasmInstance.exports, WORKER_STACK_BYTES, 0);
+  wasmInstance.exports.dream_heap_init();
+  const tlsSize = wasmInstance.exports.__tls_size?.value >>> 0;
+  const tlsAlign = wasmInstance.exports.__tls_align?.value >>> 0 || 1;
+  const ptr = guestMalloc(wasmInstance.exports, WORKER_STACK_BYTES + tlsSize + tlsAlign - 1, 0);
   if (!ptr) {
     throw new Error("failed to allocate a guest stack");
   }
   sp.value = ptr + WORKER_STACK_BYTES;
-  const tls = wasmInstance.exports.__tls_base;
-  if (tls) {
-    tls.value = ptr;
+  if (tlsSize) {
+    const base = Math.ceil((ptr + WORKER_STACK_BYTES) / tlsAlign) * tlsAlign;
+    wasmInstance.exports.__wasm_init_tls(base);
+  }
+  if (typeof wasmInstance.exports.__runtime_init === "function") {
+    wasmInstance.exports.__runtime_init();
   }
   return ptr;
 }

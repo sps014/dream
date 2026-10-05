@@ -262,8 +262,11 @@ The packaged Windows sysroot uses ordinary paths for Clang's nested-header looku
 Full native corpus: 657/657. Full Node corpus: 592 passed, 65 expected skips,
 zero failures. Workspace build, strict Clippy, 1,230 tests (15 expected ignores),
 runtime bundle freshness, hygiene, and the 17-unit freestanding core gate pass.
-Task/shared-memory C/C++ modules remain explicitly unsupported pending WASI TLS
-initialization support. Android/iOS SDK validation remains on hold. Phase 7 remains
+Task/shared-memory C/C++ modules now use threaded WASI headers/archives and per-instance
+aligned TLS initialized before module constructors. Worker isolation, persistent pool TLS,
+large/aligned zero-filled blocks, libc errno and C++ constructor lifetime are covered by
+executable tests. This uses Dream Task workers, without adding a WASI pthread-spawn host.
+Android/iOS SDK validation remains on hold. Phase 7 remains
 2/9 complete; this interop extension does not close the remaining Phase 7 tasks.
 
 ### Cleanliness metrics

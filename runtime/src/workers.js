@@ -258,18 +258,24 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     workerTerminate: (id) => {
       const s = reg.get(id);
       if (!s) return;
+      const releaseStack = () => {
+        if (s.stack && typeof getInstance === "function") {
+          getInstance().exports.dream_free(s.stack);
+        }
+      };
       try {
         if (s.worker) {
           s.worker.postMessage({ t: "term" });
-          s.worker.terminate();
+          const stopped = s.worker.terminate();
+          // Node termination is asynchronous; its TLS and stack remain live until it stops.
+          if (stopped && typeof stopped.then === "function") {
+            stopped.then(releaseStack, () => {});
+          } else {
+            releaseStack();
+          }
         }
       } catch (_) {
         /* already gone */
-      }
-      const stack = s.stack;
-      if (stack && typeof getInstance === "function") {
-        const free = getInstance().exports && getInstance().exports.free;
-        if (typeof free === "function") free(stack);
       }
       if (s.blobUrl) {
         try {

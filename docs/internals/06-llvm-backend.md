@@ -424,5 +424,17 @@ are checked against clang's bitcode signatures before linking.
 WASI libc and exception-enabled C++ archives remain linker inputs. Their allocator entry points
 use the guest heap with aligned C payloads; stdio syscall adapters use Dream's encoded output
 platform service. Package constructors run after heap initialization, and registered destructors
-and stdio exit hooks run after Dream global drops. Shared-memory package builds are rejected until
-WASI TLS and initialization can honor Dream's per-instance worker model.
+and stdio exit hooks run after Dream global drops.
+
+Shared-memory packages use the `wasm32-wasip1-threads` headers and archives and compile
+sources with `-pthread`. The linker exports `__tls_size`, `__tls_align` and `__wasm_init_tls`.
+The JS loader initializes the heap, allocates one block containing a worker stack and a separate
+aligned TLS region, calls the linker-generated initializer, then runs module initialization.
+Each worker receives the TLS template independently; worker-pool calls retain that worker's TLS.
+Global constructors run once for the shared module, after the primary instance's TLS is ready.
+Node worker termination completes before its allocation is freed.
+
+`tests/wasm_interop.rs` checks initialized and zero-filled TLS, 256-byte alignment, a TLS block
+larger than the worker stack, WASI libc `errno`, concurrent-worker isolation, worker-pool
+persistence and C++ constructor/destructor behavior. TLS tests execute at O0, O3 and `-Os`.
+Dream Task workers provide the threads; this does not add a WASI `pthread_create` host service.

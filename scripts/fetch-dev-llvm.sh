@@ -78,14 +78,18 @@ resource="$DEST/lib/clang/${LLVM_MAJOR}/lib"
 if [[ ! -f "$resource/wasm32-unknown-wasip1/libclang_rt.builtins.a" \
    || ! -f "$resource/wasm32-unknown-wasip1-threads/libclang_rt.builtins.a" \
    || ! -f "$DEST/share/wasi-sysroot/include/wasm32-wasip1/eh/c++/v1/string" \
-   || ! -f "$DEST/share/wasi-sysroot/lib/wasm32-wasip1/eh/libc++.a" ]]; then
+   || ! -f "$DEST/share/wasi-sysroot/lib/wasm32-wasip1/eh/libc++.a" \
+   || ! -f "$DEST/share/wasi-sysroot/include/wasm32-wasip1-threads/eh/c++/v1/string" \
+   || ! -f "$DEST/share/wasi-sysroot/lib/wasm32-wasip1-threads/eh/libc++.a" ]]; then
   archive="$(fetch "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION%%.*}/${WASI_SDK_ARCHIVE}" "$WASI_SDK_ARCHIVE" "$WASI_SDK_SHA")"
   tmp="$(mktemp -d)"
   tar -xzf "$archive" -C "$tmp" --strip-components=1 ${WILDCARDS[@]+"${WILDCARDS[@]}"} \
     "*/lib/clang/${LLVM_MAJOR}/lib/wasm32-unknown-wasip1/libclang_rt.builtins.a" \
     "*/lib/clang/${LLVM_MAJOR}/lib/wasm32-unknown-wasip1-threads/libclang_rt.builtins.a" \
     "*/share/wasi-sysroot/include/wasm32-wasip1/*" \
-    "*/share/wasi-sysroot/lib/wasm32-wasip1/*"
+    "*/share/wasi-sysroot/lib/wasm32-wasip1/*" \
+    "*/share/wasi-sysroot/include/wasm32-wasip1-threads/*" \
+    "*/share/wasi-sysroot/lib/wasm32-wasip1-threads/*"
   for t in wasm32-unknown-wasip1 wasm32-unknown-wasip1-threads; do
     mkdir -p "$resource/$t"
     cp "$tmp/lib/clang/${LLVM_MAJOR}/lib/$t/libclang_rt.builtins.a" "$resource/$t/"

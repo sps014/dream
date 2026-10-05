@@ -331,17 +331,20 @@ function attachGuestStack(wasmInstance) {
     }
     return 0;
   }
-  if (typeof wasmInstance.exports.__runtime_init === "function") {
-    wasmInstance.exports.__runtime_init();
-  }
-  const ptr = guestMalloc(wasmInstance.exports, WORKER_STACK_BYTES, 0);
+  wasmInstance.exports.dream_heap_init();
+  const tlsSize = wasmInstance.exports.__tls_size?.value >>> 0;
+  const tlsAlign = wasmInstance.exports.__tls_align?.value >>> 0 || 1;
+  const ptr = guestMalloc(wasmInstance.exports, WORKER_STACK_BYTES + tlsSize + tlsAlign - 1, 0);
   if (!ptr) {
     throw new Error("failed to allocate a guest stack");
   }
   sp.value = ptr + WORKER_STACK_BYTES;
-  const tls = wasmInstance.exports.__tls_base;
-  if (tls) {
-    tls.value = ptr;
+  if (tlsSize) {
+    const base = Math.ceil((ptr + WORKER_STACK_BYTES) / tlsAlign) * tlsAlign;
+    wasmInstance.exports.__wasm_init_tls(base);
+  }
+  if (typeof wasmInstance.exports.__runtime_init === "function") {
+    wasmInstance.exports.__runtime_init();
   }
   return ptr;
 }

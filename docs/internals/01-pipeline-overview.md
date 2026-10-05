@@ -32,6 +32,16 @@ flowchart TD
 
 Generate phase: `run_generators` runs after parse (before analysis). `@compute` WGSL validation runs after analysis (before MIR). Both report `CompileError::Generator` when diagnostics are present.
 
+Generator implementations live under `src/driver/generate/`. `json_gen/` separates collection
+discovery, declaration snapshots, harness execution/cache and diagnostics. `webapi_gen/` separates
+route collection, binding analysis, dispatcher emission and OpenAPI emission. `rewrite/` rebuilds
+expressions and statements through a shared context; generated-source parsing and source-span
+mapping are independent modules. `quote.rs` uses serde_json for JSON strings and Dream's own
+escape vocabulary for generated Dream literals.
+
+The embedded stdlib's ordered package descriptors live under `crates/dream-stdlib/src/registry/`;
+`packages.rs` resolves package dependencies and `symbols.rs` supplies LSP symbol discovery.
+
 The `hir → mir → emit` pipeline is the **only** backend.
 
 ## Stage by stage

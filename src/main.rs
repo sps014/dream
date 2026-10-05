@@ -240,6 +240,7 @@ fn main() -> ExitCode {
         })
         .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
         .with_timer(())
+        .with_ansi(dream::driver::ui::color_enabled())
         .with_target(false)
         .with_writer(std::io::stderr)
         .finish();

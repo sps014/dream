@@ -11,6 +11,7 @@ fn verbose_metrics_cover_phases_without_changing_ir() {
     fs::write(&source, "import system; fun identity<T>(x: T): T { return x; } fun main(): void { System.println(identity<int>(7)); }").unwrap();
     let compile = |verbose: bool| {
         let mut command = Command::new(env!("CARGO_BIN_EXE_dream"));
+        command.env("NO_COLOR", "1");
         command
             .arg("--emit-llvm")
             .arg(&source)
@@ -67,6 +68,7 @@ fn failed_parse_still_reports_its_duration_and_memory() {
     let source = dir.path().join("broken.dream");
     fs::write(&source, "fun main(:").unwrap();
     let result = Command::new(env!("CARGO_BIN_EXE_dream"))
+        .env("NO_COLOR", "1")
         .arg("-v")
         .arg(&source)
         .arg("-o")

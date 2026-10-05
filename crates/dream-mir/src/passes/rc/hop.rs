@@ -28,11 +28,21 @@ use dream_types::TypeInterner;
 pub struct HopElision;
 
 impl MirPass for HopElision {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::ControlFlow
+    }
+
     fn name(&self) -> &'static str {
         "rc-hop-elision"
     }
 
-    fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        _interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        _analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         let mut changed = false;
         for bi in 0..func.blocks.len() {
             let mut i = 0;

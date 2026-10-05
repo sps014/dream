@@ -17,6 +17,8 @@ pub mod generate;
 pub mod gpu_gen;
 pub mod interface_defaults;
 pub mod js_runtime;
+#[cfg(feature = "native")]
+pub mod metrics;
 pub mod native_sets;
 pub mod output;
 pub mod prelude;

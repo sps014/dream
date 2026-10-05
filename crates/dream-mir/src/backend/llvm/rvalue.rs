@@ -5,7 +5,6 @@ use super::ir::{Ty, Value};
 use crate::backend::shared::abi_types::{elem_size, mem_ty, runtime_c_name};
 use crate::backend::shared::glue::{release_sym, retain_sym};
 use crate::backend::shared::protocol_names::{hash_fn, runtime_tag, to_string_fn, HashFn};
-use crate::backend::shared::unique_container_move_local;
 use crate::{Operand, Rvalue, UnOp};
 use dream_types::{DefId, PrimTy, TyKind, TypeId};
 
@@ -508,9 +507,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             let val = self.operand(arg);
             let align = super::fx::align_at(&self.h(), fld.offset as i64).min(PAYLOAD_ALIGN);
             self.store_mem(m, &at, &val, align);
-            if self.is_rc(fld.ty)
-                && unique_container_move_local(self.f, self.interner, arg).is_none()
-            {
+            if self.is_rc(fld.ty) {
                 let loaded = self.load_mem(m, &at, align);
                 let sym = retain_sym(&self.l.cx, fld.ty);
                 self.call(sym, &[loaded]);
@@ -519,17 +516,14 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     fn emit_union_new(&mut self, ty: TypeId, variant: usize, args: &[Operand]) -> V {
-        // Niche union: the value *is* the payload pointer (`None` = NULL). A payload that is not a
-        // proven unique move is retained here (callee-style), matching `union_new_at`.
+        // Construction borrows its payload; a transfer elsewhere in the function does not
+        // authorize consuming this generation's token. Niche unions share the payload pointer.
         if self.interner.is_niche_union(ty) {
             let arg = match args {
                 [a] => a.clone(),
                 _ => return V::s(Value::zero(self.h())),
             };
             let e = self.operand(&arg);
-            if unique_container_move_local(self.f, self.interner, &arg).is_some() {
-                return e;
-            }
             let payload_ty = self
                 .l
                 .cx
@@ -562,10 +556,6 @@ impl<'l, 'a> Fx<'l, 'a> {
         let size = 4 + es * n;
         let m = mem_ty(&self.l.cx, elem_ty);
         let vals: Vec<V> = elems.iter().map(|e| self.operand(e)).collect();
-        let skip: Vec<bool> = elems
-            .iter()
-            .map(|e| unique_container_move_local(self.f, self.interner, e).is_some())
-            .collect();
         let is_val = self.is_value(elem_ty);
         let rc = self.is_rc(elem_ty);
         let o = self.call_v(
@@ -586,7 +576,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 self.value_refs(elem_ty, &atv, true);
             } else {
                 self.store_mem(m, &at, v, PAYLOAD_ALIGN);
-                if rc && !skip[i] {
+                if rc {
                     let loaded = self.load_mem(m, &at, PAYLOAD_ALIGN);
                     let sym = retain_sym(&self.l.cx, elem_ty);
                     self.call(sym, &[loaded]);
@@ -606,10 +596,6 @@ impl<'l, 'a> Fx<'l, 'a> {
         let size = layout.size.max(1) as i64;
         let tag = self.l.cx.type_tag(ty);
         let vals: Vec<V> = elems.iter().map(|e| self.operand(e)).collect();
-        let skip: Vec<bool> = elems
-            .iter()
-            .map(|e| unique_container_move_local(self.f, self.interner, e).is_some())
-            .collect();
         let o = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
         let p = self.ptr(&o);
         self.memset0(&p, &Value::i64(size));
@@ -627,7 +613,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             let m = mem_ty(&self.l.cx, fld.ty);
             let align = super::fx::align_at(&self.h(), fld.offset as i64);
             self.store_mem(m, &at, v, align);
-            if self.is_rc(fld.ty) && !skip[i] {
+            if self.is_rc(fld.ty) {
                 let loaded = self.load_mem(m, &at, align);
                 let sym = retain_sym(&self.l.cx, fld.ty);
                 self.call(sym, &[loaded]);

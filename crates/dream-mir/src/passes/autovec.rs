@@ -4,7 +4,6 @@
 //! covers the tail so a trip count that is not a multiple of `L` cannot overrun. The pass still
 //! requires ABC `unchecked` indexes (or IV bump pointers derived from them).
 
-use super::cfg;
 use super::MirPass;
 use crate::{
     BinOp, BlockId, Const, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, SimdLane,
@@ -16,14 +15,24 @@ use std::collections::BTreeSet;
 pub struct Autovec;
 
 impl MirPass for Autovec {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::None
+    }
+
     fn name(&self) -> &'static str {
         "autovec"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
-        let loops = cfg::natural_loops(func);
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
+        let loops = analyses.natural_loops(func);
         let mut changed = false;
-        for l in loops {
+        for l in loops.iter() {
             changed |= vectorize_loop(func, interner, &l.body, l.header, &l.latches);
         }
         changed

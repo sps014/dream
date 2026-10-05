@@ -459,21 +459,12 @@ pub enum Const {
 #[derive(Debug, Clone)]
 pub enum Rvalue {
     Use(Operand),
-    /// A store into a container (field / index / global) that hands `src`'s reference-count token to
-    /// the destination: the container adopts the existing `+1` rather than retaining, and `src` must
-    /// not be released afterwards.
+    /// Transfers `src`'s existing `+1` to the destination without retaining. The producer
+    /// explicitly nulls the source afterwards so later cleanup cannot release the transferred token.
+    /// RC insertion records container moves; inlining preserves owning call returns this way.
     ///
-    /// Two passes decide this and both record it here: [`passes::RcInsertion`] for field and global
-    /// stores, and [`passes::RcLastUseRepair`] for the index stores that only become last-use once
-    /// inlining has fused the CFG. Previously neither recorded anything and the backend re-derived
-    /// the transfer by scanning for the store's `src = null`, which was wrong in both directions:
-    /// copy propagation could rewrite the store's operand to the local it was copied from, splitting
-    /// the pair so the container retained a second reference while the null still discarded the
-    /// first; and the scan matched any local nulled anywhere in the function, skipping retains that
-    /// were genuinely needed.
-    ///
-    /// `src` is a [`Local`] rather than an [`Operand`] so operand-rewriting passes have nothing here
-    /// to substitute.
+    /// `src` is a [`Local`] rather than an [`Operand`] so copy propagation cannot substitute a
+    /// borrowed alias and separate the ownership transfer from the source's null assignment.
     Move {
         src: Local,
         /// The widening the equivalent [`Rvalue::Cast`] would have applied, if any.

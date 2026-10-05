@@ -25,11 +25,21 @@ use std::collections::BTreeMap;
 pub struct Sroa;
 
 impl MirPass for Sroa {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::ControlFlow
+    }
+
     fn name(&self) -> &'static str {
         "sroa"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        _analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         // Promote one object per call; the fixpoint reruns for the rest.
         let mut changed = false;
         for _ in 0..func.blocks.len().max(1) {

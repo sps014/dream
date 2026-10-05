@@ -44,24 +44,34 @@ enum OpKey {
 }
 
 impl MirPass for Gvn {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::ControlFlow
+    }
+
     fn name(&self) -> &'static str {
         "gvn"
     }
 
-    fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        _interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         let n = func.blocks.len();
         if n == 0 {
             return false;
         }
-        let rpo = super::cfg::reverse_postorder(func);
-        let preds = super::cfg::predecessors(func);
+        let rpo = analyses.reverse_postorder(func);
+        let preds = analyses.predecessors(func);
         let mut exit_avail: Vec<Option<Vec<(Key, u32)>>> = vec![None; n];
         let mut entry_avail: Vec<Vec<(Key, u32)>> = vec![Vec::new(); n];
 
         let mut df_changed = true;
         while df_changed {
             df_changed = false;
-            for &bid in &rpo {
+            for &bid in rpo.iter() {
                 let bi = bid.0 as usize;
                 let avail = meet_avail(&preds[bi], &exit_avail);
                 entry_avail[bi].clone_from(&avail);
@@ -80,7 +90,7 @@ impl MirPass for Gvn {
         }
 
         let mut changed = false;
-        for &bid in &rpo {
+        for &bid in rpo.iter() {
             let mut avail = entry_avail[bid.0 as usize].clone();
             for stmt in &mut func.blocks[bid.0 as usize].stmts {
                 changed |= rewrite_cse(stmt, &mut avail);

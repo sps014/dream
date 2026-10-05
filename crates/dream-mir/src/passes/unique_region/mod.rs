@@ -15,14 +15,12 @@ pub struct UniqueRegion;
 mod candidates;
 mod rewrite;
 mod safety;
-mod strip;
 #[cfg(test)]
 mod tests;
 
 use candidates::*;
 use rewrite::*;
 use safety::*;
-pub use strip::strip_escaped_regions;
 
 impl ModulePass for UniqueRegion {
     fn name(&self) -> &'static str {

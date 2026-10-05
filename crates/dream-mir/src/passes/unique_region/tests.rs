@@ -341,7 +341,7 @@ fn does_not_wrap_switch_join_when_phi_used_after() {
 }
 
 #[test]
-fn strip_escaped_drops_leave_before_payload_use() {
+fn verifier_rejects_leave_before_payload_use() {
     let mut ctx = TypeCtx::new();
     let node_def = ctx.register(DefKind::Struct, "Node", vec![]);
     let ty = ctx.interner.struct_ty(node_def, vec![]);
@@ -389,18 +389,15 @@ fn strip_escaped_drops_leave_before_payload_use() {
     );
     drop_it.terminate(Terminator::Return(None));
 
-    let mut mir = Mir {
+    let mir = Mir {
         functions: vec![alloc.finish(), drop_it.finish()],
         layouts,
         ..Default::default()
     };
-    assert!(strip::strip_escaped_fn(
-        &mut mir.functions[1],
-        &ctx.interner
-    ));
+    assert!(!crate::verify::verify_module(&mir, &ctx.interner).is_empty());
     let drop_fn = &mir.functions[1];
     assert!(
-        !drop_fn.blocks.iter().any(|b| b
+        drop_fn.blocks.iter().any(|b| b
             .stmts
             .iter()
             .any(|s| matches!(s, Statement::RegionEnter | Statement::RegionLeave))),
@@ -648,7 +645,7 @@ fn returns_fresh_requires_every_definition_fresh() {
 }
 
 #[test]
-fn strip_escaped_keeps_region_when_only_pre_region_locals_are_used_after() {
+fn verifier_accepts_pre_region_locals_used_after() {
     let mut ctx = TypeCtx::new();
     let node_def = ctx.register(DefKind::Struct, "Node", vec![]);
     let ty = ctx.interner.struct_ty(node_def, vec![]);
@@ -699,10 +696,10 @@ fn strip_escaped_keeps_region_when_only_pre_region_locals_are_used_after() {
         Rvalue::ToString(Operand::Copy(Place::Local(sw))),
     );
     f.terminate(Terminator::Return(None));
-    let mut mir = Mir {
+    let mir = Mir {
         functions: vec![f.finish(), alloc.finish()],
         ..Default::default()
     };
-    assert!(!strip_escaped_regions(&mut mir, &ctx.interner));
+    assert!(crate::verify::verify_module(&mir, &ctx.interner).is_empty());
     assert!(has_region_enter(&mir.functions[0]));
 }

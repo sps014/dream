@@ -2,6 +2,7 @@
 """Parallel golden-corpus probe for `tests/cases/*.dream`.
 
 Default: `dream run` (native).
+`--parity`: run both targets and compare executed-program stdout directly.
 `--node`: compile `--wasm` to `target/probe-wasm/{stem}/` and run via Node + `runtime/dream.js`.
 """
 import json
@@ -28,9 +29,10 @@ workers = int(os.environ.get("PROBE_JOBS", "8"))
 dream_js = root / "runtime" / "dream.js"
 
 USAGE = """\
-Usage: probe_test.py [--node] [--release] [case-stem ...]
+Usage: probe_test.py [--node | --parity] [--release] [case-stem ...]
 
   --node          compile wasm32 and run with Node (not native `dream run`)
+  --parity        run both targets and compare executed-program stdout directly
   --release       optimized build
   stems      optional filter (e.g. arithmetic task_basic)
 """
@@ -68,6 +70,7 @@ BUILD_FLAGS = []
 def parse_args(argv):
     only = []
     node = False
+    parity = False
     it = iter(argv)
     for arg in it:
         if arg in ("-h", "--help"):
@@ -76,6 +79,9 @@ def parse_args(argv):
         if arg == "--node":
             node = True
             continue
+        if arg == "--parity":
+            parity = True
+            continue
         if arg == "--release":
             BUILD_FLAGS.append("--release")
             continue
@@ -83,7 +89,10 @@ def parse_args(argv):
             sys.stderr.write(f"unknown flag {arg}\n{USAGE}")
             sys.exit(2)
         only.append(arg)
-    return node, (set(only) if only else None)
+    if node and parity:
+        sys.stderr.write("--node and --parity are mutually exclusive\n")
+        sys.exit(2)
+    return node, parity, (set(only) if only else None)
 
 
 def run_group(args, timeout, stdin=None, env=None):
@@ -267,7 +276,7 @@ def node_skip_reason(stem):
     return None
 
 
-def one_node(f: Path):
+def one_node(f: Path, stdout_record=None):
     stem = f.stem
     err = f.with_suffix(".expected_error")
     exp = f.with_suffix(".expected")
@@ -328,6 +337,8 @@ try {{
         needle = missing_needle(trap, out, err_txt, f"exit code {code}")
         if needle:
             return stem, "fail", f"trap output missing {needle!r}: {_ANSI.sub('', err_txt)[-2000:]!r}"
+        if stdout_record is not None:
+            stdout_record.append(out)
         return stem, "ok", ""
     if code != 0:
         tail = " | ".join((err_txt or out or "").strip().splitlines()[-2:])
@@ -341,10 +352,12 @@ try {{
     leak = leak_failure(err_txt, out)
     if leak:
         return stem, "fail", leak
+    if stdout_record is not None:
+        stdout_record.append(out)
     return stem, "ok", ""
 
 
-def one(f: Path):
+def one(f: Path, stdout_record=None):
     stem = f.stem
     err = f.with_suffix(".expected_error")
     native_exp = f.with_suffix(".expected.native")
@@ -385,6 +398,8 @@ def one(f: Path):
         needle = missing_needle(trap, out, err, f"exit code {code}")
         if needle:
             return stem, "fail", f"trap output missing {needle!r}: {_ANSI.sub('', err)[-2000:]!r}"
+        if stdout_record is not None:
+            stdout_record.append(out)
         return stem, "ok", ""
     if code != 0:
         tail = " | ".join((err or out or "").strip().splitlines()[-2:])
@@ -398,13 +413,36 @@ def one(f: Path):
     leak = leak_failure(err, out)
     if leak:
         return stem, "fail", leak
+    if stdout_record is not None:
+        stdout_record.append(out)
     return stem, "ok", ""
+
+
+def one_parity(f: Path):
+    # Compile diagnostics are target-specific; every executed guest has comparable stdout.
+    if not f.with_suffix(".expected_error").exists():
+        reason = node_skip_reason(f.stem)
+        if reason:
+            return f.stem, "skip", reason
+        if f.with_suffix(".expected.native").exists():
+            return f.stem, "skip", "documented target-width output"
+    native_stdout = []
+    wasm_stdout = []
+    native = one(f, native_stdout)
+    if native[1] != "ok":
+        return native
+    wasm = one_node(f, wasm_stdout)
+    if wasm[1] != "ok":
+        return wasm
+    if native_stdout != wasm_stdout:
+        return f.stem, "fail", f"native/wasm stdout differ: native={native_stdout!r} wasm={wasm_stdout!r}"
+    return f.stem, "ok", ""
 
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
-    node, only = parse_args(sys.argv[1:])
+    node, parity, only = parse_args(sys.argv[1:])
     if not dream.is_file():
         sys.stderr.write(f"missing {dream}; build with `cargo build`\n")
         sys.exit(2)
@@ -412,7 +450,7 @@ def main():
     fails = []
     ok = 0
     skipped = 0
-    run_one = one_node if node else one
+    run_one = one_parity if parity else one_node if node else one
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futs = {ex.submit(run_one, p): p for p in files}
         done = 0

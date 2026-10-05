@@ -23,7 +23,14 @@ impl RcInsertion {
         holds: &IndexSet<DefId>,
         modref: &ModRefTable,
     ) -> bool {
-        RcInsertion.run_inner(func, interner, layouts, holds, modref)
+        RcInsertion.run_inner(
+            func,
+            interner,
+            layouts,
+            holds,
+            modref,
+            &mut crate::passes::FunctionAnalyses::default(),
+        )
     }
     fn run_inner(
         &self,
@@ -32,8 +39,9 @@ impl RcInsertion {
         layouts: &dream_hir::LayoutTable,
         holds: &IndexSet<DefId>,
         modref: &ModRefTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
     ) -> bool {
-        let state = prepare::State::new(func, interner, layouts, holds, modref);
+        let state = prepare::State::new(func, interner, layouts, holds, modref, analyses);
         let mut changed = blocks::insert(func, interner, &state);
         insert_value_struct_moves(func, interner, &mut changed);
         insert_early_value_drops(func, interner, &mut changed, state.analysis.has_await);
@@ -44,17 +52,28 @@ impl RcInsertion {
     }
 }
 impl MirPass for RcInsertion {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::None
+    }
+
     fn name(&self) -> &'static str {
         "rc-insertion"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        layouts: &dream_hir::LayoutTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         self.run_inner(
             func,
             interner,
-            &dream_hir::LayoutTable::default(),
+            layouts,
             &IndexSet::new(),
             &ModRefTable::default(),
+            analyses,
         )
     }
 }

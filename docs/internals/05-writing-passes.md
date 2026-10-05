@@ -9,8 +9,16 @@ Most passes are **function-local** and implement `MirPass` (`crates/dream-mir/sr
 ```rust
 pub trait MirPass {
     fn name(&self) -> &'static str;
+    fn preserves(&self) -> PreservedAnalyses;
     /// Transform one function. Return `true` iff anything changed.
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool;
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        layouts: &LayoutTable,
+        analyses: &mut FunctionAnalyses,
+    ) -> bool;
+    // run and run_with_layouts provide standalone managed invocations.
 }
 ```
 
@@ -28,13 +36,60 @@ Two rules make the system work:
 1. **Scope honestly.** A `MirPass` sees one function; a `ModulePass` sees the module. Don't smuggle cross-function state into a `MirPass`.
 2. **Report change honestly.** The return value drives a fixpoint loop, so returning `true` when nothing changed spins the loop (capped at `max_iterations = 16`), and returning `false` after a change means later passes miss the opportunity. Be precise.
 
+## Analysis lifetime and preservation
+
+`PassManager` (`passes/manager.rs`) owns one `FunctionAnalyses` cache for a function's entire
+fixpoint, then drops it before the next function. `MirPass::run` and `run_with_layouts` use the
+same managed execution with a fresh cache for a standalone pass; `transform` is the implementation
+hook. Module transformations run before or after these scopes, so no function result survives
+inlining, pruning or a module rewrite.
+
+Queries lazily cache predecessor lists, reverse postorder, dominators, postdominators and natural
+loops. Dominators reuse cached predecessors and traversal order; loop discovery reuses cached
+predecessors and dominators. Results use immutable `Rc` handles so several analyses can coexist
+without cloning their vectors or borrowing the function while it is rewritten. A retained handle
+is a snapshot, not a live view.
+
+Every function pass must declare `preserves()`:
+
+- `ControlFlow` keeps block identities, entry and ordered successor edges intact. Copy/global
+  propagation, constant folding, algebraic rewrites, overflow elimination, GVN, scalar replacement,
+  dead stores, tail-call conversion and RC elision/sinking preserve these analyses.
+  Converting a return into a tail call preserves the same terminal CFG node.
+- `None` is required for SCCP, CFG simplification, DCE, LICM, bounds-check loop versioning,
+  induction-variable preheaders, vectorization, unrolling, string cursor preheaders and RC
+  insertion. A changed pass clears every cached CFG result; a no-change pass retains them.
+- A pass that edits the CFG and then queries it again must call `analyses.invalidate()` immediately
+  after the edit and discard old handles. LICM, unrolling and string cursor hoisting do this
+  between local iterations. The manager also invalidates after a changed `None` pass returns.
+
+Debug builds and `DREAM_VERIFY_MIR=1` compare entry and ordered successor lists around each pass.
+Changing the CFG while claiming preservation, or reporting no change after a CFG edit, is an ICE.
+The cache deliberately excludes value facts: range proofs, bounds facts, mod-ref summaries,
+liveness and ownership-token dataflow are recomputed for their current statement snapshot.
+
+MIR annotations are semantic contracts rather than cached CFG analyses:
+
+- Definition/type identities, parameter modes, ABI annotations and inlining hints come from
+  validated HIR. Transforms preserve their meaning, and synthetic locals/callees must carry
+  the corresponding typed metadata.
+- Cursor/ref/manual-drop annotations determine ownership operations. Copying or remapping a
+  local must preserve its ownership mode; owning values cannot be reclassified as cursors
+  simply because a CFG analysis changed. Inlining and scalar replacement migrate these modes
+  with their explicit retain/release/value-drop operations.
+- Unchecked access flags record a proof at the original use site. Moving or cloning that access
+  must preserve the guard, bounds and absence of intervening definitions; a new unchecked use
+  needs a new proof. CFG preservation alone does not prove value availability.
+- Region markers stay paired and cannot outlive or escape their allocation scope. Transforms
+  must preserve that invariant; the final verifier checks it independently of cached analyses.
+
 ## The whole-module driver
 
-`optimize_module` (`crates/dream-mir/src/passes/mod.rs`) sequences the module-wide phases, and the order is **correctness-relevant**, not just an optimization choice:
+`optimize_module` (`crates/dream-mir/src/passes/module_pipeline.rs`) sequences the module-wide phases, and the order is **correctness-relevant**, not just an optimization choice:
 
 ```mermaid
 flowchart LR
-    prune1[prune_module] --> expand[ExpandSimpleCtors] --> fbox[FuncboxAbi] --> args[ownership-args] --> rc[RcInsertion\n+ token verification] --> inline[Devirt + Inliner\nrounds + prune] --> repair[RcLastUseRepair] --> ur[UniqueRegion] --> held[rc-held-by-owner] --> sm[SroaManaged] --> perfn[per-function\nPassManager] --> late[strip-escaped-regions\n+ frame-alloc] --> verify[final verification\ndebug or DREAM_VERIFY_MIR=1]
+    prune1[prune_module] --> expand[ExpandSimpleCtors] --> fbox[FuncboxAbi] --> args[ownership-args] --> rc[RcInsertion\n+ token verification] --> inline[Devirt + Inliner\nrounds + prune] --> ur[UniqueRegion] --> held[rc-held-by-owner] --> sm[SroaManaged] --> perfn[per-function\nPassManager] --> late[frame-alloc] --> verify[final verification\ndebug or DREAM_VERIFY_MIR=1]
 ```
 
 `driver/compiler.rs` calls three entry points in order: `optimize_module_opts` (everything up to `SroaManaged`), `run_function_pipelines` (the per-function fixpoint), and `run_late_module_passes`. Every stage reports to the `--emit-mir` sink under its name (see [04-mir.md](./04-mir.md#pretty-printing-and-emit-mir-cratesdream-mirsrcprettyrs-passesdumprs)).
@@ -45,13 +100,13 @@ flowchart LR
 - Parameter modes are typed HIR facts (`Borrow`, `Share`, `Sink`, `Ref`), consumed directly by MIR lowering. The deleted `ParamModes` inference pass is not part of this pipeline.
 - `RcInsertion` runs **before** inlining. Callee scope-exit `Release`s stay on the original bodies (and keep inliner size budgets honest). Inserting after inlining on a fused `generated_dispatch` is too expensive. It reads a module `ModRefTable` (`rc/modref.rs`: which `(type, field)` / element / global slots each function may overwrite, closed over calls) to keep snapshot cursors and loop-carried cursor families (`rc/cursor_family.rs`) retain-free.
 - `Devirt` + `Inliner` alternate for up to 8 rounds with pruning in between. `Devirt` turns an interface call direct when every implementor maps the slot to one method, or when a forward dataflow proves the receiver's exact class (so factories exposed by inlining devirtualize on the next round). Receivers with up to four known implementors stay interface calls in MIR; the backend emits a tag switch to direct calls for them (policy in `backend/shared/iface_guard.rs`).
-- `RcLastUseRepair` walks fused CFGs once: last-use `a[i] = s` / field stores become moves so inlined `split` temps do not leak.
+- The inliner preserves the owning return ABI with explicit `Move` and source nulling, including container destinations. It does not rely on a subsequent RC repair sweep.
 - `UniqueRegion` wraps a fresh, unobserved `x = f(); … Release x` graph in a TLS bump region when `f` only allocates `del`-free, non-escaping classes. The root must remain in local slots; an ordinary release alone does not prove object uniqueness.
 - `rc-held-by-owner` (`rc/held.rs`) removes retain/release pairs on container snapshots whose owner is live and unmodified (per `ModRefTable`) wherever the snapshot is read — the post-inline counterpart of the conservative pre-inline cursors.
 - `SroaManaged` scalar-replaces non-escaping objects that the per-function `Sroa` cannot (several aliases, reference fields), spelling out the container-store RC rule from `rc_store.rs`.
 - The per-function `PassManager` then cleans up the merged bodies (`RcElision` / `HopElision` only — never a second `RcInsertion`).
 - `ownership-args` canonicalizes taken projections; lowering already materializes discarded owning results. The explicit-token verifier runs immediately after RC insertion, before inlining/elision erase those transfers.
-- `run_late_module_passes`: `strip_escaped_regions` shares the final verifier's CFG/call/graph proof. Invalid regions are ICEs in debug builds and logged, complete-function marker removal in release. Then `frame-alloc` builds instances that never outlive their frame in a stack buffer (`dream_frame_object`, immortal count). Final MIR verification runs in debug builds or with `DREAM_VERIFY_MIR=1`.
+- `run_late_module_passes`: `frame-alloc` builds instances that never outlive their frame in a stack buffer (`dream_frame_object`, immortal count). Final MIR verification runs in debug builds or with `DREAM_VERIFY_MIR=1`.
 
 Escape levels (`analysis/escape.rs`: alias classes, `No` / `Arg` / `Global`, callee parameter summaries over SCCs) and static object counts (`analysis/object_life.rs`) are shared analyses; `SroaManaged` and `frame-alloc` consume them.
 
@@ -126,7 +181,8 @@ Dream already ships `Algebraic`; rebuilding a slice of it is the clearest way to
 ```rust
 //! Algebraic identities: x+0, x-0, x*1, x*0, x/1.
 
-use super::MirPass;
+use super::{FunctionAnalyses, MirPass, PreservedAnalyses};
+use dream_hir::LayoutTable;
 use crate::mir::{BinOp, Const, MirFunction, Operand, Rvalue, Statement};
 use crate::types::TypeInterner;
 
@@ -135,7 +191,15 @@ pub struct Algebraic;
 impl MirPass for Algebraic {
     fn name(&self) -> &'static str { "algebraic" }
 
-    fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
+    fn preserves(&self) -> PreservedAnalyses { PreservedAnalyses::ControlFlow }
+
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        _interner: &TypeInterner,
+        _layouts: &LayoutTable,
+        _analyses: &mut FunctionAnalyses,
+    ) -> bool {
         let mut changed = false;
         for block in &mut func.blocks {
             for stmt in &mut block.stmts {
@@ -223,10 +287,20 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## Checklist & pitfalls for any new pass
 
-- [ ] `run` returns `true` **iff** it mutated the function. No false positives (infinite work), no false negatives (missed cascades).
+- [ ] `transform` returns `true` **iff** it mutated the function. No false positives (infinite work), no false negatives (missed cascades).
+- [ ] Declare analysis preservation; invalidate before a query following a CFG edit.
 - [ ] Iterate to a local fixpoint *within* `run` only if cheap; otherwise rely on the manager's loop.
 - [ ] **Never drop a statement with side effects** to delete its result. Only pure `Rvalue`s (`Use`/`Binary`/`Unary`/`Cast`/`ArrayLen`) are removable; `Call`/`New`/`UnionNew`/`ArrayLit`/`IndirectCall` may allocate or trap.
 - [ ] Respect RC balance: don't delete a `Retain`/`Release` unless you can prove the pairing.
 - [ ] Use `Terminator::successors()` for CFG traversal; don't hand-match terminator variants for edges.
 - [ ] Determinism: iterate blocks/stmts in `Vec` order; if you need a set/map, use `IndexMap`/`BTreeMap`, never `std::HashMap` (see [08](./08-testing-and-determinism.md)).
 - [ ] Add a focused unit test with `FunctionBuilder` and keep the workspace green and clippy-clean.
+
+## Ownership implementation modules
+
+`inline/eligibility.rs` decides which calls can inline, `pipeline.rs` drives module rounds and
+`splice.rs` remaps the callee and transfers return ownership. `rc/tokens/analysis.rs` runs the
+dataflow worklist; `flow.rs` handles joins and block transfer, `aliases.rs` orders leftover releases,
+`destroy.rs` checks destruction safety, and `calls.rs` handles call ownership effects.
+`rc/elision/` separates straight-line chains, branch/loop regions and postdominance proofs.
+The inliner and elision tests live in sibling test modules.

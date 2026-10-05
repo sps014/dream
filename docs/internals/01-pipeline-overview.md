@@ -20,7 +20,7 @@ flowchart TD
     mir --> rc["ExpandSimpleCtors, RcInsertion\n(make ownership explicit)"]
     rc --> opt["module optimize\ndevirt + inline rounds, post-inline RC,\nregions / sroa-managed"]
     opt --> perfn["per-function pipeline (fixpoint)"]
-    perfn --> late["late module passes\nstrip-escaped-regions, frame-alloc,\ndebug / DREAM_VERIFY_MIR=1 verifier"]
+    perfn --> late["late module passes\nframe-alloc,\ndebug / DREAM_VERIFY_MIR=1 verifier"]
     late --> emit["backend::llvm\nMIR → textual LLVM IR (.ll)"]
 
     emit --> link["llvm-link + runtime bitcode\n→ opt → llc"]
@@ -31,6 +31,16 @@ flowchart TD
 ```
 
 Generate phase: `run_generators` runs after parse (before analysis). `@compute` WGSL validation runs after analysis (before MIR). Both report `CompileError::Generator` when diagnostics are present.
+
+Generator implementations live under `src/driver/generate/`. `json_gen/` separates collection
+discovery, declaration snapshots, harness execution/cache and diagnostics. `webapi_gen/` separates
+route collection, binding analysis, dispatcher emission and OpenAPI emission. `rewrite/` rebuilds
+expressions and statements through a shared context; generated-source parsing and source-span
+mapping are independent modules. `quote.rs` uses serde_json for JSON strings and Dream's own
+escape vocabulary for generated Dream literals.
+
+The embedded stdlib's ordered package descriptors live under `crates/dream-stdlib/src/registry/`;
+`packages.rs` resolves package dependencies and `symbols.rs` supplies LSP symbol discovery.
 
 The `hir → mir → emit` pipeline is the **only** backend.
 
@@ -77,7 +87,7 @@ Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-s
 
 - **In:** HIR.
 - **Out:** optimized MIR (a CFG per function).
-- **Steps:** `mir::lower` desugars structured control flow into blocks; `ExpandSimpleCtors`, then `RcInsertion` (parameter ownership modes are already HIR facts) make ownership explicit (module-wide, before inlining); `optimize_module_opts` alternates `Devirt` with inliner rounds, then runs the post-inline RC and placement stages (`RcLastUseRepair`, `UniqueRegion`, `rc-held-by-owner`, `SroaManaged`); the per-function `PassManager` runs to a fixpoint (including bounds-check elimination and loop versioning in `Abc`); `run_late_module_passes` strips unsafe regions, stack-allocates non-escaping objects (`frame-alloc`), and runs the MIR verifier in debug builds or with `DREAM_VERIFY_MIR=1`. `--emit-mir` snapshots any of these stages. See [04-mir.md](./04-mir.md) and [05-writing-passes.md](./05-writing-passes.md).
+- **Steps:** `mir::lower` desugars structured control flow into blocks; `ExpandSimpleCtors`, then `RcInsertion` (parameter ownership modes are already HIR facts) make ownership explicit (module-wide, before inlining); `optimize_module_opts` alternates `Devirt` with inliner rounds, then runs the post-inline RC and placement stages (`UniqueRegion`, `rc-held-by-owner`, `SroaManaged`); the per-function `PassManager` runs to a fixpoint (including bounds-check elimination and loop versioning in `Abc`); `run_late_module_passes` stack-allocates non-escaping objects (`frame-alloc`), and runs the MIR verifier in debug builds or with `DREAM_VERIFY_MIR=1`. `--emit-mir` snapshots any of these stages. See [04-mir.md](./04-mir.md) and [05-writing-passes.md](./05-writing-passes.md).
 
 ### 7. Backend — `crates/dream-mir/src/backend/llvm/` + `src/execution/llvm/`
 

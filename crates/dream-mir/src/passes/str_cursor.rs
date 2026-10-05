@@ -5,7 +5,6 @@
 //! clang will not turn the scan into a pointer walk while the header load sits in the body.
 //! The preheader loads the payload address once; the body indexes that pointer.
 
-use super::cfg::{self, predecessors};
 use super::MirPass;
 use crate::{
     BasicBlock, BlockId, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement,
@@ -18,17 +17,28 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct StrCursor;
 
 impl MirPass for StrCursor {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::None
+    }
+
     fn name(&self) -> &'static str {
         "str-cursor"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         let mut changed = false;
         let mut skipped: BTreeSet<u32> = BTreeSet::new();
         // Innermost first. A refused loop is skipped so a later, quieter loop can still
         // hoist; block ids of existing loops stay valid when a preheader is inserted.
         for _ in 0..(func.blocks.len() + 1) * 2 {
-            let mut loops = cfg::natural_loops(func);
+            let cached_loops = analyses.natural_loops(func);
+            let mut loops: Vec<_> = cached_loops.iter().collect();
             loops.sort_by_key(|l| l.body.len());
             let Some(target) = loops
                 .into_iter()
@@ -36,10 +46,11 @@ impl MirPass for StrCursor {
             else {
                 break;
             };
-            if !apply(func, interner, target.header, &target.body) {
+            if !apply(func, interner, target.header, &target.body, analyses) {
                 skipped.insert(target.header.0);
                 continue;
             }
+            analyses.invalidate();
             changed = true;
         }
         changed
@@ -51,6 +62,7 @@ fn apply(
     interner: &TypeInterner,
     header: BlockId,
     body: &BTreeSet<BlockId>,
+    analyses: &mut crate::passes::FunctionAnalyses,
 ) -> bool {
     let bases = scan_bases(func, body);
     if bases.is_empty() || !body_is_scan(func, body, &bases) {
@@ -74,7 +86,8 @@ fn apply(
             rewrite_rvalue(rv, &ptr_of);
         }
     }
-    let incoming: Vec<BlockId> = predecessors(func)
+    let incoming: Vec<BlockId> = analyses
+        .predecessors(func)
         .get(header.0 as usize)
         .into_iter()
         .flatten()

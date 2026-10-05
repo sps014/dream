@@ -11,11 +11,21 @@ use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 pub struct SimplifyCfg;
 
 impl MirPass for SimplifyCfg {
+    fn preserves(&self) -> crate::passes::PreservedAnalyses {
+        crate::passes::PreservedAnalyses::None
+    }
+
     fn name(&self) -> &'static str {
         "simplify-cfg"
     }
 
-    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+    fn transform(
+        &self,
+        func: &mut MirFunction,
+        interner: &TypeInterner,
+        _layouts: &dream_hir::LayoutTable,
+        _analyses: &mut crate::passes::FunctionAnalyses,
+    ) -> bool {
         let mut changed = fold_constant_branches(func);
         changed |= collapse_same_target_branches(func);
         changed |= thread_empty_jumps(func);

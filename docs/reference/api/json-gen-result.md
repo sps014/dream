@@ -6,7 +6,7 @@ Read the [usage guide](../stdlib/json.md) for examples and common tasks. This re
 
 ## `class GenResult`
 
-Outcome of a `@json` source-generator expand pass. Optional `error_type` / `error_field` let the host attach a source span when reporting `DiagnosticBag` errors (see `driver/generate/json_gen.rs`).
+Outcome of a `@json` source-generator expand pass. Optional `error_type` / `error_field` let the host attach a source span when reporting `DiagnosticBag` errors (see `driver/generate/json_gen/diagnostics.rs`).
 
 ```dream
 public class GenResult

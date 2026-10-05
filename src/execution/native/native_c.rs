@@ -1,7 +1,7 @@
 //! Compiles a program's live `native/` C/C++ source sets (the `.abi.json` `c_sources` list) to
 //! objects with the same toolchain that links the binary (Zig by default, so C++ objects and the
-//! final link agree on one libc++). Objects are cached per set under `<artifact dir>/native-c/`,
-//! rebuilt when a source, a header under an include dir, or the flags change.
+//! final link agree on one C++ standard library). Objects are cached per set under
+//! `<artifact dir>/native-c/`, rebuilt when a source, a header under an include dir, or flags change.
 
 use super::cc::Cc;
 use crate::driver::wasi::run_captured;
@@ -139,7 +139,14 @@ pub fn compile_sets(
         }
     }
     if out.needs_cxx && !spec.is_msvc() {
-        out.link_args.push("-lc++".into());
+        out.link_args.push(
+            if matches!(cc, Cc::Zig(_)) || spec.is_apple() {
+                "-lc++"
+            } else {
+                "-lstdc++"
+            }
+            .into(),
+        );
     }
     Ok(out)
 }

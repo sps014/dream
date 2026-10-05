@@ -97,13 +97,12 @@ jobs:
       - name: Check runnable documentation examples
         run: python tooling/docs/check_examples.py
       - run: cargo test --workspace --no-fail-fast --timings
+      - name: Binary size gate tests
+        run: python scripts/test_binary_size.py
+      - name: Build release host capabilities
+        run: cargo build --locked --release -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone
       - name: Native distribution size budget
-        shell: bash
-        run: |
-          python3 scripts/test_binary_size.py
-          cargo build --locked --release -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone
-          python3 scripts/check-binary-size.py --compiler "target/debug/dream${{ runner.os == 'Windows' && '.exe' || '' }}" \
-            --host-directory target/release --report target/binary-size.json
+        run: python scripts/check-binary-size.py --compiler "target/debug/dream${{ runner.os == 'Windows' && '.exe' || '' }}" --host-directory target/release --llvm-directory "$HOME/.dream/toolchains/llvm-22.1.8/bin" --report target/binary-size.json
       - name: Preserve native size measurements
         if: always()
         uses: actions/upload-artifact@v4

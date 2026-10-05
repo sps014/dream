@@ -259,7 +259,11 @@ pub(super) fn build_native_runtime(
     let sigs = dir.join("dream_rt.sigs");
     let archive = (!vendored.is_empty()).then(|| dir.join(VENDOR_ARCHIVE));
     let stamp = dir.join(".stamp");
-    let level = clang_level_flags(opt);
+    let mut level = clang_level_flags(opt);
+    // The same bitcode backs shared libraries, whose ELF TLS cannot use local-exec relocations.
+    if !spec.is_windows() {
+        level.push("-fPIC");
+    }
     let headers: Vec<PathBuf> = [
         core_runtime_include_dir(root),
         runtime_abi_include_dir(root),

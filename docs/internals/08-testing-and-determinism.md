@@ -11,7 +11,9 @@ Linux, macOS and Windows run workspace build, strict Clippy and default tests. L
 the full native/Node corpus; Windows additionally runs the full native corpus with the
 pinned MSVC-compatible clang driver and developer SDK environment. Windows Rust/probe
 steps use PowerShell so Git Bash's `link` utility cannot shadow Microsoft's linker.
-Size budgets remain Linux/macOS-only until Windows distribution baselines are measured.
+All three platforms inspect and execute an isolated host-free Hello World and enforce
+independent release-size budgets for core and each optional service. The isolated compiler
+receives the pinned LLVM directory explicitly, independently of host-library discovery.
 Dependency caches survive failed validation; the pinned toolchain is cached immediately
 after installation so later test failures do not force another download.
 

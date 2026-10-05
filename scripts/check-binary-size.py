@@ -26,7 +26,7 @@ def check_budget(sizes):
     return failures
 
 
-def measure(compiler, host_directory):
+def measure(compiler, host_directory, llvm_directory):
     root = Path(__file__).resolve().parent.parent
     with tempfile.TemporaryDirectory(prefix="dream-size-") as temporary:
         directory = Path(temporary)
@@ -39,6 +39,7 @@ def measure(compiler, host_directory):
         output = package / "hello.ll"
         compile_env = os.environ.copy()
         compile_env.update(DREAM_HOME=str(directory), DREAM_BIN=str(isolated_compiler), DREAM_TARGETS=str(directory / "targets"))
+        compile_env["DREAM_LLVM"] = str(llvm_directory)
         subprocess.run(
             [str(isolated_compiler), "-O3", "--relocatable", "-o", str(output),
              str(root / "tests/size/hello.dream")],
@@ -82,9 +83,12 @@ def main():
     parser.add_argument("--compiler", type=Path, required=True)
     parser.add_argument("--host-directory", type=Path, required=True,
                         help="directory containing release core, unicode, crypto, process and timezone libraries")
+    parser.add_argument("--llvm-directory", type=Path, required=True,
+                        help="pinned LLVM bin directory available to the isolated compiler")
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
-    sizes = measure(args.compiler.resolve(strict=True), args.host_directory.resolve(strict=True))
+    sizes = measure(args.compiler.resolve(strict=True), args.host_directory.resolve(strict=True),
+                    args.llvm_directory.resolve(strict=True))
     failures = check_budget(sizes)
     report = {"platform": platform.system(), "architecture": platform.machine(),
               "guest_opt": "O3", "host_profile": "release", "bytes": sizes,

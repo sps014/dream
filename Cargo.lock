@@ -1240,6 +1240,7 @@ dependencies = [
  "flate2",
  "image",
  "indexmap",
+ "libc",
  "libloading",
  "logos",
  "naga 30.0.0",
@@ -1263,6 +1264,7 @@ dependencies = [
  "wasm-opt",
  "wasmparser",
  "wat",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1511,6 +1513,7 @@ dependencies = [
  "dream-types",
  "indexmap",
  "pretty_assertions",
+ "tracing",
 ]
 
 [[package]]

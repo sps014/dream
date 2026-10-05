@@ -25,7 +25,10 @@ impl Compiler {
         info!("starting parsing and multi-file resolution");
         let arena = Bump::new();
         let mut diagnostics = DiagnosticBag::new(None);
-        let loaded = self.load_program(main_file_path, &arena, &mut diagnostics)?;
+        let loaded = {
+            let _phase = tracing::info_span!("compile_phase", phase = "parse").entered();
+            self.load_program(main_file_path, &arena, &mut diagnostics)?
+        };
         info!("finished parsing");
         let stamp = self
             .build_cache

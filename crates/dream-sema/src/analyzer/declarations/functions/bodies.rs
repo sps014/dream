@@ -33,7 +33,9 @@ impl<'a> Analyzer<'a> {
         &mut self,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
-        let mut processed_generics: indexmap::IndexSet<crate::function_table::FunctionIdentity> = indexmap::IndexSet::new();
+        let _phase = tracing::info_span!("compile_phase", phase = "monomorphization").entered();
+        let mut processed_generics: indexmap::IndexSet<crate::function_table::FunctionIdentity> =
+            indexmap::IndexSet::new();
         let mut method_index = 0;
         // A generic whose field types amplify under substitution (e.g. a `List<fun(T): bool>`
         // field on `class C<T>` combined with something returning `C<fun(T): bool>`) expands
@@ -67,7 +69,9 @@ impl<'a> Analyzer<'a> {
                 check_instantiation_bounds(
                     &mut max_mangled_len,
                     &mut items_processed,
-                    &self.function_table.emitted_name(&self.type_ctx, &mangled_name),
+                    &self
+                        .function_table
+                        .emitted_name(&self.type_ctx, &mangled_name),
                     diagnostics,
                 )?;
             }
@@ -108,7 +112,9 @@ impl<'a> Analyzer<'a> {
                 method_index += 1;
                 diagnostics.file_path = file_path_string(&method.file_path);
                 self.with_generic_bindings(bindings, |s| s.analyze_function(method, diagnostics))?;
-                let Some(identity) = self.function_declaration(method) else { continue; };
+                let Some(identity) = self.function_declaration(method) else {
+                    continue;
+                };
                 let key = self.function_table.emitted_name(&self.type_ctx, &identity);
                 items_processed += 1;
                 check_instantiation_bounds(

@@ -65,11 +65,17 @@ dunce = { version = "1", optional = true }
 [features]
 default = ["native", "wasm-opt"]
 # Native compiler execution/linking tools; runtime hosts are built separately.
-native = ["dep:serde", "dep:serde_json", "dep:image", "dep:object", "dep:wasmparser", "dep:dunce"]
+native = ["dep:serde", "dep:serde_json", "dep:image", "dep:object", "dep:wasmparser", "dep:dunce", "dep:libc", "dep:windows-sys"]
 # `wasm-opt` pulls in Binaryen bindings for the CLI's `-O`/`--optimize` flag. Separate from `native`
 # since it's a build-time optimization concern rather than a runtime-execution one, but excluded
 # from the wasm32 analyzer build the same way.
 wasm-opt = ["dep:wasm-opt"]
+
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_ProcessStatus", "Win32_System_Threading"], optional = true }
 
 [dev-dependencies]
 libloading = "0.8"

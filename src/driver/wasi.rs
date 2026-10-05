@@ -17,6 +17,7 @@ fn tool_color() -> bool {
 /// output when the command fails. Callers pass `-fcolor-diagnostics` / `--color-diagnostics`
 /// themselves when stderr is a TTY (we capture, so the tool's own TTY detection strips colors).
 pub(crate) fn run_captured(cmd: &mut Command, what: &str) -> Result<(), String> {
+    let _tool = tracing::info_span!("compile_tool", tool = what).entered();
     let out = cmd
         .output()
         .map_err(|e| format!("failed to spawn {what}: {e}"))?;

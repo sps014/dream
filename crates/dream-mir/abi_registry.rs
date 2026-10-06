@@ -1,7 +1,7 @@
 // Authoritative guest ABI registry. Generated C and JS files must not be edited.
 
 macro_rules! numbers {
- ($($(#[$attr:meta])* $name:ident: $ty:ty = $value:expr => $c:literal;)*) => {
+ ($($(#[$attr:meta])* $name:ident: $ty:ty = $value:expr_2021 => $c:literal;)*) => {
  $($(#[$attr])* pub const $name: $ty = $value;)*
  pub const ABI_NUMBERS: &[(&str, i64)] = &[$(($c, $name as i64)),*];
  };
@@ -122,7 +122,7 @@ DREAM_RC_IMMORTAL: i32 = DREAM_RC_SHARED_BIT => "DREAM_RC_IMMORTAL";
 }
 
 macro_rules! symbols {
- ($($(#[$attr:meta])* $name:ident: $ty:ty = $value:expr => $c:literal;)*) => {
+ ($($(#[$attr:meta])* $name:ident: $ty:ty = $value:expr_2021 => $c:literal;)*) => {
  $($(#[$attr])* pub const $name: $ty = $value;)*
  pub const ABI_SYMBOLS: &[(&str, &str)] = &[$(($c, $name)),*];
  };

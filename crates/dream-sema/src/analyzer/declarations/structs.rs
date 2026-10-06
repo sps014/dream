@@ -514,9 +514,9 @@ impl<'a> Analyzer<'a> {
             position,
             diagnostics,
         );
-        if base_name == "Vector" {
-            if let Some(elem) = args.first() {
-                if !matches!(
+        if base_name == "Vector"
+            && let Some(elem) = args.first()
+                && !matches!(
                     elem,
                     Type::Byte(_)
                         | Type::Integer(_)
@@ -532,8 +532,6 @@ impl<'a> Analyzer<'a> {
                         Some(*position),
                     );
                 }
-            }
-        }
 
         let new_fields: Vec<StructFieldNode> = template
             .fields

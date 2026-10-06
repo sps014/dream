@@ -27,14 +27,13 @@ impl<'a> Analyzer<'a> {
                 Some(parent_function.name.position),
             );
         }
-        if let Some(name) = label {
-            if !self.loop_labels.contains(name) {
+        if let Some(name) = label
+            && !self.loop_labels.contains(name) {
                 diagnostics.report_error(
                     format!("Break targets unknown loop label '{}'", name),
                     Some(parent_function.name.position),
                 );
             }
-        }
         self.hir_break(label.clone());
         Ok(())
     }
@@ -54,14 +53,13 @@ impl<'a> Analyzer<'a> {
                 Some(parent_function.name.position),
             );
         }
-        if let Some(name) = label {
-            if !self.loop_labels.contains(name) {
+        if let Some(name) = label
+            && !self.loop_labels.contains(name) {
                 diagnostics.report_error(
                     format!("Continue targets unknown loop label '{}'", name),
                     Some(parent_function.name.position),
                 );
             }
-        }
         self.hir_continue(label.clone());
         Ok(())
     }

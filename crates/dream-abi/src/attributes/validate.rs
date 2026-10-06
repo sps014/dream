@@ -6,10 +6,9 @@ use dream_syntax::nodes::interface_node::InterfaceDeclarationNode;
 use dream_syntax::nodes::program::{EnumDeclarationNode, ExtendNode};
 use dream_syntax::nodes::struct_node::{StructDeclarationNode, StructFieldNode};
 use dream_syntax::nodes::types::is_special_member_name;
-use std::collections::BTreeMap;
 use std::rc::Rc;
 
-fn arg_matches_kind(arg: &AttributeArg, kind: ArgKind) -> bool {
+pub(super) fn arg_matches_kind(arg: &AttributeArg, kind: ArgKind) -> bool {
     match (kind, arg) {
         (ArgKind::String, AttributeArg::String(_)) => true,
         (ArgKind::Int, AttributeArg::Int(_)) => true,
@@ -23,7 +22,7 @@ fn arg_matches_kind(arg: &AttributeArg, kind: ArgKind) -> bool {
     }
 }
 
-fn kind_name(kind: ArgKind) -> &'static str {
+pub(super) fn kind_name(kind: ArgKind) -> &'static str {
     match kind {
         ArgKind::String => "a string literal",
         ArgKind::Int => "an integer literal",
@@ -32,63 +31,6 @@ fn kind_name(kind: ArgKind) -> &'static str {
         ArgKind::Bool => "a boolean literal",
         ArgKind::Enum => "an enum member path",
     }
-}
-
-fn type_to_arg_kind(ty: &Type) -> Option<ArgKind> {
-    match ty {
-        Type::String(_) => Some(ArgKind::String),
-        Type::Integer(_) | Type::Byte(_) | Type::Long(_) | Type::UInt(_) | Type::ULong(_) => {
-            Some(ArgKind::Int)
-        }
-        Type::Float(_) => Some(ArgKind::Float),
-        Type::Double(_) => Some(ArgKind::Double),
-        Type::Boolean(_) => Some(ArgKind::Bool),
-        // Bare named types in params are treated as enum (e.g. `HttpMethod`).
-        Type::Struct(_, None) | Type::Generic(_) => Some(ArgKind::Enum),
-        _ => None,
-    }
-}
-
-/// Top-level functions marked `@attribute`: name (exact casing) → parameter kinds.
-fn collect_user_attributes(
-    functions: &[FunctionNode<'_>],
-    diagnostics: &mut DiagnosticBag,
-) -> BTreeMap<String, Vec<ArgKind>> {
-    let mut out = BTreeMap::new();
-    for f in functions {
-        if !f.attributes.iter().any(|a| a.name.text == "attribute") {
-            continue;
-        }
-        diagnostics.file_path = file_path_string(&f.file_path);
-        let mut kinds = Vec::new();
-        let mut ok = true;
-        for p in &f.parameters {
-            match type_to_arg_kind(&p.type_) {
-                Some(k) => kinds.push(k),
-                None => {
-                    diagnostics.report_error(
-                        format!(
-                            "attribute function '{}': parameter '{}' has a type that cannot be used as an attribute argument",
-                            f.name.text, p.name.text
-                        ),
-                        Some(p.name.position),
-                    );
-                    ok = false;
-                }
-            }
-        }
-        if ok {
-            if out.contains_key(&f.name.text) {
-                diagnostics.report_error(
-                    format!("duplicate attribute function '{}'", f.name.text),
-                    Some(f.name.position),
-                );
-            } else {
-                out.insert(f.name.text.clone(), kinds);
-            }
-        }
-    }
-    out
 }
 
 fn validate_arg_list(
@@ -102,6 +44,8 @@ fn validate_arg_list(
     if attr.args.len() < min || attr.args.len() > max {
         let expected = if min == max {
             format!("{}", min)
+        } else if max == usize::MAX {
+            format!("at least {}", min)
         } else {
             format!("{}-{}", min, max)
         };
@@ -136,20 +80,20 @@ fn validate_arg_list(
 }
 
 /// Validates one declaration's attribute list against `target`: every attribute must be a known
-/// builtin name or a user `@attribute` function, allowed on `target`, carry the right argument shape,
+/// builtin name or a declared `@attribute` type, allowed on `target`, carry the right argument shape,
 /// and (unless `repeatable`) appear at most once.
 pub fn validate_attributes(
     attrs: &[AttributeNode],
     target: AttributeTarget,
     diagnostics: &mut DiagnosticBag,
 ) {
-    validate_attributes_with(attrs, target, &BTreeMap::new(), diagnostics);
+    validate_attributes_with(attrs, target, &UserAttributes::default(), diagnostics);
 }
 
 fn validate_attributes_with(
     attrs: &[AttributeNode],
     target: AttributeTarget,
-    user_attrs: &BTreeMap<String, Vec<ArgKind>>,
+    user_attrs: &UserAttributes,
     diagnostics: &mut DiagnosticBag,
 ) {
     let mut seen: Vec<&str> = Vec::new();
@@ -193,10 +137,9 @@ fn validate_attributes_with(
             continue;
         }
 
-        if let Some(kinds) = user_attrs.get(name) {
-            let n = kinds.len();
-            validate_arg_list(name, attr, kinds, n, n, diagnostics);
-            if seen.contains(&name) {
+        if let Some(decl) = user_attrs.get(name) {
+            user_attrs.validate_use(decl, attr, target, diagnostics);
+            if !decl.repeatable && seen.contains(&name) {
                 diagnostics.report_error(
                     format!("duplicate '@{}' attribute", name),
                     Some(attr.name.position),
@@ -206,8 +149,12 @@ fn validate_attributes_with(
             continue;
         }
 
+        let hint = user_attrs
+            .import_hint(name)
+            .map(|pkg| format!("; it is declared in '{pkg}', add 'import {pkg};'"))
+            .unwrap_or_default();
         diagnostics.report_error(
-            format!("unknown attribute '@{}'", name),
+            format!("unknown attribute '@{}'{}", name, hint),
             Some(attr.name.position),
         );
     }
@@ -235,7 +182,7 @@ fn function_target(f: &FunctionNode<'_>) -> Option<AttributeTarget> {
 fn validate_function_list(
     functions: &[FunctionNode<'_>],
     top_level: bool,
-    user_attrs: &BTreeMap<String, Vec<ArgKind>>,
+    user_attrs: &UserAttributes,
     diagnostics: &mut DiagnosticBag,
 ) {
     for f in functions {
@@ -264,7 +211,7 @@ fn validate_function_list(
 
 fn validate_fields(
     fields: &[StructFieldNode],
-    user_attrs: &BTreeMap<String, Vec<ArgKind>>,
+    user_attrs: &UserAttributes,
     diagnostics: &mut DiagnosticBag,
 ) {
     for field in fields {
@@ -289,10 +236,9 @@ pub fn validate_program_attributes(
     functions: &[FunctionNode<'_>],
     enums: &[EnumDeclarationNode<'_>],
     extends: &[ExtendNode<'_>],
+    user_attrs: &UserAttributes,
     diagnostics: &mut DiagnosticBag,
 ) {
-    let user_attrs = collect_user_attributes(functions, diagnostics);
-
     for s in structs {
         if s.file_path.is_none() {
             continue;
@@ -303,9 +249,9 @@ pub fn validate_program_attributes(
         } else {
             AttributeTarget::Struct
         };
-        validate_attributes_with(&s.attributes, target, &user_attrs, diagnostics);
-        validate_fields(&s.fields, &user_attrs, diagnostics);
-        validate_function_list(&s.methods, false, &user_attrs, diagnostics);
+        validate_attributes_with(&s.attributes, target, user_attrs, diagnostics);
+        validate_fields(&s.fields, user_attrs, diagnostics);
+        validate_function_list(&s.methods, false, user_attrs, diagnostics);
     }
 
     for i in interfaces {
@@ -316,20 +262,20 @@ pub fn validate_program_attributes(
         validate_attributes_with(
             &i.attributes,
             AttributeTarget::Interface,
-            &user_attrs,
+            user_attrs,
             diagnostics,
         );
         for m in &i.methods {
             validate_attributes_with(
                 &m.attributes,
                 AttributeTarget::InterfaceMethod,
-                &user_attrs,
+                user_attrs,
                 diagnostics,
             );
         }
     }
 
-    validate_function_list(functions, true, &user_attrs, diagnostics);
+    validate_function_list(functions, true, user_attrs, diagnostics);
 
     for e in enums {
         if e.file_path.is_none() {
@@ -341,11 +287,11 @@ pub fn validate_program_attributes(
         } else {
             AttributeTarget::PlainEnum
         };
-        validate_attributes_with(&e.attributes, target, &user_attrs, diagnostics);
+        validate_attributes_with(&e.attributes, target, user_attrs, diagnostics);
         for v in &e.variants {
-            validate_fields(&v.fields, &user_attrs, diagnostics);
+            validate_fields(&v.fields, user_attrs, diagnostics);
         }
-        validate_function_list(&e.methods, false, &user_attrs, diagnostics);
+        validate_function_list(&e.methods, false, user_attrs, diagnostics);
     }
 
     for ext in extends {
@@ -353,6 +299,6 @@ pub fn validate_program_attributes(
             continue;
         }
         diagnostics.file_path = file_path_string(&ext.file_path);
-        validate_function_list(&ext.methods, false, &user_attrs, diagnostics);
+        validate_function_list(&ext.methods, false, user_attrs, diagnostics);
     }
 }

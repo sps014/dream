@@ -254,6 +254,60 @@ fn wraps_switch_join_of_unique_call() {
 }
 
 #[test]
+fn does_not_wrap_scalar_call_result() {
+    let mut ctx = TypeCtx::new();
+    let pred_def = ctx.register(DefKind::Function, "pred", vec![]);
+    let user_def = ctx.register(DefKind::Function, "user", vec![]);
+    let bool_ty = ctx.interner.bool();
+
+    let mut pred = FunctionBuilder::new("pred", bool_ty);
+    pred.set_def(pred_def, vec![]);
+    let r = pred.new_local(bool_ty, Some("r".into()));
+    pred.assign(
+        Place::Local(r),
+        Rvalue::Use(Operand::Const(Const::Bool(true))),
+    );
+    pred.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(r)))));
+
+    let mut user = FunctionBuilder::new("user", ctx.interner.void());
+    user.set_def(user_def, vec![]);
+    let b = user.new_local(bool_ty, Some("b".into()));
+    user.assign(
+        Place::Local(b),
+        Rvalue::Call {
+            callee: Callee {
+                def: pred_def,
+                args: vec![],
+                ret: bool_ty,
+                take_params: vec![],
+            },
+            args: vec![],
+        },
+    );
+    let then_blk = user.new_block();
+    let else_blk = user.new_block();
+    let join = user.new_block();
+    user.terminate(Terminator::If {
+        cond: Operand::Copy(Place::Local(b)),
+        then_blk,
+        else_blk,
+    });
+    user.switch_to(then_blk);
+    user.terminate(Terminator::Goto(join));
+    user.switch_to(else_blk);
+    user.terminate(Terminator::Goto(join));
+    user.switch_to(join);
+    user.terminate(Terminator::Return(None));
+
+    let mut mir = Mir {
+        functions: vec![pred.finish(), user.finish()],
+        ..Default::default()
+    };
+    UniqueRegion.run(&mut mir, &ctx.interner);
+    assert!(!has_region_enter(&mir.functions[1]));
+}
+
+#[test]
 fn does_not_wrap_switch_join_when_phi_used_after() {
     let mut ctx = TypeCtx::new();
     let node_def = ctx.register(DefKind::Struct, "Node", vec![]);

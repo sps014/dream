@@ -141,12 +141,11 @@ pub fn cc_link_flags(
         if spec.is_msvc() && matches!(lib.as_str(), "c" | "m") {
             continue;
         }
-        if let Some(path) = find_library_path(config, lib, search_roots, spec) {
-            if let Some(dir) = path.parent() {
+        if let Some(path) = find_library_path(config, lib, search_roots, spec)
+            && let Some(dir) = path.parent() {
                 flags.push(format!("-L{}", dir.display()));
                 rpaths.insert(dir.to_path_buf());
             }
-        }
         flags.push(format!("-l{lib}"));
     }
     if !spec.is_windows() {

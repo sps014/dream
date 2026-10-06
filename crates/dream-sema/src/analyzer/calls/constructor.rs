@@ -28,19 +28,29 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(Type, Option<crate::function_table::FunctionIdentity>), SemanticError> {
-        if let Some(args) = generic_args { self.ensure_struct_instantiated(&name.text, args, &name.position, diagnostics); }
+        if let Some(args) = generic_args {
+            self.ensure_struct_instantiated(&name.text, args, &name.position, diagnostics);
+        }
         let result = Type::Struct(name.clone(), generic_args.clone());
         let owner = self.type_ctx.lower(&result);
         let struct_name = self.type_id_display(owner);
         let ctor_member = dream_syntax::nodes::types::CONSTRUCTOR_NAME;
-        if generic_args.is_none() && self.type_ctx.resolve(DefKind::Struct, &name.text).is_some_and(|def| self.generic_struct(def).is_some()) {
-            diagnostics.report_error(format!("Generic class '{}' requires type arguments", name.text), Some(name.position));
+        if generic_args.is_none()
+            && self
+                .type_ctx
+                .resolve(DefKind::Struct, &name.text)
+                .is_some_and(|def| self.generic_struct(def).is_some())
+        {
+            diagnostics.report_error(
+                format!("Generic class '{}' requires type arguments", name.text),
+                Some(name.position),
+            );
         }
 
         // File/module-level visibility (Axis 2): a non-public class is only constructible from its
         // own file.
-        if let Some(info) = self.struct_info(owner) {
-            if !self.visible_across_files(
+        if let Some(info) = self.struct_info(owner)
+            && !self.visible_across_files(
                 &info.file_path,
                 info.visibility,
                 parent_function.file_path.as_ref(),
@@ -48,7 +58,6 @@ impl<'a> Analyzer<'a> {
                 let decl_file = info.file_path.clone();
                 self.report_not_public("Class", &name.text, &decl_file, name.position, diagnostics);
             }
-        }
 
         // A struct with more than one `constructor` overload is resolved exactly like an
         // overloaded free function/method: the implicit `this` (the struct itself) plus the given
@@ -152,9 +161,6 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        Ok((
-            result,
-            resolved_ctor.map(|sig| sig.identity),
-        ))
+        Ok((result, resolved_ctor.map(|sig| sig.identity)))
     }
 }

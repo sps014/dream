@@ -3,6 +3,7 @@ use super::StdPackage;
 pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.collections",
     deps: &["system.core", "system.primitives"],
+    generators: &[],
     files: &[
         (
             "<std>/system/collections/list.dream",

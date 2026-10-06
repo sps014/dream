@@ -53,13 +53,12 @@ fn families(f: &MirFunction, interner: &TypeInterner) -> Vec<Family> {
     }
     for block in &f.blocks {
         for stmt in &block.stmts {
-            if let Statement::Assign(Place::Local(dest), rv) = stmt {
-                if let Some(src) = alias(rv) {
+            if let Statement::Assign(Place::Local(dest), rv) = stmt
+                && let Some(src) = alias(rv) {
                     let a = root(&mut parent, dest.0 as usize);
                     let b = root(&mut parent, src as usize);
                     parent[a.max(b)] = a.min(b);
                 }
-            }
         }
     }
     let mut excluded: BTreeSet<u32> = f.params.iter().map(|p| p.0).collect();
@@ -288,8 +287,8 @@ fn check_family(f: &MirFunction, family: &Family, out: &mut Vec<Violation>) {
             ));
             continue;
         }
-        if let Terminator::Return(value) = &block.terminator {
-            if value
+        if let Terminator::Return(value) = &block.terminator
+            && value
                 .as_ref()
                 .and_then(local)
                 .and_then(|l| family.locals.get(&l))
@@ -297,7 +296,6 @@ fn check_family(f: &MirFunction, family: &Family, out: &mut Vec<Violation>) {
             {
                 state.count -= 1;
             }
-        }
         if state.count != 0
             && matches!(
                 block.terminator,

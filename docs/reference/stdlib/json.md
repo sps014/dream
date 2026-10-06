@@ -135,6 +135,7 @@ System.println(Json.serialize(mixed));   // {"n":42,"s":"text"}
 | array `[...]` | `kind()` / `is_array` | `at(index)` / `as_array` / `.length` | `JsonValue.array()`, then `push` |
 | string / number / bool / null | `kind()` / `is_null` | `str_or` / `int_or` / `as_string` / `as_int` / `as_double` / `as_bool` | `from_string` / `from_int` / `number` / `boolean` / `none` |
 
-## `GenResult`
+## How `@json` works
 
-`GenResult.success(source)` / `GenResult.failure(message)` report emit-style generator outcomes; you rarely construct this by hand — prefer [CodeBuilder](codegen.md).
+`@json` is an ordinary Dream source generator, `json_derive` in `system.json`. Importing `system.json` registers it, so it works the same in single files, packages, dependencies, `dream test`, and wasm builds. It runs only when the program has a `@json` type or calls `Json.serialize`, `Json.deserialize`, or `Json.from_value`. It is `@incremental`, so unchanged programs replay its cached output. The generated code is written to `.dream/generated/<entry>/json_derive/json.dream`; to step through the derive itself, see [Debugging a generator](../language/generators.md#debugging-a-generator).
+

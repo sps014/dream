@@ -76,11 +76,10 @@ impl RegistryClient for FileRegistry {
             if name.starts_with('.') {
                 continue;
             }
-            if let Some(latest) = self.fetch_index(&name)?.pop() {
-                if latest.matches_query(&needle) {
+            if let Some(latest) = self.fetch_index(&name)?.pop()
+                && latest.matches_query(&needle) {
                     out.push(latest);
                 }
-            }
         }
         out.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(out)

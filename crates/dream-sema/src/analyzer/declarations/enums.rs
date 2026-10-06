@@ -156,8 +156,8 @@ impl<'a> Analyzer<'a> {
             for field in &variant.fields {
                 let ftype = substitute_generic_type(&field.field_type, bindings);
                 // Instantiate any generic union/struct referenced by a payload field type.
-                if let Some((base, args)) = Self::resolve_struct_parts(&ftype) {
-                    if !args.is_empty() {
+                if let Some((base, args)) = Self::resolve_struct_parts(&ftype)
+                    && !args.is_empty() {
                         self.ensure_type_instantiated(
                             &base,
                             &args,
@@ -165,7 +165,6 @@ impl<'a> Analyzer<'a> {
                             diagnostics,
                         );
                     }
-                }
                 let ftid = self.type_ctx.lower(&ftype);
                 if self.type_ctx.interner.is_ref_struct_type(ftid) {
                     diagnostics.report_error(

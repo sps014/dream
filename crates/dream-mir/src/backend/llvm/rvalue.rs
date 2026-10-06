@@ -675,8 +675,8 @@ impl<'l, 'a> Fx<'l, 'a> {
         }
         let fk = self.interner.kind(from).clone();
         let tk = self.interner.kind(to).clone();
-        if let (TyKind::Prim(from_prim), TyKind::Prim(to_prim)) = (&fk, &tk) {
-            if from_prim.is_numeric()
+        if let (TyKind::Prim(from_prim), TyKind::Prim(to_prim)) = (&fk, &tk)
+            && from_prim.is_numeric()
                 && to_prim.is_numeric()
                 && (matches!(from_prim, PrimTy::ISize | PrimTy::USize)
                     || matches!(to_prim, PrimTy::ISize | PrimTy::USize))
@@ -686,7 +686,6 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let source = self.conv_v(&src, &source_ty, from_prim.is_unsigned_integer());
                 return self.conv_v(&source, &target_ty, to_prim.is_unsigned_integer());
             }
-        }
         if matches!(tk, TyKind::Object | TyKind::Interface(..)) && self.is_value(from) {
             let size = elem_size(&self.l.cx, from) as i64;
             let tag = self.l.cx.type_tag(from);

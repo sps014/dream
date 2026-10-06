@@ -11,6 +11,7 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.io",
         "system",
     ],
+    generators: &[],
     files: &[
         (
             "<std>/system/process/process_error.dream",

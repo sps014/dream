@@ -3,6 +3,7 @@ use super::StdPackage;
 pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.crypto",
     deps: &["system.core", "system.primitives"],
+    generators: &[],
     files: &[
         (
             "<std>/system/crypto/crypto_error.dream",

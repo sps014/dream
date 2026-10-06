@@ -39,20 +39,14 @@ impl<'a> Analyzer<'a> {
                 .unwrap_or_default();
             let value = arg_hirs.into_iter().next().flatten();
             if struct_name == "JsonValue" {
-                self.hir_set_type_method_call(
-                    json_ty,
-                    "_stringify",
-                    vec![value],
-                    &named("string"),
-                );
+                self.hir_set_type_method_call(json_ty, "_stringify", vec![value], &named("string"));
                 return Ok(named("string"));
             }
             let sb_ty = named("StringBuilder");
             let string_ty = named("string");
             let sb_local = self.hir_alloc_local("__json_sb", &sb_ty);
             let sb_id = self.type_ctx.lower(&sb_ty);
-            let ctor =
-                self.unique_method_def(sb_id, dream_syntax::nodes::types::CONSTRUCTOR_NAME);
+            let ctor = self.unique_method_def(sb_id, dream_syntax::nodes::types::CONSTRUCTOR_NAME);
             let int_ty = self.type_ctx.interner.int();
             let capacity = HExpr::new(int_ty, HExprKind::IntLit(256));
             self.hir_set_new("StringBuilder", ctor, vec![Some(capacity)], &sb_ty);
@@ -72,8 +66,8 @@ impl<'a> Analyzer<'a> {
                 // Diagnose from the *type*, not from whether the generator has already emitted a
                 // writer. LSP analysis skips generators, so `Map<string, string>` has no adapter
                 // DefId even though a real compile will produce one.
-                if let Some(arg) = value.as_ref() {
-                    if !self.json_type_encodable(arg.ty) {
+                if let Some(arg) = value.as_ref()
+                    && !self.json_type_encodable(arg.ty) {
                         diagnostics.report_error(
                             format!(
                                 "'{}' cannot be serialized to JSON: it has no compile-time JSON encoding. Use 'JsonValue' for mixed or unknown data, or mark a named type '@json'",
@@ -85,7 +79,6 @@ impl<'a> Analyzer<'a> {
                         self.hir_none();
                         return Ok(string_ty);
                     }
-                }
                 let prim_writer =
                     value
                         .as_ref()
@@ -132,12 +125,7 @@ impl<'a> Analyzer<'a> {
                 let write_hir = self.hir_take();
                 self.hir_expr_stmt(write_hir);
                 let sb_read2 = HExpr::new(sb_ty_id, HExprKind::Var(Binding::Local(local)));
-                self.hir_set_type_method_call(
-                    sb_ty_id,
-                    "build",
-                    vec![Some(sb_read2)],
-                    &string_ty,
-                );
+                self.hir_set_type_method_call(sb_ty_id, "build", vec![Some(sb_read2)], &string_ty);
             } else {
                 self.hir_fail();
                 self.hir_none();
@@ -239,7 +227,12 @@ impl<'a> Analyzer<'a> {
             }
 
             if typed_parser {
-                self.hir_set_type_method_call(t_id, "from_json_parser_text", vec![text], &result_ty);
+                self.hir_set_type_method_call(
+                    t_id,
+                    "from_json_parser_text",
+                    vec![text],
+                    &result_ty,
+                );
                 return Ok(result_ty);
             }
 
@@ -451,7 +444,9 @@ impl<'a> Analyzer<'a> {
                 return Ok(t_type);
             }
             match json_collection_de_fn(&struct_name) {
-                Some(adapter) => self.hir_set_type_method_call(json_ty, &adapter, vec![value], &t_type),
+                Some(adapter) => {
+                    self.hir_set_type_method_call(json_ty, &adapter, vec![value], &t_type)
+                }
                 None => self.hir_set_type_method_call(t_ty_id, "from_json", vec![value], &t_type),
             }
             return Ok(t_type);

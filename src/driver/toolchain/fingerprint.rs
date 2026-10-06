@@ -1,7 +1,17 @@
 use super::ToolchainConfig;
 
 impl ToolchainConfig {
+    /// Everything that selects tools and libraries, including the working directory.
     pub fn fingerprint(&self) -> String {
+        let mut hash = blake3::Hasher::new();
+        hash.update(self.location_independent_fingerprint().as_bytes());
+        hash.update(format!("{:?}", self.cwd).as_bytes());
+        hash.finalize().to_hex().to_string()
+    }
+
+    /// [`Self::fingerprint`] without the working directory, for caches shared by every project
+    /// (generator executables and results), so a moved or second project still hits them.
+    pub fn location_independent_fingerprint(&self) -> String {
         let mut hash = blake3::Hasher::new();
         for value in [
             format!(
@@ -20,7 +30,6 @@ impl ToolchainConfig {
             format!(
                 "{:?}",
                 (
-                    &self.cwd,
                     &self.path,
                     &self.cc,
                     &self.cxx,

@@ -10,6 +10,7 @@ use super::*;
 
 pub(in crate::analyzer) mod capture_scan;
 mod casts;
+mod declof;
 mod dispatch;
 mod identifiers;
 mod lambda;

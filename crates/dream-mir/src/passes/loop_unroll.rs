@@ -291,11 +291,10 @@ fn induction(
                 }
             }
         }
-        if let Terminator::Await { dest: Some(d), .. } = &block.terminator {
-            if *d == iv {
+        if let Terminator::Await { dest: Some(d), .. } = &block.terminator
+            && *d == iv {
                 return None; // async-bound induction var: bail
             }
-        }
     }
     if def_count != 2 {
         return None;

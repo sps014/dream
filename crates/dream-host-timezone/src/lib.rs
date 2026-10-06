@@ -3,5 +3,5 @@
 mod exports;
 mod tz;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dream_host_timezone_abi_v2() {}

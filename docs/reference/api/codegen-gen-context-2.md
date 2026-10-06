@@ -1,4 +1,4 @@
-# GenFieldInfo, GenTypeInfo, GenSyntaxBlock, GenContext
+# GenContext
 
 **Import:** `import system.codegen;`
 
@@ -8,24 +8,34 @@ Read the [usage guide](../stdlib/codegen.md) for examples and common tasks. This
 
 ## `error`
 
-Queues a generate-time diagnostic for `block` (surfaces as `CompileError::Generator`). Only the first reported error is kept, mirroring the harness `ERR` protocol's one-message contract.
-
 ```dream
-public fun error(borrow block: GenSyntaxBlock, message: string): void
+public fun error(borrow call: GenCallSite, message: string): void
 ```
 
-## `error_general`
-
-Queues a generate-time diagnostic with no associated call site.
+## `warning`
 
 ```dream
-public fun error_general(message: string): void
+public fun warning(borrow decl: GenDecl, message: string): void
+```
+
+## `has_errors`
+
+```dream
+public fun has_errors(): bool
+```
+
+## `log`
+
+A line shown with `dream -v` / `dream generate --explain`.
+
+```dream
+public fun log(message: string): void
 ```
 
 ## `finish`
 
-Flushes accumulated replace/error/emit calls to stdout using the `GenHost` protocol.
+Writes the result for the compiler; the harness returns this as the exit code.
 
 ```dream
-public fun finish(): void
+public async fun finish(): int
 ```

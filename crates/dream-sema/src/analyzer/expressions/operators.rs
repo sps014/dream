@@ -155,8 +155,8 @@ impl<'a> Analyzer<'a> {
                 | TokenKind::GreaterThanEqualToken
                 | TokenKind::SmallerThanToken
                 | TokenKind::SmallerThanEqualToken
-        ) {
-            if let Some(compare_fn) = self.comparable_compare_fn(&left_value) {
+        )
+            && let Some(compare_fn) = self.comparable_compare_fn(&left_value) {
                 self.compare_data_type(&left_value, &right_value, &opr.position, diagnostics)?;
                 let bool_ty = Type::Boolean(opr.clone());
                 let int_ty = Type::Integer(opr.clone());
@@ -164,7 +164,6 @@ impl<'a> Analyzer<'a> {
                 self.hir_compare_last_to_zero(opr.kind);
                 return Ok(bool_ty);
             }
-        }
 
         self.compare_data_type(&left_value, &right_value, &opr.position, diagnostics)?;
 
@@ -228,8 +227,8 @@ impl<'a> Analyzer<'a> {
             // `!=` has no standalone registered symbol; a `@operator("==")` overload also powers it
             // (negated). `==` itself is already handled by the generic operator-overload dispatch
             // above, since `EqualEqualToken` maps directly to `OperatorSymbol::Eq`.
-            if opr.kind == TokenKind::NotEqualToken {
-                if let Some(op_method) =
+            if opr.kind == TokenKind::NotEqualToken
+                && let Some(op_method) =
                     self.operator_binary_fn(&left_value, TokenKind::EqualEqualToken)
                 {
                     if let Some(param_type) = &op_method.param_type {
@@ -250,7 +249,6 @@ impl<'a> Analyzer<'a> {
                     self.hir_negate_last();
                     return Ok(bool_ty);
                 }
-            }
         }
 
         let is_bool_result = matches!(

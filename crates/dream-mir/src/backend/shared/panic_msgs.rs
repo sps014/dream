@@ -66,7 +66,11 @@ pub fn c_callback_arg_what(index: usize) -> String {
 pub fn c_boundary(mir: &crate::Mir) -> Vec<String> {
     use dream_hir::CShape;
     let mut out = Vec::new();
-    for imp in mir.imports.iter().filter(|i| !i.c_params.is_empty() || i.c_ret != CShape::Void) {
+    for imp in mir
+        .imports
+        .iter()
+        .filter(|i| !i.c_params.is_empty() || i.c_ret != CShape::Void)
+    {
         out.push(c_capturing_closure(&imp.name));
         out.push(c_no_direct_target(&imp.name));
         out.push(c_null_string(&c_result_what(&imp.name)));

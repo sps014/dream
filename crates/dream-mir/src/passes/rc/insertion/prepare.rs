@@ -126,14 +126,13 @@ impl State {
                         }
                         _ => None,
                     };
-                    if let Some(Place::Field { .. } | Place::Index { .. }) = read_place {
-                        if interner.is_rc_tracked(func.locals[dest.0 as usize].ty) {
+                    if let Some(Place::Field { .. } | Place::Index { .. }) = read_place
+                        && interner.is_rc_tracked(func.locals[dest.0 as usize].ty) {
                             slot_readers
                                 .entry(slot_id(read_place.unwrap()))
                                 .or_default()
                                 .push(dest.0);
                         }
-                    }
                 }
                 let Statement::Assign(dest_place, Rvalue::ArrayRealloc { array, .. }) = stmt else {
                     continue;

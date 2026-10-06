@@ -69,14 +69,13 @@ pub fn resolve_existing_target_cc(
     {
         return Ok(Cc::Zig(p));
     }
-    if spec.can_link_on_host() {
-        if let Some(p) = config
+    if spec.can_link_on_host()
+        && let Some(p) = config
             .find_on_path("cc")
             .or_else(|| config.find_on_path("clang"))
         {
             return Ok(Cc::Program(p));
         }
-    }
     Err(MISSING_CC.into())
 }
 
@@ -98,11 +97,10 @@ fn resolve_uncached(config: &ToolchainConfig) -> Result<Cc, String> {
     if let Some(p) = config.program(config.cc.as_ref()) {
         return Ok(classify_program(p));
     }
-    if let Some(p) = config.zig.clone() {
-        if p.is_file() {
+    if let Some(p) = config.zig.clone()
+        && p.is_file() {
             return Ok(Cc::Zig(p));
         }
-    }
     if let Some(zig) = find_toolchain_zig(config) {
         return Ok(Cc::Zig(zig));
     }

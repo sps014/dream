@@ -53,7 +53,11 @@ impl<'a> Analyzer<'a> {
             ));
         };
 
-        let expected: Vec<_> = im.parameters.iter().map(|p| self.type_ctx.lower(&p.type_)).collect();
+        let expected: Vec<_> = im
+            .parameters
+            .iter()
+            .map(|p| self.type_ctx.lower(&p.type_))
+            .collect();
         // Calling an `async` interface method is eager and yields a `Future<T>` handle (just like an
         // async instance method); the concrete implementation dispatches to a `Future`-producing
         // constructor. The caller must `await` the result.

@@ -486,6 +486,69 @@ function registerDebugFileCommand(context: vscode.ExtensionContext): void {
     );
 }
 
+/** Read `package.entry` from dream.toml, or `null` when it is not set. */
+function readManifestEntry(projectRoot: string): string | null {
+    try {
+        const text = fs.readFileSync(path.join(projectRoot, 'dream.toml'), 'utf8');
+        return text.match(/^\s*entry\s*=\s*["']([^"']+)["']/m)?.[1] ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The program whose compile runs a generator: the project's entry when the workspace has a
+ * dream.toml, otherwise a file the user picks.
+ */
+async function pickGeneratorProgram(generatorFile: string): Promise<string | undefined> {
+    const root = findDreamProjectRoot(generatorFile);
+    if (root) {
+        const entry = path.join(root, readManifestEntry(root) ?? path.join('src', 'main.dream'));
+        if (fs.existsSync(entry)) {
+            return entry;
+        }
+    }
+    const picked = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        defaultUri: vscode.Uri.file(path.dirname(generatorFile)),
+        filters: { Dream: ['dream'] },
+        openLabel: 'Debug generator on this program'
+    });
+    return picked?.[0]?.fsPath;
+}
+
+function registerDebugGeneratorCommand(context: vscode.ExtensionContext): void {
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            'dream.debugGenerator',
+            async (resource?: vscode.Uri | string, generator?: string) => {
+                const generatorFile = await resolveDreamFilePath(resource);
+                if (!generatorFile || !generator) {
+                    vscode.window.showWarningMessage(
+                        'Use the "Debug generator" lens above an @generator function.'
+                    );
+                    return;
+                }
+                const program = await pickGeneratorProgram(generatorFile);
+                if (!program) {
+                    return;
+                }
+                await vscode.debug.startDebugging(
+                    vscode.workspace.getWorkspaceFolder(vscode.Uri.file(program)),
+                    {
+                        type: 'dream',
+                        request: 'launch',
+                        name: `Dream: Debug generator ${generator}`,
+                        program,
+                        generator,
+                        stopOnEntry: false
+                    }
+                );
+            }
+        )
+    );
+}
+
 /** Resolve a `.dream` path from a CodeLens URI argument or the active editor. */
 async function resolveDreamFilePath(
     resource?: vscode.Uri | string
@@ -593,6 +656,14 @@ function registerDebugAdapter(context: vscode.ExtensionContext): void {
             const program = session.configuration.program as string;
             const flags = nativeCliFlagsFromProfile(session.configuration);
             const args = [...flags, 'debug-adapter', program];
+            const generator = session.configuration.generator;
+            if (typeof generator === 'string' && generator) {
+                args.push('--generator', generator);
+                const snapshot = session.configuration.snapshot;
+                if (typeof snapshot === 'string' && snapshot) {
+                    args.push('--snapshot', snapshot);
+                }
+            }
             const options: vscode.DebugAdapterExecutableOptions = {};
             if (typeof session.configuration.cwd === 'string' && session.configuration.cwd) {
                 options.cwd = session.configuration.cwd;
@@ -883,6 +954,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     registerRunFileCommand(context);
     registerDebugFileCommand(context);
+    registerDebugGeneratorCommand(context);
     registerDebugAdapter(context);
     registerShowWatCommand(context);
     registerBuildModeCommands(context);

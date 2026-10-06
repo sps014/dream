@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 
 #[test]
 fn only_the_attribute_prevents_inlining() {

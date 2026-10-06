@@ -138,16 +138,14 @@ pub(super) fn elide_region(func: &mut MirFunction, chain: &[BlockId]) -> bool {
                 }
             }
             Statement::Release(op) => {
-                if let Some(key) = RcKey::of(op) {
-                    if let Some(stack) = pending.get_mut(&key) {
-                        if let Some(retain_idx) = stack.pop() {
+                if let Some(key) = RcKey::of(op)
+                    && let Some(stack) = pending.get_mut(&key)
+                        && let Some(retain_idx) = stack.pop() {
                             keep[retain_idx] = false;
                             keep[i] = false;
                             region_changed = true;
                             continue;
                         }
-                    }
-                }
                 // An unmatched (or differently-keyed) `Release` may drop the last count of
                 // an object some *other* pending key aliases — not provably safe to ignore.
                 pending.clear();

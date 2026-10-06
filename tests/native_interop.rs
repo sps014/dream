@@ -8,7 +8,7 @@ use dream_mir::backend::Target;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-mod common;
+use crate::common;
 
 const THREAD_HEADER: &str =
     include_str!("../crates/dream-mir/src/runtime/c/sys/native/include/dream_thread.h");

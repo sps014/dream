@@ -305,11 +305,10 @@ impl TypeCtx {
                 if let Some(bound) = bindings.get(name) {
                     return *bound;
                 }
-                if generic_args.is_none() {
-                    if let Some(id) = self.resolved_type(name) {
+                if generic_args.is_none()
+                    && let Some(id) = self.resolved_type(name) {
                         return id;
                     }
-                }
                 let args: Vec<TypeId> = generic_args
                     .as_ref()
                     .map(|gs| gs.iter().map(|g| self.lower_with(g, bindings)).collect())

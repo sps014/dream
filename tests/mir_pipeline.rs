@@ -3,7 +3,7 @@
 //! driver runs, so it both proves the pipeline composes and pins its determinism contract
 //! (byte-identical output).
 
-mod common;
+use crate::common;
 
 use dream_hir::{
     BinOp, Binding, HExpr, HExprKind, HFunction, HParam, HPlace, HStmt, Hir, LocalId, Overflow,

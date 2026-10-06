@@ -79,8 +79,7 @@ impl<'a> Analyzer<'a> {
                 if field.is_weak {
                     let is_class_option = match self.type_ctx.interner.kind(ty) {
                         TyKind::Union(def, args) if args.len() == 1 => {
-                            self.type_ctx.defs.name(*def) == "Option"
-                                && self.is_class_type(args[0])
+                            self.type_ctx.defs.name(*def) == "Option" && self.is_class_type(args[0])
                         }
                         _ => false,
                     };
@@ -152,7 +151,9 @@ impl<'a> Analyzer<'a> {
                 let Some(field_info) = info.fields.get(&field.name.text) else {
                     continue;
                 };
-                for target in self.strong_ref_targets(field_info.ty, &ref_values, &mut IndexSet::new()) {
+                for target in
+                    self.strong_ref_targets(field_info.ty, &ref_values, &mut IndexSet::new())
+                {
                     out.push(ClassEdge {
                         field_name: field.name.text.clone(),
                         field_position: Some(field.name.position),
@@ -239,7 +240,10 @@ impl<'a> Analyzer<'a> {
                 .flat_map(|&e| self.strong_ref_targets(e, ref_values, visited))
                 .collect(),
             TyKind::Struct(def, args) | TyKind::Union(def, args)
-                if matches!(self.type_ctx.defs.name(*def), "Option" | "List" | "Set" | "Map") =>
+                if matches!(
+                    self.type_ctx.defs.name(*def),
+                    "Option" | "List" | "Set" | "Map"
+                ) =>
             {
                 args.iter()
                     .flat_map(|&a| self.strong_ref_targets(a, ref_values, visited))

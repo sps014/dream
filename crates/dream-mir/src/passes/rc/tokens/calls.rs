@@ -118,11 +118,10 @@ pub(crate) fn take_owned_arg_locals(
         if !take_params.get(i).copied().unwrap_or(false) {
             continue;
         }
-        if let Operand::Copy(Place::Local(l)) = arg {
-            if is_owned_ref(l.0) {
+        if let Operand::Copy(Place::Local(l)) = arg
+            && is_owned_ref(l.0) {
                 out.push(l.0);
             }
-        }
     }
     out
 }
@@ -134,11 +133,10 @@ pub(crate) fn call_escape_locals(stmt: &Statement, is_owned_ref: &dyn Fn(u32) ->
     };
     let mut out = Vec::new();
     for arg in args {
-        if let Operand::Copy(Place::Local(l)) = arg {
-            if is_owned_ref(l.0) {
+        if let Operand::Copy(Place::Local(l)) = arg
+            && is_owned_ref(l.0) {
                 out.push(l.0);
             }
-        }
     }
     out
 }

@@ -1,0 +1,18 @@
+module system.json.derive;
+
+// One variant of a `@json` discriminated union.
+public class JsonVariantSpec {
+    public name: string;
+    public fields: List<JsonFieldSpec>;
+
+    // Builds a variant spec.
+    public constructor(name: string, fields: List<JsonFieldSpec>) {
+        this.name = name;
+        this.fields = fields;
+    }
+
+    // Convenience factory matching the constructor arguments.
+    public static fun make(name: string, fields: List<JsonFieldSpec>): JsonVariantSpec {
+        return JsonVariantSpec(name, fields);
+    }
+}

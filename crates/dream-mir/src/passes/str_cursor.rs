@@ -133,11 +133,10 @@ fn scan_bases(func: &MirFunction, body: &BTreeSet<BlockId>) -> BTreeSet<u32> {
             if let Statement::Assign(Place::Local(d), _) = stmt {
                 defined.insert(d.0);
             }
-            if let Statement::Assign(_, Rvalue::ByteAt(s, _, _) | Rvalue::CharAt(s, _, _)) = stmt {
-                if let Some(base) = base_local(s) {
+            if let Statement::Assign(_, Rvalue::ByteAt(s, _, _) | Rvalue::CharAt(s, _, _)) = stmt
+                && let Some(base) = base_local(s) {
                     bases.insert(base);
                 }
-            }
         }
     }
     bases.retain(|b| !defined.contains(b));

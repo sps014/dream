@@ -33,6 +33,8 @@ mod tests {
             "/work/app/dream_packages/json_tools/src/parse.dream"
         ));
         assert!(!is_library_source("/work/app/src/main.dream"));
-        assert!(!is_library_source("/work/app/src/dream_packages_notes.dream"));
+        assert!(!is_library_source(
+            "/work/app/src/dream_packages_notes.dream"
+        ));
     }
 }

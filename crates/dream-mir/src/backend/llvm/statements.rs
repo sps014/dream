@@ -72,23 +72,20 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     fn try_emit_into(&mut self, stmts: &[Statement], i: usize) -> Option<usize> {
-        if i + 1 < stmts.len() {
-            if let (
+        if i + 1 < stmts.len()
+            && let (
                 Statement::Release(Operand::Copy(Place::Local(rel))),
                 Statement::Assign(Place::Local(dest), rv),
             ) = (&stmts[i], &stmts[i + 1])
-            {
-                if rel.0 == dest.0
+                && rel.0 == dest.0
                     && self.is_into_rvalue(rv)
                     && !crate::passes::rvalue_reads_local(rv, dest.0)
                 {
                     self.emit_into(*dest, rv);
                     return Some(2);
                 }
-            }
-        }
-        if i + 2 < stmts.len() {
-            if let (
+        if i + 2 < stmts.len()
+            && let (
                 Statement::Assign(Place::Local(tmp), rv),
                 Statement::Release(Operand::Copy(Place::Local(rel))),
                 Statement::Assign(
@@ -96,8 +93,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     Rvalue::Use(Operand::Copy(Place::Local(src))),
                 ),
             ) = (&stmts[i], &stmts[i + 1], &stmts[i + 2])
-            {
-                if src.0 == tmp.0
+                && src.0 == tmp.0
                     && rel.0 == dest.0
                     && tmp.0 != dest.0
                     && self.is_into_rvalue(rv)
@@ -108,8 +104,6 @@ impl<'l, 'a> Fx<'l, 'a> {
                     self.write_local(*tmp, &v);
                     return Some(3);
                 }
-            }
-        }
         None
     }
 
@@ -323,13 +317,11 @@ impl<'l, 'a> Fx<'l, 'a> {
                 ty, variant, args, ..
             },
         ) = (place, rv)
-        {
-            if self.is_value(self.f.local_ty(*l)) && !is_value_place_alias(self.f, *l, rv) {
+            && self.is_value(self.f.local_ty(*l)) && !is_value_place_alias(self.f, *l, rv) {
                 let dest = self.read_local(*l);
                 self.union_new_at(&dest, *ty, *variant, args);
                 return;
             }
-        }
         if let (Place::Local(l), Rvalue::New { ty, ctor, args, .. }) = (place, rv) {
             if has_frame_buffer(self.mir, self.f, *l) {
                 let buf = self.frame_buf(*l);

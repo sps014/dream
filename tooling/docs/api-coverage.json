@@ -44,91 +44,49 @@
       {
         "signature": "public class CodeBuilder",
         "description": "Accumulates Dream source lines for generator `emit_extend` / `emit_file` bodies. Indentation mirrors C# / Rust `IndentedTextWriter`: `indent()` / `dedent()` adjust depth; `line` / `append` apply the current indent only at the start of a line.",
-        "line": 15,
+        "line": 9,
         "page": "reference/api/codegen-codegen.md"
       },
       {
         "signature": "public constructor()",
         "description": "Creates a builder that indents with four spaces.",
-        "line": 22,
+        "line": 16,
         "page": "reference/api/codegen-codegen.md"
       },
       {
         "signature": "public static fun with_spaces(spaces: int): CodeBuilder",
         "description": "Creates a builder whose indent unit is `spaces` ASCII spaces.",
-        "line": 38,
+        "line": 32,
         "page": "reference/api/codegen-codegen.md"
       },
       {
         "signature": "public fun indent(): void",
         "description": "Increases the indent depth by one unit.",
-        "line": 68,
+        "line": 62,
         "page": "reference/api/codegen-codegen.md"
       },
       {
         "signature": "public fun dedent(): void",
         "description": "Decreases the indent depth by one unit (no-op at zero).",
-        "line": 73,
+        "line": 67,
         "page": "reference/api/codegen-codegen.md"
       },
       {
         "signature": "public fun line(text: string): void",
         "description": "Writes `text` as a full line at the current indent, then starts a new line.",
-        "line": 80,
+        "line": 74,
         "page": "reference/api/codegen-codegen.md"
       },
       {
         "signature": "public fun append(text: string): void",
         "description": "Appends `text` without a trailing newline (indent applied only at line start).",
-        "line": 87,
+        "line": 81,
         "page": "reference/api/codegen-codegen.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns the accumulated source text.",
-        "line": 93,
-        "page": "reference/api/codegen-codegen.md"
-      },
-      {
-        "signature": "public static class GenHost",
-        "description": "Stdout protocol markers and helpers for Dream-side generator harnesses. The Rust host parses these markers and reports into `DiagnosticBag` (see `json_gen`).",
-        "line": 100,
-        "page": "reference/api/codegen-codegen.md"
-      },
-      {
-        "signature": "public static fun ok_marker(): string",
-        "description": "",
-        "line": 101,
-        "page": "reference/api/codegen-codegen.md"
-      },
-      {
-        "signature": "public static fun err_marker(): string",
-        "description": "",
-        "line": 105,
-        "page": "reference/api/codegen-codegen.md"
-      },
-      {
-        "signature": "public static fun loc_marker(): string",
-        "description": "Optional location line after an error marker: `type_name\\tfield_name`.",
-        "line": 110,
-        "page": "reference/api/codegen-codegen.md"
-      },
-      {
-        "signature": "public static fun emit_extend_marker(): string",
-        "description": "Marker before an `emit_extend` payload in a successful harness run.",
-        "line": 115,
-        "page": "reference/api/codegen-codegen.md"
-      },
-      {
-        "signature": "public static fun emit_file_marker(): string",
-        "description": "Marker before an `emit_file` payload in a successful harness run.",
-        "line": 120,
-        "page": "reference/api/codegen-codegen.md"
-      },
-      {
-        "signature": "public static fun format_loc(type_name: string, field_name: string): string",
-        "description": "Formats a span hint the host can attach to a diagnostic (empty field allowed).",
-        "line": 125,
+        "line": 87,
         "page": "reference/api/codegen-codegen.md"
       }
     ]
@@ -139,166 +97,1219 @@
     "page": "reference/api/codegen-gen-context.md",
     "declarations": [
       {
-        "signature": "public class GenFieldInfo",
-        "description": "One field on a snapshotted declaration type.",
-        "line": 9,
+        "signature": "public class GenContext",
+        "description": "What a `@generator fun name(ctx: GenContext)` sees and produces. The compiler runs the generator's cached executable with `--generator <name> --snapshot <in> --result <out>`; the harness loads the context from the snapshot, calls the generator, and `finish()` writes the result the compiler validates and merges.",
+        "line": 17,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
-        "signature": "public name: string",
+        "signature": "public generator_name: string",
+        "description": "The running generator's name and `module::name` identity.",
+        "line": 19,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public generator_id: string",
         "description": "",
-        "line": 10,
-        "page": "reference/api/codegen-gen-context-1.md"
-      },
-      {
-        "signature": "public type_name: string",
-        "description": "",
-        "line": 11,
-        "page": "reference/api/codegen-gen-context-1.md"
-      },
-      {
-        "signature": "public constructor(name: string, type_name: string)",
-        "description": "",
-        "line": 13,
-        "page": "reference/api/codegen-gen-context-1.md"
-      },
-      {
-        "signature": "public class GenTypeInfo",
-        "description": "One declaration type snapshotted for an executed `@generator` body.",
         "line": 20,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
-        "signature": "public name: string",
-        "description": "",
-        "line": 21,
-        "page": "reference/api/codegen-gen-context-1.md"
-      },
-      {
-        "signature": "public attributes: List<string>",
-        "description": "",
+        "signature": "public target: string",
+        "description": "Target triple of the compile (`aarch64-apple-darwin`, `wasm32-unknown-wasi`, ...).",
         "line": 22,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
-        "signature": "public fields: List<GenFieldInfo>",
-        "description": "",
-        "line": 23,
+        "signature": "public static async fun load(args: string[]): Result<GenContext, string>",
+        "description": "Reads `--snapshot` / `--result` from the program arguments.",
+        "line": 45,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
-        "signature": "public constructor(name: string, attributes: List<string>, fields: List<GenFieldInfo>)",
-        "description": "",
-        "line": 25,
+        "signature": "public fun types_with<A>(): List<GenDecl>",
+        "description": "Declarations carrying `@A` (on the declaration or on one of its members).",
+        "line": 83,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
-        "signature": "public fun has_attribute(attr: string): bool",
-        "description": "",
-        "line": 31,
+        "signature": "public fun functions_with<A>(): List<GenFunction>",
+        "description": "Top-level functions carrying `@A` (on the function or a parameter).",
+        "line": 95,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
-        "signature": "public class GenSyntaxBlock",
-        "description": "One `introducer { ... }` syntax-DSL call site, snapshotted for an executed `@generator` body.",
-        "line": 42,
+        "signature": "public fun decls(): List<GenDecl>",
+        "description": "Every declaration selected by this generator's `@on_attribute` triggers.",
+        "line": 107,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
-        "signature": "public id: int",
-        "description": "Opaque site id; pass back into `GenContext.replace`/`GenContext.error` unchanged.",
-        "line": 44,
+        "signature": "public fun type_index(): List<GenIndexEntry>",
+        "description": "Every type in the program, by name and kind.",
+        "line": 112,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
-        "signature": "public name: string",
-        "description": "The introducer name (`quote`, `html`, ...).",
-        "line": 46,
+        "signature": "public fun find_type(borrow name: string): Option<GenIndexEntry>",
+        "description": "The index entry named `name`, if the program declares such a type.",
+        "line": 117,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
-        "signature": "public body: string",
-        "description": "Raw reconstructed body text (splices appear as `{expr}` placeholders).",
-        "line": 48,
+        "signature": "public fun syntax_blocks(): List<GenSyntaxBlock>",
+        "description": "`name { ... }` sites introduced by this generator's name (`@syntax_block` generators).",
+        "line": 127,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
-        "signature": "public splices: List<string>",
-        "description": "Dream source of each `{ ... }` splice expression, in source order.",
-        "line": 50,
+        "signature": "public fun call_sites(): List<GenCallSite>",
+        "description": "Calls of the functions named in this generator's `@on_call(...)`.",
+        "line": 132,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
-        "signature": "public constructor(id: int, name: string, body: string, splices: List<string>)",
-        "description": "",
-        "line": 52,
+        "signature": "public fun options<T>(): Result<T, ParseError>",
+        "description": "`dream.toml` `[[generators]].options`, decoded into the `@json` type `T`.",
+        "line": 137,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
-        "signature": "public class GenContext",
-        "description": "Compile-time context handed to an executed `@generator` function body. Loaded from a host snapshot (see `from_snapshot`) and flushed back to the host via `finish()`, which prints the same `GenHost` stdout protocol a sibling `harness.dream` would print by hand.",
-        "line": 63,
+        "signature": "public fun option_or(borrow key: string, fallback: string): string",
+        "description": "One option as text (`fallback` when unset).",
+        "line": 142,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
-        "signature": "public static async fun from_snapshot(path: string, token: Option<CancellationToken> = Option.None): Result<GenContext, string>",
-        "description": "Loads a `GenContext` from the JSON snapshot file the compiler wrote. The path is passed to the generator harness as its first program argument.",
-        "line": 88,
+        "signature": "public fun additional_files(): List<GenFile>",
+        "description": "`dream.toml` `[[generators]].additional_files`, read by the compiler.",
+        "line": 161,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
-        "signature": "public fun syntax_blocks(name: string): List<GenSyntaxBlock>",
-        "description": "Snapshotted `name { ... }` sites. Returns the live `blocks` list (same object as `all_blocks`); callers must match `name`. Building a second list of the same nodes unique-moves them out from under this context (generator harness SIGSEGV).",
-        "line": 167,
-        "page": "reference/api/codegen-gen-context-1.md"
-      },
-      {
-        "signature": "public fun all_blocks(): List<GenSyntaxBlock>",
-        "description": "Every snapshotted call site, regardless of introducer.",
-        "line": 173,
-        "page": "reference/api/codegen-gen-context-1.md"
-      },
-      {
-        "signature": "public fun types_with(attr: string): List<GenTypeInfo>",
-        "description": "Every snapshotted declaration type carrying attribute `attr`.",
-        "line": 178,
-        "page": "reference/api/codegen-gen-context-1.md"
-      },
-      {
-        "signature": "public fun replace(borrow block: GenSyntaxBlock, dream_expr: string): void",
-        "description": "Rewrites `block`'s call site to the Dream expression `dream_expr` before type-checking.",
-        "line": 184,
-        "page": "reference/api/codegen-gen-context-1.md"
-      },
-      {
-        "signature": "public fun emit_extend(type_name: string, body: string): void",
-        "description": "Queues synthesized `extend Type { ... }` source for the host to merge before type-checking.",
-        "line": 189,
+        "signature": "public fun replace(borrow block: GenSyntaxBlock, source: string): void",
+        "description": "Rewrites `block`'s site to the Dream expression `source`.",
+        "line": 166,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun emit_file(path: string, source: string): void",
-        "description": "Queues a synthetic Dream source file for the host to parse and merge.",
-        "line": 195,
+        "description": "Adds a complete Dream source file at the generator-relative path `path` (`models.json.dream`). It is written under `.dream/generated/<entry>/<generator>/` and compiled with the program.",
+        "line": 176,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun emit_extend(borrow decl: GenDecl, body: string): void",
+        "description": "Adds `extend <decl> { <body> }` to this generator's `extends.dream` file.",
+        "line": 185,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun error_at(borrow target: string, message: string): void",
+        "description": "An error at the node with identity `target` (any model node's `id`), or at the generator itself for an empty `target`.",
+        "line": 207,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun warning_at(borrow target: string, message: string): void",
+        "description": "",
+        "line": 211,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun error(message: string): void",
+        "description": "",
+        "line": 215,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun error(borrow block: GenSyntaxBlock, message: string): void",
-        "description": "Queues a generate-time diagnostic for `block` (surfaces as `CompileError::Generator`). Only the first reported error is kept, mirroring the harness `ERR` protocol's one-message contract.",
-        "line": 203,
-        "page": "reference/api/codegen-gen-context-2.md"
-      },
-      {
-        "signature": "public fun error_general(message: string): void",
-        "description": "Queues a generate-time diagnostic with no associated call site.",
-        "line": 211,
-        "page": "reference/api/codegen-gen-context-2.md"
-      },
-      {
-        "signature": "public fun finish(): void",
-        "description": "Flushes accumulated replace/error/emit calls to stdout using the `GenHost` protocol.",
+        "description": "",
         "line": 219,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun error(borrow decl: GenDecl, message: string): void",
+        "description": "",
+        "line": 223,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun error(borrow field: GenField, message: string): void",
+        "description": "",
+        "line": 227,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun error(borrow call: GenCallSite, message: string): void",
+        "description": "",
+        "line": 231,
         "page": "reference/api/codegen-gen-context-2.md"
+      },
+      {
+        "signature": "public fun warning(borrow decl: GenDecl, message: string): void",
+        "description": "",
+        "line": 235,
+        "page": "reference/api/codegen-gen-context-2.md"
+      },
+      {
+        "signature": "public fun has_errors(): bool",
+        "description": "",
+        "line": 239,
+        "page": "reference/api/codegen-gen-context-2.md"
+      },
+      {
+        "signature": "public fun log(message: string): void",
+        "description": "A line shown with `dream -v` / `dream generate --explain`.",
+        "line": 244,
+        "page": "reference/api/codegen-gen-context-2.md"
+      },
+      {
+        "signature": "public async fun finish(): int",
+        "description": "Writes the result for the compiler; the harness returns this as the exit code.",
+        "line": 249,
+        "page": "reference/api/codegen-gen-context-2.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_decls.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-decls.md",
+    "declarations": [
+      {
+        "signature": "public class GenField",
+        "description": "A field of a class, struct or union variant.",
+        "line": 7,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public ty: GenTypeRef",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public visibility: string",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public attributes: List<GenAttribute>",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public location: GenLocation",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public constructor(id: string, name: string, ty: GenTypeRef, visibility: string, attributes: List<GenAttribute>, location: GenLocation)",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public fun attribute<A>(): Option<A>",
+        "description": "The first `@A` on this field, decoded into the attribute struct.",
+        "line": 25,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public fun attributes_of<A>(): List<A>",
+        "description": "",
+        "line": 29,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public fun has<A>(): bool",
+        "description": "",
+        "line": 33,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public class GenVariant",
+        "description": "",
+        "line": 38,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 39,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 40,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public fields: List<GenField>",
+        "description": "",
+        "line": 41,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public location: GenLocation",
+        "description": "",
+        "line": 42,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public constructor(id: string, name: string, fields: List<GenField>, location: GenLocation)",
+        "description": "",
+        "line": 44,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public class GenParam",
+        "description": "",
+        "line": 52,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 53,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public ty: GenTypeRef",
+        "description": "",
+        "line": 54,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public attributes: List<GenAttribute>",
+        "description": "",
+        "line": 55,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public constructor(name: string, ty: GenTypeRef, attributes: List<GenAttribute>)",
+        "description": "",
+        "line": 57,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public fun attribute<A>(): Option<A>",
+        "description": "",
+        "line": 63,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public fun has<A>(): bool",
+        "description": "",
+        "line": 67,
+        "page": "reference/api/codegen-gen-decls-1.md"
+      },
+      {
+        "signature": "public class GenFunction",
+        "description": "A method, or a top-level function.",
+        "line": 73,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 74,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 75,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public is_static: bool",
+        "description": "",
+        "line": 76,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public is_async: bool",
+        "description": "",
+        "line": 77,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public visibility: string",
+        "description": "",
+        "line": 78,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public generics: List<string>",
+        "description": "",
+        "line": 79,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public params: List<GenParam>",
+        "description": "",
+        "line": 80,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public ret: GenTypeRef",
+        "description": "",
+        "line": 81,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public attributes: List<GenAttribute>",
+        "description": "",
+        "line": 82,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public location: GenLocation",
+        "description": "",
+        "line": 83,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public constructor(id: string, name: string, is_static: bool, is_async: bool, visibility: string, generics: List<string>, params: List<GenParam>, ret: GenTypeRef, attributes: List<GenAttribute>, location: GenLocation)",
+        "description": "",
+        "line": 85,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public fun attribute<A>(): Option<A>",
+        "description": "",
+        "line": 98,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public fun has<A>(): bool",
+        "description": "",
+        "line": 102,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public class GenDecl",
+        "description": "A class, struct, union, enum or interface the generator's triggers selected.",
+        "line": 108,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 109,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 110,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public kind: DeclKind",
+        "description": "",
+        "line": 111,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public module_name: string",
+        "description": "",
+        "line": 112,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public visibility: string",
+        "description": "",
+        "line": 113,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public location: GenLocation",
+        "description": "",
+        "line": 114,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public generics: List<string>",
+        "description": "",
+        "line": 115,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public interfaces: List<GenTypeRef>",
+        "description": "",
+        "line": 116,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public attributes: List<GenAttribute>",
+        "description": "",
+        "line": 117,
+        "page": "reference/api/codegen-gen-decls-2.md"
+      },
+      {
+        "signature": "public fields: List<GenField>",
+        "description": "",
+        "line": 118,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public methods: List<GenFunction>",
+        "description": "",
+        "line": 119,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public variants: List<GenVariant>",
+        "description": "",
+        "line": 120,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public constructor(id: string, name: string, kind: DeclKind, module_name: string, visibility: string, location: GenLocation, generics: List<string>, interfaces: List<GenTypeRef>, attributes: List<GenAttribute>, fields: List<GenField>, methods: List<GenFunction>, variants: List<GenVariant>)",
+        "description": "",
+        "line": 122,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public fun attribute<A>(): Option<A>",
+        "description": "",
+        "line": 137,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public fun has<A>(): bool",
+        "description": "",
+        "line": 141,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public fun self_type(): string",
+        "description": "`Name` or `Name<T, U>`: the spelling of this type inside its own generic scope.",
+        "line": 146,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public class GenIndexEntry",
+        "description": "Every type in the program (user and stdlib), names and kinds only.",
+        "line": 164,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 165,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 166,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public kind: DeclKind",
+        "description": "",
+        "line": 167,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public constructor(id: string, name: string, kind: DeclKind)",
+        "description": "",
+        "line": 169,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public class GenSyntaxBlock",
+        "description": "A `name { ... }` site of this generator (`@syntax_block` generators only).",
+        "line": 177,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 178,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 179,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public body: string",
+        "description": "Reconstructed body text; splices appear as `{expr}`.",
+        "line": 181,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public splices: List<string>",
+        "description": "Dream source of each `{ ... }` splice, in order.",
+        "line": 183,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public location: GenLocation",
+        "description": "",
+        "line": 184,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public constructor(id: string, name: string, body: string, splices: List<string>, location: GenLocation)",
+        "description": "",
+        "line": 186,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public class GenCallSite",
+        "description": "A call of one of the generator's `@on_call` functions.",
+        "line": 196,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 197,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public callee: string",
+        "description": "Identity of the callee (compare with `declof(Json.serialize)`).",
+        "line": 199,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public type_args: List<GenTypeRef>",
+        "description": "",
+        "line": 200,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public arg_types: List<GenTypeRef>",
+        "description": "Statically known argument types (`TypeRefKind.Unknown` when not inferable).",
+        "line": 202,
+        "page": "reference/api/codegen-gen-decls-3.md"
+      },
+      {
+        "signature": "public location: GenLocation",
+        "description": "",
+        "line": 203,
+        "page": "reference/api/codegen-gen-decls-4.md"
+      },
+      {
+        "signature": "public constructor(id: string, callee: string, type_args: List<GenTypeRef>, arg_types: List<GenTypeRef>, location: GenLocation)",
+        "description": "",
+        "line": 205,
+        "page": "reference/api/codegen-gen-decls-4.md"
+      },
+      {
+        "signature": "public class GenFile",
+        "description": "A `dream.toml` `additional_files` entry.",
+        "line": 215,
+        "page": "reference/api/codegen-gen-decls-4.md"
+      },
+      {
+        "signature": "public path: string",
+        "description": "",
+        "line": 216,
+        "page": "reference/api/codegen-gen-decls-4.md"
+      },
+      {
+        "signature": "public contents: string",
+        "description": "",
+        "line": 217,
+        "page": "reference/api/codegen-gen-decls-4.md"
+      },
+      {
+        "signature": "public constructor(path: string, contents: string)",
+        "description": "",
+        "line": 219,
+        "page": "reference/api/codegen-gen-decls-4.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_decode.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-decode.md",
+    "declarations": [
+      {
+        "signature": "public class GenSnapshot",
+        "description": "Decoded snapshot behind a `GenContext`.",
+        "line": 161,
+        "page": "reference/api/codegen-gen-decode.md"
+      },
+      {
+        "signature": "public version: int",
+        "description": "",
+        "line": 162,
+        "page": "reference/api/codegen-gen-decode.md"
+      },
+      {
+        "signature": "public generator: string",
+        "description": "",
+        "line": 163,
+        "page": "reference/api/codegen-gen-decode.md"
+      },
+      {
+        "signature": "public generator_id: string",
+        "description": "",
+        "line": 164,
+        "page": "reference/api/codegen-gen-decode.md"
+      },
+      {
+        "signature": "public target: string",
+        "description": "",
+        "line": 165,
+        "page": "reference/api/codegen-gen-decode.md"
+      },
+      {
+        "signature": "public options: JsonValue",
+        "description": "",
+        "line": 166,
+        "page": "reference/api/codegen-gen-decode.md"
+      },
+      {
+        "signature": "public files: List<GenFile>",
+        "description": "",
+        "line": 167,
+        "page": "reference/api/codegen-gen-decode.md"
+      },
+      {
+        "signature": "public index: List<GenIndexEntry>",
+        "description": "",
+        "line": 168,
+        "page": "reference/api/codegen-gen-decode.md"
+      },
+      {
+        "signature": "public decls: List<GenDecl>",
+        "description": "",
+        "line": 169,
+        "page": "reference/api/codegen-gen-decode.md"
+      },
+      {
+        "signature": "public functions: List<GenFunction>",
+        "description": "",
+        "line": 170,
+        "page": "reference/api/codegen-gen-decode.md"
+      },
+      {
+        "signature": "public blocks: List<GenSyntaxBlock>",
+        "description": "",
+        "line": 171,
+        "page": "reference/api/codegen-gen-decode.md"
+      },
+      {
+        "signature": "public calls: List<GenCallSite>",
+        "description": "",
+        "line": 172,
+        "page": "reference/api/codegen-gen-decode.md"
+      },
+      {
+        "signature": "public constructor(root: JsonValue)",
+        "description": "",
+        "line": 174,
+        "page": "reference/api/codegen-gen-decode.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_model.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-model.md",
+    "declarations": [
+      {
+        "signature": "public enum Primitive",
+        "description": "Built-in scalar types.",
+        "line": 12,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "NotPrimitive",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "Int",
+        "description": "",
+        "line": 14,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "Long",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "UInt",
+        "description": "",
+        "line": 16,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "ULong",
+        "description": "",
+        "line": 17,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "ISize",
+        "description": "",
+        "line": 18,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "USize",
+        "description": "",
+        "line": 19,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "Byte",
+        "description": "",
+        "line": 20,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "Float",
+        "description": "",
+        "line": 21,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "Double",
+        "description": "",
+        "line": 22,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "Bool",
+        "description": "",
+        "line": 23,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "Char",
+        "description": "",
+        "line": 24,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "String",
+        "description": "",
+        "line": 25,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "Object",
+        "description": "",
+        "line": 26,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "public enum CollectionKind",
+        "description": "Standard collection shapes a generator usually special-cases.",
+        "line": 30,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "NotCollection",
+        "description": "",
+        "line": 31,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "List",
+        "description": "",
+        "line": 32,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "Set",
+        "description": "",
+        "line": 33,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "Map",
+        "description": "",
+        "line": 34,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "SortedMap",
+        "description": "",
+        "line": 35,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "Array",
+        "description": "",
+        "line": 36,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "public enum TypeRefKind",
+        "description": "What a `GenTypeRef` refers to.",
+        "line": 40,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "Primitive",
+        "description": "",
+        "line": 41,
+        "page": "reference/api/codegen-gen-model-1.md"
+      },
+      {
+        "signature": "Named",
+        "description": "",
+        "line": 42,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "Param",
+        "description": "",
+        "line": 43,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "Array",
+        "description": "",
+        "line": 44,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "Tuple",
+        "description": "",
+        "line": 45,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "Function",
+        "description": "",
+        "line": 46,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "Void",
+        "description": "",
+        "line": 47,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "Unknown",
+        "description": "",
+        "line": 48,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "public enum DeclKind",
+        "description": "What a `GenDecl` declares.",
+        "line": 52,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "Class",
+        "description": "",
+        "line": 53,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "Struct",
+        "description": "",
+        "line": 54,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "Union",
+        "description": "",
+        "line": 55,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "Enum",
+        "description": "",
+        "line": 56,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "Interface",
+        "description": "",
+        "line": 57,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "public class GenLocation",
+        "description": "",
+        "line": 60,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "public file: string",
+        "description": "Project-relative path (`src/models.dream`), or `<std>/...` for stdlib sources.",
+        "line": 62,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "public line: int",
+        "description": "",
+        "line": 63,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "public column: int",
+        "description": "",
+        "line": 64,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "public constructor(file: string, line: int, column: int)",
+        "description": "",
+        "line": 66,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "",
+        "line": 72,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "public class GenTypeRef",
+        "description": "A resolved type: `kind` + structured `args` instead of a type string to parse.",
+        "line": 79,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "public kind: TypeRefKind",
+        "description": "",
+        "line": 80,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "`int`, `List`, `T`, or empty for arrays/tuples/functions.",
+        "line": 82,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "public display: string",
+        "description": "Dream spelling (`List<int>`, `User[]`), usable verbatim in generated code.",
+        "line": 84,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "public mangled: string",
+        "description": "Compiler-mangled spelling (`List_int`), unique per instantiation; handy for helper names.",
+        "line": 86,
+        "page": "reference/api/codegen-gen-model-2.md"
+      },
+      {
+        "signature": "public decl: string",
+        "description": "Identity of the named declaration (`::User`, `system.collections::List`), or empty.",
+        "line": 88,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public args: List<GenTypeRef>",
+        "description": "Type arguments; the element of an array; tuple members; function params then return.",
+        "line": 90,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public constructor(kind: TypeRefKind, name: string, display: string, mangled: string, decl: string, args: List<GenTypeRef>)",
+        "description": "",
+        "line": 92,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public static fun unknown(): GenTypeRef",
+        "description": "",
+        "line": 101,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public fun primitive(): Primitive",
+        "description": "The scalar this type is, or `Primitive.NotPrimitive`.",
+        "line": 106,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public fun is_primitive(p: Primitive): bool",
+        "description": "",
+        "line": 113,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public fun collection(): CollectionKind",
+        "description": "The standard collection this type is, or `CollectionKind.NotCollection`.",
+        "line": 118,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public fun is_option(): bool",
+        "description": "",
+        "line": 140,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public fun is_param(): bool",
+        "description": "",
+        "line": 144,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public fun is_decl(decl_id: string): bool",
+        "description": "True when this names the declaration `decl_id` (see `declof`).",
+        "line": 149,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public fun arg(i: int): GenTypeRef",
+        "description": "Type argument `i`, or an unknown type when there is none.",
+        "line": 154,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "",
+        "line": 161,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public fun primitive_named(name: string): Primitive",
+        "description": "`Primitive` for a Dream scalar type name (`int`, `string`, ...).",
+        "line": 167,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public class GenAttrArg",
+        "description": "One attribute argument as written: `kind` is `string`, `int`, `float`, `double`, `bool` or `enum`; `value` is the unquoted string, literal text, or dotted enum path.",
+        "line": 186,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public kind: string",
+        "description": "",
+        "line": 187,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public value: string",
+        "description": "",
+        "line": 188,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public constructor(kind: string, value: string)",
+        "description": "",
+        "line": 190,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public class GenAttribute",
+        "description": "One attribute use. Prefer the typed `GenAttributes.decode<A>()` (via `attribute<A>()` on a node); the positional readers below are what decoders are built from.",
+        "line": 198,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "`module::name` of the `@attribute` type (`system.json::json`), or `builtin::name`.",
+        "line": 200,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 201,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public args: List<GenAttrArg>",
+        "description": "",
+        "line": 202,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public constructor(id: string, name: string, args: List<GenAttrArg>)",
+        "description": "",
+        "line": 204,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public fun string_arg(i: int): string",
+        "description": "",
+        "line": 217,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public fun int_arg(i: int): int",
+        "description": "",
+        "line": 221,
+        "page": "reference/api/codegen-gen-model-3.md"
+      },
+      {
+        "signature": "public fun long_arg(i: int): long",
+        "description": "",
+        "line": 225,
+        "page": "reference/api/codegen-gen-model-4.md"
+      },
+      {
+        "signature": "public fun double_arg(i: int): double",
+        "description": "",
+        "line": 229,
+        "page": "reference/api/codegen-gen-model-4.md"
+      },
+      {
+        "signature": "public fun float_arg(i: int): float",
+        "description": "",
+        "line": 233,
+        "page": "reference/api/codegen-gen-model-4.md"
+      },
+      {
+        "signature": "public fun bool_arg(i: int): bool",
+        "description": "",
+        "line": 237,
+        "page": "reference/api/codegen-gen-model-4.md"
+      },
+      {
+        "signature": "public fun enum_member(i: int): string",
+        "description": "The member name of an enum argument (`Get` for `HttpMethod.Get`).",
+        "line": 242,
+        "page": "reference/api/codegen-gen-model-4.md"
+      },
+      {
+        "signature": "public static class GenAttributes",
+        "description": "Typed attribute access. `A` is an `@attribute` struct; the compiler gives every such type the statics these forward to.",
+        "line": 257,
+        "page": "reference/api/codegen-gen-model-4.md"
+      },
+      {
+        "signature": "public static fun has(borrow attrs: List<GenAttribute>, borrow id: string): bool",
+        "description": "",
+        "line": 267,
+        "page": "reference/api/codegen-gen-model-4.md"
       }
     ]
   },
@@ -4224,319 +5235,369 @@
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/json/gen_collection.dream",
-    "package": "system.json",
-    "page": "reference/api/json-gen-collection.md",
+    "source": "crates/dream-stdlib/src/system/json/derive/gen_collection.dream",
+    "package": "system.json.derive",
+    "page": "reference/api/json-derive-gen-collection.md",
     "declarations": [
       {
-        "signature": "public class GenCollection",
+        "signature": "public class JsonCollectionSpec",
         "description": "Snapshot of a collection type that needs top-level `Json.serialize` / `deserialize` adapters.",
         "line": 5,
-        "page": "reference/api/json-gen-collection.md"
+        "page": "reference/api/json-derive-gen-collection.md"
       },
       {
-        "signature": "public kind: string",
+        "signature": "public kind: CollectionKind",
         "description": "",
         "line": 6,
-        "page": "reference/api/json-gen-collection.md"
+        "page": "reference/api/json-derive-gen-collection.md"
       },
       {
         "signature": "public elem_type: string",
         "description": "",
         "line": 7,
-        "page": "reference/api/json-gen-collection.md"
+        "page": "reference/api/json-derive-gen-collection.md"
       },
       {
         "signature": "public value_type: string",
         "description": "",
         "line": 8,
-        "page": "reference/api/json-gen-collection.md"
+        "page": "reference/api/json-derive-gen-collection.md"
       },
       {
         "signature": "public self_ty: string",
         "description": "",
         "line": 9,
-        "page": "reference/api/json-gen-collection.md"
+        "page": "reference/api/json-derive-gen-collection.md"
       },
       {
         "signature": "public fn_suffix: string",
         "description": "",
         "line": 10,
-        "page": "reference/api/json-gen-collection.md"
+        "page": "reference/api/json-derive-gen-collection.md"
       },
       {
-        "signature": "public constructor( kind: string, elem_type: string, value_type: string, self_ty: string, fn_suffix: string )",
+        "signature": "public constructor( kind: CollectionKind, elem_type: string, value_type: string, self_ty: string, fn_suffix: string )",
         "description": "",
         "line": 12,
-        "page": "reference/api/json-gen-collection.md"
+        "page": "reference/api/json-derive-gen-collection.md"
       },
       {
-        "signature": "public static fun make( kind: string, elem_type: string, value_type: string, self_ty: string, fn_suffix: string ): GenCollection",
+        "signature": "public static fun make( kind: CollectionKind, elem_type: string, value_type: string, self_ty: string, fn_suffix: string ): JsonCollectionSpec",
         "description": "",
         "line": 26,
-        "page": "reference/api/json-gen-collection.md"
+        "page": "reference/api/json-derive-gen-collection.md"
       }
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/json/gen_field.dream",
-    "package": "system.json",
-    "page": "reference/api/json-gen-field.md",
+    "source": "crates/dream-stdlib/src/system/json/derive/gen_field.dream",
+    "package": "system.json.derive",
+    "page": "reference/api/json-derive-gen-field.md",
     "declarations": [
       {
-        "signature": "public class GenField",
+        "signature": "public class JsonFieldSpec",
         "description": "One serializable field on a class or union variant.",
-        "line": 7,
-        "page": "reference/api/json-gen-field.md"
+        "line": 6,
+        "page": "reference/api/json-derive-gen-field.md"
       },
       {
         "signature": "public name: string",
         "description": "",
-        "line": 8,
-        "page": "reference/api/json-gen-field.md"
+        "line": 7,
+        "page": "reference/api/json-derive-gen-field.md"
       },
       {
         "signature": "public type_name: string",
         "description": "",
-        "line": 9,
-        "page": "reference/api/json-gen-field.md"
+        "line": 8,
+        "page": "reference/api/json-derive-gen-field.md"
       },
       {
         "signature": "public json_ignore: bool",
         "description": "",
-        "line": 10,
-        "page": "reference/api/json-gen-field.md"
+        "line": 9,
+        "page": "reference/api/json-derive-gen-field.md"
       },
       {
         "signature": "public property_name: string",
         "description": "",
-        "line": 11,
-        "page": "reference/api/json-gen-field.md"
+        "line": 10,
+        "page": "reference/api/json-derive-gen-field.md"
       },
       {
         "signature": "public option_inner: string",
         "description": "",
-        "line": 12,
-        "page": "reference/api/json-gen-field.md"
+        "line": 11,
+        "page": "reference/api/json-derive-gen-field.md"
       },
       {
         "signature": "public is_type_param: bool",
         "description": "",
-        "line": 13,
-        "page": "reference/api/json-gen-field.md"
+        "line": 12,
+        "page": "reference/api/json-derive-gen-field.md"
       },
       {
         "signature": "public map_value_inner: string",
         "description": "Value type of a `Map<string, V>` / `SortedMap<string, V>` field (empty when not a map); the key type is required to be `string` (see `snapshot_field` in `src/driver/generate/json_gen.rs`).",
-        "line": 16,
-        "page": "reference/api/json-gen-field.md"
+        "line": 15,
+        "page": "reference/api/json-derive-gen-field.md"
       },
       {
         "signature": "public map_ctor: string",
         "description": "`Map` or `SortedMap` when `map_value_inner` is set (empty otherwise).",
-        "line": 18,
-        "page": "reference/api/json-gen-field.md"
+        "line": 17,
+        "page": "reference/api/json-derive-gen-field.md"
       },
       {
         "signature": "public seq_elem_inner: string",
         "description": "Element type of a `List<T>` / `Set<T>` field (empty when not a seq collection).",
-        "line": 20,
-        "page": "reference/api/json-gen-field.md"
+        "line": 19,
+        "page": "reference/api/json-derive-gen-field.md"
       },
       {
-        "signature": "public seq_kind: string",
+        "signature": "public seq_kind: CollectionKind",
         "description": "`list` or `set` when `seq_elem_inner` is set (empty otherwise).",
-        "line": 22,
-        "page": "reference/api/json-gen-field.md"
+        "line": 21,
+        "page": "reference/api/json-derive-gen-field.md"
       },
       {
-        "signature": "public constructor( name: string, type_name: string, json_ignore: bool, property_name: string, option_inner: string, is_type_param: bool, map_value_inner: string, map_ctor: string, seq_elem_inner: string, seq_kind: string )",
+        "signature": "public constructor( name: string, type_name: string, json_ignore: bool, property_name: string, option_inner: string, is_type_param: bool, map_value_inner: string, map_ctor: string, seq_elem_inner: string, seq_kind: CollectionKind )",
         "description": "Builds a field snapshot from SemanticModel data.",
-        "line": 25,
-        "page": "reference/api/json-gen-field.md"
+        "line": 24,
+        "page": "reference/api/json-derive-gen-field.md"
       },
       {
-        "signature": "public static fun make( name: string, type_name: string, json_ignore: bool, property_name: string, option_inner: string, is_type_param: bool, map_value_inner: string, map_ctor: string, seq_elem_inner: string, seq_kind: string ): GenField",
+        "signature": "public static fun make( name: string, type_name: string, json_ignore: bool, property_name: string, option_inner: string, is_type_param: bool, map_value_inner: string, map_ctor: string, seq_elem_inner: string, seq_kind: CollectionKind ): JsonFieldSpec",
         "description": "Convenience factory matching the constructor arguments.",
-        "line": 50,
-        "page": "reference/api/json-gen-field.md"
+        "line": 49,
+        "page": "reference/api/json-derive-gen-field.md"
       },
       {
         "signature": "public fun json_key(): string",
         "description": "JSON object key: `@json_property` override, else the Dream field name.",
-        "line": 77,
-        "page": "reference/api/json-gen-field.md"
+        "line": 76,
+        "page": "reference/api/json-derive-gen-field.md"
       }
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/json/gen_result.dream",
-    "package": "system.json",
-    "page": "reference/api/json-gen-result.md",
+    "source": "crates/dream-stdlib/src/system/json/derive/gen_result.dream",
+    "package": "system.json.derive",
+    "page": "reference/api/json-derive-gen-result.md",
     "declarations": [
       {
-        "signature": "public class GenResult",
-        "description": "Outcome of a `@json` source-generator expand pass. Optional `error_type` / `error_field` let the host attach a source span when reporting `DiagnosticBag` errors (see `driver/generate/json_gen.rs`).",
-        "line": 6,
-        "page": "reference/api/json-gen-result.md"
+        "signature": "public class JsonGenOutput",
+        "description": "Outcome of a `@json` source-generator expand pass. Optional `error_type` / `error_field` name the type / field the error is reported at.",
+        "line": 5,
+        "page": "reference/api/json-derive-gen-result.md"
       },
       {
         "signature": "public ok: bool",
         "description": "",
-        "line": 7,
-        "page": "reference/api/json-gen-result.md"
+        "line": 6,
+        "page": "reference/api/json-derive-gen-result.md"
       },
       {
         "signature": "public source: string",
         "description": "",
-        "line": 8,
-        "page": "reference/api/json-gen-result.md"
+        "line": 7,
+        "page": "reference/api/json-derive-gen-result.md"
       },
       {
         "signature": "public error: string",
         "description": "",
-        "line": 9,
-        "page": "reference/api/json-gen-result.md"
+        "line": 8,
+        "page": "reference/api/json-derive-gen-result.md"
       },
       {
         "signature": "public error_type: string",
         "description": "",
-        "line": 10,
-        "page": "reference/api/json-gen-result.md"
+        "line": 9,
+        "page": "reference/api/json-derive-gen-result.md"
       },
       {
         "signature": "public error_field: string",
         "description": "",
-        "line": 11,
-        "page": "reference/api/json-gen-result.md"
+        "line": 10,
+        "page": "reference/api/json-derive-gen-result.md"
       },
       {
-        "signature": "public static fun success(source: string): GenResult",
+        "signature": "public static fun success(source: string): JsonGenOutput",
         "description": "Successful expand with emitted Dream source.",
-        "line": 23,
-        "page": "reference/api/json-gen-result.md"
+        "line": 22,
+        "page": "reference/api/json-derive-gen-result.md"
       },
       {
-        "signature": "public static fun failure(error: string): GenResult",
+        "signature": "public static fun failure(error: string): JsonGenOutput",
         "description": "Failed expand with a diagnostic message (no span hint).",
-        "line": 28,
-        "page": "reference/api/json-gen-result.md"
+        "line": 27,
+        "page": "reference/api/json-derive-gen-result.md"
       },
       {
-        "signature": "public static fun failure_at(error: string, type_name: string, field_name: string): GenResult",
+        "signature": "public static fun failure_at(error: string, type_name: string, field_name: string): JsonGenOutput",
         "description": "Failed expand with type/field names for host span recovery.",
-        "line": 33,
-        "page": "reference/api/json-gen-result.md"
+        "line": 32,
+        "page": "reference/api/json-derive-gen-result.md"
       }
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/json/gen_type.dream",
-    "package": "system.json",
-    "page": "reference/api/json-gen-type.md",
+    "source": "crates/dream-stdlib/src/system/json/derive/gen_type.dream",
+    "package": "system.json.derive",
+    "page": "reference/api/json-derive-gen-type.md",
     "declarations": [
       {
-        "signature": "public class GenType",
+        "signature": "public class JsonTypeSpec",
         "description": "Class or discriminated-union type snapshot for `@json` codegen.",
         "line": 4,
-        "page": "reference/api/json-gen-type.md"
+        "page": "reference/api/json-derive-gen-type.md"
       },
       {
         "signature": "public name: string",
         "description": "",
         "line": 5,
-        "page": "reference/api/json-gen-type.md"
+        "page": "reference/api/json-derive-gen-type.md"
       },
       {
         "signature": "public is_union: bool",
         "description": "",
         "line": 6,
-        "page": "reference/api/json-gen-type.md"
+        "page": "reference/api/json-derive-gen-type.md"
       },
       {
         "signature": "public generic_params: List<string>",
         "description": "",
         "line": 7,
-        "page": "reference/api/json-gen-type.md"
+        "page": "reference/api/json-derive-gen-type.md"
       },
       {
-        "signature": "public fields: List<GenField>",
+        "signature": "public fields: List<JsonFieldSpec>",
         "description": "",
         "line": 8,
-        "page": "reference/api/json-gen-type.md"
+        "page": "reference/api/json-derive-gen-type.md"
       },
       {
-        "signature": "public variants: List<GenVariant>",
+        "signature": "public variants: List<JsonVariantSpec>",
         "description": "",
         "line": 9,
-        "page": "reference/api/json-gen-type.md"
+        "page": "reference/api/json-derive-gen-type.md"
       },
       {
-        "signature": "public constructor( name: string, is_union: bool, generic_params: List<string>, fields: List<GenField>, variants: List<GenVariant> )",
-        "description": "Builds a type snapshot (prefer `class_type` / `union_type` factories).",
+        "signature": "public assign_fields: bool",
+        "description": "Built with a zero-argument constructor plus field stores, because no constructor takes every field in declaration order.",
         "line": 12,
-        "page": "reference/api/json-gen-type.md"
+        "page": "reference/api/json-derive-gen-type.md"
       },
       {
-        "signature": "public static fun class_type( name: string, generic_params: List<string>, fields: List<GenField> ): GenType",
+        "signature": "public constructor( name: string, is_union: bool, generic_params: List<string>, fields: List<JsonFieldSpec>, variants: List<JsonVariantSpec> )",
+        "description": "Builds a type snapshot (prefer `class_type` / `union_type` factories).",
+        "line": 15,
+        "page": "reference/api/json-derive-gen-type.md"
+      },
+      {
+        "signature": "public static fun class_type( name: string, generic_params: List<string>, fields: List<JsonFieldSpec> ): JsonTypeSpec",
         "description": "Snapshot for a `@json` class/struct with named fields.",
-        "line": 27,
-        "page": "reference/api/json-gen-type.md"
+        "line": 31,
+        "page": "reference/api/json-derive-gen-type.md"
       },
       {
-        "signature": "public static fun union_type( name: string, generic_params: List<string>, variants: List<GenVariant> ): GenType",
+        "signature": "public static fun union_type( name: string, generic_params: List<string>, variants: List<JsonVariantSpec> ): JsonTypeSpec",
         "description": "Snapshot for a `@json` discriminated union with variants.",
-        "line": 36,
-        "page": "reference/api/json-gen-type.md"
+        "line": 40,
+        "page": "reference/api/json-derive-gen-type.md"
       },
       {
         "signature": "public fun params_clause(): string",
         "description": "`<T, U>` clause for emit, or empty when non-generic.",
-        "line": 45,
-        "page": "reference/api/json-gen-type.md"
+        "line": 49,
+        "page": "reference/api/json-derive-gen-type.md"
       },
       {
         "signature": "public fun self_ty(): string",
         "description": "Fully written self type (`Name` or `Name<T, U>`).",
-        "line": 62,
-        "page": "reference/api/json-gen-type.md"
+        "line": 66,
+        "page": "reference/api/json-derive-gen-type.md"
+      },
+      {
+        "signature": "public fun construct(args: string): string",
+        "description": "Expression building a value from its fields' values (`args`, declaration order).",
+        "line": 71,
+        "page": "reference/api/json-derive-gen-type.md"
       }
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/json/gen_variant.dream",
-    "package": "system.json",
-    "page": "reference/api/json-gen-variant.md",
+    "source": "crates/dream-stdlib/src/system/json/derive/gen_variant.dream",
+    "package": "system.json.derive",
+    "page": "reference/api/json-derive-gen-variant.md",
     "declarations": [
       {
-        "signature": "public class GenVariant",
+        "signature": "public class JsonVariantSpec",
         "description": "One variant of a `@json` discriminated union.",
         "line": 4,
-        "page": "reference/api/json-gen-variant.md"
+        "page": "reference/api/json-derive-gen-variant.md"
       },
       {
         "signature": "public name: string",
         "description": "",
         "line": 5,
-        "page": "reference/api/json-gen-variant.md"
+        "page": "reference/api/json-derive-gen-variant.md"
       },
       {
-        "signature": "public fields: List<GenField>",
+        "signature": "public fields: List<JsonFieldSpec>",
         "description": "",
         "line": 6,
-        "page": "reference/api/json-gen-variant.md"
+        "page": "reference/api/json-derive-gen-variant.md"
       },
       {
-        "signature": "public constructor(name: string, fields: List<GenField>)",
-        "description": "Builds a variant snapshot from SemanticModel data.",
+        "signature": "public constructor(name: string, fields: List<JsonFieldSpec>)",
+        "description": "Builds a variant spec.",
         "line": 9,
-        "page": "reference/api/json-gen-variant.md"
+        "page": "reference/api/json-derive-gen-variant.md"
       },
       {
-        "signature": "public static fun make(name: string, fields: List<GenField>): GenVariant",
+        "signature": "public static fun make(name: string, fields: List<JsonFieldSpec>): JsonVariantSpec",
         "description": "Convenience factory matching the constructor arguments.",
         "line": 15,
-        "page": "reference/api/json-gen-variant.md"
+        "page": "reference/api/json-derive-gen-variant.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/json/derive/json_derive.dream",
+    "package": "system.json.derive",
+    "page": "reference/api/json-derive-json-derive.md",
+    "declarations": [
+      {
+        "signature": "public fun json_derive(ctx: GenContext): void",
+        "description": "The `@json` derive: `to_json` / `write_json` / `from_json` for every `@json` type, plus the `Json` collection adapters that `Json.serialize/deserialize/from_value` calls on collection types need. One generated file, `json.dream`.",
+        "line": 15,
+        "page": "reference/api/json-derive-json-derive.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/json/derive/json_generator.dream",
+    "package": "system.json.derive",
+    "page": "reference/api/json-derive-json-generator.md",
+    "declarations": [
+      {
+        "signature": "public static class JsonGenerator",
+        "description": "Builds `extend Type { to_json / write_json / from_json }` source from [`JsonTypeSpec`]s (see `json_derive`).",
+        "line": 9,
+        "page": "reference/api/json-derive-json-generator.md"
+      },
+      {
+        "signature": "public static fun expand(borrow types: List<JsonTypeSpec>, borrow json_names: List<string>, borrow jsonable: List<string>): JsonGenOutput",
+        "description": "Emits `extend … { to_json / write_json / from_json }` source for each snapshot in `types`.",
+        "line": 11,
+        "page": "reference/api/json-derive-json-generator.md"
+      },
+      {
+        "signature": "public static fun expand_collections( borrow specs: List<JsonCollectionSpec>, borrow json_names: List<string>, borrow jsonable: List<string> ): JsonGenOutput",
+        "description": "Emits free `__col_ser_*` / `__col_write_*` / `__col_de_*` helpers for top-level collection `Json.serialize` / `deserialize` / `from_value` (see `intrinsics.rs`).",
+        "line": 1905,
+        "page": "reference/api/json-derive-json-generator.md"
       }
     ]
   },
@@ -4608,27 +5669,33 @@
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/json/json_generator.dream",
+    "source": "crates/dream-stdlib/src/system/json/json_attributes.dream",
     "package": "system.json",
-    "page": "reference/api/json-json-generator.md",
+    "page": "reference/api/json-json-attributes.md",
     "declarations": [
       {
-        "signature": "public static class JsonGenerator",
-        "description": "Dream `@json` source generator: builds `extend Type { to_json / write_json / from_json }` source from a [`GenType`] snapshot. Invoked by the compile host during the generate pass.",
-        "line": 9,
-        "page": "reference/api/json-json-generator.md"
+        "signature": "public struct json",
+        "description": "Derives JSON serialization for a class, struct or discriminated union: `to_json`, `write_json` and `from_json`, written by the `system.json.derive` generator.",
+        "line": 6,
+        "page": "reference/api/json-json-attributes.md"
       },
       {
-        "signature": "public static fun expand(borrow types: List<GenType>, borrow json_names: List<string>, borrow jsonable: List<string>): GenResult",
-        "description": "Emits `extend … { to_json / write_json / from_json }` source for each snapshot in `types`.",
+        "signature": "public struct property_name",
+        "description": "Overrides the JSON property name of a field of a `@json` type.",
+        "line": 10,
+        "page": "reference/api/json-json-attributes.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
         "line": 11,
-        "page": "reference/api/json-json-generator.md"
+        "page": "reference/api/json-json-attributes.md"
       },
       {
-        "signature": "public static fun expand_collections( borrow specs: List<GenCollection>, borrow json_names: List<string>, borrow jsonable: List<string> ): GenResult",
-        "description": "Emits free `__col_ser_*` / `__col_write_*` / `__col_de_*` helpers for top-level collection `Json.serialize` / `deserialize` / `from_value` (see `intrinsics.rs`).",
-        "line": 1895,
-        "page": "reference/api/json-json-generator.md"
+        "signature": "public struct json_ignore",
+        "description": "Leaves a field of a `@json` type out of JSON serialization and deserialization.",
+        "line": 16,
+        "page": "reference/api/json-json-attributes.md"
       }
     ]
   },

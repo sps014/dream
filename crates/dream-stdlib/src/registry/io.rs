@@ -9,6 +9,7 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.text",
         "system.encoding",
     ],
+    generators: &[],
     files: &[
         (
             "<std>/system/io/io_error.dream",

@@ -279,8 +279,8 @@ fn thread_empty_jumps(func: &mut MirFunction) -> bool {
     let mut changed = false;
     for i in 0..func.blocks.len() {
         let here = BlockId(i as u32);
-        if let Terminator::Goto(t) = func.blocks[i].terminator {
-            if t != here && func.block(t).stmts.is_empty() {
+        if let Terminator::Goto(t) = func.blocks[i].terminator
+            && t != here && func.block(t).stmts.is_empty() {
                 let forwarded = func.block(t).terminator.clone();
                 // Only thread when it actually changes the target (avoid no-op churn / cycles).
                 if !matches!(&forwarded, Terminator::Goto(u) if *u == t) {
@@ -288,7 +288,6 @@ fn thread_empty_jumps(func: &mut MirFunction) -> bool {
                     changed = true;
                 }
             }
-        }
     }
     changed
 }

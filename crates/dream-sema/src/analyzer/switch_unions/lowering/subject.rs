@@ -35,15 +35,14 @@ impl<'a> Analyzer<'a> {
         let subject_hir = self.hir_take();
         // The subject's union may be a generic instantiation that has not been constructed yet
         // (e.g. matching on a `param: Option<int>`); ensure its layout is registered first.
-        if let Type::Struct(base, Some(args)) = &subject_type {
-            if self
+        if let Type::Struct(base, Some(args)) = &subject_type
+            && self
                 .type_ctx
                 .resolve(DefKind::Union, &base.text)
                 .is_some_and(|def| self.generic_union(def).is_some())
             {
                 self.ensure_union_instantiated(&base.text, args, &base.position, diagnostics);
             }
-        }
         let subject_id = self.type_ctx.lower(&subject_type);
         let subject_base =
             dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, subject_id);

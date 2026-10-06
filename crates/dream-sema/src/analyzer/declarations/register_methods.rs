@@ -104,18 +104,30 @@ impl<'a> Analyzer<'a> {
             if !bindings.is_empty() {
                 Self::substitute_generic_signature(&mut new_method, bindings);
             }
-            let mut parameters: Vec<_> = new_method.parameters.iter().map(|p| self.type_ctx.lower(&p.type_)).collect();
-            if !new_method.is_static { parameters.insert(0, target_type); }
-            let def = self.type_ctx.register_method(target_type, &member_name, &parameters);
+            let mut parameters: Vec<_> = new_method
+                .parameters
+                .iter()
+                .map(|p| self.type_ctx.lower(&p.type_))
+                .collect();
+            if !new_method.is_static {
+                parameters.insert(0, target_type);
+            }
+            let def = self
+                .type_ctx
+                .register_method(target_type, &member_name, &parameters);
 
             // Register after substitution so generic `@operator` params are `Vector<int>`, not `Vector<T>`.
             let operator_method = new_method.clone();
 
             // Static methods have no implicit receiver; instance methods get `this` at index 0.
             if !new_method.is_static {
-                new_method
-                    .parameters
-                    .insert(0, dream_syntax::nodes::ParameterNode::new(synthetic_token(TokenKind::IdentifierToken, "this"), self.type_ctx.syntax_type(target_type)));
+                new_method.parameters.insert(
+                    0,
+                    dream_syntax::nodes::ParameterNode::new(
+                        synthetic_token(TokenKind::IdentifierToken, "this"),
+                        self.type_ctx.syntax_type(target_type),
+                    ),
+                );
             }
 
             // Stash the *renamed* clone (`{Type}_{method}`), not the raw declaration: its own
@@ -131,10 +143,15 @@ impl<'a> Analyzer<'a> {
             // `instantiated_generics` after `register_generic_function_instance`.
             if method.generic_parameters.is_some() {
                 let renamed_template: &'a FunctionNode<'a> = self.arena.alloc(new_method);
-                self.type_ctx.defs.set_generic_params(def, generic_param_names(&method.generic_parameters));
+                self.type_ctx
+                    .defs
+                    .set_generic_params(def, generic_param_names(&method.generic_parameters));
                 self.generic_functions.insert(def, renamed_template);
-                self.function_table.generic_methods.insert((target_type, member_name), def);
-                self.function_table.record_declaration(renamed_template, (def, Vec::new()));
+                self.function_table
+                    .generic_methods
+                    .insert((target_type, member_name), def);
+                self.function_table
+                    .record_declaration(renamed_template, (def, Vec::new()));
                 self.record_ide_definition(def, &method.name, method.file_path.as_deref());
                 continue;
             }
@@ -142,23 +159,43 @@ impl<'a> Analyzer<'a> {
             let method_ref = self.arena.alloc(new_method);
             self.struct_methods.push((method_ref, bindings.clone()));
 
-            let mut info = FunctionTableInfo::from_identity(method_ref, (def, Vec::new()), &mut self.type_ctx);
-            self.validate_and_register_operator(target_type, &operator_method, &info.identity, diagnostics);
-            self.validate_and_register_protocol_hook(target_type, method, &info.identity, diagnostics);
-            if bindings.is_empty() && method.is_extern && dream_abi::attributes::has_c_attr(&method.attributes) {
+            let mut info =
+                FunctionTableInfo::from_identity(method_ref, (def, Vec::new()), &mut self.type_ctx);
+            self.validate_and_register_operator(
+                target_type,
+                &operator_method,
+                &info.identity,
+                diagnostics,
+            );
+            self.validate_and_register_protocol_hook(
+                target_type,
+                method,
+                &info.identity,
+                diagnostics,
+            );
+            if bindings.is_empty()
+                && method.is_extern
+                && dream_abi::attributes::has_c_attr(&method.attributes)
+            {
                 self.validate_c_extern_signature(method, def, diagnostics);
             }
             self.record_ide_definition(info.identity.0, &method.name, method.file_path.as_deref());
-            if let Some(key) = dream_abi::intrinsics::intrinsic_key(&method.attributes) { self.intrinsic_defs.push((info.identity.0, key)); }
+            if let Some(key) = dream_abi::intrinsics::intrinsic_key(&method.attributes) {
+                self.intrinsic_defs.push((info.identity.0, key));
+            }
             info.declaring_module = self.module_of(method_ref.file_path.as_ref());
             let identity = info.identity.clone();
             self.function_table.record_declaration(method_ref, identity);
-            match self.function_table.add_method(target_type, &member_name, info) {
+            match self
+                .function_table
+                .add_method(target_type, &member_name, info)
+            {
                 Ok(_) => (),
-                Err(error) => diagnostics.report_error(error.to_string(), Some(method.name.position)),
+                Err(error) => {
+                    diagnostics.report_error(error.to_string(), Some(method.name.position))
+                }
             }
         }
-
     }
 
     /// Returns true if `name` is a type that an `extend` block may attach methods to: a
@@ -172,10 +209,22 @@ impl<'a> Analyzer<'a> {
         }
         PRIMITIVE_TYPE_NAMES.contains(&name)
             || matches!(name, "object" | "js")
-            || self.type_ctx.resolved_type(name).is_some_and(|ty| self.struct_info(ty).is_some())
-            || self.type_ctx.resolve(DefKind::Struct, name).is_some_and(|def| self.generic_struct(def).is_some())
-            || self.type_ctx.resolve(DefKind::Enum, name).is_some_and(|def| self.enum_members(def).is_some())
-            || self.type_ctx.resolve(DefKind::Interface, name).is_some_and(|def| self.interface_decl(def).is_some())
+            || self
+                .type_ctx
+                .resolved_type(name)
+                .is_some_and(|ty| self.struct_info(ty).is_some())
+            || self
+                .type_ctx
+                .resolve(DefKind::Struct, name)
+                .is_some_and(|def| self.generic_struct(def).is_some())
+            || self
+                .type_ctx
+                .resolve(DefKind::Enum, name)
+                .is_some_and(|def| self.enum_members(def).is_some())
+            || self
+                .type_ctx
+                .resolve(DefKind::Interface, name)
+                .is_some_and(|def| self.interface_decl(def).is_some())
     }
 
     fn extend_target_type(&mut self, name: &str) -> Option<dream_types::TypeId> {
@@ -259,8 +308,15 @@ impl<'a> Analyzer<'a> {
                 );
                 continue;
             }
-            let Some(target_type) = self.extend_target_type(&target) else { continue; };
-            self.register_methods_for(target_type, &ext.methods, &GenericBindings::new(), diagnostics);
+            let Some(target_type) = self.extend_target_type(&target) else {
+                continue;
+            };
+            self.register_methods_for(
+                target_type,
+                &ext.methods,
+                &GenericBindings::new(),
+                diagnostics,
+            );
             // An `extend Type : Iface { ... }` block records that its target implements the
             // interface(s), so the target (including a primitive like `int`) participates in
             // interface dispatch and satisfies generic constraints (`T : Comparable<T>`). The
@@ -294,7 +350,13 @@ impl<'a> Analyzer<'a> {
                 let key = if ext.target.text.ends_with("[]") {
                     GenericExtendTarget::Array
                 } else {
-                    let Some(def) = self.type_ctx.nominal_kind(&ext.target.text).and_then(|kind| self.type_ctx.resolve(kind, &ext.target.text)) else { continue; };
+                    let Some(def) = self
+                        .type_ctx
+                        .nominal_kind(&ext.target.text)
+                        .and_then(|kind| self.type_ctx.resolve(kind, &ext.target.text))
+                    else {
+                        continue;
+                    };
                     GenericExtendTarget::Nominal(def)
                 };
                 self.generic_extends.entry(key).or_default().push(ext);

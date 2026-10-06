@@ -542,15 +542,14 @@ impl Manifest {
                 }
             }
             PackageType::Lib => {
-                if let Some(entry) = &pkg.entry {
-                    if !entry.trim().is_empty() {
+                if let Some(entry) = &pkg.entry
+                    && !entry.trim().is_empty() {
                         bail!(
                             "package '{}' is type = \"lib\" and must not set entry \
                              (libraries are imported via src/<name>.dream)",
                             pkg.name
                         );
                     }
-                }
             }
         }
         if self.lib.is_some() {
@@ -600,15 +599,12 @@ impl Manifest {
         let mut dir = Some(start_dir.to_path_buf());
         while let Some(d) = dir {
             let candidate = d.join(MANIFEST_FILE_NAME);
-            if candidate.is_file() {
-                if let Ok(text) = std::fs::read_to_string(&candidate) {
-                    if let Ok(m) = toml::from_str::<Manifest>(&text) {
-                        if m.package.is_some() {
+            if candidate.is_file()
+                && let Ok(text) = std::fs::read_to_string(&candidate)
+                    && let Ok(m) = toml::from_str::<Manifest>(&text)
+                        && m.package.is_some() {
                             return Some(d);
                         }
-                    }
-                }
-            }
             dir = d.parent().map(Path::to_path_buf);
         }
         None
@@ -619,15 +615,12 @@ impl Manifest {
         let mut dir = Some(start_dir.to_path_buf());
         while let Some(d) = dir {
             let candidate = d.join(MANIFEST_FILE_NAME);
-            if candidate.is_file() {
-                if let Ok(text) = std::fs::read_to_string(&candidate) {
-                    if let Ok(m) = toml::from_str::<Manifest>(&text) {
-                        if m.workspace.is_some() {
+            if candidate.is_file()
+                && let Ok(text) = std::fs::read_to_string(&candidate)
+                    && let Ok(m) = toml::from_str::<Manifest>(&text)
+                        && m.workspace.is_some() {
                             return Some(d);
                         }
-                    }
-                }
-            }
             dir = d.parent().map(Path::to_path_buf);
         }
         None

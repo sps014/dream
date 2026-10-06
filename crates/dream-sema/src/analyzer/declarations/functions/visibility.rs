@@ -59,9 +59,11 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let name = &token.text;
-        if let Some(struct_info) = self.type_ctx.lookup_type(ty)
-            .and_then(|ty| self.struct_info(ty)) {
-            if !struct_info.visibility.is_public() {
+        if let Some(struct_info) = self
+            .type_ctx
+            .lookup_type(ty)
+            .and_then(|ty| self.struct_info(ty))
+            && !struct_info.visibility.is_public() {
                 diagnostics.report_error(
                     format!(
                         "Public function '{}' exposes private class '{}'",
@@ -70,13 +72,12 @@ impl<'a> Analyzer<'a> {
                     Some(function.name.position),
                 );
             }
-        }
         let def = self
             .type_ctx
             .nominal_kind(name)
             .and_then(|kind| self.type_ctx.resolve(kind, name));
-        if let Some((_, visibility)) = def.and_then(|def| self.type_visibility.get(&def)) {
-            if !visibility.is_public() {
+        if let Some((_, visibility)) = def.and_then(|def| self.type_visibility.get(&def))
+            && !visibility.is_public() {
                 diagnostics.report_error(
                     format!(
                         "Public function '{}' exposes private type '{}'",
@@ -85,6 +86,5 @@ impl<'a> Analyzer<'a> {
                     Some(function.name.position),
                 );
             }
-        }
     }
 }

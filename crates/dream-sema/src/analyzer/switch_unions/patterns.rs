@@ -28,17 +28,15 @@ impl<'a> Analyzer<'a> {
                 // A bare identifier naming a unit variant is a unit-variant pattern; otherwise it
                 // binds the whole subject and acts as a catch-all `default` arm (the subject value
                 // is copied into the named local, injected by the caller).
-                if let (Some(info), Some(def)) = (union_info, union_def) {
-                    if let Some(v) = info.variant(&name.text) {
-                        if v.fields.is_empty() {
+                if let (Some(info), Some(def)) = (union_info, union_def)
+                    && let Some(v) = info.variant(&name.text)
+                        && v.fields.is_empty() {
                             return HirArmShape::Variant {
                                 def,
                                 variant: v.discriminant as usize,
                                 bindings: vec![],
                             };
                         }
-                    }
-                }
                 let ty = self.type_ctx.lower(subject_type);
                 match self.hir_alloc_local(&name.text, subject_type) {
                     Some(local) => HirArmShape::DefaultBind { local, ty },
@@ -277,9 +275,9 @@ impl<'a> Analyzer<'a> {
             PatternNode::Binding(name) => {
                 // A bare identifier naming a unit variant of the value's union is a variant test;
                 // otherwise it binds the whole value.
-                if let Some(info) = self.union_info(base).cloned() {
-                    if let Some(v) = info.variant(&name.text) {
-                        if v.fields.is_empty() {
+                if let Some(info) = self.union_info(base).cloned()
+                    && let Some(v) = info.variant(&name.text)
+                        && v.fields.is_empty() {
                             let cond = self.hx_bin(
                                 BinOp::Eq,
                                 self.hx_disc(value.clone()),
@@ -287,8 +285,6 @@ impl<'a> Analyzer<'a> {
                             );
                             return Some((vec![cond], vec![]));
                         }
-                    }
-                }
                 Some((
                     vec![],
                     vec![(name.text.clone(), value_type.clone(), value.clone())],

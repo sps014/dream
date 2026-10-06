@@ -29,30 +29,21 @@ fun snippet(): string {
 
 ## GenContext
 
-`GenContext` is the compile-time handle a `@generator` function receives — find syntax sites, replace them, and report errors. Full walkthrough: [Source generators](../language/generators.md).
-
-## GenSyntaxBlock
-
-Each `quote { … }` (or other `@syntax_block`) site is a `GenSyntaxBlock` (`.name`, `.body`, splices).
+`GenContext` is the compile-time handle a `@generator` function receives. Use it to find the sites that triggered the generator, queue output, and report errors. Full walkthrough: [Source generators](../language/generators.md).
 
 | Call | Meaning |
 | --- | --- |
-| `syntax_blocks(name)` / `all_blocks()` | matching sites |
-| `replace(block, dream_source)` | swap the site before type-check |
-| `error(block, message)` | fail compilation |
+| `syntax_blocks()` | `name { … }` sites for an `@syntax_block` generator |
+| `types_with<A>()` / `functions_with<A>()` | declarations carrying `@A` |
+| `call_sites()` | calls of the generator's `@on_call` functions |
+| `type_index()` / `find_type(name)` | every type in the program, by name and `DeclKind` |
+| `options<T>()` / `option_or(key, fallback)` | `dream.toml` `[[generators]].options` |
+| `replace(block, source)` | swap a syntax site before type-check |
+| `emit_extend(decl, body)` / `emit_file(path, source)` | add members or a whole file |
+| `error(node, message)` / `warning(decl, message)` / `log(message)` | diagnostics and `-v` log lines |
 
-## `GenFieldInfo`
+## Declaration model
 
-`GenFieldInfo` is one field on a snapshotted declaration type (`.name`, `.type_name`) — used by emit-style generators.
+`GenDecl` (`kind`, `fields`, `variants`, `methods`, `generics`, `attributes`) describes one declaration. `GenField.ty` is a `GenTypeRef`: query it with `primitive()`, `collection()`, `is_option()`, `arg(i)`, and `is_decl(declof(T))` instead of comparing type names as strings. Read typed attributes with `has<A>()`, `attribute<A>()`, and `attributes_of<A>()`.
 
-`@json` is a compiler builtin, not a `GenContext` generator — see [JSON](json.md).
-
-Samples: [`quote`](https://github.com/sps014/dream/tree/main/sample/generators/quote), [`html`](https://github.com/sps014/dream/tree/main/sample/generators/html), [`dto`](https://github.com/sps014/dream/tree/main/sample/generators/dto).
-
-## Inspect declarations
-
-`ctx.types_with(attribute)` returns `List<GenTypeInfo>` for types carrying that attribute. Each item provides its `name`, its `attributes`, and its `fields`. `has_attribute(name)` checks another attribute on the same type. Each `GenFieldInfo` gives a field's `name` and `type_name`.
-
-Use `emit_extend(type_name, body)` to add members, or `emit_file(path, source)` to create another source file. Use `error_general(message)` for a problem unrelated to one syntax block. Call `finish()` to write the generator's queued output.
-
-Read the [source-generator guide](../language/generators.md) before using these methods; generators require registration and run while building the program. See [all generator declarations](../api/codegen-gen-context.md).
+Samples: [`quote`](https://github.com/sps014/dream/tree/main/sample/generators/quote), [`html`](https://github.com/sps014/dream/tree/main/sample/generators/html), [`dto`](https://github.com/sps014/dream/tree/main/sample/generators/dto). See [all generator declarations](../api/system-codegen.md).

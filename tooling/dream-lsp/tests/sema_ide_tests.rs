@@ -3,7 +3,7 @@
 //! positions the stringly-typed index cannot resolve: chained receivers, call results, tuple
 //! elements, loop variables, and substituted generic signatures.
 
-mod common;
+use crate::common;
 
 use common::TestHarness;
 use dream_lsp::index::SymKind;

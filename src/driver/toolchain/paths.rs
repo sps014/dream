@@ -11,11 +11,10 @@ pub(super) fn prefix(
         return p.into();
     }
     if let Some(p) = home {
-        if p.file_name().and_then(|s| s.to_str()) == Some("bin") {
-            if let Some(parent) = p.parent() {
+        if p.file_name().and_then(|s| s.to_str()) == Some("bin")
+            && let Some(parent) = p.parent() {
                 return parent.to_path_buf();
             }
-        }
         let cargo_target = matches!(
             p.file_name().and_then(|s| s.to_str()),
             Some("debug" | "release")
@@ -46,11 +45,10 @@ pub(super) fn runtime_sources(
     let mut roots = Vec::new();
     if let Some(home) = home {
         roots.push(home.join("lib/runtime/c"));
-        if home.file_name().and_then(|s| s.to_str()) == Some("bin") {
-            if let Some(parent) = home.parent() {
+        if home.file_name().and_then(|s| s.to_str()) == Some("bin")
+            && let Some(parent) = home.parent() {
                 roots.push(parent.join("lib/runtime/c"));
             }
-        }
     }
     if let Some(user) = user {
         roots.push(user.join(".dream/lib/runtime/c"));
@@ -72,11 +70,10 @@ pub(super) fn host_library_dirs(config: &ToolchainConfig) -> Vec<PathBuf> {
         for exe in exe.canonicalize().ok().iter().chain(std::iter::once(exe)) {
             if let Some(p) = exe.parent() {
                 push(p.to_path_buf());
-                if p.file_name().and_then(|s| s.to_str()) == Some("deps") {
-                    if let Some(parent) = p.parent() {
+                if p.file_name().and_then(|s| s.to_str()) == Some("deps")
+                    && let Some(parent) = p.parent() {
                         push(parent.to_path_buf());
                     }
-                }
             }
         }
     }
@@ -84,11 +81,10 @@ pub(super) fn host_library_dirs(config: &ToolchainConfig) -> Vec<PathBuf> {
         push(home.clone());
         push(home.join("bin"));
     }
-    if let Some(bin) = &config.bin {
-        if let Some(parent) = bin.parent() {
+    if let Some(bin) = &config.bin
+        && let Some(parent) = bin.parent() {
             push(parent.to_path_buf());
         }
-    }
     if let Some(user) = &config.user_home {
         push(user.join(".dream/bin"));
     }
@@ -133,6 +129,10 @@ impl ToolchainConfig {
 
     pub fn generator_cache_root(&self) -> PathBuf {
         self.prefix.join("cache").join("generators")
+    }
+
+    pub fn std_sources_root(&self) -> PathBuf {
+        self.prefix.join("cache").join("std-src")
     }
 
     pub fn host_library_dirs(&self) -> Vec<PathBuf> {

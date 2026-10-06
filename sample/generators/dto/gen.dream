@@ -2,25 +2,20 @@ module gen;
 
 import system.codegen;
 
-@attribute
-public fun dto(): void {
-}
+// `@dto` on a class adds `describe()`; its fields are the attribute's arguments (none here).
+@attribute(AttributeTarget.Class)
+public struct dto {}
 
 @generator
+@on_attribute(dto)
 public fun dto_derive(ctx: GenContext): void {
-    let types = ctx.types_with("dto");
-    let i = 0;
-    while i < types.length {
-        let t = types[i];
-        if t.has_attribute("dto") {
-            let b = CodeBuilder();
-            b.line("public fun describe(): string {");
-            b.indent();
-            b.line("return \"dto\";");
-            b.dedent();
-            b.line("}");
-            ctx.emit_extend(t.name, b.to_string());
-        }
-        i = i + 1;
+    for (let t in ctx.types_with<dto>()) {
+        let b = CodeBuilder();
+        b.line("public fun describe(): string {");
+        b.indent();
+        b.line("return \"" + t.name + " is a dto\";");
+        b.dedent();
+        b.line("}");
+        ctx.emit_extend(t, b.to_string());
     }
 }

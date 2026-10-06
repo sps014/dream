@@ -37,7 +37,9 @@ impl<'a> Analyzer<'a> {
         caller_file: Option<&Rc<str>>,
     ) -> bool {
         use dream_syntax::nodes::Visibility;
-        if visibility == Visibility::Public {
+        if visibility == Visibility::Public
+            || caller_file.is_some_and(|c| self.generated_files.contains(c))
+        {
             return true;
         }
         match (decl_file, caller_file) {
@@ -105,10 +107,9 @@ impl<'a> Analyzer<'a> {
             .type_ctx
             .nominal_kind(type_name)
             .and_then(|kind| self.type_ctx.resolve(kind, type_name));
-        if let Some((decl_file, visibility)) = def.and_then(|def| self.type_visibility.get(&def)) {
-            if !self.visible_across_files(decl_file, *visibility, caller_file) {
+        if let Some((decl_file, visibility)) = def.and_then(|def| self.type_visibility.get(&def))
+            && !self.visible_across_files(decl_file, *visibility, caller_file) {
                 self.report_not_public("Type", type_name, decl_file, position, diagnostics);
             }
-        }
     }
 }

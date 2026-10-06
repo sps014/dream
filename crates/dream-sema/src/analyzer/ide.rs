@@ -48,13 +48,25 @@ pub enum IdeTarget {
         label: String,
     },
     /// A `new T(...)` constructor call on the concrete (possibly monomorphized) type.
-    Constructor { ty: dream_types::TypeId, display: String },
+    Constructor {
+        ty: dream_types::TypeId,
+        display: String,
+    },
     /// An `obj.field` access on the receiver type `owner`.
-    Field { owner: dream_types::TypeId, name: String },
+    Field {
+        owner: dream_types::TypeId,
+        name: String,
+    },
     /// An `Enum.MEMBER` read on a C-style enum.
-    EnumMember { owner: dream_types::TypeId, member: String },
+    EnumMember {
+        owner: dream_types::TypeId,
+        member: String,
+    },
     /// A `Union.Variant` construction on the concrete union `owner`.
-    UnionVariant { owner: dream_types::TypeId, variant: String },
+    UnionVariant {
+        owner: dream_types::TypeId,
+        variant: String,
+    },
     /// A typed expression with no more specific target (tuple element, `.length`, index result).
     Expr,
 }
@@ -411,20 +423,23 @@ impl<'a> Analyzer<'a> {
         let mut type_names = IndexMap::new();
         let mut methods = IndexMap::new();
         for ((receiver, member), identities) in &self.function_table.methods {
-            type_names.entry(*receiver).or_insert_with(|| self.type_id_display(*receiver));
+            type_names
+                .entry(*receiver)
+                .or_insert_with(|| self.type_id_display(*receiver));
             let entries = methods.entry(*receiver).or_insert_with(Vec::new);
             for identity in identities {
-                if let Some(sig) = functions.get(identity) {
-                    if let Some(method) = render_method(member, sig) {
+                if let Some(sig) = functions.get(identity)
+                    && let Some(method) = render_method(member, sig) {
                         entries.push(method);
                     }
-                }
             }
         }
 
         let mut structs = IndexMap::with_capacity(struct_inputs.len());
         for (owner, fields) in struct_inputs {
-            type_names.entry(owner).or_insert_with(|| self.type_id_display(owner));
+            type_names
+                .entry(owner)
+                .or_insert_with(|| self.type_id_display(owner));
             let mut out: Vec<FieldOut> = fields
                 .into_iter()
                 .map(|(fname, ty, visibility)| FieldOut {
@@ -443,7 +458,9 @@ impl<'a> Analyzer<'a> {
 
         let mut unions = IndexMap::with_capacity(union_inputs.len());
         for (owner, variants) in union_inputs {
-            type_names.entry(owner).or_insert_with(|| self.type_id_display(owner));
+            type_names
+                .entry(owner)
+                .or_insert_with(|| self.type_id_display(owner));
             let rendered = variants
                 .into_iter()
                 .map(|(vname, discriminant, fields)| VariantOut {
@@ -640,7 +657,10 @@ fn render_label(emitted: &str) -> String {
     no_module.split('.').next().unwrap_or(no_module).to_string()
 }
 
-type StructFieldInput = (dream_types::TypeId, Vec<(String, dream_types::TypeId, Visibility)>);
+type StructFieldInput = (
+    dream_types::TypeId,
+    Vec<(String, dream_types::TypeId, Visibility)>,
+);
 type UnionVariantInput = (dream_types::TypeId, Vec<(String, i32, Vec<UnionFieldInfo>)>);
 
 fn render_method(name: &str, sig: &FnSigOut) -> Option<MemberInfo> {

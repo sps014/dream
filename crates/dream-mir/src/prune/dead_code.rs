@@ -57,15 +57,14 @@ fn live_callee_defs(mir: &Mir) -> HashSet<dream_types::DefId> {
                 live_defs.insert(callee.def);
             }
         }
-        if f.is_async {
-            if let Some(hir_fn) = &f.hir_fn {
+        if f.is_async
+            && let Some(hir_fn) = &f.hir_fn {
                 let mut edges = HirEdges::default();
                 hir_body_edges(&hir_fn.body, &mut edges);
                 for (def, _) in edges.callees {
                     live_defs.insert(def);
                 }
             }
-        }
     }
     live_defs
 }
@@ -157,15 +156,14 @@ fn live_layout_types(mir: &Mir, interner: &TypeInterner) -> HashSet<TypeId> {
                 collect_stmt_types(s, &mut |ty| seed(ty, &mut live, &mut work));
             }
         }
-        if f.is_async {
-            if let Some(hir_fn) = &f.hir_fn {
+        if f.is_async
+            && let Some(hir_fn) = &f.hir_fn {
                 let mut edges = HirEdges::default();
                 hir_body_edges(&hir_fn.body, &mut edges);
                 for ty in edges.types {
                     seed(ty, &mut live, &mut work);
                 }
             }
-        }
     }
 
     let kept_defs: HashSet<dream_types::DefId> = mir.functions.iter().map(|f| f.def).collect();
@@ -435,24 +433,22 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
             type_worklist.push(f.ret);
             type_worklist.extend(f.instance.iter().copied());
             type_worklist.extend(f.locals.iter().map(|l| l.ty));
-            if f.is_async {
-                if let Some(hir_fn) = &f.hir_fn {
+            if f.is_async
+                && let Some(hir_fn) = &f.hir_fn {
                     let mut edges = HirEdges::default();
                     hir_body_edges(&hir_fn.body, &mut edges);
                     callees.extend(edges.callees);
                     type_worklist.extend(edges.types);
                     iface_uses.extend(edges.iface_calls);
                 }
-            }
             for key in callees {
                 if let Some(&ty) = constructing_imports.get(&key.0) {
                     type_worklist.push(ty);
                 }
-                if let Some(&target) = index.get(&key) {
-                    if !reachable.contains(&target) {
+                if let Some(&target) = index.get(&key)
+                    && !reachable.contains(&target) {
                         worklist.push(target);
                     }
-                }
             }
             // An interface call may dynamically reach the concrete method of *any* class that
             // implements that interface. Keep each concrete implementation alive
@@ -460,15 +456,12 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
             for (iface_id, slot) in iface_uses {
                 for imp in &mir.interfaces.impls {
                     for (id, definitions) in &imp.entries {
-                        if *id == iface_id {
-                            if let Some(Some(def)) = definitions.get(slot) {
-                                if let Some(&t) = by_def.get(def) {
-                                    if !reachable.contains(&t) {
+                        if *id == iface_id
+                            && let Some(Some(def)) = definitions.get(slot)
+                                && let Some(&t) = by_def.get(def)
+                                    && !reachable.contains(&t) {
                                         worklist.push(t);
                                     }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -509,19 +502,17 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
             }
             if let Some(methods) = mir.object_methods.get(&ty) {
                 for def in methods.to_string.iter().chain(methods.hash_code.iter()) {
-                    if let Some(&idx) = index.get(&(*def, vec![])) {
-                        if !reachable.contains(&idx) {
+                    if let Some(&idx) = index.get(&(*def, vec![]))
+                        && !reachable.contains(&idx) {
                             worklist.push(idx);
                         }
-                    }
                 }
             }
             for def in destructors {
-                if let Some(&idx) = index.get(&(def, vec![])) {
-                    if !reachable.contains(&idx) {
+                if let Some(&idx) = index.get(&(def, vec![]))
+                    && !reachable.contains(&idx) {
                         worklist.push(idx);
                     }
-                }
             }
             type_worklist.extend(field_tys);
         }

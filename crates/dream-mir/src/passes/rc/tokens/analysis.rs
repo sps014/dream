@@ -102,11 +102,10 @@ impl TokenAnalysis {
 
         let mut transferred: IndexSet<(usize, usize, u32)> = IndexSet::new();
         for &(bi, si) in &assign_move {
-            if let Statement::Assign(_, rvalue) = &func.blocks[bi].stmts[si] {
-                if let Some(src) = move_source(rvalue, &is_owned) {
+            if let Statement::Assign(_, rvalue) = &func.blocks[bi].stmts[si]
+                && let Some(src) = move_source(rvalue, &is_owned) {
                     transferred.insert((bi, si, src.0));
                 }
-            }
         }
         collect_container_moves(func, interner, &live_out, is_owned, layouts, &mut sink_move);
         transferred.extend(sink_move.iter().copied());

@@ -17,7 +17,7 @@ impl ForeignFuture {
     }
 }
 
-extern "C" {
+unsafe extern "C" {
     fn dream_host_string_alloc(length: i32) -> DreamPtr;
     fn dream_host_array_new(length: i32, element_size: i32) -> DreamPtr;
     fn dream_host_complete_foreign(future: DreamPtr, result: u64);
@@ -42,7 +42,7 @@ pub fn app_icon_png() -> Option<&'static [u8]> {
 /// # Safety
 /// `p` must be zero or a valid guest string payload. Its header and UTF-16
 /// storage (including a slice's backing storage) must remain readable during this call.
-pub unsafe fn read_string(p: DreamPtr) -> String {
+pub unsafe fn read_string(p: DreamPtr) -> String { unsafe {
     if p.is_null() {
         return String::new();
     }
@@ -68,11 +68,11 @@ pub unsafe fn read_string(p: DreamPtr) -> String {
         )
     };
     String::from_utf16_lossy(units)
-}
+}}
 
 /// # Safety
 /// `p` must be zero or a valid guest byte-array payload with readable header and elements.
-pub unsafe fn read_bytes(p: DreamPtr) -> Vec<u8> {
+pub unsafe fn read_bytes(p: DreamPtr) -> Vec<u8> { unsafe {
     if p.is_null() {
         return Vec::new();
     }
@@ -81,11 +81,11 @@ pub unsafe fn read_bytes(p: DreamPtr) -> Vec<u8> {
         return Vec::new();
     }
     std::slice::from_raw_parts((p as *const u8).add(4), n as usize).to_vec()
-}
+}}
 
 /// # Safety
 /// `p` must be zero or a valid guest int-array payload with readable, i32-aligned elements.
-pub unsafe fn read_i32s(p: DreamPtr) -> Vec<i32> {
+pub unsafe fn read_i32s(p: DreamPtr) -> Vec<i32> { unsafe {
     if p.is_null() {
         return Vec::new();
     }
@@ -94,7 +94,7 @@ pub unsafe fn read_i32s(p: DreamPtr) -> Vec<i32> {
         return Vec::new();
     }
     std::slice::from_raw_parts((p as *const u8).add(4).cast::<i32>(), n as usize).to_vec()
-}
+}}
 
 pub fn alloc_string(s: &str) -> DreamPtr {
     let units: Vec<u16> = s.encode_utf16().collect();

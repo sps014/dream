@@ -1,0 +1,28 @@
+import system;
+import system.collections;
+
+class Item {
+    public kind: int;
+    public constructor(kind: int) { this.kind = kind; }
+    del() { System.println("free " + this.kind.to_string()); }
+}
+
+fun dump(borrow items: List<Item>): void {
+    let s = "len=" + items.length.to_string() + ":";
+    for (let item in items) {
+        s = s + " " + item.kind.to_string();
+    }
+    System.println(s);
+}
+
+fun main(): void {
+    let items = List<Item>();
+    items.push(Item(1));
+    items.insert(0, Item(0));
+    dump(items);
+    items.push(Item(3));
+    items.insert(2, Item(2));
+    dump(items);
+    items.remove_at(1);
+    dump(items);
+}

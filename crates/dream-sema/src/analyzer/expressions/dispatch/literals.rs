@@ -10,8 +10,8 @@ impl<'a> Analyzer<'a> {
     ) -> Result<Type, SemanticError> {
         match expression {
             ExpressionNode::Literal(number) => {
-                if let Type::Struct(base, Some(args)) = number {
-                    if let [Type::Struct(member, None)] = args.as_slice() {
+                if let Type::Struct(base, Some(args)) = number
+                    && let [Type::Struct(member, None)] = args.as_slice() {
                         if let Some(t) = self.analyze_variant_construction(
                             &base.text,
                             member,
@@ -56,7 +56,6 @@ impl<'a> Analyzer<'a> {
                         );
                         return Ok(Type::Unknown);
                     }
-                }
                 let mut ty =
                     Self::retarget_numeric_literal(number, self.current_expected_type.as_ref());
 
@@ -109,14 +108,13 @@ impl<'a> Analyzer<'a> {
                             number.get_span(),
                         );
                     }
-                } else if let Type::Float(t) | Type::Double(t) = &ty {
-                    if dream_syntax::number::parse_float_literal(&t.text).is_none() {
+                } else if let Type::Float(t) | Type::Double(t) = &ty
+                    && dream_syntax::number::parse_float_literal(&t.text).is_none() {
                         diagnostics.report_error(
                             format!("float literal '{}' is out of range or malformed", t.text),
                             number.get_span(),
                         );
                     }
-                }
 
                 self.hir_set_literal(&ty);
                 Ok(ty)

@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 pub use crate::driver::project_manifest::find_project_root_from;
-use crate::driver::project_manifest::ProjectManifest;
+use crate::driver::project_manifest::{GeneratorEntry, ProjectManifest};
 
 /// Walks from `entry_file`'s directory upward looking for `dream.toml`.
 pub fn find_project_root(entry_file: &str) -> Option<PathBuf> {
@@ -14,21 +14,8 @@ pub fn find_project_root(entry_file: &str) -> Option<PathBuf> {
     find_project_root_from(start)
 }
 
-/// Cache directory for a generator harness, keyed only by kind + fingerprint so every project on
-/// the machine shares one compiled harness.
-#[cfg(feature = "native")]
-pub fn harness_cache_dir(
-    config: &crate::driver::toolchain::ToolchainConfig,
-    kind: &str,
-    fingerprint: u64,
-) -> PathBuf {
-    config
-        .generator_cache_root()
-        .join(format!("dream-{kind}-{fingerprint:x}"))
-}
-
-/// `[[generators]]` paths from the nearest `dream.toml`, resolved against the manifest directory.
-pub fn load_manifest_generators(entry_file: &str) -> Vec<String> {
+/// `[[generators]]` entries from the nearest `dream.toml`, keyed by the canonical generator path.
+pub fn load_manifest_generators(entry_file: &str) -> Vec<(String, GeneratorEntry)> {
     let Some(dir) = find_project_root(entry_file) else {
         return Vec::new();
     };
@@ -37,11 +24,11 @@ pub fn load_manifest_generators(entry_file: &str) -> Vec<String> {
     };
     manifest
         .generators
-        .iter()
-        .map(|p| {
-            let resolved = dir.join(p);
+        .into_iter()
+        .map(|entry| {
+            let resolved = dir.join(&entry.path);
             let path = resolved.canonicalize().unwrap_or(resolved);
-            path.to_string_lossy().into_owned()
+            (path.to_string_lossy().into_owned(), entry)
         })
         .collect()
 }
@@ -120,7 +107,7 @@ mod tests {
         let entry = root.join("src/main.dream");
         let gens = load_manifest_generators(entry.to_str().unwrap());
         assert_eq!(gens.len(), 1);
-        assert!(gens[0].ends_with("gen.dream"), "{:?}", gens);
+        assert!(gens[0].0.ends_with("gen.dream"), "{:?}", gens);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

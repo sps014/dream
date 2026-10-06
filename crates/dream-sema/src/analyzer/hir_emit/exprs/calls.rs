@@ -7,7 +7,6 @@ mod closures;
 mod indirect;
 mod members;
 impl<'a> Analyzer<'a> {
-
     /// Per-argument `take` flags for a resolved constructor def, aligned with the constructor's user
     /// arguments. A registered constructor signature carries `this` as parameter 0, which the `New`
     /// argument list does not, so that flag is dropped here.
@@ -15,7 +14,12 @@ impl<'a> Analyzer<'a> {
         let Some(ctor) = ctor else {
             return Vec::new();
         };
-        let mut flags = self.function_table.functions.get(&(ctor, Vec::new())).map(|info| info.is_take.clone()).unwrap_or_default();
+        let mut flags = self
+            .function_table
+            .functions
+            .get(&(ctor, Vec::new()))
+            .map(|info| info.is_take.clone())
+            .unwrap_or_default();
         if flags.is_empty() {
             return flags;
         }
@@ -33,14 +37,21 @@ impl<'a> Analyzer<'a> {
         args: Vec<Option<HExpr>>,
         ret: &Type,
     ) {
-        let identity = match self.function_table.method_candidates(owner, member).as_slice() {
+        let identity = match self
+            .function_table
+            .method_candidates(owner, member)
+            .as_slice()
+        {
             [identity] => identity.clone(),
             [] => {
                 let name = dream_types::method_fn(
                     &dream_types::type_symbol(&self.type_ctx.interner, &self.type_ctx.defs, owner),
                     member,
                 );
-                (self.type_ctx.register(DefKind::Function, &name, vec![]), Vec::new())
+                (
+                    self.type_ctx.register(DefKind::Function, &name, vec![]),
+                    Vec::new(),
+                )
             }
             _ => {
                 self.hir.last = None;
@@ -65,7 +76,12 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let ret_ty = self.type_ctx.lower(ret);
-        let take_params = self.function_table.functions.get(identity).map(|info| info.is_take.clone()).unwrap_or_default();
+        let take_params = self
+            .function_table
+            .functions
+            .get(identity)
+            .map(|info| info.is_take.clone())
+            .unwrap_or_default();
         let callee = Callee {
             def: identity.0,
             instance: identity.1.clone(),

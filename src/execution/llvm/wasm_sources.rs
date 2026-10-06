@@ -164,11 +164,10 @@ pub(super) fn validate_signatures(
     for module in modules {
         let actual = RuntimeSigs::parse(&super::runtime::disassemble(tools, module)?)?;
         for (name, declared) in &expected.fns {
-            if let Some(defined) = actual.fns.get(name) {
-                if declared.fty != defined.fty {
+            if let Some(defined) = actual.fns.get(name)
+                && declared.fty != defined.fty {
                     return Err(format!("WASM C ABI mismatch for '{name}': Dream declares {}, package source uses {}; use usize/isize for pointer-sized C integers", declared.fty, defined.fty));
                 }
-            }
         }
     }
     Ok(())
@@ -190,11 +189,9 @@ pub(super) fn validate_imports(
     if let Some(externs) = abi["externs"].as_array() {
         for entry in externs {
             if let (Some(module), Some(field)) = (entry["module"].as_str(), entry["field"].as_str())
-            {
-                if !module.starts_with("c/") {
+                && !module.starts_with("c/") {
                     allowed.insert((module.to_string(), field.to_string()));
                 }
-            }
         }
     }
     let bytes = std::fs::read(wasm).map_err(|e| e.to_string())?;

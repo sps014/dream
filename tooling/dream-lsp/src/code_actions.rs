@@ -75,13 +75,11 @@ pub fn imported_packages(text: &str) -> std::collections::HashSet<String> {
     let mut set = std::collections::HashSet::new();
     for line in text.lines() {
         let t = line.trim();
-        if let Some(rest) = t.strip_prefix("import ") {
-            if let Some(path) = rest.strip_suffix(';') {
-                if !path.contains(" as ") {
+        if let Some(rest) = t.strip_prefix("import ")
+            && let Some(path) = rest.strip_suffix(';')
+                && !path.contains(" as ") {
                     set.insert(path.trim().to_string());
                 }
-            }
-        }
     }
     set
 }
@@ -144,8 +142,8 @@ pub fn unresolved_names_from_message(message: &str) -> Vec<String> {
         names.push(ty);
     }
     // Quoted identifiers as a fallback (`Struct 'X' not found`).
-    if names.is_empty() {
-        if let Some(start) = message.find('\'') {
+    if names.is_empty()
+        && let Some(start) = message.find('\'') {
             let rest = &message[start + 1..];
             if let Some(end) = rest.find('\'') {
                 let name = &rest[..end];
@@ -154,7 +152,6 @@ pub fn unresolved_names_from_message(message: &str) -> Vec<String> {
                 }
             }
         }
-    }
     names
 }
 

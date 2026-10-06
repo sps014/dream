@@ -102,11 +102,19 @@ impl Analyzer<'_> {
             .collect();
         for (def, name, source) in members {
             let kind = self.type_ctx.defs.get(def).kind;
-            let Some(owner) = self.nominal_type_of(def) else { continue };
+            let Some(owner) = self.nominal_type_of(def) else {
+                continue;
+            };
             let target = match kind {
                 DefKind::Struct | DefKind::Interface => IdeTarget::Field { owner, name },
-                DefKind::Enum => IdeTarget::EnumMember { owner, member: name },
-                DefKind::Union => IdeTarget::UnionVariant { owner, variant: name },
+                DefKind::Enum => IdeTarget::EnumMember {
+                    owner,
+                    member: name,
+                },
+                DefKind::Union => IdeTarget::UnionVariant {
+                    owner,
+                    variant: name,
+                },
                 DefKind::Function => continue,
             };
             refs.push(super::IdeRef {

@@ -91,8 +91,8 @@ impl<'a> Analyzer<'a> {
     ) -> GenericBindings {
         let gen_params = template.generic_parameters.as_deref().unwrap_or(&[]);
 
-        if let Some(generics) = generic_args {
-            if !generics.is_empty() {
+        if let Some(generics) = generic_args
+            && !generics.is_empty() {
                 Self::check_generic_arity(
                     "function",
                     &template.name.text,
@@ -110,7 +110,6 @@ impl<'a> Analyzer<'a> {
                     })
                     .collect();
             }
-        }
 
         let scope = self.type_ctx.scope();
         self.type_ctx
@@ -381,11 +380,10 @@ impl<'a> Analyzer<'a> {
         position: &TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
-        if let Type::Array(inner) = ty {
-            if self.type_satisfies_kind(inner, dream_syntax::nodes::ConstraintKind::Unmanaged) {
+        if let Type::Array(inner) = ty
+            && self.type_satisfies_kind(inner, dream_syntax::nodes::ConstraintKind::Unmanaged) {
                 return;
             }
-        }
         self.require_unmanaged(ty, who, position, diagnostics);
     }
 

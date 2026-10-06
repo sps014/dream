@@ -1,0 +1,7 @@
+len=2: 0 1
+len=4: 0 1 2 3
+free 1
+len=3: 0 2 3
+free 0
+free 2
+free 3

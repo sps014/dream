@@ -23,7 +23,9 @@ fn prefer_workspace_dream() {
                 candidate.set_extension("exe");
             }
             if candidate.is_file() {
-                std::env::set_var("DREAM_BIN", &candidate);
+                // SAFETY: the only environment write in this binary, made once under `INIT`
+                // before any test that calls this reads `DREAM_BIN`.
+                unsafe { std::env::set_var("DREAM_BIN", &candidate) };
                 return;
             }
         }
@@ -425,7 +427,6 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-
 }
 
 #[test]

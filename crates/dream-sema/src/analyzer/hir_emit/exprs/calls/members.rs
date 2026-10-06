@@ -97,7 +97,12 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let ret_ty = self.type_ctx.lower(ret);
-        let take_params = self.function_table.functions.get(identity).map(|info| info.is_take.clone()).unwrap_or_default();
+        let take_params = self
+            .function_table
+            .functions
+            .get(identity)
+            .map(|info| info.is_take.clone())
+            .unwrap_or_default();
         let callee = Callee {
             def: identity.0,
             instance: identity.1.clone(),

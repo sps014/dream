@@ -412,11 +412,9 @@ impl FamilyCx<'_> {
                             .union(ty)
                             .and_then(|u| u.variants.get(variant))
                             .and_then(|v| v.fields.get(field))
-                        {
-                            if f.is_weak || f.is_unowned {
+                            && (f.is_weak || f.is_unowned) {
                                 return None;
                             }
-                        }
                         unions.insert(ty);
                     }
                 }

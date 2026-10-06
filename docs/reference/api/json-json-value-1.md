@@ -52,7 +52,7 @@ Object
 
 ## `class JsonValue`
 
-Native JSON value tree. `items` / `obj_map` can hold nested `JsonValue`s; trees are acyclic at runtime, so `@allow_cycle` opts out of the structural self-edge check. Container fields are `Option` so scalars allocate no List/Map. Arrays own `items` only; objects own `obj_keys` + `obj_vals` (insertion order) + `obj_map` (O(1) lookup).
+Native JSON value tree. `items` / `obj_map` can hold nested `JsonValue`s; trees are acyclic at runtime, so `@allow_cycle` opts out of the structural self-edge check.  Container fields are `Option` so scalars allocate no List/Map. Arrays own `items` only; objects own `obj_keys` + `obj_vals` (insertion order) + `obj_map` (O(1) lookup).
 
 ```dream
 public class JsonValue

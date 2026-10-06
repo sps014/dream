@@ -43,8 +43,8 @@ impl<'a> ProgramAccumulator<'a> {
         distribute!(globals, all_globals);
         let line = LineText::new(String::new());
         for (path, program) in &mut programs {
-            if program.module.is_none() {
-                if let Some(module) = self.file_modules.get(path) {
+            if program.module.is_none()
+                && let Some(module) = self.file_modules.get(path) {
                     program.module = Some(ModuleDeclNode {
                         attributes: vec![],
                         path: SyntaxToken::new(
@@ -54,7 +54,6 @@ impl<'a> ProgramAccumulator<'a> {
                         ),
                     });
                 }
-            }
         }
         let prelude_paths: Vec<_> = programs
             .keys()
@@ -79,6 +78,8 @@ impl<'a> ProgramAccumulator<'a> {
                 (path, source, program)
             })
             .collect();
-        ModuleGraph::new(inputs, &edges)
+        let mut graph = ModuleGraph::new(inputs, &edges);
+        graph.generated_files = self.generated_files.clone();
+        graph
     }
 }

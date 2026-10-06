@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 
 use common::{compile_test_pipeline, emit_ll, ir_func_body, SYSTEM_STUB};
 

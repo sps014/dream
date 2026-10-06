@@ -103,11 +103,10 @@ pub(crate) fn is_option_union(layout: &dream_hir::UnionLayout) -> bool {
 pub(crate) fn array_elems(cx: &Cx<'_>) -> Vec<TypeId> {
     let mut out: Vec<TypeId> = Vec::new();
     let mut push = |ty: TypeId| {
-        if let TyKind::Array(elem) = cx.interner.kind(ty) {
-            if is_marshalable(cx, *elem) && !out.contains(elem) {
+        if let TyKind::Array(elem) = cx.interner.kind(ty)
+            && is_marshalable(cx, *elem) && !out.contains(elem) {
                 out.push(*elem);
             }
-        }
     };
     for layout in cx.mir.layouts.structs.values() {
         for f in &layout.fields {

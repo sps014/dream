@@ -19,9 +19,9 @@ module gen;
 import system.codegen;
 
 @generator
-@syntax_block("quote")
+@syntax_block
 public fun quote(ctx: GenContext): void {
-    for (let block in ctx.syntax_blocks("quote")) {
+    for (let block in ctx.syntax_blocks()) {
         ctx.replace(block, as_dream_string(block.body.trim()));
     }
 }
@@ -52,7 +52,7 @@ dreamer run
 dream run sample/generators/quote/app.dream
 ```
 
-- `@syntax_block("quote")` — Dream finds every `quote { … }` block.
+- `@syntax_block` — Dream finds every `quote { … }` block; the introducer is the function name.
 - `ctx.replace` — swap that site for ordinary Dream source **before** the rest of the file is checked.
 
 Bigger samples: [`html`](https://github.com/sps014/dream/tree/main/sample/generators/html), [`dto`](https://github.com/sps014/dream/tree/main/sample/generators/dto). Reference: [Source generators](../reference/language/generators.md), [CodeBuilder](../reference/stdlib/codegen.md).

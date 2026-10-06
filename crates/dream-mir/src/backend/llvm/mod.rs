@@ -62,16 +62,19 @@ pub struct LlvmModule {
 }
 
 /// Lowers optimized MIR to one `.ll` module typed against the runtime's signature table.
-/// `leak_checks` makes native `main` always print the exit-time heap report.
+/// `leak_checks` makes native `main` always print the exit-time heap report. `std_sources` is a
+/// directory holding the embedded stdlib on disk: debug info names those files instead of the
+/// virtual `<std>/…` paths, so a debugger can show and break in stdlib code.
 pub fn emit_llvm_module(
     mir: &Mir,
     interner: &TypeInterner,
     sigs: &RuntimeSigs,
     leak_checks: bool,
     target: crate::backend::Target,
+    std_sources: Option<&std::path::Path>,
 ) -> Result<LlvmModule, EmitError> {
     let result = catch_unwind(AssertUnwindSafe(|| {
-        emit_llvm_module_unchecked(mir, interner, sigs, leak_checks, target)
+        emit_llvm_module_unchecked(mir, interner, sigs, leak_checks, target, std_sources)
     }));
     match result {
         Ok(ir) => Ok(ir),
@@ -88,8 +91,10 @@ fn emit_llvm_module_unchecked(
     sigs: &RuntimeSigs,
     leak_checks: bool,
     target: crate::backend::Target,
+    std_sources: Option<&std::path::Path>,
 ) -> LlvmModule {
     let mut l = Lcx::new(mir, interner, sigs, leak_checks, target);
+    l.std_sources = std_sources.map(std::path::Path::to_path_buf);
     for f in &mir.functions {
         let name = l.user_fn(f);
         let sig = types::fn_ll_sig(interner, f, &l.h(), &l.word());

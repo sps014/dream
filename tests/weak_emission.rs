@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 
 use common::{emit_hir_to_module_rc, ir_func_body, SYSTEM_STUB};
 

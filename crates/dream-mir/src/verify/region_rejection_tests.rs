@@ -39,7 +39,8 @@ fn escaped_returns_are_rejected_without_removing_region_markers() {
             violations
                 .iter()
                 .any(|v| v.msg.contains("allocation region was left")),
-            "{:?}", violations
+            "{:?}",
+            violations
         );
         assert_eq!(before, format!("{:?}", mir.functions[0].blocks));
     }

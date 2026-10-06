@@ -2,7 +2,7 @@
 //! These complement the parser-level fuzz tests in the compiler crate by driving the full LSP
 //! query surface (hover/definition/references/completion/signature-help/symbols/diagnostics).
 
-mod common;
+use crate::common;
 
 use common::{exercise_all, XorShift, VALID_SNIPPETS};
 

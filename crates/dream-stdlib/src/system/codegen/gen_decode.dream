@@ -1,0 +1,202 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+// Snapshot JSON → model, written by hand: `@json` cannot derive inside the package the `@json`
+// generator itself is built from.
+
+fun gen_str(borrow v: JsonValue, borrow key: string): string {
+    return v.get_str_or(key, "");
+}
+
+fun gen_int(borrow v: JsonValue, borrow key: string): int {
+    return v.get_int_or(key, 0);
+}
+
+fun gen_bool(borrow v: JsonValue, borrow key: string): bool {
+    return v.get_bool(key).unwrap_or(false);
+}
+
+fun gen_items(borrow v: JsonValue, borrow key: string): List<JsonValue> {
+    return v.get_or(key, JsonValue.array()).as_array().unwrap_or(List<JsonValue>());
+}
+
+fun gen_obj(borrow v: JsonValue, borrow key: string): JsonValue {
+    return v.get_or(key, JsonValue.dict());
+}
+
+fun gen_strings(borrow v: JsonValue, borrow key: string): List<string> {
+    let out = List<string>();
+    for (let item in gen_items(v, key)) {
+        out.push(item.str_or(""));
+    }
+    return out;
+}
+
+fun gen_type_kind(borrow kind: string): TypeRefKind {
+    if kind == "prim" { return TypeRefKind.Primitive; }
+    if kind == "named" { return TypeRefKind.Named; }
+    if kind == "param" { return TypeRefKind.Param; }
+    if kind == "array" { return TypeRefKind.Array; }
+    if kind == "tuple" { return TypeRefKind.Tuple; }
+    if kind == "function" { return TypeRefKind.Function; }
+    if kind == "void" { return TypeRefKind.Void; }
+    return TypeRefKind.Unknown;
+}
+
+fun gen_decl_kind(borrow kind: string): DeclKind {
+    if kind == "struct" { return DeclKind.Struct; }
+    if kind == "union" { return DeclKind.Union; }
+    if kind == "enum" { return DeclKind.Enum; }
+    if kind == "interface" { return DeclKind.Interface; }
+    return DeclKind.Class;
+}
+
+fun gen_type_ref(borrow v: JsonValue): GenTypeRef {
+    let args = List<GenTypeRef>();
+    for (let a in gen_items(v, "args")) {
+        args.push(gen_type_ref(a));
+    }
+    return GenTypeRef(
+        gen_type_kind(gen_str(v, "kind")),
+        gen_str(v, "name"),
+        gen_str(v, "display"),
+        gen_str(v, "mangled"),
+        gen_str(v, "decl"),
+        args
+    );
+}
+
+fun gen_type_refs(borrow v: JsonValue, borrow key: string): List<GenTypeRef> {
+    let out = List<GenTypeRef>();
+    for (let item in gen_items(v, key)) {
+        out.push(gen_type_ref(item));
+    }
+    return out;
+}
+
+fun gen_location(borrow v: JsonValue): GenLocation {
+    let loc = gen_obj(v, "location");
+    return GenLocation(gen_str(loc, "file"), gen_int(loc, "line"), gen_int(loc, "column"));
+}
+
+fun gen_attributes(borrow v: JsonValue): List<GenAttribute> {
+    let out = List<GenAttribute>();
+    for (let a in gen_items(v, "attributes")) {
+        let args = List<GenAttrArg>();
+        for (let arg in gen_items(a, "args")) {
+            args.push(GenAttrArg(gen_str(arg, "kind"), gen_str(arg, "value")));
+        }
+        out.push(GenAttribute(gen_str(a, "id"), gen_str(a, "name"), args));
+    }
+    return out;
+}
+
+fun gen_fields(borrow v: JsonValue): List<GenField> {
+    let out = List<GenField>();
+    for (let f in gen_items(v, "fields")) {
+        out.push(GenField(
+            gen_str(f, "id"),
+            gen_str(f, "name"),
+            gen_type_ref(gen_obj(f, "ty")),
+            gen_str(f, "visibility"),
+            gen_attributes(f),
+            gen_location(f)
+        ));
+    }
+    return out;
+}
+
+fun gen_function(borrow f: JsonValue): GenFunction {
+    let params = List<GenParam>();
+    for (let p in gen_items(f, "params")) {
+        params.push(GenParam(gen_str(p, "name"), gen_type_ref(gen_obj(p, "ty")), gen_attributes(p)));
+    }
+    return GenFunction(
+        gen_str(f, "id"),
+        gen_str(f, "name"),
+        gen_bool(f, "is_static"),
+        gen_bool(f, "is_async"),
+        gen_str(f, "visibility"),
+        gen_strings(f, "generics"),
+        params,
+        gen_type_ref(gen_obj(f, "ret")),
+        gen_attributes(f),
+        gen_location(f)
+    );
+}
+
+fun gen_functions(borrow v: JsonValue, borrow key: string): List<GenFunction> {
+    let out = List<GenFunction>();
+    for (let f in gen_items(v, key)) {
+        out.push(gen_function(f));
+    }
+    return out;
+}
+
+fun gen_decl(borrow d: JsonValue): GenDecl {
+    let variants = List<GenVariant>();
+    for (let v in gen_items(d, "variants")) {
+        variants.push(GenVariant(gen_str(v, "id"), gen_str(v, "name"), gen_fields(v), gen_location(v)));
+    }
+    return GenDecl(
+        gen_str(d, "id"),
+        gen_str(d, "name"),
+        gen_decl_kind(gen_str(d, "kind")),
+        gen_str(d, "module"),
+        gen_str(d, "visibility"),
+        gen_location(d),
+        gen_strings(d, "generics"),
+        gen_type_refs(d, "implements"),
+        gen_attributes(d),
+        gen_fields(d),
+        gen_functions(d, "methods"),
+        variants
+    );
+}
+
+// Decoded snapshot behind a `GenContext`.
+public class GenSnapshot {
+    public version: int;
+    public generator: string;
+    public generator_id: string;
+    public target: string;
+    public options: JsonValue;
+    public files: List<GenFile>;
+    public index: List<GenIndexEntry>;
+    public decls: List<GenDecl>;
+    public functions: List<GenFunction>;
+    public blocks: List<GenSyntaxBlock>;
+    public calls: List<GenCallSite>;
+
+    public constructor(root: JsonValue) {
+        this.version = gen_int(root, "version");
+        this.generator = gen_str(root, "generator");
+        this.generator_id = gen_str(root, "generator_id");
+        this.target = gen_str(root, "target");
+        this.options = gen_obj(root, "options");
+        this.files = List<GenFile>();
+        for (let f in gen_items(root, "additional_files")) {
+            this.files.push(GenFile(gen_str(f, "path"), gen_str(f, "contents")));
+        }
+        this.index = List<GenIndexEntry>();
+        for (let e in gen_items(root, "index")) {
+            this.index.push(GenIndexEntry(gen_str(e, "id"), gen_str(e, "name"), gen_decl_kind(gen_str(e, "kind"))));
+        }
+        this.decls = List<GenDecl>();
+        for (let d in gen_items(root, "decls")) {
+            this.decls.push(gen_decl(d));
+        }
+        this.functions = gen_functions(root, "functions");
+        this.blocks = List<GenSyntaxBlock>();
+        for (let b in gen_items(root, "blocks")) {
+            this.blocks.push(GenSyntaxBlock(gen_str(b, "id"), gen_str(b, "name"), gen_str(b, "body"), gen_strings(b, "splices"), gen_location(b)));
+        }
+        this.calls = List<GenCallSite>();
+        for (let c in gen_items(root, "calls")) {
+            this.calls.push(GenCallSite(gen_str(c, "id"), gen_str(c, "callee"), gen_type_refs(c, "type_args"), gen_type_refs(c, "arg_types"), gen_location(c)));
+        }
+    }
+}

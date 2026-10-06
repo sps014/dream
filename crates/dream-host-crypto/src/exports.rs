@@ -3,13 +3,13 @@
 
 use dream_host_abi::*;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cryptoAesGcmEncrypt(
     key: DreamPtr,
     nonce: DreamPtr,
     plaintext: DreamPtr,
     aad: DreamPtr,
-) -> DreamPtr {
+) -> DreamPtr { unsafe {
     use aes_gcm::aead::{Aead, KeyInit, Payload};
     use aes_gcm::{Aes256Gcm, Nonce};
     let key = read_bytes(key);
@@ -33,15 +33,15 @@ pub unsafe extern "C" fn cryptoAesGcmEncrypt(
         Ok(out) => alloc_bytes(&out),
         Err(_) => alloc_bytes(&[]),
     }
-}
+}}
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cryptoAesGcmDecrypt(
     key: DreamPtr,
     nonce: DreamPtr,
     ciphertext: DreamPtr,
     aad: DreamPtr,
-) -> DreamPtr {
+) -> DreamPtr { unsafe {
     use aes_gcm::aead::{Aead, KeyInit, Payload};
     use aes_gcm::{Aes256Gcm, Nonce};
     let key = read_bytes(key);
@@ -70,33 +70,33 @@ pub unsafe extern "C" fn cryptoAesGcmDecrypt(
         }
         Err(_) => alloc_bytes(&[0u8]),
     }
-}
+}}
 
-#[no_mangle]
-pub unsafe extern "C" fn cryptoSha256(input: DreamPtr) -> DreamPtr {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cryptoSha256(input: DreamPtr) -> DreamPtr { unsafe {
     alloc_bytes(&crate::crypto::sha256(&read_bytes(input)))
-}
+}}
 
-#[no_mangle]
-pub unsafe extern "C" fn cryptoSha512(input: DreamPtr) -> DreamPtr {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cryptoSha512(input: DreamPtr) -> DreamPtr { unsafe {
     alloc_bytes(&crate::crypto::sha512(&read_bytes(input)))
-}
+}}
 
-#[no_mangle]
-pub unsafe extern "C" fn cryptoHmacSha256(key: DreamPtr, input: DreamPtr) -> DreamPtr {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cryptoHmacSha256(key: DreamPtr, input: DreamPtr) -> DreamPtr { unsafe {
     alloc_bytes(&crate::crypto::hmac_sha256(
         &read_bytes(key),
         &read_bytes(input),
     ))
-}
+}}
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn cryptoSecureRandomBytes(len: i32) -> DreamPtr {
     alloc_bytes(&crate::crypto::secure_random(len))
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn cryptoSecureRandomFill(bytes: DreamPtr) {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cryptoSecureRandomFill(bytes: DreamPtr) { unsafe {
     if bytes.is_null() {
         return;
     }
@@ -106,4 +106,4 @@ pub unsafe extern "C" fn cryptoSecureRandomFill(bytes: DreamPtr) {
     }
     let dest = std::slice::from_raw_parts_mut(bytes.add(4), n as usize);
     crate::crypto::secure_random_fill(dest);
-}
+}}

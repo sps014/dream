@@ -16,11 +16,10 @@ impl<'a> Analyzer<'a> {
             return;
         }
         let parts = Self::resolve_struct_parts(&ret);
-        if let Some((base, args)) = &parts {
-            if base == "Result" && args.len() == 2 {
+        if let Some((base, args)) = &parts
+            && base == "Result" && args.len() == 2 {
                 return;
             }
-        }
         let mut message = format!(
             "'main' must return void, int, or Result<T, E>, got {}",
             self.ty_display(&ret)

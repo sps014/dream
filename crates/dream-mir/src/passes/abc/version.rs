@@ -147,11 +147,10 @@ fn plan_loop(
             return None;
         }
         for stmt in &func.blocks[b].stmts {
-            if let Statement::Assign(Place::Local(d), rv) = stmt {
-                if *d == iv && !is_unit_increment(rv, iv) {
+            if let Statement::Assign(Place::Local(d), rv) = stmt
+                && *d == iv && !is_unit_increment(rv, iv) {
                     return None;
                 }
-            }
         }
     }
     let redef_in = redefined_since_header(func, &body, h, s, iv, analyses);
@@ -168,12 +167,11 @@ fn plan_loop(
             if !redef {
                 let mut hit = false;
                 visit_stmt_accesses(stmt, &mut |acc| {
-                    if let Some(a) = versionable(&acc, iv) {
-                        if invariant(a) {
+                    if let Some(a) = versionable(&acc, iv)
+                        && invariant(a) {
                             arrays.insert(a);
                             hit = true;
                         }
-                    }
                 });
                 if hit {
                     sites.insert((b, Some(si)));
@@ -186,12 +184,11 @@ fn plan_loop(
         if !redef {
             let mut hit = false;
             visit_terminator_accesses(&block.terminator, &mut |acc| {
-                if let Some(a) = versionable(&acc, iv) {
-                    if invariant(a) {
+                if let Some(a) = versionable(&acc, iv)
+                    && invariant(a) {
                         arrays.insert(a);
                         hit = true;
                     }
-                }
             });
             if hit {
                 sites.insert((b, None));

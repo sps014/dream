@@ -177,6 +177,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 match self.current_token().text.as_str() {
                     "sizeof" => return self.parse_sizeof_expression(),
                     "nameof" => return self.parse_nameof_expression(),
+                    "declof" => return self.parse_declof_expression(),
                     "typeof" => return self.parse_typeof_expression(),
                     _ => {}
                 }
@@ -276,6 +277,17 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// `nameof(a.b.c)` — soft special (not a keyword). Dotted identifier path only; last segment
     /// is the compile-time string. Types like `int` may appear as `DataTypeToken` segments.
     pub(crate) fn parse_nameof_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
+        let (kw, parts) = self.parse_decl_path_operand()?;
+        Ok(ExpressionNode::NameOf(kw, parts))
+    }
+
+    /// `declof(a.b)` — soft special (not a keyword); same operand grammar as `nameof`.
+    pub(crate) fn parse_declof_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
+        let (kw, parts) = self.parse_decl_path_operand()?;
+        Ok(ExpressionNode::DeclOf(kw, parts))
+    }
+
+    fn parse_decl_path_operand(&mut self) -> Result<(SyntaxToken, Vec<SyntaxToken>), Error> {
         let kw = self.match_token(TokenKind::IdentifierToken);
         self.match_token(TokenKind::OpenParenthesisToken);
         let mut parts = Vec::new();
@@ -285,7 +297,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             parts.push(self.parse_nameof_segment()?);
         }
         self.match_token(TokenKind::CloseParenthesisToken);
-        Ok(ExpressionNode::NameOf(kw, parts))
+        Ok((kw, parts))
     }
 
     /// `typeof(expr)` — soft special (not a keyword). Operand is a value expression, unlike

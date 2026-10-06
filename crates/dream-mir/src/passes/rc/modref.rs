@@ -383,11 +383,10 @@ impl LocalSummary {
                 if let Some(k) = s.own.known_mut() {
                     k.fields.insert(key);
                 }
-                if Some(base) != this {
-                    if let Some(k) = s.own_fresh.known_mut() {
+                if Some(base) != this
+                    && let Some(k) = s.own_fresh.known_mut() {
                         k.fields.insert(key);
                     }
-                }
             }
             Effect::SlotStore(ty) => {
                 for m in [&mut s.own, &mut s.own_fresh] {

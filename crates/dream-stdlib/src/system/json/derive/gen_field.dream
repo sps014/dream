@@ -1,0 +1,82 @@
+module system.json.derive;
+
+// Input model of [`JsonGenerator`], built by `json_derive` from the codegen model.
+
+// One serializable field on a class or union variant.
+public class JsonFieldSpec {
+    public name: string;
+    public type_name: string;
+    public json_ignore: bool;
+    public property_name: string;
+    public option_inner: string;
+    public is_type_param: bool;
+    // Value type of a `Map<string, V>` / `SortedMap<string, V>` field (empty when not a map); the
+    // key type is required to be `string` (see `snapshot_field` in `src/driver/generate/json_gen.rs`).
+    public map_value_inner: string;
+    // `Map` or `SortedMap` when `map_value_inner` is set (empty otherwise).
+    public map_ctor: string;
+    // Element type of a `List<T>` / `Set<T>` field (empty when not a seq collection).
+    public seq_elem_inner: string;
+    // `list` or `set` when `seq_elem_inner` is set (empty otherwise).
+    public seq_kind: CollectionKind;
+
+    // Builds a field snapshot from SemanticModel data.
+    public constructor(
+        name: string,
+        type_name: string,
+        json_ignore: bool,
+        property_name: string,
+        option_inner: string,
+        is_type_param: bool,
+        map_value_inner: string,
+        map_ctor: string,
+        seq_elem_inner: string,
+        seq_kind: CollectionKind
+    ) {
+        this.name = name;
+        this.type_name = type_name;
+        this.json_ignore = json_ignore;
+        this.property_name = property_name;
+        this.option_inner = option_inner;
+        this.is_type_param = is_type_param;
+        this.map_value_inner = map_value_inner;
+        this.map_ctor = map_ctor;
+        this.seq_elem_inner = seq_elem_inner;
+        this.seq_kind = seq_kind;
+    }
+
+    // Convenience factory matching the constructor arguments.
+    public static fun make(
+        name: string,
+        type_name: string,
+        json_ignore: bool,
+        property_name: string,
+        option_inner: string,
+        is_type_param: bool,
+        map_value_inner: string,
+        map_ctor: string,
+        seq_elem_inner: string,
+        seq_kind: CollectionKind
+    ): JsonFieldSpec {
+        return JsonFieldSpec(
+            name,
+            type_name,
+            json_ignore,
+            property_name,
+            option_inner,
+            is_type_param,
+            map_value_inner,
+            map_ctor,
+            seq_elem_inner,
+            seq_kind
+        );
+    }
+
+    // JSON object key: `@json_property` override, else the Dream field name.
+    public fun json_key(): string {
+        if this.property_name.length > 0 {
+            return this.property_name;
+        }
+        return this.name;
+    }
+}

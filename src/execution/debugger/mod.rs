@@ -34,11 +34,15 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 
-/// Speak DAP over stdin/stdout by driving `lldb-dap` on `bin` (guest + runtime built with `-g`).
+/// Speak DAP over stdin/stdout by driving `lldb-dap` on `bin` (guest + runtime built with `-g`),
+/// launching it with `program_args` (a generator executable's `--generator ... --result ...`).
+/// `ir` is the linked module's LLVM IR, whose DWARF names the debugger-view types.
 pub fn run_debug_adapter(
     config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     bin: &Path,
     module: &str,
+    ir: &Path,
+    program_args: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let env_pairs = crate::execution::native::native_run_env_pairs(config, module)?;
     let dap = find_lldb_dap(config)?;
@@ -88,9 +92,9 @@ pub fn run_debug_adapter(
     let formatters = module_p.with_file_name(format!("{stem}_lldb_dream.py"));
     std::fs::write(&formatters, LLDB_FORMATTERS)?;
     // The import hook reads this generated list to know which view names get summaries.
-    let names: Vec<String> = std::fs::read_to_string(module)
-        .map(|src| view_type_names(&src))
-        .unwrap_or_default();
+    let names = view_type_names(&std::fs::read_to_string(ir).map_err(|e| {
+        format!("read {}: {e}", ir.display())
+    })?);
     let list: Vec<String> = names.iter().map(|n| format!("\"{n}\"")).collect();
     std::fs::write(
         module_p.with_file_name(format!("{stem}_lldb_names.py")),
@@ -105,7 +109,7 @@ pub fn run_debug_adapter(
                 if msg.get("arguments").is_none_or(Value::is_null) {
                     msg["arguments"] = json!({});
                 }
-                rewrite_launch(&mut msg, &bin_s, &cwd, &env_pairs);
+                rewrite_launch(&mut msg, &bin_s, &cwd, &env_pairs, program_args);
                 // Registration must happen as session commands (not from the module's import
                 // hook): summaries added during `command script import` do not reliably attach.
                 merge_init_commands(&mut msg, &formatter_init_commands(&formatters));
@@ -182,7 +186,13 @@ fn merge_init_commands(msg: &mut Value, extra: &[String]) {
     args.insert("initCommands".into(), Value::Array(commands));
 }
 
-fn rewrite_launch(msg: &mut Value, bin: &str, cwd: &Path, env_pairs: &[(String, String)]) {
+fn rewrite_launch(
+    msg: &mut Value,
+    bin: &str,
+    cwd: &Path,
+    env_pairs: &[(String, String)],
+    program_args: &[String],
+) {
     let args = msg
         .as_object_mut()
         .and_then(|o| o.get_mut("arguments"))
@@ -191,6 +201,9 @@ fn rewrite_launch(msg: &mut Value, bin: &str, cwd: &Path, env_pairs: &[(String, 
         return;
     };
     args.insert("program".into(), json!(bin));
+    if !program_args.is_empty() {
+        args.insert("args".into(), json!(program_args));
+    }
     if !args.contains_key("cwd") {
         args.insert("cwd".into(), json!(cwd.to_string_lossy()));
     }
@@ -213,9 +226,9 @@ fn find_lldb_dap(
     if let Some(p) = config.find_on_path("lldb-vscode") {
         return Ok(p);
     }
-    if cfg!(target_os = "macos") {
-        if let Ok(out) = Command::new("xcrun").args(["--find", "lldb-dap"]).output() {
-            if out.status.success() {
+    if cfg!(target_os = "macos")
+        && let Ok(out) = Command::new("xcrun").args(["--find", "lldb-dap"]).output()
+            && out.status.success() {
                 let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 if !s.is_empty() {
                     let p = PathBuf::from(s);
@@ -224,8 +237,6 @@ fn find_lldb_dap(
                     }
                 }
             }
-        }
-    }
     Err(lldb_dap_hint().into())
 }
 

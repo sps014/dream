@@ -133,12 +133,11 @@ fn rewrite_cse(stmt: &mut Statement, avail: &mut Vec<(Key, u32)>) -> bool {
     if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
         let dest_id = dest.0;
         let key = key_of(rvalue);
-        if let Some(ref k) = key {
-            if let Some(&(_, src)) = avail.iter().find(|(ak, l)| ak == k && *l != dest_id) {
+        if let Some(ref k) = key
+            && let Some(&(_, src)) = avail.iter().find(|(ak, l)| ak == k && *l != dest_id) {
                 *rvalue = Rvalue::Use(Operand::Copy(Place::Local(Local(src))));
                 changed = true;
             }
-        }
         invalidate(avail, dest_id);
         if let Some(k) = key {
             avail.push((k, dest_id));

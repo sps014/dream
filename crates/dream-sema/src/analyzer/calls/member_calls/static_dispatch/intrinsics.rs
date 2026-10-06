@@ -41,6 +41,7 @@ pub(super) struct GenericStaticMethodCall<'a, 'b> {
 
 mod buffer;
 mod bytes;
+mod gen_attribute;
 mod json;
 
 impl<'a> Analyzer<'a> {
@@ -63,7 +64,16 @@ impl<'a> Analyzer<'a> {
             generic_args,
             params,
         } = call;
-        let owner = self.function_table.declaration_node(template).and_then(|key| self.function_table.generic_methods.iter().find_map(|((owner, _), def)| (*def == key.0).then_some(*owner))).unwrap_or_else(|| self.type_ctx.lower(&Self::type_from_name(type_name)));
+        let owner = self
+            .function_table
+            .declaration_node(template)
+            .and_then(|key| {
+                self.function_table
+                    .generic_methods
+                    .iter()
+                    .find_map(|((owner, _), def)| (*def == key.0).then_some(*owner))
+            })
+            .unwrap_or_else(|| self.type_ctx.lower(&Self::type_from_name(type_name)));
         let mut params_types = vec![];
         let mut arg_hirs = vec![];
         let call_target = format!("{}.{}", type_name, method.text);
@@ -101,9 +111,12 @@ impl<'a> Analyzer<'a> {
                             .iter()
                             .enumerate()
                             .find_map(|(i, formal)| {
-                                probe.get(i).filter(|&&ty| ty != self.type_ctx.interner.error()).and_then(|arg| {
-                                    self.match_generic_type(&formal.type_, *arg, &param.text)
-                                })
+                                probe
+                                    .get(i)
+                                    .filter(|&&ty| ty != self.type_ctx.interner.error())
+                                    .and_then(|arg| {
+                                        self.match_generic_type(&formal.type_, *arg, &param.text)
+                                    })
                             });
                     if let Some(c) = concrete {
                         bindings.insert(param.text.clone(), self.type_ctx.syntax_type(c));
@@ -248,7 +261,11 @@ impl<'a> Analyzer<'a> {
             let key = dream_abi::intrinsics::intrinsic_key(&template.attributes);
             match identity.zip(key) {
                 Some((identity, key)) => {
-                    if !self.intrinsic_defs.iter().any(|(def, _)| *def == identity.0) {
+                    if !self
+                        .intrinsic_defs
+                        .iter()
+                        .any(|(def, _)| *def == identity.0)
+                    {
                         self.intrinsic_defs.push((identity.0, key));
                     }
                     self.hir_set_call_identity(&identity, vec![arg_hir], &ret);
@@ -276,6 +293,27 @@ impl<'a> Analyzer<'a> {
                     params,
                 },
                 params_types,
+                arg_hirs,
+                diagnostics,
+            );
+        }
+
+        if let Some(
+            op @ (intrinsics::IntrinsicOp::GenAttributeId
+            | intrinsics::IntrinsicOp::GenAttributeDecode
+            | intrinsics::IntrinsicOp::GenAttributeDecodeAll),
+        ) = intrinsics::IntrinsicOp::from_attributes(&template.attributes)
+        {
+            return self.analyze_gen_attribute_intrinsic(
+                &GenericStaticMethodCall {
+                    template,
+                    base,
+                    type_name,
+                    method,
+                    generic_args,
+                    params,
+                },
+                op,
                 arg_hirs,
                 diagnostics,
             );
@@ -309,7 +347,10 @@ impl<'a> Analyzer<'a> {
             Ok(sig) => sig,
             Err(_) => {
                 diagnostics.report_error(
-                    format!("Function '{}' could not be instantiated", template.name.text),
+                    format!(
+                        "Function '{}' could not be instantiated",
+                        template.name.text
+                    ),
                     Some(method.position),
                 );
                 return Ok(Type::Unknown);
@@ -352,7 +393,10 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
 
-        let ret_type = Self::async_return_type(store_sig.is_async, Some(self.type_ctx.syntax_type(store_sig.resolved_return)));
+        let ret_type = Self::async_return_type(
+            store_sig.is_async,
+            Some(self.type_ctx.syntax_type(store_sig.resolved_return)),
+        );
         self.hir_set_call_identity(&store_sig.identity, arg_hirs, &ret_type);
         Ok(ret_type)
     }

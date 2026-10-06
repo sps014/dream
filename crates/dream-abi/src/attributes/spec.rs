@@ -74,8 +74,8 @@ pub enum ArgKind {
 }
 
 /// The expected shape of an attribute's argument list — the closed-world "constructor signature"
-/// for builtin attributes. User-defined `@attribute` functions supply their schema from the
-/// function parameters instead.
+/// for builtin attributes. Declared `@attribute` types supply their schema from their fields
+/// instead (see [`super::UserAttributes`]).
 #[derive(Debug, Clone, Copy)]
 pub enum ArgShape {
     /// `@name` with no `(...)` at all, or empty parens.
@@ -108,8 +108,13 @@ impl ArgShape {
         match self {
             ArgShape::None => Vec::new(),
             ArgShape::Args { kinds, min, max } => {
-                let n = max.max(min).max(kinds.len());
-                (0..n)
+                let variadic = max == usize::MAX;
+                let n = if variadic {
+                    min.max(kinds.len())
+                } else {
+                    max.max(min).max(kinds.len())
+                };
+                let mut labels: Vec<&'static str> = (0..n)
                     .map(|i| match kinds[i.min(kinds.len() - 1)] {
                         ArgKind::String => "string",
                         ArgKind::Int => "int",
@@ -118,7 +123,11 @@ impl ArgShape {
                         ArgKind::Bool => "bool",
                         ArgKind::Enum => "Enum.Member",
                     })
-                    .collect()
+                    .collect();
+                if variadic {
+                    labels.push("...");
+                }
+                labels
             }
         }
     }

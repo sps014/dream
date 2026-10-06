@@ -70,11 +70,10 @@ pub(super) fn compute_safety(
                 }
                 _ => None,
             };
-            if let Some(key) = key {
-                if let Some(&target) = index.instances.get(&key) {
+            if let Some(key) = key
+                && let Some(&target) = index.instances.get(&key) {
                     adjacency[i].push(target);
                 }
-            }
         });
     }
     let mut memo = IndexMap::new();

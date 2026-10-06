@@ -1,0 +1,20 @@
+import system;
+import system.json;
+
+@json
+class Reply {
+    public ok: bool;
+    public tags: List<string>;
+    public constructor() { this.ok = false; this.tags = List<string>(); }
+}
+
+fun main(): void {
+    let r = Reply();
+    r.ok = true;
+    r.tags.push("a");
+    System.println(Json.serialize(r));
+    switch (Json.deserialize<Reply>("{\"ok\":true,\"tags\":[\"x\",\"y\"]}")) {
+        Ok(b) => System.println(b.ok.to_string() + " " + b.tags.length.to_string()),
+        Err(e) => System.println("err " + e.to_string()),
+    }
+}

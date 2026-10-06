@@ -149,6 +149,14 @@
                 "description": "Optional wasm-opt -O level override. If omitted, uses workspace dream.optimizeLevel.",
                 "default": "default"
               },
+              "generator": {
+                "type": "string",
+                "description": "Debug this @generator instead of the program: compiling `program` runs it under the debugger, so breakpoints in the generator's source (and in std generators) stop."
+              },
+              "snapshot": {
+                "type": "string",
+                "description": "With `generator`: a directory from `dream generate --capture`, replayed instead of recompiling `program`."
+              },
               "cwd": {
                 "type": "string",
                 "description": "Working directory for the session (optional)."
@@ -220,6 +228,17 @@
               "program": "^\"\\${file}\"",
               "buildMode": "release",
               "stopOnEntry": false
+            }
+          },
+          {
+            "label": "Dream: Debug generator",
+            "description": "Debug an @generator while it runs for the active program",
+            "body": {
+              "type": "dream",
+              "request": "launch",
+              "name": "Dream: Debug generator",
+              "program": "^\"\\${file}\"",
+              "generator": "${1:generator_name}"
             }
           },
           {
@@ -318,6 +337,12 @@
         "icon": "$(debug-alt)"
       },
       {
+        "command": "dream.debugGenerator",
+        "title": "Debug Generator",
+        "category": "Dream",
+        "icon": "$(debug-alt)"
+      },
+      {
         "command": "dream.showWat",
         "title": "Show Generated WAT",
         "category": "Dream",
@@ -391,6 +416,10 @@
         {
           "command": "dream.debugFile",
           "when": "editorLangId == dream"
+        },
+        {
+          "command": "dream.debugGenerator",
+          "when": "false"
         },
         {
           "command": "dream.showWat",

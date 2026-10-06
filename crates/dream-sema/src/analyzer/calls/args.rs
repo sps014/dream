@@ -222,7 +222,9 @@ impl<'a> Analyzer<'a> {
         if params_types.len() < fixed_user {
             return;
         }
-        let Some(&array_ty_id) = sig.parameters.get(skip + fixed_user) else { return; };
+        let Some(&array_ty_id) = sig.parameters.get(skip + fixed_user) else {
+            return;
+        };
         let array_ty = self.type_ctx.syntax_type(array_ty_id);
         let tail_hirs: Vec<Option<HExpr>> = arg_hirs.drain(fixed_user..).collect();
         params_types.truncate(fixed_user);
@@ -248,7 +250,14 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Vec<ExpressionNode<'a>>, SemanticError> {
         let keys = self.function_candidates(base);
-        self.normalize_named_for_candidates(base, keys, raw_args, call_position, user_param_offset, diagnostics)
+        self.normalize_named_for_candidates(
+            base,
+            keys,
+            raw_args,
+            call_position,
+            user_param_offset,
+            diagnostics,
+        )
     }
 
     pub(crate) fn normalize_named_for_candidates(
@@ -260,7 +269,13 @@ impl<'a> Analyzer<'a> {
         user_param_offset: usize,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Vec<ExpressionNode<'a>>, SemanticError> {
-        if keys.is_empty() { return Err(report(diagnostics, format!("named arguments are not supported for '{}'", base), Some(call_position))); }
+        if keys.is_empty() {
+            return Err(report(
+                diagnostics,
+                format!("named arguments are not supported for '{}'", base),
+                Some(call_position),
+            ));
+        }
         let mut successes: Vec<Vec<ExpressionNode<'a>>> = Vec::new();
         let mut last_err: Option<(String, Option<TextSpan>)> = None;
         for key in &keys {
@@ -366,7 +381,11 @@ impl<'a> Analyzer<'a> {
                 };
                 let field_ty = self
                     .struct_info(owner)
-                    .and_then(|s| s.fields.get(&member.text).map(|f| self.type_ctx.syntax_type(f.ty)))
+                    .and_then(|s| {
+                        s.fields
+                            .get(&member.text)
+                            .map(|f| self.type_ctx.syntax_type(f.ty))
+                    })
                     .unwrap_or(Type::Unknown);
                 self.hir_set_field(Some(obj_hir.clone()), field_idx, &field_ty);
                 let value = self.hir_take()?;

@@ -57,7 +57,9 @@ fn capabilities_share_core_binding_and_allocation() {
                 Library::new(
                     directory.join(capability.library_name(&dream_abi::target::TargetSpec::host())),
                 )
-                .unwrap()
+                .unwrap_or_else(|e| {
+                    panic!("{e}; `cargo test` does not build the host libraries, run `cargo build --workspace` first")
+                })
             })
             .collect();
         for (capability, library) in HostCapability::ALL.iter().zip(&libraries) {

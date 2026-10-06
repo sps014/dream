@@ -5,6 +5,7 @@ mod crypto;
 mod encoding;
 mod io;
 mod json;
+mod json_derive;
 mod logging;
 mod primitives;
 mod process;
@@ -22,6 +23,9 @@ pub struct StdPackage {
     pub files: &'static [(&'static str, &'static str)],
     /// Other packages that must be loaded before this one.
     pub deps: &'static [&'static str],
+    /// Generator packages whose `@generator`s are registered whenever this package is loaded.
+    /// They are never merged into the user's program.
+    pub generators: &'static [&'static str],
 }
 
 /// Bootstrap packages always merged into every program (no user `import` required).
@@ -43,5 +47,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     system::PACKAGE,
     testing::PACKAGE,
     codegen::PACKAGE,
+    json_derive::PACKAGE,
     logging::PACKAGE,
 ];

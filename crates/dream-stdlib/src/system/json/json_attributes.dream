@@ -1,0 +1,16 @@
+module system.json;
+
+// Derives JSON serialization for a class, struct or discriminated union: `to_json`,
+// `write_json` and `from_json`, written by the `system.json.derive` generator.
+@attribute(AttributeTarget.Class, AttributeTarget.Struct, AttributeTarget.Union)
+public struct json {}
+
+// Overrides the JSON property name of a field of a `@json` type.
+@attribute(AttributeTarget.Field)
+public struct property_name {
+    public name: string;
+}
+
+// Leaves a field of a `@json` type out of JSON serialization and deserialization.
+@attribute(AttributeTarget.Field)
+public struct json_ignore {}

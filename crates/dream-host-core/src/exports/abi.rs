@@ -19,7 +19,7 @@ static GUEST: Mutex<GuestAlloc> = Mutex::new(GuestAlloc {
     complete_foreign: None,
 });
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dream_host_bind_v2(
     string_alloc: AllocFn,
     array_new: ArrayNewFn,
@@ -32,13 +32,13 @@ pub extern "C" fn dream_host_bind_v2(
     };
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dream_host_string_alloc(length: i32) -> DreamPtr {
     let alloc = GUEST.lock().ok().and_then(|g| g.string_alloc);
     alloc.map_or(std::ptr::null_mut(), |alloc| unsafe { alloc(length) })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dream_host_array_new(length: i32, element_size: i32) -> DreamPtr {
     let alloc = GUEST.lock().ok().and_then(|g| g.array_new);
     alloc.map_or(std::ptr::null_mut(), |alloc| unsafe {
@@ -46,7 +46,7 @@ pub extern "C" fn dream_host_array_new(length: i32, element_size: i32) -> DreamP
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dream_host_complete_foreign(future: DreamPtr, result: u64) {
     let complete = GUEST.lock().ok().and_then(|g| g.complete_foreign);
     if let Some(complete) = complete {

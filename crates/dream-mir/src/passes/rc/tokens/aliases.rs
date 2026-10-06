@@ -85,20 +85,17 @@ pub(crate) fn leftover_alias_parent(
                     }
                     // `funcbox_new(idx, env)`: dest is a fun, arg0 is int. Leftover the box before
                     // leftover of the env array so typed array release still sees the last +1.
-                    if calls && args.len() >= 2 && ty(dest.0) != ty(src.0) {
-                        if let Operand::Copy(Place::Local(env)) = &args[1] {
+                    if calls && args.len() >= 2 && ty(dest.0) != ty(src.0)
+                        && let Operand::Copy(Place::Local(env)) = &args[1] {
                             parent.insert(dest.0, env.0);
                         }
-                    }
                     // `Next(handler)`: dest is the cell, last arg is the funcbox. Leftover of
                     // `Next` must count as covering that box so env leftover still 2→1 then last-drop.
-                    if calls {
-                        if let Some(Operand::Copy(Place::Local(last))) = args.last() {
-                            if matches!(interner.kind(func.local_ty(*last)), TyKind::Func(..)) {
+                    if calls
+                        && let Some(Operand::Copy(Place::Local(last))) = args.last()
+                            && matches!(interner.kind(func.local_ty(*last)), TyKind::Func(..)) {
                                 parent.insert(dest.0, last.0);
                             }
-                        }
-                    }
                 }
                 Statement::Assign(Place::Local(dest), Rvalue::New { args, .. }) if calls => {
                     for arg in args.iter().rev() {
@@ -238,15 +235,14 @@ pub(crate) fn leftover_order(
             continue;
         }
         out.push(d);
-        if let Some(&p) = edge.get(&d) {
-            if let Some(n) = indeg.get_mut(&p) {
+        if let Some(&p) = edge.get(&d)
+            && let Some(n) = indeg.get_mut(&p) {
                 *n = n.saturating_sub(1);
                 if *n == 0 && left.contains(&p) {
                     let child = if parent.contains_key(&p) { 0 } else { 1 };
                     ready.insert((child, p));
                 }
             }
-        }
     }
     let mut rest: Vec<u32> = left.into_iter().collect();
     rest.sort_unstable();

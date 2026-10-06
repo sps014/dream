@@ -1,4 +1,4 @@
-# GenFieldInfo, GenTypeInfo, GenSyntaxBlock, GenContext
+# GenContext
 
 **Import:** `import system.codegen;`
 
@@ -7,4 +7,4 @@ Read the [usage guide](../stdlib/codegen.md) for examples and common tasks. This
 Choose a short section to look up a member:
 
 - [Members 1–24](codegen-gen-context-1.md)
-- [Members 25–27](codegen-gen-context-2.md)
+- [Members 25–29](codegen-gen-context-2.md)

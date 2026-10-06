@@ -64,11 +64,18 @@ impl Compiler {
         }
         if diagnostics.has_errors() {
             return Err(fail_diagnostics(
+                self.render_diagnostics,
                 CompileError::Semantic,
                 &diagnostics,
                 &Default::default(),
             ));
         }
+        let std_sources = self
+            .debug_info
+            .then(|| {
+                crate::driver::std_sources::materialize(&self.toolchain_config().std_sources_root())
+            })
+            .transpose()?;
         let _phase = tracing::info_span!("compile_phase", phase = "ir_emission").entered();
         let module = dream_mir::backend::llvm::emit_llvm_module(
             mir,
@@ -76,6 +83,7 @@ impl Compiler {
             &sigs,
             self.debug && self.target.spec().capabilities.native_entry,
             self.target.clone(),
+            std_sources.as_deref(),
         )
         .map_err(|error| stale(error.to_string()))?;
         let c_shim = (!module.c_shim.is_empty())

@@ -8,11 +8,14 @@ impl Index {
         } else {
             let reference = self.ref_at(offset)?;
             if reference.kind == SymKind::Decorator {
-                let spec = find_spec(&reference.name)?;
+                let contents = match find_spec(&reference.name) {
+                    Some(spec) => attribute_hover(spec),
+                    None => self.declared_attribute(&reference.name)?.hover(),
+                };
                 return Some(Located {
                     start: reference.start,
                     end: reference.end,
-                    contents: attribute_hover(spec),
+                    contents,
                 });
             }
             let receiver = reference.receiver.as_deref();
@@ -37,11 +40,10 @@ impl Index {
             Vec::new()
         };
         // `List<float>.alloc` puts class args before the `.`, not after the method name.
-        if type_args.is_empty() && decl.kind == SymKind::Method {
-            if let Some(args) = type_args_before_member_dot(text, start) {
+        if type_args.is_empty() && decl.kind == SymKind::Method
+            && let Some(args) = type_args_before_member_dot(text, start) {
                 type_args = args;
             }
-        }
         let detail =
             Self::apply_type_args_to_detail(&decl.detail, receiver_ty_opt.as_deref(), &type_args);
 
@@ -234,11 +236,10 @@ impl Index {
             if let Some(decl) = self.resolve_member(receiver_ty_opt.as_deref(), name) {
                 let mut d = decl.clone();
                 let mut type_args = method_type_args_at(text, recv_end).unwrap_or_default();
-                if type_args.is_empty() {
-                    if let Some(args) = type_args_before_member_dot(text, recv_start) {
+                if type_args.is_empty()
+                    && let Some(args) = type_args_before_member_dot(text, recv_start) {
                         type_args = args;
                     }
-                }
                 d.detail = Self::apply_type_args_to_detail(
                     &d.detail,
                     receiver_ty_opt.as_deref(),

@@ -9,6 +9,7 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system",
         "system.io",
     ],
+    generators: &[],
     files: &[
         (
             "<std>/system/logging/log_level.dream",

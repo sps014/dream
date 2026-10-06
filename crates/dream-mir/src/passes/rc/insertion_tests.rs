@@ -54,6 +54,48 @@ fn last_use_temporary_value_call_kills_arg() {
 }
 
 #[test]
+fn last_use_constructed_value_temporary_kills_arg() {
+    let mut ctx = TypeCtx::new();
+    let point = point_ty(&mut ctx);
+    let point_def = match ctx.interner.kind(point) {
+        dream_types::TyKind::Struct(def, _) => *def,
+        _other => panic!("{}", "point is a struct: {other:?}"),
+    };
+    let take = ctx.register(DefKind::Function, "take", vec![]);
+    let mut b = FunctionBuilder::new("f", ctx.interner.void());
+    let temp = b.new_temp(point);
+    b.assign(
+        Place::Local(temp),
+        Rvalue::New {
+            def: point_def,
+            ty: point,
+            ctor: None,
+            args: vec![],
+        },
+    );
+    b.push(Statement::Call {
+        callee: Callee {
+            def: take,
+            args: vec![],
+            ret: ctx.interner.void(),
+            take_params: vec![true],
+        },
+        args: vec![Operand::Copy(Place::Local(temp))],
+    });
+    b.terminate(Terminator::Return(None));
+    let mut func = b.finish();
+    RcInsertion.run(&mut func, &ctx.interner);
+    assert!(
+        func.blocks[0]
+            .stmts
+            .iter()
+            .any(|stmt| matches!(stmt, Statement::ValueKill(l) if *l == temp)),
+        "the sink callee owns the constructed value; frame teardown must not drop it again: {:?}",
+        func.blocks[0].stmts
+    );
+}
+
+#[test]
 fn last_use_value_assign_kills_source() {
     let mut ctx = TypeCtx::new();
     let point = point_ty(&mut ctx);

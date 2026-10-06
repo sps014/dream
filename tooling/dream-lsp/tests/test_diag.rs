@@ -2,7 +2,7 @@
 //! semantic diagnostics keep flowing even while the document has a syntax error (the parser
 //! recovers and the analyzer runs over whatever parsed).
 
-mod common;
+use crate::common;
 
 use common::TestHarness;
 

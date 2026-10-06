@@ -40,11 +40,10 @@ pub fn substitute_generic_type(ty: &Type, bindings: &GenericBindings) -> Type {
         Type::Struct(token, args) => {
             // A bare struct whose name is itself a generic parameter (the common `T` case, since
             // unknown identifiers parse as `Type::Struct`).
-            if args.is_none() {
-                if let Some(concrete) = lookup_binding(bindings, &token.text) {
+            if args.is_none()
+                && let Some(concrete) = lookup_binding(bindings, &token.text) {
                     return concrete;
                 }
-            }
             let new_args = args.as_ref().map(|a| {
                 a.iter()
                     .map(|x| substitute_generic_type(x, bindings))

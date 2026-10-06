@@ -10,7 +10,7 @@ pub(super) const WRAP_PREFIX: &str = "fun __gen(): void { return ";
 
 pub(super) struct Rewriter<'a, 'ctx> {
     pub(super) arena: &'a bumpalo::Bump,
-    pub(super) by_site: &'ctx indexmap::IndexMap<(String, String), String>,
+    pub(super) by_site: &'ctx indexmap::IndexMap<super::super::sites::SiteKey, String>,
     pub(super) diagnostics: &'ctx mut dream_diagnostics::DiagnosticBag,
     pub(super) changed: &'ctx mut bool,
     pub(super) file: Option<&'ctx str>,

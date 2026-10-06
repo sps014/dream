@@ -90,8 +90,8 @@ impl Backend {
             .filter_map(|k| Url::parse(k).ok())
             .filter_map(|u| Self::file_path_of(&u))
             .collect();
-        if !open_paths.is_empty() {
-            if let Some(root) = crate::workspace::project_root(&open_paths) {
+        if !open_paths.is_empty()
+            && let Some(root) = crate::workspace::project_root(&open_paths) {
                 let mut cache = self.workspace_cache.lock().await;
                 let fresh = cache.as_ref().is_some_and(|w| w.is_fresh(&root));
                 if !fresh {
@@ -136,7 +136,6 @@ impl Backend {
                     }
                 }
             }
-        }
 
         Ok(Some(out))
     }
@@ -249,6 +248,23 @@ impl Backend {
                     data: None,
                 });
             }
+        }
+        for (name, start, end) in &idx.generators {
+            lenses.push(CodeLens {
+                range: Range {
+                    start: map_position(line_index.position(*start)),
+                    end: map_position(line_index.position(*end)),
+                },
+                command: Some(Command {
+                    title: "▶ Debug generator".to_string(),
+                    command: "dream.debugGenerator".to_string(),
+                    arguments: Some(vec![
+                        serde_json::json!(uri.to_string()),
+                        serde_json::json!(name),
+                    ]),
+                }),
+                data: None,
+            });
         }
 
         Ok(Some(lenses))

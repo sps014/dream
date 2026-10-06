@@ -139,14 +139,13 @@ impl RuntimeSigs {
         let mut out = RuntimeSigs::default();
         let mut groups: IndexMap<String, String> = IndexMap::new();
         for line in text.lines() {
-            if let Some(rest) = line.strip_prefix("attributes #") {
-                if let Some((id, body)) = rest.split_once(" = { ") {
+            if let Some(rest) = line.strip_prefix("attributes #")
+                && let Some((id, body)) = rest.split_once(" = { ") {
                     groups.insert(
                         id.to_string(),
                         body.trim_end_matches('}').trim().to_string(),
                     );
                 }
-            }
         }
         let mut target_group: Option<String> = None;
         for line in text.lines() {
@@ -169,11 +168,10 @@ impl RuntimeSigs {
                 if let Some((name, f, _)) = parse_fn(rest, &groups)? {
                     out.fns.entry(name).or_insert(f);
                 }
-            } else if line.starts_with('@') {
-                if let Some((name, g)) = parse_global(line) {
+            } else if line.starts_with('@')
+                && let Some((name, g)) = parse_global(line) {
                     out.globals.insert(name, g);
                 }
-            }
         }
         if let Some(body) = target_group.and_then(|g| groups.get(&g).cloned()) {
             for key in TARGET_ATTR_KEYS {
@@ -426,11 +424,10 @@ pub(crate) fn parse_ty(s: &str) -> Option<(Ty, &str)> {
         ("double", Ty::F64),
         ("ptr", Ty::Ptr),
     ] {
-        if let Some(rest) = s.strip_prefix(kw) {
-            if !rest.starts_with(|c: char| c.is_ascii_alphanumeric()) {
+        if let Some(rest) = s.strip_prefix(kw)
+            && !rest.starts_with(|c: char| c.is_ascii_alphanumeric()) {
                 return Some((ty, rest));
             }
-        }
     }
     if let Some(rest) = s.strip_prefix('i') {
         let n: String = rest.chars().take_while(char::is_ascii_digit).collect();

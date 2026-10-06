@@ -8,6 +8,7 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.text",
         "system.io",
     ],
+    generators: &[],
     files: &[
         (
             "<std>/system/arg_error.dream",

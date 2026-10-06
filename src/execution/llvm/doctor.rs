@@ -101,11 +101,10 @@ pub fn run(
         }
     }
     let sdk_args = super::runtime::sysroot_args(&config, &spec);
-    if let Some(root) = &config.sysroot {
-        if !root.is_dir() {
+    if let Some(root) = &config.sysroot
+        && !root.is_dir() {
             errors.push(format!("sysroot does not exist: {}", root.display()));
         }
-    }
     for capability in HostCapability::ALL {
         let path = host_dir
             .as_ref()

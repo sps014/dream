@@ -46,7 +46,7 @@ Expected stdout:
 | `app.dream` | Program that uses `html { … }` |
 | `html.dream` | Runtime `Html.el` / `render` / `text` |
 | `parser.dream` | `HtmlCompiler` — markup → Dream `Html.el` source |
-| `gen.dream` | `@generator(ctx: GenContext)` + `@syntax_block("html")` |
+| `gen.dream` | `@generator(ctx: GenContext)` + `@syntax_block` (block keyword = function name) |
 | `dream.toml` | `[[generators]] path = "gen.dream"` |
 
 See [Source generators](../../../docs/reference/language/generators.md).

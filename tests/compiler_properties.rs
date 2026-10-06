@@ -1,6 +1,6 @@
 #![cfg(feature = "native")]
 
-mod common;
+use crate::common;
 
 use bumpalo::Bump;
 use dream_diagnostics::DiagnosticBag;

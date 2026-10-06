@@ -8,6 +8,26 @@
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
+/// Every file below `root`, recursively (unordered; [`fingerprint`] sorts).
+pub fn files_under(root: &std::path::Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            match entry.file_type() {
+                Ok(kind) if kind.is_dir() => pending.push(path),
+                Ok(_) => files.push(path),
+                Err(_) => {}
+            }
+        }
+    }
+    files
+}
+
 /// One line per input, in sorted path order.
 pub fn fingerprint(mut inputs: Vec<PathBuf>) -> String {
     inputs.sort();

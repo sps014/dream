@@ -111,7 +111,7 @@ impl Builder {
             ExpressionNode::SizeOf(_, ty) => {
                 self.add_type_ref(ty, scope);
             }
-            ExpressionNode::NameOf(_, _) => {}
+            ExpressionNode::NameOf(_, _) | ExpressionNode::DeclOf(_, _) => {}
             ExpressionNode::TypeOf(_, e) => self.walk_expr(e, scope),
             ExpressionNode::Try(e) => self.walk_expr(e, scope),
             ExpressionNode::Lambda(lambda) => {

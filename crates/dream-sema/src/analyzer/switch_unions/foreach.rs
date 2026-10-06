@@ -113,8 +113,8 @@ impl<'a> Analyzer<'a> {
                 return Ok(());
             };
             let enum_ty = method.return_type.clone().unwrap_or(Type::Unknown);
-            if let Some((ebase, eargs)) = Self::resolve_struct_parts(&enum_ty) {
-                if !eargs.is_empty()
+            if let Some((ebase, eargs)) = Self::resolve_struct_parts(&enum_ty)
+                && !eargs.is_empty()
                     && self
                         .type_ctx
                         .resolve(DefKind::Interface, &ebase)
@@ -127,15 +127,14 @@ impl<'a> Analyzer<'a> {
                         diagnostics,
                     );
                 }
-            }
             self.hir_iface_call0(iter_hir, iface_name, method, slot, &enum_ty);
             let it_call = self.hir_take();
             (enum_ty, it_call)
         };
 
         let enum_iface = self.type_ctx.lower(&enumerator_type);
-        if let Some((ebase, eargs)) = Self::resolve_struct_parts(&enumerator_type) {
-            if !eargs.is_empty()
+        if let Some((ebase, eargs)) = Self::resolve_struct_parts(&enumerator_type)
+            && !eargs.is_empty()
                 && self
                     .type_ctx
                     .resolve(DefKind::Interface, &ebase)
@@ -143,7 +142,6 @@ impl<'a> Analyzer<'a> {
             {
                 self.ensure_interface_instantiated(&ebase, &eargs, &element.position, diagnostics);
             }
-        }
 
         let Some((next_slot, next_method)) = self.iface_method_slot(enum_iface, "next") else {
             self.hir_fail();
@@ -429,12 +427,7 @@ impl<'a> Analyzer<'a> {
         let elem_slot = self.hir_alloc_local(&element.text, &element_type);
 
         // `$it = <iterable>.iterator();` (emitted into the enclosing block).
-        self.hir_set_method_call(
-            iter_hir,
-            &iterator_info.identity,
-            vec![],
-            &enumerator_type,
-        );
+        self.hir_set_method_call(iter_hir, &iterator_info.identity, vec![], &enumerator_type);
         let it_call = self.hir_take();
         if let Some(it_l) = it_local {
             self.hir_assign_local_id(it_l, it_call);

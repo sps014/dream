@@ -26,15 +26,13 @@ impl Backend {
         // list; AST-index heuristic items are appended for anything lazy instantiation hasn't
         // materialized yet (e.g. `extend T[]` methods never called in this document).
         let mut completions = idx.completions(file_path.as_deref(), &text, offset);
-        if index::is_member_completion_context(&text, offset) {
-            if let Some(snapshot) = &sema {
-                if let Some(items) = crate::sema_ide::member_completions(snapshot, &text, offset) {
+        if index::is_member_completion_context(&text, offset)
+            && let Some(snapshot) = &sema
+                && let Some(items) = crate::sema_ide::member_completions(snapshot, &text, offset) {
                     let seen: std::collections::HashSet<String> =
                         completions.iter().map(|(n, ..)| n.clone()).collect();
                     completions.extend(items.into_iter().filter(|(n, ..)| !seen.contains(n)));
                 }
-            }
-        }
         let import_replace = index::import_path_partial(&text, offset).map(|(start, _)| start);
         let in_attr_name = index::attribute_name_partial(&text, offset).is_some();
         let in_attr_args = index::attribute_arg_context(&text, offset).is_some();
@@ -216,9 +214,9 @@ impl Backend {
             let label = decl.detail.clone();
             let mut parameters = vec![];
 
-            if let Some(start_paren) = label.find('(') {
-                if let Some(end_paren) = label.rfind(')') {
-                    if start_paren < end_paren {
+            if let Some(start_paren) = label.find('(')
+                && let Some(end_paren) = label.rfind(')')
+                    && start_paren < end_paren {
                         let params_str = &label[start_paren + 1..end_paren];
                         if !params_str.trim().is_empty() {
                             for param in params_str.split(',') {
@@ -229,8 +227,6 @@ impl Backend {
                             }
                         }
                     }
-                }
-            }
 
             let active_parameter = active_parameter_at(&text, offset);
 

@@ -303,12 +303,11 @@ pub fn link_wasm(
     let r = run_captured(&mut o, "opt");
     let _ = std::fs::remove_file(&linked);
     r?;
-    if let Some(out) = opt_ll {
-        if let Err(e) = write_ir(tools, &optimized, out) {
+    if let Some(out) = opt_ll
+        && let Err(e) = write_ir(tools, &optimized, out) {
             let _ = std::fs::remove_file(&optimized);
             return Err(e);
         }
-    }
     let obj = ll_path.with_extension("wasm.o");
     let mut llc = tools.command("llc");
     llc.arg(llc_level(opt, false))
@@ -344,11 +343,10 @@ pub fn link_wasm(
     let r = run_captured(&mut cmd, "wasm-ld");
     let _ = std::fs::remove_file(&obj);
     r?;
-    if !packages.libraries.is_empty() {
-        if let Err(e) = super::wasm_sources::validate_imports(ll_path, wasm_path, &sigs) {
+    if !packages.libraries.is_empty()
+        && let Err(e) = super::wasm_sources::validate_imports(ll_path, wasm_path, &sigs) {
             let _ = std::fs::remove_file(wasm_path);
             return Err(e);
         }
-    }
     Ok(())
 }

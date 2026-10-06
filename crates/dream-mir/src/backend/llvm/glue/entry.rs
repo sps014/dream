@@ -162,11 +162,10 @@ fn guest_entry(l: &mut Lcx<'_>, main: &MirFunction, exit: EntryExit) {
         fx.finish();
         return;
     }
-    if main.is_async {
-        if let Some(mf) = &r {
+    if main.is_async
+        && let Some(mf) = &r {
             fx.call("dream_release", std::slice::from_ref(mf));
         }
-    }
     fx.call("dream_drop_globals", &[]);
     fx.call("dream_callback_owner_finish", &[]);
     if exit == EntryExit::Void {

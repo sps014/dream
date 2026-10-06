@@ -1,0 +1,10 @@
+module gen;
+
+import system.codegen;
+import system.json;
+
+@generator
+@on_attribute(jsn)
+public fun derive_bad(ctx: GenContext): void {
+    ctx.log("unreachable");
+}

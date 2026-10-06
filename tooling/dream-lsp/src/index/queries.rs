@@ -137,16 +137,15 @@ fn import_path_completions(
                     if name.starts_with(partial) || format!("{}.", name).starts_with(partial) {
                         push_module_completion(&mut out, name, "directory", &imported);
                     }
-                } else if let Some(stem) = name.strip_suffix(".dream") {
-                    if stem.starts_with(partial) {
+                } else if let Some(stem) = name.strip_suffix(".dream")
+                    && stem.starts_with(partial) {
                         push_module_completion(&mut out, stem.to_string(), "module", &imported);
                     }
-                }
             }
         }
 
-        if let Some(packages_dir) = find_dream_packages_dir(parent_dir) {
-            if let Ok(entries) = std::fs::read_dir(&packages_dir) {
+        if let Some(packages_dir) = find_dream_packages_dir(parent_dir)
+            && let Ok(entries) = std::fs::read_dir(&packages_dir) {
                 for entry in entries.flatten() {
                     if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
                         continue;
@@ -187,7 +186,6 @@ fn import_path_completions(
                     }
                 }
             }
-        }
     }
 
     out.sort_by(|a, b| a.0.cmp(&b.0));

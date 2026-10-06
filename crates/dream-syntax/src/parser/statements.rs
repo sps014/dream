@@ -399,14 +399,13 @@ impl<'a, 'b> Parser<'a, 'b> {
                     pattern.position(),
                 );
             }
-            if let crate::nodes::PatternNode::Tuple(elems) = &pattern {
-                if elems.len() < 2 {
+            if let crate::nodes::PatternNode::Tuple(elems) = &pattern
+                && elems.len() < 2 {
                     self.diagnostics.report_error(
                         "Tuple destructuring requires at least two bindings".to_string(),
                         pattern.position(),
                     );
                 }
-            }
             let mut type_annotation = None;
             if self.current_token().kind == TokenKind::ColonToken {
                 self.match_token(TokenKind::ColonToken);

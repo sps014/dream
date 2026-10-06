@@ -18,11 +18,10 @@ impl<'a> Analyzer<'a> {
     /// Stores the captured initializer for global `name` (if it was fully representable) and turns
     /// collection back off.
     pub(in crate::analyzer) fn hir_global_init_finish(&mut self, name: &str) {
-        if self.hir.collecting && self.hir.ok {
-            if let Some(init) = self.hir.last.take() {
+        if self.hir.collecting && self.hir.ok
+            && let Some(init) = self.hir.last.take() {
                 self.hir.pending_global_inits.insert(name.to_string(), init);
             }
-        }
         self.hir.collecting = false;
         self.hir.last = None;
     }
@@ -130,7 +129,9 @@ impl<'a> Analyzer<'a> {
                 .get_struct(ty)
                 .is_some_and(|info| info.has_destructor)
             {
-                self.method_info(ty, dream_syntax::nodes::types::DESTRUCTOR_NAME).ok().map(|info| info.identity.0)
+                self.method_info(ty, dream_syntax::nodes::types::DESTRUCTOR_NAME)
+                    .ok()
+                    .map(|info| info.identity.0)
             } else {
                 None
             };
@@ -269,7 +270,10 @@ impl<'a> Analyzer<'a> {
         node: &crate::module_graph::ProgramView,
     ) -> Vec<HImport> {
         let mut imports: Vec<HImport> = Vec::new();
-        let candidates: Vec<_> = node.functions.iter().copied()
+        let candidates: Vec<_> = node
+            .functions
+            .iter()
+            .copied()
             .chain(self.struct_methods.iter().map(|(func, _)| *func))
             .chain(self.instantiated_generics.values().map(|(_, func)| *func))
             .collect();
@@ -277,9 +281,12 @@ impl<'a> Analyzer<'a> {
             if !func.is_extern || dream_abi::intrinsics::has_intrinsic_attr(&func.attributes) {
                 continue;
             }
-            let Some(identity) = self.function_table.declaration_node(func) else { continue; };
+            let Some(identity) = self.function_table.declaration_node(func) else {
+                continue;
+            };
             let def = identity.0;
-            self.type_ctx.set_scope(self.graph.module_for_file(func.file_path.as_deref()));
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(func.file_path.as_deref()));
             let sym_name = self.function_table.emitted_name(&self.type_ctx, &identity);
             if imports.iter().any(|import| import.def == def) {
                 continue;
@@ -341,18 +348,16 @@ impl<'a> Analyzer<'a> {
     ) -> Vec<(dream_types::DefId, String)> {
         let mut out = self.intrinsic_defs.clone();
         for func in node.functions.iter() {
-            if let Some(key) = dream_abi::intrinsics::intrinsic_key(&func.attributes) {
-                if let Some(identity) = self.function_table.declaration_node(func) {
+            if let Some(key) = dream_abi::intrinsics::intrinsic_key(&func.attributes)
+                && let Some(identity) = self.function_table.declaration_node(func) {
                     out.push((identity.0, key));
                 }
-            }
         }
         for (identity, info) in &self.function_table.functions {
-            if let Some(key) = &info.intrinsic_name {
-                if !out.iter().any(|(def, _)| *def == identity.0) {
+            if let Some(key) = &info.intrinsic_name
+                && !out.iter().any(|(def, _)| *def == identity.0) {
                     out.push((identity.0, key.clone()));
                 }
-            }
         }
         out
     }

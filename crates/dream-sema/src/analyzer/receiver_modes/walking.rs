@@ -441,7 +441,7 @@ pub(super) fn note_chain_write(
             match e {
                 ExpressionNode::Identifier(t) => return Some(t.position),
                 ExpressionNode::MemberAccess(base, m) => {
-                    if matches!(&**base, ExpressionNode::Identifier(ref t) if t.text == "this") {
+                    if matches!(&**base, ExpressionNode::Identifier(t) if t.text == "this") {
                         return Some(m.position);
                     }
                     e = base;

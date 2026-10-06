@@ -91,28 +91,24 @@ pub(in super::super) fn plan(l: &Lcx<'_>, reach: &ProtocolReach) -> Plan {
         dynamic: reach.dynamic,
     };
     for (ty, layout) in &cx.mir.layouts.structs {
-        if reach.needs_to_string(*ty) {
-            if let Some(s) = pick(*ty, &layout.name, "_to_string") {
+        if reach.needs_to_string(*ty)
+            && let Some(s) = pick(*ty, &layout.name, "_to_string") {
                 p.struct_to_string.push((*ty, s));
             }
-        }
-        if reach.needs_hash_code(*ty) {
-            if let Some(s) = pick(*ty, &layout.name, "_hash_code") {
+        if reach.needs_hash_code(*ty)
+            && let Some(s) = pick(*ty, &layout.name, "_hash_code") {
                 p.struct_hash.push((*ty, s));
             }
-        }
     }
     for (ty, layout) in &cx.mir.layouts.unions {
-        if reach.needs_to_string(*ty) || reach.to_string.contains(ty) {
-            if let Some(s) = pick(*ty, &layout.name, "_to_string") {
+        if (reach.needs_to_string(*ty) || reach.to_string.contains(ty))
+            && let Some(s) = pick(*ty, &layout.name, "_to_string") {
                 p.union_to_string.push((*ty, s));
             }
-        }
-        if reach.needs_hash_code(*ty) {
-            if let Some(s) = pick(*ty, &layout.name, "_hash_code") {
+        if reach.needs_hash_code(*ty)
+            && let Some(s) = pick(*ty, &layout.name, "_hash_code") {
                 p.union_hash.push((*ty, s));
             }
-        }
     }
     p
 }

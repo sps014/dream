@@ -93,8 +93,8 @@ impl<'a> Analyzer<'a> {
         // List<int> = [];`). With a valid annotation the literal is handled on the normal path
         // below (the annotation is published as the expected type, which the array-literal
         // analysis uses to allocate a zero-length array, or lower to `List<T>.from_array([])`).
-        if let ExpressionNode::ArrayLiteral(_, elements) = right {
-            if elements.is_empty()
+        if let ExpressionNode::ArrayLiteral(_, elements) = right
+            && elements.is_empty()
                 && !type_annotation.as_ref().is_some_and(|t| {
                     t.is_array() || Self::collection_generic_arg(t, "List").is_some()
                 })
@@ -106,7 +106,6 @@ impl<'a> Analyzer<'a> {
                 );
                 return Ok(());
             }
-        }
         //return right type. A type annotation is published as the expected type so a generic
         // union's nullary variant (`let o: Option<int> = Option.None;`) can resolve its arguments.
         let saved_expected = self.current_expected_type.take();
@@ -197,8 +196,8 @@ impl<'a> Analyzer<'a> {
         use dream_syntax::nodes::PatternNode;
         match pattern {
             PatternNode::Tuple(pats) => {
-                if let ExpressionNode::TupleLiteral(_, elems) = expr {
-                    if elems.len() == pats.len() {
+                if let ExpressionNode::TupleLiteral(_, elems) = expr
+                    && elems.len() == pats.len() {
                         let expected_elems: Option<Vec<Type>> = match expected {
                             Some(Type::Tuple(ts)) if ts.len() == elems.len() => Some(ts.clone()),
                             _ => None,
@@ -216,7 +215,6 @@ impl<'a> Analyzer<'a> {
                         }
                         return Ok(());
                     }
-                }
                 let saved_expected = self.current_expected_type.take();
                 self.current_expected_type = expected.cloned();
                 let right_type = self

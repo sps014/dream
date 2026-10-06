@@ -1,0 +1,27 @@
+import system;
+import system.io;
+import system.collections;
+import system.json;
+import system.codegen;
+import gen;
+
+async fun main(): void {
+    let args = System.args;
+    if (args.length < 1) {
+        System.println(GenHost.err_marker());
+        System.println("missing snapshot path argument");
+        return;
+    }
+    let ctx_res = GenContext.from_snapshot(args[0]).await;
+    switch (ctx_res) {
+        Ok(gen_ctx) => {
+            let arg = gen_ctx;
+            html(arg);
+            gen_ctx.finish();
+        }
+        Err(e) => {
+            System.println(GenHost.err_marker());
+            System.println(e);
+        }
+    }
+}

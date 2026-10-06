@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 
 use common::{compile_test_pipeline, emit_ll_for, ir_func_body};
 use dream_mir::backend::Target;

@@ -156,7 +156,11 @@ impl MirDump {
         let Some(spec) = &self.spec else {
             return;
         };
-        debug_assert!(MODULE_STAGES.contains(&stage), "unregistered stage {}", stage);
+        debug_assert!(
+            MODULE_STAGES.contains(&stage),
+            "unregistered stage {}",
+            stage
+        );
         let run = {
             let r = self.module_runs.entry(stage).or_insert(0);
             *r += 1;
@@ -220,8 +224,10 @@ impl MirDump {
             text.push_str(&body);
             self.snapshots.push(Snapshot { pass: want, text });
         } else {
-            let text =
-                format!("// fn {}: last run at fixpoint iteration {iteration}\n{body}", func.name);
+            let text = format!(
+                "// fn {}: last run at fixpoint iteration {iteration}\n{body}",
+                func.name
+            );
             self.last_fn
                 .insert((func.def, func.instance.clone(), func.is_async), text);
         }
@@ -236,17 +242,23 @@ impl MirDump {
         if let Some(snap) = self.last_module.take() {
             self.snapshots.push(snap);
         }
-        if !self.last_fn.is_empty() {
-            if let DumpMode::After { pass, .. } = spec.mode {
-                let mut text = format!("// dream --emit-mir: after {pass} (last run per function)\n\n");
+        if !self.last_fn.is_empty()
+            && let DumpMode::After { pass, .. } = spec.mode {
+                let mut text =
+                    format!("// dream --emit-mir: after {pass} (last run per function)\n\n");
                 for body in self.last_fn.values() {
                     text.push_str(body);
                     text.push('\n');
                 }
                 self.snapshots.push(Snapshot { pass, text });
             }
-        }
-        let width = self.snapshots.len().saturating_sub(1).to_string().len().max(2);
+        let width = self
+            .snapshots
+            .len()
+            .saturating_sub(1)
+            .to_string()
+            .len()
+            .max(2);
         self.snapshots
             .into_iter()
             .enumerate()
@@ -283,7 +295,11 @@ mod tests {
         );
         assert_eq!(MirDumpSpec::parse("all", None).unwrap().mode, DumpMode::All);
         let err = MirDumpSpec::parse("after:nope", None).unwrap_err();
-        assert!(err.contains("unknown pass `nope`") && err.contains("rc-insertion"), "{}", err);
+        assert!(
+            err.contains("unknown pass `nope`") && err.contains("rc-insertion"),
+            "{}",
+            err
+        );
         assert!(MirDumpSpec::parse("after:gvn,twice", None).is_err());
         assert!(MirDumpSpec::parse("before:gvn", None).is_err());
     }
@@ -291,8 +307,7 @@ mod tests {
     #[test]
     fn every_module_pass_name_is_registered() {
         use super::super::{
-            Devirt, ExpandSimpleCtors, FuncboxAbi, Inliner, ModulePass, RcInsertion,
-            UniqueRegion,
+            Devirt, ExpandSimpleCtors, FuncboxAbi, Inliner, ModulePass, RcInsertion, UniqueRegion,
         };
         let names = dumpable_pass_names();
         for n in [

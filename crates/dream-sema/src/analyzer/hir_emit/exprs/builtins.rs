@@ -171,7 +171,9 @@ impl<'a> Analyzer<'a> {
             return e;
         }
         if let dream_types::TyKind::Enum(def) = self.type_ctx.interner.kind(e.ty) {
-            let Some(members) = self.enum_members(*def) else { return e; };
+            let Some(members) = self.enum_members(*def) else {
+                return e;
+            };
             let arms: Vec<(i64, String)> = members
                 .iter()
                 .map(|(name, value)| (*value as i64, name.clone()))

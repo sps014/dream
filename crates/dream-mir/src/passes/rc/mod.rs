@@ -22,9 +22,9 @@ mod value;
 #[cfg(test)]
 mod cursor_family_tests;
 #[cfg(test)]
-mod held_tests;
-#[cfg(test)]
 mod cursor_tests;
+#[cfg(test)]
+mod held_tests;
 #[cfg(test)]
 mod unique_tests;
 
@@ -100,13 +100,11 @@ pub(crate) fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
             if base == Some(local) {
                 hit = true;
             }
-            if let Place::Index { index, .. } = place {
-                if let Operand::Copy(Place::Local(l)) = index.as_ref() {
-                    if l.0 == local {
+            if let Place::Index { index, .. } = place
+                && let Operand::Copy(Place::Local(l)) = index.as_ref()
+                    && l.0 == local {
                         hit = true;
                     }
-                }
-            }
         }
     };
     match rvalue {

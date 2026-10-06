@@ -49,7 +49,10 @@ impl<'a> Analyzer<'a> {
         let type_name = id.text.clone();
         let owner = self.type_ctx.lower(&Self::type_from_name(&type_name));
         let base = format!("{type_name}.{}", method.text);
-        let nominal_def = self.type_ctx.nominal_kind(&type_name).and_then(|kind| self.type_ctx.resolve(kind, &type_name));
+        let nominal_def = self
+            .type_ctx
+            .nominal_kind(&type_name)
+            .and_then(|kind| self.type_ctx.resolve(kind, &type_name));
 
         // File/module-level visibility (Axis 2): reaching a static member requires the type itself
         // to be visible. A non-public class/struct is only referenceable from its declaring file.
@@ -85,7 +88,10 @@ impl<'a> Analyzer<'a> {
         // inferred from the expected type or the arguments. Monomorphize the class so its concrete
         // static methods (`Cache_int_make`, ...) are registered, then dispatch through the normal
         // static-call path (which enforces class-level privacy).
-        if nominal_def.and_then(|def| self.generic_struct(def)).is_some() {
+        if nominal_def
+            .and_then(|def| self.generic_struct(def))
+            .is_some()
+        {
             let args: Vec<Type> = match generic_args {
                 Some(a) if !a.is_empty() => a
                     .iter()
@@ -117,7 +123,12 @@ impl<'a> Analyzer<'a> {
         }
 
         // Support generic static method calls by monomorphizing them on the fly.
-        if let Some(&template) = self.function_table.generic_methods.get(&(owner, method.text.clone())).and_then(|def| self.generic_functions.get(def)) {
+        if let Some(&template) = self
+            .function_table
+            .generic_methods
+            .get(&(owner, method.text.clone()))
+            .and_then(|def| self.generic_functions.get(def))
+        {
             let t = self.analyze_generic_static_method(
                 intrinsics::GenericStaticMethodCall {
                     template,

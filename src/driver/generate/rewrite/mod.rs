@@ -7,4 +7,4 @@ mod parse;
 mod spans;
 mod statement;
 
-pub use functions::rewrite_function;
+pub use functions::{rewrite_expression, rewrite_function};

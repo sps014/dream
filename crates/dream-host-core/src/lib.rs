@@ -2,7 +2,7 @@
 
 mod exports;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dream_host_core_abi_v2() {}
 
 #[cfg(test)]

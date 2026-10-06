@@ -92,16 +92,18 @@ impl Compiler {
         );
         field(
             "runtime",
-            crate::driver::rt_stamp::fingerprint(files_under(&self.toolchain_config.runtime_c))
-                .as_bytes(),
+            crate::driver::rt_stamp::fingerprint(crate::driver::rt_stamp::files_under(
+                &self.toolchain_config.runtime_c,
+            ))
+            .as_bytes(),
         );
         let options = format!(
-            "{:?}|{}|{}|{:?}|{}|{:?}|{:?}|{:?}|{}|{:?}",
+            "{:?}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{:?}",
             self.target,
             self.debug,
             self.debug_info,
             self.optimize,
-            self.skip_generators,
+            self.generator_stage,
             self.runtimes,
             self.compile_targets,
             self.crate_type,
@@ -191,23 +193,4 @@ impl Compiler {
             key: hash.finalize(),
         })
     }
-}
-
-fn files_under(root: &Path) -> Vec<PathBuf> {
-    let mut files = Vec::new();
-    let mut pending = vec![root.to_path_buf()];
-    while let Some(dir) = pending.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            match entry.file_type() {
-                Ok(kind) if kind.is_dir() => pending.push(path),
-                Ok(_) => files.push(path),
-                Err(_) => {}
-            }
-        }
-    }
-    files
 }

@@ -48,10 +48,7 @@ fn concurrent_native_compiles_all_succeed() {
             let out = dir.join(format!("out_{i}"));
             let compiler = Compiler::new(Target::native());
             compiler
-                .compile(
-                    &src.to_string_lossy().to_string(),
-                    &out.to_string_lossy(),
-                )
+                .compile(&src.to_string_lossy().to_string(), &out.to_string_lossy())
                 .map_err(|e| format!("{e}"))
         }));
     }

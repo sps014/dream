@@ -201,7 +201,11 @@ fn const_alloc_len_survives_release_null_out() {
     let mut func = b.finish();
     let blocks_before = func.blocks.len();
     assert!(Abc.run(&mut func, &i));
-    assert_eq!(func.blocks.len(), blocks_before, "proven loop must not be versioned");
+    assert_eq!(
+        func.blocks.len(),
+        blocks_before,
+        "proven loop must not be versioned"
+    );
     match &func.blocks[body.0 as usize].stmts[0] {
         Statement::Assign(_, Rvalue::Use(Operand::Copy(Place::Index { unchecked, .. }))) => {
             assert!(*unchecked);
@@ -346,10 +350,7 @@ fn affine_index_is_unchecked() {
     let ci = b.new_temp(i.bool());
     let cj = b.new_temp(i.bool());
     let elem = b.new_temp(i.float());
-    b.assign(
-        Place::Local(n),
-        Rvalue::Use(Operand::Const(Const::Int(64))),
-    );
+    b.assign(Place::Local(n), Rvalue::Use(Operand::Const(Const::Int(64))));
     b.assign(
         Place::Local(arr),
         Rvalue::ArrayNew {
@@ -358,10 +359,7 @@ fn affine_index_is_unchecked() {
             closure_env: false,
         },
     );
-    b.assign(
-        Place::Local(iv),
-        Rvalue::Use(Operand::Const(Const::Int(0))),
-    );
+    b.assign(Place::Local(iv), Rvalue::Use(Operand::Const(Const::Int(0))));
     let icond = b.new_block();
     let ibody = b.new_block();
     let after = b.new_block();
@@ -381,10 +379,7 @@ fn affine_index_is_unchecked() {
         else_blk: after,
     });
     b.switch_to(ibody);
-    b.assign(
-        Place::Local(j),
-        Rvalue::Use(Operand::Const(Const::Int(0))),
-    );
+    b.assign(Place::Local(j), Rvalue::Use(Operand::Const(Const::Int(0))));
     let jcond = b.new_block();
     let jbody = b.new_block();
     let ilatch = b.new_block();
@@ -453,7 +448,13 @@ fn affine_index_is_unchecked() {
     let unchecked = func.blocks[jbody.0 as usize].stmts.iter().any(|s| {
         matches!(
             s,
-            Statement::Assign(_, Rvalue::Use(Operand::Copy(Place::Index { unchecked: true, .. })))
+            Statement::Assign(
+                _,
+                Rvalue::Use(Operand::Copy(Place::Index {
+                    unchecked: true,
+                    ..
+                }))
+            )
         )
     });
     assert!(unchecked, "i * n + j must drop the bounds check");
@@ -482,10 +483,7 @@ fn shift_affine_index_with_latch_is_unchecked() {
             closure_env: false,
         },
     );
-    b.assign(
-        Place::Local(iv),
-        Rvalue::Use(Operand::Const(Const::Int(0))),
-    );
+    b.assign(Place::Local(iv), Rvalue::Use(Operand::Const(Const::Int(0))));
     let icond = b.new_block();
     let ibody = b.new_block();
     let after = b.new_block();
@@ -513,10 +511,7 @@ fn shift_affine_index_with_latch_is_unchecked() {
             Operand::Const(Const::Int(6)),
         ),
     );
-    b.assign(
-        Place::Local(k),
-        Rvalue::Use(Operand::Const(Const::Int(0))),
-    );
+    b.assign(Place::Local(k), Rvalue::Use(Operand::Const(Const::Int(0))));
     let kcond = b.new_block();
     let kbody = b.new_block();
     let klatch = b.new_block();
@@ -580,7 +575,13 @@ fn shift_affine_index_with_latch_is_unchecked() {
     let unchecked = func.blocks[kbody.0 as usize].stmts.iter().any(|s| {
         matches!(
             s,
-            Statement::Assign(_, Rvalue::Use(Operand::Copy(Place::Index { unchecked: true, .. })))
+            Statement::Assign(
+                _,
+                Rvalue::Use(Operand::Copy(Place::Index {
+                    unchecked: true,
+                    ..
+                }))
+            )
         )
     });
     assert!(unchecked, "i << 6 + k must drop the bounds check");
@@ -604,10 +605,7 @@ fn square_bound_index_is_unchecked() {
             closure_env: false,
         },
     );
-    b.assign(
-        Place::Local(iv),
-        Rvalue::Use(Operand::Const(Const::Int(2))),
-    );
+    b.assign(Place::Local(iv), Rvalue::Use(Operand::Const(Const::Int(2))));
     let cond = b.new_block();
     let body = b.new_block();
     let after = b.new_block();
@@ -658,7 +656,13 @@ fn square_bound_index_is_unchecked() {
     let unchecked = func.blocks[body.0 as usize].stmts.iter().any(|s| {
         matches!(
             s,
-            Statement::Assign(_, Rvalue::Use(Operand::Copy(Place::Index { unchecked: true, .. })))
+            Statement::Assign(
+                _,
+                Rvalue::Use(Operand::Copy(Place::Index {
+                    unchecked: true,
+                    ..
+                }))
+            )
         )
     });
     assert!(unchecked, "i under i * i < len must drop the bounds check");
@@ -1051,7 +1055,11 @@ fn loop_with_foreign_bound_is_versioned() {
     let mut func = b.finish();
     let before = func.blocks.len();
     assert!(Abc.run(&mut func, &i));
-    assert_eq!(func.blocks.len(), before + 2 + 2, "clone of cond+body plus two guards");
+    assert_eq!(
+        func.blocks.len(),
+        before + 2 + 2,
+        "clone of cond+body plus two guards"
+    );
     assert_eq!(index_flags(&func, body), vec![false]);
     let mut flags = all_index_flags(&func);
     flags.sort();
@@ -1228,7 +1236,10 @@ fn literal_loop(second_def: bool) -> (MirFunction, BlockId, BlockId, bool) {
     b.switch_to(after);
     b.assign(
         Place::Local(elem),
-        Rvalue::Use(Operand::Copy(Place::index(arr, Operand::Const(Const::Int(0))))),
+        Rvalue::Use(Operand::Copy(Place::index(
+            arr,
+            Operand::Const(Const::Int(0)),
+        ))),
     );
     b.assign(Place::Local(arr), Rvalue::Use(Operand::Const(Const::Null)));
     b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(elem)))));

@@ -29,13 +29,12 @@ impl<'a> Analyzer<'a> {
         ctx: &super::super::AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, crate::errors::SemanticError> {
-        if let ExpressionNode::Identifier(id) = obj {
-            if let Some(t) =
+        if let ExpressionNode::Identifier(id) = obj
+            && let Some(t) =
                 self.try_analyze_static_method(id, method, generic_args, params, ctx, diagnostics)?
             {
                 return Ok(t);
             }
-        }
 
         let obj_type =
             self.analyze_expression(obj, ctx.parent_function, ctx.symbol_table, diagnostics)?;

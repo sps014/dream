@@ -77,13 +77,11 @@ fn check_block_paths(
         if let Some(d) = defined_local(s) {
             dead.remove(&d);
         }
-        if let Statement::Release(o) = s {
-            if let Some(l) = rc_local(o) {
-                if single_token.contains(&l.0) {
+        if let Statement::Release(o) = s
+            && let Some(l) = rc_local(o)
+                && single_token.contains(&l.0) {
                     mark(&mut dead, l.0, Dead::Released);
                 }
-            }
-        }
     }
     let term_reads = terminator_reads(&block.terminator);
     for (&l, &how) in &dead {
@@ -115,11 +113,10 @@ pub(super) fn check_paths(f: &MirFunction, out: &mut Vec<Violation>) {
             if let Some(d) = defined_local(stmt) {
                 state.remove(&d);
             }
-            if let Statement::Release(op) = stmt {
-                if let Some(l) = rc_local(op).filter(|l| single_token.contains(&l.0)) {
+            if let Statement::Release(op) = stmt
+                && let Some(l) = rc_local(op).filter(|l| single_token.contains(&l.0)) {
                     mark(&mut state, l.0, Dead::Released);
                 }
-            }
         }
         for successor in f.blocks[bi.0 as usize].terminator.successors() {
             let row = &mut incoming[successor.0 as usize];

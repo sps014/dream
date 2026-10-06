@@ -357,11 +357,10 @@ pub(crate) fn apply_stmt_unique(
             unique[local as usize] = false;
         }
     }
-    if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
-        if is_owned(dest.0) && is_fresh_alloc(rvalue) {
+    if let Statement::Assign(Place::Local(dest), rvalue) = stmt
+        && is_owned(dest.0) && is_fresh_alloc(rvalue) {
             unique[dest.0 as usize] = true;
         }
-    }
 }
 
 pub(crate) fn meet_unique(a: bool, b: bool) -> bool {

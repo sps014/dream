@@ -12,7 +12,7 @@ use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-mod common;
+use crate::common;
 
 /// One or more cases per plan area: arithmetic, recursion, loops, structs, arrays and a bounds
 /// trap, classes, retain/release, destruction through `del`, ownership transfer, borrowed and
@@ -120,9 +120,10 @@ fn unsigned_string_reads_do_not_depend_on_abi_extension_attributes() {
     for name in ["dream_char_at_u", "dream_byte_at_u"] {
         sigs.fns.get_mut(name).unwrap().ret_attrs.clear();
     }
-    let ir = dream_mir::backend::llvm::emit_llvm_module(&mir, &interner, &sigs, false, target)
-        .unwrap()
-        .ir;
+    let ir =
+        dream_mir::backend::llvm::emit_llvm_module(&mir, &interner, &sigs, false, target, None)
+            .unwrap()
+            .ir;
     let body = common::ir_func_body(&ir, "unsigned_reads");
     assert!(body.contains("zext i16"), "{}", body);
     assert!(body.contains("zext i8"), "{}", body);
@@ -448,7 +449,7 @@ fn llvm_pgo_round_trip() {
         .map(common::normalize_stdout)
         .unwrap()
     };
-    let gen = compile_llvm(
+    let instrumented = compile_llvm(
         &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
         &ll,
         dream::execution::llvm::NativeBuildOptions {
@@ -463,8 +464,8 @@ fn llvm_pgo_round_trip() {
         },
     )
     .unwrap();
-    assert_eq!(run(&gen), expected);
-    let raw = gen.with_extension("pgo");
+    assert_eq!(run(&instrumented), expected);
+    let raw = instrumented.with_extension("pgo");
     assert!(fs::read_dir(&raw)
         .unwrap()
         .flatten()

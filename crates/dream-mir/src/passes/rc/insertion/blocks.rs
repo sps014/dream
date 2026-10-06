@@ -57,11 +57,10 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
             }
             changed = true;
         }
-        if let Some(d) = analysis.await_resume_dest.get(bi).copied().flatten() {
-            if (d as usize) < tokens.len() && is_owned(d) {
+        if let Some(d) = analysis.await_resume_dest.get(bi).copied().flatten()
+            && (d as usize) < tokens.len() && is_owned(d) {
                 tokens[d as usize] = true;
             }
-        }
         for (si, stmt) in block.stmts.drain(..).enumerate() {
             let ref_dest = match &stmt {
                 Statement::Assign(Place::Local(dest), rvalue) if is_owned(dest.0) => Some((

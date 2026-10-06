@@ -271,11 +271,10 @@ fn const_int_globals(hir: &Hir, interner: &TypeInterner) -> HashMap<u32, i64> {
         if !g.is_const {
             continue;
         }
-        if let Some(init) = &g.init {
-            if let Some(v) = const_int_value(init, &hir.layouts, interner) {
+        if let Some(init) = &g.init
+            && let Some(v) = const_int_value(init, &hir.layouts, interner) {
                 m.insert(g.id.0, v);
             }
-        }
     }
     m
 }
@@ -489,8 +488,7 @@ impl Lowerer<'_> {
                     array,
                     new_len,
                 } = &value.kind
-                {
-                    if same_place_expr(place, array) && is_pure_place(place) {
+                    && same_place_expr(place, array) && is_pure_place(place) {
                         let dest = self.lower_place(place);
                         let new_len_op = self.lower_operand(new_len);
                         let rv = Rvalue::ArrayRealloc {
@@ -501,7 +499,6 @@ impl Lowerer<'_> {
                         self.b.assign(dest, rv);
                         return;
                     }
-                }
                 let rv = self.lower_rvalue(value);
                 let p = self.lower_place(place);
                 self.b.assign(p, rv);

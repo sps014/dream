@@ -21,10 +21,24 @@ impl Index {
 
         // `@name` / `@partial` attribute-name completion (before any `.` / keyword dump).
         if let Some((_name_start, partial)) = attribute_name_partial(text, offset) {
-            return attribute_name_completions(&partial)
+            let mut out: Vec<_> = attribute_name_completions(&partial)
                 .into_iter()
                 .map(|(label, _insert, detail, doc)| (label, SymKind::Decorator, detail, doc))
                 .collect();
+            let partial = partial.to_lowercase();
+            for attr in self.declared_attributes() {
+                if attr.name.to_lowercase().starts_with(&partial)
+                    && !out.iter().any(|(n, ..)| *n == attr.name)
+                {
+                    out.push((
+                        attr.name.clone(),
+                        SymKind::Decorator,
+                        attr.signature.clone(),
+                        Some(attr.hover()),
+                    ));
+                }
+            }
+            return out;
         }
 
         // Inside `@name(...)` — closed-world arg suggestions when the registry knows them.
@@ -173,8 +187,8 @@ impl Index {
         before: usize,
     ) -> Vec<(String, SymKind, String, Option<String>)> {
         // Locals / params win over a same-named enum type (`let Color = …; Color.`).
-        if let Some(decl) = self.resolve(receiver, scope, before) {
-            if matches!(decl.kind, SymKind::Variable | SymKind::Param) {
+        if let Some(decl) = self.resolve(receiver, scope, before)
+            && matches!(decl.kind, SymKind::Variable | SymKind::Param) {
                 return match &decl.ty {
                     Some(ty) => {
                         let base = ty.trim_end_matches('?').trim_end_matches("[]");
@@ -184,7 +198,6 @@ impl Index {
                     None => Vec::new(),
                 };
             }
-        }
 
         if self
             .decls

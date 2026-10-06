@@ -75,8 +75,8 @@ impl NativeGraph {
         let entry = canonical(Path::new(entry_file));
         if let Some(root) = entry.parent().and_then(find_project_root_from) {
             roots.insert(canonical(&root));
-            if let Some(pkgs) = find_dream_packages_dir(&root) {
-                if let Ok(rd) = std::fs::read_dir(&pkgs) {
+            if let Some(pkgs) = find_dream_packages_dir(&root)
+                && let Ok(rd) = std::fs::read_dir(&pkgs) {
                     for e in rd.flatten() {
                         let p = e.path();
                         if p.join(MANIFEST_FILE_NAME).is_file() {
@@ -84,7 +84,6 @@ impl NativeGraph {
                         }
                     }
                 }
-            }
         }
         for file in acc.file_contents.keys() {
             let path = Path::new(file);
@@ -101,8 +100,8 @@ impl NativeGraph {
         for root in roots {
             let manifest = ProjectManifest::load(&root)?;
             let manifest_path = root.join(MANIFEST_FILE_NAME);
-            if let Some(links) = &manifest.links {
-                if let Some(prev) = links_owner.insert(links.clone(), manifest_path.clone()) {
+            if let Some(links) = &manifest.links
+                && let Some(prev) = links_owner.insert(links.clone(), manifest_path.clone()) {
                     return Err(format!(
                         "native library '{links}' is provided by two packages: {} and {} \
                          (`[package] links` must be unique across the dependency graph)",
@@ -110,7 +109,6 @@ impl NativeGraph {
                         manifest_path.display()
                     ));
                 }
-            }
             for set in sets_for_package(&root, &manifest, target)? {
                 if let Some(prev) = set_owner.insert(set.name.clone(), manifest_path.clone()) {
                     return Err(format!(
@@ -122,11 +120,10 @@ impl NativeGraph {
                 }
                 graph.sets.insert(set.name.clone(), set);
             }
-            if let Some(name) = implicit_set_name(&root, &manifest) {
-                if graph.sets.contains_key(&name) {
+            if let Some(name) = implicit_set_name(&root, &manifest)
+                && graph.sets.contains_key(&name) {
                     graph.implicit.insert(root.clone(), name);
                 }
-            }
         }
         Ok(graph)
     }

@@ -1,0 +1,13 @@
+import system;
+import system.json;
+
+@json
+class Pair {
+    public a: int;
+    public b: string;
+    public constructor(b: string) { this.a = 0; this.b = b; }
+}
+
+fun main(): void {
+    System.println(Json.serialize(Pair("x")));
+}

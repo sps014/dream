@@ -40,7 +40,9 @@ impl<'a> Analyzer<'a> {
                     ),
                     Some(method.position),
                 );
-            } else if params_types[0] != self.type_ctx.interner.int() && params_types[0] != self.type_ctx.interner.error() {
+            } else if params_types[0] != self.type_ctx.interner.int()
+                && params_types[0] != self.type_ctx.interner.error()
+            {
                 diagnostics.report_error(
                     format!(
                         "'Buffer.alloc' length must be int, got {}",
@@ -74,7 +76,10 @@ impl<'a> Analyzer<'a> {
                 Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
                 None => params_types
                     .first()
-                    .and_then(|&ty| match self.type_ctx.interner.kind(ty) { dream_types::TyKind::Array(elem) => Some(self.type_ctx.syntax_type(*elem)), _ => None })
+                    .and_then(|&ty| match self.type_ctx.interner.kind(ty) {
+                        dream_types::TyKind::Array(elem) => Some(self.type_ctx.syntax_type(*elem)),
+                        _ => None,
+                    })
                     .unwrap_or(Type::Unknown),
             };
             if params_types.len() != 2 {

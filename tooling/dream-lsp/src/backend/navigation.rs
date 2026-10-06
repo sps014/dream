@@ -33,8 +33,8 @@ impl Backend {
         }
         // The AST index only resolves receivers it could type heuristically; the analyzer's
         // snapshot covers chained/call-result/tuple positions it cannot.
-        if let Some(snapshot) = &sema {
-            if let Some((start, end, contents)) = crate::sema_ide::hover_at(snapshot, offset) {
+        if let Some(snapshot) = &sema
+            && let Some((start, end, contents)) = crate::sema_ide::hover_at(snapshot, offset) {
                 return Ok(Some(Hover {
                     contents: HoverContents::Markup(MarkupContent {
                         kind: MarkupKind::Markdown,
@@ -46,7 +46,6 @@ impl Backend {
                     }),
                 }));
             }
-        }
         Ok(None)
     }
 
@@ -128,9 +127,9 @@ impl Backend {
 
         // Cross-document matches first (other open documents), so the primary document's
         // entries keep the legacy ordering role below.
-        if let Some(snapshot) = &sema {
-            if let Some(r) = snapshot.ref_covering(offset) {
-                if !matches!(
+        if let Some(snapshot) = &sema
+            && let Some(r) = snapshot.ref_covering(offset)
+                && !matches!(
                     r.target,
                     dream_sema::analyzer::ide::IdeTarget::Local { .. }
                         | dream_sema::analyzer::ide::IdeTarget::Expr
@@ -165,8 +164,6 @@ impl Backend {
                         }
                     }
                 }
-            }
-        }
 
         // This document: sema-precise spans when available, legacy name-based otherwise.
         let spans = match sema
@@ -176,13 +173,12 @@ impl Backend {
             Some((_, mut spans)) => {
                 if !include_decl {
                     // Drop the declaration span (the one that is a declaration, not a use).
-                    if let Some(snapshot) = &sema {
-                        if let Some((ds, de)) =
+                    if let Some(snapshot) = &sema
+                        && let Some((ds, de)) =
                             crate::sema_ide::definition_at(snapshot, &idx, offset)
                         {
                             spans.retain(|&(st, en)| (st, en) != (ds, de));
                         }
-                    }
                 }
                 spans
             }
@@ -197,13 +193,12 @@ impl Backend {
                 },
             });
         }
-        if include_decl {
-            if let Some(snapshot) = &sema {
-                if let Some(dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. }) =
+        if include_decl
+            && let Some(snapshot) = &sema
+                && let Some(dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. }) =
                     snapshot.ref_covering(offset).map(|r| &r.target)
-                {
-                    if source.file != snapshot.primary_file {
-                        if let Some(location) = Self::location_at(
+                    && source.file != snapshot.primary_file
+                        && let Some(location) = Self::location_at(
                             &uri,
                             &text,
                             source.start,
@@ -212,10 +207,6 @@ impl Backend {
                         ) {
                             locations.push(location);
                         }
-                    }
-                }
-            }
-        }
         locations.sort_by(|a, b| {
             a.uri.as_str().cmp(b.uri.as_str()).then_with(|| {
                 (
@@ -418,11 +409,10 @@ impl Backend {
                     continue;
                 };
                 let mut spans = crate::sema_ide::references_in(&other_sema, target);
-                if let dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. } = target {
-                    if source.file == other_sema.primary_file {
+                if let dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. } = target
+                    && source.file == other_sema.primary_file {
                         spans.push((source.start, source.end));
                     }
-                }
                 spans.sort_unstable();
                 spans.dedup();
                 push_edits(&other_key, spans);

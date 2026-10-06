@@ -104,14 +104,13 @@ pub(super) fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, intern
     let mut aliased: Vec<Option<Local>> = vec![None; g_locals.len()];
     for (i, p) in g_params.iter().enumerate() {
         let decl = &g_locals[p.0 as usize];
-        if let Operand::Copy(Place::Local(src)) = &site.args[i] {
-            if decl.is_ref
+        if let Operand::Copy(Place::Local(src)) = &site.args[i]
+            && decl.is_ref
                 && interner.is_value_type(decl.ty)
                 && mir.functions[fi].local_ty(*src) == decl.ty
             {
                 aliased[p.0 as usize] = Some(*src);
             }
-        }
     }
     for (i, p) in g_params.iter().enumerate() {
         if aliased[p.0 as usize].is_some() {

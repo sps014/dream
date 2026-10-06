@@ -63,6 +63,9 @@ pub struct SourceFile<'a> {
 pub struct ModuleGraph<'a> {
     pub modules: Vec<SourceModule>,
     pub files: Vec<SourceFile<'a>>,
+    /// Files written by source generators. Their code belongs to the declarations it was
+    /// generated for, so it sees file-private declarations of every file.
+    pub generated_files: IndexSet<String>,
 }
 
 /// The analyzer borrows declarations from their owning source files; no merged AST is produced.
@@ -141,26 +144,27 @@ impl<'a> ModuleGraph<'a> {
                 .iter()
                 .filter(|import| import.alias.is_some())
             {
-                if let Some((path, _)) = import.module_name.text.rsplit_once('.') {
-                    if let Some(&id) = ids.get(path) {
-                        if id != module.id && !module.imports.contains(&id) {
+                if let Some((path, _)) = import.module_name.text.rsplit_once('.')
+                    && let Some(&id) = ids.get(path)
+                        && id != module.id && !module.imports.contains(&id) {
                             module.imports.push(id);
                         }
-                    }
-                }
             }
             for target in edges.get(&file.path).into_iter().flatten() {
-                if let Some(&id) = paths.get(target.as_str()) {
-                    if id != module.id && !module.imports.contains(&id) {
+                if let Some(&id) = paths.get(target.as_str())
+                    && id != module.id && !module.imports.contains(&id) {
                         module.imports.push(id);
                     }
-                }
             }
         }
         for module in &mut modules {
             hash::prepare_module(module, &files);
         }
-        let mut graph = Self { modules, files };
+        let mut graph = Self {
+            modules,
+            files,
+            generated_files: IndexSet::new(),
+        };
         graph.prepare_dependency_interfaces();
         graph
     }

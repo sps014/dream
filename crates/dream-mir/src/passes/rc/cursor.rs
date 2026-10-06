@@ -25,15 +25,14 @@ pub(crate) fn infer_cursors(
     let mut index_defined: IndexSet<u32> = IndexSet::new();
     for block in &func.blocks {
         for stmt in &block.stmts {
-            if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
-                if matches!(
+            if let Statement::Assign(Place::Local(dest), rvalue) = stmt
+                && matches!(
                     rvalue,
                     Rvalue::Use(Operand::Copy(Place::Index { .. }))
                         | Rvalue::Cast(Operand::Copy(Place::Index { .. }), _, _)
                 ) {
                     index_defined.insert(dest.0);
                 }
-            }
         }
     }
 
@@ -79,11 +78,10 @@ pub(crate) fn infer_cursors(
         let mut snapshot_of: IndexMap<u32, u32> = IndexMap::new();
         for block in &func.blocks {
             for stmt in &block.stmts {
-                if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
-                    if let Some(base) = snapshot_base(rvalue) {
+                if let Statement::Assign(Place::Local(dest), rvalue) = stmt
+                    && let Some(base) = snapshot_base(rvalue) {
                         snapshot_of.insert(dest.0, base);
                     }
-                }
             }
         }
         let mut copy_of: IndexMap<u32, u32> = IndexMap::new();
@@ -128,11 +126,9 @@ pub(crate) fn infer_cursors(
                 Place::Local(dest),
                 Rvalue::Use(Operand::Copy(Place::Local(src))),
             ) = stmt
-            {
-                if !forwarding.contains(&dest.0) {
+                && !forwarding.contains(&dest.0) {
                     escaped.insert(src.0);
                 }
-            }
         }
     }
 
@@ -173,12 +169,10 @@ pub(crate) fn infer_cursors(
                         Place::Local(user),
                         Rvalue::Use(Operand::Copy(Place::Local(src))),
                     ) = stmt
-                    {
-                        if src.0 == d.0 {
+                        && src.0 == d.0 {
                             escaped.insert(user.0);
                             forwarding.swap_remove(&user.0);
                         }
-                    }
                 }
             }
         }
@@ -392,7 +386,7 @@ fn escape_slot_overwrite_readers(
     let overwritten_bases: IndexSet<u32> = def_counts
         .iter()
         .enumerate()
-        .filter(|(_, &n)| n > 1)
+        .filter(|&(_, &n)| n > 1)
         .map(|(i, _)| i as u32)
         .collect();
 
@@ -449,11 +443,10 @@ fn escape_cursors_outliving_base(
     let mut snapshot_of: IndexMap<u32, u32> = IndexMap::new();
     for block in &func.blocks {
         for stmt in &block.stmts {
-            if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
-                if let Some(base) = snapshot_base(rvalue) {
+            if let Statement::Assign(Place::Local(dest), rvalue) = stmt
+                && let Some(base) = snapshot_base(rvalue) {
                     snapshot_of.insert(dest.0, base);
                 }
-            }
         }
     }
     let peel = |mut x: u32| {

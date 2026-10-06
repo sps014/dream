@@ -52,11 +52,10 @@ impl MirPass for Dse {
                         }
                         match place_key(place) {
                             Some(key) => {
-                                if let Some(prev) = pending.get(&key).copied() {
-                                    if is_pure(stmt_rvalue(&block.stmts[prev])) {
+                                if let Some(prev) = pending.get(&key).copied()
+                                    && is_pure(stmt_rvalue(&block.stmts[prev])) {
                                         dead.push(prev);
                                     }
-                                }
                                 pending.insert(key, idx);
                             }
                             // A store we can't key (e.g. a non-constant, non-local array index) may

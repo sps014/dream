@@ -10,7 +10,10 @@ fn wasi_page_exhaustion_reports_through_the_platform_without_allocating() {
     let output = temporary.path().join("empty.wat");
     fs::write(&source, "fun main(): void {}\n").unwrap();
     dream::driver::compiler::Compiler::new(dream_mir::backend::Target::wasm32())
-        .compile(&source.to_str().unwrap().to_string(), output.to_str().unwrap())
+        .compile(
+            &source.to_str().unwrap().to_string(),
+            output.to_str().unwrap(),
+        )
         .unwrap();
     let wasm = output.with_extension("wasm");
     let bytes = fs::read(&wasm).unwrap();

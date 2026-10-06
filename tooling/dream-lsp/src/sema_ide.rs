@@ -169,11 +169,7 @@ fn fn_signature(
     Some(format!("{prefix}fun {}({params}){ret}", sig.label))
 }
 
-fn type_name<'s>(
-    snapshot: &'s IdeSnapshot,
-    ty: dream_types::TypeId,
-    r: &'s IdeRef,
-) -> &'s str {
+fn type_name<'s>(snapshot: &'s IdeSnapshot, ty: dream_types::TypeId, r: &'s IdeRef) -> &'s str {
     snapshot
         .type_names
         .get(&ty)

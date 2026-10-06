@@ -1,7 +1,7 @@
 //! HIR->MIR->LLVM IR emission and native execution tests.
 //! Moved out of `dream-sema` so the analyzer crate has no `dream-mir` dependency.
 
-mod common;
+use crate::common;
 use common::*;
 use dream_diagnostics::DiagnosticBag;
 use dream_sema::analyzer::Analyzer;
@@ -19,14 +19,13 @@ fn heap_access(body: &str, op: &str) -> bool {
             Some((l, r)) => (Some(l), r),
             None => (None, line),
         };
-        if let Some(l) = lhs {
-            if ["load ptr,", "getelementptr ", "call ptr "]
+        if let Some(l) = lhs
+            && ["load ptr,", "getelementptr ", "call ptr "]
                 .iter()
                 .any(|p| rhs.starts_with(p))
             {
                 derived.push(l);
             }
-        }
         if !rhs.starts_with(op) {
             continue;
         }
@@ -46,11 +45,10 @@ fn has_back_edge(body: &str) -> bool {
     let mut offset = 0;
     for line in body.lines() {
         offset += line.len() + 1;
-        if let Some(label) = line.strip_suffix(':') {
-            if body[offset.min(body.len())..].contains(&format!("label %{label}")) {
+        if let Some(label) = line.strip_suffix(':')
+            && body[offset.min(body.len())..].contains(&format!("label %{label}")) {
                 return true;
             }
-        }
     }
     false
 }

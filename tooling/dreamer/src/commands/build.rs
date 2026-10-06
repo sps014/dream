@@ -52,11 +52,10 @@ pub fn compile_target(
     if let Some((triple, output)) = target {
         cmd.args(["--target", triple, "-o"]).arg(output);
     }
-    if flags.native {
-        if let Some(icon) = crate::app_icon::resolve(workspace)? {
+    if flags.native
+        && let Some(icon) = crate::app_icon::resolve(workspace)? {
             cmd.arg("--icon").arg(icon);
         }
-    }
 
     match pkg.package_type {
         PackageType::Lib => {

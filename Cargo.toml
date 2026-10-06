@@ -2,11 +2,16 @@
 name = "dream"
 version = "0.1.0"
 authors = ["Shivendra Pratap Singh <shivendrapsingh014@gmail.com>"]
-edition = "2018"
+edition.workspace = true
+autotests = false
 
 [lib]
 name = "dream"
 crate-type = ["rlib"]
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
 
 # Dream runtime defaults (read by `build.rs` → `DREAM_DEFAULT_STACK_SIZE`).
 # Override at run time with env `DREAM_STACK_SIZE` (e.g. `32M`, `32MiB`, `33554432`).
@@ -43,7 +48,7 @@ tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 # CLI parsing + auto-generated help for the `dream` binary (same crate `dreamer` uses).
 clap = { version = "4", features = ["derive", "env"] }
-serde = { version = "1", features = ["derive"], optional = true }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico"], optional = true }
 oxc_minifier = "0.146"
@@ -63,7 +68,7 @@ dunce = { version = "1", optional = true }
 [features]
 default = ["native"]
 # Native compiler execution/linking tools; runtime hosts are built separately.
-native = ["dep:serde", "dep:image", "dep:object", "dep:dunce", "dep:libc", "dep:windows-sys"]
+native = ["dep:image", "dep:object", "dep:dunce", "dep:libc", "dep:windows-sys"]
 [target.'cfg(unix)'.dependencies]
 libc = { version = "0.2", optional = true }
 
@@ -90,6 +95,9 @@ opt-level = 1
 debug-assertions = true
 overflow-checks = true
 
+[workspace.package]
+edition = "2024"
+
 [workspace]
 default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-unicode", "crates/dream-host-crypto", "crates/dream-host-process", "crates/dream-host-timezone"]
 members = [
@@ -115,6 +123,6 @@ members = [
     "tooling/dreamer",
     "tooling/dream-runner",
 ]
-# v2 resolver so the wasm32 analyzer build does not inherit the root crate's default
-# wasm32 analyzer build does not inherit the root crate's default `native` feature.
-resolver = "2"
+# Resolver 2+ feature unification, so the wasm32 analyzer build does not inherit the root
+# crate's default `native` feature.
+resolver = "3"

@@ -3,5 +3,5 @@
 mod exports;
 mod process_host;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dream_host_process_abi_v2() {}

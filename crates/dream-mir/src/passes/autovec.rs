@@ -169,11 +169,9 @@ fn step_local(func: &MirFunction, latch: BlockId) -> Option<Local> {
                 Operand::Const(Const::Int(1)),
             ),
         ) = stmt
-        {
-            if d.0 == a.0 {
+            && d.0 == a.0 {
                 return Some(*d);
             }
-        }
     }
     None
 }
@@ -186,11 +184,10 @@ fn header_bound(func: &MirFunction, header: BlockId, idx: Local) -> Option<Opera
         return None;
     };
     for stmt in func.block(header).stmts.iter().rev() {
-        if let Statement::Assign(Place::Local(d), Rvalue::Binary(BinOp::Lt, lhs, rhs)) = stmt {
-            if d.0 == c.0 && index_is(lhs, idx) {
+        if let Statement::Assign(Place::Local(d), Rvalue::Binary(BinOp::Lt, lhs, rhs)) = stmt
+            && d.0 == c.0 && index_is(lhs, idx) {
                 return Some(rhs.clone());
             }
-        }
     }
     None
 }
@@ -341,11 +338,10 @@ fn binop_from_rvalue(stmts: &[Statement], rv: &Rvalue) -> Option<(BinOp, Operand
         }
         Rvalue::Use(Operand::Copy(Place::Local(tmp))) => {
             for stmt in stmts {
-                if let Statement::Assign(Place::Local(d), Rvalue::Binary(op, lhs, rhs)) = stmt {
-                    if d.0 == tmp.0 && matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul) {
+                if let Statement::Assign(Place::Local(d), Rvalue::Binary(op, lhs, rhs)) = stmt
+                    && d.0 == tmp.0 && matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul) {
                         return Some((*op, lhs.clone(), rhs.clone()));
                     }
-                }
             }
             None
         }
@@ -374,15 +370,14 @@ fn binop_operands(
             Some(rhs.clone()),
         ));
     }
-    if is_splat(lhs) {
-        if let Some(rhs_arr) = resolve_index_arr(stmts, rhs, idx) {
+    if is_splat(lhs)
+        && let Some(rhs_arr) = resolve_index_arr(stmts, rhs, idx) {
             return Some((
                 Operand::Copy(Place::Local(rhs_arr)),
                 lhs.clone(),
                 Some(lhs.clone()),
             ));
         }
-    }
     None
 }
 
@@ -394,11 +389,10 @@ fn resolve_index_arr(stmts: &[Statement], op: &Operand, idx: Local) -> Option<Lo
         return None;
     };
     for stmt in stmts {
-        if let Statement::Assign(Place::Local(d), Rvalue::Use(src)) = stmt {
-            if d.0 == tmp.0 {
+        if let Statement::Assign(Place::Local(d), Rvalue::Use(src)) = stmt
+            && d.0 == tmp.0 {
                 return index_base(src, idx);
             }
-        }
     }
     None
 }
@@ -411,11 +405,10 @@ fn resolve_deref_ptr(stmts: &[Statement], op: &Operand) -> Option<Local> {
         return None;
     };
     for stmt in stmts {
-        if let Statement::Assign(Place::Local(d), Rvalue::Use(src)) = stmt {
-            if d.0 == tmp.0 {
+        if let Statement::Assign(Place::Local(d), Rvalue::Use(src)) = stmt
+            && d.0 == tmp.0 {
                 return deref_ptr(src);
             }
-        }
     }
     None
 }
@@ -680,11 +673,9 @@ mod tests {
                     _,
                     Rvalue::Binary(BinOp::Add, _, Operand::Const(Const::Int(k))),
                 ) = s
-                {
-                    if *k == 4 {
+                    && *k == 4 {
                         return Some(*k);
                     }
-                }
             }
         }
         None

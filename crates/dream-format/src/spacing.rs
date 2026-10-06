@@ -165,9 +165,7 @@ fn is_word_like(kind: TokenKind) -> bool {
 fn ends_operand(kind: TokenKind) -> bool {
     matches!(
         kind,
-        TokenKind::CloseParenthesisToken
-            | TokenKind::CloseBracketToken
-            | TokenKind::AwaitToken
+        TokenKind::CloseParenthesisToken | TokenKind::CloseBracketToken | TokenKind::AwaitToken
     ) || is_word_like(kind)
 }
 

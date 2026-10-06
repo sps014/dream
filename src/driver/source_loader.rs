@@ -50,10 +50,8 @@ pub struct ProgramAccumulator<'a> {
     /// Dotted stdlib package names requested via plain `import system.io;` (etc.). Fed to
     /// selective prelude merge together with bootstrap packages.
     pub requested_std_packages: IndexSet<String>,
-    /// Absolute paths of files that contain at least one `@generator` function.
-    pub generator_files: Vec<String>,
-    /// Extra generator source paths from `dream.toml` `[[generators]]` (filled by the driver).
-    pub manifest_generator_paths: Vec<String>,
+    /// Files merged from generator output (see `ModuleGraph::generated_files`).
+    pub generated_files: IndexSet<String>,
 }
 
 /// Resolves an `import a.b.c;` reference (passed here as the slash-joined path `a/b/c`) relative to
@@ -202,14 +200,27 @@ pub fn parse_file_recursive<'a>(
     if acc.visited.contains(&path_str) {
         return Ok(()); // Already processed
     }
-    acc.visited.insert(path_str.clone());
 
     let mut file = File::open(&path)?;
     let mut text = String::new();
     file.read_to_string(&mut text)?;
+    parse_source_recursive(path_str, text, acc, arena, diagnostics)
+}
 
-    // `print` (along with `to_string`/`hash_code`) is now a compiler builtin resolved during
-    // code generation via the object protocol, so no source injection is needed.
+/// Like [`parse_file_recursive`], but for source already in memory at `path_str` (which need
+/// not exist on disk — imports still resolve relative to its directory). Used for compiler-made
+/// entry files such as generator harnesses.
+pub fn parse_source_recursive<'a>(
+    path_str: String,
+    text: String,
+    acc: &mut ProgramAccumulator<'a>,
+    arena: &'a Bump,
+    diagnostics: &mut DiagnosticBag,
+) -> Result<(), Error> {
+    if !acc.visited.insert(path_str.clone()) {
+        return Ok(());
+    }
+    let path = Path::new(&path_str).to_path_buf();
 
     acc.file_contents.insert(path_str.clone(), text.clone());
 
@@ -233,13 +244,6 @@ pub fn parse_file_recursive<'a>(
     if let Some(module_decl) = &program.module {
         acc.file_modules
             .insert(path_str.clone(), Rc::from(module_decl.path.text.as_str()));
-    }
-    if program
-        .functions
-        .iter()
-        .any(|f| f.attributes.iter().any(|a| a.name.text == "generator"))
-    {
-        acc.generator_files.push(path_str.clone());
     }
     let parent_dir = path.parent().unwrap_or_else(|| Path::new(""));
 

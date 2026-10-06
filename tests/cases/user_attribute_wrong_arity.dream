@@ -1,6 +1,7 @@
-// User attribute arity must match the `@attribute` function parameters.
-@attribute
-public fun route(path: string): void {
+// User attribute arity must match the attribute struct's fields.
+@attribute(AttributeTarget.Function)
+public struct route {
+    public path: string;
 }
 
 @route("/a", "/b")

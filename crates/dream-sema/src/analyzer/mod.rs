@@ -379,6 +379,7 @@ pub struct Analyzer<'a> {
     /// Files absent from this map (the overwhelming majority: anyone who never writes `module`)
     /// belong to the implicit, unnamed root module. Derived from the module graph.
     file_modules: HashMap<Rc<str>, Rc<str>>,
+    generated_files: HashSet<Rc<str>>,
     /// Every aliased `import a.b.c as x;` collected across all files (module path, item name,
     /// alias token, importing file path), populated once via [`Self::with_aliased_imports`] before
     /// [`Self::analyze`] runs. Drained by `register_import_aliases` (see `declarations::imports`)
@@ -482,6 +483,11 @@ impl<'a> Analyzer<'a> {
                     (!path.is_empty())
                         .then(|| (Rc::from(file.path.as_str()), Rc::from(path.as_str())))
                 })
+                .collect(),
+            generated_files: graph
+                .generated_files
+                .iter()
+                .map(|path| Rc::from(path.as_str()))
                 .collect(),
             aliased_imports: Vec::new(),
             globals: Vec::new(),

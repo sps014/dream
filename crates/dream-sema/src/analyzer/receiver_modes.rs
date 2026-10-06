@@ -97,9 +97,7 @@ impl<'a> Analyzer<'a> {
 
     /// Every concrete method slot, numbered per owner after that owner's interface slots, in one
     /// pass over the method table.
-    fn receiver_slot_entries(
-        &self,
-    ) -> impl Iterator<Item = (MethodKey, &str, &FunctionIdentity)> {
+    fn receiver_slot_entries(&self) -> impl Iterator<Item = (MethodKey, &str, &FunctionIdentity)> {
         let mut next: IndexMap<TypeId, usize> = IndexMap::new();
         self.function_table
             .methods
@@ -110,9 +108,9 @@ impl<'a> Analyzer<'a> {
                     .map(move |identity| (*owner, name.as_str(), identity))
             })
             .map(move |(owner, name, identity)| {
-                let slot = next.entry(owner).or_insert_with(|| {
-                    self.interface_methods.get(&owner).map_or(0, Vec::len)
-                });
+                let slot = next
+                    .entry(owner)
+                    .or_insert_with(|| self.interface_methods.get(&owner).map_or(0, Vec::len));
                 let key = (owner, *slot);
                 *slot += 1;
                 (key, name, identity)
@@ -258,7 +256,8 @@ mod tests {
             .register_method(owner, "update", &parameters);
         let identity = (def, Vec::new());
         let void = analyzer.type_ctx.interner.void();
-        let info = FunctionTableInfo::new("update".into(), None, parameters, identity.clone(), void);
+        let info =
+            FunctionTableInfo::new("update".into(), None, parameters, identity.clone(), void);
         analyzer
             .function_table
             .add_method(owner, "update", info)

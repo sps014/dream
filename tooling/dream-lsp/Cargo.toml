@@ -2,8 +2,13 @@
 name = "dream-lsp"
 version = "0.1.0"
 authors = ["Shivendra Pratap Singh <shivendrapsingh014@gmail.com>"]
-edition = "2021"
+edition.workspace = true
 description = "Native VS Code Language Server for the Dream language."
+autotests = false
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
 
 [dependencies]
 dream = { path = "../..", default-features = false }

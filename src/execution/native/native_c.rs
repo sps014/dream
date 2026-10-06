@@ -232,11 +232,10 @@ fn walk_newest(dir: &Path, newest: &mut Option<SystemTime>) {
         let p = e.path();
         if p.is_dir() {
             walk_newest(&p, newest);
-        } else if let Some(t) = mtime(&p) {
-            if newest.is_none_or(|n| t > n) {
+        } else if let Some(t) = mtime(&p)
+            && newest.is_none_or(|n| t > n) {
                 *newest = Some(t);
             }
-        }
     }
 }
 

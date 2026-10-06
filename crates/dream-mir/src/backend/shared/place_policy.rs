@@ -148,10 +148,13 @@ pub(crate) fn is_value_place_alias(f: &MirFunction, local: Local, rv: &Rvalue) -
     if f.locals[local.0 as usize].name.is_some() || !is_place_copy(rv) {
         return false;
     }
-    f.blocks.iter().flat_map(|block| &block.stmts).all(|stmt| match stmt {
-        Statement::Assign(Place::Local(other), rv) if *other == local => is_place_copy(rv),
-        _ => true,
-    })
+    f.blocks
+        .iter()
+        .flat_map(|block| &block.stmts)
+        .all(|stmt| match stmt {
+            Statement::Assign(Place::Local(other), rv) if *other == local => is_place_copy(rv),
+            _ => true,
+        })
 }
 
 /// `local`'s `New` is built in a stack frame buffer (see `passes::frame_alloc`).
@@ -168,11 +171,10 @@ pub(crate) fn teardown_value_locals(
 ) -> Vec<Local> {
     let mut dropped = vec![false; f.locals.len()];
     for stmt in f.blocks.iter().flat_map(|block| &block.stmts) {
-        if let Statement::ValueDrop(l) = stmt {
-            if !f.locals[l.0 as usize].is_ref {
+        if let Statement::ValueDrop(l) = stmt
+            && !f.locals[l.0 as usize].is_ref {
                 dropped[l.0 as usize] = true;
             }
-        }
     }
     let mut out = Vec::new();
     for (i, decl) in f.locals.iter().enumerate() {

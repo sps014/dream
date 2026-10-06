@@ -7,15 +7,45 @@ pub(super) struct LoadedProgram<'a> {
     pub cpp_bridge: crate::driver::ffi_shim::CppBridge,
 }
 
+/// The program as generators see it: parsed, prelude merged, attributes validated.
+struct FrontEnd<'a> {
+    acc: ProgramAccumulator<'a>,
+    attributes: dream_abi::attributes::UserAttributes,
+    native_graph: crate::driver::native_sets::NativeGraph,
+    cpp_bridge: crate::driver::ffi_shim::CppBridge,
+}
+
 impl Compiler {
-    pub(super) fn load_program<'a>(
+    fn generate_request<'r>(
+        &'r self,
+        main_file_path: &'r str,
+    ) -> crate::driver::generate::GenerateRequest<'r> {
+        crate::driver::generate::GenerateRequest {
+            config: &self.toolchain_config,
+            stage: self.generator_stage,
+            entry_file: main_file_path,
+            target: self.target.spec(),
+            replay_materialized: false,
+        }
+    }
+
+    fn load_front<'a>(
         &self,
         main_file_path: &String,
         arena: &'a Bump,
         diagnostics: &mut DiagnosticBag,
-    ) -> Result<LoadedProgram<'a>, CompileError> {
+    ) -> Result<FrontEnd<'a>, CompileError> {
         let mut acc = ProgramAccumulator::default();
-        parse_file_recursive(main_file_path, &mut acc, arena, diagnostics)?;
+        match &self.virtual_entry {
+            Some(source) => crate::driver::source_loader::parse_source_recursive(
+                main_file_path.clone(),
+                source.clone(),
+                &mut acc,
+                arena,
+                diagnostics,
+            )?,
+            None => parse_file_recursive(main_file_path, &mut acc, arena, diagnostics)?,
+        }
 
         let native_graph =
             crate::driver::native_sets::NativeGraph::load(main_file_path, &acc, self.target.spec())
@@ -25,11 +55,7 @@ impl Compiler {
             crate::driver::ffi_shim::expand(arena, &mut acc, &native_graph, diagnostics)?;
 
         // Opt-in stdlib packages (`import system.io;`, etc.) plus always-on bootstrap
-        // (`system.core` / `system.primitives`). `@json` types need `system.json` for derives.
-        if program_uses_json_attr(&acc) {
-            acc.requested_std_packages.insert("system.json".to_string());
-        }
-
+        // (`system.core` / `system.primitives`).
         merge_prelude(
             arena,
             &mut acc.all_functions,
@@ -45,39 +71,45 @@ impl Compiler {
         )?;
 
         // Validate every attribute in the merged program (unknown names, disallowed placements,
-        // wrong argument shapes, duplicates) before anything downstream (the `@json` derive below,
-        // then semantic analysis) reads attributes assuming they are well-formed.
-        dream_abi::attributes::validate_program_attributes(
-            &acc.all_structs,
-            &acc.all_interfaces,
-            &acc.all_functions,
-            &acc.all_enums,
-            &acc.all_extends,
-            diagnostics,
-        );
+        // wrong argument shapes, duplicates) against the builtin specs and the program's declared
+        // `@attribute` types, before generators and semantic analysis read them.
+        let attributes = crate::driver::attributes::prepare(arena, &mut acc, diagnostics)?;
         if diagnostics.has_errors() {
             return Err(fail_diagnostics(
+                self.render_diagnostics,
                 CompileError::Syntax,
                 diagnostics,
                 &acc.file_contents,
             ));
         }
+        Ok(FrontEnd {
+            acc,
+            attributes,
+            native_graph,
+            cpp_bridge,
+        })
+    }
 
-        // Source generators: `@json` derive and registered `@generator`s (executed `GenContext`
-        // bodies). Nested generator compiles set `skip_generators` so this cannot recurse.
-        if !self.skip_generators {
-            debug_assert!(
-                !acc.all_structs.is_empty(),
-                "run_generators must run after prelude merge / class collection"
-            );
-            run_generators(
-                &self.toolchain_config,
-                arena,
-                &mut acc,
-                main_file_path,
-                diagnostics,
-            )?;
-        }
+    pub(super) fn load_program<'a>(
+        &self,
+        main_file_path: &String,
+        arena: &'a Bump,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<LoadedProgram<'a>, CompileError> {
+        let FrontEnd {
+            mut acc,
+            attributes,
+            native_graph,
+            cpp_bridge,
+        } = self.load_front(main_file_path, arena, diagnostics)?;
+
+        run_generators(
+            &self.generate_request(main_file_path),
+            arena,
+            &mut acc,
+            &attributes,
+            diagnostics,
+        )?;
 
         // Inherit interface default-method bodies into implementing classes that omit them, by
         // appending synthesized `extend` blocks (must run after class collection so `implements`
@@ -90,6 +122,7 @@ impl Compiler {
 
         if diagnostics.has_errors() {
             return Err(fail_diagnostics(
+                self.render_diagnostics,
                 CompileError::Generator,
                 diagnostics,
                 &acc.file_contents,
@@ -102,5 +135,32 @@ impl Compiler {
             native_graph,
             cpp_bridge,
         })
+    }
+
+    /// Runs the front end and generator discovery for `main_file_path` and reports what the
+    /// generate pass would do, without running any generator.
+    pub fn inspect_generators(
+        &self,
+        main_file_path: &str,
+    ) -> Result<crate::driver::generate::GenInspection, CompileError> {
+        let arena = Bump::new();
+        let entry = main_file_path.to_string();
+        let mut diagnostics = DiagnosticBag::new(Some(entry.clone()));
+        let front = self.load_front(&entry, &arena, &mut diagnostics)?;
+        let inspection = crate::driver::generate::inspect(
+            &self.generate_request(main_file_path),
+            &front.acc,
+            &front.attributes,
+            &mut diagnostics,
+        );
+        if diagnostics.has_errors() {
+            return Err(fail_diagnostics(
+                self.render_diagnostics,
+                CompileError::Generator,
+                &diagnostics,
+                &front.acc.file_contents,
+            ));
+        }
+        Ok(inspection)
     }
 }

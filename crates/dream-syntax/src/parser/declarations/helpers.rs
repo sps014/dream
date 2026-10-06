@@ -13,13 +13,11 @@ impl<'a, 'b> Parser<'a, 'b> {
         first_trivia: Vec<SyntaxTrivia>,
         attributes: &[AttributeNode],
     ) -> Vec<SyntaxTrivia> {
-        if first_trivia.is_empty() {
-            if let Some(first_attr) = attributes.first() {
-                if !first_attr.name.leading_trivia.is_empty() {
+        if first_trivia.is_empty()
+            && let Some(first_attr) = attributes.first()
+                && !first_attr.name.leading_trivia.is_empty() {
                     return first_attr.name.leading_trivia.clone();
                 }
-            }
-        }
         first_trivia
     }
 

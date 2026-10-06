@@ -62,5 +62,8 @@ fn builds_with_warnings_are_not_cached() {
         "import system;\nfun main(): void { let unused = 1; System.println(\"w\"); }\n",
     )
     .unwrap();
-    assert!(matches!(build(&source, &out, "O0"), BuildOutcome::Built(None)));
+    assert!(matches!(
+        build(&source, &out, "O0"),
+        BuildOutcome::Built(None)
+    ));
 }

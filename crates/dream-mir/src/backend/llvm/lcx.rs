@@ -72,6 +72,7 @@ pub(super) struct Lcx<'a> {
     pub dbg_cu: Option<MdRef>,
     /// Debugger view composites by name (`debug_views.rs`).
     pub dbg_views: IndexMap<String, MdRef>,
+    pub std_sources: Option<std::path::PathBuf>,
 }
 
 impl<'a> Lcx<'a> {
@@ -100,6 +101,7 @@ impl<'a> Lcx<'a> {
             cstrs: IndexMap::new(),
             dbg_cu: None,
             dbg_views: IndexMap::new(),
+            std_sources: None,
         }
     }
 

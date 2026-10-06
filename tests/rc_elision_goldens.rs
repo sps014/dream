@@ -1,6 +1,6 @@
 //! Track A ARC goldens: upper bounds on `dream_retain` / release traffic in the emitted LLVM IR.
 
-mod common;
+use crate::common;
 use common::*;
 
 /// A parsed LLVM function definition: its symbol name and body text.

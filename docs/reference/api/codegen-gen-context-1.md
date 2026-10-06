@@ -1,4 +1,4 @@
-# GenFieldInfo, GenTypeInfo, GenSyntaxBlock, GenContext
+# GenContext
 
 **Import:** `import system.codegen;`
 
@@ -6,176 +6,182 @@ Read the [usage guide](../stdlib/codegen.md) for examples and common tasks. This
 
 [All sections](codegen-gen-context.md)
 
-## `class GenFieldInfo`
-
-One field on a snapshotted declaration type.
-
-```dream
-public class GenFieldInfo
-```
-
-## `name: string`
-
-```dream
-public name: string
-```
-
-## `type_name: string`
-
-```dream
-public type_name: string
-```
-
-## `constructor`
-
-```dream
-public constructor(name: string, type_name: string)
-```
-
-## `class GenTypeInfo`
-
-One declaration type snapshotted for an executed `@generator` body.
-
-```dream
-public class GenTypeInfo
-```
-
-## `name: string`
-
-```dream
-public name: string
-```
-
-## `attributes: List<string>`
-
-```dream
-public attributes: List<string>
-```
-
-## `fields: List<GenFieldInfo>`
-
-```dream
-public fields: List<GenFieldInfo>
-```
-
-## `constructor`
-
-```dream
-public constructor(name: string, attributes: List<string>, fields: List<GenFieldInfo>)
-```
-
-## `has_attribute`
-
-```dream
-public fun has_attribute(attr: string): bool
-```
-
-## `class GenSyntaxBlock`
-
-One `introducer { ... }` syntax-DSL call site, snapshotted for an executed `@generator` body.
-
-```dream
-public class GenSyntaxBlock
-```
-
-## `id: int`
-
-Opaque site id; pass back into `GenContext.replace`/`GenContext.error` unchanged.
-
-```dream
-public id: int
-```
-
-## `name: string`
-
-The introducer name (`quote`, `html`, ...).
-
-```dream
-public name: string
-```
-
-## `body: string`
-
-Raw reconstructed body text (splices appear as `{expr}` placeholders).
-
-```dream
-public body: string
-```
-
-## `splices: List<string>`
-
-Dream source of each `{ ... }` splice expression, in source order.
-
-```dream
-public splices: List<string>
-```
-
-## `constructor`
-
-```dream
-public constructor(id: int, name: string, body: string, splices: List<string>)
-```
-
 ## `class GenContext`
 
-Compile-time context handed to an executed `@generator` function body. Loaded from a host snapshot (see `from_snapshot`) and flushed back to the host via `finish()`, which prints the same `GenHost` stdout protocol a sibling `harness.dream` would print by hand.
+What a `@generator fun name(ctx: GenContext)` sees and produces. The compiler runs the generator's cached executable with `--generator <name> --snapshot <in> --result <out>`; the harness loads the context from the snapshot, calls the generator, and `finish()` writes the result the compiler validates and merges.
 
 ```dream
 public class GenContext
 ```
 
-## `from_snapshot`
+## `generator_name: string`
 
-Loads the generator's context from its JSON input file. The generator receives that path as its first program argument.
+The running generator's name and `module::name` identity.
 
 ```dream
-public static async fun from_snapshot(path: string, token: Option<CancellationToken> = Option.None): Result<GenContext, string>
+public generator_name: string
 ```
 
-## `syntax_blocks`
-
-Returns the context's syntax blocks. The returned list is shared with `all_blocks`; check each block's `.name` when selecting a particular notation. Do not rearrange or remove blocks from this shared list while using the context.
+## `generator_id: string`
 
 ```dream
-public fun syntax_blocks(name: string): List<GenSyntaxBlock>
+public generator_id: string
 ```
 
-## `all_blocks`
+## `target: string`
 
-Every snapshotted call site, regardless of introducer.
+Target triple of the compile (`aarch64-apple-darwin`, `wasm32-unknown-wasi`, ...).
 
 ```dream
-public fun all_blocks(): List<GenSyntaxBlock>
+public target: string
+```
+
+## `load`
+
+Reads `--snapshot` / `--result` from the program arguments.
+
+```dream
+public static async fun load(args: string[]): Result<GenContext, string>
 ```
 
 ## `types_with`
 
-Every snapshotted declaration type carrying attribute `attr`.
+Declarations carrying `@A` (on the declaration or on one of its members).
 
 ```dream
-public fun types_with(attr: string): List<GenTypeInfo>
+public fun types_with<A>(): List<GenDecl>
+```
+
+## `functions_with`
+
+Top-level functions carrying `@A` (on the function or a parameter).
+
+```dream
+public fun functions_with<A>(): List<GenFunction>
+```
+
+## `decls`
+
+Every declaration selected by this generator's `@on_attribute` triggers.
+
+```dream
+public fun decls(): List<GenDecl>
+```
+
+## `type_index`
+
+Every type in the program, by name and kind.
+
+```dream
+public fun type_index(): List<GenIndexEntry>
+```
+
+## `find_type`
+
+The index entry named `name`, if the program declares such a type.
+
+```dream
+public fun find_type(borrow name: string): Option<GenIndexEntry>
+```
+
+## `syntax_blocks`
+
+`name { ... }` sites introduced by this generator's name (`@syntax_block` generators).
+
+```dream
+public fun syntax_blocks(): List<GenSyntaxBlock>
+```
+
+## `call_sites`
+
+Calls of the functions named in this generator's `@on_call(...)`.
+
+```dream
+public fun call_sites(): List<GenCallSite>
+```
+
+## `options`
+
+`dream.toml` `[[generators]].options`, decoded into the `@json` type `T`.
+
+```dream
+public fun options<T>(): Result<T, ParseError>
+```
+
+## `option_or`
+
+One option as text (`fallback` when unset).
+
+```dream
+public fun option_or(borrow key: string, fallback: string): string
+```
+
+## `additional_files`
+
+`dream.toml` `[[generators]].additional_files`, read by the compiler.
+
+```dream
+public fun additional_files(): List<GenFile>
 ```
 
 ## `replace`
 
-Rewrites `block`'s call site to the Dream expression `dream_expr` before type-checking.
+Rewrites `block`'s site to the Dream expression `source`.
 
 ```dream
-public fun replace(borrow block: GenSyntaxBlock, dream_expr: string): void
-```
-
-## `emit_extend`
-
-Queues synthesized `extend Type { ... }` source for the host to merge before type-checking.
-
-```dream
-public fun emit_extend(type_name: string, body: string): void
+public fun replace(borrow block: GenSyntaxBlock, source: string): void
 ```
 
 ## `emit_file`
 
-Queues a synthetic Dream source file for the host to parse and merge.
+Adds a complete Dream source file at the generator-relative path `path` (`models.json.dream`). It is written under `.dream/generated/<entry>/<generator>/` and compiled with the program.
 
 ```dream
 public fun emit_file(path: string, source: string): void
+```
+
+## `emit_extend`
+
+Adds `extend <decl> { <body> }` to this generator's `extends.dream` file.
+
+```dream
+public fun emit_extend(borrow decl: GenDecl, body: string): void
+```
+
+## `error_at`
+
+An error at the node with identity `target` (any model node's `id`), or at the generator itself for an empty `target`.
+
+```dream
+public fun error_at(borrow target: string, message: string): void
+```
+
+## `warning_at`
+
+```dream
+public fun warning_at(borrow target: string, message: string): void
+```
+
+## `error`
+
+```dream
+public fun error(message: string): void
+```
+
+## `error`
+
+```dream
+public fun error(borrow block: GenSyntaxBlock, message: string): void
+```
+
+## `error`
+
+```dream
+public fun error(borrow decl: GenDecl, message: string): void
+```
+
+## `error`
+
+```dream
+public fun error(borrow field: GenField, message: string): void
 ```

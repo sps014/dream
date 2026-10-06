@@ -1,10 +1,11 @@
-// `@attribute` is only allowed on bare top-level functions, not classes.
-@attribute
-public class Route {
+// A user attribute is only accepted on the placements its declaration lists.
+@attribute(AttributeTarget.Function)
+public struct route {
     public path: string;
-    public constructor(path: string) {
-        this.path = path;
-    }
+}
+
+@route("/users")
+public class Users {
 }
 
 fun main(): void {

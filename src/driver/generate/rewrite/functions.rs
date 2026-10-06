@@ -10,7 +10,7 @@ use std::io::Error;
 pub fn rewrite_function_body<'a>(
     arena: &'a Bump,
     body: &'a [StatementNode<'a>],
-    by_site: &IndexMap<(String, String), String>,
+    by_site: &IndexMap<super::super::sites::SiteKey, String>,
     diagnostics: &mut DiagnosticBag,
     file: Option<&str>,
     file_contents: &std::collections::HashMap<String, String>,
@@ -35,21 +35,35 @@ pub fn rewrite_function_body<'a>(
     }
 }
 
+/// `file` is the declaring file of the function's owner, the same spelling site keys use.
 pub fn rewrite_function<'a>(
     arena: &'a Bump,
     f: &mut FunctionNode<'a>,
-    by_site: &IndexMap<(String, String), String>,
+    file: Option<&str>,
+    by_site: &IndexMap<super::super::sites::SiteKey, String>,
     diagnostics: &mut DiagnosticBag,
     file_contents: &std::collections::HashMap<String, String>,
 ) -> Result<(), Error> {
-    let file = f.file_path.as_ref().map(|p| p.to_string());
-    f.body = rewrite_function_body(
+    f.body = rewrite_function_body(arena, f.body, by_site, diagnostics, file, file_contents)?;
+    Ok(())
+}
+
+pub fn rewrite_expression<'a>(
+    arena: &'a Bump,
+    expr: &dream_syntax::nodes::ExpressionNode<'a>,
+    file: Option<&str>,
+    by_site: &IndexMap<super::super::sites::SiteKey, String>,
+    diagnostics: &mut DiagnosticBag,
+    file_contents: &std::collections::HashMap<String, String>,
+) -> Result<dream_syntax::nodes::ExpressionNode<'a>, Error> {
+    let mut changed = false;
+    let mut rewriter = Rewriter {
         arena,
-        f.body,
         by_site,
         diagnostics,
-        file.as_deref(),
+        changed: &mut changed,
+        file,
         file_contents,
-    )?;
-    Ok(())
+    };
+    rewriter.expression(expr)
 }

@@ -69,6 +69,7 @@ impl Compiler {
                 )
             {
                 return Err(fail_diagnostics(
+                    self.render_diagnostics,
                     CompileError::Semantic,
                     &diagnostics,
                     &loaded.acc.file_contents,

@@ -50,9 +50,9 @@ impl<'a, 'd> FunctionControlGraph<'a, 'd> {
 
         let flow = self.visit_block(self.function.body);
 
-        if flow.falls_through {
-            if let Some(ret) = &self.function.return_type {
-                if ret != &Type::Void && entry_tail_return(self.function).is_none() {
+        if flow.falls_through
+            && let Some(ret) = &self.function.return_type
+                && ret != &Type::Void && entry_tail_return(self.function).is_none() {
                     self.diagnostics.report_error(
                         format!(
                             "function '{}': not all code paths return a value",
@@ -61,8 +61,6 @@ impl<'a, 'd> FunctionControlGraph<'a, 'd> {
                         Some(self.function.name.position),
                     );
                 }
-            }
-        }
     }
 
     fn visit_block(&mut self, stmts: &[StatementNode<'a>]) -> Flow {

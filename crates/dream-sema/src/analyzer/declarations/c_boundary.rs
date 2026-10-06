@@ -54,8 +54,7 @@ impl<'a> Analyzer<'a> {
             }
         }
         if !wrapped.is_empty() {
-            self.c_wrapped_fun_params
-                .insert(def, wrapped);
+            self.c_wrapped_fun_params.insert(def, wrapped);
         }
         if let Err(msg) = self.c_ret_shape(function) {
             diagnostics.report_error(
@@ -286,12 +285,18 @@ impl<'a> Analyzer<'a> {
 
     fn is_c_ptr(&self, ty: &Type) -> bool {
         matches!(ty, Type::Struct(tok, None) if tok.text == C_PTR_TYPE)
-            && self.type_ctx.resolved_type(C_PTR_TYPE).is_some_and(|ty| self.struct_info(ty).is_some())
+            && self
+                .type_ctx
+                .resolved_type(C_PTR_TYPE)
+                .is_some_and(|ty| self.struct_info(ty).is_some())
     }
 
     fn is_owned_c_ptr(&self, ty: &Type) -> bool {
         matches!(ty, Type::Struct(tok, None) if tok.text == OWNED_C_PTR_TYPE)
-            && self.type_ctx.resolved_type(OWNED_C_PTR_TYPE).is_some_and(|ty| self.struct_info(ty).is_some())
+            && self
+                .type_ctx
+                .resolved_type(OWNED_C_PTR_TYPE)
+                .is_some_and(|ty| self.struct_info(ty).is_some())
     }
 
     fn is_unmanaged_struct(&self, ty: &Type) -> bool {

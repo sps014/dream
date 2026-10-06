@@ -9,24 +9,8 @@ use dream_syntax::nodes::ExpressionNode;
 use dream_syntax::nodes::LambdaBody;
 use dream_syntax::nodes::SwitchArm;
 use dream_syntax::nodes::SwitchArmBody;
-use dream_syntax::nodes::SyntaxBlockPart;
 use dream_text::line_text::LineText;
 use std::io::Error;
-
-pub(super) fn block_site_key(block: &dream_syntax::nodes::SyntaxBlockNode<'_>) -> (String, String) {
-    let mut body_text = String::new();
-    for part in &block.parts {
-        match part {
-            SyntaxBlockPart::Text(t) => body_text.push_str(t),
-            SyntaxBlockPart::Splice(e) => {
-                body_text.push('{');
-                body_text.push_str(&super::super::syntax::expr_source_approx_pub(e));
-                body_text.push('}');
-            }
-        }
-    }
-    (block.name.text.clone(), body_text)
-}
 
 impl<'a> Rewriter<'a, '_> {
     pub(super) fn expression(
@@ -35,7 +19,7 @@ impl<'a> Rewriter<'a, '_> {
     ) -> Result<ExpressionNode<'a>, Error> {
         let arena = self.arena;
         if let ExpressionNode::SyntaxBlock(block) = expr {
-            let key = block_site_key(block);
+            let key = super::super::sites::site_key(self.file, block);
             if let Some(src) = self.by_site.get(&key) {
                 *self.changed = true;
                 // The generator's output stands in for this block; map diagnostics back to
@@ -238,6 +222,7 @@ impl<'a> Rewriter<'a, '_> {
             | ExpressionNode::Identifier(_)
             | ExpressionNode::SizeOf(_, _)
             | ExpressionNode::NameOf(_, _)
+            | ExpressionNode::DeclOf(_, _)
             | ExpressionNode::SyntaxBlock(_) => expr.clone(),
         })
     }

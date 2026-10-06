@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 
 use common::TestHarness;
 
@@ -2017,7 +2017,8 @@ fn auto_import_skipped_when_already_imported() {
     use dream_lsp::code_actions::auto_import_actions;
     use tower_lsp::lsp_types::Url;
 
-    let src = "import system.crypto;\nfun main(): void { let c = CryptoError(\"TEST\", \"test\"); }\n";
+    let src =
+        "import system.crypto;\nfun main(): void { let c = CryptoError(\"TEST\", \"test\"); }\n";
     let uri = Url::parse("file:///tmp/main.dream").unwrap();
     let actions = auto_import_actions(&uri, src, "CryptoError", None);
     assert!(actions.is_empty());

@@ -1,0 +1,16 @@
+module gen;
+
+import system.codegen;
+import system.json;
+
+class NotAnAttribute {
+    public x: int;
+}
+
+@generator
+@on_attribute(json)
+public fun derive_bad(ctx: GenContext): void {
+    for (let d in ctx.types_with<json>()) {
+        let a = d.attribute<NotAnAttribute>();
+    }
+}

@@ -186,9 +186,24 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// The `module::name` identity of the `@attribute` type an attribute use names, if declared.
+    pub(in crate::analyzer) fn attribute_identity(&self, name: &str) -> Option<String> {
+        let decl = self.program.structs.iter().find(|s| {
+            s.name.text == name && dream_abi::attributes::has_attribute_decl_attr(&s.attributes)
+        })?;
+        let module = self
+            .module_of(decl.file_path.as_ref())
+            .map(|m| m.to_string())
+            .unwrap_or_default();
+        Some(dream_abi::attributes::decl_identity(&module, name))
+    }
+
     pub(in crate::analyzer) fn json_decl_has_attr(&self, def: dream_types::DefId) -> bool {
         let is_json = |attrs: &[dream_syntax::nodes::AttributeNode]| {
-            attrs.iter().any(|attribute| attribute.name.text == "json")
+            attrs.iter().any(|attribute| {
+                self.attribute_identity(&attribute.name.text).as_deref()
+                    == Some(dream_abi::attributes::JSON_ATTRIBUTE_ID)
+            })
         };
         let info = self.type_ctx.defs.get(def);
         self.program.structs.iter().any(|declaration| {

@@ -18,11 +18,11 @@ mod c_abi;
 mod codegen;
 mod cpp;
 mod ownership;
-mod serialization;
 mod spec;
 mod testing;
 #[cfg(test)]
 mod tests;
+mod user;
 mod validate;
 
 pub use binding::*;
@@ -32,6 +32,7 @@ pub use cpp::*;
 pub use ownership::*;
 pub use spec::*;
 pub use testing::*;
+pub use user::*;
 pub use validate::{validate_attributes, validate_program_attributes};
 
 use dream_diagnostics::DiagnosticBag;
@@ -40,7 +41,6 @@ use dream_syntax::nodes::{AttributeArg, AttributeNode, Type};
 const FAMILIES: &[&[AttributeSpec]] = &[
     ownership::SPECS,
     codegen::SPECS,
-    serialization::SPECS,
     binding::SPECS,
     testing::SPECS,
     c_abi::SPECS,

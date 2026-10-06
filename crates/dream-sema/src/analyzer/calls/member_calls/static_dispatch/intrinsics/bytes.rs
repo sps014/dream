@@ -108,7 +108,12 @@ impl<'a> Analyzer<'a> {
                 self.hir_set_to_bytes(value);
                 let bytes = self.hir_take();
                 let bytes_ty = self.bytes_type();
-                self.hir_set_type_method_call(bytes_ty, "toWireString", vec![bytes], &named("string"));
+                self.hir_set_type_method_call(
+                    bytes_ty,
+                    "toWireString",
+                    vec![bytes],
+                    &named("string"),
+                );
             }
             return Ok(named("string"));
         }

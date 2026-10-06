@@ -105,8 +105,8 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                 let import_path =
                     dream::driver::source_loader::resolve_import_path(parent_dir, module_name);
 
-                if let Some(import_path_str) = import_path.to_str() {
-                    if import_path.exists() {
+                if let Some(import_path_str) = import_path.to_str()
+                    && import_path.exists() {
                         let resolved = std::fs::canonicalize(&import_path)
                             .unwrap_or_else(|_| import_path.clone());
                         acc.import_edges
@@ -120,7 +120,6 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                             &mut diagnostics,
                         );
                     }
-                }
             }
 
             if let Ok(mut graph) = dream::driver::native_sets::NativeGraph::load(
@@ -138,10 +137,6 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                 );
                 let _ = dream::driver::ffi_shim::expand(&arena, &mut acc, &graph, &mut diagnostics);
             }
-        }
-
-        if program_uses_json_attr(&acc) {
-            acc.requested_std_packages.insert("system.json".to_string());
         }
     }
 
@@ -164,14 +159,25 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         strip_edited_stdlib_duplicates(path, &mut acc);
     }
 
-    dream_abi::attributes::validate_program_attributes(
-        &acc.all_structs,
-        &acc.all_interfaces,
-        &acc.all_functions,
-        &acc.all_enums,
-        &acc.all_extends,
-        &mut diagnostics,
-    );
+    // Generators cannot run here; the generate pass instead merges the files the last build
+    // materialized under `.dream/generated`, so generated members resolve in the editor.
+    if let Ok(attributes) = dream::driver::attributes::prepare(&arena, &mut acc, &mut diagnostics) {
+        let config = std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default());
+        let target = dream_abi::target::TargetSpec::host();
+        let _ = dream::driver::generate::run_generators(
+            &dream::driver::generate::GenerateRequest {
+                config: &config,
+                stage: dream::driver::generate::GeneratorStage::All,
+                entry_file: file_path.unwrap_or(MAIN_FILE),
+                target: &target,
+                replay_materialized: true,
+            },
+            &arena,
+            &mut acc,
+            &attributes,
+            &mut diagnostics,
+        );
+    }
 
     // Unlike the batch compiler (which stops at the first phase with errors), the editor keeps
     // semantic diagnostics flowing even while the user is mid-edit: the parser recovers and always
@@ -211,11 +217,9 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                     for reference in &mut snapshot.refs {
                         if let dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. } =
                             &mut reference.target
-                        {
-                            if source.file.as_deref() == Some(MAIN_FILE) {
+                            && source.file.as_deref() == Some(MAIN_FILE) {
                                 source.file = Some(path.clone());
                             }
-                        }
                     }
                 }
                 sema = Some(snapshot);
@@ -257,16 +261,6 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
 /// Diagnostics-only variant of [`analyze_document`] (the snapshot is dropped).
 pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<DiagnosticOut> {
     analyze_document(file_path, text).diagnostics
-}
-
-fn program_uses_json_attr(acc: &dream::driver::source_loader::ProgramAccumulator<'_>) -> bool {
-    acc.all_structs
-        .iter()
-        .any(|s| s.attributes.iter().any(|a| a.name.text == "json"))
-        || acc
-            .all_enums
-            .iter()
-            .any(|e| e.attributes.iter().any(|a| a.name.text == "json"))
 }
 
 /// When editing a stdlib source file in-tree, drop the embedded twin so definitions don't duplicate.

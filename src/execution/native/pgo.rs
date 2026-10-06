@@ -113,14 +113,13 @@ fn profile_input(path: Option<&Path>, bin: &Path) -> Result<ProfileInput, String
 fn merge_with(raws: &[PathBuf], bin: &Path, tool: &Path, reuse: bool) -> Result<PathBuf, String> {
     let out = out_dir(bin).join(format!("{}.profdata", stem(bin)));
     let modified = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
-    if let Some(merged) = modified(&out).filter(|_| reuse) {
-        if raws
+    if let Some(merged) = modified(&out).filter(|_| reuse)
+        && raws
             .iter()
             .all(|r| modified(r).is_some_and(|t| t <= merged))
         {
             return Ok(out);
         }
-    }
     let mut cmd = Command::new(tool);
     cmd.arg("merge").arg("-o").arg(&out).args(raws);
     let res = cmd

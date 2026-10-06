@@ -3,6 +3,7 @@ use super::StdPackage;
 pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.core",
     deps: &[],
+    generators: &[],
     files: &[
         (
             "<std>/system/core/buffer.dream",

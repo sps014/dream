@@ -32,13 +32,11 @@ impl<'a> Analyzer<'a> {
             PatternNode::Binding(name) => {
                 // A bare identifier that names a unit variant of the matched union is a
                 // unit-variant pattern; otherwise it binds the whole value.
-                if let Some(info) = &union_info {
-                    if let Some(v) = info.variant(&name.text) {
-                        if v.fields.is_empty() {
+                if let Some(info) = &union_info
+                    && let Some(v) = info.variant(&name.text)
+                        && v.fields.is_empty() {
                             return Ok(PatternInfo { irrefutable: false });
                         }
-                    }
-                }
                 if let Err(e) = (*scope)
                     .borrow_mut()
                     .add_symbol(name.text.clone(), expected.clone())
@@ -405,13 +403,10 @@ impl<'a> Analyzer<'a> {
                     .type_ctx
                     .lookup_type(ty)
                     .and_then(|id| self.union_info(id))
-                {
-                    if let Some(v) = info.variant(&name.text) {
-                        if v.fields.is_empty() {
+                    && let Some(v) = info.variant(&name.text)
+                        && v.fields.is_empty() {
                             return false;
                         }
-                    }
-                }
                 true
             }
             PatternNode::Tuple(elems) => {

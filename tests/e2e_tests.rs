@@ -5,7 +5,7 @@ use dream::driver::wasm_opt::OptLevel;
 use dream::execution::native::compile_and_capture_ex;
 use dream_mir::backend::Target;
 
-mod common;
+use crate::common;
 use pretty_assertions::assert_eq;
 use rayon::prelude::*;
 use std::fs;
@@ -508,14 +508,15 @@ fn run_core_services_e2e() {
     ]));
 }
 
-/// Native ASan/LSan on leak-sensitive goldens. Opt-in: `DREAM_NATIVE_SANITIZE=address,leak`
-/// (see `src/execution/native`). Guest `live=0` is still the heap-counter check.
+/// Native ASan/LSan on leak-sensitive goldens (see `src/execution/native`). Guest `live=0` is
+/// still the heap-counter check. The sanitizer is selected by the environment the compiles
+/// inherit, which this process shares with every other test, so the caller sets it.
 #[test]
-#[ignore = "native sanitizer; DREAM_NATIVE_SANITIZE=address,leak cargo test --test e2e_tests native_asan_focused_goldens -- --ignored --exact"]
+#[ignore = "native sanitizer; DREAM_NATIVE_SANITIZE=address,leak ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 cargo test --test integration e2e_tests::native_asan_focused_goldens -- --ignored --exact"]
 fn native_asan_focused_goldens() {
-    std::env::set_var("DREAM_NATIVE_SANITIZE", "address,leak");
-    if std::env::var_os("ASAN_OPTIONS").is_none() {
-        std::env::set_var("ASAN_OPTIONS", "detect_leaks=1:halt_on_error=1");
+    if std::env::var_os("DREAM_NATIVE_SANITIZE").is_none() {
+        eprintln!("skipping: set DREAM_NATIVE_SANITIZE=address,leak");
+        return;
     }
     run_corpus(Some(&[
         "json_parse",
@@ -546,7 +547,7 @@ fn codegen_is_deterministic() {
 /// [`codegen_is_deterministic`] over every golden that compiles for wasm32. Cases that fail to
 /// compile (native-only hosts, `.expected_error`) are skipped: this checks reproducibility only.
 #[test]
-#[ignore = "full corpus, two compiles per case; cargo test --test e2e_tests codegen_is_deterministic_full_corpus -- --ignored"]
+#[ignore = "full corpus, two compiles per case; cargo test --test integration e2e_tests::codegen_is_deterministic_full_corpus -- --ignored"]
 fn codegen_is_deterministic_full_corpus() {
     let mut names: Vec<String> = fs::read_dir("tests/cases")
         .expect("tests/cases")

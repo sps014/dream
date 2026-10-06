@@ -6,7 +6,24 @@ pub fn install(component: Option<String>) -> Result<()> {
         None => toolchain::available_components()?,
         Some(name) => vec![Component::parse_name(name)?],
     };
-    toolchain::install(&components)
+    toolchain::install(&components)?;
+    prewarm_generators();
+    Ok(())
+}
+
+/// Builds the std generator executables so the first `@json` build only launches one. Best
+/// effort: a toolchain that cannot build them yet (no LLVM) still installed fine.
+fn prewarm_generators() {
+    let Ok(dream) = crate::dream_bin::locate() else {
+        return;
+    };
+    let ok = std::process::Command::new(&dream)
+        .args(["generate", "--prewarm"])
+        .status()
+        .is_ok_and(|s| s.success());
+    if !ok {
+        eprintln!("note: std generators were not prebuilt; the first build that uses one builds it");
+    }
 }
 
 pub fn list() -> Result<()> {

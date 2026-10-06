@@ -34,7 +34,7 @@ Hello generators
 | File | Role |
 |------|------|
 | `app.dream` | Program that uses `quote { … }` |
-| `gen.dream` | `@generator` + `@syntax_block("quote")`, executed with a `GenContext` |
+| `gen.dream` | `@generator` + `@syntax_block` (block keyword = function name), executed with a `GenContext` |
 | `dream.toml` | `[[generators]] path = "gen.dream"` |
 
 Start here before the larger [`../html/`](../html/) sample. See [Source generators](../../../docs/reference/language/generators.md).

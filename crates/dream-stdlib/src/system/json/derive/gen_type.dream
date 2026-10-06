@@ -1,0 +1,77 @@
+module system.json.derive;
+
+// Class or discriminated-union type snapshot for `@json` codegen.
+public class JsonTypeSpec {
+    public name: string;
+    public is_union: bool;
+    public generic_params: List<string>;
+    public fields: List<JsonFieldSpec>;
+    public variants: List<JsonVariantSpec>;
+    // Built with a zero-argument constructor plus field stores, because no constructor takes
+    // every field in declaration order.
+    public assign_fields: bool;
+
+    // Builds a type snapshot (prefer `class_type` / `union_type` factories).
+    public constructor(
+        name: string,
+        is_union: bool,
+        generic_params: List<string>,
+        fields: List<JsonFieldSpec>,
+        variants: List<JsonVariantSpec>
+    ) {
+        this.name = name;
+        this.is_union = is_union;
+        this.generic_params = generic_params;
+        this.fields = fields;
+        this.variants = variants;
+        this.assign_fields = false;
+    }
+
+    // Snapshot for a `@json` class/struct with named fields.
+    public static fun class_type(
+        name: string,
+        generic_params: List<string>,
+        fields: List<JsonFieldSpec>
+    ): JsonTypeSpec {
+        return JsonTypeSpec(name, false, generic_params, fields, List<JsonVariantSpec>());
+    }
+
+    // Snapshot for a `@json` discriminated union with variants.
+    public static fun union_type(
+        name: string,
+        generic_params: List<string>,
+        variants: List<JsonVariantSpec>
+    ): JsonTypeSpec {
+        return JsonTypeSpec(name, true, generic_params, List<JsonFieldSpec>(), variants);
+    }
+
+    // `<T, U>` clause for emit, or empty when non-generic.
+    public fun params_clause(): string {
+        if this.generic_params.is_empty() {
+            return string.empty;
+        }
+        let s = "<";
+        let i = 0;
+        while i < this.generic_params.length {
+            if i > 0 {
+                s = s + ", ";
+            }
+            s = s + this.generic_params.get(i);
+            i = i + 1;
+        }
+        return s + ">";
+    }
+
+    // Fully written self type (`Name` or `Name<T, U>`).
+    public fun self_ty(): string {
+        return this.name + this.params_clause();
+    }
+
+    // Expression building a value from its fields' values (`args`, declaration order).
+    public fun construct(args: string): string {
+        if this.assign_fields {
+            return this.self_ty() + ".__json_new(" + args + ")";
+        }
+        return this.self_ty() + "(" + args + ")";
+    }
+}

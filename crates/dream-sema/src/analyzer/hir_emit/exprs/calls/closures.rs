@@ -83,7 +83,10 @@ impl<'a> Analyzer<'a> {
         func_ty: &Type,
         ret: &Type,
     ) {
-        let Ok(info) = self.function_info(name) else { self.hir.last = None; return; };
+        let Ok(info) = self.function_info(name) else {
+            self.hir.last = None;
+            return;
+        };
         self.hir_set_func_value_identity(&info.identity, func_ty, ret);
     }
 

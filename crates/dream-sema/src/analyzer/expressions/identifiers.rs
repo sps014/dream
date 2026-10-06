@@ -33,8 +33,8 @@ impl<'a> Analyzer<'a> {
                 (*symbol_table).as_ref().borrow_mut().mark_used(&id.text);
                 // A local bound to a polymorphic generic function item instantiates when the
                 // use site publishes a concrete `fun(...)` expected type.
-                if let Type::GenericFunctionItem(ref gname) = t {
-                    if matches!(
+                if let Type::GenericFunctionItem(ref gname) = t
+                    && matches!(
                         self.current_expected_type
                             .as_ref()
                             .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings)),
@@ -46,21 +46,26 @@ impl<'a> Analyzer<'a> {
                             None => Ok(Type::Unknown),
                         };
                     }
-                }
                 t
             }
             Err(e) => {
                 // A bare identifier that names a top-level function is a first-class function value.
                 if self.function_info(&id.text).is_ok() {
                     let identity = self.function_info(&id.text).map(|info| info.identity).ok();
-                    if let Some(identity) = identity { return Ok(self.function_value(id, &identity)); }
+                    if let Some(identity) = identity {
+                        return Ok(self.function_value(id, &identity));
+                    }
                 }
                 if self.function_overloaded(&id.text) {
                     return Ok(self.overloaded_function_value(id, diagnostics));
                 }
                 // A generic function used as a value: with a `fun(...)` context, instantiate now;
                 // otherwise bind a polymorphic item that instantiates at each later use.
-                if self.type_ctx.resolve(DefKind::Function, &id.text).is_some_and(|def| self.generic_functions.contains_key(&def)) {
+                if self
+                    .type_ctx
+                    .resolve(DefKind::Function, &id.text)
+                    .is_some_and(|def| self.generic_functions.contains_key(&def))
+                {
                     let expected = self
                         .current_expected_type
                         .as_ref()
@@ -108,9 +113,8 @@ impl<'a> Analyzer<'a> {
             .as_ref()
             .borrow()
             .resolves_before_global_root(&id.text)
-        {
-            if let Some(global) = self.globals.iter().find(|g| g.name == id.text) {
-                if !self.visible_across_files(
+            && let Some(global) = self.globals.iter().find(|g| g.name == id.text)
+                && !self.visible_across_files(
                     &global.file_path,
                     global.visibility,
                     self.current_file.as_ref(),
@@ -124,8 +128,6 @@ impl<'a> Analyzer<'a> {
                         diagnostics,
                     );
                 }
-            }
-        }
         let is_local = (*symbol_table)
             .as_ref()
             .borrow()
@@ -150,7 +152,11 @@ impl<'a> Analyzer<'a> {
     /// pointer, so boxing it as `fun(...): Future<T>` matches the WASM result and lets the caller
     /// `f(...).await` like a direct async call. Worker bodies use the same shape (`spawn_async` /
     /// `map_async` / `dispatch_async`).
-    fn function_value(&mut self, id: &SyntaxToken, key: &crate::function_table::FunctionIdentity) -> Type {
+    fn function_value(
+        &mut self,
+        id: &SyntaxToken,
+        key: &crate::function_table::FunctionIdentity,
+    ) -> Type {
         let Ok(sig) = self.function_table.get_function(key) else {
             self.hir_fail();
             return Type::Unknown;
@@ -193,13 +199,20 @@ impl<'a> Analyzer<'a> {
         let message = match &expected {
             Some(Type::Function(params, _)) => {
                 let names: Vec<_> = params.iter().map(|ty| self.type_ctx.lower(ty)).collect();
-                if let Some(key) = self.function_table.overload_with_params(&self.type_ctx, &id.text, &names) {
+                if let Some(key) =
+                    self.function_table
+                        .overload_with_params(&self.type_ctx, &id.text, &names)
+                {
                     return self.function_value(id, &key);
                 }
                 format!(
                     "No overload of '{}' takes parameters ({})",
                     id.text,
-                    names.iter().map(|&ty| self.type_id_display(ty)).collect::<Vec<_>>().join(", ")
+                    names
+                        .iter()
+                        .map(|&ty| self.type_id_display(ty))
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 )
             }
             _ => format!(
@@ -226,8 +239,8 @@ impl<'a> Analyzer<'a> {
         // (e.g. a `sort_by(cmp: fun(T, T): int)` parameter, or a synthesized lambda's own signature)
         // round-trips correctly instead of collapsing to a bogus struct type. Struct generic args
         // mangle to `_`-joined names (no `<`/`>`), so only `(`/`)` and `[`/`]` need nesting tracking.
-        if let Some(rest) = name.strip_prefix("fun(") {
-            if let Some(close) = matching_close_paren(rest) {
+        if let Some(rest) = name.strip_prefix("fun(")
+            && let Some(close) = matching_close_paren(rest) {
                 let params_str = &rest[..close];
                 if let Some(ret_str) = rest[close + 1..].strip_prefix(':') {
                     let params = split_top_level_commas(params_str)
@@ -239,7 +252,6 @@ impl<'a> Analyzer<'a> {
                     return Type::Function(params, Box::new(ret));
                 }
             }
-        }
         let token = synthetic_token(TokenKind::IdentifierToken, name);
         Type::from_token(token).unwrap_or(Type::Void)
     }

@@ -139,8 +139,8 @@ fn only_field_uses(f: &MirFunction, members: &BTreeSet<Local>) -> bool {
             }
             let mut s = s.clone();
             stmt_operands_mut(&mut s, &mut hide);
-            if let Statement::Assign(Place::Field { base, .. }, rv) = &s {
-                if members.contains(base) {
+            if let Statement::Assign(Place::Field { base, .. }, rv) = &s
+                && members.contains(base) {
                     if matches!(rv, Rvalue::ArrayRealloc { .. })
                         || mentions(&Statement::Assign(Place::Local(hidden), rv.clone()))
                     {
@@ -148,7 +148,6 @@ fn only_field_uses(f: &MirFunction, members: &BTreeSet<Local>) -> bool {
                     }
                     continue;
                 }
-            }
             if mentions(&s) {
                 return false;
             }
@@ -213,8 +212,8 @@ fn transform(
                 }
                 continue;
             }
-            if let Statement::Assign(Place::Local(d), rv) = &s {
-                if members.contains(d) {
+            if let Statement::Assign(Place::Local(d), rv) = &s
+                && members.contains(d) {
                     if matches!(rv, Rvalue::New { .. }) {
                         for (i, &p) in promo.iter().enumerate() {
                             let zero = if is_ref[i] {
@@ -230,7 +229,6 @@ fn transform(
                     }
                     continue;
                 }
-            }
             stmt_operands_mut(&mut s, &mut expose);
             let Statement::Assign(Place::Field { base, field }, rv) = s else {
                 block.stmts.push(s);

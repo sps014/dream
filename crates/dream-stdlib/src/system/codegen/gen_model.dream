@@ -1,0 +1,275 @@
+module system.codegen;
+
+import system;
+import system.collections;
+
+// The program model a `@generator` reads through `GenContext`: declarations with resolved type
+// references and typed attribute access, syntax-block sites and call sites. Every node has a
+// stable `id` (`module::Name`, `module::Name.member`, `site:file:line:col`, `call:...`) that
+// diagnostics are anchored to.
+
+// Built-in scalar types.
+public enum Primitive {
+    NotPrimitive,
+    Int,
+    Long,
+    UInt,
+    ULong,
+    ISize,
+    USize,
+    Byte,
+    Float,
+    Double,
+    Bool,
+    Char,
+    String,
+    Object
+}
+
+// Standard collection shapes a generator usually special-cases.
+public enum CollectionKind {
+    NotCollection,
+    List,
+    Set,
+    Map,
+    SortedMap,
+    Array
+}
+
+// What a `GenTypeRef` refers to.
+public enum TypeRefKind {
+    Primitive,
+    Named,
+    Param,
+    Array,
+    Tuple,
+    Function,
+    Void,
+    Unknown
+}
+
+// What a `GenDecl` declares.
+public enum DeclKind {
+    Class,
+    Struct,
+    Union,
+    Enum,
+    Interface
+}
+
+public class GenLocation {
+    // Project-relative path (`src/models.dream`), or `<std>/...` for stdlib sources.
+    public file: string;
+    public line: int;
+    public column: int;
+
+    public constructor(file: string, line: int, column: int) {
+        this.file = file;
+        this.line = line;
+        this.column = column;
+    }
+
+    public override fun to_string(): string {
+        return this.file + ":" + this.line.to_string() + ":" + this.column.to_string();
+    }
+}
+
+// A resolved type: `kind` + structured `args` instead of a type string to parse.
+@allow_cycle
+public class GenTypeRef {
+    public kind: TypeRefKind;
+    // `int`, `List`, `T`, or empty for arrays/tuples/functions.
+    public name: string;
+    // Dream spelling (`List<int>`, `User[]`), usable verbatim in generated code.
+    public display: string;
+    // Compiler-mangled spelling (`List_int`), unique per instantiation; handy for helper names.
+    public mangled: string;
+    // Identity of the named declaration (`::User`, `system.collections::List`), or empty.
+    public decl: string;
+    // Type arguments; the element of an array; tuple members; function params then return.
+    public args: List<GenTypeRef>;
+
+    public constructor(kind: TypeRefKind, name: string, display: string, mangled: string, decl: string, args: List<GenTypeRef>) {
+        this.kind = kind;
+        this.name = name;
+        this.display = display;
+        this.mangled = mangled;
+        this.decl = decl;
+        this.args = args;
+    }
+
+    public static fun unknown(): GenTypeRef {
+        return GenTypeRef(TypeRefKind.Unknown, "", "", "", "", List<GenTypeRef>());
+    }
+
+    // The scalar this type is, or `Primitive.NotPrimitive`.
+    public fun primitive(): Primitive {
+        if this.kind != TypeRefKind.Primitive {
+            return Primitive.NotPrimitive;
+        }
+        return primitive_named(this.name);
+    }
+
+    public fun is_primitive(p: Primitive): bool {
+        return this.primitive() == p;
+    }
+
+    // The standard collection this type is, or `CollectionKind.NotCollection`.
+    public fun collection(): CollectionKind {
+        if this.kind == TypeRefKind.Array {
+            return CollectionKind.Array;
+        }
+        if this.kind != TypeRefKind.Named {
+            return CollectionKind.NotCollection;
+        }
+        if this.name == nameof(List) && this.args.length == 1 {
+            return CollectionKind.List;
+        }
+        if this.name == nameof(Set) && this.args.length == 1 {
+            return CollectionKind.Set;
+        }
+        if this.name == nameof(Map) && this.args.length == 2 {
+            return CollectionKind.Map;
+        }
+        if this.name == nameof(SortedMap) && this.args.length == 2 {
+            return CollectionKind.SortedMap;
+        }
+        return CollectionKind.NotCollection;
+    }
+
+    public fun is_option(): bool {
+        return this.kind == TypeRefKind.Named && this.name == nameof(Option) && this.args.length == 1;
+    }
+
+    public fun is_param(): bool {
+        return this.kind == TypeRefKind.Param;
+    }
+
+    // True when this names the declaration `decl_id` (see `declof`).
+    public fun is_decl(decl_id: string): bool {
+        return this.decl.length > 0 && this.decl == decl_id;
+    }
+
+    // Type argument `i`, or an unknown type when there is none.
+    public fun arg(i: int): GenTypeRef {
+        if i < 0 || i >= this.args.length {
+            return GenTypeRef.unknown();
+        }
+        return this.args.get(i);
+    }
+
+    public override fun to_string(): string {
+        return this.display;
+    }
+}
+
+// `Primitive` for a Dream scalar type name (`int`, `string`, ...).
+public fun primitive_named(name: string): Primitive {
+    if name == "int" { return Primitive.Int; }
+    if name == "long" { return Primitive.Long; }
+    if name == "uint" { return Primitive.UInt; }
+    if name == "ulong" { return Primitive.ULong; }
+    if name == "isize" { return Primitive.ISize; }
+    if name == "usize" { return Primitive.USize; }
+    if name == "byte" { return Primitive.Byte; }
+    if name == "float" { return Primitive.Float; }
+    if name == "double" { return Primitive.Double; }
+    if name == "bool" { return Primitive.Bool; }
+    if name == "char" { return Primitive.Char; }
+    if name == "string" { return Primitive.String; }
+    if name == "object" { return Primitive.Object; }
+    return Primitive.NotPrimitive;
+}
+
+// One attribute argument as written: `kind` is `string`, `int`, `float`, `double`, `bool` or
+// `enum`; `value` is the unquoted string, literal text, or dotted enum path.
+public class GenAttrArg {
+    public kind: string;
+    public value: string;
+
+    public constructor(kind: string, value: string) {
+        this.kind = kind;
+        this.value = value;
+    }
+}
+
+// One attribute use. Prefer the typed `GenAttributes.decode<A>()` (via `attribute<A>()` on a
+// node); the positional readers below are what decoders are built from.
+public class GenAttribute {
+    // `module::name` of the `@attribute` type (`system.json::json`), or `builtin::name`.
+    public id: string;
+    public name: string;
+    public args: List<GenAttrArg>;
+
+    public constructor(id: string, name: string, args: List<GenAttrArg>) {
+        this.id = id;
+        this.name = name;
+        this.args = args;
+    }
+
+    fun raw(i: int): string {
+        if i < 0 || i >= this.args.length {
+            return "";
+        }
+        return this.args.get(i).value;
+    }
+
+    public fun string_arg(i: int): string {
+        return this.raw(i);
+    }
+
+    public fun int_arg(i: int): int {
+        return int.parse(this.raw(i)).unwrap_or(0);
+    }
+
+    public fun long_arg(i: int): long {
+        return long.parse(this.raw(i)).unwrap_or((long)0);
+    }
+
+    public fun double_arg(i: int): double {
+        return double.parse(this.raw(i)).unwrap_or(0.0);
+    }
+
+    public fun float_arg(i: int): float {
+        return float.parse(this.raw(i)).unwrap_or((float)0.0);
+    }
+
+    public fun bool_arg(i: int): bool {
+        return this.raw(i) == "true";
+    }
+
+    // The member name of an enum argument (`Get` for `HttpMethod.Get`).
+    public fun enum_member(i: int): string {
+        let path = this.raw(i);
+        switch (path.last_index_of('.')) {
+            Some(dot) => {
+                return path.substring(dot + 1, path.length);
+            }
+            None => {
+                return path;
+            }
+        }
+    }
+}
+
+// Typed attribute access. `A` is an `@attribute` struct; the compiler gives every such type the
+// statics these forward to.
+public static class GenAttributes {
+    @intrinsic("gen_attribute_id")
+    static extern fun id<A>(): string;
+
+    @intrinsic("gen_attribute_decode")
+    static extern fun decode<A>(borrow attrs: List<GenAttribute>): Option<A>;
+
+    @intrinsic("gen_attribute_decode_all")
+    static extern fun decode_all<A>(borrow attrs: List<GenAttribute>): List<A>;
+
+    public static fun has(borrow attrs: List<GenAttribute>, borrow id: string): bool {
+        for (let a in attrs) {
+            if a.id == id {
+                return true;
+            }
+        }
+        return false;
+    }
+}

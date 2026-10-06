@@ -1,13 +1,7 @@
 module system.codegen;
 
-// Compile-time source-generator helpers. The host (`driver/generate`) owns SemanticModel /
-// SyntaxTree / GeneratorContext; this package provides emit helpers generators use when building
-// Dream source strings.
-//
-// A `@generator` function that takes a single `GenContext` parameter has its body compiled and
-// executed by the host (see `gen_context.dream`); one with an empty body instead delegates to a
-// sibling `harness.dream`. Either way, failures should use `GenResult` / `GenHost` markers so the
-// host can map them into `DiagnosticBag` (optionally with type/field spans).
+// Source-generator support: `GenContext` (what a `@generator` reads and produces), the typed
+// program model, and `CodeBuilder` for assembling Dream source.
 
 // Accumulates Dream source lines for generator `emit_extend` / `emit_file` bodies.
 // Indentation mirrors C# / Rust `IndentedTextWriter`: `indent()` / `dedent()` adjust depth;
@@ -92,37 +86,5 @@ public class CodeBuilder {
     // Returns the accumulated source text.
     public override fun to_string(): string {
         return this.buf.to_string();
-    }
-}
-
-/// Stdout protocol markers and helpers for Dream-side generator harnesses.
-/// The Rust host parses these markers and reports into `DiagnosticBag` (see `json_gen`).
-public static class GenHost {
-    public static fun ok_marker(): string {
-        return "__DREAM_GEN_OK__";
-    }
-
-    public static fun err_marker(): string {
-        return "__DREAM_GEN_ERR__";
-    }
-
-    /// Optional location line after an error marker: `type_name\tfield_name`.
-    public static fun loc_marker(): string {
-        return "__DREAM_GEN_LOC__";
-    }
-
-    /// Marker before an `emit_extend` payload in a successful harness run.
-    public static fun emit_extend_marker(): string {
-        return "__DREAM_GEN_EMIT_EXTEND__";
-    }
-
-    /// Marker before an `emit_file` payload in a successful harness run.
-    public static fun emit_file_marker(): string {
-        return "__DREAM_GEN_EMIT_FILE__";
-    }
-
-    /// Formats a span hint the host can attach to a diagnostic (empty field allowed).
-    public static fun format_loc(type_name: string, field_name: string): string {
-        return type_name + "\t" + field_name;
     }
 }

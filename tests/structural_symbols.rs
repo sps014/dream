@@ -196,4 +196,4 @@ fn interface_dispatch_uses_resolved_definitions_after_symbol_rename() {
         assert!(ir.contains("@resolved_interface_method_1("));
     });
 }
-mod common;
+use crate::common;

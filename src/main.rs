@@ -15,6 +15,8 @@ use std::time::Instant;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
+mod generate_cmd;
+
 const EXAMPLES: &str = "\
 Examples:
   dreamer run                           project: uses package.entry from dream.toml
@@ -188,6 +190,9 @@ enum Command {
     Build {
         /// Source .dream file
         file: Option<String>,
+        /// Serve a DAP session on this generator (as `debug-adapter --generator`), then build
+        #[arg(long, value_name = "GEN")]
+        debug_generator: Option<String>,
     },
     /// Compile natively and execute immediately
     Run {
@@ -209,6 +214,36 @@ enum Command {
     DebugAdapter {
         /// Source .dream file
         file: Option<String>,
+        /// Debug this compile-time generator on the program's snapshot instead of the program
+        #[arg(long, value_name = "GEN")]
+        generator: Option<String>,
+        /// With --generator: a captured snapshot (file or `--capture` directory) to run on
+        #[arg(long, value_name = "PATH", requires = "generator")]
+        snapshot: Option<PathBuf>,
+    },
+    /// Inspect compile-time generators: list them, explain cache keys, capture and replay runs
+    Generate {
+        /// Source .dream file
+        file: Option<String>,
+        /// Registered generators, their triggers, and whether each runs (the default)
+        #[arg(long)]
+        list: bool,
+        /// Each cache-key component of a generator and what changed since the last build
+        #[arg(long, value_name = "GEN")]
+        explain: Option<String>,
+        /// Run a generator once and save its snapshot and result (into -o, or
+        /// target/generators/<GEN>)
+        #[arg(long, value_name = "GEN")]
+        capture: Option<String>,
+        /// Rerun a --capture directory without compiling, comparing against its result
+        #[arg(long, value_name = "DIR")]
+        replay: Option<PathBuf>,
+        /// Rerun @incremental generators that would replay a cached result and diff the results
+        #[arg(long)]
+        verify_incremental: bool,
+        /// Build every std generator executable into the cache (no source file needed)
+        #[arg(long, conflicts_with = "file")]
+        prewarm: bool,
     },
     /// Format .dream source files in place
     Fmt {
@@ -274,15 +309,35 @@ fn main() -> ExitCode {
 
     let run_after_compile = matches!(cli.command, Some(Command::Run { .. }));
     let run_tests = matches!(cli.command, Some(Command::Test { .. }));
-    let debug_adapter = matches!(cli.command, Some(Command::DebugAdapter { .. }));
+    let debug_adapter = matches!(
+        cli.command,
+        Some(Command::DebugAdapter {
+            generator: None,
+            ..
+        })
+    );
     let debug_info = cli.debug_info || debug_adapter;
 
     // Resolve the source file and any forwarded program arguments.
     let file_name = match &cli.command {
-        Some(Command::Build { file })
+        Some(Command::Build { file, .. })
         | Some(Command::Run { file, .. })
         | Some(Command::Test { file, .. })
-        | Some(Command::DebugAdapter { file }) => file.clone(),
+        | Some(Command::DebugAdapter { file, .. })
+        | Some(Command::Generate {
+            file,
+            prewarm: false,
+            ..
+        }) => file.clone(),
+        Some(Command::Generate { prewarm: true, .. }) => {
+            match dream::driver::generate::commands::prewarm_entry(&config) {
+                Ok(entry) => Some(entry.to_string_lossy().into_owned()),
+                Err(e) => {
+                    ui.error(&format!("cannot write the prewarm program: {e}"));
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
         Some(Command::Fmt { .. })
         | Some(Command::PackRuntime { .. })
         | Some(Command::ToolchainDoctor { .. }) => None,
@@ -490,6 +545,20 @@ fn main() -> ExitCode {
         };
     }
 
+    match &cli.command {
+        Some(Command::Generate {
+            replay: Some(dir), ..
+        }) => return generate_cmd::replay(&ui, &config, dir),
+        Some(Command::DebugAdapter {
+            generator: Some(gen_name),
+            snapshot: Some(dir),
+            ..
+        }) if dream::driver::generate::commands::is_capture_dir(dir) => {
+            return generate_cmd::debug_capture(&ui, &config, dir, gen_name);
+        }
+        _ => {}
+    }
+
     let Some(file_name) = file_name.or_else(|| {
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         dream::driver::generate::default_compile_entry(&cwd)
@@ -499,6 +568,62 @@ fn main() -> ExitCode {
         ui.help("pass a .dream file, or run from a project with package.entry in dream.toml (`dreamer run`)");
         return ExitCode::FAILURE;
     };
+
+    let inspector = || {
+        Compiler::new_with_toolchain_config(target.clone(), config.clone())
+            .with_compile_targets(compile_targets)
+            .with_crate_type(crate_type)
+    };
+    match &cli.command {
+        Some(Command::Generate {
+            explain,
+            capture,
+            verify_incremental,
+            prewarm,
+            ..
+        }) => {
+            let action = if *prewarm {
+                generate_cmd::GenerateAction::Prewarm
+            } else if let Some(gen_name) = explain {
+                generate_cmd::GenerateAction::Explain(gen_name.clone())
+            } else if let Some(gen_name) = capture {
+                generate_cmd::GenerateAction::Capture(
+                    gen_name.clone(),
+                    cli.output.clone().map(PathBuf::from),
+                )
+            } else if *verify_incremental {
+                generate_cmd::GenerateAction::VerifyIncremental
+            } else {
+                generate_cmd::GenerateAction::List
+            };
+            return generate_cmd::run_generate(&ui, &config, &inspector(), &file_name, action);
+        }
+        Some(Command::DebugAdapter {
+            generator: Some(gen_name),
+            snapshot,
+            ..
+        }) => {
+            return generate_cmd::debug_generator(
+                &ui,
+                &config,
+                &inspector(),
+                &file_name,
+                gen_name,
+                snapshot.as_deref(),
+            );
+        }
+        Some(Command::Build {
+            debug_generator: Some(gen_name),
+            ..
+        }) => {
+            let code =
+                generate_cmd::debug_generator(&ui, &config, &inspector(), &file_name, gen_name, None);
+            if code != ExitCode::SUCCESS {
+                return code;
+            }
+        }
+        _ => {}
+    }
 
     ui.step(
         "Compiling",
@@ -524,9 +649,9 @@ fn main() -> ExitCode {
         },
     };
 
-    if let Some(parent) = Path::new(&out_path).parent() {
-        if !parent.as_os_str().is_empty() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
+    if let Some(parent) = Path::new(&out_path).parent()
+        && !parent.as_os_str().is_empty()
+            && let Err(e) = std::fs::create_dir_all(parent) {
                 ui.error(&format!(
                     "could not create output directory {}: {}",
                     parent.display(),
@@ -534,8 +659,6 @@ fn main() -> ExitCode {
                 ));
                 return ExitCode::FAILURE;
             }
-        }
-    }
 
     let reporter = Arc::new(ConsoleReporter::new());
     // `with_release` installs RELEASE_DEFAULT wasm-opt; an explicit `-O` overrides.
@@ -744,7 +867,13 @@ impl Launch<'_> {
     fn run(&self, ui: &Ui, bin: &Path) -> ExitCode {
         if self.debug_adapter {
             if let Err(e) =
-                dream::execution::debugger::run_debug_adapter(self.config, bin, self.out_path)
+                dream::execution::debugger::run_debug_adapter(
+                    self.config,
+                    bin,
+                    self.out_path,
+                    &Path::new(self.out_path).with_extension("opt.ll"),
+                    &[],
+                )
             {
                 ui.error(&format!("debug adapter failed: {e}"));
                 return ExitCode::FAILURE;

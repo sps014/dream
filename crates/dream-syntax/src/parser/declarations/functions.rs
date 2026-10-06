@@ -140,9 +140,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.match_token(TokenKind::SemicolonToken);
                 let empty: &'a [StatementNode<'a>] =
                     self.arena.alloc_slice_fill_iter(std::iter::empty());
-                let mut node = FunctionNode::new(
-                    attributes, ctor_name, None, None, params, empty, visibility,
-                );
+                let mut node =
+                    FunctionNode::new(attributes, ctor_name, None, None, params, empty, visibility);
                 node.is_extern = true;
                 return Ok(node);
             }
@@ -383,8 +382,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 None
             };
 
-            if let Some(modifier) = ownership_modifier {
-                if is_variadic {
+            if let Some(modifier) = ownership_modifier
+                && is_variadic {
                     self.diagnostics.report_error(
                         format!(
                             "parameter '{}' cannot be both '{}' and variadic",
@@ -393,7 +392,6 @@ impl<'a, 'b> Parser<'a, 'b> {
                         Some(param.position),
                     );
                 }
-            }
 
             if is_variadic {
                 if seen_variadic {

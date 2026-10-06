@@ -18,7 +18,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 
 A general-purpose, ahead-of-time (AOT) language: statically typed, fast by default, compiled to a single native binary or to WebAssembly (`.wasm` + pretty-printed `.wat` + `.abi.json` sidecar). Syntax closer to Rust and TypeScript, automatic memory management via ARC (deterministic reference counting), zero-cost monomorphized generics, classes/structs/interfaces/enums/discriminated unions, `Option`/`Result`, `async`/`await` with an in-module cooperative scheduler, `Task` for real parallelism, JS interop (`js` type, `extern`), and a batteries-included stdlib (`List`, `Map`, `Set`, strings, JSON via `@json`, files, regex, dates).
 
-Rust edition 2018 (root crate) / 2021 (`dream-lsp`). Workspace resolver `"2"` so the wasm32 analyzer-only build doesn't drag in native host deps.
+Rust edition 2024 for every crate, set once in `[workspace.package]` (crates use `edition.workspace = true`). Workspace resolver `"3"`; its feature unification keeps the wasm32 analyzer-only build from dragging in native host deps.
 
 ## Repository layout
 
@@ -227,6 +227,7 @@ When iterating on a feature or bugfix, prefer `./scripts/probe_test.sh <case-ste
 
 - **Golden e2e tests** live in `tests/cases/`: add `<name>.dream`, plus one of `<name>.expected` (exact stdout for successful compile+run), `<name>.expected_error` (lines the compile diagnostics must contain), or `<name>.expected_trap` (lines a failing run's output must contain, plus `exit code N`). Default `cargo test --workspace` runs a smoke subset; the full corpus is `./scripts/probe_test.sh`. **Agents implementing or fixing behavior must run `./scripts/probe_test.sh`** (optionally filtered by case stem while iterating; full probe before done).
 - **Unit tests** live next to the code they test (`dream-types`, `dream-hir`, `dream-mir` passes / `backend::llvm::ir`). Passes use `FunctionBuilder` (`dream-mir`) to build a tiny `MirFunction` and assert on the pass output.
+- **Integration test layout**: the root crate and `dream-lsp` build all of `tests/*.rs` as one `integration` binary (`autotests = false`), so the library links once instead of once per file. A new test file must be added as a `mod` in that crate's `tests/integration.rs` (an unlisted file is silently never built); shared helpers are `crate::common` / `crate::dap`, not per-file `mod common;`. Run one file with `cargo test --test integration <file>::`.
 - **Integration tests** `dream-mir`'s `hir_to_optimized_mir` (HIR→MIR→pass pipeline) and `tests/mir_pipeline.rs` (the same through LLVM IR emission) are the fastest signal when touching lowering/passes/emission. `tests/sema_emission_tests.rs` and `tests/rc_elision_goldens.rs` assert on emitted IR (`tests/common::emit_ll`, `ir_func_body`).
 - **Determinism test** `codegen_is_deterministic` (`tests/e2e_tests.rs`) compiles the same source twice and asserts byte-identical output. Never break this.
 

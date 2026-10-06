@@ -1,329 +1,50 @@
-//! Compile-time source generators: declaration SemanticModel, walkable SyntaxTree facade,
-//! GeneratorContext, registration, and the generate/merge pipeline.
+//! Compile-time source generators: `@generator fun name(ctx: GenContext)` Dream functions
+//! triggered by `@on_attribute`, `@on_call` and `@syntax_block`, run as cached debuggable
+//! executables on a JSON snapshot of the program, with results merged back as generated files
+//! and syntax-site replacements.
 
-mod context;
-mod context_gen;
-mod json_gen;
+mod apply;
+mod call_sites;
+#[cfg(feature = "native")]
+pub mod commands;
+mod decls;
+mod exe;
+#[cfg(feature = "native")]
+mod execute;
+mod identity;
+mod incremental;
+mod inspect;
 mod manifest;
-mod quote;
-mod registration;
+mod materialize;
+mod merge;
+mod model;
+#[cfg(feature = "native")]
+mod parallel;
+mod pass;
+mod paths;
+mod registry;
 mod rewrite;
-mod semantic;
-mod syntax;
-mod syntax_gen;
+#[cfg(feature = "native")]
+mod run;
+mod sites;
+mod snapshot;
+mod stage;
+mod stats;
+mod type_ref;
+mod walk;
 
-pub use context::GeneratorContext;
+pub use decls::module_of;
+#[cfg(feature = "native")]
+pub use exe::ensure_built;
+pub use exe::{group as group_executables, plan as plan_executable, ExePlan, GenExe};
+pub use identity::compiler_identity;
+pub use inspect::{inspect, GenInspection, InspectedGenerator};
 pub use manifest::{default_compile_entry, find_project_root, find_project_root_from};
-pub use registration::{discover_generators, RegisteredGenerator};
-pub use semantic::{
-    SemanticModel, Symbol, SymbolKind, TypeKind, TypeSymbol, Visibility as SymVisibility,
-};
-pub use syntax::{SyntaxKind, SyntaxNodeId, SyntaxTreeView};
-
-use bumpalo::Bump;
-use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::{ExpressionNode, StatementNode};
-use std::collections::HashMap;
-use std::io::Error;
-
-use crate::driver::source_loader::ProgramAccumulator;
-
-/// Runs the declaration + syntax generate passes.
-pub fn run_generators<'a>(
-    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
-    arena: &'a Bump,
-    acc: &mut ProgramAccumulator<'a>,
-    entry_file: &str,
-    diagnostics: &mut DiagnosticBag,
-) -> Result<(), Error> {
-    run_generators_inner(config, arena, acc, entry_file, diagnostics)
-}
-
-fn run_generators_inner<'a>(
-    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
-    arena: &'a Bump,
-    acc: &mut ProgramAccumulator<'a>,
-    entry_file: &str,
-    diagnostics: &mut DiagnosticBag,
-) -> Result<(), Error> {
-    acc.manifest_generator_paths = manifest::load_manifest_generators(entry_file);
-
-    let registered = discover_generators(acc, diagnostics);
-    let mut ctx = GeneratorContext::build(config.clone(), acc, registered);
-
-    json_gen::expand_from_acc(&mut ctx, acc, &acc.all_structs, &acc.all_enums, diagnostics);
-    ctx.apply_emits(arena, acc, diagnostics)?;
-
-    ctx.apply_emits(arena, acc, diagnostics)?;
-
-    let handled = context_gen::expand_context_generators(&mut ctx, diagnostics);
-    ctx.apply_emits(arena, acc, diagnostics)?;
-    syntax_gen::expand_syntax_blocks(&mut ctx, diagnostics, &handled);
-
-    ctx.apply_replacements(arena, acc, diagnostics)?;
-    // Flush any `ctx.error` reported during replacements (apply_emits already flushed once).
-    ctx.flush_errors(diagnostics);
-
-    report_unexpanded_syntax_blocks(acc, diagnostics);
-    Ok(())
-}
-
-fn report_unexpanded_syntax_blocks(acc: &ProgramAccumulator<'_>, diagnostics: &mut DiagnosticBag) {
-    fn walk_expr(expr: &ExpressionNode<'_>, diagnostics: &mut DiagnosticBag) {
-        match expr {
-            ExpressionNode::SyntaxBlock(block) => {
-                diagnostics.report_error(
-                    format!(
-                        "unexpanded syntax block '{}'; no generator registered for this introducer",
-                        block.name.text
-                    ),
-                    Some(block.name.position),
-                );
-            }
-            ExpressionNode::Binary(l, _, r) => {
-                walk_expr(l, diagnostics);
-                walk_expr(r, diagnostics);
-            }
-            ExpressionNode::Ternary(c, t, e) => {
-                walk_expr(c, diagnostics);
-                walk_expr(t, diagnostics);
-                walk_expr(e, diagnostics);
-            }
-            ExpressionNode::IndexAccess(a, i) => {
-                walk_expr(a, diagnostics);
-                walk_expr(i, diagnostics);
-            }
-            ExpressionNode::Unary(_, x)
-            | ExpressionNode::IncDec { target: x, .. }
-            | ExpressionNode::Parenthesized(_, x)
-            | ExpressionNode::Await(_, x)
-            | ExpressionNode::Try(x)
-            | ExpressionNode::Cast(_, _, x)
-            | ExpressionNode::IsExpression(x, _, _)
-            | ExpressionNode::TypeOf(_, x)
-            | ExpressionNode::MemberAccess(x, _)
-            | ExpressionNode::RefArgument(_, x)
-            | ExpressionNode::NamedArg(_, x) => walk_expr(x, diagnostics),
-            ExpressionNode::Call(c, _, args) | ExpressionNode::MethodCall(c, _, _, args) => {
-                walk_expr(c, diagnostics);
-                for a in args {
-                    walk_expr(a, diagnostics);
-                }
-            }
-            ExpressionNode::ArrayRepeat(_, v, n) => {
-                walk_expr(v, diagnostics);
-                walk_expr(n, diagnostics);
-            }
-            ExpressionNode::FunctionCall(_, _, args)
-            | ExpressionNode::ArrayLiteral(_, args)
-            | ExpressionNode::TupleLiteral(_, args)
-            | ExpressionNode::SetLiteral(_, args) => {
-                for a in args {
-                    walk_expr(a, diagnostics);
-                }
-            }
-            ExpressionNode::MapLiteral(_, entries) => {
-                for (k, v) in entries {
-                    walk_expr(k, diagnostics);
-                    walk_expr(v, diagnostics);
-                }
-            }
-            ExpressionNode::Switch(_, subj, arms) => {
-                walk_expr(subj, diagnostics);
-                for arm in arms {
-                    if let Some(g) = &arm.guard {
-                        walk_expr(g, diagnostics);
-                    }
-                    match &arm.body {
-                        dream_syntax::nodes::SwitchArmBody::Expr(e) => walk_expr(e, diagnostics),
-                        dream_syntax::nodes::SwitchArmBody::Block(stmts) => {
-                            for s in *stmts {
-                                walk_stmt(s, diagnostics);
-                            }
-                        }
-                    }
-                }
-            }
-            ExpressionNode::Lambda(l) => match &l.body {
-                dream_syntax::nodes::LambdaBody::Expr(e) => walk_expr(e, diagnostics),
-                dream_syntax::nodes::LambdaBody::Block(stmts) => {
-                    for s in *stmts {
-                        walk_stmt(s, diagnostics);
-                    }
-                }
-            },
-            ExpressionNode::Literal(_)
-            | ExpressionNode::Identifier(_)
-            | ExpressionNode::SizeOf(_, _)
-            | ExpressionNode::NameOf(_, _) => {}
-        }
-    }
-    fn walk_stmt(stmt: &StatementNode<'_>, diagnostics: &mut DiagnosticBag) {
-        match stmt {
-            StatementNode::ExpressionStatement(e)
-            | StatementNode::AwaitStmt(e)
-            | StatementNode::Return(Some(e))
-            | StatementNode::Assignment(_, e)
-            | StatementNode::Declaration(_, _, e, _)
-            | StatementNode::TupleDeclaration { init: e, .. } => walk_expr(e, diagnostics),
-            StatementNode::IndexAssignment(a, i, v) => {
-                walk_expr(a, diagnostics);
-                walk_expr(i, diagnostics);
-                walk_expr(v, diagnostics);
-            }
-            StatementNode::MemberAssignment(r, _, v) => {
-                walk_expr(r, diagnostics);
-                walk_expr(v, diagnostics);
-            }
-            StatementNode::FunctionInvocation(_, _, args) => {
-                for a in args {
-                    walk_expr(a, diagnostics);
-                }
-            }
-            StatementNode::MethodInvocation(r, _, _, args) => {
-                walk_expr(r, diagnostics);
-                for a in args {
-                    walk_expr(a, diagnostics);
-                }
-            }
-            StatementNode::IfElse(cond, then_b, elifs, else_b) => {
-                walk_expr(cond, diagnostics);
-                for s in *then_b {
-                    walk_stmt(s, diagnostics);
-                }
-                for (c, b) in elifs {
-                    walk_expr(c, diagnostics);
-                    for s in *b {
-                        walk_stmt(s, diagnostics);
-                    }
-                }
-                if let Some(eb) = else_b {
-                    for s in *eb {
-                        walk_stmt(s, diagnostics);
-                    }
-                }
-            }
-            StatementNode::While(cond, body) | StatementNode::Lock(cond, body) => {
-                walk_expr(cond, diagnostics);
-                for s in *body {
-                    walk_stmt(s, diagnostics);
-                }
-            }
-            StatementNode::Overflow(_, _, body) => {
-                for s in *body {
-                    walk_stmt(s, diagnostics);
-                }
-            }
-            StatementNode::Defer(budget, body) => {
-                if let Some(q) = budget {
-                    walk_expr(q, diagnostics);
-                }
-                for s in *body {
-                    walk_stmt(s, diagnostics);
-                }
-            }
-            StatementNode::DoWhile(body, cond) => {
-                for s in *body {
-                    walk_stmt(s, diagnostics);
-                }
-                walk_expr(cond, diagnostics);
-            }
-            StatementNode::For(init, cond, inc, body) => {
-                if let Some(s) = init {
-                    walk_stmt(s, diagnostics);
-                }
-                if let Some(e) = cond {
-                    walk_expr(e, diagnostics);
-                }
-                if let Some(s) = inc {
-                    walk_stmt(s, diagnostics);
-                }
-                for s in *body {
-                    walk_stmt(s, diagnostics);
-                }
-            }
-            StatementNode::ForEach(_, iter, _, _, body) => {
-                walk_expr(iter, diagnostics);
-                for s in *body {
-                    walk_stmt(s, diagnostics);
-                }
-            }
-            StatementNode::Switch(subj, cases, default) => {
-                walk_expr(subj, diagnostics);
-                for (labels, body) in cases {
-                    for l in labels {
-                        walk_expr(l, diagnostics);
-                    }
-                    for s in *body {
-                        walk_stmt(s, diagnostics);
-                    }
-                }
-                if let Some(d) = default {
-                    for s in *d {
-                        walk_stmt(s, diagnostics);
-                    }
-                }
-            }
-            StatementNode::Labeled(_, inner) => walk_stmt(inner, diagnostics),
-            StatementNode::Return(None) | StatementNode::Break(_) | StatementNode::Continue(_) => {}
-        }
-    }
-
-    for f in &acc.all_functions {
-        for s in f.body {
-            walk_stmt(s, diagnostics);
-        }
-    }
-    for s in &acc.all_structs {
-        for m in &s.methods {
-            for st in m.body {
-                walk_stmt(st, diagnostics);
-            }
-        }
-    }
-    for e in &acc.all_extends {
-        for m in &e.methods {
-            for st in m.body {
-                walk_stmt(st, diagnostics);
-            }
-        }
-    }
-}
-
-/// Parse Dream source containing `extend` blocks into `ExtendNode`s.
-pub(crate) fn parse_extends<'a>(
-    arena: &'a Bump,
-    source: String,
-    synthetic_path: &str,
-    diagnostics: &mut DiagnosticBag,
-    file_contents: &mut HashMap<String, String>,
-) -> Result<Vec<dream_syntax::nodes::ExtendNode<'a>>, Error> {
-    use dream_syntax::lexer::Lexer;
-    use dream_syntax::parser::Parser;
-
-    file_contents.insert(synthetic_path.to_string(), source.clone());
-    let mut derive_diagnostics = DiagnosticBag::new(Some(synthetic_path.to_string()));
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, arena, &mut derive_diagnostics);
-    let ast = match parser.parse() {
-        Ok(ast) => ast,
-        Err(e) => {
-            diagnostics.extend(&derive_diagnostics);
-            return Err(e);
-        }
-    };
-    diagnostics.extend(&derive_diagnostics);
-    let program = ast.get_root();
-    let file_tag: std::rc::Rc<str> = std::rc::Rc::from(synthetic_path);
-    let mut out = Vec::new();
-    for extend_decl in program.extends.iter().cloned() {
-        let mut extend_decl = extend_decl;
-        extend_decl.file_path = Some(file_tag.clone());
-        extend_decl.is_synthesized = true;
-        for method in extend_decl.methods.iter_mut() {
-            method.file_path = None;
-        }
-        out.push(extend_decl);
-    }
-    Ok(out)
-}
+pub use materialize::{header as generated_header, materialized_text};
+pub use model::{GenResult, Snapshot, SNAPSHOT_VERSION};
+pub use pass::{gather, run_generators, GenerateRequest, PassInputs};
+pub use registry::RegisteredGenerator;
+#[cfg(feature = "native")]
+pub use run::{exe_args, run as run_executable, DEFAULT_TIMEOUT_SECS};
+pub use stage::GeneratorStage;
+pub use stats::GenStats;

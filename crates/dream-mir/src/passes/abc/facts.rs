@@ -104,11 +104,10 @@ impl Defs {
             for (si, stmt) in block.stmts.iter().enumerate() {
                 if let Statement::Assign(Place::Local(d), rv) = stmt {
                     note(d.0 as usize, bi, Some(si), &mut count);
-                    if matches!(rv, Rvalue::Use(Operand::Const(Const::Null))) {
-                        if let Some(c) = nulls.get_mut(d.0 as usize) {
+                    if matches!(rv, Rvalue::Use(Operand::Const(Const::Null)))
+                        && let Some(c) = nulls.get_mut(d.0 as usize) {
                             *c += 1;
                         }
-                    }
                 }
             }
             if let Terminator::Await { dest: Some(d), .. } = &block.terminator {
@@ -239,11 +238,10 @@ impl FactEngine {
             let Statement::Assign(Place::Local(d), rv) = stmt else {
                 return;
             };
-            if let Some(x) = unit_increment_of(rv) {
-                if view.holds(&Fact::Bounded(x.0)) {
+            if let Some(x) = unit_increment_of(rv)
+                && view.holds(&Fact::Bounded(x.0)) {
                     bounded_incr.insert((bi, si));
                 }
-            }
             if decrement_of(rv) == Some(*d) && view.nonneg(d.0) {
                 nonneg_decr.insert((bi, si));
             }
@@ -329,11 +327,10 @@ fn dom_children(func: &MirFunction, dom: &DomTree) -> Vec<Vec<usize>> {
     let n = func.blocks.len();
     let mut children = vec![Vec::new(); n];
     for b in 0..n {
-        if let Some(p) = dom.idom(crate::BlockId(b as u32)) {
-            if p.0 as usize != b {
+        if let Some(p) = dom.idom(crate::BlockId(b as u32))
+            && p.0 as usize != b {
                 children[p.0 as usize].push(b);
             }
-        }
     }
     children
 }
@@ -465,12 +462,11 @@ fn at_most(func: &MirFunction, defs: &Defs, lhs: &Operand, rhs: &Operand, out: &
         return;
     };
     let mut bounded = false;
-    if let Some(k) = defs.const_value(func, rhs) {
-        if k < i32::MAX as i64 {
+    if let Some(k) = defs.const_value(func, rhs)
+        && k < i32::MAX as i64 {
             out.push(Fact::BelowConst(i.0, k + 1));
             bounded = true;
         }
-    }
     for b in le_bounds(func, defs, rhs) {
         out.push(Fact::Below(i.0, b));
         bounded = true;
@@ -605,11 +601,9 @@ fn link_local(
                 len: Operand::Copy(Place::Local(l)),
                 ..
             } = rv
-            {
-                if l.0 == n {
+                && l.0 == n {
                     out.push(Bound::Arr(a));
                 }
-            }
         }
     }
     out.sort();

@@ -71,9 +71,15 @@ pub struct Compiler {
     /// set yet; an explicit [`Compiler::with_optimize`] (or CLI `-O`) overrides that default.
     /// Debug builds leave this `None` unless the caller opts in.
     optimize: Option<OptLevel>,
-    /// When `true`, skip the source-generator pass (`@json`, …). Used when compiling
-    /// the generator harness itself so nested compiles cannot recurse into generator execution.
-    skip_generators: bool,
+    /// Which source generators run. Generator executables compile at a narrower stage so
+    /// nested compiles cannot recurse into themselves.
+    generator_stage: crate::driver::generate::GeneratorStage,
+    /// Source of the entry file when it is compiler-made (generator harnesses) rather than read
+    /// from disk; imports still resolve relative to the entry path's directory.
+    virtual_entry: Option<String>,
+    /// Print diagnostics to stderr when a compile fails. Off for nested generator builds, whose
+    /// diagnostics the outer compile reports itself.
+    render_diagnostics: bool,
     /// When non-empty (CLI `--runtime --web` / `--runtime --node`), emit a tree-shaken sibling
     /// `*.{web,node}.runtime.js` for each listed host (both may be set in one compile).
     runtimes: Vec<JsRuntimeTarget>,
@@ -120,7 +126,9 @@ impl Compiler {
             debug: true,
             debug_info: false,
             optimize: None,
-            skip_generators: false,
+            generator_stage: crate::driver::generate::GeneratorStage::All,
+            virtual_entry: None,
+            render_diagnostics: true,
             runtimes: Vec::new(),
             compile_targets: CompileTargets::native_only(),
             crate_type: dream_sema::analyzer::CrateType::Bin,
@@ -172,9 +180,21 @@ impl Compiler {
         self
     }
 
-    /// Builder: skip `@json` / syntax-DSL generators (for compiling generator harnesses).
-    pub fn with_skip_generators(mut self, on: bool) -> Self {
-        self.skip_generators = on;
+    /// Builder: which source generators this compile runs.
+    pub fn with_generator_stage(mut self, stage: crate::driver::generate::GeneratorStage) -> Self {
+        self.generator_stage = stage;
+        self
+    }
+
+    /// Builder: whether a failing compile prints its diagnostics (they are always in the error).
+    pub fn with_render_diagnostics(mut self, on: bool) -> Self {
+        self.render_diagnostics = on;
+        self
+    }
+
+    /// Builder: compile `source` as the entry file instead of reading the entry path from disk.
+    pub fn with_virtual_entry(mut self, source: String) -> Self {
+        self.virtual_entry = Some(source);
         self
     }
 
@@ -379,17 +399,6 @@ fn report_wasm_c_imports(
         ));
     }
     true
-}
-
-/// True when any collected user type carries `@json` (derived converters need `system.json`).
-fn program_uses_json_attr(acc: &ProgramAccumulator<'_>) -> bool {
-    acc.all_structs
-        .iter()
-        .any(|s| s.attributes.iter().any(|a| a.name.text == "json"))
-        || acc
-            .all_enums
-            .iter()
-            .any(|e| e.attributes.iter().any(|a| a.name.text == "json"))
 }
 
 mod library;

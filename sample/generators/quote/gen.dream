@@ -2,17 +2,12 @@ module gen;
 
 import system.codegen;
 
-// `quote { ... }` becomes a Dream string literal at compile time. The compiler compiles + runs
-// this body directly (it takes a single `GenContext`), so no sibling `harness.dream` is needed.
+// `quote { ... }` becomes a Dream string literal at compile time.
 @generator
-@syntax_block("quote")
+@syntax_block
 public fun quote(ctx: GenContext): void {
-    let blocks = ctx.syntax_blocks("quote");
-    let i = 0;
-    while i < blocks.length {
-        let block = blocks[i];
+    for (let block in ctx.syntax_blocks()) {
         ctx.replace(block, as_dream_string(block.body.trim()));
-        i = i + 1;
     }
 }
 

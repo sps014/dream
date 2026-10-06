@@ -202,7 +202,9 @@ fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
             walk_expr_for_ref_targets(i, out);
         }
         ExpressionNode::Cast(_, _, e) => walk_expr_for_ref_targets(e, out),
-        ExpressionNode::SizeOf(_, _) | ExpressionNode::NameOf(_, _) => {}
+        ExpressionNode::SizeOf(_, _)
+        | ExpressionNode::NameOf(_, _)
+        | ExpressionNode::DeclOf(_, _) => {}
         ExpressionNode::TypeOf(_, e) => walk_expr_for_ref_targets(e, out),
         ExpressionNode::MemberAccess(e, _) => walk_expr_for_ref_targets(e, out),
         ExpressionNode::IsExpression(e, _, _) => walk_expr_for_ref_targets(e, out),
@@ -392,7 +394,9 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
             walk_expr_for_lambdas(i, out);
         }
         ExpressionNode::Cast(_, _, e) => walk_expr_for_lambdas(e, out),
-        ExpressionNode::SizeOf(_, _) | ExpressionNode::NameOf(_, _) => {}
+        ExpressionNode::SizeOf(_, _)
+        | ExpressionNode::NameOf(_, _)
+        | ExpressionNode::DeclOf(_, _) => {}
         ExpressionNode::TypeOf(_, e) => walk_expr_for_lambdas(e, out),
         ExpressionNode::MemberAccess(e, _) => walk_expr_for_lambdas(e, out),
         ExpressionNode::IsExpression(e, _, _) => walk_expr_for_lambdas(e, out),
@@ -680,7 +684,9 @@ fn collect_names_expr(
             collect_names_expr(i, scopes, referenced);
         }
         ExpressionNode::Cast(_, _, e) => collect_names_expr(e, scopes, referenced),
-        ExpressionNode::SizeOf(_, _) | ExpressionNode::NameOf(_, _) => {}
+        ExpressionNode::SizeOf(_, _)
+        | ExpressionNode::NameOf(_, _)
+        | ExpressionNode::DeclOf(_, _) => {}
         ExpressionNode::TypeOf(_, e) => collect_names_expr(e, scopes, referenced),
         ExpressionNode::MemberAccess(e, _) => collect_names_expr(e, scopes, referenced),
         // `is`-with-binding is scoped by the statement layer (`if`/`while`); here the binding is

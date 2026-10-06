@@ -58,12 +58,11 @@ fn resolve(op: &Operand, known: &HashMap<Local, Operand>) -> Option<Operand> {
     let mut value = op;
     // At most one visit per binding can resolve a copy chain. A cycle carries no known value.
     for _ in 0..=known.len() {
-        if let Operand::Copy(Place::Local(local)) = value {
-            if let Some(next) = known.get(local) {
+        if let Operand::Copy(Place::Local(local)) = value
+            && let Some(next) = known.get(local) {
                 value = next;
                 continue;
             }
-        }
         return (!matches!(value, Operand::Copy(Place::Local(local)) if local == start))
             .then(|| value.clone());
     }

@@ -179,14 +179,13 @@ impl Known {
                 return Ok(Bridge::Struct(tok.text.clone()));
             }
         }
-        if let Type::Struct(tok, _) = ty {
-            if tok.text == NATIVE_CALLBACK_TYPE {
+        if let Type::Struct(tok, _) = ty
+            && tok.text == NATIVE_CALLBACK_TYPE {
                 return Err(
                     "a `@cpp` member takes `fun(...)` directly; `NativeCallback` is for `@c`"
                         .to_string(),
                 );
             }
-        }
         Err(format!(
             "type '{}' cannot cross the C++ boundary; allowed: {BRIDGEABLE}",
             ty.display_name()

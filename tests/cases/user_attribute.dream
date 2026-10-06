@@ -1,7 +1,8 @@
 import system;
 
-@attribute
-public fun route(path: string): void {
+@attribute(AttributeTarget.Function)
+public struct route {
+    public path: string;
 }
 
 @route("/users")

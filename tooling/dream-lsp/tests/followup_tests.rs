@@ -1,7 +1,7 @@
 //! Tests for the follow-up IDE features: structured diagnostic codes, embedded-stdlib
 //! navigation, workspace disk scan, and type-safe (entity-identity) reference matching.
 
-mod common;
+use crate::common;
 
 use common::TestHarness;
 use dream_lsp::analysis::analyze_document;
@@ -63,6 +63,48 @@ fn materializes_stdlib_source_for_navigation() {
 
     // Unknown virtual paths fail cleanly.
     assert!(dream_lsp::backend::materialize_stdlib(&dir, "<std>/nope/nope.dream").is_none());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// ---------------------------------------------------------------- generated sources
+
+#[test]
+fn generated_members_resolve_from_materialized_files() {
+    let dir = std::env::temp_dir().join(format!("dream-lsp-test-gen-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("dream.toml"), "[[generators]]\npath = \"gen.dream\"\n").unwrap();
+    fs::write(
+        dir.join("gen.dream"),
+        "module gen;\n\nimport system.codegen;\n\n@attribute(AttributeTarget.Class)\npublic struct dto {}\n\n@generator\n@on_attribute(dto)\npublic fun dto_derive(ctx: GenContext): void {\n    ctx.log(\"run\");\n}\n",
+    )
+    .unwrap();
+    let src = "import system;\nimport gen;\n\n@dto\nclass Point {\n    public x: int;\n    public constructor(x: int) { this.x = x; }\n}\n\nfun main(): void {\n    System.println(Point(1).describe());\n}\n";
+    let main = dir.join("main.dream");
+    fs::write(&main, src).unwrap();
+    let main = main.to_string_lossy().into_owned();
+
+    let unresolved = |diags: &[dream_lsp::analysis::DiagnosticOut]| {
+        diags
+            .iter()
+            .any(|d| d.severity == "error" && d.message.contains("describe"))
+    };
+    assert!(unresolved(&analyze_document(Some(&main), src).diagnostics));
+
+    let generated = dir.join(".dream/generated/main/dto_derive");
+    fs::create_dir_all(&generated).unwrap();
+    fs::write(
+        generated.join("extends.dream"),
+        dream::driver::generate::generated_header("dto_derive")
+            + "extend Point {\npublic fun describe(): string {\n    return \"dto\";\n}\n}\n",
+    )
+    .unwrap();
+    let diags = analyze_document(Some(&main), src).diagnostics;
+    assert!(
+        !unresolved(&diags),
+        "materialized member should resolve: {:?}",
+        diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+    );
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -192,9 +234,9 @@ fun main() {
 "#;
     let diags = analyze_document(None, src).diagnostics;
     assert!(
-        diags
-            .iter()
-            .any(|d| d.message.contains("'Map<string, object>' cannot be serialized to JSON")),
+        diags.iter().any(|d| d
+            .message
+            .contains("'Map<string, object>' cannot be serialized to JSON")),
         "expected object-map serialize error, got {:?}",
         diags.iter().map(|d| &d.message).collect::<Vec<_>>()
     );

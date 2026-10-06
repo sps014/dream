@@ -5,244 +5,303 @@ import system.io;
 import system.collections;
 import system.json;
 
-// One field on a snapshotted declaration type.
-public class GenFieldInfo {
-    public name: string;
-    public type_name: string;
-
-    public constructor(name: string, type_name: string) {
-        this.name = name;
-        this.type_name = type_name;
-    }
+// Snapshot format this package reads; the compiler writes the same number.
+fun gen_snapshot_version(): int {
+    return 1;
 }
 
-// One declaration type snapshotted for an executed `@generator` body.
-public class GenTypeInfo {
-    public name: string;
-    public attributes: List<string>;
-    public fields: List<GenFieldInfo>;
-
-    public constructor(name: string, attributes: List<string>, fields: List<GenFieldInfo>) {
-        this.name = name;
-        this.attributes = attributes;
-        this.fields = fields;
-    }
-
-    public fun has_attribute(attr: string): bool {
-        for (let a in this.attributes) {
-            if a == attr {
-                return true;
-            }
-        }
-        return false;
-    }
-}
-
-// One `introducer { ... }` syntax-DSL call site, snapshotted for an executed `@generator` body.
-public class GenSyntaxBlock {
-    // Opaque site id; pass back into `GenContext.replace`/`GenContext.error` unchanged.
-    public id: int;
-    // The introducer name (`quote`, `html`, ...).
-    public name: string;
-    // Raw reconstructed body text (splices appear as `{expr}` placeholders).
-    public body: string;
-    // Dream source of each `{ ... }` splice expression, in source order.
-    public splices: List<string>;
-
-    public constructor(id: int, name: string, body: string, splices: List<string>) {
-        this.id = id;
-        this.name = name;
-        this.body = body;
-        this.splices = splices;
-    }
-}
-
-// Compile-time context handed to an executed `@generator` function body. Loaded from a host
-// snapshot (see `from_snapshot`) and flushed back to the host via `finish()`, which prints the
-// same `GenHost` stdout protocol a sibling `harness.dream` would print by hand.
+// What a `@generator fun name(ctx: GenContext)` sees and produces. The compiler runs the
+// generator's cached executable with `--generator <name> --snapshot <in> --result <out>`; the
+// harness loads the context from the snapshot, calls the generator, and `finish()` writes the
+// result the compiler validates and merges.
 public class GenContext {
-    blocks: List<GenSyntaxBlock>;
-    types: List<GenTypeInfo>;
-    replacements: List<string>;
-    extend_types: List<string>;
-    extend_bodies: List<string>;
-    file_paths: List<string>;
-    file_sources: List<string>;
-    error_line: string;
-    has_error: bool;
+    // The running generator's name and `module::name` identity.
+    public generator_name: string;
+    public generator_id: string;
+    // Target triple of the compile (`aarch64-apple-darwin`, `wasm32-unknown-wasi`, ...).
+    public target: string;
+    snapshot: GenSnapshot;
+    result_path: string;
+    outputs: JsonValue;
+    diagnostics: JsonValue;
+    logs: JsonValue;
+    extends: StringBuilder;
+    error_count: int;
 
-    constructor(blocks: List<GenSyntaxBlock>, types: List<GenTypeInfo>) {
-        this.blocks = blocks;
-        this.types = types;
-        this.replacements = List<string>();
-        this.extend_types = List<string>();
-        this.extend_bodies = List<string>();
-        this.file_paths = List<string>();
-        this.file_sources = List<string>();
-        this.error_line = string.empty;
-        this.has_error = false;
+    constructor(snapshot: GenSnapshot, result_path: string) {
+        this.generator_name = snapshot.generator;
+        this.generator_id = snapshot.generator_id;
+        this.target = snapshot.target;
+        this.snapshot = snapshot;
+        this.result_path = result_path;
+        this.outputs = JsonValue.array();
+        this.diagnostics = JsonValue.array();
+        this.logs = JsonValue.array();
+        this.extends = StringBuilder();
+        this.error_count = 0;
     }
 
-    // Loads a `GenContext` from the JSON snapshot file the compiler wrote. The path is
-    // passed to the generator harness as its first program argument.
-    public static async fun from_snapshot(path: string, token: Option<CancellationToken> = Option.None): Result<GenContext, string> {
-        if path.is_empty() {
-            return Result.Err("snapshot path is empty");
+    // Reads `--snapshot` / `--result` from the program arguments.
+    public static async fun load(args: string[]): Result<GenContext, string> {
+        let snapshot_path = "";
+        let result_path = "";
+        let i = 0;
+        while i + 1 < args.length {
+            if args[i] == "--snapshot" {
+                snapshot_path = args[i + 1];
+            } else if args[i] == "--result" {
+                result_path = args[i + 1];
+            }
+            i = i + 1;
         }
-        let text_res = File.read(path, token).await;
-        if CancellationToken.is_cancelled_opt(token) {
-            return Result.Err("ECANCELLED");
+        if snapshot_path.is_empty() || result_path.is_empty() {
+            return Result.Err("usage: --generator <name> --snapshot <path> --result <path>");
         }
-        return GenContext.parse_snapshot(text_res);
-    }
-
-    static fun parse_snapshot(text_res: Result<string, IoError>): Result<GenContext, string> {
-        switch (text_res) {
-            Ok(text) => {
-                let parsed = Json._parse(text);
-                switch (parsed) {
+        let text = File.read(snapshot_path).await;
+        switch (text) {
+            Ok(source) => {
+                switch (Json._parse(source)) {
                     Ok(root) => {
-                        let arr = root.get("blocks").unwrap_or(JsonValue.array());
-                        let blocks = List<GenSyntaxBlock>();
-                        let i = 0;
-                        while i < arr.length {
-                            let b = arr.at(i).unwrap_or(JsonValue.none());
-                            let id = b.get("id").unwrap_or(JsonValue.none()).as_int().unwrap_or(0);
-                            let name = b.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or(string.empty);
-                            let body = b.get("body").unwrap_or(JsonValue.none()).as_string().unwrap_or(string.empty);
-                            let splices_json = b.get("splices").unwrap_or(JsonValue.array());
-                            let splices = List<string>();
-                            let j = 0;
-                            while j < splices_json.length {
-                                let s = splices_json.at(j).unwrap_or(JsonValue.none()).as_string().unwrap_or(string.empty);
-                                splices.push(s);
-                                j = j + 1;
-                            }
-                            blocks.push(GenSyntaxBlock(id, name, body, splices));
-                            i = i + 1;
+                        let snapshot = GenSnapshot(root);
+                        if snapshot.version != gen_snapshot_version() {
+                            return Result.Err("snapshot version " + snapshot.version.to_string() + " does not match system.codegen (" + gen_snapshot_version().to_string() + "); rebuild the generator");
                         }
-                        let types_arr = root.get("types").unwrap_or(JsonValue.array());
-                        let types = List<GenTypeInfo>();
-                        let ti = 0;
-                        while ti < types_arr.length {
-                            let t = types_arr.at(ti).unwrap_or(JsonValue.none());
-                            let tname = t.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or(string.empty);
-                            let attrs_json = t.get("attributes").unwrap_or(JsonValue.array());
-                            let attributes = List<string>();
-                            let ai = 0;
-                            while ai < attrs_json.length {
-                                let a = attrs_json.at(ai).unwrap_or(JsonValue.none()).as_string().unwrap_or(string.empty);
-                                attributes.push(a);
-                                ai = ai + 1;
-                            }
-                            let fields_json = t.get("fields").unwrap_or(JsonValue.array());
-                            let fields = List<GenFieldInfo>();
-                            let fi = 0;
-                            while fi < fields_json.length {
-                                let f = fields_json.at(fi).unwrap_or(JsonValue.none());
-                                let fname = f.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or(string.empty);
-                                let ftype = f.get("type_name").unwrap_or(JsonValue.none()).as_string().unwrap_or(string.empty);
-                                fields.push(GenFieldInfo(fname, ftype));
-                                fi = fi + 1;
-                            }
-                            types.push(GenTypeInfo(tname, attributes, fields));
-                            ti = ti + 1;
-                        }
-                        return Result.Ok(GenContext(blocks, types));
+                        return Result.Ok(GenContext(snapshot, result_path));
                     }
                     Err(e) => {
-                        return Result.Err("failed to parse snapshot JSON: " + e.message());
+                        return Result.Err("malformed snapshot " + snapshot_path + ": " + e.message());
                     }
                 }
             }
             Err(e) => {
-                return Result.Err("failed to read snapshot: " + e.message());
+                return Result.Err("cannot read snapshot " + snapshot_path + ": " + e.message());
             }
         }
     }
 
-    // Snapshotted `name { ... }` sites. Returns the live `blocks` list (same object as
-    // `all_blocks`); callers must match `name`. Building a second list of the same nodes
-    // unique-moves them out from under this context (generator harness SIGSEGV).
-    public fun syntax_blocks(name: string): List<GenSyntaxBlock> {
-        let _ = name;
-        return this.blocks;
+    // Declarations carrying `@A` (on the declaration or on one of its members).
+    public fun types_with<A>(): List<GenDecl> {
+        let id = GenAttributes.id<A>();
+        let out = List<GenDecl>();
+        for (let d in this.snapshot.decls) {
+            if gen_decl_carries(d, id) {
+                out.push(d);
+            }
+        }
+        return out;
     }
 
-    // Every snapshotted call site, regardless of introducer.
-    public fun all_blocks(): List<GenSyntaxBlock> {
-        return this.blocks;
+    // Top-level functions carrying `@A` (on the function or a parameter).
+    public fun functions_with<A>(): List<GenFunction> {
+        let id = GenAttributes.id<A>();
+        let out = List<GenFunction>();
+        for (let f in this.snapshot.functions) {
+            if gen_function_carries(f, id) {
+                out.push(f);
+            }
+        }
+        return out;
     }
 
-    // Every snapshotted declaration type carrying attribute `attr`.
-    public fun types_with(attr: string): List<GenTypeInfo> {
-        let _ = attr;
-        return this.types;
+    // Every declaration selected by this generator's `@on_attribute` triggers.
+    public fun decls(): List<GenDecl> {
+        return this.snapshot.decls;
     }
 
-    // Rewrites `block`'s call site to the Dream expression `dream_expr` before type-checking.
-    public fun replace(borrow block: GenSyntaxBlock, dream_expr: string): void {
-        this.replacements.push(block.id.to_string() + "\t" + dream_expr);
+    // Every type in the program, by name and kind.
+    public fun type_index(): List<GenIndexEntry> {
+        return this.snapshot.index;
     }
 
-    // Queues synthesized `extend Type { ... }` source for the host to merge before type-checking.
-    public fun emit_extend(type_name: string, body: string): void {
-        this.extend_types.push(type_name);
-        this.extend_bodies.push(body);
+    // The index entry named `name`, if the program declares such a type.
+    public fun find_type(borrow name: string): Option<GenIndexEntry> {
+        for (let e in this.snapshot.index) {
+            if e.name == name {
+                return Option.Some(e);
+            }
+        }
+        return Option.None;
     }
 
-    // Queues a synthetic Dream source file for the host to parse and merge.
+    // `name { ... }` sites introduced by this generator's name (`@syntax_block` generators).
+    public fun syntax_blocks(): List<GenSyntaxBlock> {
+        return this.snapshot.blocks;
+    }
+
+    // Calls of the functions named in this generator's `@on_call(...)`.
+    public fun call_sites(): List<GenCallSite> {
+        return this.snapshot.calls;
+    }
+
+    // `dream.toml` `[[generators]].options`, decoded into the `@json` type `T`.
+    public fun options<T>(): Result<T, ParseError> {
+        return Json.deserialize<T>(Json._stringify(this.snapshot.options));
+    }
+
+    // One option as text (`fallback` when unset).
+    public fun option_or(borrow key: string, fallback: string): string {
+        switch (this.snapshot.options.get(key)) {
+            Some(v) => {
+                switch (v.as_string()) {
+                    Some(s) => {
+                        return s;
+                    }
+                    None => {
+                        return Json._stringify(v);
+                    }
+                }
+            }
+            None => {
+                return fallback;
+            }
+        }
+    }
+
+    // `dream.toml` `[[generators]].additional_files`, read by the compiler.
+    public fun additional_files(): List<GenFile> {
+        return this.snapshot.files;
+    }
+
+    // Rewrites `block`'s site to the Dream expression `source`.
+    public fun replace(borrow block: GenSyntaxBlock, source: string): void {
+        let out = JsonValue.dict();
+        out.set("kind", JsonValue.from_string("replace"));
+        out.set("site", JsonValue.from_string(block.id));
+        out.set("source", JsonValue.from_string(source));
+        this.outputs.push(out);
+    }
+
+    // Adds a complete Dream source file at the generator-relative path `path` (`models.json.dream`).
+    // It is written under `.dream/generated/<entry>/<generator>/` and compiled with the program.
     public fun emit_file(path: string, source: string): void {
-        this.file_paths.push(path);
-        this.file_sources.push(source);
+        let out = JsonValue.dict();
+        out.set("kind", JsonValue.from_string("file"));
+        out.set("path", JsonValue.from_string(path));
+        out.set("source", JsonValue.from_string(source));
+        this.outputs.push(out);
     }
 
-    // Queues a generate-time diagnostic for `block` (surfaces as `CompileError::Generator`).
-    // Only the first reported error is kept, mirroring the harness `ERR` protocol's one-message
-    // contract.
+    // Adds `extend <decl> { <body> }` to this generator's `extends.dream` file.
+    public fun emit_extend(borrow decl: GenDecl, body: string): void {
+        this.extends.append("extend " + decl.self_type() + " {\n");
+        this.extends.append(body);
+        if !body.ends_with("\n") {
+            this.extends.append("\n");
+        }
+        this.extends.append("}\n\n");
+    }
+
+    fun report(severity: string, borrow target: string, message: string): void {
+        let d = JsonValue.dict();
+        d.set("severity", JsonValue.from_string(severity));
+        d.set("message", JsonValue.from_string(message));
+        d.set("target", JsonValue.from_string(target));
+        this.diagnostics.push(d);
+        if severity == "error" {
+            this.error_count = this.error_count + 1;
+        }
+    }
+
+    // An error at the node with identity `target` (any model node's `id`), or at the generator
+    // itself for an empty `target`.
+    public fun error_at(borrow target: string, message: string): void {
+        this.report("error", target, message);
+    }
+
+    public fun warning_at(borrow target: string, message: string): void {
+        this.report("warning", target, message);
+    }
+
+    public fun error(message: string): void {
+        this.report("error", "", message);
+    }
+
     public fun error(borrow block: GenSyntaxBlock, message: string): void {
-        if this.has_error == false {
-            this.has_error = true;
-            this.error_line = block.id.to_string() + "\t" + message;
-        }
+        this.report("error", block.id, message);
     }
 
-    // Queues a generate-time diagnostic with no associated call site.
-    public fun error_general(message: string): void {
-        if this.has_error == false {
-            this.has_error = true;
-            this.error_line = message;
-        }
+    public fun error(borrow decl: GenDecl, message: string): void {
+        this.report("error", decl.id, message);
     }
 
-    // Flushes accumulated replace/error/emit calls to stdout using the `GenHost` protocol.
-    public fun finish(): void {
-        if this.has_error {
-            System.println(GenHost.err_marker());
-            System.println(this.error_line);
-            return;
+    public fun error(borrow field: GenField, message: string): void {
+        this.report("error", field.id, message);
+    }
+
+    public fun error(borrow call: GenCallSite, message: string): void {
+        this.report("error", call.id, message);
+    }
+
+    public fun warning(borrow decl: GenDecl, message: string): void {
+        this.report("warning", decl.id, message);
+    }
+
+    public fun has_errors(): bool {
+        return this.error_count > 0;
+    }
+
+    // A line shown with `dream -v` / `dream generate --explain`.
+    public fun log(message: string): void {
+        this.logs.push(JsonValue.from_string(message));
+    }
+
+    // Writes the result for the compiler; the harness returns this as the exit code.
+    public async fun finish(): int {
+        let extends = this.extends.to_string();
+        if extends.length > 0 {
+            this.emit_file("extends.dream", extends);
         }
-        System.println(GenHost.ok_marker());
-        for (let line in this.replacements) {
-            System.println(line);
-        }
-        let ei = 0;
-        while ei < this.extend_types.length {
-            System.println(GenHost.emit_extend_marker());
-            System.println(this.extend_types.get(ei));
-            System.println(escape_gen_payload(this.extend_bodies.get(ei)));
-            ei = ei + 1;
-        }
-        let fi = 0;
-        while fi < this.file_paths.length {
-            System.println(GenHost.emit_file_marker());
-            System.println(this.file_paths.get(fi));
-            System.println(escape_gen_payload(this.file_sources.get(fi)));
-            fi = fi + 1;
+        let root = JsonValue.dict();
+        root.set("version", JsonValue.from_int(gen_snapshot_version()));
+        root.set("generator", JsonValue.from_string(this.generator_name));
+        root.set("outputs", this.outputs);
+        root.set("diagnostics", this.diagnostics);
+        root.set("logs", this.logs);
+        let written = File.write(this.result_path, Json._stringify(root)).await;
+        switch (written) {
+            Ok(_) => {
+                return 0;
+            }
+            Err(e) => {
+                System.println("cannot write generator result " + this.result_path + ": " + e.message());
+                return 3;
+            }
         }
     }
 }
 
-fun escape_gen_payload(s: string): string {
-    return s.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r");
+fun gen_function_carries(borrow f: GenFunction, borrow id: string): bool {
+    if GenAttributes.has(f.attributes, id) {
+        return true;
+    }
+    for (let p in f.params) {
+        if GenAttributes.has(p.attributes, id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun gen_decl_carries(borrow d: GenDecl, borrow id: string): bool {
+    if GenAttributes.has(d.attributes, id) {
+        return true;
+    }
+    for (let f in d.fields) {
+        if GenAttributes.has(f.attributes, id) {
+            return true;
+        }
+    }
+    for (let v in d.variants) {
+        for (let f in v.fields) {
+            if GenAttributes.has(f.attributes, id) {
+                return true;
+            }
+        }
+    }
+    for (let m in d.methods) {
+        if gen_function_carries(m, id) {
+            return true;
+        }
+    }
+    return false;
 }

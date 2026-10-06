@@ -162,7 +162,7 @@ Appends a value to the array.
 public fun push(value: JsonValue): void
 ```
 
-## `length`
+## `get`
 
 Element count for arrays/objects (0 for scalars).
 

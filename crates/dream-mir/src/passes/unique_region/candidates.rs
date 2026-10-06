@@ -104,6 +104,11 @@ pub(super) fn wrap_sites(
     let mut used_birth = BTreeSet::new();
     let mut used_death = BTreeSet::new();
     for (local, (bbi, bsi, callee)) in births {
+        // Only a call returning a heap graph can own a region; scalar results (an intrinsic's
+        // `bool`) have no release to anchor the leave to.
+        if !interner.is_rc_tracked(f.local_ty(Local(local))) {
+            continue;
+        }
         let aliases = aliases_of(local, &from);
         if aliases.iter().any(|a| retained.contains(a)) {
             continue;
@@ -359,11 +364,10 @@ pub(super) fn find_switch_after(
         }
         let block = f.blocks.get(bi)?;
         for stmt in block.stmts.iter().skip(si) {
-            if let Statement::Assign(Place::Local(d), rv) = stmt {
-                if disc_of_alias(rv, &keys) {
+            if let Statement::Assign(Place::Local(d), rv) = stmt
+                && disc_of_alias(rv, &keys) {
                     keys.insert(d.0);
                 }
-            }
         }
         match &block.terminator {
             Terminator::Switch { value, .. } if operand_alias(value, &keys) => {

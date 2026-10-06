@@ -56,9 +56,22 @@ pub struct ProjectManifest {
     pub package_name: Option<String>,
     pub entry: Option<String>,
     pub links: Option<String>,
-    pub generators: Vec<String>,
+    pub generators: Vec<GeneratorEntry>,
     /// `[native.<set>]` tables in sorted set-name order.
     pub native: Vec<(String, NativeSetSpec)>,
+}
+
+/// One `[[generators]]` table: a generator source file plus the inputs its generators receive.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GeneratorEntry {
+    /// Generator source, relative to the manifest directory.
+    pub path: String,
+    /// Extra input files (relative to the manifest directory) passed in the generator snapshot.
+    pub additional_files: Vec<String>,
+    /// `options = { key = "value" }`, read in Dream through `ctx.options<T>()`.
+    pub options: std::collections::BTreeMap<String, serde_json::Value>,
+    /// Per-run limit in seconds; `None` uses the compiler default.
+    pub timeout_secs: Option<u64>,
 }
 
 impl ProjectManifest {
@@ -99,11 +112,67 @@ impl ProjectManifest {
                 let t = g
                     .as_table()
                     .ok_or("[[generators]] entries must be tables")?;
-                if let Some(p) = opt_string(t, "path", "generators")? {
-                    if !p.is_empty() {
-                        m.generators.push(p);
+                for key in t.keys() {
+                    if !matches!(
+                        key.as_str(),
+                        "path" | "additional_files" | "options" | "timeout_secs"
+                    ) {
+                        return Err(format!("[[generators]]: unknown key '{key}'"));
                     }
                 }
+                let Some(path) = opt_string(t, "path", "generators")?.filter(|p| !p.is_empty())
+                else {
+                    return Err("[[generators]] entries need a non-empty 'path'".into());
+                };
+                let additional_files = match t.get("additional_files") {
+                    None => Vec::new(),
+                    Some(v) => v
+                        .as_array()
+                        .ok_or("[[generators]].additional_files must be an array of strings")?
+                        .iter()
+                        .map(|f| {
+                            f.as_str().map(str::to_string).ok_or_else(|| {
+                                "[[generators]].additional_files must be an array of strings"
+                                    .to_string()
+                            })
+                        })
+                        .collect::<Result<_, _>>()?,
+                };
+                let mut options = std::collections::BTreeMap::new();
+                if let Some(v) = t.get("options") {
+                    let table = v
+                        .as_table()
+                        .ok_or("[[generators]].options must be a table")?;
+                    for (k, v) in table {
+                        let value = match v {
+                            toml::Value::String(s) => serde_json::Value::from(s.clone()),
+                            toml::Value::Integer(i) => serde_json::Value::from(*i),
+                            toml::Value::Float(f) => serde_json::Value::from(*f),
+                            toml::Value::Boolean(b) => serde_json::Value::from(*b),
+                            _ => {
+                                return Err(format!(
+                                    "[[generators]].options.{k} must be a string, number or bool"
+                                ))
+                            }
+                        };
+                        options.insert(k.clone(), value);
+                    }
+                }
+                let timeout_secs = match t.get("timeout_secs") {
+                    None => None,
+                    Some(v) => Some(
+                        v.as_integer()
+                            .filter(|n| *n > 0)
+                            .ok_or("[[generators]].timeout_secs must be a positive integer")?
+                            as u64,
+                    ),
+                };
+                m.generators.push(GeneratorEntry {
+                    path,
+                    additional_files,
+                    options,
+                    timeout_secs,
+                });
             }
         }
         if let Some(native) = root.get("native") {
@@ -274,6 +343,9 @@ links = "kv"
 
 [[generators]]
 path = "gen/a.dream"
+additional_files = ["schema.json"]
+timeout_secs = 20
+options = { prefix = "Api", strict = true }
 
 [native.kv_store]
 cflags = ["-O2"]
@@ -293,7 +365,12 @@ sources = ["third_party/x.c"]
         assert_eq!(m.package_name.as_deref(), Some("kv-store"));
         assert_eq!(m.entry.as_deref(), Some("src/main.dream"));
         assert_eq!(m.links.as_deref(), Some("kv"));
-        assert_eq!(m.generators, vec!["gen/a.dream"]);
+        assert_eq!(m.generators.len(), 1);
+        assert_eq!(m.generators[0].path, "gen/a.dream");
+        assert_eq!(m.generators[0].additional_files, vec!["schema.json"]);
+        assert_eq!(m.generators[0].timeout_secs, Some(20));
+        assert_eq!(m.generators[0].options["prefix"], "Api");
+        assert_eq!(m.generators[0].options["strict"], true);
         assert_eq!(m.native.len(), 2);
         assert_eq!(m.native[0].0, "extra");
         let kv = &m.native[1].1;

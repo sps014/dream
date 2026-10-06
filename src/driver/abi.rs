@@ -189,11 +189,10 @@ pub(crate) fn build_abi_json(
         if let Type::Function(params, ret) = ty {
             return fn_tag_from_types(params, ret, ptr_size);
         }
-        if let Type::Array(inner) = ty {
-            if matches!(**inner, Type::Byte(_)) {
+        if let Type::Array(inner) = ty
+            && matches!(**inner, Type::Byte(_)) {
                 return "bytes".to_string();
             }
-        }
         let type_str = ty.get_type();
         match type_str.as_str() {
             "string" => {
@@ -431,11 +430,10 @@ fn build_c_structs_section(
         };
         resolved.insert(name.clone(), *decl);
         for field in &decl.fields {
-            if let Some(inner) = value_struct_name(&field.field_type) {
-                if by_name.contains_key(inner) && !resolved.contains_key(inner) {
+            if let Some(inner) = value_struct_name(&field.field_type)
+                && by_name.contains_key(inner) && !resolved.contains_key(inner) {
                     work.push(inner.to_string());
                 }
-            }
         }
     }
     if resolved.is_empty() {

@@ -26,10 +26,15 @@ fn first_line(f: &MirFunction) -> Option<u32> {
 
 impl<'a> Lcx<'a> {
     fn di_file(&mut self, path: &str) -> MdRef {
-        let p = Path::new(path);
-        let name = p
-            .file_name()
-            .map_or_else(|| path.to_string(), |s| s.to_string_lossy().into_owned());
+        let on_disk = self.std_sources.as_ref().and_then(|dir| {
+            path.strip_prefix(dream_stdlib::STD_PATH_PREFIX)
+                .map(|rel| dir.join(rel))
+        });
+        let p = on_disk.as_deref().unwrap_or(Path::new(path));
+        let name = p.file_name().map_or_else(
+            || p.to_string_lossy().into_owned(),
+            |s| s.to_string_lossy().into_owned(),
+        );
         let dir = p
             .parent()
             .map(|d| d.to_string_lossy().into_owned())

@@ -83,21 +83,19 @@ pub fn assignable(interner: &TypeInterner, target: TypeId, value: TypeId) -> boo
     }
 
     // Numeric widening.
-    if let (TyKind::Prim(from), TyKind::Prim(to)) = (vk, tk) {
-        if numeric_widen(*from, *to) {
+    if let (TyKind::Prim(from), TyKind::Prim(to)) = (vk, tk)
+        && numeric_widen(*from, *to) {
             return true;
         }
-    }
 
     // Structural tuples: same arity, each element assignable.
-    if let (TyKind::Tuple(t_elems), TyKind::Tuple(v_elems)) = (tk, vk) {
-        if t_elems.len() == v_elems.len() {
+    if let (TyKind::Tuple(t_elems), TyKind::Tuple(v_elems)) = (tk, vk)
+        && t_elems.len() == v_elems.len() {
             return t_elems
                 .iter()
                 .zip(v_elems.iter())
                 .all(|(t, v)| assignable(interner, *t, *v));
         }
-    }
 
     false
 }
@@ -126,10 +124,9 @@ pub fn overload_compatible(interner: &TypeInterner, param: TypeId, arg: TypeId) 
     if is_enum_int_pair(pk, ak) {
         return true;
     }
-    if let (TyKind::Prim(p), TyKind::Prim(a)) = (pk, ak) {
-        if p.is_numeric() && a.is_numeric() {
+    if let (TyKind::Prim(p), TyKind::Prim(a)) = (pk, ak)
+        && p.is_numeric() && a.is_numeric() {
             return true;
         }
-    }
     false
 }

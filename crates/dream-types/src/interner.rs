@@ -284,11 +284,10 @@ impl TypeInterner {
         if self.value_unions.contains(&id) {
             return false;
         }
-        if let TyKind::Struct(def, _) = self.kind(id) {
-            if self.value_defs.contains(def) {
+        if let TyKind::Struct(def, _) = self.kind(id)
+            && self.value_defs.contains(def) {
                 return false;
             }
-        }
         self.kind(id).is_reference()
     }
 

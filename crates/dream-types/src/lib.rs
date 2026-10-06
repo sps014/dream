@@ -13,8 +13,8 @@ mod display;
 mod interner;
 mod kind;
 mod lower;
-mod syntax;
 mod naming;
+mod syntax;
 
 pub use c_scalar::CScalar;
 pub use compat::{assignable, numeric_widen, overload_compatible};

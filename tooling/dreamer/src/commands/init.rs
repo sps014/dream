@@ -5,7 +5,7 @@ use crate::manifest::{
 use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 
-const GITIGNORE_ENTRIES: &[&str] = &["dream_packages/", "target/"];
+const GITIGNORE_ENTRIES: &[&str] = &["dream_packages/", "target/", ".dream/"];
 
 const HELLO_MAIN: &str =
     "import system;\n\nfun main() {\n    System.println(\"Hello, world!\");\n}\n";

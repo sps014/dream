@@ -3,6 +3,7 @@ use super::StdPackage;
 pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.task",
     deps: &["system.core"],
+    generators: &[],
     files: &[
         (
             "<std>/system/task/task.dream",

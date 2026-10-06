@@ -102,6 +102,15 @@ pub const ATTR_PROMISE_RACE: &str = "promise_race";
 pub const ATTR_JSON_SERIALIZE: &str = "json_serialize";
 pub const ATTR_JSON_DESERIALIZE: &str = "json_deserialize";
 pub const ATTR_JSON_FROM_VALUE: &str = "json_from_value";
+/// `GenAttributes.id<A>()` / `decode<A>(attrs)` / `decode_all<A>(attrs)` — forward to the
+/// `__gen_*` statics the driver synthesizes on every `@attribute` type.
+pub const ATTR_GEN_ATTRIBUTE_ID: &str = "gen_attribute_id";
+pub const ATTR_GEN_ATTRIBUTE_DECODE: &str = "gen_attribute_decode";
+pub const ATTR_GEN_ATTRIBUTE_DECODE_ALL: &str = "gen_attribute_decode_all";
+/// Synthesized `@attribute` type members the `GenAttributes` intrinsics forward to.
+pub const GEN_ATTRIBUTE_ID_MEMBER: &str = "__gen_id";
+pub const GEN_ATTRIBUTE_DECODE_MEMBER: &str = "__gen_decode";
+pub const GEN_ATTRIBUTE_DECODE_ALL_MEMBER: &str = "__gen_decode_all";
 /// `Buffer.alloc<T>(len)` — allocate a zero-initialized array.
 pub const ATTR_ARRAY_NEW: &str = "array_new";
 /// `Time.sleep(ms)` — the async timer (yields `Future<void>`).
@@ -192,6 +201,9 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_JSON_SERIALIZE,
     ATTR_JSON_DESERIALIZE,
     ATTR_JSON_FROM_VALUE,
+    ATTR_GEN_ATTRIBUTE_ID,
+    ATTR_GEN_ATTRIBUTE_DECODE,
+    ATTR_GEN_ATTRIBUTE_DECODE_ALL,
     ATTR_ARRAY_NEW,
     ATTR_SLEEP,
     ATTR_STRING_ALLOC,
@@ -260,6 +272,12 @@ pub enum IntrinsicOp {
     JsonDeserialize,
     /// `Json.from_value<T>(v)` — already-parsed `JsonValue` to `T`.
     JsonFromValue,
+    /// `GenAttributes.id<A>()` — the `module::name` identity of attribute type `A`.
+    GenAttributeId,
+    /// `GenAttributes.decode<A>(attrs)` — the first `A` in a snapshotted attribute list.
+    GenAttributeDecode,
+    /// `GenAttributes.decode_all<A>(attrs)` — every `A` in a snapshotted attribute list.
+    GenAttributeDecodeAll,
     /// `Buffer.alloc<T>(len)` — allocate a zero-initialized `T[]`.
     ArrayNew,
     /// `Time.sleep(ms)` — async timer yielding `Future<void>`.
@@ -340,6 +358,9 @@ impl IntrinsicOp {
             ATTR_JSON_SERIALIZE => IntrinsicOp::JsonSerialize,
             ATTR_JSON_DESERIALIZE => IntrinsicOp::JsonDeserialize,
             ATTR_JSON_FROM_VALUE => IntrinsicOp::JsonFromValue,
+            ATTR_GEN_ATTRIBUTE_ID => IntrinsicOp::GenAttributeId,
+            ATTR_GEN_ATTRIBUTE_DECODE => IntrinsicOp::GenAttributeDecode,
+            ATTR_GEN_ATTRIBUTE_DECODE_ALL => IntrinsicOp::GenAttributeDecodeAll,
             ATTR_ARRAY_NEW => IntrinsicOp::ArrayNew,
             ATTR_SLEEP => IntrinsicOp::Sleep,
             ATTR_STRING_ALLOC => IntrinsicOp::StringAlloc,

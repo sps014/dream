@@ -1,6 +1,6 @@
 //! Sink-default / `borrow` parameter parsing, type-checking, and RC store behavior.
 
-mod common;
+use crate::common;
 use common::*;
 
 #[test]

@@ -16,11 +16,10 @@ impl Builder {
     ) {
         if let Some(ty) = ty {
             self.record_decl_type(ty);
-        } else if let Some(id) = self.infer_id(expr, scope, &[]) {
-            if let Some(index) = self.decls.len().checked_sub(1) {
+        } else if let Some(id) = self.infer_id(expr, scope, &[])
+            && let Some(index) = self.decls.len().checked_sub(1) {
                 self.inferred_types.insert(index, id);
             }
-        }
     }
 
     pub(crate) fn record_callable(&mut self, func: &FunctionNode, owner: Option<&str>) {
@@ -115,16 +114,15 @@ impl Builder {
         scope: usize,
         extras: &[(String, TypeId)],
     ) -> Option<TypeId> {
-        if let ExpressionNode::Identifier(token) = recv {
-            if let Some(decl) = self
+        if let ExpressionNode::Identifier(token) = recv
+            && let Some(decl) = self
                 .resolve(&token.text, scope, token.position.start)
                 .or_else(|| {
                     self.decls
                         .iter()
                         .find(|d| d.kind == SymKind::Type && d.name == token.text)
                 })
-            {
-                if matches!(
+                && matches!(
                     decl.kind,
                     SymKind::Class
                         | SymKind::Struct
@@ -138,8 +136,6 @@ impl Builder {
                             .lower(&Type::Struct(token.clone(), None)),
                     );
                 }
-            }
-        }
         self.infer_id(recv, scope, extras)
     }
 

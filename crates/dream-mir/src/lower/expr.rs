@@ -475,9 +475,9 @@ impl Lowerer<'_> {
     /// Fuse `"…" + int.to_string() [+ "…"]` into one alloc; otherwise flatten nested `+`.
     fn lower_concat(&mut self, a: &HExpr, b: &HExpr) -> Rvalue {
         // `"pref" + x.to_string() + "suf"`
-        if let HExprKind::Concat(x, y) = &a.kind {
-            if let HExprKind::ToString(inner) = &y.kind {
-                if self.is_i32_tostring_ty(inner.ty)
+        if let HExprKind::Concat(x, y) = &a.kind
+            && let HExprKind::ToString(inner) = &y.kind
+                && self.is_i32_tostring_ty(inner.ty)
                     && matches!(x.kind, HExprKind::StringLit(_))
                     && matches!(b.kind, HExprKind::StringLit(_))
                 {
@@ -487,18 +487,15 @@ impl Lowerer<'_> {
                         suffix: self.lower_operand(b),
                     };
                 }
-            }
-        }
         // `"pref" + x.to_string()`
-        if let HExprKind::ToString(inner) = &b.kind {
-            if self.is_i32_tostring_ty(inner.ty) && matches!(a.kind, HExprKind::StringLit(_)) {
+        if let HExprKind::ToString(inner) = &b.kind
+            && self.is_i32_tostring_ty(inner.ty) && matches!(a.kind, HExprKind::StringLit(_)) {
                 return Rvalue::ConcatInt {
                     prefix: self.lower_operand(a),
                     value: self.lower_operand(inner),
                     suffix: Operand::Const(Const::Str(String::new())),
                 };
             }
-        }
         let parts = match (&a.kind, &b.kind) {
             (HExprKind::Concat(x, y), _) => vec![
                 self.lower_operand(x),

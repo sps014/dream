@@ -618,13 +618,22 @@ impl<'a> Analyzer<'a> {
             indexer_kind: None,
         };
         let func_ref: &'a FunctionNode<'a> = self.arena.alloc(func_node);
-        let parameter_ids: Vec<_> = func_ref.parameters.iter().map(|p| self.type_ctx.lower(&p.type_)).collect();
+        let parameter_ids: Vec<_> = func_ref
+            .parameters
+            .iter()
+            .map(|p| self.type_ctx.lower(&p.type_))
+            .collect();
         let def = if is_generic_lambda {
-            self.type_ctx.register(DefKind::Function, &name, generic_param_names(&lambda.generic_parameters))
+            self.type_ctx.register(
+                DefKind::Function,
+                &name,
+                generic_param_names(&lambda.generic_parameters),
+            )
         } else {
             self.type_ctx.register_function(&name, &parameter_ids)
         };
-        self.function_table.record_declaration(func_ref, (def, Vec::new()));
+        self.function_table
+            .record_declaration(func_ref, (def, Vec::new()));
 
         if !captures.is_empty() {
             self.closure_captures.insert(def, captures.clone());
@@ -642,14 +651,13 @@ impl<'a> Analyzer<'a> {
                 return match self.instantiate_generic_function_value(&tok, diagnostics) {
                     Some(func_ty) => {
                         // Propagate captures onto the mangled instance if any.
-                        if let Some(caps) = self.closure_captures.get(&def).cloned() {
-                            if let Some(Type::Function(_, _)) = self.current_expected_type.as_ref()
+                        if let Some(caps) = self.closure_captures.get(&def).cloned()
+                            && let Some(Type::Function(_, _)) = self.current_expected_type.as_ref()
                             {
                                 // Instance name is mangled; find latest registered instance.
                                 // `instantiate_generic_function_value` already emitted HIR.
                                 let _ = caps;
                             }
-                        }
                         Ok(func_ty)
                     }
                     None => Ok(Type::Unknown),
@@ -661,10 +669,8 @@ impl<'a> Analyzer<'a> {
 
         let info = FunctionTableInfo::from(func_ref, &mut self.type_ctx);
         let _ = self.function_table.add_function(name.clone(), info);
-        self.pending_lambdas.insert(
-            def,
-            (func_ref, self.current_generic_bindings.clone()),
-        );
+        self.pending_lambdas
+            .insert(def, (func_ref, self.current_generic_bindings.clone()));
 
         let func_ty_params: Vec<Type> = func_ref
             .parameters

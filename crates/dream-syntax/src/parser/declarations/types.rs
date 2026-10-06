@@ -99,22 +99,19 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         // Resolve a type alias to its underlying type (unless generic args follow). The array
         // suffix below still applies to the resolved type.
-        if let Type::Struct(token, None) = &parsed_type {
-            if self.current_token().kind != TokenKind::SmallerThanToken {
-                if let Some(alias) = self.type_aliases.get(&token.text) {
+        if let Type::Struct(token, None) = &parsed_type
+            && self.current_token().kind != TokenKind::SmallerThanToken
+                && let Some(alias) = self.type_aliases.get(&token.text) {
                     parsed_type = alias.clone();
                 }
-            }
-        }
 
         // Check for generic arguments
-        if let Type::Struct(token, _) = &parsed_type {
-            if self.current_token().kind == TokenKind::SmallerThanToken {
+        if let Type::Struct(token, _) = &parsed_type
+            && self.current_token().kind == TokenKind::SmallerThanToken {
                 self.match_token(TokenKind::SmallerThanToken);
                 let args = self.parse_generic_args()?;
                 parsed_type = Type::Struct(token.clone(), Some(args));
             }
-        }
 
         // Check for array suffix `[]`
         while self.current_token().kind == TokenKind::OpenBracketToken {

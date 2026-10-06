@@ -86,11 +86,10 @@ impl Builder {
             if as_lambda(arg).is_some() {
                 continue;
             }
-            if let Some(actual) = self.infer_id(arg, scope, extras) {
-                if !self.bind_type(&formal.type_, actual, &all_params, &mut bindings) {
+            if let Some(actual) = self.infer_id(arg, scope, extras)
+                && !self.bind_type(&formal.type_, actual, &all_params, &mut bindings) {
                     return None;
                 }
-            }
         }
         for (formal, arg) in callable.params.iter().zip(args) {
             let Some(lambda) = lambda_node(arg) else {

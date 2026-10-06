@@ -132,6 +132,9 @@ pub(super) fn shift_expr<'a>(
         ExpressionNode::NameOf(t, path) => {
             ExpressionNode::NameOf(map.token(t), path.iter().map(|p| map.token(p)).collect())
         }
+        ExpressionNode::DeclOf(t, path) => {
+            ExpressionNode::DeclOf(map.token(t), path.iter().map(|p| map.token(p)).collect())
+        }
         ExpressionNode::MemberAccess(x, t) => {
             ExpressionNode::MemberAccess(arena.alloc(shift_expr(map, arena, x)), map.token(t))
         }

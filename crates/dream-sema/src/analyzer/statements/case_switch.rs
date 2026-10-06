@@ -54,14 +54,13 @@ impl<'a> Analyzer<'a> {
         for labels in std::mem::take(&mut self.deferred_case_labels) {
             let mut seen = indexmap::IndexSet::new();
             for (label, span) in labels {
-                if let Some(key) = self.const_case_key(&label, Some(layouts)) {
-                    if !seen.insert(key.clone()) {
+                if let Some(key) = self.const_case_key(&label, Some(layouts))
+                    && !seen.insert(key.clone()) {
                         diagnostics.report_error(
                             format!("duplicate case label '{}' in switch statement", key),
                             span,
                         );
                     }
-                }
             }
         }
     }
@@ -139,14 +138,13 @@ impl<'a> Analyzer<'a> {
                     diagnostics,
                 )?;
 
-                if let Some(k) = key {
-                    if !seen.insert(k.clone()) {
+                if let Some(k) = key
+                    && !seen.insert(k.clone()) {
                         diagnostics.report_error(
                             format!("duplicate case label '{}' in switch statement", k),
                             label.position(),
                         );
                     }
-                }
             }
             self.hir_open_block();
             self.analyze_body(

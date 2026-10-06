@@ -1,0 +1,6 @@
+import system;
+import support.badtrigger.gen;
+
+fun main(): void {
+    System.println("x");
+}

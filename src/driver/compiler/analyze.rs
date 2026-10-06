@@ -34,6 +34,7 @@ impl Compiler {
             Ok(info) => info.hir,
             Err(_) => {
                 return Err(fail_diagnostics(
+                    self.render_diagnostics,
                     CompileError::Semantic,
                     diagnostics,
                     &loaded.acc.file_contents,
@@ -43,6 +44,7 @@ impl Compiler {
         // Poison HIR must never reach lowering, even if an analyzer reports an error but returns Ok.
         if diagnostics.has_errors() {
             return Err(fail_diagnostics(
+                self.render_diagnostics,
                 CompileError::Semantic,
                 diagnostics,
                 &loaded.acc.file_contents,

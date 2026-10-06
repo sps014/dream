@@ -298,11 +298,10 @@ fn find_default_news(func: &MirFunction, interner: &TypeInterner) -> Vec<Local> 
         for stmt in &block.stmts {
             if let Statement::Assign(Place::Local(d), rv) = stmt {
                 *def_counts.entry(*d).or_default() += 1;
-                if let Rvalue::New { ctor: None, ty, .. } = rv {
-                    if !interner.is_value_type(*ty) {
+                if let Rvalue::New { ctor: None, ty, .. } = rv
+                    && !interner.is_value_type(*ty) {
                         news.push(*d);
                     }
-                }
             }
         }
     }
@@ -510,11 +509,10 @@ fn rvalue_mentions(rv: &Rvalue, o: Local) -> bool {
 
 fn stmt_mentions(stmt: &Statement, o: Local) -> bool {
     // Writes to `o` (as a place) plus any read of `o`.
-    if let Statement::Assign(place, _) = stmt {
-        if place_mentions(place, o) {
+    if let Statement::Assign(place, _) = stmt
+        && place_mentions(place, o) {
             return true;
         }
-    }
     let mut hit = false;
     stmt_reads(stmt, &mut |l| {
         if l == o {
@@ -531,11 +529,10 @@ fn terminator_mentions(t: &Terminator, o: Local) -> bool {
             hit = true;
         }
     });
-    if let Terminator::Await { dest: Some(d), .. } = t {
-        if *d == o {
+    if let Terminator::Await { dest: Some(d), .. } = t
+        && *d == o {
             hit = true;
         }
-    }
     hit
 }
 

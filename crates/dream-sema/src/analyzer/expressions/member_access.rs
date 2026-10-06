@@ -95,8 +95,8 @@ impl<'a> Analyzer<'a> {
     ) -> Result<Type, SemanticError> {
         // A unit variant of a discriminated union (`Shape.Empty`, `Option.None`) constructs
         // a heap union value rather than resolving to an integer enum member.
-        if let ExpressionNode::Identifier(id) = obj {
-            if let Some(t) = self.analyze_variant_construction(
+        if let ExpressionNode::Identifier(id) = obj
+            && let Some(t) = self.analyze_variant_construction(
                 &id.text,
                 member,
                 &[],
@@ -118,10 +118,9 @@ impl<'a> Analyzer<'a> {
                 );
                 return Ok(t);
             }
-        }
         // Enum member access `EnumName.Member` resolves to the enum type (an i32 at runtime).
-        if let ExpressionNode::Identifier(id) = obj {
-            if self
+        if let ExpressionNode::Identifier(id) = obj
+            && self
                 .type_ctx
                 .resolve(DefKind::Enum, &id.text)
                 .is_some_and(|def| self.enum_members(def).is_some())
@@ -150,7 +149,6 @@ impl<'a> Analyzer<'a> {
                 );
                 return Ok(enum_ty);
             }
-        }
         // `js.global` as a value (not the `js.global("name")` call form) is `globalThis`, so
         // `js.global.document` / `js.global.fetch(...)` chain naturally off the JS global scope.
         if let ExpressionNode::Identifier(id) = obj {
@@ -271,8 +269,8 @@ impl<'a> Analyzer<'a> {
         // Interface-typed receiver: `iface.prop` may be a property getter (`get prop`), desugared
         // to a method call of `get$prop` (same path as class getters / interface method dispatch).
         if self.interface_receiver_name(&obj_type).is_some() {
-            if let Some((base, args)) = Self::resolve_struct_parts(&obj_type) {
-                if !args.is_empty()
+            if let Some((base, args)) = Self::resolve_struct_parts(&obj_type)
+                && !args.is_empty()
                     && self
                         .type_ctx
                         .resolve(DefKind::Interface, &base)
@@ -280,7 +278,6 @@ impl<'a> Analyzer<'a> {
                 {
                     self.ensure_interface_instantiated(&base, &args, &member.position, diagnostics);
                 }
-            }
             let getter = getter_member_name(&member.text);
             let iface_ty = self.type_ctx.lower(&obj_type);
             let methods = self

@@ -226,11 +226,10 @@ impl Backend {
     ) -> Option<(Arc<Index>, Option<Arc<dream_sema::analyzer::IdeSnapshot>>)> {
         let (text, version) = {
             let doc = self.documents.get(uri)?;
-            if let Some(cached) = self.index_cache.get(uri) {
-                if cached.version == doc.version {
+            if let Some(cached) = self.index_cache.get(uri)
+                && cached.version == doc.version {
                     return Some((cached.index.clone(), cached.sema.clone()));
                 }
-            }
             (doc.text.clone(), doc.version)
         };
 

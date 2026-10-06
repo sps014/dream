@@ -33,11 +33,10 @@ impl Default for CompileFlags {
 
 impl CompileFlags {
     pub fn from_cli(release: bool, optimize: Option<String>, wasm: bool) -> Result<Self> {
-        if let Some(lvl) = optimize.as_deref() {
-            if !matches!(lvl, "0" | "1" | "2" | "3" | "4" | "s" | "S" | "z" | "Z") {
+        if let Some(lvl) = optimize.as_deref()
+            && !matches!(lvl, "0" | "1" | "2" | "3" | "4" | "s" | "S" | "z" | "Z") {
                 bail!("invalid optimization level '{lvl}' (expected one of: 0, 1, 2, 3, 4, s, z)");
             }
-        }
         Ok(Self {
             release,
             optimize: optimize.map(|s| s.to_ascii_lowercase()),

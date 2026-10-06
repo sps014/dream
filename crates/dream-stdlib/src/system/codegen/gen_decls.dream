@@ -1,0 +1,223 @@
+module system.codegen;
+
+import system;
+import system.collections;
+
+// A field of a class, struct or union variant.
+public class GenField {
+    public id: string;
+    public name: string;
+    public ty: GenTypeRef;
+    public visibility: string;
+    public attributes: List<GenAttribute>;
+    public location: GenLocation;
+
+    public constructor(id: string, name: string, ty: GenTypeRef, visibility: string, attributes: List<GenAttribute>, location: GenLocation) {
+        this.id = id;
+        this.name = name;
+        this.ty = ty;
+        this.visibility = visibility;
+        this.attributes = attributes;
+        this.location = location;
+    }
+
+    // The first `@A` on this field, decoded into the attribute struct.
+    public fun attribute<A>(): Option<A> {
+        return GenAttributes.decode<A>(this.attributes);
+    }
+
+    public fun attributes_of<A>(): List<A> {
+        return GenAttributes.decode_all<A>(this.attributes);
+    }
+
+    public fun has<A>(): bool {
+        return GenAttributes.has(this.attributes, GenAttributes.id<A>());
+    }
+}
+
+public class GenVariant {
+    public id: string;
+    public name: string;
+    public fields: List<GenField>;
+    public location: GenLocation;
+
+    public constructor(id: string, name: string, fields: List<GenField>, location: GenLocation) {
+        this.id = id;
+        this.name = name;
+        this.fields = fields;
+        this.location = location;
+    }
+}
+
+public class GenParam {
+    public name: string;
+    public ty: GenTypeRef;
+    public attributes: List<GenAttribute>;
+
+    public constructor(name: string, ty: GenTypeRef, attributes: List<GenAttribute>) {
+        this.name = name;
+        this.ty = ty;
+        this.attributes = attributes;
+    }
+
+    public fun attribute<A>(): Option<A> {
+        return GenAttributes.decode<A>(this.attributes);
+    }
+
+    public fun has<A>(): bool {
+        return GenAttributes.has(this.attributes, GenAttributes.id<A>());
+    }
+}
+
+// A method, or a top-level function.
+public class GenFunction {
+    public id: string;
+    public name: string;
+    public is_static: bool;
+    public is_async: bool;
+    public visibility: string;
+    public generics: List<string>;
+    public params: List<GenParam>;
+    public ret: GenTypeRef;
+    public attributes: List<GenAttribute>;
+    public location: GenLocation;
+
+    public constructor(id: string, name: string, is_static: bool, is_async: bool, visibility: string, generics: List<string>, params: List<GenParam>, ret: GenTypeRef, attributes: List<GenAttribute>, location: GenLocation) {
+        this.id = id;
+        this.name = name;
+        this.is_static = is_static;
+        this.is_async = is_async;
+        this.visibility = visibility;
+        this.generics = generics;
+        this.params = params;
+        this.ret = ret;
+        this.attributes = attributes;
+        this.location = location;
+    }
+
+    public fun attribute<A>(): Option<A> {
+        return GenAttributes.decode<A>(this.attributes);
+    }
+
+    public fun has<A>(): bool {
+        return GenAttributes.has(this.attributes, GenAttributes.id<A>());
+    }
+}
+
+// A class, struct, union, enum or interface the generator's triggers selected.
+public class GenDecl {
+    public id: string;
+    public name: string;
+    public kind: DeclKind;
+    public module_name: string;
+    public visibility: string;
+    public location: GenLocation;
+    public generics: List<string>;
+    public interfaces: List<GenTypeRef>;
+    public attributes: List<GenAttribute>;
+    public fields: List<GenField>;
+    public methods: List<GenFunction>;
+    public variants: List<GenVariant>;
+
+    public constructor(id: string, name: string, kind: DeclKind, module_name: string, visibility: string, location: GenLocation, generics: List<string>, interfaces: List<GenTypeRef>, attributes: List<GenAttribute>, fields: List<GenField>, methods: List<GenFunction>, variants: List<GenVariant>) {
+        this.id = id;
+        this.name = name;
+        this.kind = kind;
+        this.module_name = module_name;
+        this.visibility = visibility;
+        this.location = location;
+        this.generics = generics;
+        this.interfaces = interfaces;
+        this.attributes = attributes;
+        this.fields = fields;
+        this.methods = methods;
+        this.variants = variants;
+    }
+
+    public fun attribute<A>(): Option<A> {
+        return GenAttributes.decode<A>(this.attributes);
+    }
+
+    public fun has<A>(): bool {
+        return GenAttributes.has(this.attributes, GenAttributes.id<A>());
+    }
+
+    // `Name` or `Name<T, U>`: the spelling of this type inside its own generic scope.
+    public fun self_type(): string {
+        if this.generics.is_empty() {
+            return this.name;
+        }
+        let s = this.name + "<";
+        let i = 0;
+        while i < this.generics.length {
+            if i > 0 {
+                s = s + ", ";
+            }
+            s = s + this.generics.get(i);
+            i = i + 1;
+        }
+        return s + ">";
+    }
+}
+
+// Every type in the program (user and stdlib), names and kinds only.
+public class GenIndexEntry {
+    public id: string;
+    public name: string;
+    public kind: DeclKind;
+
+    public constructor(id: string, name: string, kind: DeclKind) {
+        this.id = id;
+        this.name = name;
+        this.kind = kind;
+    }
+}
+
+// A `name { ... }` site of this generator (`@syntax_block` generators only).
+public class GenSyntaxBlock {
+    public id: string;
+    public name: string;
+    // Reconstructed body text; splices appear as `{expr}`.
+    public body: string;
+    // Dream source of each `{ ... }` splice, in order.
+    public splices: List<string>;
+    public location: GenLocation;
+
+    public constructor(id: string, name: string, body: string, splices: List<string>, location: GenLocation) {
+        this.id = id;
+        this.name = name;
+        this.body = body;
+        this.splices = splices;
+        this.location = location;
+    }
+}
+
+// A call of one of the generator's `@on_call` functions.
+public class GenCallSite {
+    public id: string;
+    // Identity of the callee (compare with `declof(Json.serialize)`).
+    public callee: string;
+    public type_args: List<GenTypeRef>;
+    // Statically known argument types (`TypeRefKind.Unknown` when not inferable).
+    public arg_types: List<GenTypeRef>;
+    public location: GenLocation;
+
+    public constructor(id: string, callee: string, type_args: List<GenTypeRef>, arg_types: List<GenTypeRef>, location: GenLocation) {
+        this.id = id;
+        this.callee = callee;
+        this.type_args = type_args;
+        this.arg_types = arg_types;
+        this.location = location;
+    }
+}
+
+// A `dream.toml` `additional_files` entry.
+public class GenFile {
+    public path: string;
+    public contents: string;
+
+    public constructor(path: string, contents: string) {
+        this.path = path;
+        this.contents = contents;
+    }
+}

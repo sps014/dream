@@ -63,11 +63,10 @@ fn macos_rpaths(text: &str) -> Vec<&str> {
         if line.starts_with("cmd ") {
             in_rpath = line == "cmd LC_RPATH";
         }
-        if in_rpath {
-            if let Some(path) = line.strip_prefix("path ") {
+        if in_rpath
+            && let Some(path) = line.strip_prefix("path ") {
                 paths.push(path.split_once(" (offset ").expect("otool rpath offset").0);
             }
-        }
     }
     paths
 }

@@ -98,11 +98,10 @@ pub fn capture_native_bin(
         cmd.stdin(Stdio::null());
     }
     let mut child = cmd.spawn()?;
-    if let Some(bytes) = stdin {
-        if let Some(mut sin) = child.stdin.take() {
+    if let Some(bytes) = stdin
+        && let Some(mut sin) = child.stdin.take() {
             let _ = std::io::Write::write_all(&mut sin, bytes);
         }
-    }
     let pid = child.id();
     let waiter = std::thread::spawn(move || child.wait_with_output());
     let limit = Duration::from_secs(timeout_secs);
@@ -136,11 +135,10 @@ pub fn capture_native_bin(
         return Err(format!("native program failed ({code}): stderr={err} stdout={stdout}").into());
     }
     let stderr = String::from_utf8_lossy(&out.stderr);
-    if let Some(live) = parse_leak_live(&stderr) {
-        if live != 0 {
+    if let Some(live) = parse_leak_live(&stderr)
+        && live != 0 {
             return Err(format!("guest leak check live={live} (want 0)\n{stderr}").into());
         }
-    }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 

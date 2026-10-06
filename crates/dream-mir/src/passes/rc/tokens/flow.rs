@@ -207,12 +207,11 @@ pub(super) fn transfer_block(
         *slot = false;
         unique[local as usize] = false;
     }
-    if let Some(d) = flow.await_resume_dest[bi] {
-        if (flow.is_owned)(d) {
+    if let Some(d) = flow.await_resume_dest[bi]
+        && (flow.is_owned)(d) {
             tokens[d as usize] = true;
             unique[d as usize] = true;
         }
-    }
     for (si, stmt) in block.stmts.iter().enumerate() {
         apply_stmt_tokens(
             stmt,
@@ -243,8 +242,7 @@ pub(super) fn transfer_block(
         dest,
         resume,
     } = &block.terminator
-    {
-        if dest != &Some(*l)
+        && dest != &Some(*l)
             && (flow.is_owned)(l.0)
             && tokens[l.0 as usize]
             && !live_in_of(flow.func, flow.live_out, resume.0 as usize).contains(&l.0)
@@ -252,7 +250,6 @@ pub(super) fn transfer_block(
             tokens[l.0 as usize] = false;
             unique[l.0 as usize] = false;
         }
-    }
 
     let await_clobber: Option<u32> = match &block.terminator {
         Terminator::Await {

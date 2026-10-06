@@ -6,7 +6,27 @@ import system.json;
 import system.text;
 
 // Compile-time HTML markup → Dream source (`Html.el` / `Html.render`).
-// Called from the `@generator(ctx: GenContext)` body in `gen.dream`.
+// Called from the `html` generator in `gen.dream`.
+
+public class HtmlResult {
+    public ok: bool;
+    public source: string;
+    public error: string;
+
+    public constructor(ok: bool, source: string, error: string) {
+        this.ok = ok;
+        this.source = source;
+        this.error = error;
+    }
+
+    public static fun success(source: string): HtmlResult {
+        return HtmlResult(true, source, "");
+    }
+
+    public static fun failure(error: string): HtmlResult {
+        return HtmlResult(false, "", error);
+    }
+}
 
 class SpliceCursor {
     public i: int;
@@ -17,19 +37,19 @@ class SpliceCursor {
 }
 
 public class HtmlCompiler {
-    public static fun compile(body: string, splices: List<string>): GenResult {
+    public static fun compile(body: string, splices: List<string>): HtmlResult {
         let cur = SpliceCursor();
         let frag = HtmlCompiler.compile_fragment(body.trim(), splices, cur);
         if !frag.ok {
             return frag;
         }
-        return GenResult.success("Html.render(" + frag.source + ")");
+        return HtmlResult.success("Html.render(" + frag.source + ")");
     }
 
-    static fun compile_fragment(body: string, splices: List<string>, cur: SpliceCursor): GenResult {
+    static fun compile_fragment(body: string, splices: List<string>, cur: SpliceCursor): HtmlResult {
         let trimmed = body.trim();
         if trimmed.length == 0 {
-            return GenResult.success("\"\"");
+            return HtmlResult.success("\"\"");
         }
         if !trimmed.contains("<") {
             return HtmlCompiler.compile_text_with_splices(trimmed, splices, cur);
@@ -46,7 +66,7 @@ public class HtmlCompiler {
             if preview.length > 32 {
                 preview = preview.substring(0, 32);
             }
-            return GenResult.failure(
+            return HtmlResult.failure(
                 "html syntax block: could not parse markup starting with '" + preview + "'"
             );
         }
@@ -54,21 +74,21 @@ public class HtmlCompiler {
     }
 
     // Success with empty source means "not an element" (caller may fall through).
-    static fun try_compile_element(s: string, splices: List<string>, cur: SpliceCursor): GenResult {
+    static fun try_compile_element(s: string, splices: List<string>, cur: SpliceCursor): HtmlResult {
         let t = s.trim();
         if !t.starts_with("<") {
-            return GenResult.success("");
+            return HtmlResult.success("");
         }
         let after = t.substring(1, t.length);
         let name_end = HtmlCompiler.tag_name_end(after);
         let tag = after.substring(0, name_end);
         if (tag.length == 0) || tag.starts_with("/") {
-            return GenResult.success("");
+            return HtmlResult.success("");
         }
         let rest = after.substring(name_end, after.length);
         let close_angle_opt = rest.index_of(">");
         if close_angle_opt.is_none() {
-            return GenResult.failure("html syntax block: unclosed opening tag '<" + tag + "'");
+            return HtmlResult.failure("html syntax block: unclosed opening tag '<" + tag + "'");
         }
         let close_angle = close_angle_opt.unwrap_or(0);
         let attrs_raw = rest.substring(0, close_angle);
@@ -83,12 +103,12 @@ public class HtmlCompiler {
             return attrs;
         }
         if self_closing {
-            return GenResult.success("Html.el(\"" + tag + "\", " + attrs.source + ", \"\")");
+            return HtmlResult.success("Html.el(\"" + tag + "\", " + attrs.source + ", \"\")");
         }
         let close_tag = "</" + tag + ">";
         let close_pos_opt = HtmlCompiler.last_index_of(after_open, close_tag);
         if close_pos_opt.is_none() {
-            return GenResult.failure("html syntax block: missing closing tag '</" + tag + ">'");
+            return HtmlResult.failure("html syntax block: missing closing tag '</" + tag + ">'");
         }
         let close_pos = close_pos_opt.unwrap_or(0);
         let inner = HtmlCompiler.compile_children(
@@ -99,7 +119,7 @@ public class HtmlCompiler {
         if !inner.ok {
             return inner;
         }
-        return GenResult.success(
+        return HtmlResult.success(
             "Html.el(\"" + tag + "\", " + attrs.source + ", " + inner.source + ")"
         );
     }
@@ -134,9 +154,9 @@ public class HtmlCompiler {
         return Option.None;
     }
 
-    static fun compile_attrs(attrs_src: string): GenResult {
+    static fun compile_attrs(attrs_src: string): HtmlResult {
         if attrs_src.length == 0 {
-            return GenResult.success("[]");
+            return HtmlResult.success("[]");
         }
         let parts = List<string>();
         let rest = attrs_src;
@@ -151,7 +171,7 @@ public class HtmlCompiler {
                 if preview.length > 24 {
                     preview = preview.substring(0, 24);
                 }
-                return GenResult.failure(
+                return HtmlResult.failure(
                     "html syntax block: attribute missing '=': '" + preview + "'"
                 );
             }
@@ -159,14 +179,14 @@ public class HtmlCompiler {
             let key = rest.substring(0, eq).trim();
             rest = rest.substring(eq + 1, rest.length).trim();
             if !rest.starts_with("\"") {
-                return GenResult.failure(
+                return HtmlResult.failure(
                     "html syntax block: attribute '" + key + "' value must be a double-quoted string"
                 );
             }
             let after_q = rest.substring(1, rest.length);
             let end_opt = after_q.index_of("\"");
             if end_opt.is_none() {
-                return GenResult.failure(
+                return HtmlResult.failure(
                     "html syntax block: unclosed attribute value for '" + key + "'"
                 );
             }
@@ -176,7 +196,7 @@ public class HtmlCompiler {
             rest = after_q.substring(end + 1, after_q.length);
         }
         if parts.length == 0 {
-            return GenResult.success("[]");
+            return HtmlResult.success("[]");
         }
         let joined_sb = StringBuilder();
         let i = 0;
@@ -187,17 +207,17 @@ public class HtmlCompiler {
             joined_sb.append(parts.get(i));
             i = i + 1;
         }
-        return GenResult.success("[" + joined_sb.build() + "]");
+        return HtmlResult.success("[" + joined_sb.build() + "]");
     }
 
     static fun escape_str(s: string): string {
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    static fun compile_children(inner: string, splices: List<string>, cur: SpliceCursor): GenResult {
+    static fun compile_children(inner: string, splices: List<string>, cur: SpliceCursor): HtmlResult {
         let text = inner.trim();
         if text.length == 0 {
-            return GenResult.success("\"\"");
+            return HtmlResult.success("\"\"");
         }
         let parts = List<string>();
         let rest = text;
@@ -224,7 +244,7 @@ public class HtmlCompiler {
                 if preview.length > 32 {
                     preview = preview.substring(0, 32);
                 }
-                return GenResult.failure(
+                return HtmlResult.failure(
                     "html syntax block: could not parse nested markup '" + preview + "'"
                 );
             }
@@ -244,7 +264,7 @@ public class HtmlCompiler {
             rest = rest.substring(next_tag, rest.length);
         }
         if parts.length == 0 {
-            return GenResult.success("\"\"");
+            return HtmlResult.success("\"\"");
         }
         let joined_sb = StringBuilder();
         let i = 0;
@@ -255,7 +275,7 @@ public class HtmlCompiler {
             joined_sb.append(parts.get(i));
             i = i + 1;
         }
-        return GenResult.success(joined_sb.build());
+        return HtmlResult.success(joined_sb.build());
     }
 
     static fun element_source_len(s: string): Option<int> {
@@ -290,9 +310,9 @@ public class HtmlCompiler {
         text: string,
         splices: List<string>,
         cur: SpliceCursor
-    ): GenResult {
+    ): HtmlResult {
         if text.length == 0 {
-            return GenResult.success("\"\"");
+            return HtmlResult.success("\"\"");
         }
         let result_parts = List<string>();
         let rest = text;
@@ -309,7 +329,7 @@ public class HtmlCompiler {
             let after = rest.substring(start + 1, rest.length);
             let end_opt = after.index_of("}");
             if end_opt.is_none() {
-                return GenResult.failure(
+                return HtmlResult.failure(
                     "html syntax block: unclosed '{…}' splice (missing closing '}')"
                 );
             }
@@ -326,7 +346,7 @@ public class HtmlCompiler {
             result_parts.push("\"" + HtmlCompiler.escape_str(rest) + "\"");
         }
         if result_parts.length == 0 {
-            return GenResult.success("\"\"");
+            return HtmlResult.success("\"\"");
         }
         let joined_sb = StringBuilder();
         let i = 0;
@@ -337,6 +357,6 @@ public class HtmlCompiler {
             joined_sb.append(result_parts.get(i));
             i = i + 1;
         }
-        return GenResult.success(joined_sb.build());
+        return HtmlResult.success(joined_sb.build());
     }
 }

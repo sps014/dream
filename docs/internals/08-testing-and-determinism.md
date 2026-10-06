@@ -142,8 +142,8 @@ regression as a focused golden or unit test after fixing it.
 The default suite runs 32 cases per property. Increase coverage or reproduce a run with:
 
 ```bash
-PROPTEST_CASES=512 cargo test --test compiler_properties
-PROPTEST_RNG_SEED=123 cargo test --test compiler_properties
+PROPTEST_CASES=512 cargo test --test integration compiler_properties::
+PROPTEST_RNG_SEED=123 cargo test --test integration compiler_properties::
 ./scripts/probe_test.sh --parity
 ```
 

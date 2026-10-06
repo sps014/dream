@@ -66,6 +66,10 @@ pub enum ExpressionNode<'a> {
     /// The `SyntaxToken` is the `nameof` identifier; the `Vec` is the dotted path (length ≥ 1).
     /// Not a reserved keyword; the operand is not evaluated.
     NameOf(SyntaxToken, Vec<SyntaxToken>),
+    /// `declof(a.b)` — the `GenDeclId` identity (`module::Type.member`) of a resolved declaration,
+    /// as a compile-time `string`. Same shape as [`ExpressionNode::NameOf`]; an unresolved path
+    /// is a compile error. Not a reserved keyword; the operand is not evaluated.
+    DeclOf(SyntaxToken, Vec<SyntaxToken>),
     /// `typeof(expr)` — the name of `expr`'s concrete type as a `string`. The `SyntaxToken` is the
     /// `typeof` identifier. Not a reserved keyword. An `object`/interface/class operand is read
     /// from its runtime heap tag (so a boxed value or a subclass reports what it actually is);
@@ -222,6 +226,7 @@ impl<'a> ExpressionNode<'a> {
             | ExpressionNode::Cast(open, _, _)
             | ExpressionNode::SizeOf(open, _)
             | ExpressionNode::NameOf(open, _)
+            | ExpressionNode::DeclOf(open, _)
             | ExpressionNode::TypeOf(open, _)
             | ExpressionNode::Switch(open, _, _)
             | ExpressionNode::RefArgument(open, _) => Some(open.position),

@@ -14,12 +14,14 @@ use std::collections::HashMap;
 
 mod attr_ide;
 mod builder;
+mod declared_attrs;
 mod model;
 mod queries;
 
 pub use attr_ide::{
     attribute_arg_context, attribute_name_partial, attribute_signature, AttrArgContext,
 };
+pub use declared_attrs::{std_attributes, DeclaredAttribute};
 pub use model::*;
 pub(crate) use queries::import_path_partial;
 pub use queries::is_member_completion_context;
@@ -33,6 +35,10 @@ pub struct Index {
     pub decls: Vec<Decl>,
     pub refs: Vec<Ref>,
     pub inlay_hints: Vec<InlayHintOut>,
+    /// `@generator` functions declared in this document, by name and name span.
+    pub generators: Vec<(String, usize, usize)>,
+    /// Attribute types this document declares or imports from non-std files.
+    pub attributes: Vec<DeclaredAttribute>,
 }
 impl Index {
     /// Parses `text` and builds the symbol model. Tolerates parse errors by indexing whatever
@@ -58,8 +64,18 @@ impl Index {
             fn_params: HashMap::new(),
             ctor_params: HashMap::new(),
         };
+        let mut generators = Vec::new();
+        let mut attributes = Vec::new();
         if let Ok(ast) = parser.parse() {
             let program = ast.get_root();
+            for func in &program.functions {
+                if dream_abi::attributes::has_generator_attr(&func.attributes) {
+                    let span = func.name.position;
+                    generators.push((func.name.text.clone(), span.start, span.end));
+                }
+            }
+
+            attributes.extend(declared_attrs::collect(text, &program.structs, None));
 
             // Pass 1: Declare all file-level symbols for the main program
             builder.walk_program_for_imports(program);
@@ -95,8 +111,8 @@ impl Index {
                     let import_path =
                         dream::driver::source_loader::resolve_import_path(parent_dir, module_name);
 
-                    if let Some(import_path_str) = import_path.to_str() {
-                        if import_path.exists() {
+                    if let Some(import_path_str) = import_path.to_str()
+                        && import_path.exists() {
                             let _ = dream::driver::source_loader::parse_file_recursive(
                                 &import_path_str.to_string(),
                                 &mut acc,
@@ -104,20 +120,7 @@ impl Index {
                                 &mut scratch,
                             );
                         }
-                    }
                 }
-            }
-
-            if acc
-                .all_structs
-                .iter()
-                .any(|s| s.attributes.iter().any(|a| a.name.text == "json"))
-                || acc
-                    .all_enums
-                    .iter()
-                    .any(|e| e.attributes.iter().any(|a| a.name.text == "json"))
-            {
-                acc.requested_std_packages.insert("system.json".to_string());
             }
 
             let _ = dream::driver::prelude::merge_prelude(
@@ -143,6 +146,15 @@ impl Index {
                 acc.all_extends,
                 acc.all_globals,
             );
+            for s in &combined.structs {
+                let Some(path) = s.file_path.as_deref() else { continue };
+                if dream_stdlib::is_std_source(path) {
+                    continue;
+                }
+                if let Some(source) = acc.file_contents.get(path) {
+                    attributes.extend(declared_attrs::collect(source, std::slice::from_ref(s), None));
+                }
+            }
             // Pass 1.5: Declare all imported and prelude symbols
             builder.is_main = false;
             builder.walk_program_for_imports(&combined);
@@ -155,6 +167,8 @@ impl Index {
             decls: builder.decls,
             refs: builder.refs,
             inlay_hints: builder.inlay_hints,
+            generators,
+            attributes,
         }
     }
 }

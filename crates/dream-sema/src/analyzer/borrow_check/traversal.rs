@@ -1,21 +1,13 @@
 use super::*;
 
 impl<'s> Extractor<'s> {
-    pub(super) fn walk_block(
-        &mut self,
-        stmts: &[StatementNode],
-        class_fields: &[String],
-    ) {
+    pub(super) fn walk_block(&mut self, stmts: &[StatementNode], class_fields: &[String]) {
         for s in stmts {
             self.walk_stmt(s, class_fields);
         }
     }
 
-    pub(super) fn walk_args(
-        &mut self,
-        args: &[ExpressionNode],
-        class_fields: &[String],
-    ) {
+    pub(super) fn walk_args(&mut self, args: &[ExpressionNode], class_fields: &[String]) {
         for a in args {
             self.walk_expr(a, class_fields);
         }
@@ -49,11 +41,7 @@ impl<'s> Extractor<'s> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn walk_stmt(
-        &mut self,
-        stmt: &StatementNode,
-        class_fields: &[String],
-    ) {
+    pub(super) fn walk_stmt(&mut self, stmt: &StatementNode, class_fields: &[String]) {
         match stmt {
             StatementNode::Declaration(name_tok, _, init, _) => {
                 if is_self_expr(init, &self.aliases_this) {
@@ -106,15 +94,14 @@ impl<'s> Extractor<'s> {
                 self.walk_expr(init, class_fields);
             }
             StatementNode::Assignment(name_tok, value) => {
-                if class_fields.contains(&name_tok.text) {
-                    if let Some(span) = Some(name_tok.position) {
+                if class_fields.contains(&name_tok.text)
+                    && let Some(span) = Some(name_tok.position) {
                         self.events.push(Ev::UniqueCandidate {
                             recv: "this".to_string(),
                             name: format!("set {}", name_tok.text),
                             span,
                         });
                     }
-                }
                 self.emit_binding_and_init(&name_tok.text, value, class_fields);
             }
             StatementNode::MemberAssignment(target, name, value) => {
@@ -230,11 +217,7 @@ impl<'s> Extractor<'s> {
         }
     }
 
-    pub(super) fn walk_expr(
-        &mut self,
-        e: &ExpressionNode,
-        class_fields: &[String],
-    ) {
+    pub(super) fn walk_expr(&mut self, e: &ExpressionNode, class_fields: &[String]) {
         match e {
             ExpressionNode::Identifier(t) => {
                 self.events.push(Ev::Ref {
@@ -254,15 +237,14 @@ impl<'s> Extractor<'s> {
             | ExpressionNode::Parenthesized(_, inner)
             | ExpressionNode::Try(inner) => self.walk_expr(inner, class_fields),
             ExpressionNode::IncDec { target, .. } => {
-                if let Some(key) = canonical_chain_from(target) {
-                    if let Some(span) = target_span_opt(target) {
+                if let Some(key) = canonical_chain_from(target)
+                    && let Some(span) = target_span_opt(target) {
                         self.events.push(Ev::UniqueCandidate {
                             recv: key,
                             name: "incdec".to_string(),
                             span,
                         });
                     }
-                }
                 self.walk_expr(target, class_fields);
             }
             ExpressionNode::ArrayLiteral(_, elems)
@@ -294,9 +276,7 @@ impl<'s> Extractor<'s> {
             ExpressionNode::Cast(_, _, inner)
             | ExpressionNode::IsExpression(inner, _, _)
             | ExpressionNode::Await(_, inner) => self.walk_expr(inner, class_fields),
-            ExpressionNode::MemberAccess(base, _) => {
-                self.walk_expr(base, class_fields)
-            }
+            ExpressionNode::MemberAccess(base, _) => self.walk_expr(base, class_fields),
             ExpressionNode::Switch(_, subject, arms) => {
                 self.walk_expr(subject, class_fields);
                 for arm in arms {

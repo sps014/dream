@@ -71,11 +71,10 @@ impl MirPass for HopElision {
                     continue;
                 }
                 let mut base = base;
-                if plain_copy {
-                    if let Some(src) = preceding_copy(&func.blocks[bi].stmts, i, base) {
+                if plain_copy
+                    && let Some(src) = preceding_copy(&func.blocks[bi].stmts, i, base) {
                         base = src;
                     }
-                }
                 let Some(j) = next_matching(&func.blocks[bi].stmts[i + 1..], |s| {
                     matches!(
                         s,
@@ -261,16 +260,13 @@ fn field_then_store(stmts: &[Statement], release_at: usize, n: Local, base: Loca
             Place::Local(d),
             Rvalue::Use(Operand::Copy(Place::Field { base: f, .. })),
         ) = s
-        {
-            if *f == n {
+            && *f == n {
                 tmp = Some(*d);
             }
-        }
-        if let Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Copy(Place::Local(s)))) = s {
-            if *d == base && tmp == Some(*s) {
+        if let Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Copy(Place::Local(s)))) = s
+            && *d == base && tmp == Some(*s) {
                 return true;
             }
-        }
     }
     false
 }

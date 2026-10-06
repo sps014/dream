@@ -56,7 +56,10 @@ impl<'a> Analyzer<'a> {
         self.current_call_target_name = saved_call_target;
 
         // Align with the template's parameter list (index 0 is `this`) for inference.
-        let owner = receiver.as_ref().map(|hir| hir.ty).unwrap_or_else(|| self.type_ctx.lower(&template.parameters[0].type_));
+        let owner = receiver
+            .as_ref()
+            .map(|hir| hir.ty)
+            .unwrap_or_else(|| self.type_ctx.lower(&template.parameters[0].type_));
         let mut inference_types = Vec::with_capacity(arg_types.len() + 1);
         inference_types.push(owner);
         inference_types.extend(arg_types.iter().cloned());
@@ -99,7 +102,10 @@ impl<'a> Analyzer<'a> {
             Ok(sig) => sig,
             Err(_) => {
                 diagnostics.report_error(
-                    format!("Function '{}' could not be instantiated", template.name.text),
+                    format!(
+                        "Function '{}' could not be instantiated",
+                        template.name.text
+                    ),
                     Some(method.position),
                 );
                 return Ok(Type::Unknown);
@@ -184,7 +190,10 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
 
-        let ret_type = Self::async_return_type(store_sig.is_async, Some(self.type_ctx.syntax_type(store_sig.resolved_return)));
+        let ret_type = Self::async_return_type(
+            store_sig.is_async,
+            Some(self.type_ctx.syntax_type(store_sig.resolved_return)),
+        );
         self.hir_set_method_call(receiver, &store_sig.identity, arg_hirs, &ret_type);
         let call_summary = self.ide_summary(&ret_type);
         self.record_ide_ref(

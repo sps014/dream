@@ -11,28 +11,61 @@ impl<'a> Analyzer<'a> {
         bindings: &GenericBindings,
     ) -> crate::function_table::FunctionIdentity {
         let old_scope = self.type_ctx.scope();
-        self.type_ctx.set_scope(self.graph.module_for_file(template.file_path.as_deref()));
-        let def = self.function_table.declaration_node(template).map(|key| key.0)
-            .or_else(|| self.type_ctx.resolve(DefKind::Function, &template.name.text));
+        self.type_ctx
+            .set_scope(self.graph.module_for_file(template.file_path.as_deref()));
+        let def = self
+            .function_table
+            .declaration_node(template)
+            .map(|key| key.0)
+            .or_else(|| {
+                self.type_ctx
+                    .resolve(DefKind::Function, &template.name.text)
+            });
         let Some(def) = def else {
             self.type_ctx.set_scope(old_scope);
-            return (self.type_ctx.register(DefKind::Function, &template.name.text, generic_param_names(&template.generic_parameters)), Vec::new());
+            return (
+                self.type_ctx.register(
+                    DefKind::Function,
+                    &template.name.text,
+                    generic_param_names(&template.generic_parameters),
+                ),
+                Vec::new(),
+            );
         };
-        let args: Vec<_> = bindings.values().map(|ty| self.type_ctx.lower(ty)).collect();
+        let args: Vec<_> = bindings
+            .values()
+            .map(|ty| self.type_ctx.lower(ty))
+            .collect();
         let identity = (def, args);
         if !self.function_table.functions.contains_key(&identity) {
             let mut specialized = template.clone();
             Self::substitute_generic_signature(&mut specialized, bindings);
             let specialized_ref: &'a FunctionNode<'a> = self.arena.alloc(specialized);
-            let mut info = FunctionTableInfo::from_identity(specialized_ref, identity.clone(), &mut self.type_ctx);
+            let mut info = FunctionTableInfo::from_identity(
+                specialized_ref,
+                identity.clone(),
+                &mut self.type_ctx,
+            );
             info.declaring_module = self.module_of(template.file_path.as_ref());
-            self.instantiated_generics.insert(identity.clone(), (bindings.clone(), specialized_ref));
-            self.function_table.record_declaration(specialized_ref, identity.clone());
-            self.function_table.add_instance(info, def, identity.1.clone());
-            let owners: Vec<_> = self.function_table.generic_methods.iter()
-                .filter(|(_, candidate)| **candidate == def).map(|(key, _)| key.clone()).collect();
+            self.instantiated_generics
+                .insert(identity.clone(), (bindings.clone(), specialized_ref));
+            self.function_table
+                .record_declaration(specialized_ref, identity.clone());
+            self.function_table
+                .add_instance(info, def, identity.1.clone());
+            let owners: Vec<_> = self
+                .function_table
+                .generic_methods
+                .iter()
+                .filter(|(_, candidate)| **candidate == def)
+                .map(|(key, _)| key.clone())
+                .collect();
             for key in owners {
-                self.function_table.methods.entry(key).or_default().push(identity.clone());
+                self.function_table
+                    .methods
+                    .entry(key)
+                    .or_default()
+                    .push(identity.clone());
             }
         }
         self.type_ctx.set_scope(old_scope);

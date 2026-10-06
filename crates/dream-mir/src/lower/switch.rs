@@ -89,11 +89,10 @@ impl Lowerer<'_> {
 
         for arm in arms {
             let blk = self.b.new_block();
-            if let dream_hir::HPattern::Const(c) = &arm.pattern {
-                if let Some(v) = const_int_value(c, self.layouts, self.interner) {
+            if let dream_hir::HPattern::Const(c) = &arm.pattern
+                && let Some(v) = const_int_value(c, self.layouts, self.interner) {
                     targets.push((v, blk));
                 }
-            }
             let saved = self.b.current();
             self.b.switch_to(blk);
             self.lower_block(&arm.body);

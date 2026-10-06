@@ -3,8 +3,8 @@
 
 use dream_host_abi::*;
 
-#[no_mangle]
-pub unsafe extern "C" fn unicodeNormalize(text: DreamPtr, form: i32) -> DreamPtr {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn unicodeNormalize(text: DreamPtr, form: i32) -> DreamPtr { unsafe {
     use unicode_normalization::UnicodeNormalization;
     let s = read_string(text);
     let out = match form {
@@ -14,22 +14,22 @@ pub unsafe extern "C" fn unicodeNormalize(text: DreamPtr, form: i32) -> DreamPtr
         _ => s.nfc().collect::<String>(),
     };
     alloc_string(&out)
-}
+}}
 
-#[no_mangle]
-pub unsafe extern "C" fn unicodeToLower(text: DreamPtr) -> DreamPtr {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn unicodeToLower(text: DreamPtr) -> DreamPtr { unsafe {
     alloc_string(&read_string(text).to_lowercase())
-}
+}}
 
-#[no_mangle]
-pub unsafe extern "C" fn unicodeToUpper(text: DreamPtr) -> DreamPtr {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn unicodeToUpper(text: DreamPtr) -> DreamPtr { unsafe {
     alloc_string(&read_string(text).to_uppercase())
-}
+}}
 
-#[no_mangle]
-pub unsafe extern "C" fn unicodeGraphemes(text: DreamPtr) -> DreamPtr {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn unicodeGraphemes(text: DreamPtr) -> DreamPtr { unsafe {
     use unicode_segmentation::UnicodeSegmentation;
     let s = read_string(text);
     let parts: Vec<String> = s.graphemes(true).map(str::to_string).collect();
     alloc_string_array(&parts)
-}
+}}

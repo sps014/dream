@@ -409,11 +409,9 @@ pub(super) fn build_poll<'a>(
             resume,
             ..
         } = &block.terminator
-        {
-            if (resume.0 as usize) < resume_dest.len() {
+            && (resume.0 as usize) < resume_dest.len() {
                 resume_dest[resume.0 as usize] = Some(d.0);
             }
-        }
     }
     fx.body_blocks(&resume_dest, Some(offs));
     let w = fx.w;

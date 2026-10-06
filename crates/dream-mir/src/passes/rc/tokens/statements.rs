@@ -14,24 +14,22 @@ pub(crate) fn apply_stmt_tokens(
     sink_is_move: impl Fn(u32) -> bool,
     tokens: &mut [bool],
 ) {
-    if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
-        if is_owned(dest.0) {
+    if let Statement::Assign(Place::Local(dest), rvalue) = stmt
+        && is_owned(dest.0) {
             let self_ref = rvalue_reads_local(rvalue, dest.0);
             if !self_ref {
                 tokens[dest.0 as usize] = false;
                 if is_borrowed_copy(rvalue, interner) {
-                    if let Some(src) = move_source(rvalue, is_owned) {
-                        if assign_is_move {
+                    if let Some(src) = move_source(rvalue, is_owned)
+                        && assign_is_move {
                             tokens[src.0 as usize] = false;
                         }
-                    }
                     tokens[dest.0 as usize] = true;
                 } else {
                     tokens[dest.0 as usize] = true;
                 }
             }
         }
-    }
     for local in take_owned_arg_locals(stmt, is_owned) {
         if sink_is_move(local) {
             tokens[local as usize] = false;

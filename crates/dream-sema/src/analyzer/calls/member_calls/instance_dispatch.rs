@@ -33,17 +33,24 @@ impl<'a> Analyzer<'a> {
         // A generic interface receiver (e.g. `Container<int>`) must be monomorphized before dispatch
         // so its concrete method slots exist, even if no implementing class was instantiated earlier
         // in analysis order.
-        if let Some((base, args)) = Self::resolve_struct_parts(obj_type) {
-            if !args.is_empty() && self.type_ctx.resolve(DefKind::Interface, &base).is_some_and(|def| self.is_generic_interface(def)) {
+        if let Some((base, args)) = Self::resolve_struct_parts(obj_type)
+            && !args.is_empty()
+                && self
+                    .type_ctx
+                    .resolve(DefKind::Interface, &base)
+                    .is_some_and(|def| self.is_generic_interface(def))
+            {
                 self.ensure_interface_instantiated(&base, &args, &method.position, diagnostics);
             }
-        }
         // Interface-typed receiver: package `extend Iface` methods (`Collection_int_to_list`) are
         // ordinary `{iface}_{method}` entries — prefer those over itable dispatch.
         let obj_id = self.type_ctx.lower(obj_type);
         if let Some(iface_name) = self.interface_receiver_name(obj_type) {
             let has_extension = self.method_info(obj_id, &method.text).is_ok()
-                || self.function_table.generic_methods.contains_key(&(obj_id, method.text.clone()));
+                || self
+                    .function_table
+                    .generic_methods
+                    .contains_key(&(obj_id, method.text.clone()));
             if !has_extension {
                 return self.analyze_interface_method(
                     obj_id,
@@ -120,15 +127,21 @@ impl<'a> Analyzer<'a> {
 
         // Concrete class missing the method: try package extensions on implemented interfaces.
         let missing = self.method_info(owner, &method.text).is_err()
-            && !self.function_table.generic_methods.contains_key(&(owner, method.text.clone()));
-        if missing {
-            if let Some(ifaces) = self.implemented_interfaces(owner).cloned() {
+            && !self
+                .function_table
+                .generic_methods
+                .contains_key(&(owner, method.text.clone()));
+        if missing
+            && let Some(ifaces) = self.implemented_interfaces(owner).cloned() {
                 for iface in ifaces {
                     let iface_id = iface;
                     let iface = self.type_id_display(iface_id);
                     let ext = method_fn(&iface, &method.text);
                     if self.method_info(iface_id, &method.text).is_ok()
-                        || self.function_table.generic_methods.contains_key(&(iface_id, method.text.clone()))
+                        || self
+                            .function_table
+                            .generic_methods
+                            .contains_key(&(iface_id, method.text.clone()))
                     {
                         let iface_ty = self.type_ctx.syntax_type(iface_id);
                         self.hir_set_cast(receiver.take(), &iface_ty);
@@ -140,11 +153,15 @@ impl<'a> Analyzer<'a> {
                     }
                 }
             }
-        }
 
         // Method-level generics (`pool.dispatch<TIn, TOut>(...)`): monomorphize before the plain
         // `function_table` path, which only knows the unbound template signature.
-        if let Some(&template) = self.function_table.generic_methods.get(&(owner, method.text.clone())).and_then(|def| self.generic_functions.get(def)) {
+        if let Some(&template) = self
+            .function_table
+            .generic_methods
+            .get(&(owner, method.text.clone()))
+            .and_then(|def| self.generic_functions.get(def))
+        {
             return self.analyze_generic_instance_method(
                 template,
                 &mangled_name,
@@ -187,11 +204,7 @@ impl<'a> Analyzer<'a> {
                         .collect();
                     return Err(report_with_notes(
                         diagnostics,
-                        format!(
-                            "Type '{}' has no method '{}'",
-                            owner_name,
-                            method.text
-                        ),
+                        format!("Type '{}' has no method '{}'", owner_name, method.text),
                         Some(method.position),
                         notes,
                     ));
@@ -226,16 +239,18 @@ impl<'a> Analyzer<'a> {
         // parameter type. An overloaded method's parameter types aren't known until the arguments
         // themselves are typed, so it falls back to no expected-type context (unchanged behavior).
         let expected_params: Option<Vec<Type>> = if is_overloaded {
-            self.expected_params_for_candidates(self.function_table.method_candidates(owner, &method.text), params, 1)
+            self.expected_params_for_candidates(
+                self.function_table.method_candidates(owner, &method.text),
+                params,
+                1,
+            )
         } else {
-            method_info
-                .as_ref()
-                .map(|info| {
-                    Self::expected_param_types(info)
-                        .into_iter()
-                        .skip(1) // implicit `this`
-                        .collect()
-                })
+            method_info.as_ref().map(|info| {
+                Self::expected_param_types(info)
+                    .into_iter()
+                    .skip(1) // implicit `this`
+                    .collect()
+            })
         };
 
         let call_target = format!("{}.{}", effective_struct, method.text);
@@ -276,11 +291,7 @@ impl<'a> Analyzer<'a> {
                         .collect();
                     return Err(report_noted(
                         diagnostics,
-                        format!(
-                            "Type '{}' has no method '{}'",
-                            owner_name,
-                            method.text
-                        ),
+                        format!("Type '{}' has no method '{}'", owner_name, method.text),
                         Some(method.position),
                         notes,
                         Some("missing-member"),
@@ -399,7 +410,10 @@ impl<'a> Analyzer<'a> {
 
         // An `async` method yields a `Future<T>` handle (carried by the `MethodCall`); `await`
         // unwraps it.
-        let ret_type = Self::async_return_type(store_sig.is_async, Some(self.type_ctx.syntax_type(store_sig.resolved_return)));
+        let ret_type = Self::async_return_type(
+            store_sig.is_async,
+            Some(self.type_ctx.syntax_type(store_sig.resolved_return)),
+        );
         // Overloaded methods each register a distinct `DefId` under their emitted (signature-mangled)
         // name; resolve to the selected overload's name so the call targets the right instance.
         // Non-overloaded methods keep their base-mangled name.
@@ -417,10 +431,25 @@ impl<'a> Analyzer<'a> {
         Ok(ret_type)
     }
 
-    pub(crate) fn in_methods_of(&self, parent_function: &FunctionNode<'a>, owner: dream_types::TypeId) -> bool {
-        let Some(identity) = self.function_table.declaration_node(parent_function) else { return false; };
-        self.function_table.methods.iter().any(|((receiver, _), keys)| *receiver == owner && keys.iter().any(|key| key.0 == identity.0))
-            || self.function_table.generic_methods.iter().any(|((receiver, _), def)| *receiver == owner && *def == identity.0)
+    pub(crate) fn in_methods_of(
+        &self,
+        parent_function: &FunctionNode<'a>,
+        owner: dream_types::TypeId,
+    ) -> bool {
+        let Some(identity) = self.function_table.declaration_node(parent_function) else {
+            return false;
+        };
+        self.function_table
+            .methods
+            .iter()
+            .any(|((receiver, _), keys)| {
+                *receiver == owner && keys.iter().any(|key| key.0 == identity.0)
+            })
+            || self
+                .function_table
+                .generic_methods
+                .iter()
+                .any(|((receiver, _), def)| *receiver == owner && *def == identity.0)
     }
 }
 
@@ -434,7 +463,9 @@ fn suggest_methods(
     let mut out: Vec<String> = Vec::new();
     let want = wanted.to_ascii_lowercase();
     for (receiver, member) in table.methods.keys() {
-        if *receiver != owner { continue; }
+        if *receiver != owner {
+            continue;
+        }
         let m = member.clone();
         let lm = m.to_ascii_lowercase();
         if (lm.starts_with(&want) || levenshtein(&lm, &want) <= 2) && !out.contains(&m) {

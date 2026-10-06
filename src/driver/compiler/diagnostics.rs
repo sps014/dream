@@ -1,11 +1,14 @@
 use super::*;
 
 pub(super) fn fail_diagnostics(
+    render: bool,
     ctor: fn(String) -> CompileError,
     diagnostics: &DiagnosticBag,
     file_contents: &std::collections::HashMap<String, String>,
 ) -> CompileError {
-    render_with(diagnostics, file_contents, Some(highlight_dream_line));
+    if render {
+        render_with(diagnostics, file_contents, Some(highlight_dream_line));
+    }
     ctor(format_diagnostics(
         diagnostics,
         file_contents,

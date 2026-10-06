@@ -206,7 +206,9 @@ impl<'a> Analyzer<'a> {
             } else {
                 body_ret
             };
-            let actual = self.type_ctx.lower(&Type::Function(param_tys, Box::new(ret)));
+            let actual = self
+                .type_ctx
+                .lower(&Type::Function(param_tys, Box::new(ret)));
             arg_types[i] = Some(actual);
         }
 
@@ -239,11 +241,10 @@ impl<'a> Analyzer<'a> {
                             .and_then(|a| self.match_generic_type(&formal.type_, *a, name))
                     })
                 });
-            if let Some(concrete) = concrete {
-                if concrete != self.type_ctx.interner.error() {
+            if let Some(concrete) = concrete
+                && concrete != self.type_ctx.interner.error() {
                     bindings.insert(name.clone(), self.type_ctx.syntax_type(concrete));
                 }
-            }
         }
     }
 

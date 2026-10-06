@@ -380,11 +380,10 @@ fn collect_array_elems(
     array_elems: &mut BTreeSet<TypeId>,
 ) {
     for local in &f.locals {
-        if let TyKind::Array(e) = interner.kind(local.ty) {
-            if interner.is_reference(*e) || interner.is_value_type(*e) {
+        if let TyKind::Array(e) = interner.kind(local.ty)
+            && (interner.is_reference(*e) || interner.is_value_type(*e)) {
                 array_elems.insert(*e);
             }
-        }
     }
 }
 
@@ -394,11 +393,10 @@ pub(crate) fn glue_array_elems(cx: &Cx<'_>) -> BTreeSet<TypeId> {
     let mut array_elems = BTreeSet::new();
     for layout in cx.mir.layouts.structs.values() {
         for f in &layout.fields {
-            if let TyKind::Array(e) = interner.kind(f.ty) {
-                if interner.is_reference(*e) || interner.is_value_type(*e) {
+            if let TyKind::Array(e) = interner.kind(f.ty)
+                && (interner.is_reference(*e) || interner.is_value_type(*e)) {
                     array_elems.insert(*e);
                 }
-            }
         }
     }
     for f in &cx.mir.functions {

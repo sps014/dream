@@ -48,7 +48,7 @@ dto
 | File | Role |
 |------|------|
 | `main.dream` | Program using `@dto` on a class |
-| `gen.dream` | `@attribute` schema + `@generator` emit logic |
+| `gen.dream` | `@attribute(AttributeTarget.Class) struct` + `@on_attribute` `@generator` emit logic |
 | `dream.toml` | `[[generators]] path = "gen.dream"` |
 
 See [Source generators](../../../docs/reference/language/generators.md).

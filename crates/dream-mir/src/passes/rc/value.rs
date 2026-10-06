@@ -18,7 +18,7 @@ pub(super) fn insert_value_struct_moves(
         let d = &func.locals[idx];
         interner.is_value_type(d.ty)
             && !d.is_ref
-            && (d.name.is_some() || defined_only_by_calls(func, idx as u32))
+            && (d.name.is_some() || defined_only_by_producers(func, idx as u32))
             && d.name.as_deref() != Some("this")
     };
     let live_out = liveness::live_out(func);
@@ -37,8 +37,7 @@ pub(super) fn insert_value_struct_moves(
                 Place::Local(dest),
                 Rvalue::Use(Operand::Copy(Place::Local(src))),
             ) = stmt
-            {
-                if dest.0 != src.0
+                && dest.0 != src.0
                     && is_value_src(src.0 as usize)
                     && func.locals[dest.0 as usize].name.is_some()
                     && !func.locals[dest.0 as usize].is_ref
@@ -50,7 +49,6 @@ pub(super) fn insert_value_struct_moves(
                         kill_after.push((bi, si, src.0));
                     }
                 }
-            }
             let mut counts: std::collections::BTreeMap<u32, u32> =
                 std::collections::BTreeMap::new();
             for local in value_arg_locals(func, stmt, interner, &is_value_src) {
@@ -203,19 +201,17 @@ fn value_copy_root(func: &MirFunction, local: u32) -> u32 {
                     defs += 1;
                     src = Some(s.0);
                 }
-            } else if let Statement::Assign(Place::Local(d), _) = stmt {
-                if d.0 == local {
+            } else if let Statement::Assign(Place::Local(d), _) = stmt
+                && d.0 == local {
                     defs += 1;
                     src = None;
                 }
-            }
         }
     }
-    if defs == 1 {
-        if let Some(s) = src {
+    if defs == 1
+        && let Some(s) = src {
             return value_copy_root(func, s);
         }
-    }
     local
 }
 
@@ -231,15 +227,13 @@ pub(super) fn mark_returned_value_locals_moved(
     for block in &func.blocks {
         if let Terminator::Return(Some(Operand::Copy(Place::Local(l))))
         | Terminator::AsyncComplete(Some(Operand::Copy(Place::Local(l)))) = &block.terminator
-        {
-            if interner.is_value_type(func.locals[l.0 as usize].ty)
+            && interner.is_value_type(func.locals[l.0 as usize].ty)
                 && !func.locals[l.0 as usize].is_ref
                 && !func.locals[l.0 as usize].manual_drop
             {
                 func.locals[l.0 as usize].manual_drop = true;
                 *changed = true;
             }
-        }
     }
 }
 
@@ -254,12 +248,13 @@ fn is_owning_value_local(func: &MirFunction, interner: &TypeInterner, idx: usize
     if idx < func.params.len() {
         return false;
     }
-    decl.name.is_some() || defined_only_by_calls(func, idx as u32)
+    decl.name.is_some() || defined_only_by_producers(func, idx as u32)
 }
 
-/// An unnamed temp holding a call result owns it; once the call is inlined the temp is defined by
-/// a plain copy, which frame teardown treats as an alias, so its drop must be placed here.
-fn defined_only_by_calls(func: &MirFunction, local: u32) -> bool {
+/// An unnamed temp holding a call or constructor result owns it, so passing it to a sink parameter
+/// must move it (or the callee and frame teardown both drop it). Once a call is inlined the temp is
+/// defined by a plain copy, which frame teardown treats as an alias, so its drop must be placed here.
+fn defined_only_by_producers(func: &MirFunction, local: u32) -> bool {
     let mut seen = false;
     for stmt in func.blocks.iter().flat_map(|b| &b.stmts) {
         if let Statement::Assign(Place::Local(d), rv) = stmt {
@@ -268,7 +263,10 @@ fn defined_only_by_calls(func: &MirFunction, local: u32) -> bool {
             }
             if !matches!(
                 rv,
-                Rvalue::Call { .. } | Rvalue::IndirectCall { .. } | Rvalue::InterfaceCall { .. }
+                Rvalue::Call { .. }
+                    | Rvalue::IndirectCall { .. }
+                    | Rvalue::InterfaceCall { .. }
+                    | Rvalue::New { .. }
             ) {
                 return false;
             }

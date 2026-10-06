@@ -76,6 +76,27 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return result;
     }
 
+    fun find_span(key: StringSpan): int where K : StringKey {
+        let slots = this.slots;
+        let cap = this.cap;
+        let epoch = this.epoch;
+        let tomb = 0 - epoch;
+        let idx = key.hash_code() & (cap - 1);
+        while true {
+            let s = slots[idx].state;
+            if (s != epoch) && (s != tomb) {
+                return -1;
+            }
+            if (s == epoch) && slots[idx].key.matches_span(key) {
+                return idx;
+            }
+            idx = idx + 1;
+            if idx == cap {
+                idx = 0;
+            }
+        }
+    }
+
     fun insert_no_grow(key: K, value: V): void {
         let slots = this.slots;
         let cap = this.cap;
@@ -194,6 +215,27 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
             return Option.Some(this.slots[i].value);
         }
         return Option.None;
+    }
+
+    // Value for the `string` key equal to `key`, without building a `string`.
+    public fun get(key: StringSpan): Option<V> where K : StringKey {
+        let i = this.find_span(key);
+        if i >= 0 {
+            return Option.Some(this.slots[i].value);
+        }
+        return Option.None;
+    }
+
+    public fun get_or(key: StringSpan, fallback: V): V where K : StringKey {
+        let i = this.find_span(key);
+        if i >= 0 {
+            return this.slots[i].value;
+        }
+        return fallback;
+    }
+
+    public fun contains(key: StringSpan): bool where K : StringKey {
+        return this.find_span(key) >= 0;
     }
 
     // Value for `key`. Panics when the key is absent — this is what `m[k]` compiles to; use

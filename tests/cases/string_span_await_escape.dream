@@ -1,0 +1,14 @@
+// Locals in scope at an `await` are spilled into the heap-allocated coroutine state, so a
+// `StringSpan` local may not be in scope there.
+
+import system;
+
+async fun run(s: string): int {
+    let v = s.span(0, 2);
+    Time.sleep(1).await;
+    return v.length;
+}
+
+async fun main(): void {
+    System.println(run("abc").await);
+}

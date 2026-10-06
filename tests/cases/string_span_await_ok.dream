@@ -1,0 +1,18 @@
+// The span's uses live in a synchronous helper, so no span is in scope at the `await`.
+
+import system;
+
+fun head_length(s: string): int {
+    let v = s.span(0, 2).trim();
+    return v.length;
+}
+
+async fun run(s: string): int {
+    let n = head_length(s);
+    Time.sleep(1).await;
+    return n + 1;
+}
+
+async fun main(): void {
+    System.println(run(" bc").await);
+}

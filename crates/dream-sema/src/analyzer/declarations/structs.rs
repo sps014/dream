@@ -109,6 +109,7 @@ impl<'a> Analyzer<'a> {
         for struct_decl in node.structs.iter() {
             self.type_ctx
                 .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
+            diagnostics.file_path = file_path_string(&struct_decl.file_path);
             if struct_decl.generic_parameters.is_some() {
                 continue;
             }
@@ -139,6 +140,7 @@ impl<'a> Analyzer<'a> {
         for struct_decl in node.structs.iter() {
             self.type_ctx
                 .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
+            diagnostics.file_path = file_path_string(&struct_decl.file_path);
             if struct_decl.generic_parameters.is_some() {
                 continue;
             }
@@ -157,15 +159,18 @@ impl<'a> Analyzer<'a> {
         self.check_weak_unowned_and_cycles(node, diagnostics);
 
         // A `ref struct` field would smuggle a stack-only value into a heap-allocated (or
-        // otherwise longer-lived) container — reject it regardless of whether the enclosing type
-        // is a `class` or a `struct`. Run once every struct's own `is_ref_struct`/`is_value` marks
-        // are registered (the loop above), so a field referencing another `ref struct` declared
+        // otherwise longer-lived) container. Only another `ref struct` may hold one: it is bound
+        // by the same frame. Run once every struct's own `is_ref_struct`/`is_value` marks are
+        // registered (the loop above), so a field referencing another `ref struct` declared
         // later in the same file still resolves correctly.
         for struct_decl in node.structs.iter() {
             self.type_ctx
                 .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
+            diagnostics.file_path = file_path_string(&struct_decl.file_path);
             for field in &struct_decl.fields {
-                self.reject_ref_struct_field(&struct_decl.name.text, field, diagnostics);
+                if !struct_decl.is_ref_struct {
+                    self.reject_ref_struct_field(&struct_decl.name.text, field, diagnostics);
+                }
                 self.check_type_not_static_class(&field.field_type, diagnostics);
             }
         }
@@ -299,115 +304,6 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Reports an error if `field`'s type is a `ref struct` — such a type cannot be stored as a
-    /// field of any enclosing type (`class` or `struct`), since that would let a stack-only value
-    /// outlive the stack frame it was created in.
-    pub(in crate::analyzer) fn reject_ref_struct_field(
-        &mut self,
-        owner_name: &str,
-        field: &StructFieldNode,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        let tid = self.type_ctx.lower(&field.field_type);
-        if self.type_ctx.interner.is_ref_struct_type(tid) {
-            diagnostics.report_error(
-                format!(
-                    "field '{}' of '{}' cannot have type '{}': a 'ref struct' cannot be stored as a field (it would let a stack-only value escape its stack frame)",
-                    field.name.text,
-                    owner_name,
-                    self.ty_display(&field.field_type)
-                ),
-                Some(field.name.position),
-            );
-        }
-    }
-
-    /// Rejects a `ref struct`-typed parameter on any `async` function, method, or `extend`-block
-    /// method in the program: an `async` call may suspend at an `await`, which spills the coroutine's
-    /// live locals (including its parameters) into a heap-allocated state object so they survive
-    /// across the suspend point — exactly the kind of stack-frame escape a `ref struct` forbids.
-    /// Generic templates are checked once per instantiation's concrete parameter types would be
-    /// ideal, but templates don't carry a `ref struct` argument until monomorphized, so this walks
-    /// only concrete (non-generic) declarations, matching this analysis's stated conservative scope.
-    pub(in crate::analyzer) fn check_ref_struct_async_boundary(
-        &mut self,
-        node: &'a ProgramView<'a>,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        let check_fn = |this: &mut Self,
-                        f: &dream_syntax::nodes::function::FunctionNode<'a>,
-                        diags: &mut DiagnosticBag| {
-            if !f.is_async {
-                return;
-            }
-            for p in &f.parameters {
-                let tid = this.type_ctx.lower(&p.type_);
-                if this.type_ctx.interner.is_ref_struct_type(tid) {
-                    diags.report_error(
-                        format!(
-                            "async function '{}' cannot take 'ref struct' parameter '{}' of type '{}': it may need to survive an 'await' suspend point, which would spill it into the heap-allocated coroutine state",
-                            f.name.text,
-                            p.name.text,
-                            this.ty_display(&p.type_)
-                        ),
-                        Some(f.name.position),
-                    );
-                }
-            }
-        };
-        for f in node.functions.iter() {
-            self.type_ctx
-                .set_scope(self.graph.module_for_file(f.file_path.as_deref()));
-            check_fn(self, f, diagnostics);
-        }
-        for s in node.structs.iter() {
-            self.type_ctx
-                .set_scope(self.graph.module_for_file(s.file_path.as_deref()));
-            for m in &s.methods {
-                check_fn(self, m, diagnostics);
-            }
-        }
-        for e in node.extends.iter() {
-            self.type_ctx
-                .set_scope(self.graph.module_for_file(e.file_path.as_deref()));
-            for m in &e.methods {
-                check_fn(self, m, diagnostics);
-            }
-        }
-        for en in node.enums.iter() {
-            self.type_ctx
-                .set_scope(self.graph.module_for_file(en.file_path.as_deref()));
-            for m in &en.methods {
-                check_fn(self, m, diagnostics);
-            }
-        }
-    }
-
-    /// Rejects any `ref struct` type appearing in `args` as a generic type argument: instantiating
-    /// a generic class/struct/union/function with a `ref struct` argument would store it in a field,
-    /// array element, or heap payload somewhere in that generic's body, letting a stack-only value
-    /// escape its frame. Called at every generic instantiation site (classes, unions, and — where
-    /// wired — generic function calls).
-    pub(in crate::analyzer) fn reject_ref_struct_type_args(
-        &mut self,
-        args: &[Type],
-        position: &TextSpan,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        for arg in args {
-            let tid = self.type_ctx.lower(arg);
-            if self.type_ctx.interner.is_ref_struct_type(tid) {
-                diagnostics.report_error(
-                    format!(
-                        "'{}' is a 'ref struct' and cannot be used as a generic type argument (it would be stored in a heap-allocated container, letting it escape its stack frame)",
-                        self.ty_display(arg)
-                    ),
-                    Some(*position),
-                );
-            }
-        }
-    }
-
     /// True when value struct `start` transitively embeds itself by value. Only value-typed,
     /// non-array fields form inline edges; reference fields (`class`, `string`, arrays) do not.
     fn value_struct_contains_self(&self, start: dream_types::TypeId) -> bool {
@@ -498,7 +394,8 @@ impl<'a> Analyzer<'a> {
             position,
             diagnostics,
         );
-        self.reject_ref_struct_type_args(&args, position, diagnostics);
+        let muted = self.ref_struct_escape_muted;
+        self.ref_struct_escape_muted |= self.reject_ref_struct_type_args(&args, position, diagnostics);
         let bindings = generic_bindings(params, &args);
         let type_bindings: IndexMap<_, _> = params
             .iter()
@@ -630,6 +527,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             );
         }
+        self.ref_struct_escape_muted = muted;
         self.type_ctx.set_scope(scope);
     }
 }

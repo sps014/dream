@@ -1,5 +1,6 @@
-//! `for (let <element> in <list>)` over a statically known stdlib `List<T>`, lowered to an index
-//! loop instead of the `ListIterator` + `Option<T>` enumerator protocol.
+//! `for (let <element> in <seq>)` over a statically known stdlib `List<T>`, `Span<T>`, or
+//! `ReadOnlySpan<T>`, lowered to an index loop instead of an enumerator + `Option<T>` protocol.
+//! For the spans this is also what keeps iteration by-value: no enumerator object exists.
 
 use super::*;
 use crate::errors::SemanticError;
@@ -11,27 +12,31 @@ use dream_syntax::token::token_kind::TokenKind;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Mangled `List<T>` accessors the index loop calls.
-pub(super) struct ListAccessors {
-    list: Type,
+/// Stdlib generic sequences whose for-each is an index loop over `length` + `at_unchecked`.
+const INDEXED_SEQUENCES: &[&str] = &["List", "Span", "ReadOnlySpan"];
+
+/// Mangled accessors the index loop calls.
+pub(super) struct IndexedAccessors {
+    seq: Type,
     element: Type,
     length: crate::function_table::FunctionIdentity,
     at: crate::function_table::FunctionIdentity,
 }
 
 impl<'a> Analyzer<'a> {
-    /// The accessors for `ty` when it is the stdlib `List<T>` (not a user type of the same name).
-    pub(super) fn stdlib_list_accessors(
+    /// The accessors for `ty` when it is one of the stdlib [`INDEXED_SEQUENCES`] (not a user type
+    /// of the same name).
+    pub(super) fn stdlib_indexed_accessors(
         &mut self,
         ty: &Type,
         diagnostics: &mut DiagnosticBag,
-    ) -> Option<ListAccessors> {
+    ) -> Option<IndexedAccessors> {
         let id = self.type_ctx.lower(ty);
         let dream_types::TyKind::Struct(def, args) = self.type_ctx.interner.kind(id).clone() else {
             return None;
         };
         let template = *self.generic_struct(def)?;
-        if template.name.text != "List"
+        if !INDEXED_SEQUENCES.contains(&template.name.text.as_str())
             || args.len() != 1
             || !template
                 .file_path
@@ -52,22 +57,22 @@ impl<'a> Analyzer<'a> {
             .iter()
             .map(|&arg| self.type_ctx.syntax_type(arg))
             .collect();
-        Some(ListAccessors {
-            list: ty.clone(),
+        Some(IndexedAccessors {
+            seq: ty.clone(),
             element: args[0].clone(),
             length,
             at,
         })
     }
 
-    /// Lowers `for (let x in list)` to
+    /// Lowers `for (let x in seq)` to
     ///
     /// ```text
-    /// let $list = <iterable>;
+    /// let $seq = <iterable>;
     /// let $i = 0;
     /// while (true) {
-    ///     if (!($i < $list.length)) { break; }
-    ///     x = $list.at_unchecked($i);
+    ///     if (!($i < $seq.length)) { break; }
+    ///     x = $seq.at_unchecked($i);
     ///     $i = $i + 1;
     ///     <body>
     /// }
@@ -76,11 +81,11 @@ impl<'a> Analyzer<'a> {
     /// which is exactly `ListIterator.next()` inlined: `length` is re-read every step, so a list
     /// mutated during iteration behaves identically, and the increment precedes the body so
     /// `continue` still advances.
-    pub(super) fn analyze_foreach_list(
+    pub(super) fn analyze_foreach_indexed(
         &mut self,
         element: &SyntaxToken,
         iter_hir: Option<dream_hir::HExpr>,
-        acc: ListAccessors,
+        acc: IndexedAccessors,
         body: &[StatementNode<'a>],
         ctx: &super::super::AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
@@ -94,31 +99,33 @@ impl<'a> Analyzer<'a> {
         (*ctx.symbol_table)
             .borrow_mut()
             .add_child(foreach_scope.clone());
-        if let Err(e) = foreach_scope
-            .borrow_mut()
-            .add_symbol(element.text.clone(), acc.element.clone())
         {
-            diagnostics.report_error(e.to_string(), Some(element.position));
+            let mut scope = foreach_scope.borrow_mut();
+            // Visible to the `await` scope rule: a span iterated here lives across the body.
+            let _ = scope.add_symbol("__foreach_seq".to_string(), acc.seq.clone());
+            if let Err(e) = scope.add_symbol(element.text.clone(), acc.element.clone()) {
+                diagnostics.report_error(e.to_string(), Some(element.position));
+            }
         }
 
         let int_type = Type::Integer(synthetic_token(TokenKind::DataTypeToken, "int"));
-        let list_local = self.hir_alloc_local("$foreach_list", &acc.list);
+        let seq_local = self.hir_alloc_local("$foreach_seq", &acc.seq);
         let idx_local = self.hir_alloc_local("$foreach_idx", &int_type);
         let elem_slot = self.hir_alloc_local(&element.text, &acc.element);
 
-        if let (Some(list_l), Some(idx_l)) = (list_local, idx_local) {
-            self.hir_assign_local_id(list_l, iter_hir);
+        if let (Some(seq_l), Some(idx_l)) = (seq_local, idx_local) {
+            self.hir_assign_local_id(seq_l, iter_hir);
             let zero = self.hx_int(0);
             self.hir_assign_local_id(idx_l, Some(zero));
         }
 
         self.hir_open_block();
-        if let (Some(list_l), Some(idx_l), Some(elem_l)) = (list_local, idx_local, elem_slot) {
-            let list_ty = self.type_ctx.lower(&acc.list);
+        if let (Some(seq_l), Some(idx_l), Some(elem_l)) = (seq_local, idx_local, elem_slot) {
+            let seq_ty = self.type_ctx.lower(&acc.seq);
             let int = self.type_ctx.interner.int();
 
             self.hir_set_method_call(
-                Some(self.hx_local(list_l, list_ty)),
+                Some(self.hx_local(seq_l, seq_ty)),
                 &acc.length,
                 vec![],
                 &int_type,
@@ -137,7 +144,7 @@ impl<'a> Analyzer<'a> {
             }
 
             self.hir_set_method_call(
-                Some(self.hx_local(list_l, list_ty)),
+                Some(self.hx_local(seq_l, seq_ty)),
                 &acc.at,
                 vec![Some(self.hx_local(idx_l, int))],
                 &acc.element,

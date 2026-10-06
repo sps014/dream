@@ -255,6 +255,7 @@ impl<'a> Analyzer<'a> {
                 let fut =
                     self.analyze_expression(inner, parent_function, symbol_table, diagnostics)?;
                 let inner_hir = self.hir_take();
+                self.reject_ref_struct_across_await(symbol_table, inner.position(), diagnostics);
                 if fut.is_unknown() {
                     self.hir_none();
                     return Ok(Type::Unknown);

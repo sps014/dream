@@ -1,0 +1,15 @@
+// The span a for-each iterates stays in scope for the whole body, so the body may not `await`.
+import system;
+
+async fun total(xs: int[]): int {
+    let t = 0;
+    for (let x in Span<int>.of(xs)) {
+        Time.sleep(1).await;
+        t = t + x;
+    }
+    return t;
+}
+
+async fun main(): void {
+    System.println(total([1, 2]).await);
+}

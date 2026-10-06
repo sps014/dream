@@ -1,0 +1,7 @@
+// Arrays are heap-allocated, so a `ref struct` cannot be an array element type.
+import system;
+
+fun main(): void {
+    let views = ["abc".span(), "de".span()];
+    System.println(views.length);
+}

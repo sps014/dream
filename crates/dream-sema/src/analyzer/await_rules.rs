@@ -2,10 +2,15 @@
 //! conditionally-evaluated positions (ternary arms, the right operand of `&&`/`||`/`??`) and inside
 //! loop/branch/`switch` bodies and conditions — because the coroutine transform lowers the whole
 //! body to a CFG state machine in which each `await` is a suspend point (`mir::lower::lower_await`).
-//! The only remaining rule is that `await` outside an `async` function is an error.
+//! The remaining rules: `await` outside an `async` function is an error, and no `ref struct` local
+//! may be in scope at an `await`.
 
 use super::Analyzer;
+use crate::symbol_table::SymbolTable;
 use dream_diagnostics::DiagnosticBag;
+use dream_text::text_span::TextSpan;
+use std::cell::RefCell;
+use std::rc::Rc;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, LambdaBody, LambdaNode, StatementNode};
 
 impl<'a> Analyzer<'a> {
@@ -22,6 +27,36 @@ impl<'a> Analyzer<'a> {
         let message = "'await' can only be used inside an 'async' function";
         for stmt in function.body.iter() {
             self.forbid_await_in_stmt(stmt, message, diagnostics);
+        }
+    }
+
+    /// Every local still in scope at an `await` is spilled into the heap-allocated coroutine state,
+    /// so a `ref struct` local in scope there would escape its frame. Scope (not liveness) is the
+    /// rule: it is sound and simple, and a synchronous helper confines the span's uses.
+    pub(in crate::analyzer) fn reject_ref_struct_across_await(
+        &mut self,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
+        at: Option<TextSpan>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let locals = symbol_table.borrow().visible_locals();
+        for (name, ty) in locals.iter().rev() {
+            let tid = self.type_ctx.lower(ty);
+            if !self.type_ctx.interner.is_ref_struct_type(tid) {
+                continue;
+            }
+            let shown = if name.starts_with("__") {
+                "a hidden loop variable".to_string()
+            } else {
+                format!("'{name}'")
+            };
+            diagnostics.report_error(
+                format!(
+                    "{shown} of 'ref struct' type '{}' is still in scope at this 'await': the suspend point would spill it into the heap-allocated coroutine state (move its uses into a separate non-async function)",
+                    self.ty_display(ty)
+                ),
+                at,
+            );
         }
     }
 

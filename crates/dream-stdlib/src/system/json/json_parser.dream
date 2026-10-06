@@ -526,25 +526,12 @@ public class JsonParser {
             return false;
         }
         this.pos = this.pos + 1;
-        let i = 0;
         let kn = key.length;
-        while i < kn {
-            if this.pos >= this.len() {
-                this.pos = saved;
-                return false;
-            }
-            let c = this.b();
-            if c == 92 {
-                this.pos = saved;
-                return false;
-            }
-            if c != key.char_at(i).to_int() {
-                this.pos = saved;
-                return false;
-            }
-            this.pos = this.pos + 1;
-            i = i + 1;
+        if (this.pos + kn > this.len()) || !this.text.span(this.pos, this.pos + kn).equals(key) || key.span().contains('\\') {
+            this.pos = saved;
+            return false;
         }
+        this.pos = this.pos + kn;
         if (this.pos >= this.len()) || (this.b() != 34) {
             this.pos = saved;
             return false;

@@ -1,0 +1,19 @@
+import system;
+import system.collections;
+
+fun main() {
+    let m = Map<string, int>();
+    m["apple"] = 1;
+    m["pear"] = 2;
+    let text = "apple,pear,plum";
+    let it = text.span().split_iter(',');
+    while it.move_next() {
+        let k = it.current;
+        System.println(k.to_string() + "=" + m.get(k).unwrap_or(-1).to_string() + " " + m.contains(k).to_string() + " " + m.get_or(k, 0).to_string());
+    }
+    System.println(m.get("pear").unwrap_or(0));
+    let s = Set<string>();
+    s.add("x");
+    System.println(s.contains("axb".span(1, 2)));
+    System.println(s.contains("ab".span(1, 2)));
+}

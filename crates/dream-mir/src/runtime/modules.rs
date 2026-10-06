@@ -113,6 +113,7 @@ pub const CORE_C: &[&str] = &[
     "publish.c",
     "region.c",
     "strings.c",
+    "string_view.c",
     "ffi.c",
     "object.c",
     "format.c",

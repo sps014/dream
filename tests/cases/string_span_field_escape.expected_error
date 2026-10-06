@@ -1,0 +1,1 @@
+field 'view' of 'Holder' cannot have type 'StringSpan': a 'ref struct' cannot be stored as a field

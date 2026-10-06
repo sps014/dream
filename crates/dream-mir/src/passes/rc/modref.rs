@@ -561,6 +561,7 @@ fn intrinsic_summary(op: IntrinsicOp) -> Option<ModRef> {
             | I::StringSubstring
             | I::StringCopyUtf8
             | I::StringCompare
+            | I::StringView
             | I::ToBytes
             | I::FromBytes
             | I::ArrayGetUnchecked

@@ -1,0 +1,1 @@
+a hidden loop variable of 'ref struct' type 'Span<int>' is still in scope at this 'await'

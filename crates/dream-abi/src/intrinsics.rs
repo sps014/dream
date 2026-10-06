@@ -133,6 +133,15 @@ pub const ATTR_STRING_SUBSTRING: &str = "string_substring_raw";
 pub const ATTR_STRING_COPY_UTF8: &str = "string_copy_utf8";
 /// `string.compare_raw(a, b)` — UTF-8 lexicographic compare (`$string_compare`).
 pub const ATTR_STRING_COMPARE: &str = "string_compare";
+/// `StringSpan` helpers over `(string, offset, length)` views (`core/string_view.c`).
+pub const ATTR_STRING_VIEW_EQ: &str = "string_view_eq";
+pub const ATTR_STRING_VIEW_COMPARE: &str = "string_view_compare";
+pub const ATTR_STRING_VIEW_HASH: &str = "string_view_hash";
+pub const ATTR_STRING_VIEW_FIND: &str = "string_view_find";
+pub const ATTR_STRING_VIEW_RFIND: &str = "string_view_rfind";
+pub const ATTR_STRING_VIEW_FIND_CHAR: &str = "string_view_find_char";
+pub const ATTR_STRING_VIEW_RFIND_CHAR: &str = "string_view_rfind_char";
+pub const ATTR_STRING_BUILDER_VIEW: &str = "string_builder_view";
 /// `Debug.free_list_head()` — allocator introspection for tests.
 pub const ATTR_DEBUG_FREE_LIST: &str = "debug_get_free_list_head";
 /// `Debug.heap_ptr()` — current bump-pointer (heap high-water mark).
@@ -215,6 +224,14 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_STRING_SUBSTRING,
     ATTR_STRING_COPY_UTF8,
     ATTR_STRING_COMPARE,
+    ATTR_STRING_VIEW_EQ,
+    ATTR_STRING_VIEW_COMPARE,
+    ATTR_STRING_VIEW_HASH,
+    ATTR_STRING_VIEW_FIND,
+    ATTR_STRING_VIEW_RFIND,
+    ATTR_STRING_VIEW_FIND_CHAR,
+    ATTR_STRING_VIEW_RFIND_CHAR,
+    ATTR_STRING_BUILDER_VIEW,
     ATTR_DEBUG_FREE_LIST,
     ATTR_DEBUG_HEAP_PTR,
     ATTR_DEBUG_LIVE_OBJECTS,
@@ -298,6 +315,9 @@ pub enum IntrinsicOp {
     StringCopyUtf8,
     /// `string.compare_raw(a, b)` — UTF-8 lexicographic compare.
     StringCompare,
+    /// Read-only `StringSpan` scans and compares (`string_view_*`), and the slice header a
+    /// `StringBuilder` span views its buffer through (retains only that buffer).
+    StringView,
     StringBuilderBuffer,
     /// `Debug.free_list_head()` — head of the allocator free list.
     DebugFreeList,
@@ -372,6 +392,14 @@ impl IntrinsicOp {
             ATTR_STRING_SUBSTRING => IntrinsicOp::StringSubstring,
             ATTR_STRING_COPY_UTF8 => IntrinsicOp::StringCopyUtf8,
             ATTR_STRING_COMPARE => IntrinsicOp::StringCompare,
+            ATTR_STRING_VIEW_EQ
+            | ATTR_STRING_VIEW_COMPARE
+            | ATTR_STRING_VIEW_HASH
+            | ATTR_STRING_VIEW_FIND
+            | ATTR_STRING_VIEW_RFIND
+            | ATTR_STRING_VIEW_FIND_CHAR
+            | ATTR_STRING_VIEW_RFIND_CHAR
+            | ATTR_STRING_BUILDER_VIEW => IntrinsicOp::StringView,
             ATTR_DEBUG_FREE_LIST => IntrinsicOp::DebugFreeList,
             ATTR_DEBUG_HEAP_PTR => IntrinsicOp::DebugHeapPtr,
             ATTR_DEBUG_LIVE_OBJECTS => IntrinsicOp::DebugLiveObjects,

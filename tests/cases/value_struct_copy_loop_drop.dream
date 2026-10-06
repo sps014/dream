@@ -1,0 +1,19 @@
+// A struct copied by a last-use move and then only read in a loop header is still released at
+// function exit.
+import system;
+
+struct P {
+    public a: int[];
+    public constructor(a: int[]) { this.a = a; }
+    public get n(): int { return this.a.length; }
+}
+
+fun main(): void {
+    let p = P([1, 2, 3]);
+    let q = p;
+    let i = 0;
+    while i < q.n {
+        i = i + 1;
+    }
+    System.println(i);
+}

@@ -51,6 +51,7 @@ impl<'a> Analyzer<'a> {
                     Some(method.position),
                 );
             }
+            self.reject_ref_struct_array_element(&element, Some(method.position), diagnostics);
             self.hir_set_array_new(&element, arg_hirs.into_iter().next().flatten());
             return Ok(Type::Array(Box::new(element)));
         }

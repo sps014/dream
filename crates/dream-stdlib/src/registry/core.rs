@@ -18,6 +18,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/span.dream"),
         ),
         (
+            "<std>/system/core/read_only_span.dream",
+            include_str!("../system/core/read_only_span.dream"),
+        ),
+        (
             "<std>/system/core/pointer.dream",
             include_str!("../system/core/pointer.dream"),
         ),
@@ -40,6 +44,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/core/string_abi.dream",
             include_str!("../system/core/string_abi.dream"),
+        ),
+        (
+            "<std>/system/core/string_span.dream",
+            include_str!("../system/core/string_span.dream"),
         ),
         (
             "<std>/system/core/string_builder.dream",

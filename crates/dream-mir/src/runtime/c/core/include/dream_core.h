@@ -654,6 +654,9 @@ DREAM_ALWAYS_INLINE void dream_strb_reserve(dream_strb *sb, int32_t units) {
     }
     sb->blk = dream_realloc(sb->blk, dream_string_bytes(cap), TAG_STRING);
     sb->cap = cap;
+    /* A recycled block keeps stale header words; a pad word that happens to read as the
+     * slice marker would make the next regrow's free chase a garbage parent pointer. */
+    dream_str_init_owned(sb->blk);
 }
 
 DREAM_ALWAYS_INLINE void dream_strb_append(dream_strb *sb, dream_ptr s) {
@@ -1403,6 +1406,17 @@ dream_ptr string_from_utf8(dream_ptr bytes);
 dream_ptr string_from_utf8_prefix(dream_ptr bytes, int32_t len);
 dream_ptr string_from_utf8_prefix_n(dream_ptr bytes, int32_t len, int32_t scalars);
 int32_t string_compare(dream_ptr a, dream_ptr b);
+int32_t string_view_eq(dream_ptr a, int32_t ao, int32_t an, dream_ptr b, int32_t bo, int32_t bn);
+int32_t string_view_compare(dream_ptr a, int32_t ao, int32_t an, dream_ptr b, int32_t bo,
+                            int32_t bn);
+int32_t string_view_hash(dream_ptr s, int32_t off, int32_t n);
+int32_t string_view_find(dream_ptr h, int32_t ho, int32_t hn, dream_ptr nd, int32_t no,
+                         int32_t nn, int32_t from);
+int32_t string_view_rfind(dream_ptr h, int32_t ho, int32_t hn, dream_ptr nd, int32_t no,
+                          int32_t nn);
+int32_t string_view_find_char(dream_ptr s, int32_t off, int32_t n, int32_t from, int32_t c);
+int32_t string_view_rfind_char(dream_ptr s, int32_t off, int32_t n, int32_t c);
+dream_ptr string_builder_view(dream_ptr bytes, int32_t len);
 int32_t dream_char_at(dream_ptr ptr, int32_t i);
 int32_t dream_byte_at(dream_ptr ptr, int32_t i);
 

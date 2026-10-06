@@ -10,6 +10,9 @@ public class StringBuilder {
     // Backing-buffer capacity in bytes (mirrors `this.bytes.length`; the native fast path
     // reads this field instead of chasing the array header on every append).
     cap: int;
+    // Set once `as_span` has shared `bytes`; `clear` then swaps in a fresh buffer so viewed units
+    // are never overwritten.
+    viewed: bool;
 
     // Allocates an empty builder with an initial backing buffer capacity in payload bytes (defaults to 16).
     @inline
@@ -94,6 +97,11 @@ public class StringBuilder {
         StringBuilder.push_raw(this, text);
     }
 
+    // Appends the units a `StringSpan` views, with no intermediate string.
+    public fun append(span: StringSpan): void {
+        this.append_utf8_slice(span.src, span.offset * 2, span._length * 2);
+    }
+
     // Appends `byte_len` payload bytes starting at byte index `start` of `text`.
     public fun append_utf8_slice(borrow text: string, start: int, byte_len: int): void {
         if byte_len <= 0 {
@@ -142,6 +150,24 @@ public class StringBuilder {
     @inline
     public fun clear(): void {
         this.count = 0;
+        if this.viewed {
+            this.bytes = StringBuilder.new_buffer(this.cap);
+            this.viewed = false;
+        }
+    }
+
+    @intrinsic("string_builder_view")
+    static extern fun view_raw(borrow bytes: byte[], len: int): string;
+
+    // A view of everything appended so far, without copying the units. Later appends and
+    // `clear` leave the view unchanged: it is a snapshot.
+    public fun as_span(): StringSpan {
+        if this.count <= 0 {
+            return string.empty.span();
+        }
+        this.viewed = true;
+        let s = StringBuilder.view_raw(this.bytes, this.count);
+        return StringSpan(s, 0, this.count / 2);
     }
 
     // Snapshot into a new string. `from_builder` copies once; do not stage through a

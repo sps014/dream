@@ -341,6 +341,7 @@ impl<'a> Analyzer<'a> {
             &method.position,
             diagnostics,
         );
+        self.reject_ref_struct_bindings(&bindings, &method.position, diagnostics);
         let instance = self.register_generic_function_instance(template, &bindings);
 
         let store_sig = match self.function_table.get_function(&instance) {

@@ -115,6 +115,7 @@ impl<'a> Analyzer<'a> {
             &id.position,
             diagnostics,
         );
+        self.reject_ref_struct_bindings(&bindings, &id.position, diagnostics);
 
         let identity = self.register_generic_function_instance(template, &bindings);
         // The func value must reference the base template's `DefId` + concrete instance args (in

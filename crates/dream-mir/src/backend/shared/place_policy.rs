@@ -120,6 +120,23 @@ pub(crate) fn is_value_copy_local(f: &MirFunction, local: Local) -> bool {
     seen
 }
 
+/// `local = src` immediately followed by `ValueKill(src)` (a last-use move) or `ValueRetain(local)`
+/// (a retained copy): either way `local` owns nested refs of its own, unlike a plain copy local.
+fn owns_copied_value(f: &MirFunction, local: Local) -> bool {
+    f.blocks.iter().any(|block| {
+        block.stmts.windows(2).any(|pair| match pair {
+            [
+                Statement::Assign(Place::Local(dest), Rvalue::Use(Operand::Copy(Place::Local(src)))),
+                next,
+            ] if *dest == local => matches!(
+                next,
+                Statement::ValueKill(k) if k == src
+            ) || matches!(next, Statement::ValueRetain(r) if *r == local),
+            _ => false,
+        })
+    })
+}
+
 pub(crate) fn is_moved_into_union(f: &MirFunction, local: Local) -> bool {
     f.blocks.iter().flat_map(|block| &block.stmts).any(|stmt| {
         let Statement::Assign(_, rv) = stmt else {
@@ -185,7 +202,7 @@ pub(crate) fn teardown_value_locals(
             || dropped[i]
             || !interner.is_value_type(decl.ty)
             || is_alias_value_local(f, local)
-            || is_value_copy_local(f, local)
+            || (is_value_copy_local(f, local) && !owns_copied_value(f, local))
             || is_moved_into_union(f, local)
         {
             continue;

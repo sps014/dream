@@ -1,0 +1,150 @@
+module system.core;
+
+// `ReadOnlySpan<T>` - a `Span<T>` without the writers: no indexer setter, `set`, `fill`, or
+// `copy_from`. Take one when a function borrows a run of elements and promises not to change them.
+// The same `ref struct` escape rules as `Span<T>` apply (see `docs/reference/language/spans.md`).
+public ref struct ReadOnlySpan<T> {
+    internal array: T[];
+    internal offset: int;
+    internal _length: int;
+
+    // A view of `array[offset .. offset + length)`. Traps unless that range lies inside `array`.
+    public constructor(borrow array: T[], offset: int, length: int) {
+        if (offset < 0) || (length < 0) || (length > array.length - offset) {
+            System.panic("Span range out of bounds");
+        }
+        this.array = array;
+        this.offset = offset;
+        this._length = length;
+    }
+
+    // A read-only span over the whole of `array`.
+    public static fun of(borrow array: T[]): ReadOnlySpan<T> {
+        return ReadOnlySpan<T>(array, 0, array.length);
+    }
+
+    // Number of elements this span covers.
+    public get length(): int {
+        return this._length;
+    }
+
+    // True when this span covers no elements.
+    @inline
+    public fun is_empty(): bool {
+        return this._length == 0;
+    }
+
+    // The element at `index` (relative to this span). Traps if out of range.
+    public fun this[index: int]: T {
+        if (index < 0) || (index >= this._length) {
+            System.panic("Span index out of range");
+        }
+        return this.array[this.offset + index];
+    }
+
+    public fun get(index: int): T {
+        return this[index];
+    }
+
+    // For-each access; see `Span<T>.at_unchecked`.
+    @inline
+    internal fun at_unchecked(index: int): T {
+        return Buffer.get_unchecked<T>(this.array, this.offset + index);
+    }
+
+    // A sub-span covering `[start, start + count)`. Traps if the range doesn't fit.
+    public fun slice(start: int, count: int): ReadOnlySpan<T> {
+        if (start < 0) || (count < 0) || (count > this._length - start) {
+            System.panic("Span slice out of range");
+        }
+        return ReadOnlySpan<T>(this.array, this.offset + start, count);
+    }
+
+    // The sub-span from `start` to the end. Traps if `start` is outside `[0, length]`.
+    public fun slice(start: int): ReadOnlySpan<T> {
+        return this.slice(start, this._length - start);
+    }
+
+    // Index of the first element equal to `value` (by value equality), or `None`.
+    public fun index_of(borrow value: T): Option<int> {
+        let i = 0;
+        while i < this._length {
+            if Buffer.get_unchecked<T>(this.array, this.offset + i) == value {
+                return Option.Some(i);
+            }
+            i = i + 1;
+        }
+        return Option.None;
+    }
+
+    // True when some element equals `value`.
+    public fun contains(borrow value: T): bool {
+        return this.index_of(value).is_some();
+    }
+
+    // True when `other` has the same length and pairwise-equal elements. Element-wise `==` even
+    // for unmanaged `T`: a bitwise compare would disagree with `==` on floating-point NaN and -0.0.
+    public fun sequence_equal(other: ReadOnlySpan<T>): bool {
+        if this._length != other._length {
+            return false;
+        }
+        if (this.array == other.array) && (this.offset == other.offset) {
+            return true;
+        }
+        let i = 0;
+        while i < this._length {
+            let a = Buffer.get_unchecked<T>(this.array, this.offset + i);
+            if a != Buffer.get_unchecked<T>(other.array, other.offset + i) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    // Copies every element into `dst` starting at index 0. Traps if `dst` is shorter. Overlap
+    // within one array is handled like `Span<T>.copy_from`.
+    public fun copy_to(dst: Span<T>): void {
+        if this._length > dst._length {
+            System.panic("Span copy_to overflow");
+        }
+        if (this.array == dst.array) && (dst.offset > this.offset) {
+            let i = this._length;
+            while i > 0 {
+                i = i - 1;
+                dst.array[dst.offset + i] = this.array[this.offset + i];
+            }
+            return;
+        }
+        let i = 0;
+        while i < this._length {
+            dst.array[dst.offset + i] = this.array[this.offset + i];
+            i = i + 1;
+        }
+    }
+
+    // Unmanaged fast path: one `memory.copy`.
+    public fun copy_to(dst: Span<T>): void where T : unmanaged {
+        if this._length > dst._length {
+            System.panic("Span copy_to overflow");
+        }
+        Buffer.elems_copy<T>(dst.array, dst.offset, this.array, this.offset, this._length);
+    }
+
+    // Copies every element into a fresh, independently-owned array.
+    public fun to_array(): T[] {
+        let result = Buffer.alloc<T>(this._length);
+        let i = 0;
+        while i < this._length {
+            result[i] = this.array[this.offset + i];
+            i = i + 1;
+        }
+        return result;
+    }
+
+    public fun to_array(): T[] where T : unmanaged {
+        let result = Buffer.alloc<T>(this._length);
+        Buffer.elems_copy<T>(result, 0, this.array, this.offset, this._length);
+        return result;
+    }
+}

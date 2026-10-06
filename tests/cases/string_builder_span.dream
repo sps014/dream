@@ -1,0 +1,24 @@
+// `StringBuilder.as_span()` views the appended units without copying; the view is a snapshot
+// that later appends and `clear` do not change.
+import system;
+
+fun main(): void {
+    let sb = StringBuilder();
+    sb.append("hello ");
+    sb.append("world");
+    let v = sb.as_span();
+    System.println(v.slice(0, 5).to_string());
+    let snap = v.to_string();
+    sb.clear();
+    sb.append("XXXXXXXXXXX");
+    System.println(snap + "|" + v.to_string() + "|" + sb.to_string());
+    System.println(v.hash_code() == "hello world".hash_code());
+    let i = 0;
+    while i < 40 {
+        sb.append_char('y');
+        i = i + 1;
+    }
+    let w = sb.as_span();
+    System.println(w.length.to_string() + " " + v.length.to_string());
+    System.println(StringBuilder().as_span().is_empty());
+}

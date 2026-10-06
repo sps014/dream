@@ -449,6 +449,7 @@ impl<'a> Analyzer<'a> {
                 &name.position,
                 diagnostics,
             );
+            self.reject_ref_struct_bindings(&bindings, &name.position, diagnostics);
             let mangled_name = self.register_generic_function_instance(template, &bindings);
             generic_instance = Some(mangled_name);
         }

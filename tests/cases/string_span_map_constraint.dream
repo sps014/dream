@@ -1,0 +1,8 @@
+// Span lookups require a `string`-keyed map (`K : StringKey`).
+
+import system.collections;
+
+fun main(): void {
+    let m = Map<int, int>();
+    let x = m.get("1".span());
+}

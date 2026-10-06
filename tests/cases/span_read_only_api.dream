@@ -1,0 +1,33 @@
+// `Span<T>` / `ReadOnlySpan<T>` shared ops and by-value for-each (an index loop, no iterator).
+import system;
+
+fun sum(xs: ReadOnlySpan<int>): int {
+    let t = 0;
+    for (let x in xs) {
+        t = t + x;
+    }
+    return t;
+}
+
+fun main(): void {
+    let arr = [1, 2, 3, 4, 5];
+    let s = Span<int>.of(arr);
+    System.println(sum(s.as_read_only()));
+    System.println(sum(s.slice(1, 3).as_read_only()));
+    System.println(s.slice(2).length);
+    System.println(s.index_of(4).unwrap_or(-1));
+    System.println(s.contains(9));
+    let dst = Span<int>.of([0, 0, 0, 0, 0, 0]);
+    s.copy_to(dst);
+    System.println(dst.to_array().length.to_string() + " " + dst[4].to_string());
+    System.println(s.sequence_equal(dst.slice(0, 5)));
+    System.println(s.as_read_only().sequence_equal(dst.slice(1, 5).as_read_only()));
+    for (let x in s.slice(3)) {
+        System.println(x);
+    }
+    let words = ReadOnlySpan<string>.of(["a", "b" + "c", "d"]);
+    System.println(words.index_of("bc").unwrap_or(-1));
+    let buf = ["x", "y", "z", "w"];
+    Span<string>.of(buf).slice(0, 3).copy_to(Span<string>.of(buf).slice(1, 3));
+    System.println(buf[0] + buf[1] + buf[2] + buf[3]);
+}

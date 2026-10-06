@@ -1,0 +1,19 @@
+// `span(start, end)` and `slice` clamp out-of-range bounds like `substring`; `char_at` traps.
+
+import system;
+
+fun main(): void {
+    let s = "hello world";
+    System.println(s.span(-5, 3).to_string() + "|");
+    System.println(s.span(6, 100).to_string() + "|");
+    System.println(s.span(8, 2).length);
+    let w = s.span(6, 11);
+    System.println(w.slice(1, 3).to_string());
+    System.println(w.slice(3).to_string());
+    System.println(w.slice(-1, 99).equals("world"));
+    System.println(w.is_empty());
+    System.println(s.span(3, 3).is_empty());
+    System.println("".span().split_iter(',').move_next());
+    System.println("   ".span().trim().length);
+    System.println("12x".span().parse_int().is_err());
+}

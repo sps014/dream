@@ -153,6 +153,27 @@ impl SymbolTable {
         }
     }
 
+    /// Every binding visible from this scope below the global root, innermost first; a shadowed
+    /// outer binding is omitted.
+    pub fn visible_locals(&self) -> Vec<(String, Type)> {
+        let mut out: Vec<(String, Type)> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        self.collect_visible_locals(&mut seen, &mut out);
+        out
+    }
+
+    fn collect_visible_locals(&self, seen: &mut HashSet<String>, out: &mut Vec<(String, Type)>) {
+        let Some(parent) = self.parent.as_ref().and_then(Weak::upgrade) else {
+            return;
+        };
+        for (name, symbol) in &self.symbols {
+            if seen.insert(name.clone()) {
+                out.push((name.clone(), symbol.ty.clone()));
+            }
+        }
+        parent.borrow().collect_visible_locals(seen, out);
+    }
+
     pub fn get_symbol(&self, name: &SyntaxToken) -> Result<Type, SymbolError> {
         if let Some(symbol) = self.symbols.get(&name.text) {
             return Ok(symbol.ty.clone());

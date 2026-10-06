@@ -1,0 +1,7 @@
+// A `StringSpan` cannot be a generic argument: `List<T>` keeps its elements on the heap.
+
+import system.collections;
+
+fun main(): void {
+    let xs = List<StringSpan>();
+}

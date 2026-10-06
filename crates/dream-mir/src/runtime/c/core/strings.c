@@ -189,7 +189,7 @@ void string_set(dream_ptr ptr, int32_t i, int32_t c) {
     }
     ((uint16_t *)dream_str_units(ptr))[i] = u;
     /* A slice writes through to its parents' units; drop every cached hash on the chain. */
-    while (ptr != 0) {
+    while (ptr != 0 && dream_object_tag(ptr) == TAG_STRING) {
         int32_t *slot = dream_str_hash_slot(ptr);
         if (slot != NULL) {
             *slot = 0;

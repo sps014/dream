@@ -355,6 +355,9 @@ pub struct Analyzer<'a> {
     /// Label attached to the immediately-following loop (`outer: for ...`), consumed by that loop's
     /// analyzer so it can be threaded into the loop's HIR node. `None` for unlabeled loops.
     pending_loop_label: Option<String>,
+    /// True while instantiating a generic whose type argument was already rejected as a
+    /// `ref struct`: the same escape would otherwise be reported again from inside its body.
+    ref_struct_escape_muted: bool,
     /// True while analyzing the body of an `async fun`. Gates the use of `await`.
     current_function_is_async: bool,
     /// True while analyzing the body of an `@unsafe fun`/method. Gates calling another `@unsafe`
@@ -467,6 +470,7 @@ impl<'a> Analyzer<'a> {
             current_call_target_name: None,
             loop_labels: Vec::new(),
             pending_loop_label: None,
+            ref_struct_escape_muted: false,
             current_function_is_async: false,
             current_function_is_unsafe: false,
             current_function_runtime: RuntimeSupport::ALL,

@@ -1,0 +1,9 @@
+// A lambda's captures live in a heap closure environment, so a `StringSpan` cannot be captured.
+
+import system;
+
+fun main(): void {
+    let v = "abc".span();
+    let f: fun(): int = () => v.length;
+    System.println(f());
+}

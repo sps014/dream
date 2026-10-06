@@ -166,7 +166,7 @@ impl<'a> Analyzer<'a> {
                         );
                     }
                 let ftid = self.type_ctx.lower(&ftype);
-                if self.type_ctx.interner.is_ref_struct_type(ftid) {
+                if self.type_ctx.interner.is_ref_struct_type(ftid) && !self.ref_struct_escape_muted {
                     diagnostics.report_error(
                         format!(
                             "field '{}' of variant '{}' cannot have type '{}': a 'ref struct' cannot be stored as a union payload (it would let a stack-only value escape its stack frame)",
@@ -320,7 +320,8 @@ impl<'a> Analyzer<'a> {
             position,
             diagnostics,
         );
-        self.reject_ref_struct_type_args(&args, position, diagnostics);
+        let muted = self.ref_struct_escape_muted;
+        self.ref_struct_escape_muted |= self.reject_ref_struct_type_args(&args, position, diagnostics);
         let bindings = generic_bindings(params, &args);
         self.register_union(
             instance,
@@ -350,6 +351,7 @@ impl<'a> Analyzer<'a> {
             &args,
             diagnostics,
         );
+        self.ref_struct_escape_muted = muted;
         self.type_ctx.set_scope(scope);
     }
 

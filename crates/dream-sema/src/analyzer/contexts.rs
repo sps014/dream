@@ -13,8 +13,15 @@ impl<'a> Analyzer<'a> {
     where
         F: FnOnce(&mut Self) -> R,
     {
+        let rejected = bindings.values().any(|ty| {
+            let tid = self.type_ctx.lower(ty);
+            self.type_ctx.interner.is_ref_struct_type(tid)
+        });
         let saved = std::mem::replace(&mut self.current_generic_bindings, bindings);
+        let muted = self.ref_struct_escape_muted;
+        self.ref_struct_escape_muted |= rejected;
         let result = f(self);
+        self.ref_struct_escape_muted = muted;
         self.current_generic_bindings = saved;
         result
     }

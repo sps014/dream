@@ -1,0 +1,13 @@
+// A `StringSpan` is a `ref struct`: it cannot be stored as a field of a class or ordinary struct.
+
+class Holder {
+    public view: StringSpan;
+
+    public constructor(view: StringSpan) {
+        this.view = view;
+    }
+}
+
+fun main(): void {
+    let h = Holder("abc".span());
+}

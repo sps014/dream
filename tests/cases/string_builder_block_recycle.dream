@@ -1,0 +1,9 @@
+import system;
+fun main(): void {
+    let sb = StringBuilder();
+    sb.append("[");
+    sb.append("x");
+    System.println(sb.build());
+    let o: Option<string> = Option.Some("a");
+    System.println(o);
+}

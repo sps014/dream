@@ -1,0 +1,12 @@
+// A generic function instantiated with a `ref struct` could store it on the heap; the call site
+// reports it once.
+import system.collections;
+
+fun store<T>(x: T): void {
+    let l = List<T>();
+    l.push(x);
+}
+
+fun main(): void {
+    store("abc".span());
+}

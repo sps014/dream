@@ -345,6 +345,18 @@ public class List<T> : IndexedCollection<T> {
         return ListIterator<T>(this);
     }
 
+    // A view of the current elements, writable in place. The span holds the backing array it was
+    // taken from: after the list grows (or shrinks and regrows) it keeps showing that old array,
+    // so take a fresh span after structural changes.
+    public fun as_span(): Span<T> {
+        return Span<T>(this.items, 0, this.count);
+    }
+
+    // A read-only view of the current elements, with the same staleness rule as `as_span`.
+    public fun as_read_only_span(): ReadOnlySpan<T> {
+        return ReadOnlySpan<T>(this.items, 0, this.count);
+    }
+
     // Unchecked element access for `ListIterator` and for-each (index already validated against
     // `count`).
     @inline

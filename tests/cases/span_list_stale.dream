@@ -1,0 +1,32 @@
+// `List.as_span()` views the backing array it was taken from: writes go through to the list,
+// and after the list grows the span keeps showing the old array.
+import system;
+import system.collections;
+
+class Box {
+    public v: int;
+    public constructor(v: int) { this.v = v; }
+}
+
+fun main(): void {
+    let names = List<string>();
+    names.push("a" + "1");
+    names.push("bb");
+    let view = names.as_read_only_span();
+    let i = 0;
+    while i < 20 {
+        names.push("n" + i.to_string());
+        i = i + 1;
+    }
+    for (let n in view) {
+        System.println(n);
+    }
+    System.println(view.length.to_string() + " " + names.length.to_string());
+
+    let boxes = List<Box>();
+    boxes.push(Box(7));
+    boxes.push(Box(8));
+    let bs = boxes.as_span();
+    bs[0] = Box(70);
+    System.println(boxes[0].v + bs[1].v);
+}

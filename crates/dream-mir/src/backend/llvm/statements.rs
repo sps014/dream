@@ -9,7 +9,7 @@ use crate::backend::shared::place_policy::{
     has_frame_buffer, is_alias_value_local, is_value_place_alias,
 };
 use crate::backend::shared::protocol_names::to_string_fn;
-use crate::{Callee, Local, Operand, Place, Rvalue, Statement};
+use crate::{Callee, Operand, Place, Rvalue, Statement};
 use dream_abi::intrinsics::IntrinsicOp;
 use dream_types::{PrimTy, TyKind, TypeId};
 
@@ -24,87 +24,6 @@ impl<'l, 'a> Fx<'l, 'a> {
             self.stmt(&stmts[i]);
             i += 1;
         }
-    }
-
-    fn is_substring_call(&self, callee: &Callee) -> bool {
-        self.mir.intrinsics.iter().any(|(def, key)| {
-            *def == callee.def && IntrinsicOp::from_key(key) == Some(IntrinsicOp::StringSubstring)
-        })
-    }
-
-    fn is_into_rvalue(&self, rv: &Rvalue) -> bool {
-        match rv {
-            Rvalue::Concat(parts) => parts.len() == 2,
-            Rvalue::ConcatInt { .. } => true,
-            Rvalue::Call { callee, .. } => self.is_substring_call(callee),
-            _ => false,
-        }
-    }
-
-    /// `dest = rv` where `dest`'s old string is released first: the `_into` runtime entry reuses
-    /// the old block in place when it is uniquely owned.
-    fn emit_into(&mut self, dest: Local, rv: &Rvalue) {
-        let slot = self.read_local(dest);
-        let r = match rv {
-            Rvalue::Concat(parts) if parts.len() == 2 => {
-                let (a, b) = (self.operand(&parts[0]), self.operand(&parts[1]));
-                self.call_v("dream_concat_strings_into", &[slot, a, b])
-            }
-            Rvalue::ConcatInt {
-                prefix,
-                value,
-                suffix,
-            } => {
-                let p = self.operand(prefix);
-                let v = self.operand(value);
-                let v = self.conv_v(&v, &Ty::I32, false);
-                let s = self.operand(suffix);
-                self.call_v("dream_concat_str_int_str_into", &[slot, p, v, s])
-            }
-            Rvalue::Call { args, .. } => {
-                let mut all = vec![slot];
-                all.extend(args.iter().map(|a| self.operand(a)));
-                self.call_v("dream_substring_into", &all)
-            }
-            _ => crate::internal_error!("into emit of non-reusable rvalue"),
-        };
-        self.store(&Place::Local(dest), rv, r);
-    }
-
-    fn try_emit_into(&mut self, stmts: &[Statement], i: usize) -> Option<usize> {
-        if i + 1 < stmts.len()
-            && let (
-                Statement::Release(Operand::Copy(Place::Local(rel))),
-                Statement::Assign(Place::Local(dest), rv),
-            ) = (&stmts[i], &stmts[i + 1])
-                && rel.0 == dest.0
-                    && self.is_into_rvalue(rv)
-                    && !crate::passes::rvalue_reads_local(rv, dest.0)
-                {
-                    self.emit_into(*dest, rv);
-                    return Some(2);
-                }
-        if i + 2 < stmts.len()
-            && let (
-                Statement::Assign(Place::Local(tmp), rv),
-                Statement::Release(Operand::Copy(Place::Local(rel))),
-                Statement::Assign(
-                    Place::Local(dest),
-                    Rvalue::Use(Operand::Copy(Place::Local(src))),
-                ),
-            ) = (&stmts[i], &stmts[i + 1], &stmts[i + 2])
-                && src.0 == tmp.0
-                    && rel.0 == dest.0
-                    && tmp.0 != dest.0
-                    && self.is_into_rvalue(rv)
-                    && !crate::passes::rvalue_reads_local(rv, dest.0)
-                {
-                    self.emit_into(*dest, rv);
-                    let v = self.read_local(*dest);
-                    self.write_local(*tmp, &v);
-                    return Some(3);
-                }
-        None
     }
 
     pub fn stmt(&mut self, stmt: &Statement) {

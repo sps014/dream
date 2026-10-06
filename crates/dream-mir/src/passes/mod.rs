@@ -38,6 +38,7 @@ mod sroa;
 mod str_cursor;
 mod tco;
 mod unique_region;
+mod value_borrow;
 
 pub use abc::Abc;
 pub use algebraic::Algebraic;

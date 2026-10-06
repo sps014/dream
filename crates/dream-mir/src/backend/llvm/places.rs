@@ -351,7 +351,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             self.weak_option_store(&slot, &fld, rv, &rhs, align);
             return;
         }
-        if self.interner.is_reference(fld.ty) {
+        if self.interner.is_reference(fld.ty) && !self.f.locals[base.0 as usize].borrows_refs {
             self.rc_store_ty(fld.ty, &slot, &rhs, rv, align);
             return;
         }

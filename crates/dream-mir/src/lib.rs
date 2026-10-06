@@ -167,6 +167,9 @@ pub struct LocalDecl {
     /// splices these at the inlined continuation) rather than function-frame teardown. Still gets a
     /// shadow-stack slot; excluded from [`ValueFrame`] teardown so it is not double-dropped.
     pub manual_drop: bool,
+    /// Value-struct local whose reference fields only hold frame-stable values (see
+    /// `passes::value_borrow`): its reference field stores skip RC and it has no drop glue.
+    pub borrows_refs: bool,
 }
 
 #[derive(Debug, Default, Clone)]

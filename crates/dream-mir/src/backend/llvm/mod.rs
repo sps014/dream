@@ -7,6 +7,7 @@ mod debug_views;
 mod fx;
 mod glue;
 mod int_ops;
+mod into_reuse;
 pub mod ir;
 mod js;
 mod lcx;

@@ -368,6 +368,7 @@ fn apply(func: &mut MirFunction, interner: &TypeInterner, l: &NaturalLoop, plan:
             is_take: false,
             is_cursor: false,
             manual_drop: false,
+            borrows_refs: false,
         });
         Local(func.locals.len() as u32 - 1)
     };

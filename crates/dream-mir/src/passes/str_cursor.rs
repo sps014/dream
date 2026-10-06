@@ -209,6 +209,7 @@ fn new_int_temp(func: &mut MirFunction, interner: &TypeInterner) -> Local {
         is_take: false,
         is_cursor: false,
         manual_drop: false,
+        borrows_refs: false,
     });
     id
 }

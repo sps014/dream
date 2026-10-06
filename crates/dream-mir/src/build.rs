@@ -75,6 +75,7 @@ impl FunctionBuilder {
             is_take: false,
             is_cursor: false,
             manual_drop: false,
+            borrows_refs: false,
         });
         id
     }

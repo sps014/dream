@@ -238,6 +238,7 @@ fn split_field_rebind(
         is_take: false,
         is_cursor: false,
         manual_drop: false,
+        borrows_refs: false,
     });
     let Statement::Assign(_, rv) = func.blocks[bi].stmts[p].clone() else {
         return false;

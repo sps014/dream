@@ -32,6 +32,7 @@ const MODULE_STAGES: &[&str] = &[
     "sroa-managed",
     super::slice_measure::STAGE,
     STAGE_FIXPOINT,
+    super::value_borrow::STAGE,
     super::frame_alloc::STAGE,
 ];
 

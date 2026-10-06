@@ -24,6 +24,7 @@ fn temp(f: &mut MirFunction, ty: TypeId) -> Local {
         is_take: false,
         is_cursor: false,
         manual_drop: false,
+        borrows_refs: false,
     });
     l
 }

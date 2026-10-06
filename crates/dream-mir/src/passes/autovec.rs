@@ -590,6 +590,7 @@ fn new_temp(func: &mut MirFunction, ty: dream_types::TypeId) -> Local {
         is_take: false,
         is_cursor: false,
         manual_drop: false,
+        borrows_refs: false,
     });
     id
 }

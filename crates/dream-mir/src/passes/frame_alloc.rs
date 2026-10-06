@@ -148,6 +148,7 @@ fn apply(f: &mut MirFunction, plans: &[Plan]) {
                 is_take: false,
                 is_cursor: false,
                 manual_drop: false,
+                borrows_refs: false,
             });
             Local(f.locals.len() as u32 - 1)
         });

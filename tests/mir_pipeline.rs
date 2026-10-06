@@ -183,3 +183,70 @@ fn hir_to_ir_pipeline_is_deterministic() {
         "the new backend pipeline must be byte-for-byte deterministic"
     );
 }
+
+/// Compiles `source` with `--release --emit-llvm` and returns the LLVM-optimized module.
+#[cfg(feature = "native")]
+fn release_opt_ll(source: &str) -> String {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("spans.dream");
+    let out = dir.path().join("out/spans.ll");
+    std::fs::write(&src, source).unwrap();
+    let result = std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
+        .env("NO_COLOR", "1")
+        .args(["--release", "--emit-llvm"])
+        .arg(&src)
+        .arg("-o")
+        .arg(&out)
+        .output()
+        .unwrap();
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    std::fs::read_to_string(out.with_extension("opt.ll")).unwrap()
+}
+
+/// Spans over a borrowed source scalarize into registers with no RC, so LLVM folds `length`
+/// and removes the indexer's bounds checks from the hot loop.
+#[cfg(feature = "native")]
+#[test]
+fn spans_scalarize_and_drop_bounds_checks() {
+    let ir = release_opt_ll(
+        r#"
+        import system;
+        @noinline
+        fun span_len(borrow s: string, n: int): int {
+            let acc = 0;
+            let i = 0;
+            while i < n {
+                let sp = s.span(5, 40);
+                acc = acc + sp.length;
+                i = i + 1;
+            }
+            return acc;
+        }
+        @noinline
+        fun sum_span(sp: Span<int>): int {
+            let acc = 0;
+            let i = 0;
+            while i < sp.length {
+                acc = acc + sp[i];
+                i = i + 1;
+            }
+            return acc;
+        }
+        fun main(): void {
+            System.println(span_len("hello world, this is a fairly long literal for spans", 100));
+            let a = [1, 2, 3, 4, 5];
+            System.println(sum_span(Span.of(a)));
+        }
+    "#,
+    );
+    let span_len = common::ir_func_body(&ir, "span_len");
+    for needle in ["alloca", "atomic"] {
+        assert!(!span_len.contains(needle), "`{needle}` left in span_len:\n{span_len}");
+    }
+    assert!(
+        !span_len.lines().any(|l| l.contains("call ") && !l.contains("@llvm.")),
+        "runtime call left in span_len:\n{span_len}"
+    );
+    let sum_span = common::ir_func_body(&ir, "sum_span");
+    assert!(sum_span.contains("vector.body"), "sum_span did not vectorize:\n{sum_span}");
+}

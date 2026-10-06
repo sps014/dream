@@ -386,6 +386,7 @@ fn transform(
             is_take: false,
             is_cursor: false,
             manual_drop: false,
+            borrows_refs: false,
         });
         promo.insert(field, l);
     }

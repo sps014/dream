@@ -377,3 +377,40 @@ fn rc_golden_last_use_field_store_skips_retain() {
         c
     );
 }
+
+#[test]
+fn rc_golden_span_over_borrowed_source_has_no_rc() {
+    let code = r#"
+        ref struct View {
+            src: string;
+            offset: int;
+            public length: int;
+            public constructor(src: string, offset: int, length: int) {
+                this.src = src;
+                this.offset = offset;
+                this.length = length;
+            }
+            public fun slice(start: int): View {
+                return View(this.src, this.offset + start, this.length - start);
+            }
+        }
+        @noinline
+        fun view_len(borrow a: string, n: int): int {
+            let acc = 0;
+            let i = 0;
+            while i < n {
+                let v = View(a, 0, 4).slice(1);
+                acc = acc + v.length;
+                i = i + 1;
+            }
+            return acc;
+        }
+        fun main(): void {
+            System.println(view_len("abcd", 10));
+        }
+    "#;
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
+    let body = ir_func_body(&c, "view_len");
+    let rc = count_in(body, "@dream_retain(") + count_in(body, "@dream_release(");
+    assert_eq!(rc, 0, "a view over a borrow parameter should not touch RC:\n{body}");
+}

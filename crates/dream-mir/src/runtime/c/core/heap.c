@@ -100,15 +100,14 @@ void dream_pin_immortal(dream_ptr s) {
     }
 }
 
-void dream_retain_slow(int32_t *rc) {
-    if (__atomic_load_n(rc, __ATOMIC_RELAXED) == DREAM_RC_IMMORTAL) {
+void dream_retain_slow(int32_t *rc, int32_t v) {
+    if (v == DREAM_RC_IMMORTAL) {
         return;
     }
     __atomic_fetch_add(rc, 1, __ATOMIC_RELAXED);
 }
 
-int dream_rc_last_slow(int32_t *rc) {
-    int32_t v = __atomic_load_n(rc, __ATOMIC_RELAXED);
+int dream_rc_last_slow(int32_t *rc, int32_t v) {
     if (v == 0 || v == DREAM_RC_IMMORTAL) {
         return 0;
     }

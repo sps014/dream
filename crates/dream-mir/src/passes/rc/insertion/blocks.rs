@@ -137,6 +137,7 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
                         is_take: false,
                         is_cursor: false,
                         manual_drop: false,
+                        borrows_refs: false,
                     });
                     let rvalue = match stmt {
                         Statement::Assign(_, rv) => rv,

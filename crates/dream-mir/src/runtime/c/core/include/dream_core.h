@@ -213,8 +213,10 @@ DREAM_ALWAYS_INLINE int32_t *dream_rc_word(dream_ptr ptr) {
     return (int32_t *)((char *)dream_p(ptr) - RC_FROM_DATA);
 }
 
-void dream_retain_slow(int32_t *rc);
-int dream_rc_last_slow(int32_t *rc);
+/* `v` is the count word the inline fast path already loaded; the slow paths reuse it rather than
+ * issue a second atomic load the optimizer cannot merge. */
+void dream_retain_slow(int32_t *rc, int32_t v);
+int dream_rc_last_slow(int32_t *rc, int32_t v);
 void dream_weak_prepare_destroy(dream_ptr ptr);
 
 DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
@@ -229,7 +231,7 @@ DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
         *rc = v + 1;
         return;
     }
-    dream_retain_slow(rc);
+    dream_retain_slow(rc, v);
 }
 
 void dream_free(dream_ptr ptr);
@@ -408,7 +410,7 @@ DREAM_ALWAYS_INLINE int dream_rc_last(dream_ptr p) {
         *rc = v - 1;
         return v == 1;
     }
-    return dream_rc_last_slow(rc);
+    return dream_rc_last_slow(rc, v);
 }
 
 DREAM_ALWAYS_INLINE void dream_release(dream_ptr ptr) {

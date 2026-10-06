@@ -664,6 +664,7 @@ fn ordinary_release_does_not_prove_a_rebound_root_unique() {
         is_take: false,
         is_cursor: false,
         manual_drop: false,
+        borrows_refs: false,
     });
     bench.params.push(param);
     bench.blocks[0].stmts.insert(

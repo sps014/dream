@@ -177,6 +177,7 @@ fn local_flags(decl: &LocalDecl) -> String {
         (decl.is_ref, "ref"),
         (decl.is_cursor, "cursor"),
         (decl.manual_drop, "manual_drop"),
+        (decl.borrows_refs, "borrows_refs"),
     ] {
         if on {
             if s.is_empty() {

@@ -42,6 +42,14 @@ True when this span covers no elements.
 public fun is_empty(): bool
 ```
 
+## `as_read_only`
+
+The same elements, viewed read-only.
+
+```dream
+public fun as_read_only(): ReadOnlySpan<T>
+```
+
 ## `this`
 
 The element at `index` (relative to this span, not the backing array). Stops the program if out of range.
@@ -78,6 +86,44 @@ A sub-span covering `[start, start + count)` of this span's own range. Stops the
 public fun slice(start: int, count: int): Span<T>
 ```
 
+## `slice`
+
+The sub-span from `start` to the end. Traps if `start` is outside `[0, length]`.
+
+```dream
+public fun slice(start: int): Span<T>
+```
+
+## `index_of`
+
+Index of the first element equal to `value`, or `None`.
+
+```dream
+public fun index_of(borrow value: T): Option<int>
+```
+
+## `contains`
+
+True when some element equals `value`.
+
+```dream
+public fun contains(borrow value: T): bool
+```
+
+## `sequence_equal`
+
+True when `other` has the same length and pairwise-equal elements.
+
+```dream
+public fun sequence_equal(other: ReadOnlySpan<T>): bool
+```
+
+## `sequence_equal`
+
+```dream
+public fun sequence_equal(other: Span<T>): bool
+```
+
 ## `copy_from`
 
 Copies every element of `src` into this span starting at index 0. Stops the program if `src` is longer than this span. Reference elements go through ordinary assignment (retain/release); the unmanaged specialization below bulk-blits instead.
@@ -92,6 +138,20 @@ Unmanaged fast path: one `memory.copy` of `src._length * sizeof(T)` bytes.
 
 ```dream
 public fun copy_from(src: Span<T>): void where T : unmanaged
+```
+
+## `copy_to`
+
+Copies every element of this span into `dst` starting at index 0. Traps if `dst` is shorter.
+
+```dream
+public fun copy_to(dst: Span<T>): void
+```
+
+## `copy_to`
+
+```dream
+public fun copy_to(dst: Span<T>): void where T : unmanaged
 ```
 
 ## `fill`

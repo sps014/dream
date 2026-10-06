@@ -25,7 +25,10 @@ void dream_panic(dream_ptr message) {
 }
 
 void dream_defer_drain_all(void) {}
-void dream_retain_slow(int32_t *rc) { __atomic_fetch_add(rc, 1, __ATOMIC_RELAXED); }
+void dream_retain_slow(int32_t *rc, int32_t v) {
+    (void)v;
+    __atomic_fetch_add(rc, 1, __ATOMIC_RELAXED);
+}
 
 void dream_release_object(dream_ptr object) {
     assert(dream_thread_id_eq(owner, dream_thread_self()));

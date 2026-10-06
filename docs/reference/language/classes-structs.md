@@ -84,10 +84,11 @@ ref struct Pair {
 
 A `ref struct` value behaves exactly like an ordinary `struct` as a local variable, a function parameter, or a function return value (inline storage, copy semantics, zero heap allocation). What's rejected:
 
-- **Storing it in a field** of any `class` or `struct` — that would keep it alive past the frame that created it.
-- **Using it as a generic type argument** (`List<Pair>`, `Option<Pair>`, ...) — a container's backing storage is heap-allocated.
+- **Storing it in a field** of a `class` or an ordinary `struct` — that would keep it alive past the frame that created it. A field of another `ref struct` is fine, since the outer value is bound by the same rules (`StringSplit` holds a `StringSpan` this way).
+- **Using it as a generic type argument** of a type or a function (`List<Pair>`, `Option<Pair>`, `identity<Pair>(p)`, ...) — generic code may store a `T` anywhere, including on the heap.
+- **Using it as an array element type** (`Pair[]`, `[p, q]`) — arrays are heap-allocated.
 - **Capturing it in a lambda** — a capturing lambda's environment is a heap-allocated cell.
-- **Using it as a parameter of an `async` function** — values must stay on the stack across `await`, and an async parameter would outlive that frame.
+- **Using it as a parameter of an `async` function**, or **keeping a local of that type in scope at an `await`** — an async function's locals live in its heap-allocated coroutine state across a suspend point. Move the span work into a separate non-async function and `await` around it.
 
 `ref` may only precede `struct`, never `class` (a `class` is already a heap-allocated reference type, so "stack-only class" is meaningless and rejected at parse time).
 

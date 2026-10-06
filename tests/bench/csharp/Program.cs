@@ -163,13 +163,62 @@ public static class Program
         int acc = 0;
         for (int i = 0; i < iters; i++)
         {
-            // Dream substring(5, 40) is an O(1) slice (start, end). Span is that slice;
-            // String.Substring would copy 35 chars.
-            ReadOnlySpan<char> sub = s.AsSpan(5, 35);
+            // Dream substring(5, 40) yields an owned `string`; Substring is C#'s owned slice.
+            string sub = s.Substring(5, 35);
             acc += sub.Length;
         }
         sw.Stop();
         Report("substring", ElapsedNs(sw), iters);
+        Sink = acc;
+    }
+
+    static void BenchSubstringSpan(int iters)
+    {
+        string s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        var sw = Stopwatch.StartNew();
+        int acc = 0;
+        for (int i = 0; i < iters; i++)
+        {
+            ReadOnlySpan<char> sub = s.AsSpan(5, 35);
+            acc += sub.Length;
+        }
+        sw.Stop();
+        Report("substring_span", ElapsedNs(sw), iters);
+        Sink = acc;
+    }
+
+    static void BenchSplitSpan(int iters)
+    {
+        string line = "alpha,beta,gamma,delta,epsilon,zeta,eta,theta";
+        var sw = Stopwatch.StartNew();
+        int acc = 0;
+        for (int i = 0; i < iters; i++)
+        {
+            ReadOnlySpan<char> text = line.AsSpan();
+            foreach (Range r in text.Split(','))
+                acc += text[r].Length;
+        }
+        sw.Stop();
+        Report("split_span", ElapsedNs(sw), iters);
+        Sink = acc;
+    }
+
+    static void BenchMapGetSpan(int iters)
+    {
+        string text = "k0k1k2k3k4k5k6k7";
+        var map = new Dictionary<string, int>();
+        for (int j = 0; j < 8; j++)
+            map["k" + j] = j + 1;
+        var lookup = map.GetAlternateLookup<ReadOnlySpan<char>>();
+        var sw = Stopwatch.StartNew();
+        int acc = 0;
+        for (int i = 0; i < iters; i++)
+        {
+            int j = i & 7;
+            acc += lookup.TryGetValue(text.AsSpan(j * 2, 2), out int v) ? v : 0;
+        }
+        sw.Stop();
+        Report("map_get_span", ElapsedNs(sw), iters);
         Sink = acc;
     }
 
@@ -857,9 +906,12 @@ public static class Program
         BenchCharScan(scale * 10);
         BenchByteScan(scale * 20);
         BenchSubstring(scale * 160);
+        BenchSubstringSpan(scale * 160);
+        BenchSplitSpan(scale * 20);
         BenchListPush(scale * 400);
         BenchListInsertMid(scale * 40);
         BenchMapGetSet(scale * 35);
+        BenchMapGetSpan(scale * 35);
         BenchMapClearReuse(scale * 70);
         BenchListClearReuse(scale * 500);
         BenchAllocChurn(scale * 30);

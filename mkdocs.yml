@@ -102,6 +102,7 @@ nav:
       - Overview: reference/language/types.md
       - Primitives: reference/language/primitives.md
       - Arrays: reference/language/arrays.md
+      - Spans: reference/language/spans.md
       - Enums & Unions: reference/language/enums-unions.md
       - Classes & Structs: reference/language/classes-structs.md
       - The object Type: reference/language/objects.md

@@ -89,7 +89,7 @@ MIR annotations are semantic contracts rather than cached CFG analyses:
 
 ```mermaid
 flowchart LR
-    prune1[prune_module] --> expand[ExpandSimpleCtors] --> fbox[FuncboxAbi] --> args[ownership-args] --> rc[RcInsertion\n+ token verification] --> inline[Devirt + Inliner\nrounds + prune] --> ur[UniqueRegion] --> held[rc-held-by-owner] --> sm[SroaManaged] --> perfn[per-function\nPassManager] --> late[frame-alloc] --> verify[final verification\ndebug or DREAM_VERIFY_MIR=1]
+    prune1[prune_module] --> expand[ExpandSimpleCtors] --> fbox[FuncboxAbi] --> args[ownership-args] --> rc[RcInsertion\n+ token verification] --> inline[Devirt + Inliner\nrounds + prune] --> ur[UniqueRegion] --> held[rc-held-by-owner] --> sm[SroaManaged] --> perfn[per-function\nPassManager] --> vb[value-borrow] --> late[frame-alloc] --> verify[final verification\ndebug or DREAM_VERIFY_MIR=1]
 ```
 
 `driver/compiler.rs` calls three entry points in order: `optimize_module_opts` (everything up to `SroaManaged`), `run_function_pipelines` (the per-function fixpoint), and `run_late_module_passes`. Every stage reports to the `--emit-mir` sink under its name (see [04-mir.md](./04-mir.md#pretty-printing-and-emit-mir-cratesdream-mirsrcprettyrs-passesdumprs)).
@@ -106,7 +106,7 @@ flowchart LR
 - `SroaManaged` scalar-replaces non-escaping objects that the per-function `Sroa` cannot (several aliases, reference fields), spelling out the container-store RC rule from `rc_store.rs`.
 - The per-function `PassManager` then cleans up the merged bodies (`RcElision` / `HopElision` only — never a second `RcInsertion`).
 - `ownership-args` canonicalizes taken projections; lowering already materializes discarded owning results. The explicit-token verifier runs immediately after RC insertion, before inlining/elision erase those transfers.
-- `run_late_module_passes`: `frame-alloc` builds instances that never outlive their frame in a stack buffer (`dream_frame_object`, immortal count). Final MIR verification runs in debug builds or with `DREAM_VERIFY_MIR=1`.
+- `run_late_module_passes`: `value-borrow` marks value-struct families (spans) whose reference fields only ever hold frame-stable values — `borrow` parameters, literals, loads back out of the family — as `LocalDecl::borrows_refs`, so their field stores skip RC and their copy/drop glue goes. Then `frame-alloc` builds instances that never outlive their frame in a stack buffer (`dream_frame_object`, immortal count). Final MIR verification runs in debug builds or with `DREAM_VERIFY_MIR=1`.
 
 Escape levels (`analysis/escape.rs`: alias classes, `No` / `Arg` / `Global`, callee parameter summaries over SCCs) and static object counts (`analysis/object_life.rs`) are shared analyses; `SroaManaged` and `frame-alloc` consume them.
 

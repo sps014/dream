@@ -52,6 +52,14 @@ True if the set contains the value.
 public fun contains(borrow value: T): bool
 ```
 
+## `contains`
+
+True when the set holds the `string` equal to `value`, without building a `string`.
+
+```dream
+public fun contains(value: StringSpan): bool where T : StringKey
+```
+
 ## `add_all`
 
 Adds every element of `items` (duplicates are ignored, exactly like repeated `add` calls). Also what the `{e1, e2, ...}` set-literal syntax lowers to via `from_array`, so a literal with N elements costs one call, not N.

@@ -184,10 +184,10 @@ SECTIONS = [
     ("collections", ["wordcount", "parse_ints", "sum_options"]),
     ("strings", [
         "arc_locals", "string_concat", "string_eq", "char_scan", "byte_scan",
-        "substring", "string_builder",
+        "substring", "substring_span", "split_span", "string_builder",
     ]),
     ("containers", [
-        "list_push", "list_insert_mid", "map_get_set", "map_clear_reuse",
+        "list_push", "list_insert_mid", "map_get_set", "map_get_span", "map_clear_reuse",
         "list_clear_reuse", "alloc_churn", "scratch_arena",
     ]),
     ("regex / json / simd", ["regex_find", "json_serialize", "json_deserialize", "arr_add", "vec_add"]),

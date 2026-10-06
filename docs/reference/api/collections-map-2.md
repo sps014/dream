@@ -4,7 +4,16 @@
 
 Read the [usage guide](../stdlib/collections/map.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-Choose a short section to look up a member:
+[All sections](collections-map.md)
 
-- [Members 1–24](collections-map-1.md)
-- [Members 25–26](collections-map-2.md)
+## `iterator`
+
+```dream
+public fun iterator(): MapIterator<K, V>
+```
+
+## `to_string`
+
+```dream
+public override fun to_string(): string
+```

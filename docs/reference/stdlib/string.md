@@ -44,6 +44,18 @@ fun main() {
 
 `Unicode.normalize`, `Unicode.to_lower_unicode`, `Unicode.to_upper_unicode`, and `Unicode.graphemes` are the static forms of the same helpers.
 
+## Views without allocating
+
+`substring` returns a new `string`. When you only need to look at part of a string (to compare it, parse it, or look it up in a map), take a `StringSpan` instead. `s.span(start, end)` clamps like `substring`, but never allocates:
+
+```dream
+let line = "port=8080";
+let value = line.span(5, line.length);
+System.println(value.parse_int().unwrap_or(0));   // 8080
+```
+
+`split_iter(sep)` and `lines()` walk the pieces as spans, and `Map<string, V>` / `Set<string>` accept a span key. Call `to_string()` when you need an owned copy. See [Spans](../language/spans.md).
+
 ## `StringBuilder`
 
 Grow a string without a new allocation on every `+`:

@@ -52,6 +52,22 @@ Enumerator for `for (let x in list)`. Returns a fresh cursor over the current el
 public fun iterator(): ListIterator<T>
 ```
 
+## `as_span`
+
+A view of the current elements, writable in place. The span holds the backing array it was taken from: after the list grows (or shrinks and regrows) it keeps showing that old array, so take a fresh span after structural changes.
+
+```dream
+public fun as_span(): Span<T>
+```
+
+## `as_read_only_span`
+
+A read-only view of the current elements, with the same staleness rule as `as_span`.
+
+```dream
+public fun as_read_only_span(): ReadOnlySpan<T>
+```
+
 ## `sort_by`
 
 Sorts the list in place with the supplied comparator.

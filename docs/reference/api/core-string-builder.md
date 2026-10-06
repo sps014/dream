@@ -52,6 +52,14 @@ Appends every UTF-16 unit of `text`, growing at most once.
 public fun append(borrow text: string): void
 ```
 
+## `append`
+
+Appends the units a `StringSpan` views, with no intermediate string.
+
+```dream
+public fun append(span: StringSpan): void
+```
+
 ## `append_utf8_slice`
 
 Appends `byte_len` payload bytes starting at byte index `start` of `text`.
@@ -106,6 +114,14 @@ Removes every appended character, keeping the backing buffer for reuse.
 
 ```dream
 public fun clear(): void
+```
+
+## `as_span`
+
+A view of everything appended so far, without copying the units. Later appends and `clear` leave the view unchanged: it is a snapshot.
+
+```dream
+public fun as_span(): StringSpan
 ```
 
 ## `build`

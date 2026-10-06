@@ -1,10 +1,11 @@
-//! Optional host toolchains under `~/.dream/toolchains/` (`dreamer toolchain install`). LLVM is
+//! Pinned host toolchains under `~/.dream/toolchains/` (`dreamer toolchain install`). LLVM is
 //! not one: a release ships the minimal LLVM it needs in `lib/dream/llvm`.
 
 mod catalog;
 mod install;
 
 pub use catalog::ZIG_VERSION;
+pub use dream_abi::toolchain::BINARYEN_VERSION;
 pub use install::{install, list, uninstall};
 
 use anyhow::{bail, Result};
@@ -13,24 +14,27 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Component {
     Cc,
+    Binaryen,
 }
 
 impl Component {
     pub fn parse_name(name: &str) -> Result<Self> {
         match name {
             "cc" | "zig" => Ok(Self::Cc),
-            other => bail!("unknown toolchain component '{other}' (expected `cc`)"),
+            "binaryen" => Ok(Self::Binaryen),
+            other => bail!("unknown toolchain component '{other}' (expected `cc` or `binaryen`)"),
         }
     }
 
     pub fn id(self) -> &'static str {
         match self {
             Self::Cc => "cc",
+            Self::Binaryen => "binaryen",
         }
     }
 
-    pub fn all() -> [Self; 1] {
-        [Self::Cc]
+    pub fn all() -> [Self; 2] {
+        [Self::Cc, Self::Binaryen]
     }
 }
 
@@ -144,9 +148,22 @@ pub fn zig_binary() -> PathBuf {
     }
 }
 
+pub fn binaryen_dir() -> PathBuf {
+    toolchains_dir().join(format!("binaryen-{BINARYEN_VERSION}"))
+}
+
+pub fn binaryen_binary() -> PathBuf {
+    binaryen_dir().join("bin").join(if cfg!(windows) {
+        "wasm-opt.exe"
+    } else {
+        "wasm-opt"
+    })
+}
+
 pub fn is_installed(component: Component) -> bool {
     match component {
         Component::Cc => zig_binary().is_file(),
+        Component::Binaryen => binaryen_binary().is_file(),
     }
 }
 
@@ -171,6 +188,10 @@ mod tests {
     fn parse_component_aliases() {
         assert_eq!(Component::parse_name("cc").unwrap(), Component::Cc);
         assert_eq!(Component::parse_name("zig").unwrap(), Component::Cc);
+        assert_eq!(
+            Component::parse_name("binaryen").unwrap(),
+            Component::Binaryen
+        );
         assert!(Component::parse_name("llvm").is_err());
         assert!(Component::parse_name("gcc").is_err());
     }

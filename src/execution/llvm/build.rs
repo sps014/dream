@@ -512,6 +512,10 @@ pub struct Toolchain {
 }
 
 impl crate::driver::compiler::LlvmToolchain for Toolchain {
+    fn optimize_wasm(&self, wasm: &Path, level: OptLevel) -> Result<(), String> {
+        super::wasm_opt::optimize(wasm, level, &self.config)
+    }
+
     fn runtime_sigs(
         &self,
         req: &crate::driver::compiler::LlvmRuntimeRequest,

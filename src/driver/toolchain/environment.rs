@@ -43,6 +43,7 @@ impl ToolchainConfig {
             home,
             bin: value("DREAM_BIN").map(PathBuf::from),
             llvm: value("DREAM_LLVM").map(PathBuf::from),
+            wasm_opt: value("DREAM_WASM_OPT").map(PathBuf::from),
             toolchains,
             prefix: prefix.clone(),
             user_home,
@@ -70,6 +71,8 @@ impl ToolchainConfig {
             windir: value("WINDIR").map(PathBuf::from),
             #[cfg(feature = "native")]
             resolved_llvm: OnceLock::new(),
+            #[cfg(feature = "native")]
+            resolved_wasm_opt: OnceLock::new(),
             #[cfg(feature = "native")]
             resolved_cc: OnceLock::new(),
         }

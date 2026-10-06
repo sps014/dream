@@ -16,7 +16,7 @@ On macOS or Linux:
 curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/dream/install.sh | sh
 ```
 
-The installer puts Dream, Dreamer, and the editor support program in `~/.dream/bin`. It also installs the build tools your programs need. On Linux it may install system libraries needed by desktop windows.
+The installer puts Dream, Dreamer, and the editor support program in `~/.dream/bin`. It also installs the build tools your programs need.
 
 Open a new terminal so it can find the installed commands, then check:
 
@@ -76,6 +76,6 @@ Continue with the [language tour](tour.md) and [your first small project](first-
 
 ## Installation options
 
-Set `DREAM_VERSION` before running the installer to request a particular release. `DREAM_SKIP_LLVM=1` skips the build-tools download, and `DREAM_SKIP_CC=1` skips the native linker download; use these only when you already have suitable tools. On Linux, `DREAM_SKIP_LIBS=1` skips installing desktop system libraries.
+Set `DREAM_VERSION` before running the installer to request a particular release. `DREAM_SKIP_LLVM=1` skips the build-tools download, and `DREAM_SKIP_CC=1` skips the native linker download; use these only when you already have suitable tools.
 
 Linux release downloads require glibc 2.36 or later. Read [Toolchain setup](../reference/tooling/toolchain.md) to inspect or change your tools, and [the compiler command guide](../reference/tooling/compiler.md) for advanced output and target options.

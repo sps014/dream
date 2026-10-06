@@ -2,7 +2,6 @@ use super::*;
 
 pub(super) struct AnalyzedProgram {
     pub hir: dream_hir::Hir,
-    pub gpu: crate::driver::gpu_gen::GpuEmitResult,
 }
 
 impl Compiler {
@@ -57,14 +56,6 @@ impl Compiler {
                 Some(highlight_dream_line),
             );
         }
-        let gpu = crate::driver::gpu_gen::collect_gpu_shaders(&loaded.graph.view(), diagnostics);
-        if diagnostics.has_errors() {
-            return Err(fail_diagnostics(
-                CompileError::Generator,
-                diagnostics,
-                &loaded.acc.file_contents,
-            ));
-        }
-        Ok(AnalyzedProgram { hir, gpu })
+        Ok(AnalyzedProgram { hir })
     }
 }

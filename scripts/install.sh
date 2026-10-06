@@ -10,7 +10,6 @@
 #   DREAM_HOME      install prefix (default: ~/.dream). Re-runs replace bin/, lib/,
 #                   and leftover files; toolchains/ (Zig) is kept.
 #   DREAM_SKIP_CC=1 skip auto `dreamer toolchain install cc` when no compiler is found
-#   DREAM_SKIP_LIBS=1 skip auto-install of Linux WebKitGTK / GTK runtime libraries
 
 set -eu
 
@@ -193,7 +192,7 @@ if [ ! -f "${BIN_DIR}/dream${EXT}" ] || [ ! -f "${BIN_DIR}/dreamer${EXT}" ]; the
   exit 1
 fi
 
-for capability in core net gpu webview unicode crypto process timezone; do
+for capability in core unicode crypto process timezone; do
   HOST_LIBRARY_OK=0
   for lib in "libdream_host_${capability}.so" "libdream_host_${capability}.dylib" "dream_host_${capability}.dll"; do
     if [ -f "${BIN_DIR}/${lib}" ]; then
@@ -255,88 +254,6 @@ has_cc() {
 }
 
 LIBS_NOTE=
-bin_needs_shared_libs() {
-  _bin="$1"
-  [ -f "$_bin" ] || return 1
-  command -v ldd >/dev/null 2>&1 || return 1
-  ldd "$_bin" 2>/dev/null | grep -q 'not found'
-}
-
-linux_pkg_install() {
-  _pkgs="$1"
-  _sudo=
-  if [ "$(id -u)" -ne 0 ]; then
-    if command -v sudo >/dev/null 2>&1; then
-      _sudo=sudo
-    else
-      return 1
-    fi
-  fi
-  if command -v apt-get >/dev/null 2>&1; then
-    export DEBIAN_FRONTEND=noninteractive
-    # shellcheck disable=SC2086
-    ${_sudo} apt-get update -qq && ${_sudo} apt-get install -y -qq --no-install-recommends ${_pkgs}
-    return $?
-  fi
-  if command -v dnf >/dev/null 2>&1; then
-    # shellcheck disable=SC2086
-    ${_sudo} dnf install -y ${_pkgs}
-    return $?
-  fi
-  if command -v pacman >/dev/null 2>&1; then
-    # shellcheck disable=SC2086
-    ${_sudo} pacman -S --noconfirm --needed ${_pkgs}
-    return $?
-  fi
-  return 1
-}
-
-linux_runtime_packages() {
-  if command -v apt-get >/dev/null 2>&1; then
-    echo "libwebkit2gtk-4.1-0 libgtk-3-0 libudev1"
-  elif command -v dnf >/dev/null 2>&1; then
-    echo "webkit2gtk4.1 gtk3 systemd-libs"
-  elif command -v pacman >/dev/null 2>&1; then
-    echo "webkit2gtk-4.1 gtk3"
-  else
-    echo ""
-  fi
-}
-
-ensure_linux_libs() {
-  case "$TARGET" in
-    linux-*) ;;
-    *) return 0 ;;
-  esac
-  if [ "${DREAM_SKIP_LIBS:-}" = "1" ]; then
-    LIBS_NOTE="Skipped Linux runtime libraries (DREAM_SKIP_LIBS=1)"
-    echo "${LIBS_NOTE}"
-    return 0
-  fi
-  if ! bin_needs_shared_libs "${BIN_DIR}/libdream_host_webview.so"; then
-    return 0
-  fi
-  _pkgs="$(linux_runtime_packages)"
-  if [ -z "$_pkgs" ]; then
-    LIBS_NOTE="warning: dream needs WebKitGTK (libwebkit2gtk-4.1) and GTK 3; install them with your package manager"
-    echo "${LIBS_NOTE}" >&2
-    return 0
-  fi
-  echo "Installing Linux runtime libraries for native run / system.webview: ${_pkgs}"
-  if linux_pkg_install "${_pkgs}"; then
-    if bin_needs_shared_libs "${BIN_DIR}/libdream_host_webview.so"; then
-      LIBS_NOTE="warning: shared libraries still missing after install; see ldd ${BIN_DIR}/dream"
-      echo "${LIBS_NOTE}" >&2
-      ldd "${BIN_DIR}/libdream_host_webview.so" 2>/dev/null | grep 'not found' >&2 || true
-    else
-      LIBS_NOTE="Installed Linux runtime libraries (${_pkgs})"
-    fi
-  else
-    LIBS_NOTE="warning: could not install ${_pkgs}; install them so dream and system.webview can load"
-    echo "${LIBS_NOTE}" >&2
-  fi
-}
-
 cat > "${PREFIX}/toolchain.env" <<EOF
 DREAM_HOME=${BIN_DIR}
 DREAMER_HOME=${BIN_DIR}
@@ -388,7 +305,6 @@ case ":${PATH}:" in
   *) export PATH="${BIN_DIR}:${PATH}" ;;
 esac
 
-ensure_linux_libs
 ensure_cc
 
 echo

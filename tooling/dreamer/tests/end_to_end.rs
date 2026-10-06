@@ -397,23 +397,6 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
         "expected at least one packed binary under {}",
         pack_dir.display()
     );
-    if cfg!(target_os = "macos") {
-        let contents = pack_dir.join("binpack.app").join("Contents");
-        assert!(contents.join("MacOS").join("binpack").is_file());
-        for capability in dream_abi::host_capability::HostCapability::ALL {
-            assert!(!contents
-                .join("Frameworks")
-                .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
-                .is_file());
-        }
-        assert!(contents.join("Resources").join("icon.icns").is_file());
-        let plist = std::fs::read_to_string(contents.join("Info.plist")).unwrap();
-        assert!(plist.contains("<string>dev.dream.binpack</string>"));
-    } else if cfg!(target_os = "linux") {
-        let entry = std::fs::read_to_string(pack_dir.join("binpack.desktop")).unwrap();
-        assert!(entry.contains("Icon=binpack"));
-        assert!(pack_dir.join("binpack.png").is_file());
-    }
     for capability in dream_abi::host_capability::HostCapability::ALL {
         assert!(!pack_dir
             .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
@@ -442,17 +425,7 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    if cfg!(target_os = "macos") {
-        let output = std::process::Command::new(moved.join("binpack.app/Contents/MacOS/binpack"))
-            .current_dir(tmp.path())
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
+
 }
 
 #[test]

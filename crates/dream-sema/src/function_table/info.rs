@@ -49,18 +49,6 @@ pub struct FunctionTableInfo {
     /// Runtimes this declaration is available on (`@native`/`@node`/`@web`). Absent all three
     /// means every runtime; checked at call sites via `Analyzer::check_runtime_call`.
     pub runtime_support: dream_abi::attributes::RuntimeSupport,
-    /// True when the declaration carries `@compute`: it is a WebGPU compute kernel (body emitted as
-    /// WGSL, not WASM). Calling it like a CPU function is rejected; kernels may only call other
-    /// `@compute` helpers (see `Analyzer::check_compute_call`).
-    pub is_compute: bool,
-    /// True when the declaration carries `@vertex`.
-    pub is_vertex: bool,
-    /// True when the declaration carries `@fragment`.
-    pub is_fragment: bool,
-    /// True when the declaration carries `@gpu` (callable from shaders as a WGSL helper).
-    pub is_gpu_helper: bool,
-    /// True when the declaration carries `@shader_only`: only callable from GPU code.
-    pub is_shader_only: bool,
     pub intrinsic_name: Option<String>,
     /// Accessibility of the declaration. For methods this gates external calls (private methods
     /// may only be called from within their declaring type; `internal` ones from anywhere in the
@@ -106,11 +94,6 @@ impl FunctionTableInfo {
             is_static: false,
             is_unsafe: false,
             runtime_support: dream_abi::attributes::RuntimeSupport::ALL,
-            is_compute: false,
-            is_vertex: false,
-            is_fragment: false,
-            is_gpu_helper: false,
-            is_shader_only: false,
             intrinsic_name: None,
             visibility: Visibility::Public,
             declaring_file: None,
@@ -118,12 +101,20 @@ impl FunctionTableInfo {
         }
     }
     pub fn from(func: &FunctionNode, type_ctx: &mut TypeCtx) -> Self {
-        let parameters: Vec<_> = func.parameters.iter().map(|p| type_ctx.lower(&p.type_)).collect();
+        let parameters: Vec<_> = func
+            .parameters
+            .iter()
+            .map(|p| type_ctx.lower(&p.type_))
+            .collect();
         let def = type_ctx.register_function(&func.name.text, &parameters);
         Self::from_identity(func, (def, Vec::new()), type_ctx)
     }
 
-    pub fn from_identity(func: &FunctionNode, identity: FunctionIdentity, type_ctx: &mut TypeCtx) -> Self {
+    pub fn from_identity(
+        func: &FunctionNode,
+        identity: FunctionIdentity,
+        type_ctx: &mut TypeCtx,
+    ) -> Self {
         let name = func.name.clone();
         let return_type = func.return_type.clone();
         let mut parameters: Vec<TypeId> = vec![];
@@ -150,10 +141,26 @@ impl FunctionTableInfo {
             .last()
             .map(|p| p.is_variadic)
             .unwrap_or(false);
-        let resolved_return = return_type.as_ref().map(|ret| type_ctx.lower(ret)).unwrap_or_else(|| type_ctx.interner.void());
-        let mut info = FunctionTableInfo::new(name.text, return_type, parameters, identity, resolved_return);
-        info.parameter_types = info.parameters.iter().map(|&ty| type_ctx.syntax_type(ty)).collect();
-        info.return_type = func.return_type.as_ref().map(|_| type_ctx.syntax_type(resolved_return));
+        let resolved_return = return_type
+            .as_ref()
+            .map(|ret| type_ctx.lower(ret))
+            .unwrap_or_else(|| type_ctx.interner.void());
+        let mut info = FunctionTableInfo::new(
+            name.text,
+            return_type,
+            parameters,
+            identity,
+            resolved_return,
+        );
+        info.parameter_types = info
+            .parameters
+            .iter()
+            .map(|&ty| type_ctx.syntax_type(ty))
+            .collect();
+        info.return_type = func
+            .return_type
+            .as_ref()
+            .map(|_| type_ctx.syntax_type(resolved_return));
         info.param_names = param_names;
         info.is_variadic = is_variadic;
         info.is_ref = is_ref;
@@ -164,11 +171,6 @@ impl FunctionTableInfo {
         info.is_unsafe = func.attributes.iter().any(|a| a.name.text == "unsafe");
         info.runtime_support =
             dream_abi::attributes::RuntimeSupport::from_attributes(&func.attributes);
-        info.is_compute = dream_abi::attributes::has_compute_attr(&func.attributes);
-        info.is_vertex = dream_abi::attributes::has_vertex_attr(&func.attributes);
-        info.is_fragment = dream_abi::attributes::has_fragment_attr(&func.attributes);
-        info.is_gpu_helper = dream_abi::attributes::has_gpu_helper_attr(&func.attributes);
-        info.is_shader_only = dream_abi::attributes::has_shader_only_attr(&func.attributes);
         info.intrinsic_name = intrinsic_name;
         // `extern` functions/methods are interop entry points (WASM imports): they cannot be
         // host-exported and privacy is meaningless for them, so they are always call-visible.
@@ -179,11 +181,6 @@ impl FunctionTableInfo {
         };
         info.declaring_file = func.file_path.clone();
         info
-    }
-
-    /// True for `@compute` / `@vertex` / `@fragment` (WGSL-emitted, no WASM body).
-    pub fn is_gpu_shader(&self) -> bool {
-        self.is_compute || self.is_vertex || self.is_fragment
     }
 
     /// The number of leading required parameters: the index of the first parameter that has a

@@ -93,11 +93,11 @@ fn minified_decls_get_separated_by_one_blank_line() {
 #[test]
 fn consecutive_imports_stay_packed() {
     assert_format(
-        "import system;\nimport system.json;\nimport system.net;\nfun main(): void {}",
+        "import system;\nimport system.json;\nimport system.io;\nfun main(): void {}",
         "\
 import system;
 import system.json;
-import system.net;
+import system.io;
 
 fun main(): void {}
 ",

@@ -3,7 +3,7 @@
 
 Use `async` for work that may need to wait. Calling an async function creates a future: a result that will be available later. Its work starts when you await it, start it explicitly, or pass it to a Promise helper.
 
-**Packages:** `Promise` / `Future` are bootstrap (`system.core`). `Time.sleep` needs `import system;`. HTTP examples need `import system.net;`.
+**Packages:** `Promise` / `Future` are bootstrap (`system.core`). `Time.sleep` needs `import system;`.
 
 Dream has cooperative concurrency with `async`/`await`.
 The model is **lazy**: calling an `async fun` builds a `Future<T>` but does *not* run it.
@@ -133,13 +133,13 @@ Public stdlib async APIs take a trailing `token: Option<CancellationToken> = Non
 `Promise.cancel(future)` marks a future cancelled; pending sleeps are dropped when the token is cancelled.
 
 Cancelling a not-yet-started future means it never runs.
-Native in-flight host I/O remains best-effort (`HttpClient.with_cancellation` still sets a client-wide default used when the per-call token is omitted).
+Native in-flight host I/O remains best-effort.
 
 ### Native deferred hosts (`@async_host`)
 
 On native, an `extern async fun` host blocks the whole run loop while it runs.
 Declaring it `@async_host` opts that import into true async: on the native host, the function runs off the main task and completes the future when it finishes — so timers and other tasks keep interleaving while the host op is in flight.
-`HttpClient` request methods use this on native; wasm32 bridges are always deferred.
+User-provided native hosts can use this contract; wasm32 bridges are always deferred.
 
 ## Async methods
 
@@ -148,18 +148,18 @@ The call types as `Future<T>` just like a free async call:
 
 ```dream
 import system;
-import system.net;
+import system.io;
 
-class Downloader {
-    url: string;
+class Reader {
+    path: string;
     async fun fetch(): string {
-        let body = HttpClient().text(this.url).await;
+        let body = File.read(this.path).await.unwrap_or("");
         return body;
     }
 }
 
 async fun main(): void {
-    let d = Downloader("https://example.com");
+    let d = Reader("example.txt");
     let body = d.fetch().await;   // d.fetch() : Future<string>
     System.println(body);
 }

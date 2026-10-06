@@ -13,6 +13,15 @@ the implemented desktop foundations without resuming the Android/iOS validation
 hold. Phase 6 mobile release readiness remains unverified; it is not a prerequisite
 for developing a compiler that runs on the supported desktop host.
 
+## Prerequisite work
+
+Complete the [build performance and minimal compiler plan](./14-build-performance-and-native-networking-plan.md)
+before beginning the compiler bootstrap implementation. That work is planned, not
+implemented: it prioritizes faster development builds and removing deferred
+GPU, networking, WebView, and desktop features while preserving core behavior.
+Android/iOS validation remains on hold; artifact sizes are reported without fixed
+size assertions.
+
 ## Evidence for the original blockers
 
 - **FFI-2, pointer-sized integers:** `isize` and `usize` follow the selected target.

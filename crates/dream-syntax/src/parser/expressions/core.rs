@@ -203,8 +203,8 @@ impl<'a, 'b> Parser<'a, 'b> {
 
             if is_invocation {
                 // A call on a bare identifier (free function or constructor, e.g.
-                // `HttpClient(url)`) can still be the base of a postfix chain like
-                // `HttpClient(url).set_header(...)` or `make().field`.
+                // `Reader(path)`) can still be the base of a postfix chain like
+                // `Reader(path).configure(...)` or `make().field`.
                 let expr = self.parse_invocation_expression()?;
                 return self.parse_postfix_chain(expr);
             } else if is_generic_static {
@@ -418,7 +418,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     /// Continues parsing index (`[...]`), call (`(...)`), and member/method (`.name` / `.name(...)`)
     /// accesses onto an already-parsed base expression. Used so a call on a bare identifier (e.g. a
-    /// constructor like `HttpClient(url)`) can be chained: `HttpClient(url).set_header(...)`, and so
+    /// constructor like `Reader(path)`) can be chained: `Reader(path).configure(...)`, and so
     /// a `fun(...)` value expression can be invoked: `make()()`, `(f)(x)`.
     pub(crate) fn parse_postfix_chain(
         &mut self,

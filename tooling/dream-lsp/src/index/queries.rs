@@ -19,7 +19,7 @@ use dream_stdlib::{BOOTSTRAP_PACKAGES, STD_PACKAGES};
 
 /// True when `offset` is in a `receiver.` / `receiver.partial` member-access position.
 /// Used by the LSP backend to avoid merging unloaded stdlib type completions into
-/// member lists (`System.` must not offer `List` / `Gpu` / …).
+/// member lists (`System.` must not offer `List` / `Map` / …).
 pub fn is_member_completion_context(text: &str, offset: usize) -> bool {
     if import_path_partial(text, offset).is_some() {
         return false;
@@ -400,7 +400,7 @@ fn method_type_args_at(text: &str, name_end: usize) -> Option<Vec<String>> {
     None
 }
 
-/// Class type args in `GpuBuffer<float>.alloc` — the `<…>` sits before the `.`, not after the method.
+/// Class type args in `List<float>.alloc` — the `<…>` sits before the `.`, not after the method.
 fn type_args_before_member_dot(text: &str, member_start: usize) -> Option<Vec<String>> {
     let bytes = text.as_bytes();
     let mut i = member_start.min(bytes.len());

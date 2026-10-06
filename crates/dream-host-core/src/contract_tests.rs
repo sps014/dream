@@ -8,10 +8,6 @@ const HOST_SOURCES: &[&str] = &[
     include_str!("../../dream-host-crypto/src/exports.rs"),
     include_str!("../../dream-host-process/src/exports.rs"),
     include_str!("../../dream-host-timezone/src/exports.rs"),
-    include_str!("../../dream-host-gpu/src/exports/gpu.rs"),
-    include_str!("../../dream-host-net/src/exports/net.rs"),
-    include_str!("../../dream-host-webview/src/exports/webview.rs"),
-    include_str!("../../dream-host-webview/src/exports/desktop.rs"),
 ];
 
 fn names_after_module(src: &str, module: &str) -> Vec<String> {
@@ -110,12 +106,6 @@ fn capability_inventory_matches_each_library_exports() {
         (HostCapability::Crypto, vec![HOST_SOURCES[1]]),
         (HostCapability::Process, vec![HOST_SOURCES[2]]),
         (HostCapability::Timezone, vec![HOST_SOURCES[3]]),
-        (HostCapability::Gpu, vec![HOST_SOURCES[4]]),
-        (HostCapability::Net, vec![HOST_SOURCES[5]]),
-        (
-            HostCapability::WebView,
-            vec![HOST_SOURCES[6], HOST_SOURCES[7]],
-        ),
     ] {
         let exported: HashSet<_> = sources.iter().flat_map(|s| c_abi_fn_names(s)).collect();
         let registered: HashSet<_> = capability.fields().iter().map(|s| s.to_string()).collect();
@@ -136,41 +126,17 @@ fn capability_inventory_matches_each_library_exports() {
 
 const JS_HOST_SOURCES: &[&str] = &[
     include_str!("../../../runtime/src/hosts/js.js"),
-    include_str!("../../../runtime/src/hosts/http.js"),
     include_str!("../../../runtime/src/hosts/fs.js"),
     include_str!("../../../runtime/src/hosts/crypto.js"),
-    include_str!("../../../runtime/src/hosts/gpu.js"),
     include_str!("../../../runtime/src/hosts/console_process.js"),
     include_str!("../../../runtime/src/hosts/datetime_text.js"),
-    include_str!("../../../runtime/src/hosts/net_sockets.js"),
-    include_str!("../../../runtime/src/hosts/webview.js"),
     include_str!("../../../runtime/src/workers.js"),
 ];
 
-const JS_HOST_INTERNAL_KEYS: &[&str] = &["__attachGpuAbi"];
 // Satisfied by the runtime C archive (runtime/c/core/weak.c), not by any
 // JS host or capability ABI table — so they are exempt from the prelude/host parity check.
 const RUNTIME_ARCHIVE_KEYS: &[&str] = &["weakBind", "weakDead", "weakLoad", "weakReleaseRaw"];
 const COMPILER_EMITTED_JS_RC: &[&str] = &["jsRetain", "jsRelease"];
-// Native `system.webapi` (`@native` only; no JS/wasm listen in v1).
-const NATIVE_ONLY_HOST_KEYS: &[&str] = &[
-    "httpServerListen",
-    "httpServerAccept",
-    "httpServerReadBody",
-    "httpServerRespond",
-    "httpServerStartStream",
-    "httpServerWriteChunk",
-    "httpServerEndStream",
-    "httpServerWsUpgrade",
-    "httpServerWsSend",
-    "httpServerWsReceive",
-    "httpServerWsClose",
-    "httpServerParseMultipart",
-    "httpServerMultipartField",
-    "httpServerMultipartFile",
-    "httpServerShutdown",
-    "httpServerWait",
-];
 
 fn js_host_export_keys(src: &str) -> HashSet<String> {
     let lines: Vec<&str> = src.lines().collect();
@@ -231,9 +197,6 @@ fn js_dream_host_keys_match_prelude_js_declarations() {
     for src in JS_HOST_SOURCES {
         js_keys.extend(js_host_export_keys(src));
     }
-    for internal in JS_HOST_INTERNAL_KEYS {
-        js_keys.remove(*internal);
-    }
     for emitted in COMPILER_EMITTED_JS_RC {
         js_keys.remove(*emitted);
     }
@@ -247,7 +210,6 @@ fn js_dream_host_keys_match_prelude_js_declarations() {
     let mut prelude_only: Vec<&String> = declared.difference(&js_keys).collect();
     prelude_only.retain(|n| !COMPILER_EMITTED_JS_RC.contains(&n.as_str()));
     prelude_only.retain(|n| !RUNTIME_ARCHIVE_KEYS.contains(&n.as_str()));
-    prelude_only.retain(|n| !NATIVE_ONLY_HOST_KEYS.contains(&n.as_str()));
     assert!(
         js_only.is_empty() && prelude_only.is_empty(),
         "JS Dream host keys and prelude `@runtime` / `@js(\"Dream\", …)` declarations have drifted.\n\

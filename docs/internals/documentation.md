@@ -17,7 +17,7 @@ If the source changed, update the documentation first. Then refresh the reviewed
 
 ## Check complete examples
 
-`tooling/docs/example-cases.json` lists complete, self-contained examples and their expected output. Each entry identifies its page and Dream code-block position. Add examples to that list when they can run without a network service, a desktop window, a GPU, or other external setup.
+`tooling/docs/example-cases.json` lists complete, self-contained examples and their expected output. Each entry identifies its page and Dream code-block position. Add examples to that list when they can run without external setup.
 
 ```sh
 cargo build --workspace

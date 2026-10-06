@@ -170,12 +170,12 @@ _dream_home="${_dream_root}/target/${_dream_profile}"
 if [ "$_dream_skip_build" -eq 0 ]; then
   echo "Building ${_dream_profile} toolchain (dream, dream-lsp, dreamer)..."
   if [ "$_dream_profile" = release ]; then
-    (cd "$_dream_root" && cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-gpu -p dream-host-webview -p dream-lsp -p dreamer) || {
+    (cd "$_dream_root" && cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-lsp -p dreamer) || {
       _dream_fail
       return 1 2>/dev/null || exit 1
     }
   else
-    (cd "$_dream_root" && cargo build -p dream -p dream-host -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-gpu -p dream-host-webview -p dream-lsp -p dreamer) || {
+    (cd "$_dream_root" && cargo build -p dream -p dream-host -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-lsp -p dreamer) || {
       _dream_fail
       return 1 2>/dev/null || exit 1
     }
@@ -217,7 +217,7 @@ ln -sfn "$_dream_bin" "${_dream_bin_dir}/dream${_dream_ext}"
 ln -sfn "$_dreamer_bin" "${_dream_bin_dir}/dreamer${_dream_ext}"
 ln -sfn "$_dream_lsp_bin" "${_dream_bin_dir}/dream-lsp${_dream_ext}"
 echo "Linked ${_dream_bin_dir}/{dream,dreamer,dream-lsp} -> ${_dream_home}/"
-for _dream_lib in libdream_host_unicode.so libdream_host_unicode.dylib dream_host_unicode.dll dream_host_unicode.dll.lib libdream_host_crypto.so libdream_host_crypto.dylib dream_host_crypto.dll dream_host_crypto.dll.lib libdream_host_process.so libdream_host_process.dylib dream_host_process.dll dream_host_process.dll.lib libdream_host_timezone.so libdream_host_timezone.dylib dream_host_timezone.dll dream_host_timezone.dll.lib libdream_host_core.so libdream_host_core.dylib dream_host_core.dll dream_host_core.dll.lib libdream_host_net.so libdream_host_net.dylib dream_host_net.dll dream_host_net.dll.lib libdream_host_gpu.so libdream_host_gpu.dylib dream_host_gpu.dll dream_host_gpu.dll.lib libdream_host_webview.so libdream_host_webview.dylib dream_host_webview.dll dream_host_webview.dll.lib; do
+for _dream_lib in libdream_host_unicode.so libdream_host_unicode.dylib dream_host_unicode.dll dream_host_unicode.dll.lib libdream_host_crypto.so libdream_host_crypto.dylib dream_host_crypto.dll dream_host_crypto.dll.lib libdream_host_process.so libdream_host_process.dylib dream_host_process.dll dream_host_process.dll.lib libdream_host_timezone.so libdream_host_timezone.dylib dream_host_timezone.dll dream_host_timezone.dll.lib libdream_host_core.so libdream_host_core.dylib dream_host_core.dll dream_host_core.dll.lib; do
   if [ -f "${_dream_home}/${_dream_lib}" ]; then
     ln -sfn "${_dream_home}/${_dream_lib}" "${_dream_bin_dir}/${_dream_lib}"
   fi

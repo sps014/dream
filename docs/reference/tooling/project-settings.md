@@ -60,11 +60,10 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
 - `[package].icon` is an optional path to a PNG (relative to the `dream.toml` directory). It is
   the only place an app icon is configured.
   - `dreamer build`, `run` and `pack` compile it into native binaries, so no file is read at run
-    time: WebView and GPU windows and the macOS Dock use it. A WebView can still change it at run
-    time with `view.icon = "other.png"`.
+    time. Windows executables use the embedded icon.
   - `dreamer` checks that the file exists and is a PNG, and warns when it is not square or is
     smaller than 256x256.
-  - `dreamer pack` also uses it for the OS bundle (see [Native `dreamer pack`](pack/desktop.md)).
+  - See [CLI packaging](pack/desktop.md) for native output layouts.
   - Web builds use it as the favicon that `dreamer run --target web` serves.
 - A dependency is either a bare semver requirement string, or a table with exactly one of
   `path`, `git`, or `version` (+ optional `registry`).

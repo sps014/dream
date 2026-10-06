@@ -2,7 +2,6 @@ import system;
 import system.collections;
 import system.encoding;
 import system.json;
-import system.net;
 
 fun main(): void {
     let xs: List<int> = [1, 2, 3];
@@ -32,9 +31,6 @@ fun main(): void {
     }
     j.remove("k");
     System.println(j.has("k"));
-    let u = Url.parse("https://ex.com/p?a=1#f").unwrap();
-    System.println(u.with_host("y.com").host);
-    System.println(u.query_params().get_or("a", ""));
     System.println(Encoding.utf8_encode("é").length);
     let d = Duration.from_seconds(2L);
     System.println(d.as_millis());

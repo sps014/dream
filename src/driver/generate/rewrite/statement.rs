@@ -237,9 +237,6 @@ impl<'a> Rewriter<'a, '_> {
             }
             StatementNode::Break(x) => StatementNode::Break(x.clone()),
             StatementNode::Continue(x) => StatementNode::Continue(x.clone()),
-            StatementNode::WorkgroupDecl(n, ty, size) => {
-                StatementNode::WorkgroupDecl(n.clone(), ty.clone(), *size)
-            }
         })
     }
 }

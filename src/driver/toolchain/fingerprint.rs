@@ -25,6 +25,7 @@ impl ToolchainConfig {
                     &self.cc,
                     &self.cxx,
                     &self.zig,
+                    &self.wasm_opt,
                     &self.targets,
                     &self.sysroot
                 )

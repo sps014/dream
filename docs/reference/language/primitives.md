@@ -65,7 +65,7 @@ checked {
 }
 ```
 
-The mode is lexical: it applies to the statements written inside the block (including lambdas written there), not to functions they call. `checked` and `unchecked` are only keywords directly before `{`, so they stay usable as identifiers. GPU shader code always wraps, and rejects `checked` blocks.
+The mode is lexical: it applies to the statements written inside the block (including lambdas written there), not to functions they call. `checked` and `unchecked` are only keywords directly before `{`, so they stay usable as identifiers.
 
 Inside `checked` blocks, the optimizer removes checks it can prove never fire — a loop counter bounded by `i < n`, a masked `x & 255`, an array length.
 

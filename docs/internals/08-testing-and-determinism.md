@@ -25,8 +25,9 @@ and O1 copies. Tests retain debug assertions, overflow checks and line-table
 backtraces; local development profiles and release artifact measurement builds are unchanged.
 Clippy runs first to reject lint failures before expensive executable builds.
 
-CI additionally uses sccache for Rust and C++ compiler invocations,
-including Binaryen's large `wasm-opt-sys` build. Rust incremental compilation is
+CI additionally uses sccache for Rust and native dependency compiler invocations.
+Binaryen is downloaded as a checksum-verified toolchain executable; Cargo does not
+compile or link its C++ sources. Rust incremental compilation is
 disabled in CI because sccache cannot cache incremental invocations. The existing
 `cc` build dependency also recognizes `RUSTC_WRAPPER=sccache`, so native dependency
 compilation is cached without changing Dream's guest linker configuration.

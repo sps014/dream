@@ -226,25 +226,7 @@ fn packed_application_has_no_builder_runtime_dependency() {
         }
     }
     assert_runs_clean(&executable, &empty_home, temporary.path());
-    #[cfg(target_os = "macos")]
-    {
-        let contents = moved.join("portable.app/Contents");
-        let app_executable = contents.join("MacOS/portable");
-        inspect_loader(&app_executable, true);
-        for capability in HostCapability::ALL {
-            let path = contents
-                .join("Frameworks")
-                .join(capability.library_name(&dream_abi::target::TargetSpec::host()));
-            assert_eq!(
-                path.is_file(),
-                matches!(capability, HostCapability::Core | HostCapability::Unicode)
-            );
-            if path.is_file() {
-                inspect_loader(&path, false);
-            }
-        }
-        assert_runs_clean(&app_executable, &empty_home, temporary.path());
-    }
+
     // Failure without the shipped runtime proves the clean run did not find a toolchain copy.
     let hidden = moved.join("runtime unavailable");
     std::fs::rename(&library, &hidden).unwrap();

@@ -24,14 +24,12 @@ impl Compiler {
         let cpp_bridge =
             crate::driver::ffi_shim::expand(arena, &mut acc, &native_graph, diagnostics)?;
 
-        // Opt-in stdlib packages (`import system.net;`, etc.) plus always-on bootstrap
+        // Opt-in stdlib packages (`import system.io;`, etc.) plus always-on bootstrap
         // (`system.core` / `system.primitives`). `@json` types need `system.json` for derives.
         if program_uses_json_attr(&acc) {
             acc.requested_std_packages.insert("system.json".to_string());
         }
-        if program_uses_gpu_shader_attr(&acc) {
-            acc.requested_std_packages.insert("system.gpu".to_string());
-        }
+
         merge_prelude(
             arena,
             &mut acc.all_functions,

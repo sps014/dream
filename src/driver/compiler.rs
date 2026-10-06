@@ -39,6 +39,7 @@ pub struct RuntimeSignatures {
 pub trait LlvmToolchain: Send + Sync {
     /// The runtime signature table (`dream_rt.sigs` text) the backend types runtime calls from.
     fn runtime_sigs(&self, req: &LlvmRuntimeRequest) -> Result<RuntimeSignatures, String>;
+    fn optimize_wasm(&self, wasm: &Path, level: OptLevel) -> Result<(), String>;
     /// `.ll` → `.wasm`: whole-program link with the wasm runtime bitcode, `opt`, `llc`, `wasm-ld`.
     /// With `opt_ll`, also writes the optimized whole-program module there as text.
     fn link_wasm(
@@ -389,13 +390,6 @@ fn program_uses_json_attr(acc: &ProgramAccumulator<'_>) -> bool {
             .all_enums
             .iter()
             .any(|e| e.attributes.iter().any(|a| a.name.text == "json"))
-}
-
-/// True when any top-level function carries `@compute` / `@vertex` / `@fragment` (needs `system.gpu`).
-fn program_uses_gpu_shader_attr(acc: &ProgramAccumulator<'_>) -> bool {
-    acc.all_functions
-        .iter()
-        .any(|f| dream_abi::attributes::is_gpu_shader_attr(&f.attributes))
 }
 
 mod library;

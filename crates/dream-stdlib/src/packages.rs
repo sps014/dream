@@ -10,7 +10,7 @@ pub fn all_prelude_files() -> Vec<(&'static str, &'static str)> {
     out
 }
 
-/// Looks up a package by dotted name (`system.net`).
+/// Looks up a package by dotted name (`system.io`).
 pub fn find_package(name: &str) -> Option<&'static StdPackage> {
     STD_PACKAGES.iter().find(|p| p.name == name)
 }
@@ -22,7 +22,7 @@ pub fn package_for_source(path: &str) -> Option<&'static StdPackage> {
         .find(|package| package.files.iter().any(|(source, _)| *source == path))
 }
 
-/// True when `slash_path` (parser form of a plain import, e.g. `system/net`) names a std package.
+/// True when `slash_path` (parser form of a plain import, e.g. `system/io`) names a std package.
 pub fn std_package_from_slash_path(slash_path: &str) -> Option<&'static StdPackage> {
     let dotted = slash_path.replace('/', ".");
     find_package(&dotted)

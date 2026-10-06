@@ -236,6 +236,5 @@ fn stmt_position(stmt: &StatementNode) -> Option<dream_text::text_span::TextSpan
         StatementNode::Overflow(_, keyword, _) => Some(keyword.position),
         StatementNode::Break(_) | StatementNode::Continue(_) => None,
         StatementNode::Labeled(_, s) => stmt_position(s),
-        StatementNode::WorkgroupDecl(t, _, _) => Some(t.position),
     }
 }

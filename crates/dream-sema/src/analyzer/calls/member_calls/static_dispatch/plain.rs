@@ -42,8 +42,7 @@ impl<'a> Analyzer<'a> {
                         diagnostics,
                         format!(
                             "Type '{}' has no static method '{}'",
-                            type_name,
-                            method.text
+                            type_name, method.text
                         ),
                         Some(method.position),
                     ));
@@ -75,7 +74,11 @@ impl<'a> Analyzer<'a> {
         // annotation. An overloaded callee can't do this (the signature isn't known until the
         // arguments are typed), so it falls back to no expected-type context, as before.
         let expected_params: Option<Vec<Type>> = if is_overloaded {
-            self.expected_params_for_candidates(self.function_table.method_candidates(owner, &method.text), params, 0)
+            self.expected_params_for_candidates(
+                self.function_table.method_candidates(owner, &method.text),
+                params,
+                0,
+            )
         } else {
             self.method_info(owner, &method.text)
                 .ok()
@@ -112,8 +115,7 @@ impl<'a> Analyzer<'a> {
                         diagnostics,
                         format!(
                             "Type '{}' has no static method '{}'",
-                            type_name,
-                            method.text
+                            type_name, method.text
                         ),
                         Some(method.position),
                         "missing-member",
@@ -153,11 +155,7 @@ impl<'a> Analyzer<'a> {
             self.in_methods_of(parent_function, owner),
         ) {
             diagnostics.report_error(
-                format!(
-                    "'{}' is private to '{}'",
-                    method.text,
-                    type_name
-                ),
+                format!("'{}' is private to '{}'", method.text, type_name),
                 Some(method.position),
             );
         }
@@ -169,12 +167,6 @@ impl<'a> Analyzer<'a> {
             method.position,
             diagnostics,
         );
-        self.check_compute_call(&store_sig, method.position, diagnostics);
-        if type_name == "GpuRenderPipeline"
-            && (method.text == "create" || method.text == "create_ex")
-        {
-            self.check_render_pipeline_create(params, method.position, diagnostics);
-        }
 
         self.validate_ref_arguments(
             &format!("static method '{}'", base),
@@ -236,11 +228,20 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         )?;
 
-        self.validate_arguments(&format!("static method {base}"), &expected_params, &arg_types, method.position, diagnostics);
+        self.validate_arguments(
+            &format!("static method {base}"),
+            &expected_params,
+            &arg_types,
+            method.position,
+            diagnostics,
+        );
 
         // An async static method (e.g. `File.read`) eagerly starts a task; the call yields a
         // `Future<T>` that must be `await`ed, just like any other async call.
-        let ret_type = Self::async_return_type(store_sig.is_async, Some(self.type_ctx.syntax_type(store_sig.resolved_return)));
+        let ret_type = Self::async_return_type(
+            store_sig.is_async,
+            Some(self.type_ctx.syntax_type(store_sig.resolved_return)),
+        );
         // A static method is an unbound function under its mangled `{Type}_{method}` name (no
         // receiver). Overloaded names resolve to the selected overload's emitted key (each a
         // distinct `DefId`), matching free-function / instance-method overload emission.

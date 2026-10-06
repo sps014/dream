@@ -55,7 +55,7 @@ impl<'a> Analyzer<'a> {
                 .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
             diagnostics.file_path = file_path_string(&struct_decl.file_path);
             // Static classes are implicitly `sealed` on the AST so they cannot grow an instance
-            // surface, but stdlib splits static helpers across `extend` files (e.g. `GpuMath`).
+            // surface, but stdlib splits static helpers across `extend` files (e.g. `Math`).
             // Those extends are allowed when every member is `static` (checked in
             // `register_extensions`).
             let def = self.type_ctx.register(

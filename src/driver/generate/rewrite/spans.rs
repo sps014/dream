@@ -373,8 +373,5 @@ pub(super) fn shift_stmt<'a>(
         StatementNode::Overflow(mode, keyword, body) => {
             StatementNode::Overflow(*mode, map.token(keyword), shift_stmts(map, arena, body))
         }
-        StatementNode::WorkgroupDecl(t, ty, n) => {
-            StatementNode::WorkgroupDecl(map.token(t), ty.clone(), *n)
-        }
     }
 }

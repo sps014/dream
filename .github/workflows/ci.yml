@@ -49,8 +49,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential clang cmake libclang-dev libgtk-3-dev libssl-dev \
-            libudev-dev libwebkit2gtk-4.1-dev ninja-build pkg-config python3 xz-utils
+            build-essential clang cmake libclang-dev \
+            ninja-build pkg-config python3 xz-utils
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -100,8 +100,13 @@ jobs:
         run: |
           "DREAM_CC=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang.exe" >> $env:GITHUB_ENV
           "DREAM_CXX=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang++.exe" >> $env:GITHUB_ENV
+      - uses: actions/cache@v4
+        with:
+          path: ~/.dream/toolchains/binaryen-133
+          key: binaryen-133-${{ runner.os }}-${{ runner.arch }}
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo build --workspace --timings
+      - run: cargo run --locked -p dreamer -- toolchain install binaryen
       - name: Check runnable documentation examples
         run: python tooling/docs/check_examples.py
       - run: cargo test --workspace --no-fail-fast --timings
@@ -210,15 +215,13 @@ jobs:
   golden-corpus:
     name: Full native corpus and WASM parity
     runs-on: ubuntu-latest
-    env:
-      WGPU_BACKEND: vulkan
     steps:
       - name: Install native dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential clang cmake libclang-dev libgtk-3-dev libssl-dev \
-            libudev-dev libwebkit2gtk-4.1-dev mesa-vulkan-drivers ninja-build pkg-config python3 xz-utils
+            build-essential clang cmake libclang-dev \
+            ninja-build pkg-config python3 xz-utils
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: mozilla-actions/sccache-action@v0.0.11
@@ -265,12 +268,3 @@ jobs:
             target/cargo-timings/*.html
           retention-days: 7
           if-no-files-found: ignore
-      - name: Preserve GPU corpus diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gpu-corpus-diagnostics
-          path: |
-            tests/cases/target/debug/gpu_capabilities.opt.ll
-            tests/cases/target/debug/gpu_capabilities.abi.json
-            tests/cases/target/debug/gpu_pack_unorm.wgsl

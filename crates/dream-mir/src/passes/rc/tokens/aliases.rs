@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 ///
 /// `calls`: also `dest = f(src, …)` so leftover_order releases a `JsonValue.get` dest before
 /// leftover of `this`. Do not use that edge for leftover_waits: `r.text()` / concat dests would
-/// wait for a still-live receiver and leak (`webapi_basic`).
+/// wait for a still-live receiver and leak.
 pub(crate) fn leftover_alias_parent(
     func: &MirFunction,
     interner: &TypeInterner,

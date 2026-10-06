@@ -59,7 +59,6 @@ pub(super) fn statement_line(statement: &dream_syntax::nodes::StatementNode) -> 
     match statement {
         StatementNode::Assignment(tok, _)
         | StatementNode::Declaration(tok, _, _, _)
-        | StatementNode::WorkgroupDecl(tok, _, _)
         | StatementNode::FunctionInvocation(tok, _, _)
         | StatementNode::MethodInvocation(_, tok, _, _)
         | StatementNode::MemberAssignment(_, tok, _)
@@ -369,11 +368,6 @@ pub struct Analyzer<'a> {
     /// Pointer facts used by the single HIR layout table.
     target_layout: dream_hir::TargetLayout,
     deferred_case_labels: Vec<Vec<(dream_hir::HExpr, Option<TextSpan>)>>,
-    /// True while analyzing the body of an `@compute` kernel. Gates calling non-compute functions
-    /// and accepting `@workgroup` declarations — see `Analyzer::check_compute_call`.
-    current_function_is_compute: bool,
-    /// True while analyzing `@vertex` / `@fragment` / `@compute` (GPU shader body).
-    current_function_is_gpu: bool,
     /// Overflow behavior stamped on integer arithmetic, set lexically by `checked`/`unchecked`
     /// blocks and reset at each function body.
     overflow: dream_hir::Overflow,
@@ -478,8 +472,6 @@ impl<'a> Analyzer<'a> {
             compile_targets: CompileTargets::native_only(),
             target_layout: dream_hir::TargetLayout::default(),
             deferred_case_labels: Vec::new(),
-            current_function_is_compute: false,
-            current_function_is_gpu: false,
             overflow: dream_hir::Overflow::Wrapping,
             current_file: None,
             file_modules: graph

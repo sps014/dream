@@ -7,9 +7,6 @@ mod fields;
 #[serde(rename_all = "lowercase")]
 pub enum HostCapability {
     Core,
-    Net,
-    Gpu,
-    WebView,
     Unicode,
     Crypto,
     Process,
@@ -17,11 +14,8 @@ pub enum HostCapability {
 }
 
 impl HostCapability {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 5] = [
         Self::Core,
-        Self::Net,
-        Self::Gpu,
-        Self::WebView,
         Self::Unicode,
         Self::Crypto,
         Self::Process,
@@ -31,9 +25,6 @@ impl HostCapability {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Core => "core",
-            Self::Net => "net",
-            Self::Gpu => "gpu",
-            Self::WebView => "webview",
             Self::Unicode => "unicode",
             Self::Crypto => "crypto",
             Self::Process => "process",
@@ -44,9 +35,6 @@ impl HostCapability {
     pub const fn link_name(self) -> &'static str {
         match self {
             Self::Core => "dream_host_core",
-            Self::Net => "dream_host_net",
-            Self::Gpu => "dream_host_gpu",
-            Self::WebView => "dream_host_webview",
             Self::Unicode => "dream_host_unicode",
             Self::Crypto => "dream_host_crypto",
             Self::Process => "dream_host_process",
@@ -141,16 +129,16 @@ mod tests {
                 .is_err()
         );
         let manifest = HostManifest::parse(
-            r#"{"native_abi_version":2,"host_capabilities":["webview","gpu","net","gpu"]}"#,
+            r#"{"native_abi_version":2,"host_capabilities":["timezone","unicode","crypto","unicode"]}"#,
         )
         .unwrap();
         assert_eq!(
             manifest.host_capabilities,
             vec![
                 HostCapability::Core,
-                HostCapability::Net,
-                HostCapability::Gpu,
-                HostCapability::WebView
+                HostCapability::Unicode,
+                HostCapability::Crypto,
+                HostCapability::Timezone,
             ]
         );
     }

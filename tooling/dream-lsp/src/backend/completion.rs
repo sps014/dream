@@ -102,7 +102,7 @@ impl Backend {
 
             // Offer not-yet-imported stdlib exports with an import edit on accept.
             // Skip inside `import …` (package paths), after `.` (member access — `System.`
-            // must not mix in `List` / `Gpu` from unloaded packages), and in `@…` attribute
+            // must not mix in `List` / `Map` from unloaded packages), and in `@…` attribute
             // name/arg context.
             if import_replace.is_none()
                 && !index::is_member_completion_context(&text, offset)

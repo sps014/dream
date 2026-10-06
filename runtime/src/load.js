@@ -208,16 +208,6 @@ export async function load(source, options = {}) {
       ? makeWorkerModule(wasmBytes, abi, () => sharedMemory, stackGate, getInstance)
       : {}),
   };
-  if (typeof builtinDream.__attachGpuAbi === "function") {
-    const hint =
-      typeof source === "string"
-        ? source
-        : typeof options.abi === "string"
-          ? options.abi
-          : null;
-    builtinDream.__attachGpuAbi(abi, hint);
-  }
-
   const wrapFor = (fn, sig) => {
     if (
       sig &&

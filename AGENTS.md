@@ -16,7 +16,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 
 ## What Dream is
 
-A general-purpose, ahead-of-time (AOT) language: statically typed, fast by default, compiled to a single native binary or to WebAssembly (`.wasm` + pretty-printed `.wat` + `.abi.json` sidecar). Syntax closer to Rust and TypeScript, automatic memory management via ARC (deterministic reference counting), zero-cost monomorphized generics, classes/structs/interfaces/enums/discriminated unions, `Option`/`Result`, `async`/`await` with an in-module cooperative scheduler, `Task` for real parallelism, JS interop (`js` type, `extern`), and a batteries-included stdlib (`List`, `Map`, `Set`, strings, JSON via `@json`, files, HTTP, regex, dates).
+A general-purpose, ahead-of-time (AOT) language: statically typed, fast by default, compiled to a single native binary or to WebAssembly (`.wasm` + pretty-printed `.wat` + `.abi.json` sidecar). Syntax closer to Rust and TypeScript, automatic memory management via ARC (deterministic reference counting), zero-cost monomorphized generics, classes/structs/interfaces/enums/discriminated unions, `Option`/`Result`, `async`/`await` with an in-module cooperative scheduler, `Task` for real parallelism, JS interop (`js` type, `extern`), and a batteries-included stdlib (`List`, `Map`, `Set`, strings, JSON via `@json`, files, regex, dates).
 
 Rust edition 2018 (root crate) / 2021 (`dream-lsp`). Workspace resolver `"2"` so the wasm32 analyzer-only build doesn't drag in native host deps.
 
@@ -34,9 +34,9 @@ Dream/
 │   ├── dream-stdlib/               Embedded prelude .dream files + STD_PACKAGES registry
 │   ├── dream-sema/                 Semantic analyzer + tables + hir_emit (fused; no MIR dep)
 │   ├── dream-mir/                  CFG MIR, passes, backend/llvm (textual LLVM IR), runtime/c
-│   ├── dream-host/                 Distribution features: core/net/gpu/webview
-│   ├── dream-host-{core,net,gpu,webview}/ Separate native capability cdylibs
-│   └── dream-host-{abi,gui}/       Shared C ABI conversions and stateless GUI icon helpers
+│   ├── dream-host/                 Distribution features: core/unicode/crypto/process/timezone
+│   ├── dream-host-{core,unicode,crypto,process,timezone}/ Separate native capability cdylibs
+│   └── dream-host-abi/       Shared C ABI conversions
 ├── src/                            Root `dream` crate — driver, CLI, execution only
 │   ├── main.rs                     CLI entry point
 │   ├── lib.rs                      Thin facade: driver + execution (+ debug_schema)
@@ -94,7 +94,7 @@ dream-stdlib ← dream-syntax, dream-abi
 dream-sema ← dream-syntax, dream-types, dream-hir, dream-abi, dream-stdlib
 dream-mir ← dream-hir, dream-types, dream-abi, dream-stdlib
 dream-host → optional capability crates; independent of dream
-dream-host-{net,gpu,webview} → core cdylib through C ABI
+dream-host-{unicode,crypto,process,timezone} → core cdylib through C ABI
 dream-host-abi ← dream-mir (guest layout constants)
 dream (driver/CLI/execution) ← dream-sema, dream-mir, dream-stdlib, dream-abi, …
 dream-lsp ← dream
@@ -105,7 +105,9 @@ Hard rules Cargo enforces:
 - `dream-sema` never depends on `dream-mir`.
 - `dream-mir` never depends on `dream-sema`.
 - Shared names (JS ABI, intrinsics, attributes) live in `dream-abi`, not in MIR.
-- The compiler never depends on host crates, wgpu, winit, wry or reqwest. Host C exports live in the capability crates; C-library discovery/link flags stay in the compiler.
+- The compiler never depends on host crates. Host C exports live in the capability crates; C-library discovery/link flags stay in the compiler.
+
+Binaryen is a pinned external `wasm-opt` executable, auto-installed through `dreamer toolchain install binaryen` for optimized WASM builds; it is not a Cargo dependency. `DREAM_WASM_OPT` overrides its path, and `DREAM_NO_AUTO_INSTALL=1` disables downloads.
 
 Root `dream` may re-export front-end leaves as `dream::{syntax,diagnostics,text}` for the CLI/LSP facade; it does **not** permanently re-export middle/back-end crates.
 
@@ -142,7 +144,7 @@ Every build needs the pinned LLVM (`LLVM_VERSION` in `src/execution/llvm/tools.r
 - **Intrinsics** (`crates/dream-abi/src/intrinsics.rs`): all builtin/`@intrinsic` stdlib ops. Classify via `IntrinsicOp::from_key`/`from_attributes`. Never bare-string-match `"print"`/`"len"`/`"promise_all"` in analyzer or codegen.
 - **Attributes / JS ABI** (`crates/dream-abi/`): attribute helpers and JS bridge/type names shared by sema and MIR.
 - **Reserved names** (`crates/dream-syntax/src/nodes/types.rs`): special member names (`constructor`/`del` via `is_special_member_name`), `@intrinsic` attribute name, synthetic for-each locals. Defined once, reused by parser/semantics/codegen.
-- **Stdlib prelude** (`crates/dream-stdlib/system/*.dream`): single source of truth for stdlib signatures, embedded in the binary. Packages are registered in `STD_PACKAGES` / `BOOTSTRAP_PACKAGES` (`crates/dream-stdlib`); both the compiler and `dream-lsp` load the same files. User code imports opt-in packages (`import system.net;`, etc.); bootstrap (`system.core`, `system.primitives`) is always merged. New stdlib API → define its signature in the `.dream` file, register its package, and wire native hosts in `dream-host` when needed.
+- **Stdlib prelude** (`crates/dream-stdlib/system/*.dream`): single source of truth for stdlib signatures, embedded in the binary. Packages are registered in `STD_PACKAGES` / `BOOTSTRAP_PACKAGES` (`crates/dream-stdlib`); both the compiler and `dream-lsp` load the same files. User code imports opt-in packages (`import system.io;`, etc.); bootstrap (`system.core`, `system.primitives`) is always merged. New stdlib API → define its signature in the `.dream` file, register its package, and wire native hosts in `dream-host` when needed.
 
 ## Building, running, testing
 
@@ -244,5 +246,5 @@ When iterating on a feature or bugfix, prefer `./scripts/probe_test.sh <case-ste
 
 - Memory: AST uses `bumpalo` arena allocation — mind lifetimes tied to the `Bump` arena.
 - Avoid `unsafe` unless there's no idiomatic composition available.
-- Deps of note (don't reinvent): `logos` (lexing), `bumpalo` (arena alloc), `indexmap` (deterministic maps), `wat` (dev-dep; parses emitted `.wat` in tests), `reqwest`+`serde_json` (HTTP host fn), `crossterm` (raw terminal I/O), `chrono` (OS timezone lookups only — calendar math is hand-written in Dream itself), `tower-lsp`+`tokio`+`dashmap` (LSP server).
-- The compiler's `native` feature enables execution/linking tools, not runtime hosts. `dream-host` selects core/net/gpu/webview packages through Cargo features; all four are enabled by default. Core owns guest binding and icon storage; other capability libraries dynamically call core. Never duplicate that state in statically linked helpers or re-embed hosts in the compiler.
+- Deps of note (don't reinvent): `logos` (lexing), `bumpalo` (arena alloc), `indexmap` (deterministic maps), `wat` (dev-dep; parses emitted `.wat` in tests), `crossterm` (raw terminal I/O), `chrono` (OS timezone lookups only — calendar math is hand-written in Dream itself), `tower-lsp`+`tokio`+`dashmap` (LSP server).
+- The compiler's `native` feature enables execution/linking tools, not runtime hosts. `dream-host` selects core/unicode/crypto/process/timezone packages through Cargo features; all five are enabled by default. Core owns guest binding and icon storage; other capability libraries dynamically call core. Never duplicate that state in statically linked helpers or re-embed hosts in the compiler.

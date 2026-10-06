@@ -488,7 +488,6 @@ impl<'a> Analyzer<'a> {
             name.position,
             diagnostics,
         );
-        self.check_compute_call(&store_sig, name.position, diagnostics);
         self.check_c_fun_args(store_sig.identity.0, params, symbol_table, diagnostics);
 
         self.validate_ref_arguments(

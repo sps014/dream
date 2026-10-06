@@ -506,11 +506,11 @@ fun f(r: Result<int, string>): void {
 
 #[test]
 fn switch_arm_binding_member_completions_for_result_err() {
-    // Pattern bindings must carry the concrete payload type so `e.` completes GpuError members.
+    // Pattern bindings must carry the concrete payload type so `e.` completes IoError members.
     let harness = TestHarness::new(
         r#"
-import system.gpu;
-fun f(r: Result<bool, GpuError>): void {
+import system.io;
+fun f(r: Result<string, IoError>): void {
     switch (r) {
         Ok(v) => {},
         Err(e) => { e.| },
@@ -524,7 +524,7 @@ fun f(r: Result<bool, GpuError>): void {
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"message") && names.contains(&"code"),
-        "expected GpuError methods on Err(e) binding, got {names:?}"
+        "expected IoError methods on Err(e) binding, got {names:?}"
     );
 }
 
@@ -555,9 +555,9 @@ fun f(o: Option<Point>): void {
 }
 
 #[test]
-fn result_inferred_from_gpu_try_init_member_completions() {
+fn result_inferred_from_file_read_member_completions() {
     let harness = TestHarness::new(
-        "import system.gpu;\nasync fun main(): void {\n    let a = Gpu.try_init().await;\n    a.|\n}\n",
+        "import system.io;\nasync fun main(): void {\n    let a = File.read(\"file.txt\").await;\n    a.|\n}\n",
     );
     let comps = harness
         .index()
@@ -565,16 +565,16 @@ fn result_inferred_from_gpu_try_init_member_completions() {
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"is_ok") && names.contains(&"unwrap_or") && names.contains(&"and_then"),
-        "expected Result instance methods on a. after Gpu.try_init.await, got {names:?}"
+        "expected Result instance methods on a. after File.read.await, got {names:?}"
     );
 }
 
 #[test]
 fn async_call_without_await_is_future_not_result() {
-    // `Gpu.try_init()` is async → `Future<Result<bool, GpuError>>`. Without `await`, Result
+    // `File.read("file.txt")` is async → `Future<Result<string, IoError>>`. Without `await`, Result
     // methods must not appear (matches the analyzer: Future has no `is_err`).
     let harness = TestHarness::new(
-        "import system.gpu;\nfun main(): void {\n    let a = Gpu.try_init();\n    a.|\n}\n",
+        "import system.io;\nfun main(): void {\n    let a = File.read(\"file.txt\");\n    a.|\n}\n",
     );
     let index = harness.index();
     let a_ty = index
@@ -584,7 +584,7 @@ fn async_call_without_await_is_future_not_result() {
         .and_then(|d| d.ty.as_deref());
     assert!(
         a_ty.is_some_and(|t| t.starts_with("Future<") && t.contains("Result")),
-        "expected Future<Result<…>> for bare Gpu.try_init(), got {a_ty:?}"
+        "expected Future<Result<…>> for bare File.read, got {a_ty:?}"
     );
     let comps = index.completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
@@ -653,57 +653,6 @@ fun main(): void {
 }
 
 #[test]
-fn compute_pass_dispatch_not_task_pool() {
-    let harness = TestHarness::new(
-        r#"
-import system.gpu;
-async fun main(): void {
-    let p = ComputePass.begin();
-    p.dispa|tch("k", Buffer.alloc<GpuBuffer<float>>(0), 1, 1, 1);
-}
-"#,
-    );
-    let hover = harness
-        .index()
-        .hover(&harness.src, harness.offset)
-        .expect("hover on ComputePass.dispatch");
-    assert!(
-        hover.contents.contains("ComputePass.dispatch"),
-        "expected ComputePass.dispatch, got {}",
-        hover.contents
-    );
-    assert!(
-        !hover.contents.contains("TaskPool"),
-        "must not show TaskPool.dispatch: {}",
-        hover.contents
-    );
-    assert!(
-        hover.contents.contains("kernel: string"),
-        "expected ComputePass param names: {}",
-        hover.contents
-    );
-
-    let sig_harness = TestHarness::new(
-        r#"
-import system.gpu;
-async fun main(): void {
-    let p = ComputePass.begin();
-    p.dispatch(|);
-}
-"#,
-    );
-    let sig = sig_harness
-        .index()
-        .signature_help(&sig_harness.src, sig_harness.offset)
-        .expect("signature help");
-    assert!(
-        sig.detail.contains("ComputePass.dispatch") && !sig.detail.contains("TaskPool"),
-        "signature help must be ComputePass.dispatch, got {}",
-        sig.detail
-    );
-}
-
-#[test]
 fn method_generic_args_expanded_on_hover() {
     let harness = TestHarness::new(
         r#"
@@ -754,186 +703,6 @@ fun main(): void {
         hover.contents
     );
     assert!(!hover.contents.contains("B.value") && !hover.contents.contains("string"));
-}
-
-#[test]
-fn type_name_completion_only_static_methods() {
-    let harness = TestHarness::new(
-        r#"
-import system.gpu;
-fun main(): void {
-    ComputePass.|
-}
-"#,
-    );
-    let comps = harness
-        .index()
-        .completions(None, &harness.src, harness.offset);
-    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
-    assert!(
-        names.contains(&"begin"),
-        "static begin should appear on ComputePass.: {names:?}"
-    );
-    assert!(
-        !names.contains(&"dispatch") && !names.contains(&"submit"),
-        "instance methods must not complete on ComputePass. type name: {names:?}"
-    );
-}
-
-#[test]
-fn instance_completion_excludes_static_methods() {
-    let harness = TestHarness::new(
-        r#"
-import system.gpu;
-fun main(): void {
-    let p = ComputePass.begin();
-    p.|
-}
-"#,
-    );
-    let comps = harness
-        .index()
-        .completions(None, &harness.src, harness.offset);
-    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
-    assert!(
-        names.contains(&"dispatch") && names.contains(&"submit"),
-        "instance methods should appear on p.: {names:?}"
-    );
-    assert!(
-        !names.contains(&"begin"),
-        "static begin must not complete on instance receiver: {names:?}"
-    );
-}
-
-#[test]
-fn method_detail_display_omits_fun_keyword() {
-    let harness = TestHarness::new(
-        r#"
-import system.gpu;
-async fun main(): void {
-    Gpu.try_in|it();
-}
-"#,
-    );
-    let hover = harness
-        .index()
-        .hover(&harness.src, harness.offset)
-        .expect("hover");
-    assert!(
-        hover.contents.contains("static async Gpu.try_init"),
-        "expected clean static async Owner.name form, got {}",
-        hover.contents
-    );
-    assert!(
-        !hover.contents.contains("async fun try_init") && !hover.contents.contains("Gpu.async fun"),
-        "old `Owner.async fun name` form must be gone: {}",
-        hover.contents
-    );
-}
-
-#[test]
-fn compute_kernel_completes_global_id() {
-    let harness = TestHarness::new(
-        r#"
-@compute(64)
-fun k(out: GpuBuffer<float>, n: int): void {
-    global_|
-}
-"#,
-    );
-    let comps = harness
-        .index()
-        .completions(None, &harness.src, harness.offset);
-    assert!(
-        comps.iter().any(|(n, ..)| n == "global_id"),
-        "expected global_id among completions in @compute body, got {:?}",
-        comps.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>()
-    );
-}
-
-#[test]
-fn compute_kernel_completes_global_id_xyz() {
-    let harness = TestHarness::new(
-        r#"
-@compute(64)
-fun k(out: GpuBuffer<float>, n: int): void {
-    global_id.|
-}
-"#,
-    );
-    let comps = harness
-        .index()
-        .completions(None, &harness.src, harness.offset);
-    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
-    assert!(
-        names.contains(&"x") && names.contains(&"y") && names.contains(&"z"),
-        "expected GpuId3 fields x/y/z on global_id., got {names:?}"
-    );
-}
-
-#[test]
-fn compute_kernel_hover_global_id() {
-    let harness = TestHarness::new(
-        r#"
-@compute(64)
-fun k(out: GpuBuffer<float>, n: int): void {
-    let i = global_|id.x;
-}
-"#,
-    );
-    let hover = harness
-        .index()
-        .hover(&harness.src, harness.offset)
-        .expect("hover on global_id");
-    assert!(
-        hover.contents.contains("GpuId3") || hover.contents.contains("global_id"),
-        "expected GpuId3/global_id hover, got {}",
-        hover.contents
-    );
-}
-
-#[test]
-fn gpubuffer_alloc_infers_concrete_element_type() {
-    let harness = TestHarness::new(
-        r#"
-import system.gpu;
-async fun main(): void {
-    let buffer = GpuBuffer<float>.alloc(4);
-    buffe|r;
-}
-"#,
-    );
-    let hover = harness
-        .index()
-        .hover(&harness.src, harness.offset)
-        .expect("hover on buffer");
-    assert!(
-        hover.contents.contains("GpuBuffer<float>"),
-        "expected GpuBuffer<float> after GpuBuffer<float>.alloc, got {}",
-        hover.contents
-    );
-}
-
-#[test]
-fn gpubuffer_read_at_hover_substitutes_element_type() {
-    let harness = TestHarness::new(
-        r#"
-import system.gpu;
-async fun main(): void {
-    let buffer = GpuBuffer<float>.alloc(4);
-    buffer.read_|at(0, 1);
-}
-"#,
-    );
-    let hover = harness
-        .index()
-        .hover(&harness.src, harness.offset)
-        .expect("hover on read_at");
-    assert!(
-        hover.contents.contains("float[]") && !hover.contents.contains(": T[]"),
-        "expected read_at return float[], got {}",
-        hover.contents
-    );
 }
 
 #[test]
@@ -2221,26 +1990,26 @@ fun main(): void {
 }
 
 #[test]
-fn auto_import_code_action_for_http_client() {
+fn auto_import_code_action_for_crypto_error() {
     use dream_lsp::code_actions::{already_imports, auto_import_actions};
     use tower_lsp::lsp_types::Url;
 
     let src = r#"
 fun main(): void {
-    let c = HttpClient("");
+    let c = CryptoError("TEST", "test");
 }
 "#;
     let uri = Url::parse("file:///tmp/main.dream").unwrap();
-    let actions = auto_import_actions(&uri, src, "HttpClient", None);
+    let actions = auto_import_actions(&uri, src, "CryptoError", None);
     assert_eq!(actions.len(), 1);
-    // Apply conceptually: insert should mention system.net
-    assert!(!already_imports(src, "system.net"));
+    // Apply conceptually: insert should mention system.crypto
+    assert!(!already_imports(src, "system.crypto"));
     let edited = {
         let (_, pos) = dream_lsp::code_actions::import_insert_point(src);
         assert_eq!(pos.line, 0);
-        format!("import system.net;\n{}", src)
+        format!("import system.crypto;\n{}", src)
     };
-    assert!(already_imports(&edited, "system.net"));
+    assert!(already_imports(&edited, "system.crypto"));
 }
 
 #[test]
@@ -2248,9 +2017,9 @@ fn auto_import_skipped_when_already_imported() {
     use dream_lsp::code_actions::auto_import_actions;
     use tower_lsp::lsp_types::Url;
 
-    let src = "import system.net;\nfun main(): void { let c = HttpClient(\"\"); }\n";
+    let src = "import system.crypto;\nfun main(): void { let c = CryptoError(\"TEST\", \"test\"); }\n";
     let uri = Url::parse("file:///tmp/main.dream").unwrap();
-    let actions = auto_import_actions(&uri, src, "HttpClient", None);
+    let actions = auto_import_actions(&uri, src, "CryptoError", None);
     assert!(actions.is_empty());
 }
 
@@ -2271,9 +2040,7 @@ fn bootstrap_symbol_has_no_auto_import() {
 #[test]
 fn system_missing_method_auto_import() {
     use dream_lsp::analysis::analyze_document;
-    use dream_lsp::code_actions::{
-        auto_import_actions, unresolved_names_from_message,
-    };
+    use dream_lsp::code_actions::{auto_import_actions, unresolved_names_from_message};
     use tower_lsp::lsp_types::Url;
 
     let src = "fun main(): void {\n    System.println(\"hi\");\n}\n";
@@ -2420,9 +2187,7 @@ fn member_context_skips_unloaded_stdlib_types() {
         .index()
         .completions(None, &harness.src, harness.offset);
     assert!(
-        !comps
-            .iter()
-            .any(|(n, ..)| n == "List" || n == "DateTime" || n == "Gpu"),
+        !comps.iter().any(|(n, ..)| n == "List" || n == "DateTime"),
         "member completion must not include unloaded package types: {:?}",
         comps.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>()
     );
@@ -2871,5 +2636,176 @@ fun main(): void {
     assert!(
         comps2.iter().any(|(n, ..)| n == "SemVer"),
         "expected SemVer in completions after import"
+    );
+}
+
+#[test]
+fn instance_dispatch_resolves_its_receiver() {
+    let harness = TestHarness::new(
+        r#"
+class JobGroup { public static fun begin(): JobGroup { return JobGroup(); } public fun dispatch(kernel: string, buffers: float[][], x: int, y: int, z: int): void {} public fun submit(): void {} }
+async fun main(): void {
+    let p = JobGroup.begin();
+    p.dispa|tch("k", Buffer.alloc<float[]>(0), 1, 1, 1);
+}
+"#,
+    );
+    let hover = harness
+        .index()
+        .hover(&harness.src, harness.offset)
+        .expect("hover on JobGroup.dispatch");
+    assert!(
+        hover.contents.contains("JobGroup.dispatch"),
+        "expected JobGroup.dispatch, got {}",
+        hover.contents
+    );
+    assert!(
+        !hover.contents.contains("TaskPool"),
+        "must not show TaskPool.dispatch: {}",
+        hover.contents
+    );
+    assert!(
+        hover.contents.contains("kernel: string"),
+        "expected JobGroup param names: {}",
+        hover.contents
+    );
+
+    let sig_harness = TestHarness::new(
+        r#"
+class JobGroup { public static fun begin(): JobGroup { return JobGroup(); } public fun dispatch(kernel: string, buffers: float[][], x: int, y: int, z: int): void {} public fun submit(): void {} }
+async fun main(): void {
+    let p = JobGroup.begin();
+    p.dispatch(|);
+}
+"#,
+    );
+    let sig = sig_harness
+        .index()
+        .signature_help(&sig_harness.src, sig_harness.offset)
+        .expect("signature help");
+    assert!(
+        sig.detail.contains("JobGroup.dispatch") && !sig.detail.contains("TaskPool"),
+        "signature help must be JobGroup.dispatch, got {}",
+        sig.detail
+    );
+}
+
+#[test]
+fn type_name_completion_only_static_methods() {
+    let harness = TestHarness::new(
+        r#"
+class JobGroup { public static fun begin(): JobGroup { return JobGroup(); } public fun dispatch(kernel: string, buffers: float[][], x: int, y: int, z: int): void {} public fun submit(): void {} }
+fun main(): void {
+    JobGroup.|
+}
+"#,
+    );
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"begin"),
+        "static begin should appear on JobGroup.: {names:?}"
+    );
+    assert!(
+        !names.contains(&"dispatch") && !names.contains(&"submit"),
+        "instance methods must not complete on JobGroup. type name: {names:?}"
+    );
+}
+
+#[test]
+fn instance_completion_excludes_static_methods() {
+    let harness = TestHarness::new(
+        r#"
+class JobGroup { public static fun begin(): JobGroup { return JobGroup(); } public fun dispatch(kernel: string, buffers: float[][], x: int, y: int, z: int): void {} public fun submit(): void {} }
+fun main(): void {
+    let p = JobGroup.begin();
+    p.|
+}
+"#,
+    );
+    let comps = harness
+        .index()
+        .completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"dispatch") && names.contains(&"submit"),
+        "instance methods should appear on p.: {names:?}"
+    );
+    assert!(
+        !names.contains(&"begin"),
+        "static begin must not complete on instance receiver: {names:?}"
+    );
+}
+
+#[test]
+fn method_detail_display_omits_fun_keyword() {
+    let harness = TestHarness::new(
+        r#"
+class Worker { public static async fun try_init(): bool { return true; } }
+async fun main(): void {
+    Worker.try_in|it();
+}
+"#,
+    );
+    let hover = harness
+        .index()
+        .hover(&harness.src, harness.offset)
+        .expect("hover");
+    assert!(
+        hover.contents.contains("static async Worker.try_init"),
+        "expected clean static async Owner.name form, got {}",
+        hover.contents
+    );
+    assert!(
+        !hover.contents.contains("async fun try_init")
+            && !hover.contents.contains("Worker.async fun"),
+        "old `Owner.async fun name` form must be gone: {}",
+        hover.contents
+    );
+}
+
+#[test]
+fn generic_buffer_alloc_infers_concrete_element_type() {
+    let harness = TestHarness::new(
+        r#"
+class TestBuffer<T> { public static fun alloc(n: int): TestBuffer<T> { return TestBuffer<T>(); } public fun read_at(start: int, n: int): T[] { return Buffer.alloc<T>(n); } }
+async fun main(): void {
+    let buffer = TestBuffer<float>.alloc(4);
+    buffe|r;
+}
+"#,
+    );
+    let hover = harness
+        .index()
+        .hover(&harness.src, harness.offset)
+        .expect("hover on buffer");
+    assert!(
+        hover.contents.contains("TestBuffer<float>"),
+        "expected TestBuffer<float> after TestBuffer<float>.alloc, got {}",
+        hover.contents
+    );
+}
+
+#[test]
+fn generic_buffer_read_at_hover_substitutes_element_type() {
+    let harness = TestHarness::new(
+        r#"
+class TestBuffer<T> { public static fun alloc(n: int): TestBuffer<T> { return TestBuffer<T>(); } public fun read_at(start: int, n: int): T[] { return Buffer.alloc<T>(n); } }
+async fun main(): void {
+    let buffer = TestBuffer<float>.alloc(4);
+    buffer.read_|at(0, 1);
+}
+"#,
+    );
+    let hover = harness
+        .index()
+        .hover(&harness.src, harness.offset)
+        .expect("hover on read_at");
+    assert!(
+        hover.contents.contains("float[]") && !hover.contents.contains(": T[]"),
+        "expected read_at return float[], got {}",
+        hover.contents
     );
 }

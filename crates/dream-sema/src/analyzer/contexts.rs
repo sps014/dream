@@ -61,24 +61,4 @@ impl<'a> Analyzer<'a> {
         self.current_function_runtime = saved;
         result
     }
-
-    /// Runs `f` with GPU-stage flags set, restoring previous values afterward.
-    pub(in crate::analyzer) fn with_gpu_flags<F, R>(
-        &mut self,
-        is_compute: bool,
-        is_gpu: bool,
-        f: F,
-    ) -> R
-    where
-        F: FnOnce(&mut Self) -> R,
-    {
-        let saved_c = self.current_function_is_compute;
-        let saved_g = self.current_function_is_gpu;
-        self.current_function_is_compute = is_compute;
-        self.current_function_is_gpu = is_gpu;
-        let result = f(self);
-        self.current_function_is_compute = saved_c;
-        self.current_function_is_gpu = saved_g;
-        result
-    }
 }

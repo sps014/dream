@@ -28,6 +28,6 @@ This program prints `Hello, world!`. You do not need to understand Dream's imple
 
 ## Build on the basics
 
-Use lists and maps to store data, `Option` and `Result` to handle missing values and failures, and modules to organize your program. Add files, HTTP, JSON, desktop windows, or GPU work when your project needs them.
+Use lists and maps to store data, `Option` and `Result` to handle missing values and failures, and modules to organize your program. Add files, JSON, dates, or process execution when your project needs them.
 
-Read [Choosing an environment](learn/environments.md) before relying on a desktop or browser service. Each feature guide explains its requirements and gives examples.
+Read [Choosing an environment](learn/environments.md) before relying on a native or browser service. Each feature guide explains its requirements and gives examples.

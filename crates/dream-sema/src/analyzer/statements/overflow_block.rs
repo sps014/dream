@@ -12,27 +12,16 @@ impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn analyze_overflow_block(
         &mut self,
         mode: OverflowMode,
-        keyword: &SyntaxToken,
+        _keyword: &SyntaxToken,
         body: &[StatementNode<'a>],
         parent_function: &FunctionNode<'a>,
         symbol_table: &Rc<RefCell<SymbolTable>>,
         has_parent_while: bool,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
-        let overflow = if self.current_function_is_gpu {
-            if mode == OverflowMode::Checked {
-                diagnostics.report_error(
-                    "'checked' cannot be used in GPU code: shader arithmetic always wraps"
-                        .to_string(),
-                    Some(keyword.position),
-                );
-            }
-            Overflow::Wrapping
-        } else {
-            match mode {
-                OverflowMode::Checked => Overflow::Checked,
-                OverflowMode::Unchecked => Overflow::Wrapping,
-            }
+        let overflow = match mode {
+            OverflowMode::Checked => Overflow::Checked,
+            OverflowMode::Unchecked => Overflow::Wrapping,
         };
         let saved = std::mem::replace(&mut self.overflow, overflow);
         let body_scope = self.branch_scope(symbol_table);

@@ -11,7 +11,7 @@ pub enum CompileError {
     Syntax(String),
     /// One or more semantic errors were reported during analysis.
     Semantic(String),
-    /// One or more errors from the generate phase (`@json`, syntax DSLs, `@compute` WGSL emit, …).
+    /// One or more errors from the generate phase (`@json`, syntax DSLs, …).
     Generator(String),
     /// An I/O failure during the pipeline (reading sources, writing artifacts).
     Io(std::io::Error),

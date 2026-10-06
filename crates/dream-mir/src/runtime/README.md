@@ -12,7 +12,7 @@ This directory contains the C code that supports running Dream programs on each 
 | `c/sys/shared/` | Scheduling used by both native and WebAssembly builds |
 | `c/regex.c` and `c/pcre2/` | Optional regular-expression support |
 
-`modules.rs` selects the units for each target. Native networking, GPU, and window capabilities remain separate `dream-host-*` crates. Do not add a second runtime implementation for another output format.
+`modules.rs` selects the units for each target. Unicode, crypto, process, and timezone services live in separate `dream-host-*` crates. Do not add a second runtime implementation for another output format.
 
 The build driver compiles these units with the pinned Clang and combines their bitcode with the program before optimization. Read the [backend handbook](../../../../docs/internals/06-llvm-backend.md) before changing this boundary.
 

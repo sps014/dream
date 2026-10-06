@@ -143,9 +143,6 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         if program_uses_json_attr(&acc) {
             acc.requested_std_packages.insert("system.json".to_string());
         }
-        if program_uses_gpu_shader_attr(&acc) {
-            acc.requested_std_packages.insert("system.gpu".to_string());
-        }
     }
 
     let _ = dream::driver::prelude::merge_prelude(
@@ -270,19 +267,6 @@ fn program_uses_json_attr(acc: &dream::driver::source_loader::ProgramAccumulator
             .all_enums
             .iter()
             .any(|e| e.attributes.iter().any(|a| a.name.text == "json"))
-}
-
-fn program_uses_gpu_shader_attr(
-    acc: &dream::driver::source_loader::ProgramAccumulator<'_>,
-) -> bool {
-    acc.all_functions.iter().any(|f| {
-        f.attributes.iter().any(|a| {
-            matches!(
-                a.name.text.as_str(),
-                "compute" | "vertex" | "fragment" | "gpu"
-            )
-        })
-    })
 }
 
 /// When editing a stdlib source file in-tree, drop the embedded twin so definitions don't duplicate.

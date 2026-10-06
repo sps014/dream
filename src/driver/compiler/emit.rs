@@ -107,7 +107,6 @@ impl Compiler {
         out_path: &str,
         loaded: &load::LoadedProgram<'_>,
         emitted: EmittedModule,
-        gpu: crate::driver::gpu_gen::GpuEmitResult,
         layouts: dream_hir::LayoutTable,
         llvm: Option<&dyn LlvmToolchain>,
     ) -> Result<(), CompileError> {
@@ -122,7 +121,6 @@ impl Compiler {
         let abi_artifacts = emit_wasm_and_abi(
             out_path,
             &loaded.graph.view(),
-            &gpu,
             &emitted.live_imports,
             &loaded.native_graph,
             &loaded.cpp_bridge,
@@ -169,15 +167,10 @@ impl Compiler {
         // embed the ABI custom section, then read the final binary once to print `.wat` — so
         // the text always mirrors the shipped bytes.
         if let Some(level) = self.optimize {
-            // Non-fatal: the unoptimized `.wasm` is already valid output.
-            match crate::driver::wasm_opt::optimize_wasm_file(&wasm_path, level) {
-                Ok(()) => debug!("wasm-opt applied at {level:?}: {}", wasm_path.display()),
-                Err(e) => self.reporter.warning(&format!(
-                    "could not optimize {} with wasm-opt: {}",
-                    wasm_path.display(),
-                    e
-                )),
-            }
+            llvm.ok_or_else(|| CompileError::Internal("no LLVM toolchain configured".into()))?
+                .optimize_wasm(&wasm_path, level)
+                .map_err(CompileError::Toolchain)?;
+            debug!("wasm-opt applied at {level:?}: {}", wasm_path.display());
         }
 
         for p in abi_artifacts {

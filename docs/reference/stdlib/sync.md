@@ -42,7 +42,6 @@ gate.release();
 
 ## Cancellation
 
-`CancellationSource` has `cancel()`, `is_cancelled`, and `token`. Pass `token: Some(tok)` as the last argument of stdlib async APIs, or attach it with [`HttpClient.with_cancellation`](http.md). `CancellationToken.is_cancelled` is the read-only side.
 
 ```dream
 let src = CancellationSource();

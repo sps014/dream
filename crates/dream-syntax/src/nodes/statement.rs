@@ -93,7 +93,4 @@ pub enum StatementNode<'a> {
     /// `checked { body }` / `unchecked { body }` — integer overflow behavior for arithmetic written
     /// lexically inside `body`. The token is the `checked`/`unchecked` keyword.
     Overflow(OverflowMode, SyntaxToken, &'a [StatementNode<'a>]),
-    /// `@workgroup(N) let name: T;` — GPU workgroup-shared array of `N` elements of `T`.
-    /// No initializer; storage is zero-initialized by WGSL.
-    WorkgroupDecl(SyntaxToken, Type, u32),
 }

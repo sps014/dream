@@ -43,13 +43,13 @@ Unpack with `switch` when both arms matter.
 | `map(f)` / `map_err(f)` | transform success or error |
 | `and_then(f)` | chain another `Result` |
 
-File, HTTP, GPU, and parse APIs return `Result`. In an `async` function (or any function that itself returns `Result`), `?` forwards `Err` to the caller.
+File and parse APIs return `Result`. In an `async` function (or any function that itself returns `Result`), `?` forwards `Err` to the caller.
 
 ## `?` — try-propagation
 
 `expr?` unwraps `Ok` or returns `Err` from the current function. The function’s return type must be a `Result`.
 
-`Option` and `Result` do not mix: `?` on an `Option` needs the enclosing function to return a matching `Option`. `?` on a `Result` rebuilds `Err` at the function’s `Result` type: `E` may widen when the operand’s error implements the function’s error interface (`GpuError` → `Error`), but there is no general conversion between unrelated error types. Bridge those explicitly:
+`Option` and `Result` do not mix: `?` on an `Option` needs the enclosing function to return a matching `Option`. `?` on a `Result` rebuilds `Err` at the function’s `Result` type: `E` may widen when the operand’s error implements the function’s error interface (`IoError` → `Error`), but there is no general conversion between unrelated error types. Bridge those explicitly:
 
 ```dream
 let first = first_line(text).ok_or(ParseError.invalid("empty input"))?;   // Option → Result

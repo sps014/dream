@@ -47,7 +47,7 @@ pub struct ProgramAccumulator<'a> {
     /// pass, after every file (and its `module` declaration) is loaded, since the referenced module
     /// may be declared by a file loaded later in the recursive walk.
     pub aliased_imports: Vec<(String, String, SyntaxToken, String)>,
-    /// Dotted stdlib package names requested via plain `import system.net;` (etc.). Fed to
+    /// Dotted stdlib package names requested via plain `import system.io;` (etc.). Fed to
     /// selective prelude merge together with bootstrap packages.
     pub requested_std_packages: IndexSet<String>,
     /// Absolute paths of files that contain at least one `@generator` function.

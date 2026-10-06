@@ -4,8 +4,8 @@ Dream programs can run on your computer, in a browser, or in Node. Choose an env
 
 | Environment | Good for | Important limits |
 | --- | --- | --- |
-| Desktop (`native`) | Command-line tools, local files, windows, system services | The receiving machine needs compatible system libraries |
-| Browser (`web`) | Programs inside a web page | Browser permissions apply; ordinary desktop processes and raw TCP sockets are unavailable |
+| Desktop (`native`) | Command-line tools, local files, system services | The receiving machine needs compatible system libraries |
+| Browser (`web`) | Programs inside a web page | Browser permissions apply; ordinary native processes are unavailable |
 | Node (`node`) | Programs launched through Node | Requires Node and the generated launcher; check each API's availability |
 
 ## Start on your computer
@@ -28,6 +28,6 @@ Use `--runtime node` and `--target node` for Node. A project declaring several e
 
 ## Check a feature before using it
 
-Read the availability notes in the feature guide. Running in a browser does not grant access to the user's disk or let you launch desktop programs. GPU features also depend on the device and environment.
+Read the availability notes in the feature guide. Running in a browser does not grant access to the user's disk or let you launch desktop programs.
 
 See [Build and run](../reference/tooling/build-run.md) for environment selection and [Packaging](../reference/tooling/pack/index.md) for sharing the result.

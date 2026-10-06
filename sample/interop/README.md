@@ -30,7 +30,7 @@ cargo run -- --runtime --node sample/interop/js.dream   # Node ≥ 18
 Or build them all at once:
 
 ```sh
-for f in async_fetch async_js callback_multi callbacks http interop js regex slots structs; do
+for f in async_fetch async_js callback_multi callbacks interop js regex slots structs; do
   cargo run -- --wasm "sample/interop/$f.dream"
 done
 ```
@@ -74,8 +74,3 @@ Serving `sample/interop/` directly would put `../../runtime/dream.js` above the 
 page would 404 on the runtime.
 
 ## HTTP / CORS note
-
-`http.dream` and `async_fetch.dream` use the platform `fetch`. In Node there is no CORS restriction,
-but in the browser the target endpoint must exist **and** return permissive CORS headers. The
-`https://example.com` URLs in `http.dream` are placeholders — repoint them at a CORS-enabled backend
-before expecting the browser demo to succeed.

@@ -1,24 +1,6 @@
-/// JSON strings and Dream literals have different escape vocabularies: Dream does not
-/// interpret JSON's Unicode, backspace or form-feed escapes.
+/// JSON output uses the JSON escape vocabulary, including Unicode and control characters.
 pub(super) fn json_string(value: &str) -> String {
     serde_json::Value::String(value.to_owned()).to_string()
-}
-
-pub(super) fn dream_string(value: &str) -> String {
-    let mut out = String::from("\"");
-    for c in value.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\0' => out.push_str("\\0"),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
 }
 
 #[cfg(test)]

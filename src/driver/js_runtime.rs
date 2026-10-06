@@ -164,12 +164,6 @@ pub(crate) fn assemble_selective_runtime(
             chunks.insert(c);
         }
     }
-    // GPU resources are `js` handles; the module emits `js_retain`/`js_release` even when no
-    // other `js*` bridge survives import pruning.
-    if chunks.contains("gpu") {
-        chunks.insert("js");
-    }
-
     let src = runtime_src_dir();
     let mut out = format!(
         "// Dream JS interop runtime (selective — generated per compile for {}).\n\
@@ -318,9 +312,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn minimal_print_runtime_omits_gpu_and_fs() {
+    fn minimal_print_runtime_omits_optional_hosts() {
         let text = assemble_selective_runtime(&[], JsRuntimeTarget::Web).expect("assemble");
-        assert!(!text.contains("makeGpuHost(getInstance)"));
         assert!(!text.contains("makeFsHost(getInstance)"));
         assert!(!text.contains("makeCryptoHost(getInstance)"));
         assert!(text.contains("function load("));
@@ -332,15 +325,6 @@ mod tests {
     fn node_target_pins_is_node() {
         let text = assemble_selective_runtime(&[], JsRuntimeTarget::Node).expect("assemble");
         assert!(text.contains("const isNode = true;"));
-    }
-
-    #[test]
-    fn gpu_field_pulls_gpu_chunk() {
-        let live = vec![("Dream".into(), "gpuDispatch".into())];
-        let text = assemble_selective_runtime(&live, JsRuntimeTarget::Web).expect("assemble");
-        assert!(text.contains("makeGpuHost(getInstance)"));
-        assert!(text.contains("makeJsHost(getInstance)"));
-        assert!(!text.contains("makeFsHost(getInstance)"));
     }
 
     #[test]
@@ -368,7 +352,6 @@ mod tests {
         assert_eq!(chunk_for_field(&manifest, "dirList"), Some("fs"));
         assert_eq!(chunk_for_field(&manifest, "delayMs"), Some("datetime_text"));
         assert_eq!(chunk_for_field(&manifest, "delay"), None);
-        assert_eq!(chunk_for_field(&manifest, "__attachGpuAbi"), Some("gpu"));
         assert_eq!(chunk_for_field(&manifest, "print_int"), None);
     }
 }

@@ -27,7 +27,6 @@ Needless `defer` is extra bookkeeping.
 
 Braces are required.
 `await` is not allowed inside `defer`.
-GPU shaders do not support it.
 
 ```dream
 class Tracked {

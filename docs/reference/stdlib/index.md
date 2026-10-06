@@ -33,8 +33,6 @@ Dream includes a library for everyday tasks. Import the packages you need; some 
 | [Logging](logging.md) | `import system.logging;` |
 | [Testing](testing.md) | `import system.testing;` |
 | [Process](process.md) | `import system.process;` |
-| [WebView](webview.md) | `import system.webview;` |
-| [Desktop](desktop.md) (dialogs, clipboard, open URLs) | `import system.desktop;` |
 | [Crypto](crypto.md) | `import system.crypto;` |
 
 ## I/O
@@ -42,13 +40,6 @@ Dream includes a library for everyday tasks. Import the packages you need; some 
 | Page | Import |
 | --- | --- |
 | [Files](file.md) | `import system.io;` |
-| [HTTP](http.md) | `import system.net;` |
-| [Web API](webapi.md) | `import system.webapi;` |
-| [Raw sockets](net.md) | `import system.net;` |
-
-## GPU
-
-[system.gpu](gpu.md) — `import system.gpu;` (also see [compute shaders](../language/compute.md) and [vertex & fragment](../language/shaders.md))
 
 ## Metaprogramming
 

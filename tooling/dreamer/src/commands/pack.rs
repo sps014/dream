@@ -1,8 +1,6 @@
-//! `dreamer pack`: compile a bin package and copy the native `.bin`, plus the OS bundle around it
-//! and selected host libraries (a macOS `.app`, a Linux `.desktop` entry). The Windows `.exe` carries its icon already.
+//! `dreamer pack` produces a relocatable CLI executable and its selected host libraries.
 
 pub mod bundle;
-pub mod desktop;
 pub mod mobile;
 mod runtime;
 
@@ -43,7 +41,6 @@ pub fn run(
     let triples = resolve_pack_targets(target_args)?;
     flags.relocatable = true;
     let pkg_name = pkg.name.clone();
-    let icon = app_icon::resolve(&workspace)?;
     for (dream_triple, rust_triple) in &triples {
         let spec = dream_abi::target::TargetSpec::parse(rust_triple).map_err(anyhow::Error::msg)?;
         let entry = workspace.compile_root_path()?;
@@ -88,24 +85,6 @@ pub fn run(
         std::fs::copy(&bin_path, &dest)
             .with_context(|| format!("copy {} → {}", bin_path.display(), dest.display()))?;
         app_icon::make_executable(&dest)?;
-        if dream_triple.starts_with("macos-") {
-            let app = desktop::write_macos_app(
-                &writer,
-                &pkg_name,
-                &pkg.version,
-                &bin_path,
-                icon.as_deref(),
-            )?;
-            runtime::copy(&bin_path, &app.join("Contents").join("Frameworks"), &spec)?;
-            products.push(app.file_name().context("app name")?.into());
-        } else if dream_triple.starts_with("linux-") {
-            let entry =
-                desktop::write_linux_desktop(&writer, &pkg_name, &out_name, icon.as_deref())?;
-            products.push(entry.file_name().context("desktop name")?.into());
-            if icon.is_some() {
-                products.push(format!("{pkg_name}.png").into());
-            }
-        }
         for product in writer.publish_native(&products, &spec)? {
             println!("packed {}", product.display());
         }

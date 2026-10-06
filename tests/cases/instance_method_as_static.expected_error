@@ -1,1 +1,1 @@
-'dispatch' is an instance method of 'ComputePass'; call it on a 'ComputePass' value, not on the type name
+'clear' is an instance method of 'Counter'; call it on a 'Counter' value, not on the type name

@@ -17,8 +17,6 @@ mod binding;
 mod c_abi;
 mod codegen;
 mod cpp;
-mod gpu;
-mod http;
 mod ownership;
 mod serialization;
 mod spec;
@@ -31,7 +29,6 @@ pub use binding::*;
 pub use c_abi::*;
 pub use codegen::*;
 pub use cpp::*;
-pub use gpu::*;
 pub use ownership::*;
 pub use spec::*;
 pub use testing::*;
@@ -46,10 +43,8 @@ const FAMILIES: &[&[AttributeSpec]] = &[
     serialization::SPECS,
     binding::SPECS,
     testing::SPECS,
-    gpu::SPECS,
     c_abi::SPECS,
     cpp::SPECS,
-    http::SPECS,
 ];
 
 /// Every attribute the compiler recognizes, in registry order.

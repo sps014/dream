@@ -77,7 +77,7 @@ export function wrapImport(getInstance, fn, signature) {
   const params = signature ? signature.params : null;
   const result = signature ? signature.result : null;
   // `(start $__runtime_init)` runs during `WebAssembly.instantiate`, before `DreamInstance` exists.
-  // Pure numeric externs (e.g. `gpuBufferAllocBytes`) must not call `getInstance()` or module-level
+  // Pure numeric externs (e.g. `timeNow`) must not call `getInstance()` or module-level
   // constructors that touch the host die with "instance not ready".
   const needsInst = signatureNeedsInstance(params, result);
 

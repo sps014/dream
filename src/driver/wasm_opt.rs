@@ -1,9 +1,8 @@
-//! `.wasm` post-processing via Binaryen's `wasm-opt` (the `wasm-opt` crate), driven by `--release`
+//! `.wasm` post-processing via Binaryen's `wasm-opt` toolchain executable, driven by `--release`
 //! (default level [`OptLevel::RELEASE_DEFAULT`]) and/or an explicit `-O`/`--optimize` level. This
 //! runs *after* the MIR pass pipeline already applied — an independent, coarser-grained
 //! shrink/speed pass over the linked binary, not a replacement for the MIR passes.
 
-use std::path::Path;
 use std::str::FromStr;
 
 /// Optimization preset requested via `-O`/`--optimize=<LEVEL>`, mirroring `wasm-opt`'s own CLI
@@ -100,76 +99,6 @@ impl FromStr for OptLevel {
             )),
         }
     }
-}
-
-/// Runs Binaryen's `wasm-opt` over the `.wasm` file at `path` in place, at the given [`OptLevel`].
-#[cfg(feature = "wasm-opt")]
-pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
-    use wasm_opt::{Feature, FeatureBaseline, OptimizationOptions, Pass};
-
-    let mut options = match level {
-        OptLevel::O0 => OptimizationOptions::new_opt_level_0(),
-        OptLevel::O1 => OptimizationOptions::new_opt_level_1(),
-        OptLevel::O2 => OptimizationOptions::new_opt_level_2(),
-        OptLevel::O3 => OptimizationOptions::new_opt_level_3(),
-        OptLevel::O4 => OptimizationOptions::new_opt_level_4(),
-        OptLevel::Size => OptimizationOptions::new_optimize_for_size(),
-        OptLevel::SizeAggressive => OptimizationOptions::new_optimize_for_size_aggressively(),
-    };
-
-    // Dream does not emit DWARF; the WAT assembler still produces a name custom section from `$id`
-    // identifiers. Size builds drop that (and producers) so downloadable modules stay compact.
-    options.debug_info(false);
-    if matches!(level, OptLevel::Size | OptLevel::SizeAggressive) {
-        options.add_pass(Pass::StripDebug);
-        options.add_pass(Pass::StripProducers);
-    }
-    // Converge at every release level: rerun the pass pipeline until fixpoint. Extra compile
-    // time, smaller/faster code — worth it unconditionally now that wasm is a primary target.
-    options.set_converge();
-
-    // Codegen unconditionally emits bulk-memory ops (`memory.fill`/`memory.copy`, see
-    // `src/mir/emit/emitter/`) and other post-MVP instructions, so `wasm-opt`'s narrow default
-    // feature baseline (sign-extension + mutable-globals only) mis-validates them as errors.
-    // `FeatureBaseline::All` looked like the obvious fix, but it over-shoots: it also licenses
-    // Binaryen to *emit* far newer proposals (e.g. typed function references) that browsers
-    // and the WAT emitter's feature set do not use. Instead, start from the MVP baseline and
-    // enable precisely the proposals Dream's WAT module needs (WASM 2.0 plus
-    // multi-memory/relaxed-simd/tail-call/extended-const/threads).
-    // `Feature::Memory64` is omitted: Dream emits i32 memories.
-    options.features.baseline = FeatureBaseline::MvpOnly;
-    options.features.enabled.extend([
-        Feature::MutableGlobals,
-        Feature::SignExt,
-        Feature::TruncSat,
-        Feature::BulkMemory,
-        Feature::ReferenceTypes,
-        Feature::Multivalue,
-        Feature::Simd,
-        Feature::MultiMemory,
-        Feature::RelaxedSimd,
-        Feature::TailCall,
-        Feature::ExtendedConst,
-        // Threads proposal: modules with `Task` emit shared memory + atomics; others emit
-        // a private memory. Binaryen still needs the feature enabled to parse either form.
-        Feature::Atomics,
-        Feature::ExceptionHandling,
-    ]);
-
-    options
-        .run(path, path)
-        .map_err(|e| format!("wasm-opt failed: {}", e))
-}
-
-/// Stub used when the compiler was built without the `wasm-opt` feature, so `-O`/`--optimize` still
-/// fails with a clear, actionable message instead of silently doing nothing or not compiling.
-#[cfg(not(feature = "wasm-opt"))]
-pub fn optimize_wasm_file(_path: &Path, _level: OptLevel) -> Result<(), String> {
-    Err(
-        "this build of the compiler was built without the `wasm-opt` feature; rebuild with \
-         `--features wasm-opt` (enabled by default) to use --release / -O/--optimize"
-            .to_string(),
-    )
 }
 
 #[cfg(test)]

@@ -24,7 +24,12 @@ $UserDir = Join-Path $HOME ".dream"
 $BinDir = Join-Path $UserDir "bin"
 $EnvFile = Join-Path $UserDir "toolchain.env"
 $Names = @("dream.exe", "dreamer.exe", "dream-lsp.exe")
-$Libs = @("dream.dll", "dream.dll.lib", "dream.lib", "libdream.dll.a")
+$Capabilities = @("core", "unicode", "crypto", "process", "timezone")
+$Libs = @($Capabilities | ForEach-Object {
+    "dream_host_$_.dll"
+    "dream_host_$_.dll.lib"
+    "libdream_host_$_.dll.a"
+})
 
 function Set-UserEnv([string]$Name, [string]$Value) {
     [Environment]::SetEnvironmentVariable($Name, $Value, "User")
@@ -66,8 +71,10 @@ $BuildProfile = if ($DebugBuild) { "debug" } else { "release" }
 $DreamHome = Join-Path $Root "target\$BuildProfile"
 
 if (-not $SkipBuild) {
-    Write-Host "Building $BuildProfile toolchain (dream, dream-lsp, dreamer)..."
-    $cargoArgs = @("build", "-p", "dream", "-p", "dream-lsp", "-p", "dreamer")
+    Write-Host "Building $BuildProfile toolchain and core host capabilities..."
+    $packages = @("dream", "dream-host", "dream-lsp", "dreamer") + @($Capabilities | ForEach-Object { "dream-host-$_" })
+    $cargoArgs = @("build")
+    foreach ($package in $packages) { $cargoArgs += @("-p", $package) }
     if ($BuildProfile -eq "release") { $cargoArgs += "--release" }
     Push-Location $Root
     try {
@@ -78,7 +85,7 @@ if (-not $SkipBuild) {
     }
 }
 
-foreach ($n in $Names) {
+foreach ($n in $Names + @($Capabilities | ForEach-Object { "dream_host_$_.dll" })) {
     if (-not (Test-Path (Join-Path $DreamHome $n))) {
         throw "missing $(Join-Path $DreamHome $n); build failed or omit -SkipBuild"
     }
@@ -108,12 +115,12 @@ if ($copied) {
 }
 
 $rtSrc = Join-Path $Root "crates\dream-mir\src\runtime\c"
-if (Test-Path (Join-Path $rtSrc "native\include\dream_rt_native.h")) {
+if (Test-Path (Join-Path $rtSrc "core\include\dream_core.h")) {
     $rtDst = Join-Path $UserDir "lib\runtime\c"
     New-Item -ItemType Directory -Force -Path (Split-Path $rtDst) | Out-Null
     if (Test-Path $rtDst) { Remove-Item -Recurse -Force $rtDst }
     Copy-Item -Recurse $rtSrc $rtDst
-    Write-Host "Copied native runtime C -> $rtDst"
+    Write-Host "Copied runtime C -> $rtDst"
 }
 
 Set-UserEnv "DREAM_HOME" $DreamHome
@@ -186,3 +193,5 @@ if ($env:DREAM_SKIP_LLVM -eq "1") {
         Write-Warning "could not fetch LLVM ($_); later run: scripts\fetch-dev-llvm.ps1"
     }
 }
+
+Write-Host "Optimized WASM builds install pinned Binaryen through Dreamer on first use. For offline setup: dreamer toolchain install binaryen"

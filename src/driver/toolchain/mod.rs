@@ -16,6 +16,7 @@ pub struct ToolchainConfig {
     pub home: Option<PathBuf>,
     pub bin: Option<PathBuf>,
     pub llvm: Option<PathBuf>,
+    pub wasm_opt: Option<PathBuf>,
     pub toolchains: Vec<PathBuf>,
     pub prefix: PathBuf,
     pub user_home: Option<PathBuf>,
@@ -39,6 +40,8 @@ pub struct ToolchainConfig {
     pub windir: Option<PathBuf>,
     #[cfg(feature = "native")]
     pub(crate) resolved_llvm: OnceLock<Result<PathBuf, String>>,
+    #[cfg(feature = "native")]
+    pub(crate) resolved_wasm_opt: OnceLock<Result<PathBuf, String>>,
     #[cfg(feature = "native")]
     pub(crate) resolved_cc: OnceLock<Result<crate::execution::native::cc::Cc, String>>,
 }

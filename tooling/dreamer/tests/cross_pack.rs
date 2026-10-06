@@ -103,7 +103,4 @@ fn packages_foreign_elf_and_its_target_libraries() {
         std::fs::read(bundle.join("libdream_host_core.so")).unwrap(),
         std::fs::read(library).unwrap()
     );
-    assert!(std::fs::read_to_string(bundle.join("foreign.desktop"))
-        .unwrap()
-        .contains(&format!("foreign-{target}")));
 }

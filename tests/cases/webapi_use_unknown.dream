@@ -1,9 +1,0 @@
-import system.webapi;
-
-@use(missing_mw)
-@get("/x")
-fun x(): string {
-    return "x";
-}
-
-fun main() {}

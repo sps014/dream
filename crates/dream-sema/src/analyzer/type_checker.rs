@@ -4,7 +4,6 @@ use crate::function_control_flow::FunctionControlGraph;
 use crate::symbol_table::SymbolTable;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{FunctionNode, StatementNode, Type};
-use dream_syntax::token::token_kind::TokenKind;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -23,28 +22,23 @@ impl<'a> Analyzer<'a> {
         let errors_before = diagnostics.errors().count();
         self.hir_begin_function(function);
         let is_unsafe = function.attributes.iter().any(|a| a.name.text == "unsafe");
-        let is_compute = dream_abi::attributes::has_compute_attr(&function.attributes);
-        let is_gpu = dream_abi::attributes::is_gpu_shader_attr(&function.attributes)
-            || dream_abi::attributes::has_gpu_helper_attr(&function.attributes);
         let runtime_support =
             dream_abi::attributes::RuntimeSupport::from_attributes(&function.attributes);
         let saved_overflow = std::mem::replace(&mut self.overflow, dream_hir::Overflow::Wrapping);
         let body = self.with_runtime_flag(runtime_support, |s| {
             s.with_unsafe_flag(is_unsafe, |s| {
-                s.with_gpu_flags(is_compute, is_gpu, |s| {
-                    s.with_async_flag(function.is_async, |s| {
-                        s.analyze_body(
-                            function.body,
-                            function,
-                            Some(&param_table),
-                            false,
-                            diagnostics,
-                        )?;
-                        // Enforce the v1 `await` placement rules (only in async functions, only at statement
-                        // position) and that non-async functions contain no `await` at all.
-                        s.check_await_positions(function, diagnostics);
-                        Ok(())
-                    })
+                s.with_async_flag(function.is_async, |s| {
+                    s.analyze_body(
+                        function.body,
+                        function,
+                        Some(&param_table),
+                        false,
+                        diagnostics,
+                    )?;
+                    // Enforce the v1 `await` placement rules (only in async functions, only at statement
+                    // position) and that non-async functions contain no `await` at all.
+                    s.check_await_positions(function, diagnostics);
+                    Ok(())
                 })
             })
         });
@@ -92,41 +86,6 @@ impl<'a> Analyzer<'a> {
             for (cap_name, cap_ty) in captures.clone() {
                 let _ = param_table.add_symbol(cap_name, cap_ty);
             }
-        }
-        // Compute kernels get WGSL builtins as ordinary locals (`global_id.x`, …). `GpuId3` is
-        // defined in `system.gpu` (auto-loaded whenever any GPU shader attr is present).
-        if dream_abi::attributes::has_compute_attr(&function.attributes) {
-            let id3 = Type::Struct(
-                super::synthetic_token(TokenKind::IdentifierToken, "GpuId3"),
-                None,
-            );
-            for name in ["global_id", "local_id", "workgroup_id", "num_workgroups"] {
-                let _ = param_table.add_symbol(name.to_string(), id3.clone());
-            }
-            // The flattened counterpart of `local_id`, and the natural index into workgroup
-            // memory, so it is a scalar rather than a `GpuId3`.
-            let _ = param_table.add_symbol(
-                "local_invocation_index".to_string(),
-                Type::Integer(super::synthetic_token(TokenKind::DataTypeToken, "int")),
-            );
-        }
-        if dream_abi::attributes::has_vertex_attr(&function.attributes) {
-            let i32ty = Type::Integer(super::synthetic_token(TokenKind::DataTypeToken, "int"));
-            let _ = param_table.add_symbol("vertex_index".to_string(), i32ty.clone());
-            let _ = param_table.add_symbol("instance_index".to_string(), i32ty);
-        }
-        if dream_abi::attributes::has_fragment_attr(&function.attributes) {
-            let v4 = Type::Struct(
-                super::synthetic_token(TokenKind::IdentifierToken, "GpuVec4"),
-                None,
-            );
-            let i32ty = Type::Integer(super::synthetic_token(TokenKind::DataTypeToken, "int"));
-            let boolty = Type::Boolean(super::synthetic_token(TokenKind::DataTypeToken, "bool"));
-            let _ = param_table.add_symbol("frag_coord".to_string(), v4);
-            let _ = param_table.add_symbol("front_facing".to_string(), boolty);
-            let _ = param_table.add_symbol("sample_index".to_string(), i32ty.clone());
-            let _ = param_table.add_symbol("primitive_index".to_string(), i32ty.clone());
-            let _ = param_table.add_symbol("sample_mask".to_string(), i32ty);
         }
         Ok(param_table)
     }
@@ -182,23 +141,6 @@ impl<'a> Analyzer<'a> {
         match statement {
             StatementNode::Declaration(left, type_annotation, right, is_const) => self
                 .analyze_declaration(left, type_annotation, right, *is_const, &ctx, diagnostics)?,
-            StatementNode::WorkgroupDecl(name, ty, _size) => {
-                if !self.current_function_is_compute {
-                    diagnostics.report_error(
-                        "'@workgroup' declarations are only allowed inside '@compute' kernels"
-                            .to_string(),
-                        Some(name.position),
-                    );
-                } else {
-                    let arr_ty = Type::Array(Box::new(ty.clone()));
-                    if let Err(e) = symbol_table
-                        .borrow_mut()
-                        .add_symbol(name.text.clone(), arr_ty)
-                    {
-                        diagnostics.report_error(e.to_string(), Some(name.position));
-                    }
-                }
-            }
             StatementNode::TupleDeclaration {
                 pattern,
                 ty,

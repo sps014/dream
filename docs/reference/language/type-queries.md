@@ -59,13 +59,3 @@ coarse name for them when the static type was erased: an array reports `"array"`
 function value reports `"function"`, and a `Future<T>` reports `"future"`. A statically typed
 operand of those shapes still reports precisely (`typeof(nums)` on an `int[]` is `"int[]"`). A null
 reference reports `"null"`.
-
-### GPU shaders (`@compute` / `@vertex` / `@fragment` / `@gpu`)
-
-These forms work differently inside shader bodies:
-
-| Form | In shaders |
-|------|------------|
-| `sizeof(T)` | Becomes a number (same sizes as host `sizeof` for scalars and `GpuVec*` / `GpuMat*` / `GpuId3`). Useful for strides and byte offsets inside a kernel. |
-| `nameof(...)` | **Compile error.** It produces a `string`, and strings are forbidden in GPU code — keep `nameof` on the CPU (or hard-code a constant in the shader if you only need a fixed name). |
-| `typeof(...)` | **Compile error**, for the same reason as `nameof` — keep it on the CPU host. |

@@ -1,4 +1,5 @@
 use dream::driver::compiler::{Compiler, LlvmRuntimeRequest, LlvmToolchain, RuntimeSignatures};
+use dream::driver::wasm_opt::OptLevel;
 use dream_abi::target::TargetSpec;
 use dream_mir::backend::Target;
 use std::path::Path;
@@ -8,6 +9,10 @@ use std::sync::{Arc, Mutex};
 struct CaptureTarget(Mutex<Option<TargetSpec>>);
 
 impl LlvmToolchain for CaptureTarget {
+    fn optimize_wasm(&self, _: &Path, _: OptLevel) -> Result<(), String> {
+        unreachable!()
+    }
+
     fn runtime_sigs(&self, req: &LlvmRuntimeRequest) -> Result<RuntimeSignatures, String> {
         *self.0.lock().unwrap() = Some(req.target.spec().clone());
         Err("target captured before loading runtime".into())
@@ -71,6 +76,10 @@ fn pointer_integer_literal_ranges_follow_the_selected_target() {
 }
 
 impl LlvmToolchain for StaleRuntime {
+    fn optimize_wasm(&self, _: &Path, _: OptLevel) -> Result<(), String> {
+        unreachable!()
+    }
+
     fn runtime_sigs(&self, req: &LlvmRuntimeRequest) -> Result<RuntimeSignatures, String> {
         let data_layout = if req.target.spec().ptr_size == 4 {
             "e-p:32:32"

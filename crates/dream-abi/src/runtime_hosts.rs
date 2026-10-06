@@ -1,7 +1,5 @@
 //! `@runtime("…")` host field names shared by stdlib, native libdream, and JS `Dream.*`.
 
-pub const GPU_TRY_INIT: &str = "gpuTryInit";
-
 pub const WORKER_SPAWN: &str = "workerSpawn";
 pub const WORKER_POST: &str = "workerPost";
 pub const WORKER_RECV: &str = "workerRecv";

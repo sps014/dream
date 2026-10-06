@@ -167,8 +167,6 @@ pub(super) fn collect_collections_from_stmts(
                 collect_collections_from_expr(arg, jsonable, out, locals);
             }
         }
-        StatementNode::Break(_)
-        | StatementNode::Continue(_)
-        | StatementNode::WorkgroupDecl(_, _, _) => {}
+        StatementNode::Break(_) | StatementNode::Continue(_) => {}
     }
 }

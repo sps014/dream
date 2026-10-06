@@ -11,7 +11,6 @@ mod rewrite;
 mod semantic;
 mod syntax;
 mod syntax_gen;
-mod webapi_gen;
 
 pub use context::GeneratorContext;
 pub use manifest::{default_compile_entry, find_project_root, find_project_root_from};
@@ -55,7 +54,6 @@ fn run_generators_inner<'a>(
     json_gen::expand_from_acc(&mut ctx, acc, &acc.all_structs, &acc.all_enums, diagnostics);
     ctx.apply_emits(arena, acc, diagnostics)?;
 
-    webapi_gen::expand_from_acc(&mut ctx, acc, diagnostics);
     ctx.apply_emits(arena, acc, diagnostics)?;
 
     let handled = context_gen::expand_context_generators(&mut ctx, diagnostics);
@@ -267,10 +265,7 @@ fn report_unexpanded_syntax_blocks(acc: &ProgramAccumulator<'_>, diagnostics: &m
                 }
             }
             StatementNode::Labeled(_, inner) => walk_stmt(inner, diagnostics),
-            StatementNode::Return(None)
-            | StatementNode::Break(_)
-            | StatementNode::Continue(_)
-            | StatementNode::WorkgroupDecl(_, _, _) => {}
+            StatementNode::Return(None) | StatementNode::Break(_) | StatementNode::Continue(_) => {}
         }
     }
 

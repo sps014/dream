@@ -44,14 +44,14 @@ version suffix is accepted without weakening architecture, OS, environment, widt
 checks. A mismatch, malformed table, or missing runtime symbol reports `CompileError::Toolchain`
 with the exact `dream_rt.sigs` cache path, so stale artifacts are actionable rather than ICEs.
 
-Native Rust hosts live in `crates/dream-host-{core,net,gpu,webview,unicode,crypto,process,timezone}`, not in the compiler.
+Native Rust hosts live in `crates/dream-host-{core,unicode,crypto,process,timezone}`, not in the compiler.
 The root `dream` library is an rlib only and has no GUI/network host dependencies.
-`cargo build --workspace` builds the compiler and all eight native capability libraries:
-`dream_host_core`, `dream_host_net`, `dream_host_gpu`, `dream_host_webview`,
+`cargo build --workspace` builds the compiler and all five native capability libraries:
+`dream_host_core`,
 `dream_host_unicode`, `dream_host_crypto`, `dream_host_process`, and `dream_host_timezone` (with the
 platform's shared-library prefix/suffix). `dream-host` is a distribution feature set, not
 another host implementation: its independent capability features
-select these packages. Core-only builds do not compile networking or GUI dependencies.
+select these packages. The workspace contains only retained core services.
 For direct package builds, name the required capability packages as primary targets to put
 their artifacts next to the compiler; dependency-only artifacts live in Cargo's `deps/`.
 Guest callback binding and icon storage belong exclusively to the core library. Shared
@@ -132,7 +132,7 @@ cache fingerprints include the ABI emitter and capability schema/registry.
 Native `--relocatable` builds stage the selected host libraries next to the executable and include
 this link policy in the freshness stamp. Linux uses `$ORIGIN`; macOS libraries carry their
 `@rpath/libdream_host_*.dylib` install identities from build time and executables use relative
-search paths for adjacent libraries and `.app/Contents/Frameworks`. Bundled Unix libraries
+search paths for adjacent libraries. Bundled Unix libraries
 are direct linker inputs rather than `-L` search directories, since Zig adds native search
 directories to rpaths. Linux libraries carry filename-only SONAMEs; each non-core library finds
 core through `$ORIGIN` (macOS: `@loader_path`). Windows ships the selected `dream_host_*.dll` files

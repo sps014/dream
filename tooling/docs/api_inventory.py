@@ -110,8 +110,8 @@ def declarations(source):
 
 
 def inventory():
-    registry = (ROOT / "crates/dream-stdlib/src/lib.rs").read_text(encoding="utf-8")
-    sources = sorted(set(re.findall(r'include_str!\("(system/[^\"]+\.dream)"\)', registry)))
+    registry = "\n".join(path.read_text(encoding="utf-8") for path in sorted((ROOT / "crates/dream-stdlib/src/registry").glob("*.rs")))
+    sources = sorted(set(re.findall(r'include_str!\("(?:\.\./)?(system/[^\"]+\.dream)"\)', registry)))
     result = []
     for relative in sources:
         path = ROOT / "crates/dream-stdlib/src" / relative

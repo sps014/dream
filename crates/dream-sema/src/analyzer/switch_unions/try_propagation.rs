@@ -75,7 +75,7 @@ impl<'a> Analyzer<'a> {
 
         // Operand `E` must be assignable to the function's `E`. `?` rebuilds `Err` at the
         // function's Result type, so a class that implements the function's error interface
-        // (e.g. `GpuError` → `Error`) is allowed; there is still no general `From`.
+        // (e.g. `IoError` → `Error`) is allowed; there is still no general `From`.
         if op_base == "Result" {
             self.compare_data_type(
                 &ret_args[1],

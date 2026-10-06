@@ -87,8 +87,6 @@ fn minimal_pack_runs_without_hosts_and_replaces_capability_heavy_pack() {
         pack();
         for capability in HostCapability::ALL {
             assert!(!package.join(capability.library_name(&spec)).exists());
-            #[cfg(target_os = "macos")]
-            assert!(!package.join("hello.app/Contents/Frameworks").join(capability.library_name(&spec)).exists());
         }
         assert_no_host_imports(&executable);
         let mut run = Command::new(&executable);

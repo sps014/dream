@@ -1,6 +1,6 @@
 # Cookbook
 
-Choose a small working example, run it, and change one part to see what happens. Start with console programs before trying examples that need a GPU, window, or server.
+Choose a small working example, run it, and change one part to see what happens. Start with console programs and the core standard library.
 
 <div class="dream-compact-cards" markdown>
 
@@ -30,21 +30,7 @@ Choose a small working example, run it, and change one part to see what happens.
 
     [:octicons-arrow-right-24: Recipe](sum-a-list.md)
 
--   :material-expansion-card: **GPU SAXPY**
 
-    ---
-
-    A `@compute` kernel, dispatch, readback.
-
-    [:octicons-arrow-right-24: Recipe](gpu-saxpy.md)
-
--   :material-triangle: **GPU triangle**
-
-    ---
-
-    `@vertex` / `@fragment` colored triangle.
-
-    [:octicons-arrow-right-24: Recipe](gpu-triangle.md)
 
 -   :material-auto-fix: **Quote generator**
 
@@ -54,13 +40,6 @@ Choose a small working example, run it, and change one part to see what happens.
 
     [:octicons-arrow-right-24: Recipe](quote-generator.md)
 
--   :material-api: **JSON HTTP API**
-
-    ---
-
-    Native `WebApp` with `/docs` (Swagger).
-
-    [:octicons-arrow-right-24: Recipe](webapi.md)
 
 </div>
 

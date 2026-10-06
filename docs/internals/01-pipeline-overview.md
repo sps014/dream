@@ -27,17 +27,15 @@ flowchart TD
     link --> nat["host cc link → native .bin"]
     link --> wasm["wasm-ld (wasi-sdk) → .wasm"]
     wasm --> wat["pretty-print .wat (wasmprinter)"]
-    wasm --> abi["driver::abi sidecar\n.abi.json / .wgsl"]
+    wasm --> abi["driver::abi sidecar\n.abi.json"]
 ```
 
-Generate phase: `run_generators` runs after parse (before analysis). `@compute` WGSL validation runs after analysis (before MIR). Both report `CompileError::Generator` when diagnostics are present.
+Generate phase: `run_generators` runs after parse (before analysis). Generators report `CompileError::Generator` when diagnostics are present.
 
 Generator implementations live under `src/driver/generate/`. `json_gen/` separates collection
-discovery, declaration snapshots, harness execution/cache and diagnostics. `webapi_gen/` separates
-route collection, binding analysis, dispatcher emission and OpenAPI emission. `rewrite/` rebuilds
+discovery, declaration snapshots, harness execution/cache and diagnostics. `rewrite/` rebuilds
 expressions and statements through a shared context; generated-source parsing and source-span
-mapping are independent modules. `quote.rs` uses serde_json for JSON strings and Dream's own
-escape vocabulary for generated Dream literals.
+mapping are independent modules. `quote.rs` uses serde_json for JSON strings in generated metadata.
 
 The embedded stdlib's ordered package descriptors live under `crates/dream-stdlib/src/registry/`;
 `packages.rs` resolves package dependencies and `symbols.rs` supplies LSP symbol discovery.
@@ -122,14 +120,14 @@ bypass the cache because their inputs live outside the key. Analysis is whole-pr
 ```mermaid
 flowchart LR
     A[Lex/Parse] -->|lexical/syntactic| D[DiagnosticBag]
-    G[Generators / compute WGSL] -->|derive/DSL/kernel| D
+    G[Generators] -->|derive/DSL| D
     B[Analyze] -->|semantic| D
     D --> CE1[CompileError::Syntax / Generator / Semantic]
     IO[fs read/write] --> CE3[CompileError::Io]
 ```
 
 - User-facing problems are reported as **diagnostics** during lex/parse/generate/analyze and surface as `CompileError::Syntax`, `CompileError::Generator`, or `CompileError::Semantic` (`CompileError::Io` wraps source/artifact I/O). An incompatible or stale installed runtime is `CompileError::Toolchain`, not an ICE.
-- Generator-phase failures (`@json`, unexpanded syntax blocks, syntax-DSL harness errors, unsupported `@compute` statements) use **`CompileError::Generator`**.
+- Generator-phase failures (`@json`, unexpanded syntax blocks, syntax-DSL harness errors) use **`CompileError::Generator`**.
 - The backend has **no user-facing error path**: it expects a fully validated program. A promised invariant it finds violated is a compiler bug (ICE) and `panic!`s rather than returning a diagnostic.
 - The backend never runs on a program that produced any diagnostic error, so poison (`Error`-typed) values never reach lowering.
 

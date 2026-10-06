@@ -181,16 +181,16 @@ mod tests {
     #[test]
     fn failed_staging_preserves_existing_bundle_and_replacement_removes_stale_files() {
         let temp = tempfile::tempdir().unwrap();
-        let old = temp.path().join("demo.app");
+        let old = temp.path().join("demo-package");
         std::fs::create_dir(&old).unwrap();
         std::fs::write(old.join("stale"), b"old").unwrap();
         let writer = BundleWriter::new(temp.path()).unwrap();
-        writer.write("demo.app/current", b"new").unwrap();
+        writer.write("demo-package/current", b"new").unwrap();
         assert!(writer
-            .publish(&["demo.app".into(), "missing".into()])
+            .publish(&["demo-package".into(), "missing".into()])
             .is_err());
         assert_eq!(std::fs::read(old.join("stale")).unwrap(), b"old");
-        writer.publish(&["demo.app".into()]).unwrap();
+        writer.publish(&["demo-package".into()]).unwrap();
         assert!(!old.join("stale").exists());
         assert_eq!(std::fs::read(old.join("current")).unwrap(), b"new");
         for path in ["../escape", "/outside", "nested/../../escape", ""] {

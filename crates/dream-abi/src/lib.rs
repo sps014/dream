@@ -6,11 +6,10 @@
 pub mod attributes;
 pub mod c_abi;
 pub mod exports;
-pub mod gpu_format;
-pub mod gpu_swizzle;
 pub mod host_capability;
 pub mod intrinsics;
 pub mod js_abi;
 pub mod library;
 pub mod runtime_hosts;
 pub mod target;
+pub mod toolchain;

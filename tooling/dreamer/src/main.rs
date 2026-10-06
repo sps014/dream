@@ -51,7 +51,7 @@ impl OptFlags {
     version,
     about = "Package manager for the Dream language",
     after_help = "Examples:\n  dreamer init my-app --runtime web\n  dreamer add system.testing\n  dreamer run --release\n  dreamer test --filter math\n  dreamer toolchain install cc",
-    after_long_help = "Examples:\n  dreamer init my-app --runtime web     scaffold a new project\n  dreamer add system.testing            add a dependency from the registry\n  dreamer add ./local/pkg --path        add a path dependency\n  dreamer run --release                 install deps, build, and run\n  dreamer test --filter math            run @test suites under tests/\n  dreamer pack                          native executable + OS app bundle (default --release / -O3)\n  dreamer toolchain install cc          Zig linker for native builds when no system cc exists"
+    after_long_help = "Examples:\n  dreamer init my-app --runtime web     scaffold a new project\n  dreamer add system.testing            add a dependency from the registry\n  dreamer add ./local/pkg --path        add a path dependency\n  dreamer run --release                 install deps, build, and run\n  dreamer test --filter math            run @test suites under tests/\n  dreamer pack                          relocatable native executable (default --release / -O3)\n  dreamer toolchain install cc          Zig linker for native builds when no system cc exists"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -179,7 +179,7 @@ enum Cmd {
         #[arg(short = 'p', long = "package", value_name = "NAME")]
         package: Option<String>,
     },
-    /// Install or manage the optional Zig linker (`cc`) under ~/.dream/toolchains/.
+    /// Install or manage the optional Zig linker (`cc`) and Binaryen optimizer under ~/.dream/toolchains/.
     Toolchain {
         #[command(subcommand)]
         cmd: ToolchainCmd,
@@ -195,14 +195,14 @@ enum ToolchainCmd {
         #[arg(long)]
         json: bool,
     },
-    /// Download the pinned Zig for this OS/arch. `dream` does this itself when it finds no linker.
+    /// Download pinned build tools for this OS/arch. `dream` installs missing tools when needed.
     Install {
-        /// `cc` (Zig). Omit to install every component.
+        /// `cc` (Zig) or `binaryen` (WASM optimizer). Omit to install every component.
         component: Option<String>,
     },
     /// Show which toolchain components are installed.
     List,
-    /// Remove a component (`cc`).
+    /// Remove a component (`cc` or `binaryen`).
     Uninstall { component: String },
 }
 

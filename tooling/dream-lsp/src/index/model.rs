@@ -119,8 +119,8 @@ pub(crate) fn signature(func: &FunctionNode) -> String {
 }
 
 /// Renders a method/field-owner detail for the index, e.g.
-/// `static ComputePass.begin(): ComputePass`,
-/// `ComputePass.dispatch(kernel: string, …): void`, or
+/// `static JobGroup.begin(): JobGroup`,
+/// `JobGroup.dispatch(kernel: string, …): void`, or
 /// `async TaskPool.dispatch<TOut>(body: fun(): TOut): TOut`.
 pub(crate) fn method_detail(owner: &str, func: &FunctionNode) -> String {
     let params = param_list(func);
@@ -267,7 +267,7 @@ pub(crate) fn parse_angle_type_args(ty: &str) -> Vec<String> {
     split_comma_type_list(&ty[start + 1..end])
 }
 
-/// Substitutes named type parameters in a type / signature fragment (`E` → `GpuError`, `T[]` → `int[]`).
+/// Substitutes named type parameters in a type / signature fragment (`E` → `IoError`, `T[]` → `int[]`).
 pub(crate) fn substitute_named_type_params(ty: &str, params: &[String], args: &[String]) -> String {
     let mut out = ty.to_string();
     for (param, arg) in params.iter().zip(args.iter()) {

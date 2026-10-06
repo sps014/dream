@@ -9,7 +9,6 @@ use dream_syntax::nodes::Type;
 
 mod bodies;
 mod entry;
-mod shaders;
 mod visibility;
 impl<'a> Analyzer<'a> {
     /// Pass 1: register every (non-generic) function signature; stash generic templates.
@@ -65,23 +64,7 @@ impl<'a> Analyzer<'a> {
                         Some(function.name.position),
                     );
                 }
-                if dream_abi::attributes::is_gpu_shader_attr(&function.attributes)
-                    || dream_abi::attributes::has_gpu_helper_attr(&function.attributes)
-                {
-                    let kind = if dream_abi::attributes::has_compute_attr(&function.attributes) {
-                        "@compute"
-                    } else if dream_abi::attributes::has_vertex_attr(&function.attributes) {
-                        "@vertex"
-                    } else if dream_abi::attributes::has_fragment_attr(&function.attributes) {
-                        "@fragment"
-                    } else {
-                        "@gpu"
-                    };
-                    diagnostics.report_error(
-                        format!("{kind} function '{}' cannot be generic", function.name.text),
-                        Some(function.name.position),
-                    );
-                }
+
                 let def = self.type_ctx.register(
                     DefKind::Function,
                     &function.name.text,
@@ -114,15 +97,7 @@ impl<'a> Analyzer<'a> {
             if function.is_extern && dream_abi::attributes::has_c_attr(&function.attributes) {
                 self.validate_c_extern_signature(function, info.identity.0, diagnostics);
             }
-            if info.is_compute {
-                self.validate_compute_shader(function, &info, diagnostics);
-            }
-            if info.is_vertex {
-                self.validate_vertex_shader(function, diagnostics);
-            }
-            if info.is_fragment {
-                self.validate_fragment_shader(function, diagnostics);
-            }
+
             if let Err(e) =
                 self.function_table
                     .add_overload(&function.name.text, info, &mut self.type_ctx)
@@ -197,101 +172,15 @@ impl<'a> Analyzer<'a> {
                 Some(function.name.position),
             );
         }
-        if dream_abi::attributes::is_gpu_shader_attr(&function.attributes)
-            || dream_abi::attributes::has_gpu_helper_attr(&function.attributes)
-            || dream_abi::attributes::has_generator_attr(&function.attributes)
-        {
+        if dream_abi::attributes::has_generator_attr(&function.attributes) {
             diagnostics.report_error(
                 format!(
-                    "@test function '{}' cannot also be a generator or GPU shader",
+                    "@test function '{}' cannot also be a generator",
                     function.name.text
                 ),
                 Some(function.name.position),
             );
         }
-    }
-}
-
-/// Element type of `GpuBuffer<T>`, if `ty` is that form.
-pub(crate) fn gpu_buffer_elem_type(ty: &Type) -> Option<&Type> {
-    match ty {
-        Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
-            Some(&args[0])
-        }
-        _ => None,
-    }
-}
-
-/// Kernel parameters: scalars, unmanaged value structs, `GpuBuffer<T>`, `GpuTexture`, `GpuSampler`.
-fn is_compute_param_type(ty: &Type) -> bool {
-    match ty {
-        Type::Integer(_)
-        | Type::Float(_)
-        | Type::Boolean(_)
-        | Type::Byte(_)
-        | Type::UInt(_)
-        | Type::Long(_)
-        | Type::ULong(_) => true,
-        Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
-            is_compute_elem_type(&args[0])
-        }
-        Type::Struct(tok, None) => {
-            if matches!(tok.text.as_str(), "GpuTexture" | "GpuSampler") {
-                return true;
-            }
-            // Allow unmanaged value structs by name; GpuId3 is synthetic. Reject known heap types.
-            !matches!(
-                tok.text.as_str(),
-                "string" | "List" | "Map" | "Set" | "object" | "js"
-            )
-        }
-        Type::String(_) | Type::Object(_) | Type::Char(_) | Type::Array(_) => false,
-        _ => false,
-    }
-}
-
-/// Vertex/fragment parameters: primitives, unmanaged value structs, textures/samplers,
-/// and read-only `GpuBuffer<T>` (storage).
-fn is_render_param_type(ty: &Type) -> bool {
-    match ty {
-        Type::Integer(_)
-        | Type::Float(_)
-        | Type::Boolean(_)
-        | Type::Byte(_)
-        | Type::UInt(_)
-        | Type::Long(_)
-        | Type::ULong(_) => true,
-        Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
-            is_compute_elem_type(&args[0])
-        }
-        Type::Struct(tok, None) => {
-            if matches!(tok.text.as_str(), "GpuTexture" | "GpuSampler") {
-                return true;
-            }
-            !matches!(
-                tok.text.as_str(),
-                "string" | "List" | "Map" | "Set" | "object" | "js"
-            )
-        }
-        Type::String(_) | Type::Object(_) | Type::Char(_) | Type::Array(_) => false,
-        _ => false,
-    }
-}
-
-fn is_compute_elem_type(ty: &Type) -> bool {
-    match ty {
-        Type::Integer(_)
-        | Type::Float(_)
-        | Type::Boolean(_)
-        | Type::Byte(_)
-        | Type::UInt(_)
-        | Type::Long(_)
-        | Type::ULong(_) => true,
-        Type::Struct(tok, None) => !matches!(
-            tok.text.as_str(),
-            "string" | "List" | "Map" | "Set" | "object" | "js"
-        ),
-        _ => false,
     }
 }
 

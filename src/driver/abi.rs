@@ -4,7 +4,6 @@ use std::io::Error;
 use std::path::Path;
 
 use crate::driver::ffi_shim::{CppBridge, WrittenShim, SHIM_RUNTIME_EXPORTS};
-use crate::driver::gpu_gen::{self, GpuEmitResult};
 use crate::driver::native_sets::{NativeGraph, NativeSet};
 use dream_abi::attributes::{c_import_target, c_marshal_charset, extern_import_target, has_c_attr};
 use dream_sema::module_graph::ProgramView;
@@ -75,13 +74,11 @@ pub(crate) fn embed_abi_in_wasm(wat_path: &str) -> Result<(), Error> {
     Ok(())
 }
 
-/// Writes the mandatory ABI sidecar for native capability linking and JS interop. GPU programs
-/// also need sibling WGSL and ABI shader metadata for native run/debug and JS hosts.
+/// The ABI sidecar supplies native capability linking and JS interop metadata.
 /// Returns the paths of every file written so callers can surface them as build artifacts.
 pub(crate) fn emit_wasm_and_abi(
     wat_path: &str,
     program: &ProgramView,
-    gpu: &GpuEmitResult,
     live_imports: &[LiveImport],
     native: &NativeGraph,
     cpp: &CppBridge,
@@ -89,12 +86,6 @@ pub(crate) fn emit_wasm_and_abi(
 ) -> Result<Vec<std::path::PathBuf>, Error> {
     let base = Path::new(wat_path);
     let mut written = Vec::new();
-
-    if !gpu.is_empty() {
-        let wgsl_path = base.with_extension("wgsl");
-        fs::write(&wgsl_path, gpu_gen::join_wgsl_module(gpu))?;
-        written.push(wgsl_path);
-    }
 
     let abi_path = base.with_extension("abi.json");
     let native_root = base
@@ -105,7 +96,7 @@ pub(crate) fn emit_wasm_and_abi(
     let shims = cpp.write(&native_root, |set| live.contains(set))?;
     fs::write(
         &abi_path,
-        build_abi_json(program, gpu, live_imports, native, &shims, module),
+        build_abi_json(program, live_imports, native, &shims, module),
     )?;
     written.push(abi_path);
     Ok(written)
@@ -158,7 +149,6 @@ fn fn_tag_from_types(params: &[Type], ret: &Type, ptr_size: u32) -> String {
 /// `(module, field)` pairs that survived MIR import pruning.
 pub(crate) fn build_abi_json(
     program: &ProgramView,
-    gpu: &GpuEmitResult,
     live_imports: &[LiveImport],
     native: &NativeGraph,
     shims: &BTreeMap<String, WrittenShim>,
@@ -311,12 +301,6 @@ pub(crate) fn build_abi_json(
         .map(|name| format!("\"{}\"", json_escape(name)))
         .collect::<Vec<_>>();
 
-    let gpu_section = if gpu.is_empty() {
-        String::new()
-    } else {
-        format!(",\n  \"gpu\": {{ {} }}", gpu_gen::gpu_abi_json(gpu))
-    };
-
     let live_sets: Vec<&NativeSet> = live_set_names(live_imports)
         .into_iter()
         .filter_map(|lib| native.sets.get(lib))
@@ -345,13 +329,12 @@ pub(crate) fn build_abi_json(
         .join(", ");
 
     format!(
-        "{{\n  \"target_triple\": \"{}\",\n  \"native_abi_version\": 2,\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}],\n  \"export_functions\": {},\n  \"host_capabilities\": [{}]{}{}{}{}\n}}\n",
+        "{{\n  \"target_triple\": \"{}\",\n  \"native_abi_version\": 2,\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}],\n  \"export_functions\": {},\n  \"host_capabilities\": [{}]{}{}{}\n}}\n",
         json_escape(module.target_triple),
         externs.join(",\n"),
         exports.join(", "),
         dream_abi::exports::to_json(module.export_functions),
         host_capabilities,
-        gpu_section,
         c_libs_section,
         c_sources_section,
         structs_section,
@@ -605,7 +588,6 @@ mod tests {
         let graph = dream_sema::module_graph::ModuleGraph::single(program.clone());
         let view = graph.view();
         let layouts = test_layouts(program, target);
-        let gpu = crate::driver::gpu_gen::GpuEmitResult::default();
         // Consider every extern in the source "live" so the extern actually reaches the JSON.
         let live: Vec<LiveImport> = program
             .functions
@@ -619,7 +601,6 @@ mod tests {
             .collect();
         build_abi_json(
             &view,
-            &gpu,
             &live,
             &NativeGraph::default(),
             &BTreeMap::new(),
@@ -691,7 +672,6 @@ mod tests {
         );
         let json = build_abi_json(
             &dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone()).view(),
-            &crate::driver::gpu_gen::GpuEmitResult::default(),
             &live,
             &graph,
             &shims,
@@ -851,7 +831,6 @@ mod tests {
             assert_eq!(outer.size, expected);
             let json = build_abi_json(
                 &view,
-                &crate::driver::gpu_gen::GpuEmitResult::default(),
                 &live,
                 &NativeGraph::default(),
                 &BTreeMap::new(),

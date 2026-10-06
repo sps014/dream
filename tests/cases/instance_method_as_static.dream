@@ -1,8 +1,7 @@
-import system.gpu;
+class Counter {
+    public fun clear(): void {}
+}
 
-// Calling an instance method as `Type.method(...)` must fail clearly — not with a misleading
-// arity error against the implicit `this` parameter.
-
-async fun main(): void {
-    ComputePass.dispatch();
+fun main(): void {
+    Counter.clear();
 }

@@ -40,18 +40,10 @@ impl<'a> Analyzer<'a> {
             return Ok(());
         }
 
-        // Inside `@compute`, `GpuBuffer<T>[i] = v` is a storage-buffer write (like `T[]`).
-        let gpu_elem = if self.current_function_is_gpu {
-            crate::analyzer::declarations::functions::gpu_buffer_elem_type(&array_type).cloned()
-        } else {
-            None
-        };
-
         // Class/string index-assignment: `obj[i] = v` on a struct or `string` receiver desugars
         // to the `@set_indexer` method when registered. Arrays keep the built-in path; `Unknown`
         // is a poison carried from an earlier error and must not cascade.
-        if gpu_elem.is_none()
-            && !matches!(array_type, Type::Array(_) | Type::Unknown)
+        if !matches!(array_type, Type::Array(_) | Type::Unknown)
             && (Self::resolve_struct_parts(&array_type).is_some()
                 || matches!(array_type, Type::String(_)))
         {
@@ -68,10 +60,9 @@ impl<'a> Analyzer<'a> {
             );
         }
 
-        let inner_type = match (gpu_elem, array_type) {
-            (Some(elem), _) => elem,
-            (_, Type::Array(inner)) => *inner,
-            (_, other) => {
+        let inner_type = match array_type {
+            Type::Array(inner) => *inner,
+            other => {
                 self.hir_fail();
                 diagnostics.report_error(
                     format!(
@@ -292,7 +283,12 @@ impl<'a> Analyzer<'a> {
                         && self.unique_method_def(string_id, "clone").is_some()
                     {
                         let string_ty = field_type.clone();
-                        self.hir_set_type_method_call(string_id, "clone", vec![value_hir], &string_ty);
+                        self.hir_set_type_method_call(
+                            string_id,
+                            "clone",
+                            vec![value_hir],
+                            &string_ty,
+                        );
                         value_hir = self.hir_take();
                     }
                 }
@@ -325,12 +321,19 @@ impl<'a> Analyzer<'a> {
                 );
                 Ok(())
             }
-            MemberField::NotAField { struct_name, struct_ty } => {
+            MemberField::NotAField {
+                struct_name,
+                struct_ty,
+            } => {
                 // Not a field: `obj.prop = v` may write a property setter, which desugars to a call
                 // of the (internally named) setter method. The call carries its own privacy/type
                 // check, and its (discarded) result becomes the assignment statement.
                 let setter = setter_member_name(&member.text);
-                if self.function_table.methods.contains_key(&(struct_ty, setter)) {
+                if self
+                    .function_table
+                    .methods
+                    .contains_key(&(struct_ty, setter))
+                {
                     let set_tok = synthetic_token(
                         TokenKind::IdentifierToken,
                         &setter_member_name(&member.text),
@@ -346,8 +349,7 @@ impl<'a> Analyzer<'a> {
                     diagnostics.report_error(
                         format!(
                             "Field '{}' not found in class '{}'",
-                            member.text,
-                            struct_name
+                            member.text, struct_name
                         ),
                         Some(member.position),
                     );

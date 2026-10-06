@@ -31,7 +31,7 @@ pub enum AttributeTarget {
     InterfaceMethod,
     /// A file-level `module` declaration.
     Module,
-    /// A formal parameter (`@readonly a: GpuBuffer<T>`).
+    /// A formal parameter.
     Parameter,
 }
 
@@ -82,7 +82,7 @@ pub enum ArgShape {
     None,
     /// `@name(...)` with between `min` and `max` (inclusive) arguments.
     /// Argument `i` must match `kinds[i.min(kinds.len() - 1)]` (so a single-kind slice covers
-    /// variadic same-typed args like `@compute(8, 8)`).
+    /// variadic arguments of the same type).
     Args {
         kinds: &'static [ArgKind],
         min: usize,
@@ -133,15 +133,6 @@ impl ArgShape {
             }
         }
     }
-}
-
-pub(super) fn parse_named_u32(attributes: &[AttributeNode], name: &str) -> Option<u32> {
-    attributes
-        .iter()
-        .find(|a| a.name.text == name)
-        .and_then(|a| a.args.first())
-        .and_then(|t| t.as_int_text())
-        .and_then(dream_syntax::number::parse_u32_literal)
 }
 
 /// True when an attribute named `name` is present (even if its argument failed to parse).

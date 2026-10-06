@@ -140,12 +140,7 @@ impl<'a> Analyzer<'a> {
         // `(import ...)` (see `hir_build_imports`) and `@intrinsic` ones lower straight to their
         // runtime helper (e.g. `String.alloc` → `$string_alloc`). Emitting an (empty) HIR body for
         // them would define a second `$string_alloc`, colliding with the runtime function.
-        // `@compute` kernels are emitted as WGSL, not WASM — skip HIR collection the same way.
-        // `@compute`/`@vertex`/`@fragment` stages and `@gpu` helpers are WGSL-only — skip HIR/MIR.
-        if function.is_extern
-            || dream_abi::attributes::is_gpu_shader_attr(&function.attributes)
-            || dream_abi::attributes::has_gpu_helper_attr(&function.attributes)
-        {
+        if function.is_extern {
             self.hir.collecting = false;
             return;
         }
@@ -159,7 +154,10 @@ impl<'a> Analyzer<'a> {
         // overloaded declaration resolves to its own distinct `DefId` rather than a shared base def.
         let identity = self.function_declaration(function);
         let def = identity.as_ref().map(|key| key.0);
-        let lookup_name = identity.as_ref().map(|key| self.function_table.emitted_name(&self.type_ctx, key)).unwrap_or_else(|| function.name.text.clone());
+        let lookup_name = identity
+            .as_ref()
+            .map(|key| self.function_table.emitted_name(&self.type_ctx, key))
+            .unwrap_or_else(|| function.name.text.clone());
 
         // A generic template is emitted once per monomorphization: the initial (unbound) pass is
         // skipped, and each concrete instantiation is analyzed again under `current_generic_bindings`
@@ -315,7 +313,9 @@ impl<'a> Analyzer<'a> {
         // `CaptureCell<T>` its creating scope boxed it into, so `hir_set_var`/`hir_assign_local`'s
         // `self.hir.boxed`-driven redirect (see `hir_declare_local`) applies transparently to it
         // too — reads/writes inside this body go through `.value` exactly like a captured `let`'s.
-        if let Some(captures) = lookup_def_for_captures.and_then(|def| self.closure_captures.get(&def)).cloned()
+        if let Some(captures) = lookup_def_for_captures
+            .and_then(|def| self.closure_captures.get(&def))
+            .cloned()
         {
             if captures.len() == 1 {
                 let (cap_name, cap_ty) = &captures[0];

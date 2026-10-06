@@ -54,6 +54,11 @@ pub fn run(
         }
         Err(error) => errors.push(error),
     }
+    let binaryen = super::wasm_opt::resolve_existing(&config);
+    let binaryen_error = binaryen
+        .as_ref()
+        .and_then(|path| super::wasm_opt::validate(path.clone()).err());
+    tools.insert("wasm-opt".into(), json!({"path": binaryen, "available": binaryen.is_some() && binaryen_error.is_none(), "expected_version": dream_abi::toolchain::BINARYEN_VERSION, "reason": binaryen_error}));
     match cc::resolve_existing_target_cc(&config, &spec) {
         Ok(cc) => {
             let command = cc.cc_command(&config, &spec)?;

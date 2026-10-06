@@ -2,16 +2,13 @@
 
 use dream::driver::compiler::Compiler;
 use dream::driver::wasm_opt::OptLevel;
-use dream::execution::native::{compile_and_capture, compile_and_capture_ex};
+use dream::execution::native::compile_and_capture_ex;
 use dream_mir::backend::Target;
 
 mod common;
-use dream_abi::attributes::CompileTargets;
 use pretty_assertions::assert_eq;
 use rayon::prelude::*;
 use std::fs;
-use std::io::{Read, Write};
-use std::net::TcpListener;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -85,21 +82,6 @@ const SMOKE_CASES: &[&str] = &[
     "hello_println",
     "stdio_streams",
     "stdlib_internal_hidden",
-    "webapi_duplicate_route",
-    "webapi_missing_path_param",
-    "webapi_dep_cycle",
-    "webapi_use_unknown",
-    "webapi_basic",
-    "webapi_mw_short",
-    "webapi_docs_off",
-    "webapi_cors",
-    "webapi_use_route",
-    "webapi_group",
-    "webapi_error_500",
-    "webapi_sse",
-    "webapi_ws",
-    "webapi_multipart",
-    "webapi_tls",
     "cancellation_basic",
     "cancellation_stdlib",
     "primary_constructor",
@@ -135,128 +117,6 @@ fn collect_case_paths() -> Vec<PathBuf> {
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("dream"))
         .collect()
-}
-
-fn spawn_tcp_echo() -> (u16, thread::JoinHandle<()>) {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback tcp");
-    let port = listener.local_addr().expect("tcp local addr").port();
-    let handle = thread::spawn(move || {
-        let Ok((mut stream, _)) = listener.accept() else {
-            return;
-        };
-        let mut buf = [0u8; 64];
-        if let Ok(n) = stream.read(&mut buf) {
-            let _ = stream.write_all(&buf[..n]);
-        }
-    });
-    (port, handle)
-}
-
-fn write_e2e_tls_cert(dir: &Path) -> (String, String) {
-    let cert_path = dir.join("cert.pem");
-    let key_path = dir.join("key.pem");
-    let issued = rcgen::generate_simple_self_signed(["localhost".into()]).expect("rcgen");
-    fs::write(&cert_path, issued.cert.pem()).expect("write cert");
-    fs::write(&key_path, issued.key_pair.serialize_pem()).expect("write key");
-    (
-        cert_path.to_string_lossy().into_owned(),
-        key_path.to_string_lossy().into_owned(),
-    )
-}
-
-struct MockRequest {
-    method: String,
-    path: String,
-    x_tag: Option<String>,
-    content_type: Option<String>,
-    body: String,
-}
-
-/// Reads one HTTP/1.1 request (head + Content-Length framed body); `None` on EOF/error.
-fn read_http_request(stream: &mut std::net::TcpStream) -> Option<MockRequest> {
-    let mut buf = Vec::new();
-    let mut chunk = [0u8; 1024];
-    let head_end = loop {
-        if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
-            break pos;
-        }
-        let n = stream.read(&mut chunk).ok()?;
-        if n == 0 {
-            return None;
-        }
-        buf.extend_from_slice(&chunk[..n]);
-    };
-    let head = String::from_utf8_lossy(&buf[..head_end]).to_string();
-    let mut lines = head.split("\r\n");
-    let request_line = lines.next().unwrap_or_default();
-    let mut parts = request_line.split_whitespace();
-    let method = parts.next().unwrap_or_default().to_string();
-    let path = parts.next().unwrap_or_default().to_string();
-    let mut content_length = 0usize;
-    let mut x_tag = None;
-    let mut content_type = None;
-    for line in lines {
-        let Some((name, value)) = line.split_once(':') else {
-            continue;
-        };
-        let value = value.trim();
-        match name.to_ascii_lowercase().as_str() {
-            "content-length" => content_length = value.parse().unwrap_or(0),
-            "x-tag" => x_tag = Some(value.to_string()),
-            "content-type" => content_type = Some(value.to_string()),
-            _ => {}
-        }
-    }
-    let mut body = buf[head_end + 4..].to_vec();
-    while body.len() < content_length {
-        let n = stream.read(&mut chunk).ok()?;
-        if n == 0 {
-            break;
-        }
-        body.extend_from_slice(&chunk[..n]);
-    }
-    body.truncate(content_length);
-    Some(MockRequest {
-        method,
-        path,
-        x_tag,
-        content_type,
-        body: String::from_utf8_lossy(&body).to_string(),
-    })
-}
-
-/// Loopback HTTP mock: echoes `METHOD path|x-tag|content-type|body` as the response body.
-/// `/bytes` serves a fixed binary payload instead. Handles sequential requests forever.
-fn spawn_http_mock() -> (u16, thread::JoinHandle<()>) {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback http");
-    let port = listener.local_addr().expect("http local addr").port();
-    let handle = thread::spawn(move || {
-        while let Ok((mut stream, _)) = listener.accept() {
-            while let Some(req) = read_http_request(&mut stream) {
-                let body = if req.path == "/bytes" {
-                    "bin-data-01".to_string()
-                } else {
-                    format!(
-                        "{} {}|{}|{}|{}",
-                        req.method,
-                        req.path,
-                        req.x_tag.as_deref().unwrap_or("-"),
-                        req.content_type.as_deref().unwrap_or("-"),
-                        req.body
-                    )
-                };
-                let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    body.len(),
-                    if req.method == "HEAD" { "" } else { body.as_str() }
-                );
-                if stream.write_all(response.as_bytes()).is_err() {
-                    break;
-                }
-            }
-        }
-    });
-    (port, handle)
 }
 
 fn run_native_case(dream_file: &Path) {
@@ -301,24 +161,7 @@ fn run_native_case(dream_file: &Path) {
     };
 
     let ll_str = ll_path.to_str().unwrap();
-    let tcp = if stem == "tcp_echo_local" {
-        Some(spawn_tcp_echo())
-    } else {
-        None
-    };
-    let http_mock = if stem == "http_methods_local" {
-        Some(spawn_http_mock())
-    } else {
-        None
-    };
-    let timeout_secs = if stem == "http_get_local"
-        || stem == "http_methods_local"
-        || stem.starts_with("webapi_")
-    {
-        90
-    } else {
-        30
-    };
+    let timeout_secs = 30;
     let extra_args: &[&str] = if stem == "process_args_basic" {
         &["alpha", "beta"]
     } else {
@@ -329,41 +172,15 @@ fn run_native_case(dream_file: &Path) {
     } else {
         None
     };
-    let mut env: Vec<(&str, String)> = Vec::new();
-    if let Some((port, _)) = tcp.as_ref() {
-        env.push(("DREAM_E2E_TCP_PORT", port.to_string()));
-    }
-    if let Some((port, _)) = http_mock.as_ref() {
-        env.push(("DREAM_E2E_HTTP_PORT", port.to_string()));
-    }
-    let tls_paths = if stem == "webapi_tls" {
-        Some(write_e2e_tls_cert(artifacts.path()))
-    } else {
-        None
-    };
-    if let Some((cert, key)) = tls_paths.as_ref() {
-        env.push(("DREAM_E2E_TLS_CERT", cert.clone()));
-        env.push(("DREAM_E2E_TLS_KEY", key.clone()));
-    }
-    let env_refs: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    let run =
-        if timeout_secs != 8 || !extra_args.is_empty() || stdin.is_some() || !env_refs.is_empty() {
-            compile_and_capture_ex(
-                &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
-                ll_str,
-                OptLevel::O0,
-                &env_refs,
-                extra_args,
-                stdin,
-                timeout_secs,
-            )
-        } else {
-            compile_and_capture(
-                &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
-                ll_str,
-                OptLevel::O0,
-            )
-        };
+    let run = compile_and_capture_ex(
+        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+        ll_str,
+        OptLevel::O0,
+        &[],
+        extra_args,
+        stdin,
+        timeout_secs,
+    );
     let _ = fs::remove_file(&ll_path);
     let _ = fs::remove_file(ll_path.with_extension("o"));
     let _ = fs::remove_file(ll_path.with_extension("bin"));
@@ -397,8 +214,8 @@ fn run_corpus(only: Option<&[&str]>) {
     }
     let failures: Vec<String> = paths
         .par_iter()
-        .filter_map(|path| {
-            match catch_unwind(AssertUnwindSafe(|| run_native_case(path))) {
+        .filter_map(
+            |path| match catch_unwind(AssertUnwindSafe(|| run_native_case(path))) {
                 Ok(()) => None,
                 Err(payload) => {
                     let msg = payload
@@ -408,8 +225,8 @@ fn run_corpus(only: Option<&[&str]>) {
                         .unwrap_or_else(|| "unknown panic".to_string());
                     Some(format!("{:?}: {}", path, msg))
                 }
-            }
-        })
+            },
+        )
         .collect();
     assert!(
         failures.is_empty(),
@@ -670,100 +487,25 @@ fn wasm32_js_option_struct_fields_are_marshaled() {
 }
 
 #[test]
-fn webapi_listen_not_available_on_wasm32() {
-    let src = Path::new("tests/cases/webapi_basic.dream");
-    let dest = std::env::temp_dir().join("dream_webapi_wasm32.wat");
-    let src_s = src.to_str().unwrap().to_string();
-    let dest_s = dest.to_str().unwrap().to_string();
-    let err = Compiler::new(Target::wasm32())
-        .with_compile_targets(CompileTargets {
-            native: false,
-            node: false,
-            web: true,
-        })
-        .compile(&src_s, &dest_s)
-        .expect_err("WebApp.listen is native-only");
-    let text = err.diagnostic_text().unwrap_or("");
-    assert!(
-        text.contains("not available") || text.contains("native"),
-        "expected native-only diagnostic, got:\n{}",
-        text
-    );
-    let _ = fs::remove_file(&dest);
-}
-
-#[test]
-fn wasm_compiles_webgpu_samples() {
-    for rel in [
-        "sample/compute/gpu_ext.dream",
-        "sample/compute/saxpy.dream",
-        "sample/compute/gpu_advanced_math.dream",
-        "sample/compute/life/life.dream",
-    ] {
-        let src = Path::new(rel);
-        if !src.exists() {
-            continue;
-        }
-        let stem = src.file_stem().and_then(|s| s.to_str()).unwrap();
-        let dest = std::env::temp_dir().join(format!("dream_gpu_{stem}.wat"));
-        let src_s = src.to_str().unwrap().to_string();
-        let dest_s = dest.to_str().unwrap().to_string();
-        Compiler::new(Target::wasm32())
-            .compile(&src_s, &dest_s)
-            .unwrap_or_else(|e| panic!("{} should compile to wasm32: {}", rel, e));
-        let wasm = dest.with_extension("wasm");
-        assert!(wasm.is_file(), "expected {}", wasm.display());
-        let _ = fs::remove_file(&dest);
-        let _ = fs::remove_file(&wasm);
-        let _ = fs::remove_file(dest.with_extension("ll"));
-        let _ = fs::remove_file(dest.with_extension("abi.json"));
-        let _ = fs::remove_file(dest.with_extension("wgsl"));
-    }
-}
-
-#[test]
 fn run_smoke_e2e_cases() {
     run_corpus(Some(SMOKE_CASES));
 }
 
 #[test]
-fn run_file_http_parity_e2e() {
-    run_corpus(
-        Some(&[
-            "file_bytes",
-            "file_dir",
-            "file_stats",
-            "file_copy_rename",
-            "file_remove_dir",
-            "http_get_local",
-            "http_methods_local",
-            "tcp_echo_local",
-            "process_args_basic",
-            "console_read_line",
-            "crypto_basic",
-            "process_run_basic",
-            "process_spawn_basic",
-            "timezone_basic",
-            "tcp_client_connect_fail",
-            "websocket_unsupported_scheme",
-            "websocket_connect_fail",
-            "webapi_duplicate_route",
-            "webapi_missing_path_param",
-            "webapi_dep_cycle",
-            "webapi_use_unknown",
-            "webapi_basic",
-            "webapi_mw_short",
-            "webapi_docs_off",
-            "webapi_cors",
-            "webapi_use_route",
-            "webapi_group",
-            "webapi_error_500",
-            "webapi_sse",
-            "webapi_ws",
-            "webapi_multipart",
-            "webapi_tls",
-        ]),
-    );
+fn run_core_services_e2e() {
+    run_corpus(Some(&[
+        "file_bytes",
+        "file_dir",
+        "file_stats",
+        "file_copy_rename",
+        "file_remove_dir",
+        "process_args_basic",
+        "console_read_line",
+        "crypto_basic",
+        "process_run_basic",
+        "process_spawn_basic",
+        "timezone_basic",
+    ]));
 }
 
 /// Native ASan/LSan on leak-sensitive goldens. Opt-in: `DREAM_NATIVE_SANITIZE=address,leak`
@@ -775,14 +517,11 @@ fn native_asan_focused_goldens() {
     if std::env::var_os("ASAN_OPTIONS").is_none() {
         std::env::set_var("ASAN_OPTIONS", "detect_leaks=1:halt_on_error=1");
     }
-    run_corpus(
-        Some(&[
-            "webapi_basic",
-            "json_parse",
-            "json_roundtrip",
-            "promise_start_no_leak",
-        ]),
-    );
+    run_corpus(Some(&[
+        "json_parse",
+        "json_roundtrip",
+        "promise_start_no_leak",
+    ]));
 }
 
 /// Codegen must be reproducible: compiling the same program twice (each compile uses fresh,
@@ -910,7 +649,7 @@ fn dream_js_bundle_is_platform_independent() {
     );
 }
 
-/// A compute-free arithmetic program must not pull GPU/FS/crypto host chunks into its selective
+/// An arithmetic program must not pull FS/crypto host chunks into its selective
 /// runtime (js bridges may still appear when layouts exist for marshaler keepalive).
 #[test]
 fn selective_runtime_omits_unused_host_chunks() {
@@ -930,7 +669,6 @@ fn selective_runtime_omits_unused_host_chunks() {
     let _ = fs::remove_file(out.with_extension("web.runtime.js"));
     let _ = fs::remove_file(out.with_extension("wasm"));
     let _ = fs::remove_file(out.with_extension("abi.json"));
-    assert!(!rt.contains("makeGpuHost"), "gpu chunk should be absent");
     assert!(!rt.contains("makeFsHost"), "fs chunk should be absent");
     assert!(
         !rt.contains("makeCryptoHost"),

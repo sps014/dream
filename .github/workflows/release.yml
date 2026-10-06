@@ -20,8 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Debian 12 (glibc 2.36 + WebKitGTK 4.1) so Linux `dream` runs hello-world and
-          # `system.webview` on Debian 12 / Ubuntu 24.04+ without needing glibc 2.39.
+          # Debian 12 keeps the Linux distribution compatible with glibc 2.36.
           - os: ubuntu-latest
             container: debian:bookworm
             target: linux-x64
@@ -56,8 +55,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             ca-certificates curl git xz-utils build-essential pkg-config \
-            cmake ninja-build python3 clang libclang-dev \
-            libssl-dev libwebkit2gtk-4.1-dev libgtk-3-dev libudev-dev
+            cmake ninja-build python3 clang libclang-dev
 
       - uses: actions/checkout@v4
 
@@ -71,9 +69,9 @@ jobs:
           set -euo pipefail
           # macOS /bin/bash is 3.2: `"${arr[@]}"` with `set -u` and an empty array is an error.
           if [[ -n "${{ matrix.rust_target }}" ]]; then
-            cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-gpu -p dream-host-webview -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
+            cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
           else
-            cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-gpu -p dream-host-webview -p dreamer -p dream-lsp
+            cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dreamer -p dream-lsp
           fi
 
       # The official LLVM (clang) builds the runtime the archive ships prebuilt; it is not shipped.
@@ -101,7 +99,7 @@ jobs:
           cp "${BIN_DIR}/dream${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dreamer${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dream-lsp${EXT}" "$STAGE/"
-          for capability in core net gpu webview unicode crypto process timezone; do
+          for capability in core unicode crypto process timezone; do
             case "$RUNNER_OS" in
               Windows) library="dream_host_${capability}.dll" ;;
               macOS) library="libdream_host_${capability}.dylib" ;;

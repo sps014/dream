@@ -50,7 +50,12 @@ impl<'a> Analyzer<'a> {
 
         let (field_type, field_visibility) = match field {
             Some(f) => f,
-            None => return MemberField::NotAField { struct_name, struct_ty },
+            None => {
+                return MemberField::NotAField {
+                    struct_name,
+                    struct_ty,
+                }
+            }
         };
 
         // Private fields (the default) may only be accessed from within the declaring type's own
@@ -116,7 +121,11 @@ impl<'a> Analyzer<'a> {
         }
         // Enum member access `EnumName.Member` resolves to the enum type (an i32 at runtime).
         if let ExpressionNode::Identifier(id) = obj {
-            if self.type_ctx.resolve(DefKind::Enum, &id.text).is_some_and(|def| self.enum_members(def).is_some()) {
+            if self
+                .type_ctx
+                .resolve(DefKind::Enum, &id.text)
+                .is_some_and(|def| self.enum_members(def).is_some())
+            {
                 let enum_ty = Type::Struct(id.clone(), None);
                 match self.enum_member_value(&id.text, &member.text) {
                     Some(value) => self.hir_set_enum_value(value as i64, &enum_ty),
@@ -158,7 +167,11 @@ impl<'a> Analyzer<'a> {
             let is_local = symbol_table.borrow().get_symbol(id).is_ok();
             if !is_local {
                 let getter = getter_member_name(&member.text);
-                if self.type_ctx.resolved_type(&id.text).is_some_and(|owner| self.function_table.methods.contains_key(&(owner, getter))) {
+                if self
+                    .type_ctx
+                    .resolved_type(&id.text)
+                    .is_some_and(|owner| self.function_table.methods.contains_key(&(owner, getter)))
+                {
                     let get_tok = synthetic_token(
                         TokenKind::IdentifierToken,
                         &getter_member_name(&member.text),
@@ -175,7 +188,9 @@ impl<'a> Analyzer<'a> {
                 // method, with no receiver to capture — identical in shape to a bare function
                 // value (see `Analyzer::hir_set_func_value`), just looked up under its mangled
                 // `{Type}_{method}` name instead of its own bare source name.
-                if let Some(func_ty) = self.type_ctx.resolved_type(&id.text)
+                if let Some(func_ty) = self
+                    .type_ctx
+                    .resolved_type(&id.text)
                     .and_then(|owner| self.resolve_static_method_group_value(owner, member))
                 {
                     return Ok(func_ty);
@@ -230,10 +245,13 @@ impl<'a> Analyzer<'a> {
         }
 
         // `arr.length` / `str.length`: builtin element-count property (same spelling collections use).
-        // Inside `@compute`, `GpuBuffer<T>.length` maps to WGSL `arrayLength` (not the host getter).
         if member.text == dream_abi::intrinsics::LENGTH {
             let obj_ty = self.type_ctx.lower(&obj_type);
-            if matches!(self.type_ctx.interner.kind(obj_ty), dream_types::TyKind::Array(_) | dream_types::TyKind::Prim(dream_types::PrimTy::String)) {
+            if matches!(
+                self.type_ctx.interner.kind(obj_ty),
+                dream_types::TyKind::Array(_)
+                    | dream_types::TyKind::Prim(dream_types::PrimTy::String)
+            ) {
                 self.record_ide_ref(
                     member.position,
                     ide::IdeTarget::Expr,
@@ -248,16 +266,6 @@ impl<'a> Analyzer<'a> {
                     "int",
                 )));
             }
-            if self.current_function_is_gpu
-                && crate::analyzer::declarations::functions::gpu_buffer_elem_type(&obj_type)
-                    .is_some()
-            {
-                self.hir_none();
-                return Ok(Type::Integer(synthetic_token(
-                    TokenKind::DataTypeToken,
-                    "int",
-                )));
-            }
         }
 
         // Interface-typed receiver: `iface.prop` may be a property getter (`get prop`), desugared
@@ -265,7 +273,9 @@ impl<'a> Analyzer<'a> {
         if self.interface_receiver_name(&obj_type).is_some() {
             if let Some((base, args)) = Self::resolve_struct_parts(&obj_type) {
                 if !args.is_empty()
-                    && self.type_ctx.resolve(DefKind::Interface, &base)
+                    && self
+                        .type_ctx
+                        .resolve(DefKind::Interface, &base)
                         .is_some_and(|def| self.is_generic_interface(def))
                 {
                     self.ensure_interface_instantiated(&base, &args, &member.position, diagnostics);
@@ -325,11 +335,18 @@ impl<'a> Analyzer<'a> {
                     Some(member.position),
                 ))
             }
-            MemberField::NotAField { struct_name, struct_ty } => {
+            MemberField::NotAField {
+                struct_name,
+                struct_ty,
+            } => {
                 // Not a field: `obj.prop` may read a property getter, which desugars to a call of
                 // the (internally named) getter method. The call carries its own privacy/type check.
                 let getter = getter_member_name(&member.text);
-                if self.function_table.methods.contains_key(&(struct_ty, getter)) {
+                if self
+                    .function_table
+                    .methods
+                    .contains_key(&(struct_ty, getter))
+                {
                     let get_tok = synthetic_token(
                         TokenKind::IdentifierToken,
                         &getter_member_name(&member.text),
@@ -344,15 +361,6 @@ impl<'a> Analyzer<'a> {
                     parent_function,
                 ) {
                     Ok(func_ty)
-                } else if let Some(swizzled) = self.try_gpu_swizzle(
-                    obj,
-                    &obj_type,
-                    member,
-                    parent_function,
-                    symbol_table,
-                    diagnostics,
-                ) {
-                    swizzled
                 } else {
                     self.hir_none();
                     Err(report_with_code(
@@ -388,7 +396,10 @@ impl<'a> Analyzer<'a> {
         if !sig.is_static {
             return None;
         }
-        let box_ret = Self::async_return_type(sig.is_async, Some(self.type_ctx.syntax_type(sig.resolved_return)));
+        let box_ret = Self::async_return_type(
+            sig.is_async,
+            Some(self.type_ctx.syntax_type(sig.resolved_return)),
+        );
         let func_ty = Type::Function(sig.parameter_types.clone(), Box::new(box_ret.clone()));
         self.hir_set_func_value_identity(&sig.identity, &func_ty, &box_ret);
         Some(func_ty)
@@ -493,14 +504,13 @@ impl<'a> Analyzer<'a> {
 
         let info = FunctionTableInfo::from(func_ref, &mut self.type_ctx);
         let def = info.identity.0;
-        self.function_table.record_declaration(func_ref, info.identity.clone());
+        self.function_table
+            .record_declaration(func_ref, info.identity.clone());
         // Synthesized names are always fresh (a monotonically increasing counter, shared with
         // `expressions::lambda`'s own `__lambda_<n>` names), so this cannot collide.
         let _ = self.function_table.add_function(name.clone(), info);
-        self.pending_lambdas.insert(
-            def,
-            (func_ref, self.current_generic_bindings.clone()),
-        );
+        self.pending_lambdas
+            .insert(def, (func_ref, self.current_generic_bindings.clone()));
         self.closure_captures
             .insert(def, vec![(recv_name, receiver_ty.clone())]);
 

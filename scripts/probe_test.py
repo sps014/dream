@@ -9,11 +9,9 @@ import json
 import os
 import re
 import signal
-import socket
 import struct
 import subprocess
 import sys
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -37,21 +35,11 @@ Usage: probe_test.py [--node | --parity] [--release] [case-stem ...]
   stems      optional filter (e.g. arithmetic task_basic)
 """
 
-# Hosts that exist natively only (files, sockets, GPU, interactive stdin).
+# Hosts that exist natively only (files and interactive stdin).
 _NODE_SKIP_PREFIXES = (
     "file_",
     "dir_",
-    "http_",
-    "tcp_",
-    "net_",
-    "ws_",
     "sqlite",
-    "gpu_",
-    # wgpu hosts: no WebGPU under Node.
-    "render_",
-    "compute_",
-    # `WebApp.listen` is native-only; wasm32 compile may still succeed then abort in Node.
-    "webapi_",
 )
 _NODE_SKIP_STEMS = {
     # This asserts that the native process has PATH; guests expose an empty environment.
@@ -161,102 +149,6 @@ def run_output_body(out):
     # Program stdout only. Compiler diagnostics go to stderr; do not drop blank lines or
     # lines that happen to start with `error:` (e.g. `error: divide by zero`).
     return _ANSI.sub("", out).strip()
-
-
-def spawn_http_mock():
-    """Loopback HTTP mock for `http_methods_local` (same contract as e2e `DREAM_E2E_HTTP_PORT`).
-
-    Echoes `METHOD path|x-tag|content-type|body` as the response body; `/bytes` serves a fixed
-    binary payload. Handles sequential requests forever, like the Rust mock in e2e_tests.rs.
-    """
-    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    listener.bind(("127.0.0.1", 0))
-    listener.listen(8)
-    port = listener.getsockname()[1]
-
-    def serve(sock):
-        try:
-            while True:
-                conn, _ = sock.accept()
-                with conn:
-                    while _serve_one(conn):
-                        pass
-        except OSError:
-            pass
-        finally:
-            sock.close()
-
-    def _serve_one(conn):
-        data = b""
-        while b"\r\n\r\n" not in data:
-            chunk = conn.recv(4096)
-            if not chunk:
-                return False
-            data += chunk
-        head, _, rest = data.partition(b"\r\n\r\n")
-        lines = head.split(b"\r\n")
-        method, path, _ = lines[0].decode("latin1").split(" ", 2)
-        length = 0
-        x_tag = "-"
-        content_type = "-"
-        for line in lines[1:]:
-            name, _, value = line.decode("latin1").partition(":")
-            value = value.strip()
-            if name.lower() == "content-length":
-                length = int(value)
-            elif name.lower() == "x-tag":
-                x_tag = value
-            elif name.lower() == "content-type":
-                content_type = value
-        while len(rest) < length:
-            rest += conn.recv(4096)
-        body = rest[:length].decode("utf-8", "replace")
-        if path == "/bytes":
-            payload = "bin-data-01"
-        else:
-            payload = f"{method} {path}|{x_tag}|{content_type}|{body}"
-        if method == "HEAD":
-            payload = ""
-        response = (
-            f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
-            f"Content-Length: {len(payload)}\r\nConnection: close\r\n\r\n{payload}"
-        )
-        conn.sendall(response.encode())
-        return False
-
-    thread = threading.Thread(target=serve, args=(listener,), daemon=True)
-    thread.start()
-    return port
-
-
-def spawn_tcp_echo():
-    """Loopback echo server for `tcp_echo_local` (same contract as e2e `DREAM_E2E_TCP_PORT`).
-
-    The listener stays in the accept thread with no timeout: `dream run` compiles natively
-    first, which can take longer than a short accept window when the probe is loaded.
-    """
-    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    listener.bind(("127.0.0.1", 0))
-    listener.listen(1)
-    port = listener.getsockname()[1]
-
-    def serve(sock):
-        try:
-            conn, _ = sock.accept()
-            with conn:
-                data = conn.recv(64)
-                if data:
-                    conn.sendall(data)
-        except OSError:
-            pass
-        finally:
-            sock.close()
-
-    thread = threading.Thread(target=serve, args=(listener,), daemon=True)
-    thread.start()
-    return str(port)
 
 
 def js_string(s):
@@ -381,11 +273,6 @@ def one(f: Path, stdout_record=None):
         stdin = "hello-line\n"
     elif stem == "process_args_basic":
         cmd.extend(["--", "alpha", "beta"])
-    elif stem == "tcp_echo_local":
-        env = {"DREAM_E2E_TCP_PORT": spawn_tcp_echo()}
-    elif stem == "http_methods_local":
-        env = {"DREAM_E2E_HTTP_PORT": str(spawn_http_mock())}
-
     # Debug `cc -O0` of large `@json` units is slow; leave headroom for a cold
     # `libdream_rt.a` rebuild and a loaded machine.
     code, out, err = run_group(cmd, 180, stdin=stdin, env=env)

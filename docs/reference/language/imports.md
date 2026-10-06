@@ -11,12 +11,10 @@ import system;                 // System, DateTime, Stopwatch, Random, …
 import system.collections;     // List, Map, Set, Queue, Stack
 import system.text;            // string methods, StringBuilder, Regex
 import system.json;            // Json, JsonValue
-import system.net;             // HttpClient, HttpResponse, HttpHeaders, Url, …
 import system.io;              // File, FileStream, Path, IoError
 import system.encoding;        // Encoding (UTF-8 / hex / Base64)
 import system.logging;         // Logger, LogLevel, handlers
 import system.crypto;          // Sha256, HmacSha256, SecureRandom
-import system.gpu;             // Gpu, GpuBuffer, shaders (also auto-imported with @compute/@vertex/@fragment)
 import system.task;            // Task, TaskPool (real threads)
 ```
 
@@ -36,7 +34,7 @@ import math_lib;
 - Each `.` maps to a directory separator, and `.dream` is added automatically: `import utils.math_lib;` resolves to `utils/math_lib.dream`, relative to the importing file.
 - Imported declarations are usable directly — there is no namespace prefix.
 - If no matching file exists relative to the importing file, resolution falls back to a `dream_packages/` dependency directory installed by the [`dreamer` package manager](../tooling/dreamer.md) — so `import json_tools;` can resolve to a project dependency once `dreamer install` has run, with no different syntax required.
-- Names that match a stdlib package (`system`, `system.net`, …) never fall through to the filesystem.
+- Names that match a stdlib package (`system`, `system.io`, …) never fall through to the filesystem.
 
 ```dream
 // math_lib.dream

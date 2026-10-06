@@ -93,7 +93,7 @@ mod tests {
         let destination = root.path().join("package").join("Frameworks");
         std::fs::write(
             binary.with_extension("abi.json"),
-            r#"{"native_abi_version":2,"host_capabilities":["core","net","gpu","webview","unicode","crypto","process","timezone"]}"#,
+            r#"{"native_abi_version":2,"host_capabilities":["core","unicode","crypto","process","timezone"]}"#,
         )
         .unwrap();
         assert!(copy(

@@ -1,8 +1,8 @@
 # Dream
 
-Dream is a programming language for building command-line tools, desktop apps, web services, and programs that run in a browser. It checks your code before running it and manages memory for you.
+Dream is a programming language for building command-line tools and programs that run in a browser. It checks your code before running it and manages memory for you.
 
-Start with a small program, then add the features you need. The included library gives you collections, files, network requests, JSON, dates, testing, graphics, and more.
+Start with a small program, then add the features you need. The included library gives you collections, files, JSON, dates, testing, and more.
 
 [Documentation](https://sps014.github.io/dream/) · [Quickstart](docs/learn/quickstart.md) · [Language tour](docs/learn/tour.md) · [Examples](docs/cookbook/index.md)
 
@@ -96,15 +96,11 @@ This prints `42`. [Option and Result](docs/reference/stdlib/option-result.md) ex
 | Build a small complete project | [Shopping total](docs/learn/first-project.md) |
 | Store and search data | [Collections](docs/reference/stdlib/collections.md) |
 | Read and write files | [Files](docs/reference/stdlib/file.md) |
-| Call a web service | [HTTP](docs/reference/stdlib/http.md) |
-| Build a web service | [Web APIs](docs/reference/stdlib/webapi.md) |
 | Work with structured data | [JSON](docs/reference/stdlib/json.md) |
-| Create a desktop window | [WebView](docs/reference/stdlib/webview.md) |
-| Draw graphics or run GPU calculations | [GPU](docs/reference/stdlib/gpu.md) |
 | Check your program | [Testing](docs/reference/tooling/testing.md) |
 | Find an exact API signature | [API catalog](docs/reference/api/index.md) |
 
-Desktop, browser, and Node programs do not all have the same permissions or services. Each feature guide explains its availability. Start with [Choosing where your program runs](docs/learn/environments.md).
+Native CLI, browser, and Node programs do not all have the same permissions or services. Each feature guide explains its availability. Start with [Choosing where your program runs](docs/learn/environments.md).
 
 ## Everyday commands
 
@@ -116,7 +112,7 @@ Run these from your project folder:
 | `dreamer build --release` | Build an optimized version |
 | `dreamer test` | Run the tests in `tests/` |
 | `dreamer add <package>` | Install a reusable package |
-| `dreamer pack` | Prepare a desktop app for sharing |
+| `dreamer pack` | Prepare a CLI program for sharing |
 | `dreamer toolchain doctor` | Check required build tools |
 
 The [Dreamer overview](docs/reference/tooling/dreamer.md) links to focused guides. [Packaging](docs/reference/tooling/pack/index.md) explains sharing an app; [publishing](docs/reference/tooling/publishing.md) explains sharing its source.

@@ -120,18 +120,6 @@ impl Index {
                 acc.requested_std_packages.insert("system.json".to_string());
             }
 
-            // GPU stages / `@gpu` helpers need `system.gpu` even without an import.
-            if program.functions.iter().any(|f| {
-                f.attributes.iter().any(|a| {
-                    matches!(
-                        a.name.text.as_str(),
-                        "compute" | "vertex" | "fragment" | "gpu"
-                    )
-                })
-            }) {
-                acc.requested_std_packages.insert("system.gpu".to_string());
-            }
-
             let _ = dream::driver::prelude::merge_prelude(
                 &arena,
                 &mut acc.all_functions,

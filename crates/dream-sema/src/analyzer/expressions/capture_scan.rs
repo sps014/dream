@@ -150,7 +150,6 @@ fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut HashSet<String>) {
                 walk_stmts_for_ref_targets(b, out);
             }
         }
-        StatementNode::WorkgroupDecl(_, _, _) => {}
     }
 }
 
@@ -347,7 +346,6 @@ fn walk_stmt_for_lambdas(stmt: &StatementNode, out: &mut HashSet<String>) {
                 walk_stmts_for_lambdas(b, out);
             }
         }
-        StatementNode::WorkgroupDecl(_, _, _) => {}
     }
 }
 
@@ -624,7 +622,6 @@ fn collect_names_stmt(
                 collect_names_block(b, scopes, referenced);
             }
         }
-        StatementNode::WorkgroupDecl(_, _, _) => {}
     }
 }
 

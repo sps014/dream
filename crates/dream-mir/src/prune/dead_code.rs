@@ -82,27 +82,16 @@ fn prune_dead_intrinsics(mir: &mut Mir) {
 ///
 /// Generated struct↔js marshalers (emitted later as WAT) call the `js*` host bridges by symbol, so
 /// whenever a surviving `Cast` involves `js` — or any `JsCall` remains — every import whose host
-/// `field` starts with `js` is kept even if no MIR call edge names it. GPU-only modules keep
-/// `jsRetain`/`jsRelease` so host handle RC stays bound.
+/// `field` starts with `js` is kept even if no MIR call edge names it.
 fn prune_dead_imports(mir: &mut Mir, interner: &TypeInterner) {
     let live_defs = live_callee_defs(mir);
 
     let keep_js_bridges = module_uses_js_bridges(mir, interner);
-    // GPU resources are `js` handles; `$release_js` calls `$js_release` even when no `js*` stdlib
-    // bridge remains. Keep the stdlib `jsRetain`/`jsRelease` externs so the ABI/runtime bind them
-    // (the emitter still replaces the WAT with compiler-emitted `$js_retain`/`$js_release`).
-    let keep_js_rc = keep_js_bridges
-        || mir
-            .imports
-            .iter()
-            .any(|imp| live_defs.contains(&imp.def) && imp.field.starts_with("gpu"));
     mir.imports.retain(|imp| {
         // Generated `$Foo_to_js` / `$js_to_Foo` marshalers call `js*` bridges by symbol. Keep every
         // `js*` import only when a live `JsCall` or `js` Cast actually needs them — not merely
         // because some struct layout survived.
-        live_defs.contains(&imp.def)
-            || (imp.field.starts_with("js") && keep_js_bridges)
-            || (keep_js_rc && (imp.field == "jsRetain" || imp.field == "jsRelease"))
+        live_defs.contains(&imp.def) || (imp.field.starts_with("js") && keep_js_bridges)
     });
 }
 

@@ -76,7 +76,7 @@ impl Index {
     }
 
     /// Type of a receiver identifier: variable/param type, or the bare type name itself when it
-    /// names a class/struct/interface/enum/extend-target (static access `ComputePass.dispatch` /
+    /// names a class/struct/interface/enum/extend-target (static access `JobGroup.dispatch` /
     /// `js.global`).
     pub(crate) fn receiver_type_name(
         &self,
@@ -122,7 +122,7 @@ impl Index {
     }
 
     pub(crate) fn substitute_generic(detail: &str, receiver_ty: &str) -> String {
-        // `receiver_ty` is the human-readable type (e.g. `List<int>` / `GpuBuffer<float>`);
+        // `receiver_ty` is the human-readable type (e.g. `List<int>` / `List<float>`);
         // pull the generic argument out of the angle brackets.
         let mut generic_arg = None;
         if let Some(start) = receiver_ty.find('<') {
@@ -139,7 +139,7 @@ impl Index {
     }
 
     /// Applies call-site / receiver type arguments to a method detail that still mentions `T`
-    /// (e.g. `GpuBuffer.alloc<float>` → `GpuBuffer<float>`, `read_at(): T[]` → `float[]`).
+    /// (e.g. `List.create<float>` → `List<float>`, `read_at(): T[]` → `float[]`).
     /// Method-level params (`dispatch<TIn, TOut>`) are handled only by
     /// [`substitute_method_type_args`] — never via class-`T` synthesis, which would turn
     /// `TIn` into `stringIn` when args are `int, string`.
@@ -150,12 +150,12 @@ impl Index {
     ) -> String {
         let mut out = detail.to_string();
         let method_has_type_params = method_detail_has_type_params(detail);
-        // Prefer an already-concrete receiver (`GpuBuffer<float>`).
+        // Prefer an already-concrete receiver (`List<float>`).
         if let Some(recv) = receiver_ty {
             if recv.contains('<') {
                 out = Self::substitute_generic(&out, recv);
             } else if !call_type_args.is_empty() && !method_has_type_params {
-                // Bare `GpuBuffer.alloc<float>(…)`: synthesize `GpuBuffer<float>`.
+                // Bare `List.create<float>(…)`: synthesize `List<float>`.
                 let synthetic = format!("{}<{}>", type_base(recv), call_type_args.join(", "));
                 out = Self::substitute_generic(&out, &synthetic);
             }

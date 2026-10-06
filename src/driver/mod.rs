@@ -14,7 +14,6 @@ pub mod diag_highlight;
 pub mod error;
 pub mod ffi_shim;
 pub mod generate;
-pub mod gpu_gen;
 pub mod interface_defaults;
 pub mod js_runtime;
 #[cfg(feature = "native")]

@@ -98,14 +98,14 @@ mod tests {
             &mut command,
             Path::new("/toolchain"),
             None,
-            &[HostCapability::Core, HostCapability::Net],
+            &[HostCapability::Core, HostCapability::Crypto],
             &dream_abi::target::TargetSpec::host(),
         );
         let args: Vec<_> = command
             .get_args()
             .map(|arg| arg.to_string_lossy())
             .collect();
-        for name in ["core", "net"] {
+        for name in ["core", "crypto"] {
             let symbol = format!("dream_host_{name}_abi_v2");
             let required = if cfg!(windows) {
                 format!("-Wl,/include:{symbol}")
@@ -116,10 +116,12 @@ mod tests {
             };
             assert!(args.iter().any(|arg| *arg == required));
         }
-        assert!(!args.iter().any(|arg| arg.contains("dream_host_gpu_abi")));
         assert!(!args
             .iter()
-            .any(|arg| arg.contains("dream_host_webview_abi")));
+            .any(|arg| arg.contains("dream_host_unicode_abi")));
+        assert!(!args
+            .iter()
+            .any(|arg| arg.contains("dream_host_process_abi")));
         assert!(!args.iter().any(|arg| arg.contains("abi_v1")));
     }
 
@@ -152,9 +154,9 @@ mod tests {
         );
         let args = format!("{command:?}");
         for capability in [
-            HostCapability::Net,
-            HostCapability::Gpu,
-            HostCapability::WebView,
+            HostCapability::Crypto,
+            HostCapability::Unicode,
+            HostCapability::Process,
         ] {
             assert!(!args.contains(capability.link_name()));
         }

@@ -132,6 +132,7 @@ fn cache_locations_do_not_depend_on_cargo_files_in_the_working_directory() {
 fn execution_and_runtime_catalog_do_not_read_environment_again() {
     for source in [
         include_str!("../../execution/llvm/tools.rs"),
+        include_str!("../../execution/llvm/wasm_opt.rs"),
         include_str!("../../execution/llvm/runtime.rs"),
         include_str!("../../execution/llvm/bundle.rs"),
         include_str!("../../execution/native/cc.rs"),
@@ -152,6 +153,7 @@ fn target_sysroot_and_driver_changes_invalidate_configuration_hash() {
         [("DREAM_TARGETS", "/foreign")],
         [("DREAM_SYSROOT", "/sdk")],
         [("DREAM_CC", "other-clang")],
+        [("DREAM_WASM_OPT", "/binaryen/bin/wasm-opt")],
     ] {
         let changed = config(&values, None, PathBuf::from("/project"));
         assert_ne!(base.fingerprint(), changed.fingerprint());

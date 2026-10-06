@@ -12,7 +12,7 @@ export function readEmbeddedAbi(wasmModule) {
 }
 
 /**
- * Swap a Dream artifact extension (`.wasm` / `.abi.json` / `.wgsl`), keeping `?query` / `#hash`.
+ * Swap a Dream artifact extension (`.wasm` / `.abi.json`), keeping `?query` / `#hash`.
  * Fallback when an older `.wasm` has no embedded ABI section.
  */
 export function replaceArtifactExt(source, ext) {
@@ -24,9 +24,7 @@ export function replaceArtifactExt(source, ext) {
     ? path.slice(0, -9)
     : path.endsWith(".wasm")
       ? path.slice(0, -5)
-      : path.endsWith(".wgsl")
-        ? path.slice(0, -5)
-        : null;
+      : null;
   if (stem == null) return undefined;
   return stem + ext + extra;
 }

@@ -1,4 +1,4 @@
-//! Pinned Zig download URLs + SHA-256.
+//! Pinned host build-tool downloads and SHA-256 checksums.
 
 use super::{Host, HostArch, HostOs};
 use anyhow::Result;
@@ -8,6 +8,7 @@ pub const ZIG_VERSION: &str = "0.16.0";
 #[derive(Clone, Copy, Debug)]
 pub enum ArchiveKind {
     TarXz,
+    TarGz,
     Zip,
 }
 
@@ -55,6 +56,7 @@ pub fn zig_artifact(host: Host) -> Result<Artifact> {
     let ext = match kind {
         ArchiveKind::Zip => "zip",
         ArchiveKind::TarXz => "tar.xz",
+        ArchiveKind::TarGz => "tar.gz",
     };
     let filename = format!("zig-{triple}-{ZIG_VERSION}.{ext}");
     Ok(Artifact {
@@ -65,15 +67,59 @@ pub fn zig_artifact(host: Host) -> Result<Artifact> {
     })
 }
 
+pub fn binaryen_artifact(host: Host) -> Result<Artifact> {
+    let (triple, sha256) = match (host.os, host.arch) {
+        (HostOs::Linux, HostArch::X64) => (
+            "x86_64-linux",
+            "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489",
+        ),
+        (HostOs::Linux, HostArch::Arm64) => (
+            "aarch64-linux",
+            "89c07ea56faf38d0fbecf36ca8ec0721756716185f265b568e133d427f299bf8",
+        ),
+        (HostOs::Macos, HostArch::X64) => (
+            "x86_64-macos",
+            "13a9b90be775c6389ce3d1f879cb8627bea56708ba8c122983941d53a8199b95",
+        ),
+        (HostOs::Macos, HostArch::Arm64) => (
+            "arm64-macos",
+            "ad66da82ac13f163e424b1643f16c6dfcccc98b5966296b43e52d3cab04f84a8",
+        ),
+        (HostOs::Windows, HostArch::X64) => (
+            "x86_64-windows",
+            "17a2cbeac6b5693c5fbafab3838d3c65fd9c1eb38b05f5baec6c657e8c84995b",
+        ),
+        (HostOs::Windows, HostArch::Arm64) => (
+            "arm64-windows",
+            "492a8e1847a0be1554bb9a7f384227981d60bc013aedc02d8ba1372c3943178c",
+        ),
+    };
+    let filename = format!(
+        "binaryen-version_{}-{triple}.tar.gz",
+        super::BINARYEN_VERSION
+    );
+    Ok(Artifact {
+        url: format!(
+            "https://github.com/WebAssembly/binaryen/releases/download/version_{}/{filename}",
+            super::BINARYEN_VERSION
+        ),
+        sha256: sha256.into(),
+        filename,
+        kind: ArchiveKind::TarGz,
+    })
+}
+
 pub fn artifact_for(component: super::Component, host: Host) -> Result<Artifact> {
     match component {
         super::Component::Cc => zig_artifact(host),
+        super::Component::Binaryen => binaryen_artifact(host),
     }
 }
 
 pub fn dest_dir(component: super::Component) -> std::path::PathBuf {
     match component {
         super::Component::Cc => super::zig_dir(),
+        super::Component::Binaryen => super::binaryen_dir(),
     }
 }
 
@@ -88,6 +134,21 @@ pub fn ensure_host_supported(host: Host) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn binaryen_artifacts_cover_every_supported_host() {
+        for os in [HostOs::Linux, HostOs::Macos, HostOs::Windows] {
+            for arch in [HostArch::X64, HostArch::Arm64] {
+                let artifact = binaryen_artifact(Host { os, arch }).unwrap();
+                assert!(artifact
+                    .url
+                    .contains(&format!("version_{}/", super::super::BINARYEN_VERSION)));
+                assert_eq!(artifact.sha256.len(), 64);
+                assert!(artifact.sha256.chars().all(|ch| ch.is_ascii_hexdigit()));
+                assert!(matches!(artifact.kind, ArchiveKind::TarGz));
+            }
+        }
+    }
 
     #[test]
     fn zig_artifacts_are_pinned_per_host() {

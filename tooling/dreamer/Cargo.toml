@@ -32,7 +32,6 @@ dirs = "5"
 tiny_http = "0.12"
 yansi = "1.0"
 image = { version = "0.25", default-features = false, features = ["png"] }
-icns = "0.3"
 tempfile = "3"
 
 [dev-dependencies]

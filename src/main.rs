@@ -344,12 +344,6 @@ fn main() -> ExitCode {
         None => None,
     };
 
-    if !native && (cli.release || optimize.is_some()) && !cfg!(feature = "wasm-opt") {
-        ui.error("--release / -O need the compiler built with its `wasm-opt` feature");
-        ui.help("rebuild `dream` with default features (cargo build --release)");
-        return ExitCode::FAILURE;
-    }
-
     let emit_mir = match &cli.emit_mir {
         Some(spec) => match dream_mir::passes::MirDumpSpec::parse(spec, cli.emit_mir_fn.as_deref())
         {

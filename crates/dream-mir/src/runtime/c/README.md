@@ -9,7 +9,7 @@ Use this guide when changing the C runtime or embedding it in another applicatio
 - `sys/wasi/` adapts WebAssembly memory, globals, synchronization, and browser/Node services.
 - `sys/shared/` provides scheduling common to both target families.
 
-The host capability crates provide networking, GPU, and window services separately. PCRE2 remains the vendored regular-expression module. `../modules.rs` registers runtime units; cache fingerprints include sources and headers from every layer.
+The host capability crates provide Unicode, crypto, process, and timezone services separately. PCRE2 remains the vendored regular-expression module. `../modules.rs` registers runtime units; cache fingerprints include sources and headers from every layer.
 
 ## Embed the runtime
 

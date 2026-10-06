@@ -75,12 +75,12 @@ impl Compiler {
                 ));
             }
             let emitted = self.emit_module(&mir, interner, live_imports, llvm.as_deref())?;
-            Ok((emitted, analyzed.gpu, mir.layouts))
+            Ok((emitted, mir.layouts))
         }));
         if self.emit_mir.is_some() {
             self.write_mir_dump(out_path, dump)?;
         }
-        let (emitted, gpu, layouts) = match result {
+        let (emitted, layouts) = match result {
             Ok(result) => result?,
             Err(payload) => {
                 let message = panic_message(&payload);
@@ -88,7 +88,7 @@ impl Compiler {
                 return Err(CompileError::Internal(message));
             }
         };
-        self.emit_artifacts(out_path, &loaded, emitted, gpu, layouts, llvm.as_deref())?;
+        self.emit_artifacts(out_path, &loaded, emitted, layouts, llvm.as_deref())?;
         // A reused build would silently drop warnings this compile printed.
         Ok(BuildOutcome::Built(
             stamp.filter(|_| diagnostics.diagnostics.is_empty()),

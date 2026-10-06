@@ -33,7 +33,7 @@ dreamer run --target node
 dreamer run --target web
 ```
 
-Choose a target explicitly when your project supports several environments. Check [environment availability](../../learn/environments.md) before adding file, desktop, or network features.
+Choose a target explicitly when your project supports several environments. Check [environment availability](../../learn/environments.md) before adding file or process features.
 
 ## Add reusable code
 

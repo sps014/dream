@@ -7,7 +7,7 @@ use std::rc::Rc;
 /// Represents a function parameter in the AST
 #[derive(Debug, Clone)]
 pub struct ParameterNode {
-    /// Attributes preceding the parameter (`@readonly a: GpuBuffer<float>`).
+    /// Attributes preceding the parameter.
     pub attributes: Vec<crate::nodes::AttributeNode>,
     pub name: SyntaxToken,
     pub type_: Type,

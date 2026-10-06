@@ -1,7 +1,5 @@
 import system;
 import system.io;
-import system.net;
-import system.webapi;
 
 async fun main(): void {
     let src = CancellationSource();
@@ -14,17 +12,4 @@ async fun main(): void {
         Err(e) => System.println(e.code()),
     }
 
-    switch (HttpClient().get("http://127.0.0.1:1/", opt).await) {
-        Ok(r) => System.println(r.status),
-        Err(e) => System.println(e.code()),
-    }
-
-    let client = HttpClient().with_cancellation(tok);
-    switch (client.get("http://127.0.0.1:1/").await) {
-        Ok(r) => System.println(r.status),
-        Err(e) => System.println(e.code()),
-    }
-
-    let port = WebApp.listen("127.0.0.1", 0, opt).await;
-    System.println(port);
 }

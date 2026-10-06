@@ -36,7 +36,7 @@ impl Index {
         } else {
             Vec::new()
         };
-        // `GpuBuffer<float>.alloc` puts class args before the `.`, not after the method name.
+        // `List<float>.alloc` puts class args before the `.`, not after the method name.
         if type_args.is_empty() && decl.kind == SymKind::Method {
             if let Some(args) = type_args_before_member_dot(text, start) {
                 type_args = args;

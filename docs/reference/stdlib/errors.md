@@ -21,23 +21,14 @@ The parse operation takes the error branch. Read [Option and Result](option-resu
 | --- | --- | --- |
 | Parse a value | `ParseError` | [ParseError](../api/core-parse-error.md) |
 | Read or write a file | `IoError` | [IoError](../api/io-io-error.md) |
-| Make an HTTP request | `HttpError` | [HttpError](../api/net-http-error.md) |
-| Use a socket | `NetError` | [NetError](../api/net-net-error.md) |
 | Run another process | `ProcessError` | [ProcessError](../api/process-process-error.md) |
-| Use a GPU | `GpuError` | [GpuError](../api/gpu-gpu-error.md) |
 | Encrypt or decrypt | `CryptoError` | [CryptoError](../api/crypto-crypto-error.md) |
-| Open or use a web window | `WebViewError` | [WebViewError](../api/webview-webview-error.md) |
-| Use a desktop dialog or clipboard | `DesktopError` | [DesktopError](../api/desktop-desktop-error.md) |
 
 ## Encryption errors
 
 `CryptoError` is returned by encryption and key operations. `EINVAL_KEY` indicates unsuitable key material, `EINVAL_NONCE` an invalid nonce, and `EDECRYPT` a decryption or authentication failure. Handle `EDECRYPT` as a failed operation; do not use unauthenticated output.
 
 The public helpers `invalid_key`, `invalid_nonce`, and `decrypt_failed` create errors from a message. `CryptoError(code, message)` constructs one directly.
-
-## Window errors
-
-`WebViewError` uses `UNAVAILABLE`, `EFAILED`, `EUNSUPPORTED`, `EPARSE`, and `ECANCELLED` for unavailable services, operation failures, unsupported operations, invalid responses, and cancellation. Its helpers are `unavailable(message)`, `failed(message)`, `unsupported(message)`, `parse(message)`, and `cancelled()`.
 
 ## Cancellation and fatal errors
 

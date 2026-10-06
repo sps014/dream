@@ -21,7 +21,7 @@ if [[ ! -x "$DREAM" ]]; then
   DREAM="$ROOT/target/debug/dream"
 fi
 if [[ ! -x "$DREAM" ]]; then
-  echo "dream binary not found; build with: cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-gpu -p dream-host-webview" >&2
+  echo "dream binary not found; build with: cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone" >&2
   exit 1
 fi
 

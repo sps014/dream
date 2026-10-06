@@ -11,6 +11,14 @@ use std::time::Duration;
 
 pub fn install(components: &[Component]) -> Result<()> {
     let host = super::detect_host()?;
+    fs::create_dir_all(toolchains_dir())?;
+    let lock = File::options()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(toolchains_dir().join(".install.lock"))?;
+    lock.lock()?;
     for component in components {
         catalog::ensure_host_supported(host)?;
         if is_installed(*component) {
@@ -147,6 +155,9 @@ fn extract_archive(archive: &Path, kind: ArchiveKind, dest: &Path) -> Result<()>
     fs::create_dir_all(&tmp)?;
     match kind {
         ArchiveKind::TarXz => unpack_tar_xz(archive, &tmp)?,
+        ArchiveKind::TarGz => {
+            tar::Archive::new(flate2::read::GzDecoder::new(File::open(archive)?)).unpack(&tmp)?
+        }
         ArchiveKind::Zip => unpack_zip(archive, &tmp)?,
     }
     let unpacked = flatten_single_dir(&tmp)?;

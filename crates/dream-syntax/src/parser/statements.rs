@@ -294,36 +294,6 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::SwitchToken => Ok(self.parse_switch()?),
             TokenKind::BreakToken => Ok(self.parse_break()?),
             TokenKind::ContinueToken => Ok(self.parse_continue()?),
-            // `@workgroup(N) let name: T;` — GPU workgroup-shared array (validated in sema).
-            TokenKind::AtToken
-                if self.peek_token(1).kind == TokenKind::IdentifierToken
-                    && self.peek_token(1).text == "workgroup" =>
-            {
-                self.match_token(TokenKind::AtToken);
-                self.match_token(TokenKind::IdentifierToken); // workgroup
-                let mut size: u32 = 64;
-                if self.current_token().kind == TokenKind::OpenParenthesisToken {
-                    self.match_token(TokenKind::OpenParenthesisToken);
-                    let ntok = self.current_token().clone();
-                    self.next_token();
-                    match crate::number::parse_u32_literal(&ntok.text) {
-                        Some(n) => size = n,
-                        None => {
-                            self.diagnostics.report_error(
-                                format!("'@workgroup' size '{}' is not a valid integer", ntok.text),
-                                Some(ntok.position),
-                            );
-                        }
-                    }
-                    self.match_token(TokenKind::CloseParenthesisToken);
-                }
-                self.match_token(TokenKind::LetToken);
-                let name = self.match_token(TokenKind::IdentifierToken);
-                self.match_token(TokenKind::ColonToken);
-                let ty = self.parse_type()?;
-                self.match_token(TokenKind::SemicolonToken);
-                Ok(StatementNode::WorkgroupDecl(name, ty, size))
-            }
             // A loop label: `name: while (...) { ... }` (also `for`/`do`).
             TokenKind::IdentifierToken if self.peek_token(1).kind == TokenKind::ColonToken => {
                 let label = self.match_token(TokenKind::IdentifierToken);

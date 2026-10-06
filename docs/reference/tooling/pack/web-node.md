@@ -2,7 +2,7 @@
 
 Use this guide after your app runs with `dreamer run --target web` or `dreamer run --target node`.
 
-Desktop `dreamer pack` creates native executables. For a browser or Node, build the corresponding output instead:
+Native `dreamer pack` creates native executables. For a browser or Node, build the corresponding output instead:
 
 ```sh
 dreamer build --release --target web

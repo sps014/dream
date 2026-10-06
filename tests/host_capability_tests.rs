@@ -29,42 +29,14 @@ fn unused_capability_imports_and_functions_do_not_link_hosts() {
         inventory(
             r#"
         import system;
-        import system.net;
-        import system.gpu;
-        import system.webview;
-        fun unused(): bool { return Gpu.is_available; }
+        import system.crypto;
+        import system.text;
+        fun unused(): byte[] { return SecureRandom.bytes(1); }
         fun main(): void { System.println("hello"); }
     "#
         ),
         vec![]
     );
-}
-
-#[test]
-fn live_hosts_select_only_their_own_capabilities() {
-    for (stem, capability) in [
-        ("http_stream_connect_fail", HostCapability::Net),
-        ("webapi_tls", HostCapability::Net),
-        ("gpu_capabilities", HostCapability::Gpu),
-    ] {
-        let source = std::fs::read_to_string(format!("tests/cases/{stem}.dream")).unwrap();
-        assert_eq!(inventory(&source), vec![HostCapability::Core, capability]);
-    }
-    assert_eq!(
-        inventory(
-            r#"
-        import system.desktop;
-        fun main(): void { Shell.open(""); }
-    "#
-        ),
-        vec![HostCapability::Core, HostCapability::WebView]
-    );
-}
-
-#[test]
-fn cpu_only_gpu_helpers_do_not_require_gpu_host() {
-    let source = std::fs::read_to_string("tests/cases/gpu_math_log_cpu.dream").unwrap();
-    assert_eq!(inventory(&source), vec![]);
 }
 
 #[cfg(unix)]

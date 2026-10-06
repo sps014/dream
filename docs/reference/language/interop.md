@@ -9,7 +9,7 @@ Dream runs in the browser and Node as WebAssembly. Talking to JavaScript uses th
 | function values | passing functions across the boundary in either direction | [Callbacks](callbacks.md) |
 | `@c(...)` | binds an extern to a C library in native executables and library outputs | [C Interop](c-interop.md) |
 
-`Js.*` is WASM/JS-host only: a native build aborts if guest code tries to call into JavaScript. `system.webview` is native-only.
+`Js.*` is WASM/JS-host only: a native build aborts if guest code tries to call into JavaScript.
 
 This page covers `extern` functions.
 
@@ -49,7 +49,7 @@ extern fun log(msg: string): void;
 
 ## Dream runtime hosts (`@runtime`)
 
-Stdlib functions implemented by the Dream runtime (files, process, HTTP, GPU, …) bind with `@runtime("name")`. That is **not** JavaScript-only: WASM imports `Dream.name` and native `dream run` calls the C symbol `name`.
+Stdlib functions implemented by the Dream runtime (files, process, crypto, …) bind with `@runtime("name")`. That is **not** JavaScript-only: WASM imports `Dream.name` and native `dream run` calls the C symbol `name`.
 
 ```dream
 @runtime("fileRead")
@@ -144,11 +144,10 @@ Functions cross the boundary in both directions too — see [Callbacks](callback
 ## Built on interop
 
 - [Regex](../stdlib/regex.md) — `Regex` in `system.text` (not a JS `RegExp`).
-- [HttpClient](../stdlib/http.md) — HTTP over `extern async fun`.
 
 ## Host feature matrix
 
-Most stdlib packages behave identically on `dream run`, in the browser, and in Node. Where a host can't support a feature (no raw sockets in the browser, no process model in the browser, …) that package's own page has a "Platform notes" table — check
-[HTTP](../stdlib/http.md), [Raw sockets](../stdlib/net.md), [File I/O](../stdlib/file.md),
-[Process](../stdlib/process.md), [Crypto](../stdlib/crypto.md), [DateTime](../stdlib/datetime.md),
-and [`system.gpu`](../stdlib/gpu.md). Unicode helpers ([Strings](../stdlib/string.md)) and `System.read_line` / `read_key` ([Built-ins](../stdlib/builtins.md)) work on both native and JS hosts; in the browser, interactive input uses a `prompt()` dialog because there is no stdin.
+Most stdlib packages behave identically on native, browser, and Node hosts.
+Check each retained package's platform notes for file access and process support.
+Unicode helpers and console input work on native and JS hosts; browser console
+input uses a prompt because there is no stdin.

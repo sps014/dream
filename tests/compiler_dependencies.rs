@@ -20,37 +20,22 @@ fn compiler_does_not_embed_native_hosts() {
 
 #[test]
 fn host_capability_dependency_boundaries_are_explicit() {
-    for (source, forbidden) in [
-        (
-            include_str!("../crates/dream-host-core/Cargo.toml"),
-            &["reqwest", "wgpu", "winit", "wry"][..],
-        ),
-        (
-            include_str!("../crates/dream-host-net/Cargo.toml"),
-            &["wgpu", "winit", "wry"][..],
-        ),
-        (
-            include_str!("../crates/dream-host-gpu/Cargo.toml"),
-            &["reqwest", "wry"][..],
-        ),
-        (
-            include_str!("../crates/dream-host-webview/Cargo.toml"),
-            &["reqwest", "wgpu"][..],
-        ),
+    let manifest: toml::Value =
+        toml::from_str(include_str!("../crates/dream-host-core/Cargo.toml")).unwrap();
+    for name in [
+        "reqwest",
+        "hyper",
+        "hyper-util",
+        "wgpu",
+        "naga",
+        "winit",
+        "wry",
     ] {
-        let manifest: toml::Value = toml::from_str(source).unwrap();
-        let dependencies = manifest["dependencies"].as_table().unwrap();
-        for name in forbidden {
-            assert!(
-                !dependencies.contains_key(*name),
-                "unexpected dependency {}",
-                name
-            );
-        }
+        assert!(manifest["dependencies"].get(name).is_none());
     }
     let manifest: toml::Value =
         toml::from_str(include_str!("../crates/dream-host/Cargo.toml")).unwrap();
-    for capability in ["core", "net", "gpu", "webview"] {
+    for capability in ["core", "unicode", "crypto", "process", "timezone"] {
         assert!(manifest["features"][capability].is_array());
         assert_eq!(
             manifest["dependencies"][format!("dream-host-{capability}")]["optional"].as_bool(),

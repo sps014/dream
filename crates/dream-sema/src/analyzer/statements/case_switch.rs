@@ -66,44 +66,6 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// The same constant-label key, read off the AST instead of HIR.
-    ///
-    /// Shader bodies are emitted straight from the AST and produce no HIR, so `const_case_key`
-    /// has nothing to inspect there and every label would look non-constant. This accepts the
-    /// shapes a shader can actually use as a label: literals, a negated literal, and an enum
-    /// member. Enum members resolve to their value, which is what makes the duplicate check work
-    /// across `case 1:` and `case Color.Red:` naming the same number.
-    fn const_case_key_ast(&self, e: &ExpressionNode<'_>) -> Option<String> {
-        match e {
-            ExpressionNode::Literal(ty) => match ty {
-                Type::Integer(t) | Type::Boolean(t) | Type::String(t) => Some(t.text.clone()),
-                Type::Char(t) => Some((t.text.chars().next()? as u32).to_string()),
-                Type::Float(t) | Type::Double(t) => Some(t.text.clone()),
-                _ => None,
-            },
-            ExpressionNode::Parenthesized(_, inner) => self.const_case_key_ast(inner),
-            ExpressionNode::Unary(op, inner)
-                if op.kind == dream_syntax::token::token_kind::TokenKind::MinusToken =>
-            {
-                let key = self.const_case_key_ast(inner)?;
-                Some(match key.strip_prefix('-') {
-                    Some(rest) => rest.to_string(),
-                    None if key == "0" => key,
-                    None => format!("-{key}"),
-                })
-            }
-            ExpressionNode::MemberAccess(base, member) => {
-                let ExpressionNode::Identifier(enum_name) = base else {
-                    return None;
-                };
-                self.enum_members(self.type_ctx.resolve(DefKind::Enum, &enum_name.text)?)?
-                    .get(&member.text)
-                    .map(|v| v.to_string())
-            }
-            _ => None,
-        }
-    }
-
     pub(in crate::analyzer) fn analyze_case_switch(
         &mut self,
         subject: &ExpressionNode<'a>,
@@ -154,7 +116,7 @@ impl<'a> Analyzer<'a> {
                 // constants. If it evaluates to a non-constant (e.g. a runtime field access), reject it.
                 let key = match &label_hir {
                     Some(hir) => self.const_case_key(hir, None),
-                    None => self.const_case_key_ast(label),
+                    None => None,
                 };
 
                 let layout_constant = label_hir.as_ref().is_some_and(case_needs_layout);

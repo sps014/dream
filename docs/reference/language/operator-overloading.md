@@ -58,8 +58,17 @@ Rules:
 - `<`, `<=`, `>`, `>=` are **not** tagged individually. Implement `Comparable<Self>` (see
   [Interfaces § Built-in `Equatable` and `Comparable`](interfaces.md#built-in-equatable-and-comparable))
   instead; all four ordering operators dispatch to its single `compare` method.
-- A type may declare at most one overload per operator symbol/arity, and at most one cast per
-  target type.
+- A type may declare multiple binary overloads of the same symbol with different right-hand
+  operand types. An exact type match wins over a compatible match; equally good matches are
+  ambiguous. Duplicate parameter types are errors, even when the return types differ.
+- Unary operators remain unique per symbol, and casts remain unique per target type.
+- Equality overloads must return `bool`. `==` and `!=` select the same overload; `!=` negates it.
+- Operators dispatch on the left operand. Support both operand orders by declaring an overload
+  on each type (including through `extend`); operands are never automatically reversed.
+- String concatenation keeps its built-in behavior whenever either operand of `+` is a string.
+
+For example, a type can declare both `fun operator +(other: Vector2): Vector2` and
+`fun operator +(other: int): Vector2`. The right operand determines which method is called.
 
 ### User-defined casts
 

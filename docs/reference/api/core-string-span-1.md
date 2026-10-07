@@ -98,6 +98,16 @@ Same value as `this.to_string().hash_code()`, without allocating.
 public override fun hash_code(): int
 ```
 
+## Equality operators
+
+`==` and `!=` compare the viewed UTF-16 units without allocating, against another `StringSpan`
+or a `string`. String comparisons work in either operand order.
+
+```dream
+fun operator ==(other: StringSpan): bool
+fun operator ==(borrow other: string): bool
+```
+
 ## `equals`
 
 True when the view holds exactly the units of `other`.

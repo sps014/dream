@@ -8,7 +8,7 @@ import system;
 fun main() {
     let line = "name=Ada; lang=Dream";
     let key = line.span(0, 4);              // "name", no allocation
-    System.println(key.equals("name"));     // true
+    System.println(key == "name");     // true
     System.println(key.length);             // 4
     let owned = key.to_string();            // the explicit allocation point
     System.println(owned);
@@ -29,7 +29,7 @@ fun main() {
 | --- | --- |
 | `length` / `is_empty()` / `byte_size()` | size in UTF-16 units / payload bytes |
 | `char_at(i)` / `sp[i]` / `byte_at(i)` | one code unit / payload byte |
-| `==` / `equals(s)` / `compare` | equality with another `StringSpan` / with a `string` / ordering against either |
+| `==` / `equals(s)` / `compare` | equality with a `StringSpan` or `string` / named string equality / ordering against either |
 | `starts_with` / `ends_with` / `contains` | tests |
 | `index_of` / `last_index_of` | `Option<int>`, by `char` or `string` |
 | `slice(start, end)` / `slice(start)` | a narrower view, clamped |
@@ -37,6 +37,9 @@ fun main() {
 | `parse_int()` / `parse_double()` | `Result` like the `string` versions |
 | `split_iter(sep)` / `lines()` | allocation-free iterators of `StringSpan` pieces |
 | `to_string()` | copy the view into an owned `string` |
+
+`==` and `!=` compare contents without allocating: `sp == "text"`, `"text" == sp`,
+and `sp == other_span` all work. `equals(string)` is also available.
 
 A span hashes like the equal `string`, so `Map<string, V>` and `Set<string>` look it up without building a key:
 

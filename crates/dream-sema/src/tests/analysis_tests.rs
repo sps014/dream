@@ -2410,3 +2410,25 @@ fn test_ordinary_function_may_not_fall_off_the_end() {
         errors
     );
 }
+
+#[test]
+fn operator_no_match_and_poison_do_not_cascade() {
+    let diagnostics = analyze_code(
+        r#"
+        class Value {
+            fun operator +(other: int): int { return other; }
+            fun operator +(other: long): long { return other; }
+        }
+        fun main(): void {
+            let v = Value();
+            let bad = v * true;
+            let poisoned = bad + 1;
+            let unknown = v + missing;
+        }
+        "#,
+    );
+    let errors: Vec<_> = diagnostics.errors().collect();
+    assert_eq!(errors.len(), 2, "{errors:?}");
+    assert!(errors.iter().any(|d| d.message.contains("cannot convert from bool to Value")));
+    assert!(errors.iter().any(|d| d.message.contains("missing")));
+}

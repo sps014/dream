@@ -117,34 +117,7 @@ impl<'a> Analyzer<'a> {
         candidates: Vec<crate::function_table::FunctionIdentity>,
         arg_types: &[dream_types::TypeId],
     ) -> Result<FunctionTableInfo, String> {
-        let mut compatibility = indexmap::IndexMap::new();
-        for key in &candidates {
-            let Ok(info) = self.function_table.get_function(key) else {
-                continue;
-            };
-            let mut parameters = info.parameters;
-            if info.is_variadic
-                && let Some(last) = parameters.last()
-                    && let dream_types::TyKind::Array(element) = self.type_ctx.interner.kind(*last)
-                    {
-                        parameters.push(*element);
-                    }
-            for param in parameters {
-                for &arg in arg_types {
-                    let mut sink = DiagnosticBag::new(None);
-                    let compatible =
-                        dream_types::overload_compatible(&self.type_ctx.interner, param, arg)
-                            || self.value_type_assignable(param, arg, &mut sink);
-                    compatibility.insert((param, arg), compatible);
-                }
-            }
-        }
-        match self.function_table.select_candidates(
-            &self.type_ctx,
-            candidates,
-            arg_types,
-            |param, arg| compatibility.get(&(param, arg)).copied().unwrap_or(false),
-        ) {
+        match self.resolve_candidate_overload(candidates, arg_types) {
             OverloadResolution::Unique(key) => match self.function_table.get_function(&key) {
                 Ok(info) => Ok(info),
                 Err(_) => Err(format!("Could not resolve function '{base}'")),
@@ -175,6 +148,41 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    pub(in crate::analyzer) fn resolve_candidate_overload(
+        &mut self,
+        candidates: Vec<crate::function_table::FunctionIdentity>,
+        arg_types: &[dream_types::TypeId],
+    ) -> OverloadResolution {
+        let mut compatibility = indexmap::IndexMap::new();
+        for key in &candidates {
+            let Ok(info) = self.function_table.get_function(key) else {
+                continue;
+            };
+            let mut parameters = info.parameters;
+            if info.is_variadic
+                && let Some(last) = parameters.last()
+                && let dream_types::TyKind::Array(element) = self.type_ctx.interner.kind(*last)
+            {
+                parameters.push(*element);
+            }
+            for param in parameters {
+                for &arg in arg_types {
+                    let mut sink = DiagnosticBag::new(None);
+                    let compatible =
+                        dream_types::overload_compatible(&self.type_ctx.interner, param, arg)
+                            || self.value_type_assignable(param, arg, &mut sink);
+                    compatibility.insert((param, arg), compatible);
+                }
+            }
+        }
+        self.function_table.select_candidates(
+            &self.type_ctx,
+            candidates,
+            arg_types,
+            |param, arg| compatibility.get(&(param, arg)).copied().unwrap_or(false),
+        )
+    }
+
     pub(crate) fn validate_arguments(
         &mut self,
         error_prefix: &str,
@@ -185,20 +193,21 @@ impl<'a> Analyzer<'a> {
     ) {
         for (i, given_type) in given.iter().enumerate() {
             if let Some(expected_type_str) = expected.get(i)
-                && !self.value_type_assignable(*expected_type_str, *given_type, diagnostics) {
-                    let expected_pretty = self.type_id_display(*expected_type_str);
-                    let given_pretty = self.type_id_display(*given_type);
-                    diagnostics.report_error(
-                        format!(
-                            "{} expects parameter {} to be {}, got {}",
-                            error_prefix,
-                            i + 1,
-                            expected_pretty,
-                            given_pretty
-                        ),
-                        Some(position),
-                    );
-                }
+                && !self.value_type_assignable(*expected_type_str, *given_type, diagnostics)
+            {
+                let expected_pretty = self.type_id_display(*expected_type_str);
+                let given_pretty = self.type_id_display(*given_type);
+                diagnostics.report_error(
+                    format!(
+                        "{} expects parameter {} to be {}, got {}",
+                        error_prefix,
+                        i + 1,
+                        expected_pretty,
+                        given_pretty
+                    ),
+                    Some(position),
+                );
+            }
         }
     }
 }

@@ -1,0 +1,6 @@
+import system;
+class Value {
+    fun operator +(other: int): int { return other; }
+    fun operator +(other: long): long { return other; }
+}
+fun main(): void { let v = Value(); let x = v + true; let y = v + v; }

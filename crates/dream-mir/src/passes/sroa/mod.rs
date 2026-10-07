@@ -11,6 +11,7 @@
 //! lived only as a field of the eliminated object.
 
 mod managed;
+mod value_ctors;
 
 pub use managed::SroaManaged;
 
@@ -57,7 +58,9 @@ impl MirPass for Sroa {
 /// stores when `C` is a straight-line initializer that only writes non-ref fields or `string`
 /// fields of `this` from parameters/constants. Runs **before** [`super::RcInsertion`] so string
 /// field stores get call-site retain/move (take-ctors like `JsonParser`). Class / option / array
-/// fields stay on the ctor `New` so RC still sees a single sink.
+/// fields in heap classes stay on the ctor `New` so RC still sees a single sink. Other value
+/// constructors become zero-initialization followed by an ordinary call: inlining preserves
+/// their validation CFG and exposes the reference-field stores to value borrowing.
 pub struct ExpandSimpleCtors;
 
 impl ModulePass for ExpandSimpleCtors {
@@ -76,12 +79,20 @@ impl ModulePass for ExpandSimpleCtors {
             }
             map
         };
-        if ctor_inits.is_empty() {
-            return false;
-        }
+        let signatures = mir
+            .functions
+            .iter()
+            .map(|f| {
+                (
+                    (f.def, f.instance.clone()),
+                    f.params.iter().map(|&p| f.local_ty(p)).collect(),
+                )
+            })
+            .collect();
         let mut changed = false;
         for f in &mut mir.functions {
             changed |= expand_in_function(f, &ctor_inits);
+            changed |= value_ctors::expand(f, interner, &signatures);
         }
         changed
     }
@@ -299,9 +310,10 @@ fn find_default_news(func: &MirFunction, interner: &TypeInterner) -> Vec<Local> 
             if let Statement::Assign(Place::Local(d), rv) = stmt {
                 *def_counts.entry(*d).or_default() += 1;
                 if let Rvalue::New { ctor: None, ty, .. } = rv
-                    && !interner.is_value_type(*ty) {
-                        news.push(*d);
-                    }
+                    && !interner.is_value_type(*ty)
+                {
+                    news.push(*d);
+                }
             }
         }
     }
@@ -511,9 +523,10 @@ fn rvalue_mentions(rv: &Rvalue, o: Local) -> bool {
 fn stmt_mentions(stmt: &Statement, o: Local) -> bool {
     // Writes to `o` (as a place) plus any read of `o`.
     if let Statement::Assign(place, _) = stmt
-        && place_mentions(place, o) {
-            return true;
-        }
+        && place_mentions(place, o)
+    {
+        return true;
+    }
     let mut hit = false;
     stmt_reads(stmt, &mut |l| {
         if l == o {
@@ -531,9 +544,10 @@ fn terminator_mentions(t: &Terminator, o: Local) -> bool {
         }
     });
     if let Terminator::Await { dest: Some(d), .. } = t
-        && *d == o {
-            hit = true;
-        }
+        && *d == o
+    {
+        hit = true;
+    }
     hit
 }
 

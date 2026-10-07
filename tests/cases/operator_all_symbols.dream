@@ -1,0 +1,32 @@
+import system;
+class Bits {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+    fun operator %(other: int): int { return this.value % other; }
+    fun operator %(other: Bits): int { return this.value % other.value; }
+    fun operator &(other: int): int { return this.value & other; }
+    fun operator &(other: Bits): int { return this.value & other.value; }
+    fun operator |(other: int): int { return this.value | other; }
+    fun operator |(other: Bits): int { return this.value | other.value; }
+    fun operator ^(other: int): int { return this.value ^ other; }
+    fun operator ^(other: Bits): int { return this.value ^ other.value; }
+    fun operator <<(other: int): int { return this.value << other; }
+    fun operator <<(other: Bits): int { return this.value << other.value; }
+    fun operator >>(other: int): int { return this.value >> other; }
+    fun operator >>(other: Bits): int { return this.value >> other.value; }
+}
+fun main(): void {
+    let b = Bits(10);
+    System.println(b % 3);
+    System.println(b % Bits(3));
+    System.println(b & 3);
+    System.println(b & Bits(3));
+    System.println(b | 3);
+    System.println(b | Bits(3));
+    System.println(b ^ 3);
+    System.println(b ^ Bits(3));
+    System.println(b << 3);
+    System.println(b << Bits(3));
+    System.println(b >> 3);
+    System.println(b >> Bits(3));
+}

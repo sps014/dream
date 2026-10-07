@@ -97,6 +97,10 @@ public ref struct StringSpan {
         return string.view_eq(this.src, this.offset, this._length, other.src, other.offset, other._length) != 0;
     }
 
+    fun operator ==(borrow other: string): bool {
+        return this.equals(other);
+    }
+
     // True when the view holds exactly the units of `other`.
     public fun equals(borrow other: string): bool {
         return string.view_eq(this.src, this.offset, this._length, other, 0, other.length) != 0;
@@ -346,6 +350,10 @@ extend string : StringKey {
     // A view of `[start, end)`, clamped exactly like `substring`.
     public fun span(start: int, end: int): StringSpan {
         return StringSpan(this, 0, this.length).slice(start, end);
+    }
+
+    fun operator ==(other: StringSpan): bool {
+        return this.matches_span(other);
     }
 
     public fun matches_span(other: StringSpan): bool {

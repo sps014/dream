@@ -1,11 +1,11 @@
 use super::pipeline::Inliner;
-use crate::build::FunctionBuilder;
-use crate::passes::ModulePass;
 use crate::Operand;
 use crate::Place;
 use crate::Rvalue;
 use crate::Statement;
 use crate::Terminator;
+use crate::build::FunctionBuilder;
+use crate::passes::ModulePass;
 use crate::{Const, MirFunction};
 use dream_types::{DefKind, TypeCtx, TypeId};
 
@@ -421,8 +421,8 @@ fn skips_recursion() {
 /// pair that a call barrier would have kept.
 #[test]
 fn inlined_callee_lets_elision_cancel_rc_pair() {
-    use crate::passes::rc::{RcElision, RcInsertion};
     use crate::passes::MirPass;
+    use crate::passes::rc::{RcElision, RcInsertion};
 
     let mut ctx = TypeCtx::new();
     let void = ctx.interner.void();
@@ -596,5 +596,52 @@ fn optimize_module_rc_after_inline_moves_returned_string() {
         string_teardown,
         "fused body still tears down RC locals: {:?}",
         caller.blocks.iter().map(|b| &b.stmts).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn inlined_value_this_stores_into_caller_storage() {
+    let mut ctx = TypeCtx::new();
+    let def = ctx.register(DefKind::Struct, "View", vec![]);
+    ctx.interner.mark_value_def(def);
+    let view = ctx.interner.struct_ty(def, vec![]);
+    let ctor_def = ctx.register(DefKind::Function, "initialize", vec![]);
+    let caller_def = ctx.register(DefKind::Function, "caller", vec![]);
+    let mut ctor = FunctionBuilder::new("initialize", ctx.interner.void());
+    ctor.set_def(ctor_def, vec![]);
+    let this = ctor.new_param(view, Some("this".into()));
+    ctor.assign(
+        Place::Field {
+            base: this,
+            field: 0,
+        },
+        Rvalue::Use(Operand::Const(Const::Int(42))),
+    );
+    ctor.terminate(Terminator::Return(None));
+    let mut caller = FunctionBuilder::new("caller", ctx.interner.void());
+    caller.set_def(caller_def, vec![]);
+    let dest = caller.new_local(view, Some("value".into()));
+    caller.push(Statement::Call {
+        callee: crate::Callee {
+            def: ctor_def,
+            args: vec![],
+            ret: ctx.interner.void(),
+            take_params: vec![false],
+        },
+        args: vec![Operand::Copy(Place::Local(dest))],
+    });
+    caller.terminate(Terminator::Return(None));
+    let mut mir = crate::Mir {
+        functions: vec![ctor.finish(), caller.finish()],
+        ..Default::default()
+    };
+    assert!(Inliner.run(&mut mir, &ctx.interner));
+    assert!(
+        mir.functions[1]
+            .blocks
+            .iter()
+            .flat_map(|b| &b.stmts)
+            .any(|s| matches!(s,
+        Statement::Assign(Place::Field { base, field: 0 }, _) if *base == dest))
     );
 }

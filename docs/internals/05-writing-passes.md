@@ -166,7 +166,7 @@ Function-local `MirPass`es:
 
 Module passes (`ModulePass` or module-level functions) are listed in the driver section above. The largest is **`Inliner` (`inline/`)**:
 
-- **Eligibility:** direct calls to sync, non-recursive, non-entry callees. Size-gated: ≤64 statements and ≤16 blocks (≤128 / ≤24 when the callee has `@inline` / `prefer_inline`). Address-taken and recursive-SCC callees are skipped. Looping callees are eligible (the backend maps every MIR block to an LLVM block, so any reducible shape lowers). Async bodies, `New`/indirect calls, interface calls that `Devirt` could not make direct, and wide-arg sites with unknown argument types are skipped. Calls into `main` / the module init function are never inlined.
+- **Eligibility:** direct calls to sync, non-recursive, non-entry callees. Size-gated: ≤64 statements and ≤16 blocks (≤128 / ≤24 when the callee has `@inline` / `prefer_inline`). Address-taken and recursive-SCC callees are skipped. Looping callees are eligible (the backend maps every MIR block to an LLVM block, so any reducible shape lowers). Async bodies, heap `New`/indirect calls, interface calls that `Devirt` could not make direct, and wide-arg sites with unknown argument types are skipped. Calls into `main` / the module init function are never inlined.
 - **Value types:** callees with value-struct / `ref struct` locals are inlinable. Remapped `this` / `ref` / alias temps stay borrows (`LocalDecl::is_ref`). Owning and by-value param value locals get `LocalDecl::manual_drop` and a MIR `Statement::ValueDrop` at each remapped return→continuation edge (nulling RC fields afterward so loop re-entry is safe). Locals already marked `manual_drop` from a prior inline are not dropped again when their enclosing function is inlined. Call-result dests are forced Owning (`__vret`) so the return `Assign` deep-copies instead of Borrow-rebinding. `ValueFrame` treats `manual_drop` as always-Owning so the emitter never reclassifies those slots as borrows.
 - **Why this matters:** stdlib leaves like `Span.copy_from` (and callers such as `List.insert` on unmanaged `T`) collapse to open-coded `memory.copy` under `--release` once the Span call layer is erased.
 
@@ -304,3 +304,12 @@ dataflow worklist; `flow.rs` handles joins and block transfer, `aliases.rs` orde
 `destroy.rs` checks destruction safety, and `calls.rs` handles call ownership effects.
 `rc/elision/` separates straight-line chains, branch/loop regions and postdominance proofs.
 The inliner and elision tests live in sibling test modules.
+
+Validated value-struct constructors that cannot be flattened as straight-line initializers are
+split into zero-initialization and a direct constructor call before RC insertion. The CFG inliner
+preserves guards and side effects, with `this` aliasing the caller's value storage. Aliased or
+self-referential construction destinations remain combined until their alias safety is proven.
+The late `value-borrow` proof applies to ordinary structs and ref structs, including immutable
+by-value `borrow` parameters. Their private copies remain by-value, but frame-stable reference
+fields need no retains or drops. Mutation, escape, sink parameters, and opaque forwarding keep
+owning behavior.

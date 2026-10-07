@@ -1,4 +1,4 @@
-// Two methods on the same type cannot both claim the binary `+` operator.
+// Two binary `+` declarations with the same parameter type are duplicates.
 import system;
 class Vector2 {
     public x: int;

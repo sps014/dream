@@ -1,0 +1,35 @@
+import system;
+
+fun text(): string {
+    System.println("left");
+    return "hello";
+}
+
+fun other_text(): string {
+    System.println("right");
+    return "hello";
+}
+
+fun main(): void {
+    let span = "xhelloy".span(1, 6);
+    System.println(span == "hello");
+    System.println("hello" == span);
+    System.println(span != "hello");
+    System.println("hello" != span);
+    System.println(span == "world");
+    System.println("world" == span);
+    System.println(span != "world");
+    System.println("world" != span);
+    System.println(span == "hello".span());
+    System.println(span != "world".span());
+    System.println("".span() == "");
+    System.println("" == "x".span(0, 0));
+    System.println("🙂é".span() == "🙂é");
+    System.println("🙂é" == "x🙂éy".span(1, 4));
+    System.println("🙂é".span() != "🙂e");
+    System.println("same" == "same");
+    System.println("same" != "different");
+    System.println(span.equals("hello"));
+    System.println(text() == other_text().span());
+    System.println(text().span() != other_text());
+}

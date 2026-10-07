@@ -4139,193 +4139,193 @@
       {
         "signature": "public fun equals(borrow other: string): bool",
         "description": "True when the view holds exactly the units of `other`.",
-        "line": 101,
+        "line": 105,
         "page": "reference/api/core-string-span-1.md"
       },
       {
         "signature": "public fun compare(other: StringSpan): int",
         "description": "Code-unit order against `other`: negative / zero / positive.",
-        "line": 106,
+        "line": 110,
         "page": "reference/api/core-string-span-1.md"
       },
       {
         "signature": "public fun compare(borrow other: string): int",
         "description": "",
-        "line": 110,
+        "line": 114,
         "page": "reference/api/core-string-span-1.md"
       },
       {
         "signature": "public fun starts_with(borrow prefix: string): bool",
         "description": "",
-        "line": 114,
+        "line": 118,
         "page": "reference/api/core-string-span-1.md"
       },
       {
         "signature": "public fun ends_with(borrow suffix: string): bool",
         "description": "",
-        "line": 122,
+        "line": 126,
         "page": "reference/api/core-string-span-1.md"
       },
       {
         "signature": "public fun contains(borrow sub: string): bool",
         "description": "",
-        "line": 130,
+        "line": 134,
         "page": "reference/api/core-string-span-1.md"
       },
       {
         "signature": "public fun contains(c: char): bool",
         "description": "",
-        "line": 134,
+        "line": 138,
         "page": "reference/api/core-string-span-1.md"
       },
       {
         "signature": "public fun index_of(c: char): Option<int>",
         "description": "Index (relative to the view) of the first `c`, or `None`.",
-        "line": 139,
+        "line": 143,
         "page": "reference/api/core-string-span-1.md"
       },
       {
         "signature": "public fun index_of(c: char, from: int): Option<int>",
         "description": "",
-        "line": 143,
+        "line": 147,
         "page": "reference/api/core-string-span-1.md"
       },
       {
         "signature": "public fun index_of(borrow sub: string): Option<int>",
         "description": "Index (relative to the view) of the first occurrence of `sub`, or `None`.",
-        "line": 148,
+        "line": 152,
         "page": "reference/api/core-string-span-1.md"
       },
       {
         "signature": "public fun index_of(borrow sub: string, from: int): Option<int>",
         "description": "",
-        "line": 152,
+        "line": 156,
         "page": "reference/api/core-string-span-1.md"
       },
       {
         "signature": "public fun last_index_of(c: char): Option<int>",
         "description": "",
-        "line": 156,
+        "line": 160,
         "page": "reference/api/core-string-span-1.md"
       },
       {
         "signature": "public fun last_index_of(borrow sub: string): Option<int>",
         "description": "Empty `sub` is `Some(length)`, like `string.last_index_of`.",
-        "line": 161,
+        "line": 165,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public fun trim(): StringSpan",
         "description": "The view without leading and trailing whitespace.",
-        "line": 166,
+        "line": 170,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public fun trim_start(): StringSpan",
         "description": "",
-        "line": 170,
+        "line": 174,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public fun trim_end(): StringSpan",
         "description": "",
-        "line": 178,
+        "line": 182,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public fun parse_int(): Result<int, ParseError>",
         "description": "A (possibly signed) decimal `int`, with the same errors as `int.parse`.",
-        "line": 187,
+        "line": 191,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public fun parse_double(): Result<double, ParseError>",
         "description": "",
-        "line": 223,
+        "line": 227,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public fun split_iter(sep: char): StringSplit",
         "description": "Pieces between occurrences of `sep`; `while it.move_next() { it.current }`.",
-        "line": 228,
+        "line": 232,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public fun split_iter(borrow sep: string): StringSplit",
         "description": "",
-        "line": 232,
+        "line": 236,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public fun lines(): StringLines",
         "description": "Lines split on `\\n` with a trailing `\\r` dropped; a final `\\n` does not start a new line.",
-        "line": 237,
+        "line": 241,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public ref struct StringSplit",
         "description": "Cursor over the pieces of a `StringSpan` between separators. Every piece is a view of the same source; nothing is allocated.",
-        "line": 251,
+        "line": 255,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public fun move_next(): bool",
         "description": "Advances to the next piece; `false` once every piece has been produced.",
-        "line": 270,
+        "line": 274,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public get current(): StringSpan",
         "description": "The piece produced by the last `move_next()`.",
-        "line": 295,
+        "line": 299,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public ref struct StringLines",
         "description": "Cursor over the lines of a `StringSpan`.",
-        "line": 301,
+        "line": 305,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public fun move_next(): bool",
         "description": "",
-        "line": 310,
+        "line": 314,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public get current(): StringSpan",
         "description": "",
-        "line": 330,
+        "line": 334,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public interface StringKey",
         "description": "A `Map`/`Set` key that can be found by a `StringSpan` without building a `string`.",
-        "line": 336,
+        "line": 340,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "fun matches_span(other: StringSpan): bool",
         "description": "",
-        "line": 337,
+        "line": 341,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public fun span(): StringSpan",
         "description": "A view of the whole string.",
-        "line": 342,
+        "line": 346,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public fun span(start: int, end: int): StringSpan",
         "description": "A view of `[start, end)`, clamped exactly like `substring`.",
-        "line": 347,
+        "line": 351,
         "page": "reference/api/core-string-span-2.md"
       },
       {
         "signature": "public fun matches_span(other: StringSpan): bool",
         "description": "",
-        "line": 351,
+        "line": 359,
         "page": "reference/api/core-string-span-2.md"
       }
     ]

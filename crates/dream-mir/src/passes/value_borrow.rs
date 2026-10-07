@@ -5,8 +5,8 @@
 //! reference counting at all.
 //!
 //! A family is the value locals of one type joined by whole copies. It qualifies when its members
-//! are defined only by a zeroing `New`, copies between members, or are `ref`/`this` parameters
-//! (never written); are otherwise used only as field bases or as `ref`/`this` arguments of callees
+//! are defined only by a zeroing `New`, copies between members, or are `borrow`/`ref`/`this` parameters
+//! (never written); are otherwise used only as field bases or as `borrow`/`ref`/`this` arguments of callees
 //! that never store a reference field of that type; and every reference field store into a member
 //! is frame-stable. Members are marked [`crate::LocalDecl::borrows_refs`] (the backend stores their
 //! reference fields raw) and owning ones `manual_drop`; their `ValueRetain`/`ValueDrop` glue goes.
@@ -21,9 +21,13 @@ use dream_hir::LayoutTable;
 use dream_types::{DefId, TyKind, TypeId, TypeInterner};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[cfg(test)]
+#[path = "value_borrow_tests.rs"]
+mod tests;
+
 pub(crate) const STAGE: &str = "value-borrow";
 
-/// Per callee instance: which parameters alias the caller's slot and never store a reference
+/// Per callee instance: which parameters borrow the caller's references and never store a reference
 /// field of their type, so a borrowing member may be passed there.
 type Signatures = BTreeMap<(DefId, Vec<TypeId>), Vec<bool>>;
 
@@ -47,7 +51,7 @@ fn signatures(mir: &Mir, interner: &TypeInterner) -> Signatures {
                 .iter()
                 .map(|&p| {
                     let d = &f.locals[p.0 as usize];
-                    aliases_caller(f, p)
+                    borrows_caller(f, p)
                         && interner.is_value_type(d.ty)
                         && !stores_ref_field_of(f, d.ty, interner)
                         && !passes_along(f, p)
@@ -58,9 +62,9 @@ fn signatures(mir: &Mir, interner: &TypeInterner) -> Signatures {
         .collect()
 }
 
-fn aliases_caller(f: &MirFunction, p: Local) -> bool {
+fn borrows_caller(f: &MirFunction, p: Local) -> bool {
     let d = &f.locals[p.0 as usize];
-    f.params.contains(&p) && !d.is_take && (d.is_ref || d.name.as_deref() == Some("this"))
+    f.params.contains(&p) && !d.is_take
 }
 
 fn stores_ref_field_of(f: &MirFunction, ty: TypeId, interner: &TypeInterner) -> bool {
@@ -79,14 +83,72 @@ fn scalar_rvalue(f: &MirFunction, interner: &TypeInterner, rv: &Rvalue) -> bool 
     }
 }
 
-/// `p` reaches a call argument, so its field stores could happen out of sight.
+/// A borrowed parameter's whole-value copies must not escape or be forwarded through an
+/// opaque call. Checking the original parameter alone misses escapes through named copies.
 fn passes_along(f: &MirFunction, p: Local) -> bool {
-    f.blocks.iter().flat_map(|b| &b.stmts).any(|s| match s {
-        Statement::Call { args, .. } | Statement::Assign(_, Rvalue::Call { args, .. }) => {
-            args.iter().any(|a| local_of(a) == Some(p))
+    let mut aliases = BTreeSet::from([p]);
+    loop {
+        let mut changed = false;
+        for s in f.blocks.iter().flat_map(|b| &b.stmts) {
+            if let Statement::Assign(
+                Place::Local(dest),
+                Rvalue::Use(Operand::Copy(Place::Local(src))),
+            ) = s
+                && aliases.contains(src)
+                && f.local_ty(*dest) == f.local_ty(p)
+            {
+                changed |= aliases.insert(*dest);
+            }
         }
-        _ => false,
-    })
+        if !changed {
+            break;
+        }
+    }
+    let hidden = Local(u32::MAX);
+    for b in &f.blocks {
+        for s in &b.stmts {
+            match s {
+                Statement::Assign(
+                    Place::Local(dest),
+                    Rvalue::Use(Operand::Copy(Place::Local(src))),
+                ) if aliases.contains(dest)
+                    && aliases.contains(src)
+                    && !f.params.contains(dest) =>
+                {
+                    continue;
+                }
+                Statement::ValueRetain(l) | Statement::ValueDrop(l) | Statement::ValueKill(l)
+                    if aliases.contains(l) =>
+                {
+                    continue;
+                }
+                _ => {}
+            }
+            let mut s = s.clone();
+            stmt_operands_mut(&mut s, &mut |o| {
+                if matches!(o, Operand::Copy(Place::Field { base, .. }) if aliases.contains(base)) {
+                    *o = Operand::Copy(Place::Local(hidden));
+                }
+            });
+            let mut escapes = false;
+            stmt_reads(&s, &mut |l| escapes |= aliases.contains(&l));
+            if escapes {
+                return true;
+            }
+        }
+        let mut t = b.terminator.clone();
+        terminator_operands_mut(&mut t, &mut |o| {
+            if matches!(o, Operand::Copy(Place::Field { base, .. }) if aliases.contains(base)) {
+                *o = Operand::Const(Const::Int(0));
+            }
+        });
+        let mut escapes = false;
+        terminator_reads(&t, &mut |l| escapes |= aliases.contains(&l));
+        if escapes {
+            return true;
+        }
+    }
+    defines(f, p)
 }
 
 /// Every reference field of `ty` is a plain strong reference and the rest are plain scalars.
@@ -204,22 +266,23 @@ fn borrow_families(
     if members.is_empty() {
         return false;
     }
+    let mut changed = false;
     for b in &mut f.blocks {
+        let old_len = b.stmts.len();
         b.stmts.retain(|s| {
             !matches!(s, Statement::ValueRetain(l) | Statement::ValueDrop(l) if members.contains(l))
         });
+        changed |= b.stmts.len() != old_len;
     }
     for &m in &members {
-        if f.params.contains(&m) {
-            continue;
-        }
         let d = &mut f.locals[m.0 as usize];
+        changed |= !d.borrows_refs || (!d.is_ref && !d.manual_drop);
         d.borrows_refs = true;
         if !d.is_ref {
             d.manual_drop = true;
         }
     }
-    true
+    changed
 }
 
 impl Ctx<'_> {
@@ -256,11 +319,11 @@ impl Ctx<'_> {
         }
     }
 
-    /// A member's own definitions are a zeroing `New` or a same-type copy; parameters must alias.
+    /// A member's own definitions are a zeroing `New` or a same-type copy; parameters must borrow.
     fn member_shape_ok(&self, m: Local) -> bool {
         let f = self.f;
         if f.params.contains(&m) {
-            return aliases_caller(f, m) && !defines(f, m);
+            return borrows_caller(f, m) && !defines(f, m);
         }
         let ty = f.local_ty(m);
         f.blocks.iter().all(|b| {

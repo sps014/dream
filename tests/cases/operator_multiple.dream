@@ -1,0 +1,56 @@
+import system;
+
+class Number {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+    fun operator +(other: long): long { return (long)100 + other; }
+    fun operator +(other: int): int { return this.value + other; }
+    fun operator +(other: Number): int { return this.value + other.value; }
+    fun operator ==(other: Number): bool { return this.value == other.value; }
+    fun operator ==(other: int): bool { return this.value == other; }
+    fun operator -(): int { return -this.value; }
+    fun operator -(other: int): int { return this.value - other; }
+    fun operator -(other: long): long { return (long)100 - other; }
+}
+
+class Generic<T> {
+    public value: T;
+    public constructor(value: T) { this.value = value; }
+    fun operator ==(other: Generic<T>): bool { return this.value == other.value; }
+    fun operator ==(other: T): bool { return this.value == other; }
+}
+
+extend Number {
+    fun operator *(other: int): int { return this.value * other; }
+    fun operator *(other: Number): int { return this.value * other.value; }
+    fun operator /(other: double): double { return (double)this.value / other; }
+}
+
+extend int {
+    fun operator +(other: Number): int { return this + other.value; }
+}
+
+fun main(): void {
+    let n = Number(6);
+    let l: long = 2;
+    let f: float = 2.0;
+    System.println(n + 2);
+    System.println(n + l);
+    System.println(n + Number(4));
+    System.println(5 + n);
+    System.println(n == 6);
+    System.println(n != 6);
+    System.println(n == Number(6));
+    System.println(n != Number(4));
+    System.println(-n);
+    System.println(n - 2);
+    System.println(n - l);
+    System.println(n * 2);
+    System.println(n * Number(3));
+    System.println(n / f);
+    System.println(Generic<int>(6) == 6);
+    System.println(Generic<int>(6) != Generic<int>(7));
+    System.println(Generic<string>("same") == "same");
+    System.println(Generic<string>("same") == Generic<string>("same"));
+    System.println("value=" + n.value);
+}

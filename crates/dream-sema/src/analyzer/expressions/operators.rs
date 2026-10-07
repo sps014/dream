@@ -68,6 +68,10 @@ impl<'a> Analyzer<'a> {
         self.is_binding_aliases.truncate(alias_mark);
         self.current_expected_type = saved_expected;
 
+        if left_value.is_unknown() || right_value.is_unknown() {
+            return Ok(Type::Unknown);
+        }
+
         // `a ?? b`: pure sugar for `a.unwrap_or(b)` on an `Option<T>` left operand — the same
         // method the stdlib already exposes, just spelled as an operator for the common inline
         // "unwrap with a default" case. `a` must be `Option<T>`; `b` must be assignable to `T`.
@@ -131,20 +135,48 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        // User-defined operator overload: `@operator("+")`/`@operator("==")`/etc. on the left
-        // operand's type. Checked before the built-in numeric/string rules below so a struct's
-        // overload always wins over (what would otherwise be) a type error. `!=` is handled
-        // separately below (as the negation of a registered `@operator("==")`), since there is no
-        // standalone `!=` symbol to register.
-        if let Some(op_method) = self.operator_binary_fn(&left_value, opr.kind) {
-            let param_type = op_method.param_type;
-            let return_type = op_method.return_type;
-            let identity = op_method.identity;
-            if let Some(param_type) = &param_type {
-                self.compare_data_type(param_type, &right_value, &opr.position, diagnostics)?;
+        let operator_kind = if opr.kind == TokenKind::NotEqualToken {
+            TokenKind::EqualEqualToken
+        } else {
+            opr.kind
+        };
+        match self.operator_binary_fn(&left_value, &right_value, operator_kind) {
+            Ok(Some(method)) => {
+                if let Some(target) = method.param_type {
+                    let arg = self.type_ctx.lower(&right_value);
+                    if !self.value_type_assignable(target, arg, diagnostics) {
+                        diagnostics.report_error(
+                            format!(
+                                "Operator '{}' expects {}, got {}",
+                                opr.text,
+                                self.type_id_display(target),
+                                self.type_id_display(arg)
+                            ),
+                            Some(opr.position),
+                        );
+                        return Ok(Type::Unknown);
+                    }
+                }
+                let right_hir = right_hir.map(|value| match method.param_type {
+                    Some(target) => self.coerce_to(value, target),
+                    None => value,
+                });
+                self.hir_set_method_call(
+                    left_hir,
+                    &method.identity,
+                    vec![right_hir],
+                    &method.return_type,
+                );
+                if opr.kind == TokenKind::NotEqualToken {
+                    self.hir_negate_last();
+                }
+                return Ok(method.return_type);
             }
-            self.hir_set_method_call(left_hir, &identity, vec![right_hir], &return_type);
-            return Ok(return_type);
+            Ok(None) => {}
+            Err(message) => {
+                diagnostics.report_error(message, Some(opr.position));
+                return Ok(Type::Unknown);
+            }
         }
 
         // User-defined ordering: `@operator`-free structs implementing `Comparable<Self>` get
@@ -155,17 +187,29 @@ impl<'a> Analyzer<'a> {
                 | TokenKind::GreaterThanEqualToken
                 | TokenKind::SmallerThanToken
                 | TokenKind::SmallerThanEqualToken
-        )
-            && let Some(compare_fn) = self.comparable_compare_fn(&left_value) {
-                self.compare_data_type(&left_value, &right_value, &opr.position, diagnostics)?;
-                let bool_ty = Type::Boolean(opr.clone());
-                let int_ty = Type::Integer(opr.clone());
-                self.hir_set_method_call(left_hir, &compare_fn, vec![right_hir], &int_ty);
-                self.hir_compare_last_to_zero(opr.kind);
-                return Ok(bool_ty);
-            }
+        ) && let Some(compare_fn) = self.comparable_compare_fn(&left_value)
+        {
+            self.compare_data_type(&left_value, &right_value, &opr.position, diagnostics)?;
+            let bool_ty = Type::Boolean(opr.clone());
+            let int_ty = Type::Integer(opr.clone());
+            self.hir_set_method_call(left_hir, &compare_fn, vec![right_hir], &int_ty);
+            self.hir_compare_last_to_zero(opr.kind);
+            return Ok(bool_ty);
+        }
 
-        self.compare_data_type(&left_value, &right_value, &opr.position, diagnostics)?;
+        let left_ty = self.type_ctx.lower(&left_value);
+        let right_ty = self.type_ctx.lower(&right_value);
+        if !self.value_type_assignable(left_ty, right_ty, diagnostics) {
+            diagnostics.report_error(
+                format!(
+                    "cannot convert from {} to {}",
+                    self.ty_display(&right_value),
+                    self.ty_display(&left_value)
+                ),
+                Some(opr.position),
+            );
+            return Ok(Type::Unknown);
+        }
 
         // Bitwise ops (`&`/`|`/`^`/`<<`/`>>`) are only meaningful on integer operands
         // (`int`/`long`/`uint`/`ulong`/`byte`); `float`/`double` have no well-defined bitwise
@@ -215,40 +259,14 @@ impl<'a> Analyzer<'a> {
         if matches!(
             opr.kind,
             TokenKind::EqualEqualToken | TokenKind::NotEqualToken
-        ) {
-            if let Some(equals_fn) = self.equatable_equals_fn(&left_value) {
-                let bool_ty = Type::Boolean(opr.clone());
-                self.hir_set_method_call(left_hir, &equals_fn, vec![right_hir], &bool_ty);
-                if opr.kind == TokenKind::NotEqualToken {
-                    self.hir_negate_last();
-                }
-                return Ok(bool_ty);
+        ) && let Some(equals_fn) = self.equatable_equals_fn(&left_value)
+        {
+            let bool_ty = Type::Boolean(opr.clone());
+            self.hir_set_method_call(left_hir, &equals_fn, vec![right_hir], &bool_ty);
+            if opr.kind == TokenKind::NotEqualToken {
+                self.hir_negate_last();
             }
-            // `!=` has no standalone registered symbol; a `@operator("==")` overload also powers it
-            // (negated). `==` itself is already handled by the generic operator-overload dispatch
-            // above, since `EqualEqualToken` maps directly to `OperatorSymbol::Eq`.
-            if opr.kind == TokenKind::NotEqualToken
-                && let Some(op_method) =
-                    self.operator_binary_fn(&left_value, TokenKind::EqualEqualToken)
-                {
-                    if let Some(param_type) = &op_method.param_type {
-                        self.compare_data_type(
-                            param_type,
-                            &right_value,
-                            &opr.position,
-                            diagnostics,
-                        )?;
-                    }
-                    let bool_ty = Type::Boolean(opr.clone());
-                    self.hir_set_method_call(
-                        left_hir,
-                        &op_method.identity,
-                        vec![right_hir],
-                        &bool_ty,
-                    );
-                    self.hir_negate_last();
-                    return Ok(bool_ty);
-                }
+            return Ok(bool_ty);
         }
 
         let is_bool_result = matches!(

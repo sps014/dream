@@ -1,0 +1,42 @@
+import system;
+
+struct View {
+    public source: string;
+    public count: int;
+    public constructor(borrow source: string, count: int) {
+        if count < 0 || count > source.length { System.panic("invalid view"); }
+        this.source = source;
+        this.count = count;
+    }
+}
+
+@noinline
+fun read(borrow view: View): string {
+    let copy = view;
+    return copy.source.substring(0, copy.count);
+}
+@noinline
+fun span_sum(borrow span: Span<int>): int {
+    let sum = 0;
+    for (let x in span) { sum = sum + x; }
+    return sum;
+}
+@noinline
+fun span_text(borrow span: StringSpan): bool {
+    let copy = span;
+    return copy == "number=42";
+}
+fun main(): void {
+    let source = "number=" + 42;
+    let view = View(source, 6);
+    System.println(read(view));
+    System.println(read(view));
+    System.println(view.source);
+    let xs = [1, 2, 3, 4, 5];
+    let span = Span<int>(xs, 1, 3);
+    System.println(span_sum(span));
+    System.println(span_sum(span));
+    System.println(span.length);
+    System.println(span_text(source.span()));
+    System.println(source);
+}

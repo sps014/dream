@@ -250,3 +250,82 @@ fn spans_scalarize_and_drop_bounds_checks() {
     let sum_span = common::ir_func_body(&ir, "sum_span");
     assert!(sum_span.contains("vector.body"), "sum_span did not vectorize:\n{sum_span}");
 }
+
+#[cfg(feature = "native")]
+#[test]
+fn value_struct_constructors_and_borrow_parameters_elide_arc() {
+    let ir = release_opt_ll(
+        r#"
+        import system;
+        struct View {
+            public source: string;
+            public count: int;
+            public constructor(borrow source: string, count: int) {
+                if count < 0 { System.panic("invalid view"); }
+                this.source = source;
+                this.count = count;
+            }
+        }
+        @noinline
+        fun array_view(borrow xs: int[], start: int, count: int): int {
+            let view = Span<int>(xs, start, count);
+            return view.length;
+        }
+        @noinline
+        fun readonly_view(borrow xs: int[], start: int, count: int): int {
+            let view = ReadOnlySpan<int>(xs, start, count);
+            return view.length;
+        }
+        @noinline
+        fun struct_view(borrow s: string, count: int): int {
+            let view = View(s, count);
+            return view.count;
+        }
+        @noinline
+        fun borrowed_array(borrow view: Span<int>): int {
+            let copy = view;
+            return copy.length;
+        }
+        @noinline
+        fun borrowed_string(borrow view: StringSpan): int {
+            let copy = view;
+            return copy.length;
+        }
+        @noinline
+        fun borrowed_struct(borrow view: View): int {
+            let copy = view;
+            return copy.count;
+        }
+        @noinline
+        fun span_equals(borrow s: string, borrow other: string): bool {
+            return s.span() == other;
+        }
+        @noinline
+        fun string_equals(borrow s: string, borrow other: string): bool {
+            return s == other.span();
+        }
+        fun main(): void {
+            let xs = [1, 2, 3, 4];
+            System.println(array_view(xs, 1, 2));
+            System.println(readonly_view(xs, 1, 2));
+            System.println(struct_view("hello", 3));
+            System.println(borrowed_array(Span.of(xs)));
+            System.println(borrowed_string("hello".span()));
+            System.println(borrowed_struct(View("hello", 3)));
+            System.println(span_equals("hello", "world"));
+            System.println(string_equals("hello", "world"));
+        }
+        "#,
+    );
+    for name in ["array_view", "readonly_view", "struct_view", "borrowed_array", "borrowed_string", "borrowed_struct", "span_equals", "string_equals"] {
+        let body = common::ir_func_body(&ir, name);
+        for operation in ["atomic", "@dream_retain", "@dream_release", "@dream_malloc", "@dream_str_sub"] {
+            assert!(!body.contains(operation), "{operation} left in {name}:\n{body}");
+        }
+        assert!(!body.contains("alloca"), "value did not scalarize in {name}:\n{body}");
+    }
+    for name in ["array_view", "readonly_view", "struct_view"] {
+        let body = common::ir_func_body(&ir, name);
+        assert!(body.contains("dream_panic"), "constructor validation lost in {name}:\n{body}");
+    }
+}

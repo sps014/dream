@@ -54,6 +54,8 @@ let value = line.span(5, line.length);
 System.println(value.parse_int().unwrap_or(0));   // 8080
 ```
 
+Compare a span with a string using `sp == "text"` or `"text" == sp`; `!=` works in both orders too. These compare contents without allocating.
+
 `split_iter(sep)` and `lines()` walk the pieces as spans, and `Map<string, V>` / `Set<string>` accept a span key. Call `to_string()` when you need an owned copy. See [Spans](../language/spans.md).
 
 ## `StringBuilder`

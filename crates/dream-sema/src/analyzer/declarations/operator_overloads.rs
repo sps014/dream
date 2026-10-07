@@ -3,8 +3,8 @@
 //! method-only placement — is already validated by [`dream_abi::attributes`]), resolves the argument
 //! to a concrete [`OperatorSymbol`]/[`CastKind`], and records the mangled method name so
 //! `expressions::operators`/`expressions::dispatch`/`expressions::casts` can dispatch `a + b`,
-//! `-a`, and `(T)a` to it. One [`OperatorOverloads`] table per registered type, keyed the same way
-//! as `register_methods_for`'s `target_type_str` (so generic instantiations get independent tables).
+//! `-a`, and `(T)a` to it. Each interned receiver type has an independent overload table,
+//! including concrete generic instantiations.
 
 use super::*;
 use dream_syntax::nodes::FunctionNode;
@@ -123,7 +123,7 @@ impl OperatorSymbol {
 #[derive(Debug, Clone)]
 pub struct OperatorMethod {
     pub identity: crate::function_table::FunctionIdentity,
-    pub param_type: Option<Type>,
+    pub param_type: Option<dream_types::TypeId>,
     pub return_type: Type,
 }
 
@@ -152,11 +152,10 @@ pub struct CastMethod {
     pub identity: crate::function_table::FunctionIdentity,
 }
 
-/// One type's full set of operator/cast overloads, keyed the same way as
-/// `register_methods_for`'s `target_type_str` (so `Box_int`/`Box_string` get independent tables).
+/// One interned receiver's operator/cast overloads, preserving declaration order.
 #[derive(Debug, Clone, Default)]
 pub struct OperatorOverloads {
-    pub binary: IndexMap<OperatorSymbol, OperatorMethod>,
+    pub binary: IndexMap<OperatorSymbol, Vec<OperatorMethod>>,
     pub unary: IndexMap<OperatorSymbol, OperatorMethod>,
     pub casts: Vec<CastMethod>,
 }
@@ -167,7 +166,7 @@ impl<'a> Analyzer<'a> {
     /// run before analysis) and, if present, records it against `target_type_str`. Reports the
     /// operator-specific rules the generic attribute layer can't know: the argument must resolve to
     /// a known symbol/cast-kind for the method's declared arity, and no two methods on the same
-    /// type may claim the same operator/cast.
+    /// type may claim the same operator signature or cast target.
     pub(in crate::analyzer) fn validate_and_register_operator(
         &mut self,
         receiver: dream_types::TypeId,
@@ -189,37 +188,49 @@ impl<'a> Analyzer<'a> {
                 return;
             };
             let return_type = method.return_type.clone().unwrap_or(Type::Void);
+            if symbol == OperatorSymbol::Eq
+                && self.type_ctx.lower(&return_type) != self.type_ctx.interner.bool()
+                && !return_type.is_unknown()
+            {
+                diagnostics.report_error(
+                    "'operator ==' must return bool".into(),
+                    Some(method.name.position),
+                );
+                return;
+            }
+            let param_type = method
+                .parameters
+                .first()
+                .map(|p| self.type_ctx.lower(&p.type_));
             let overloads = self.operator_overloads.entry(receiver).or_default();
-            let table = if symbol.is_unary() {
-                &mut overloads.unary
+            let duplicate = if symbol.is_unary() {
+                overloads.unary.contains_key(&symbol)
             } else {
-                &mut overloads.binary
+                overloads
+                    .binary
+                    .get(&symbol)
+                    .is_some_and(|methods| methods.iter().any(|m| m.param_type == param_type))
             };
-            if table.contains_key(&symbol) {
+            if duplicate {
                 diagnostics.report_error(
                     format!(
-                        "'{}' already declares an operator overload for '{}' on '{}'",
-                        target_display,
-                        symbol.symbol_str(),
-                        target_display
+                        "'{}' already declares an operator overload for '{}' on '{}' with the same parameter types",
+                        target_display, symbol.symbol_str(), target_display
                     ),
                     Some(method.name.position),
                 );
                 return;
             }
-            let param_type = if symbol.is_unary() {
-                None
-            } else {
-                method.parameters.first().map(|p| p.type_.clone())
+            let registered = OperatorMethod {
+                identity: identity.clone(),
+                param_type,
+                return_type,
             };
-            table.insert(
-                symbol,
-                OperatorMethod {
-                    identity: identity.clone(),
-                    param_type,
-                    return_type,
-                },
-            );
+            if symbol.is_unary() {
+                overloads.unary.insert(symbol, registered);
+            } else {
+                overloads.binary.entry(symbol).or_default().push(registered);
+            }
         }
 
         if let Some(kind_text) = method.cast_kind.as_deref() {
@@ -268,27 +279,60 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// The registered binary-operator method for `opr_kind` on `left`'s type, if `left` is a
-    /// struct/class that declared one via `@operator(...)`. Returns an owned clone (the tables are
-    /// small) so callers can freely make further `&mut self` calls (type-checking the other
-    /// operand, emitting HIR) without fighting the borrow checker over a borrowed lookup result.
+    /// Candidate order is declaration order; tied compatible signatures are errors, never
+    /// resolved by whichever declaration happened to be registered first.
     pub(in crate::analyzer) fn operator_binary_fn(
         &mut self,
         left: &Type,
+        right: &Type,
         opr_kind: TokenKind,
-    ) -> Option<OperatorMethod> {
+    ) -> Result<Option<OperatorMethod>, String> {
         let recv = self.type_ctx.lower(left);
-        let symbol = OperatorSymbol::from_binary_token(opr_kind)?;
-        self.operator_overloads
-            .get(&recv)?
-            .binary
-            .get(&symbol)
+        let arg = self.type_ctx.lower(right);
+        let Some(symbol) = OperatorSymbol::from_binary_token(opr_kind) else {
+            return Ok(None);
+        };
+        let Some(methods) = self
+            .operator_overloads
+            .get(&recv)
+            .and_then(|overloads| overloads.binary.get(&symbol))
             .cloned()
+        else {
+            return Ok(None);
+        };
+        let candidates = methods.iter().map(|m| m.identity.clone()).collect();
+        match self.resolve_candidate_overload(candidates, &[recv, arg]) {
+            crate::function_table::OverloadResolution::Unique(identity) => {
+                Ok(methods.into_iter().find(|m| m.identity == identity))
+            }
+            crate::function_table::OverloadResolution::None
+                if symbol != OperatorSymbol::Eq
+                    && matches!(
+                        self.type_ctx.interner.kind(recv),
+                        dream_types::TyKind::Struct(..)
+                            | dream_types::TyKind::Union(..)
+                            | dream_types::TyKind::Interface(..)
+                    ) =>
+            {
+                Err(format!(
+                    "No overload of operator '{}' on '{}' matches right operand '{}'",
+                    symbol.symbol_str(),
+                    self.type_id_display(recv),
+                    self.type_id_display(arg)
+                ))
+            }
+            crate::function_table::OverloadResolution::None => Ok(None),
+            crate::function_table::OverloadResolution::Ambiguous(_) => Err(format!(
+                "Ambiguous operator '{}' on '{}' with right operand '{}'",
+                symbol.symbol_str(),
+                self.type_id_display(recv),
+                self.type_id_display(arg)
+            )),
+        }
     }
 
     /// The registered unary-operator method for `opr_kind` on `operand`'s type, if `operand` is a
-    /// struct/class that declared one via `@operator(...)`. See [`Self::operator_binary_fn`] for
-    /// why this returns an owned clone.
+    /// type that declared one. An owned clone lets HIR emission mutate the analyzer afterward.
     pub(in crate::analyzer) fn operator_unary_fn(
         &mut self,
         operand: &Type,
@@ -306,8 +350,7 @@ impl<'a> Analyzer<'a> {
     /// The registered cast method converting `from` to `to`, if any. `only_implicit` restricts the
     /// search to `@cast("implicit")` methods (used for implicit-coercion sites); explicit `(T)expr`
     /// casts pass `false` to accept either kind, matching the common convention that an explicit
-    /// cast may always invoke an implicit conversion. See [`Self::operator_binary_fn`] for why this
-    /// returns an owned clone.
+    /// cast may always invoke an implicit conversion.
     pub(in crate::analyzer) fn operator_cast_fn(
         &mut self,
         from: &Type,

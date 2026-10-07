@@ -105,7 +105,7 @@ pub(super) fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, intern
     for (i, p) in g_params.iter().enumerate() {
         let decl = &g_locals[p.0 as usize];
         if let Operand::Copy(Place::Local(src)) = &site.args[i]
-            && decl.is_ref
+            && (decl.is_ref || decl.name.as_deref() == Some("this"))
                 && interner.is_value_type(decl.ty)
                 && mir.functions[fi].local_ty(*src) == decl.ty
             {

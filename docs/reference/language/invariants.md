@@ -54,7 +54,7 @@ public fun to_string(): string { return "x"; }
 
 - `fun operator +(...)` only applies to a method; the method's own parameter count (0 or 1) fixes whether it overloads the unary or binary form of that symbol.
 - `fun implicit(): T` / `fun explicit(): T` only apply to a no-parameter method; its return type is the cast's target type.
-- A type may declare at most one operator overload per (symbol, arity) and at most one cast per target type. See [Operators § Operator overloading](operator-overloading.md#operator-overloading).
+- Binary operators may overload by right-hand operand type; duplicate signatures and ambiguous matches are errors. Unary operators remain unique per symbol, and casts per target type. Equality overloads return `bool`. See [Operators § Operator overloading](operator-overloading.md#operator-overloading).
 
 ## Indexers and enumerators
 

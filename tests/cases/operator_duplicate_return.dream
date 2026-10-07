@@ -1,0 +1,5 @@
+class Value {
+    fun operator +(other: int): int { return other; }
+    fun operator +(other: int): long { return other; }
+}
+fun main(): void { }

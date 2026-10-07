@@ -12,7 +12,7 @@
 //! unique region (its rewind frees what the deaths would release again), and async bodies.
 
 use crate::analysis::escape::{Escape, LocalEscape, ParamSummaries};
-use crate::analysis::object_life::{lifetime, Lifetime};
+use crate::analysis::object_life::{Lifetime, lifetime};
 use crate::passes::rc::modref::strong_children;
 use crate::{Local, LocalDecl, Mir, MirFunction, Operand, Place, Rvalue, Statement};
 use dream_hir::LayoutTable;
@@ -95,6 +95,7 @@ fn releasable_fields(
     if !matches!(interner.kind(ty), TyKind::Struct(..))
         || interner.is_value_type(ty)
         || interner.is_shared_type(ty)
+        || crate::ownership::cycle_capable(layouts, interner, ty)
     {
         return None;
     }

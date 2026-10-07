@@ -5,7 +5,7 @@ use dream::driver::ui::{ConsoleReporter, Ui};
 use dream::driver::wasm_opt::OptLevel;
 use dream::execution::llvm::build::emit_llvm_artifacts;
 use dream::execution::llvm::compile_llvm;
-use dream::execution::native::{run_native_bin, GuestAborted, Pgo};
+use dream::execution::native::{GuestAborted, Pgo, run_native_bin};
 use dream_abi::attributes::CompileTargets;
 use dream_sema::analyzer::CrateType;
 use std::path::{Path, PathBuf};
@@ -68,11 +68,11 @@ struct Cli {
     #[arg(long, global = true)]
     release: bool,
 
-    /// Emit DWARF and build at -O0 for lldb-dap (`debug-adapter` implies this)
+    /// Emit DWARF for debugging (`debug-adapter` implies this)
     #[arg(short = 'g', long = "debug-info", global = true)]
     debug_info: bool,
 
-    /// Optimization level (0-4, s, z); bare -O means Os; overrides --release
+    /// Backend optimization level within the selected profile (0-4, s, z); bare -O means Os
     #[arg(
         short = 'O',
         long = "optimize",
@@ -87,13 +87,17 @@ struct Cli {
     #[arg(short = 'o', long = "output", value_name = "PATH", global = true)]
     output: Option<String>,
 
-    /// Compile a wasm32 module (.opt.ll + .wasm + .wat) instead of a native binary
+    /// Compile a wasm32 module (.wasm + .wat) instead of a native binary
     #[arg(long, global = true)]
     wasm: bool,
 
     /// Stop after the native module's LLVM IR: writes the optimized .opt.ll and .s
     #[arg(long = "emit-llvm", global = true)]
     emit_llvm: bool,
+
+    /// Write optimized LLVM IR alongside the linked artifact
+    #[arg(long = "emit-opt-ir", global = true)]
+    emit_opt_ir: bool,
 
     /// Bundle required host libraries beside the native binary with package-relative lookup
     #[arg(long, global = true, conflicts_with_all = ["wasm", "emit_llvm"])]
@@ -616,8 +620,14 @@ fn main() -> ExitCode {
             debug_generator: Some(gen_name),
             ..
         }) => {
-            let code =
-                generate_cmd::debug_generator(&ui, &config, &inspector(), &file_name, gen_name, None);
+            let code = generate_cmd::debug_generator(
+                &ui,
+                &config,
+                &inspector(),
+                &file_name,
+                gen_name,
+                None,
+            );
             if code != ExitCode::SUCCESS {
                 return code;
             }
@@ -651,14 +661,15 @@ fn main() -> ExitCode {
 
     if let Some(parent) = Path::new(&out_path).parent()
         && !parent.as_os_str().is_empty()
-            && let Err(e) = std::fs::create_dir_all(parent) {
-                ui.error(&format!(
-                    "could not create output directory {}: {}",
-                    parent.display(),
-                    e
-                ));
-                return ExitCode::FAILURE;
-            }
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        ui.error(&format!(
+            "could not create output directory {}: {}",
+            parent.display(),
+            e
+        ));
+        return ExitCode::FAILURE;
+    }
 
     let reporter = Arc::new(ConsoleReporter::new());
     // `with_release` installs RELEASE_DEFAULT wasm-opt; an explicit `-O` overrides.
@@ -671,10 +682,10 @@ fn main() -> ExitCode {
             .map(|icon| dream::driver::rt_stamp::fingerprint(vec![icon]))
             .unwrap_or_default();
         format!(
-            "{}|{debug_info}|{:?}|{}|{:?}|{native}|{icon}",
+            "{}|{debug_info}|{:?}|{:?}|{:?}|{native}|{icon}",
             cc_opt.as_cli_flag(),
             cli.target,
-            cli.emit_llvm,
+            (cli.emit_llvm, cli.emit_opt_ir),
             (cli.relocatable, output_kind, cli.object),
         )
     });
@@ -687,7 +698,8 @@ fn main() -> ExitCode {
         .with_crate_type(crate_type)
         .with_output_kind(output_kind)
         .with_emit_mir(emit_mir)
-        .with_opt_ir(true)
+        .with_raw_ll_intermediate(true)
+        .with_opt_ir(cli.emit_llvm || cli.emit_opt_ir)
         .with_reporter(reporter.clone());
     if let Some(level) = optimize {
         compiler = compiler.with_optimize(Some(level));
@@ -746,7 +758,9 @@ fn main() -> ExitCode {
     };
     let raw_ll = raw_ll.as_path();
     let drop_raw_ll = || {
-        let _ = std::fs::remove_file(raw_ll);
+        if !debug_adapter {
+            let _ = std::fs::remove_file(raw_ll);
+        }
         let _ = std::fs::remove_file(dream::driver::compiler::c_shim_path(raw_ll));
     };
 
@@ -771,6 +785,7 @@ fn main() -> ExitCode {
             cc_opt,
             debug_info,
             cli.icon.as_deref(),
+            dream_abi::profile::CompileProfile::from_release(cli.release),
         ) {
             Ok(paths) => {
                 drop_raw_ll();
@@ -803,9 +818,10 @@ fn main() -> ExitCode {
             raw_ll,
             dream::execution::llvm::NativeBuildOptions {
                 target: target.spec().clone(),
-                opt_ll: Some(&opt_ll),
+                opt_ll: cli.emit_opt_ir.then_some(opt_ll.as_path()),
                 opt: cc_opt,
                 debug: debug_info,
+                profile: dream_abi::profile::CompileProfile::from_release(cli.release),
                 pgo: &pgo,
                 icon: cli.icon.as_deref(),
                 relocatable: cli.relocatable,
@@ -814,8 +830,9 @@ fn main() -> ExitCode {
         ) {
             Ok(bin) => {
                 drop_raw_ll();
-                artifacts.push(opt_ll);
                 artifacts.push(bin.clone());
+                if debug_adapter { artifacts.push(raw_ll.to_path_buf()); }
+                if cli.emit_opt_ir { artifacts.push(opt_ll); }
                 if output_kind == dream::driver::output::OutputKind::Staticlib {
                     artifacts.push(raw_ll.with_extension("link.json"));
                 } else if target.spec().is_windows()
@@ -866,15 +883,13 @@ struct Launch<'a> {
 impl Launch<'_> {
     fn run(&self, ui: &Ui, bin: &Path) -> ExitCode {
         if self.debug_adapter {
-            if let Err(e) =
-                dream::execution::debugger::run_debug_adapter(
-                    self.config,
-                    bin,
-                    self.out_path,
-                    &Path::new(self.out_path).with_extension("opt.ll"),
-                    &[],
-                )
-            {
+            if let Err(e) = dream::execution::debugger::run_debug_adapter(
+                self.config,
+                bin,
+                self.out_path,
+                Path::new(self.out_path),
+                &[],
+            ) {
                 ui.error(&format!("debug adapter failed: {e}"));
                 return ExitCode::FAILURE;
             }
@@ -1028,11 +1043,7 @@ fn get_path_from_file_path(file_path: &str, release: bool, native: bool) -> Opti
         .unwrap_or_else(|| Path::new("."));
     let root = find_project_root(path).unwrap_or_else(|| source_dir.to_path_buf());
     let sub = if native {
-        if release {
-            "release"
-        } else {
-            "debug"
-        }
+        if release { "release" } else { "debug" }
     } else {
         "web"
     };

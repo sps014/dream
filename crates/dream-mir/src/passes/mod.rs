@@ -45,12 +45,12 @@ pub use algebraic::Algebraic;
 pub use analyses::{DomTree, FunctionAnalyses, NaturalLoop, PostDomTree, PreservedAnalyses};
 pub use autovec::Autovec;
 pub use const_fold::ConstFold;
-pub(crate) use dce::is_pure;
 pub use dce::Dce;
+pub(crate) use dce::is_pure;
 pub use devirt::Devirt;
 pub use dse::Dse;
 pub use dump::{
-    dumpable_pass_names, MirDump, MirDumpFile, MirDumpSpec, STAGE_FIXPOINT, STAGE_LOWER,
+    MirDump, MirDumpFile, MirDumpSpec, STAGE_FIXPOINT, STAGE_LOWER, dumpable_pass_names,
 };
 pub use funcbox_abi::FuncboxAbi;
 pub use global_prop::GlobalProp;
@@ -61,12 +61,13 @@ pub use licm::Licm;
 pub use loop_unroll::LoopUnroll;
 pub use manager::PassManager;
 pub use module_pipeline::{
-    optimize_module, optimize_module_opts, run_function_pipelines, run_late_module_passes,
+    optimize_module, optimize_module_opts, prepare_debug_module, run_function_pipelines,
+    run_late_module_passes,
 };
 pub use overflow_elim::OverflowElim;
 pub use prop::CopyConstProp;
-pub(crate) use rc::{rvalue_reads_local, stmt_reads_local};
 pub use rc::{HopElision, RcElision, RcInsertion, ReleaseSink};
+pub(crate) use rc::{rvalue_reads_local, stmt_reads_local};
 pub use sccp::Sccp;
 pub use simplify_cfg::SimplifyCfg;
 pub use sroa::{ExpandSimpleCtors, Sroa, SroaManaged};

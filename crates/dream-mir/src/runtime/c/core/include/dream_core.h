@@ -213,6 +213,8 @@ DREAM_ALWAYS_INLINE int32_t *dream_rc_word(dream_ptr ptr) {
     return (int32_t *)((char *)dream_p(ptr) - RC_FROM_DATA);
 }
 
+#include "dream_ownership.h"
+
 /* `v` is the count word the inline fast path already loaded; the slow paths reuse it rather than
  * issue a second atomic load the optimizer cannot merge. */
 void dream_retain_slow(int32_t *rc, int32_t v);
@@ -225,6 +227,8 @@ DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
     if (ptr == 0) {
         return;
     }
+    const dream_type_info *info = dream_object_info(ptr);
+    if (info && info->cycle_capable) { dream_cycle_retain(ptr); return; }
     rc = dream_rc_word(ptr);
     v = __atomic_load_n(rc, __ATOMIC_RELAXED);
     if (DREAM_LIKELY(v >= 0)) {
@@ -256,7 +260,8 @@ void dream_recycle(dream_ptr ptr);
 /* Keep the payload 16-aligned and the ARC words at the same offsets from it. */
 typedef struct {
     dream_size size;
-    unsigned char reserved[NATIVE_HEAP_HEADER_SIZE - sizeof(dream_size) - 12];
+    const dream_type_info *info;
+    unsigned char reserved[NATIVE_HEAP_HEADER_SIZE - sizeof(dream_size) - sizeof(void *) - 12];
     uint32_t magic;
     int32_t tag;
     int32_t rc;
@@ -318,6 +323,7 @@ DREAM_ALWAYS_INLINE void dream_block_activate(char *block, int32_t tag) {
     header->magic = DREAM_MAGIC_LIVE;
     header->tag = tag;
     header->rc = dream_rc_init(tag);
+    dream_set_type((dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE), dream_type_info_for_tag(tag & TAG_VALUE_MASK));
 }
 
 DREAM_ALWAYS_INLINE void dream_heap_count(uint64_t *c, uint64_t n) {
@@ -360,6 +366,8 @@ DREAM_ALWAYS_INLINE void dream_recycle(dream_ptr ptr) {
     block = (char *)dream_p(ptr) - NATIVE_HEAP_HEADER_SIZE;
     sz = *dream_block_size(block);
     tag = *(int32_t *)(block + NATIVE_HEAP_HEADER_SIZE - TAG_FROM_DATA);
+    const dream_type_info *info = dream_object_info(ptr);
+    if (info && info->cycle_capable) { dream_recycle_slow(ptr); return; }
     if (DREAM_UNLIKELY(c == NULL || *dream_block_magic(block) != DREAM_MAGIC_LIVE
                        || sz - 1u >= DREAM_MAX_CLASS_BYTES
                        || (tag & (DREAM_TAG_WEAK_TARGET | TAG_SHARED)) != 0
@@ -404,6 +412,8 @@ void dream_defer_drain_all(void);
 /* Decrement `p`'s refcount; true when the caller must run destroy glue and free
  * (this was the last reference). `rc == 0` (mid-destroy) never re-frees. */
 DREAM_ALWAYS_INLINE int dream_rc_last(dream_ptr p) {
+    const dream_type_info *info = dream_object_info(p);
+    if (info && info->cycle_capable) { return dream_cycle_release(p); }
     int32_t *rc = dream_rc_word(p);
     int32_t v = __atomic_load_n(rc, __ATOMIC_RELAXED);
     if (DREAM_LIKELY(v > 0)) {
@@ -440,6 +450,8 @@ DREAM_ALWAYS_INLINE int dream_rc_immortal(dream_ptr p) {
 /* A weak reader can retain between a count peek and destruction. Claiming count zero
  * makes that decision atomic and also distinguishes dying shared objects from immortals. */
 DREAM_ALWAYS_INLINE int dream_rc_claim_unique(dream_ptr p) {
+    const dream_type_info *info = dream_object_info(p);
+    if (info && info->cycle_capable) { return 0; }
     int32_t *rc = dream_rc_word(p);
     int32_t expected = __atomic_load_n(rc, __ATOMIC_RELAXED);
     if ((expected & INT32_MAX) != 1) {
@@ -522,6 +534,7 @@ DREAM_ALWAYS_INLINE void dream_publish_child(dream_ptr owner, dream_ptr child) {
     if (child == 0) {
         return;
     }
+    dream_cycle_check_store(owner, child);
     int shared;
     if (owner == 0) {
         shared = __atomic_load_n(&dream_rt_mt, __ATOMIC_ACQUIRE);
@@ -1160,6 +1173,13 @@ typedef struct {
 } dream_sb;
 
 dream_ptr dream_sb_grow_bytes(dream_sb *sb, dream_ptr bytes, int32_t need);
+dream_ptr dream_sb_buffer(int32_t capacity);
+
+double dream_host_abs(double value);
+double dream_host_log(double value);
+double dream_host_log10(double value);
+double dream_host_exp(double value);
+double dream_host_hypot(double x, double y);
 
 DREAM_ALWAYS_INLINE const void *dream_str_units_fast(dream_ptr s) {
     const uint16_t *d;
@@ -1354,8 +1374,8 @@ void dream_enqueue(dream_ptr f);
 void dream_start(dream_ptr f);
 void dream_run_loop(void);
 dream_ptr dream_sleep(int32_t ms);
-dream_ptr dream_all(dream_ptr arr, int32_t esize);
-dream_ptr dream_any(dream_ptr arr);
+dream_ptr dream_all(dream_ptr arr, int32_t esize, void (*copy)(dream_ptr, dream_ptr), const dream_type_info *info);
+dream_ptr dream_any(dream_ptr arr, dream_result (*clone)(dream_result));
 #ifndef DREAM_WASM32
 int32_t delayMsAsync(dream_ptr future, int32_t ms);
 #endif
@@ -1387,6 +1407,7 @@ int32_t regex_name_count(uintptr_t h);
 dream_ptr regex_name_at(uintptr_t h, int32_t i);
 int32_t regex_name_number(uintptr_t h, int32_t i);
 dream_ptr regex_find(uintptr_t h, dream_ptr input, int32_t pos);
+dream_ptr regex_find_all(uintptr_t h, dream_ptr input);
 int32_t regex_test(uintptr_t h, dream_ptr input);
 
 int64_t debug_get_live_objects(void);
@@ -1424,6 +1445,7 @@ int32_t dream_byte_at(dream_ptr ptr, int32_t i);
 
 #ifdef DREAM_WASM32
 #define DREAM_WASM_IMPORT(mod, name) __attribute__((import_module(mod), import_name(name)))
+void platform_write(int stream, const void *bytes, size_t size, int encoding) DREAM_WASM_IMPORT("env", "write_text");
 DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_INT) void print_int(int32_t v);
 DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_STRING) void print_string(dream_ptr s);
 DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_CHAR) void print_char(int32_t c);

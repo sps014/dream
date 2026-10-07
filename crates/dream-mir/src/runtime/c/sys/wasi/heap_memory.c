@@ -35,11 +35,8 @@ static void heap_ptr_set(int32_t v) { *meta_i32(META_HEAP_PTR) = v; }
 int32_t *dream_wasm32_meta_i32(int32_t off) { return meta_i32(off); }
 
 void dream_heap_init(void) {
-    /* Blocks must start at 4 (mod 16) so the payload at block+12 is 8-aligned, and block
-     * totals must be multiples of 16 (see round_total) so every successor block — bump,
-     * split remainder, or merge — keeps that residue. */
+    /* Headers and block sizes preserve 16-byte payload alignment. */
     int32_t desired = (dream_wasm_heap_start() + META_SIZE + 15) & -16;
-    desired += 4;
 #ifdef DREAM_WASM32_THREADS
     int32_t expected = 0;
     (void)__atomic_compare_exchange_n(meta_i32(META_HEAP_PTR), &expected, desired, 0,
@@ -57,11 +54,11 @@ int32_t dream_next_tid(void) {
 
 static void ensure_pages(int32_t new_heap) {
 #ifdef __wasm__
-    int32_t cur;
+    uint32_t cur;
     int32_t need;
     int32_t delta;
-    cur = wasm_memory_size() << 16;
-    if (new_heap <= cur) {
+    cur = (uint32_t)wasm_memory_size() << 16;
+    if ((uint32_t)new_heap <= cur) {
         return;
     }
     need = ((new_heap - 1) >> 16) + 1;
@@ -77,9 +74,20 @@ static void ensure_pages(int32_t new_heap) {
 int32_t dream_wasm_heap_claim(int32_t n) {
     int32_t start;
 #ifdef DREAM_WASM32_THREADS
-    start = __atomic_fetch_add(meta_i32(META_HEAP_PTR), n, __ATOMIC_RELAXED);
+    start = __atomic_load_n(meta_i32(META_HEAP_PTR), __ATOMIC_RELAXED);
+    for (;;) {
+        if (n <= 0 || start < 0 || n > INT32_MAX - start) {
+            DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the WASI heap limit");
+        }
+        int32_t end = start + n;
+        if (__atomic_compare_exchange_n(meta_i32(META_HEAP_PTR), &start, end, 0,
+                                       __ATOMIC_RELAXED, __ATOMIC_RELAXED)) { break; }
+    }
 #else
     start = dream_wasm_heap_ptr_get();
+    if (n <= 0 || start < 0 || n > INT32_MAX - start) {
+        DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the WASI heap limit");
+    }
     heap_ptr_set(start + n);
 #endif
     ensure_pages(start + n);

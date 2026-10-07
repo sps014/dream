@@ -12,7 +12,7 @@
 //!   monomorphization, the runtime interface table, and `validate_implements`.
 //! - [`register_methods`]: struct-method and `extend`-block method registration plus object-protocol
 //!   override validation.
-//! - [`reference_cycles`]: `weak`/`unowned` field validation and the compile-time class
+//! - [`ownership_fields`]: `weak`/`unowned` field validation and the compile-time class
 //!   reference-cycle check.
 //! - [`ref_struct_rules`]: the `ref struct` escape rules (fields, generic arguments, array
 //!   elements, `async` parameters).
@@ -30,9 +30,9 @@ pub(in crate::analyzer) mod functions;
 mod globals;
 mod imports;
 pub(in crate::analyzer) mod operator_overloads;
-mod ref_struct_rules;
+mod ownership_fields;
 pub(in crate::analyzer) mod protocol_hooks;
-mod reference_cycles;
+mod ref_struct_rules;
 mod register_interfaces;
 mod register_methods;
 mod structs;

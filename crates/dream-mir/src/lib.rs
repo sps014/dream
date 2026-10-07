@@ -30,7 +30,7 @@ pub use dream_abi::js_abi;
 pub use dream_hir::{BinOp, UnOp};
 use dream_types::{DefId, TypeId};
 pub use prune::prune_module;
-pub(crate) use prune::{hir_body_edges, module_uses_js_bridges, HirEdges};
+pub(crate) use prune::{HirEdges, hir_body_edges, module_uses_js_bridges};
 
 /// Raises a codegen-time compiler-internal-error: the condition it guards can only be reached if an
 /// earlier pass (analysis/lowering) produced MIR that is inconsistent with itself (e.g. a type with
@@ -757,3 +757,5 @@ mod tests {
         );
     }
 }
+
+pub(crate) mod ownership;

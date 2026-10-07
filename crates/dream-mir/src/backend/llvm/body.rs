@@ -6,7 +6,7 @@ use super::ir::{BlockRef, FnAttr, Ty, Value};
 use super::lcx::Lcx;
 use super::types::is_unsigned;
 use crate::backend::shared::abi_types::native_scalar_size;
-use crate::backend::shared::glue::release_sym;
+use crate::backend::shared::glue::{release_sym, retain_sym};
 use crate::backend::shared::place_policy::has_frame_buffer;
 use crate::{Local, MirFunction, Operand, Place, Statement, Terminator};
 use dream_types::{PrimTy, TyKind};
@@ -117,7 +117,8 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 }
 
-fn inline_attr(f: &MirFunction) -> Option<FnAttr> {
+fn inline_attr(f: &MirFunction, preserve_frames: bool) -> Option<FnAttr> {
+    if preserve_frames { return Some(FnAttr::NoInline); }
     match f.inline {
         dream_hir::InlineHint::Never => Some(FnAttr::NoInline),
         dream_hir::InlineHint::Prefer => Some(FnAttr::AlwaysInline),
@@ -128,7 +129,7 @@ fn inline_attr(f: &MirFunction) -> Option<FnAttr> {
 pub(super) fn build_sync<'a>(l: &mut Lcx<'a>, f: &'a MirFunction) {
     let name = l.user_fn(f);
     let mut w = l.writer(&name);
-    w.attrs.extend(inline_attr(f));
+    w.attrs.extend(inline_attr(f, l.cx.leak_checks && l.cx.debug_syms));
     let mut fx = Fx::new(l, f, w);
     fx.debug_begin(f);
     fx.source_begin(f);
@@ -222,7 +223,7 @@ pub(super) fn build_async_stub<'a>(
 ) {
     let name = l.user_fn(stub);
     let mut w = l.writer(&name);
-    w.attrs.extend(inline_attr(stub));
+    w.attrs.extend(inline_attr(stub, l.cx.leak_checks && l.cx.debug_syms));
     let wide = crate::backend::shared::abi_types::ref_int_locals(&l.cx, body);
     let mut fx = Fx::new(l, stub, w);
     let first = fx.w.new_block("body");
@@ -236,6 +237,8 @@ pub(super) fn build_async_stub<'a>(
             V::i32(0),
         ],
     );
+    let metadata = V::s(Value::global(format!("info_{}", drop_name(fx.l, stub))));
+    fx.call("dream_set_type", &[s.clone(), metadata]);
     for (pi, p) in body.params.iter().enumerate() {
         let off = offs[p.0 as usize] as i64;
         let ty = body.local_ty(*p);
@@ -295,6 +298,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             };
             self.store_ty(&t, &p, &v, 8);
         }
+        self.poll_offsets = offs.to_vec();
     }
 
     /// At a resume block, moves the awaited child's settled value into the destination local.
@@ -303,6 +307,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         let fut = self.l.cx.target.abi().future;
         let at = self.addr(&s, fut.awaiting as i64);
         let ch = self.load_ty(self.h(), &at, 8, true);
+        self.store_ty(&self.h(), &at, &V::s(Value::zero(self.h())), 8);
         let dest_ty = self.f.local_ty(d);
         if self.is_value(dest_ty) {
             let sz = native_scalar_size(&self.l.cx, dest_ty).0 as i64;
@@ -311,6 +316,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             let dst = self.read_local(d);
             let (dp, rp) = (self.ptr(&dst), self.ptr(&r));
             self.memcpy(&dp, &rp, &Value::i64(sz));
+            self.value_refs(dest_ty, &dst, true);
             return;
         }
         let (t, off) = match self.interner.kind(dest_ty) {
@@ -334,6 +340,9 @@ impl<'l, 'a> Fx<'l, 'a> {
         let va = self.addr(&ch, off as i64);
         let unsigned = off == fut.result;
         let v = self.load_ty(t, &va, 8, unsigned);
+        if self.is_rc(dest_ty) {
+            self.call(retain_sym(&self.l.cx, dest_ty), std::slice::from_ref(&v));
+        }
         self.write_local(d, &v);
     }
 
@@ -439,13 +448,41 @@ pub(super) fn build_future_drop<'a>(
     let mut idxs: Vec<usize> = (0..body.locals.len())
         .filter(|&i| {
             let d = &body.locals[i];
-            if !l.interner.is_rc_tracked(d.ty) || l.interner.is_value_type(d.ty) || d.is_cursor {
+            if (!l.interner.is_rc_tracked(d.ty) && !l.interner.is_value_type(d.ty)) || d.is_cursor || d.is_ref || crate::backend::shared::place_policy::is_alias_value_local(body, Local(i as u32)) {
                 return false;
             }
             let is_param = body.params.iter().any(|p| p.0 == i as u32);
             !is_param || d.is_take
         })
         .collect();
+    let visit_name = format!("visit_{name}");
+    let h = l.h();
+    super::glue::register(l, &visit_name, Ty::Void, vec![h.clone()]);
+    let mut visit = super::glue::glue(l, &visit_name);
+    let owner = visit.arg(0);
+    let result_at = visit.addr(&owner, visit.l.cx.target.abi().future.result as i64);
+    let result = visit.load_ty(h.clone(), &result_at, 8, true);
+    for &i in &idxs {
+        let at = visit.addr(&owner, offs[i] as i64);
+        let ty = body.locals[i].ty;
+        if visit.is_value(ty) {
+            let base = visit.ptr_value(&at);
+            let ne = visit.w.icmp("ne", &base.v, &result.v);
+            visit.if_then(&ne, |fx| fx.visit_refs(ty, &base));
+        } else {
+            let child = visit.load_ty(h.clone(), &at, align_at(&h, offs[i] as i64), true);
+            visit.call("dream_visit_edge", std::slice::from_ref(&child));
+        }
+    }
+    if visit.is_value(body.ret) {
+        let nz = visit.truthy(&result);
+        visit.if_then(&nz, |fx| fx.visit_refs(body.ret, &result));
+    } else if visit.is_rc(body.ret) {
+        visit.call("dream_visit_edge", std::slice::from_ref(&result));
+    }
+    visit.w.ret(None);
+    visit.finish();
+    super::glue::ownership::descriptor(l, &format!("info_{name}"), &visit_name, None, &name, true);
     idxs.sort_by_key(|&i| drop_slot_rank(l, body.locals[i].ty));
     let w = l.writer(&name);
     let mut fx = Fx::new(l, body, w);
@@ -459,14 +496,30 @@ pub(super) fn build_future_drop<'a>(
     for i in idxs {
         let ty = body.locals[i].ty;
         let at = fx.addr(&s, offs[i] as i64);
+        if fx.is_value(ty) {
+            let base = fx.ptr_value(&at);
+            let ne = fx.w.icmp("ne", &base.v, &res.v);
+            fx.if_then(&ne, |fx| fx.clear_refs(ty, &base));
+            continue;
+        }
         let v = fx.load_ty(h.clone(), &at, align_at(&h, offs[i] as i64), true);
         let nz = fx.truthy(&v);
-        let ne = fx.w.icmp("ne", &v.v, &res.v);
-        let both = fx.w.bin("and", &nz, &ne);
+        let both = nz;
         let rel = release_sym(&fx.l.cx, ty);
         fx.if_then(&both, |fx| {
-            fx.call(&rel, std::slice::from_ref(&v));
             fx.store_ty(&h, &at, &V::s(Value::zero(h.clone())), 8);
+            fx.call(&rel, std::slice::from_ref(&v));
+        });
+    }
+    if fx.is_value(body.ret) {
+        let nz = fx.truthy(&res);
+        fx.if_then(&nz, |fx| fx.clear_refs(body.ret, &res));
+    } else if fx.is_rc(body.ret) {
+        let nz = fx.truthy(&res);
+        let rel = release_sym(&fx.l.cx, body.ret);
+        fx.if_then(&nz, |fx| {
+            fx.store_ty(&h, &ra, &V::s(Value::zero(h.clone())), 8);
+            fx.call(&rel, std::slice::from_ref(&res));
         });
     }
     fx.w.ret(None);

@@ -92,6 +92,7 @@ pub fn emit_ll_for(
     target: dream_mir::backend::Target,
 ) -> String {
     let req = LlvmRuntimeRequest {
+            profile: dream_abi::profile::CompileProfile::Debug,
         need: dream_mir::runtime::runtime_need_from_mir(mir),
         target: target.clone(),
         threads: false,

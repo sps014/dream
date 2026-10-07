@@ -160,19 +160,20 @@ void dream_complete_foreign(dream_ptr f, dream_result res) {
         free(n);
         return;
     }
-    /* Foreign Future/result are published so host pthreads use atomic RC. */
-    dream_publish(f);
-    dream_publish((dream_ptr)(uintptr_t)res);
     dream_mutex_lock(&wake_mu);
+    dream_cycle_enter();
+    dream_cycle_check_store(f, 0);
     /* Publish under the lock so a concurrent dream_await cannot set its waker between our
      * status flip and our waker read (lost-wakeup guard). */
     if (!__atomic_compare_exchange_n(i32_at(f, F_STATUS), &expected, 1, 0,
                                      __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+        dream_cycle_leave();
         dream_mutex_unlock(&wake_mu);
         free(n);
         return; /* already completed or cancelled */
     }
     *result_at(f) = res;
+    dream_publish(f);
     if (foreign_pending > 0) {
         foreign_pending -= 1;
     }
@@ -183,7 +184,9 @@ void dream_complete_foreign(dream_ptr f, dream_result res) {
         dream_cond_signal(&wake_cv);
         n = NULL; /* drained by the loop */
     }
+    dream_cycle_leave();
     dream_mutex_unlock(&wake_mu);
+    dream_cycle_drain();
     free(n);
     if (!had_waker) {
         scheduler_drop_start_retain(f);
@@ -267,9 +270,10 @@ void dream_resolve(dream_ptr f, dream_ptr res) {
 void dream_async_complete(dream_ptr f, dream_result res) {
     dream_ptr w;
     int32_t wk;
-    if (!f || i32_at(f, F_STATUS)[0]) {
-        return;
-    }
+    if (!f) { return; }
+    dream_cycle_enter();
+    dream_cycle_check_store(f, 0);
+    if (i32_at(f, F_STATUS)[0]) { dream_cycle_leave(); return; }
     *result_at(f) = res;
     i32_at(f, F_STATUS)[0] = 1;
     w = ptr_at(f, F_WAKER)[0];
@@ -283,6 +287,8 @@ void dream_async_complete(dream_ptr f, dream_result res) {
         }
     }
     scheduler_drop_start_retain(f);
+    dream_cycle_leave();
+    dream_cycle_drain();
 }
 
 void dream_cancel(dream_ptr f) {
@@ -487,66 +493,55 @@ int32_t delayMsAsync(dream_ptr future, int32_t ms) {
 }
 #endif
 
+typedef struct {
+    void (*copy)(dream_ptr, dream_ptr);
+    dream_result (*clone)(dream_result);
+    const dream_type_info *array_info;
+} CombinatorState;
+static CombinatorState *combinator_state(dream_ptr f) {
+    return (CombinatorState *)((char *)dream_p(f) + F_SLOTS);
+}
 static void combinator_progress(dream_ptr w, dream_ptr child) {
     int32_t kind = i32_at(w, F_KIND)[0];
-    int32_t rem;
-    int32_t n;
-    int32_t i;
-    dream_ptr kids;
-    dream_ptr out;
-    if (i32_at(w, F_STATUS)[0]) {
-        return;
+    if (i32_at(w, F_STATUS)[0]) { return; }
+    if (kind != KIND_ANY && --i32_at(w, F_REMAINING)[0] > 0) { return; }
+    int32_t n = i32_at(w, F_COUNT)[0];
+    dream_ptr kids = ptr_at(w, F_CHILDREN)[0];
+    for (int32_t i = 0; i < n; ++i) {
+        dream_ptr c = arr_get(kids, i);
+        if (c && ptr_at(c, F_WAKER)[0] == w) { ptr_at(c, F_WAKER)[0] = 0; }
     }
+    CombinatorState *state = combinator_state(w);
     if (kind == KIND_ANY) {
-        /* The winner's result moves into `w`'s slot, so complete before dropping the retains
-         * `combinator_new` took. Losers may still be in flight; `dream_start` gave each a
-         * scheduler retain, and their later `combinator_progress` sees `F_STATUS` set and
-         * returns, so dropping our reference here cannot free one out from under the loop. */
-        dream_async_complete(w, *result_at(child));
-        n = i32_at(w, F_COUNT)[0];
-        kids = ptr_at(w, F_CHILDREN)[0];
-        for (i = 0; i < n; i++) {
-            dream_release(arr_get(kids, i));
-        }
-        return;
-    }
-    rem = i32_at(w, F_REMAINING)[0] - 1;
-    i32_at(w, F_REMAINING)[0] = rem;
-    if (rem > 0) {
-        return;
-    }
-    n = i32_at(w, F_COUNT)[0];
-    kids = ptr_at(w, F_CHILDREN)[0];
-    {
+        memcpy((char *)dream_p(w) + F_WIDE, (char *)dream_p(child) + F_WIDE, 8);
+        dream_async_complete(w, state->clone(*result_at(child)));
+    } else {
         int32_t es = i32_at(w, F_ESIZE)[0];
-        if (es <= 0) {
-            es = 4;
-        }
-        out = dream_array_new(n, es);
-        for (i = 0; i < n; i++) {
+        dream_ptr out = dream_array_new(n, es);
+        dream_set_type(out, state->array_info);
+        for (int32_t i = 0; i < n; ++i) {
             dream_ptr c = arr_get(kids, i);
-            dream_result res = c ? *result_at(c) : 0;
-            memcpy((char *)dream_p(out) + LEN_PREFIX_SIZE + (size_t)i * (size_t)es, &res, (size_t)es);
-            dream_release(c);
+            if (c) { state->copy((dream_ptr)((char *)dream_p(out) + LEN_PREFIX_SIZE + (size_t)i * (size_t)es), c); }
         }
+        dream_async_complete(w, (dream_result)(uintptr_t)out);
     }
-    dream_async_complete(w, (dream_result)(uintptr_t)out);
 }
 
-static dream_ptr combinator_new(dream_ptr arr, int32_t kind, int32_t esize) {
+static dream_ptr combinator_new(dream_ptr arr, int32_t kind, int32_t esize, void (*copy)(dream_ptr, dream_ptr), dream_result (*clone)(dream_result), const dream_type_info *array_info) {
     int32_t n = arr ? dream_i32(arr)[0] : 0;
     int32_t i;
-    dream_ptr w = dream_new_future((int32_t)F_SLOTS, HOST_POLL_INDEX, kind);
+    dream_ptr w = dream_new_future(F_SLOTS + sizeof(CombinatorState), HOST_POLL_INDEX, kind);
+    *combinator_state(w) = (CombinatorState){copy, clone, array_info};
+    dream_retain(arr);
     ptr_at(w, F_CHILDREN)[0] = arr;
     i32_at(w, F_COUNT)[0] = n;
     i32_at(w, F_REMAINING)[0] = n;
     i32_at(w, F_ESIZE)[0] = esize > 0 ? esize : 4;
     if (n == 0 && kind == KIND_ALL) {
-        dream_async_complete(w, (dream_result)(uintptr_t)arr);
+        dream_ptr out = dream_array_new(0, esize);
+        dream_set_type(out, array_info);
+        dream_async_complete(w, (dream_result)(uintptr_t)out);
         return w;
-    }
-    for (i = 0; i < n; i++) {
-        dream_retain(arr_get(arr, i));
     }
     for (i = 0; i < n; i++) {
         dream_ptr c = arr_get(arr, i);
@@ -561,6 +556,6 @@ static dream_ptr combinator_new(dream_ptr arr, int32_t kind, int32_t esize) {
     return w;
 }
 
-dream_ptr dream_all(dream_ptr arr, int32_t esize) { return combinator_new(arr, KIND_ALL, esize); }
+dream_ptr dream_all(dream_ptr arr, int32_t esize, void (*copy)(dream_ptr, dream_ptr), const dream_type_info *info) { return combinator_new(arr, KIND_ALL, esize, copy, NULL, info); }
 
-dream_ptr dream_any(dream_ptr arr) { return combinator_new(arr, KIND_ANY, 8); }
+dream_ptr dream_any(dream_ptr arr, dream_result (*clone)(dream_result)) { return combinator_new(arr, KIND_ANY, 8, NULL, clone, NULL); }

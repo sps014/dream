@@ -51,6 +51,7 @@ impl ToolchainConfig {
         ] {
             hash.update(value.as_bytes());
         }
+        hash.update(format!("{:?}", self.compiler_environment).as_bytes());
         hash.finalize().to_hex().to_string()
     }
 }

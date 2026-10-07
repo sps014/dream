@@ -116,7 +116,7 @@ pub(crate) fn native_header_fn_names() -> Vec<String> {
 
 fn parse_native_header_fns() -> HashSet<String> {
     let mut names = HashSet::new();
-    for raw in NATIVE_RT_HEADER.lines() {
+    for raw in NATIVE_RT_HEADER.lines().chain(include_str!("../../runtime/c/core/include/dream_ownership.h").lines()) {
         let line = raw.trim();
         if line.is_empty()
             || line.starts_with('#')

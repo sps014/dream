@@ -123,3 +123,5 @@ int main(int argc, char **argv) {
     assert(debug_get_live_objects() == 0);
     puts("lock registry stress passed");
 }
+
+void dream_release_object(dream_ptr ptr) { dream_release(ptr); }

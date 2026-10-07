@@ -44,7 +44,7 @@ fn fatal_runtime_paths_report_without_allocating_or_deadlocking() {
         .arg(runtime.join("core/utf8.c"))
         .arg(native.join("platform.c"));
     for unit in [
-        "heap_maps.c",
+        "heap_maps.c", "cycles.c",
         "publish.c",
         "region.c",
         "weak.c",

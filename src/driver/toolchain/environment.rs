@@ -65,6 +65,24 @@ impl ToolchainConfig {
             loader_path: lookup(Self::loader_path_key()),
             sdkroot: value("SDKROOT"),
             developer_dir: value("DEVELOPER_DIR"),
+            compiler_environment: [
+                "CPATH",
+                "C_INCLUDE_PATH",
+                "CPLUS_INCLUDE_PATH",
+                "OBJC_INCLUDE_PATH",
+                "LIBRARY_PATH",
+                "COMPILER_PATH",
+                "GCC_EXEC_PREFIX",
+                "MACOSX_DEPLOYMENT_TARGET",
+                "IPHONEOS_DEPLOYMENT_TARGET",
+                "SOURCE_DATE_EPOCH",
+                "CCC_OVERRIDE_OPTIONS",
+                "CLANG_CONFIG_FILE_SYSTEM_DIR",
+                "CLANG_CONFIG_FILE_USER_DIR",
+            ]
+            .into_iter()
+            .filter_map(|key| value(key).map(|v| (key.to_string(), v)))
+            .collect(),
             #[cfg(feature = "native")]
             sdkroot_args: Default::default(),
             #[cfg(windows)]

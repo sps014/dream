@@ -3,7 +3,6 @@
 // argument the callee still reads; results must match ordinary ARC semantics.
 import system;
 
-@allow_cycle
 class Node {
     public value: int;
     public next: Option<Node>;

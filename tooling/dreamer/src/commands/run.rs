@@ -17,7 +17,7 @@ pub fn run(
         start_dir,
         target,
         CompileFlags {
-            release,
+            compile_profile: dream_abi::profile::CompileProfile::from_release(release),
             ..CompileFlags::default()
         },
         port,

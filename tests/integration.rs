@@ -29,6 +29,7 @@ mod noinline_attribute_tests;
 mod publication_emission;
 mod rc_elision_goldens;
 mod runtime_callback;
+mod runtime_cycles;
 mod runtime_machine_size;
 mod runtime_panic;
 mod runtime_platform;

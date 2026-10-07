@@ -1,16 +1,11 @@
 # Memory Safety Guide
 
-Dream checks ordinary code to prevent invalid memory access and rejects many reference cycles before running the program. This guide explains the rules you will meet while writing safe code and the boundaries that still need care.
+Dream checks ordinary code to prevent invalid memory access and reclaims strong reference cycles deterministically. This guide explains the rules you will meet while writing safe code and the boundaries that still need care.
 
 ## Quick reference: what the compiler checks
 
 | Check | Severity | Example rejected |
 |---|---|---|
-| Reference cycles (declared fields) | error | `Node { next: Option<Node> }` |
-| Reference cycles (via tuples) | error | `Data { r: (Data, int) }` |
-| Reference cycles (via value structs) | error | `C { h: Holder }` + `Holder { d: Data }` |
-| Interface-field cycles (conservative) | error | `Node { h: Option<Handler> }` + impl back-ref |
-| Closure self-capture (`this` into fn-field) | error | `b.onClick = () => this.label` |
 | Borrow contract violation | error | declared `borrow fun` that mutates |
 | Interface value you call the method on-mode mismatch | error | implementor mode ≠ interface mode |
 | Iterator/Span invalidation (same function) | error | `xs.push(2)` while cursor live |
@@ -115,30 +110,13 @@ class Node {
 }
 ```
 
-Or annotate `@allow_cycle` on every class in the loop.
+Strong cyclic ownership is also supported automatically.
 
 ## Closure capture safety
 
-Lambdas that outlive their capturing scope can leak.
-The compiler catches the most dangerous pattern:
-
-```dream
-class Button {
-    onClick: fun(): string;
-}
-
-fun wire(b: Button): void {
-    b.onClick = () => b.label;   // ✗ error: captures b, stored in b
-}
-```
-
-Fix by capturing only the data you need:
-
-```dream
-b.onClick = () => "clicked";      // ✓ captures nothing
-```
-
-For cases where you need object access, use `Weak<T>` (below).
+Closures own their captured references. Callback graphs can be cyclic; exact capture metadata
+lets ARC reclaim them when external owners disappear. Use weak captures when a callback
+should not extend its target lifetime.
 
 ## Weak handles
 

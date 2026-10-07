@@ -8,7 +8,7 @@
 #else
 #include <sys/mman.h>
 #endif
-static dream_mutex locks[2] = {DREAM_MUTEX_INIT, DREAM_MUTEX_INIT};
+static dream_mutex locks[3] = {DREAM_MUTEX_INIT, DREAM_MUTEX_INIT, DREAM_MUTEX_INIT};
 static void platform_lock(unsigned domain) { dream_mutex_lock(&locks[domain]); }
 static void platform_unlock(unsigned domain) { dream_mutex_unlock(&locks[domain]); }
 static void *platform_map(size_t size) {

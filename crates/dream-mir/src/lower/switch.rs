@@ -15,6 +15,7 @@ impl Lowerer<'_> {
         arms: &[dream_hir::HArm],
         default: &[HStmt],
     ) {
+        let temporary_start = self.b.locals().len();
         // A union `match` dispatches on the value's discriminant and binds each arm's payload; a
         // string `switch` needs content equality (no `br_table`); an int/enum/bool `switch`
         // dispatches on the scrutinee value itself via a `br_table`.
@@ -30,6 +31,21 @@ impl Lowerer<'_> {
             self.lower_string_switch(scrutinee, arms, default);
         } else {
             self.lower_const_switch(scrutinee, arms, default);
+        }
+        let cleanup: Vec<_> = self
+            .b
+            .locals()
+            .iter()
+            .enumerate()
+            .skip(temporary_start)
+            .filter(|(_, d)| !d.is_cursor && self.interner.is_reference(d.ty))
+            .map(|(i, _)| Local(i as u32))
+            .collect();
+        for local in cleanup.into_iter().rev() {
+            self.b.assign(
+                Place::Local(local),
+                Rvalue::Use(Operand::Const(Const::Null)),
+            );
         }
     }
 
@@ -90,9 +106,10 @@ impl Lowerer<'_> {
         for arm in arms {
             let blk = self.b.new_block();
             if let dream_hir::HPattern::Const(c) = &arm.pattern
-                && let Some(v) = const_int_value(c, self.layouts, self.interner) {
-                    targets.push((v, blk));
-                }
+                && let Some(v) = const_int_value(c, self.layouts, self.interner)
+            {
+                targets.push((v, blk));
+            }
             let saved = self.b.current();
             self.b.switch_to(blk);
             self.lower_block(&arm.body);

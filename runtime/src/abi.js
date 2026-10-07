@@ -21,4 +21,4 @@ export const TAGS = {
   VALUE_MASK: 1073741823,
   FROM_DATA: 8,
 };
-export const HEAP_HEADER_SIZE = 12;
+export const HEAP_HEADER_SIZE = 16;

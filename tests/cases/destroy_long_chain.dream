@@ -3,7 +3,6 @@
 // an owning field before `next` (dropped before its successor, preserving field order).
 import system;
 
-@allow_cycle
 class Node {
     public value: int;
     public next: Option<Node>;
@@ -14,7 +13,6 @@ class Node {
     }
 }
 
-@allow_cycle
 class Labeled {
     public label: string;
     public next: Option<Labeled>;

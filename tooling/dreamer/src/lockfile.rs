@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 pub const LOCKFILE_FILE_NAME: &str = "dream.lock";
-pub const LOCKFILE_VERSION: u32 = 1;
+pub const LOCKFILE_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Lockfile {
@@ -25,6 +25,8 @@ pub struct LockedPackage {
     pub source: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checksum: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_selector: Option<String>,
     /// Resolved dependency names of this locked package, as `"name version"` strings.
     #[serde(default)]
     pub dependencies: Vec<String>,
@@ -44,6 +46,20 @@ impl Lockfile {
             .with_context(|| format!("reading lockfile at {}", path.display()))?;
         let lock: Lockfile = toml::from_str(&text)
             .with_context(|| format!("parsing lockfile at {}", path.display()))?;
+        if lock.version != LOCKFILE_VERSION {
+            anyhow::bail!("unsupported lockfile version; run dreamer update");
+        }
+        for package in &lock.packages {
+            crate::manifest::validate_package_name(&package.name)?;
+            if let Some(source) = package.source.strip_prefix("git+") {
+                let (_, commit) = source
+                    .rsplit_once('#')
+                    .context("Git lock is missing its commit")?;
+                if !crate::git::is_commit(commit) || package.git_selector.is_none() {
+                    anyhow::bail!("Git lock is missing its immutable identity");
+                }
+            }
+        }
         Ok(lock)
     }
 
@@ -81,6 +97,7 @@ mod tests {
             source: "registry+https://raw.githubusercontent.com/sps014/dream-registry/main"
                 .to_string(),
             checksum: Some("sha256:abc".to_string()),
+            git_selector: None,
             dependencies: Vec::new(),
         }
     }

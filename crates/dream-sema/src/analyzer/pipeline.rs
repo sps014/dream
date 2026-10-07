@@ -98,7 +98,6 @@ impl<'a> Analyzer<'a> {
         if !diagnostics.has_errors() {
             self.classify_receiver_modes(node, diagnostics);
             self.check_borrow_collisions(node, diagnostics);
-            self.check_closure_self_capture(node, diagnostics);
         }
 
         // Per-statement/expression analysis recovers locally (reporting into the bag and poisoning

@@ -1,0 +1,14 @@
+import system;
+class Node {
+    public next: Option<Node>;
+    public constructor() { this.next = Option.None; }
+    del() { System.println("drop"); }
+}
+fun make() {
+    let node = Node();
+    node.next = Option.Some(node);
+}
+fun main() {
+    defer { make(); System.println("inside"); }
+    System.println("outside");
+}

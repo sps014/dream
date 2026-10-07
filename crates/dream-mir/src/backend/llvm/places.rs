@@ -3,9 +3,9 @@
 
 use std::convert::TryFrom;
 
-use super::fx::{align_at, mem_ll, Fx, V};
+use super::fx::{Fx, V, align_at, mem_ll};
 use super::ir::{Ty, Value};
-use crate::backend::shared::abi_types::{array_elem_ty, elem_size, mem_ty, MemTy};
+use crate::backend::shared::abi_types::{MemTy, array_elem_ty, elem_size, mem_ty};
 use crate::backend::shared::glue::{release_sym, retain_sym};
 use crate::backend::shared::panic_msgs;
 use crate::backend::shared::place_policy::{
@@ -35,6 +35,30 @@ impl<'l, 'a> Fx<'l, 'a> {
         };
         let (ptr, ty) = (s.ptr.clone(), s.ty.clone());
         self.store_ty(&ty, &ptr, x, 8);
+        if self.poll_owned(l) {
+            let owner = V::u(self.self_.clone().unwrap());
+            let child = self.as_ref(x);
+            let locked = self.call_v("dream_cycle_store_begin", &[owner.clone(), child, V::i32(0)]);
+            let off = self.poll_offsets[l.0 as usize] as i64;
+            let at = self.addr(&owner, off);
+            self.store_ty(&ty, &at, x, super::fx::align_at(&ty, off));
+            self.call("dream_cycle_store_end", &[locked]);
+        }
+    }
+
+    pub(super) fn poll_owned(&self, local: Local) -> bool {
+        if self.poll_offsets.is_empty() { return false; }
+        let decl = &self.f.locals[local.0 as usize];
+        self.is_rc(decl.ty) && !self.is_value(decl.ty) && !decl.is_cursor
+            && (!self.f.params.contains(&local) || decl.is_take)
+    }
+
+    pub(super) fn clear_poll_edge(&mut self, local: Local) {
+        if self.poll_owned(local) {
+            let owner = V::u(self.self_.clone().unwrap());
+            let at = self.addr(&owner, self.poll_offsets[local.0 as usize] as i64);
+            self.store_ty(&self.h(), &at, &V::s(Value::zero(self.h())), 8);
+        }
     }
 
     pub fn global_ty(&self, g: Global) -> TypeId {
@@ -219,6 +243,66 @@ impl<'l, 'a> Fx<'l, 'a> {
     // ---- stores -------------------------------------------------------------------------------
 
     pub fn store(&mut self, place: &Place, rv: &Rvalue, rhs: V) {
+        let ty = match place {
+            Place::Local(_) => {
+                self.store_inner(place, rv, rhs);
+                return;
+            }
+            Place::Global(g) => self.global_ty(*g),
+            Place::Field { base, field } => self
+                .l
+                .cx
+                .nstruct(self.f.local_ty(*base))
+                .and_then(|s| s.fields.get(*field))
+                .map(|f| f.ty)
+                .unwrap_or(self.interner.object()),
+            Place::Index { base, .. } => array_elem_ty(self.interner, self.f.local_ty(*base)),
+            Place::Deref { elem_ty, .. } => *elem_ty,
+        };
+        if !self.is_value(ty) && !self.is_rc(ty) {
+            self.store_inner(place, rv, rhs);
+            return;
+        }
+        let child_cycles = crate::ownership::contains_cycle_refs(&self.mir.layouts, self.interner, ty);
+        let owner_cycles = match place {
+            Place::Field { base, .. } | Place::Index { base, .. } =>
+                crate::ownership::cycle_capable(&self.mir.layouts, self.interner, self.f.local_ty(*base)),
+            _ => false,
+        };
+        if !child_cycles && !owner_cycles {
+            self.store_inner(place, rv, rhs);
+            return;
+        }
+        let owner = match place {
+            Place::Field { base, .. } | Place::Index { base, .. }
+                if !self.is_value(self.f.local_ty(*base)) =>
+            {
+                self.read_local(*base)
+            }
+            _ => V::s(Value::zero(self.h())),
+        };
+        let child = if self.is_value(ty) {
+            V::s(Value::zero(self.h()))
+        } else {
+            self.as_ref(&rhs)
+        };
+        let unknown_owner = matches!(place, Place::Deref { .. })
+            || matches!(place, Place::Field { base, .. }
+                if self.is_value(self.f.local_ty(*base)) && {
+                    let decl = &self.f.locals[base.0 as usize];
+                    decl.is_ref || decl.is_cursor || decl.name.as_deref() == Some("this")
+                        || crate::backend::shared::place_policy::is_alias_value_local(self.f, *base)
+                });
+        let shape = if unknown_owner { 2 } else { i32::from(self.is_value(ty)) };
+        let locked = self.call_v(
+            "dream_cycle_store_begin",
+            &[owner, child, V::i32(shape as i64)],
+        );
+        self.store_inner(place, rv, rhs);
+        self.call("dream_cycle_store_end", &[locked]);
+    }
+
+    fn store_inner(&mut self, place: &Place, rv: &Rvalue, rhs: V) {
         match place {
             Place::Local(l) if self.is_value(self.f.local_ty(*l)) => {
                 let lty = self.f.local_ty(*l);

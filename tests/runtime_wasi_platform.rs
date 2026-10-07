@@ -36,7 +36,7 @@ fn wasi_page_exhaustion_reports_through_the_platform_without_allocating() {
             r#"import {{readFileSync}} from 'node:fs';
 import assert from 'node:assert/strict';
 const module = await WebAssembly.compile(readFileSync({wasm_path}));
-const memory = new WebAssembly.Memory({{initial: {minimum}, maximum: {minimum}}});
+const memory = new WebAssembly.Memory({{initial: {minimum}, maximum: {minimum} + 64}});
 let stderr = '';
 const imports = {{env: {{memory}}}};
 for (const entry of WebAssembly.Module.imports(module)) {{
@@ -51,8 +51,17 @@ imports.env.write_text = (stream, ptr, length, encoding) => {{
 }};
 const instance = await WebAssembly.instantiate(module, imports);
 instance.exports.__runtime_init();
+for (const size of [1, 17, 33, 65, 129, 511, 1025]) {{
+    const pointer = instance.exports.malloc(size, 0);
+    instance.exports.free(pointer);
+    for (let attempt = 0; attempt < 32; attempt++) {{
+        const reused = instance.exports.malloc(size, 0);
+        assert.equal(reused, pointer, `small allocation class was not reused: ${{size}}`);
+        instance.exports.free(reused);
+    }}
+}}
 const before = memory.buffer.byteLength;
-assert.throws(() => instance.exports.malloc(before, 0), WebAssembly.RuntimeError);
+assert.throws(() => instance.exports.malloc(({minimum} + 64) * 65536, 0), WebAssembly.RuntimeError);
 assert.equal(memory.buffer.byteLength, before);
 assert.equal(stderr, 'panic: out of memory growing the WASI heap\n');
 console.log('WASI platform exhaustion passed');

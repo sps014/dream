@@ -29,7 +29,7 @@ fn native_allocations_use_machine_width_without_committing_large_buffers() {
         .arg(runtime.join("core/platform.c"))
         .arg(runtime.join("core/utf8.c"))
         .arg(native.join("platform.c"));
-    for unit in ["heap_maps.c", "publish.c", "region.c", "weak.c", "sync.c"] {
+    for unit in ["heap_maps.c", "cycles.c", "publish.c", "region.c", "weak.c", "sync.c"] {
         let path = dream_mir::runtime::native_runtime_units(
             runtime,
             dream_mir::runtime::RuntimeNeed::CORE,

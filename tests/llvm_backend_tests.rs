@@ -4,10 +4,10 @@
 
 use dream::driver::compiler::{Compiler, LlvmRuntimeRequest, LlvmToolchain};
 use dream::driver::wasm_opt::OptLevel;
-use dream::execution::llvm::{compile_llvm, resolve_llvm, Toolchain};
-use dream::execution::native::{capture_native_bin, Pgo};
-use dream_mir::backend::llvm::RuntimeSigs;
+use dream::execution::llvm::{Toolchain, compile_llvm, resolve_llvm};
+use dream::execution::native::{Pgo, capture_native_bin};
 use dream_mir::backend::Target;
+use dream_mir::backend::llvm::RuntimeSigs;
 use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -104,6 +104,7 @@ fn unsigned_string_reads_do_not_depend_on_abi_extension_attributes() {
     };
     let target = dream_mir::backend::Target::native();
     let req = LlvmRuntimeRequest {
+            profile: dream_abi::profile::CompileProfile::Debug,
         need: dream_mir::runtime::runtime_need_from_mir(&mir),
         target: target.clone(),
         threads: false,
@@ -164,6 +165,7 @@ fn run_llvm(src: &Path, opt: OptLevel) -> Result<String, String> {
             opt_ll: None,
             opt,
             debug: false,
+            profile: dream_abi::profile::CompileProfile::Release,
             pgo: &Pgo::Off,
             icon: None,
             relocatable: false,
@@ -203,6 +205,7 @@ fn llvm_relocatable_binary_runs_after_move() {
             opt_ll: None,
             opt: OptLevel::O0,
             debug: false,
+            profile: dream_abi::profile::CompileProfile::Release,
             pgo: &Pgo::Off,
             icon: None,
             relocatable: true,
@@ -211,9 +214,11 @@ fn llvm_relocatable_binary_runs_after_move() {
     )
     .unwrap();
     for capability in dream_abi::host_capability::HostCapability::ALL {
-        assert!(!build
-            .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
-            .exists());
+        assert!(
+            !build
+                .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
+                .exists()
+        );
     }
     let moved = temporary.path().join("moved package");
     fs::rename(&build, &moved).unwrap();
@@ -256,7 +261,7 @@ fn check_case(stem: &str) -> Result<(), String> {
                 }
             }
             (outcome, _, _) => {
-                return Err(format!("{stem} {opt:?}: unexpected outcome {outcome:?}"))
+                return Err(format!("{stem} {opt:?}: unexpected outcome {outcome:?}"));
             }
         }
     }
@@ -317,6 +322,7 @@ fn llvm_runtime_declarations_match_bitcode() {
         let text = fs::read_to_string(&ll).unwrap();
         let need = dream_mir::runtime::runtime_need_from_module_text(&text);
         let req = LlvmRuntimeRequest {
+            profile: dream_abi::profile::CompileProfile::Debug,
             need,
             target: dream_mir::backend::Target::native(),
             threads: false,
@@ -400,9 +406,10 @@ fn llvm_ir_shapes() {
     assert!(ll.contains("define internal void @mk(i32 %a0, ptr %a1)"));
     assert!(function_body(&ll, "mk__abi").contains("call void @mk("));
     assert!(ll.contains("call void @mk(i32 4, ptr "));
-    assert!(ll
-        .lines()
-        .any(|l| l.starts_with("@dream_ft = ") && l.contains("ptr @mk__abi")));
+    assert!(
+        ll.lines()
+            .any(|l| l.starts_with("@dream_ft = ") && l.contains("ptr @mk__abi"))
+    );
 
     for l in ll.lines().filter(|l| l.starts_with("define ")) {
         assert!(l.contains("nounwind"), "missing nounwind: {}", l);
@@ -457,6 +464,7 @@ fn llvm_pgo_round_trip() {
             opt_ll: None,
             opt: OptLevel::O2,
             debug: false,
+            profile: dream_abi::profile::CompileProfile::Release,
             pgo: &Pgo::Generate,
             icon: None,
             relocatable: false,
@@ -466,10 +474,12 @@ fn llvm_pgo_round_trip() {
     .unwrap();
     assert_eq!(run(&instrumented), expected);
     let raw = instrumented.with_extension("pgo");
-    assert!(fs::read_dir(&raw)
-        .unwrap()
-        .flatten()
-        .any(|e| e.path().extension().is_some_and(|x| x == "profraw")));
+    assert!(
+        fs::read_dir(&raw)
+            .unwrap()
+            .flatten()
+            .any(|e| e.path().extension().is_some_and(|x| x == "profraw"))
+    );
     let used = compile_llvm(
         &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
         &ll,
@@ -478,6 +488,7 @@ fn llvm_pgo_round_trip() {
             opt_ll: None,
             opt: OptLevel::O2,
             debug: false,
+            profile: dream_abi::profile::CompileProfile::Release,
             pgo: &Pgo::Use(None),
             icon: None,
             relocatable: false,

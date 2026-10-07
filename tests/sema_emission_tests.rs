@@ -23,9 +23,9 @@ fn heap_access(body: &str, op: &str) -> bool {
             && ["load ptr,", "getelementptr ", "call ptr "]
                 .iter()
                 .any(|p| rhs.starts_with(p))
-            {
-                derived.push(l);
-            }
+        {
+            derived.push(l);
+        }
         if !rhs.starts_with(op) {
             continue;
         }
@@ -46,9 +46,10 @@ fn has_back_edge(body: &str) -> bool {
     for line in body.lines() {
         offset += line.len() + 1;
         if let Some(label) = line.strip_suffix(':')
-            && body[offset.min(body.len())..].contains(&format!("label %{label}")) {
-                return true;
-            }
+            && body[offset.min(body.len())..].contains(&format!("label %{label}"))
+        {
+            return true;
+        }
     }
     false
 }
@@ -445,8 +446,7 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
     // tag-dispatches to those per-type destroys. Non-reference fields (`v: int`) are not released.
     let code = format!(
         "{SYSTEM_STUB}
-        @allow_cycle
-        class Node {{ public next: Node; public v: int;
+                class Node {{ public next: Node; public v: int;
             del() {{ System.print(0); }}
             public constructor(v: int) {{ this.v = v; }}
         }}
@@ -1020,8 +1020,7 @@ fn exec_container_store_retains_no_double_free() {
     // this double-frees `b`.
     let code = format!(
         "{SYSTEM_STUB}
-        @allow_cycle
-        class Node {{ public next: Node;
+                class Node {{ public next: Node;
             del() {{ System.print(1); }}
             public constructor() {{ }}
         }}
@@ -1775,9 +1774,10 @@ fn test_hir_switch_or_pattern_expands_to_multi_const_arms() {
             "five vowel alternatives should become five Const arms, got {:?}",
             arms.len()
         );
-        assert!(arms
-            .iter()
-            .all(|a| matches!(a.pattern, dream_hir::HPattern::Const(_))));
+        assert!(
+            arms.iter()
+                .all(|a| matches!(a.pattern, dream_hir::HPattern::Const(_)))
+        );
     });
 }
 
@@ -1809,9 +1809,10 @@ fn test_hir_switch_range_pattern_expands_to_multi_const_arms() {
             "10..12 should expand to three Const arms, got {}",
             arms.len()
         );
-        assert!(arms
-            .iter()
-            .all(|a| matches!(a.pattern, dream_hir::HPattern::Const(_))));
+        assert!(
+            arms.iter()
+                .all(|a| matches!(a.pattern, dream_hir::HPattern::Const(_)))
+        );
     });
 }
 

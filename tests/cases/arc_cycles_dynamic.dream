@@ -1,0 +1,36 @@
+import system;
+
+class ClosureNode {
+    public action: Option<fun(): int>;
+    public constructor() { this.action = Option.None; }
+    del() { System.println("closure"); }
+}
+class FutureNode {
+    public future: Option<Future<int>>;
+    public constructor() { this.future = Option.None; }
+    del() { System.println("future"); }
+}
+class ContainerNode {
+    public children: List<ContainerNode>;
+    public constructor() { this.children = List<ContainerNode>(); }
+    del() { System.println("container"); }
+}
+async fun hold(_node: FutureNode): int { return 1; }
+fun closures() {
+    let node = ClosureNode();
+    node.action = Option.Some(() => { let _keep = node; return 1; });
+}
+fun futures() {
+    let node = FutureNode();
+    node.future = Option.Some(hold(node));
+}
+fun containers() {
+    let node = ContainerNode();
+    node.children.push(node);
+}
+fun main() {
+    closures();
+    futures();
+    containers();
+    System.println("done");
+}

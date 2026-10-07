@@ -58,6 +58,8 @@ pub(super) struct Lcx<'a> {
     /// Internal functions returning a value struct through a trailing caller buffer instead of a
     /// heap box. Tables and itables point at their `__abi` wrapper, which keeps the box ABI.
     pub sret: IndexSet<String>,
+    pub future_infos: IndexSet<dream_types::TypeId>,
+    pub future_copies: IndexSet<dream_types::TypeId>,
     /// Library functions taking the caller's panic location as a trailing hidden `ptr`
     /// (`source_loc.rs`). Tables and itables point at their `__abi` wrapper, which passes NULL.
     pub tracked: IndexSet<String>,
@@ -93,6 +95,8 @@ impl<'a> Lcx<'a> {
             m,
             own: IndexMap::new(),
             sret: IndexSet::new(),
+            future_infos: IndexSet::new(),
+            future_copies: IndexSet::new(),
             tracked: IndexSet::new(),
             hosts: IndexMap::new(),
             intrinsics: IndexMap::new(),

@@ -71,9 +71,10 @@ pub(super) fn compute_safety(
                 _ => None,
             };
             if let Some(key) = key
-                && let Some(&target) = index.instances.get(&key) {
-                    adjacency[i].push(target);
-                }
+                && let Some(&target) = index.instances.get(&key)
+            {
+                adjacency[i].push(target);
+            }
         });
     }
     let mut memo = IndexMap::new();
@@ -117,6 +118,10 @@ pub(super) fn region_safe_body(cx: &mut SafeCx<'_>, f: &MirFunction) -> bool {
         return false;
     }
     if cx.mir.intrinsics.iter().any(|(d, _)| *d == f.def) {
+        return false;
+    }
+    if f.blocks.iter().flat_map(|b| &b.stmts).any(|s| matches!(s,
+        Statement::Assign(_, Rvalue::New { ty, .. }) if crate::ownership::cycle_capable(&cx.mir.layouts, cx.interner, *ty))) {
         return false;
     }
     let this_local = f.params.first().copied();

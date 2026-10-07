@@ -10,7 +10,7 @@ pub fn run(start_dir: &Path, name: Option<String>) -> Result<()> {
     let (install_root, members) = workspace::discover_install_root(start_dir)?;
     let lock_path = install_root.join(crate::lockfile::LOCKFILE_FILE_NAME);
 
-    let preferred: BTreeMap<String, String> = match (
+    let preferred: BTreeMap<String, crate::lockfile::LockedPackage> = match (
         &name,
         crate::lockfile::Lockfile::load_if_exists(&lock_path)?,
     ) {
@@ -18,7 +18,7 @@ pub fn run(start_dir: &Path, name: Option<String>) -> Result<()> {
             .packages
             .into_iter()
             .filter(|p| &p.name != keep_others_pinned)
-            .map(|p| (p.name, p.version))
+            .map(|p| (p.name.clone(), p))
             .collect(),
         _ => BTreeMap::new(),
     };

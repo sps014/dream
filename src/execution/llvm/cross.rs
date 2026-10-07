@@ -116,7 +116,7 @@ pub fn emit_object(
         tools
             .command("llc")
             .arg(format!("-mtriple={}", target.llvm_triple()))
-            .arg(super::build::llc_level(level, false))
+            .arg(super::build::llc_level(level))
             .args(["-filetype=obj", "-relocation-model=pic"])
             .arg(input)
             .arg("-o")

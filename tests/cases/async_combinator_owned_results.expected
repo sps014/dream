@@ -1,0 +1,7 @@
+items 1 2
+values 3 4
+done
+drop 1
+drop 2
+drop 3
+drop 4

@@ -116,6 +116,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             Terminator::AsyncComplete(Some(o)) => {
                 self.value_teardown(self.value_local_of(o));
                 let result = self.operand(o);
+                if let Operand::Copy(Place::Local(local)) = o { self.clear_poll_edge(*local); }
                 let s = self.self_ref();
                 let wide = self.l.cx.target.abi().future.wide as i64;
                 let wide_ty = match self.interner.kind(self.f.ret) {

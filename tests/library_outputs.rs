@@ -34,7 +34,7 @@ fn build(root: &Path, kind: OutputKind, extra: &[&str]) -> std::path::PathBuf {
         ),
     )
     .unwrap();
-    cmd.arg(root.join("src/lib.dream"))
+    cmd.arg("--emit-opt-ir").arg(root.join("src/lib.dream"))
         .arg("-o")
         .arg(kind.artifact_path(&ll, &dream_abi::target::TargetSpec::host()))
         .args(extra);

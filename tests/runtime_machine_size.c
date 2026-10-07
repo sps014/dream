@@ -100,3 +100,5 @@ int main(int argc, char **argv) {
     }
     return 0;
 }
+
+void dream_release_object(dream_ptr ptr) { dream_release(ptr); }

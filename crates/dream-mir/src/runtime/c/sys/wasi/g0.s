@@ -331,3 +331,20 @@ dream_region_state_set:
 	local.get	0
 	global.set	__dream_region_state
 	end_function
+
+	.hidden	__dream_cycle_context
+	.globaltype	__dream_cycle_context, i32
+__dream_cycle_context:
+	.globl	dream_cycle_context_get
+	.type	dream_cycle_context_get,@function
+dream_cycle_context_get:
+	.functype	dream_cycle_context_get () -> (i32)
+	global.get	__dream_cycle_context
+	end_function
+	.globl	dream_cycle_context_set
+	.type	dream_cycle_context_set,@function
+dream_cycle_context_set:
+	.functype	dream_cycle_context_set (i32) -> ()
+	local.get	0
+	global.set	__dream_cycle_context
+	end_function

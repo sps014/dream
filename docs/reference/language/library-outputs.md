@@ -39,11 +39,12 @@ Target builds require matching capability libraries and SDKs;
 Native library output selection belongs to `[lib].output-type`; `--crate-type` only selects
 validation for intermediate output or a different target.
 
-Outputs include `<stem>.h`, `<stem>.abi.json`, `<stem>.opt.ll` and either an archive
+Outputs include `<stem>.h`, `<stem>.abi.json` and either an archive
 (`.a`, or `.lib` on Windows) or a shared library (`.dylib`, `.so`, or `.dll`). Windows shared
 libraries also produce an import `.lib`. Static libraries provide `<stem>.link.json`: append its
 `link_args` array when linking the archive into a C, Swift or Kotlin host. Required Dream host
 capability libraries remain dynamic dependencies and must be available to the host application.
+Request `<stem>.opt.ll` explicitly with `--emit-opt-ir` when inspecting optimized code.
 
 The generated header contains both the exported declarations and the embedding API. For example:
 

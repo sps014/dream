@@ -218,6 +218,9 @@ void dream_callback_owner_finish(void) {
     dream_defer_drain_all();
     dream_mutex_lock(&callback_mu);
     owner->attached = 0;
+#ifdef DREAM_CALLBACK_TEST_FINISH
+    DREAM_CALLBACK_TEST_FINISH();
+#endif
     while (owner->waking) {
         dream_cond_wait(&callback_cv, &callback_mu);
     }

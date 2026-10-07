@@ -1,9 +1,7 @@
 #include "dream_core.h"
 #include "dream_platform_internal.h"
 
-/* Env sits at byte 8 so a 32-bit idx and env are not packed into one i64 store. Wasm32 heap
- * payloads are 4-mod-8 (`HEAP_HEADER_SIZE` 12), and an i64 store there traps. Native already
- * used offset 8 (`dream_ptr[1]`). */
+/* The index and environment keep separate typed slots across pointer widths. */
 enum { FUNCBOX_ENV_OFF = 8 };
 
 static void funcbox_set_env(dream_ptr box, dream_ptr env) {

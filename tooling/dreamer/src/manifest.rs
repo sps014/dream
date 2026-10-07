@@ -1,7 +1,7 @@
 //! `dream.toml` project manifest: package metadata, dependencies, dev-dependencies, scripts, and
 //! registry aliases. Parsed with `serde` + `toml`, mirroring how Cargo reads `Cargo.toml`.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -227,14 +227,14 @@ pub struct PackageMeta {
 
 /// A dependency requirement: either a bare semver requirement string (`"^1.2"`) or a detailed
 /// table (`{ version = "...", path = "...", git = "..." }`), matching Cargo's `Cargo.toml` shape.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum Dependency {
     Version(String),
     Detailed(DetailedDependency),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct DetailedDependency {
     #[serde(default)]
     pub version: Option<String>,
@@ -253,6 +253,24 @@ pub struct DetailedDependency {
 }
 
 impl Dependency {
+    pub fn validate(&self) -> Result<()> {
+        if let Self::Detailed(d) = self {
+            if d.path.is_some() && (d.git.is_some() || d.registry.is_some())
+                || d.git.is_some() && d.registry.is_some()
+            {
+                bail!("dependency has conflicting package sources");
+            }
+            let refs = [d.tag.is_some(), d.branch.is_some(), d.rev.is_some()]
+                .into_iter()
+                .filter(|v| *v)
+                .count();
+            if refs > 1 || refs > 0 && d.git.is_none() {
+                bail!("invalid Git dependency selectors");
+            }
+        }
+        Ok(())
+    }
+
     pub fn version_req(&self) -> Option<&str> {
         match self {
             Dependency::Version(v) => Some(v.as_str()),
@@ -517,6 +535,23 @@ impl Manifest {
                 }
             }
         }
+        let mut segments = BTreeMap::new();
+        for (name, dep) in self.dependencies.iter().chain(&self.dev_dependencies) {
+            validate_package_name(name)?;
+            let segment = import_segment(name);
+            if let Some(previous) = segments.insert(segment, name)
+                && previous != name
+            {
+                bail!("package import names collide: '{previous}' and '{name}'");
+            }
+            dep.validate()?;
+            if let Some(normal) = self.dependencies.get(name)
+                && self.dev_dependencies.contains_key(name)
+                && normal != dep
+            {
+                bail!("conflicting dependency and dev-dependency for '{name}'");
+            }
+        }
         let Some(pkg) = &self.package else {
             if self.lib.is_some() {
                 bail!("[lib] requires [package].type = \"lib\"");
@@ -543,13 +578,14 @@ impl Manifest {
             }
             PackageType::Lib => {
                 if let Some(entry) = &pkg.entry
-                    && !entry.trim().is_empty() {
-                        bail!(
-                            "package '{}' is type = \"lib\" and must not set entry \
+                    && !entry.trim().is_empty()
+                {
+                    bail!(
+                        "package '{}' is type = \"lib\" and must not set entry \
                              (libraries are imported via src/<name>.dream)",
-                            pkg.name
-                        );
-                    }
+                        pkg.name
+                    );
+                }
             }
         }
         if self.lib.is_some() {
@@ -601,10 +637,11 @@ impl Manifest {
             let candidate = d.join(MANIFEST_FILE_NAME);
             if candidate.is_file()
                 && let Ok(text) = std::fs::read_to_string(&candidate)
-                    && let Ok(m) = toml::from_str::<Manifest>(&text)
-                        && m.package.is_some() {
-                            return Some(d);
-                        }
+                && let Ok(m) = toml::from_str::<Manifest>(&text)
+                && m.package.is_some()
+            {
+                return Some(d);
+            }
             dir = d.parent().map(Path::to_path_buf);
         }
         None
@@ -617,10 +654,11 @@ impl Manifest {
             let candidate = d.join(MANIFEST_FILE_NAME);
             if candidate.is_file()
                 && let Ok(text) = std::fs::read_to_string(&candidate)
-                    && let Ok(m) = toml::from_str::<Manifest>(&text)
-                        && m.workspace.is_some() {
-                            return Some(d);
-                        }
+                && let Ok(m) = toml::from_str::<Manifest>(&text)
+                && m.workspace.is_some()
+            {
+                return Some(d);
+            }
             dir = d.parent().map(Path::to_path_buf);
         }
         None
@@ -660,13 +698,33 @@ mod tests {
         let parsed: Manifest = toml::from_str(&text).unwrap();
         parsed.validate().unwrap();
         assert_eq!(parsed.lib, manifest.lib);
-        assert!(toml::from_str::<Manifest>(
-            &text.replace("output-type = \"cdylib\"", "output-type = [\"cdylib\"]")
-        )
-        .is_err());
+        assert!(
+            toml::from_str::<Manifest>(
+                &text.replace("output-type = \"cdylib\"", "output-type = [\"cdylib\"]")
+            )
+            .is_err()
+        );
         let mut invalid = parsed;
         invalid.package.as_mut().unwrap().targets = vec!["web".into()];
         assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn conflicting_sources_and_git_selectors_are_rejected() {
+        for source in [
+            "path = 'local', git = 'https://example.com/repo'",
+            "path = 'local', registry = 'private'",
+            "git = 'https://example.com/repo', registry = 'private'",
+            "git = 'https://example.com/repo', branch = 'main', rev = 'abc'",
+            "branch = 'main'",
+        ] {
+            let dependency: Dependency = toml::from_str::<toml::Value>(&format!("dep = {{ {source} }}"))
+                .unwrap().get("dep").unwrap().clone().try_into().unwrap();
+            assert!(dependency.validate().is_err(), "{source}");
+        }
+        for name in ["../escape", "a/b", "a\\b", ".", "..", "a%2fb"] {
+            assert!(validate_package_name(name).is_err(), "{name}");
+        }
     }
 
     #[test]

@@ -6,7 +6,7 @@ use super::checksum;
 use super::client::RegistryClient;
 use super::index::IndexEntry;
 use super::{CatalogEntry, MAX_TARBALL_BYTES};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 
 pub struct FileRegistry {
@@ -25,12 +25,7 @@ impl FileRegistry {
     /// Resolves a (possibly relative) tarball location from an [`IndexEntry`] against the
     /// registry base directory.
     fn tarball_path(&self, tarball: &str) -> PathBuf {
-        let p = Path::new(tarball);
-        if p.is_absolute() {
-            p.to_path_buf()
-        } else {
-            self.base.join(p)
-        }
+        self.base.join(tarball)
     }
 }
 
@@ -40,6 +35,7 @@ impl RegistryClient for FileRegistry {
     }
 
     fn fetch_index(&self, package: &str) -> Result<Vec<IndexEntry>> {
+        crate::manifest::validate_package_name(package)?;
         let path = self.index_file(package);
         if !path.is_file() {
             return Ok(Vec::new());
@@ -50,17 +46,12 @@ impl RegistryClient for FileRegistry {
     }
 
     fn fetch_tarball(&self, entry: &IndexEntry, dest_file: &Path) -> Result<()> {
-        let src = self.tarball_path(&entry.tarball);
-        let bytes =
-            std::fs::read(&src).with_context(|| format!("reading tarball at {}", src.display()))?;
-        checksum::verify(&bytes, &entry.cksum)
-            .with_context(|| format!("verifying tarball for {} {}", entry.name, entry.vers))?;
-        if let Some(parent) = dest_file.parent() {
-            std::fs::create_dir_all(parent)?;
+        crate::manifest::validate_relative_asset_path(&entry.tarball, "registry tarball")?;
+        let src = self.tarball_path(&entry.tarball).canonicalize()?;
+        if !src.starts_with(self.base.canonicalize()?) {
+            bail!("tarball escapes registry root");
         }
-        std::fs::write(dest_file, bytes)
-            .with_context(|| format!("writing tarball to {}", dest_file.display()))?;
-        Ok(())
+        checksum::copy_verified(std::fs::File::open(src)?, dest_file, &entry.cksum)
     }
 
     fn search(&self, query: &str) -> Result<Vec<IndexEntry>> {
@@ -77,15 +68,18 @@ impl RegistryClient for FileRegistry {
                 continue;
             }
             if let Some(latest) = self.fetch_index(&name)?.pop()
-                && latest.matches_query(&needle) {
-                    out.push(latest);
-                }
+                && latest.matches_query(&needle)
+            {
+                out.push(latest);
+            }
         }
         out.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(out)
     }
 
     fn publish(&self, entry: &IndexEntry, tarball_path: &Path) -> Result<()> {
+        crate::manifest::validate_package_name(&entry.name)?;
+        semver::Version::parse(&entry.vers)?;
         let bytes = std::fs::read(tarball_path)
             .with_context(|| format!("reading tarball at {}", tarball_path.display()))?;
         if bytes.len() > MAX_TARBALL_BYTES {

@@ -158,17 +158,23 @@ pub(super) fn validate_signatures(
     tools: &LlvmTools,
     modules: &[PathBuf],
     shim: &Path,
+    runtime: &dream_mir::backend::llvm::RuntimeSigs,
 ) -> Result<(), String> {
     use dream_mir::backend::llvm::RuntimeSigs;
     let expected = RuntimeSigs::parse(&super::runtime::disassemble(tools, shim)?)?;
-    for module in modules {
-        let actual = RuntimeSigs::parse(&super::runtime::disassemble(tools, module)?)?;
+    let compare = |actual: &RuntimeSigs| -> Result<(), String> {
         for (name, declared) in &expected.fns {
             if let Some(defined) = actual.fns.get(name)
                 && declared.fty != defined.fty {
                     return Err(format!("WASM C ABI mismatch for '{name}': Dream declares {}, package source uses {}; use usize/isize for pointer-sized C integers", declared.fty, defined.fty));
                 }
         }
+        Ok(())
+    };
+    compare(runtime)?;
+    for module in modules {
+        let actual = RuntimeSigs::parse(&super::runtime::disassemble(tools, module)?)?;
+        compare(&actual)?;
     }
     Ok(())
 }

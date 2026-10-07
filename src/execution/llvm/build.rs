@@ -4,7 +4,7 @@
 use super::c_shim::shim_bitcode;
 use super::icon;
 use super::runtime::llvm_runtime;
-use super::tools::{resolve_llvm, LlvmTools};
+use super::tools::{LlvmTools, resolve_llvm};
 use crate::driver::output::OutputKind;
 use crate::driver::wasi::run_captured;
 use crate::driver::wasm_opt::OptLevel;
@@ -12,10 +12,10 @@ use crate::execution::native::bundle::{link_runtime, stage_runtime};
 use crate::execution::native::c_link::{
     cc_link_flags, read_c_libs_from_abi, search_roots_for_artifact,
 };
-use crate::execution::native::native_c::{compile_sets, read_c_sources_from_abi, NativeObjects};
+use crate::execution::native::native_c::{NativeObjects, compile_sets, read_c_sources_from_abi};
 use crate::execution::native::pgo::{clear_raw_profiles, llvm_pgo};
 use crate::execution::native::{
-    cc, host_library_dir, native_bin_fresh, read_host_capabilities, Pgo,
+    Pgo, cc, host_library_dir, native_bin_fresh, read_host_capabilities,
 };
 use dream_abi::c_abi::EMBED_EXPORTS;
 #[path = "library.rs"]
@@ -43,8 +43,8 @@ fn optimize_linked(
     let (opt, debug) = level;
     let out = linked.with_extension("opt.bc");
     let mut cmd = tools.command("opt");
-    cmd.arg(format!("-passes={}", pipeline(opt, debug)))
-        .args(cpu_args(opt, debug, spec))
+    cmd.arg(format!("-passes={}", pipeline(opt)))
+        .args(cpu_args(opt, spec))
         .arg(public_api_list(exports));
     if !debug {
         // COFF CodeView records llc's output path even for runtime-only debug units.
@@ -94,15 +94,15 @@ fn run_llc(
     tools: &LlvmTools,
     input: &Path,
     opt: OptLevel,
-    debug: bool,
+    _debug: bool,
     filetype: &str,
     out: &Path,
     spec: &dream_abi::target::TargetSpec,
 ) -> Result<(), String> {
     let mut llc = tools.command("llc");
-    llc.arg(llc_level(opt, debug))
+    llc.arg(llc_level(opt))
         .args(section_args(spec))
-        .args(cpu_args(opt, debug, spec))
+        .args(cpu_args(opt, spec))
         .arg(format!("-filetype={filetype}"))
         .arg("-relocation-model=pic")
         .arg(input)
@@ -135,9 +135,37 @@ pub fn emit_llvm_artifacts(
     opt: OptLevel,
     debug: bool,
     icon: Option<&Path>,
+    profile: dream_abi::profile::CompileProfile,
 ) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     let tools = resolve_llvm(config)?;
     let src = std::fs::read_to_string(ll_path)?;
+    if profile.is_debug() {
+        let opt_ll = ll_path.with_extension("opt.ll");
+        let optimized = if opt == OptLevel::O0 {
+            std::fs::copy(ll_path, &opt_ll)?;
+            ll_path.to_path_buf()
+        } else {
+            let bc = ll_path.with_extension("opt.bc");
+            let mut command = tools.command("opt");
+            command
+                .arg(format!(
+                    "-passes={}",
+                    pipeline(opt).trim_start_matches("internalize,")
+                ))
+                .arg(ll_path)
+                .arg("-o")
+                .arg(&bc);
+            run_captured(&mut command, "opt (program)")?;
+            write_ir(&tools, &bc, &opt_ll)?;
+            bc
+        };
+        let asm = ll_path.with_extension("s");
+        run_llc(&tools, &optimized, opt, debug, "asm", &asm, target)?;
+        if optimized != ll_path {
+            std::fs::remove_file(optimized)?;
+        }
+        return Ok(vec![opt_ll, asm]);
+    }
     let rt = llvm_runtime(
         &tools,
         target,
@@ -175,7 +203,9 @@ pub fn emit_llvm_artifacts(
     write_ir(&tools, &optimized, &opt_ll)?;
     let asm = ll_path.with_extension("s");
     run_llc(&tools, &optimized, opt, debug, "asm", &asm, target)?;
-    let _ = std::fs::remove_file(&optimized);
+    if optimized != ll_path {
+        let _ = std::fs::remove_file(&optimized);
+    }
     Ok(vec![opt_ll, asm])
 }
 
@@ -185,6 +215,7 @@ pub struct NativeBuildOptions<'a> {
     pub target: dream_abi::target::TargetSpec,
     pub opt_ll: Option<&'a Path>,
     pub opt: OptLevel,
+    pub profile: dream_abi::profile::CompileProfile,
     pub debug: bool,
     pub pgo: &'a Pgo,
     pub icon: Option<&'a Path>,
@@ -201,6 +232,7 @@ pub fn compile_llvm(
         target: spec,
         opt_ll,
         opt,
+        profile: compile_profile,
         debug,
         pgo,
         icon,
@@ -249,7 +281,27 @@ pub fn compile_llvm(
     };
     let src = std::fs::read_to_string(ll_path)?;
     let need = runtime_need_from_module_text(&src);
-    let rt = llvm_runtime(&tools, &spec, opt, need, debug)?;
+    let separate_runtime = compile_profile.is_debug() && *pgo == Pgo::Off;
+    let runtime_objects = if separate_runtime {
+        super::runtime_objects::native(&tools, &spec, need, debug)?
+    } else {
+        Vec::new()
+    };
+    let rt = if separate_runtime {
+        None
+    } else {
+        Some(llvm_runtime(
+            &tools,
+            &spec,
+            if compile_profile.is_debug() {
+                OptLevel::O0
+            } else {
+                opt
+            },
+            need,
+            debug,
+        )?)
+    };
     let profile = llvm_pgo(pgo, &bin, || tools.optional_tool("llvm-profdata"))?;
     let icon_png = icon.map(icon::read_png).transpose()?;
     let c_sources = read_c_sources_from_abi(&abi_path);
@@ -275,16 +327,19 @@ pub fn compile_llvm(
     let stamp_path = bin.with_extension("flags");
     let stamp = format!(
         "native-c-shim-v4\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
-        pipeline(opt, debug),
+        pipeline(opt),
         debug,
-        llc_level(opt, debug),
+        llc_level(opt),
         tools.bin.display(),
-        rt.archive,
+        (
+            &rt.as_ref().and_then(|rt| rt.archive.as_ref()),
+            &runtime_objects
+        ),
         profile,
         icon_png.as_deref().map(icon::fingerprint),
         native.objects,
         native.link_args,
-        (relocatable, output_kind),
+        (relocatable, output_kind, compile_profile),
         capabilities,
         section_args(&spec),
         dead_strip_args(&spec)
@@ -318,7 +373,15 @@ pub fn compile_llvm(
         (Pgo::Use(_), Some((_, p))) => Some(p.as_path()),
         _ => None,
     };
-    if native_bin_fresh(&bin, ll_path, &rt.bc, input)
+    let runtime_input = rt
+        .as_ref()
+        .map(|rt| rt.bc.as_path())
+        .or_else(|| runtime_objects.first().map(PathBuf::as_path))
+        .ok_or("runtime has no link inputs")?;
+    let runtime_archive = rt.as_ref().and_then(|rt| rt.archive.as_deref());
+    if c_sources.is_empty()
+        && native_bin_fresh(&bin, ll_path, runtime_input, input)
+        && runtime_objects.iter().all(|o| !newer_than(o, &bin))
         && native.objects.iter().all(|o| !newer_than(o, &bin))
         && opt_ll.is_none_or(Path::exists)
         && (output_kind != OutputKind::Staticlib || ll_path.with_extension("link.json").is_file())
@@ -337,31 +400,65 @@ pub fn compile_llvm(
     let mut exports = native.runtime_exports.clone();
     exports.extend(library::exports(&abi_path)?);
     let shim = shim_bitcode(&tools, &spec, ll_path)?;
-    let optimized = link_and_optimize(
-        &tools,
-        ll_path,
-        &[Some(rt.bc.as_path()), shim.as_deref(), icon_ll.as_deref()]
+    let mut debug_objects = runtime_objects;
+    let optimized = if separate_runtime {
+        for module in shim.iter().chain(&icon_ll) {
+            let object = module.with_extension("shim.o");
+            run_llc(&tools, module, opt, debug, "obj", &object, &spec)?;
+            debug_objects.push(object);
+        }
+        if opt == OptLevel::O0 {
+            Ok(ll_path.to_path_buf())
+        } else {
+            let out = ll_path.with_extension("opt.bc");
+            let mut command = tools.command("opt");
+            command
+                .arg(format!(
+                    "-passes={}",
+                    pipeline(opt).trim_start_matches("internalize,")
+                ))
+                .arg(ll_path)
+                .arg("-o")
+                .arg(&out);
+            run_captured(&mut command, "opt (program)").map(|()| out)
+        }
+    } else {
+        link_and_optimize(
+            &tools,
+            ll_path,
+            &[
+                rt.as_ref().map(|rt| rt.bc.as_path()),
+                shim.as_deref(),
+                icon_ll.as_deref(),
+            ]
             .iter()
             .flatten()
             .copied()
             .collect::<Vec<_>>(),
-        (opt, debug),
-        &profile,
-        &exports,
-        &spec,
-    );
+            (opt, debug),
+            &profile,
+            &exports,
+            &spec,
+        )
+    };
     for p in icon_ll.iter().chain(&shim) {
         let _ = std::fs::remove_file(p);
     }
     let optimized = optimized?;
     if let Some(out) = opt_ll {
-        write_ir(&tools, &optimized, out)?;
+        if optimized == ll_path {
+            std::fs::copy(ll_path, out)?;
+        } else {
+            write_ir(&tools, &optimized, out)?;
+        }
     }
     let obj = ll_path.with_extension("o");
     run_llc(&tools, &optimized, opt, debug, "obj", &obj, &spec)?;
 
     if output_kind == OutputKind::Staticlib {
-        library::archive(&tools, &bin, &obj, &native.objects, rt.archive.as_deref())?;
+        let mut objects = native.objects.clone();
+        objects.extend(debug_objects.iter().cloned());
+        library::archive(&tools, &bin, &obj, &objects, runtime_archive)?;
         let mut flags = Vec::new();
         let mut host = std::process::Command::new("cc");
         if let Some(dir) = &dir {
@@ -384,7 +481,9 @@ pub fn compile_llvm(
             return Err(error);
         }
         std::fs::write(&stamp_path, stamp)?;
-        let _ = std::fs::remove_file(&optimized);
+        if optimized != ll_path {
+            let _ = std::fs::remove_file(&optimized);
+        }
         let _ = std::fs::remove_file(&obj);
         return Ok(bin);
     }
@@ -402,7 +501,7 @@ pub fn compile_llvm(
         c.arg(&obj);
         c
     };
-    lcmd.args(&native.objects);
+    lcmd.args(&native.objects).args(&debug_objects);
     if let Some(version) = spec.min_os {
         lcmd.arg(format!(
             "-m{}-version-min={}.{}.{}",
@@ -432,7 +531,7 @@ pub fn compile_llvm(
         None
     };
     lcmd.args(dead_strip_args(&spec));
-    if let Some(a) = &rt.archive {
+    if let Some(a) = runtime_archive {
         lcmd.arg(a);
     }
     if let Some(png) = &icon_png.as_ref().filter(|_| spec.is_windows()) {
@@ -459,7 +558,9 @@ pub fn compile_llvm(
         let _ = std::fs::remove_file(path);
     }
     std::fs::write(&stamp_path, stamp)?;
-    let _ = std::fs::remove_file(&optimized);
+    if optimized != ll_path {
+        let _ = std::fs::remove_file(&optimized);
+    }
     if !debug {
         let _ = std::fs::remove_file(&obj);
     }
@@ -468,8 +569,7 @@ pub fn compile_llvm(
 
 /// PGO links with the system compiler, whose C++ standard library may differ from the one the
 /// package's native sources were compiled against.
-const PGO_NATIVE_SOURCES: &str =
-    "--profile is not supported for programs with `native/` C/C++ sources yet: profile builds \
+const PGO_NATIVE_SOURCES: &str = "--profile is not supported for programs with `native/` C/C++ sources yet: profile builds \
      link with the system compiler, whose C/C++ runtime may not match the Zig-built objects";
 
 fn newer_than(a: &Path, b: &Path) -> bool {
@@ -482,8 +582,7 @@ fn newer_than(a: &Path, b: &Path) -> bool {
 
 /// zig's linker lays out the `__llvm_prf_*` sections so the profile runtime writes corrupt
 /// counters, so instrumented binaries link with the platform linker.
-const PGO_NEEDS_CC: &str =
-    "--profile needs a system C compiler (cc or clang on PATH, or CC): the Zig toolchain \
+const PGO_NEEDS_CC: &str = "--profile needs a system C compiler (cc or clang on PATH, or CC): the Zig toolchain \
      cannot link profile-instrumented binaries";
 
 /// What `clang -fprofile-generate` adds at link time: compiler-rt's profile runtime, kept alive by
@@ -525,17 +624,7 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
         if !req.target.spec().capabilities.linear_memory && !req.target.spec().can_link_on_host() {
             return super::cross::runtime_signatures(&tools, req.target.spec());
         }
-        let sigs = if req.target.spec().capabilities.linear_memory {
-            super::wasm::wasm_runtime(&tools, req.wasm_opt, req.need, req.threads)?.sigs
-        } else {
-            llvm_runtime(&tools, req.target.spec(), self.opt, req.need, self.debug)?.sigs
-        };
-        let text =
-            std::fs::read_to_string(&sigs).map_err(|e| format!("{}: {e}", sigs.display()))?;
-        Ok(crate::driver::compiler::RuntimeSignatures {
-            text,
-            cache_path: sigs,
-        })
+        super::signatures::load(&tools, req)
     }
 
     fn link_wasm(
@@ -547,14 +636,6 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
     ) -> Result<(), String> {
         let config = &self.config;
         let tools = resolve_llvm(config)?;
-        super::wasm::link_wasm(
-            &tools,
-            ll,
-            wasm,
-            opt_ll,
-            req.need,
-            req.threads,
-            req.wasm_opt,
-        )
+        super::wasm::link_wasm(&tools, ll, wasm, opt_ll, req)
     }
 }

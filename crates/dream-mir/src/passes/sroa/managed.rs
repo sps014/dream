@@ -84,7 +84,8 @@ fn promote_one(f: &mut MirFunction, interner: &TypeInterner, layouts: &LayoutTab
 
 /// Every field's type, or `None` if the object must stay whole.
 fn field_types(ty: TypeId, interner: &TypeInterner, layouts: &LayoutTable) -> Option<Vec<TypeId>> {
-    if !matches!(interner.kind(ty), TyKind::Struct(..))
+    if crate::ownership::cycle_capable(layouts, interner, ty)
+        || !matches!(interner.kind(ty), TyKind::Struct(..))
         || interner.is_value_type(ty)
         || interner.is_shared_type(ty)
     {

@@ -1,6 +1,4 @@
-// See `linked_list.dream` for why a self-referencing `next` needs `@allow_cycle`.
 import system;
-@allow_cycle
 class Node {
     val: int;
     next: Option<Node>;

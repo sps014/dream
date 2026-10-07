@@ -31,6 +31,23 @@ typedef struct {
     dream_ptr right;
 } Node;
 
+static void node_visit(dream_ptr p) {
+    Node *n = (Node *)dream_p(p); dream_visit_edge(n->left); dream_visit_edge(n->right);
+}
+static void array_visit(dream_ptr p) {
+    for (int32_t i = 0; i < dream_i32(p)[0]; ++i) {
+        dream_ptr child; memcpy(&child, (char *)dream_p(p) + 4 + (size_t)i * sizeof(child), sizeof(child));
+        dream_visit_edge(child);
+    }
+}
+static const dream_type_info node_info = {node_visit, NULL, NULL, NULL, 0};
+static const dream_type_info array_info = {array_visit, NULL, NULL, NULL, 0};
+const dream_type_info *dream_type_info_for_tag(int32_t tag) {
+    if (tag == TAG_STRUCT_BASE) { return &node_info; }
+    if (tag == TAG_ARRAY || tag == TAG_CLOSURE_ENV) { return &array_info; }
+    return dream_builtin_type_info(tag);
+}
+
 static dream_ptr *nodes;
 static size_t node_count;
 static pthread_mutex_t mutation_mu = PTHREAD_MUTEX_INITIALIZER;

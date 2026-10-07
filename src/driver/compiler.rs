@@ -10,11 +10,11 @@ use crate::driver::error::CompileError;
 use crate::driver::generate::run_generators;
 use crate::driver::js_runtime::JsRuntimeTarget;
 use crate::driver::prelude::merge_prelude;
-use crate::driver::source_loader::{parse_file_recursive, ProgramAccumulator};
+use crate::driver::source_loader::{ProgramAccumulator, parse_file_recursive};
 use crate::driver::ui::{BuildReporter, SilentReporter};
 use crate::driver::wasm_opt::OptLevel;
 use dream_abi::attributes::CompileTargets;
-use dream_diagnostics::{format_diagnostics, render_with, DiagnosticBag};
+use dream_diagnostics::{DiagnosticBag, format_diagnostics, render_with};
 use dream_mir::backend::Target;
 use dream_sema::analyzer::Analyzer;
 use dream_sema::module_graph::ProgramView;
@@ -22,6 +22,7 @@ use dream_sema::module_graph::ProgramView;
 /// The runtime a module links against: its needed catalog modules, target, and for wasm32 whether
 /// the module runs on shared memory and the guest optimization level.
 pub struct LlvmRuntimeRequest {
+    pub profile: dream_abi::profile::CompileProfile,
     pub need: dream_mir::runtime::RuntimeNeed,
     pub target: dream_mir::backend::Target,
     pub threads: bool,
@@ -61,7 +62,7 @@ pub struct Compiler {
     /// `Debug.live_objects()` / `Debug.total_allocations()` probes report real values, and keeps
     /// every runtime helper in the WAT (skips structural dead-function elimination). Release builds
     /// (`--release` / [`Compiler::with_release`]) turn this off for a trimmed, uninstrumented module.
-    debug: bool,
+    profile: dream_abi::profile::CompileProfile,
     /// When `true`, the compiler threads source-line info through HIR/MIR so the backend can emit
     /// source-line hooks / line directives for the interactive debugger. Off by default;
     /// enabled via the CLI `-g`/`--debug-info` flag or [`Compiler::with_debug_info`].
@@ -69,7 +70,7 @@ pub struct Compiler {
     /// When set, the emitted `.wasm` is post-processed in place with Binaryen's `wasm-opt` at this
     /// level. [`Compiler::with_release`] enables [`OptLevel::RELEASE_DEFAULT`] when no level was
     /// set yet; an explicit [`Compiler::with_optimize`] (or CLI `-O`) overrides that default.
-    /// Debug builds leave this `None` unless the caller opts in.
+    /// `None` selects the profile default.
     optimize: Option<OptLevel>,
     /// Which source generators run. Generator executables compile at a narrower stage so
     /// nested compiles cannot recurse into themselves.
@@ -92,9 +93,9 @@ pub struct Compiler {
     reporter: Arc<dyn BuildReporter>,
     /// CLI `--emit-mir`: MIR snapshots written to `<out>.mir/<NN>-<pass>.mir`.
     emit_mir: Option<dream_mir::passes::MirDumpSpec>,
-    /// When `true`, the unoptimized `.ll` is an intermediate the caller deletes: it is not reported
-    /// as an artifact, and wasm32 builds write the optimized module as `<stem>.opt.ll` instead.
+    /// Artifact requests are independent of profile and debugger information.
     opt_ir: bool,
+    raw_ir_intermediate: bool,
     output_kind: crate::driver::output::OutputKind,
     llvm: Option<Arc<dyn LlvmToolchain>>,
     /// Link-stage options folded into the build key; `None` disables the build cache.
@@ -123,7 +124,7 @@ impl Compiler {
             },
             target,
             toolchain_config,
-            debug: true,
+            profile: dream_abi::profile::CompileProfile::Debug,
             debug_info: false,
             optimize: None,
             generator_stage: crate::driver::generate::GeneratorStage::All,
@@ -135,6 +136,7 @@ impl Compiler {
             reporter: Arc::new(SilentReporter),
             emit_mir: None,
             opt_ir: false,
+            raw_ir_intermediate: false,
             llvm: None,
             build_cache: None,
         }
@@ -145,8 +147,22 @@ impl Compiler {
     }
 
     /// The native optimization level these settings build at.
+    pub fn profile(&self) -> dream_abi::profile::CompileProfile {
+        self.profile
+    }
+
+    fn effective_optimize(&self) -> Option<OptLevel> {
+        self.optimize.or_else(|| {
+            (!self.profile.is_debug()).then_some(if self.runtimes.contains(&JsRuntimeTarget::Web) {
+                OptLevel::WEB_RELEASE_DEFAULT
+            } else {
+                OptLevel::RELEASE_DEFAULT
+            })
+        })
+    }
+
     pub fn native_opt(&self) -> OptLevel {
-        OptLevel::from_cli(!self.debug, self.optimize)
+        OptLevel::from_cli(!self.profile.is_debug(), self.optimize)
     }
 
     fn toolchain(&self) -> Option<Arc<dyn LlvmToolchain>> {
@@ -204,10 +220,7 @@ impl Compiler {
     /// When `false` (the default from [`Compiler::new`]), keep allocator probes and the full runtime
     /// (does not clear a previously configured optimize level).
     pub fn with_release(mut self, on: bool) -> Self {
-        self.debug = !on;
-        if on && self.optimize.is_none() {
-            self.optimize = Some(OptLevel::RELEASE_DEFAULT);
-        }
+        self.profile = dream_abi::profile::CompileProfile::from_release(on);
         self
     }
 
@@ -220,7 +233,7 @@ impl Compiler {
 
     /// Builder: post-process the emitted `.wasm` with Binaryen's `wasm-opt` at the given level.
     /// `Some(level)` sets/overrides (including the [`OptLevel::RELEASE_DEFAULT`] from
-    /// [`Compiler::with_release`]); `None` clears post-processing entirely.
+    /// [`Compiler::with_release`]); `None` restores the profile default.
     pub fn with_optimize(mut self, level: Option<OptLevel>) -> Self {
         self.optimize = level;
         self
@@ -244,11 +257,6 @@ impl Compiler {
                 }
                 _ => {}
             }
-        }
-        // `--release --web` without an explicit `-O` keeps download size (`-Os`); native `--release`
-        // stays at [`OptLevel::RELEASE_DEFAULT`] (`-O3`).
-        if seen_web && self.optimize == Some(OptLevel::RELEASE_DEFAULT) {
-            self.optimize = Some(OptLevel::WEB_RELEASE_DEFAULT);
         }
         self.runtimes = out;
         if !self.runtimes.is_empty() {
@@ -298,6 +306,11 @@ impl Compiler {
 
     /// Builder: publish the optimized `<stem>.opt.ll` rather than the unoptimized `.ll`, which the
     /// caller removes once linked.
+    pub fn with_raw_ll_intermediate(mut self, on: bool) -> Self {
+        self.raw_ir_intermediate = on;
+        self
+    }
+
     pub fn with_opt_ir(mut self, on: bool) -> Self {
         self.opt_ir = on;
         self

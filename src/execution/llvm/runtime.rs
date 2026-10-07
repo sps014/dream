@@ -11,19 +11,16 @@
 //! The bitcode carries no `target-cpu`/`target-features`: the machine that built it is not the
 //! one that runs it, so the program's `-mcpu` (see `build::cpu_args`) decides for both.
 
-use super::bundle::{prebuilt_file, rt_dir, RtDir};
+use super::bundle::{RtDir, prebuilt_file, rt_dir};
 use super::tools::LlvmTools;
 use crate::driver::rt_stamp;
 use crate::driver::wasi::run_captured;
 use crate::driver::wasm_opt::OptLevel;
 use dream_abi::target::TargetSpec;
-use dream_mir::runtime::{
-    core_runtime_include_dir, runtime_abi_include_dir, RuntimeNeed, RUNTIME_MODULES,
-};
+use dream_mir::runtime::{RUNTIME_MODULES, RuntimeNeed, core_runtime_include_dir};
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
 
 pub struct LlvmRuntime {
     pub bc: PathBuf,
@@ -34,13 +31,31 @@ pub struct LlvmRuntime {
 
 const VENDOR_ARCHIVE: &str = "libdream_rt_vendor.a";
 
-struct Unit {
+fn snapshot_runtime(
+    dir: &Path,
+    bc: PathBuf,
+    sigs: PathBuf,
+    archive: Option<PathBuf>,
+) -> Result<LlvmRuntime, String> {
+    let files: Vec<_> = [Some(bc), Some(sigs), archive]
+        .into_iter()
+        .flatten()
+        .collect();
+    let outputs = super::runtime_snapshot::publish(dir, &files)?;
+    Ok(LlvmRuntime {
+        bc: outputs[0].clone(),
+        sigs: outputs[1].clone(),
+        archive: outputs.get(2).cloned(),
+    })
+}
+
+pub(super) struct Unit {
     path: PathBuf,
     defines: Vec<String>,
     include_dirs: Vec<PathBuf>,
 }
 
-fn clang_level_flags(opt: OptLevel) -> Vec<&'static str> {
+pub(super) fn clang_level_flags(opt: OptLevel) -> Vec<&'static str> {
     match opt {
         OptLevel::O0 => vec!["-O0"],
         OptLevel::O1 => vec!["-O1"],
@@ -106,7 +121,7 @@ pub(crate) fn sysroot_args(
         .clone()
 }
 
-fn runtime_command(
+pub(super) fn runtime_command(
     config: &crate::driver::toolchain::ToolchainConfig,
     spec: &TargetSpec,
     clang: &Path,
@@ -127,7 +142,7 @@ fn native_target_arg(spec: &TargetSpec) -> String {
     format!("--target={}", spec.llvm_triple())
 }
 
-fn bitcode_units(root: &Path, need: RuntimeNeed) -> (Vec<Unit>, Vec<Unit>) {
+pub(super) fn bitcode_units(root: &Path, need: RuntimeNeed) -> (Vec<Unit>, Vec<Unit>) {
     let c = root.to_path_buf();
     let native_inc = core_runtime_include_dir(root);
     let mut bc: Vec<Unit> = dream_mir::runtime::native_runtime_units(root, RuntimeNeed::CORE)
@@ -168,14 +183,15 @@ fn bitcode_units(root: &Path, need: RuntimeNeed) -> (Vec<Unit>, Vec<Unit>) {
     (bc, vendored)
 }
 
-fn clang_unit(
+pub(super) fn clang_unit(
     config: &crate::driver::toolchain::ToolchainConfig,
     spec: &TargetSpec,
     clang: &Path,
     u: &Unit,
     flags: &[&str],
     out: &Path,
-) -> Result<(), String> {
+    namespaces: &super::runtime_cache::IncludeInventory,
+) -> Result<super::runtime_cache::CompiledUnit, String> {
     let mut cmd = runtime_command(config, spec, clang)?;
     cmd.args(["-std=gnu11", "-w", "-c"])
         .args(if spec.is_windows() {
@@ -190,8 +206,14 @@ fn clang_unit(
     for d in &u.defines {
         cmd.arg(format!("-D{d}"));
     }
-    cmd.arg(&u.path).arg("-o").arg(out);
-    run_captured(&mut cmd, &format!("clang ({})", u.path.display()))
+    cmd.arg(&u.path);
+    super::runtime_cache::compile(
+        cmd,
+        &config.native_rt_cache_root(),
+        out,
+        config.compiler_environment.is_empty(),
+        namespaces,
+    )
 }
 
 pub fn llvm_runtime(
@@ -199,12 +221,8 @@ pub fn llvm_runtime(
     spec: &TargetSpec,
     opt: OptLevel,
     need: RuntimeNeed,
-    debug: bool,
+    _debug: bool,
 ) -> Result<LlvmRuntime, String> {
-    // Debug builds link the plain O0 runtime without DWARF: the whole program becomes one object,
-    // and lldb's Mach-O debug map reads one compile unit per object, so runtime units would hide
-    // the Dream one.
-    let opt = if debug { OptLevel::O0 } else { opt };
     match rt_dir(&tools.config, "native", opt, need) {
         RtDir::Prebuilt(_) if !spec.can_link_on_host() => build_native_runtime(
             tools,
@@ -238,7 +256,6 @@ pub(super) fn build_native_runtime(
     need: RuntimeNeed,
     dir: &Path,
 ) -> Result<LlvmRuntime, String> {
-    static LOCK: Mutex<()> = Mutex::new(());
     let clang = tools.clang()?;
     let io = |e: std::io::Error| format!("{}: {e}", dir.display());
     std::fs::create_dir_all(dir).map_err(io)?;
@@ -250,7 +267,6 @@ pub(super) fn build_native_runtime(
         .open(dir.join(".lock"))
         .map_err(io)?;
     lock_file.lock().map_err(io)?;
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
     let config = &tools.config;
     let root = &config.runtime_c;
@@ -264,23 +280,10 @@ pub(super) fn build_native_runtime(
     if !spec.is_windows() {
         level.push("-fPIC");
     }
-    let headers: Vec<PathBuf> = [
-        core_runtime_include_dir(root),
-        runtime_abi_include_dir(root),
-        root.join("sys/native/include"),
-    ]
-    .iter()
-    .filter_map(|d| std::fs::read_dir(d).ok())
-    .flatten()
-    .filter_map(|e| Some(e.ok()?.path()))
-    .collect();
-    let mut inputs: Vec<PathBuf> = bc_units
-        .iter()
-        .chain(&vendored)
-        .map(|u| u.path.clone())
-        .chain(headers)
-        .collect();
+    let mut inputs: Vec<PathBuf> = rt_stamp::files_under(root);
     inputs.push(clang.clone());
+    inputs.push(tools.tool("llvm-link"));
+    inputs.push(tools.tool("llvm-dis"));
     if !spec.can_link_on_host() {
         inputs.push(
             crate::execution::native::cc::resolve_target_cc(config, spec)?
@@ -288,20 +291,38 @@ pub(super) fn build_native_runtime(
                 .to_path_buf(),
         );
     }
-    let fingerprint = format!(
-        "{}{}\n{}\n{}|{}\n",
-        rt_stamp::fingerprint(inputs),
-        level.join(" "),
-        native_target_arg(spec),
-        sysroot_args(config, spec).join(" "),
-        config.fingerprint()
-    );
-    let fresh = bc.exists()
+    let dependency_file = dir.join(".dependencies.json");
+    let previous_dependencies = std::fs::read(&dependency_file)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Vec<PathBuf>>(&bytes).ok());
+    let fingerprint_for = |dependencies: &[PathBuf]| {
+        let mut all = inputs.clone();
+        all.extend_from_slice(dependencies);
+        format!(
+            "{}{}\n{}\n{}|{}\n",
+            rt_stamp::content_fingerprint(all),
+            level.join(" "),
+            native_target_arg(spec),
+            sysroot_args(config, spec).join(" "),
+            config.fingerprint()
+        )
+    };
+    let fingerprint = fingerprint_for(previous_dependencies.as_deref().unwrap_or_default());
+    let output_stamp = dir.join(".outputs");
+    let outputs: Vec<PathBuf> = [Some(bc.clone()), Some(sigs.clone()), archive.clone()]
+        .into_iter()
+        .flatten()
+        .collect();
+    let fresh = rt_stamp::matches(
+        &output_stamp,
+        &rt_stamp::content_fingerprint(outputs.clone()),
+    ) && previous_dependencies.is_some()
+        && bc.exists()
         && sigs.exists()
         && archive.as_ref().is_none_or(|a| a.exists())
         && rt_stamp::matches(&stamp, &fingerprint);
-    if fresh {
-        return Ok(LlvmRuntime { bc, sigs, archive });
+    if fresh && config.compiler_environment.is_empty() {
+        return snapshot_runtime(dir, bc, sigs, archive);
     }
 
     let mut bc_flags = vec!["-emit-llvm"];
@@ -309,10 +330,14 @@ pub(super) fn build_native_runtime(
         bc_flags.push("-flto=full");
     }
     bc_flags.extend(&level);
+    let namespaces = Default::default();
+    let mut dependencies = Vec::new();
     let mut parts = Vec::new();
     for (i, u) in bc_units.iter().enumerate() {
         let out = dir.join(format!("{i}.bc"));
-        clang_unit(config, spec, &clang, u, &bc_flags, &out)?;
+        dependencies.extend(
+            clang_unit(config, spec, &clang, u, &bc_flags, &out, &namespaces)?.dependencies,
+        );
         parts.push(out);
     }
     let mut link = tools.command("llvm-link");
@@ -332,7 +357,9 @@ pub(super) fn build_native_runtime(
         let mut objs = Vec::new();
         for (i, u) in vendored.iter().enumerate() {
             let obj = dir.join(format!("v{i}.o"));
-            clang_unit(config, spec, &clang, u, &level, &obj)?;
+            dependencies.extend(
+                clang_unit(config, spec, &clang, u, &level, &obj, &namespaces)?.dependencies,
+            );
             objs.push(obj);
         }
         let _ = std::fs::remove_file(archive);
@@ -346,8 +373,14 @@ pub(super) fn build_native_runtime(
     for p in parts.iter().chain([&anchor, &merged]) {
         let _ = std::fs::remove_file(p);
     }
-    std::fs::write(&stamp, fingerprint).map_err(io)?;
-    Ok(LlvmRuntime { bc, sigs, archive })
+    std::fs::write(
+        &dependency_file,
+        serde_json::to_vec(&dependencies).map_err(|e| e.to_string())?,
+    )
+    .map_err(io)?;
+    std::fs::write(&output_stamp, rt_stamp::content_fingerprint(outputs)).map_err(io)?;
+    std::fs::write(&stamp, fingerprint_for(&dependencies)).map_err(io)?;
+    snapshot_runtime(dir, bc, sigs, archive)
 }
 
 pub(super) fn disassemble(tools: &LlvmTools, bc: &Path) -> Result<String, String> {
@@ -381,7 +414,7 @@ pub(super) fn strip_target_cpu(tools: &LlvmTools, bc: &Path) -> Result<(), Strin
 
 const CPU_ATTRS: [&str; 3] = ["target-cpu", "target-features", "tune-cpu"];
 
-fn strip_cpu_attrs(ll: &str) -> String {
+pub(super) fn strip_cpu_attrs(ll: &str) -> String {
     let mut out = String::with_capacity(ll.len());
     for line in ll.lines() {
         if line.starts_with("attributes #") {
@@ -404,7 +437,7 @@ fn strip_cpu_attrs(ll: &str) -> String {
     out
 }
 
-fn build_anchor(
+pub(super) fn build_anchor(
     config: &crate::driver::toolchain::ToolchainConfig,
     spec: &TargetSpec,
     clang: &Path,
@@ -438,16 +471,25 @@ fn build_anchor(
             .map_err(|e| e.to_string())
     };
     let compile = |src: &Path, out: &Path| {
-        run_captured(
-            anchor_command()?
-                .args(["-std=gnu11", "-w", "-c", "-DDREAM_NATIVE"])
-                .args(flags)
-                .arg(&inc)
-                .arg(src)
-                .arg("-o")
-                .arg(out),
-            "runtime ABI anchor",
+        let mut command = anchor_command()?;
+        command
+            .args(["-std=gnu11", "-w", "-c", "-DDREAM_NATIVE"])
+            .args(flags)
+            .arg(&inc)
+            .arg(src);
+        let dependencies = super::runtime_cache::compile(
+            command,
+            &config.native_rt_cache_root(),
+            out,
+            config.compiler_environment.is_empty(),
+            &Default::default(),
+        )?
+        .dependencies;
+        std::fs::write(
+            dir.join(".anchor-dependencies.json"),
+            serde_json::to_vec(&dependencies).map_err(|e| e.to_string())?,
         )
+        .map_err(|e| e.to_string())
     };
     anchor_unit(dir, "dream_core.h", &check, &compile)
 }
@@ -474,6 +516,7 @@ pub(super) fn anchor_unit(
                 text.push('\n');
             }
         }
+        text.push_str("void *__dream_anchor_defer(void) { return (void *)&dream_defer_open; }\n");
         std::fs::write(&src, text)
     };
     write(&|_| true).map_err(|e| e.to_string())?;
@@ -518,8 +561,8 @@ pub(super) fn reduce_disassembly(ll: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dream_mir::backend::llvm::ir::Ty;
     use dream_mir::backend::llvm::RuntimeSigs;
+    use dream_mir::backend::llvm::ir::Ty;
 
     #[test]
     fn runtime_bitcode_signatures_cover_header() {
@@ -543,10 +586,11 @@ mod tests {
         assert_eq!(sigs.function("dream_retain").fty.params, vec![Ty::Ptr]);
         assert_eq!(sigs.function("dream_malloc").fty.ret, Ty::Ptr);
         assert!(sigs.globals["g0"].thread_local);
-        assert!(sigs
-            .target_attrs
-            .iter()
-            .all(|(k, _)| !CPU_ATTRS.contains(&k.as_str())));
+        assert!(
+            sigs.target_attrs
+                .iter()
+                .all(|(k, _)| !CPU_ATTRS.contains(&k.as_str()))
+        );
     }
 
     #[test]

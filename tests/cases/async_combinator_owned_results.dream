@@ -1,0 +1,19 @@
+import system;
+class Item {
+    public id: int;
+    public constructor(id: int) { this.id = id; }
+    del() { System.println("drop " + this.id); }
+}
+struct Value {
+    public item: Item;
+    public constructor(item: Item) { this.item = item; }
+}
+async fun item(id: int): Item { return Item(id); }
+async fun value(id: int): Value { return Value(Item(id)); }
+async fun main(): void {
+    let items = Promise.all([item(1), item(2)]).await;
+    System.println("items " + items[0].id + " " + items[1].id);
+    let values = Promise.all([value(3), value(4)]).await;
+    System.println("values " + values[0].item.id + " " + values[1].item.id);
+    System.println("done");
+}

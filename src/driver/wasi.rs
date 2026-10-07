@@ -98,6 +98,11 @@ pub(crate) fn guest_include_dirs(root: &Path) -> Vec<PathBuf> {
     ]
 }
 
+pub(crate) struct GuestUnitOutput<'a> {
+    pub stable_name: &'a str,
+    pub bitcode: bool,
+}
+
 /// The clang invocation for one guest runtime unit (output and input not yet added). C
 /// units become LLVM bitcode for the whole-program link; assembly units stay objects. `sysroot`
 /// supplies the libc headers (`string.h`, …) the guest libc implements itself.
@@ -111,7 +116,7 @@ pub(crate) fn unit_command(
     defines: &[String],
     threads: bool,
     opt: OptLevel,
-    stable_name: &str,
+    output: GuestUnitOutput<'_>,
 ) -> Command {
     let is_asm = src.extension().and_then(|e| e.to_str()) == Some("s");
     let mut cmd = Command::new(clang);
@@ -135,12 +140,14 @@ pub(crate) fn unit_command(
             "-frandom-seed=0",
             "-Wno-unused-value",
             "-DDREAM_WASM32",
-            "-emit-llvm",
         ]);
+        if output.bitcode {
+            cmd.arg("-emit-llvm");
+        }
         cmd.arg(format!(
             "-ffile-prefix-map={}={}",
             src.display(),
-            stable_name
+            output.stable_name
         ));
         if threads {
             cmd.args(["-matomics", "-DDREAM_WASM32_THREADS"]);

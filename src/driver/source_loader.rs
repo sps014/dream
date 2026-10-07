@@ -29,6 +29,7 @@ mod graph;
 #[derive(Default)]
 pub struct ProgramAccumulator<'a> {
     pub parsed_files: indexmap::IndexMap<String, ProgramNode<'a>>,
+    pub resolution_inputs: indexmap::IndexSet<std::path::PathBuf>,
     pub import_edges: indexmap::IndexMap<String, Vec<String>>,
     pub visited: HashSet<String>,
     pub all_functions: Vec<FunctionNode<'a>>,
@@ -52,6 +53,7 @@ pub struct ProgramAccumulator<'a> {
     pub requested_std_packages: IndexSet<String>,
     /// Files merged from generator output (see `ModuleGraph::generated_files`).
     pub generated_files: IndexSet<String>,
+    pub untracked_generator_inputs: bool,
 }
 
 /// Resolves an `import a.b.c;` reference (passed here as the slash-joined path `a/b/c`) relative to
@@ -280,7 +282,22 @@ pub fn parse_source_recursive<'a>(
             acc.requested_std_packages.insert(pkg.name.to_string());
             continue;
         }
+        let mut local_candidate = parent_dir.join(module_name);
+        if local_candidate.extension().is_none() {
+            local_candidate.set_extension("dream");
+        }
+        acc.resolution_inputs.insert(local_candidate);
+        for ancestor in parent_dir.ancestors() {
+            acc.resolution_inputs
+                .insert(ancestor.join("dream_packages"));
+            acc.resolution_inputs.insert(ancestor.join("dream.toml"));
+            acc.resolution_inputs.insert(ancestor.join("dream.lock"));
+            if ancestor.join("dream.toml").is_file() {
+                break;
+            }
+        }
         let import_path = resolve_import_path(parent_dir, module_name);
+        acc.resolution_inputs.insert(import_path.clone());
 
         let import_path_str = match import_path.to_str() {
             Some(s) => s.to_string(),

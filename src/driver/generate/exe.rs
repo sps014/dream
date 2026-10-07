@@ -67,7 +67,9 @@ pub fn group<'g>(gens: &[&'g RegisteredGenerator]) -> Vec<ExeGroup<'g>> {
             .find(|grp| module_key(grp.first()) == module_key(registered))
         {
             Some(grp) => grp.gens.push(registered),
-            None => groups.push(ExeGroup { gens: vec![registered] }),
+            None => groups.push(ExeGroup {
+                gens: vec![registered],
+            }),
         }
     }
     groups
@@ -230,11 +232,7 @@ impl ExePlan {
 }
 
 fn bin_name() -> &'static str {
-    if cfg!(windows) {
-        "gen.exe"
-    } else {
-        "gen.bin"
-    }
+    if cfg!(windows) { "gen.exe" } else { "gen.bin" }
 }
 
 #[cfg(feature = "native")]
@@ -305,6 +303,7 @@ fn build_into(config: &Arc<ToolchainConfig>, plan: &ExePlan, dir: &Path) -> Resu
             opt_ll: None,
             opt: OptLevel::O0,
             debug: true,
+            profile: dream_abi::profile::CompileProfile::Release,
             pgo: &crate::execution::native::Pgo::Off,
             icon: None,
             relocatable: false,

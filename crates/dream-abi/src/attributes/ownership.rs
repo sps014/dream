@@ -15,13 +15,6 @@ pub(super) const SPECS: &[AttributeSpec] = &[
         doc: "Marks an extern whose reference parameters transfer ownership to the host, which must release them. Extern parameters are otherwise passed borrowed, since a host cannot release a Dream reference.",
     },
     AttributeSpec {
-        name: "allow_cycle",
-        targets: &[AttributeTarget::Struct],
-        args: ArgShape::None,
-        repeatable: false,
-        doc: "Allows a class to participate in a reference cycle (ARC will not free it automatically).",
-    },
-    AttributeSpec {
         name: OWNED,
         targets: &[AttributeTarget::ExternFunction],
         args: ArgShape::Args {

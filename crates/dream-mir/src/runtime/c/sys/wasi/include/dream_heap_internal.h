@@ -8,6 +8,7 @@ enum {
     META_LOCK = 8,
     META_FL = 12,
     META_WEAK_LOCK = 72,
+    META_CYCLE_LOCK = 76,
     META_SIZE = 80
 };
 

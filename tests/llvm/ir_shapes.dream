@@ -1,5 +1,4 @@
 import system;
-@allow_cycle
 class Node {
     public v: int;
     public next: Option<Node>;

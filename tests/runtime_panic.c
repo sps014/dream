@@ -55,3 +55,5 @@ int main(int argc, char **argv) {
     tls_bump(16);
     return 1;
 }
+
+void dream_release_object(dream_ptr ptr) { dream_release(ptr); }

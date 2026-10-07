@@ -36,6 +36,7 @@ pub struct ToolchainConfig {
     pub(crate) sdkroot_args: std::sync::Mutex<std::collections::BTreeMap<String, Vec<String>>>,
     pub sdkroot: Option<OsString>,
     pub developer_dir: Option<OsString>,
+    pub compiler_environment: std::collections::BTreeMap<String, OsString>,
     #[cfg(windows)]
     pub windir: Option<PathBuf>,
     #[cfg(feature = "native")]

@@ -1,14 +1,14 @@
 //! The generate pass: discover generators, skip everything when no trigger matches, otherwise
 //! snapshot → replay or run → validate → materialize → merge.
 
-use super::call_sites::{collect_calls, FoundCall};
+use super::call_sites::{FoundCall, collect_calls};
 use super::decls::DeclIndex;
 use super::paths::ProjectPaths;
 use super::registry::{CallTrigger, RegisteredGenerator, Registration};
-use super::sites::{collect_sites, report_unexpanded, Site};
-use super::snapshot::{build_snapshot, has_inputs, program_carries, BuiltSnapshot, ProgramFacts};
+use super::sites::{Site, collect_sites, report_unexpanded};
+use super::snapshot::{BuiltSnapshot, ProgramFacts, build_snapshot, has_inputs, program_carries};
 use super::stage::GeneratorStage;
-use super::stats::{record, Event};
+use super::stats::{Event, record};
 use crate::driver::source_loader::ProgramAccumulator;
 use crate::driver::toolchain::ToolchainConfig;
 use bumpalo::Bump;
@@ -164,6 +164,11 @@ pub fn run_generators<'a>(
     for registered in applicable {
         match inputs.snapshot(acc, attributes, registered) {
             Ok(built) if has_inputs(&built.snapshot) => {
+                acc.untracked_generator_inputs |= !registered.incremental;
+                for file in &built.snapshot.additional_files {
+                    acc.resolution_inputs
+                        .insert(inputs.paths.root.join(&file.path));
+                }
                 #[cfg(feature = "native")]
                 let job = {
                     let json = if req.replay_materialized {
@@ -172,16 +177,22 @@ pub fn run_generators<'a>(
                         serde_json::to_string(&built.snapshot)
                             .map_err(|e| Error::other(format!("generator snapshot: {e}")))?
                     };
-                    super::apply::Job { registered, built, json }
+                    super::apply::Job {
+                        registered,
+                        built,
+                        json,
+                    }
                 };
                 #[cfg(not(feature = "native"))]
                 let job = super::apply::Job { registered, built };
                 jobs.push(job);
             }
             Ok(_) => {}
-            Err(message) => {
-                diagnostics.report(Diagnostic::new(message, registered.span, Some(registered.file.clone())))
-            }
+            Err(message) => diagnostics.report(Diagnostic::new(
+                message,
+                registered.span,
+                Some(registered.file.clone()),
+            )),
         }
     }
     let snapshotted = started.elapsed();
@@ -200,6 +211,7 @@ pub fn run_generators<'a>(
         super::materialize::materialize(&root, &ran, &applied.files)
     };
     for (path, text) in files {
+        acc.resolution_inputs.insert(path.clone());
         super::merge::merge_generated_file(arena, acc, &path.to_string_lossy(), text, diagnostics)?;
     }
     super::merge::apply_replacements(arena, acc, &applied.replacements, diagnostics)?;
@@ -227,10 +239,12 @@ fn run_jobs<'g>(
     #[cfg(not(feature = "native"))]
     {
         let _ = (config, diagnostics);
-        unreachable!("generators run only with the native toolchain; got {} jobs", jobs.len())
+        unreachable!(
+            "generators run only with the native toolchain; got {} jobs",
+            jobs.len()
+        )
     }
 }
-
 
 /// Results rebuilt from the files the last build materialized (the only option without the
 /// native toolchain). Syntax sites stay unexpanded,

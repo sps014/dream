@@ -22,6 +22,12 @@ typedef struct {
     uintptr_t slot;
 } Node;
 
+static void node_visit(dream_ptr ptr) { dream_visit_edge(((Node *)dream_p(ptr))->child); }
+static const dream_type_info node_info = {node_visit, NULL, NULL, NULL, 0};
+const dream_type_info *dream_type_info_for_tag(int32_t tag) {
+    return tag == TAG_STRUCT_BASE ? &node_info : dream_builtin_type_info(tag);
+}
+
 static dream_mutex mutex = DREAM_MUTEX_INIT;
 static dream_cond condition = DREAM_COND_INIT;
 static int phase;
@@ -136,3 +142,5 @@ int main(void) {
     assert(debug_get_live_objects() == 0);
     puts("weak lifetime stress passed");
 }
+
+void dream_release_object(dream_ptr ptr) { dream_release(ptr); }

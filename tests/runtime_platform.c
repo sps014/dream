@@ -12,8 +12,8 @@ void dream_future_fini(dream_ptr ptr) { (void)ptr; }
 void dream_release_object(dream_ptr ptr) { dream_release(ptr); }
 const dream_platform dream_default_platform = {0};
 static int fail_allocate, fail_resize, fail_map;
-static int allocations, resizes, mappings, frees, locked[2];
-static dream_mutex locks[2] = {DREAM_MUTEX_INIT, DREAM_MUTEX_INIT};
+static int allocations, resizes, mappings, frees, locked[3];
+static dream_mutex locks[3] = {DREAM_MUTEX_INIT, DREAM_MUTEX_INIT, DREAM_MUTEX_INIT};
 
 static DREAM_THREAD_PROC(increment_counter) {
     for (int i = 0; i < 100000; ++i) {
@@ -34,13 +34,13 @@ static void write_bytes(int stream, const void *bytes, size_t size, int encoding
 }
 static void terminal_abort(void) { fputs("PLATFORM_ABORT\n", stderr); fflush(stderr); _Exit(86); }
 static void lock(unsigned domain) {
-    assert(domain < 2);
+    assert(domain < 3);
     dream_mutex_lock(&locks[domain]);
     assert(!locked[domain]);
     locked[domain] = 1;
 }
 static void unlock(unsigned domain) {
-    assert(domain < 2 && locked[domain]);
+    assert(domain < 3 && locked[domain]);
     locked[domain] = 0;
     dream_mutex_unlock(&locks[domain]);
 }

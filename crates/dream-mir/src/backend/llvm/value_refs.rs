@@ -3,16 +3,18 @@
 use super::fx::{Fx, V};
 use super::ir::{Ty, Value};
 use super::places::ELEM_ALIGN;
+use crate::Rvalue;
 use crate::backend::shared::abi_types::elem_size;
 use crate::backend::shared::glue::{release_sym, retain_sym};
 use crate::rc_store::rvalue_allocates;
-use crate::Rvalue;
 use dream_types::TypeId;
 
 #[derive(Clone)]
 enum RefAction {
     Retain,
+    Visit,
     Release,
+    Clear,
     Publish(V),
 }
 
@@ -53,6 +55,10 @@ impl Fx<'_, '_> {
         self.walk_value_refs(ty, base, &action);
     }
 
+    pub(super) fn clear_refs(&mut self, ty: TypeId, base: &V) {
+        self.walk_value_refs(ty, base, &RefAction::Clear);
+    }
+
     pub(super) fn publish_refs(&mut self, ty: TypeId, base: &V, owner: &V) {
         let action = RefAction::Publish(owner.clone());
         if self.is_value(ty) {
@@ -60,6 +66,10 @@ impl Fx<'_, '_> {
         } else if self.is_rc(ty) {
             self.ref_action(ty, base, &action);
         }
+    }
+
+    pub(super) fn visit_refs(&mut self, ty: TypeId, base: &V) {
+        self.walk_value_refs(ty, base, &RefAction::Visit);
     }
 
     fn walk_value_refs(&mut self, ty: TypeId, base: &V, action: &RefAction) {
@@ -117,16 +127,24 @@ impl Fx<'_, '_> {
         } else if self.is_rc(field.ty) {
             let at = self.addr(base, off);
             let v = self.load_ty(self.h(), &at, ELEM_ALIGN, true);
+            if matches!(action, RefAction::Clear) {
+                let h = self.h();
+                self.store_ty(&h, &at, &V::s(Value::zero(h.clone())), ELEM_ALIGN);
+            }
             self.ref_action(field.ty, &v, action);
         }
     }
 
     fn ref_action(&mut self, ty: TypeId, value: &V, action: &RefAction) {
         match action {
+            RefAction::Visit => {
+                let value = self.as_ref(value);
+                self.call("dream_visit_edge", &[value]);
+            }
             RefAction::Retain => {
                 self.call(retain_sym(&self.l.cx, ty), std::slice::from_ref(value));
             }
-            RefAction::Release => {
+            RefAction::Release | RefAction::Clear => {
                 self.call(&release_sym(&self.l.cx, ty), std::slice::from_ref(value));
             }
             RefAction::Publish(owner) => {

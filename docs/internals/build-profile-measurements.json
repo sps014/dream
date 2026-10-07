@@ -1,0 +1,1408 @@
+{
+  "baseline_commit": "2eb32e25",
+  "measurement_note": "Three quiet repetitions on macOS arm64 with release-built compiler binaries and the pinned LLVM toolchain. After measurements include parallel cached runtime compilation, before the final zero-count teardown and WASI diagnostic-accounting changes. Phase instrumentation is unavailable in the baseline binary. Cold means isolated Dream/runtime caches, not a flushed operating-system filesystem cache. Raw absolute log paths are omitted.",
+  "datasets": [
+    {
+      "version": "before",
+      "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+      "functions": 200,
+      "rows": [
+        {
+          "profile": "Debug",
+          "repeat": 0,
+          "phase": "cold",
+          "seconds": 6.894358958990779,
+          "max_rss_bytes": 69222400,
+          "phase_seconds": {
+            "parse": 0.07579999999999999,
+            "monomorphization": 0.0733,
+            "sema": 0.11,
+            "lowering": 0.00283,
+            "module_passes": 0.0174,
+            "per_function_passes": 0.0179,
+            "late_module_passes": 0.00015,
+            "ir_emission": 0.00574
+          },
+          "subprocesses": {
+            "opt": 2,
+            "clang": 37,
+            "llvm-link": 4,
+            "llvm-dis": 3,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 2.6255474531208165
+        },
+        {
+          "profile": "Debug",
+          "repeat": 0,
+          "phase": "unchanged",
+          "seconds": 0.263737624976784,
+          "max_rss_bytes": 29147136,
+          "phase_seconds": {
+            "parse": 0.154
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.014702625048812479
+        },
+        {
+          "profile": "Debug",
+          "repeat": 0,
+          "phase": "edited",
+          "seconds": 1.0108656249940395,
+          "max_rss_bytes": 60309504,
+          "phase_seconds": {
+            "parse": 0.108,
+            "monomorphization": 0.0963,
+            "sema": 0.148,
+            "lowering": 0.00413,
+            "module_passes": 0.0211,
+            "per_function_passes": 0.0242,
+            "late_module_passes": 0.00019899999999999999,
+            "ir_emission": 0.00434
+          },
+          "subprocesses": {
+            "opt": 2,
+            "llvm-link": 1,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.3564424999640323
+        },
+        {
+          "profile": "Debug",
+          "repeat": 0,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.21232525003142655,
+          "max_rss_bytes": 27869184,
+          "phase_seconds": {
+            "parse": 0.111
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.015315708005800843
+        },
+        {
+          "profile": "Debug",
+          "repeat": 1,
+          "phase": "cold",
+          "seconds": 6.540464958990924,
+          "max_rss_bytes": 70729728,
+          "phase_seconds": {
+            "parse": 0.113,
+            "monomorphization": 0.099,
+            "sema": 0.152,
+            "lowering": 0.00508,
+            "module_passes": 0.0216,
+            "per_function_passes": 0.024100000000000003,
+            "late_module_passes": 0.000214,
+            "ir_emission": 0.004900000000000001
+          },
+          "subprocesses": {
+            "opt": 2,
+            "clang": 37,
+            "llvm-link": 4,
+            "llvm-dis": 3,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 2.977527749084402
+        },
+        {
+          "profile": "Debug",
+          "repeat": 1,
+          "phase": "unchanged",
+          "seconds": 0.20728712499840185,
+          "max_rss_bytes": 28016640,
+          "phase_seconds": {
+            "parse": 0.117
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.013831457996275276
+        },
+        {
+          "profile": "Debug",
+          "repeat": 1,
+          "phase": "edited",
+          "seconds": 1.0776700000278652,
+          "max_rss_bytes": 61308928,
+          "phase_seconds": {
+            "parse": 0.105,
+            "monomorphization": 0.101,
+            "sema": 0.156,
+            "lowering": 0.00418,
+            "module_passes": 0.022600000000000002,
+            "per_function_passes": 0.0261,
+            "late_module_passes": 0.000222,
+            "ir_emission": 0.00492
+          },
+          "subprocesses": {
+            "opt": 2,
+            "llvm-link": 1,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.40040241793030873
+        },
+        {
+          "profile": "Debug",
+          "repeat": 1,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.2170493329758756,
+          "max_rss_bytes": 27672576,
+          "phase_seconds": {
+            "parse": 0.108
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.015107875049579889
+        },
+        {
+          "profile": "Debug",
+          "repeat": 2,
+          "phase": "cold",
+          "seconds": 7.867223582987208,
+          "max_rss_bytes": 69550080,
+          "phase_seconds": {
+            "parse": 0.12,
+            "monomorphization": 0.115,
+            "sema": 0.17400000000000002,
+            "lowering": 0.00429,
+            "module_passes": 0.0217,
+            "per_function_passes": 0.0254,
+            "late_module_passes": 0.00023799999999999998,
+            "ir_emission": 0.00549
+          },
+          "subprocesses": {
+            "opt": 2,
+            "clang": 37,
+            "llvm-link": 4,
+            "llvm-dis": 3,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 3.9949467499391176
+        },
+        {
+          "profile": "Debug",
+          "repeat": 2,
+          "phase": "unchanged",
+          "seconds": 0.23128670896403491,
+          "max_rss_bytes": 27525120,
+          "phase_seconds": {
+            "parse": 0.126
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.016119500040076673
+        },
+        {
+          "profile": "Debug",
+          "repeat": 2,
+          "phase": "edited",
+          "seconds": 1.1897365000331774,
+          "max_rss_bytes": 61734912,
+          "phase_seconds": {
+            "parse": 0.126,
+            "monomorphization": 0.124,
+            "sema": 0.191,
+            "lowering": 0.00444,
+            "module_passes": 0.0275,
+            "per_function_passes": 0.029500000000000002,
+            "late_module_passes": 0.000277,
+            "ir_emission": 0.0054800000000000005
+          },
+          "subprocesses": {
+            "opt": 2,
+            "llvm-link": 1,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.4225635409238748
+        },
+        {
+          "profile": "Debug",
+          "repeat": 2,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.2750987919862382,
+          "max_rss_bytes": 28966912,
+          "phase_seconds": {
+            "parse": 0.148
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.018742541957180947
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 0,
+          "phase": "cold",
+          "seconds": 13.352083417004906,
+          "max_rss_bytes": 61014016,
+          "phase_seconds": {
+            "parse": 0.125,
+            "monomorphization": 0.116,
+            "sema": 0.178,
+            "lowering": 0.00519,
+            "module_passes": 0.028,
+            "per_function_passes": 0.00207,
+            "late_module_passes": 0.000308,
+            "ir_emission": 0.0108
+          },
+          "subprocesses": {
+            "opt": 2,
+            "clang": 37,
+            "llvm-link": 4,
+            "llvm-dis": 3,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 6.880954709020443
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 0,
+          "phase": "unchanged",
+          "seconds": 0.75606941600563,
+          "max_rss_bytes": 28246016,
+          "phase_seconds": {
+            "parse": 0.302
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.02713179198326543
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 0,
+          "phase": "edited",
+          "seconds": 1.6415702080121264,
+          "max_rss_bytes": 64077824,
+          "phase_seconds": {
+            "parse": 0.161,
+            "monomorphization": 0.161,
+            "sema": 0.243,
+            "lowering": 0.00532,
+            "module_passes": 0.0315,
+            "per_function_passes": 0.00204,
+            "late_module_passes": 0.000323,
+            "ir_emission": 0.00975
+          },
+          "subprocesses": {
+            "opt": 2,
+            "llvm-link": 1,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.7646825410192832
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 0,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.2752685410086997,
+          "max_rss_bytes": 29622272,
+          "phase_seconds": {
+            "parse": 0.14100000000000001
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.019663290993776172
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 1,
+          "phase": "cold",
+          "seconds": 6.566554249962792,
+          "max_rss_bytes": 72450048,
+          "phase_seconds": {
+            "parse": 0.14200000000000002,
+            "monomorphization": 0.146,
+            "sema": 0.234,
+            "lowering": 0.0126,
+            "module_passes": 0.0343,
+            "per_function_passes": 0.00292,
+            "late_module_passes": 0.000346,
+            "ir_emission": 0.00756
+          },
+          "subprocesses": {
+            "opt": 2,
+            "clang": 37,
+            "llvm-link": 4,
+            "llvm-dis": 3,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 3.0027614619466476
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 1,
+          "phase": "unchanged",
+          "seconds": 0.19220479199429974,
+          "max_rss_bytes": 27738112,
+          "phase_seconds": {
+            "parse": 0.105
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.014722583000548184
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 1,
+          "phase": "edited",
+          "seconds": 0.9677922920091078,
+          "max_rss_bytes": 63504384,
+          "phase_seconds": {
+            "parse": 0.101,
+            "monomorphization": 0.09770000000000001,
+            "sema": 0.149,
+            "lowering": 0.00447,
+            "module_passes": 0.0223,
+            "per_function_passes": 0.00175,
+            "late_module_passes": 0.000256,
+            "ir_emission": 0.00754
+          },
+          "subprocesses": {
+            "opt": 2,
+            "llvm-link": 1,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.3755612091626972
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 1,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.2020687090116553,
+          "max_rss_bytes": 27885568,
+          "phase_seconds": {
+            "parse": 0.109
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.015021749946754426
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 2,
+          "phase": "cold",
+          "seconds": 5.843978999997489,
+          "max_rss_bytes": 72253440,
+          "phase_seconds": {
+            "parse": 0.105,
+            "monomorphization": 0.10400000000000001,
+            "sema": 0.158,
+            "lowering": 0.00456,
+            "module_passes": 0.0223,
+            "per_function_passes": 0.00183,
+            "late_module_passes": 0.000484,
+            "ir_emission": 0.00795
+          },
+          "subprocesses": {
+            "opt": 2,
+            "clang": 37,
+            "llvm-link": 4,
+            "llvm-dis": 3,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 2.756890791002661
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 2,
+          "phase": "unchanged",
+          "seconds": 0.19648354197852314,
+          "max_rss_bytes": 27901952,
+          "phase_seconds": {
+            "parse": 0.108
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.014854583016131073
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 2,
+          "phase": "edited",
+          "seconds": 1.0459220000193454,
+          "max_rss_bytes": 63717376,
+          "phase_seconds": {
+            "parse": 0.10400000000000001,
+            "monomorphization": 0.11800000000000001,
+            "sema": 0.176,
+            "lowering": 0.00526,
+            "module_passes": 0.0277,
+            "per_function_passes": 0.0025800000000000003,
+            "late_module_passes": 0.000338,
+            "ir_emission": 0.00791
+          },
+          "subprocesses": {
+            "opt": 2,
+            "llvm-link": 1,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.39568495796993375
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 2,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.1931440409971401,
+          "max_rss_bytes": 27721728,
+          "phase_seconds": {
+            "parse": 0.105
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.014934791019186378
+        },
+        {
+          "profile": "Release",
+          "repeat": 0,
+          "phase": "cold",
+          "seconds": 6.0612474589725025,
+          "max_rss_bytes": 61931520,
+          "phase_seconds": {
+            "parse": 0.107,
+            "monomorphization": 0.0999,
+            "sema": 0.152,
+            "lowering": 0.00385,
+            "module_passes": 0.0209,
+            "per_function_passes": 0.022600000000000002,
+            "late_module_passes": 0.00019999999999999998,
+            "ir_emission": 0.004240000000000001
+          },
+          "subprocesses": {
+            "opt": 2,
+            "clang": 37,
+            "llvm-link": 4,
+            "llvm-dis": 3,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 2.9973217099322937
+        },
+        {
+          "profile": "Release",
+          "repeat": 0,
+          "phase": "unchanged",
+          "seconds": 0.18586650001816452,
+          "max_rss_bytes": 27607040,
+          "phase_seconds": {
+            "parse": 0.10200000000000001
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.014048875018488616
+        },
+        {
+          "profile": "Release",
+          "repeat": 0,
+          "phase": "edited",
+          "seconds": 0.9803648749948479,
+          "max_rss_bytes": 60293120,
+          "phase_seconds": {
+            "parse": 0.10200000000000001,
+            "monomorphization": 0.114,
+            "sema": 0.178,
+            "lowering": 0.00578,
+            "module_passes": 0.0265,
+            "per_function_passes": 0.0334,
+            "late_module_passes": 0.000227,
+            "ir_emission": 0.00536
+          },
+          "subprocesses": {
+            "opt": 2,
+            "llvm-link": 1,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.28943596000317484
+        },
+        {
+          "profile": "Release",
+          "repeat": 0,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.21610754198627546,
+          "max_rss_bytes": 27541504,
+          "phase_seconds": {
+            "parse": 0.112
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.01487658399855718
+        },
+        {
+          "profile": "Release",
+          "repeat": 1,
+          "phase": "cold",
+          "seconds": 6.541619041992817,
+          "max_rss_bytes": 63242240,
+          "phase_seconds": {
+            "parse": 0.105,
+            "monomorphization": 0.113,
+            "sema": 0.169,
+            "lowering": 0.00426,
+            "module_passes": 0.0224,
+            "per_function_passes": 0.0253,
+            "late_module_passes": 0.000236,
+            "ir_emission": 0.0070599999999999994
+          },
+          "subprocesses": {
+            "opt": 2,
+            "clang": 37,
+            "llvm-link": 4,
+            "llvm-dis": 3,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 3.276240415230859
+        },
+        {
+          "profile": "Release",
+          "repeat": 1,
+          "phase": "unchanged",
+          "seconds": 0.31464062503073364,
+          "max_rss_bytes": 28016640,
+          "phase_seconds": {
+            "parse": 0.22
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.016320541966706514
+        },
+        {
+          "profile": "Release",
+          "repeat": 1,
+          "phase": "edited",
+          "seconds": 0.894533125043381,
+          "max_rss_bytes": 59932672,
+          "phase_seconds": {
+            "parse": 0.107,
+            "monomorphization": 0.10400000000000001,
+            "sema": 0.159,
+            "lowering": 0.00384,
+            "module_passes": 0.022,
+            "per_function_passes": 0.0234,
+            "late_module_passes": 0.000243,
+            "ir_emission": 0.00456
+          },
+          "subprocesses": {
+            "opt": 2,
+            "llvm-link": 1,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.2551201260066591
+        },
+        {
+          "profile": "Release",
+          "repeat": 1,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.19015741697512567,
+          "max_rss_bytes": 27525120,
+          "phase_seconds": {
+            "parse": 0.106
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.014797582989558578
+        },
+        {
+          "profile": "Release",
+          "repeat": 2,
+          "phase": "cold",
+          "seconds": 6.258777250011917,
+          "max_rss_bytes": 62750720,
+          "phase_seconds": {
+            "parse": 0.101,
+            "monomorphization": 0.114,
+            "sema": 0.168,
+            "lowering": 0.00459,
+            "module_passes": 0.024300000000000002,
+            "per_function_passes": 0.0272,
+            "late_module_passes": 0.000242,
+            "ir_emission": 0.00446
+          },
+          "subprocesses": {
+            "opt": 2,
+            "clang": 37,
+            "llvm-link": 4,
+            "llvm-dis": 3,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 2.993380036961753
+        },
+        {
+          "profile": "Release",
+          "repeat": 2,
+          "phase": "unchanged",
+          "seconds": 0.19315962499240413,
+          "max_rss_bytes": 27328512,
+          "phase_seconds": {
+            "parse": 0.105
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.015601749997586012
+        },
+        {
+          "profile": "Release",
+          "repeat": 2,
+          "phase": "edited",
+          "seconds": 1.1982960830209777,
+          "max_rss_bytes": 59817984,
+          "phase_seconds": {
+            "parse": 0.106,
+            "monomorphization": 0.165,
+            "sema": 0.234,
+            "lowering": 0.00557,
+            "module_passes": 0.0291,
+            "per_function_passes": 0.035500000000000004,
+            "late_module_passes": 0.0005949999999999999,
+            "ir_emission": 0.00643
+          },
+          "subprocesses": {
+            "opt": 2,
+            "llvm-link": 1,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.35219358396716416
+        },
+        {
+          "profile": "Release",
+          "repeat": 2,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.2747077909880318,
+          "max_rss_bytes": 27918336,
+          "phase_seconds": {
+            "parse": 0.127
+          },
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.024005457991734147
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+      "functions": 200,
+      "rows": [
+        {
+          "profile": "Debug",
+          "repeat": 0,
+          "phase": "cold",
+          "seconds": 7.375596750003751,
+          "max_rss_bytes": 93831168,
+          "phase_seconds": {
+            "parse": 0.0898,
+            "monomorphization": 0.07940000000000001,
+            "sema": 0.126,
+            "lowering": 0.00475,
+            "module_passes": 0.02,
+            "per_function_passes": 0.0028,
+            "late_module_passes": 0.0011,
+            "ir_emission": 0.00663
+          },
+          "subprocesses": {
+            "opt": 1,
+            "clang": 38,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 5.08221649704501
+        },
+        {
+          "profile": "Debug",
+          "repeat": 0,
+          "phase": "unchanged",
+          "seconds": 0.21501170902047306,
+          "max_rss_bytes": 17645568,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.023397208016831428
+        },
+        {
+          "profile": "Debug",
+          "repeat": 0,
+          "phase": "edited",
+          "seconds": 1.1237730829743668,
+          "max_rss_bytes": 73285632,
+          "phase_seconds": {
+            "parse": 0.128,
+            "monomorphization": 0.105,
+            "sema": 0.161,
+            "lowering": 0.00392,
+            "module_passes": 0.023,
+            "per_function_passes": 0.0030499999999999998,
+            "late_module_passes": 0.00148,
+            "ir_emission": 0.00701
+          },
+          "subprocesses": {
+            "opt": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.41442508407635614
+        },
+        {
+          "profile": "Debug",
+          "repeat": 0,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.10905237501719967,
+          "max_rss_bytes": 17612800,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.014112250006292015
+        },
+        {
+          "profile": "Debug",
+          "repeat": 1,
+          "phase": "cold",
+          "seconds": 3.715210249996744,
+          "max_rss_bytes": 93995008,
+          "phase_seconds": {
+            "parse": 0.0965,
+            "monomorphization": 0.0983,
+            "sema": 0.152,
+            "lowering": 0.00483,
+            "module_passes": 0.0209,
+            "per_function_passes": 0.0028,
+            "late_module_passes": 0.00133,
+            "ir_emission": 0.00652
+          },
+          "subprocesses": {
+            "opt": 1,
+            "clang": 38,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 2.899683919909876
+        },
+        {
+          "profile": "Debug",
+          "repeat": 1,
+          "phase": "unchanged",
+          "seconds": 0.1096794159966521,
+          "max_rss_bytes": 17596416,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.01442333305021748
+        },
+        {
+          "profile": "Debug",
+          "repeat": 1,
+          "phase": "edited",
+          "seconds": 0.6106575420126319,
+          "max_rss_bytes": 71811072,
+          "phase_seconds": {
+            "parse": 0.0849,
+            "monomorphization": 0.0778,
+            "sema": 0.121,
+            "lowering": 0.00329,
+            "module_passes": 0.0173,
+            "per_function_passes": 0.00229,
+            "late_module_passes": 0.0010500000000000002,
+            "ir_emission": 0.00545
+          },
+          "subprocesses": {
+            "opt": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.10706225002650172
+        },
+        {
+          "profile": "Debug",
+          "repeat": 1,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.0938915410079062,
+          "max_rss_bytes": 17563648,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.011853499978315085
+        },
+        {
+          "profile": "Debug",
+          "repeat": 2,
+          "phase": "cold",
+          "seconds": 3.4134639160474762,
+          "max_rss_bytes": 92782592,
+          "phase_seconds": {
+            "parse": 0.07590000000000001,
+            "monomorphization": 0.07940000000000001,
+            "sema": 0.123,
+            "lowering": 0.0034300000000000003,
+            "module_passes": 0.0175,
+            "per_function_passes": 0.00229,
+            "late_module_passes": 0.0010500000000000002,
+            "ir_emission": 0.00522
+          },
+          "subprocesses": {
+            "opt": 1,
+            "clang": 38,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 2.8695534167345613
+        },
+        {
+          "profile": "Debug",
+          "repeat": 2,
+          "phase": "unchanged",
+          "seconds": 0.11437862500315532,
+          "max_rss_bytes": 17596416,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.01451020798413083
+        },
+        {
+          "profile": "Debug",
+          "repeat": 2,
+          "phase": "edited",
+          "seconds": 0.7411796660162508,
+          "max_rss_bytes": 71909376,
+          "phase_seconds": {
+            "parse": 0.09659999999999999,
+            "monomorphization": 0.09670000000000001,
+            "sema": 0.148,
+            "lowering": 0.00412,
+            "module_passes": 0.022,
+            "per_function_passes": 0.00271,
+            "late_module_passes": 0.00122,
+            "ir_emission": 0.00651
+          },
+          "subprocesses": {
+            "opt": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.13056845805840567
+        },
+        {
+          "profile": "Debug",
+          "repeat": 2,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.3380044169607572,
+          "max_rss_bytes": 17678336,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.019099124998319894
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 0,
+          "phase": "cold",
+          "seconds": 5.329117832996417,
+          "max_rss_bytes": 96845824,
+          "phase_seconds": {
+            "parse": 0.446,
+            "monomorphization": 0.106,
+            "sema": 0.168,
+            "lowering": 0.00413,
+            "module_passes": 0.021,
+            "per_function_passes": 0.000904,
+            "late_module_passes": 0.00127,
+            "ir_emission": 0.00687
+          },
+          "subprocesses": {
+            "opt": 1,
+            "clang": 38,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 2.9841099160257727
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 0,
+          "phase": "unchanged",
+          "seconds": 0.11321437498554587,
+          "max_rss_bytes": 17563648,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.017539291991852224
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 0,
+          "phase": "edited",
+          "seconds": 0.6779358750209212,
+          "max_rss_bytes": 73875456,
+          "phase_seconds": {
+            "parse": 0.09090000000000001,
+            "monomorphization": 0.0829,
+            "sema": 0.127,
+            "lowering": 0.004070000000000001,
+            "module_passes": 0.019,
+            "per_function_passes": 0.0007909999999999999,
+            "late_module_passes": 0.00114,
+            "ir_emission": 0.008039999999999999
+          },
+          "subprocesses": {
+            "opt": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.13508545805234462
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 0,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.10605158400721848,
+          "max_rss_bytes": 17432576,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.013437999994494021
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 1,
+          "phase": "cold",
+          "seconds": 3.450675583037082,
+          "max_rss_bytes": 96223232,
+          "phase_seconds": {
+            "parse": 0.0947,
+            "monomorphization": 0.0907,
+            "sema": 0.14,
+            "lowering": 0.00396,
+            "module_passes": 0.0198,
+            "per_function_passes": 0.000873,
+            "late_module_passes": 0.00124,
+            "ir_emission": 0.0077599999999999995
+          },
+          "subprocesses": {
+            "opt": 1,
+            "clang": 38,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 3.184815921005793
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 1,
+          "phase": "unchanged",
+          "seconds": 0.10097795800538734,
+          "max_rss_bytes": 17563648,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.01314587495289743
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 1,
+          "phase": "edited",
+          "seconds": 0.8605704579968005,
+          "max_rss_bytes": 74055680,
+          "phase_seconds": {
+            "parse": 0.08650000000000001,
+            "monomorphization": 0.08220000000000001,
+            "sema": 0.128,
+            "lowering": 0.004059999999999999,
+            "module_passes": 0.024100000000000003,
+            "per_function_passes": 0.000895,
+            "late_module_passes": 0.00126,
+            "ir_emission": 0.00894
+          },
+          "subprocesses": {
+            "opt": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.16424416698282585
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 1,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.11747779202414677,
+          "max_rss_bytes": 17416192,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.016348041011951864
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 2,
+          "phase": "cold",
+          "seconds": 3.429085624986328,
+          "max_rss_bytes": 96780288,
+          "phase_seconds": {
+            "parse": 0.10400000000000001,
+            "monomorphization": 0.0871,
+            "sema": 0.133,
+            "lowering": 0.004059999999999999,
+            "module_passes": 0.019899999999999998,
+            "per_function_passes": 0.000839,
+            "late_module_passes": 0.0012,
+            "ir_emission": 0.00795
+          },
+          "subprocesses": {
+            "opt": 1,
+            "clang": 38,
+            "llvm-dis": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 3.2236727928975597
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 2,
+          "phase": "unchanged",
+          "seconds": 0.1118142920313403,
+          "max_rss_bytes": 17596416,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.01658724999288097
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 2,
+          "phase": "edited",
+          "seconds": 0.6897408329532482,
+          "max_rss_bytes": 74432512,
+          "phase_seconds": {
+            "parse": 0.0878,
+            "monomorphization": 0.0887,
+            "sema": 0.138,
+            "lowering": 0.005,
+            "module_passes": 0.0207,
+            "per_function_passes": 0.0008449999999999999,
+            "late_module_passes": 0.0012,
+            "ir_emission": 0.00858
+          },
+          "subprocesses": {
+            "opt": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.12734250002540648
+        },
+        {
+          "profile": "Debug-g",
+          "repeat": 2,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.10580141696846113,
+          "max_rss_bytes": 17432576,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.014136833022348583
+        },
+        {
+          "profile": "Release",
+          "repeat": 0,
+          "phase": "cold",
+          "seconds": 6.999833417008631,
+          "max_rss_bytes": 92913664,
+          "phase_seconds": {
+            "parse": 0.0983,
+            "monomorphization": 0.0917,
+            "sema": 0.14100000000000001,
+            "lowering": 0.00359,
+            "module_passes": 0.019,
+            "per_function_passes": 0.0207,
+            "late_module_passes": 0.000193,
+            "ir_emission": 0.00365
+          },
+          "subprocesses": {
+            "opt": 2,
+            "clang": 41,
+            "llvm-dis": 3,
+            "llvm-link": 4,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 2.613666877907235
+        },
+        {
+          "profile": "Release",
+          "repeat": 0,
+          "phase": "unchanged",
+          "seconds": 0.0958589999936521,
+          "max_rss_bytes": 17596416,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.012890082958620042
+        },
+        {
+          "profile": "Release",
+          "repeat": 0,
+          "phase": "edited",
+          "seconds": 0.6959078329964541,
+          "max_rss_bytes": 60211200,
+          "phase_seconds": {
+            "parse": 0.08070000000000001,
+            "monomorphization": 0.0777,
+            "sema": 0.12,
+            "lowering": 0.00318,
+            "module_passes": 0.0173,
+            "per_function_passes": 0.0183,
+            "late_module_passes": 0.000175,
+            "ir_emission": 0.0035800000000000003
+          },
+          "subprocesses": {
+            "opt": 2,
+            "llvm-link": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.2007400409784168
+        },
+        {
+          "profile": "Release",
+          "repeat": 0,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.09501362504670396,
+          "max_rss_bytes": 17596416,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.012143375002779067
+        },
+        {
+          "profile": "Release",
+          "repeat": 1,
+          "phase": "cold",
+          "seconds": 6.2447947500040755,
+          "max_rss_bytes": 92618752,
+          "phase_seconds": {
+            "parse": 0.08259999999999999,
+            "monomorphization": 0.0819,
+            "sema": 0.124,
+            "lowering": 0.00336,
+            "module_passes": 0.0182,
+            "per_function_passes": 0.019,
+            "late_module_passes": 0.000206,
+            "ir_emission": 0.0036200000000000004
+          },
+          "subprocesses": {
+            "opt": 2,
+            "clang": 41,
+            "llvm-dis": 3,
+            "llvm-link": 4,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 2.492460955923889
+        },
+        {
+          "profile": "Release",
+          "repeat": 1,
+          "phase": "unchanged",
+          "seconds": 0.0954159579705447,
+          "max_rss_bytes": 17563648,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.012312999984715134
+        },
+        {
+          "profile": "Release",
+          "repeat": 1,
+          "phase": "edited",
+          "seconds": 0.8097405839944258,
+          "max_rss_bytes": 60243968,
+          "phase_seconds": {
+            "parse": 0.0835,
+            "monomorphization": 0.08020000000000001,
+            "sema": 0.122,
+            "lowering": 0.00359,
+            "module_passes": 0.0175,
+            "per_function_passes": 0.0182,
+            "late_module_passes": 0.00019099999999999998,
+            "ir_emission": 0.00357
+          },
+          "subprocesses": {
+            "opt": 2,
+            "llvm-link": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.2569771679700352
+        },
+        {
+          "profile": "Release",
+          "repeat": 1,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.11286600003950298,
+          "max_rss_bytes": 17596416,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.016624375013634562
+        },
+        {
+          "profile": "Release",
+          "repeat": 2,
+          "phase": "cold",
+          "seconds": 10.192355667008087,
+          "max_rss_bytes": 92602368,
+          "phase_seconds": {
+            "parse": 0.0902,
+            "monomorphization": 0.0868,
+            "sema": 0.134,
+            "lowering": 0.00365,
+            "module_passes": 0.019100000000000002,
+            "per_function_passes": 0.0195,
+            "late_module_passes": 0.000183,
+            "ir_emission": 0.004
+          },
+          "subprocesses": {
+            "opt": 2,
+            "clang": 41,
+            "llvm-dis": 3,
+            "llvm-link": 4,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 4.658466127759311
+        },
+        {
+          "profile": "Release",
+          "repeat": 2,
+          "phase": "unchanged",
+          "seconds": 0.4565891670063138,
+          "max_rss_bytes": 17727488,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.021482834010384977
+        },
+        {
+          "profile": "Release",
+          "repeat": 2,
+          "phase": "edited",
+          "seconds": 1.3385115420096554,
+          "max_rss_bytes": 61571072,
+          "phase_seconds": {
+            "parse": 0.128,
+            "monomorphization": 0.123,
+            "sema": 0.19,
+            "lowering": 0.005730000000000001,
+            "module_passes": 0.0273,
+            "per_function_passes": 0.038200000000000005,
+            "late_module_passes": 0.00041299999999999996,
+            "ir_emission": 0.007690000000000001
+          },
+          "subprocesses": {
+            "opt": 2,
+            "llvm-link": 1,
+            "llc": 1,
+            "cc": 1
+          },
+          "subprocess_seconds": 0.5490834150114097
+        },
+        {
+          "profile": "Release",
+          "repeat": 2,
+          "phase": "unchanged_after_edit",
+          "seconds": 0.11112104199128225,
+          "max_rss_bytes": 17596416,
+          "phase_seconds": {},
+          "subprocesses": {
+            "opt": 1
+          },
+          "subprocess_seconds": 0.014906416996382177
+        }
+      ]
+    }
+  ],
+  "compiler_rebuilds": {
+    "method": "Touch src/main.rs and incrementally rebuild the release host compiler with cargo build --release -p dream -vv, restoring source timestamps afterward. Operating-system caches remain warm. There is no baseline compiler rebuild comparison; RSS measures the timed Cargo process and children. Cargo-reported rustc invocations exclude internal linker subprocesses.",
+    "rows": [
+      {
+        "repeat": 0,
+        "seconds": 5.551527082978282,
+        "max_rss_bytes": 270090240,
+        "cargo_rustc_invocations": 1
+      },
+      {
+        "repeat": 1,
+        "seconds": 3.785322333977092,
+        "max_rss_bytes": 268222464,
+        "cargo_rustc_invocations": 1
+      },
+      {
+        "repeat": 2,
+        "seconds": 3.39306958403904,
+        "max_rss_bytes": 271630336,
+        "cargo_rustc_invocations": 1
+      }
+    ]
+  }
+}

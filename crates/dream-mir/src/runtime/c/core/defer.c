@@ -41,6 +41,7 @@ static void sync_open(void) {
 }
 
 void dream_defer_enter(void) {
+    dream_cycle_postpone(1);
     dream_defer_depth += 1;
     sync_open();
 }
@@ -123,6 +124,8 @@ void dream_defer_drain_all(void) {
         drain_one();
     }
     defer_queued = 0;
+    dream_cycle_postpone(0);
+    if (dream_defer_depth > 0) { dream_cycle_postpone(1); }
     if (defer_cache) {
         dream_platform_current->deallocate(defer_cache);
         defer_cache = NULL;
@@ -147,5 +150,6 @@ void dream_defer_leave(uint32_t q) {
     if (dream_defer_depth > 0) {
         dream_defer_depth -= 1;
     }
+    if (q != 0 && dream_defer_depth == 0) { dream_cycle_postpone(0); }
     sync_open();
 }

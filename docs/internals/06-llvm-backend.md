@@ -186,13 +186,14 @@ continue in ordinary blocks.
 
 The `.ll` next to a build is the frontend output, before any optimization, and reads like clang
 `-O0`: entry `alloca`s, a load and store around every use, almost no `phi`s, guard branches on
-constants, and one `abort` + `unreachable` block per MIR `Unreachable`. The build always runs
+constants, and one `abort` + `unreachable` block per MIR `Unreachable`. Release runs
 `opt` next, which promotes the slots, folds the constant guards and merges the trap blocks.
+Debug defaults to O0 and compiles the program separately from cached runtime objects.
 Building SSA in the printer would duplicate `mem2reg`, and replacing the `abort` with a bare
 `unreachable` would turn a MIR invariant into undefined behavior.
 
-Review performance on the optimized module instead: every build writes `<stem>.opt.ll` (the
-whole program after `opt`, runtime included) and deletes the unoptimized `.ll` once linked;
+Review Release performance with `--emit-opt-ir`, which writes `<stem>.opt.ll` (the
+whole program after `opt`, runtime included). IR serialization is otherwise omitted;
 `dream --emit-llvm file.dream` stops there and adds `<stem>.s`. Native `[lib].output-type = "staticlib"` and `"cdylib"` in `dream.toml` build an archive or shared library, respectively,
 plus a C header and ABI sidecar. The manifest selects one library output. There is no process
 entry; `@export` definitions are reachability roots. Their private bodies have separate structural

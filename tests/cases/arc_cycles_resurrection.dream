@@ -1,0 +1,15 @@
+import system;
+let escaped: Option<Node> = Option.None;
+class Node {
+    public next: Option<Node>;
+    public constructor() { this.next = Option.None; }
+    del() { System.println("finalizer"); escaped = Option.Some(this); }
+}
+fun make() {
+    let node = Node();
+    node.next = Option.Some(node);
+}
+fun main() {
+    make();
+    System.println(escaped.is_some());
+}

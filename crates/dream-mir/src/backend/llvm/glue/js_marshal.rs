@@ -524,6 +524,7 @@ fn js_to_array(l: &mut Lcx<'_>, elem: TypeId) {
     let len = fx.bridge_str("get", &j, "length");
     let n = fx.bridge("as_int", &[len]);
     let o = fx.call_v("dream_array_new", &[n.clone(), V::i32(esize)]);
+    fx.install_array_info(&o, elem);
     count_loop(&mut fx, &n, |fx, i| {
         let idx = fx.bridge("box_int", std::slice::from_ref(i));
         let jv = fx.bridge("index_get", &[j.clone(), idx]);

@@ -17,8 +17,8 @@ typedef struct dream_weak_node {
 
 static dream_weak_node *weak_buckets[WEAK_BUCKETS];
 
-static void weak_lock(void) { dream_platform_current->lock(DREAM_LOCK_WEAK); }
-static void weak_unlock(void) { dream_platform_current->unlock(DREAM_LOCK_WEAK); }
+static void weak_lock(void) { dream_cycle_enter(); dream_platform_current->lock(DREAM_LOCK_WEAK); }
+static void weak_unlock(void) { dream_platform_current->unlock(DREAM_LOCK_WEAK); dream_cycle_leave(); }
 
 static dream_weak_node **weak_bucket(dream_ptr target) {
     uint64_t h = ((uint64_t)(uintptr_t)target >> 3) * 0x9E3779B97F4A7C15ull;
@@ -163,6 +163,11 @@ dream_ptr weakLoad(uintptr_t slot) {
     }
     int32_t *rc = dream_rc_word(v);
     int32_t count = __atomic_load_n(rc, __ATOMIC_RELAXED);
+    if (count == DREAM_RC_IMMORTAL) {
+        data->immortal = 1;
+        weak_unlock();
+        return v;
+    }
     while ((count & INT32_MAX) != 0) {
         if ((count & INT32_MAX) == INT32_MAX) {
             weak_unlock();
@@ -187,8 +192,9 @@ int32_t weakDead(uintptr_t slot) {
     weak_lock();
     WeakBox *data = (WeakBox *)dream_p(box);
     dream_ptr value = data->value;
+    int32_t count = value ? __atomic_load_n(dream_rc_word(value), __ATOMIC_RELAXED) : 0;
     int32_t dead = value == 0 ||
-        (!data->immortal && (__atomic_load_n(dream_rc_word(value), __ATOMIC_RELAXED) & INT32_MAX) == 0);
+        (!data->immortal && count != DREAM_RC_IMMORTAL && (count & INT32_MAX) == 0);
     weak_unlock();
     return dead;
 }

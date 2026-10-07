@@ -65,3 +65,5 @@ int main(void) {
     puts("region stress passed");
     return 0;
 }
+
+void dream_release_object(dream_ptr ptr) { dream_release(ptr); }

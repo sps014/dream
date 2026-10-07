@@ -11,11 +11,10 @@ public enum JsonKind {
 }
 
 // Native JSON value tree. `items` / `obj_map` can hold nested `JsonValue`s; trees are
-// acyclic at runtime, so `@allow_cycle` opts out of the structural self-edge check.
+// represented by exact ownership metadata; recursive types are supported by ARC.
 //
 // Container fields are `Option` so scalars allocate no List/Map. Arrays own `items` only;
 // objects own `obj_keys` + `obj_vals` (insertion order) + `obj_map` (O(1) lookup).
-@allow_cycle
 public class JsonValue {
     internal kind: int;
     internal bool_val: bool;

@@ -15,7 +15,7 @@ pub fn run(
     run_with(
         start_dir,
         CompileFlags {
-            release,
+            compile_profile: dream_abi::profile::CompileProfile::from_release(release),
             ..CompileFlags::default()
         },
         filter,

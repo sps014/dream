@@ -11,6 +11,8 @@ int dream_rt_mt;
 #endif
 int64_t live_objects;
 int64_t total_allocations;
+int64_t dream_raw_live_objects;
+int64_t dream_raw_total_allocations;
 int32_t last_freed;
 int32_t free_list_head;
 
@@ -101,11 +103,16 @@ static void large_remove(int32_t block) {
     }
 }
 
-/* Total block size for `payload` bytes: 8-aligned payload + 12-byte header, padded to a
- * multiple of 16 so block starts stay at 4 (mod 16) across bump/split/merge. */
+/* Small allocations must fill their size class: non-class blocks return to the
+ * address-ordered large list, making collector scratch allocation churn quadratic. */
 static int32_t round_total(int32_t payload) {
+    if (payload < 0 || payload > INT32_MAX - (int32_t)HEAP_HEADER_SIZE - 31) {
+        DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the WASI heap limit");
+    }
     int32_t t = ((payload + 7) & -8) + (int32_t)HEAP_HEADER_SIZE;
-    return (t + 15) & -16;
+    t = (t + 15) & -16;
+    int32_t idx = size_class(t);
+    return idx <= 12 ? class_bytes(idx) : t;
 }
 
 /* Carve `need` bytes off the front of the free block at `block` (size at [block]).
@@ -195,7 +202,10 @@ static dream_ptr finish_block_ex(int32_t block, int32_t tag, int32_t account) {
     if (account) {
         account_alloc();
     }
-    return (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
+    dream_ptr ptr = (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
+    const dream_type_info *info = NULL;
+    memcpy((char *)dream_p(ptr) - DREAM_BLOCK_HEADER + sizeof(dream_size), &info, sizeof(info));
+    return ptr;
 }
 
 static dream_ptr finish_block(int32_t block, int32_t tag) {
@@ -295,27 +305,35 @@ static dream_ptr malloc_locked(int32_t size, int32_t tag) {
     i32_put(block + (int32_t)HEADER_TAG_OFFSET, tag);
     i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, dream_rc_init(tag));
     account_alloc();
-    return (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
+    dream_ptr ptr = (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
+    const dream_type_info *info = NULL;
+    memcpy((char *)dream_p(ptr) - DREAM_BLOCK_HEADER + sizeof(dream_size), &info, sizeof(info));
+    return ptr;
 }
 
 int64_t debug_get_live_objects(void) {
-    return __atomic_load_n(&live_objects, __ATOMIC_RELAXED);
+    return __atomic_load_n(&live_objects, __ATOMIC_RELAXED) -
+        __atomic_load_n(&dream_raw_live_objects, __ATOMIC_RELAXED);
 }
 int64_t debug_get_total_allocations(void) {
-    return __atomic_load_n(&total_allocations, __ATOMIC_RELAXED);
+    return __atomic_load_n(&total_allocations, __ATOMIC_RELAXED) -
+        __atomic_load_n(&dream_raw_total_allocations, __ATOMIC_RELAXED);
 }
 int32_t debug_get_ref_count(dream_ptr ptr) {
     return ptr ? dream_rc_count(ptr) : 0;
 }
 
 void dream_pin_immortal(dream_ptr s) {
-    if (s) {
-        *dream_rc_word(s) = DREAM_RC_IMMORTAL;
+    if (!s) { return; }
+    int locked = dream_cycle_store_begin(s, 0, 1);
+    if (__atomic_exchange_n(dream_rc_word(s), DREAM_RC_IMMORTAL, __ATOMIC_RELAXED) != DREAM_RC_IMMORTAL) {
+        dream_cycle_forget(s);
         int64_t live = __atomic_load_n(&live_objects, __ATOMIC_RELAXED);
         while (live > 0 && !__atomic_compare_exchange_n(
             &live_objects, &live, live - 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
         }
     }
+    dream_cycle_store_end(locked);
 }
 
 void dream_retain_slow(int32_t *rc, int32_t v) {
@@ -342,8 +360,13 @@ int32_t debug_get_free_list_head(void) { return last_freed; }
 
 __attribute__((export_name(DREAM_SYM_MALLOC)))
 dream_ptr dream_malloc(int32_t size, int32_t tag) {
+    if ((tag & TAG_VALUE_MASK) == 0 || (tag & TAG_SHARED)) {
+        return dream_malloc_shared(size, tag);
+    }
     dream_ptr pointer = dream_region_try_malloc(size, tag);
-    return pointer != 0 ? pointer : malloc_private(size, tag);
+    pointer = pointer != 0 ? pointer : malloc_private(size, tag);
+    dream_set_type(pointer, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
+    return pointer;
 }
 
 dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
@@ -354,6 +377,7 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
     dream_platform_current->lock(DREAM_LOCK_HEAP);
     p = malloc_locked(size, tag);
     dream_platform_current->unlock(DREAM_LOCK_HEAP);
+    dream_set_type(p, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
     return p;
 }
 
@@ -440,6 +464,7 @@ void dream_recycle(dream_ptr ptr) {
     if (!ptr) {
         return;
     }
+    dream_cycle_forget(ptr);
     if (*dream_tag_word(ptr) & DREAM_TAG_WEAK_TARGET) {
         dream_weak_clear_all(ptr);
     }
@@ -484,6 +509,11 @@ void dream_free(dream_ptr ptr) {
     dream_recycle(ptr);
 }
 
+static void retain_copied_edge(dream_ptr child, void *context) {
+    (void)context;
+    dream_retain(child);
+}
+
 dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {
     int32_t block_start;
     int32_t old_total;
@@ -499,12 +529,25 @@ dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {
     if (new_total <= old_total) {
         return ptr;
     }
+    const dream_type_info *info = dream_object_info(ptr);
+    int locked = info && info->visit;
+    if (locked) { dream_cycle_enter(); }
     np = dream_tag_shared(ptr) ? dream_malloc_shared(new_size, tag) : dream_malloc(new_size, tag);
+    dream_set_type(np, info);
+    int unique = dream_rc_count(ptr) == 1;
+    if (!unique && info && info->visit) {
+        dream_visit_owned(ptr, retain_copied_edge, NULL);
+    }
     copy = old_total - (int32_t)HEAP_HEADER_SIZE;
     if (copy > new_size) {
         copy = new_size;
     }
     memcpy(dream_p(np), dream_p(ptr), (size_t)copy);
+    if (unique && tag == TAG_ARRAY && info) {
+        /* The copied payload owns the transferred edges before the old storage is released. */
+        memset(dream_p(ptr), 0, (size_t)copy);
+    }
     dream_release(ptr);
+    if (locked) { dream_cycle_leave(); dream_cycle_drain(); }
     return np;
 }

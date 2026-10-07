@@ -21,16 +21,22 @@ impl<'l, 'a> Fx<'l, 'a> {
             self.retain_rc_global_sink(callee.take_params.get(i).copied().unwrap_or(false), a);
             vals.push(self.operand(a));
         }
+        let combinator_result = if name == "dream_all" || name == "dream_any" {
+            let TyKind::Struct(_, arguments) = self.interner.kind(callee.ret) else { crate::internal_error!("combinator must return a Future"); };
+            Some(*arguments.first().unwrap())
+        } else { None };
         if name == "dream_all" {
-            let es = match self.interner.kind(callee.ret) {
-                TyKind::Array(e) => elem_size(&self.l.cx, *e),
-                _ => callee
-                    .args
-                    .first()
-                    .map(|t| elem_size(&self.l.cx, *t))
-                    .unwrap_or(4),
-            };
-            vals.push(V::i32(es as i64));
+            let TyKind::Array(elem) = self.interner.kind(combinator_result.unwrap()) else { crate::internal_error!("all must return an array"); };
+            vals.push(V::i32(elem_size(&self.l.cx, *elem) as i64));
+            let (copy, _) = super::glue::future_ownership::copies(self.l, *elem);
+            vals.push(V::s(Value::global(copy)));
+            let array_info = if crate::backend::shared::glue::glue_array_elems(&self.l.cx).contains(elem) {
+                Value::global(super::glue::ownership::array_info(*elem))
+            } else { Value::zero(Ty::Ptr) };
+            vals.push(V::s(array_info));
+        } else if name == "dream_any" {
+            let (_, clone) = super::glue::future_ownership::copies(self.l, combinator_result.unwrap());
+            vals.push(V::s(Value::global(clone)));
         }
         if IntrinsicOp::from_key(&raw) == Some(IntrinsicOp::Panic) {
             let at = self.panic_location();
@@ -44,7 +50,16 @@ impl<'l, 'a> Fx<'l, 'a> {
             self.call(&name, &vals);
             return Some(self.as_ref(&V::s(buf)));
         }
-        self.call(&name, &vals)
+        let result = self.call(&name, &vals);
+        if let (Some(ty), Some(future)) = (combinator_result, &result) {
+            let info = super::glue::future_ownership::info(self.l, ty);
+            self.call("dream_set_type", &[future.clone(), V::s(Value::global(info))]);
+        }
+        if self.l.sigs.has_function(&name)
+            && let (Some(array), TyKind::Array(elem)) = (&result, self.interner.kind(callee.ret)) {
+            self.install_array_info(array, *elem);
+        }
+        result
     }
 
     /// The call's value-struct result sits in a caller buffer, not a heap box to free.

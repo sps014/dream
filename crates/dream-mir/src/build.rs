@@ -150,6 +150,10 @@ impl FunctionBuilder {
         self.locals[local.0 as usize].ty
     }
 
+    pub(crate) fn locals(&self) -> &[LocalDecl] {
+        &self.locals
+    }
+
     pub fn finish(self) -> MirFunction {
         MirFunction {
             def: self.def,

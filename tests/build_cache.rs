@@ -67,3 +67,47 @@ fn builds_with_warnings_are_not_cached() {
         BuildOutcome::Built(None)
     ));
 }
+
+#[test]
+fn incremental_generated_sources_allow_early_lookup_and_detect_corruption() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("main.dream");
+    let out = dir.path().join("main.ll");
+    std::fs::write(&source, "import system; import system.json;\n@json class Point { public x: int; public constructor(x: int) { this.x = x; } }\nfun main(): void { System.println(Json.serialize(Point(1))); }").unwrap();
+    record(build(&source, &out, "O0"), &out);
+    assert!(cached(build(&source, &out, "O0")).is_some());
+    let stamp = out.with_extension("dream-cache");
+    std::fs::write(&stamp, b"{partial").unwrap();
+    record(build(&source, &out, "O0"), &out);
+    assert!(cached(build(&source, &out, "O0")).is_some());
+}
+
+#[test]
+fn cache_detects_new_local_resolution_candidates_and_manifest_changes() {
+    let dir = tempfile::tempdir().unwrap();
+    let packages = dir.path().join("dream_packages/helper/src");
+    std::fs::create_dir_all(&packages).unwrap();
+    std::fs::write(
+        packages.join("helper.dream"),
+        "public fun answer(): int { return 42; }",
+    )
+    .unwrap();
+    let source = dir.path().join("main.dream");
+    let out = dir.path().join("main.ll");
+    std::fs::write(
+        &source,
+        "import system; import helper; fun main(): void { System.println(answer()); }",
+    )
+    .unwrap();
+    record(build(&source, &out, "O0"), &out);
+    assert!(cached(build(&source, &out, "O0")).is_some());
+    std::fs::write(
+        dir.path().join("helper.dream"),
+        "public fun answer(): int { return 7; }",
+    )
+    .unwrap();
+    record(build(&source, &out, "O0"), &out);
+    assert!(cached(build(&source, &out, "O0")).is_some());
+    std::fs::write(dir.path().join("dream.lock"), "changed resolution").unwrap();
+    assert!(cached(build(&source, &out, "O0")).is_none());
+}

@@ -6,7 +6,7 @@
 //! order equals emission order.
 
 use super::{MirPass, PassManager};
-use crate::pretty::{print_function, MirNames, PrettyCx};
+use crate::pretty::{MirNames, PrettyCx, print_function};
 use crate::{Mir, MirFunction};
 use dream_types::{DefId, TypeId, TypeInterner};
 use indexmap::IndexMap;
@@ -43,7 +43,7 @@ pub fn dumpable_pass_names() -> Vec<&'static str> {
         PassManager::default_pipeline(),
         PassManager::release_pipeline(),
         PassManager::async_poll_pipeline(),
-        PassManager::debug_pipeline(),
+        PassManager::debug_pipeline(true),
     ]
     .iter()
     .flat_map(|pm| pm.passes.iter().map(|p| p.name()))
@@ -79,7 +79,7 @@ impl MirDumpSpec {
                 Some((_, other)) => {
                     return Err(format!(
                         "--emit-mir: unknown modifier `{other}` (only `each` is supported)"
-                    ))
+                    ));
                 }
                 None => (rest, false),
             };
@@ -244,15 +244,15 @@ impl MirDump {
             self.snapshots.push(snap);
         }
         if !self.last_fn.is_empty()
-            && let DumpMode::After { pass, .. } = spec.mode {
-                let mut text =
-                    format!("// dream --emit-mir: after {pass} (last run per function)\n\n");
-                for body in self.last_fn.values() {
-                    text.push_str(body);
-                    text.push('\n');
-                }
-                self.snapshots.push(Snapshot { pass, text });
+            && let DumpMode::After { pass, .. } = spec.mode
+        {
+            let mut text = format!("// dream --emit-mir: after {pass} (last run per function)\n\n");
+            for body in self.last_fn.values() {
+                text.push_str(body);
+                text.push('\n');
             }
+            self.snapshots.push(Snapshot { pass, text });
+        }
         let width = self
             .snapshots
             .len()

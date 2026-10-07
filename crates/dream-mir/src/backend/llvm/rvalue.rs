@@ -4,7 +4,7 @@ use super::fx::{Fx, V};
 use super::ir::{Ty, Value};
 use crate::backend::shared::abi_types::{elem_size, mem_ty, runtime_c_name};
 use crate::backend::shared::glue::{release_sym, retain_sym};
-use crate::backend::shared::protocol_names::{hash_fn, runtime_tag, to_string_fn, HashFn};
+use crate::backend::shared::protocol_names::{HashFn, hash_fn, runtime_tag, to_string_fn};
 use crate::{Operand, Rvalue, UnOp};
 use dream_types::{DefId, PrimTy, TyKind, TypeId};
 
@@ -110,7 +110,9 @@ impl<'l, 'a> Fx<'l, 'a> {
             Rvalue::ArrayNew { elem_ty, len, .. } => {
                 let es = elem_size(&self.l.cx, *elem_ty);
                 let n = self.operand(len);
-                self.call_v("dream_array_new", &[n, V::i32(es as i64)])
+                let array = self.call_v("dream_array_new", &[n, V::i32(es as i64)]);
+                self.install_array_info(&array, *elem_ty);
+                array
             }
             Rvalue::HashCode(o) => {
                 let ty = self.operand_ty(o);
@@ -550,6 +552,13 @@ impl<'l, 'a> Fx<'l, 'a> {
         o
     }
 
+    pub(super) fn install_array_info(&mut self, array: &V, elem: TypeId) {
+        if crate::backend::shared::glue::glue_array_elems(&self.l.cx).contains(&elem) {
+            let info = V::s(Value::global(super::glue::ownership::array_info(elem)));
+            self.call("dream_set_type", &[array.clone(), info]);
+        }
+    }
+
     fn emit_array_lit(&mut self, elem_ty: TypeId, elems: &[Operand]) -> V {
         let es = elem_size(&self.l.cx, elem_ty) as i64;
         let n = elems.len() as i64;
@@ -564,6 +573,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         );
         let p = self.ptr(&o);
         self.memset0(&p, &Value::i64(size));
+        self.install_array_info(&o, elem_ty);
         self.store_ty(&Ty::I32, &p, &V::i32(n), 4);
         for (i, v) in vals.iter().enumerate() {
             let at = self
@@ -573,11 +583,15 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let sp = self.ptr(v);
                 self.memcpy(&at, &sp, &Value::i64(es));
                 let atv = self.as_ref(&V::s(at));
+                self.publish_refs(elem_ty, &atv, &o);
                 self.value_refs(elem_ty, &atv, true);
             } else {
                 self.store_mem(m, &at, v, PAYLOAD_ALIGN);
                 if rc {
                     let loaded = self.load_mem(m, &at, PAYLOAD_ALIGN);
+                    if crate::ownership::contains_cycle_refs(&self.mir.layouts, self.interner, elem_ty) {
+                        self.call("dream_cycle_check_store", &[o.clone(), loaded.clone()]);
+                    }
                     let sym = retain_sym(&self.l.cx, elem_ty);
                     self.call(sym, &[loaded]);
                 }
@@ -677,15 +691,15 @@ impl<'l, 'a> Fx<'l, 'a> {
         let tk = self.interner.kind(to).clone();
         if let (TyKind::Prim(from_prim), TyKind::Prim(to_prim)) = (&fk, &tk)
             && from_prim.is_numeric()
-                && to_prim.is_numeric()
-                && (matches!(from_prim, PrimTy::ISize | PrimTy::USize)
-                    || matches!(to_prim, PrimTy::ISize | PrimTy::USize))
-            {
-                let source_ty = super::types::ll_ty(self.interner, from, &self.h(), &self.word());
-                let target_ty = super::types::ll_ty(self.interner, to, &self.h(), &self.word());
-                let source = self.conv_v(&src, &source_ty, from_prim.is_unsigned_integer());
-                return self.conv_v(&source, &target_ty, to_prim.is_unsigned_integer());
-            }
+            && to_prim.is_numeric()
+            && (matches!(from_prim, PrimTy::ISize | PrimTy::USize)
+                || matches!(to_prim, PrimTy::ISize | PrimTy::USize))
+        {
+            let source_ty = super::types::ll_ty(self.interner, from, &self.h(), &self.word());
+            let target_ty = super::types::ll_ty(self.interner, to, &self.h(), &self.word());
+            let source = self.conv_v(&src, &source_ty, from_prim.is_unsigned_integer());
+            return self.conv_v(&source, &target_ty, to_prim.is_unsigned_integer());
+        }
         if matches!(tk, TyKind::Object | TyKind::Interface(..)) && self.is_value(from) {
             let size = elem_size(&self.l.cx, from) as i64;
             let tag = self.l.cx.type_tag(from);

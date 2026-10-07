@@ -41,6 +41,14 @@ impl<'l, 'a> Fx<'l, 'a> {
             Statement::Release(o) => {
                 let ty = self.operand_ty(o);
                 let a = self.operand(o);
+                let frame_gate = if let Operand::Copy(Place::Local(local)) = o {
+                    if self.poll_owned(*local) {
+                        let owner = V::u(self.self_.clone().unwrap());
+                        let gate = self.call_v("dream_cycle_store_begin", &[owner, V::s(Value::zero(self.h())), V::i32(0)]);
+                        self.clear_poll_edge(*local);
+                        Some(gate)
+                    } else { None }
+                } else { None };
                 // Inline fast path: null check + decrement here; the free tail runs only on the
                 // last-ref transition.
                 if let Some(tail) = release_into_sym(&self.l.cx, ty) {
@@ -61,6 +69,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     };
                     self.call(&sym, &[a]);
                 }
+                if let Some(gate) = frame_gate { self.call("dream_cycle_store_end", &[gate]); }
             }
             Statement::Panic(o) => {
                 let a = self.operand(o);
@@ -193,7 +202,14 @@ impl<'l, 'a> Fx<'l, 'a> {
             Statement::ValueDrop(l) => {
                 if !self.f.locals[l.0 as usize].is_ref && !is_alias_value_local(self.f, *l) {
                     let v = self.read_local(*l);
-                    self.value_refs(self.f.local_ty(*l), &v, false);
+                    if !self.poll_offsets.is_empty() {
+                        let owner = V::u(self.self_.clone().unwrap());
+                        let gate = self.call_v("dream_cycle_store_begin", &[owner, V::s(Value::zero(self.h())), V::i32(0)]);
+                        self.clear_refs(self.f.local_ty(*l), &v);
+                        self.call("dream_cycle_store_end", &[gate]);
+                    } else {
+                        self.value_refs(self.f.local_ty(*l), &v, false);
+                    }
                 }
             }
             Statement::ValueRetain(l) => {

@@ -104,14 +104,16 @@ impl PassManager {
         pm
     }
 
-    /// A minimal, value-preserving pipeline for debug-info builds. It deliberately omits every pass
-    /// that can eliminate, fold, or coalesce user locals (const/copy propagation, SCCP, GVN, DCE,
-    /// DSE), so each declared variable still lives in a distinct slot the debugger can read at every
-    /// statement. Only redundant RC is elided (a value-neutral cleanup) and the CFG is tidied.
-    pub fn debug_pipeline() -> Self {
-        let mut pm = PassManager::new();
+    /// One bounded cleanup round; debug information preserves source locals and call frames.
+    pub fn debug_pipeline(debug_info: bool) -> Self {
+        let mut pm = Self::new();
+        pm.max_iterations = 1;
+        if !debug_info {
+            pm.add(CopyConstProp);
+            pm.add(ConstFold);
+            pm.add(Dce);
+        }
         pm.add(SimplifyCfg);
-        pm.add(RcElision);
         pm
     }
 

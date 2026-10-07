@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <time.h>
 
+void dream_release_object(dream_ptr ptr) { dream_release(ptr); }
+
 static dream_ptr mk_ascii(const char *s) {
     size_t n = strlen(s);
     dream_ptr p = dream_malloc((dream_size)n * 2 + 8, TAG_STRING);

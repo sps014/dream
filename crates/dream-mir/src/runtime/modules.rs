@@ -111,6 +111,7 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[RuntimeModule {
 /// Portable runtime logic; no OS headers or direct hosted allocator calls.
 pub const CORE_C: &[&str] = &[
     "publish.c",
+    "cycles.c",
     "region.c",
     "strings.c",
     "string_view.c",
@@ -426,27 +427,32 @@ mod tests {
                 "{name}"
             );
         }
-        assert!(core
-            .iter()
-            .all(|p| p.file_name().and_then(|n| n.to_str()) != Some("host.c")));
+        assert!(
+            core.iter()
+                .all(|p| p.file_name().and_then(|n| n.to_str()) != Some("host.c"))
+        );
     }
 
     #[test]
     fn native_units_tree_shake_pcre2() {
         let core = native_runtime_c_files(RuntimeNeed::CORE);
         assert!(core.iter().all(|p| !p.to_string_lossy().contains("pcre2")));
-        assert!(core
-            .iter()
-            .all(|p| p.file_name().and_then(|n| n.to_str()) != Some("regex.c")));
+        assert!(
+            core.iter()
+                .all(|p| p.file_name().and_then(|n| n.to_str()) != Some("regex.c"))
+        );
         let with = native_runtime_c_files(RuntimeNeed::CORE.union(RuntimeNeed::REGEX));
-        assert!(with
-            .iter()
-            .any(|p| p.file_name().and_then(|n| n.to_str()) == Some("regex.c")));
-        assert!(with
-            .iter()
-            .any(|p| p.to_string_lossy().contains("pcre2_compile.c")));
-        assert!(with
-            .iter()
-            .any(|p| p.file_name().and_then(|n| n.to_str()) == Some("pcre2_jit_compile.c")));
+        assert!(
+            with.iter()
+                .any(|p| p.file_name().and_then(|n| n.to_str()) == Some("regex.c"))
+        );
+        assert!(
+            with.iter()
+                .any(|p| p.to_string_lossy().contains("pcre2_compile.c"))
+        );
+        assert!(
+            with.iter()
+                .any(|p| p.file_name().and_then(|n| n.to_str()) == Some("pcre2_jit_compile.c"))
+        );
     }
 }

@@ -6,11 +6,11 @@
 //! gets a `dream_packages` symlink back to that root so LSP/compiler discovery stays unchanged.
 
 use crate::fetch;
-use crate::lockfile::{LockedPackage, Lockfile, LOCKFILE_FILE_NAME};
-use crate::manifest::{import_segment, Manifest, PackageType, MANIFEST_FILE_NAME};
+use crate::lockfile::{LOCKFILE_FILE_NAME, LockedPackage, Lockfile};
+use crate::manifest::{MANIFEST_FILE_NAME, Manifest, PackageType, import_segment};
 use crate::registry::open_registry;
 use crate::resolver::{ResolvedPackage, ResolvedSource};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -213,6 +213,10 @@ impl Workspace {
                 source: pkg.source.lock_source(),
                 checksum: match &pkg.source {
                     ResolvedSource::Registry { checksum, .. } => Some(checksum.clone()),
+                    _ => None,
+                },
+                git_selector: match &pkg.source {
+                    ResolvedSource::Git { selector, .. } => Some(selector.clone()),
                     _ => None,
                 },
                 dependencies,

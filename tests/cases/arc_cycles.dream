@@ -1,0 +1,29 @@
+import system;
+
+class CycleNode {
+    public id: int;
+    public next: Option<CycleNode>;
+    public constructor(id: int) { this.id = id; this.next = Option.None; }
+    del() {
+        System.println("drop " + this.id.to_string());
+        switch (this.next) {
+            Some(peer) => { System.println("peer " + peer.id.to_string()); }
+            None => {}
+        }
+    }
+}
+fun self_cycle() {
+    let node = CycleNode(1);
+    node.next = Option.Some(node);
+}
+fun mutual_cycle() {
+    let first = CycleNode(2);
+    let second = CycleNode(3);
+    first.next = Option.Some(second);
+    second.next = Option.Some(first);
+}
+fun main() {
+    self_cycle();
+    mutual_cycle();
+    System.println("done");
+}

@@ -37,14 +37,14 @@ TAG_SHARED: i32 = 1 << 30 => "TAG_SHARED";
 TAG_VALUE_MASK: i32 = TAG_SHARED - 1 => "TAG_VALUE_MASK";
 /// Byte size of the universal heap-block header `[size:i32][tag:i32][ref_count:i32]`. A value's data
 /// pointer is `block_start + HEAP_HEADER_SIZE`.
-HEAP_HEADER_SIZE: u32 = 12 => "HEAP_HEADER_SIZE";
+HEAP_HEADER_SIZE: u32 = 16 => "HEAP_HEADER_SIZE";
 /// Written into cleared `unowned` slots so loads can report "target destroyed" distinctly
 /// from "never assigned". Mirrors `DREAM_UNOWNED_POISON` in dream_abi.h.
 UNOWNED_POISON: i32 = -165764356 => "DREAM_UNOWNED_POISON";
 /// Byte offset (from the block start) of the type-tag word in the heap header.
-HEADER_TAG_OFFSET: u32 = 4 => "HEADER_TAG_OFFSET";
+HEADER_TAG_OFFSET: u32 = 8 => "HEADER_TAG_OFFSET";
 /// Byte offset (from the block start) of the reference-count word in the heap header.
-HEADER_REFCOUNT_OFFSET: u32 = 8 => "HEADER_REFCOUNT_OFFSET";
+HEADER_REFCOUNT_OFFSET: u32 = 12 => "HEADER_REFCOUNT_OFFSET";
 /// Byte size of the length/count prefix preceding an array's elements at the data pointer
 /// (`[count:i32][payload...]`); the payload starts at `ptr + LEN_PREFIX_SIZE`. Also the size of the
 /// first word of a string (`unit_len`); UTF-16 payload starts at `ptr + STRING_UNITS_OFFSET`.

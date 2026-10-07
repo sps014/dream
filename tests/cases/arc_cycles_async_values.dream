@@ -1,0 +1,16 @@
+import system;
+
+class Node {
+    public future: Option<Future<int>>;
+    public constructor() { this.future = Option.None; }
+    del() { System.println("value-frame"); }
+}
+struct Holder {
+    public node: Node;
+    public constructor(node: Node) { this.node = node; }
+}
+async fun hold(value: Holder): int { let _keep = value.node; return 1; }
+fun main() {
+    let node = Node();
+    node.future = Option.Some(hold(Holder(node)));
+}

@@ -10,8 +10,8 @@ use super::{glue, register};
 use crate::abi::{TAG_CLOSURE_ENV, TAG_FUNCBOX, TAG_STRING};
 use crate::backend::shared::abi_types::{c_ident, elem_size};
 use crate::backend::shared::glue::{
-    del_symbol, destroy_sym, drop_nonempty, field_drop, glue_array_elems, release_sym,
-    self_tail_field, struct_field_drops, FieldDrop,
+    FieldDrop, del_symbol, destroy_sym, drop_nonempty, field_drop, glue_array_elems, release_sym,
+    self_tail_field, struct_field_drops,
 };
 use dream_hir::TypeLayout;
 use dream_types::TypeId;
@@ -123,6 +123,11 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     fn maybe_defer(&mut self, p: &V, destroy: &str) {
+        let current = self.w.name().to_string();
+        let function = V::u(self.l.fn_ref(&current));
+        let queued = self.call_v("dream_cycle_defer_destroy", &[p.clone(), function]);
+        let queued = self.truthy(&queued);
+        self.if_then(&queued, |fx| fx.w.ret(None));
         if !self.mir.uses_defer {
             return;
         }
@@ -153,7 +158,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.load_ty(self.h(), &at, ELEM_ALIGN, true)
     }
 
-    fn field_drop_code(&mut self, p: &V, d: FieldDrop) {
+    pub(super) fn field_drop_code(&mut self, p: &V, d: FieldDrop) {
         match d {
             FieldDrop::None => {}
             FieldDrop::Unregister { offset } => {
@@ -201,7 +206,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         yes.v
     }
 
-    fn array_elems_drop(&mut self, p: &V, elem: TypeId) {
+    pub(super) fn array_elems_drop(&mut self, p: &V, elem: TypeId) {
         let es = elem_size(&self.l.cx, elem) as i64;
         let value = self.is_value(elem);
         if !value && !self.is_rc(elem) {
@@ -250,7 +255,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.if_then(&imm, |fx| fx.w.ret(None));
     }
 
-    fn union_drops(&mut self, p: &V, u: &dream_hir::UnionLayout) {
+    pub(super) fn union_drops(&mut self, p: &V, u: &dream_hir::UnionLayout) {
         let pp = self.ptr(p);
         let disc = self.load_ty(Ty::I32, &pp, 4, false);
         let join = self.w.new_block("u.join");

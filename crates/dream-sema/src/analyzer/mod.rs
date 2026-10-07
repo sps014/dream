@@ -23,7 +23,6 @@ use std::rc::Rc;
 mod await_rules;
 mod borrow_check;
 mod calls;
-mod closure_cycles;
 mod declarations;
 mod expressions;
 mod generics;

@@ -156,7 +156,7 @@ impl<'a> Analyzer<'a> {
         // `weak`/`unowned` field validation and the whole-program class reference-cycle check run
         // last, once every non-generic class's fields are in `self.struct_table` (needed to
         // classify a field's target as a value struct vs. a class).
-        self.check_weak_unowned_and_cycles(node, diagnostics);
+        self.validate_weak_unowned_fields(node, diagnostics);
 
         // A `ref struct` field would smuggle a stack-only value into a heap-allocated (or
         // otherwise longer-lived) container. Only another `ref struct` may hold one: it is bound
@@ -395,7 +395,8 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
         let muted = self.ref_struct_escape_muted;
-        self.ref_struct_escape_muted |= self.reject_ref_struct_type_args(&args, position, diagnostics);
+        self.ref_struct_escape_muted |=
+            self.reject_ref_struct_type_args(&args, position, diagnostics);
         let bindings = generic_bindings(params, &args);
         let type_bindings: IndexMap<_, _> = params
             .iter()
@@ -413,22 +414,22 @@ impl<'a> Analyzer<'a> {
         );
         if base_name == "Vector"
             && let Some(elem) = args.first()
-                && !matches!(
-                    elem,
-                    Type::Byte(_)
-                        | Type::Integer(_)
-                        | Type::Long(_)
-                        | Type::Float(_)
-                        | Type::Double(_)
-                        | Type::Unknown
-                        | Type::Generic(_)
-                ) {
-                    diagnostics.report_error(
-                        "'Vector<T>' requires T to be byte, int, long, float, or double"
-                            .to_string(),
-                        Some(*position),
-                    );
-                }
+            && !matches!(
+                elem,
+                Type::Byte(_)
+                    | Type::Integer(_)
+                    | Type::Long(_)
+                    | Type::Float(_)
+                    | Type::Double(_)
+                    | Type::Unknown
+                    | Type::Generic(_)
+            )
+        {
+            diagnostics.report_error(
+                "'Vector<T>' requires T to be byte, int, long, float, or double".to_string(),
+                Some(*position),
+            );
+        }
 
         let new_fields: Vec<StructFieldNode> = template
             .fields

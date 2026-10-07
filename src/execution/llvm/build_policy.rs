@@ -1,10 +1,7 @@
 use crate::driver::wasm_opt::OptLevel;
 
-/// The new-pass-manager pipeline for a level. Debug builds stay at `O0` so values survive.
-pub(crate) fn pipeline(opt: OptLevel, debug: bool) -> &'static str {
-    if debug {
-        return "internalize,default<O0>";
-    }
+/// Backend tuning is independent of whether source debug information is emitted.
+pub(crate) fn pipeline(opt: OptLevel) -> &'static str {
     match opt {
         OptLevel::O0 => "internalize,default<O0>",
         OptLevel::O1 => "internalize,default<O1>",
@@ -15,10 +12,7 @@ pub(crate) fn pipeline(opt: OptLevel, debug: bool) -> &'static str {
     }
 }
 
-pub(crate) fn llc_level(opt: OptLevel, debug: bool) -> &'static str {
-    if debug {
-        return "-O0";
-    }
+pub(crate) fn llc_level(opt: OptLevel) -> &'static str {
     match opt {
         OptLevel::O0 => "-O0",
         OptLevel::O1 => "-O1",
@@ -32,10 +26,9 @@ pub(crate) fn llc_level(opt: OptLevel, debug: bool) -> &'static str {
 /// Apple silicon is the M1 every arm64 Mac has.
 pub(crate) fn cpu_args(
     opt: OptLevel,
-    debug: bool,
     spec: &dream_abi::target::TargetSpec,
 ) -> &'static [&'static str] {
-    if spec.can_link_on_host() && !debug && matches!(opt, OptLevel::O3 | OptLevel::O4) {
+    if spec.can_link_on_host() && matches!(opt, OptLevel::O3 | OptLevel::O4) {
         &["-mcpu=native"]
     } else if spec.is_apple() && !spec.is_ios() && spec.triple.architecture.to_string() == "aarch64"
     {
@@ -97,7 +90,7 @@ mod size_tests {
                 spec.is_windows() || spec.is_apple()
             );
             if !spec.can_link_on_host() {
-                assert!(!cpu_args(OptLevel::O3, false, &spec).contains(&"-mcpu=native"));
+                assert!(!cpu_args(OptLevel::O3, &spec).contains(&"-mcpu=native"));
             }
         }
     }

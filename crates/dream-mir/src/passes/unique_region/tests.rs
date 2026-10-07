@@ -601,22 +601,12 @@ fn has_region_enter(f: &MirFunction) -> bool {
 }
 
 #[test]
-fn wraps_builder_whose_base_case_returns_niche_none() {
+fn refuses_cycle_capable_builder_whose_base_case_returns_niche_none() {
     let mut ctx = TypeCtx::new();
     let mut mir = make_tree_module(&mut ctx, false);
-    assert!(UniqueRegion.run(&mut mir, &ctx.interner));
-    let bench = &mir.functions[1];
-    assert!(
-        matches!(bench.blocks[0].stmts[0], Statement::RegionEnter),
-        "{:?}",
-        bench.blocks[0].stmts
-    );
-    assert!(
-        matches!(bench.blocks[0].stmts[2], Statement::RegionLeave),
-        "{:?}",
-        bench.blocks[0].stmts
-    );
+    assert!(!UniqueRegion.run(&mut mir, &ctx.interner));
     assert!(!has_region_enter(&mir.functions[0]));
+    assert!(!has_region_enter(&mir.functions[1]));
 }
 
 #[test]

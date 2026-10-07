@@ -240,7 +240,7 @@ fn js_string(s: &str) -> String {
     serde_json::to_string(s).unwrap()
 }
 
-fn wasm_runner_script(runtime: &Path, wasm: &Path) -> String {
+pub(crate) fn wasm_runner_script(runtime: &Path, wasm: &Path) -> String {
     format!(
         "import {{ pathToFileURL }} from 'node:url';\n\
          const {{ run }} = await import(pathToFileURL({js}).href);\n\
@@ -536,7 +536,7 @@ fn codegen_is_deterministic() {
     if !cases_dir.exists() {
         return;
     }
-    for name in ["classes", "async_basic"] {
+    for name in ["classes", "async_basic", "arc_cycles", "arc_cycles_dynamic", "arc_cycles_async_values"] {
         let src = cases_dir.join(format!("{}.dream", name));
         if src.exists() {
             assert_deterministic("dream_det", name, &src, true);
@@ -582,6 +582,8 @@ fn assert_deterministic(prefix: &str, name: &str, src: &Path, must_compile: bool
     let out = std::env::temp_dir().join(format!("{}_{}.wat", prefix, name));
     let out_str = out.to_str().unwrap().to_string();
     let artifacts = [
+        out.clone(),
+        out.with_extension("abi.json"),
         out.with_extension("ll"),
         out.with_extension("wasm"),
         out.with_extension("web.runtime.js"),
@@ -616,10 +618,7 @@ fn assert_deterministic(prefix: &str, name: &str, src: &Path, must_compile: bool
             prev = Some(bytes);
         }
     }
-    for p in artifacts
-        .iter()
-        .chain([&out, &out.with_extension("abi.json")])
-    {
+    for p in &artifacts {
         let _ = fs::remove_file(p);
     }
 }

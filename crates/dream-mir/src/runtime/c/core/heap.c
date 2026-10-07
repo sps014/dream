@@ -94,10 +94,13 @@ static void heap_sums(uint64_t *allocs, uint64_t *frees) {
 }
 
 void dream_pin_immortal(dream_ptr s) {
-    if (s) {
-        *dream_rc_word(s) = DREAM_RC_IMMORTAL;
+    if (!s) { return; }
+    int locked = dream_cycle_store_begin(s, 0, 1);
+    if (__atomic_exchange_n(dream_rc_word(s), DREAM_RC_IMMORTAL, __ATOMIC_RELAXED) != DREAM_RC_IMMORTAL) {
+        dream_cycle_forget(s);
         __atomic_fetch_add(&pinned, 1u, __ATOMIC_RELAXED);
     }
+    dream_cycle_store_end(locked);
 }
 
 void dream_retain_slow(int32_t *rc, int32_t v) {
@@ -369,6 +372,7 @@ void dream_recycle_slow(dream_ptr ptr) {
     if (ptr == 0) {
         return;
     }
+    dream_cycle_forget(ptr);
     heap_refresh_fast();
     if (*dream_tag_word(ptr) & DREAM_TAG_WEAK_TARGET) {
         dream_weak_clear_all(ptr);
@@ -415,6 +419,11 @@ void dream_free(dream_ptr ptr) {
     dream_recycle(ptr);
 }
 
+static void retain_copied_edge(dream_ptr child, void *context) {
+    (void)context;
+    dream_retain(child);
+}
+
 dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag) {
     char *block;
     size_t old_total;
@@ -430,7 +439,15 @@ dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag) {
     if (new_total <= old_total) {
         return ptr;
     }
+    const dream_type_info *info = dream_object_info(ptr);
+    int locked = info && info->visit;
+    if (locked) { dream_cycle_enter(); }
     np = dream_tag_shared(ptr) ? dream_malloc_shared(new_size, tag) : dream_malloc(new_size, tag);
+    dream_set_type(np, info);
+    int unique = dream_rc_count(ptr) == 1;
+    if (!unique && info && info->visit) {
+        dream_visit_owned(ptr, retain_copied_edge, NULL);
+    }
     copy = old_total - NATIVE_HEAP_HEADER_SIZE;
     if (copy > new_size) {
         copy = new_size;
@@ -440,6 +457,11 @@ dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag) {
      * aliases (retained field/index snapshots) may still hold their own +1 on the
      * old block. Release instead of freeing outright so those aliases stay valid;
      * with a single holder this is exactly dream_free. */
+    if (unique && tag == TAG_ARRAY && info) {
+        /* The copied payload owns the transferred edges before the old storage is released. */
+        memset(dream_p(ptr), 0, (size_t)copy);
+    }
     dream_release(ptr);
+    if (locked) { dream_cycle_leave(); dream_cycle_drain(); }
     return np;
 }

@@ -154,6 +154,8 @@ fn target_sysroot_and_driver_changes_invalidate_configuration_hash() {
         [("DREAM_SYSROOT", "/sdk")],
         [("DREAM_CC", "other-clang")],
         [("DREAM_WASM_OPT", "/binaryen/bin/wasm-opt")],
+        [("CPATH", "/extra-headers")],
+        [("LIBRARY_PATH", "/extra-libraries")],
     ] {
         let changed = config(&values, None, PathBuf::from("/project"));
         assert_ne!(base.fingerprint(), changed.fingerprint());

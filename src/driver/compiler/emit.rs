@@ -13,11 +13,7 @@ pub(super) struct EmittedModule {
 
 impl Compiler {
     fn guest_opt(&self) -> OptLevel {
-        // LLVM -O0 bloats guest code; the CLI level still controls Binaryen independently.
-        match self.optimize {
-            None | Some(OptLevel::O0) => OptLevel::O1,
-            Some(level) => level,
-        }
+        self.effective_optimize().unwrap_or(OptLevel::O0)
     }
 
     pub(super) fn emit_module(
@@ -32,6 +28,7 @@ impl Compiler {
             && dream_mir::backend::module_needs_threads(mir, interner);
         let need = dream_mir::runtime::runtime_need_from_mir(mir);
         let req = LlvmRuntimeRequest {
+            profile: self.profile,
             need,
             target: self.target.clone(),
             threads,
@@ -81,7 +78,7 @@ impl Compiler {
             mir,
             interner,
             &sigs,
-            self.debug && self.target.spec().capabilities.native_entry,
+            self.profile.is_debug() && self.target.spec().capabilities.native_entry,
             self.target.clone(),
             std_sources.as_deref(),
         )
@@ -146,7 +143,7 @@ impl Compiler {
                 fs::write(&header, &emitted.header)?;
                 self.reporter.artifact(&header);
             }
-            if !self.opt_ir {
+            if !self.raw_ir_intermediate {
                 self.reporter.artifact(Path::new(out_path));
             }
             for p in abi_artifacts {
@@ -159,6 +156,7 @@ impl Compiler {
         fs::write(&ll_path, &emitted.bytes)?;
         let opt_ll = self.opt_ir.then(|| ll_path.with_extension("opt.ll"));
         let req = LlvmRuntimeRequest {
+            profile: self.profile,
             need: emitted.need,
             target: self.target.clone(),
             threads: emitted.threads,
@@ -167,14 +165,17 @@ impl Compiler {
         llvm.ok_or_else(|| CompileError::Internal("no LLVM toolchain configured".into()))?
             .link_wasm(&ll_path, &wasm_path, opt_ll.as_deref(), &req)
             .map_err(CompileError::Toolchain)?;
-        self.reporter
-            .artifact(opt_ll.as_deref().unwrap_or(&ll_path));
+        if let Some(path) = &opt_ll {
+            self.reporter.artifact(path);
+        } else if !self.raw_ir_intermediate {
+            self.reporter.artifact(&ll_path);
+        }
         self.reporter.artifact(&wasm_path);
 
         // Post-process order matters: wasm-opt first (it drops unknown custom sections), then
         // embed the ABI custom section, then read the final binary once to print `.wat` — so
         // the text always mirrors the shipped bytes.
-        if let Some(level) = self.optimize {
+        if let Some(level) = self.effective_optimize() {
             llvm.ok_or_else(|| CompileError::Internal("no LLVM toolchain configured".into()))?
                 .optimize_wasm(&wasm_path, level)
                 .map_err(CompileError::Toolchain)?;
@@ -194,7 +195,7 @@ impl Compiler {
 
         // Release builds ship pre-compressed siblings (.gz / .br) for servers with
         // `gzip_static` / `brotli_static` (or CDNs); browsers never compress on their own.
-        if self.optimize.is_some() {
+        if self.effective_optimize().is_some() {
             for (path, _) in crate::driver::compress::write_precompressed(&wasm_path) {
                 self.reporter.artifact(&path);
             }
@@ -207,7 +208,7 @@ impl Compiler {
                 out_path,
                 &wasm_bytes,
                 &self.runtimes,
-                self.optimize.is_some(),
+                self.effective_optimize().is_some(),
             )?;
             for p in runtime_paths {
                 self.reporter.artifact(&p);

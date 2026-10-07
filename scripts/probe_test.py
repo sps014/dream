@@ -27,11 +27,12 @@ workers = int(os.environ.get("PROBE_JOBS", "8"))
 dream_js = root / "runtime" / "dream.js"
 
 USAGE = """\
-Usage: probe_test.py [--node | --parity] [--release] [case-stem ...]
+Usage: probe_test.py [--node | --parity] [--release] [--debug-info] [case-stem ...]
 
   --node          compile wasm32 and run with Node (not native `dream run`)
   --parity        run both targets and compare executed-program stdout directly
   --release       optimized build
+  --debug-info    include debugger information
   stems      optional filter (e.g. arithmetic task_basic)
 """
 
@@ -72,6 +73,9 @@ def parse_args(argv):
             continue
         if arg == "--release":
             BUILD_FLAGS.append("--release")
+            continue
+        if arg == "--debug-info":
+            BUILD_FLAGS.append("-g")
             continue
         if arg.startswith("-"):
             sys.stderr.write(f"unknown flag {arg}\n{USAGE}")

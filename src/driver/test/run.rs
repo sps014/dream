@@ -1,6 +1,6 @@
 //! Orchestrate `dream test`: discover `@test` fns, write a runner under `target/test/`, compile+run.
 
-use super::discovery::{discover_tests_in_source, DiscoveredTest};
+use super::discovery::{DiscoveredTest, discover_tests_in_source};
 use crate::driver::compiler::Compiler;
 use crate::driver::ui::Ui;
 use crate::driver::wasm_opt::OptLevel;
@@ -172,6 +172,7 @@ fn run_one_file(
             opt_ll: None,
             opt,
             debug: false,
+            profile: dream_abi::profile::CompileProfile::from_release(opts.release),
             pgo: &crate::execution::native::Pgo::Off,
             icon: None,
             relocatable: false,

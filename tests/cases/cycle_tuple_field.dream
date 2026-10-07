@@ -1,3 +1,4 @@
+import system;
 // A tuple-typed field that references the enclosing class is a detected strong cycle.
 
 class Data {

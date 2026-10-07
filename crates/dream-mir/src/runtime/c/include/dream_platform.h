@@ -16,6 +16,6 @@ typedef struct dream_platform {
     void (*unlock)(unsigned);
     void (*object_drop)(void *);
 } dream_platform;
-enum { DREAM_LOCK_HEAP, DREAM_LOCK_WEAK };
+enum { DREAM_LOCK_HEAP, DREAM_LOCK_WEAK, DREAM_LOCK_CYCLE };
 enum { DREAM_TEXT_UTF8, DREAM_TEXT_UTF16 };
 #endif

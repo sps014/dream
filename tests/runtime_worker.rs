@@ -11,6 +11,10 @@ fn worker_registry_grows_and_cleans_up_failed_starts() {
     let binary = temp.path().join("worker");
     let mut command = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
     command.args(["-std=gnu11", "-O2", "-pthread"]);
+    if let Ok(sanitizer) = std::env::var("DREAM_WORKER_SANITIZER") {
+        assert!(matches!(sanitizer.as_str(), "thread" | "address,undefined"));
+        command.arg(format!("-fsanitize={sanitizer}")).arg("-g");
+    }
     let runtime = native.parent().unwrap().parent().unwrap();
     command
         .arg("-I")
@@ -24,6 +28,7 @@ fn worker_registry_grows_and_cleans_up_failed_starts() {
         .arg(native.join("platform.c"));
     for unit in [
         "heap.c",
+        "cycles.c",
         "heap_maps.c",
         "publish.c",
         "region.c",

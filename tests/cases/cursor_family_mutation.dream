@@ -4,7 +4,6 @@
 // must match ordinary ARC semantics and every object must be reclaimed.
 import system;
 
-@allow_cycle
 class Node {
     public value: int;
     public next: Option<Node>;

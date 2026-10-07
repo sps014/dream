@@ -50,6 +50,7 @@ pub fn compile_and_capture_ex(
             opt_ll: None,
             opt,
             debug: false,
+            profile: dream_abi::profile::CompileProfile::Release,
             pgo: &Pgo::Off,
             icon: None,
             relocatable: false,
@@ -99,9 +100,10 @@ pub fn capture_native_bin(
     }
     let mut child = cmd.spawn()?;
     if let Some(bytes) = stdin
-        && let Some(mut sin) = child.stdin.take() {
-            let _ = std::io::Write::write_all(&mut sin, bytes);
-        }
+        && let Some(mut sin) = child.stdin.take()
+    {
+        let _ = std::io::Write::write_all(&mut sin, bytes);
+    }
     let pid = child.id();
     let waiter = std::thread::spawn(move || child.wait_with_output());
     let limit = Duration::from_secs(timeout_secs);
@@ -136,9 +138,10 @@ pub fn capture_native_bin(
     }
     let stderr = String::from_utf8_lossy(&out.stderr);
     if let Some(live) = parse_leak_live(&stderr)
-        && live != 0 {
-            return Err(format!("guest leak check live={live} (want 0)\n{stderr}").into());
-        }
+        && live != 0
+    {
+        return Err(format!("guest leak check live={live} (want 0)\n{stderr}").into());
+    }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 

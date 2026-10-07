@@ -17,10 +17,12 @@ fn test_lib_crate_rejects_main() {
     let code = "fun main(): void {}";
     let diagnostics = analyze_code_with_crate_type(code, CrateType::Lib);
     assert!(diagnostics.has_errors());
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("library crates must not declare")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("library crates must not declare"))
+    );
 }
 
 #[test]
@@ -35,10 +37,12 @@ fn test_analyze_type_mismatch() {
     let code = "fun main(): void { let x: int = \"hello\"; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("cannot convert from string to int")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("cannot convert from string to int"))
+    );
 }
 
 #[test]
@@ -132,10 +136,12 @@ fn test_analyze_unary_minus_rejects_non_numeric_types() {
     let code = "fun main(): void { let x = -\"hello\"; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("unary +/- requires a numeric type")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("unary +/- requires a numeric type"))
+    );
 }
 
 #[test]
@@ -166,10 +172,12 @@ fn test_c_style_enum_shift_still_rejected() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("requires an integer operand")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("requires an integer operand"))
+    );
 }
 
 #[test]
@@ -180,10 +188,12 @@ fn test_discriminated_union_bitwise_or_rejected() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("requires an integer operand")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("requires an integer operand"))
+    );
 }
 
 #[test]
@@ -191,10 +201,12 @@ fn test_analyze_undefined_variable() {
     let code = "fun main(): void { let x = y + 5; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("variable y does not exist")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("variable y does not exist"))
+    );
 }
 
 #[test]
@@ -222,14 +234,18 @@ fn test_analyze_invalid_array_operations() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("Array index must be of type int")));
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("Cannot index into non-array type int")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("Array index must be of type int"))
+    );
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("Cannot index into non-array type int"))
+    );
 }
 
 #[test]
@@ -253,9 +269,10 @@ fn test_analyze_await_outside_async() {
     let code = "async fun delay(): int { return 1; } fun main(): void { let x = delay().await; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics.diagnostics.iter().any(|d| d
-        .message
-        .contains("can only be used inside an 'async' function")));
+    assert!(diagnostics.diagnostics.iter().any(|d| {
+        d.message
+            .contains("can only be used inside an 'async' function")
+    }));
 }
 
 #[test]
@@ -419,10 +436,12 @@ fn test_statement_switch_missing_arm_return() {
     ";
     let diagnostics = analyze_code(code);
     assert!(diagnostics.has_errors());
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("not all code paths return a value")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("not all code paths return a value"))
+    );
 }
 
 #[test]
@@ -439,10 +458,12 @@ fn test_analyze_union_switch_non_exhaustive() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("Non-exhaustive switch") && d.message.contains("Empty")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("Non-exhaustive switch") && d.message.contains("Empty"))
+    );
 }
 
 #[test]
@@ -473,10 +494,12 @@ fn test_analyze_range_pattern_wrong_bound_type() {
     ";
     let diagnostics = analyze_code(code);
     assert!(diagnostics.has_errors());
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("Range pattern bound")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("Range pattern bound"))
+    );
 }
 
 #[test]
@@ -528,10 +551,12 @@ fn test_analyze_or_pattern_rejects_binding_alternative() {
     ";
     let diagnostics = analyze_code(code);
     assert!(diagnostics.has_errors());
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("or-pattern alternative cannot bind")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("or-pattern alternative cannot bind"))
+    );
 }
 
 #[test]
@@ -542,10 +567,12 @@ fn test_analyze_union_variant_arity_mismatch() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("expects 1 argument")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("expects 1 argument"))
+    );
 }
 
 #[test]
@@ -625,9 +652,10 @@ fn test_try_propagation_requires_result_or_option_operand() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics.diagnostics.iter().any(|d| d
-        .message
-        .contains("requires a Result<T, E> or Option<T> operand")));
+    assert!(diagnostics.diagnostics.iter().any(|d| {
+        d.message
+            .contains("requires a Result<T, E> or Option<T> operand")
+    }));
 }
 
 #[test]
@@ -646,9 +674,10 @@ fn test_try_propagation_requires_matching_return_type() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics.diagnostics.iter().any(|d| d
-        .message
-        .contains("requires the enclosing function to return a matching")));
+    assert!(diagnostics.diagnostics.iter().any(|d| {
+        d.message
+            .contains("requires the enclosing function to return a matching")
+    }));
 }
 
 #[test]
@@ -724,10 +753,12 @@ fn test_class_indexer_bare_get_is_not_an_indexer() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("has no indexer")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("has no indexer"))
+    );
 }
 
 #[test]
@@ -743,10 +774,12 @@ fn test_class_indexer_void_get_attr_rejected() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("must return a non-void value")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("must return a non-void value"))
+    );
 }
 
 #[test]
@@ -780,10 +813,12 @@ fn test_class_indexer_static_get_attr_rejected() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("non-static")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("non-static"))
+    );
 }
 
 #[test]
@@ -799,10 +834,12 @@ fn test_class_indexer_async_get_attr_rejected() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("cannot be async")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("cannot be async"))
+    );
 }
 
 // -- TypeScript-style property accessors (`get prop()` / `set prop(v)`) --
@@ -889,10 +926,12 @@ fn test_async_accessor_is_rejected() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("cannot be 'async'")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("cannot be 'async'"))
+    );
 }
 
 #[test]
@@ -950,10 +989,12 @@ fn test_class_foreach_next_not_option_errors() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("must return Option")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("must return Option"))
+    );
 }
 
 #[test]
@@ -970,10 +1011,12 @@ fn test_class_foreach_missing_iterator_errors() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("iterator")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("iterator"))
+    );
 }
 
 #[test]
@@ -1051,9 +1094,10 @@ fn test_result_string_not_assignable_to_error() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics.diagnostics.iter().any(|d| d
-        .message
-        .contains("cannot convert from Result<bool, string> to Result<bool, Error>")));
+    assert!(diagnostics.diagnostics.iter().any(|d| {
+        d.message
+            .contains("cannot convert from Result<bool, string> to Result<bool, Error>")
+    }));
 }
 
 #[test]
@@ -1071,10 +1115,12 @@ fn test_interface_missing_method_errors() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("does not implement method") && d.message.contains("legs")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("does not implement method") && d.message.contains("legs"))
+    );
 }
 
 #[test]
@@ -1085,10 +1131,12 @@ fn test_interface_cannot_be_instantiated() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("instantiate interface")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("instantiate interface"))
+    );
 }
 
 #[test]
@@ -1134,11 +1182,13 @@ fn test_generic_interface_signature_mismatch_errors() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("does not match the signature")
-            || d.message.contains("does not implement method")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("does not match the signature")
+                || d.message.contains("does not implement method"))
+    );
 }
 
 #[test]
@@ -1169,10 +1219,12 @@ fn test_async_interface_method_requires_async_impl() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("does not match the signature")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("does not match the signature"))
+    );
 }
 
 #[test]
@@ -1187,10 +1239,12 @@ fn test_is_binding_not_visible_outside_branch() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("does not exist")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("does not exist"))
+    );
 }
 
 #[test]
@@ -1354,10 +1408,12 @@ fn test_default_param_too_many_args_errors() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("between 1 and 2 arguments")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("between 1 and 2 arguments"))
+    );
 }
 
 #[test]
@@ -1538,10 +1594,12 @@ fn test_extend_sealed_class_is_rejected() {
                 extend Locked { public fun bump(): int { return this.v + 1; } }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("Cannot extend sealed type 'Locked'")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("Cannot extend sealed type 'Locked'"))
+    );
 }
 
 #[test]
@@ -1550,10 +1608,12 @@ fn test_extend_sealed_enum_is_rejected() {
                 extend Color { public fun label(): int { return 0; } }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("Cannot extend sealed type 'Color'")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("Cannot extend sealed type 'Color'"))
+    );
 }
 
 #[test]
@@ -1568,132 +1628,69 @@ fn test_extend_non_sealed_class_is_allowed() {
 // --- `weak`/`unowned` fields and the compile-time reference-cycle check ---
 
 #[test]
-fn test_class_self_reference_is_a_cycle_error() {
+fn test_class_self_reference_is_supported() {
     // A class holding a strong field of its own type is a self-loop in the reference-cycle
     // graph: it is structurally capable of forming a leak (e.g. `n.next = n`), so it is a hard
     // error even though this particular declaration never actually wires up a loop.
     let code = "class Node { public next: Node; }";
     let diagnostics = analyze_code(code);
-    assert_eq!(diagnostics.has_errors(), true);
-    assert!(
-        diagnostics
-            .diagnostics
-            .iter()
-            .any(|d| d.message.contains("reference cycle detected")
-                && d.message.contains("Node.next"))
-    );
+    assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]
-fn test_class_self_reference_allowed_with_allow_cycle() {
-    let code = "@allow_cycle class Node { public next: Node; }";
+fn test_option_wrapped_self_reference_is_supported() {
+    let code = "enum Option<T> { Some(T), None }
+        class Node { public next: Option<Node>; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]
-fn test_option_wrapped_self_reference_is_a_cycle_error() {
-    let code = "enum Option<T> { Some(T), None }
-        class Node { public next: Option<Node>; }";
-    let diagnostics = analyze_code(code);
-    assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("reference cycle detected")));
-}
-
-#[test]
-fn test_array_field_self_reference_is_a_cycle_error() {
+fn test_array_field_self_reference_is_supported() {
     // Array elements are strong references, so `Node[]` contributes the same self-loop edge as a
     // bare `Node` field.
     let code = "class Node { public children: Node[]; }";
     let diagnostics = analyze_code(code);
-    assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("reference cycle detected")));
+    assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]
-fn test_list_field_self_reference_is_a_cycle_error() {
+fn test_list_field_self_reference_is_supported() {
     let code = "class List<T> {}
         class Node { public children: List<Node>; }";
     let diagnostics = analyze_code(code);
-    assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("reference cycle detected")
-            && d.message.contains("Node.children")));
+    assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]
-fn test_map_value_field_self_reference_is_a_cycle_error() {
+fn test_map_value_field_self_reference_is_supported() {
     let code = "class Map<K, V> {}
         class Node { public kids: Map<string, Node>; }";
     let diagnostics = analyze_code(code);
-    assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("reference cycle detected")));
+    assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]
-fn test_set_field_self_reference_is_a_cycle_error() {
+fn test_set_field_self_reference_is_supported() {
     let code = "class Set<T> {}
         class Node { public peers: Set<Node>; }";
     let diagnostics = analyze_code(code);
-    assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("reference cycle detected")));
+    assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]
-fn test_option_list_field_self_reference_is_a_cycle_error() {
+fn test_option_list_field_self_reference_is_supported() {
     let code = "enum Option<T> { Some(T), None }
         class List<T> {}
         class Node { public children: Option<List<Node>>; }";
     let diagnostics = analyze_code(code);
-    assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("reference cycle detected")));
+    assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]
-fn test_mutual_class_cycle_is_error() {
+fn test_mutual_class_cycle_is_supported() {
     let code = "class A { public b: B; }
         class B { public a: A; }";
-    let diagnostics = analyze_code(code);
-    assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("reference cycle detected")
-            && d.message.contains("A.b")
-            && d.message.contains("B.a")));
-}
-
-#[test]
-fn test_mutual_cycle_allow_cycle_on_only_one_class_still_errors() {
-    // `@allow_cycle` must be present on *every* class participating in the cycle; annotating only
-    // one side can't launder a multi-class cycle through it.
-    let code = "@allow_cycle class A { public b: B; }
-        class B { public a: A; }";
-    let diagnostics = analyze_code(code);
-    assert_eq!(diagnostics.has_errors(), true);
-}
-
-#[test]
-fn test_mutual_cycle_allow_cycle_on_both_suppresses() {
-    let code = "@allow_cycle class A { public b: B; }
-        @allow_cycle class B { public a: A; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
 }
@@ -1718,10 +1715,12 @@ fn test_weak_field_requires_option_type() {
     let code = "class Node { weak next: Node; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("'weak' field") && d.message.contains("Option<T>")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("'weak' field") && d.message.contains("Option<T>"))
+    );
 }
 
 #[test]
@@ -1730,10 +1729,12 @@ fn test_unowned_field_requires_class_type() {
         class Node { unowned next: Option<Node>; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("'unowned' field") && d.message.contains("class type")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("'unowned' field") && d.message.contains("class type"))
+    );
 }
 
 #[test]
@@ -1742,10 +1743,12 @@ fn test_field_cannot_be_both_weak_and_unowned() {
         class Node { weak unowned next: Option<Node>; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("cannot be both 'weak' and 'unowned'")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("cannot be both 'weak' and 'unowned'"))
+    );
 }
 
 #[test]
@@ -1767,10 +1770,12 @@ fn test_unused_local_warns_but_discard_does_not() {
         d.severity == dream_diagnostics::Severity::Warning
             && d.message.contains("unused variable 'x'")
     }));
-    assert!(!diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("unused variable '_'")));
+    assert!(
+        !diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("unused variable '_'"))
+    );
 }
 
 #[test]
@@ -1808,10 +1813,12 @@ fn test_analyze_nongeneric_function_value_rejects_type_args() {
         fun main(): void { let f: fun(int): int = id; let n = f<int>(1); }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("type arguments are not valid")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("type arguments are not valid"))
+    );
 }
 
 #[test]
@@ -2076,10 +2083,12 @@ fn test_static_class_rejects_instance_members() {
     ";
     let diagnostics = analyze_code(code);
     assert!(diagnostics.has_errors());
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("must be static")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("must be static"))
+    );
 }
 
 #[test]
@@ -2117,10 +2126,12 @@ fn test_extend_static_class_rejects_instance_members() {
     ";
     let diagnostics = analyze_code(code);
     assert!(diagnostics.has_errors());
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("static class") && d.message.contains("static members")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("static class") && d.message.contains("static members"))
+    );
 }
 
 #[test]
@@ -2429,6 +2440,10 @@ fn operator_no_match_and_poison_do_not_cascade() {
     );
     let errors: Vec<_> = diagnostics.errors().collect();
     assert_eq!(errors.len(), 2, "{errors:?}");
-    assert!(errors.iter().any(|d| d.message.contains("cannot convert from bool to Value")));
+    assert!(
+        errors
+            .iter()
+            .any(|d| d.message.contains("cannot convert from bool to Value"))
+    );
     assert!(errors.iter().any(|d| d.message.contains("missing")));
 }

@@ -13,8 +13,7 @@ use super::checksum;
 use super::client::RegistryClient;
 use super::index::IndexEntry;
 use super::{CatalogEntry, MAX_TARBALL_BYTES};
-use anyhow::{bail, Context, Result};
-use std::io::Read;
+use anyhow::{Context, Result, bail};
 use std::path::Path;
 
 pub struct HttpRegistry {
@@ -43,6 +42,7 @@ impl RegistryClient for HttpRegistry {
     }
 
     fn fetch_index(&self, package: &str) -> Result<Vec<IndexEntry>> {
+        crate::manifest::validate_package_name(package)?;
         let url = format!("{}/index/{}", self.base, package);
         // GitHub raw CDN can serve stale index bodies for several minutes after publish;
         // ask for a revalidated response so `dreamer update` sees newly published versions.
@@ -72,17 +72,8 @@ impl RegistryClient for HttpRegistry {
         let resp = ureq::get(&url)
             .call()
             .with_context(|| format!("downloading tarball {}", url))?;
-        let mut bytes = Vec::new();
-        resp.into_reader()
-            .read_to_end(&mut bytes)
-            .with_context(|| format!("reading tarball body from {}", url))?;
-        checksum::verify(&bytes, &entry.cksum)
+        checksum::copy_verified(resp.into_reader(), dest_file, &entry.cksum)
             .with_context(|| format!("verifying tarball for {} {}", entry.name, entry.vers))?;
-        if let Some(parent) = dest_file.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(dest_file, bytes)
-            .with_context(|| format!("writing tarball to {}", dest_file.display()))?;
         Ok(())
     }
 

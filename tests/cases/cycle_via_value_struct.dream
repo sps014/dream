@@ -1,3 +1,4 @@
+import system;
 // Value structs holding class references participate in the cycle graph: C -> Holder -> Data
 // -> C is a detected strong cycle even though Holder is an inline value type.
 

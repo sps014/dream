@@ -30,7 +30,7 @@ Dream's type system and compiler enforce the following in safe code — no `unsa
 | No use-after-free | Values remain valid while they are still in use |
 | No double-free | Automatic cleanup frees each object once |
 | No out-of-bounds read | Bounds-checked indexing panics with a clear message |
-| Cycle leaks rejected | Compile-time reference-cycle detection covers direct, indirect, tuple, value-struct, interface-typed, and closure-capture shapes |
+| Cycles reclaimed | Exact ownership visitors and synchronous trial deletion reclaim unrooted cycles deterministically |
 | Constructor side effects preserved | Constructor bodies always run at allocation sites |
 | Global/local scope separation | Top-level variables are file-scoped; function locals shadow them cleanly |
 

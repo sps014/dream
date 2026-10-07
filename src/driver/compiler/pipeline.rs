@@ -22,6 +22,10 @@ impl Compiler {
                 "staticlib and dylib require a native target".into(),
             ));
         }
+        if let Some(artifacts) = self.early_build_lookup(main_file_path, out_path) {
+            info!("reusing cached build before parsing");
+            return Ok(BuildOutcome::Cached(artifacts));
+        }
         info!("starting parsing and multi-file resolution");
         let arena = Bump::new();
         let mut diagnostics = DiagnosticBag::new(None);

@@ -1,0 +1,1343 @@
+{
+  "note": "Alternating three quiet executions of the baseline Release microbenchmark and final native zero-count teardown Release microbenchmark, each containing three internal passes. Native runtime source is unchanged by the subsequent WASI accounting fix. Baseline is commit 2eb32e25. Host libraries are shared by both binaries. ns_per_op is the rounded value printed by the benchmark; ns_total/iters retains finer precision.",
+  "rows": [
+    {
+      "version": "before",
+      "repeat": 0,
+      "seconds": 0.4497856249799952,
+      "benchmarks": [
+        {
+          "name": "nbody",
+          "ns_total": 5457000,
+          "iters": 80000,
+          "ns_per_op": 68
+        },
+        {
+          "name": "mandelbrot",
+          "ns_total": 18040000,
+          "iters": 200,
+          "ns_per_op": 90200
+        },
+        {
+          "name": "matmul_64",
+          "ns_total": 20319000,
+          "iters": 400,
+          "ns_per_op": 50797
+        },
+        {
+          "name": "quicksort",
+          "ns_total": 19292000,
+          "iters": 1000,
+          "ns_per_op": 19292
+        },
+        {
+          "name": "sieve",
+          "ns_total": 2440000,
+          "iters": 1666,
+          "ns_per_op": 1464
+        },
+        {
+          "name": "fib_rec",
+          "ns_total": 25890000,
+          "iters": 1000,
+          "ns_per_op": 25890
+        },
+        {
+          "name": "iface_dispatch",
+          "ns_total": 2294000,
+          "iters": 719872,
+          "ns_per_op": 3
+        },
+        {
+          "name": "binary_trees",
+          "ns_total": 4214000,
+          "iters": 100,
+          "ns_per_op": 42140
+        },
+        {
+          "name": "linked_walk",
+          "ns_total": 5230000,
+          "iters": 4000,
+          "ns_per_op": 1307
+        },
+        {
+          "name": "weak_tree",
+          "ns_total": 4811000,
+          "iters": 100,
+          "ns_per_op": 48110
+        },
+        {
+          "name": "wordcount",
+          "ns_total": 3990000,
+          "iters": 420000,
+          "ns_per_op": 9
+        },
+        {
+          "name": "parse_ints",
+          "ns_total": 0,
+          "iters": 1000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "sum_options",
+          "ns_total": 0,
+          "iters": 8000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "arc_locals",
+          "ns_total": 3362000,
+          "iters": 500000,
+          "ns_per_op": 6
+        },
+        {
+          "name": "string_concat",
+          "ns_total": 2126000,
+          "iters": 400000,
+          "ns_per_op": 5
+        },
+        {
+          "name": "string_eq",
+          "ns_total": 4529000,
+          "iters": 2000000,
+          "ns_per_op": 2
+        },
+        {
+          "name": "char_scan",
+          "ns_total": 3327000,
+          "iters": 200000,
+          "ns_per_op": 16
+        },
+        {
+          "name": "byte_scan",
+          "ns_total": 7188000,
+          "iters": 400000,
+          "ns_per_op": 17
+        },
+        {
+          "name": "substring",
+          "ns_total": 3668000,
+          "iters": 3200000,
+          "ns_per_op": 1
+        },
+        {
+          "name": "substring_span",
+          "ns_total": 0,
+          "iters": 3200000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "split_span",
+          "ns_total": 10698000,
+          "iters": 400000,
+          "ns_per_op": 26
+        },
+        {
+          "name": "list_push",
+          "ns_total": 5086000,
+          "iters": 8000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "list_insert_mid",
+          "ns_total": 5213000,
+          "iters": 800000,
+          "ns_per_op": 6
+        },
+        {
+          "name": "map_get_set",
+          "ns_total": 3189000,
+          "iters": 700000,
+          "ns_per_op": 4
+        },
+        {
+          "name": "map_get_span",
+          "ns_total": 2127000,
+          "iters": 700000,
+          "ns_per_op": 3
+        },
+        {
+          "name": "map_clear_reuse",
+          "ns_total": 1527000,
+          "iters": 1400000,
+          "ns_per_op": 1
+        },
+        {
+          "name": "list_clear_reuse",
+          "ns_total": 3843000,
+          "iters": 10000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "alloc_churn",
+          "ns_total": 4515000,
+          "iters": 600000,
+          "ns_per_op": 7
+        },
+        {
+          "name": "scratch_arena",
+          "ns_total": 0,
+          "iters": 8000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "regex_find",
+          "ns_total": 3461000,
+          "iters": 10000,
+          "ns_per_op": 346
+        },
+        {
+          "name": "string_builder",
+          "ns_total": 3923000,
+          "iters": 400000,
+          "ns_per_op": 9
+        },
+        {
+          "name": "json_serialize",
+          "ns_total": 6357000,
+          "iters": 40000,
+          "ns_per_op": 158
+        },
+        {
+          "name": "json_deserialize",
+          "ns_total": 6267000,
+          "iters": 10000,
+          "ns_per_op": 626
+        },
+        {
+          "name": "arr_add",
+          "ns_total": 4946000,
+          "iters": 100000,
+          "ns_per_op": 49
+        },
+        {
+          "name": "vec_add",
+          "ns_total": 5484000,
+          "iters": 200000,
+          "ns_per_op": 27
+        },
+        {
+          "name": "binary_trees_reclaim",
+          "ns_total": 4409000,
+          "iters": 100,
+          "ns_per_op": 44090
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "repeat": 0,
+      "seconds": 1.6302530829561874,
+      "benchmarks": [
+        {
+          "name": "nbody",
+          "ns_total": 6269000,
+          "iters": 80000,
+          "ns_per_op": 78
+        },
+        {
+          "name": "mandelbrot",
+          "ns_total": 40581000,
+          "iters": 200,
+          "ns_per_op": 202905
+        },
+        {
+          "name": "matmul_64",
+          "ns_total": 41417000,
+          "iters": 400,
+          "ns_per_op": 103542
+        },
+        {
+          "name": "quicksort",
+          "ns_total": 27619000,
+          "iters": 1000,
+          "ns_per_op": 27619
+        },
+        {
+          "name": "sieve",
+          "ns_total": 3861000,
+          "iters": 1666,
+          "ns_per_op": 2317
+        },
+        {
+          "name": "fib_rec",
+          "ns_total": 33419000,
+          "iters": 1000,
+          "ns_per_op": 33419
+        },
+        {
+          "name": "iface_dispatch",
+          "ns_total": 4644000,
+          "iters": 719872,
+          "ns_per_op": 6
+        },
+        {
+          "name": "binary_trees",
+          "ns_total": 361763000,
+          "iters": 100,
+          "ns_per_op": 3617630
+        },
+        {
+          "name": "linked_walk",
+          "ns_total": 43185000,
+          "iters": 4000,
+          "ns_per_op": 10796
+        },
+        {
+          "name": "weak_tree",
+          "ns_total": 83400000,
+          "iters": 100,
+          "ns_per_op": 834000
+        },
+        {
+          "name": "wordcount",
+          "ns_total": 7831000,
+          "iters": 420000,
+          "ns_per_op": 18
+        },
+        {
+          "name": "parse_ints",
+          "ns_total": 0,
+          "iters": 1000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "sum_options",
+          "ns_total": 0,
+          "iters": 8000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "arc_locals",
+          "ns_total": 7009000,
+          "iters": 500000,
+          "ns_per_op": 14
+        },
+        {
+          "name": "string_concat",
+          "ns_total": 3389000,
+          "iters": 400000,
+          "ns_per_op": 8
+        },
+        {
+          "name": "string_eq",
+          "ns_total": 7431000,
+          "iters": 2000000,
+          "ns_per_op": 3
+        },
+        {
+          "name": "char_scan",
+          "ns_total": 4920000,
+          "iters": 200000,
+          "ns_per_op": 24
+        },
+        {
+          "name": "byte_scan",
+          "ns_total": 10468000,
+          "iters": 400000,
+          "ns_per_op": 26
+        },
+        {
+          "name": "substring",
+          "ns_total": 5855000,
+          "iters": 3200000,
+          "ns_per_op": 1
+        },
+        {
+          "name": "substring_span",
+          "ns_total": 0,
+          "iters": 3200000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "split_span",
+          "ns_total": 62278000,
+          "iters": 400000,
+          "ns_per_op": 155
+        },
+        {
+          "name": "list_push",
+          "ns_total": 14906000,
+          "iters": 8000000,
+          "ns_per_op": 1
+        },
+        {
+          "name": "list_insert_mid",
+          "ns_total": 7606000,
+          "iters": 800000,
+          "ns_per_op": 9
+        },
+        {
+          "name": "map_get_set",
+          "ns_total": 6915000,
+          "iters": 700000,
+          "ns_per_op": 9
+        },
+        {
+          "name": "map_get_span",
+          "ns_total": 4052000,
+          "iters": 700000,
+          "ns_per_op": 5
+        },
+        {
+          "name": "map_clear_reuse",
+          "ns_total": 3563000,
+          "iters": 1400000,
+          "ns_per_op": 2
+        },
+        {
+          "name": "list_clear_reuse",
+          "ns_total": 9980000,
+          "iters": 10000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "alloc_churn",
+          "ns_total": 6920000,
+          "iters": 600000,
+          "ns_per_op": 11
+        },
+        {
+          "name": "scratch_arena",
+          "ns_total": 10173000,
+          "iters": 8000000,
+          "ns_per_op": 1
+        },
+        {
+          "name": "regex_find",
+          "ns_total": 4957000,
+          "iters": 10000,
+          "ns_per_op": 495
+        },
+        {
+          "name": "string_builder",
+          "ns_total": 8478000,
+          "iters": 400000,
+          "ns_per_op": 21
+        },
+        {
+          "name": "json_serialize",
+          "ns_total": 8692000,
+          "iters": 40000,
+          "ns_per_op": 217
+        },
+        {
+          "name": "json_deserialize",
+          "ns_total": 19432000,
+          "iters": 10000,
+          "ns_per_op": 1943
+        },
+        {
+          "name": "arr_add",
+          "ns_total": 6523000,
+          "iters": 100000,
+          "ns_per_op": 65
+        },
+        {
+          "name": "vec_add",
+          "ns_total": 5781000,
+          "iters": 200000,
+          "ns_per_op": 28
+        },
+        {
+          "name": "binary_trees_reclaim",
+          "ns_total": 161848000,
+          "iters": 100,
+          "ns_per_op": 1618480
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "repeat": 1,
+      "seconds": 0.713978958025109,
+      "benchmarks": [
+        {
+          "name": "nbody",
+          "ns_total": 9586000,
+          "iters": 80000,
+          "ns_per_op": 119
+        },
+        {
+          "name": "mandelbrot",
+          "ns_total": 36786000,
+          "iters": 200,
+          "ns_per_op": 183930
+        },
+        {
+          "name": "matmul_64",
+          "ns_total": 40045000,
+          "iters": 400,
+          "ns_per_op": 100112
+        },
+        {
+          "name": "quicksort",
+          "ns_total": 29576000,
+          "iters": 1000,
+          "ns_per_op": 29576
+        },
+        {
+          "name": "sieve",
+          "ns_total": 5426000,
+          "iters": 1666,
+          "ns_per_op": 3256
+        },
+        {
+          "name": "fib_rec",
+          "ns_total": 42015000,
+          "iters": 1000,
+          "ns_per_op": 42015
+        },
+        {
+          "name": "iface_dispatch",
+          "ns_total": 3806000,
+          "iters": 719872,
+          "ns_per_op": 5
+        },
+        {
+          "name": "binary_trees",
+          "ns_total": 7106000,
+          "iters": 100,
+          "ns_per_op": 71060
+        },
+        {
+          "name": "linked_walk",
+          "ns_total": 8042000,
+          "iters": 4000,
+          "ns_per_op": 2010
+        },
+        {
+          "name": "weak_tree",
+          "ns_total": 9447000,
+          "iters": 100,
+          "ns_per_op": 94470
+        },
+        {
+          "name": "wordcount",
+          "ns_total": 8299000,
+          "iters": 420000,
+          "ns_per_op": 19
+        },
+        {
+          "name": "parse_ints",
+          "ns_total": 0,
+          "iters": 1000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "sum_options",
+          "ns_total": 0,
+          "iters": 8000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "arc_locals",
+          "ns_total": 8659000,
+          "iters": 500000,
+          "ns_per_op": 17
+        },
+        {
+          "name": "string_concat",
+          "ns_total": 4586000,
+          "iters": 400000,
+          "ns_per_op": 11
+        },
+        {
+          "name": "string_eq",
+          "ns_total": 8267000,
+          "iters": 2000000,
+          "ns_per_op": 4
+        },
+        {
+          "name": "char_scan",
+          "ns_total": 4409000,
+          "iters": 200000,
+          "ns_per_op": 22
+        },
+        {
+          "name": "byte_scan",
+          "ns_total": 10338000,
+          "iters": 400000,
+          "ns_per_op": 25
+        },
+        {
+          "name": "substring",
+          "ns_total": 5884000,
+          "iters": 3200000,
+          "ns_per_op": 1
+        },
+        {
+          "name": "substring_span",
+          "ns_total": 0,
+          "iters": 3200000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "split_span",
+          "ns_total": 16323000,
+          "iters": 400000,
+          "ns_per_op": 40
+        },
+        {
+          "name": "list_push",
+          "ns_total": 9184000,
+          "iters": 8000000,
+          "ns_per_op": 1
+        },
+        {
+          "name": "list_insert_mid",
+          "ns_total": 9311000,
+          "iters": 800000,
+          "ns_per_op": 11
+        },
+        {
+          "name": "map_get_set",
+          "ns_total": 4088000,
+          "iters": 700000,
+          "ns_per_op": 5
+        },
+        {
+          "name": "map_get_span",
+          "ns_total": 4368000,
+          "iters": 700000,
+          "ns_per_op": 6
+        },
+        {
+          "name": "map_clear_reuse",
+          "ns_total": 3357000,
+          "iters": 1400000,
+          "ns_per_op": 2
+        },
+        {
+          "name": "list_clear_reuse",
+          "ns_total": 6353000,
+          "iters": 10000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "alloc_churn",
+          "ns_total": 7976000,
+          "iters": 600000,
+          "ns_per_op": 13
+        },
+        {
+          "name": "scratch_arena",
+          "ns_total": 0,
+          "iters": 8000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "regex_find",
+          "ns_total": 5525000,
+          "iters": 10000,
+          "ns_per_op": 552
+        },
+        {
+          "name": "string_builder",
+          "ns_total": 6727000,
+          "iters": 400000,
+          "ns_per_op": 16
+        },
+        {
+          "name": "json_serialize",
+          "ns_total": 10706000,
+          "iters": 40000,
+          "ns_per_op": 267
+        },
+        {
+          "name": "json_deserialize",
+          "ns_total": 9357000,
+          "iters": 10000,
+          "ns_per_op": 935
+        },
+        {
+          "name": "arr_add",
+          "ns_total": 7668000,
+          "iters": 100000,
+          "ns_per_op": 76
+        },
+        {
+          "name": "vec_add",
+          "ns_total": 8915000,
+          "iters": 200000,
+          "ns_per_op": 44
+        },
+        {
+          "name": "binary_trees_reclaim",
+          "ns_total": 6838000,
+          "iters": 100,
+          "ns_per_op": 68380
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "repeat": 1,
+      "seconds": 1.9207419169833884,
+      "benchmarks": [
+        {
+          "name": "nbody",
+          "ns_total": 7953000,
+          "iters": 80000,
+          "ns_per_op": 99
+        },
+        {
+          "name": "mandelbrot",
+          "ns_total": 29171000,
+          "iters": 200,
+          "ns_per_op": 145855
+        },
+        {
+          "name": "matmul_64",
+          "ns_total": 37047000,
+          "iters": 400,
+          "ns_per_op": 92617
+        },
+        {
+          "name": "quicksort",
+          "ns_total": 29996000,
+          "iters": 1000,
+          "ns_per_op": 29996
+        },
+        {
+          "name": "sieve",
+          "ns_total": 4059000,
+          "iters": 1666,
+          "ns_per_op": 2436
+        },
+        {
+          "name": "fib_rec",
+          "ns_total": 39116000,
+          "iters": 1000,
+          "ns_per_op": 39116
+        },
+        {
+          "name": "iface_dispatch",
+          "ns_total": 6065000,
+          "iters": 719872,
+          "ns_per_op": 8
+        },
+        {
+          "name": "binary_trees",
+          "ns_total": 166797000,
+          "iters": 100,
+          "ns_per_op": 1667970
+        },
+        {
+          "name": "linked_walk",
+          "ns_total": 7976000,
+          "iters": 4000,
+          "ns_per_op": 1994
+        },
+        {
+          "name": "weak_tree",
+          "ns_total": 91463000,
+          "iters": 100,
+          "ns_per_op": 914630
+        },
+        {
+          "name": "wordcount",
+          "ns_total": 8460000,
+          "iters": 420000,
+          "ns_per_op": 20
+        },
+        {
+          "name": "parse_ints",
+          "ns_total": 0,
+          "iters": 1000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "sum_options",
+          "ns_total": 0,
+          "iters": 8000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "arc_locals",
+          "ns_total": 7620000,
+          "iters": 500000,
+          "ns_per_op": 15
+        },
+        {
+          "name": "string_concat",
+          "ns_total": 3687000,
+          "iters": 400000,
+          "ns_per_op": 9
+        },
+        {
+          "name": "string_eq",
+          "ns_total": 7503000,
+          "iters": 2000000,
+          "ns_per_op": 3
+        },
+        {
+          "name": "char_scan",
+          "ns_total": 5365000,
+          "iters": 200000,
+          "ns_per_op": 26
+        },
+        {
+          "name": "byte_scan",
+          "ns_total": 10392000,
+          "iters": 400000,
+          "ns_per_op": 25
+        },
+        {
+          "name": "substring",
+          "ns_total": 5478000,
+          "iters": 3200000,
+          "ns_per_op": 1
+        },
+        {
+          "name": "substring_span",
+          "ns_total": 0,
+          "iters": 3200000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "split_span",
+          "ns_total": 62603000,
+          "iters": 400000,
+          "ns_per_op": 156
+        },
+        {
+          "name": "list_push",
+          "ns_total": 18733000,
+          "iters": 8000000,
+          "ns_per_op": 2
+        },
+        {
+          "name": "list_insert_mid",
+          "ns_total": 8543000,
+          "iters": 800000,
+          "ns_per_op": 10
+        },
+        {
+          "name": "map_get_set",
+          "ns_total": 5470000,
+          "iters": 700000,
+          "ns_per_op": 7
+        },
+        {
+          "name": "map_get_span",
+          "ns_total": 4138000,
+          "iters": 700000,
+          "ns_per_op": 5
+        },
+        {
+          "name": "map_clear_reuse",
+          "ns_total": 9821000,
+          "iters": 1400000,
+          "ns_per_op": 7
+        },
+        {
+          "name": "list_clear_reuse",
+          "ns_total": 24294000,
+          "iters": 10000000,
+          "ns_per_op": 2
+        },
+        {
+          "name": "alloc_churn",
+          "ns_total": 10350000,
+          "iters": 600000,
+          "ns_per_op": 17
+        },
+        {
+          "name": "scratch_arena",
+          "ns_total": 14107000,
+          "iters": 8000000,
+          "ns_per_op": 1
+        },
+        {
+          "name": "regex_find",
+          "ns_total": 7838000,
+          "iters": 10000,
+          "ns_per_op": 783
+        },
+        {
+          "name": "string_builder",
+          "ns_total": 20155000,
+          "iters": 400000,
+          "ns_per_op": 50
+        },
+        {
+          "name": "json_serialize",
+          "ns_total": 14462000,
+          "iters": 40000,
+          "ns_per_op": 361
+        },
+        {
+          "name": "json_deserialize",
+          "ns_total": 28392000,
+          "iters": 10000,
+          "ns_per_op": 2839
+        },
+        {
+          "name": "arr_add",
+          "ns_total": 9196000,
+          "iters": 100000,
+          "ns_per_op": 91
+        },
+        {
+          "name": "vec_add",
+          "ns_total": 9126000,
+          "iters": 200000,
+          "ns_per_op": 45
+        },
+        {
+          "name": "binary_trees_reclaim",
+          "ns_total": 205509000,
+          "iters": 100,
+          "ns_per_op": 2055090
+        }
+      ]
+    },
+    {
+      "version": "before",
+      "repeat": 2,
+      "seconds": 0.7916297920164652,
+      "benchmarks": [
+        {
+          "name": "nbody",
+          "ns_total": 9728000,
+          "iters": 80000,
+          "ns_per_op": 121
+        },
+        {
+          "name": "mandelbrot",
+          "ns_total": 40886000,
+          "iters": 200,
+          "ns_per_op": 204430
+        },
+        {
+          "name": "matmul_64",
+          "ns_total": 37664000,
+          "iters": 400,
+          "ns_per_op": 94160
+        },
+        {
+          "name": "quicksort",
+          "ns_total": 27311000,
+          "iters": 1000,
+          "ns_per_op": 27311
+        },
+        {
+          "name": "sieve",
+          "ns_total": 4524000,
+          "iters": 1666,
+          "ns_per_op": 2715
+        },
+        {
+          "name": "fib_rec",
+          "ns_total": 41903000,
+          "iters": 1000,
+          "ns_per_op": 41903
+        },
+        {
+          "name": "iface_dispatch",
+          "ns_total": 5281000,
+          "iters": 719872,
+          "ns_per_op": 7
+        },
+        {
+          "name": "binary_trees",
+          "ns_total": 6885000,
+          "iters": 100,
+          "ns_per_op": 68850
+        },
+        {
+          "name": "linked_walk",
+          "ns_total": 7310000,
+          "iters": 4000,
+          "ns_per_op": 1827
+        },
+        {
+          "name": "weak_tree",
+          "ns_total": 11425000,
+          "iters": 100,
+          "ns_per_op": 114250
+        },
+        {
+          "name": "wordcount",
+          "ns_total": 8300000,
+          "iters": 420000,
+          "ns_per_op": 19
+        },
+        {
+          "name": "parse_ints",
+          "ns_total": 0,
+          "iters": 1000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "sum_options",
+          "ns_total": 0,
+          "iters": 8000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "arc_locals",
+          "ns_total": 7850000,
+          "iters": 500000,
+          "ns_per_op": 15
+        },
+        {
+          "name": "string_concat",
+          "ns_total": 4249000,
+          "iters": 400000,
+          "ns_per_op": 10
+        },
+        {
+          "name": "string_eq",
+          "ns_total": 8453000,
+          "iters": 2000000,
+          "ns_per_op": 4
+        },
+        {
+          "name": "char_scan",
+          "ns_total": 4699000,
+          "iters": 200000,
+          "ns_per_op": 23
+        },
+        {
+          "name": "byte_scan",
+          "ns_total": 8075000,
+          "iters": 400000,
+          "ns_per_op": 20
+        },
+        {
+          "name": "substring",
+          "ns_total": 5753000,
+          "iters": 3200000,
+          "ns_per_op": 1
+        },
+        {
+          "name": "substring_span",
+          "ns_total": 0,
+          "iters": 3200000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "split_span",
+          "ns_total": 17211000,
+          "iters": 400000,
+          "ns_per_op": 43
+        },
+        {
+          "name": "list_push",
+          "ns_total": 11142000,
+          "iters": 8000000,
+          "ns_per_op": 1
+        },
+        {
+          "name": "list_insert_mid",
+          "ns_total": 9652000,
+          "iters": 800000,
+          "ns_per_op": 12
+        },
+        {
+          "name": "map_get_set",
+          "ns_total": 6430000,
+          "iters": 700000,
+          "ns_per_op": 9
+        },
+        {
+          "name": "map_get_span",
+          "ns_total": 4162000,
+          "iters": 700000,
+          "ns_per_op": 5
+        },
+        {
+          "name": "map_clear_reuse",
+          "ns_total": 4848000,
+          "iters": 1400000,
+          "ns_per_op": 3
+        },
+        {
+          "name": "list_clear_reuse",
+          "ns_total": 6817000,
+          "iters": 10000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "alloc_churn",
+          "ns_total": 7828000,
+          "iters": 600000,
+          "ns_per_op": 13
+        },
+        {
+          "name": "scratch_arena",
+          "ns_total": 0,
+          "iters": 8000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "regex_find",
+          "ns_total": 5456000,
+          "iters": 10000,
+          "ns_per_op": 545
+        },
+        {
+          "name": "string_builder",
+          "ns_total": 9613000,
+          "iters": 400000,
+          "ns_per_op": 24
+        },
+        {
+          "name": "json_serialize",
+          "ns_total": 10426000,
+          "iters": 40000,
+          "ns_per_op": 260
+        },
+        {
+          "name": "json_deserialize",
+          "ns_total": 11032000,
+          "iters": 10000,
+          "ns_per_op": 1103
+        },
+        {
+          "name": "arr_add",
+          "ns_total": 8037000,
+          "iters": 100000,
+          "ns_per_op": 80
+        },
+        {
+          "name": "vec_add",
+          "ns_total": 7360000,
+          "iters": 200000,
+          "ns_per_op": 36
+        },
+        {
+          "name": "binary_trees_reclaim",
+          "ns_total": 6663000,
+          "iters": 100,
+          "ns_per_op": 66630
+        }
+      ]
+    },
+    {
+      "version": "after",
+      "repeat": 2,
+      "seconds": 1.8123294159886427,
+      "benchmarks": [
+        {
+          "name": "nbody",
+          "ns_total": 9174000,
+          "iters": 80000,
+          "ns_per_op": 114
+        },
+        {
+          "name": "mandelbrot",
+          "ns_total": 28114000,
+          "iters": 200,
+          "ns_per_op": 140570
+        },
+        {
+          "name": "matmul_64",
+          "ns_total": 34560000,
+          "iters": 400,
+          "ns_per_op": 86400
+        },
+        {
+          "name": "quicksort",
+          "ns_total": 29812000,
+          "iters": 1000,
+          "ns_per_op": 29812
+        },
+        {
+          "name": "sieve",
+          "ns_total": 4968000,
+          "iters": 1666,
+          "ns_per_op": 2981
+        },
+        {
+          "name": "fib_rec",
+          "ns_total": 41708000,
+          "iters": 1000,
+          "ns_per_op": 41708
+        },
+        {
+          "name": "iface_dispatch",
+          "ns_total": 6131000,
+          "iters": 719872,
+          "ns_per_op": 8
+        },
+        {
+          "name": "binary_trees",
+          "ns_total": 249869000,
+          "iters": 100,
+          "ns_per_op": 2498690
+        },
+        {
+          "name": "linked_walk",
+          "ns_total": 10071000,
+          "iters": 4000,
+          "ns_per_op": 2517
+        },
+        {
+          "name": "weak_tree",
+          "ns_total": 95998000,
+          "iters": 100,
+          "ns_per_op": 959980
+        },
+        {
+          "name": "wordcount",
+          "ns_total": 9175000,
+          "iters": 420000,
+          "ns_per_op": 21
+        },
+        {
+          "name": "parse_ints",
+          "ns_total": 0,
+          "iters": 1000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "sum_options",
+          "ns_total": 0,
+          "iters": 8000000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "arc_locals",
+          "ns_total": 8403000,
+          "iters": 500000,
+          "ns_per_op": 16
+        },
+        {
+          "name": "string_concat",
+          "ns_total": 4336000,
+          "iters": 400000,
+          "ns_per_op": 10
+        },
+        {
+          "name": "string_eq",
+          "ns_total": 8758000,
+          "iters": 2000000,
+          "ns_per_op": 4
+        },
+        {
+          "name": "char_scan",
+          "ns_total": 5614000,
+          "iters": 200000,
+          "ns_per_op": 28
+        },
+        {
+          "name": "byte_scan",
+          "ns_total": 11583000,
+          "iters": 400000,
+          "ns_per_op": 28
+        },
+        {
+          "name": "substring",
+          "ns_total": 5557000,
+          "iters": 3200000,
+          "ns_per_op": 1
+        },
+        {
+          "name": "substring_span",
+          "ns_total": 0,
+          "iters": 3200000,
+          "ns_per_op": 0
+        },
+        {
+          "name": "split_span",
+          "ns_total": 64343000,
+          "iters": 400000,
+          "ns_per_op": 160
+        },
+        {
+          "name": "list_push",
+          "ns_total": 16142000,
+          "iters": 8000000,
+          "ns_per_op": 2
+        },
+        {
+          "name": "list_insert_mid",
+          "ns_total": 8634000,
+          "iters": 800000,
+          "ns_per_op": 10
+        },
+        {
+          "name": "map_get_set",
+          "ns_total": 5864000,
+          "iters": 700000,
+          "ns_per_op": 8
+        },
+        {
+          "name": "map_get_span",
+          "ns_total": 5083000,
+          "iters": 700000,
+          "ns_per_op": 7
+        },
+        {
+          "name": "map_clear_reuse",
+          "ns_total": 3996000,
+          "iters": 1400000,
+          "ns_per_op": 2
+        },
+        {
+          "name": "list_clear_reuse",
+          "ns_total": 11164000,
+          "iters": 10000000,
+          "ns_per_op": 1
+        },
+        {
+          "name": "alloc_churn",
+          "ns_total": 7851000,
+          "iters": 600000,
+          "ns_per_op": 13
+        },
+        {
+          "name": "scratch_arena",
+          "ns_total": 11345000,
+          "iters": 8000000,
+          "ns_per_op": 1
+        },
+        {
+          "name": "regex_find",
+          "ns_total": 5540000,
+          "iters": 10000,
+          "ns_per_op": 554
+        },
+        {
+          "name": "string_builder",
+          "ns_total": 8131000,
+          "iters": 400000,
+          "ns_per_op": 20
+        },
+        {
+          "name": "json_serialize",
+          "ns_total": 11807000,
+          "iters": 40000,
+          "ns_per_op": 295
+        },
+        {
+          "name": "json_deserialize",
+          "ns_total": 25358000,
+          "iters": 10000,
+          "ns_per_op": 2535
+        },
+        {
+          "name": "arr_add",
+          "ns_total": 8565000,
+          "iters": 100000,
+          "ns_per_op": 85
+        },
+        {
+          "name": "vec_add",
+          "ns_total": 8525000,
+          "iters": 200000,
+          "ns_per_op": 42
+        },
+        {
+          "name": "binary_trees_reclaim",
+          "ns_total": 180896000,
+          "iters": 100,
+          "ns_per_op": 1808960
+        }
+      ]
+    }
+  ]
+}

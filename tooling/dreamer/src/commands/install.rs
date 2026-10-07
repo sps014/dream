@@ -1,7 +1,7 @@
 use crate::lockfile::Lockfile;
 use crate::manifest::Manifest;
 use crate::resolver;
-use crate::workspace::{self, Workspace, PACKAGES_DIR_NAME};
+use crate::workspace::{self, PACKAGES_DIR_NAME, Workspace};
 use anyhow::Result;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -11,11 +11,11 @@ pub fn run(start_dir: &Path) -> Result<()> {
 
     let lock_path = install_root.join(crate::lockfile::LOCKFILE_FILE_NAME);
     let existing_lock = Lockfile::load_if_exists(&lock_path)?;
-    let preferred: BTreeMap<String, String> = existing_lock
+    let preferred: BTreeMap<String, crate::lockfile::LockedPackage> = existing_lock
         .map(|lock| {
             lock.packages
                 .into_iter()
-                .map(|p| (p.name, p.version))
+                .map(|p| (p.name.clone(), p))
                 .collect()
         })
         .unwrap_or_default();

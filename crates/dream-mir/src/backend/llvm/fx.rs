@@ -58,6 +58,7 @@ pub(super) struct Fx<'l, 'a> {
     pub value_frame: crate::backend::shared::ValueFrame,
     /// The poll function's `__self` future (as `dream_ptr`); `None` in sync bodies.
     pub self_: Option<Value>,
+    pub poll_offsets: Vec<i32>,
     /// The subprogram's file and first line, when this body carries debug info.
     pub dbg: Option<(MdRef, u32)>,
     /// Source file panic locations name (`source_loc.rs`); `None` outside user bodies.
@@ -119,6 +120,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             frame_bufs: Vec::new(),
             value_frame: crate::backend::shared::ValueFrame::compute(f, interner),
             self_: None,
+            poll_offsets: Vec::new(),
             dbg: None,
             src_file: None,
             src_lines: Vec::new(),

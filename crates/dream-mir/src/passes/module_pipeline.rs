@@ -41,26 +41,7 @@ pub(super) fn optimize_module_rounds(
     dump: &mut MirDump,
     max_rounds: usize,
 ) {
-    crate::prune_module(mir, interner);
-    let _ = ExpandSimpleCtors.run(mir, interner);
-    dump.module(ExpandSimpleCtors.name(), mir, interner);
-    // Before RC insertion: address-taken functions move their parameter retains to the callee so a
-    // funcbox call site can pass at +0 (see `funcbox_abi`).
-    let _ = FuncboxAbi.run(mir, interner);
-    crate::prune_module(mir, interner);
-    dump.module(FuncboxAbi.name(), mir, interner);
-    ownership_args::run(mir, interner);
-    dump.module(ownership_args::STAGE, mir, interner);
-    let layouts = mir.layouts.clone();
-    let holds = rc::lifetime::held_defs(&mir.intrinsics, &mir.imports);
-    let modref = rc::modref::ModRefTable::compute(mir, interner);
-    for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
-        RcInsertion::run_with_layouts(f, interner, &layouts, &holds, &modref);
-    }
-    dump.module(MirPass::name(&RcInsertion), mir, interner);
-    if crate::verify::enabled() {
-        crate::verify::assert_inserted_tokens(mir, interner);
-    }
+    prepare_ownership(mir, interner, dump);
     // Correctness invariant: RC must be inserted (above) *before* any inlining (below), or callee
     // scope-exit releases won't be baked into bodies for inlining to copy. The `rc_inserted` flag
     // makes a future reordering that hoists the inliner above this point fail loudly in dev.
@@ -94,6 +75,37 @@ pub(super) fn optimize_module_rounds(
     dump.module(SroaManaged.name(), mir, interner);
     let _ = slice_measure::run(mir, interner);
     dump.module(slice_measure::STAGE, mir, interner);
+}
+
+/// Ownership lowering is mandatory even when every optional optimization is disabled.
+pub fn prepare_ownership(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirDump) {
+    crate::prune_module(mir, interner);
+    let _ = ExpandSimpleCtors.run(mir, interner);
+    dump.module(ExpandSimpleCtors.name(), mir, interner);
+    // Before RC insertion: address-taken functions move their parameter retains to the callee so a
+    // funcbox call site can pass at +0 (see `funcbox_abi`).
+    let _ = FuncboxAbi.run(mir, interner);
+    crate::prune_module(mir, interner);
+    dump.module(FuncboxAbi.name(), mir, interner);
+    ownership_args::run(mir, interner);
+    dump.module(ownership_args::STAGE, mir, interner);
+    let layouts = mir.layouts.clone();
+    let holds = rc::lifetime::held_defs(&mir.intrinsics, &mir.imports);
+    let modref = rc::modref::ModRefTable::compute(mir, interner);
+    for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
+        RcInsertion::run_with_layouts(f, interner, &layouts, &holds, &modref);
+    }
+    dump.module(MirPass::name(&RcInsertion), mir, interner);
+    if crate::verify::enabled() {
+        crate::verify::assert_inserted_tokens(mir, interner);
+    }
+}
+
+pub fn prepare_debug_module(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirDump) {
+    prepare_ownership(mir, interner, dump);
+    let _ = value_borrow::run(mir, interner);
+    crate::verify::assert_inserted_tokens(mir, interner);
+    crate::verify::assert_module(mir, interner);
 }
 
 /// Runs `pipeline` over every function and `poll_pipeline` over every async poll body, then

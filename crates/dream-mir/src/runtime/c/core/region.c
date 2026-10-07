@@ -63,6 +63,8 @@ void dream_region_enter(void) {
 }
 
 dream_ptr dream_region_try_malloc(dream_size size, int32_t tag) {
+    const dream_type_info *info = dream_type_info_for_tag(tag & TAG_VALUE_MASK);
+    if (info && info->cycle_capable) { return 0; }
     region_state *s = current();
     if (s == NULL || s->depth == 0 || s->depth > REGION_MAX_DEPTH || (tag & TAG_SHARED)) {
         return 0;
@@ -75,10 +77,6 @@ dream_ptr dream_region_try_malloc(dream_size size, int32_t tag) {
     region_chunk *chunk = s->chunk;
     if (chunk == NULL || total > chunk->capacity - chunk->offset) {
         size_t prefix = (sizeof(region_chunk) + 15u) & ~(size_t)15u;
-#ifdef DREAM_WASM32
-        /* wasm headers are 12 bytes, so blocks start at 4 mod 16. */
-        prefix += 4;
-#endif
         size_t capacity = prefix + (total > REGION_PAYLOAD ? total : REGION_PAYLOAD);
         dream_ptr pointer = dream_region_backing_malloc((dream_size)capacity);
         chunk = (region_chunk *)dream_p(pointer);

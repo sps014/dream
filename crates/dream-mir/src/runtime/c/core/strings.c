@@ -113,11 +113,17 @@ dream_ptr dream_array_realloc_rc(dream_ptr arr, int32_t new_len, int32_t esize,
     int32_t old_len = arr ? dream_i32(arr)[0] : 0;
     (void)array_bytes(new_len, esize);
     if (arr && release && new_len < old_len) {
+        dream_cycle_enter();
         for (int32_t i = new_len; i < old_len; i++) {
             dream_ptr elem;
             memcpy(&elem, (char *)dream_p(arr) + 4 + (size_t)i * (size_t)esize, sizeof(elem));
+            dream_ptr zero = 0;
+            memcpy((char *)dream_p(arr) + 4 + (size_t)i * (size_t)esize, &zero, sizeof(zero));
             release(elem);
         }
+        dream_i32(arr)[0] = new_len;
+        dream_cycle_leave();
+        dream_cycle_drain();
     }
     return dream_array_realloc(arr, new_len, esize);
 }

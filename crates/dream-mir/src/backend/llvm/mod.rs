@@ -27,7 +27,7 @@ use crate::Mir;
 use dream_types::TypeInterner;
 use ir::{FnTy, Ty};
 use lcx::{FnSig, Lcx};
-use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 
 #[derive(Debug, PartialEq, Eq)]
 struct MissingRuntimeSymbol(String);
@@ -129,6 +129,7 @@ fn emit_llvm_module_unchecked(
     let reach = crate::backend::shared::reach::compute(&l.cx);
     let protocol = glue::protocol::plan(&l, &reach);
     glue::release::register_all(&mut l);
+    glue::ownership::register_all(&mut l);
     glue::protocol::register_all(&mut l, &protocol);
     glue::tables::register_all(&mut l);
     glue::imports::register_all(&mut l);
@@ -159,6 +160,7 @@ fn emit_llvm_module_unchecked(
         body::build_future_drop(&mut l, f, pre_lowered, &offs);
     }
     glue::release::emit_all(&mut l);
+    glue::ownership::emit_all(&mut l);
     glue::protocol::emit_all(&mut l, &protocol);
     glue::imports::emit_all(&mut l);
     glue::js_marshal::emit_all(&mut l);

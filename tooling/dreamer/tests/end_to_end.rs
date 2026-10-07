@@ -4,8 +4,8 @@
 //! `dream_packages/` layout is actually importable.
 
 use dreamer::commands;
-use dreamer::manifest::{import_segment, Manifest, PackageType};
-use dreamer::registry::{checksum, open_registry, IndexEntry};
+use dreamer::manifest::{Manifest, PackageType, import_segment};
+use dreamer::registry::{IndexEntry, checksum, open_registry};
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 
@@ -325,9 +325,11 @@ fn build_refreshes_web_and_node_aliases() {
     commands::build::run(&project_dir, false, None).unwrap();
     assert!(project_dir.join("target/web/main.wasm").is_file());
     assert!(project_dir.join("target/web/main.web.runtime.js").is_file());
-    assert!(project_dir
-        .join("target/node/main.node.runtime.js")
-        .is_file());
+    assert!(
+        project_dir
+            .join("target/node/main.node.runtime.js")
+            .is_file()
+    );
     assert!(project_dir.join("target/node/main.wasm").is_file());
 
     commands::build::run(&project_dir, true, None).unwrap();
@@ -349,11 +351,21 @@ fn build_lib_writes_under_target_debug() {
     let project_dir = tmp.path().join("mylib");
     commands::init::run(&project_dir, Some("mylib".to_string()), None, true).unwrap();
     commands::build::run(&project_dir, false, None).unwrap();
-    assert!(project_dir
-        .join("target")
-        .join("debug")
-        .join("mylib.ll")
-        .is_file());
+    let output = project_dir.join("target/debug");
+    let archive = if dream_abi::target::TargetSpec::host().is_msvc() {
+        "mylib.lib"
+    } else {
+        "mylib.a"
+    };
+    for name in [archive, "mylib.h", "mylib.abi.json", "mylib.link.json"] {
+        assert!(
+            output.join(name).is_file(),
+            "missing library artifact {name}"
+        );
+    }
+    for name in ["mylib.ll", "mylib.opt.ll", "mylib.s"] {
+        assert!(!output.join(name).exists(), "unrequested artifact {name}");
+    }
 }
 
 #[test]
@@ -400,9 +412,11 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
         pack_dir.display()
     );
     for capability in dream_abi::host_capability::HostCapability::ALL {
-        assert!(!pack_dir
-            .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
-            .is_file());
+        assert!(
+            !pack_dir
+                .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
+                .is_file()
+        );
     }
     let moved = tmp.path().join("relocated package");
     std::fs::rename(&pack_dir, &moved).unwrap();
@@ -472,12 +486,13 @@ fn workspace_install_shares_lock_and_packages_symlink() {
     // Install from workspace root.
     commands::install::run(&root).unwrap();
     assert!(root.join("dream.lock").is_file());
-    assert!(root
-        .join("dream_packages")
-        .join("greeter")
-        .join("src")
-        .join("greeter.dream")
-        .is_file());
+    assert!(
+        root.join("dream_packages")
+            .join("greeter")
+            .join("src")
+            .join("greeter.dream")
+            .is_file()
+    );
     let member_pkgs = cli.join("dream_packages");
     assert!(
         member_pkgs.is_symlink() || member_pkgs.is_dir(),

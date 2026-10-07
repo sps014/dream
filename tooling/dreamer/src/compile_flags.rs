@@ -1,12 +1,12 @@
 //! Flags forwarded to `dream` using the same tokens as the compiler CLI.
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::process::Command;
 
 /// `--release`, `-O`/`--optimize`, and `--wasm` (native is the default).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompileFlags {
-    pub release: bool,
+    pub compile_profile: dream_abi::profile::CompileProfile,
     /// `0`–`4`, `s`, or `z`. Bare `-O` is `"s"` (`-Os`).
     pub optimize: Option<String>,
     /// `true` = native binary (default). `false` = wasm32 module (`--wasm`).
@@ -21,7 +21,7 @@ pub struct CompileFlags {
 impl Default for CompileFlags {
     fn default() -> Self {
         Self {
-            release: false,
+            compile_profile: dream_abi::profile::CompileProfile::Debug,
             optimize: None,
             native: true,
             profile: false,
@@ -34,11 +34,12 @@ impl Default for CompileFlags {
 impl CompileFlags {
     pub fn from_cli(release: bool, optimize: Option<String>, wasm: bool) -> Result<Self> {
         if let Some(lvl) = optimize.as_deref()
-            && !matches!(lvl, "0" | "1" | "2" | "3" | "4" | "s" | "S" | "z" | "Z") {
-                bail!("invalid optimization level '{lvl}' (expected one of: 0, 1, 2, 3, 4, s, z)");
-            }
+            && !matches!(lvl, "0" | "1" | "2" | "3" | "4" | "s" | "S" | "z" | "Z")
+        {
+            bail!("invalid optimization level '{lvl}' (expected one of: 0, 1, 2, 3, 4, s, z)");
+        }
         Ok(Self {
-            release,
+            compile_profile: dream_abi::profile::CompileProfile::from_release(release),
             optimize: optimize.map(|s| s.to_ascii_lowercase()),
             native: !wasm,
             profile: false,
@@ -66,7 +67,7 @@ impl CompileFlags {
 
     /// `target/release` vs `target/debug`, matching `dream`'s native output layout.
     pub fn native_artifact_subdir(&self) -> &'static str {
-        if self.release {
+        if !self.compile_profile.is_debug() {
             "release"
         } else {
             "debug"
@@ -77,7 +78,7 @@ impl CompileFlags {
         if self.relocatable {
             cmd.arg("--relocatable");
         }
-        if self.release {
+        if !self.compile_profile.is_debug() {
             cmd.arg("--release");
         }
         if let Some(lvl) = &self.optimize {
@@ -168,7 +169,7 @@ mod tests {
     #[test]
     fn pack_defaults_to_release() {
         let flags = CompileFlags::for_pack(false, None, false).unwrap();
-        assert!(flags.release);
+        assert!(!flags.compile_profile.is_debug());
         assert!(flags.optimize.is_none());
         assert_eq!(flags.native_artifact_subdir(), "release");
         assert!(flags.relocatable);
@@ -183,7 +184,7 @@ mod tests {
     #[test]
     fn pack_optimize_without_release_is_debug_like_run() {
         let flags = CompileFlags::for_pack(false, Some("2".into()), false).unwrap();
-        assert!(!flags.release);
+        assert!(flags.compile_profile.is_debug());
         assert_eq!(flags.optimize.as_deref(), Some("2"));
         assert_eq!(flags.native_artifact_subdir(), "debug");
     }

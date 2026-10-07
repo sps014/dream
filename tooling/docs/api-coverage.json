@@ -1098,217 +1098,217 @@
       {
         "signature": "public class GenTypeRef",
         "description": "A resolved type: `kind` + structured `args` instead of a type string to parse.",
-        "line": 79,
+        "line": 78,
         "page": "reference/api/codegen-gen-model-2.md"
       },
       {
         "signature": "public kind: TypeRefKind",
         "description": "",
-        "line": 80,
+        "line": 79,
         "page": "reference/api/codegen-gen-model-2.md"
       },
       {
         "signature": "public name: string",
         "description": "`int`, `List`, `T`, or empty for arrays/tuples/functions.",
-        "line": 82,
+        "line": 81,
         "page": "reference/api/codegen-gen-model-2.md"
       },
       {
         "signature": "public display: string",
         "description": "Dream spelling (`List<int>`, `User[]`), usable verbatim in generated code.",
-        "line": 84,
+        "line": 83,
         "page": "reference/api/codegen-gen-model-2.md"
       },
       {
         "signature": "public mangled: string",
         "description": "Compiler-mangled spelling (`List_int`), unique per instantiation; handy for helper names.",
-        "line": 86,
+        "line": 85,
         "page": "reference/api/codegen-gen-model-2.md"
       },
       {
         "signature": "public decl: string",
         "description": "Identity of the named declaration (`::User`, `system.collections::List`), or empty.",
-        "line": 88,
+        "line": 87,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public args: List<GenTypeRef>",
         "description": "Type arguments; the element of an array; tuple members; function params then return.",
-        "line": 90,
+        "line": 89,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public constructor(kind: TypeRefKind, name: string, display: string, mangled: string, decl: string, args: List<GenTypeRef>)",
         "description": "",
-        "line": 92,
+        "line": 91,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public static fun unknown(): GenTypeRef",
         "description": "",
-        "line": 101,
+        "line": 100,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public fun primitive(): Primitive",
         "description": "The scalar this type is, or `Primitive.NotPrimitive`.",
-        "line": 106,
+        "line": 105,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public fun is_primitive(p: Primitive): bool",
         "description": "",
-        "line": 113,
+        "line": 112,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public fun collection(): CollectionKind",
         "description": "The standard collection this type is, or `CollectionKind.NotCollection`.",
-        "line": 118,
+        "line": 117,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public fun is_option(): bool",
         "description": "",
-        "line": 140,
+        "line": 139,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public fun is_param(): bool",
         "description": "",
-        "line": 144,
+        "line": 143,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public fun is_decl(decl_id: string): bool",
         "description": "True when this names the declaration `decl_id` (see `declof`).",
-        "line": 149,
+        "line": 148,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public fun arg(i: int): GenTypeRef",
         "description": "Type argument `i`, or an unknown type when there is none.",
-        "line": 154,
+        "line": 153,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "",
-        "line": 161,
+        "line": 160,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public fun primitive_named(name: string): Primitive",
         "description": "`Primitive` for a Dream scalar type name (`int`, `string`, ...).",
-        "line": 167,
+        "line": 166,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public class GenAttrArg",
         "description": "One attribute argument as written: `kind` is `string`, `int`, `float`, `double`, `bool` or `enum`; `value` is the unquoted string, literal text, or dotted enum path.",
-        "line": 186,
+        "line": 185,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public kind: string",
         "description": "",
-        "line": 187,
+        "line": 186,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public value: string",
         "description": "",
-        "line": 188,
+        "line": 187,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public constructor(kind: string, value: string)",
         "description": "",
-        "line": 190,
+        "line": 189,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public class GenAttribute",
         "description": "One attribute use. Prefer the typed `GenAttributes.decode<A>()` (via `attribute<A>()` on a node); the positional readers below are what decoders are built from.",
-        "line": 198,
+        "line": 197,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public id: string",
         "description": "`module::name` of the `@attribute` type (`system.json::json`), or `builtin::name`.",
-        "line": 200,
+        "line": 199,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public name: string",
         "description": "",
-        "line": 201,
+        "line": 200,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public args: List<GenAttrArg>",
         "description": "",
-        "line": 202,
+        "line": 201,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public constructor(id: string, name: string, args: List<GenAttrArg>)",
         "description": "",
-        "line": 204,
+        "line": 203,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public fun string_arg(i: int): string",
         "description": "",
-        "line": 217,
+        "line": 216,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public fun int_arg(i: int): int",
         "description": "",
-        "line": 221,
+        "line": 220,
         "page": "reference/api/codegen-gen-model-3.md"
       },
       {
         "signature": "public fun long_arg(i: int): long",
         "description": "",
-        "line": 225,
+        "line": 224,
         "page": "reference/api/codegen-gen-model-4.md"
       },
       {
         "signature": "public fun double_arg(i: int): double",
         "description": "",
-        "line": 229,
+        "line": 228,
         "page": "reference/api/codegen-gen-model-4.md"
       },
       {
         "signature": "public fun float_arg(i: int): float",
         "description": "",
-        "line": 233,
+        "line": 232,
         "page": "reference/api/codegen-gen-model-4.md"
       },
       {
         "signature": "public fun bool_arg(i: int): bool",
         "description": "",
-        "line": 237,
+        "line": 236,
         "page": "reference/api/codegen-gen-model-4.md"
       },
       {
         "signature": "public fun enum_member(i: int): string",
         "description": "The member name of an enum argument (`Get` for `HttpMethod.Get`).",
-        "line": 242,
+        "line": 241,
         "page": "reference/api/codegen-gen-model-4.md"
       },
       {
         "signature": "public static class GenAttributes",
         "description": "Typed attribute access. `A` is an `@attribute` struct; the compiler gives every such type the statics these forward to.",
-        "line": 257,
+        "line": 256,
         "page": "reference/api/codegen-gen-model-4.md"
       },
       {
         "signature": "public static fun has(borrow attrs: List<GenAttribute>, borrow id: string): bool",
         "description": "",
-        "line": 267,
+        "line": 266,
         "page": "reference/api/codegen-gen-model-4.md"
       }
     ]
@@ -6327,248 +6327,248 @@
       },
       {
         "signature": "public class JsonValue",
-        "description": "Native JSON value tree. `items` / `obj_map` can hold nested `JsonValue`s; trees are acyclic at runtime, so `@allow_cycle` opts out of the structural self-edge check.  Container fields are `Option` so scalars allocate no List/Map. Arrays own `items` only; objects own `obj_keys` + `obj_vals` (insertion order) + `obj_map` (O(1) lookup).",
-        "line": 19,
+        "description": "Native JSON value tree. `items` / `obj_map` can hold nested `JsonValue`s; trees are represented by exact ownership metadata; recursive types are supported by ARC.  Container fields are `Option` so scalars allocate no List/Map. Arrays own `items` only; objects own `obj_keys` + `obj_vals` (insertion order) + `obj_map` (O(1) lookup).",
+        "line": 18,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public static fun none(): JsonValue",
         "description": "A new null JSON value.",
-        "line": 62,
+        "line": 61,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public static fun boolean(b: bool): JsonValue",
         "description": "A new boolean JSON value.",
-        "line": 67,
+        "line": 66,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public static fun number(n: double): JsonValue",
         "description": "A new number JSON value.",
-        "line": 72,
+        "line": 71,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public static fun from_int(n: int): JsonValue",
         "description": "A new number JSON value from int.",
-        "line": 77,
+        "line": 76,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public static fun from_string(s: string): JsonValue",
         "description": "A new string JSON value.",
-        "line": 82,
+        "line": 81,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public static fun array(): JsonValue",
         "description": "A new empty JSON array (allocates only the items list).",
-        "line": 87,
+        "line": 86,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public static fun dict(): JsonValue",
         "description": "A new empty JSON object (allocates keys, parallel values, and map).",
-        "line": 95,
+        "line": 94,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun kind(): JsonKind",
         "description": "The kind of JSON value, for `switch (v.kind()) { case JsonKind.Object: … }`.",
-        "line": 110,
+        "line": 109,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun is_null(): bool",
         "description": "True if the value is null.",
-        "line": 130,
+        "line": 129,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun is_array(): bool",
         "description": "True if the value is an array.",
-        "line": 135,
+        "line": 134,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun is_object(): bool",
         "description": "True if the value is an object.",
-        "line": 140,
+        "line": 139,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun as_bool(): Option<bool>",
         "description": "Returns the value as a bool when this is a JSON boolean.",
-        "line": 145,
+        "line": 144,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun as_double(): Option<double>",
         "description": "Returns the value as a double when this is a JSON number.",
-        "line": 153,
+        "line": 152,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun as_int(): Option<int>",
         "description": "Returns the value as an integer when this is a JSON number.",
-        "line": 161,
+        "line": 160,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun as_string(): Option<string>",
         "description": "Returns the value as a string when this is a JSON string.",
-        "line": 169,
+        "line": 168,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun as_array(): Option<List<JsonValue>>",
         "description": "",
-        "line": 176,
+        "line": 175,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun as_map(): Option<Map<string, JsonValue>>",
         "description": "",
-        "line": 183,
+        "line": 182,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun str_or(fallback: string): string",
         "description": "",
-        "line": 190,
+        "line": 189,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun int_or(fallback: int): int",
         "description": "",
-        "line": 194,
+        "line": 193,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun bool_or(fallback: bool): bool",
         "description": "",
-        "line": 198,
+        "line": 197,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun double_or(fallback: double): double",
         "description": "",
-        "line": 202,
+        "line": 201,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun get_str(borrow key: string): Option<string>",
         "description": "",
-        "line": 206,
+        "line": 205,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun get_int(borrow key: string): Option<int>",
         "description": "",
-        "line": 217,
+        "line": 216,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun get_bool(borrow key: string): Option<bool>",
         "description": "",
-        "line": 228,
+        "line": 227,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun get_str_or(borrow key: string, fallback: string): string",
         "description": "",
-        "line": 239,
+        "line": 238,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun get_int_or(borrow key: string, fallback: int): int",
         "description": "",
-        "line": 243,
+        "line": 242,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun get_or(borrow key: string, fallback: JsonValue): JsonValue",
         "description": "",
-        "line": 247,
+        "line": 246,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun remove(borrow key: string): bool",
         "description": "",
-        "line": 251,
+        "line": 250,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun has(borrow key: string): bool",
         "description": "True if the object has the given key.",
-        "line": 277,
+        "line": 276,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun this[borrow key: string]: Option<JsonValue>",
         "description": "The value for `key`, or `None` when this is not an object or the key is absent.",
-        "line": 285,
+        "line": 284,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun get(borrow key: string): Option<JsonValue>",
         "description": "",
-        "line": 292,
+        "line": 291,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun at(borrow key: string): JsonValue",
         "description": "The value for `key`. Panics when this is not an object or the key is absent — use `get(key)` for absence-tolerant reads.",
-        "line": 298,
+        "line": 297,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun this[key: string] = value: JsonValue",
         "description": "Sets the value for `key` (objects only).",
-        "line": 307,
+        "line": 306,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun set(key: string, value: JsonValue): void",
         "description": "",
-        "line": 337,
+        "line": 336,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun key_at(index: int): Option<string>",
         "description": "The object key at `index`, or `None`.",
-        "line": 342,
+        "line": 341,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun value_at(index: int): Option<JsonValue>",
         "description": "The object value at insertion index `index`, or `None`.",
-        "line": 357,
+        "line": 356,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun keys(): List<string>",
         "description": "The keys of the object (empty list when not an object).",
-        "line": 372,
+        "line": 371,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun at(index: int): Option<JsonValue>",
         "description": "The array element at `index`, or `None`.",
-        "line": 377,
+        "line": 376,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun push(value: JsonValue): void",
         "description": "Appends a value to the array.",
-        "line": 392,
+        "line": 391,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Element count for arrays/objects (0 for scalars).",
-        "line": 402,
+        "line": 401,
         "page": "reference/api/json-json-value-2.md"
       }
     ]

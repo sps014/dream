@@ -1,7 +1,7 @@
 //! Compiles a program's live `native/` C/C++ source sets (the `.abi.json` `c_sources` list) to
 //! objects with the same toolchain that links the binary (Zig by default, so C++ objects and the
-//! final link agree on one C++ standard library). Objects are cached per set under
-//! `<artifact dir>/native-c/`, rebuilt when a source, a header under an include dir, or flags change.
+//! final link agree on one C++ standard library). Until transitive dependencies are recorded,
+//! every native source is compiled again under `<artifact dir>/native-c/`.
 
 use super::cc::Cc;
 use crate::driver::wasi::run_captured;
@@ -9,7 +9,6 @@ use dream_mir::runtime::runtime_abi_include_dir;
 use serde::Deserialize;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct CSourceSet {
@@ -85,41 +84,17 @@ pub fn compile_sets(
             .map_err(|e| format!("{}: {e}", dir.display()))?;
         lock.lock()
             .map_err(|e| format!("locking {}: {e}", dir.display()))?;
-        let headers_t = newest_header(&set.include);
         for src in &set.sources {
             let src = PathBuf::from(src);
             let obj = dir.join(object_name(&src));
             let cxx = is_cxx(&src);
             out.needs_cxx |= cxx;
             let args = compile_args(set, &embed_include, &src, &obj, cxx, debug, spec);
-            let driver = if cxx {
-                cc.cxx_command(config, spec)?
-            } else {
-                cc.cc_command(config, spec)?
-            };
-            let stamp_path = obj.with_extension("o.args");
-            let stamp = format!(
-                "{}\n{cc:?}\n{spec:?}\n{}\n{:?}\n{}",
-                args.join("\n"),
-                config.fingerprint(),
-                driver.get_args().collect::<Vec<_>>(),
-                crate::driver::rt_stamp::fingerprint(vec![PathBuf::from(driver.get_program())])
-            );
-            let fresh = object_fresh(&obj, &src, headers_t)
-                && std::fs::read_to_string(&stamp_path).is_ok_and(|s| s == stamp);
-            if !fresh {
-                let mut cmd = if cxx {
-                    cc.cxx_command(config, spec)?
-                } else {
-                    cc.cc_command(config, spec)?
-                };
-                cmd.args(&args);
-                if let Err(e) = run_captured(&mut cmd, &format!("compiling {}", src.display())) {
-                    let _ = std::fs::remove_file(&obj);
-                    return Err(strip_warning_noise(&e));
-                }
-                std::fs::write(&stamp_path, &stamp)
-                    .map_err(|e| format!("{}: {e}", stamp_path.display()))?;
+            let mut command = if cxx { cc.cxx_command(config, spec)? } else { cc.cc_command(config, spec)? };
+            command.args(&args);
+            if let Err(error) = run_captured(&mut command, &format!("compiling {}", src.display())) {
+                let _ = std::fs::remove_file(&obj);
+                return Err(strip_warning_noise(&error));
             }
             out.objects.push(obj);
         }
@@ -203,40 +178,6 @@ fn fnv1a(bytes: &[u8]) -> u64 {
         h = h.wrapping_mul(0x0100_0000_01b3);
     }
     h
-}
-
-fn mtime(p: &Path) -> Option<SystemTime> {
-    std::fs::metadata(p).ok()?.modified().ok()
-}
-
-fn object_fresh(obj: &Path, src: &Path, headers: Option<SystemTime>) -> bool {
-    let Some(obj_t) = mtime(obj) else {
-        return false;
-    };
-    mtime(src).is_some_and(|t| t <= obj_t) && headers.is_none_or(|t| t <= obj_t)
-}
-
-fn newest_header(include: &[String]) -> Option<SystemTime> {
-    let mut newest = None;
-    for dir in include {
-        walk_newest(Path::new(dir), &mut newest);
-    }
-    newest
-}
-
-fn walk_newest(dir: &Path, newest: &mut Option<SystemTime>) {
-    let Ok(rd) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for e in rd.flatten() {
-        let p = e.path();
-        if p.is_dir() {
-            walk_newest(&p, newest);
-        } else if let Some(t) = mtime(&p)
-            && newest.is_none_or(|n| t > n) {
-                *newest = Some(t);
-            }
-    }
 }
 
 /// Zig builds libc++ from source the first time, which floods stderr with nullability warnings

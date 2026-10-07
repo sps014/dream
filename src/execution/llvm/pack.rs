@@ -3,7 +3,7 @@
 //! level × module set is built, since each level compiles the C with its own clang `-O` and the
 //! signatures are read from the result; the compiler-rt archives the links need are copied in.
 
-use super::bundle::{dev_clang_rt, rt_rel_dir, ClangRt, LEVELS};
+use super::bundle::{ClangRt, LEVELS, dev_clang_rt, rt_rel_dir};
 use super::runtime::build_native_runtime;
 use super::tools::resolve_llvm;
 use super::wasm::{build_wasm_runtime, flavor};
@@ -25,9 +25,26 @@ pub fn pack_runtime(
                 need,
                 &out.join(rt_rel_dir("native", opt, need)),
             )?;
+            if opt == crate::driver::wasm_opt::OptLevel::O0 {
+                let objects = super::runtime_objects::native(
+                    &tools,
+                    &dream_abi::target::TargetSpec::host(),
+                    need,
+                    false,
+                )?;
+                super::runtime_objects::store_prebuilt(
+                    &out.join(rt_rel_dir("native", opt, need))
+                        .join("unit-objects"),
+                    &objects,
+                )?;
+            }
             for threads in [false, true] {
                 let dir = out.join(rt_rel_dir(flavor(threads), opt, need));
                 build_wasm_runtime(&tools, opt, need, threads, &dir)?;
+                if opt == crate::driver::wasm_opt::OptLevel::O0 {
+                    let objects = super::runtime_objects::wasm(&tools, need, threads)?;
+                    super::runtime_objects::store_prebuilt(&dir.join("unit-objects"), &objects)?;
+                }
             }
         }
     }

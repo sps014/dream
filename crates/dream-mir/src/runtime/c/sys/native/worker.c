@@ -6,7 +6,6 @@
 
 extern dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg);
 static dream_ptr worker_recv_blocking(int32_t id);
-
 static dream_mutex reg_mu = DREAM_MUTEX_INIT;
 
 #define worker_failure(message) DREAM_PANIC_LITERAL(u##message)
@@ -14,7 +13,6 @@ static dream_mutex reg_mu = DREAM_MUTEX_INIT;
     dream_mutex_unlock(&reg_mu); \
     worker_failure(message); \
 } while (0)
-
 #define uthash_fatal(msg) registry_failure("panic: out of memory indexing workers")
 #include "uthash.h"
 
@@ -22,6 +20,10 @@ typedef struct Job {
     int32_t fn;
     dream_ptr env;
     dream_ptr msg;
+    dream_ptr reply;
+    unsigned refs;
+    int synchronous;
+    int done;
     struct Job *next;
 } Job;
 
@@ -29,37 +31,81 @@ typedef struct Worker {
     int32_t id;
     int32_t fn;
     dream_ptr env;
+    unsigned refs;
     dream_thread th;
+    dream_thread_id thread_id;
     dream_mutex mu;
     dream_cond cv;
     Job *head;
     Job *tail;
-    dream_ptr reply;
-    int has_reply;
+    Job *replies;
+    Job *reply_tail;
     int dead;
     int busy;
-    int abandoned;
     UT_hash_handle hh;
 } Worker;
 
 static Worker *workers;
 static int64_t next_id = 1;
-
-static Worker *find_worker(int32_t id);
 static void destroy_worker(Worker *w);
 
+static void release_worker(Worker *w) {
+    if (__atomic_fetch_sub(&w->refs, 1u, __ATOMIC_ACQ_REL) == 1u) {
+        destroy_worker(w);
+    }
+}
+
+static void release_job(Job *j) {
+    if (__atomic_fetch_sub(&j->refs, 1u, __ATOMIC_ACQ_REL) == 1u) {
+        dream_release(j->msg);
+        dream_release_closure_env(j->env);
+        dream_release(j->reply);
+        free(j);
+    }
+}
+
+static void release_jobs(Job *j) {
+    while (j) {
+        Job *next = j->next;
+        release_job(j);
+        j = next;
+    }
+}
+
+static Worker *find_worker(int32_t id) {
+    Worker *w;
+    HASH_FIND(hh, workers, &id, sizeof(id), w);
+    return w;
+}
+
+static Worker *acquire_worker(int32_t id) {
+    dream_mutex_lock(&reg_mu);
+    Worker *w = find_worker(id);
+    if (w) {
+        __atomic_fetch_add(&w->refs, 1u, __ATOMIC_RELAXED);
+    }
+    dream_mutex_unlock(&reg_mu);
+#ifdef DREAM_WORKER_TEST_ACQUIRED
+    DREAM_WORKER_TEST_ACQUIRED(w);
+#endif
+    return w;
+}
+
 static void callback_wake(void *context) {
-    Worker *worker = (Worker *)context;
-    dream_mutex_lock(&worker->mu);
-    dream_cond_signal(&worker->cv);
-    dream_mutex_unlock(&worker->mu);
+    Worker *w = context;
+    dream_mutex_lock(&w->mu);
+    dream_cond_broadcast(&w->cv);
+    dream_mutex_unlock(&w->mu);
 }
 
 static DREAM_THREAD_PROC(worker_main) {
-    Worker *w = (Worker *)arg;
+    Worker *w = arg;
     dream_thread_attach();
+    dream_mutex_lock(&w->mu);
+    w->thread_id = dream_thread_self();
+    dream_mutex_unlock(&w->mu);
+    dream_callback_set_waker(callback_wake, w);
     for (;;) {
-        dream_callback_set_waker(callback_wake, w);
         dream_callback_drain();
         dream_mutex_lock(&w->mu);
         while (!w->head && !w->dead) {
@@ -71,14 +117,8 @@ static DREAM_THREAD_PROC(worker_main) {
             }
             dream_cond_wait(&w->cv, &w->mu);
         }
-        if (w->dead && !w->head) {
-            int abandoned = w->abandoned;
+        if (w->dead) {
             dream_mutex_unlock(&w->mu);
-            if (abandoned) {
-                dream_callback_owner_finish();
-                destroy_worker(w);
-                return 0;
-            }
             break;
         }
         Job *j = w->head;
@@ -86,40 +126,49 @@ static DREAM_THREAD_PROC(worker_main) {
         if (!w->head) {
             w->tail = NULL;
         }
+        j->next = NULL;
         w->busy = 1;
         dream_mutex_unlock(&w->mu);
+        /* The invoke ABI consumes the wire argument, but borrows the closure environment. */
         dream_ptr r = dream_worker_invoke(j->fn, j->env, j->msg);
-        /* Ownership of `j->msg` transferred to `dream_worker_invoke`, which releases it once the
-         * body has run; releasing here too over-frees the posted wire string. */
-        free(j);
-        dream_mutex_lock(&w->mu);
+        j->msg = 0;
         dream_publish(r);
-        w->reply = r;
-        w->has_reply = 1;
+        dream_mutex_lock(&w->mu);
+        j->reply = r;
+        j->done = 1;
         w->busy = 0;
-        dream_cond_signal(&w->cv);
+        int queued_reply = !j->synchronous && !w->dead;
+        if (queued_reply) {
+            if (w->reply_tail) {
+                w->reply_tail->next = j;
+            } else {
+                w->replies = j;
+            }
+            w->reply_tail = j;
+        }
+        dream_cond_broadcast(&w->cv);
         dream_mutex_unlock(&w->mu);
+        if (!queued_reply) {
+            release_job(j);
+        }
     }
+    /* owner_finish waits for outstanding wake callbacks before the thread reference is dropped. */
     dream_callback_owner_finish();
+    release_worker(w);
     return 0;
 }
 
-static Worker *find_worker(int32_t id) {
-    Worker *w;
-    HASH_FIND(hh, workers, &id, sizeof(id), w);
-    return w;
-}
-
 int32_t workerSpawn(int32_t fn, dream_ptr env) {
-    Worker *w = (Worker *)calloc(1, sizeof(Worker));
-    if (w == NULL) {
+    Worker *w = calloc(1, sizeof(*w));
+    if (!w) {
         worker_failure("panic: out of memory creating a worker");
     }
     __atomic_store_n(&dream_rt_mt, 1, __ATOMIC_RELEASE);
     w->fn = fn;
-    w->env = (dream_ptr)env;
-    dream_publish(w->env);
-    dream_retain(w->env);
+    w->env = env;
+    w->refs = 2; /* Registry membership and the running thread each own a reference. */
+    dream_publish(env);
+    dream_retain(env);
     dream_mutex_init(&w->mu);
     dream_cond_init(&w->cv);
     dream_mutex_lock(&reg_mu);
@@ -128,9 +177,8 @@ int32_t workerSpawn(int32_t fn, dream_ptr env) {
         destroy_worker(w);
         worker_failure("panic: worker ID space exhausted");
     }
-    w->id = (int32_t)next_id++;
+    int32_t id = w->id = (int32_t)next_id++;
     HASH_ADD(hh, workers, id, sizeof(w->id), w);
-    /* Do not expose a handle until its thread exists; failure must undo registration. */
     if (dream_thread_start(&w->th, worker_main, w) != 0) {
         HASH_DEL(workers, w);
         dream_mutex_unlock(&reg_mu);
@@ -138,88 +186,106 @@ int32_t workerSpawn(int32_t fn, dream_ptr env) {
         worker_failure("panic: could not start a worker thread");
     }
     dream_mutex_unlock(&reg_mu);
-    return w->id;
+    return id;
 }
 
 int32_t workerPoolSpawn(void) { return workerSpawn(0, 0); }
 
+static Job *new_job(int32_t fn, dream_ptr env, dream_ptr msg, int synchronous) {
+    Job *j = calloc(1, sizeof(*j));
+    if (!j) {
+        worker_failure("panic: out of memory posting a worker job");
+    }
+    j->fn = fn;
+    j->env = env;
+    j->msg = msg;
+    j->refs = synchronous ? 2u : 1u;
+    j->synchronous = synchronous;
+    dream_publish(env);
+    dream_publish(msg);
+    dream_retain(env);
+    dream_retain(msg);
+    return j;
+}
+
+/* Caller holds w->mu; termination and enqueue have one linearization point. */
+static int enqueue(Worker *w, Job *j) {
+    if (w->dead) {
+        return 0;
+    }
+    if (w->tail) {
+        w->tail->next = j;
+    } else {
+        w->head = j;
+    }
+    w->tail = j;
+    dream_cond_broadcast(&w->cv);
+    return 1;
+}
+
 void workerPost(int32_t id, dream_ptr msg) {
-    Worker *w;
-    Job *j;
-    dream_mutex_lock(&reg_mu);
-    w = find_worker(id);
-    dream_mutex_unlock(&reg_mu);
+    Worker *w = acquire_worker(id);
     if (!w) {
         return;
     }
-    j = (Job *)calloc(1, sizeof(Job));
-    if (j == NULL) {
-        worker_failure("panic: out of memory posting a worker job");
-    }
-    j->fn = w->fn;
-    j->env = w->env;
-    j->msg = msg;
-    dream_publish(msg);
-    dream_retain(msg);
+    Job *j = new_job(w->fn, w->env, msg, 0);
     dream_mutex_lock(&w->mu);
-    if (w->tail) {
-        w->tail->next = j;
-    } else {
-        w->head = j;
-    }
-    w->tail = j;
-    dream_cond_signal(&w->cv);
+    int accepted = enqueue(w, j);
     dream_mutex_unlock(&w->mu);
+    if (!accepted) {
+        release_job(j);
+    }
+    release_worker(w);
 }
 
 dream_ptr workerPoolDispatch(int32_t id, int32_t fn, dream_ptr env, dream_ptr msg) {
-    Worker *w;
-    Job *j;
-    dream_mutex_lock(&reg_mu);
-    w = find_worker(id);
-    dream_mutex_unlock(&reg_mu);
+    Worker *w = acquire_worker(id);
     if (!w) {
         return 0;
     }
-    j = (Job *)calloc(1, sizeof(Job));
-    if (j == NULL) {
-        worker_failure("panic: out of memory dispatching a worker job");
-    }
-    j->fn = fn;
-    j->env = (dream_ptr)env;
-    j->msg = msg;
-    dream_publish(j->env);
-    dream_publish(msg);
-    dream_retain(msg);
+    Job *j = new_job(fn, env, msg, 1);
     dream_mutex_lock(&w->mu);
-    if (w->tail) {
-        w->tail->next = j;
-    } else {
-        w->head = j;
+    int accepted = enqueue(w, j);
+    while (accepted && !j->done && !w->dead) {
+        dream_cond_wait(&w->cv, &w->mu);
     }
-    w->tail = j;
-    dream_cond_signal(&w->cv);
+    dream_ptr r = j->done ? j->reply : 0;
+    if (j->done) {
+        j->reply = 0;
+    }
     dream_mutex_unlock(&w->mu);
-    return worker_recv_blocking(id);
+    if (!accepted) {
+        release_job(j);
+    }
+    release_job(j);
+    release_worker(w);
+    return r;
 }
 
 static dream_ptr worker_recv_blocking(int32_t id) {
-    Worker *w;
-    dream_ptr r;
-    dream_mutex_lock(&reg_mu);
-    w = find_worker(id);
-    dream_mutex_unlock(&reg_mu);
+    Worker *w = acquire_worker(id);
     if (!w) {
         return 0;
     }
     dream_mutex_lock(&w->mu);
-    while (!w->has_reply && !w->dead) {
+    while (!w->replies && !w->dead) {
         dream_cond_wait(&w->cv, &w->mu);
     }
-    r = w->reply;
-    w->reply = 0;
-    w->has_reply = 0;
+    Job *j = w->replies;
+    dream_ptr r = 0;
+    if (j) {
+        w->replies = j->next;
+        if (!w->replies) {
+            w->reply_tail = NULL;
+        }
+        r = j->reply;
+        j->reply = 0;
+    }
     dream_mutex_unlock(&w->mu);
+    if (j) {
+        release_job(j);
+    }
+    release_worker(w);
     return r;
 }
 
@@ -228,7 +294,7 @@ dream_ptr workerRecv(int32_t id) { return worker_recv_blocking(id); }
 static Worker *take_worker(int32_t id) {
     dream_mutex_lock(&reg_mu);
     Worker *w = find_worker(id);
-    if (w != NULL) {
+    if (w) {
         HASH_DEL(workers, w);
     }
     dream_mutex_unlock(&reg_mu);
@@ -236,20 +302,8 @@ static Worker *take_worker(int32_t id) {
 }
 
 static void destroy_worker(Worker *w) {
-    Job *j;
-    if (!w) {
-        return;
-    }
-    j = w->head;
-    while (j) {
-        Job *next = j->next;
-        dream_release(j->msg);
-        free(j);
-        j = next;
-    }
-    if (w->reply) {
-        dream_release(w->reply);
-    }
+    release_jobs(w->head);
+    release_jobs(w->replies);
     dream_release_closure_env(w->env);
     dream_mutex_destroy(&w->mu);
     dream_cond_destroy(&w->cv);
@@ -257,26 +311,25 @@ static void destroy_worker(Worker *w) {
 }
 
 void workerTerminate(int32_t id) {
-    Worker *w;
-    int busy;
-    w = take_worker(id);
+    Worker *w = take_worker(id);
     if (!w) {
         return;
     }
     dream_mutex_lock(&w->mu);
     w->dead = 1;
-    busy = w->busy;
-    if (busy) {
-        w->abandoned = 1;
+    Job *cancelled = w->head;
+    w->head = w->tail = NULL;
+    for (Job *j = cancelled; j; j = j->next) {
+        j->done = 1;
     }
-    dream_cond_signal(&w->cv);
+    int detach = w->busy || dream_thread_id_eq(dream_thread_self(), w->thread_id);
+    dream_cond_broadcast(&w->cv);
     dream_mutex_unlock(&w->mu);
-    if (busy) {
-        /* Hard abort: the body is still running (e.g. Promise.cancel on a tight loop).
-         * Detach so we do not hang `del()`; the thread self-frees if it ever exits. */
+    release_jobs(cancelled);
+    if (detach) {
         dream_thread_release(w->th);
-        return;
+    } else {
+        dream_thread_join(w->th);
     }
-    dream_thread_join(w->th);
-    destroy_worker(w);
+    release_worker(w);
 }

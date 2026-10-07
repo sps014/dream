@@ -38,6 +38,8 @@ dream-mir = { path = "crates/dream-mir" }
 bumpalo = "3.20.3"
 # Content keys and artifact hashes for the build cache.
 blake3 = "1"
+depfile = { version = "0.1.1", optional = true }
+rayon = { version = "1", optional = true }
 # Insertion-ordered map used for the codegen tables whose iteration order reaches emitted
 # `.wat` output, so compilation is reproducible (std `HashMap` randomizes iteration per run).
 indexmap = "2"
@@ -68,7 +70,7 @@ dunce = { version = "1", optional = true }
 [features]
 default = ["native"]
 # Native compiler execution/linking tools; runtime hosts are built separately.
-native = ["dep:image", "dep:object", "dep:dunce", "dep:libc", "dep:windows-sys"]
+native = ["dep:rayon", "dep:depfile", "dep:image", "dep:object", "dep:dunce", "dep:libc", "dep:windows-sys"]
 [target.'cfg(unix)'.dependencies]
 libc = { version = "0.2", optional = true }
 
@@ -80,13 +82,16 @@ proptest = "1"
 libloading = "0.8"
 tempfile = "3"
 pretty_assertions = "1.4.1"
-rayon = "1"
 # Parses the emitted `.wat` text back into a module in wasm-opt / e2e assertions.
 wat = "1.252.0"
 wasmparser = "0.252"
 
 [profile.dev]
 debug = "line-tables-only"
+
+# Cache validation hashes LLVM tools and transitive headers on every cache lookup.
+[profile.dev.package.blake3]
+opt-level = 3
 
 [profile.test]
 # `-O1` keeps the compiler-heavy e2e cases fast to *run* while cutting test *build* time

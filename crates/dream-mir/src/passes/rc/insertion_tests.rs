@@ -71,6 +71,7 @@ fn last_use_constructed_value_temporary_kills_arg() {
             ty: point,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.push(Statement::Call {
@@ -341,6 +342,7 @@ fn birth_borrow_falls_off_block_one_release_zero_retain() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.push(Statement::Call {
@@ -374,6 +376,7 @@ fn last_use_assign_forwards_token_without_retain() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(Place::Local(y), Rvalue::Use(Operand::Copy(Place::Local(x))));
@@ -448,6 +451,7 @@ fn still_live_alias_retains() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(Place::Local(y), Rvalue::Use(Operand::Copy(Place::Local(x))));
@@ -486,6 +490,7 @@ fn unbalanced_if_releases_on_kept_arm() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::If {
@@ -586,6 +591,7 @@ fn loop_carried_local_does_not_share_retain_on_entry() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::Goto(header));
@@ -641,6 +647,7 @@ fn loop_live_local_does_not_move_into_sink() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::Goto(header));
@@ -764,6 +771,7 @@ fn rebind_evaluates_rhs_before_release() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(
@@ -810,6 +818,7 @@ fn unread_local_survives_until_rebind() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(
@@ -827,6 +836,7 @@ fn unread_local_survives_until_rebind() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::Return(None));
@@ -1177,6 +1187,7 @@ fn async_class_released_before_await() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(
@@ -1186,6 +1197,7 @@ fn async_class_released_before_await() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::Await {
@@ -1335,6 +1347,7 @@ fn async_await_rebind_releases_previous_dest() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(
@@ -1344,6 +1357,7 @@ fn async_await_rebind_releases_previous_dest() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::Await {
@@ -1404,6 +1418,7 @@ fn loop_await_releases_future_on_resume() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::Await {
@@ -1445,6 +1460,7 @@ fn unique_new_uses_release_unique() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::Return(None));
@@ -1480,6 +1496,7 @@ fn last_use_field_store_nulls_without_retain() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(
@@ -1489,6 +1506,7 @@ fn last_use_field_store_nulls_without_retain() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(
@@ -1657,6 +1675,7 @@ fn still_live_copy_is_shared_not_unique_destroy() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(Place::Local(y), Rvalue::Use(Operand::Copy(Place::Local(x))));

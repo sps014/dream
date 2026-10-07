@@ -176,6 +176,7 @@ impl Lowerer<'_> {
                         take_params: take_params.clone(),
                     }),
                     args: lowered,
+                    policy: crate::AllocPolicy::Tracked,
                 }
             }
             HExprKind::UnionNew { def, variant, args } => {

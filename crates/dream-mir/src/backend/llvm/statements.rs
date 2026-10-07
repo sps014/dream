@@ -260,7 +260,13 @@ impl<'l, 'a> Fx<'l, 'a> {
         if let (Place::Local(l), Rvalue::New { ty, ctor, args, .. }) = (place, rv) {
             if has_frame_buffer(self.mir, self.f, *l) {
                 let buf = self.frame_buf(*l);
-                let o = self.emit_new_in(*ty, ctor.as_ref().map(|c| c.def), args, Some(buf));
+                let o = self.emit_new_in(
+                    *ty,
+                    ctor.as_ref().map(|c| c.def),
+                    args,
+                    Some(buf),
+                    crate::AllocPolicy::Tracked,
+                );
                 self.write_local(*l, &o);
                 return;
             }

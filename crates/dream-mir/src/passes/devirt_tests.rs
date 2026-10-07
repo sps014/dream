@@ -69,6 +69,7 @@ fn new_of(def: u32, ty: TypeId) -> Rvalue {
         ty,
         ctor: None,
         args: vec![],
+        policy: crate::AllocPolicy::Tracked,
     }
 }
 

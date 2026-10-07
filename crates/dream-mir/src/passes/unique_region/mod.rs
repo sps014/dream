@@ -13,12 +13,14 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct UniqueRegion;
 
 mod candidates;
+mod private_graph;
 mod rewrite;
 mod safety;
 #[cfg(test)]
 mod tests;
 
 use candidates::*;
+use private_graph::*;
 use rewrite::*;
 use safety::*;
 
@@ -31,6 +33,7 @@ impl ModulePass for UniqueRegion {
         let ctor_only = ctor_only_defs(mir);
         let index = FunctionIndex::new(mir);
         let safe = compute_safety(mir, interner, &ctor_only, &index);
+        mark_private(mir, interner, &safe);
         let mut changed = false;
         let n = mir.functions.len();
         for i in 0..n {

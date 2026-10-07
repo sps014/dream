@@ -217,6 +217,7 @@ fn expand_in_function(
                         ty,
                         ctor: Some(ctor),
                         args,
+                        policy,
                     },
                 ) => {
                     let Some(inits) = ctor_inits.get(&ctor.def) else {
@@ -227,6 +228,7 @@ fn expand_in_function(
                                 ty,
                                 ctor: Some(ctor),
                                 args,
+                                policy,
                             },
                         ));
                         continue;
@@ -244,6 +246,7 @@ fn expand_in_function(
                                 ty,
                                 ctor: Some(ctor),
                                 args,
+                                policy,
                             },
                         ));
                         continue;
@@ -255,6 +258,7 @@ fn expand_in_function(
                             ty,
                             ctor: None,
                             args: vec![],
+                            policy,
                         },
                     ));
                     for (field, init) in inits {
@@ -580,6 +584,7 @@ mod tests {
                 ty: i.int(),
                 ctor: None,
                 args: vec![],
+                policy: crate::AllocPolicy::Tracked,
             },
         );
         b.assign(
@@ -627,6 +632,7 @@ mod tests {
                 ty: i.int(),
                 ctor: None,
                 args: vec![],
+                policy: crate::AllocPolicy::Tracked,
             },
         );
         b.push(Statement::Retain(Operand::Copy(Place::Local(o))));
@@ -676,6 +682,7 @@ mod tests {
                 ty: i.int(),
                 ctor: None,
                 args: vec![],
+                policy: crate::AllocPolicy::Tracked,
             },
         );
         b.assign(
@@ -704,6 +711,7 @@ mod tests {
                 ty: i.int(),
                 ctor: None,
                 args: vec![],
+                policy: crate::AllocPolicy::Tracked,
             },
         );
         b.assign(
@@ -752,6 +760,7 @@ mod tests {
                     take_params: vec![],
                 }),
                 args: vec![Operand::Const(Const::Int(7))],
+                policy: crate::AllocPolicy::Tracked,
             },
         );
         caller_b.assign(
@@ -823,6 +832,7 @@ mod tests {
                     take_params: vec![],
                 }),
                 args: vec![Operand::Copy(Place::Local(s))],
+                policy: crate::AllocPolicy::Tracked,
             },
         );
         caller_b.terminate(Terminator::Return(None));

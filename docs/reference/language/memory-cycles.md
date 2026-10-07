@@ -42,7 +42,11 @@ a new global ordering guarantee.
 
 ## Graph ownership
 
-Release can infer a `UniqueRegion` for proven nonescaping, destructor-free graphs. It excludes
-collector-managed objects until equivalent cleanup is proven. A future explicit graph-owner
+Release can infer a `UniqueRegion` for proven nonescaping, destructor-free graphs. A class that
+could form a cycle is included only when the compiler also proves the graph private: every
+reference stored into its objects was allocated inside the same region, and the class has no
+`weak` or `unowned` fields. Those objects are allocated without collector registration and are
+reclaimed in bulk when the region ends; the same builder called outside a region allocates
+ordinary collector-tracked objects. A future explicit graph-owner
 API could represent an intentionally shared lifetime, but there is no new graph syntax or
 lifetime system in this design.

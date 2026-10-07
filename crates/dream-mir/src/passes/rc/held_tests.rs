@@ -148,6 +148,7 @@ fn rebinding_the_owner_keeps_the_pair() {
                 ty: boxed,
                 ctor: None,
                 args: vec![],
+                policy: crate::AllocPolicy::Tracked,
             },
         );
     });

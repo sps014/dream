@@ -117,7 +117,7 @@ public class Counter {
 }
 ```
 
-A field may also carry `weak` or `unowned` (combinable with visibility in any order) to opt a strong-reference-cycle-prone field out of the compiler's cycle check — see [Memory > Reference cycles](memory-cycles.md#advanced-reference-cycles).
+A field may also carry `weak` or `unowned` (combinable with visibility in any order) so the field does not extend its target's lifetime — see [Weak and unowned references](memory-cycles.md#weak-and-unowned-references).
 
 ### Methods
 

@@ -25,36 +25,36 @@ size assertions.
 ## Evidence for the original blockers
 
 - **FFI-2, pointer-sized integers:** `isize` and `usize` follow the selected target.
-  [Target tests](../../tests/target_spec.rs) check literal ranges, and the
-  [pointer-integer golden](../../tests/cases/pointer_integers.dream) exercises
+  Target tests (`tests/target_spec.rs`) check literal ranges, and the
+  pointer-integer golden (`tests/cases/pointer_integers.dream`) exercises
   arithmetic, layout, boxing, collections, closures and async values on native
   and wasm32. These types permit sizes and offsets to cross C boundaries without
   encoding the host's pointer width as a language-level `int`.
 - **ABI-1, native address limits:** native references use LLVM pointers; wasm32
   references remain linear-memory offsets. The
-  [emission tests](../../tests/native_pointer_emission.rs) distinguish those
-  representations. The [machine-size harness](../../tests/runtime_machine_size.rs)
+  emission tests (`tests/native_pointer_emission.rs`) distinguish those
+  representations. The machine-size harness (`tests/runtime_machine_size.rs`)
   exercises allocations beyond the former 2 GiB boundary without committing
   large physical buffers, including arrays, strings, futures and regions. That
   harness runs on 64-bit Unix; its scope must not be presented as a Windows
   allocation stress result or a wasm64 implementation.
 - **MOB-1, library output:** static and shared library outputs have generated C
   headers and explicit exported entry points. The
-  [library consumer tests](../../tests/library_outputs.rs) build and run real C
+  library consumer tests (`tests/library_outputs.rs`) build and run real C
   consumers, exercise ownership and C calls, verify optional host binding, and
   check relocation of IR and headers. A bootstrap component can therefore be
   embedded through the existing C ABI rather than requiring a new runtime.
 - **GEN-1, unstable symbols:**
-  [structural symbol encoding](../../crates/dream-types/src/symbols.rs) uses
+  structural symbol encoding (`crates/dream-types/src/symbols.rs`) uses
   declaration paths and structural type arguments rather than interner allocation
   order. Its unit tests and the
-  [module identity tests](../../tests/structural_symbols.rs) cover unrelated
+  module identity tests (`tests/structural_symbols.rs`) cover unrelated
   declarations and module name collisions. Exported C names are checked by the
   library consumers. This is reproducible identity, not a promise of a permanent
   pre-1.0 ABI.
 
 LLVM can remain an external pinned toolchain. The existing
-[process golden](../../tests/cases/process_run_basic.dream) exercises spawning,
+process golden (`tests/cases/process_run_basic.dream`) exercises spawning,
 stdout capture, successful exit and missing-executable errors. This establishes
 an available process API; it does not prove a Dream compiler's complete toolchain
 orchestration, linker argument construction or packaging.

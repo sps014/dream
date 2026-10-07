@@ -180,7 +180,7 @@ from pathlib import Path
 SECTIONS = [
     ("compute", ["nbody", "mandelbrot", "matmul_64", "quicksort", "sieve"]),
     ("calls", ["fib_rec", "iface_dispatch"]),
-    ("memory", ["binary_trees", "linked_walk"]),
+    ("memory", ["binary_trees", "binary_trees_alloc", "binary_trees_reclaim", "linked_walk", "weak_tree"]),
     ("collections", ["wordcount", "parse_ints", "sum_options"]),
     ("strings", [
         "arc_locals", "string_concat", "string_eq", "char_scan", "byte_scan",

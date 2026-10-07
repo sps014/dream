@@ -1339,5 +1339,39 @@
         }
       ]
     }
-  ]
+  ],
+  "attribution": {
+    "note": "Deterministic runtime counters (Debug.runtime_counter, DREAM_BENCH_COUNTERS=1) per measured pass of tests/bench/microbenches.dream, before the region and collector changes. Timings were too noisy on a loaded host to attribute; counts are exact. binary_trees builds 100 depth-12 trees (409,500 nodes).",
+    "per_node_binary_trees": {
+      "cycle_node_registrations": 1,
+      "cycle_node_removals": 1,
+      "queued_candidates": 1,
+      "registry_lookups": 11,
+      "gate_acquisitions": 8,
+      "trial_collections": 0,
+      "forward_flag_queues": 0
+    },
+    "per_node_weak_tree": {
+      "cycle_node_registrations": 1,
+      "queued_candidates": 2,
+      "registry_lookups": 23,
+      "gate_acquisitions": 16,
+      "trial_collections": 1,
+      "edges_visited": 2,
+      "forward_flag_queues": 1,
+      "weak_registrations": 1,
+      "weak_invalidations": 1
+    },
+    "mir_difference": "The reference build wraps the make_tree(12) call in region_enter/region_leave (unique-region) and nulls the result; the current build omits the region because unique_region refuses every cycle-capable New, so each node takes the collector path. No other MIR pass output differs for the tree builder.",
+    "ir_per_node_calls": [
+      "dream_set_type (gate + calloc CycleNode + HASH_ADD)",
+      "2x dream_cycle_store_begin per constructor (gate + check_store re-entering the gate with 2 lookups, then 2 more lookups)",
+      "dream_cycle_release (gate + lookup + calloc Candidate + drain)",
+      "dream_cycle_forget in dream_recycle_slow (gate + lookup + HASH_DEL)"
+    ],
+    "forward_edge_flag": "Plain trees never set may_have_forward_edges: children are allocated before parents, so every store is backward. weak_tree allocates the parent first, so the first child store is a forward edge; the global flag then queues every nonzero decrement for trial deletion until the cycle registry empties (one trial collection per node). An unrelated live List<object> did not change the plain tree counts.",
+    "isolation": {
+      "binary_trees_counts_isolated_equal_suite": true
+    }
+  }
 }

@@ -198,9 +198,13 @@ impl<'l, 'a> Fx<'l, 'a> {
                     .unwrap_or(0);
                 V::i32(idx as i64)
             }
-            Rvalue::New { ty, ctor, args, .. } => {
-                self.emit_new_in(*ty, ctor.as_ref().map(|c| c.def), args, None)
-            }
+            Rvalue::New {
+                ty,
+                ctor,
+                args,
+                policy,
+                ..
+            } => self.emit_new_in(*ty, ctor.as_ref().map(|c| c.def), args, None, *policy),
             Rvalue::Tuple { ty, elems } => self.emit_tuple(*ty, elems),
             Rvalue::UnionNew {
                 ty, variant, args, ..
@@ -411,6 +415,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         ctor: Option<DefId>,
         args: &[Operand],
         frame: Option<Value>,
+        policy: crate::AllocPolicy,
     ) -> V {
         let layout = self.l.cx.nstruct(ty).unwrap_or_else(|| {
             crate::internal_error!("missing layout for struct allocation {ty:?}")
@@ -432,12 +437,16 @@ impl<'l, 'a> Fx<'l, 'a> {
                 &[V::s(buf), V::i64(size as i64), V::i32(tag as i64)],
             ),
             None => {
-                let malloc = if shared {
-                    "dream_malloc_shared"
-                } else {
-                    "dream_malloc"
+                let size_tag = [V::i64(size as i64), V::i32(tag as i64)];
+                let o = match policy {
+                    _ if shared => self.call_v("dream_malloc_shared", &size_tag),
+                    crate::AllocPolicy::Private => {
+                        let untracked = super::glue::ownership::untracked_info(ty);
+                        let [size, tag] = size_tag;
+                        self.call_v("dream_malloc_private", &[size, tag, V::s(Value::global(untracked))])
+                    }
+                    crate::AllocPolicy::Tracked => self.call_v("dream_malloc", &size_tag),
                 };
-                let o = self.call_v(malloc, &[V::i64(size as i64), V::i32(tag as i64)]);
                 let p = self.ptr(&o);
                 self.memset0(&p, &Value::i64(size as i64));
                 o

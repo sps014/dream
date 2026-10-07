@@ -404,20 +404,32 @@ impl FnPrinter<'_> {
                 self.operand(receiver),
                 self.ops(args)
             ),
-            Rvalue::New { ty, ctor, args, .. } => match ctor {
-                Some(c) => format!(
-                    "new {} via {}({})",
-                    self.cx.ty(*ty),
-                    self.cx.callee(&Callee {
-                        def: c.def,
-                        args: Vec::new(),
-                        ret: *ty,
-                        take_params: Vec::new(),
-                    }),
-                    self.ops(args)
-                ),
-                None => format!("new {}({})", self.cx.ty(*ty), self.ops(args)),
-            },
+            Rvalue::New {
+                ty,
+                ctor,
+                args,
+                policy,
+                ..
+            } => {
+                let policy = match policy {
+                    crate::AllocPolicy::Tracked => "",
+                    crate::AllocPolicy::Private => "private ",
+                };
+                match ctor {
+                    Some(c) => format!(
+                        "new {policy}{} via {}({})",
+                        self.cx.ty(*ty),
+                        self.cx.callee(&Callee {
+                            def: c.def,
+                            args: Vec::new(),
+                            ret: *ty,
+                            take_params: Vec::new(),
+                        }),
+                        self.ops(args)
+                    ),
+                    None => format!("new {policy}{}({})", self.cx.ty(*ty), self.ops(args)),
+                }
+            }
             Rvalue::UnionNew {
                 ty, variant, args, ..
             } => format!(

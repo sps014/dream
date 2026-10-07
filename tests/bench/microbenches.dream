@@ -34,7 +34,32 @@ class BenchSink {
 }
 let bench_sink = BenchSink();
 
+// bench-compare: current-only begin
+// Ownership-runtime event deltas since the previous row (`DREAM_BENCH_COUNTERS=1`). A row's
+// counts include the setup that ran between the two reports. Names follow `dream_counter`.
+let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
+let counter_names = "cycle_nodes,cycle_forgets,candidates,lookups,gates,edges,trials,forward_queues,deferred,weak_register,weak_invalidate,region_objects".split(',');
+let counter_last = Buffer.alloc<long>(13);
+
+fun counters_field(): string {
+    if counters_on == false {
+        return "";
+    }
+    let out = " counters=allocs:" + (Debug.total_allocations - counter_last[12]).to_string();
+    counter_last[12] = Debug.total_allocations;
+    let i = 0;
+    while i < counter_names.length {
+        let now = Debug.runtime_counter(i);
+        out = out + "," + counter_names[i] + ":" + (now - counter_last[i]).to_string();
+        counter_last[i] = now;
+        i = i + 1;
+    }
+    return out;
+}
+// bench-compare: current-only end
+
 fun report(name: string, nanos: long, iters: int): void {
+    let counters = counters_field(); // bench-compare: baseline=let counters = "";
     if measuring == false {
         return;
     }
@@ -44,6 +69,7 @@ fun report(name: string, nanos: long, iters: int): void {
             + " ns_total=" + nanos.to_string()
             + " iters=" + iters.to_string()
             + " ns_per_op=" + per.to_string()
+            + counters
     );
 }
 
@@ -182,14 +208,18 @@ fun bench_substring(iters: int): void {
     sink_int(acc);
 }
 
+// One op = one span view whose bounds and first unit depend on the iteration. A constant
+// span over a literal folds to `acc = 35 * iters`, which measures nothing.
 fun bench_substring_span(iters: int): void {
-    let s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let seed = (int)(Time.nano_time() & 1L);
+    let s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" + seed.to_string();
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
     while i < iters {
-        let sub = s.span(5, 40);
-        acc = acc + sub.length;
+        let start = i & 7;
+        let sub = s.span(start, start + 25 + (i & 3));
+        acc = acc + sub.length + (int)sub.char_at(0);
         i = i + 1;
     }
     sw.stop();
@@ -355,11 +385,15 @@ fun bench_scratch_arena(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
+    // Each op reads a slot an earlier op wrote; reading back the value just stored folds the
+    // whole loop to a closed form.
     while i < iters {
-        let start = arena.bump(32);
+        let start = arena.bump(1);
         arena.set_at(start, i);
-        acc = acc + arena.at(start);
-        arena.reset();
+        acc = acc + arena.at(start / 2);
+        if (i & 8191) == 8191 {
+            arena.reset();
+        }
         i = i + 1;
     }
     sw.stop();
@@ -925,7 +959,24 @@ fun make_tree(depth: int): Option<TreeNode> {
     return Option.Some(TreeNode(make_tree(depth - 1), make_tree(depth - 1)));
 }
 
+// One op = build a depth-12 tree (4095 nodes) and keep it; teardown runs after the timer.
+// This is allocation throughput only, comparable to C# without a collection.
+fun bench_binary_trees_alloc(iters: int): void {
+    let keep = List<Option<TreeNode>>(iters);
+    let sw = Stopwatch();
+    let i = 0;
+    while i < iters {
+        keep.push(make_tree(12));
+        i = i + 1;
+    }
+    sw.stop();
+    report("binary_trees_alloc", sw.elapsed_nanos, iters);
+    sink_int(keep.length);
+}
+
 // One op = build a depth-12 tree (4095 nodes) then drop it (full recursive ARC release).
+// Dream reclaims eagerly, so both labels time construction plus completed reclamation; the
+// `_reclaim` row exists because C# only forces a collection there (`BenchBinaryTrees`).
 fun bench_binary_trees(iters: int, reclaim: bool = false): void {
     let sw = Stopwatch();
     let acc = 0;
@@ -1059,20 +1110,24 @@ fun bench_wordcount(iters: int): void {
 }
 
 // One op = parse one 10-digit string via char_at digit loop (no int.parse host call).
+// One op = parse one 10-digit decimal chosen per iteration from eight strings built at
+// runtime. A single literal source lets LICM hoist the whole digit loop out of the timed loop.
 fun bench_parse_ints(iters: int): void {
-    let src = "1234567890";
-    let n = src.length;
-    // Clock bit keeps the digit loop opaque so SCCP cannot delete it. The
-    // product does not fit in `int` when the bit is set; C# runs this loop unchecked
-    // and accumulates into a 64-bit sink.
-    let bias = (int)(Time.nano_time() & 1L);
+    let seed = (int)(Time.nano_time() & 1L);
+    let srcs = List<string>(8);
+    let k = 0;
+    while k < 8 {
+        srcs.push((1000000000 + k * 111111 + seed).to_string());
+        k = k + 1;
+    }
     let sw = Stopwatch();
     let acc: long = 0;
     let i = 0;
     while i < iters {
-        let v = bias;
+        let src = srcs[i & 7];
+        let v = 0;
         let j = 0;
-        while j < n {
+        while j < src.length {
             v = v * 10 + ((int)src.char_at(j) - 48);
             j = j + 1;
         }
@@ -1085,19 +1140,29 @@ fun bench_parse_ints(iters: int): void {
 }
 
 // One op = two discriminated-union matches (Some hit + None hit).
+// One op = two discriminated-union matches over options loaded from a runtime-built array, so
+// neither the discriminant nor the payload is known to the optimizer.
 fun bench_sum_options(iters: int): void {
-    let bias = (int)(Time.nano_time() & 1L);
-    let some: Option<int> = Option.Some(7 + bias);
-    let none: Option<int> = Option.None;
+    let seed = (int)(Time.nano_time() & 1L);
+    let opts = List<Option<int>>(8);
+    let k = 0;
+    while k < 8 {
+        if ((k + seed) & 1) == 0 {
+            opts.push(Option.Some(k + 7));
+        } else {
+            opts.push(Option.None);
+        }
+        k = k + 1;
+    }
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
     while i < iters {
-        switch (some) {
+        switch (opts[i & 7]) {
             Some(v) => { acc = acc + v; }
             None    => { acc = acc - 1; }
         }
-        switch (none) {
+        switch (opts[(i + 3) & 7]) {
             Some(v) => { acc = acc + v; }
             None    => { acc = acc + 1; }
         }
@@ -1122,6 +1187,7 @@ fun run_suite(scale: int): void {
     bench_iface_dispatch(scale * 12);
     // ---- ARC / allocator reality at scale ----
     bench_binary_trees(scale / 200);
+    bench_binary_trees_alloc(scale / 200);
     bench_linked_walk(scale / 5);
     bench_weak_tree(scale / 200);
     // ---- collections / strings / enums ----

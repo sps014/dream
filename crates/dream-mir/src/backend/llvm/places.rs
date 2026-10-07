@@ -298,7 +298,9 @@ impl<'l, 'a> Fx<'l, 'a> {
             "dream_cycle_store_begin",
             &[owner, child, V::i32(shape as i64)],
         );
+        self.store_checked = !self.is_value(ty);
         self.store_inner(place, rv, rhs);
+        self.store_checked = false;
         self.call("dream_cycle_store_end", &[locked]);
     }
 

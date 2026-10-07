@@ -227,8 +227,7 @@ DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
     if (ptr == 0) {
         return;
     }
-    const dream_type_info *info = dream_object_info(ptr);
-    if (info && info->cycle_capable) { dream_cycle_retain(ptr); return; }
+    if (dream_cycle_tracked(ptr)) { dream_cycle_retain(ptr); return; }
     rc = dream_rc_word(ptr);
     v = __atomic_load_n(rc, __ATOMIC_RELAXED);
     if (DREAM_LIKELY(v >= 0)) {
@@ -244,8 +243,13 @@ dream_ptr dream_malloc_shared(dream_size size, int32_t tag);
  * `Debug.live_objects` accounting (it will never be freed). */
 void dream_pin_immortal(dream_ptr s);
 
+/* A compiler-proven private allocation: inside a region it takes `untracked`, the type's
+ * descriptor with `cycle_capable = 0`, and skips collector registration; elsewhere it is an
+ * ordinary `dream_malloc`. */
+dream_ptr dream_region_try_malloc_private(dream_size size, int32_t tag, const dream_type_info *untracked);
 #ifdef DREAM_WASM32
 dream_ptr dream_malloc(dream_size size, int32_t tag);
+dream_ptr dream_malloc_private(dream_size size, int32_t tag, const dream_type_info *untracked);
 /* Recycle a live block without `dream_str_fini`. Typed `destroy_*` for classes/arrays/unions
  * uses this; string destroy still goes through `dream_free`. */
 void dream_recycle(dream_ptr ptr);
@@ -261,7 +265,7 @@ void dream_recycle(dream_ptr ptr);
 typedef struct {
     dream_size size;
     const dream_type_info *info;
-    unsigned char reserved[NATIVE_HEAP_HEADER_SIZE - sizeof(dream_size) - sizeof(void *) - 12];
+    uint32_t cycle_slot;
     uint32_t magic;
     int32_t tag;
     int32_t rc;
@@ -271,6 +275,8 @@ _Static_assert(offsetof(dream_heap_header, tag) == NATIVE_HEAP_HEADER_SIZE - TAG
                "native tag offset");
 _Static_assert(offsetof(dream_heap_header, rc) == NATIVE_HEAP_HEADER_SIZE - RC_FROM_DATA,
                "native reference-count offset");
+_Static_assert(offsetof(dream_heap_header, cycle_slot) == NATIVE_HEAP_HEADER_SIZE - DREAM_CYCLE_SLOT_FROM_DATA,
+               "native collector slot offset");
 
 DREAM_ALWAYS_INLINE size_t *dream_block_size(char *block) {
     return &((dream_heap_header *)block)->size;
@@ -318,12 +324,17 @@ DREAM_ALWAYS_INLINE int32_t dream_class_bytes(int idx) {
     return (int32_t)((9u + (j & 7u)) << (5u + (j >> 3)));
 }
 
-DREAM_ALWAYS_INLINE void dream_block_activate(char *block, int32_t tag) {
+DREAM_ALWAYS_INLINE void dream_block_activate_info(char *block, int32_t tag, const dream_type_info *info) {
     dream_heap_header *header = (dream_heap_header *)block;
     header->magic = DREAM_MAGIC_LIVE;
     header->tag = tag;
     header->rc = dream_rc_init(tag);
-    dream_set_type((dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE), dream_type_info_for_tag(tag & TAG_VALUE_MASK));
+    header->cycle_slot = 0;
+    dream_set_type((dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE), info);
+}
+
+DREAM_ALWAYS_INLINE void dream_block_activate(char *block, int32_t tag) {
+    dream_block_activate_info(block, tag, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
 }
 
 DREAM_ALWAYS_INLINE void dream_heap_count(uint64_t *c, uint64_t n) {
@@ -349,6 +360,15 @@ DREAM_ALWAYS_INLINE dream_ptr dream_malloc(dream_size size, int32_t tag) {
     return dream_malloc_slow(size, tag);
 }
 
+/* The heap fast path is only armed outside region mode. */
+DREAM_ALWAYS_INLINE dream_ptr dream_malloc_private(dream_size size, int32_t tag, const dream_type_info *untracked) {
+    if (DREAM_LIKELY(dream_heap.fast != NULL)) {
+        return dream_malloc(size, tag);
+    }
+    dream_ptr pointer = dream_region_try_malloc_private(size, tag, untracked);
+    return pointer != 0 ? pointer : dream_malloc_slow(size, tag);
+}
+
 /* Recycle a live block without `dream_str_fini`. Typed `destroy_*` for classes/arrays/unions
  * uses this; string destroy still goes through `dream_free`. */
 DREAM_ALWAYS_INLINE void dream_recycle(dream_ptr ptr) {
@@ -366,8 +386,7 @@ DREAM_ALWAYS_INLINE void dream_recycle(dream_ptr ptr) {
     block = (char *)dream_p(ptr) - NATIVE_HEAP_HEADER_SIZE;
     sz = *dream_block_size(block);
     tag = *(int32_t *)(block + NATIVE_HEAP_HEADER_SIZE - TAG_FROM_DATA);
-    const dream_type_info *info = dream_object_info(ptr);
-    if (info && info->cycle_capable) { dream_recycle_slow(ptr); return; }
+    if (dream_cycle_tracked(ptr)) { dream_recycle_slow(ptr); return; }
     if (DREAM_UNLIKELY(c == NULL || *dream_block_magic(block) != DREAM_MAGIC_LIVE
                        || sz - 1u >= DREAM_MAX_CLASS_BYTES
                        || (tag & (DREAM_TAG_WEAK_TARGET | TAG_SHARED)) != 0
@@ -412,8 +431,7 @@ void dream_defer_drain_all(void);
 /* Decrement `p`'s refcount; true when the caller must run destroy glue and free
  * (this was the last reference). `rc == 0` (mid-destroy) never re-frees. */
 DREAM_ALWAYS_INLINE int dream_rc_last(dream_ptr p) {
-    const dream_type_info *info = dream_object_info(p);
-    if (info && info->cycle_capable) { return dream_cycle_release(p); }
+    if (dream_cycle_tracked(p)) { return dream_cycle_release(p); }
     int32_t *rc = dream_rc_word(p);
     int32_t v = __atomic_load_n(rc, __ATOMIC_RELAXED);
     if (DREAM_LIKELY(v > 0)) {
@@ -450,8 +468,7 @@ DREAM_ALWAYS_INLINE int dream_rc_immortal(dream_ptr p) {
 /* A weak reader can retain between a count peek and destruction. Claiming count zero
  * makes that decision atomic and also distinguishes dying shared objects from immortals. */
 DREAM_ALWAYS_INLINE int dream_rc_claim_unique(dream_ptr p) {
-    const dream_type_info *info = dream_object_info(p);
-    if (info && info->cycle_capable) { return 0; }
+    if (dream_cycle_tracked(p)) { return 0; }
     int32_t *rc = dream_rc_word(p);
     int32_t expected = __atomic_load_n(rc, __ATOMIC_RELAXED);
     if ((expected & INT32_MAX) != 1) {
@@ -529,12 +546,12 @@ void dream_publish(dream_ptr ptr);
 
 /* A zero owner denotes an interior/ref value whose containing heap object is not known.
  * Once workers exist, such stores conservatively publish the child; stack addresses must never
- * be read as headers. The first worker handoff publishes the whole pre-existing graph. */
-DREAM_ALWAYS_INLINE void dream_publish_child(dream_ptr owner, dream_ptr child) {
+ * be read as headers. The first worker handoff publishes the whole pre-existing graph.
+ * `dream_publish_edge` omits the collector's store check, for a store whose barrier ran it. */
+DREAM_ALWAYS_INLINE void dream_publish_edge(dream_ptr owner, dream_ptr child) {
     if (child == 0) {
         return;
     }
-    dream_cycle_check_store(owner, child);
     int shared;
     if (owner == 0) {
         shared = __atomic_load_n(&dream_rt_mt, __ATOMIC_ACQUIRE);
@@ -545,6 +562,14 @@ DREAM_ALWAYS_INLINE void dream_publish_child(dream_ptr owner, dream_ptr child) {
     if (shared) {
         dream_publish(child);
     }
+}
+
+DREAM_ALWAYS_INLINE void dream_publish_child(dream_ptr owner, dream_ptr child) {
+    if (child == 0) {
+        return;
+    }
+    dream_cycle_check_store(owner, child);
+    dream_publish_edge(owner, child);
 }
 dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag);
 #ifdef DREAM_WASM32

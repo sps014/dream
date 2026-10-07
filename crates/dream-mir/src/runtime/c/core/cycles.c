@@ -11,7 +11,12 @@ typedef struct CycleNode {
     uint64_t sequence;
     unsigned queued;
     int dying;
+    uint32_t slot;
+    struct CycleNode *next_free;
+    struct Trial *trial;
+#ifdef DREAM_WASM32
     UT_hash_handle hh;
+#endif
 } CycleNode;
 
 typedef struct Candidate {
@@ -65,18 +70,38 @@ static void release_idle_context(CycleContext *c) {
 #endif
 }
 
+/* Nodes live in fixed chunks so a queued candidate's node pointer survives pool growth; a
+ * node's 1-based slot is its stable index. Every access holds the cycle gate. */
+#define NODE_CHUNK_BITS 12
+#define NODE_CHUNK (1u << NODE_CHUNK_BITS)
+static CycleNode **node_chunks;
+static uint32_t node_chunk_count;
+static uint32_t node_chunk_capacity;
+static CycleNode *free_nodes;
+static size_t live_nodes;
+#ifdef DREAM_WASM32
 static CycleNode *nodes;
+#endif
 static uint64_t next_sequence;
 static int may_have_forward_edges;
+uint64_t dream_runtime_counters[DREAM_COUNT_LIMIT];
+
+int64_t debug_get_runtime_counter(int32_t id) {
+    if (id < 0 || id >= DREAM_COUNT_LIMIT) { return 0; }
+    return (int64_t)__atomic_load_n(&dream_runtime_counters[id], __ATOMIC_RELAXED);
+}
 
 void dream_cycle_enter(void) {
     CycleContext *c = context();
-    if (c->gate_depth++ == 0) { dream_platform_current->lock(DREAM_LOCK_CYCLE); }
+    if (c->gate_depth++ == 0) {
+        dream_platform_current->lock(DREAM_LOCK_CYCLE);
+        dream_count(DREAM_COUNT_GATES, 1);
+    }
 }
 void dream_cycle_leave(void) {
     CycleContext *c = context();
     if (--c->gate_depth == 0) {
-        c->heap_empty = nodes == NULL;
+        c->heap_empty = live_nodes == 0;
         dream_platform_current->unlock(DREAM_LOCK_CYCLE);
     }
     release_idle_context(c);
@@ -132,26 +157,82 @@ const dream_type_info *dream_builtin_type_info(int32_t tag) {
     }
 }
 
-static CycleNode *find_node(dream_ptr ptr) {
-    CycleNode *node;
-    HASH_FIND(hh, nodes, &ptr, sizeof(ptr), node);
+static void grow_nodes(void) {
+    if (node_chunk_count == node_chunk_capacity) {
+        uint32_t capacity = node_chunk_capacity ? node_chunk_capacity * 2u : 16u;
+        if (capacity > (UINT32_MAX >> NODE_CHUNK_BITS)) { DREAM_PANIC_LITERAL(u"panic: cycle allocation identity exhausted"); }
+        CycleNode **chunks = dream_platform_current->resize(node_chunks, (size_t)capacity * sizeof(*chunks));
+        if (!chunks) { DREAM_PANIC_LITERAL(u"panic: out of memory indexing cycle objects"); }
+        node_chunks = chunks;
+        node_chunk_capacity = capacity;
+    }
+    CycleNode *chunk = dream_raw_calloc(NODE_CHUNK, sizeof(*chunk));
+    if (!chunk) { DREAM_PANIC_LITERAL(u"panic: out of memory indexing cycle objects"); }
+    uint32_t base = node_chunk_count++ << NODE_CHUNK_BITS;
+    node_chunks[base >> NODE_CHUNK_BITS] = chunk;
+    for (uint32_t i = NODE_CHUNK; i-- > 0;) {
+        chunk[i].slot = base + i + 1u;
+        chunk[i].next_free = free_nodes;
+        free_nodes = &chunk[i];
+    }
+}
+
+static CycleNode *take_node(dream_ptr ptr) {
+    if (!free_nodes) { grow_nodes(); }
+    CycleNode *node = free_nodes;
+    free_nodes = node->next_free;
+    node->next_free = NULL;
+    node->ptr = ptr;
+    node->sequence = ++next_sequence;
+    node->queued = 0;
+    node->dying = 0;
+    node->trial = NULL;
+    ++live_nodes;
     return node;
 }
 
-void dream_set_type(dream_ptr ptr, const dream_type_info *info) {
-    memcpy((char *)dream_p(ptr) - DREAM_BLOCK_HEADER + sizeof(dream_size), &info, sizeof(info));
-    if (!info || !info->cycle_capable || dream_rc_immortal(ptr)) { return; }
+static void give_node(CycleNode *node) {
+    node->next_free = free_nodes;
+    free_nodes = node;
+}
+
+static CycleNode *find_node(dream_ptr ptr) {
+    dream_count(DREAM_COUNT_LOOKUPS, 1);
+#ifdef DREAM_WASM32
+    CycleNode *node;
+    HASH_FIND(hh, nodes, &ptr, sizeof(ptr), node);
+    return node;
+#else
+    uint32_t slot = *dream_cycle_slot(ptr) - 1u;
+    return slot == UINT32_MAX ? NULL : &node_chunks[slot >> NODE_CHUNK_BITS][slot & (NODE_CHUNK - 1u)];
+#endif
+}
+
+static void unlink_node(CycleNode *node) {
+#ifdef DREAM_WASM32
+    HASH_DEL(nodes, node);
+#else
+    *dream_cycle_slot(node->ptr) = 0;
+#endif
+    --live_nodes;
+}
+
+void dream_cycle_register(dream_ptr ptr) {
+    if (dream_rc_immortal(ptr)) { return; }
     dream_cycle_enter();
     int32_t tag = dream_object_tag(ptr);
     if (tag == TAG_FUTURE || tag == TAG_FUNCBOX || tag == TAG_CLOSURE_ENV || tag == TAG_ARRAY) {
         may_have_forward_edges = 1;
     }
     if (!find_node(ptr)) {
-        CycleNode *node = dream_raw_calloc(1, sizeof(*node));
-        if (!node || next_sequence == UINT64_MAX) { DREAM_PANIC_LITERAL(u"panic: cycle allocation identity exhausted"); }
-        node->ptr = ptr;
-        node->sequence = ++next_sequence;
+        if (next_sequence == UINT64_MAX) { DREAM_PANIC_LITERAL(u"panic: cycle allocation identity exhausted"); }
+        CycleNode *node = take_node(ptr);
+#ifdef DREAM_WASM32
         HASH_ADD(hh, nodes, ptr, sizeof(ptr), node);
+#else
+        *dream_cycle_slot(ptr) = node->slot;
+#endif
+        dream_count(DREAM_COUNT_CYCLE_NODES, 1);
     }
     dream_cycle_leave();
 }
@@ -175,26 +256,46 @@ void dream_visit_owned(dream_ptr ptr, void (*edge)(dream_ptr, void *), void *arg
     release_idle_context(c);
 }
 
-void dream_cycle_forget(dream_ptr ptr) {
-    const dream_type_info *info = dream_object_info(ptr);
-    if (!info || !info->cycle_capable) { return; }
+void dream_cycle_forget_slow(dream_ptr ptr) {
     dream_cycle_enter();
     CycleNode *node = find_node(ptr);
     if (node) {
-        HASH_DEL(nodes, node);
-        if (!nodes) { may_have_forward_edges = 0; }
+        unlink_node(node);
+        dream_count(DREAM_COUNT_CYCLE_FORGETS, 1);
+        if (!live_nodes) { may_have_forward_edges = 0; }
         node->ptr = 0;
-        if (!node->queued) { dream_platform_current->deallocate(node); }
+        if (!node->queued) { give_node(node); }
     }
     dream_cycle_leave();
 }
 
-static void queue_node(CycleNode *node) {
-    Candidate *candidate = dream_raw_calloc(1, sizeof(*candidate));
+/* Queue entries recycle through a gate-guarded free list: teardown of a tracked graph queues
+ * one entry per object. */
+static Candidate *free_candidates;
+
+static Candidate *take_candidate(void) {
+    Candidate *candidate = free_candidates;
+    if (candidate) {
+        free_candidates = candidate->next;
+        *candidate = (Candidate){0};
+        return candidate;
+    }
+    candidate = dream_raw_calloc(1, sizeof(*candidate));
     if (!candidate) { DREAM_PANIC_LITERAL(u"panic: out of memory queuing cycle candidate"); }
+    return candidate;
+}
+
+static void give_candidate(Candidate *candidate) {
+    candidate->next = free_candidates;
+    free_candidates = candidate;
+}
+
+static void queue_node(CycleNode *node) {
+    Candidate *candidate = take_candidate();
     CycleContext *c = context();
     candidate->node = node;
     ++node->queued;
+    dream_count(DREAM_COUNT_CANDIDATES, 1);
     if (c->tail) { c->tail->next = candidate; } else { c->head = candidate; }
     c->tail = candidate;
 }
@@ -202,11 +303,11 @@ static void queue_node(CycleNode *node) {
 int dream_cycle_defer_destroy(dream_ptr ptr, void (*destroy)(dream_ptr)) {
     CycleContext *c = peek_context();
     if (!c || !c->gate_depth) { return 0; }
-    Candidate *candidate = dream_raw_calloc(1, sizeof(*candidate));
-    if (!candidate) { DREAM_PANIC_LITERAL(u"panic: out of memory queuing destruction"); }
+    Candidate *candidate = take_candidate();
     dream_weak_prepare_destroy(ptr);
     candidate->ptr = ptr;
     candidate->destroy = destroy;
+    dream_count(DREAM_COUNT_DEFERRED, 1);
     if (c->tail) { c->tail->next = candidate; } else { c->head = candidate; }
     c->tail = candidate;
     return 1;
@@ -228,10 +329,7 @@ void dream_cycle_retain(dream_ptr ptr) {
     dream_cycle_leave();
 }
 
-void dream_cycle_check_store(dream_ptr owner, dream_ptr child) {
-    const dream_type_info *a_info = owner ? dream_object_info(owner) : NULL;
-    const dream_type_info *b_info = child ? dream_object_info(child) : NULL;
-    if (!(a_info && a_info->cycle_capable) && !(b_info && b_info->cycle_capable)) { return; }
+void dream_cycle_check_store_slow(dream_ptr owner, dream_ptr child) {
     dream_cycle_enter();
     CycleNode *a = owner ? find_node(owner) : NULL;
     CycleNode *b = child ? find_node(child) : NULL;
@@ -242,54 +340,63 @@ void dream_cycle_check_store(dream_ptr owner, dream_ptr child) {
     dream_cycle_leave();
 }
 
-int dream_cycle_store_begin(dream_ptr owner, dream_ptr child, int value) {
-    const dream_type_info *a = owner ? dream_object_info(owner) : NULL;
-    const dream_type_info *b = child ? dream_object_info(child) : NULL;
-    int locked = value || (a && a->cycle_capable) || (b && b->cycle_capable);
-    if (locked) {
-        dream_cycle_enter();
-        dream_cycle_check_store(owner, child);
-        CycleNode *parent = owner ? find_node(owner) : NULL;
-        CycleNode *edge = child ? find_node(child) : NULL;
-        if (value == 2 || (parent && edge && edge->sequence >= parent->sequence)) {
-            may_have_forward_edges = 1;
-        }
-    }
-    return locked;
+__attribute__((noinline)) void dream_cycle_store_begin_slow(dream_ptr owner, dream_ptr child, int value, int tracked) {
+    dream_cycle_enter();
+    if (tracked) { dream_cycle_check_store_slow(owner, child); }
+    if (value == 2) { may_have_forward_edges = 1; }
 }
-void dream_cycle_store_end(int locked) {
-    if (locked) { dream_cycle_leave(); dream_cycle_drain(); }
+__attribute__((noinline)) void dream_cycle_store_end_slow(void) {
+    dream_cycle_leave();
+    dream_cycle_drain();
 }
 
+/* A trial entry hangs off its collector node for the duration of one gated trial, so membership
+ * is a pointer test; entries recycle through a gate-guarded pool. */
 typedef struct Trial {
     dream_ptr ptr;
     CycleNode *node;
     int64_t residual;
     int live;
     struct Trial *next;
-    UT_hash_handle hh;
+    struct Trial *member;
 } Trial;
 
 typedef struct {
-    Trial *seen;
+    Trial *members;
+    Trial *last_member;
     Trial *head;
     Trial *tail;
     int mode;
 } TrialGraph;
 
+static Trial *free_trials;
+
+static Trial *take_trial(void) {
+    Trial *entry = free_trials;
+    if (entry) {
+        free_trials = entry->member;
+        *entry = (Trial){0};
+        return entry;
+    }
+    entry = dream_raw_calloc(1, sizeof(*entry));
+    if (!entry) { DREAM_PANIC_LITERAL(u"panic: out of memory constructing cycle trial"); }
+    return entry;
+}
+
 static void trial_edge(dream_ptr ptr, void *arg) {
     TrialGraph *graph = arg;
+    dream_count(DREAM_COUNT_EDGES, 1);
     CycleNode *node = find_node(ptr);
     if (!node || node->dying) { return; }
-    Trial *entry;
-    HASH_FIND(hh, graph->seen, &ptr, sizeof(ptr), entry);
+    Trial *entry = node->trial;
     if (graph->mode == 0 && !entry) {
-        entry = dream_raw_calloc(1, sizeof(*entry));
-        if (!entry) { DREAM_PANIC_LITERAL(u"panic: out of memory constructing cycle trial"); }
+        entry = take_trial();
         entry->ptr = ptr;
         entry->node = node;
         entry->residual = dream_rc_count(ptr);
-        HASH_ADD(hh, graph->seen, ptr, sizeof(ptr), entry);
+        node->trial = entry;
+        if (graph->last_member) { graph->last_member->member = entry; } else { graph->members = entry; }
+        graph->last_member = entry;
         if (graph->tail) { graph->tail->next = entry; } else { graph->head = entry; }
         graph->tail = entry;
     } else if (graph->mode == 1 && entry) {
@@ -302,8 +409,29 @@ static void trial_edge(dream_ptr ptr, void *arg) {
     }
 }
 
-static int allocation_order(Trial *x, Trial *y) {
-    return x->node->sequence < y->node->sequence ? -1 : x->node->sequence != y->node->sequence;
+/* Bottom-up merge sort by allocation identity: destruction order is part of the observable
+ * cleanup trace, and the freestanding wasm runtime has no qsort. */
+static Trial *sort_by_allocation(Trial *list, size_t count) {
+    for (size_t width = 1; width < count; width *= 2) {
+        Trial *result = NULL, **tail = &result, *rest = list;
+        while (rest) {
+            Trial *left = rest, *right = rest;
+            size_t left_n = 0, right_n = 0;
+            while (right && left_n < width) { right = right->next; ++left_n; }
+            rest = right;
+            while (rest && right_n < width) { rest = rest->next; ++right_n; }
+            while (left_n || right_n) {
+                int take_left = left_n && (!right_n || left->node->sequence < right->node->sequence);
+                Trial *pick = take_left ? left : right;
+                if (take_left) { left = left->next; --left_n; } else { right = right->next; --right_n; }
+                *tail = pick;
+                tail = &pick->next;
+            }
+        }
+        *tail = NULL;
+        list = result;
+    }
+    return list;
 }
 
 static void collect(CycleNode *candidate) {
@@ -329,67 +457,80 @@ static void collect(CycleNode *candidate) {
         dream_cycle_enter();
         return;
     }
+    dream_count(DREAM_COUNT_TRIALS, 1);
     trial_edge(candidate->ptr, &graph);
     for (Trial *entry = graph.head; entry; entry = entry->next) {
         dream_visit_owned(entry->ptr, trial_edge, &graph);
     }
     graph.mode = 1;
-    Trial *entry, *next;
-    HASH_ITER(hh, graph.seen, entry, next) {
+    for (Trial *entry = graph.members; entry; entry = entry->member) {
         dream_visit_owned(entry->ptr, trial_edge, &graph);
     }
     graph.head = graph.tail = NULL;
     graph.mode = 2;
-    HASH_ITER(hh, graph.seen, entry, next) {
+    for (Trial *entry = graph.members; entry; entry = entry->member) {
         if (entry->residual < 0) { DREAM_PANIC_LITERAL(u"panic: invalid strong-edge ownership count"); }
         if (entry->residual > 0) { trial_edge(entry->ptr, &graph); }
     }
     while (graph.head) {
-        entry = graph.head;
+        Trial *entry = graph.head;
         graph.head = entry->next;
         if (!graph.head) { graph.tail = NULL; }
         dream_visit_owned(entry->ptr, trial_edge, &graph);
     }
-    HASH_SORT(graph.seen, allocation_order);
-    size_t count = HASH_COUNT(graph.seen);
-    Trial **doomed = dream_raw_calloc(count ? count : 1, sizeof(*doomed));
-    if (!doomed) { DREAM_PANIC_LITERAL(u"panic: out of memory ordering cycle destruction"); }
+    Trial *doomed_list = NULL, **doomed_tail = &doomed_list;
     size_t n = 0;
-    HASH_ITER(hh, graph.seen, entry, next) {
+    for (Trial *entry = graph.members; entry; entry = entry->member) {
+        entry->node->trial = NULL;
         if (!entry->live) {
-            doomed[n++] = entry;
+            *doomed_tail = entry;
+            doomed_tail = &entry->next;
+            ++n;
             entry->node->dying = 1;
             __atomic_store_n(dream_rc_word(entry->ptr), 0, __ATOMIC_RELEASE);
         }
     }
-    for (size_t i = 0; i < n; ++i) { dream_weak_prepare_destroy(doomed[i]->ptr); }
+    *doomed_tail = NULL;
+    dream_ptr *doomed = NULL;
+    if (n) {
+        doomed = dream_raw_calloc(n, sizeof(*doomed));
+        if (!doomed) { DREAM_PANIC_LITERAL(u"panic: out of memory ordering cycle destruction"); }
+        size_t i = 0;
+        for (Trial *entry = sort_by_allocation(doomed_list, n); entry; entry = entry->next) { doomed[i++] = entry->ptr; }
+    }
+    if (graph.last_member) {
+        graph.last_member->member = free_trials;
+        free_trials = graph.members;
+    }
+    if (!n) { return; }
+    for (size_t i = 0; i < n; ++i) { dream_weak_prepare_destroy(doomed[i]); }
     dream_cycle_leave();
     CycleContext *c = context();
     ++c->finalizing;
     for (size_t i = 0; i < n; ++i) {
-        const dream_type_info *info = dream_object_info(doomed[i]->ptr);
-        if (info->finalize) { info->finalize(doomed[i]->ptr); }
+        const dream_type_info *info = dream_object_info(doomed[i]);
+        if (info->finalize) { info->finalize(doomed[i]); }
     }
     --c->finalizing;
     for (size_t i = 0; i < n; ++i) {
-        const dream_type_info *info = dream_object_info(doomed[i]->ptr);
-        if (info->clear) { info->clear(doomed[i]->ptr); }
+        const dream_type_info *info = dream_object_info(doomed[i]);
+        if (info->clear) { info->clear(doomed[i]); }
     }
     for (size_t i = 0; i < n; ++i) {
-        const dream_type_info *info = dream_object_info(doomed[i]->ptr);
-        info->reclaim(doomed[i]->ptr);
+        const dream_type_info *info = dream_object_info(doomed[i]);
+        info->reclaim(doomed[i]);
     }
     dream_cycle_enter();
-    HASH_ITER(hh, graph.seen, entry, next) {
-        HASH_DEL(graph.seen, entry);
-        dream_platform_current->deallocate(entry);
-    }
     dream_platform_current->deallocate(doomed);
 }
 
 void dream_cycle_drain(void) {
     CycleContext *c = peek_context();
     if (!c || c->draining || c->gate_depth || c->postponed) { return; }
+    if (!c->head) {
+        release_idle_context(c);
+        return;
+    }
     c->draining = 1;
     dream_cycle_enter();
     while (c->head) {
@@ -403,9 +544,9 @@ void dream_cycle_drain(void) {
         } else {
             collect(candidate->node);
             CycleNode *node = candidate->node;
-            if (--node->queued == 0 && !node->ptr) { dream_platform_current->deallocate(node); }
+            if (--node->queued == 0 && !node->ptr) { give_node(node); }
         }
-        dream_platform_current->deallocate(candidate);
+        give_candidate(candidate);
     }
     dream_cycle_leave();
     c->draining = 0;
@@ -423,6 +564,7 @@ int dream_cycle_release(dream_ptr ptr) {
             int32_t count = (v & INT32_MAX) - 1;
             /* Shared zero is the immortal sentinel, so the last transition must use plain zero. */
             __atomic_store_n(rc, count ? (v & DREAM_RC_SHARED_BIT) | count : 0, __ATOMIC_RELAXED);
+            if (count && may_have_forward_edges) { dream_count(DREAM_COUNT_FORWARD_QUEUES, 1); }
             if (may_have_forward_edges || !count) { queue_node(node); }
         }
     }

@@ -259,10 +259,12 @@ dream_ptr dream_region_backing_malloc(int32_t size) {
     return dream_malloc_shared(size, 0);
 }
 
-dream_ptr dream_region_activate(char *block, int32_t total, int32_t tag) {
+dream_ptr dream_region_activate(char *block, int32_t total, int32_t tag, const dream_type_info *info) {
     int32_t address = (int32_t)(uintptr_t)block;
     i32_put(address, total);
-    return finish_block(address, tag);
+    dream_ptr ptr = finish_block(address, tag);
+    dream_set_type(ptr, info);
+    return ptr;
 }
 
 void dream_region_account_free(uint32_t count) {
@@ -363,10 +365,19 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
     if ((tag & TAG_VALUE_MASK) == 0 || (tag & TAG_SHARED)) {
         return dream_malloc_shared(size, tag);
     }
+    /* A region allocation already carries its descriptor. */
     dream_ptr pointer = dream_region_try_malloc(size, tag);
-    pointer = pointer != 0 ? pointer : malloc_private(size, tag);
+    if (pointer != 0) {
+        return pointer;
+    }
+    pointer = malloc_private(size, tag);
     dream_set_type(pointer, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
     return pointer;
+}
+
+dream_ptr dream_malloc_private(int32_t size, int32_t tag, const dream_type_info *untracked) {
+    dream_ptr pointer = dream_region_try_malloc_private(size, tag, untracked);
+    return pointer != 0 ? pointer : dream_malloc(size, tag);
 }
 
 dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {

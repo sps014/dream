@@ -12,7 +12,7 @@ Dream inserts automatic checks for the operations below. Each prints a message a
 | Integer division or remainder by zero | `10 / 0`, `10 % 0` |
 | Integer overflow inside a `checked { }` block (see [Primitives](primitives.md#integer-overflow)) | `checked { 2147483647 + 1; }`, `0u - 1u`, `1 << 32` |
 | Casting an `object` to the wrong concrete type | `let o: object = "hi"; (int)o;` |
-| Reading an `unowned` field after its referent was freed | see [Memory > `weak`/`unowned`](memory-cycles.md#advanced-reference-cycles) |
+| Reading an `unowned` field after its referent was freed | see [Memory > `weak`/`unowned`](memory-cycles.md#weak-and-unowned-references) |
 
 You can also panic explicitly:
 

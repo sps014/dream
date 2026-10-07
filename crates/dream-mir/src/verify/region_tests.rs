@@ -12,6 +12,7 @@ fn new(ty: TypeId) -> Rvalue {
         ty,
         ctor: None,
         args: vec![],
+        policy: crate::AllocPolicy::Tracked,
     }
 }
 fn node(ctx: &mut TypeCtx) -> TypeId {

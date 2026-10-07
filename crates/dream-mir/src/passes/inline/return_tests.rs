@@ -139,6 +139,7 @@ fn non_owning_fields_keep_the_call_result_disposal_boundary() {
                 ty: node,
                 ctor: None,
                 args: vec![],
+                policy: crate::AllocPolicy::Tracked,
             },
         );
         make.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(value)))));

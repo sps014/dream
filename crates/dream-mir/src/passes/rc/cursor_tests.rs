@@ -196,6 +196,7 @@ fn forwarding_copy_stored_in_array_owns() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(
@@ -402,6 +403,7 @@ fn cursor_escapes_when_base_dies_before_last_use() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(
@@ -541,6 +543,7 @@ fn field_cursor_keeps_base_alive_until_last_use() {
             ty: rty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(

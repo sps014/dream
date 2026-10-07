@@ -549,6 +549,7 @@ fn intrinsic_summary(op: IntrinsicOp) -> Option<ModRef> {
             | I::DebugLiveObjects
             | I::DebugTotalAllocations
             | I::DebugRefCount
+            | I::DebugRuntimeCounter
     );
     let quiet = matches!(
         op,

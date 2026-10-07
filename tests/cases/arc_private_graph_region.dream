@@ -1,0 +1,64 @@
+import system;
+
+class TreeNode {
+    public left: Option<TreeNode>;
+    public right: Option<TreeNode>;
+
+    public constructor(left: Option<TreeNode>, right: Option<TreeNode>) {
+        this.left = left;
+        this.right = right;
+    }
+}
+
+fun make_tree(depth: int): Option<TreeNode> {
+    let none: Option<TreeNode> = Option.None;
+    if depth <= 0 {
+        return none;
+    }
+    return Option.Some(TreeNode(make_tree(depth - 1), make_tree(depth - 1)));
+}
+
+fun count(tree: Option<TreeNode>): int {
+    switch (tree) {
+        Some(node) => { return 1 + count(node.left) + count(node.right); }
+        None => { return 0; }
+    }
+}
+
+fun discarded(rounds: int): int {
+    let built = 0;
+    let i = 0;
+    while i < rounds {
+        switch (make_tree(6)) {
+            Some(root) => { built = built + 1; }
+            None => { built = built - 1; }
+        }
+        i = i + 1;
+    }
+    return built;
+}
+
+fun kept(): int {
+    let keep = List<Option<TreeNode>>(2);
+    keep.push(make_tree(4));
+    keep.push(make_tree(3));
+    return count(keep[0]) + count(keep[1]);
+}
+
+fun cycled(): int {
+    switch (make_tree(3)) {
+        Some(root) => {
+            root.right = Option.Some(root);
+            return count(root.left);
+        }
+        None => { return -1; }
+    }
+}
+
+fun main(): void {
+    let before = Debug.live_objects;
+    System.println(discarded(5).to_string());
+    System.println(kept().to_string());
+    System.println(cycled().to_string());
+    System.println((Debug.live_objects - before).to_string());
+}

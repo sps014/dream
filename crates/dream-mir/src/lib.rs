@@ -573,6 +573,7 @@ pub enum Rvalue {
         ty: TypeId,
         ctor: Option<NewCtor>,
         args: Vec<Operand>,
+        policy: AllocPolicy,
     },
     /// Inline positional tuple construction: zero the destination then store each element at its
     /// layout field offset. Always a value type (never heap-allocated).
@@ -661,6 +662,19 @@ pub enum Rvalue {
 /// The user `constructor(){}` a [`Rvalue::New`] calls, with the per-argument `take` flags from its
 /// declaration (empty = unknown). A `borrow` constructor parameter retains inside the constructor
 /// body, so the call site must not retain it a second time.
+/// How a heap [`Rvalue::New`] may be reclaimed. Cycle capability stays a property of the type;
+/// this records what `unique-region` proved about one allocation site.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AllocPolicy {
+    /// Ordinary ARC, collector-registered when the type is cycle-capable.
+    #[default]
+    Tracked,
+    /// Every execution of this site inside an inferred region builds part of a nonescaping,
+    /// destructor- and observer-free graph that the region reclaims in bulk, so a region
+    /// allocation needs no collector registration. Outside a region it is `Tracked`.
+    Private,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewCtor {
     pub def: DefId,

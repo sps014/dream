@@ -21,6 +21,7 @@ fn fixture() -> (TypeCtx, FunctionBuilder, Local, Local) {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     f.assign(Place::Local(alias), Rvalue::Use(copy(x)));

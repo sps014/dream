@@ -230,9 +230,10 @@ static char *bump(size_t n) {
     }
 }
 
-dream_ptr dream_region_activate(char *block, dream_size total, int32_t tag) {
+dream_ptr dream_region_activate(char *block, dream_size total, int32_t tag, const dream_type_info *info) {
     *dream_block_size(block) = total;
-    activate(block, tag);
+    dream_block_activate_info(block, tag, info);
+    dream_heap_count(&thread_counters()->allocs, UINT64_C(1));
     return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
 }
 

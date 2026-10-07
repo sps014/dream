@@ -22,6 +22,7 @@ fn escaped_returns_are_rejected_without_removing_region_markers() {
                 ty,
                 ctor: None,
                 args: vec![],
+                policy: crate::AllocPolicy::Tracked,
             },
         );
         f.push(Statement::RegionLeave);

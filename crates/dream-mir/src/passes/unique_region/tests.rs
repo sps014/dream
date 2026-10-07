@@ -119,6 +119,7 @@ fn wraps_unique_call_that_only_news_del_free_class() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     alloc.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(t)))));
@@ -190,6 +191,7 @@ fn wraps_switch_join_of_unique_call() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     alloc.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(t)))));
@@ -328,6 +330,7 @@ fn does_not_wrap_switch_join_when_phi_used_after() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     alloc.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(t)))));
@@ -415,6 +418,7 @@ fn verifier_rejects_leave_before_payload_use() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     alloc.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(t)))));
@@ -463,6 +467,10 @@ fn verifier_rejects_leave_before_payload_use() {
 /// `make_tree` from `bench_binary_trees`: the base case returns a niche `None`, which niche
 /// canonicalization lowers to `none = null; return none`.
 fn make_tree_module(ctx: &mut TypeCtx, base_returns_param: bool) -> Mir {
+    make_tree_module_with(ctx, base_returns_param, false)
+}
+
+fn make_tree_module_with(ctx: &mut TypeCtx, base_returns_param: bool, right_weak: bool) -> Mir {
     use crate::BinOp;
 
     let node_def = ctx.register(DefKind::Struct, "TreeNode", vec![]);
@@ -476,7 +484,7 @@ fn make_tree_module(ctx: &mut TypeCtx, base_returns_param: bool) -> Mir {
         "TreeNode",
         vec![
             ("left".to_string(), ty, false, false),
-            ("right".to_string(), ty, false, false),
+            ("right".to_string(), ty, right_weak, false),
         ],
     );
     let mut layouts = LayoutTable::default();
@@ -556,6 +564,7 @@ fn make_tree_module(ctx: &mut TypeCtx, base_returns_param: bool) -> Mir {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     for (field, src) in [(0, l), (1, r)] {
@@ -600,13 +609,84 @@ fn has_region_enter(f: &MirFunction) -> bool {
         .any(|b| b.stmts.iter().any(|s| matches!(s, Statement::RegionEnter)))
 }
 
+fn tree_policies(f: &MirFunction) -> Vec<crate::AllocPolicy> {
+    f.blocks
+        .iter()
+        .flat_map(|b| &b.stmts)
+        .filter_map(|s| match s {
+            Statement::Assign(_, Rvalue::New { policy, .. }) => Some(*policy),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Redirect `make_tree`'s `node.right` store to `value`.
+fn store_right(mir: &mut Mir, value: Rvalue) {
+    let stmt = mir.functions[0]
+        .blocks
+        .iter_mut()
+        .flat_map(|b| &mut b.stmts)
+        .find(|s| matches!(s, Statement::Assign(Place::Field { field: 1, .. }, _)))
+        .unwrap();
+    let Statement::Assign(_, rv) = stmt else {
+        unreachable!()
+    };
+    *rv = value;
+}
+
+fn assert_tracked_and_unwrapped(mir: &mut Mir, ctx: &TypeCtx) {
+    assert!(!UniqueRegion.run(mir, &ctx.interner));
+    assert!(!has_region_enter(&mir.functions[1]));
+    assert_eq!(tree_policies(&mir.functions[0]), vec![crate::AllocPolicy::Tracked]);
+}
+
 #[test]
-fn refuses_cycle_capable_builder_whose_base_case_returns_niche_none() {
+fn wraps_private_cycle_capable_builder_and_marks_its_allocations() {
     let mut ctx = TypeCtx::new();
     let mut mir = make_tree_module(&mut ctx, false);
-    assert!(!UniqueRegion.run(&mut mir, &ctx.interner));
+    assert!(UniqueRegion.run(&mut mir, &ctx.interner));
     assert!(!has_region_enter(&mir.functions[0]));
-    assert!(!has_region_enter(&mir.functions[1]));
+    assert!(has_region_enter(&mir.functions[1]));
+    assert_eq!(tree_policies(&mir.functions[0]), vec![crate::AllocPolicy::Private]);
+}
+
+#[test]
+fn refuses_private_graph_that_stores_a_parameter() {
+    let mut ctx = TypeCtx::new();
+    let mut mir = make_tree_module(&mut ctx, false);
+    let mk = &mut mir.functions[0];
+    let ty = mk.ret;
+    let outside = Local(mk.locals.len() as u32);
+    mk.locals.push(crate::LocalDecl {
+        ty,
+        name: Some("outside".into()),
+        is_ref: false,
+        is_take: false,
+        is_cursor: false,
+        manual_drop: false,
+        borrows_refs: false,
+    });
+    mk.params.push(outside);
+    store_right(&mut mir, Rvalue::Use(Operand::Copy(Place::Local(outside))));
+    assert_tracked_and_unwrapped(&mut mir, &ctx);
+}
+
+#[test]
+fn refuses_private_graph_that_stores_a_global() {
+    let mut ctx = TypeCtx::new();
+    let mut mir = make_tree_module(&mut ctx, false);
+    store_right(
+        &mut mir,
+        Rvalue::Use(Operand::Copy(Place::Global(crate::Global(0)))),
+    );
+    assert_tracked_and_unwrapped(&mut mir, &ctx);
+}
+
+#[test]
+fn refuses_private_graph_with_a_weak_field() {
+    let mut ctx = TypeCtx::new();
+    let mut mir = make_tree_module_with(&mut ctx, false, true);
+    assert_tracked_and_unwrapped(&mut mir, &ctx);
 }
 
 #[test]
@@ -682,6 +762,7 @@ fn returns_fresh_requires_every_definition_fresh() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     f.assign(Place::Local(v), Rvalue::Use(Operand::Copy(Place::Local(p))));
@@ -705,6 +786,7 @@ fn verifier_accepts_pre_region_locals_used_after() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     alloc.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(value)))));
@@ -719,6 +801,7 @@ fn verifier_accepts_pre_region_locals_used_after() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     f.push(Statement::RegionEnter);

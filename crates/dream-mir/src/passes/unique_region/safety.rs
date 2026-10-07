@@ -120,8 +120,7 @@ pub(super) fn region_safe_body(cx: &mut SafeCx<'_>, f: &MirFunction) -> bool {
     if cx.mir.intrinsics.iter().any(|(d, _)| *d == f.def) {
         return false;
     }
-    if f.blocks.iter().flat_map(|b| &b.stmts).any(|s| matches!(s,
-        Statement::Assign(_, Rvalue::New { ty, .. }) if crate::ownership::cycle_capable(&cx.mir.layouts, cx.interner, *ty))) {
+    if !private_graph_ok(cx, f) {
         return false;
     }
     let this_local = f.params.first().copied();

@@ -59,6 +59,9 @@ pub(super) struct Fx<'l, 'a> {
     /// The poll function's `__self` future (as `dream_ptr`); `None` in sync bodies.
     pub self_: Option<Value>,
     pub poll_offsets: Vec<i32>,
+    /// Set while emitting a reference store that `dream_cycle_store_begin` already checked for
+    /// this exact (owner, child) pair, so publication skips the second check.
+    pub store_checked: bool,
     /// The subprogram's file and first line, when this body carries debug info.
     pub dbg: Option<(MdRef, u32)>,
     /// Source file panic locations name (`source_loc.rs`); `None` outside user bodies.
@@ -121,6 +124,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             value_frame: crate::backend::shared::ValueFrame::compute(f, interner),
             self_: None,
             poll_offsets: Vec::new(),
+            store_checked: false,
             dbg: None,
             src_file: None,
             src_lines: Vec::new(),

@@ -62,13 +62,12 @@ void dream_region_enter(void) {
     dream_region_heap_mode(1);
 }
 
-dream_ptr dream_region_try_malloc(dream_size size, int32_t tag) {
-    const dream_type_info *info = dream_type_info_for_tag(tag & TAG_VALUE_MASK);
-    if (info && info->cycle_capable) { return 0; }
+static region_state *active_region(void) {
     region_state *s = current();
-    if (s == NULL || s->depth == 0 || s->depth > REGION_MAX_DEPTH || (tag & TAG_SHARED)) {
-        return 0;
-    }
+    return s == NULL || s->depth == 0 || s->depth > REGION_MAX_DEPTH ? NULL : s;
+}
+
+static dream_ptr region_bump(region_state *s, dream_size size, int32_t tag, const dream_type_info *info) {
     if ((size_t)size > DREAM_SIZE_MAX - 63 - sizeof(region_chunk)) {
         region_panic();
         return 0;
@@ -88,7 +87,26 @@ dream_ptr dream_region_try_malloc(dream_size size, int32_t tag) {
     char *block = (char *)chunk + chunk->offset;
     chunk->offset += total;
     ++s->allocations;
-    return dream_region_activate(block, (dream_size)total, tag);
+    return dream_region_activate(block, (dream_size)total, tag, info);
+}
+
+dream_ptr dream_region_try_malloc(dream_size size, int32_t tag) {
+    region_state *s = active_region();
+    if (s == NULL || (tag & TAG_SHARED)) {
+        return 0;
+    }
+    const dream_type_info *info = dream_type_info_for_tag(tag & TAG_VALUE_MASK);
+    /* Bulk reclamation would strand a collector registration; only `dream_malloc_private`
+     * may place a cycle-capable type in a region. */
+    if (info && info->cycle_capable) {
+        return 0;
+    }
+    return region_bump(s, size, tag, info);
+}
+
+dream_ptr dream_region_try_malloc_private(dream_size size, int32_t tag, const dream_type_info *untracked) {
+    region_state *s = active_region();
+    return s == NULL ? 0 : region_bump(s, size, tag, untracked);
 }
 
 int dream_region_owns(dream_ptr pointer) {
@@ -116,6 +134,9 @@ void dream_region_leave(void) {
     }
     region_mark mark = s->marks[s->depth];
     dream_region_account_free(s->allocations - mark.allocations);
+    /* Leave is rare next to allocation, so the shared count is updated here rather than per object. */
+    __atomic_fetch_add(&dream_runtime_counters[DREAM_COUNT_REGION_OBJECTS],
+                       (uint64_t)(s->allocations - mark.allocations), __ATOMIC_RELAXED);
     s->allocations = mark.allocations;
     while (s->chunk != mark.chunk) {
         region_chunk *chunk = s->chunk;

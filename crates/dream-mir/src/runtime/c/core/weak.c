@@ -48,6 +48,7 @@ void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, int32_t
     node->kind = kind;
     weak_lock();
     __atomic_fetch_or(dream_tag_word(target), DREAM_TAG_WEAK_TARGET, __ATOMIC_RELAXED);
+    dream_count(DREAM_COUNT_WEAK_REGISTER, 1);
     head = weak_bucket(target);
     node->next = *head;
     *head = node;
@@ -102,6 +103,7 @@ void dream_weak_clear_all(dream_ptr obj) {
             *link = node->next;
             node->next = dead;
             dead = node;
+            dream_count(DREAM_COUNT_WEAK_INVALIDATE, 1);
         } else {
             link = &node->next;
         }

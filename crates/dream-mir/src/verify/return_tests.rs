@@ -40,6 +40,7 @@ fn factories_cannot_hide_region_allocations_but_identity_preserves_older_objects
                     ty,
                     ctor: None,
                     args: vec![],
+                    policy: crate::AllocPolicy::Tracked,
                 }
             },
         );
@@ -81,6 +82,7 @@ fn an_opaque_call_cannot_erase_its_argument_origin() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     f.assign(
@@ -115,6 +117,7 @@ fn call_side_effects_preserve_region_children_inserted_into_an_older_root() {
             ty,
             ctor: None,
             args: vec![],
+            policy: crate::AllocPolicy::Tracked,
         },
     );
     install.assign(

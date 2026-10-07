@@ -174,13 +174,15 @@ public static class Program
 
     static void BenchSubstringSpan(int iters)
     {
-        string s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        int seed = (int)(Stopwatch.GetTimestamp() & 1);
+        string s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" + seed;
         var sw = Stopwatch.StartNew();
         int acc = 0;
         for (int i = 0; i < iters; i++)
         {
-            ReadOnlySpan<char> sub = s.AsSpan(5, 35);
-            acc += sub.Length;
+            int start = i & 7;
+            ReadOnlySpan<char> sub = s.AsSpan(start, 25 + (i & 3));
+            acc += sub.Length + sub[0];
         }
         sw.Stop();
         Report("substring_span", ElapsedNs(sw), iters);
@@ -318,10 +320,11 @@ public static class Program
         int acc = 0;
         for (int i = 0; i < iters; i++)
         {
-            int start = arena.Bump(32);
+            int start = arena.Bump(1);
             arena.SetAt(start, i);
-            acc += arena.At(start);
-            arena.Reset();
+            acc += arena.At(start / 2);
+            if ((i & 8191) == 8191)
+                arena.Reset();
         }
         sw.Stop();
         Report("scratch_arena", ElapsedNs(sw), iters);
@@ -729,6 +732,18 @@ public static class Program
     static TreeNode? MakeTree(int depth) =>
         depth <= 0 ? null : new TreeNode(MakeTree(depth - 1), MakeTree(depth - 1));
 
+    // Allocation throughput only: trees stay reachable until after the timer, like Dream's row.
+    static void BenchBinaryTreesAlloc(int iters)
+    {
+        var keep = new List<TreeNode?>(iters);
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i < iters; i++)
+            keep.Add(MakeTree(12));
+        sw.Stop();
+        Report("binary_trees_alloc", ElapsedNs(sw), iters);
+        Sink = keep.Count;
+    }
+
     static void BenchBinaryTrees(int iters, bool reclaim = false)
     {
         if (reclaim)
@@ -843,11 +858,15 @@ public static class Program
 
     static void BenchParseInts(int iters)
     {
-        string src = "1234567890";
+        int seed = (int)(Stopwatch.GetTimestamp() & 1);
+        var srcs = new string[8];
+        for (int k = 0; k < 8; k++)
+            srcs[k] = (1000000000 + k * 111111 + seed).ToString();
         var sw = Stopwatch.StartNew();
         long acc = 0;
         for (int i = 0; i < iters; i++)
         {
+            string src = srcs[i & 7];
             int v = 0;
             for (int j = 0; j < src.Length; j++)
                 v = v * 10 + (src[j] - '0');
@@ -860,13 +879,16 @@ public static class Program
 
     static void BenchSumOptions(int iters)
     {
-        int? some = 7, none = null;
+        int seed = (int)(Stopwatch.GetTimestamp() & 1);
+        var opts = new int?[8];
+        for (int k = 0; k < 8; k++)
+            opts[k] = ((k + seed) & 1) == 0 ? k + 7 : null;
         var sw = Stopwatch.StartNew();
-        long acc = 0;
+        int acc = 0;
         for (int i = 0; i < iters; i++)
         {
-            if (some is int sv) acc += sv; else acc--;
-            if (none is int nv) acc += nv; else acc++;
+            if (opts[i & 7] is int sv) acc += sv; else acc--;
+            if (opts[(i + 3) & 7] is int nv) acc += nv; else acc++;
         }
         sw.Stop();
         Report("sum_options", ElapsedNs(sw), iters);
@@ -895,6 +917,7 @@ public static class Program
         BenchFibRec(scale / 20);
         BenchIfaceDispatch(scale * 12);
         BenchBinaryTrees(scale / 200);
+        BenchBinaryTreesAlloc(scale / 200);
         BenchLinkedWalk(scale / 5);
         BenchWeakTree(scale / 200);
         BenchWordcount(scale);

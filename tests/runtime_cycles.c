@@ -1,4 +1,5 @@
 #include "dream_core.h"
+#include "dream_region.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,7 @@ static void finalize(dream_ptr p) {
     if (n->weak) { assert(weakDead(n->weak)); assert(!weakLoad(n->weak)); }
 }
 static void clear(dream_ptr p) { dream_ptr child = ((Node *)p)->edge; ((Node *)p)->edge = 0; dream_release(child); }
+static const dream_type_info private_info = {visit, finalize, clear, dream_recycle, 0};
 static const dream_type_info node_info = {visit, finalize, clear, dream_recycle, 1};
 const dream_type_info *dream_type_info_for_tag(int32_t tag) { return tag == TAG_STRUCT_BASE ? &node_info : dream_builtin_type_info(tag); }
 static dream_ptr node(int id) { dream_ptr p = dream_malloc(sizeof(Node), TAG_STRUCT_BASE); memset(p, 0, sizeof(Node)); ((Node *)p)->id = id; return p; }
@@ -111,6 +113,34 @@ static void immortal_cycle(void) {
     weakReleaseRaw(weak);
     assert(trace_count == 0 && debug_get_live_objects() == before);
 }
+void dream_region_enter(void);
+void dream_region_leave(void);
+static int64_t cycle_nodes(void) { return debug_get_runtime_counter(DREAM_COUNT_CYCLE_NODES); }
+static dream_ptr private_node(int id) {
+    dream_ptr p = dream_malloc_private(sizeof(Node), TAG_STRUCT_BASE, &private_info);
+    memset(p, 0, sizeof(Node)); ((Node *)p)->id = id; return p;
+}
+static void private_region(void) {
+    int64_t before = debug_get_live_objects(), nodes = cycle_nodes();
+    trace_count = 0;
+    dream_region_enter();
+    dream_ptr a = private_node(1), b = private_node(2);
+    edge(a, b); dream_release(b);
+    assert(dream_region_owns(a) && dream_object_info(a) == &private_info);
+    assert(dream_object_tag(a) == TAG_STRUCT_BASE);
+    dream_ptr tracked = node(3);
+    assert(!dream_region_owns(tracked) && dream_object_info(tracked) == &node_info);
+    assert(cycle_nodes() == nodes + 1);
+    dream_release(tracked);
+    dream_region_leave();
+    assert(trace_count == 1 && debug_get_live_objects() == before);
+
+    dream_ptr outside = private_node(4);
+    assert(dream_object_info(outside) == &node_info && dream_object_tag(outside) == TAG_STRUCT_BASE);
+    assert(cycle_nodes() == nodes + 2);
+    edge(outside, outside); dream_release(outside);
+    assert(trace_count == 2 && debug_get_live_objects() == before);
+}
 int main(void) {
     alarm(30);
     int64_t baseline = debug_get_live_objects();
@@ -152,6 +182,7 @@ int main(void) {
         assert(debug_get_live_objects() == baseline);
     }
     immortal_cycle();
+    private_region();
     puts("cycle trial deletion passed");
 }
 

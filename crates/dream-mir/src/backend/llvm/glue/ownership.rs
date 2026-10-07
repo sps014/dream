@@ -13,6 +13,10 @@ pub(in super::super) fn array_info(elem: TypeId) -> String {
 fn info(ty: TypeId) -> String {
     format!("dream_type_info_{}", ty.0)
 }
+/// The `cycle_capable = 0` twin a proven-private (`AllocPolicy::Private`) region allocation uses.
+pub(crate) fn untracked_info(ty: TypeId) -> String {
+    format!("dream_type_info_untracked_{}", ty.0)
+}
 fn symbol(ty: TypeId, action: &str) -> String {
     format!("dream_{action}_{}", ty.0)
 }
@@ -105,6 +109,17 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
         fx.w.ret(None);
         fx.finish();
         let cyclic = crate::ownership::cycle_capable(&l.mir.layouts, l.interner, *ty);
+        // Only class instances can be private region allocations (`AllocPolicy::Private`).
+        if cyclic && layout.is_some() {
+            descriptor(
+                l,
+                &untracked_info(*ty),
+                &symbol(*ty, "visit"),
+                Some(&symbol(*ty, "finalize")),
+                &symbol(*ty, "clear"),
+                false,
+            );
+        }
         descriptor(
             l,
             &info(*ty),

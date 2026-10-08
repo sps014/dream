@@ -144,6 +144,7 @@ pub fn print_function(cx: &PrettyCx<'_>, func: &MirFunction) -> String {
     if func.is_async {
         out.push_str(" async");
     }
+    if func.batched_construction.is_some() { out.push_str(" [batched-construction]"); }
     let _ = writeln!(out, " {{");
     for (i, decl) in func.locals.iter().enumerate() {
         let _ = writeln!(

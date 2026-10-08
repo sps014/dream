@@ -49,6 +49,7 @@ pub(in super::super) fn descriptor(
     finalize: Option<&str>,
     clear: &str,
     cyclic: bool,
+    pure_clear: bool,
 ) {
     for f in [Some(visit), finalize, Some(clear), Some("dream_recycle")]
         .into_iter()
@@ -66,11 +67,12 @@ pub(in super::super) fn descriptor(
             unnamed_addr: false,
             ty: Ty::Struct {
                 packed: false,
-                fields: vec![Ty::Ptr, Ty::Ptr, Ty::Ptr, Ty::Ptr, Ty::I32],
+                fields: vec![Ty::Ptr, Ty::Ptr, Ty::Ptr, Ty::Ptr, Ty::I32, Ty::I32],
             },
             init: Some(format!(
-                "{{ ptr @{visit}, ptr {fin}, ptr @{clear}, ptr @dream_recycle, i32 {} }}",
-                i32::from(cyclic)
+                "{{ ptr @{visit}, ptr {fin}, ptr @{clear}, ptr @dream_recycle, i32 {}, i32 {} }}",
+                i32::from(cyclic),
+                i32::from(pure_clear)
             )),
             align: l.cx.target.spec().ptr_align,
         },
@@ -96,8 +98,19 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
         let layout = l.cx.nstruct(*ty).cloned();
         let union = l.cx.nunion(*ty).cloned();
         let drops = layout.as_ref().map(|s| struct_field_drops(&l.cx, s));
+        // Reference drops defer child finalizers through the collector queue. Inline value
+        // drops may execute user destructors directly and must never run under this gate.
+        let batched_clear = crate::ownership::cycle_capable(&l.mir.layouts, l.interner, *ty)
+            && layout.as_ref().is_some_and(|s| {
+                s.fields.iter().all(|field| {
+                    field.is_weak || field.is_unowned || !l.interner.is_value_type(field.ty)
+                })
+            });
         let mut fx = glue(l, &symbol(*ty, "clear"));
         let p = fx.arg(0);
+        if batched_clear {
+            fx.call("dream_cycle_enter", &[]);
+        }
         if let Some(drops) = drops {
             for d in drops {
                 fx.field_drop_code(&p, d);
@@ -105,6 +118,9 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
         }
         if let Some(u) = union {
             fx.union_drops(&p, &u);
+        }
+        if batched_clear {
+            fx.call("dream_cycle_leave", &[]);
         }
         fx.w.ret(None);
         fx.finish();
@@ -115,18 +131,20 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
                 l,
                 &untracked_info(*ty),
                 &symbol(*ty, "visit"),
-                Some(&symbol(*ty, "finalize")),
+                destructor.map(|_| symbol(*ty, "finalize")).as_deref(),
                 &symbol(*ty, "clear"),
                 false,
+                batched_clear,
             );
         }
         descriptor(
             l,
             &info(*ty),
             &symbol(*ty, "visit"),
-            Some(&symbol(*ty, "finalize")),
+            destructor.map(|_| symbol(*ty, "finalize")).as_deref(),
             &symbol(*ty, "clear"),
             cyclic,
+            batched_clear,
         );
     }
     for elem in glue_array_elems(&l.cx) {
@@ -170,9 +188,10 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
         fx.w.ret(None);
         fx.finish();
         // Erased arrays can be put into themselves or into their element's graph.
-        let cyclic = l.interner.lookup(&TyKind::Array(elem)).is_none_or(|ty| {
-            crate::ownership::cycle_capable(&l.mir.layouts, l.interner, ty)
-        });
+        let cyclic = l
+            .interner
+            .lookup(&TyKind::Array(elem))
+            .is_none_or(|ty| crate::ownership::cycle_capable(&l.mir.layouts, l.interner, ty));
         descriptor(
             l,
             &array_info(elem),
@@ -180,6 +199,7 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
             None,
             &symbol(elem, "array_clear"),
             cyclic,
+            !l.interner.is_value_type(elem),
         );
     }
     let arms: Vec<_> = types

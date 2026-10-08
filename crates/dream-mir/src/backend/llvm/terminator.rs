@@ -28,6 +28,9 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     pub fn term(&mut self, t: &Terminator) {
+        if matches!(t, Terminator::Await { .. } | Terminator::AsyncComplete(_)) {
+            self.release_poll_environment();
+        }
         match t {
             Terminator::Goto(b) => {
                 let b = self.block_ref(*b);
@@ -68,6 +71,9 @@ impl<'l, 'a> Fx<'l, 'a> {
             Terminator::Return(Some(o)) => {
                 if !self.f.is_async {
                     self.value_teardown(self.value_local_of(o));
+                }
+                if let Some(gate) = self.construction_gate.clone() {
+                    self.call("dream_cycle_store_end", &[gate]);
                 }
                 if self.l.sret.contains(&self.l.user_fn(self.f)) {
                     let size = elem_size(&self.l.cx, self.f.ret) as i64;
@@ -116,7 +122,9 @@ impl<'l, 'a> Fx<'l, 'a> {
             Terminator::AsyncComplete(Some(o)) => {
                 self.value_teardown(self.value_local_of(o));
                 let result = self.operand(o);
-                if let Operand::Copy(Place::Local(local)) = o { self.clear_poll_edge(*local); }
+                if let Operand::Copy(Place::Local(local)) = o {
+                    self.clear_poll_edge(*local);
+                }
                 let s = self.self_ref();
                 let wide = self.l.cx.target.abi().future.wide as i64;
                 let wide_ty = match self.interner.kind(self.f.ret) {

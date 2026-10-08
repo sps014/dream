@@ -10,9 +10,20 @@ use dream_types::{TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap as HashMap;
 use std::collections::{BTreeMap, BTreeSet};
 
+pub(crate) fn acyclic_arc(cx: &Cx<'_>, ty: TypeId) -> bool {
+    !cx.mir.profile.is_debug()
+        && !crate::ownership::contains_cycle_refs(&cx.mir.layouts, cx.interner, ty)
+}
+
+pub(crate) fn last_sym(cx: &Cx<'_>, ty: TypeId) -> &'static str {
+    if acyclic_arc(cx, ty) { "dream_rc_last_acyclic" } else { "dream_rc_last" }
+}
+
 pub(crate) fn retain_sym(cx: &Cx<'_>, ty: TypeId) -> &'static str {
     if cx.target.spec().capabilities.js_interop && matches!(cx.interner.kind(ty), TyKind::Js) {
         "js_retain"
+    } else if acyclic_arc(cx, ty) {
+        "dream_retain_acyclic"
     } else {
         "dream_retain"
     }
@@ -119,6 +130,7 @@ pub(crate) fn release_sym(cx: &Cx<'_>, ty: TypeId) -> String {
         // pick the cascade — a flat `dream_release` recycles the block and strands its fields.
         // `destroy_sym` already dispatches this way.
         TyKind::Object | TyKind::Interface(..) => c_ident("dream_release_object"),
+        _ if acyclic_arc(cx, ty) => "dream_release_acyclic".into(),
         _ => "dream_release".into(),
     }
 }
@@ -408,4 +420,39 @@ pub(crate) fn glue_array_elems(cx: &Cx<'_>) -> BTreeSet<TypeId> {
     // Funcbox last-drop of `TAG_CLOSURE_ENV` always forwards to `release_array_t{object}`.
     array_elems.insert(interner.object());
     array_elems
+}
+
+#[cfg(test)]
+mod acyclic_tests {
+    use super::*;
+    use crate::Mir;
+    use crate::backend::shared::target::Target;
+    use dream_abi::profile::CompileProfile;
+    use dream_hir::TypeLayout;
+    use dream_types::{DefKind, TypeCtx};
+
+    #[test]
+    fn unchecked_arc_requires_release_and_complete_acyclic_layouts() {
+        let mut ctx = TypeCtx::new();
+        let leaf_def = ctx.register(DefKind::Struct, "Leaf", vec![]);
+        let leaf = ctx.interner.struct_ty(leaf_def, vec![]);
+        let node_def = ctx.register(DefKind::Struct, "Node", vec![]);
+        let node = ctx.interner.struct_ty(node_def, vec![]);
+        let opaque_def = ctx.register(DefKind::Struct, "Opaque", vec![]);
+        let opaque = ctx.interner.struct_ty(opaque_def, vec![]);
+        let mut mir = Mir::default();
+        mir.layouts.insert(leaf, TypeLayout::from_fields(&ctx.interner, "Leaf", []));
+        mir.layouts.insert(node, TypeLayout::from_fields(&ctx.interner, "Node", [("next".into(), node, false, false)]));
+        for profile in [CompileProfile::Debug, CompileProfile::Release] {
+            mir.profile = profile;
+            let cx = Cx::new(&mir, &ctx.interner, Target::native());
+            assert_eq!(acyclic_arc(&cx, leaf), profile == CompileProfile::Release);
+            assert_eq!(acyclic_arc(&cx, ctx.interner.string()), profile == CompileProfile::Release);
+            assert!(!acyclic_arc(&cx, node));
+            assert!(!acyclic_arc(&cx, opaque));
+            assert!(!acyclic_arc(&cx, ctx.interner.object()));
+            assert_eq!(retain_sym(&cx, node), "dream_retain");
+            assert_eq!(last_sym(&cx, opaque), "dream_rc_last");
+        }
+    }
 }

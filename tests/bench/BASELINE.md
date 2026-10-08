@@ -2,23 +2,37 @@
 
 ## Measurement protocol (read before comparing numbers)
 
-`./scripts/run-microbenches.sh` runs the whole suite `REPS` times (default 5; override with
-`REPS=7`) wrapped in `caffeinate`, then prints per-bench **median** and spread%
-(`(max-min)/median`, flagged `!` above 15%). The script does not print mins; take them from
-the per-rep files `out/native.repN.txt` / `out/csharp.repN.txt`. Rules for honest numbers:
+Use `scripts/bench-compare.py` for regression decisions. Timing runs compile without runtime
+counters. `--counters` builds a separate instrumented runtime for attribution and cannot create
+or pass a performance reference.
 
-- **Compare `min` columns** — the minimum converges to true cost even on a loaded machine;
-  the median tracks ambient load. Two back-to-back runs on this host agreed within 0-2% on
-  compute kernels (`json_*`, `iface_dispatch`) and ~10-15% elsewhere while load average was
-  6-7 (opencode/VS Code/Chrome running). On an idle machine (load < 1) expect 1-3%.
-- Rows flagged `!` are load-sensitive; re-run before trusting a regression there.
-- ns_per_op values are fractional now (integer division used to truncate sub-ns benches to
-  0-1); the comparator recomputes from `ns_total/iters`.
+Use a quiet, controlled runner with a stable `--runner-id`. Arms rotate across process starts;
+a discarded warmup precedes ten measured rounds with five passes each. A round contributes its
+median pass time. The gate bootstraps paired current/reference round ratios and reports their
+95% confidence interval: an upper bound at or below 1.10 passes, a lower bound above 1.10 fails,
+and an overlapping interval is inconclusive (exit 2). Inconclusive measurements can be repeated
+with `--rounds 20`. Neither minima nor noisy hosted-runner results establish acceptance.
 
-Recorded with `./scripts/run-microbenches.sh` (Dream `--release` native C, optional
-`dotnet run -c Release` from `tests/bench/csharp`). Absolute values vary by host — use
-relative deltas. Dream and C# are **different substrates** (native LLVM+ARC vs native JIT+GC);
-ratios are not an ARC-only scoreboard.
+Recompile historical Dream against the current fixtures before recording a reference:
+
+```sh
+scripts/bench-compare.py --arms baseline current --runner-id controlled-runner \
+  --save-baseline target/perf-reference.json
+scripts/bench-compare.py --arms current --runner-id controlled-runner \
+  --gate target/perf-reference.json
+```
+
+The versioned reference contains complete samples, intervals, fixture/input fingerprints,
+hardware identity, compiler hashes, tool identities and per-process peak RSS. It archives the
+reference executable and replays that executable in paired control rounds when gating. Keep its
+linked host libraries available. References from another runner or fixture version, corrupted
+executables, invalid timing rows and incomplete measurements are rejected. Old median-only
+reference files must be regenerated. Peak current RSS must remain within 10% of the live control.
+
+Dream and C# comparisons are reported separately from Dream regression decisions. Both arms use
+`DREAM_BENCH_SEED` for matched runtime-generated inputs. The comparator derives fractional
+ns/op from `ns_total/iters`; zero-time workloads invalidate a reference or gate. Hosted CI publishes
+raw measurements for inspection; hard gates require a controlled runner.
 
 ## API fairness notes
 

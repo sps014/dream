@@ -805,15 +805,17 @@ public static class JsonGenerator {
         cb.line("if p.try_consume(91) {");
         cb.indent();
         cb.line("let __agoing_" + out_var + " = true;");
+        cb.line("let __aprevious_" + out_var + " = -1;");
         cb.line("while __agoing_" + out_var + " {");
         cb.indent();
         cb.line("p.skip_ws();");
-        cb.line("if p.try_consume(93) {");
+        cb.line("if p.container_end(93, __aprevious_" + out_var + ") {");
         cb.indent();
         cb.line("__agoing_" + out_var + " = false;");
         cb.dedent();
         cb.line("} else {");
         cb.indent();
+        cb.line("__aprevious_" + out_var + " = p.cursor();");
         cb.line("__items_" + out_var + ".push(" + read + ");");
         cb.line("p.try_consume(44);");
         cb.dedent();
@@ -875,15 +877,17 @@ public static class JsonGenerator {
         body.dedent();
         body.line("}");
         body.line("let __going = true;");
+        body.line("let __previous = -1;");
         body.line("while __going {");
         body.indent();
         body.line("p.skip_ws();");
-        body.line("if p.try_consume(125) {");
+        body.line("if p.container_end(125, __previous) {");
         body.indent();
         body.line("__going = false;");
         body.dedent();
         body.line("} else {");
         body.indent();
+        body.line("__previous = p.cursor();");
         fi = 0;
         let first_if = true;
         while fi < t.fields.length {
@@ -971,15 +975,17 @@ public static class JsonGenerator {
                 body.line("if p.try_consume(91) {");
                 body.indent();
                 body.line("let __lgoing_" + fname + " = true;");
+                body.line("let __lprevious_" + fname + " = -1;");
                 body.line("while __lgoing_" + fname + " {");
                 body.indent();
                 body.line("p.skip_ws();");
-                body.line("if p.try_consume(93) {");
+                body.line("if p.container_end(93, __lprevious_" + fname + ") {");
                 body.indent();
                 body.line("__lgoing_" + fname + " = false;");
                 body.dedent();
                 body.line("} else {");
                 body.indent();
+                body.line("__lprevious_" + fname + " = p.cursor();");
                 body.line("__p_" + fname + ".push(" + read + ");");
                 body.line("p.try_consume(44);");
                 body.dedent();
@@ -1029,6 +1035,11 @@ public static class JsonGenerator {
         out.line("}");
         out.line("let p = JsonParser(text, 0);");
         out.line("let v = " + self_ty + ".from_json_parser(p);");
+        out.line("if p.failed() {");
+        out.indent();
+        out.line("return Result.Err(ParseError.invalid(\"invalid JSON input\"));");
+        out.dedent();
+        out.line("}");
         out.line("if p.at_end() == false {");
         out.indent();
         out.line("return Result.Err(ParseError.invalid(\"trailing characters after JSON value\"));");
@@ -1498,6 +1509,13 @@ public static class JsonGenerator {
                             t.name,
                             fname
                         );
+            }
+            let primitive = primitive_named(ftype);
+            if primitive == Primitive.Int || primitive == Primitive.Long || primitive == Primitive.Double || primitive == Primitive.Float || primitive == Primitive.Bool || primitive == Primitive.String {
+                let value = "__json_" + fname;
+                let converted = JsonGenerator.json_from_expr(ftype, value, json_names);
+                // Missing scalar fields need only their scalar default, not an owned null node.
+                from_e = "(switch (v.get(\"" + json_key + "\")) { Some(" + value + ") => " + converted + ", None => " + JsonGenerator.ignore_default(ftype, "") + " })";
             }
             first_field = JsonGenerator.comma_append(from_sb, first_field, from_e);
             fi = fi + 1;

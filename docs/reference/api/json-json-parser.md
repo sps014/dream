@@ -30,6 +30,32 @@ public fun skip_ws(): void
 public fun at_end(): bool
 ```
 
+## `cursor`
+
+Returns the current code-unit offset for generated decoder progress checks.
+
+```dream
+public fun cursor(): int
+```
+
+## `failed`
+
+Reports a failed container progress check. Generated typed deserializers return a parse error
+when this flag is set.
+
+```dream
+public fun failed(): bool
+```
+
+## `container_end`
+
+Generated decoders pass the previous iteration's cursor. The method consumes a closing token,
+or marks failure and stops the loop if input ends or the iteration made no progress.
+
+```dream
+public fun container_end(close: int, previous: int): bool
+```
+
 ## `keyword`
 
 ```dream

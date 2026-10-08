@@ -38,15 +38,15 @@ let bench_sink = BenchSink();
 // Ownership-runtime event deltas since the previous row (`DREAM_BENCH_COUNTERS=1`). A row's
 // counts include the setup that ran between the two reports. Names follow `dream_counter`.
 let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
-let counter_names = "cycle_nodes,cycle_forgets,candidates,lookups,gates,edges,trials,forward_queues,deferred,weak_register,weak_invalidate,region_objects".split(',');
-let counter_last = Buffer.alloc<long>(13);
+let counter_names = "cycle_nodes,cycle_forgets,candidates,lookups,gates,edges,trials,forward_queues,deferred,weak_register,weak_invalidate,region_objects,unknown_stores".split(',');
+let counter_last = Buffer.alloc<long>(14);
 
 fun counters_field(): string {
     if counters_on == false {
         return "";
     }
-    let out = " counters=allocs:" + (Debug.total_allocations - counter_last[12]).to_string();
-    counter_last[12] = Debug.total_allocations;
+    let out = " counters=allocs:" + (Debug.total_allocations - counter_last[13]).to_string();
+    counter_last[13] = Debug.total_allocations;
     let i = 0;
     while i < counter_names.length {
         let now = Debug.runtime_counter(i);
@@ -211,7 +211,7 @@ fun bench_substring(iters: int): void {
 // One op = one span view whose bounds and first unit depend on the iteration. A constant
 // span over a literal folds to `acc = 35 * iters`, which measures nothing.
 fun bench_substring_span(iters: int): void {
-    let seed = (int)(Time.nano_time() & 1L);
+    let seed = int.parse(System.env_or("DREAM_BENCH_SEED", "1")).unwrap_or(1) & 1;
     let s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" + seed.to_string();
     let sw = Stopwatch();
     let acc = 0;
@@ -229,6 +229,9 @@ fun bench_substring_span(iters: int): void {
 
 fun bench_split_span(iters: int): void {
     let line = "alpha,beta,gamma,delta,epsilon,zeta,eta,theta";
+// bench-compare: current-only begin
+    let allocations = Debug.total_allocations;
+// bench-compare: current-only end
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
@@ -240,6 +243,11 @@ fun bench_split_span(iters: int): void {
         i = i + 1;
     }
     sw.stop();
+// bench-compare: current-only begin
+    if counters_on && Debug.total_allocations != allocations {
+        System.panic("split_span allocated during iteration");
+    }
+// bench-compare: current-only end
     report("split_span", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
@@ -670,8 +678,8 @@ fun bench_nbody(iters: int): void {
 
 // One op = one full 48x64 frame, up to 30 iterations per pixel.
 fun bench_mandelbrot(iters: int): void {
-    // Clock-derived bit keeps cr opaque so SCCP cannot fold the frame away.
-    let jitter = (double)(Time.nano_time() & 1L);
+    // A shared runtime seed makes the historical and current workloads identical.
+    let jitter = (double)(int.parse(System.env_or("DREAM_BENCH_SEED", "1")).unwrap_or(1) & 1);
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
@@ -1068,6 +1076,10 @@ fun make_weak_tree(depth: int): WeakTreeNode {
 // One op = build a depth-10 tree (1023 nodes) whose children hold `weak` parent back-pointers,
 // then drop it (1022 live weak registrations torn down while unrelated frees keep happening).
 fun bench_weak_tree(iters: int): void {
+// bench-compare: current-only begin
+    let trials_before = Debug.runtime_counter(6);
+    let forward_before = Debug.runtime_counter(7);
+// bench-compare: current-only end
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
@@ -1080,6 +1092,11 @@ fun bench_weak_tree(iters: int): void {
         i = i + 1;
     }
     sw.stop();
+// bench-compare: current-only begin
+    if counters_on && (Debug.runtime_counter(6) != trials_before || Debug.runtime_counter(7) != forward_before) {
+        System.panic("weak forest triggered positive-count trial deletion");
+    }
+// bench-compare: current-only end
     report("weak_tree", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
@@ -1113,7 +1130,7 @@ fun bench_wordcount(iters: int): void {
 // One op = parse one 10-digit decimal chosen per iteration from eight strings built at
 // runtime. A single literal source lets LICM hoist the whole digit loop out of the timed loop.
 fun bench_parse_ints(iters: int): void {
-    let seed = (int)(Time.nano_time() & 1L);
+    let seed = int.parse(System.env_or("DREAM_BENCH_SEED", "1")).unwrap_or(1) & 1;
     let srcs = List<string>(8);
     let k = 0;
     while k < 8 {
@@ -1143,7 +1160,7 @@ fun bench_parse_ints(iters: int): void {
 // One op = two discriminated-union matches over options loaded from a runtime-built array, so
 // neither the discriminant nor the payload is known to the optimizer.
 fun bench_sum_options(iters: int): void {
-    let seed = (int)(Time.nano_time() & 1L);
+    let seed = int.parse(System.env_or("DREAM_BENCH_SEED", "1")).unwrap_or(1) & 1;
     let opts = List<Option<int>>(8);
     let k = 0;
     while k < 8 {

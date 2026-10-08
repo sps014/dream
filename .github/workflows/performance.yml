@@ -1,0 +1,64 @@
+name: Release performance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      controlled_gate:
+        description: Run the stored reference gate on the controlled performance runner
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  measurements:
+    name: Hosted measurements (no performance acceptance)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/fetch-dev-llvm.sh
+      - run: cargo build --locked --release -p dream --bin dream
+      - run: python3 scripts/bench-compare.py --arms current --rounds 10 --passes 5 --out target/performance
+      - name: Publish samples for inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-measurements
+          path: target/performance/*.json*
+          if-no-files-found: error
+
+  controlled-gate:
+    if: github.event_name == 'workflow_dispatch' && inputs.controlled_gate
+    runs-on: [self-hosted, linux, dream-perf]
+    timeout-minutes: 60
+    env:
+      DREAM_PERF_REFERENCE: ${{ vars.DREAM_PERF_REFERENCE }}
+      DREAM_BENCH_RUNNER_ID: ${{ vars.DREAM_PERF_RUNNER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+      - name: Require a configured reference
+        run: |
+          test -n "$DREAM_BENCH_RUNNER_ID"
+          test -f "$DREAM_PERF_REFERENCE"
+      - run: cargo build --locked --release -p dream --bin dream
+      - run: python3 scripts/bench-compare.py --arms current --rounds 20 --passes 5 --gate "$DREAM_PERF_REFERENCE" --out target/performance-gate
+      - name: Preserve gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-controlled-gate
+          path: target/performance-gate/*.json*
+          if-no-files-found: error

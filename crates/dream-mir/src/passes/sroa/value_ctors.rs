@@ -117,6 +117,7 @@ mod tests {
                     def,
                     ty,
                     ctor: Some(NewCtor {
+ batched: false,
                         def: ctor_def,
                         take_params: vec![false],
                     }),

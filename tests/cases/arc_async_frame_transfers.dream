@@ -1,0 +1,20 @@
+import system;
+
+class Item {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+    del() { System.println("drop " + this.value); }
+}
+fun identity(item: Item): Item { return item; }
+
+async fun main(): void {
+    let i = 0;
+    while i < 3 {
+        let item = identity(Item(i));
+        let alias = item;
+        System.println(item.value);
+        Time.sleep(0).await;
+        System.println(alias.value);
+        i = i + 1;
+    }
+}

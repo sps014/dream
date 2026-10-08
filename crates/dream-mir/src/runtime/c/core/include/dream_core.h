@@ -219,22 +219,29 @@ DREAM_ALWAYS_INLINE int32_t *dream_rc_word(dream_ptr ptr) {
  * issue a second atomic load the optimizer cannot merge. */
 void dream_retain_slow(int32_t *rc, int32_t v);
 int dream_rc_last_slow(int32_t *rc, int32_t v);
+int dream_release_nonlast_slow(int32_t *rc, int32_t v);
 void dream_weak_prepare_destroy(dream_ptr ptr);
 
-DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
+DREAM_ALWAYS_INLINE void dream_retain_acyclic(dream_ptr ptr) {
     int32_t *rc;
     int32_t v;
     if (ptr == 0) {
         return;
     }
-    if (dream_cycle_tracked(ptr)) { dream_cycle_retain(ptr); return; }
     rc = dream_rc_word(ptr);
     v = __atomic_load_n(rc, __ATOMIC_RELAXED);
-    if (DREAM_LIKELY(v >= 0)) {
+    if (DREAM_LIKELY(v > 0 && v < INT32_MAX)) {
         *rc = v + 1;
         return;
     }
     dream_retain_slow(rc, v);
+}
+
+/* Only exact static layouts may omit the collector check; erased references always use
+ * the checked entry point, even when their current referent happens to be acyclic. */
+DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
+    if (ptr && dream_cycle_tracked(ptr)) { dream_cycle_retain(ptr); return; }
+    dream_retain_acyclic(ptr);
 }
 
 void dream_free(dream_ptr ptr);
@@ -247,6 +254,7 @@ void dream_pin_immortal(dream_ptr s);
  * descriptor with `cycle_capable = 0`, and skips collector registration; elsewhere it is an
  * ordinary `dream_malloc`. */
 dream_ptr dream_region_try_malloc_private(dream_size size, int32_t tag, const dream_type_info *untracked);
+int dream_region_active(void);
 #ifdef DREAM_WASM32
 dream_ptr dream_malloc(dream_size size, int32_t tag);
 dream_ptr dream_malloc_private(dream_size size, int32_t tag, const dream_type_info *untracked);
@@ -330,7 +338,7 @@ DREAM_ALWAYS_INLINE void dream_block_activate_info(char *block, int32_t tag, con
     header->tag = tag;
     header->rc = dream_rc_init(tag);
     header->cycle_slot = 0;
-    dream_set_type((dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE), info);
+    dream_set_type_new((dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE), info);
 }
 
 DREAM_ALWAYS_INLINE void dream_block_activate(char *block, int32_t tag) {
@@ -389,8 +397,7 @@ DREAM_ALWAYS_INLINE void dream_recycle(dream_ptr ptr) {
     if (dream_cycle_tracked(ptr)) { dream_recycle_slow(ptr); return; }
     if (DREAM_UNLIKELY(c == NULL || *dream_block_magic(block) != DREAM_MAGIC_LIVE
                        || sz - 1u >= DREAM_MAX_CLASS_BYTES
-                       || (tag & (DREAM_TAG_WEAK_TARGET | TAG_SHARED)) != 0
-                       || (tag & TAG_VALUE_MASK) == 0)) {
+                       || (tag & (DREAM_TAG_WEAK_TARGET | TAG_SHARED)) != 0)) {
         dream_recycle_slow(ptr);
         return;
     }
@@ -430,15 +437,36 @@ void dream_defer_drain_all(void);
 
 /* Decrement `p`'s refcount; true when the caller must run destroy glue and free
  * (this was the last reference). `rc == 0` (mid-destroy) never re-frees. */
-DREAM_ALWAYS_INLINE int dream_rc_last(dream_ptr p) {
-    if (dream_cycle_tracked(p)) { return dream_cycle_release(p); }
+DREAM_ALWAYS_INLINE int dream_rc_last_acyclic(dream_ptr p) {
     int32_t *rc = dream_rc_word(p);
     int32_t v = __atomic_load_n(rc, __ATOMIC_RELAXED);
     if (DREAM_LIKELY(v > 0)) {
         *rc = v - 1;
         return v == 1;
     }
+    if (v == 0 || v == DREAM_RC_IMMORTAL) { return 0; }
     return dream_rc_last_slow(rc, v);
+}
+
+DREAM_ALWAYS_INLINE int dream_rc_last(dream_ptr p) {
+    if (dream_cycle_tracked(p)) { return dream_cycle_release(p); }
+    return dream_rc_last_acyclic(p);
+}
+
+DREAM_ALWAYS_INLINE void dream_release_acyclic(dream_ptr ptr) {
+    if (ptr && dream_rc_last_acyclic(ptr)) { dream_free(ptr); }
+}
+
+/* Erased releases need dynamic glue only for the last owner. Cycle-managed objects
+ * must still reach trial deletion even when their count remains positive. */
+DREAM_ALWAYS_INLINE int dream_release_nonlast(dream_ptr ptr) {
+    if (!ptr || dream_cycle_tracked(ptr)) { return 0; }
+    int32_t *rc = dream_rc_word(ptr);
+    int32_t v = __atomic_load_n(rc, __ATOMIC_RELAXED);
+    if (DREAM_LIKELY(v > 1)) { *rc = v - 1; return 1; }
+    if (v == DREAM_RC_IMMORTAL) { return 1; }
+    if (v >= 0 || (v & INT32_MAX) <= 1) { return 0; }
+    return dream_release_nonlast_slow(rc, v);
 }
 
 DREAM_ALWAYS_INLINE void dream_release(dream_ptr ptr) {
@@ -475,13 +503,6 @@ DREAM_ALWAYS_INLINE int dream_rc_claim_unique(dream_ptr p) {
         return 0;
     }
     return __atomic_compare_exchange_n(rc, &expected, 0, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED);
-}
-
-/* `del` runs with the object observably alive (count 1), keeping its local/shared encoding. */
-DREAM_ALWAYS_INLINE void dream_rc_revive(dream_ptr p) {
-    int32_t *rc = dream_rc_word(p);
-    int32_t tag = __atomic_load_n(dream_tag_word(p), __ATOMIC_RELAXED);
-    __atomic_store_n(rc, dream_rc_init(tag), __ATOMIC_RELAXED);
 }
 
 /* User-visible count (`Debug.ref_count`): immortal reads as `INT32_MAX`. */

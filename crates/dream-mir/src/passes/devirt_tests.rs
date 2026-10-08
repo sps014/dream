@@ -44,6 +44,7 @@ fn module(w: &World, caller: MirFunction, a_def: u32, b_def: u32) -> Mir {
         functions: vec![caller, method(w, "A_f", 1, w.a), method(w, "B_f", 2, w.b)],
         interfaces: InterfaceTable {
             interfaces: vec![InterfaceInfo {
+                ty: w.iface,
                 name: "I".into(),
                 method_count: 1,
                 sigs: vec![sig],

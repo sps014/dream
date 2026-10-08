@@ -6,8 +6,24 @@ fun make_async_adder(n: int): fun(int): Future<int> {
     };
 }
 
+fun make_async_offset(n: int, offset: int): fun(int): Future<int> {
+    return async (x) => {
+        Time.sleep(1).await;
+        return x + n + offset;
+    };
+}
+
 async fun main(): void {
     let add5: fun(int): Future<int> = make_async_adder(5);
     System.println(add5(10).await);
     System.println(add5(20).await);
+    let add7: fun(int): Future<int> = make_async_adder(7);
+    let pending5 = add5(30);
+    let pending7 = add7(40);
+    System.println(pending5.await);
+    System.println(pending7.await);
+    let offset: fun(int): Future<int> = make_async_offset(5, 7);
+    let pending = offset(50);
+    let abandoned = offset(60);
+    System.println(pending.await);
 }

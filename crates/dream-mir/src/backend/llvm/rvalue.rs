@@ -204,7 +204,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 args,
                 policy,
                 ..
-            } => self.emit_new_in(*ty, ctor.as_ref().map(|c| c.def), args, None, *policy),
+            } => self.emit_new_in(*ty, ctor.as_ref().map(|c| c.def), args, None, *policy, ctor.as_ref().is_some_and(|c| c.batched)),
             Rvalue::Tuple { ty, elems } => self.emit_tuple(*ty, elems),
             Rvalue::UnionNew {
                 ty, variant, args, ..
@@ -416,6 +416,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         args: &[Operand],
         frame: Option<Value>,
         policy: crate::AllocPolicy,
+        batched: bool,
     ) -> V {
         let layout = self.l.cx.nstruct(ty).unwrap_or_else(|| {
             crate::internal_error!("missing layout for struct allocation {ty:?}")
@@ -431,6 +432,17 @@ impl<'l, 'a> Fx<'l, 'a> {
         }
         let vals: Vec<V> = args.iter().map(|a| self.operand(a)).collect();
         let ctor_name = self.ctor_name(ctor);
+        let borrows_builder_gate = self.construction_gate.is_some();
+        let gate = if batched && frame.is_none() && !shared {
+            if let Some(outer) = self.construction_gate.clone() {
+                // A verified builder already owns the boundary; zero preserves its private
+                // region path and two borrows the gate without prematurely ending that boundary.
+                let private = self.w.icmp("eq", &outer.v, &Value::i32(0));
+                Some(V::s(self.w.select(&private, &Value::i32(0), &Value::i32(2))))
+            } else {
+                Some(self.call_v("dream_cycle_construction_begin", &[V::i32(i64::from(policy == crate::AllocPolicy::Private))]))
+            }
+        } else { None };
         let o = match frame {
             Some(buf) => self.call_v(
                 "dream_frame_object",
@@ -455,7 +467,26 @@ impl<'l, 'a> Fx<'l, 'a> {
         if let Some(name) = ctor_name {
             let mut all = vec![o.clone()];
             all.extend(vals);
-            self.call(&name, &all);
+            if policy == crate::AllocPolicy::Private && let Some(gate) = &gate {
+                let private = self.w.new_block("construct.private");
+                let tracked = self.w.new_block("construct.tracked");
+                let done = self.w.new_block("construct.done");
+                let active = self.w.icmp("eq", &gate.v, &Value::i32(0));
+                self.w.cond_br(&active, private, tracked);
+                self.w.switch_to(private);
+                self.call(&super::construction::private_name(&name), &all);
+                self.w.br(done);
+                self.w.switch_to(tracked);
+                self.call(&super::construction::tracked_name(&name), &all);
+                self.w.br(done);
+                self.w.switch_to(done);
+            } else {
+                let name = if gate.is_some() { super::construction::tracked_name(&name) } else { name };
+                self.call(&name, &all);
+            }
+        }
+        if !borrows_builder_gate && let Some(gate) = gate {
+            self.call("dream_cycle_store_end", &[gate]);
         }
         o
     }

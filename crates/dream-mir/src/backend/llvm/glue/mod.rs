@@ -32,6 +32,7 @@ static GLUE_FN: MirFunction = MirFunction {
     blocks: Vec::new(),
     entry: BlockId(0),
     is_async: false,
+    batched_construction: None,
     hir_fn: None,
     file: None,
     inline: dream_hir::InlineHint::Default,

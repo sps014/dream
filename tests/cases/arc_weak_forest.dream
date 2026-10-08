@@ -1,0 +1,42 @@
+import system;
+
+class ForestNode {
+    public left: Option<ForestNode>;
+    public right: Option<ForestNode>;
+    public weak parent: Option<ForestNode>;
+    public constructor() {
+        this.left = Option.None;
+        this.right = Option.None;
+        this.parent = Option.None;
+    }
+}
+fun forest(depth: int): ForestNode {
+    let node = ForestNode();
+    if depth > 1 {
+        let left = forest(depth - 1);
+        left.parent = Option.Some(node);
+        let right = forest(depth - 1);
+        right.parent = Option.Some(node);
+        node.left = Option.Some(left);
+        node.right = Option.Some(right);
+    }
+    return node;
+}
+fun main(): void {
+    let root: Option<ForestNode> = Option.Some(forest(5));
+    let kept: Option<ForestNode> = Option.None;
+    switch (root) {
+        Some(node) => { kept = node.left; }
+        None => {}
+    }
+    switch (kept) {
+        Some(child) => { System.println(child.parent.is_some()); }
+        None => {}
+    }
+    root = Option.None;
+    switch (kept) {
+        Some(child) => { System.println(child.parent.is_none()); }
+        None => {}
+    }
+    System.println("forest reclaimed");
+}

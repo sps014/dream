@@ -1,12 +1,16 @@
 //! The MIR reachability core: [`prune_module`] removes functions unreachable from the module's entry
 //! points, then drops globals no surviving function reads.
 
-use super::hir_edges::{hir_body_edges, HirEdges};
 use super::FnKey;
+use super::hir_edges::{HirEdges, hir_body_edges};
 use crate::lower;
 use crate::{Global, Mir, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{TyKind, TypeId, TypeInterner};
 use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
+
+#[cfg(test)]
+#[path = "global_tests.rs"]
+mod global_tests;
 
 /// Records every callable this rvalue statically references (direct calls, first-class function
 /// refs, and user constructors) into `out`.
@@ -30,7 +34,7 @@ fn rvalue_callees(rv: &Rvalue, out: &mut Vec<FnKey>) {
 /// shaking lives in [`prune_dead_globals`] / [`prune_dead_layouts`] / [`prune_dead_imports`].
 pub fn prune_module(mir: &mut Mir, interner: &TypeInterner) {
     prune_functions(mir, interner);
-    prune_dead_globals(mir);
+    prune_dead_globals(mir, interner);
     prune_dead_layouts(mir, interner);
     prune_dead_imports(mir, interner);
     prune_dead_intrinsics(mir);
@@ -58,13 +62,14 @@ fn live_callee_defs(mir: &Mir) -> HashSet<dream_types::DefId> {
             }
         }
         if f.is_async
-            && let Some(hir_fn) = &f.hir_fn {
-                let mut edges = HirEdges::default();
-                hir_body_edges(&hir_fn.body, &mut edges);
-                for (def, _) in edges.callees {
-                    live_defs.insert(def);
-                }
+            && let Some(hir_fn) = &f.hir_fn
+        {
+            let mut edges = HirEdges::default();
+            hir_body_edges(&hir_fn.body, &mut edges);
+            for (def, _) in edges.callees {
+                live_defs.insert(def);
             }
+        }
     }
     live_defs
 }
@@ -157,13 +162,14 @@ fn live_layout_types(mir: &Mir, interner: &TypeInterner) -> HashSet<TypeId> {
             }
         }
         if f.is_async
-            && let Some(hir_fn) = &f.hir_fn {
-                let mut edges = HirEdges::default();
-                hir_body_edges(&hir_fn.body, &mut edges);
-                for ty in edges.types {
-                    seed(ty, &mut live, &mut work);
-                }
+            && let Some(hir_fn) = &f.hir_fn
+        {
+            let mut edges = HirEdges::default();
+            hir_body_edges(&hir_fn.body, &mut edges);
+            for ty in edges.types {
+                seed(ty, &mut live, &mut work);
             }
+        }
     }
 
     let kept_defs: HashSet<dream_types::DefId> = mir.functions.iter().map(|f| f.def).collect();
@@ -434,21 +440,23 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
             type_worklist.extend(f.instance.iter().copied());
             type_worklist.extend(f.locals.iter().map(|l| l.ty));
             if f.is_async
-                && let Some(hir_fn) = &f.hir_fn {
-                    let mut edges = HirEdges::default();
-                    hir_body_edges(&hir_fn.body, &mut edges);
-                    callees.extend(edges.callees);
-                    type_worklist.extend(edges.types);
-                    iface_uses.extend(edges.iface_calls);
-                }
+                && let Some(hir_fn) = &f.hir_fn
+            {
+                let mut edges = HirEdges::default();
+                hir_body_edges(&hir_fn.body, &mut edges);
+                callees.extend(edges.callees);
+                type_worklist.extend(edges.types);
+                iface_uses.extend(edges.iface_calls);
+            }
             for key in callees {
                 if let Some(&ty) = constructing_imports.get(&key.0) {
                     type_worklist.push(ty);
                 }
                 if let Some(&target) = index.get(&key)
-                    && !reachable.contains(&target) {
-                        worklist.push(target);
-                    }
+                    && !reachable.contains(&target)
+                {
+                    worklist.push(target);
+                }
             }
             // An interface call may dynamically reach the concrete method of *any* class that
             // implements that interface. Keep each concrete implementation alive
@@ -458,10 +466,11 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
                     for (id, definitions) in &imp.entries {
                         if *id == iface_id
                             && let Some(Some(def)) = definitions.get(slot)
-                                && let Some(&t) = by_def.get(def)
-                                    && !reachable.contains(&t) {
-                                        worklist.push(t);
-                                    }
+                            && let Some(&t) = by_def.get(def)
+                            && !reachable.contains(&t)
+                        {
+                            worklist.push(t);
+                        }
                     }
                 }
             }
@@ -503,16 +512,18 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
             if let Some(methods) = mir.object_methods.get(&ty) {
                 for def in methods.to_string.iter().chain(methods.hash_code.iter()) {
                     if let Some(&idx) = index.get(&(*def, vec![]))
-                        && !reachable.contains(&idx) {
-                            worklist.push(idx);
-                        }
+                        && !reachable.contains(&idx)
+                    {
+                        worklist.push(idx);
+                    }
                 }
             }
             for def in destructors {
                 if let Some(&idx) = index.get(&(def, vec![]))
-                    && !reachable.contains(&idx) {
-                        worklist.push(idx);
-                    }
+                    && !reachable.contains(&idx)
+                {
+                    worklist.push(idx);
+                }
             }
             type_worklist.extend(field_tys);
         }
@@ -546,7 +557,13 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
 /// slot is dropped. A global written by an impure store (a call that may have side effects) is kept
 /// even if never read, so the effect still runs. Globals are keyed by their stable `Global` id (the
 /// backend emits `$g{id}` by id, not by position), so dropping entries never renumbers survivors.
-fn prune_dead_globals(mir: &mut Mir) {
+fn prune_dead_globals(mir: &mut Mir, interner: &TypeInterner) {
+    let owning: HashSet<Global> = mir
+        .globals
+        .iter()
+        .filter(|g| interner.is_rc_tracked(g.ty) || interner.is_value_type(g.ty))
+        .map(|g| g.id)
+        .collect();
     let mut read: HashSet<Global> = HashSet::new();
     for f in mir.functions.iter().chain(mir.polls.iter()) {
         for b in &f.blocks {
@@ -556,12 +573,12 @@ fn prune_dead_globals(mir: &mut Mir) {
             collect_global_reads_terminator(&b.terminator, &mut read);
         }
     }
-    // Remove pure stores to never-read globals.
+    // Managed stores retain ownership and validate publication even without later reads.
     for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
         for b in &mut f.blocks {
             b.stmts.retain(|s| match s {
                 Statement::Assign(Place::Global(g), rv) => {
-                    read.contains(g) || !crate::passes::is_pure(rv)
+                    read.contains(g) || owning.contains(g) || !crate::passes::is_pure(rv)
                 }
                 _ => true,
             });

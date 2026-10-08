@@ -36,6 +36,7 @@ jobs:
       - run: python3 scripts/check_hygiene.py
       - run: python3 scripts/test_probe.py
       - run: python3 scripts/test_compile_budget.py
+      - run: python3 scripts/test_bench_gate.py
 
   build-clippy-test:
     name: Build, clippy, test (${{ matrix.os }})
@@ -292,4 +293,5 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: "cargo test --test integration runtime_worker:: -- --nocapture"
       - run: "cargo test --test integration runtime_cycles:: -- --nocapture"
+      - run: "cargo test --test integration runtime_weak:: -- --nocapture"
       - run: "cargo test --test integration runtime_callback:: -- --nocapture"

@@ -13,6 +13,16 @@ impl<'l, 'a> Fx<'l, 'a> {
     pub fn call_expr(&mut self, callee: &Callee, args: &[Operand]) -> Option<V> {
         let raw = self.l.cx.callee_sym(callee.def, &callee.args);
         let name = runtime_c_name(&raw);
+        let name = if self.private_builder && self.mir.functions.iter().any(|f| {
+            f.def == callee.def && f.instance == callee.args
+                && f.batched_construction == Some(crate::AllocPolicy::Private)
+        }) {
+            super::construction::builder_name(&name)
+        } else if self.tracked_builder && self.mir.functions.iter().any(|f| {
+            f.def == callee.def && f.instance == callee.args && f.batched_construction.is_some()
+        }) {
+            super::construction::tracked_builder_name(&name)
+        } else { name };
         if name == "dream_sb_push" && self.sb_push_units(args) {
             return None;
         }

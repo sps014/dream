@@ -148,7 +148,6 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.call("dream_weak_prepare_destroy", std::slice::from_ref(p));
         if let Some(def) = destructor {
             let del = del_symbol(&self.l.cx, def);
-            self.call("dream_rc_revive", std::slice::from_ref(p));
             self.call(&del, std::slice::from_ref(p));
         }
     }
@@ -504,6 +503,19 @@ fn tag_dispatch(l: &mut Lcx<'_>, name: &str, destroy: bool) {
     let mut fx = glue(l, name);
     let p = fx.arg(0);
     fx.ret_if_null(&p);
+    if !destroy {
+        let release_extra = |fx: &mut Fx<'_, '_>| {
+            let released = fx.call_v("dream_release_nonlast", std::slice::from_ref(&p));
+            let released = fx.truthy(&released);
+            fx.if_then(&released, |fx| fx.w.ret(None));
+        };
+        if fx.mir.uses_defer {
+            let (g, ty) = fx.l.rt_global("dream_defer_open");
+            let open = fx.load_ty(ty, &g, 4, false);
+            let closed = fx.w.icmp("eq", &open.v, &Value::zero(open.ty().clone()));
+            fx.if_then(&closed, release_extra);
+        } else { release_extra(&mut fx); }
+    }
     fx.maybe_defer(&p, name);
     let tag = fx.call_v("dream_object_tag", std::slice::from_ref(&p));
     let tag = fx.conv(&tag, &Ty::I32);

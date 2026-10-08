@@ -7,6 +7,7 @@ impl Compiler {
         interner: &dream_types::TypeInterner,
         dump: &mut dream_mir::passes::MirDump,
     ) -> dream_mir::Mir {
+        mir.profile = self.profile();
         {
             let _phase = tracing::info_span!("compile_phase", phase = "module_passes").entered();
             if self.profile().is_debug() {

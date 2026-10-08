@@ -30,6 +30,7 @@ pub struct ToolchainConfig {
     pub sysroot: Option<PathBuf>,
     pub no_auto_install: bool,
     pub native_sanitize: Option<OsString>,
+    pub runtime_counters: bool,
     pub asan_options: Option<OsString>,
     pub loader_path: Option<OsString>,
     #[cfg(feature = "native")]

@@ -20,10 +20,12 @@ void dream_panic(dream_ptr message) {
 typedef struct {
     dream_ptr child;
     uintptr_t slot;
+    int id;
 } Node;
+static int destroyed[ROUNDS];
 
 static void node_visit(dream_ptr ptr) { dream_visit_edge(((Node *)dream_p(ptr))->child); }
-static const dream_type_info node_info = {node_visit, NULL, NULL, NULL, 0};
+static const dream_type_info node_info = {node_visit, NULL, NULL, NULL, 0, 0};
 const dream_type_info *dream_type_info_for_tag(int32_t tag) {
     return tag == TAG_STRUCT_BASE ? &node_info : dream_builtin_type_info(tag);
 }
@@ -33,11 +35,12 @@ static dream_cond condition = DREAM_COND_INIT;
 static int phase;
 static uintptr_t current_slot;
 
-/* These mirror generated typed destruction, including the user's observably-live del(). */
+/* A claimed zero closes the weak-load race before finalization can observe the object. */
 static void node_destroy(dream_ptr ptr) {
     Node *node = (Node *)dream_p(ptr);
+    assert(__atomic_fetch_add(&destroyed[node->id], 1, __ATOMIC_RELAXED) == 0);
     dream_weak_prepare_destroy(ptr);
-    dream_rc_revive(ptr);
+    assert(dream_rc_count(ptr) == 0);
     assert(weakDead(node->slot));
     assert(weakLoad(node->slot) == 0);
     dream_release(node->child);
@@ -102,6 +105,7 @@ int main(void) {
     for (int round = 0; round < ROUNDS; ++round) {
         dream_ptr ptr = dream_malloc(sizeof(Node), TAG_STRUCT_BASE);
         Node *node = (Node *)dream_p(ptr);
+        node->id = round;
         node->child = dream_utf8_to_string("child");
         node->slot = 0;
         uintptr_t slot = weakBind(ptr);
@@ -124,6 +128,7 @@ int main(void) {
             dream_cond_wait(&condition, &mutex);
         }
         dream_mutex_unlock(&mutex);
+        assert(__atomic_load_n(&destroyed[round], __ATOMIC_RELAXED) == 1);
         assert(weakDead(slot));
         assert(weakLoad(slot) == 0);
         weakReleaseRaw(slot);

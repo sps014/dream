@@ -27,6 +27,8 @@ mod cursor_tests;
 mod held_tests;
 #[cfg(test)]
 mod unique_tests;
+#[cfg(test)]
+mod modref_tests;
 
 pub use elision::RcElision;
 pub use hop::HopElision;

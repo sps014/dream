@@ -32,6 +32,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+import bench_gate
 
 ROOT = Path(__file__).resolve().parent.parent
 BENCH = ROOT / "tests/bench/microbenches.dream"
@@ -48,16 +49,17 @@ def parse_args() -> argparse.Namespace:
                    choices=["baseline", "current", "csharp"])
     p.add_argument("--current-dream", default=str(ROOT / "target/release/dream"))
     p.add_argument("--baseline-dream", default=str(ROOT / "target/bench-baseline/target/release/dream"))
-    p.add_argument("--rounds", type=int, default=6, help="measured process starts per arm")
+    p.add_argument("--rounds", type=int, default=10, help="measured process starts per arm (10-20 for gating)")
     p.add_argument("--warmup", type=int, default=1, help="discarded process starts per arm")
     p.add_argument("--passes", type=int, default=5, help="DREAM_BENCH_PASSES per process")
     p.add_argument("--filter", nargs="*", default=[], help="only report these bench names")
     p.add_argument("--out", default=str(ROOT / "tests/bench/out/compare"))
     p.add_argument("--counters", action="store_true", help="set DREAM_BENCH_COUNTERS=1 for Dream arms")
     p.add_argument("--seed", type=int, default=0x5eed)
-    p.add_argument("--save-baseline", help="write current-arm medians to this JSON file")
-    p.add_argument("--gate", help="fail if current regresses >10%% beyond its CI vs this JSON")
-    p.add_argument("--gate-threshold", type=float, default=0.10)
+    p.add_argument("--save-baseline", help="save a validated immutable reference and complete samples")
+    p.add_argument("--gate", help="compare current against the saved reference in paired rounds")
+    p.add_argument("--runner-id", default=os.environ.get("DREAM_BENCH_RUNNER_ID"), help="controlled runner identity (required for gating)")
+    p.add_argument("--input-seed", type=int, default=1)
     p.add_argument("--allow-tiny", action="store_true", help="do not fail on zero-time rows")
     return p.parse_args()
 
@@ -73,8 +75,9 @@ def run(cmd, cwd=None, env=None):
 def tool_versions(args) -> dict:
     out = {"host": platform.platform(), "python": platform.python_version()}
     for arm, exe in (("current", args.current_dream), ("baseline", args.baseline_dream)):
-        if arm in args.arms:
+        if arm in args.arms and not (arm == 'baseline' and args.gate):
             out[f"{arm}_dream"] = exe
+            out[f"{arm}_sha256"] = bench_gate.digest(exe)
             try:
                 out[f"{arm}_version"] = run([exe, "--version"]).strip()
             except SystemExit:
@@ -82,6 +85,16 @@ def tool_versions(args) -> dict:
     tools = ROOT / "src/execution/llvm/tools.rs"
     m = re.search(r'LLVM_VERSION[^"]*"([^"]+)"', tools.read_text()) if tools.exists() else None
     out["llvm"] = m.group(1) if m else "unknown"
+    llvm = Path(os.environ.get("DREAM_LLVM", str(Path.home() / ".dream/toolchains" / f"llvm-{out['llvm']}" / "bin")))
+    if (llvm / "bin").is_dir():
+        llvm /= "bin"
+    for name in ("clang", "opt", "llc", "llvm-link"):
+        executable = llvm / name
+        if executable.is_file():
+            out[f"{name}_sha256"] = bench_gate.digest(executable)
+            out[f"{name}_version"] = run([str(executable), "--version"]).strip()
+        else:
+            out[f"{name}_version"] = "unknown"
     if "csharp" in args.arms and shutil.which("dotnet"):
         out["dotnet"] = run(["dotnet", "--version"]).strip()
     return out
@@ -101,18 +114,21 @@ def baseline_source(src: str) -> str:
     return src
 
 
-def prepare_dream(arm: str, exe: str, out: Path) -> list[str]:
+def prepare_dream(arm: str, exe: str, out: Path, counters: bool = False) -> list[str]:
+    exe = str(Path(exe).resolve())
+    out = out.resolve()
     if not Path(exe).is_file():
         raise SystemExit(f"{arm}: dream binary not found at {exe}")
     work = out / arm
-    shutil.rmtree(work, ignore_errors=True)
-    work.mkdir(parents=True)
+    work.mkdir(parents=True, exist_ok=True)
     src = BENCH.read_text()
     if arm == "baseline":
         src = baseline_source(src)
     path = work / "microbenches.dream"
-    path.write_text(src)
-    run([exe, "--release", str(path)], cwd=work)
+    if not path.exists() or path.read_text() != src:
+        path.write_text(src)
+    compile_env = dict(os.environ, DREAM_RUNTIME_COUNTERS="1" if counters and arm == "current" else "0")
+    run([exe, "--release", str(path)], cwd=work, env=compile_env)
     binary = work / "target/release/microbenches.bin"
     if not binary.is_file():
         raise SystemExit(f"{arm}: compile produced no {binary}")
@@ -173,7 +189,7 @@ def bootstrap_ci(values: list[float], rng: random.Random, n: int = 2000) -> tupl
 
 def order_for(round_index: int, arms: list[str]) -> list[str]:
     rotated = arms[round_index % len(arms):] + arms[:round_index % len(arms)]
-    return rotated if round_index % 2 == 0 else list(reversed(rotated))
+    return rotated if (round_index // len(arms)) % 2 == 0 else list(reversed(rotated))
 
 
 def summarize(samples: list[dict], rss: dict, arms: list[str], rng: random.Random, names_filter):
@@ -234,35 +250,47 @@ def print_table(summary: dict, peak: dict, arms: list[str]) -> None:
             print(f"  {name:<22} {arm:<9} " + " ".join(f"{k}={v}" for k, v in c.items() if v))
 
 
-def gate(summary: dict, path: str, threshold: float) -> int:
-    stored = json.loads(Path(path).read_text())["medians"]
-    failures = []
-    for name, base in stored.items():
-        r = summary.get(name, {}).get("current")
-        if not r or base <= 0:
-            continue
-        # Fail only when the whole confidence interval sits beyond the allowed regression.
-        if r["ci_low"] > base * (1 + threshold):
-            failures.append(f"{name}: {fmt(r['median'])} ns/op (CI low {fmt(r['ci_low'])}) vs baseline {fmt(base)}")
-    for f in failures:
-        print("REGRESSION " + f)
-    return 1 if failures else 0
-
-
 def main() -> int:
     args = parse_args()
+    if args.gate and args.save_baseline:
+        raise ValueError("choose either reference creation or gating")
+    if args.warmup < 1 or args.rounds < 1 or args.passes < 1 or not 0 <= args.input_seed <= 2147483647:
+        raise ValueError("invalid warmup, round, pass count or input seed")
+    reference = None
+    compatibility = bench_gate.identity(BENCH, CSHARP / "Program.cs", args.runner_id, args.input_seed, args.passes)
+    if args.gate or args.save_baseline:
+        if os.environ.get("DREAM_NATIVE_SANITIZE"):
+            raise ValueError("sanitizer instrumentation cannot form a timing reference or gate")
+        if args.counters or args.allow_tiny or args.filter:
+            raise ValueError("references and gates require complete, uninstrumented, valid measurements")
+        if not args.runner_id or not 10 <= args.rounds <= 20 or args.passes < 5 or "current" not in args.arms:
+            raise ValueError("references and gates require a runner id, 10-20 rounds, five passes and the current arm")
+        if args.gate:
+            reference, control = bench_gate.load(args.gate, compatibility)
+            if "baseline" not in args.arms: args.arms.insert(0, "baseline")
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     rng = random.Random(args.seed)
     commands = {}
+    identities = tool_versions(args)
+    if reference:
+        identities.update({key: value for key, value in reference['tools'].items() if key.startswith('baseline_')})
+        for key in ('llvm', *(f'{name}_{suffix}' for name in ('clang', 'opt', 'llc', 'llvm-link') for suffix in ('sha256', 'version'))):
+            if identities.get(key) != reference['tools'].get(key):
+                raise ValueError(f'incompatible reference tool: {key}')
     for arm in args.arms:
-        if arm == "csharp":
+        if arm == "baseline" and reference:
+            commands[arm] = control
+        elif arm == "csharp":
             commands[arm] = prepare_csharp()
         else:
             exe = args.current_dream if arm == "current" else args.baseline_dream
-            commands[arm] = prepare_dream(arm, exe, out)
-    env = dict(os.environ, DREAM_BENCH_PASSES=str(args.passes))
-    dream_env = dict(env, **({"DREAM_BENCH_COUNTERS": "1"} if args.counters else {}))
+            commands[arm] = prepare_dream(arm, exe, out, args.counters)
+    for arm, command in commands.items():
+        artifact = Path(command[-1]) if arm == 'csharp' else Path(command[0])
+        identities[f'{arm}_artifact_sha256'] = bench_gate.digest(artifact)
+    env = dict(os.environ, DREAM_BENCH_PASSES=str(args.passes), DREAM_BENCH_SEED=str(args.input_seed))
+    dream_env = dict(env, DREAM_BENCH_COUNTERS="1" if args.counters else "0")
     samples: list[dict] = []
     rss = {arm: [] for arm in args.arms}
     raw_path = out / "raw.jsonl"
@@ -271,6 +299,9 @@ def main() -> int:
             for arm in order_for(r, args.arms):
                 started = time.time()
                 stdout, peak = run_once(commands[arm], env if arm == "csharp" else dream_env)
+                sinks = re.findall(r"^sink (-?\d+)$", stdout, re.M)
+                if len(sinks) != 1:
+                    raise ValueError(f"{arm}: missing or duplicate result sink")
                 if r < args.warmup:
                     continue
                 rss[arm].append(peak)
@@ -278,13 +309,13 @@ def main() -> int:
                 for row in parse_lines(stdout):
                     seen[row["name"]] = seen.get(row["name"], -1) + 1
                     row.update(arm=arm, round=r - args.warmup, pass_index=seen[row["name"]],
-                               peak_rss=peak, started=started)
+                               peak_rss=peak, started=started, sink=int(sinks[0]))
                     raw.write(json.dumps(row) + "\n")
                     samples.append(row)
             print(f"round {r + 1}/{args.warmup + args.rounds} done", file=sys.stderr)
     summary, peak = summarize(samples, rss, args.arms, rng, set(args.filter))
     (out / "summary.json").write_text(json.dumps(
-        {"tools": tool_versions(args), "passes": args.passes, "rounds": args.rounds,
+        {"tools": identities, "passes": args.passes, "rounds": args.rounds,
          "peak_rss": peak, "benchmarks": summary}, indent=2))
     print_table(summary, peak, args.arms)
     print(f"\nraw samples: {raw_path}\nsummary: {out / 'summary.json'}")
@@ -295,13 +326,25 @@ def main() -> int:
         if tiny:
             print("ZERO-TIME rows (measured work was optimized away): " + ", ".join(tiny))
             status = 1
-    if args.save_baseline and "current" in args.arms:
-        medians = {n: r["current"]["median"] for n, r in summary.items() if "current" in r}
-        Path(args.save_baseline).write_text(json.dumps({"tools": tool_versions(args), "medians": medians}, indent=2) + "\n")
+    if args.save_baseline:
+        if status:
+            raise ValueError("invalid timing rows cannot form a reference")
+        arm = "baseline" if "baseline" in args.arms else "current"
+        bench_gate.save(args.save_baseline, ROOT, compatibility, commands[arm], samples, arm,
+                        args.passes, args.rounds, rss, identities)
     if args.gate:
-        status |= gate(summary, args.gate, args.gate_threshold)
+        if status:
+            raise ValueError("invalid timing rows cannot pass a gate")
+        status, decisions = bench_gate.evaluate(samples, reference, args.passes, args.rounds, rss, 0.10)
+        (out / "gate.json").write_text(json.dumps(decisions, indent=2) + "\n")
+        for name, decision in decisions.items():
+            print(f"GATE {name}: {decision['decision']} ({decision['ratio']:.3f}x)")
     return status
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except ValueError as error:
+        sys.stderr.write(f"invalid benchmark measurement: {error}\n")
+        sys.exit(3)

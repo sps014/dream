@@ -61,6 +61,7 @@ impl ToolchainConfig {
             sysroot: value("DREAM_SYSROOT").map(PathBuf::from),
             no_auto_install: value("DREAM_NO_AUTO_INSTALL").is_some(),
             native_sanitize: value("DREAM_NATIVE_SANITIZE"),
+            runtime_counters: value("DREAM_RUNTIME_COUNTERS").is_some_and(|v| v == "1"),
             asan_options: lookup("ASAN_OPTIONS"),
             loader_path: lookup(Self::loader_path_key()),
             sdkroot: value("SDKROOT"),

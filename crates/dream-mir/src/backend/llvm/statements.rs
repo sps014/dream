@@ -17,6 +17,11 @@ impl<'l, 'a> Fx<'l, 'a> {
     pub fn stmts(&mut self, stmts: &[Statement]) {
         let mut i = 0;
         while i < stmts.len() {
+            if let Some(skip) = self.poll_ownership_group(stmts, i) {
+                i += skip;
+                continue;
+            }
+            self.prepare_poll_transfer(stmts, i);
             if let Some(skip) = self.try_emit_into(stmts, i) {
                 i += skip;
                 continue;
@@ -36,6 +41,9 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let ty = self.operand_ty(o);
                 let a = self.operand(o);
                 let sym = retain_sym(&self.l.cx, ty);
+                let sym = if (self.private_init || self.private_builder) && sym == "dream_retain" {
+                    "dream_retain_acyclic"
+                } else { sym };
                 self.call(sym, &[a]);
             }
             Statement::Release(o) => {
@@ -55,7 +63,9 @@ impl<'l, 'a> Fx<'l, 'a> {
                     let a = self.as_ref(&a);
                     let nz = self.truthy(&a);
                     self.if_then(&nz, |fx| {
-                        let last = fx.call_v("dream_rc_last", std::slice::from_ref(&a));
+                        let symbol = if fx.private_init || fx.private_builder { "dream_rc_last_acyclic" }
+                            else { crate::backend::shared::glue::last_sym(&fx.l.cx, ty) };
+                        let last = fx.call_v(symbol, std::slice::from_ref(&a));
                         let last = fx.truthy(&last);
                         fx.if_then(&last, |fx| {
                             fx.call(&tail, std::slice::from_ref(&a));
@@ -266,6 +276,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     args,
                     Some(buf),
                     crate::AllocPolicy::Tracked,
+                    false,
                 );
                 self.write_local(*l, &o);
                 return;

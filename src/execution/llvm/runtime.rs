@@ -193,6 +193,9 @@ pub(super) fn clang_unit(
     namespaces: &super::runtime_cache::IncludeInventory,
 ) -> Result<super::runtime_cache::CompiledUnit, String> {
     let mut cmd = runtime_command(config, spec, clang)?;
+    if config.runtime_counters {
+        cmd.arg("-DDREAM_RUNTIME_COUNTERS=1");
+    }
     cmd.args(["-std=gnu11", "-w", "-c"])
         .args(if spec.is_windows() {
             &[][..]

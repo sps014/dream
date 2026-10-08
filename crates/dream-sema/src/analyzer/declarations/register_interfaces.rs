@@ -314,6 +314,7 @@ impl<'a> Analyzer<'a> {
                 .map(|m| self.interface_dispatch_sig(m))
                 .collect();
             interfaces.push(InterfaceInfo {
+                ty: *name,
                 name: dream_types::display_name(
                     &self.type_ctx.interner,
                     &self.type_ctx.defs,

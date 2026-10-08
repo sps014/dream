@@ -95,11 +95,13 @@ fn releasable_fields(
     if !matches!(interner.kind(ty), TyKind::Struct(..))
         || interner.is_value_type(ty)
         || interner.is_shared_type(ty)
-        || crate::ownership::cycle_capable(layouts, interner, ty)
     {
         return None;
     }
     let layout = layouts.get(ty)?;
+    // LocalEscape rejects every store, return, weak observation or opaque call that
+    // could retain this allocation. A cycle through it requires such an incoming edge;
+    // cycle-capable types can therefore use the same local lifetime/field-cleanup proof.
     if layout.has_destructor() {
         return None;
     }

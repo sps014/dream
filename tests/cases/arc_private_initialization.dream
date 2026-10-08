@@ -1,0 +1,48 @@
+import system;
+import system.collections;
+
+class PrivateTree {
+    public left: Option<PrivateTree>;
+    public right: Option<PrivateTree>;
+    public constructor(left: Option<PrivateTree>, right: Option<PrivateTree>) {
+        this.left = left;
+        this.right = right;
+    }
+}
+fun build_tree(depth: int): Option<PrivateTree> {
+    if depth == 0 { return Option.None; }
+    return Option.Some(PrivateTree(build_tree(depth - 1), build_tree(depth - 1)));
+}
+fun count_tree(tree: Option<PrivateTree>): int {
+    switch (tree) {
+        Some(node) => { return 1 + count_tree(node.left) + count_tree(node.right); }
+        None => { return 0; }
+    }
+}
+fun private_tree(): int {
+    let tree = build_tree(6);
+    return count_tree(tree);
+}
+fun escaped_tree(): int {
+    let keep = List<Option<PrivateTree>>();
+    keep.push(build_tree(4));
+    return count_tree(keep[0]);
+}
+class CallbackTree {
+    public next: Option<CallbackTree>;
+    public constructor() {
+        this.next = Option.None;
+        System.println("callback");
+    }
+    del() { System.println("finalized"); }
+}
+fun callback_tree(): void {
+    let node = CallbackTree();
+    node.next = Option.Some(node);
+}
+fun main(): void {
+    System.println(private_tree());
+    System.println(escaped_tree());
+    callback_tree();
+    System.println("done");
+}

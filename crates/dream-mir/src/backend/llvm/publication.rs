@@ -8,6 +8,7 @@ use dream_types::TypeId;
 
 impl Fx<'_, '_> {
     pub(super) fn publish_store(&mut self, place: &Place, ty: TypeId, rhs: &V) {
+        if self.private_init || self.private_builder || self.tracked_init { return; }
         let owner = match place {
             Place::Field { base, .. } if !self.is_value(self.f.local_ty(*base)) => {
                 self.read_local(*base)

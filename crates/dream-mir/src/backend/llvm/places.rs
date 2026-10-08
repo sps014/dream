@@ -38,7 +38,10 @@ impl<'l, 'a> Fx<'l, 'a> {
         if self.poll_owned(l) {
             let owner = V::u(self.self_.clone().unwrap());
             let child = self.as_ref(x);
-            let locked = self.call_v("dream_cycle_store_begin", &[owner.clone(), child, V::i32(0)]);
+            let locked = self.call_v(
+                "dream_cycle_store_begin",
+                &[owner.clone(), child, V::i32(0)],
+            );
             let off = self.poll_offsets[l.0 as usize] as i64;
             let at = self.addr(&owner, off);
             self.store_ty(&ty, &at, x, super::fx::align_at(&ty, off));
@@ -47,9 +50,13 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     pub(super) fn poll_owned(&self, local: Local) -> bool {
-        if self.poll_offsets.is_empty() { return false; }
+        if self.poll_offsets.is_empty() {
+            return false;
+        }
         let decl = &self.f.locals[local.0 as usize];
-        self.is_rc(decl.ty) && !self.is_value(decl.ty) && !decl.is_cursor
+        self.is_rc(decl.ty)
+            && !self.is_value(decl.ty)
+            && !decl.is_cursor
             && (!self.f.params.contains(&local) || decl.is_take)
     }
 
@@ -80,6 +87,13 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     pub(super) fn read_global(&mut self, g: Global) -> V {
+        if g.0 == 0
+            && let Some(offset) = self.poll_environment
+        {
+            let owner = V::u(self.self_.clone().unwrap());
+            let at = self.addr(&owner, offset as i64);
+            return self.load_ty(self.h(), &at, 8, true);
+        }
         if g.0 == 0 && self.l.cx.target.spec().capabilities.linear_memory {
             return self.call_v("dream_g0_get", &[]);
         }
@@ -243,6 +257,10 @@ impl<'l, 'a> Fx<'l, 'a> {
     // ---- stores -------------------------------------------------------------------------------
 
     pub fn store(&mut self, place: &Place, rv: &Rvalue, rhs: V) {
+        if self.private_init || self.private_builder {
+            self.store_inner(place, rv, rhs);
+            return;
+        }
         let ty = match place {
             Place::Local(_) => {
                 self.store_inner(place, rv, rhs);
@@ -263,10 +281,26 @@ impl<'l, 'a> Fx<'l, 'a> {
             self.store_inner(place, rv, rhs);
             return;
         }
-        let child_cycles = crate::ownership::contains_cycle_refs(&self.mir.layouts, self.interner, ty);
+        if self.tracked_init {
+            let Place::Field { base, .. } = place else {
+                crate::internal_error!("tracked initializer wrote a non-field place");
+            };
+            let owner = self.read_local(*base);
+            let child = self.as_ref(&rhs);
+            self.call("dream_cycle_initialize_edge", &[owner, child]);
+            self.store_inner(place, rv, rhs);
+            return;
+        }
+        let child_cycles =
+            crate::ownership::contains_cycle_refs(&self.mir.layouts, self.interner, ty);
         let owner_cycles = match place {
-            Place::Field { base, .. } | Place::Index { base, .. } =>
-                crate::ownership::cycle_capable(&self.mir.layouts, self.interner, self.f.local_ty(*base)),
+            Place::Field { base, .. } | Place::Index { base, .. } => {
+                crate::ownership::cycle_capable(
+                    &self.mir.layouts,
+                    self.interner,
+                    self.f.local_ty(*base),
+                )
+            }
             _ => false,
         };
         if !child_cycles && !owner_cycles {
@@ -288,12 +322,27 @@ impl<'l, 'a> Fx<'l, 'a> {
         };
         let unknown_owner = matches!(place, Place::Deref { .. })
             || matches!(place, Place::Field { base, .. }
-                if self.is_value(self.f.local_ty(*base)) && {
-                    let decl = &self.f.locals[base.0 as usize];
-                    decl.is_ref || decl.is_cursor || decl.name.as_deref() == Some("this")
-                        || crate::backend::shared::place_policy::is_alias_value_local(self.f, *base)
-                });
-        let shape = if unknown_owner { 2 } else { i32::from(self.is_value(ty)) };
+            if self.is_value(self.f.local_ty(*base)) && {
+                let decl = &self.f.locals[base.0 as usize];
+                decl.is_ref || decl.is_cursor || decl.name.as_deref() == Some("this")
+                    || crate::backend::shared::place_policy::is_alias_value_local(self.f, *base)
+            });
+        let observing = match place {
+            Place::Field { base, field } => self
+                .l
+                .cx
+                .nstruct(self.f.local_ty(*base))
+                .and_then(|layout| layout.fields.get(*field))
+                .is_some_and(|field| field.is_weak || field.is_unowned),
+            _ => false,
+        };
+        let shape = if observing {
+            3
+        } else if unknown_owner {
+            2
+        } else {
+            i32::from(self.is_value(ty))
+        };
         let locked = self.call_v(
             "dream_cycle_store_begin",
             &[owner, child, V::i32(shape as i64)],
@@ -449,11 +498,27 @@ impl<'l, 'a> Fx<'l, 'a> {
     fn rc_store_ty(&mut self, ty: TypeId, slot: &Value, rhs: &V, rv: &Rvalue, align: u32) {
         let release = release_sym(&self.l.cx, ty);
         let retain = retain_sym(&self.l.cx, ty);
+        let retain = if (self.private_init || self.private_builder) && retain == "dream_retain" {
+            "dream_retain_acyclic"
+        } else {
+            retain
+        };
         let move_id = unique_move_src(rv);
         let borrowed = borrowed_ref_store(self.interner, rv) && move_id.is_none();
         let (mty, _) = mem_ll(MemTy::Ptr, &self.h(), &self.word());
-        let old = self.load_ty(mty.clone(), slot, align, true);
         let v = self.as_ref(rhs);
+        if self.private_init || self.tracked_init {
+            // The constructor proof permits one write per field of a zeroed allocation.
+            if borrowed {
+                self.call(retain, std::slice::from_ref(&v));
+            }
+            self.store_ty(&mty, slot, &v, align);
+            if let Some(id) = move_id {
+                self.write_local(Local(id), &V::s(Value::zero(self.h())));
+            }
+            return;
+        }
+        let old = self.load_ty(mty.clone(), slot, align, true);
         if borrowed {
             let changed = self.w.icmp("ne", &old.v, &v.v);
             self.if_then(&changed, |fx| {

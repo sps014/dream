@@ -29,7 +29,25 @@ fn children(layouts: &LayoutTable, interner: &TypeInterner, ty: TypeId) -> Vec<T
 }
 
 pub(crate) fn cycle_capable(layouts: &LayoutTable, interner: &TypeInterner, root: TypeId) -> bool {
-    if matches!(interner.kind(root), TyKind::Object | TyKind::Interface(..) | TyKind::Func(..)) { return true; }
+    // User finalizers need a claimed dying state even when their fields are acyclic:
+    // temporary peer reads are borrowed, while publication must reject resurrection.
+    if layouts
+        .structs
+        .get(&root)
+        .is_some_and(|s| s.destructor.is_some())
+        || matches!(
+            interner.kind(root),
+            TyKind::Object | TyKind::Interface(..) | TyKind::Func(..)
+        )
+        || (interner.is_reference(root)
+            && match interner.kind(root) {
+                TyKind::Struct(..) => !layouts.structs.contains_key(&root),
+                TyKind::Union(..) => !layouts.unions.contains_key(&root),
+                _ => false,
+            })
+    {
+        return true;
+    }
     let mut pending = children(layouts, interner, root);
     let mut seen = BTreeSet::new();
     while let Some(ty) = pending.pop() {
@@ -45,9 +63,12 @@ pub(crate) fn cycle_capable(layouts: &LayoutTable, interner: &TypeInterner, root
         ) {
             return true;
         }
-        if matches!(interner.kind(ty), TyKind::Struct(..))
-            && !layouts.structs.contains_key(&ty)
-            && interner.is_reference(ty)
+        if interner.is_reference(ty)
+            && match interner.kind(ty) {
+                TyKind::Struct(..) => !layouts.structs.contains_key(&ty),
+                TyKind::Union(..) => !layouts.unions.contains_key(&ty),
+                _ => false,
+            }
         {
             return true;
         }
@@ -56,13 +77,23 @@ pub(crate) fn cycle_capable(layouts: &LayoutTable, interner: &TypeInterner, root
     false
 }
 
-pub(crate) fn contains_cycle_refs(layouts: &LayoutTable, interner: &TypeInterner, root: TypeId) -> bool {
-    if cycle_capable(layouts, interner, root) { return true; }
+pub(crate) fn contains_cycle_refs(
+    layouts: &LayoutTable,
+    interner: &TypeInterner,
+    root: TypeId,
+) -> bool {
+    if cycle_capable(layouts, interner, root) {
+        return true;
+    }
     let mut seen = BTreeSet::new();
     let mut pending = children(layouts, interner, root);
     while let Some(ty) = pending.pop() {
-        if !seen.insert(ty) { continue; }
-        if cycle_capable(layouts, interner, ty) { return true; }
+        if !seen.insert(ty) {
+            continue;
+        }
+        if cycle_capable(layouts, interner, ty) {
+            return true;
+        }
         pending.extend(children(layouts, interner, ty));
     }
     false

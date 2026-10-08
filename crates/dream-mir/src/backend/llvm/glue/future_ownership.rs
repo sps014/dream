@@ -38,7 +38,7 @@ pub(in super::super) fn info(l: &mut Lcx<'_>, result: TypeId) -> String {
         fx.if_then(&nz, |fx| { fx.clear_refs(result, &value); fx.call("dream_recycle", std::slice::from_ref(&value)); });
     } else if fx.is_rc(result) { fx.call(&release_sym(&fx.l.cx, result), &[value]); }
     fx.w.ret(None); fx.finish();
-    super::ownership::descriptor(l, &name, &visit, None, &clear, true);
+    super::ownership::descriptor(l, &name, &visit, None, &clear, true, false);
     name
 }
 
@@ -108,6 +108,6 @@ pub(super) fn bridge(l: &mut Lcx<'_>, name: &str, result: TypeId, params: &[(Typ
         }
         fx.w.ret(None); fx.finish();
     }
-    super::ownership::descriptor(l, &metadata, &visit, None, &clear, true);
+    super::ownership::descriptor(l, &metadata, &visit, None, &clear, true, false);
     metadata
 }

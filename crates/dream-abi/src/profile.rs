@@ -1,6 +1,7 @@
 /// Guest compilation policy, independent of debugger information and backend tuning.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CompileProfile {
+    #[default]
     Debug,
     Release,
 }

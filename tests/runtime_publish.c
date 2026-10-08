@@ -40,8 +40,8 @@ static void array_visit(dream_ptr p) {
         dream_visit_edge(child);
     }
 }
-static const dream_type_info node_info = {node_visit, NULL, NULL, NULL, 0};
-static const dream_type_info array_info = {array_visit, NULL, NULL, NULL, 0};
+static const dream_type_info node_info = {node_visit, NULL, NULL, NULL, 0, 0};
+static const dream_type_info array_info = {array_visit, NULL, NULL, NULL, 0, 0};
 const dream_type_info *dream_type_info_for_tag(int32_t tag) {
     if (tag == TAG_STRUCT_BASE) { return &node_info; }
     if (tag == TAG_ARRAY || tag == TAG_CLOSURE_ENV) { return &array_info; }

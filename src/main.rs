@@ -671,6 +671,13 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    let output_lock = match dream::driver::output::acquire_lock(Path::new(&out_path)) {
+        Ok(lock) => lock,
+        Err(error) => {
+            ui.error(&format!("could not lock output: {error}"));
+            return ExitCode::FAILURE;
+        }
+    };
     let reporter = Arc::new(ConsoleReporter::new());
     // `with_release` installs RELEASE_DEFAULT wasm-opt; an explicit `-O` overrides.
     let cc_opt = OptLevel::from_cli(cli.release, optimize);
@@ -734,6 +741,7 @@ fn main() -> ExitCode {
                 ui.debug_build_note(!linked);
             }
             drop(_memory);
+            drop(output_lock);
             if linked {
                 return launch.run(
                     &ui,
@@ -846,6 +854,7 @@ fn main() -> ExitCode {
                     ui.debug_build_note(false);
                 }
                 drop(_memory);
+                drop(output_lock);
                 if output_kind.is_library() {
                     ExitCode::SUCCESS
                 } else {

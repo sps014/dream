@@ -49,7 +49,10 @@ Exact visitors enumerate only strong edges, including active union fields and re
 inline values and arrays. Publication uses these visitors rather than payload scanning.
 Localized trial deletion subtracts internal edges from scratch counts and retains the graph
 reachable from remaining external owners. Traversal is iterative. Ordinary acyclic retain and
-release operations do not allocate collector state or acquire its gate. Zero-count cycle-capable
+release operations on types without user finalizers do not allocate collector state or acquire
+its gate. Classes with user finalizers also use managed metadata to distinguish temporary
+finalizer borrows from forbidden resurrection, even when their fields cannot form a cycle.
+Zero-count cycle-capable
 objects use direct iterative teardown without trial counts or ordering scratch: no incoming
 strong edge can remain, so the object cannot belong to a cycle.
 
@@ -61,11 +64,85 @@ finalizer reads cannot revive ownership; publication and mutation of doomed obje
 Reentrant destruction joins the current drain. Explicit `defer` postpones collection, and its
 final drain must precede leak reporting.
 
+Async frame visitors see ownership tokens rather than transient pointer copies. Pure copy,
+retain, move, and source-clearing steps publish atomically under the gate. Consumed call
+arguments leave the frame before application code runs; their active stack tokens remain
+external owners until transferred. The gate never spans an arbitrary call or cast evaluation.
+Lazy async closures retain their environment in a visited frame slot at creation. Polls read
+that snapshot, then release it at their first suspension or completion after acquiring the
+captured cells. Dropping an unpolled future releases the snapshot as well. Completed async
+worker replies acquire their own wire-string token before the result future is released.
+
 Inferred `UniqueRegion` remains a Release optimization for proven nonescaping, destructor-free
-graphs. Collector-managed objects are excluded pending proof of equivalent cleanup. Future
+graphs. Its private-allocation proof allows recursive types without registering their private
+instances in the collector; escaped instances retain ordinary cycle management. Future
 explicit graph ownership can define a lifetime for deliberately shared cyclic graphs; no new
 syntax or API is introduced here. Determinism concerns the same synchronized execution;
 concurrent scheduling has no added global ordering guarantee.
+
+## Release recovery mechanisms
+
+Fresh, statically described objects remain isolated until their first strong edge creates or
+shares a pooled component descriptor. Dynamic objects start with a suspect descriptor.
+Strong edges join components under the
+ownership gate; an edge within a component marks it potentially cyclic. Membership stays
+conservative after removal. Weak and unowned edges do not join components. Unknown-owner
+mutations invalidate existing components through an epoch and increment an opt-in counter.
+An allocation-sequence watermark also invalidates older isolated objects; newly allocated
+objects and reused metadata slots do not inherit that fallback.
+Parent metadata links own references, so representatives outlive their original objects.
+Queued collector nodes remain pinned until their candidates drain, preventing pooled reuse.
+
+Release batches verified field-only initializers after evaluating their arguments. Tracked
+initializers join strong components while holding one gate; private initializers omit those
+checks only inside an active proved region. Callback-bearing constructors keep the ordinary
+path. Fresh recursive builders with scalar inputs and a fully verified call graph can hold
+one outer gate. Fresh weak forests also qualify when their constructors only zero fields and
+no weak observation, callback, or publication can observe delayed cleanup during construction.
+Redundant null writes into the zeroed allocation disappear; constructors that execute weak
+operations keep the ordinary path. Nested batches borrow the outer gate rather than
+reacquiring it; verified builders also reuse that token for field-only constructor calls. Proven private
+recursive builders select an internal clone after the outer region check, carrying the same
+proof through recursive calls without checking the region or gate at every node.
+The tracked builder clone similarly borrows the outer gate through recursive calls. Its
+ordinary entry can acquire a temporary component metadata owner shared by the fresh graph,
+then relinquishes it and drains the gate before returning to unproved callers. Verified
+initialization of a fresh owner cannot close a cycle, including when its children share
+a component; ordinary mutation still marks an existing component potentially cyclic.
+Builders with ordinary field mutations retain distinct-component bookkeeping instead of
+sharing the temporary descriptor, so weak forest stores retain their inexpensive path.
+No gate spans arbitrary application code. Debug keeps ordinary validation. Release emits
+collector-free retain and decrement calls for exact acyclic static layouts. Missing layouts,
+erased objects, interfaces, and closures stay conservative. Shared counts still use atomic
+operations, and canonicalized release wrappers retain their runtime collector check. Weak
+registrations and target claims use the same collector gate; their table does not need a
+second mutex. Nested weak operations borrow the gate without ending the outer cleanup boundary.
+
+Release span borrowing also admits fresh private string owners. Ownership dataflow proves
+that the original owner remains alive at every view and derived-reference read, including
+joins and back edges. Escape analysis includes the source fields of inline views, so an
+escaping view or published source prevents this specialization. Ownership observations and
+ordinary opaque calls retain the checked path. A bounds-check panic cannot access the private
+source through its hook; the normal owner remains alive until abort. Debug retains the
+ordinary validation path, and the optimization never postpones the original owner's cleanup.
+
+Type metadata separates finalization, clearing, reclamation, and a proof that clearing invokes
+no user code. Destructor-free zero-count objects with that proof can clear and reclaim under
+the gate; reference children append to the iterative drain. Inline values with destructors
+are excluded, and all user finalizers run outside the gate. Deferred erased releases retain
+live weak observations until their pending ownership decrement actually reaches zero.
+
+WASM libc storage and worker stacks use an uncounted runtime heap path. Guest object
+diagnostics read a single guest counter rather than subtracting independently updated raw
+allocation counters; asynchronous worker-stack teardown cannot change guest leak counts.
+
+Runtime event counters are compiled only with `DREAM_RUNTIME_COUNTERS=1`, which changes the
+runtime cache identity. Uninstrumented paired timing runs are separate from counter runs.
+The existing comparison harness stores versioned full samples and immutable reference
+artifacts; missing, corrupt, incompatible, zero-time, or inconsistent-sink results fail
+validation. A paired 95% interval above 1.10 fails; an overlapping interval is inconclusive.
+The hosted performance workflow publishes measurements, while a configured controlled
+runner is required for the hard gate. These mechanisms alone do not establish acceptance.
 
 ## Validation
 
@@ -76,7 +153,7 @@ parity and byte-identical repeated artifacts; preserve Release runtime benchmark
 gates are workspace build, strict Clippy, workspace tests, the full native corpus, parity,
 runtime layering checks, relevant ignored DAP/toolchain tests, and Linux sanitizer CI.
 
-### Measured results and remaining performance cost
+### Historical measured results and remaining performance cost
 
 The [recorded samples](build-profile-measurements.json) compare release-built host compilers
 against commit `2eb32e25` on macOS arm64, with three quiet repetitions and a generated

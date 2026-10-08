@@ -359,7 +359,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         let [ptr_off, free_off] = offsets[..] else {
             crate::internal_error!("OwnedCPtr must have exactly the fields `ptr` and `free`");
         };
-        let o = self.emit_new_in(ty, None, &[], None, crate::AllocPolicy::Tracked);
+        let o = self.emit_new_in(ty, None, &[], None, crate::AllocPolicy::Tracked, false);
         let at = self.addr(&o, ptr_off as i64);
         self.cptr_store(&at, p);
         let at = self.addr(&o, free_off as i64);

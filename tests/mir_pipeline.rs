@@ -253,6 +253,34 @@ fn spans_scalarize_and_drop_bounds_checks() {
 
 #[cfg(feature = "native")]
 #[test]
+fn spans_over_private_owned_strings_do_not_count_references_in_the_loop() {
+    let ir = release_opt_ll(r#"
+        import system;
+        @noinline
+        fun owned_span(borrow suffix: string, n: int): int {
+            let source = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" + suffix;
+            let sum = 0;
+            let i = 0;
+            while i < n {
+                let start = i & 7;
+                let view = source.span(start, start + 25 + (i & 3));
+                sum = sum + view.length + (int)view.char_at(0);
+                i = i + 1;
+            }
+            return sum;
+        }
+        fun main(): void {
+            System.println(owned_span(System.env_or("DREAM_SPAN_INPUT", "!"), 100));
+        }
+    "#);
+    let body = common::ir_func_body(&ir, "owned_span");
+    assert_eq!(body.matches("@dream_rc_last_slow(").count(), 1,
+        "only the original source owner's cleanup may remain:\n{body}");
+    assert!(!body.contains("atomicrmw"), "a span retained its private source:\n{body}");
+}
+
+#[cfg(feature = "native")]
+#[test]
 fn value_struct_constructors_and_borrow_parameters_elide_arc() {
     let ir = release_opt_ll(
         r#"
@@ -328,4 +356,81 @@ fn value_struct_constructors_and_borrow_parameters_elide_arc() {
         let body = common::ir_func_body(&ir, name);
         assert!(body.contains("dream_panic"), "constructor validation lost in {name}:\n{body}");
     }
+}
+
+
+#[test]
+fn source_weak_forest_builder_batches_niche_null_initialization() {
+    let fixture = include_str!("cases/arc_weak_forest.dream");
+    let (_, fixture) = fixture.split_once("class ForestNode").unwrap();
+    let (fixture, _) = fixture.split_once("fun main()").unwrap();
+    let source = format!("enum Option<T> {{ Some(T), None }} class ForestNode{fixture} fun main(): void {{ let root = forest(5); }}");
+    common::compile_test_pipeline(&source, |hir, interner| {
+        let mut mir = lower_program(hir, interner);
+        let mut dump = dream_mir::passes::MirDump::default();
+        dream_mir::passes::optimize_module_opts(&mut mir, interner, true, &mut dump);
+        dream_mir::passes::run_function_pipelines(
+            &mut mir, interner, &PassManager::release_pipeline(),
+            &PassManager::async_poll_pipeline(), &mut dump,
+        );
+        dream_mir::passes::run_late_module_passes(&mut mir, interner, &mut dump);
+        let forest = mir.functions.iter().find(|function| function.name == "forest").unwrap();
+        assert_eq!(forest.batched_construction, Some(dream_mir::AllocPolicy::Tracked));
+        assert!(forest.blocks.iter().flat_map(|b| &b.stmts).any(|statement| {
+            matches!(statement, dream_mir::Statement::Assign(_, dream_mir::Rvalue::New { ctor: None, .. }))
+        }));
+        let ir = common::emit_ll(&mir, interner);
+        let ordinary = common::ir_func_body(&ir, "forest");
+        assert!(ordinary.contains("dream_cycle_construction_begin"));
+        assert!(!ordinary.contains("dream_cycle_graph_begin"));
+    });
+}
+
+#[test]
+fn private_recursive_builder_checks_the_region_only_at_its_outer_call() {
+    let source = r#"
+        enum Option<T> { Some(T), None }
+        class Tree {
+            public left: Option<Tree>;
+            public right: Option<Tree>;
+            public constructor(left: Option<Tree>, right: Option<Tree>) {
+                this.left = left; this.right = right;
+            }
+        }
+        fun build_tree(depth: int): Option<Tree> {
+            if depth == 0 { return Option.None; }
+            return Option.Some(Tree(build_tree(depth - 1), build_tree(depth - 1)));
+        }
+        fun count(tree: Option<Tree>): int {
+            return switch (tree) {
+                Some(node) => 1 + count(node.left) + count(node.right),
+                None => 0,
+            };
+        }
+        fun main(): int { return count(build_tree(5)); }
+    "#;
+    common::compile_test_pipeline(source, |hir, interner| {
+        let mut mir = lower_program(hir, interner);
+        mir.profile = dream_abi::profile::CompileProfile::Release;
+        let mut dump = dream_mir::passes::MirDump::disabled();
+        dream_mir::passes::optimize_module_opts(&mut mir, interner, true, &mut dump);
+        dream_mir::passes::run_function_pipelines(
+            &mut mir, interner, &PassManager::release_pipeline(),
+            &PassManager::async_poll_pipeline(), &mut dump,
+        );
+        dream_mir::passes::run_late_module_passes(&mut mir, interner, &mut dump);
+        let builder = mir.functions.iter().find(|f| f.name == "build_tree").unwrap();
+        assert_eq!(builder.batched_construction, Some(dream_mir::AllocPolicy::Private));
+        let ir = common::emit_ll(&mir, interner);
+        let body = common::ir_func_body(&ir, "build_tree__private_graph");
+        assert!(!body.contains("dream_cycle_graph_begin"));
+        assert!(body.contains("@build_tree__private_graph("));
+        let tracked = common::ir_func_body(&ir, "build_tree__tracked_graph");
+        assert!(!tracked.contains("dream_cycle_graph_begin"));
+        assert!(tracked.contains("@build_tree__tracked_graph("));
+        let ordinary = common::ir_func_body(&ir, "build_tree");
+        assert!(ordinary.contains("dream_cycle_graph_begin"));
+        assert!(ordinary.contains("@build_tree__tracked_graph("));
+        assert!(ordinary.contains("dream_cycle_graph_end"));
+    });
 }

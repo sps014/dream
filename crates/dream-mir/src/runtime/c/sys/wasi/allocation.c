@@ -1,22 +1,16 @@
-#include "dream_rt_wasm32.h"
+#include "dream_heap_internal.h"
 #include <stddef.h>
 #include <errno.h>
-
-/* Native libc allocations do not contribute to Dream object diagnostics. */
-extern int64_t dream_raw_live_objects;
-extern int64_t dream_raw_total_allocations;
 
 static void *allocate_aligned(size_t n, size_t alignment) {
     if (alignment > (size_t)INT32_MAX - 8 || n > (size_t)INT32_MAX - alignment - 8) {
         return NULL;
     }
     /* C and C++ allocations require max_align_t alignment, unlike Dream's compact payloads. */
-    dream_ptr raw = dream_malloc((int32_t)(n + alignment + 8), 0);
+    dream_ptr raw = dream_wasm_raw_malloc((int32_t)(n + alignment + 8));
     uintptr_t aligned = ((uintptr_t)(uint32_t)raw + 8 + alignment - 1) & ~(uintptr_t)(alignment - 1);
     ((uint32_t *)aligned)[-2] = (uint32_t)raw;
     ((uint32_t *)aligned)[-1] = (uint32_t)n;
-    __atomic_fetch_add(&dream_raw_live_objects, 1, __ATOMIC_RELAXED);
-    __atomic_fetch_add(&dream_raw_total_allocations, 1, __ATOMIC_RELAXED);
     return (void *)aligned;
 }
 
@@ -51,8 +45,7 @@ void *calloc(size_t n, size_t sz) {
 
 void free(void *p) {
     if (p) {
-        __atomic_fetch_sub(&dream_raw_live_objects, 1, __ATOMIC_RELAXED);
-        dream_free((dream_ptr)((uint32_t *)p)[-2]);
+        dream_wasm_raw_free((dream_ptr)((uint32_t *)p)[-2]);
     }
 }
 

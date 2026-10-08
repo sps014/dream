@@ -172,6 +172,7 @@ impl Lowerer<'_> {
                     def: *def,
                     ty: e.ty,
                     ctor: ctor.map(|def| crate::NewCtor {
+ batched: false,
                         def,
                         take_params: take_params.clone(),
                     }),

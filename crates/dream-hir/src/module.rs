@@ -84,6 +84,7 @@ pub struct InterfaceTable {
 /// signature of each method slot (used to declare the `call_indirect` type + trampoline).
 #[derive(Debug, Clone)]
 pub struct InterfaceInfo {
+    pub ty: TypeId,
     pub name: String,
     pub method_count: usize,
     /// The `call_indirect` signature (a `Func` `TypeId`) for each method slot.

@@ -2,6 +2,7 @@
 
 mod body;
 mod calls;
+mod construction;
 mod debug;
 mod debug_views;
 mod fx;
@@ -12,6 +13,7 @@ pub mod ir;
 mod js;
 mod lcx;
 mod places;
+mod poll_ownership;
 mod publication;
 pub mod runtime_sigs;
 mod rvalue;
@@ -126,6 +128,42 @@ fn emit_llvm_module_unchecked(
             l.own(&drop, FnSig::plain(FnTy::new(Ty::Void, vec![h])));
         }
     }
+    let private_initializers = construction::private_initializers(mir);
+    let tracked_initializers = construction::tracked_initializers(mir);
+    for f in &mir.functions {
+        if private_initializers.contains(&f.def) {
+            let ordinary = l.user_fn(f);
+            let private = construction::private_name(&ordinary);
+            let sig = l.sig(&ordinary);
+            l.own(&private, sig);
+            if l.tracked.contains(&ordinary) { l.tracked.insert(private); }
+        }
+    }
+    for f in &mir.functions {
+        if tracked_initializers.contains(&f.def) {
+            let ordinary = l.user_fn(f);
+            let tracked = construction::tracked_name(&ordinary);
+            let sig = l.sig(&ordinary);
+            l.own(&tracked, sig);
+            if l.tracked.contains(&ordinary) { l.tracked.insert(tracked); }
+        }
+    }
+    for f in &mir.functions {
+        if f.batched_construction.is_some() {
+            let ordinary = l.user_fn(f);
+            let tracked = construction::tracked_builder_name(&ordinary);
+            let sig = l.sig(&ordinary);
+            l.own(&tracked, sig);
+            if l.tracked.contains(&ordinary) { l.tracked.insert(tracked); }
+        }
+        if f.batched_construction == Some(crate::AllocPolicy::Private) {
+            let ordinary = l.user_fn(f);
+            let private = construction::builder_name(&ordinary);
+            let sig = l.sig(&ordinary);
+            l.own(&private, sig);
+            if l.tracked.contains(&ordinary) { l.tracked.insert(private); }
+        }
+    }
     let reach = crate::backend::shared::reach::compute(&l.cx);
     let protocol = glue::protocol::plan(&l, &reach);
     glue::release::register_all(&mut l);
@@ -142,7 +180,15 @@ fn emit_llvm_module_unchecked(
     let mut async_i = 0usize;
     for f in &mir.functions {
         if !f.is_async {
-            body::build_sync(&mut l, f);
+            body::build_sync(&mut l, f, construction::InitMode::Ordinary);
+            if f.batched_construction.is_some() {
+                body::build_sync(&mut l, f, construction::InitMode::TrackedBuilder);
+            }
+            if f.batched_construction == Some(crate::AllocPolicy::Private) {
+                body::build_sync(&mut l, f, construction::InitMode::PrivateBuilder);
+            }
+            if private_initializers.contains(&f.def) { body::build_sync(&mut l, f, construction::InitMode::Private); }
+            if tracked_initializers.contains(&f.def) { body::build_sync(&mut l, f, construction::InitMode::Tracked); }
             body::build_abi_wrapper(&mut l, f);
             continue;
         }
@@ -150,14 +196,18 @@ fn emit_llvm_module_unchecked(
         let pre_lowered = &mir.polls[async_i];
         async_i += 1;
         if f.hir_fn.is_none() {
-            body::build_sync(&mut l, f);
+            body::build_sync(&mut l, f, construction::InitMode::Ordinary);
+            if private_initializers.contains(&f.def) { body::build_sync(&mut l, f, construction::InitMode::Private); }
             body::build_empty_poll_drop(&mut l, f);
             continue;
         }
         let (offs, frame_size) = body::async_offsets(&l, pre_lowered);
-        body::build_async_stub(&mut l, f, pre_lowered, &offs, frame_size, poll_idx as i32);
-        body::build_poll(&mut l, f, pre_lowered, &offs);
-        body::build_future_drop(&mut l, f, pre_lowered, &offs);
+        let environment = poll_ownership::captures_environment(pre_lowered)
+            .then_some((frame_size + 7) & !7);
+        let frame_size = environment.map_or(frame_size, |offset| offset + 8);
+        body::build_async_stub(&mut l, f, pre_lowered, &offs, frame_size, poll_idx as i32, environment);
+        body::build_poll(&mut l, f, pre_lowered, &offs, environment);
+        body::build_future_drop(&mut l, f, pre_lowered, &offs, environment);
     }
     glue::release::emit_all(&mut l);
     glue::ownership::emit_all(&mut l);

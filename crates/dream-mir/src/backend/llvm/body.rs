@@ -1,7 +1,7 @@
 //! Function bodies: a sync function, and an async function's (stub, poll, drop) triple. Every MIR
 //! block becomes one LLVM block; locals are entry allocas that mem2reg promotes.
 
-use super::fx::{align_at, Fx, Slot, V};
+use super::fx::{Fx, Slot, V, align_at};
 use super::ir::{BlockRef, FnAttr, Ty, Value};
 use super::lcx::Lcx;
 use super::types::is_unsigned;
@@ -118,7 +118,9 @@ impl<'l, 'a> Fx<'l, 'a> {
 }
 
 fn inline_attr(f: &MirFunction, preserve_frames: bool) -> Option<FnAttr> {
-    if preserve_frames { return Some(FnAttr::NoInline); }
+    if preserve_frames {
+        return Some(FnAttr::NoInline);
+    }
     match f.inline {
         dream_hir::InlineHint::Never => Some(FnAttr::NoInline),
         dream_hir::InlineHint::Prefer => Some(FnAttr::AlwaysInline),
@@ -126,15 +128,69 @@ fn inline_attr(f: &MirFunction, preserve_frames: bool) -> Option<FnAttr> {
     }
 }
 
-pub(super) fn build_sync<'a>(l: &mut Lcx<'a>, f: &'a MirFunction) {
+pub(super) fn build_sync<'a>(
+    l: &mut Lcx<'a>,
+    f: &'a MirFunction,
+    mode: super::construction::InitMode,
+) {
     let name = l.user_fn(f);
+    let name = match mode {
+        super::construction::InitMode::Ordinary => name,
+        super::construction::InitMode::Private => super::construction::private_name(&name),
+        super::construction::InitMode::Tracked => super::construction::tracked_name(&name),
+        super::construction::InitMode::PrivateBuilder => super::construction::builder_name(&name),
+        super::construction::InitMode::TrackedBuilder => {
+            super::construction::tracked_builder_name(&name)
+        }
+    };
     let mut w = l.writer(&name);
-    w.attrs.extend(inline_attr(f, l.cx.leak_checks && l.cx.debug_syms));
+    w.attrs
+        .extend(inline_attr(f, l.cx.leak_checks && l.cx.debug_syms));
     let mut fx = Fx::new(l, f, w);
+    fx.private_init = matches!(mode, super::construction::InitMode::Private);
+    fx.tracked_init = matches!(mode, super::construction::InitMode::Tracked);
+    fx.private_builder = matches!(mode, super::construction::InitMode::PrivateBuilder);
+    fx.tracked_builder = matches!(mode, super::construction::InitMode::TrackedBuilder);
     fx.debug_begin(f);
     fx.source_begin(f);
-    fx.map_blocks();
     fx.sync_locals();
+    if fx.private_builder {
+        fx.construction_gate = Some(V::i32(0));
+    } else if fx.tracked_builder {
+        fx.construction_gate = Some(V::i32(2));
+    } else if let Some(policy) = f.batched_construction {
+        fx.debug_locals(true);
+        let private = i64::from(policy == crate::AllocPolicy::Private);
+        let grouped = super::construction::only_fresh_edges(fx.mir, f);
+        let begin = if grouped {
+            "dream_cycle_graph_begin"
+        } else {
+            "dream_cycle_construction_begin"
+        };
+        let end = if grouped {
+            "dream_cycle_graph_end"
+        } else {
+            "dream_cycle_store_end"
+        };
+        let gate = fx.call_v(begin, &[V::i32(private)]);
+        if policy == crate::AllocPolicy::Private {
+            let active = fx.w.icmp("eq", &gate.v, &Value::i32(0));
+            fx.if_then(&active, |fx| {
+                let name = super::construction::builder_name(&fx.l.user_fn(f));
+                let arguments: Vec<_> = f.params.iter().map(|p| fx.read_local(*p)).collect();
+                let result = fx.call_v(&name, &arguments);
+                fx.w.ret(Some(&result.v));
+            });
+        }
+        let name = super::construction::tracked_builder_name(&fx.l.user_fn(f));
+        let arguments: Vec<_> = f.params.iter().map(|p| fx.read_local(*p)).collect();
+        let result = fx.call_v(&name, &arguments);
+        fx.call(end, &[gate]);
+        fx.w.ret(Some(&result.v));
+        fx.finish();
+        return;
+    }
+    fx.map_blocks();
     fx.frame_buffers();
     fx.debug_locals(true);
     let entry = fx.blocks[f.entry.0 as usize];
@@ -220,10 +276,12 @@ pub(super) fn build_async_stub<'a>(
     offs: &[i32],
     frame_size: i32,
     poll_idx: i32,
+    environment: Option<i32>,
 ) {
     let name = l.user_fn(stub);
     let mut w = l.writer(&name);
-    w.attrs.extend(inline_attr(stub, l.cx.leak_checks && l.cx.debug_syms));
+    w.attrs
+        .extend(inline_attr(stub, l.cx.leak_checks && l.cx.debug_syms));
     let wide = crate::backend::shared::abi_types::ref_int_locals(&l.cx, body);
     let mut fx = Fx::new(l, stub, w);
     let first = fx.w.new_block("body");
@@ -239,6 +297,18 @@ pub(super) fn build_async_stub<'a>(
     );
     let metadata = V::s(Value::global(format!("info_{}", drop_name(fx.l, stub))));
     fx.call("dream_set_type", &[s.clone(), metadata]);
+    if let Some(offset) = environment {
+        // Polls are lazy: the caller's funcbox may die or another call may replace g0.
+        let env = fx.read_global(crate::Global(0));
+        fx.call("dream_retain", std::slice::from_ref(&env));
+        let gate = fx.call_v(
+            "dream_cycle_store_begin",
+            &[s.clone(), env.clone(), V::i32(0)],
+        );
+        let at = fx.addr(&s, offset as i64);
+        fx.store_ty(&fx.h(), &at, &env, 8);
+        fx.call("dream_cycle_store_end", &[gate]);
+    }
     for (pi, p) in body.params.iter().enumerate() {
         let off = offs[p.0 as usize] as i64;
         let ty = body.local_ty(*p);
@@ -393,6 +463,7 @@ pub(super) fn build_poll<'a>(
     stub: &MirFunction,
     body: &'a MirFunction,
     offs: &[i32],
+    environment: Option<i32>,
 ) {
     let name = poll_name(l, stub);
     let w = l.writer(&name);
@@ -401,6 +472,7 @@ pub(super) fn build_poll<'a>(
     fx.source_begin(stub);
     fx.map_blocks();
     fx.poll_locals(offs);
+    fx.poll_environment = environment;
     fx.debug_locals(false);
     let s = V::u(fx.w.param(0));
     let state_at = fx.addr(&s, fx.l.cx.target.abi().future.state as i64);
@@ -418,9 +490,10 @@ pub(super) fn build_poll<'a>(
             resume,
             ..
         } = &block.terminator
-            && (resume.0 as usize) < resume_dest.len() {
-                resume_dest[resume.0 as usize] = Some(d.0);
-            }
+            && (resume.0 as usize) < resume_dest.len()
+        {
+            resume_dest[resume.0 as usize] = Some(d.0);
+        }
     }
     fx.body_blocks(&resume_dest, Some(offs));
     let w = fx.w;
@@ -443,12 +516,17 @@ pub(super) fn build_future_drop<'a>(
     stub: &MirFunction,
     body: &'a MirFunction,
     offs: &[i32],
+    environment: Option<i32>,
 ) {
     let name = drop_name(l, stub);
     let mut idxs: Vec<usize> = (0..body.locals.len())
         .filter(|&i| {
             let d = &body.locals[i];
-            if (!l.interner.is_rc_tracked(d.ty) && !l.interner.is_value_type(d.ty)) || d.is_cursor || d.is_ref || crate::backend::shared::place_policy::is_alias_value_local(body, Local(i as u32)) {
+            if (!l.interner.is_rc_tracked(d.ty) && !l.interner.is_value_type(d.ty))
+                || d.is_cursor
+                || d.is_ref
+                || crate::backend::shared::place_policy::is_alias_value_local(body, Local(i as u32))
+            {
                 return false;
             }
             let is_param = body.params.iter().any(|p| p.0 == i as u32);
@@ -462,6 +540,11 @@ pub(super) fn build_future_drop<'a>(
     let owner = visit.arg(0);
     let result_at = visit.addr(&owner, visit.l.cx.target.abi().future.result as i64);
     let result = visit.load_ty(h.clone(), &result_at, 8, true);
+    if let Some(offset) = environment {
+        let at = visit.addr(&owner, offset as i64);
+        let env = visit.load_ty(h.clone(), &at, 8, true);
+        visit.call("dream_visit_edge", &[env]);
+    }
     for &i in &idxs {
         let at = visit.addr(&owner, offs[i] as i64);
         let ty = body.locals[i].ty;
@@ -482,7 +565,15 @@ pub(super) fn build_future_drop<'a>(
     }
     visit.w.ret(None);
     visit.finish();
-    super::glue::ownership::descriptor(l, &format!("info_{name}"), &visit_name, None, &name, true);
+    super::glue::ownership::descriptor(
+        l,
+        &format!("info_{name}"),
+        &visit_name,
+        None,
+        &name,
+        true,
+        false,
+    );
     idxs.sort_by_key(|&i| drop_slot_rank(l, body.locals[i].ty));
     let w = l.writer(&name);
     let mut fx = Fx::new(l, body, w);
@@ -493,6 +584,12 @@ pub(super) fn build_future_drop<'a>(
     let ra = fx.addr(&s, fx.l.cx.target.abi().future.result as i64);
     let h = fx.h();
     let res = fx.load_ty(h.clone(), &ra, 8, true);
+    if let Some(offset) = environment {
+        let at = fx.addr(&s, offset as i64);
+        let env = fx.load_ty(h.clone(), &at, 8, true);
+        fx.store_ty(&h, &at, &V::s(Value::zero(h.clone())), 8);
+        fx.call("dream_release_closure_env", &[env]);
+    }
     for i in idxs {
         let ty = body.locals[i].ty;
         let at = fx.addr(&s, offs[i] as i64);

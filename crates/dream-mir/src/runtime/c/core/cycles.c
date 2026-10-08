@@ -5,15 +5,20 @@
 #define uthash_free(ptr, size) dream_platform_current->deallocate(ptr)
 #define uthash_fatal(msg) DREAM_PANIC_LITERAL(u"panic: out of memory indexing cycle objects")
 #include "uthash.h"
+#include "cycle_components.h"
 
 typedef struct CycleNode {
     dream_ptr ptr;
     uint64_t sequence;
-    unsigned queued;
-    int dying;
+    unsigned queued : 31;
+    unsigned dying : 1;
     uint32_t slot;
-    struct CycleNode *next_free;
-    struct Trial *trial;
+    /* A pooled slot has no trial membership; a live slot is never on the free list. */
+    union {
+        struct CycleNode *next_free;
+        struct Trial *trial;
+    };
+    CycleComponent *component;
 #ifdef DREAM_WASM32
     UT_hash_handle hh;
 #endif
@@ -36,6 +41,7 @@ typedef struct {
     Candidate *tail;
     void (*edge)(dream_ptr, void *);
     void *edge_context;
+    CycleComponent *construction_component;
 } CycleContext;
 
 #ifndef DREAM_WASM32
@@ -61,7 +67,7 @@ static CycleContext *context(void) {
 
 static void release_idle_context(CycleContext *c) {
 #ifdef DREAM_WASM32
-    if (c && c->heap_empty && !c->gate_depth && !c->draining && !c->postponed && !c->finalizing && !c->head && !c->edge) {
+    if (c && c->heap_empty && !c->gate_depth && !c->draining && !c->postponed && !c->finalizing && !c->head && !c->edge && !c->construction_component) {
         dream_cycle_context_set(0);
         dream_platform_current->deallocate(c);
     }
@@ -83,7 +89,7 @@ static size_t live_nodes;
 static CycleNode *nodes;
 #endif
 static uint64_t next_sequence;
-static int may_have_forward_edges;
+static uint64_t unknown_store_sequence;
 uint64_t dream_runtime_counters[DREAM_COUNT_LIMIT];
 
 int64_t debug_get_runtime_counter(int32_t id) {
@@ -98,6 +104,21 @@ void dream_cycle_enter(void) {
         dream_count(DREAM_COUNT_GATES, 1);
     }
 }
+
+int dream_cycle_construction_begin(int private_graph) {
+    CycleContext *c = peek_context();
+    if (c && c->gate_depth) { return 2; }
+    if (private_graph && dream_region_active()) { return 0; }
+    dream_cycle_enter();
+    return 1;
+}
+#include "cycle_construction.h"
+int dream_cycle_acquire(void) {
+    if (context()->gate_depth) { return 0; }
+    dream_cycle_enter();
+    return 1;
+}
+
 void dream_cycle_leave(void) {
     CycleContext *c = context();
     if (--c->gate_depth == 0) {
@@ -119,7 +140,7 @@ static void string_visit(dream_ptr p) {
         dream_visit_edge(parent);
     }
 }
-static const dream_type_info string_info = { string_visit, NULL, NULL, NULL, 0 };
+static const dream_type_info string_info = { string_visit, NULL, NULL, NULL, 0, 0};
 static dream_ptr closure_edge(dream_ptr p) {
     dream_ptr child; memcpy(&child, (char *)dream_p(p) + 8, sizeof(child)); return child;
 }
@@ -146,8 +167,8 @@ static void environment_clear(dream_ptr p) {
         dream_release_object(child);
     }
 }
-static const dream_type_info closure_info = { closure_visit, NULL, closure_clear, dream_recycle, 1 };
-static const dream_type_info environment_info = { environment_visit, NULL, environment_clear, dream_recycle, 1 };
+static const dream_type_info closure_info = { closure_visit, NULL, closure_clear, dream_recycle, 1, 1};
+static const dream_type_info environment_info = { environment_visit, NULL, environment_clear, dream_recycle, 1, 1};
 const dream_type_info *dream_builtin_type_info(int32_t tag) {
     switch (tag) {
     case TAG_STRING: return &string_info;
@@ -157,7 +178,7 @@ const dream_type_info *dream_builtin_type_info(int32_t tag) {
     }
 }
 
-static void grow_nodes(void) {
+static __attribute__((noinline, cold)) void grow_nodes(void) {
     if (node_chunk_count == node_chunk_capacity) {
         uint32_t capacity = node_chunk_capacity ? node_chunk_capacity * 2u : 16u;
         if (capacity > (UINT32_MAX >> NODE_CHUNK_BITS)) { DREAM_PANIC_LITERAL(u"panic: cycle allocation identity exhausted"); }
@@ -187,11 +208,16 @@ static CycleNode *take_node(dream_ptr ptr) {
     node->queued = 0;
     node->dying = 0;
     node->trial = NULL;
+    int32_t tag = dream_object_tag(ptr);
+    int dynamic = tag == TAG_FUTURE || tag == TAG_FUNCBOX || tag == TAG_CLOSURE_ENV || tag == TAG_ARRAY;
+    node->component = construction_component(dynamic);
     ++live_nodes;
     return node;
 }
 
 static void give_node(CycleNode *node) {
+    component_drop(node->component);
+    node->component = NULL;
     node->next_free = free_nodes;
     free_nodes = node;
 }
@@ -219,11 +245,7 @@ static void unlink_node(CycleNode *node) {
 
 void dream_cycle_register(dream_ptr ptr) {
     if (dream_rc_immortal(ptr)) { return; }
-    dream_cycle_enter();
-    int32_t tag = dream_object_tag(ptr);
-    if (tag == TAG_FUTURE || tag == TAG_FUNCBOX || tag == TAG_CLOSURE_ENV || tag == TAG_ARRAY) {
-        may_have_forward_edges = 1;
-    }
+    int acquired = dream_cycle_acquire();
     if (!find_node(ptr)) {
         if (next_sequence == UINT64_MAX) { DREAM_PANIC_LITERAL(u"panic: cycle allocation identity exhausted"); }
         CycleNode *node = take_node(ptr);
@@ -234,7 +256,20 @@ void dream_cycle_register(dream_ptr ptr) {
 #endif
         dream_count(DREAM_COUNT_CYCLE_NODES, 1);
     }
-    dream_cycle_leave();
+    if (acquired) { dream_cycle_leave(); }
+}
+
+void dream_cycle_register_new(dream_ptr ptr) {
+    int acquired = dream_cycle_acquire();
+    if (next_sequence == UINT64_MAX) { DREAM_PANIC_LITERAL(u"panic: cycle allocation identity exhausted"); }
+    CycleNode *node = take_node(ptr);
+#ifdef DREAM_WASM32
+    HASH_ADD(hh, nodes, ptr, sizeof(ptr), node);
+#else
+    *dream_cycle_slot(ptr) = node->slot;
+#endif
+    dream_count(DREAM_COUNT_CYCLE_NODES, 1);
+    if (acquired) { dream_cycle_leave(); }
 }
 
 void dream_visit_edge(dream_ptr ptr) {
@@ -257,40 +292,21 @@ void dream_visit_owned(dream_ptr ptr, void (*edge)(dream_ptr, void *), void *arg
 }
 
 void dream_cycle_forget_slow(dream_ptr ptr) {
-    dream_cycle_enter();
+    int acquired = dream_cycle_acquire();
     CycleNode *node = find_node(ptr);
     if (node) {
         unlink_node(node);
         dream_count(DREAM_COUNT_CYCLE_FORGETS, 1);
-        if (!live_nodes) { may_have_forward_edges = 0; }
         node->ptr = 0;
         if (!node->queued) { give_node(node); }
     }
-    dream_cycle_leave();
+    if (acquired) { dream_cycle_leave(); }
 }
 
-/* Queue entries recycle through a gate-guarded free list: teardown of a tracked graph queues
- * one entry per object. */
-static Candidate *free_candidates;
-
-static Candidate *take_candidate(void) {
-    Candidate *candidate = free_candidates;
-    if (candidate) {
-        free_candidates = candidate->next;
-        *candidate = (Candidate){0};
-        return candidate;
-    }
-    candidate = dream_raw_calloc(1, sizeof(*candidate));
-    if (!candidate) { DREAM_PANIC_LITERAL(u"panic: out of memory queuing cycle candidate"); }
-    return candidate;
-}
-
-static void give_candidate(Candidate *candidate) {
-    candidate->next = free_candidates;
-    free_candidates = candidate;
-}
+#include "cycle_scratch.h"
 
 static void queue_node(CycleNode *node) {
+    if (node->queued == INT32_MAX) { DREAM_PANIC_LITERAL(u"panic: cycle candidate reference overflow"); }
     Candidate *candidate = take_candidate();
     CycleContext *c = context();
     candidate->node = node;
@@ -304,7 +320,9 @@ int dream_cycle_defer_destroy(dream_ptr ptr, void (*destroy)(dream_ptr)) {
     CycleContext *c = peek_context();
     if (!c || !c->gate_depth) { return 0; }
     Candidate *candidate = take_candidate();
-    dream_weak_prepare_destroy(ptr);
+    // Erased release dispatch can be deferred before it selects/decrements the count.
+    // Its queued reference still owns the object; only a claimed zero invalidates observers.
+    if (dream_rc_count(ptr) == 0) { dream_weak_prepare_destroy(ptr); }
     candidate->ptr = ptr;
     candidate->destroy = destroy;
     dream_count(DREAM_COUNT_DEFERRED, 1);
@@ -314,7 +332,7 @@ int dream_cycle_defer_destroy(dream_ptr ptr, void (*destroy)(dream_ptr)) {
 }
 
 void dream_cycle_retain(dream_ptr ptr) {
-    dream_cycle_enter();
+    int acquired = dream_cycle_acquire();
     CycleNode *node = find_node(ptr);
     if (node && node->dying) {
         if (!context()->finalizing) { DREAM_PANIC_LITERAL(u"panic: resurrection of a dying object"); }
@@ -326,120 +344,65 @@ void dream_cycle_retain(dream_ptr ptr) {
             __atomic_store_n(rc, v + 1, __ATOMIC_RELAXED);
         }
     }
+    if (acquired) { dream_cycle_leave(); }
+}
+
+static int node_possible(CycleNode *node) {
+    return node->component ? component_possible(node->component) : node->sequence <= unknown_store_sequence;
+}
+
+#include "cycle_edges.h"
+
+void dream_cycle_initialize_edge(dream_ptr owner, dream_ptr child) {
+    if (!child) { return; }
+    CycleContext *c = context();
+    if (!c->gate_depth) { DREAM_PANIC_LITERAL(u"panic: initialization without ownership gate"); }
+    /* Verified fresh builders import no reference owner and run no application code.
+     * Registration has already joined these nodes; a new owner's edges cannot close a cycle. */
+    if (c->construction_component && owner != child) { return; }
+    check_store_locked(owner, child, 2);
+}
+
+static void check_store(dream_ptr owner, dream_ptr child, int strong) {
+    dream_cycle_enter();
+    check_store_locked(owner, child, strong);
     dream_cycle_leave();
 }
 
 void dream_cycle_check_store_slow(dream_ptr owner, dream_ptr child) {
-    dream_cycle_enter();
-    CycleNode *a = owner ? find_node(owner) : NULL;
-    CycleNode *b = child ? find_node(child) : NULL;
-    if ((a && a->dying) || (b && b->dying)) {
-        DREAM_PANIC_LITERAL(u"panic: publication or mutation of a dying object");
-    }
-    if (a && b && b->sequence >= a->sequence) { may_have_forward_edges = 1; }
-    dream_cycle_leave();
+    check_store(owner, child, 1);
 }
 
-__attribute__((noinline)) void dream_cycle_store_begin_slow(dream_ptr owner, dream_ptr child, int value, int tracked) {
-    dream_cycle_enter();
-    if (tracked) { dream_cycle_check_store_slow(owner, child); }
-    if (value == 2) { may_have_forward_edges = 1; }
+__attribute__((noinline)) int dream_cycle_store_begin_slow(dream_ptr owner, dream_ptr child, int value, int tracked) {
+    /* Token 2 borrows an outer gate; only token 1 owns an acquisition to release. */
+    int token = context()->gate_depth ? 2 : 1;
+    if (token == 1) { dream_cycle_enter(); }
+    if (tracked) { check_store_locked(owner, child, value != 3); }
+    if (value == 2) {
+        CycleNode *node = owner ? find_node(owner) : NULL;
+        if (node) {
+            if (!node->component) { node->component = component_take(1); }
+            else { component_root(node->component)->uncertain = 1; }
+            queue_node(node);
+        } else {
+            component_invalidate_all();
+            unknown_store_sequence = next_sequence;
+            CycleNode *child_node = child ? find_node(child) : NULL;
+            if (child_node) { queue_node(child_node); }
+        }
+    }
+    return token;
 }
 __attribute__((noinline)) void dream_cycle_store_end_slow(void) {
     dream_cycle_leave();
     dream_cycle_drain();
 }
 
-/* A trial entry hangs off its collector node for the duration of one gated trial, so membership
- * is a pointer test; entries recycle through a gate-guarded pool. */
-typedef struct Trial {
-    dream_ptr ptr;
-    CycleNode *node;
-    int64_t residual;
-    int live;
-    struct Trial *next;
-    struct Trial *member;
-} Trial;
-
-typedef struct {
-    Trial *members;
-    Trial *last_member;
-    Trial *head;
-    Trial *tail;
-    int mode;
-} TrialGraph;
-
-static Trial *free_trials;
-
-static Trial *take_trial(void) {
-    Trial *entry = free_trials;
-    if (entry) {
-        free_trials = entry->member;
-        *entry = (Trial){0};
-        return entry;
-    }
-    entry = dream_raw_calloc(1, sizeof(*entry));
-    if (!entry) { DREAM_PANIC_LITERAL(u"panic: out of memory constructing cycle trial"); }
-    return entry;
-}
-
-static void trial_edge(dream_ptr ptr, void *arg) {
-    TrialGraph *graph = arg;
-    dream_count(DREAM_COUNT_EDGES, 1);
-    CycleNode *node = find_node(ptr);
-    if (!node || node->dying) { return; }
-    Trial *entry = node->trial;
-    if (graph->mode == 0 && !entry) {
-        entry = take_trial();
-        entry->ptr = ptr;
-        entry->node = node;
-        entry->residual = dream_rc_count(ptr);
-        node->trial = entry;
-        if (graph->last_member) { graph->last_member->member = entry; } else { graph->members = entry; }
-        graph->last_member = entry;
-        if (graph->tail) { graph->tail->next = entry; } else { graph->head = entry; }
-        graph->tail = entry;
-    } else if (graph->mode == 1 && entry) {
-        --entry->residual;
-    } else if (graph->mode == 2 && entry && !entry->live) {
-        entry->live = 1;
-        entry->next = NULL;
-        if (graph->tail) { graph->tail->next = entry; } else { graph->head = entry; }
-        graph->tail = entry;
-    }
-}
-
-/* Bottom-up merge sort by allocation identity: destruction order is part of the observable
- * cleanup trace, and the freestanding wasm runtime has no qsort. */
-static Trial *sort_by_allocation(Trial *list, size_t count) {
-    for (size_t width = 1; width < count; width *= 2) {
-        Trial *result = NULL, **tail = &result, *rest = list;
-        while (rest) {
-            Trial *left = rest, *right = rest;
-            size_t left_n = 0, right_n = 0;
-            while (right && left_n < width) { right = right->next; ++left_n; }
-            rest = right;
-            while (rest && right_n < width) { rest = rest->next; ++right_n; }
-            while (left_n || right_n) {
-                int take_left = left_n && (!right_n || left->node->sequence < right->node->sequence);
-                Trial *pick = take_left ? left : right;
-                if (take_left) { left = left->next; --left_n; } else { right = right->next; --right_n; }
-                *tail = pick;
-                tail = &pick->next;
-            }
-        }
-        *tail = NULL;
-        list = result;
-    }
-    return list;
-}
-
 static void collect(CycleNode *candidate) {
     TrialGraph graph = {0};
     if (!candidate->ptr || candidate->dying) { return; }
-    // Strictly decreasing allocation identities prove a DAG without walking its descendants.
-    // Dynamic shapes and any forward store invalidate this proof until the tracked heap empties.
-    if (!may_have_forward_edges && dream_rc_count(candidate->ptr) > 0) { return; }
+    // Distinct forest components cannot form a directed cycle until an edge closes a path.
+    if (!node_possible(candidate) && dream_rc_count(candidate->ptr) > 0) { return; }
     // A zero-count object has no incoming strong edge and cannot be part of a cycle.
     // Keep its teardown iterative without allocating trial counts or ordering scratch.
     if (dream_rc_count(candidate->ptr) == 0) {
@@ -447,6 +410,11 @@ static void collect(CycleNode *candidate) {
         const dream_type_info *info = dream_object_info(ptr);
         candidate->dying = 1;
         dream_weak_prepare_destroy(ptr);
+        if (!info->finalize && info->clear_no_user_code) {
+            if (info->clear) { info->clear(ptr); }
+            info->reclaim(ptr);
+            return;
+        }
         dream_cycle_leave();
         CycleContext *c = context();
         ++c->finalizing;
@@ -554,7 +522,7 @@ void dream_cycle_drain(void) {
 }
 
 int dream_cycle_release(dream_ptr ptr) {
-    dream_cycle_enter();
+    int acquired = dream_cycle_acquire();
     CycleNode *node = find_node(ptr);
     if (node && !node->dying) {
         int32_t *rc = dream_rc_word(ptr);
@@ -564,12 +532,15 @@ int dream_cycle_release(dream_ptr ptr) {
             int32_t count = (v & INT32_MAX) - 1;
             /* Shared zero is the immortal sentinel, so the last transition must use plain zero. */
             __atomic_store_n(rc, count ? (v & DREAM_RC_SHARED_BIT) | count : 0, __ATOMIC_RELAXED);
-            if (count && may_have_forward_edges) { dream_count(DREAM_COUNT_FORWARD_QUEUES, 1); }
-            if (may_have_forward_edges || !count) { queue_node(node); }
+            if (!count) { queue_node(node); }
+            else if (node_possible(node)) {
+                dream_count(DREAM_COUNT_FORWARD_QUEUES, 1);
+                queue_node(node);
+            }
         }
     }
-    dream_cycle_leave();
-    dream_cycle_drain();
+    if (acquired) { dream_cycle_leave(); }
+    if (acquired) { dream_cycle_drain(); }
     return 0;
 }
 

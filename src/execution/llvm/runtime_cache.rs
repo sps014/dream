@@ -293,6 +293,7 @@ pub(super) fn compile(
         .arg(&partial);
     run_captured(&mut command, "clang (runtime unit)")?;
     let text = std::fs::read_to_string(&deps).map_err(|e| e.to_string())?;
+    let text = if cfg!(windows) { normalize_dependency_separators(&text) } else { text };
     let parsed = depfile::parse(&text).map_err(|e| format!("clang dependency file: {e:?}"))?;
     let dependencies: Vec<PathBuf> = parsed
         .find("dream-unit")
@@ -323,6 +324,41 @@ pub(super) fn compile(
     .map_err(|e| e.to_string())?;
     std::fs::rename(manifest, stamp).map_err(|e| e.to_string())?;
     completed_unit(&cache, &object, output, dependencies)
+}
+
+fn normalize_dependency_separators(text: &str) -> String {
+    // Clang emits literal Windows separators, which the Make parser treats as escapes.
+    let mut chars = text.chars().peekable();
+    let mut normalized = String::with_capacity(text.len());
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            match chars.peek().copied() {
+                Some('\\' | ' ' | '\t' | '\r' | '\n' | ':' | '#' | '$') => {
+                    normalized.push(ch);
+                    normalized.push(chars.next().unwrap());
+                    continue;
+                }
+                Some(_) => { normalized.push('/'); continue; }
+                None => {}
+            }
+        }
+        normalized.push(ch);
+    }
+    normalized
+}
+
+#[cfg(test)]
+mod dependency_tests {
+    use super::*;
+
+    #[test]
+    fn clang_windows_paths_keep_spaces_and_continuations() {
+        let text = "dream-unit: D:\\a\\dream\\core.c \\\r\n C:\\Program\\ Files\\sdk.h\r\n";
+        let normalized = normalize_dependency_separators(text);
+        let parsed = depfile::parse(&normalized).unwrap();
+        let paths: Vec<_> = parsed.find("dream-unit").unwrap().iter().map(|s| s.as_ref()).collect();
+        assert_eq!(paths, ["D:/a/dream/core.c", "C:/Program Files/sdk.h"]);
+    }
 }
 
 #[cfg(all(test, unix))]

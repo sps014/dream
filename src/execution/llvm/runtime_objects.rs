@@ -123,6 +123,9 @@ pub(super) fn wasm(
         if unit.path.extension().is_some_and(|ext| ext == "s") {
             command.args(["-x", "assembler-with-cpp"]);
         }
+        if config.runtime_counters {
+            command.arg("-DDREAM_RUNTIME_COUNTERS=1");
+        }
         command.arg(&unit.path);
         let unit = super::runtime_cache::compile(
             command,

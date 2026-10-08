@@ -2340,7 +2340,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       if (!s) return;
       const releaseStack = () => {
         if (s.stack && typeof getInstance === "function") {
-          getInstance().exports.free(s.stack);
+          getInstance().exports.dream_wasm_raw_free(s.stack);
         }
       };
       try {
@@ -2691,16 +2691,6 @@ async function withBootstrapLock(gate, fn) {
   }
 }
 
-function guestMalloc(exports, size, tag) {
-  if (typeof exports.dream_malloc === "function") {
-    return exports.dream_malloc(size, tag);
-  }
-  if (typeof exports.malloc === "function") {
-    return exports.malloc(size, tag);
-  }
-  return 0;
-}
-
 function attachGuestStack(wasmInstance) {
   const sp = wasmInstance.exports.__stack_pointer;
   if (!sp) {
@@ -2712,7 +2702,7 @@ function attachGuestStack(wasmInstance) {
   wasmInstance.exports.dream_heap_init();
   const tlsSize = wasmInstance.exports.__tls_size?.value >>> 0;
   const tlsAlign = wasmInstance.exports.__tls_align?.value >>> 0 || 1;
-  const ptr = guestMalloc(wasmInstance.exports, WORKER_STACK_BYTES + tlsSize + tlsAlign - 1, 0);
+  const ptr = wasmInstance.exports.dream_wasm_raw_malloc(WORKER_STACK_BYTES + tlsSize + tlsAlign - 1);
   if (!ptr) {
     throw new Error("failed to allocate a guest stack");
   }

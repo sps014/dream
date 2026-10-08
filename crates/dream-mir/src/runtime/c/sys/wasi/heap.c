@@ -11,8 +11,6 @@ int dream_rt_mt;
 #endif
 int64_t live_objects;
 int64_t total_allocations;
-int64_t dream_raw_live_objects;
-int64_t dream_raw_total_allocations;
 int32_t last_freed;
 int32_t free_list_head;
 
@@ -162,8 +160,8 @@ static void free_insert(int32_t block, int32_t sz) {
     }
 }
 
-static dream_ptr malloc_locked(int32_t size, int32_t tag);
-static void recycle_locked(dream_ptr ptr);
+static dream_ptr malloc_locked(int32_t size, int32_t tag, int account);
+static void recycle_locked(dream_ptr ptr, int account);
 
 #define PRIV_SLAB (2 << 20)
 
@@ -263,7 +261,7 @@ dream_ptr dream_region_activate(char *block, int32_t total, int32_t tag, const d
     int32_t address = (int32_t)(uintptr_t)block;
     i32_put(address, total);
     dream_ptr ptr = finish_block(address, tag);
-    dream_set_type(ptr, info);
+    dream_set_type_new(ptr, info);
     return ptr;
 }
 
@@ -275,7 +273,7 @@ void dream_region_heap_mode(int active) {
     (void)active;
 }
 
-static dream_ptr malloc_locked(int32_t size, int32_t tag) {
+static dream_ptr malloc_locked(int32_t size, int32_t tag, int account) {
     int32_t idx;
     int32_t *head;
     int32_t block = 0;
@@ -304,22 +302,14 @@ static dream_ptr malloc_locked(int32_t size, int32_t tag) {
         large_split(block, i32_at(block), size);
     }
 
-    i32_put(block + (int32_t)HEADER_TAG_OFFSET, tag);
-    i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, dream_rc_init(tag));
-    account_alloc();
-    dream_ptr ptr = (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
-    const dream_type_info *info = NULL;
-    memcpy((char *)dream_p(ptr) - DREAM_BLOCK_HEADER + sizeof(dream_size), &info, sizeof(info));
-    return ptr;
+    return finish_block_ex(block, tag, account);
 }
 
 int64_t debug_get_live_objects(void) {
-    return __atomic_load_n(&live_objects, __ATOMIC_RELAXED) -
-        __atomic_load_n(&dream_raw_live_objects, __ATOMIC_RELAXED);
+    return __atomic_load_n(&live_objects, __ATOMIC_RELAXED);
 }
 int64_t debug_get_total_allocations(void) {
-    return __atomic_load_n(&total_allocations, __ATOMIC_RELAXED) -
-        __atomic_load_n(&dream_raw_total_allocations, __ATOMIC_RELAXED);
+    return __atomic_load_n(&total_allocations, __ATOMIC_RELAXED);
 }
 int32_t debug_get_ref_count(dream_ptr ptr) {
     return ptr ? dream_rc_count(ptr) : 0;
@@ -339,21 +329,35 @@ void dream_pin_immortal(dream_ptr s) {
 }
 
 void dream_retain_slow(int32_t *rc, int32_t v) {
-    if (v == DREAM_RC_IMMORTAL) {
-        return;
+    for (;;) {
+        if (v == DREAM_RC_IMMORTAL) { return; }
+        if (v == 0) { DREAM_PANIC_LITERAL(u"panic: resurrection of a dying object"); }
+        if ((v & INT32_MAX) == INT32_MAX) { DREAM_PANIC_LITERAL(u"panic: reference count overflow"); }
+        int32_t next = (int32_t)((uint32_t)v + 1u);
+        if (__atomic_compare_exchange_n(rc, &v, next, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) { return; }
     }
-    __atomic_fetch_add(rc, 1, __ATOMIC_RELAXED);
 }
 
-int dream_rc_last_slow(int32_t *rc, int32_t v) {
-    if (v == 0 || v == DREAM_RC_IMMORTAL) {
-        return 0;
-    }
-    if (__atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL) == (DREAM_RC_SHARED_BIT | 1)) {
-        __atomic_store_n(rc, 0, __ATOMIC_RELAXED);
-        return 1;
+/* Replicating the shared-count retry loop at every local-count release bloats hot functions. */
+__attribute__((noinline)) int dream_rc_last_slow(int32_t *rc, int32_t v) {
+    while (v != 0 && v != DREAM_RC_IMMORTAL) {
+        /* Shared count zero has the immortal encoding. Never expose that intermediate
+         * value: a weak loader could mistake it for a permanent owner and revive it. */
+        int last = (v & INT32_MAX) == 1;
+        int32_t next = last ? 0 : (int32_t)((uint32_t)v - 1u);
+        if (__atomic_compare_exchange_n(rc, &v, next, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
+            return last;
+        }
     }
     return 0;
+}
+
+__attribute__((noinline)) int dream_release_nonlast_slow(int32_t *rc, int32_t v) {
+    while (v != DREAM_RC_IMMORTAL && (v & INT32_MAX) > 1) {
+        int32_t next = (int32_t)((uint32_t)v - 1u);
+        if (__atomic_compare_exchange_n(rc, &v, next, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) { return 1; }
+    }
+    return v == DREAM_RC_IMMORTAL;
 }
 int32_t debug_get_heap_ptr(void) { return dream_wasm_heap_ptr_get(); }
 /* Native parity: the probe exposes "most recent freed block" (a free-happened detector),
@@ -371,7 +375,7 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
         return pointer;
     }
     pointer = malloc_private(size, tag);
-    dream_set_type(pointer, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
+    dream_set_type_new(pointer, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
     return pointer;
 }
 
@@ -386,10 +390,28 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
         tag |= TAG_SHARED;
     }
     dream_platform_current->lock(DREAM_LOCK_HEAP);
-    p = malloc_locked(size, tag);
+    p = malloc_locked(size, tag, 1);
     dream_platform_current->unlock(DREAM_LOCK_HEAP);
-    dream_set_type(p, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
+    dream_set_type_new(p, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
     return p;
+}
+
+/* Runtime allocations never enter guest diagnostics, including the interval between
+ * allocating storage and constructing the aligned libc pointer on another worker. */
+__attribute__((export_name("dream_wasm_raw_malloc")))
+dream_ptr dream_wasm_raw_malloc(int32_t size) {
+    dream_platform_current->lock(DREAM_LOCK_HEAP);
+    dream_ptr p = malloc_locked(size, 0, 0);
+    dream_platform_current->unlock(DREAM_LOCK_HEAP);
+    return p;
+}
+
+__attribute__((export_name("dream_wasm_raw_free")))
+void dream_wasm_raw_free(dream_ptr ptr) {
+    if (!ptr) { return; }
+    dream_platform_current->lock(DREAM_LOCK_HEAP);
+    recycle_locked(ptr, 0);
+    dream_platform_current->unlock(DREAM_LOCK_HEAP);
 }
 
 int dream_heap_is_live(dream_ptr ptr) {
@@ -444,7 +466,7 @@ static void free_large_locked(int32_t block, int32_t sz) {
     i32_put(block, sz);
 }
 
-static void recycle_locked(dream_ptr ptr) {
+static void recycle_locked(dream_ptr ptr, int account) {
     int32_t block_start;
     int32_t idx;
     int32_t sz;
@@ -456,7 +478,7 @@ static void recycle_locked(dream_ptr ptr) {
     if (sz == 0) {
         return;
     }
-    account_free_n(1);
+    if (account) { account_free_n(1); }
     free_list_head = block_start;
     idx = size_class(sz);
     /* Private large blocks share this address-ordered list with the shared subheap.
@@ -484,7 +506,7 @@ void dream_recycle(dream_ptr ptr) {
     }
     if (dream_tag_shared(ptr)) {
         dream_platform_current->lock(DREAM_LOCK_HEAP);
-        recycle_locked(ptr);
+        recycle_locked(ptr, 1);
         dream_platform_current->unlock(DREAM_LOCK_HEAP);
         return;
     }

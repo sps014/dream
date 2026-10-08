@@ -17,8 +17,8 @@ public static class Debug {
     @intrinsic("debug_get_ref_count")
     static extern fun ref_count(borrow o: object): int;
 
-    // Ownership-runtime event counts for benchmark attribution; ids are listed in
-    // `dream_ownership.h` (`dream_counter`). Unknown ids read as 0.
+    // Opt-in attribution (DREAM_RUNTIME_COUNTERS=1); ids follow `dream_ownership.h`.
+    // Ordinary builds and unknown ids read as 0.
     @intrinsic("debug_get_runtime_counter")
     static extern fun runtime_counter(id: int): long;
 

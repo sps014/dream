@@ -16,4 +16,6 @@ int32_t dream_wasm_heap_start(void);
 int32_t dream_wasm_heap_ptr_get(void);
 int32_t dream_wasm_heap_claim(int32_t size);
 int32_t *dream_wasm32_meta_i32(int32_t offset);
+dream_ptr dream_wasm_raw_malloc(int32_t size);
+void dream_wasm_raw_free(dream_ptr ptr);
 #endif

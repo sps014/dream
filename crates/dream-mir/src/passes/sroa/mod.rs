@@ -155,44 +155,8 @@ fn analyze_simple_ctor(
                 assigned.insert(*field, ());
                 inits.push((*field, init));
             }
-            Statement::Retain(_) | Statement::Release(_) => {
-                // RC bookkeeping is ignored; this pass runs before insertion, but leftover RC
-                // from a previous pipeline must not look like ctor logic.
-                if stmt_mentions(stmt, this) {
-                    // Retain/Release(this) alone is fine — object still exists after expansion.
-                    if !matches!(
-                        stmt,
-                        Statement::Retain(Operand::Copy(Place::Local(l)))
-                            | Statement::Release(Operand::Copy(Place::Local(l)))
-                            if *l == this
-                    ) {
-                        return None;
-                    }
-                }
-            }
-            _ => {
-                if stmt_mentions(stmt, this) {
-                    return None;
-                }
-                // Reject effectful / complex bodies even when they don't mention this.
-                // NOTE: every `Assign` here targets something other than a field of `this`
-                // (those were handled above), so it is an observable side effect — globals,
-                // temps read later, anything. Expansion deletes the ctor body at call sites,
-                // so all such assigns must disqualify the ctor. `is_pure_field_store` used to
-                // admit Binary/Use rvalues here, silently dropping global writes.
-                match stmt {
-                    Statement::Assign(_, _) => return None,
-                    Statement::Call { .. }
-                    | Statement::JsCall { .. }
-                    | Statement::IndirectCall { .. }
-                    | Statement::InterfaceCall { .. }
-                    | Statement::Panic(_)
-                    | Statement::ValueDrop(_)
-                    | Statement::ValueRetain(_)
-                    | Statement::ValueKill(_) => return None,
-                    _ => {}
-                }
-            }
+            Statement::SourceLine(_) => {},
+            _ => return None,
         }
     }
     if inits.is_empty() {
@@ -727,6 +691,22 @@ mod tests {
     }
 
     #[test]
+    fn constructor_expansion_preserves_observable_statements() {
+        let interner = TypeInterner::new();
+        let mut builder = FunctionBuilder::new("constructor", interner.void());
+        let this = builder.new_param(interner.int(), Some("this".into()));
+        builder.assign(Place::Field { base: this, field: 0 }, Rvalue::Use(Operand::Const(Const::Int(1))));
+        builder.push(Statement::SourceLine(1));
+        builder.terminate(Terminator::Return(None));
+        let mut constructor = builder.finish();
+        assert!(analyze_simple_ctor(&constructor, &interner).is_some());
+        constructor.blocks[0].stmts.push(Statement::Print {
+            arg: Operand::Const(Const::Int(1)), ty: interner.int(), newline: true,
+        });
+        assert!(analyze_simple_ctor(&constructor, &interner).is_none());
+    }
+
+    #[test]
     fn expands_simple_ctor_then_promotes() {
         // Ctor: this.0 = n; Caller: o = new C(7); x = o.0; return x;
         let i = TypeInterner::new();
@@ -756,6 +736,7 @@ mod tests {
                 def: class_def,
                 ty: i.int(),
                 ctor: Some(crate::NewCtor {
+                    batched: false,
                     def: ctor_def,
                     take_params: vec![],
                 }),
@@ -828,6 +809,7 @@ mod tests {
                 def: class_def,
                 ty: class_ty,
                 ctor: Some(crate::NewCtor {
+                    batched: false,
                     def: ctor_def,
                     take_params: vec![],
                 }),

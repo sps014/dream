@@ -212,6 +212,9 @@ pub(super) fn build_wasm_runtime(
                 bitcode: true,
             },
         );
+        if tools.config.runtime_counters {
+            cmd.arg("-DDREAM_RUNTIME_COUNTERS=1");
+        }
         cmd.arg(&u.path);
         if asm {
             run_captured(

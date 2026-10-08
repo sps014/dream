@@ -7,6 +7,19 @@ fn config(values: &[(&str, &str)], exe: Option<PathBuf>, cwd: PathBuf) -> Toolch
 }
 
 #[test]
+fn runtime_instrumentation_has_a_distinct_cache_identity() {
+    let ordinary = config(&[], None, PathBuf::from("/project"));
+    let measured = config(
+        &[("DREAM_RUNTIME_COUNTERS", "1")],
+        None,
+        PathBuf::from("/project"),
+    );
+    assert!(!ordinary.runtime_counters);
+    assert!(measured.runtime_counters);
+    assert_ne!(ordinary.fingerprint(), measured.fingerprint());
+}
+
+#[test]
 fn explicit_paths_and_compiler_precedence_are_captured() {
     let c = config(
         &[

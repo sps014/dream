@@ -109,6 +109,7 @@ pub(crate) struct ModRefTable {
     ifaces: IndexMap<(usize, usize), ModRef>,
     /// Resolved destructor-bearing types; `None` (an uncomputed table) means any type may.
     del_types: Option<BTreeSet<TypeId>>,
+    interface_children: IndexMap<TypeId, Vec<TypeId>>,
 }
 
 impl ModRefTable {
@@ -138,6 +139,27 @@ impl ModRefTable {
             intrinsics,
             del: ModRef::default(),
             ifaces: IndexMap::new(),
+            interface_children: mir
+                .interfaces
+                .interfaces
+                .iter()
+                .enumerate()
+                .map(|(id, info)| {
+                    let children = mir
+                        .interfaces
+                        .impls
+                        .iter()
+                        .filter(|implementation| {
+                            implementation
+                                .entries
+                                .iter()
+                                .any(|(iface_id, _)| *iface_id == id)
+                        })
+                        .map(|implementation| implementation.class_ty)
+                        .collect();
+                    (info.ty, children)
+                })
+                .collect(),
             del_types: Some(
                 mir.layouts
                     .structs
@@ -310,6 +332,15 @@ impl ModRefTable {
             if dels.contains(&t) {
                 return true;
             }
+            if matches!(interner.kind(t), TyKind::Interface(..)) {
+                match self.interface_children.get(&t) {
+                    Some(children) if !children.is_empty() => {
+                        stack.extend(children.iter().copied())
+                    }
+                    _ => return true,
+                }
+                continue;
+            }
             match strong_children(t, interner, layouts) {
                 Some(cs) => stack.extend(cs),
                 None => return true,
@@ -384,9 +415,10 @@ impl LocalSummary {
                     k.fields.insert(key);
                 }
                 if Some(base) != this
-                    && let Some(k) = s.own_fresh.known_mut() {
-                        k.fields.insert(key);
-                    }
+                    && let Some(k) = s.own_fresh.known_mut()
+                {
+                    k.fields.insert(key);
+                }
             }
             Effect::SlotStore(ty) => {
                 for m in [&mut s.own, &mut s.own_fresh] {

@@ -5,10 +5,12 @@ module system.json;
 public class JsonParser {
     text: string;
     pos: int;
+    invalid: bool;
 
     public constructor(text: string, pos: int) {
         this.text = text;
         this.pos = pos;
+        this.invalid = false;
     }
 
     fun len(): int {
@@ -42,6 +44,21 @@ public class JsonParser {
     public fun at_end(): bool {
         this.skip_ws();
         return this.pos >= this.len();
+    }
+
+    public fun cursor(): int { return this.pos; }
+
+    public fun failed(): bool { return this.invalid; }
+
+    // Generated loops must consume input or close their container; nested readers can
+    // return without consuming a token when its shape does not match the field type.
+    public fun container_end(close: int, previous: int): bool {
+        this.skip_ws();
+        if this.pos >= this.len() || this.pos <= previous {
+            this.invalid = true;
+            return true;
+        }
+        return this.try_consume(close);
     }
 
     public fun keyword(length: int, value: JsonValue): JsonValue {

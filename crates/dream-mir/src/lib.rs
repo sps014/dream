@@ -63,6 +63,7 @@ pub struct Global(pub u32);
 /// A whole program in MIR form.
 #[derive(Debug, Default)]
 pub struct Mir {
+    pub profile: dream_abi::profile::CompileProfile,
     pub exports: Vec<(DefId, String)>,
     pub functions: Vec<MirFunction>,
     /// Pre-lowered async poll bodies corresponding to the async functions in `functions`
@@ -123,6 +124,8 @@ pub struct MirFunction {
     pub blocks: Vec<BasicBlock>,
     pub entry: BlockId,
     pub is_async: bool,
+    /// Release-only proof that the entire fresh-graph builder can share a construction gate.
+    pub batched_construction: Option<AllocPolicy>,
     /// When `is_async`, the full typed HIR function preserved for the coroutine transform.
     pub hir_fn: Option<dream_hir::HFunction>,
     /// Source-file path this function was declared in; `None` for synthesized functions. Names the
@@ -679,6 +682,8 @@ pub enum AllocPolicy {
 pub struct NewCtor {
     pub def: DefId,
     pub take_params: Vec<bool>,
+    /// Release proved that this constructor only initializes fresh fields from its arguments.
+    pub batched: bool,
 }
 
 /// A resolved call target carried into MIR. The backend derives the emitted symbol from

@@ -1,0 +1,21 @@
+import system;
+
+let saved: Option<Revive> = Option.None;
+
+class Revive {
+    public constructor() {}
+    del() {
+        System.println("finalizing");
+        saved = Option.Some(this);
+    }
+}
+
+@noinline
+fun destroy(): void {
+    let value = Revive();
+}
+
+fun main(): void {
+    destroy();
+    System.println("unreachable");
+}

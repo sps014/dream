@@ -174,7 +174,7 @@ public static class Program
 
     static void BenchSubstringSpan(int iters)
     {
-        int seed = (int)(Stopwatch.GetTimestamp() & 1);
+        int seed = int.Parse(Environment.GetEnvironmentVariable("DREAM_BENCH_SEED") ?? "1") & 1;
         string s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" + seed;
         var sw = Stopwatch.StartNew();
         int acc = 0;
@@ -540,6 +540,7 @@ public static class Program
 
     static void BenchMandelbrot(int iters)
     {
+        double jitter = int.Parse(Environment.GetEnvironmentVariable("DREAM_BENCH_SEED") ?? "1") & 1;
         var sw = Stopwatch.StartNew();
         long acc = 0;
         for (int i = 0; i < iters; i++)
@@ -549,7 +550,7 @@ public static class Program
                 double ci = row / 24.0 - 1.0;
                 for (int col = 0; col < 64; col++)
                 {
-                    double cr = col / 32.0 - 1.5;
+                    double cr = (col + jitter) / 32.0 - 1.5;
                     double zr = 0, zi = 0;
                     int k = 0;
                     bool escaped = false;
@@ -858,7 +859,7 @@ public static class Program
 
     static void BenchParseInts(int iters)
     {
-        int seed = (int)(Stopwatch.GetTimestamp() & 1);
+        int seed = int.Parse(Environment.GetEnvironmentVariable("DREAM_BENCH_SEED") ?? "1") & 1;
         var srcs = new string[8];
         for (int k = 0; k < 8; k++)
             srcs[k] = (1000000000 + k * 111111 + seed).ToString();
@@ -879,7 +880,7 @@ public static class Program
 
     static void BenchSumOptions(int iters)
     {
-        int seed = (int)(Stopwatch.GetTimestamp() & 1);
+        int seed = int.Parse(Environment.GetEnvironmentVariable("DREAM_BENCH_SEED") ?? "1") & 1;
         var opts = new int?[8];
         for (int k = 0; k < 8; k++)
             opts[k] = ((k + seed) & 1) == 0 ? k + 7 : null;
@@ -992,6 +993,7 @@ public static class Program
             GC.Collect();
             RunSuite();
         }
+        Console.WriteLine($"sink {Sink}");
         return Sink == int.MinValue ? 1 : 0;
     }
 }

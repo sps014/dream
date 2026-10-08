@@ -104,21 +104,35 @@ void dream_pin_immortal(dream_ptr s) {
 }
 
 void dream_retain_slow(int32_t *rc, int32_t v) {
-    if (v == DREAM_RC_IMMORTAL) {
-        return;
+    for (;;) {
+        if (v == DREAM_RC_IMMORTAL) { return; }
+        if (v == 0) { DREAM_PANIC_LITERAL(u"panic: resurrection of a dying object"); }
+        if ((v & INT32_MAX) == INT32_MAX) { DREAM_PANIC_LITERAL(u"panic: reference count overflow"); }
+        int32_t next = (int32_t)((uint32_t)v + 1u);
+        if (__atomic_compare_exchange_n(rc, &v, next, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) { return; }
     }
-    __atomic_fetch_add(rc, 1, __ATOMIC_RELAXED);
 }
 
-int dream_rc_last_slow(int32_t *rc, int32_t v) {
-    if (v == 0 || v == DREAM_RC_IMMORTAL) {
-        return 0;
-    }
-    if (__atomic_fetch_sub(rc, 1, __ATOMIC_ACQ_REL) == (DREAM_RC_SHARED_BIT | 1)) {
-        __atomic_store_n(rc, 0, __ATOMIC_RELAXED);
-        return 1;
+/* Replicating the shared-count retry loop at every local-count release bloats hot functions. */
+__attribute__((noinline)) int dream_rc_last_slow(int32_t *rc, int32_t v) {
+    while (v != 0 && v != DREAM_RC_IMMORTAL) {
+        /* Shared count zero has the immortal encoding. Never expose that intermediate
+         * value: a weak loader could mistake it for a permanent owner and revive it. */
+        int last = (v & INT32_MAX) == 1;
+        int32_t next = last ? 0 : (int32_t)((uint32_t)v - 1u);
+        if (__atomic_compare_exchange_n(rc, &v, next, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
+            return last;
+        }
     }
     return 0;
+}
+
+__attribute__((noinline)) int dream_release_nonlast_slow(int32_t *rc, int32_t v) {
+    while (v != DREAM_RC_IMMORTAL && (v & INT32_MAX) > 1) {
+        int32_t next = (int32_t)((uint32_t)v - 1u);
+        if (__atomic_compare_exchange_n(rc, &v, next, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) { return 1; }
+    }
+    return v == DREAM_RC_IMMORTAL;
 }
 
 static void note_heap_map(char *p, size_t n) {

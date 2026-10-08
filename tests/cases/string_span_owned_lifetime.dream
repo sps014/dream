@@ -1,0 +1,44 @@
+import system;
+
+@noinline
+fun owned_views(borrow suffix: string): int {
+    let source = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" + suffix;
+    let sum = 0;
+    let i = 0;
+    while i < 8 {
+        let start = i & 7;
+        let view = source.span(start, start + 25 + (i & 3));
+        sum = sum + view.length + (int)view.char_at(0);
+        i = i + 1;
+    }
+    return sum;
+}
+
+@noinline
+fun replaced_owner(borrow suffix: string): void {
+    let source = "hello " + suffix;
+    let view = source.span(0, 5);
+    source = "changed " + suffix;
+    System.println(view.to_string());
+    System.println(source.span(0, 7).to_string());
+}
+
+fun loop_owner(): void {
+    let saved = "".span();
+    let i = 0;
+    while i < 3 {
+        let source = "first " + i.to_string();
+        if i == 0 {
+            saved = source.span(0, 5);
+        } else {
+            System.println(saved.char_at(0));
+        }
+        i = i + 1;
+    }
+}
+
+fun main(): void {
+    System.println(owned_views("!"));
+    replaced_owner("world");
+    loop_owner();
+}

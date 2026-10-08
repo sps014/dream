@@ -6066,7 +6066,7 @@
       {
         "signature": "public static fun expand_collections( borrow specs: List<JsonCollectionSpec>, borrow json_names: List<string>, borrow jsonable: List<string> ): JsonGenOutput",
         "description": "Emits free `__col_ser_*` / `__col_write_*` / `__col_de_*` helpers for top-level collection `Json.serialize` / `deserialize` / `from_value` (see `intrinsics.rs`).",
-        "line": 1905,
+        "line": 1923,
         "page": "reference/api/json-derive-json-generator.md"
       }
     ]
@@ -6183,97 +6183,115 @@
       {
         "signature": "public constructor(text: string, pos: int)",
         "description": "",
-        "line": 9,
+        "line": 10,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun skip_ws(): void",
         "description": "",
-        "line": 26,
+        "line": 28,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun at_end(): bool",
         "description": "",
-        "line": 42,
+        "line": 44,
+        "page": "reference/api/json-json-parser.md"
+      },
+      {
+        "signature": "public fun cursor(): int",
+        "description": "",
+        "line": 49,
+        "page": "reference/api/json-json-parser.md"
+      },
+      {
+        "signature": "public fun failed(): bool",
+        "description": "",
+        "line": 51,
+        "page": "reference/api/json-json-parser.md"
+      },
+      {
+        "signature": "public fun container_end(close: int, previous: int): bool",
+        "description": "Generated loops must consume input or close their container; nested readers can return without consuming a token when its shape does not match the field type.",
+        "line": 55,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun keyword(length: int, value: JsonValue): JsonValue",
         "description": "",
-        "line": 47,
+        "line": 64,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_string(): string",
         "description": "",
-        "line": 94,
+        "line": 111,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_number(): JsonValue",
         "description": "",
-        "line": 183,
+        "line": 200,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_array(): JsonValue",
         "description": "",
-        "line": 259,
+        "line": 276,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_object(): JsonValue",
         "description": "",
-        "line": 288,
+        "line": 305,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_value(): JsonValue",
         "description": "",
-        "line": 325,
+        "line": 342,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun try_consume(code: int): bool",
         "description": "",
-        "line": 352,
+        "line": 369,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun try_null(): bool",
         "description": "",
-        "line": 361,
+        "line": 378,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_bool(): bool",
         "description": "",
-        "line": 370,
+        "line": 387,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_int(): int",
         "description": "",
-        "line": 425,
+        "line": 442,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_double(): double",
         "description": "",
-        "line": 448,
+        "line": 465,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun match_key(borrow key: string): bool",
         "description": "True when the next object key is `key` (no escapes). Consumes the key and the following colon.",
-        "line": 522,
+        "line": 539,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun skip_value(): void",
         "description": "",
-        "line": 549,
+        "line": 566,
         "page": "reference/api/json-json-parser.md"
       }
     ]

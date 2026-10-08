@@ -4,6 +4,10 @@
 //! back out of another borrowing local. A span over a borrowed string or array then costs no
 //! reference counting at all.
 //!
+//! Release also admits a fresh private string owner whose existing token covers every view
+//! and derived-reference read. The separate ownership dataflow rejects early release on any
+//! path, transfers, publication and observing callbacks; it never extends the owner's cleanup.
+//!
 //! A family is the value locals of one type joined by whole copies. It qualifies when its members
 //! are defined only by a zeroing `New`, copies between members, or are `borrow`/`ref`/`this` parameters
 //! (never written); are otherwise used only as field bases or as `borrow`/`ref`/`this` arguments of callees
@@ -21,6 +25,9 @@ use dream_hir::LayoutTable;
 use dream_types::{DefId, TyKind, TypeId, TypeInterner};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "value_borrow_owned.rs"]
+mod owned;
+
 #[cfg(test)]
 #[path = "value_borrow_tests.rs"]
 mod tests;
@@ -33,10 +40,21 @@ type Signatures = BTreeMap<(DefId, Vec<TypeId>), Vec<bool>>;
 
 pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
     let sigs = signatures(mir, interner);
+    let modref =
+        (!mir.profile.is_debug()).then(|| super::rc::modref::ModRefTable::compute(mir, interner));
+    let panics: BTreeSet<DefId> = mir
+        .intrinsics
+        .iter()
+        .filter_map(|(def, key)| {
+            (dream_abi::intrinsics::IntrinsicOp::from_key(key)
+                == Some(dream_abi::intrinsics::IntrinsicOp::Panic))
+            .then_some(*def)
+        })
+        .collect();
     let mut changed = false;
     for f in &mut mir.functions {
         if !f.is_async {
-            changed |= borrow_families(f, interner, &mir.layouts, &sigs);
+            changed |= borrow_families(f, interner, &mir.layouts, &sigs, modref.as_ref(), &panics);
         }
     }
     changed
@@ -202,6 +220,7 @@ struct Ctx<'a> {
     family: Vec<Option<usize>>,
     alive: BTreeSet<usize>,
     stable: Vec<bool>,
+    owned: Vec<bool>,
 }
 
 fn borrow_families(
@@ -209,6 +228,8 @@ fn borrow_families(
     interner: &TypeInterner,
     layouts: &LayoutTable,
     sigs: &Signatures,
+    modref: Option<&super::rc::modref::ModRefTable>,
+    panics: &BTreeSet<DefId>,
 ) -> bool {
     let n = f.locals.len();
     let candidate: Vec<bool> = f
@@ -236,6 +257,35 @@ fn borrow_families(
         .map(|i| candidate[i].then(|| find(&mut root, i)))
         .collect();
     let members = {
+        let owners: BTreeSet<Local> = f
+            .blocks
+            .iter()
+            .flat_map(|b| &b.stmts)
+            .filter_map(|s| match s {
+                Statement::Assign(Place::Field { base, .. }, Rvalue::Use(op))
+                    if family[base.0 as usize].is_some() =>
+                {
+                    local_of(op)
+                }
+                _ => None,
+            })
+            .collect();
+        let owned = (0..n)
+            .map(|i| {
+                owners.contains(&Local(i as u32))
+                    && modref.is_some_and(|m| {
+                        owned::source_stays_alive(
+                            f,
+                            Local(i as u32),
+                            &family,
+                            interner,
+                            layouts,
+                            m,
+                            panics,
+                        )
+                    })
+            })
+            .collect();
         let mut cx = Ctx {
             f,
             interner,
@@ -243,6 +293,7 @@ fn borrow_families(
             sigs,
             alive: family.iter().flatten().copied().collect(),
             family,
+            owned,
             stable: (0..n)
                 .map(|i| {
                     let ty = f.locals[i].ty;
@@ -342,6 +393,9 @@ impl Ctx<'_> {
 
     /// `x` always holds a frame-stable object (or null).
     fn stable_local(&self, x: Local) -> bool {
+        if self.owned[x.0 as usize] {
+            return true;
+        }
         let f = self.f;
         let d = &f.locals[x.0 as usize];
         if f.params.contains(&x) {

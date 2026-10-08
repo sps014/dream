@@ -49,7 +49,15 @@ pub enum RtDir {
 
 pub fn rt_dir(config: &ToolchainConfig, flavor: &str, opt: OptLevel, need: RuntimeNeed) -> RtDir {
     let rel = rt_rel_dir(flavor, opt, need);
-    match prebuilt_rt(config) {
+    let rel = if config.runtime_counters {
+        PathBuf::from("runtime-counters").join(rel)
+    } else {
+        rel
+    };
+    match (!config.runtime_counters)
+        .then(|| prebuilt_rt(config))
+        .flatten()
+    {
         Some(root) => RtDir::Prebuilt(root.join(rel)),
         None => RtDir::Cache(
             config

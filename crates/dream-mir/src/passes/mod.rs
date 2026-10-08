@@ -8,11 +8,15 @@ mod autovec;
 mod await_facts_tests;
 mod cfg;
 mod const_fold;
+mod construction;
+mod construction_builders;
 mod dce;
 mod devirt;
 mod dse;
 mod dump;
 mod frame_alloc;
+#[cfg(test)]
+mod frame_alloc_tests;
 pub(crate) mod funcbox_abi;
 mod global_prop;
 mod gvn;

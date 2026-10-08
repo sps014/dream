@@ -67,6 +67,8 @@ static region_state *active_region(void) {
     return s == NULL || s->depth == 0 || s->depth > REGION_MAX_DEPTH ? NULL : s;
 }
 
+int dream_region_active(void) { return active_region() != NULL; }
+
 static dream_ptr region_bump(region_state *s, dream_size size, int32_t tag, const dream_type_info *info) {
     if ((size_t)size > DREAM_SIZE_MAX - 63 - sizeof(region_chunk)) {
         region_panic();
@@ -135,8 +137,10 @@ void dream_region_leave(void) {
     region_mark mark = s->marks[s->depth];
     dream_region_account_free(s->allocations - mark.allocations);
     /* Leave is rare next to allocation, so the shared count is updated here rather than per object. */
+#if defined(DREAM_RUNTIME_COUNTERS) && DREAM_RUNTIME_COUNTERS
     __atomic_fetch_add(&dream_runtime_counters[DREAM_COUNT_REGION_OBJECTS],
                        (uint64_t)(s->allocations - mark.allocations), __ATOMIC_RELAXED);
+#endif
     s->allocations = mark.allocations;
     while (s->chunk != mark.chunk) {
         region_chunk *chunk = s->chunk;

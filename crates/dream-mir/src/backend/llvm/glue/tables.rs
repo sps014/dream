@@ -550,6 +550,9 @@ fn emit_worker_invoke(l: &mut Lcx<'_>) {
         fx.call("dream_run_loop", &[]);
         let at = fx.addr(&result, result_off);
         let settled = fx.load_ty(fx.h(), &at, 8, true);
+        // The settled wire string is owned by the future until its teardown. Give the
+        // worker reply its token before releasing that future.
+        fx.call("dream_retain", std::slice::from_ref(&settled));
         fx.call("dream_release", std::slice::from_ref(&result));
         fx.w.ret(Some(&settled.v));
         fx.w.switch_to(plain);

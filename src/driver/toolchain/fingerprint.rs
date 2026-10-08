@@ -45,7 +45,8 @@ impl ToolchainConfig {
                     &self.sdkroot,
                     &self.developer_dir,
                     self.no_auto_install,
-                    &self.native_sanitize
+                    &self.native_sanitize,
+                    self.runtime_counters
                 )
             ),
         ] {

@@ -1,0 +1,44 @@
+import system;
+import system.json;
+
+@json
+class ScalarDefaults {
+    public text: string;
+    public number: int;
+    public enabled: bool;
+    public precise: double;
+    public constructor(text: string, number: int, enabled: bool, precise: double) {
+        this.text = text;
+        this.number = number;
+        this.enabled = enabled;
+        this.precise = precise;
+    }
+    del() { System.println("scalar destroyed"); }
+}
+@json
+class NumberArray {
+    public values: int[];
+    public constructor(values: int[]) { this.values = values; }
+}
+@json
+class NumberList {
+    public values: List<int>;
+    public constructor(values: List<int>) { this.values = values; }
+}
+fun check_defaults(value: ScalarDefaults): void {
+    System.println(value.text == "");
+    System.println(value.number == 0);
+    System.println(value.enabled == false);
+    System.println(value.precise == 0.0d);
+}
+fun main(): void {
+    check_defaults(ScalarDefaults.from_json(JsonValue.none()));
+    check_defaults(ScalarDefaults.from_json(JsonValue.dict()));
+    let wrong = Json._parse("{\"text\":1,\"number\":true,\"enabled\":\"x\",\"precise\":{}}").unwrap_or(JsonValue.none());
+    check_defaults(ScalarDefaults.from_json(wrong));
+    System.println(Json.deserialize<ScalarDefaults>("{").is_err());
+    System.println(Json.deserialize<NumberArray>("{\"values\":[").is_err());
+    System.println(Json.deserialize<NumberArray>("{\"values\":[\"x\"]}").is_err());
+    System.println(Json.deserialize<NumberList>("{\"values\":[\"x\"]}").is_err());
+    System.println(Json.deserialize<NumberList>("{\"values\":[1,2]}").is_ok());
+}

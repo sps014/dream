@@ -34,6 +34,7 @@ const MODULE_STAGES: &[&str] = &[
     STAGE_FIXPOINT,
     super::value_borrow::STAGE,
     super::frame_alloc::STAGE,
+    "construction",
 ];
 
 /// Every name `--emit-mir=after:<pass>` accepts: module stages in pipeline order, then every

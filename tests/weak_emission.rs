@@ -3,7 +3,7 @@ use crate::common;
 use common::{emit_hir_to_module_rc, ir_func_body, SYSTEM_STUB};
 
 #[test]
-fn typed_drops_claim_counts_and_clear_weak_slots_before_destructor_revival() {
+fn typed_drops_claim_counts_and_invalidate_weak_slots_without_revival() {
     let source = format!(
         "{}\n{}",
         SYSTEM_STUB,
@@ -41,7 +41,8 @@ fn typed_drops_claim_counts_and_clear_weak_slots_before_destructor_revival() {
         let clear = body
             .find("@dream_weak_prepare_destroy(")
             .expect("weak clear");
-        let revive = body.find("@dream_rc_revive(").expect("destructor revival");
-        assert!(clear < revive, "{}", body);
+        let finalize = body.find("_del(").expect("user destructor");
+        assert!(clear < finalize, "{}", body);
     }
+    assert!(!ir.contains("@dream_rc_revive("));
 }

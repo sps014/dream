@@ -28,7 +28,7 @@ fn weak_load_and_unique_drop_do_not_resurrect_dying_targets() {
         .arg(native.join("platform.c"));
     for unit in [
         "heap.c",
-        "cycles.c",
+        "ownership.c",
         "heap_maps.c",
         "publish.c",
         "region.c",

@@ -1,6 +1,6 @@
 # Memory Safety Guide
 
-Dream checks ordinary code to prevent invalid memory access and reclaims strong reference cycles deterministically. This guide explains the rules you will meet while writing safe code and the boundaries that still need care.
+Dream checks ordinary code to prevent invalid memory access and checks potentially cyclic class ownership. This guide explains the rules you will meet while writing safe code and the boundaries that still need care.
 
 ## Quick reference: what the compiler checks
 
@@ -76,7 +76,7 @@ This works through field chains (`this.items.iterator()`), local aliases, and cr
 
 ## Reference-cycle detection
 
-If class fields point at each other in a loop, that program is rejected.
+Classes whose strong field layouts can form cycles require `@allow_cycle`. The annotation accepts possible leaks; ARC does not collect cycles.
 
 ### Direct and indirect field cycles
 
@@ -97,8 +97,7 @@ class C { h: Holder; }                                    // ✗ detected
 
 ### Interface-typed fields (conservative)
 
-When a field references an interface, the graph includes edges to every implementing class.
-This may report cycles that are only potential at runtime — use `weak` on one direction if the pattern is safe.
+Owning interface, erased `object` and closure fields require `@allow_cycle` because runtime targets can point back to their owner. Use non-owning back-links or explicit teardown to prevent leaks.
 
 ### Breaking cycles
 
@@ -110,13 +109,11 @@ class Node {
 }
 ```
 
-Strong cyclic ownership is also supported automatically.
+Use `@allow_cycle` when a strong recursive layout is intentional, then break runtime cycles explicitly to avoid leaks.
 
 ## Closure capture safety
 
-Closures own their captured references. Callback graphs can be cyclic; exact capture metadata
-lets ARC reclaim them when external owners disappear. Use weak captures when a callback
-should not extend its target lifetime.
+Closures own their captured references. Cyclic callback ownership can leak; clear callbacks explicitly or use non-owning handles when a callback should not extend its target lifetime.
 
 ## Weak handles
 

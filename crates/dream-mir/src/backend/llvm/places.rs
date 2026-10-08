@@ -37,15 +37,9 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.store_ty(&ty, &ptr, x, 8);
         if self.poll_owned(l) {
             let owner = V::u(self.self_.clone().unwrap());
-            let child = self.as_ref(x);
-            let locked = self.call_v(
-                "dream_cycle_store_begin",
-                &[owner.clone(), child, V::i32(0)],
-            );
             let off = self.poll_offsets[l.0 as usize] as i64;
             let at = self.addr(&owner, off);
             self.store_ty(&ty, &at, x, super::fx::align_at(&ty, off));
-            self.call("dream_cycle_store_end", &[locked]);
         }
     }
 
@@ -174,6 +168,56 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.as_ref(&V::s(addr.clone()))
     }
 
+    pub(super) fn observed_load(&mut self, operand: &Operand) -> V {
+        let Operand::Copy(Place::Field { base, field }) = operand else {
+            crate::internal_error!("observed load requires a field");
+        };
+        let fld = self
+            .l
+            .cx
+            .nstruct(self.f.local_ty(*base))
+            .and_then(|layout| layout.fields.get(*field))
+            .cloned()
+            .unwrap_or_else(|| crate::internal_error!("missing observed field"));
+        let (slot, _) = self.field_addr(*base, fld.offset);
+        let slot = self.ptr_value(&slot);
+        let (kind, none, offset, size, tag, info) = if fld.is_unowned {
+            (1, 0, 0, 0, 0, V::s(Value::zero(Ty::Ptr)))
+        } else if fld.is_weak && self.interner.is_niche_union(fld.ty) {
+            (2, 0, 0, 0, 0, V::s(Value::zero(Ty::Ptr)))
+        } else if fld.is_weak {
+            let u = self
+                .l
+                .cx
+                .nunion(fld.ty)
+                .unwrap_or_else(|| crate::internal_error!("weak field requires Option"));
+            let none = u.variant("None").unwrap().discriminant;
+            let offset = u.variant("Some").unwrap().fields[0].offset;
+            (
+                0,
+                none,
+                offset,
+                u.size.max(16),
+                self.l.cx.type_tag(fld.ty),
+                V::s(Value::global(format!("dream_type_info_{}", fld.ty.0))),
+            )
+        } else {
+            crate::internal_error!("observed load requires weak or unowned field");
+        };
+        self.call_v(
+            "dream_weak_load_field",
+            &[
+                slot,
+                V::i32(kind),
+                V::i32(none as i64),
+                V::i32(offset as i64),
+                V::i64(size as i64),
+                V::i32(tag as i64),
+                info,
+            ],
+        )
+    }
+
     pub fn load_place(&mut self, place: &Place) -> V {
         match place {
             Place::Local(l) => self.read_local(*l),
@@ -256,101 +300,41 @@ impl<'l, 'a> Fx<'l, 'a> {
 
     // ---- stores -------------------------------------------------------------------------------
 
+    pub(super) fn clear_freed_place(&mut self, place: &Place) {
+        let zero = V::s(Value::zero(self.h()));
+        // ForceFree consumed the slot's owner; an owning store would release it again.
+        match place {
+            Place::Local(local) => self.write_local(*local, &zero),
+            Place::Global(global) => self.write_global(*global, &zero),
+            Place::Field { base, field } => {
+                let offset = self
+                    .l
+                    .cx
+                    .nstruct(self.f.local_ty(*base))
+                    .and_then(|layout| layout.fields.get(*field))
+                    .map(|field| field.offset)
+                    .unwrap_or_else(|| crate::internal_error!("missing freed field"));
+                let (at, align) = self.field_addr(*base, offset);
+                self.store_mem(MemTy::Ptr, &at, &zero, align);
+            }
+            Place::Index {
+                base,
+                index,
+                unchecked,
+            } => {
+                let at = self.index_addr(*base, index, self.l.cx.target.abi().ptr_size, *unchecked);
+                self.store_mem(MemTy::Ptr, &at, &zero, ELEM_ALIGN);
+            }
+            Place::Deref { ptr, .. } => {
+                let value = self.read_local(*ptr);
+                let at = self.ptr(&value);
+                self.store_mem(MemTy::Ptr, &at, &zero, ELEM_ALIGN);
+            }
+        }
+    }
+
     pub fn store(&mut self, place: &Place, rv: &Rvalue, rhs: V) {
-        if self.private_init || self.private_builder {
-            self.store_inner(place, rv, rhs);
-            return;
-        }
-        let ty = match place {
-            Place::Local(_) => {
-                self.store_inner(place, rv, rhs);
-                return;
-            }
-            Place::Global(g) => self.global_ty(*g),
-            Place::Field { base, field } => self
-                .l
-                .cx
-                .nstruct(self.f.local_ty(*base))
-                .and_then(|s| s.fields.get(*field))
-                .map(|f| f.ty)
-                .unwrap_or(self.interner.object()),
-            Place::Index { base, .. } => array_elem_ty(self.interner, self.f.local_ty(*base)),
-            Place::Deref { elem_ty, .. } => *elem_ty,
-        };
-        if !self.is_value(ty) && !self.is_rc(ty) {
-            self.store_inner(place, rv, rhs);
-            return;
-        }
-        if self.tracked_init {
-            let Place::Field { base, .. } = place else {
-                crate::internal_error!("tracked initializer wrote a non-field place");
-            };
-            let owner = self.read_local(*base);
-            let child = self.as_ref(&rhs);
-            self.call("dream_cycle_initialize_edge", &[owner, child]);
-            self.store_inner(place, rv, rhs);
-            return;
-        }
-        let child_cycles =
-            crate::ownership::contains_cycle_refs(&self.mir.layouts, self.interner, ty);
-        let owner_cycles = match place {
-            Place::Field { base, .. } | Place::Index { base, .. } => {
-                crate::ownership::cycle_capable(
-                    &self.mir.layouts,
-                    self.interner,
-                    self.f.local_ty(*base),
-                )
-            }
-            _ => false,
-        };
-        if !child_cycles && !owner_cycles {
-            self.store_inner(place, rv, rhs);
-            return;
-        }
-        let owner = match place {
-            Place::Field { base, .. } | Place::Index { base, .. }
-                if !self.is_value(self.f.local_ty(*base)) =>
-            {
-                self.read_local(*base)
-            }
-            _ => V::s(Value::zero(self.h())),
-        };
-        let child = if self.is_value(ty) {
-            V::s(Value::zero(self.h()))
-        } else {
-            self.as_ref(&rhs)
-        };
-        let unknown_owner = matches!(place, Place::Deref { .. })
-            || matches!(place, Place::Field { base, .. }
-            if self.is_value(self.f.local_ty(*base)) && {
-                let decl = &self.f.locals[base.0 as usize];
-                decl.is_ref || decl.is_cursor || decl.name.as_deref() == Some("this")
-                    || crate::backend::shared::place_policy::is_alias_value_local(self.f, *base)
-            });
-        let observing = match place {
-            Place::Field { base, field } => self
-                .l
-                .cx
-                .nstruct(self.f.local_ty(*base))
-                .and_then(|layout| layout.fields.get(*field))
-                .is_some_and(|field| field.is_weak || field.is_unowned),
-            _ => false,
-        };
-        let shape = if observing {
-            3
-        } else if unknown_owner {
-            2
-        } else {
-            i32::from(self.is_value(ty))
-        };
-        let locked = self.call_v(
-            "dream_cycle_store_begin",
-            &[owner, child, V::i32(shape as i64)],
-        );
-        self.store_checked = !self.is_value(ty);
         self.store_inner(place, rv, rhs);
-        self.store_checked = false;
-        self.call("dream_cycle_store_end", &[locked]);
     }
 
     fn store_inner(&mut self, place: &Place, rv: &Rvalue, rhs: V) {
@@ -498,16 +482,11 @@ impl<'l, 'a> Fx<'l, 'a> {
     fn rc_store_ty(&mut self, ty: TypeId, slot: &Value, rhs: &V, rv: &Rvalue, align: u32) {
         let release = release_sym(&self.l.cx, ty);
         let retain = retain_sym(&self.l.cx, ty);
-        let retain = if (self.private_init || self.private_builder) && retain == "dream_retain" {
-            "dream_retain_acyclic"
-        } else {
-            retain
-        };
         let move_id = unique_move_src(rv);
         let borrowed = borrowed_ref_store(self.interner, rv) && move_id.is_none();
         let (mty, _) = mem_ll(MemTy::Ptr, &self.h(), &self.word());
         let v = self.as_ref(rhs);
-        if self.private_init || self.tracked_init {
+        if self.fresh_init {
             // The constructor proof permits one write per field of a zeroed allocation.
             if borrowed {
                 self.call(retain, std::slice::from_ref(&v));
@@ -536,6 +515,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     fn unowned_store(&mut self, slot: &Value, rhs: &V, align: u32) {
+        self.call("dream_weak_enter", &[]);
         let old = self.load_ty(self.h(), slot, align, true);
         let slot_ref = self.ptr_value(slot);
         let nz = self.truthy(&old);
@@ -551,6 +531,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 &[new.clone(), slot_ref.clone(), V::i32(1), V::i32(0)],
             );
         });
+        self.call("dream_weak_leave", &[]);
     }
 
     fn weak_option_store(
@@ -567,6 +548,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         if self.interner.is_niche_union(fld.ty) {
             let retain_copy = unique_move_src(rv).is_none();
             let new = self.as_ref(rhs);
+            self.call("dream_weak_enter", &[]);
             let old = self.load_ty(self.h(), slot, align, true);
             self.store_ty(&self.h(), slot, &new, align);
             let nz = self.truthy(&old);
@@ -580,6 +562,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     &[new.clone(), slot_ref.clone(), V::i32(2), V::i32(0)],
                 );
             });
+            self.call("dream_weak_leave", &[]);
             if retain_copy {
                 self.call("dream_release", &[new]);
             }
@@ -599,12 +582,13 @@ impl<'l, 'a> Fx<'l, 'a> {
         let size = u.size.max(16) as i64;
         let drop_src = rvalue_allocates(rv).then(|| release_sym(&self.l.cx, fld.ty));
         let src = self.as_ref(rhs);
-        let old = self.load_ty(self.h(), slot, align, true);
         let box_ = self.call_v("dream_malloc", &[V::i64(size), V::i32(0)]);
         let (bp, sp) = (self.ptr(&box_), self.ptr(&src));
         self.memcpy(&bp, &sp, &Value::i64(size));
         let disc = self.load_ty(Ty::I32, &sp, 4, false);
         let is_some = self.w.icmp("eq", &disc.v, &Value::i32(some as i64));
+        self.call("dream_weak_enter", &[]);
+        let old = self.load_ty(self.h(), slot, align, true);
         self.if_then(&is_some, |fx| {
             let pa = fx.addr(&src, poff);
             let payload = fx.load_ty(fx.h(), &pa, ELEM_ALIGN, true);
@@ -614,9 +598,6 @@ impl<'l, 'a> Fx<'l, 'a> {
             );
         });
         self.store_ty(&self.h(), slot, &box_, align);
-        if let Some(rel) = drop_src {
-            self.call(&rel, &[src]);
-        }
         let nz = self.truthy(&old);
         self.if_then(&nz, |fx| {
             let op = fx.ptr(&old);
@@ -627,6 +608,12 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let payload = fx.load_ty(fx.h(), &pa, 8, true);
                 fx.call("dream_weak_unregister", &[payload, old.clone()]);
             });
+        });
+        self.call("dream_weak_leave", &[]);
+        if let Some(rel) = drop_src {
+            self.call(&rel, &[src]);
+        }
+        self.if_then(&nz, |fx| {
             fx.call("dream_free", std::slice::from_ref(&old));
         });
     }

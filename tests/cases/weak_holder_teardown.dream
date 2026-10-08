@@ -1,0 +1,34 @@
+import system;
+
+class Target {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+    del() { System.println("target dropped"); }
+}
+class Holder {
+    public weak typed: Option<Target>;
+    public weak second: Option<Target>;
+    public constructor(borrow target: Target) {
+        this.typed = Option.Some(target);
+        this.second = Option.Some(target);
+    }
+    del() { System.println("holder dropped"); }
+}
+fun observe(borrow target: Target): void {
+    let holder = Holder(target);
+    switch (holder.typed) {
+        Some(value) => System.println(value.value),
+        None => System.println(-1),
+    }
+    switch (holder.second) {
+        Some(value) => System.println(value.value),
+        None => System.println(-1),
+    }
+}
+fun main(): void {
+    let target = Target(42);
+    observe(target);
+    let replacement = Target(7);
+    System.println(replacement.value);
+    System.println(target.value);
+}

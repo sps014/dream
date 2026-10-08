@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use dream_abi::attributes::{
-    cpp_attr, cpp_header, cpp_member_name, cpp_target_name, has_packed_attr, owned_result,
-    OwnedResult,
+    ALLOW_CYCLE, AttributeTarget, OwnedResult, allows_cycle, cpp_attr, cpp_header, cpp_member_name,
+    cpp_target_name, has_packed_attr, owned_result, validate_attributes,
 };
 use dream_abi::c_abi::cpp_shim_symbol;
 use dream_diagnostics::DiagnosticBag;
@@ -15,7 +15,7 @@ use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_text::text_span::TextSpan;
 use indexmap::IndexSet;
 
-use super::types::{dream_type, Known, Param, Ret};
+use super::types::{Known, Param, Ret, dream_type};
 use crate::driver::native_sets::NativeGraph;
 use crate::driver::source_loader::ProgramAccumulator;
 use dream_types::CScalar;
@@ -47,6 +47,7 @@ pub(super) struct Member {
 
 #[derive(Debug, Clone)]
 pub(super) struct Class {
+    pub allow_cycle: bool,
     pub name: String,
     pub cpp: String,
     pub public: bool,
@@ -150,6 +151,26 @@ pub(super) fn collect(
         if cpp_attr(&s.attributes).is_none() {
             continue;
         }
+        // Expansion removes the source declaration, so validate the permission before
+        // replacing its attributes with the generated wrapper's bare annotation.
+        let cycle_attributes: Vec<_> = s
+            .attributes
+            .iter()
+            .filter(|attribute| attribute.name.text == ALLOW_CYCLE)
+            .cloned()
+            .collect();
+        let saved_file = diagnostics.file_path.clone();
+        diagnostics.file_path = s.file_path.as_ref().map(|file| file.to_string());
+        validate_attributes(
+            &cycle_attributes,
+            if s.is_value {
+                AttributeTarget::ValueStruct
+            } else {
+                AttributeTarget::Struct
+            },
+            diagnostics,
+        );
+        diagnostics.file_path = saved_file;
         let cpp =
             cpp_target_name(&s.attributes).map_or_else(|| s.name.text.clone(), str::to_string);
         if s.is_value {
@@ -292,7 +313,9 @@ fn class(
         report(
             diagnostics,
             file,
-            format!("`@cpp` class '{name}' cannot be generic; bind each instantiation with its own class and `@cpp(\"h\", \"ns::T<int>\")`"),
+            format!(
+                "`@cpp` class '{name}' cannot be generic; bind each instantiation with its own class and `@cpp(\"h\", \"ns::T<int>\")`"
+            ),
             &s.name,
         );
         return None;
@@ -345,6 +368,7 @@ fn class(
         }
     }
     ok.then(|| Class {
+        allow_cycle: allows_cycle(&s.attributes),
         cpp: known
             .classes
             .get(&name)

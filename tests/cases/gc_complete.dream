@@ -8,6 +8,7 @@
 // The destructor prints make reclamation order observable for the `del()` cases.
 
 import system;
+@allow_cycle
 class Node {
     public val: int;
     public next: Option<Node>;

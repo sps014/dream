@@ -4,9 +4,18 @@
 use super::*;
 
 pub const CONSUMING: &str = "consuming";
+pub const ALLOW_CYCLE: &str = "allow_cycle";
+
 pub const OWNED: &str = "owned";
 
 pub(super) const SPECS: &[AttributeSpec] = &[
+    AttributeSpec {
+        name: ALLOW_CYCLE,
+        targets: &[AttributeTarget::Struct],
+        args: ArgShape::None,
+        repeatable: false,
+        doc: "Acknowledges that this class can form strong ownership cycles. ARC does not collect cycles; use weak/unowned back-links or explicit teardown to avoid leaks.",
+    },
     AttributeSpec {
         name: CONSUMING,
         targets: &[AttributeTarget::ExternFunction],
@@ -57,4 +66,9 @@ pub fn owned_result(attributes: &[AttributeNode]) -> OwnedResult<'_> {
         Some(free) => OwnedResult::FreedBy(free),
         None => OwnedResult::Owned,
     }
+}
+
+/// Explicit acceptance of possible strong-cycle leaks; it never changes runtime ARC.
+pub fn allows_cycle(attributes: &[AttributeNode]) -> bool {
+    has_named_attr(attributes, ALLOW_CYCLE)
 }

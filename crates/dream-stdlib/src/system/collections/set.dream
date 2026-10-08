@@ -1,6 +1,7 @@
 module system.collections;
 
 // A generic open-addressing hash set.
+@allow_cycle
 public class Set<T> : Collection<T> {
     keys: T[];
     states: int[];

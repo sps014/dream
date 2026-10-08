@@ -26,9 +26,9 @@ mod cursor_tests;
 #[cfg(test)]
 mod held_tests;
 #[cfg(test)]
-mod unique_tests;
-#[cfg(test)]
 mod modref_tests;
+#[cfg(test)]
+mod unique_tests;
 
 pub use elision::RcElision;
 pub use hop::HopElision;
@@ -104,9 +104,10 @@ pub(crate) fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
             }
             if let Place::Index { index, .. } = place
                 && let Operand::Copy(Place::Local(l)) = index.as_ref()
-                    && l.0 == local {
-                        hit = true;
-                    }
+                && l.0 == local
+            {
+                hit = true;
+            }
         }
     };
     match rvalue {
@@ -120,7 +121,8 @@ pub(crate) fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
             check(then_val);
             check(else_val);
         }
-        Rvalue::Use(o)
+        Rvalue::ObservedLoad(o)
+        | Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::CheckedNeg(o)
         | Rvalue::ArrayLen(o)

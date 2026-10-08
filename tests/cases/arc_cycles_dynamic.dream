@@ -1,15 +1,18 @@
 import system;
 
+@allow_cycle
 class ClosureNode {
     public action: Option<fun(): int>;
     public constructor() { this.action = Option.None; }
     del() { System.println("closure"); }
 }
+@allow_cycle
 class FutureNode {
     public future: Option<Future<int>>;
     public constructor() { this.future = Option.None; }
     del() { System.println("future"); }
 }
+@allow_cycle
 class ContainerNode {
     public children: List<ContainerNode>;
     public constructor() { this.children = List<ContainerNode>(); }
@@ -19,14 +22,17 @@ async fun hold(_node: FutureNode): int { return 1; }
 fun closures() {
     let node = ClosureNode();
     node.action = Option.Some(() => { let _keep = node; return 1; });
+    node.action = Option.None;
 }
 fun futures() {
     let node = FutureNode();
     node.future = Option.Some(hold(node));
+    node.future = Option.None;
 }
 fun containers() {
     let node = ContainerNode();
     node.children.push(node);
+    node.children.clear();
 }
 fun main() {
     closures();

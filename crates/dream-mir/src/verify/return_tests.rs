@@ -40,7 +40,6 @@ fn factories_cannot_hide_region_allocations_but_identity_preserves_older_objects
                     ty,
                     ctor: None,
                     args: vec![],
-                    policy: crate::AllocPolicy::Tracked,
                 }
             },
         );
@@ -82,7 +81,6 @@ fn an_opaque_call_cannot_erase_its_argument_origin() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     f.assign(
@@ -92,12 +90,16 @@ fn an_opaque_call_cannot_erase_its_argument_origin() {
     f.push(Statement::RegionLeave);
     f.terminate(Terminator::Return(Some(copy(output))));
     let found = verify_function(&f.finish(), &ctx.interner);
-    assert!(found
-        .iter()
-        .any(|v| v.msg.contains("allocation region was left")));
-    assert!(found
-        .iter()
-        .any(|v| v.msg.contains("escape through a call")));
+    assert!(
+        found
+            .iter()
+            .any(|v| v.msg.contains("allocation region was left"))
+    );
+    assert!(
+        found
+            .iter()
+            .any(|v| v.msg.contains("escape through a call"))
+    );
 }
 
 #[test]
@@ -117,7 +119,6 @@ fn call_side_effects_preserve_region_children_inserted_into_an_older_root() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     install.assign(
@@ -149,9 +150,11 @@ fn call_side_effects_preserve_region_children_inserted_into_an_older_root() {
     };
     let found = verify_module(&mir, &ctx.interner);
     assert!(found.iter().all(|v| v.func == "caller"));
-    assert!(found
-        .iter()
-        .any(|v| v.msg.contains("allocation region was left")));
+    assert!(
+        found
+            .iter()
+            .any(|v| v.msg.contains("allocation region was left"))
+    );
 }
 
 #[test]

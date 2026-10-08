@@ -90,6 +90,7 @@ pub(crate) fn rvalue_operands_mut(rv: &mut Rvalue, f: &mut impl FnMut(&mut Opera
     match rv {
         Rvalue::Move { .. } | Rvalue::FuncRef(_) => {}
         Rvalue::Use(o)
+        | Rvalue::ObservedLoad(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)

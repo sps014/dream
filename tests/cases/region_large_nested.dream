@@ -5,6 +5,7 @@ extern fun enter(): void;
 @runtime("dream_region_leave")
 extern fun leave(): void;
 
+@allow_cycle
 class TreeNode {
     public left: Option<TreeNode>;
     public right: Option<TreeNode>;

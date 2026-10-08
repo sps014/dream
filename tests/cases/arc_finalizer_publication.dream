@@ -1,0 +1,15 @@
+import system;
+
+@runtime("dream_publish")
+extern fun publish_borrowed(borrow value: Dying): void;
+
+class Dying {
+    public constructor() {}
+    del() {
+        System.println("finalizing");
+        publish_borrowed(this);
+    }
+}
+@noinline
+fun destroy(): void { let value = Dying(); }
+fun main(): void { destroy(); System.println("unreachable"); }

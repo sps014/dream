@@ -172,12 +172,11 @@ impl Lowerer<'_> {
                     def: *def,
                     ty: e.ty,
                     ctor: ctor.map(|def| crate::NewCtor {
- batched: false,
+                        field_init: false,
                         def,
                         take_params: take_params.clone(),
                     }),
                     args: lowered,
-                    policy: crate::AllocPolicy::Tracked,
                 }
             }
             HExprKind::UnionNew { def, variant, args } => {
@@ -191,10 +190,20 @@ impl Lowerer<'_> {
             }
             HExprKind::Field { obj, field } => {
                 let base = self.operand_into_local(obj);
-                Rvalue::Use(Operand::Copy(Place::Field {
+                let place = Operand::Copy(Place::Field {
                     base,
                     field: *field,
-                }))
+                });
+                if self
+                    .layouts
+                    .get(obj.ty)
+                    .and_then(|s| s.fields.get(*field))
+                    .is_some_and(|f| f.is_weak || f.is_unowned)
+                {
+                    Rvalue::ObservedLoad(place)
+                } else {
+                    Rvalue::Use(place)
+                }
             }
             HExprKind::Index { array, index } => {
                 let base = self.operand_into_local(array);
@@ -261,16 +270,24 @@ impl Lowerer<'_> {
                 Rvalue::Use(Operand::Copy(Place::index_unchecked(base, idx)))
             }
             HExprKind::ForceFree(_) => {
-                unreachable!("HExprKind::ForceFree is void-typed and only ever lowered as a bare statement in lower_stmt")
+                unreachable!(
+                    "HExprKind::ForceFree is void-typed and only ever lowered as a bare statement in lower_stmt"
+                )
             }
             HExprKind::ArraySetUnchecked { .. } => {
-                unreachable!("HExprKind::ArraySetUnchecked is void-typed and only ever lowered as a bare statement in lower_stmt")
+                unreachable!(
+                    "HExprKind::ArraySetUnchecked is void-typed and only ever lowered as a bare statement in lower_stmt"
+                )
             }
             HExprKind::ArrayElemsCopy { .. } => {
-                unreachable!("HExprKind::ArrayElemsCopy is void-typed and only ever lowered as a bare statement in lower_stmt")
+                unreachable!(
+                    "HExprKind::ArrayElemsCopy is void-typed and only ever lowered as a bare statement in lower_stmt"
+                )
             }
             HExprKind::ArrayElemsFill { .. } => {
-                unreachable!("HExprKind::ArrayElemsFill is void-typed and only ever lowered as a bare statement in lower_stmt")
+                unreachable!(
+                    "HExprKind::ArrayElemsFill is void-typed and only ever lowered as a bare statement in lower_stmt"
+                )
             }
             HExprKind::HashCode(e) => Rvalue::HashCode(self.lower_operand(e)),
             // A string's `to_string` is the value itself; as a copy, RC insertion retains it like
@@ -479,25 +496,27 @@ impl Lowerer<'_> {
         // `"pref" + x.to_string() + "suf"`
         if let HExprKind::Concat(x, y) = &a.kind
             && let HExprKind::ToString(inner) = &y.kind
-                && self.is_i32_tostring_ty(inner.ty)
-                    && matches!(x.kind, HExprKind::StringLit(_))
-                    && matches!(b.kind, HExprKind::StringLit(_))
-                {
-                    return Rvalue::ConcatInt {
-                        prefix: self.lower_operand(x),
-                        value: self.lower_operand(inner),
-                        suffix: self.lower_operand(b),
-                    };
-                }
+            && self.is_i32_tostring_ty(inner.ty)
+            && matches!(x.kind, HExprKind::StringLit(_))
+            && matches!(b.kind, HExprKind::StringLit(_))
+        {
+            return Rvalue::ConcatInt {
+                prefix: self.lower_operand(x),
+                value: self.lower_operand(inner),
+                suffix: self.lower_operand(b),
+            };
+        }
         // `"pref" + x.to_string()`
         if let HExprKind::ToString(inner) = &b.kind
-            && self.is_i32_tostring_ty(inner.ty) && matches!(a.kind, HExprKind::StringLit(_)) {
-                return Rvalue::ConcatInt {
-                    prefix: self.lower_operand(a),
-                    value: self.lower_operand(inner),
-                    suffix: Operand::Const(Const::Str(String::new())),
-                };
-            }
+            && self.is_i32_tostring_ty(inner.ty)
+            && matches!(a.kind, HExprKind::StringLit(_))
+        {
+            return Rvalue::ConcatInt {
+                prefix: self.lower_operand(a),
+                value: self.lower_operand(inner),
+                suffix: Operand::Const(Const::Str(String::new())),
+            };
+        }
         let parts = match (&a.kind, &b.kind) {
             (HExprKind::Concat(x, y), _) => vec![
                 self.lower_operand(x),

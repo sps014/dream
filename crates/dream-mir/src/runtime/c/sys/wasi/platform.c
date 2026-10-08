@@ -3,7 +3,7 @@
 #include <stdlib.h>
 static void platform_lock(unsigned domain) {
 #ifdef DREAM_WASM32_THREADS
-    int32_t *word = dream_wasm32_meta_i32(domain == DREAM_LOCK_WEAK ? META_WEAK_LOCK : domain == DREAM_LOCK_CYCLE ? META_CYCLE_LOCK : META_LOCK);
+    int32_t *word = dream_wasm32_meta_i32(domain == DREAM_LOCK_WEAK ? META_WEAK_LOCK : META_LOCK);
     for (;;) {
         int32_t expected = 0;
         if (__atomic_compare_exchange_n(word, &expected, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) { return; }
@@ -14,7 +14,7 @@ static void platform_lock(unsigned domain) {
 }
 static void platform_unlock(unsigned domain) {
 #ifdef DREAM_WASM32_THREADS
-    int32_t *word = dream_wasm32_meta_i32(domain == DREAM_LOCK_WEAK ? META_WEAK_LOCK : domain == DREAM_LOCK_CYCLE ? META_CYCLE_LOCK : META_LOCK);
+    int32_t *word = dream_wasm32_meta_i32(domain == DREAM_LOCK_WEAK ? META_WEAK_LOCK : META_LOCK);
     __atomic_store_n(word, 0, __ATOMIC_RELEASE);
 #else
     (void)domain;

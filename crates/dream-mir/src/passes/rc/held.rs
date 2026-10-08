@@ -23,7 +23,7 @@
 //! backend retain `x` at any container store.
 
 use super::liveness::{self, add_terminator_reads, transfer_stmt};
-use super::modref::{stmt_effects, Effect, ModRef, ModRefTable};
+use super::modref::{Effect, ModRef, ModRefTable, stmt_effects};
 use super::tokens::{assigns_local, sink_call_args};
 use crate::{Const, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_hir::LayoutTable;
@@ -339,7 +339,6 @@ fn terminator_hands_on(t: &Terminator) -> Option<u32> {
 /// `f` without RC ops on `locals`, so their liveness is that of their real reads.
 fn without_rc_on(f: &MirFunction, locals: &IndexSet<u32>) -> MirFunction {
     let mut g = MirFunction {
-        batched_construction: f.batched_construction,
         def: f.def,
         instance: f.instance.clone(),
         name: String::new(),
@@ -532,11 +531,7 @@ impl Check<'_> {
                 saw = true;
             }
         }
-        if saw {
-            src
-        } else {
-            None
-        }
+        if saw { src } else { None }
     }
 
     /// Array pointer loaded only from one field of one object. The element stays alive while
@@ -570,11 +565,7 @@ impl Check<'_> {
                 saw = true;
             }
         }
-        if saw {
-            pin
-        } else {
-            None
-        }
+        if saw { pin } else { None }
     }
 
     fn hits_elem(&self, elem: TypeId) -> bool {

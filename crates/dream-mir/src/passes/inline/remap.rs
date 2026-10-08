@@ -112,7 +112,8 @@ fn remap_rvalue(rv: &mut Rvalue, base: LocalMap<'_>) {
             remap_operand(then_val, base);
             remap_operand(else_val, base);
         }
-        Rvalue::Use(o)
+        Rvalue::ObservedLoad(o)
+        | Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::CheckedNeg(o)
         | Rvalue::ArrayLen(o)

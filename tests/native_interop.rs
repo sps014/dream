@@ -139,7 +139,7 @@ fn cpp_declaration_mismatch_is_reported_at_the_dream_line() {
             ("native/box.cpp", "#include \"box.hpp\"\n"),
             (
                 "src/main.dream",
-                "import system;\n\n@cpp(\"box.hpp\", \"m::Box\")\nclass Box {\n    extern constructor(v: int);\n    extern fun value(): int;\n}\n\nfun main(): void {\n    System.println(Box(3).value());\n}\n",
+                "import system;\n\n@cpp(\"box.hpp\", \"m::Box\")\n@allow_cycle class Box {\n    extern constructor(v: int);\n    extern fun value(): int;\n}\n\nfun main(): void {\n    System.println(Box(3).value());\n}\n",
             ),
         ],
     );
@@ -458,7 +458,7 @@ fn store_package(name: &str, class: &str) -> [(String, String); 4] {
         (
             format!("dream_packages/{name}/src/{name}.dream"),
             format!(
-                "module {name};\n\n@cpp(\"{name}.hpp\", \"{name}::Store\")\npublic class {class} {{\n    extern constructor();\n    extern fun name(): string;\n}}\n"
+                "module {name};\n\n@cpp(\"{name}.hpp\", \"{name}::Store\")\n@allow_cycle public class {class} {{\n    extern constructor();\n    extern fun name(): string;\n}}\n"
             ),
         ),
     ]

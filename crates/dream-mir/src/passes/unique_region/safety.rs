@@ -277,6 +277,7 @@ pub(super) fn stmt_region_safe(
 
 pub(super) fn rvalue_region_safe(cx: &mut SafeCx<'_>, rv: &Rvalue) -> bool {
     match rv {
+        Rvalue::ObservedLoad(_) => false,
         Rvalue::Use(_)
         | Rvalue::Move { .. }
         | Rvalue::Select { .. }

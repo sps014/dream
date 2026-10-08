@@ -2,6 +2,7 @@ module system.core;
 
 // Cursor produced by `T[].iterator()` when an array participates as `Collection` /
 // `IndexedCollection`. Concrete `for (let x in arr)` still uses the native index loop.
+@allow_cycle
 public class ArrayIterator<T> : Iterator<T> {
     items: T[];
     idx: int;

@@ -1,6 +1,6 @@
 use crate::common;
 
-use common::{emit_hir_to_module_rc, ir_func_body, SYSTEM_STUB};
+use common::{SYSTEM_STUB, emit_hir_to_module_rc, ir_func_body};
 
 #[test]
 fn typed_drops_claim_counts_and_invalidate_weak_slots_without_revival() {
@@ -17,7 +17,7 @@ fn typed_drops_claim_counts_and_invalidate_weak_slots_without_revival() {
             public item: Item;
             public constructor(item: Item) { this.item = item; }
         }
-        class Erased {
+        @allow_cycle class Erased {
             public item: object;
             public constructor(item: object) { this.item = item; }
         }

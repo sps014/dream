@@ -144,13 +144,14 @@ impl LocalEscape {
         for b in &f.blocks {
             for s in &b.stmts {
                 if let Statement::Assign(Place::Local(d), rv) = s
-                    && tracked(*d) {
-                        alias_sources(rv, |src| {
-                            if tracked(src) {
-                                uf.union(d.0, src.0);
-                            }
-                        });
-                    }
+                    && tracked(*d)
+                {
+                    alias_sources(rv, |src| {
+                        if tracked(src) {
+                            uf.union(d.0, src.0);
+                        }
+                    });
+                }
             }
         }
         let root: Vec<u32> = (0..n as u32).map(|l| uf.find(l)).collect();
@@ -345,9 +346,10 @@ fn rvalue_uses(
         } => {
             call_args(c.def, &[], args, 1, sums, mark);
             if let Some(d) = dest
-                && sums.param_escapes(c.def, &[], 0) {
-                    mark(d, Escape::Global);
-                }
+                && sums.param_escapes(c.def, &[], 0)
+            {
+                mark(d, Escape::Global);
+            }
         }
         Rvalue::Tuple { elems: ops, .. }
         | Rvalue::ArrayLit { elems: ops, .. }
@@ -374,7 +376,8 @@ fn rvalue_uses(
             all_global([a, b], mark)
         }
         Rvalue::Unary(_, op) | Rvalue::CheckedNeg(op) => all_global([op], mark),
-        Rvalue::Use(_)
+        Rvalue::ObservedLoad(_)
+        | Rvalue::Use(_)
         | Rvalue::Cast(..)
         | Rvalue::Move { .. }
         | Rvalue::Select { .. }

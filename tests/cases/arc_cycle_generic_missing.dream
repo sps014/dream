@@ -1,0 +1,5 @@
+class Node<T> {
+    public next: Option<Node<T>>;
+    public constructor() { this.next = Option.None; }
+}
+fun main() { let node = Node<int>(); }

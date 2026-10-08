@@ -1,0 +1,7 @@
+import system;
+class OptionalScalar {
+    public number: Option<int>;
+    public text: Option<string>;
+    public constructor() { this.number = Option.None; this.text = Option.None; }
+}
+fun main() { let value = OptionalScalar(); System.println(value.text.is_none()); }

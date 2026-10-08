@@ -37,8 +37,6 @@ import bench_gate
 ROOT = Path(__file__).resolve().parent.parent
 BENCH = ROOT / "tests/bench/microbenches.dream"
 CSHARP = ROOT / "tests/bench/csharp"
-# The reference compiler predates collector-managed recursive classes and requires the opt-in.
-BASELINE_CYCLE_CLASSES = ("TreeNode", "LinkNode", "WeakTreeNode")
 # Rows below this are timer noise or a deleted loop and cannot substantiate a claim.
 MIN_NS_PER_OP = 0.25
 
@@ -109,8 +107,6 @@ def baseline_source(src: str) -> str:
     src = re.sub(r"^// bench-compare: current-only begin\n.*?^// bench-compare: current-only end\n",
                  "", src, flags=re.M | re.S)
     src = re.sub(r"^(\s*).*// bench-compare: baseline=(.*)$", r"\1\2", src, flags=re.M)
-    for name in BASELINE_CYCLE_CLASSES:
-        src = re.sub(rf"^class {name}\b", f"@allow_cycle\nclass {name}", src, flags=re.M)
     return src
 
 

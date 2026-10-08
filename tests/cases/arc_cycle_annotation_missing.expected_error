@@ -1,0 +1,2 @@
+class 'Node' can form a strong ownership cycle
+add @allow_cycle to acknowledge possible leaks

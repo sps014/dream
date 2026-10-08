@@ -126,12 +126,17 @@ fn owns_copied_value(f: &MirFunction, local: Local) -> bool {
     f.blocks.iter().any(|block| {
         block.stmts.windows(2).any(|pair| match pair {
             [
-                Statement::Assign(Place::Local(dest), Rvalue::Use(Operand::Copy(Place::Local(src)))),
+                Statement::Assign(
+                    Place::Local(dest),
+                    Rvalue::Use(Operand::Copy(Place::Local(src))),
+                ),
                 next,
-            ] if *dest == local => matches!(
-                next,
-                Statement::ValueKill(k) if k == src
-            ) || matches!(next, Statement::ValueRetain(r) if *r == local),
+            ] if *dest == local => {
+                matches!(
+                    next,
+                    Statement::ValueKill(k) if k == src
+                ) || matches!(next, Statement::ValueRetain(r) if *r == local)
+            }
             _ => false,
         })
     })
@@ -189,9 +194,10 @@ pub(crate) fn teardown_value_locals(
     let mut dropped = vec![false; f.locals.len()];
     for stmt in f.blocks.iter().flat_map(|block| &block.stmts) {
         if let Statement::ValueDrop(l) = stmt
-            && !f.locals[l.0 as usize].is_ref {
-                dropped[l.0 as usize] = true;
-            }
+            && !f.locals[l.0 as usize].is_ref
+        {
+            dropped[l.0 as usize] = true;
+        }
     }
     let mut out = Vec::new();
     for (i, decl) in f.locals.iter().enumerate() {
@@ -207,7 +213,7 @@ pub(crate) fn teardown_value_locals(
         {
             continue;
         }
-        if f.params.iter().any(|p| p.0 == local.0) && decl.name.as_deref() == Some("this") {
+        if f.params.contains(&local) && (!decl.is_take || decl.name.as_deref() == Some("this")) {
             continue;
         }
         out.push(local);

@@ -14,8 +14,8 @@ with cached runtime unit objects. Optimized IR and assembly are emitted on reque
 Release retains aggressive MIR, ARC, and LLVM optimization. Explicit `-O0` tunes LLVM
 without changing the Release ownership preparation or selecting another profile. Both
 profiles have identical ownership semantics, including destructor ordering, weak invalidation,
-and synchronous cycle reclamation. Cleanup boundaries are established before optimization.
-Immortal singletons preserve their reference-count sentinel, leave cycle tracking, and remain
+and explicit strong-cycle ownership. Cleanup boundaries are established before optimization.
+Immortal singletons preserve their reference-count sentinel, and remain
 accessible through weak handles bound before pinning. Repeated pinning changes accounting once.
 
 ## Cache correctness
@@ -42,87 +42,44 @@ libc allocations; the underlying storage remains reusable and is freed through t
 Runtime signatures remain derived from the runtime bitcode and are cached independently of
 program linking. Cache keys include target, compiler identity, effective flags and instrumentation.
 
-## Cycles
+## ARC and cycle permissions
 
-Concrete ownership layouts classify cycle capability; recursive reference types are valid.
-Exact visitors enumerate only strong edges, including active union fields and references in
-inline values and arrays. Publication uses these visitors rather than payload scanning.
-Localized trial deletion subtracts internal edges from scratch counts and retains the graph
-reachable from remaining external owners. Traversal is iterative. Ordinary acyclic retain and
-release operations on types without user finalizers do not allocate collector state or acquire
-its gate. Classes with user finalizers also use managed metadata to distinguish temporary
-finalizer borrows from forbidden resurrection, even when their fields cannot form a cycle.
-Zero-count cycle-capable
-objects use direct iterative teardown without trial counts or ordering scratch: no incoming
-strong edge can remain, so the object cannot belong to a cycle.
+Both profiles use ordinary ARC. There is no automatic cycle collector, collector
+registration, component metadata, candidate queue, or strong-edge barrier. Native object
+headers remain 32 bytes; the former collector index is padding. Private references use
+the local count fast path; published references use atomic counts.
 
-Cycle reference operations and strong-edge mutations use a runtime gate. Doomed objects are
-claimed under the gate; user destructors run after releasing it. Weak and unowned handles are
-invalidated before finalization. Finalizers run once in allocation order while peer storage
-and edges remain readable. Edges are cleared and storage reclaimed afterward. Temporary
-finalizer reads cannot revive ownership; publication and mutation of doomed objects are rejected.
-Reentrant destruction joins the current drain. Explicit `defer` postpones collection, and its
-final drain must precede leak reporting.
+The compiler follows strong field ownership after concrete type discovery. Classes that
+can form cycles require `@allow_cycle`, including classes with owning erased `object`,
+interface, or closure fields. Arrays, tuples, containers and active union payloads
+participate. Weak and unowned edges do not. The annotation acknowledges possible leaks;
+it does not enable collection or change emitted ARC operations. Infinitely sized inline
+values remain invalid regardless of the annotation.
 
-Async frame visitors see ownership tokens rather than transient pointer copies. Pure copy,
-retain, move, and source-clearing steps publish atomically under the gate. Consumed call
-arguments leave the frame before application code runs; their active stack tokens remain
-external owners until transferred. The gate never spans an arbitrary call or cast evaluation.
-Lazy async closures retain their environment in a visited frame slot at creation. Polls read
-that snapshot, then release it at their first suspension or completion after acquiring the
-captured cells. Dropping an unpolled future releases the snapshot as well. Completed async
-worker replies acquire their own wire-string token before the result future is released.
+Use weak/unowned back-links or explicit teardown to break cycles. All-strong cycles
+remain allocated; Debug leak diagnostics report their outstanding objects. There is no
+cyclic finalizer ordering or special access to dying peers. Noncyclic finalizers run once
+at zero count, before owned fields are cleared and storage is reclaimed. Explicit `defer`
+postpones cleanup and drains before leak reporting. Resurrection remains forbidden.
 
-Inferred `UniqueRegion` remains a Release optimization for proven nonescaping, destructor-free
-graphs. Its private-allocation proof allows recursive types without registering their private
-instances in the collector; escaped instances retain ordinary cycle management. Future
-explicit graph ownership can define a lifetime for deliberately shared cyclic graphs; no new
-syntax or API is introduced here. Determinism concerns the same synchronized execution;
-concurrent scheduling has no added global ordering guarantee.
+A dedicated weak registry lock protects observer registration, slot snapshots and
+observed-target zero-count claims. Reads acquire a temporary strong reference under that
+lock. Weak reads become empty after destruction; unowned reads trap. Slots are invalidated
+before user finalizers run, and user code never runs under the registry lock. Objects
+without observers require no registry lookup or lock.
 
-## Release recovery mechanisms
+Exact strong-edge visitors remain for worker publication. Publication marks reachable
+references shared for atomic ARC; application code must synchronize concurrent field
+mutation. Async frame transfers retain moved ownership, explicit cleanup boundaries and
+lazy environment snapshots without collector synchronization.
 
-Fresh, statically described objects remain isolated until their first strong edge creates or
-shares a pooled component descriptor. Dynamic objects start with a suspect descriptor.
-Strong edges join components under the
-ownership gate; an edge within a component marks it potentially cyclic. Membership stays
-conservative after removal. Weak and unowned edges do not join components. Unknown-owner
-mutations invalidate existing components through an epoch and increment an opt-in counter.
-An allocation-sequence watermark also invalidates older isolated objects; newly allocated
-objects and reused metadata slots do not inherit that fallback.
-Parent metadata links own references, so representatives outlive their original objects.
-Queued collector nodes remain pinned until their candidates drain, preventing pooled reuse.
+Release retains private regions for proven nonescaping, destructor-free allocations,
+scalar replacement and ARC elision. Verified fresh field initializers can omit releases
+of zeroed fields; callbacks and weak operations retain ordinary construction. Debug keeps
+bounded optimization, ownership validation and leak reporting. Exactly Debug and Release
+remain available.
 
-Release batches verified field-only initializers after evaluating their arguments. Tracked
-initializers join strong components while holding one gate; private initializers omit those
-checks only inside an active proved region. Callback-bearing constructors keep the ordinary
-path. Fresh recursive builders with scalar inputs and a fully verified call graph can hold
-one outer gate. Fresh weak forests also qualify when their constructors only zero fields and
-no weak observation, callback, or publication can observe delayed cleanup during construction.
-Redundant null writes into the zeroed allocation disappear; constructors that execute weak
-operations keep the ordinary path. Nested batches borrow the outer gate rather than
-reacquiring it; verified builders also reuse that token for field-only constructor calls. Proven private
-recursive builders select an internal clone after the outer region check, carrying the same
-proof through recursive calls without checking the region or gate at every node.
-The tracked builder clone similarly borrows the outer gate through recursive calls. Its
-ordinary entry can acquire a temporary component metadata owner shared by the fresh graph,
-then relinquishes it and drains the gate before returning to unproved callers. Verified
-initialization of a fresh owner cannot close a cycle, including when its children share
-a component; ordinary mutation still marks an existing component potentially cyclic.
-Builders with ordinary field mutations retain distinct-component bookkeeping instead of
-sharing the temporary descriptor, so weak forest stores retain their inexpensive path.
-No gate spans arbitrary application code. Debug keeps ordinary validation. Release emits
-collector-free retain and decrement calls for exact acyclic static layouts. Missing layouts,
-erased objects, interfaces, and closures stay conservative. Shared counts still use atomic
-operations, and canonicalized release wrappers retain their runtime collector check. Weak
-registrations and target claims use the same collector gate; their table does not need a
-second mutex. Nested weak operations borrow the gate without ending the outer cleanup boundary.
-Weak registration records use a gate-protected metadata pool instead of individual ARC
-allocations. Registrations and removals still contribute to allocation and live-object
-diagnostics on native and WASM; pooled capacity is runtime storage, not a live registration.
-Tracked registration, retain, and release reuse the acquired thread context. A release with
-no pending candidate avoids entering the drain; zero-count and suspect candidates still drain
-synchronously at the outer ownership boundary.
+## Release optimization mechanisms
 
 Release span borrowing also admits fresh private string owners. Ownership dataflow proves
 that the original owner remains alive at every view and derived-reference read, including
@@ -132,11 +89,8 @@ ordinary opaque calls retain the checked path. A bounds-check panic cannot acces
 source through its hook; the normal owner remains alive until abort. Debug retains the
 ordinary validation path, and the optimization never postpones the original owner's cleanup.
 
-Type metadata separates finalization, clearing, reclamation, and a proof that clearing invokes
-no user code. Destructor-free zero-count objects with that proof can clear and reclaim under
-the gate; reference children append to the iterative drain. Inline values with destructors
-are excluded, and all user finalizers run outside the gate. Deferred erased releases retain
-live weak observations until their pending ownership decrement actually reaches zero.
+Type metadata keeps separate exact traversal, finalization, edge clearing and storage
+reclamation hooks. It has no collector flags or component identity.
 
 WASM libc storage and worker stacks use an uncounted runtime heap path. Guest object
 diagnostics read a single guest counter rather than subtracting independently updated raw
@@ -185,14 +139,20 @@ touching `src/main.rs` took 5.55 s, 3.79 s and 3.39 s, with median peak resident
 257.6 MiB and one Cargo-reported rustc invocation each. There is no baseline Rust compiler
 rebuild comparison, and internal linker subprocesses are not counted by this measurement.
 
-Release runtime performance is not fully preserved. Repeated microbenchmarks showed
+### Historical automatic-collector checkpoint
+
+The following results describe the earlier automatic-collector implementation, before
+the Swift-style ARC migration above. They are retained as historical measurements and
+are not validation results for the current implementation.
+
+Release runtime performance was not fully preserved. Repeated microbenchmarks showed
 numeric kernels close to baseline, but recursive tree allocation/reclamation increased
 from roughly 37 microseconds to 1.3–1.6 milliseconds, and weak-tree workloads from roughly
 45 microseconds to 650 microseconds. The baseline used inferred regions for these graphs;
-cycle-managed types are now excluded until equivalent observable cleanup is proven.
+cycle-managed types were excluded until equivalent observable cleanup is proven.
 Direct zero-count teardown reduces collector scratch overhead but does not recover bulk
 region reclamation. Recovering this performance needs a proved region/collector interaction;
-it remains follow-up work, rather than a claimed acceptance success.
+it remained follow-up work at that checkpoint.
 
 The [final alternating runtime samples](runtime-cycle-measurements.json) include three
 executions per version, each with three internal passes. Absolute timings varied from the

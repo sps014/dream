@@ -25,7 +25,7 @@ typedef struct {
 static int destroyed[ROUNDS];
 
 static void node_visit(dream_ptr ptr) { dream_visit_edge(((Node *)dream_p(ptr))->child); }
-static const dream_type_info node_info = {node_visit, NULL, NULL, NULL, 0, 0};
+static const dream_type_info node_info = {node_visit, NULL, NULL, NULL};
 const dream_type_info *dream_type_info_for_tag(int32_t tag) {
     return tag == TAG_STRUCT_BASE ? &node_info : dream_builtin_type_info(tag);
 }
@@ -34,6 +34,7 @@ static dream_mutex mutex = DREAM_MUTEX_INIT;
 static dream_cond condition = DREAM_COND_INIT;
 static int phase;
 static uintptr_t current_slot;
+static dream_ptr current_field;
 
 /* A claimed zero closes the weak-load race before finalization can observe the object. */
 static void node_destroy(dream_ptr ptr) {
@@ -76,6 +77,12 @@ static DREAM_THREAD_PROC(reader) {
                 assert(dream_char_at_u(node->child, 0) == 'c');
                 assert(dream_tag_shared(node->child));
                 node_release(value);
+            }
+            dream_ptr observed = dream_weak_load_field((dream_ptr)&current_field, 2, 0, 0, 0, 0, NULL);
+            if (observed) {
+                Node *node = dream_p(observed);
+                assert(dream_char_at_u(node->child, 0) == 'c');
+                node_release(observed);
             }
             (void)weakDead(slot);
         }
@@ -125,6 +132,19 @@ int main(void) {
     assert(optional.payload == NULL);
     assert(debug_get_live_objects() == 0);
 
+    dream_ptr boxed_target = dream_malloc(4, TAG_INT);
+    dream_ptr boxed_slot = dream_malloc(sizeof(optional), 0);
+    optional.tag = 3;
+    optional.payload = boxed_target;
+    memcpy(dream_p(boxed_slot), &optional, sizeof(optional));
+    dream_weak_register(boxed_target, boxed_slot, 0, 17);
+    dream_weak_drop_field((dream_ptr)&boxed_slot, 0, 17, offsetof(typeof(optional), payload));
+    assert(boxed_slot == 0);
+    assert((*dream_tag_word(boxed_target) & DREAM_TAG_WEAK_TARGET) == 0);
+    assert(debug_get_live_objects() == 1);
+    dream_release(boxed_target);
+    assert(debug_get_live_objects() == 0);
+
     dream_thread thread;
     assert(dream_thread_start(&thread, reader, NULL) == 0);
     for (int round = 0; round < ROUNDS; ++round) {
@@ -135,6 +155,13 @@ int main(void) {
         node->slot = 0;
         uintptr_t slot = weakBind(ptr);
         node->slot = slot;
+        assert(!dream_tag_shared(ptr));
+        assert(!dream_tag_shared(node->child));
+        assert(__atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED) < 0);
+        dream_weak_enter();
+        current_field = ptr;
+        dream_weak_register(ptr, (dream_ptr)&current_field, 2, 0);
+        dream_weak_leave();
         dream_mutex_lock(&mutex);
         current_slot = slot;
         phase = 1;
@@ -143,6 +170,9 @@ int main(void) {
             dream_cond_wait(&condition, &mutex);
         }
         dream_mutex_unlock(&mutex);
+        if (round % 3 == 0) {
+            dream_weak_drop_field((dream_ptr)&current_field, 2, 0, 0);
+        }
         if ((round & 1) && dream_rc_claim_unique(ptr)) {
             node_destroy(ptr);
         } else {
@@ -156,6 +186,7 @@ int main(void) {
         assert(__atomic_load_n(&destroyed[round], __ATOMIC_RELAXED) == 1);
         assert(weakDead(slot));
         assert(weakLoad(slot) == 0);
+        assert(dream_weak_load_field((dream_ptr)&current_field, 2, 0, 0, 0, 0, NULL) == 0);
         weakReleaseRaw(slot);
     }
     dream_thread_join(thread);

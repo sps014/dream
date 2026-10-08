@@ -332,19 +332,36 @@ dream_region_state_set:
 	global.set	__dream_region_state
 	end_function
 
-	.hidden	__dream_cycle_context
-	.globaltype	__dream_cycle_context, i32
-__dream_cycle_context:
-	.globl	dream_cycle_context_get
-	.type	dream_cycle_context_get,@function
-dream_cycle_context_get:
-	.functype	dream_cycle_context_get () -> (i32)
-	global.get	__dream_cycle_context
+	.hidden	__dream_visit_context
+	.globaltype	__dream_visit_context, i32
+__dream_visit_context:
+	.globl	dream_visit_context_get
+	.type	dream_visit_context_get,@function
+dream_visit_context_get:
+	.functype	dream_visit_context_get () -> (i32)
+	global.get	__dream_visit_context
 	end_function
-	.globl	dream_cycle_context_set
-	.type	dream_cycle_context_set,@function
-dream_cycle_context_set:
-	.functype	dream_cycle_context_set (i32) -> ()
+	.globl	dream_visit_context_set
+	.type	dream_visit_context_set,@function
+dream_visit_context_set:
+	.functype	dream_visit_context_set (i32) -> ()
 	local.get	0
-	global.set	__dream_cycle_context
+	global.set	__dream_visit_context
 	end_function
+
+    .hidden __dream_weak_depth
+    .globaltype __dream_weak_depth, i32
+__dream_weak_depth:
+    .globl dream_weak_depth_get
+    .type dream_weak_depth_get,@function
+dream_weak_depth_get:
+    .functype dream_weak_depth_get () -> (i32)
+    global.get __dream_weak_depth
+    end_function
+    .globl dream_weak_depth_set
+    .type dream_weak_depth_set,@function
+dream_weak_depth_set:
+    .functype dream_weak_depth_set (i32) -> ()
+    local.get 0
+    global.set __dream_weak_depth
+    end_function

@@ -125,7 +125,6 @@ pub struct MirFunction {
     pub entry: BlockId,
     pub is_async: bool,
     /// Release-only proof that the entire fresh-graph builder can share a construction gate.
-    pub batched_construction: Option<AllocPolicy>,
     /// When `is_async`, the full typed HIR function preserved for the coroutine transform.
     pub hir_fn: Option<dream_hir::HFunction>,
     /// Source-file path this function was declared in; `None` for synthesized functions. Names the
@@ -464,6 +463,9 @@ pub enum Const {
 /// The right-hand side of an assignment: any computation producing a single value.
 #[derive(Debug, Clone)]
 pub enum Rvalue {
+    /// Acquire an owned snapshot of a weak/unowned field under the observer lock.
+    ObservedLoad(Operand),
+
     Use(Operand),
     /// Transfers `src`'s existing `+1` to the destination without retaining. The producer
     /// explicitly nulls the source afterwards so later cleanup cannot release the transferred token.
@@ -576,7 +578,6 @@ pub enum Rvalue {
         ty: TypeId,
         ctor: Option<NewCtor>,
         args: Vec<Operand>,
-        policy: AllocPolicy,
     },
     /// Inline positional tuple construction: zero the destination then store each element at its
     /// layout field offset. Always a value type (never heap-allocated).
@@ -662,28 +663,13 @@ pub enum Rvalue {
     },
 }
 
-/// The user `constructor(){}` a [`Rvalue::New`] calls, with the per-argument `take` flags from its
-/// declaration (empty = unknown). A `borrow` constructor parameter retains inside the constructor
-/// body, so the call site must not retain it a second time.
-/// How a heap [`Rvalue::New`] may be reclaimed. Cycle capability stays a property of the type;
-/// this records what `unique-region` proved about one allocation site.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum AllocPolicy {
-    /// Ordinary ARC, collector-registered when the type is cycle-capable.
-    #[default]
-    Tracked,
-    /// Every execution of this site inside an inferred region builds part of a nonescaping,
-    /// destructor- and observer-free graph that the region reclaims in bulk, so a region
-    /// allocation needs no collector registration. Outside a region it is `Tracked`.
-    Private,
-}
-
+/// The user constructor and its ownership argument contract.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewCtor {
     pub def: DefId,
     pub take_params: Vec<bool>,
     /// Release proved that this constructor only initializes fresh fields from its arguments.
-    pub batched: bool,
+    pub field_init: bool,
 }
 
 /// A resolved call target carried into MIR. The backend derives the emitted symbol from

@@ -1,5 +1,6 @@
 import system;
 let escaped: Option<Node> = Option.None;
+@allow_cycle
 class Node {
     public next: Option<Node>;
     public constructor() { this.next = Option.None; }
@@ -8,6 +9,7 @@ class Node {
 fun make() {
     let node = Node();
     node.next = Option.Some(node);
+    node.next = Option.None;
 }
 fun main() {
     make();

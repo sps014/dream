@@ -111,7 +111,7 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[RuntimeModule {
 /// Portable runtime logic; no OS headers or direct hosted allocator calls.
 pub const CORE_C: &[&str] = &[
     "publish.c",
-    "cycles.c",
+    "ownership.c",
     "region.c",
     "strings.c",
     "string_view.c",

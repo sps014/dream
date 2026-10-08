@@ -1,4 +1,4 @@
-//! Frame visitors must observe ownership tokens, including during reentrant collection.
+//! Frame ownership transfers preserve captured environments and consumed call arguments.
 
 use super::fx::{Fx, V};
 use super::ir::Value;
@@ -44,15 +44,10 @@ impl Fx<'_, '_> {
             return;
         };
         let owner = V::u(self.self_.clone().unwrap());
-        let gate = self.call_v(
-            "dream_cycle_store_begin",
-            &[owner.clone(), V::s(Value::zero(self.h())), V::i32(0)],
-        );
         let at = self.addr(&owner, offset as i64);
         let env = self.load_ty(self.h(), &at, 8, true);
         self.store_ty(&self.h(), &at, &V::s(Value::zero(self.h())), 8);
         self.call("dream_release_closure_env", &[env]);
-        self.call("dream_cycle_store_end", &[gate]);
     }
     pub(super) fn poll_ownership_group(
         &mut self,
@@ -84,11 +79,6 @@ impl Fx<'_, '_> {
             .map_or(statements.len(), |n| next + n);
         // Copies acquire their token after assignment; moves clear the previous slot after
         // assignment. Neither intermediate frame snapshot is a valid strong-edge graph.
-        let owner = V::u(self.self_.clone().unwrap());
-        let gate = self.call_v(
-            "dream_cycle_store_begin",
-            &[owner, V::s(Value::zero(self.h())), V::i32(0)],
-        );
         if let Some((local, value, result)) = cast {
             self.store(&Place::Local(local), value, result);
         } else {
@@ -97,7 +87,6 @@ impl Fx<'_, '_> {
         for statement in &statements[next..end] {
             self.stmt(statement);
         }
-        self.call("dream_cycle_store_end", &[gate]);
         Some(end - start)
     }
 
@@ -140,16 +129,10 @@ impl Fx<'_, '_> {
             return;
         }
         // The active stack still owns these tokens until the callee consumes them. Remove
-        // the frame edges before application code can collect, without holding its gate.
-        let owner = V::u(self.self_.clone().unwrap());
-        let gate = self.call_v(
-            "dream_cycle_store_begin",
-            &[owner, V::s(Value::zero(self.h())), V::i32(0)],
-        );
+        // the frame edges before application code can release or abandon the frame.
         for local in moved {
             self.clear_poll_edge(local);
         }
-        self.call("dream_cycle_store_end", &[gate]);
     }
 }
 

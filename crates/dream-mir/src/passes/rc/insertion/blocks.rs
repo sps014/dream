@@ -58,9 +58,11 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
             changed = true;
         }
         if let Some(d) = analysis.await_resume_dest.get(bi).copied().flatten()
-            && (d as usize) < tokens.len() && is_owned(d) {
-                tokens[d as usize] = true;
-            }
+            && (d as usize) < tokens.len()
+            && is_owned(d)
+        {
+            tokens[d as usize] = true;
+        }
         for (si, stmt) in block.stmts.drain(..).enumerate() {
             let ref_dest = match &stmt {
                 Statement::Assign(Place::Local(dest), rvalue) if is_owned(dest.0) => Some((
@@ -77,10 +79,15 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
                 .unwrap_or(false);
             // Loop-header token join treats the entry pred as empty, so a loop-carried
             // owned local can overwrite a still-resident pointer with `had_dest` false.
-            let drop_previous = dest_had_token
-                || ref_dest
-                    .as_ref()
-                    .is_some_and(|(d, _, _, _)| is_owned(d.0) && in_loop.contains(&bi));
+            let realloc_consumes_dest = matches!(&stmt,
+                Statement::Assign(Place::Local(dest), Rvalue::ArrayRealloc {
+                    array: Operand::Copy(Place::Local(src)), ..
+                }) if dest == src);
+            let drop_previous = !realloc_consumes_dest
+                && (dest_had_token
+                    || ref_dest
+                        .as_ref()
+                        .is_some_and(|(d, _, _, _)| is_owned(d.0) && in_loop.contains(&bi)));
             let container_srcs = container_move_locals(&stmt);
             // Self-realloc of a slot destroys the block under any read-derived owner of it
             // (the lowering emits `$realloc` with no release-old step). Release those owners
@@ -243,7 +250,15 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
                             mark_container_move(&mut stmt, src);
                         }
                     }
+                    let freed = match &stmt {
+                        Statement::ForceFree(Operand::Copy(Place::Local(local))) => Some(local.0),
+                        _ => None,
+                    };
                     out.push(stmt);
+                    if let Some(local) = freed {
+                        out.push(null_local(local));
+                        had_sink = true;
+                    }
                     for n in sink_nulls {
                         out.push(n);
                     }

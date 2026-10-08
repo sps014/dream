@@ -1,0 +1,2 @@
+intentional strong-cycle leak
+exit code 1

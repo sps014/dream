@@ -136,60 +136,16 @@ pub(super) fn build_sync<'a>(
     let name = l.user_fn(f);
     let name = match mode {
         super::construction::InitMode::Ordinary => name,
-        super::construction::InitMode::Private => super::construction::private_name(&name),
-        super::construction::InitMode::Tracked => super::construction::tracked_name(&name),
-        super::construction::InitMode::PrivateBuilder => super::construction::builder_name(&name),
-        super::construction::InitMode::TrackedBuilder => {
-            super::construction::tracked_builder_name(&name)
-        }
+        super::construction::InitMode::Fresh => super::construction::fresh_name(&name),
     };
     let mut w = l.writer(&name);
     w.attrs
         .extend(inline_attr(f, l.cx.leak_checks && l.cx.debug_syms));
     let mut fx = Fx::new(l, f, w);
-    fx.private_init = matches!(mode, super::construction::InitMode::Private);
-    fx.tracked_init = matches!(mode, super::construction::InitMode::Tracked);
-    fx.private_builder = matches!(mode, super::construction::InitMode::PrivateBuilder);
-    fx.tracked_builder = matches!(mode, super::construction::InitMode::TrackedBuilder);
+    fx.fresh_init = matches!(mode, super::construction::InitMode::Fresh);
     fx.debug_begin(f);
     fx.source_begin(f);
     fx.sync_locals();
-    if fx.private_builder {
-        fx.construction_gate = Some(V::i32(0));
-    } else if fx.tracked_builder {
-        fx.construction_gate = Some(V::i32(2));
-    } else if let Some(policy) = f.batched_construction {
-        fx.debug_locals(true);
-        let private = i64::from(policy == crate::AllocPolicy::Private);
-        let grouped = super::construction::only_fresh_edges(fx.mir, f);
-        let begin = if grouped {
-            "dream_cycle_graph_begin"
-        } else {
-            "dream_cycle_construction_begin"
-        };
-        let end = if grouped {
-            "dream_cycle_graph_end"
-        } else {
-            "dream_cycle_store_end"
-        };
-        let gate = fx.call_v(begin, &[V::i32(private)]);
-        if policy == crate::AllocPolicy::Private {
-            let active = fx.w.icmp("eq", &gate.v, &Value::i32(0));
-            fx.if_then(&active, |fx| {
-                let name = super::construction::builder_name(&fx.l.user_fn(f));
-                let arguments: Vec<_> = f.params.iter().map(|p| fx.read_local(*p)).collect();
-                let result = fx.call_v(&name, &arguments);
-                fx.w.ret(Some(&result.v));
-            });
-        }
-        let name = super::construction::tracked_builder_name(&fx.l.user_fn(f));
-        let arguments: Vec<_> = f.params.iter().map(|p| fx.read_local(*p)).collect();
-        let result = fx.call_v(&name, &arguments);
-        fx.call(end, &[gate]);
-        fx.w.ret(Some(&result.v));
-        fx.finish();
-        return;
-    }
     fx.map_blocks();
     fx.frame_buffers();
     fx.debug_locals(true);
@@ -301,13 +257,8 @@ pub(super) fn build_async_stub<'a>(
         // Polls are lazy: the caller's funcbox may die or another call may replace g0.
         let env = fx.read_global(crate::Global(0));
         fx.call("dream_retain", std::slice::from_ref(&env));
-        let gate = fx.call_v(
-            "dream_cycle_store_begin",
-            &[s.clone(), env.clone(), V::i32(0)],
-        );
         let at = fx.addr(&s, offset as i64);
         fx.store_ty(&fx.h(), &at, &env, 8);
-        fx.call("dream_cycle_store_end", &[gate]);
     }
     for (pi, p) in body.params.iter().enumerate() {
         let off = offs[p.0 as usize] as i64;
@@ -565,15 +516,7 @@ pub(super) fn build_future_drop<'a>(
     }
     visit.w.ret(None);
     visit.finish();
-    super::glue::ownership::descriptor(
-        l,
-        &format!("info_{name}"),
-        &visit_name,
-        None,
-        &name,
-        true,
-        false,
-    );
+    super::glue::ownership::descriptor(l, &format!("info_{name}"), &visit_name, None, &name);
     idxs.sort_by_key(|&i| drop_slot_rank(l, body.locals[i].ty));
     let w = l.writer(&name);
     let mut fx = Fx::new(l, body, w);

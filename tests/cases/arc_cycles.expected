@@ -1,7 +1,4 @@
 drop 1
-peer 1
 drop 2
-peer 3
 drop 3
-peer 2
 done

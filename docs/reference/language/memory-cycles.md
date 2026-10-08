@@ -1,52 +1,72 @@
-# Cycles and deterministic ARC
+# Cycles and ARC
 
-Recursive classes and strong reference cycles are supported. You can build lists, trees,
-parent/child graphs, callback graphs, and cyclic containers without mandatory ownership
-annotations or a tracing collector.
+Dream uses deterministic reference counting in Debug and Release. ARC does not collect
+strong reference cycles. Break cycles with `weak` or checked `unowned` back-links, or
+explicitly clear an owning edge before releasing the last external owner.
 
-The compiler emits exact strong-edge metadata for concrete heap layouts. Types that cannot
-participate in cycles use ordinary ARC. Cycle-capable objects use localized trial deletion:
-internal references are subtracted from scratch counts, and objects still reachable from
-external owners survive. An unreachable remainder is reclaimed synchronously before the
-outermost ownership-release boundary returns. Reentrant cleanup joins the same drain.
+## Cycle-capable classes
+
+A class whose strong field layout can form a cycle requires `@allow_cycle`. This check
+follows concrete generic fields, arrays, containers, tuples and reference-bearing values.
+Owning erased `object`, interface and closure fields are conservative: their runtime
+referents may point back to the owner. Weak and unowned edges do not participate.
+
+```dream
+@allow_cycle
+class Node {
+    public next: Option<Node>;
+    public constructor() { this.next = Option.None; }
+}
+
+fun main() {
+    let node = Node();
+    node.next = Option.Some(node);
+    node.next = Option.None; // Explicit teardown releases the internal owner.
+}
+```
+
+The annotation acknowledges possible leaks; it does not enable collection. Incorrect
+all-strong cycles stay allocated, and Debug leak diagnostics report their outstanding
+objects. Recursive reference types remain representable; infinitely sized inline value
+types are rejected even when annotated.
 
 ## Destructors and observers
 
-For a cyclic group, weak handles become empty and unowned handles become invalid before
-user destructors run. Destructors run once in allocation order while peer storage and strong
-fields remain readable. After all finalizers finish, edges are cleared and storage reclaimed.
-Finalizers may temporarily read dying peers. They may not resurrect them, publish them into
-an escaping owner, or mutate their strong edges.
+A finalizer runs once when the strong count reaches zero. Weak and unowned observers are
+invalidated before user finalizers run. Owned fields are cleared afterward, then storage
+is reclaimed. Retaining an object after zero is forbidden resurrection. There is no
+special dying-peer access or finalizer order for leaking cycles.
 
-Debug and Release share these semantics. Debug also performs ownership validation and leak
-reporting. Explicit `defer` postpones destruction intentionally and drains pending cycles
-before final leak reporting.
+Debug and Release share these ownership semantics. Explicit `defer` intentionally
+postpones cleanup; deferred work drains before leak reporting.
 
 ## Weak and unowned references
 
-`weak` and `unowned` remain useful when a reference should not extend a lifetime. A weak field
-has type `Option<T>` for a class `T` and becomes `None` when the target dies. An unowned field
-has a class type and traps if accessed after invalidation. These tools can reduce ownership
-traffic and make application intent clearer; they are not required to permit recursive types.
+A `weak` field has type `Option<T>` for a class `T` and becomes `None` when the target dies.
+An `unowned` field has class type and traps when read after invalidation. Reads acquire a
+temporary strong reference that survives the consuming expression's cleanup boundary.
+Neither field extends the target's lifetime while stored.
 
-Infinitely sized inline value types remain invalid. A recursive class is a heap reference and
-does not have this size problem. Interfaces, erased `object` values and closures are classified
-conservatively because their concrete target varies at runtime.
+```dream
+class Parent { public weak child: Option<Child>; }
+class Child { public unowned parent: Parent; }
+```
+
+These fields have no strong cycle, so neither class needs `@allow_cycle`. A recursive
+strong child field still makes a class cycle-capable, even when actual instances form a tree.
 
 ## Concurrency
 
-Cycle-capable reference operations and collection are initially serialized by a runtime gate.
-User destructors execute outside that gate. Applications must still synchronize field access.
-Cleanup is deterministic for the same synchronized execution; thread scheduling does not gain
-a new global ordering guarantee.
+Published objects use atomic reference counts. A dedicated registry lock synchronizes
+weak/unowned reads, registration and observed-target destruction. User finalizers run
+outside it. Objects without weak observers need no registry lookup or lock. Application
+code remains responsible for synchronization of concurrent field mutation.
 
-## Graph ownership
+Cleanup is deterministic for the same synchronized execution. Concurrent scheduling does
+not gain a global destruction-order guarantee.
 
-Release can infer a `UniqueRegion` for proven nonescaping, destructor-free graphs. A class that
-could form a cycle is included only when the compiler also proves the graph private: every
-reference stored into its objects was allocated inside the same region, and the class has no
-`weak` or `unowned` fields. Those objects are allocated without collector registration and are
-reclaimed in bulk when the region ends; the same builder called outside a region allocates
-ordinary collector-tracked objects. A future explicit graph-owner
-API could represent an intentionally shared lifetime, but there is no new graph syntax or
-lifetime system in this design.
+## Private regions
+
+Release can infer a `UniqueRegion` for proven nonescaping, destructor-free allocations
+and reclaim their storage in bulk. This is an internal optimization, not a public graph
+owner or a guarantee that arbitrary strong cycles are reclaimed.

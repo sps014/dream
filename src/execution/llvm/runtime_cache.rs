@@ -293,7 +293,11 @@ pub(super) fn compile(
         .arg(&partial);
     run_captured(&mut command, "clang (runtime unit)")?;
     let text = std::fs::read_to_string(&deps).map_err(|e| e.to_string())?;
-    let text = if cfg!(windows) { normalize_dependency_separators(&text) } else { text };
+    let text = if cfg!(windows) {
+        normalize_dependency_separators(&text)
+    } else {
+        text
+    };
     let parsed = depfile::parse(&text).map_err(|e| format!("clang dependency file: {e:?}"))?;
     let dependencies: Vec<PathBuf> = parsed
         .find("dream-unit")
@@ -312,7 +316,9 @@ pub(super) fn compile(
             .to_hex()
             .to_string(),
     };
-    std::fs::File::open(&partial)
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&partial)
         .and_then(|file| file.sync_all())
         .map_err(|e| e.to_string())?;
     std::fs::rename(&partial, &object).map_err(|e| e.to_string())?;
@@ -338,7 +344,10 @@ fn normalize_dependency_separators(text: &str) -> String {
                     normalized.push(chars.next().unwrap());
                     continue;
                 }
-                Some(_) => { normalized.push('/'); continue; }
+                Some(_) => {
+                    normalized.push('/');
+                    continue;
+                }
                 None => {}
             }
         }
@@ -356,7 +365,12 @@ mod dependency_tests {
         let text = "dream-unit: D:\\a\\dream\\core.c \\\r\n C:\\Program\\ Files\\sdk.h\r\n";
         let normalized = normalize_dependency_separators(text);
         let parsed = depfile::parse(&normalized).unwrap();
-        let paths: Vec<_> = parsed.find("dream-unit").unwrap().iter().map(|s| s.as_ref()).collect();
+        let paths: Vec<_> = parsed
+            .find("dream-unit")
+            .unwrap()
+            .iter()
+            .map(|s| s.as_ref())
+            .collect();
         assert_eq!(paths, ["D:/a/dream/core.c", "C:/Program Files/sdk.h"]);
     }
 }

@@ -99,12 +99,9 @@ static void heap_sums(uint64_t *allocs, uint64_t *frees) {
 
 void dream_pin_immortal(dream_ptr s) {
     if (!s) { return; }
-    int locked = dream_cycle_store_begin(s, 0, 1);
     if (__atomic_exchange_n(dream_rc_word(s), DREAM_RC_IMMORTAL, __ATOMIC_RELAXED) != DREAM_RC_IMMORTAL) {
-        dream_cycle_forget(s);
         __atomic_fetch_add(&pinned, 1u, __ATOMIC_RELAXED);
     }
-    dream_cycle_store_end(locked);
 }
 
 void dream_retain_slow(int32_t *rc, int32_t v) {
@@ -128,6 +125,7 @@ __attribute__((noinline)) int dream_rc_last_slow(int32_t *rc, int32_t v) {
             return last;
         }
     }
+    if (v == 0) { DREAM_PANIC_LITERAL(u"panic: reference count underflow"); }
     return 0;
 }
 
@@ -391,7 +389,6 @@ void dream_recycle_slow(dream_ptr ptr) {
     if (ptr == 0) {
         return;
     }
-    dream_cycle_forget(ptr);
     heap_refresh_fast();
     if (*dream_tag_word(ptr) & DREAM_TAG_WEAK_TARGET) {
         dream_weak_clear_all(ptr);
@@ -459,8 +456,6 @@ dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag) {
         return ptr;
     }
     const dream_type_info *info = dream_object_info(ptr);
-    int locked = info && info->visit;
-    if (locked) { dream_cycle_enter(); }
     np = dream_tag_shared(ptr) ? dream_malloc_shared(new_size, tag) : dream_malloc(new_size, tag);
     dream_set_type(np, info);
     int unique = dream_rc_count(ptr) == 1;
@@ -481,6 +476,5 @@ dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag) {
         memset(dream_p(ptr), 0, (size_t)copy);
     }
     dream_release(ptr);
-    if (locked) { dream_cycle_leave(); dream_cycle_drain(); }
     return np;
 }

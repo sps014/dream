@@ -69,6 +69,22 @@ pub(super) fn statement(
         _ => {}
     }
     match stmt {
+        Statement::ForceFree(Operand::Copy(Place::Local(local))) if flow.tracked(*local) => {
+            // Unsafe free destroys storage irrespective of its count or borrowed aliases.
+            state[local.0 as usize] = BTreeSet::from([Ticket::Null]);
+        }
+        Statement::Assign(
+            Place::Local(dest),
+            Rvalue::ArrayRealloc {
+                array: Operand::Copy(Place::Local(src)),
+                ..
+            },
+        ) if dest == src => {
+            flow.consume(state, *src, bi, si);
+        }
+        _ => {}
+    }
+    match stmt {
         Statement::Retain(Operand::Copy(Place::Local(l))) => flow.retain(state, *l, bi, si),
         Statement::Release(Operand::Copy(Place::Local(l))) => flow.consume(state, *l, bi, si),
         Statement::Assign(Place::Local(dest), rv) if flow.tracked(*dest) => {
@@ -139,7 +155,7 @@ fn local_move(flow: &Flow<'_>, bi: usize, si: usize, src: Local, dest: Local) ->
             Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(Const::Null)))
                 if *l == src =>
             {
-                return true
+                return true;
             }
             Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(Const::Null)))
                 if *l != dest => {}

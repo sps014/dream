@@ -1,13 +1,13 @@
 use super::pipeline::Inliner;
-use crate::build::FunctionBuilder;
-use crate::passes::ModulePass;
-use crate::passes::{MirPass, RcInsertion};
 use crate::Const;
 use crate::Operand;
 use crate::Place;
 use crate::Rvalue;
 use crate::Statement;
 use crate::Terminator;
+use crate::build::FunctionBuilder;
+use crate::passes::ModulePass;
+use crate::passes::{MirPass, RcInsertion};
 use dream_types::{DefKind, TypeCtx};
 
 #[test]
@@ -139,7 +139,6 @@ fn non_owning_fields_keep_the_call_result_disposal_boundary() {
                 ty: node,
                 ctor: None,
                 args: vec![],
-                policy: crate::AllocPolicy::Tracked,
             },
         );
         make.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(value)))));
@@ -174,13 +173,15 @@ fn non_owning_fields_keep_the_call_result_disposal_boundary() {
             ),
         );
         assert!(!Inliner.run(&mut mir, &ctx.interner));
-        assert!(mir.functions[0]
-            .blocks
-            .iter()
-            .flat_map(|b| &b.stmts)
-            .any(|s| matches!(
-                s,
-                Statement::Assign(Place::Field { .. }, Rvalue::Call { .. })
-            )));
+        assert!(
+            mir.functions[0]
+                .blocks
+                .iter()
+                .flat_map(|b| &b.stmts)
+                .any(|s| matches!(
+                    s,
+                    Statement::Assign(Place::Field { .. }, Rvalue::Call { .. })
+                ))
+        );
     }
 }

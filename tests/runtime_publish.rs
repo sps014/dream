@@ -24,7 +24,7 @@ fn publishes_cyclic_diamond_and_million_node_task_graphs() {
         .arg(native.join("platform.c"));
     for unit in [
         "heap.c",
-        "cycles.c",
+        "ownership.c",
         "heap_maps.c",
         "heap_debug.c",
         "publish.c",

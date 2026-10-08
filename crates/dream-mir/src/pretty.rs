@@ -144,7 +144,6 @@ pub fn print_function(cx: &PrettyCx<'_>, func: &MirFunction) -> String {
     if func.is_async {
         out.push_str(" async");
     }
-    if func.batched_construction.is_some() { out.push_str(" [batched-construction]"); }
     let _ = writeln!(out, " {{");
     for (i, decl) in func.locals.iter().enumerate() {
         let _ = writeln!(
@@ -358,6 +357,7 @@ impl FnPrinter<'_> {
 
     fn rvalue(&self, r: &Rvalue) -> String {
         match r {
+            Rvalue::ObservedLoad(o) => format!("observed_load {}", self.operand(o)),
             Rvalue::Use(o) => self.operand(o),
             Rvalue::Move { src, cast } => match cast {
                 Some((from, to)) => format!(
@@ -405,32 +405,20 @@ impl FnPrinter<'_> {
                 self.operand(receiver),
                 self.ops(args)
             ),
-            Rvalue::New {
-                ty,
-                ctor,
-                args,
-                policy,
-                ..
-            } => {
-                let policy = match policy {
-                    crate::AllocPolicy::Tracked => "",
-                    crate::AllocPolicy::Private => "private ",
-                };
-                match ctor {
-                    Some(c) => format!(
-                        "new {policy}{} via {}({})",
-                        self.cx.ty(*ty),
-                        self.cx.callee(&Callee {
-                            def: c.def,
-                            args: Vec::new(),
-                            ret: *ty,
-                            take_params: Vec::new(),
-                        }),
-                        self.ops(args)
-                    ),
-                    None => format!("new {policy}{}({})", self.cx.ty(*ty), self.ops(args)),
-                }
-            }
+            Rvalue::New { ty, ctor, args, .. } => match ctor {
+                Some(c) => format!(
+                    "new {} via {}({})",
+                    self.cx.ty(*ty),
+                    self.cx.callee(&Callee {
+                        def: c.def,
+                        args: Vec::new(),
+                        ret: *ty,
+                        take_params: Vec::new(),
+                    }),
+                    self.ops(args)
+                ),
+                None => format!("new {}({})", self.cx.ty(*ty), self.ops(args)),
+            },
             Rvalue::UnionNew {
                 ty, variant, args, ..
             } => format!(

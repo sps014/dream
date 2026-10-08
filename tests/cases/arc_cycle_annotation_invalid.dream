@@ -1,0 +1,5 @@
+@allow_cycle(true)
+class Node {}
+@allow_cycle
+struct Value { public x: int; }
+fun main() {}

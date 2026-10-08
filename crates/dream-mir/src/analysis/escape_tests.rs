@@ -23,7 +23,6 @@ fn new_node(ty: TypeId) -> Rvalue {
         ty,
         ctor: None,
         args: vec![],
-        policy: crate::AllocPolicy::Tracked,
     }
 }
 

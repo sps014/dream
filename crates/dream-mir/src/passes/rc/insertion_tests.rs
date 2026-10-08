@@ -1,6 +1,6 @@
 use super::*;
-use crate::build::FunctionBuilder;
 use crate::Callee;
+use crate::build::FunctionBuilder;
 use dream_types::{DefId, DefKind, TypeCtx};
 use indexmap::IndexSet;
 
@@ -43,14 +43,18 @@ fn last_use_temporary_value_call_kills_arg() {
     b.terminate(Terminator::Return(None));
     let mut func = b.finish();
     RcInsertion.run(&mut func, &ctx.interner);
-    assert!(func.blocks[0]
-        .stmts
-        .iter()
-        .any(|stmt| matches!(stmt, Statement::ValueKill(l) if *l == temp)));
-    assert!(!func.blocks[0]
-        .stmts
-        .iter()
-        .any(|stmt| matches!(stmt, Statement::ValueRetain(l) if *l == temp)));
+    assert!(
+        func.blocks[0]
+            .stmts
+            .iter()
+            .any(|stmt| matches!(stmt, Statement::ValueKill(l) if *l == temp))
+    );
+    assert!(
+        !func.blocks[0]
+            .stmts
+            .iter()
+            .any(|stmt| matches!(stmt, Statement::ValueRetain(l) if *l == temp))
+    );
 }
 
 #[test]
@@ -71,7 +75,6 @@ fn last_use_constructed_value_temporary_kills_arg() {
             ty: point,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.push(Statement::Call {
@@ -342,7 +345,6 @@ fn birth_borrow_falls_off_block_one_release_zero_retain() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.push(Statement::Call {
@@ -376,7 +378,6 @@ fn last_use_assign_forwards_token_without_retain() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(Place::Local(y), Rvalue::Use(Operand::Copy(Place::Local(x))));
@@ -451,7 +452,6 @@ fn still_live_alias_retains() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(Place::Local(y), Rvalue::Use(Operand::Copy(Place::Local(x))));
@@ -490,7 +490,6 @@ fn unbalanced_if_releases_on_kept_arm() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::If {
@@ -591,7 +590,6 @@ fn loop_carried_local_does_not_share_retain_on_entry() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::Goto(header));
@@ -647,7 +645,6 @@ fn loop_live_local_does_not_move_into_sink() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::Goto(header));
@@ -771,7 +768,6 @@ fn rebind_evaluates_rhs_before_release() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(
@@ -818,7 +814,6 @@ fn unread_local_survives_until_rebind() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(
@@ -836,7 +831,6 @@ fn unread_local_survives_until_rebind() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::Return(None));
@@ -1187,7 +1181,6 @@ fn async_class_released_before_await() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(
@@ -1197,7 +1190,6 @@ fn async_class_released_before_await() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::Await {
@@ -1347,7 +1339,6 @@ fn async_await_rebind_releases_previous_dest() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(
@@ -1357,7 +1348,6 @@ fn async_await_rebind_releases_previous_dest() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::Await {
@@ -1418,7 +1408,6 @@ fn loop_await_releases_future_on_resume() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::Await {
@@ -1460,7 +1449,6 @@ fn unique_new_uses_release_unique() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.terminate(Terminator::Return(None));
@@ -1496,7 +1484,6 @@ fn last_use_field_store_nulls_without_retain() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(
@@ -1506,7 +1493,6 @@ fn last_use_field_store_nulls_without_retain() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(
@@ -1675,7 +1661,6 @@ fn still_live_copy_is_shared_not_unique_destroy() {
             ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(Place::Local(y), Rvalue::Use(Operand::Copy(Place::Local(x))));
@@ -1711,5 +1696,95 @@ fn string_never_release_unique() {
         !uniq,
         "strings stay on ordinary release: {:?}",
         func.blocks[0].stmts
+    );
+}
+
+#[test]
+fn borrowed_value_copy_retains_instead_of_moving() {
+    let mut ctx = TypeCtx::new();
+    let value = point_ty(&mut ctx);
+    let mut b = FunctionBuilder::new("f", ctx.interner.void());
+    let source = b.new_param(value, Some("source".into()));
+    let copy = b.new_local(value, Some("copy".into()));
+    b.assign(
+        Place::Local(copy),
+        Rvalue::Use(Operand::Copy(Place::Local(source))),
+    );
+    b.terminate(Terminator::Return(None));
+    let mut func = b.finish();
+    RcInsertion.run(&mut func, &ctx.interner);
+    let statements = &func.blocks[0].stmts;
+    assert!(
+        statements
+            .iter()
+            .any(|s| matches!(s, Statement::ValueRetain(l) if *l == copy))
+    );
+    assert!(
+        !statements.iter().any(
+            |s| matches!(s, Statement::ValueKill(l) | Statement::ValueDrop(l) if *l == source)
+        )
+    );
+}
+
+#[test]
+fn self_realloc_and_explicit_free_consume_the_existing_owner() {
+    let mut ctx = TypeCtx::new();
+    let elem = ctx.interner.int();
+    let array_ty = ctx.interner.array(elem);
+    let mut b = FunctionBuilder::new("f", ctx.interner.void());
+    let array = b.new_local(array_ty, Some("array".into()));
+    b.assign(
+        Place::Local(array),
+        Rvalue::ArrayNew {
+            elem_ty: elem,
+            len: Operand::Const(Const::Int(3)),
+            closure_env: false,
+        },
+    );
+    b.assign(
+        Place::Local(array),
+        Rvalue::ArrayRealloc {
+            elem_ty: elem,
+            array: Operand::Copy(Place::Local(array)),
+            new_len: Operand::Const(Const::Int(5)),
+        },
+    );
+    b.push(Statement::ForceFree(Operand::Copy(Place::Local(array))));
+    b.terminate(Terminator::Return(None));
+    let mut func = b.finish();
+    RcInsertion.run(&mut func, &ctx.interner);
+    assert!(!func.blocks[0].stmts.iter().any(|s| matches!(s,
+        Statement::Release(Operand::Copy(Place::Local(l))) if *l == array)));
+}
+
+#[test]
+fn borrowed_value_passed_to_sink_takes_an_independent_owner() {
+    let mut ctx = TypeCtx::new();
+    let value = point_ty(&mut ctx);
+    let sink = ctx.register(DefKind::Function, "sink", vec![]);
+    let mut b = FunctionBuilder::new("f", ctx.interner.void());
+    let source = b.new_param(value, Some("source".into()));
+    b.push(Statement::Call {
+        callee: Callee {
+            def: sink,
+            args: vec![],
+            ret: ctx.interner.void(),
+            take_params: vec![true],
+        },
+        args: vec![Operand::Copy(Place::Local(source))],
+    });
+    b.terminate(Terminator::Return(None));
+    let mut func = b.finish();
+    RcInsertion.run(&mut func, &ctx.interner);
+    let statements = &func.blocks[0].stmts;
+    assert!(
+        statements
+            .iter()
+            .any(|s| matches!(s, Statement::ValueRetain(l) if *l == source))
+    );
+    assert!(
+        !statements.iter().any(
+            |s| matches!(s, Statement::ValueKill(l) | Statement::ValueDrop(l) if *l == source)
+        )
     );
 }

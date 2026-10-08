@@ -8,7 +8,7 @@ use super::super::fx::{Fx, V};
 use super::super::ir::{FnTy, Ty, Value};
 use super::super::lcx::{FnSig, Lcx};
 use super::super::types::{is_unsigned, ll_ty};
-use super::c_reverse::{callback_fun_ty, direct_targets, Reverse};
+use super::c_reverse::{Reverse, callback_fun_ty, direct_targets};
 use super::{glue, register};
 use crate::backend::shared::abi_types::{c_ident, elem_size, import_call_name};
 use crate::backend::shared::panic_msgs;
@@ -359,7 +359,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         let [ptr_off, free_off] = offsets[..] else {
             crate::internal_error!("OwnedCPtr must have exactly the fields `ptr` and `free`");
         };
-        let o = self.emit_new_in(ty, None, &[], None, crate::AllocPolicy::Tracked, false);
+        let o = self.emit_new_in(ty, None, &[], None, false);
         let at = self.addr(&o, ptr_off as i64);
         self.cptr_store(&at, p);
         let at = self.addr(&o, free_off as i64);

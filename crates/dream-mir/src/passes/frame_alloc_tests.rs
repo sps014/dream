@@ -23,7 +23,6 @@ fn cycle_capable_frame_objects_require_no_incoming_heap_edges() {
                 ty,
                 ctor: None::<NewCtor>,
                 args: vec![],
-                policy: crate::AllocPolicy::Tracked,
             },
         );
         if escapes {

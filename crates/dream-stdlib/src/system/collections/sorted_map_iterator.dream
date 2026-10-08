@@ -1,6 +1,7 @@
 module system.collections;
 
 // Cursor produced by `SortedMap.iterator()` — walks entries in ascending key order.
+@allow_cycle
 public class SortedMapIterator<K : Comparable<K>, V> : Iterator<KeyValuePair<K, V>> {
     map: SortedMap<K, V>;
     idx: int;

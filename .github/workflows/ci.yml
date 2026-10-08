@@ -183,7 +183,7 @@ jobs:
           core=crates/dream-mir/src/runtime/c/core
           clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -I"$core/include" -I"$native/include" -I"$core/../include" \
             "$core/platform.c" "$core/utf8.c" "$native/platform.c" \
-            "$core/heap.c" "$core/cycles.c" "$core/heap_maps.c" "$core/publish.c" \
+            "$core/heap.c" "$core/ownership.c" "$core/heap_maps.c" "$core/publish.c" \
             "$core/region.c" "$core/weak.c" "$native/sync.c" "$core/strings.c" tests/runtime_weak.c \
             -o "$stress_dir/weak"
           DREAM_DEBUG_LEAKS=1 "$stress_dir/weak"
@@ -196,7 +196,7 @@ jobs:
           core=crates/dream-mir/src/runtime/c/core
           clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -I"$core/include" -I"$native/include" -I"$core/../include" \
             "$core/platform.c" "$core/utf8.c" "$native/platform.c" \
-            "$core/heap.c" "$core/cycles.c" "$core/heap_maps.c" "$core/publish.c" \
+            "$core/heap.c" "$core/ownership.c" "$core/heap_maps.c" "$core/publish.c" \
             "$core/region.c" "$core/weak.c" "$core/strings.c" tests/runtime_sync.c \
             -o "$stress_dir/sync"
           DREAM_DEBUG_LEAKS=1 "$stress_dir/sync"
@@ -210,7 +210,7 @@ jobs:
           core=crates/dream-mir/src/runtime/c/core
           clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -I"$core/include" -I"$native/include" -I"$core/../include" \
             "$core/platform.c" "$core/utf8.c" "$native/platform.c" \
-            "$core/heap.c" "$core/cycles.c" "$core/heap_maps.c" "$core/publish.c" \
+            "$core/heap.c" "$core/ownership.c" "$core/heap_maps.c" "$core/publish.c" \
             "$core/region.c" "$core/weak.c" "$native/sync.c" "$core/strings.c" tests/runtime_worker.c \
             -o "$stress_dir/worker"
           DREAM_DEBUG_LEAKS=1 "$stress_dir/worker"
@@ -292,6 +292,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: "cargo test --test integration runtime_worker:: -- --nocapture"
-      - run: "cargo test --test integration runtime_cycles:: -- --nocapture"
+      - run: "cargo test --test integration runtime_ownership:: -- --nocapture"
       - run: "cargo test --test integration runtime_weak:: -- --nocapture"
       - run: "cargo test --test integration runtime_callback:: -- --nocapture"

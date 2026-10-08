@@ -1,5 +1,6 @@
 import system;
 
+@allow_cycle
 class Node {
     public future: Option<Future<int>>;
     public constructor() { this.future = Option.None; }
@@ -13,4 +14,5 @@ async fun hold(value: Holder): int { let _keep = value.node; return 1; }
 fun main() {
     let node = Node();
     node.future = Option.Some(hold(Holder(node)));
+    node.future = Option.None;
 }

@@ -1628,69 +1628,67 @@ fn test_extend_non_sealed_class_is_allowed() {
 // --- `weak`/`unowned` fields and the compile-time reference-cycle check ---
 
 #[test]
-fn test_class_self_reference_is_supported() {
-    // A class holding a strong field of its own type is a self-loop in the reference-cycle
-    // graph: it is structurally capable of forming a leak (e.g. `n.next = n`), so it is a hard
-    // error even though this particular declaration never actually wires up a loop.
-    let code = "class Node { public next: Node; }";
+fn test_class_self_reference_with_permission_is_supported() {
+    // The annotation acknowledges a possible leak without enabling runtime collection.
+    let code = "@allow_cycle class Node { public next: Node; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]
-fn test_option_wrapped_self_reference_is_supported() {
+fn test_option_wrapped_self_reference_with_permission_is_supported() {
     let code = "enum Option<T> { Some(T), None }
-        class Node { public next: Option<Node>; }";
+        @allow_cycle class Node { public next: Option<Node>; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]
-fn test_array_field_self_reference_is_supported() {
+fn test_array_field_self_reference_with_permission_is_supported() {
     // Array elements are strong references, so `Node[]` contributes the same self-loop edge as a
     // bare `Node` field.
-    let code = "class Node { public children: Node[]; }";
+    let code = "@allow_cycle class Node { public children: Node[]; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]
-fn test_list_field_self_reference_is_supported() {
-    let code = "class List<T> {}
-        class Node { public children: List<Node>; }";
+fn test_list_field_self_reference_with_permission_is_supported() {
+    let code = "@allow_cycle class List<T> {}
+        @allow_cycle class Node { public children: List<Node>; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]
-fn test_map_value_field_self_reference_is_supported() {
-    let code = "class Map<K, V> {}
-        class Node { public kids: Map<string, Node>; }";
+fn test_map_value_field_self_reference_with_permission_is_supported() {
+    let code = "@allow_cycle class Map<K, V> {}
+        @allow_cycle class Node { public kids: Map<string, Node>; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]
-fn test_set_field_self_reference_is_supported() {
-    let code = "class Set<T> {}
-        class Node { public peers: Set<Node>; }";
+fn test_set_field_self_reference_with_permission_is_supported() {
+    let code = "@allow_cycle class Set<T> {}
+        @allow_cycle class Node { public peers: Set<Node>; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]
-fn test_option_list_field_self_reference_is_supported() {
+fn test_option_list_field_self_reference_with_permission_is_supported() {
     let code = "enum Option<T> { Some(T), None }
-        class List<T> {}
-        class Node { public children: Option<List<Node>>; }";
+        @allow_cycle class List<T> {}
+        @allow_cycle class Node { public children: Option<List<Node>>; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]
-fn test_mutual_class_cycle_is_supported() {
-    let code = "class A { public b: B; }
-        class B { public a: A; }";
+fn test_mutual_class_cycle_with_permission_is_supported() {
+    let code = "@allow_cycle class A { public b: B; }
+        @allow_cycle class B { public a: A; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
 }
@@ -2446,4 +2444,26 @@ fn operator_no_match_and_poison_do_not_cascade() {
             .any(|d| d.message.contains("cannot convert from bool to Value"))
     );
     assert!(errors.iter().any(|d| d.message.contains("missing")));
+}
+
+#[test]
+fn strong_cycle_permission_is_required() {
+    for code in [
+        "class Node { public next: Node; }",
+        "enum Option<T> { Some(T), None } class Node { public next: Option<Node>; }",
+        "class Node { public children: Node[]; }",
+        "class Holder { public value: object; }",
+        "class A { public b: B; } class B { public a: A; }",
+    ] {
+        let diagnostics = analyze_code(code);
+        assert!(diagnostics.has_errors(), "{code}");
+        assert!(
+            diagnostics
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("@allow_cycle")),
+            "{:?}",
+            diagnostics.diagnostics
+        );
+    }
 }

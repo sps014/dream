@@ -1,5 +1,6 @@
 import system;
 
+@allow_cycle
 class TreeNode {
     public left: Option<TreeNode>;
     public right: Option<TreeNode>;
@@ -49,7 +50,9 @@ fun cycled(): int {
     switch (make_tree(3)) {
         Some(root) => {
             root.right = Option.Some(root);
-            return count(root.left);
+            let result = count(root.left);
+            root.right = Option.None;
+            return result;
         }
         None => { return -1; }
     }

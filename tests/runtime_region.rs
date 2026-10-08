@@ -24,7 +24,7 @@ fn regions_chain_rewind_and_fall_back_independently_per_thread() {
         .arg(native.join("platform.c"));
     for unit in [
         "heap.c",
-        "cycles.c",
+        "ownership.c",
         "heap_maps.c",
         "publish.c",
         "region.c",

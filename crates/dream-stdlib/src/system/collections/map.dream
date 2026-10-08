@@ -1,6 +1,7 @@
 module system.collections;
 
 // A generic open-addressing hash map. Slots are packed `{key, value, state}` records.
+@allow_cycle
 public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     slots: MapSlot<K, V>[];
     defaults: V[];

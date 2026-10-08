@@ -30,7 +30,8 @@ pub(crate) fn rvalue_allocates(rv: &Rvalue) -> bool {
     }
     matches!(
         rv,
-        Rvalue::New { .. }
+        Rvalue::ObservedLoad(_)
+            | Rvalue::New { .. }
             | Rvalue::Tuple { .. }
             | Rvalue::UnionNew { .. }
             | Rvalue::Call { .. }

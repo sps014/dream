@@ -1,0 +1,4 @@
+class Node {
+    public next: Option<Node>;
+}
+fun main() {}

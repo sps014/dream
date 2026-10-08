@@ -41,30 +41,21 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let ty = self.operand_ty(o);
                 let a = self.operand(o);
                 let sym = retain_sym(&self.l.cx, ty);
-                let sym = if (self.private_init || self.private_builder) && sym == "dream_retain" {
-                    "dream_retain_acyclic"
-                } else { sym };
                 self.call(sym, &[a]);
             }
             Statement::Release(o) => {
                 let ty = self.operand_ty(o);
                 let a = self.operand(o);
-                let frame_gate = if let Operand::Copy(Place::Local(local)) = o {
-                    if self.poll_owned(*local) {
-                        let owner = V::u(self.self_.clone().unwrap());
-                        let gate = self.call_v("dream_cycle_store_begin", &[owner, V::s(Value::zero(self.h())), V::i32(0)]);
-                        self.clear_poll_edge(*local);
-                        Some(gate)
-                    } else { None }
-                } else { None };
+                if let Operand::Copy(Place::Local(local)) = o {
+                    self.clear_poll_edge(*local);
+                }
                 // Inline fast path: null check + decrement here; the free tail runs only on the
                 // last-ref transition.
                 if let Some(tail) = release_into_sym(&self.l.cx, ty) {
                     let a = self.as_ref(&a);
                     let nz = self.truthy(&a);
                     self.if_then(&nz, |fx| {
-                        let symbol = if fx.private_init || fx.private_builder { "dream_rc_last_acyclic" }
-                            else { crate::backend::shared::glue::last_sym(&fx.l.cx, ty) };
+                        let symbol = crate::backend::shared::glue::last_sym(&fx.l.cx, ty);
                         let last = fx.call_v(symbol, std::slice::from_ref(&a));
                         let last = fx.truthy(&last);
                         fx.if_then(&last, |fx| {
@@ -79,7 +70,6 @@ impl<'l, 'a> Fx<'l, 'a> {
                     };
                     self.call(&sym, &[a]);
                 }
-                if let Some(gate) = frame_gate { self.call("dream_cycle_store_end", &[gate]); }
             }
             Statement::Panic(o) => {
                 let a = self.operand(o);
@@ -149,6 +139,9 @@ impl<'l, 'a> Fx<'l, 'a> {
             Statement::ForceFree(o) => {
                 let a = self.operand(o);
                 self.call("dream_free", &[a]);
+                if let Operand::Copy(place) = o {
+                    self.clear_freed_place(place);
+                }
             }
             Statement::LockAcquire(o) => {
                 let a = self.lock_addr(o);
@@ -213,10 +206,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 if !self.f.locals[l.0 as usize].is_ref && !is_alias_value_local(self.f, *l) {
                     let v = self.read_local(*l);
                     if !self.poll_offsets.is_empty() {
-                        let owner = V::u(self.self_.clone().unwrap());
-                        let gate = self.call_v("dream_cycle_store_begin", &[owner, V::s(Value::zero(self.h())), V::i32(0)]);
                         self.clear_refs(self.f.local_ty(*l), &v);
-                        self.call("dream_cycle_store_end", &[gate]);
                     } else {
                         self.value_refs(self.f.local_ty(*l), &v, false);
                     }
@@ -262,22 +252,17 @@ impl<'l, 'a> Fx<'l, 'a> {
                 ty, variant, args, ..
             },
         ) = (place, rv)
-            && self.is_value(self.f.local_ty(*l)) && !is_value_place_alias(self.f, *l, rv) {
-                let dest = self.read_local(*l);
-                self.union_new_at(&dest, *ty, *variant, args);
-                return;
-            }
+            && self.is_value(self.f.local_ty(*l))
+            && !is_value_place_alias(self.f, *l, rv)
+        {
+            let dest = self.read_local(*l);
+            self.union_new_at(&dest, *ty, *variant, args);
+            return;
+        }
         if let (Place::Local(l), Rvalue::New { ty, ctor, args, .. }) = (place, rv) {
             if has_frame_buffer(self.mir, self.f, *l) {
                 let buf = self.frame_buf(*l);
-                let o = self.emit_new_in(
-                    *ty,
-                    ctor.as_ref().map(|c| c.def),
-                    args,
-                    Some(buf),
-                    crate::AllocPolicy::Tracked,
-                    false,
-                );
+                let o = self.emit_new_in(*ty, ctor.as_ref().map(|c| c.def), args, Some(buf), false);
                 self.write_local(*l, &o);
                 return;
             }

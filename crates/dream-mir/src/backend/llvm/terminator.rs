@@ -72,9 +72,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 if !self.f.is_async {
                     self.value_teardown(self.value_local_of(o));
                 }
-                if let Some(gate) = self.construction_gate.clone() {
-                    self.call("dream_cycle_store_end", &[gate]);
-                }
+
                 if self.l.sret.contains(&self.l.user_fn(self.f)) {
                     let size = elem_size(&self.l.cx, self.f.ret) as i64;
                     let src = self.operand(o);

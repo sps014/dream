@@ -155,7 +155,7 @@ fn analyze_simple_ctor(
                 assigned.insert(*field, ());
                 inits.push((*field, init));
             }
-            Statement::SourceLine(_) => {},
+            Statement::SourceLine(_) => {}
             _ => return None,
         }
     }
@@ -181,7 +181,6 @@ fn expand_in_function(
                         ty,
                         ctor: Some(ctor),
                         args,
-                        policy,
                     },
                 ) => {
                     let Some(inits) = ctor_inits.get(&ctor.def) else {
@@ -192,7 +191,6 @@ fn expand_in_function(
                                 ty,
                                 ctor: Some(ctor),
                                 args,
-                                policy,
                             },
                         ));
                         continue;
@@ -210,7 +208,6 @@ fn expand_in_function(
                                 ty,
                                 ctor: Some(ctor),
                                 args,
-                                policy,
                             },
                         ));
                         continue;
@@ -222,7 +219,6 @@ fn expand_in_function(
                             ty,
                             ctor: None,
                             args: vec![],
-                            policy,
                         },
                     ));
                     for (field, init) in inits {
@@ -548,7 +544,6 @@ mod tests {
                 ty: i.int(),
                 ctor: None,
                 args: vec![],
-                policy: crate::AllocPolicy::Tracked,
             },
         );
         b.assign(
@@ -596,7 +591,6 @@ mod tests {
                 ty: i.int(),
                 ctor: None,
                 args: vec![],
-                policy: crate::AllocPolicy::Tracked,
             },
         );
         b.push(Statement::Retain(Operand::Copy(Place::Local(o))));
@@ -646,7 +640,6 @@ mod tests {
                 ty: i.int(),
                 ctor: None,
                 args: vec![],
-                policy: crate::AllocPolicy::Tracked,
             },
         );
         b.assign(
@@ -675,7 +668,6 @@ mod tests {
                 ty: i.int(),
                 ctor: None,
                 args: vec![],
-                policy: crate::AllocPolicy::Tracked,
             },
         );
         b.assign(
@@ -695,13 +687,21 @@ mod tests {
         let interner = TypeInterner::new();
         let mut builder = FunctionBuilder::new("constructor", interner.void());
         let this = builder.new_param(interner.int(), Some("this".into()));
-        builder.assign(Place::Field { base: this, field: 0 }, Rvalue::Use(Operand::Const(Const::Int(1))));
+        builder.assign(
+            Place::Field {
+                base: this,
+                field: 0,
+            },
+            Rvalue::Use(Operand::Const(Const::Int(1))),
+        );
         builder.push(Statement::SourceLine(1));
         builder.terminate(Terminator::Return(None));
         let mut constructor = builder.finish();
         assert!(analyze_simple_ctor(&constructor, &interner).is_some());
         constructor.blocks[0].stmts.push(Statement::Print {
-            arg: Operand::Const(Const::Int(1)), ty: interner.int(), newline: true,
+            arg: Operand::Const(Const::Int(1)),
+            ty: interner.int(),
+            newline: true,
         });
         assert!(analyze_simple_ctor(&constructor, &interner).is_none());
     }
@@ -736,12 +736,11 @@ mod tests {
                 def: class_def,
                 ty: i.int(),
                 ctor: Some(crate::NewCtor {
-                    batched: false,
+                    field_init: false,
                     def: ctor_def,
                     take_params: vec![],
                 }),
                 args: vec![Operand::Const(Const::Int(7))],
-                policy: crate::AllocPolicy::Tracked,
             },
         );
         caller_b.assign(
@@ -809,12 +808,11 @@ mod tests {
                 def: class_def,
                 ty: class_ty,
                 ctor: Some(crate::NewCtor {
-                    batched: false,
+                    field_init: false,
                     def: ctor_def,
                     take_params: vec![],
                 }),
                 args: vec![Operand::Copy(Place::Local(s))],
-                policy: crate::AllocPolicy::Tracked,
             },
         );
         caller_b.terminate(Terminator::Return(None));

@@ -21,6 +21,10 @@ pub(super) fn insert_value_struct_moves(
             && (d.name.is_some() || defined_only_by_producers(func, idx as u32))
             && d.name.as_deref() != Some("this")
     };
+    let owns_source = |local: u32| {
+        let decl = &func.locals[local as usize];
+        !decl.borrows_refs && (!func.params.contains(&Local(local)) || decl.is_take)
+    };
     let live_out = liveness::live_out(func);
     let mut retain_before: Vec<(usize, usize, u32, u32)> = Vec::new();
     let mut retain_after: Vec<(usize, usize, u32)> = Vec::new();
@@ -38,24 +42,25 @@ pub(super) fn insert_value_struct_moves(
                 Rvalue::Use(Operand::Copy(Place::Local(src))),
             ) = stmt
                 && dest.0 != src.0
-                    && is_value_src(src.0 as usize)
-                    && func.locals[dest.0 as usize].name.is_some()
-                    && !func.locals[dest.0 as usize].is_ref
-                    && interner.is_value_type(func.locals[dest.0 as usize].ty)
-                {
-                    if live_after_stmt(func, &live_out, bi, si, src.0) {
-                        retain_after.push((bi, si, dest.0));
-                    } else {
-                        kill_after.push((bi, si, src.0));
-                    }
+                && is_value_src(src.0 as usize)
+                && func.locals[dest.0 as usize].name.is_some()
+                && !func.locals[dest.0 as usize].is_ref
+                && interner.is_value_type(func.locals[dest.0 as usize].ty)
+            {
+                if !owns_source(src.0) || live_after_stmt(func, &live_out, bi, si, src.0) {
+                    retain_after.push((bi, si, dest.0));
+                } else {
+                    kill_after.push((bi, si, src.0));
                 }
+            }
             let mut counts: std::collections::BTreeMap<u32, u32> =
                 std::collections::BTreeMap::new();
             for local in value_arg_locals(func, stmt, interner, &is_value_src) {
                 *counts.entry(local).or_insert(0) += 1;
             }
             for (local, n) in counts {
-                let last_use = !live_after_stmt(func, &live_out, bi, si, local);
+                let last_use =
+                    owns_source(local) && !live_after_stmt(func, &live_out, bi, si, local);
                 let retains = if last_use { n.saturating_sub(1) } else { n };
                 if retains > 0 {
                     retain_before.push((bi, si, local, retains));
@@ -202,16 +207,18 @@ fn value_copy_root(func: &MirFunction, local: u32) -> u32 {
                     src = Some(s.0);
                 }
             } else if let Statement::Assign(Place::Local(d), _) = stmt
-                && d.0 == local {
-                    defs += 1;
-                    src = None;
-                }
+                && d.0 == local
+            {
+                defs += 1;
+                src = None;
+            }
         }
     }
     if defs == 1
-        && let Some(s) = src {
-            return value_copy_root(func, s);
-        }
+        && let Some(s) = src
+    {
+        return value_copy_root(func, s);
+    }
     local
 }
 
@@ -228,12 +235,12 @@ pub(super) fn mark_returned_value_locals_moved(
         if let Terminator::Return(Some(Operand::Copy(Place::Local(l))))
         | Terminator::AsyncComplete(Some(Operand::Copy(Place::Local(l)))) = &block.terminator
             && interner.is_value_type(func.locals[l.0 as usize].ty)
-                && !func.locals[l.0 as usize].is_ref
-                && !func.locals[l.0 as usize].manual_drop
-            {
-                func.locals[l.0 as usize].manual_drop = true;
-                *changed = true;
-            }
+            && !func.locals[l.0 as usize].is_ref
+            && !func.locals[l.0 as usize].manual_drop
+        {
+            func.locals[l.0 as usize].manual_drop = true;
+            *changed = true;
+        }
     }
 }
 

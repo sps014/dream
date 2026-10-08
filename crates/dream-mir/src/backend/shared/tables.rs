@@ -1,7 +1,7 @@
 //! Module-wide tables: function symbols, runtime type tags, and the interned string-literal set.
 
 use super::abi_types::{c_ident, import_call_name};
-use super::entry::{entry_reports_error, ERROR_PREFIX};
+use super::entry::{ERROR_PREFIX, entry_reports_error};
 use super::symbols::func_symbol;
 use crate::abi::TAG_STRUCT_BASE;
 use crate::{Const, Mir, Operand, Place, Rvalue, Statement, Terminator};
@@ -289,7 +289,8 @@ fn strings_in_term(t: &Terminator, out: &mut Vec<String>) {
 fn strings_in_rv(rv: &Rvalue, out: &mut Vec<String>) {
     match rv {
         Rvalue::Move { .. } => {}
-        Rvalue::Use(o)
+        Rvalue::ObservedLoad(o)
+        | Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::CheckedNeg(o)
         | Rvalue::StrLen(o)

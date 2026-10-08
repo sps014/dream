@@ -1,6 +1,7 @@
 import system;
 import system.collections;
 
+@allow_cycle
 class PrivateTree {
     public left: Option<PrivateTree>;
     public right: Option<PrivateTree>;
@@ -28,6 +29,7 @@ fun escaped_tree(): int {
     keep.push(build_tree(4));
     return count_tree(keep[0]);
 }
+@allow_cycle
 class CallbackTree {
     public next: Option<CallbackTree>;
     public constructor() {
@@ -39,6 +41,7 @@ class CallbackTree {
 fun callback_tree(): void {
     let node = CallbackTree();
     node.next = Option.Some(node);
+    node.next = Option.None;
 }
 fun main(): void {
     System.println(private_tree());

@@ -273,9 +273,10 @@ fn const_int_globals(hir: &Hir, interner: &TypeInterner) -> HashMap<u32, i64> {
             continue;
         }
         if let Some(init) = &g.init
-            && let Some(v) = const_int_value(init, &hir.layouts, interner) {
-                m.insert(g.id.0, v);
-            }
+            && let Some(v) = const_int_value(init, &hir.layouts, interner)
+        {
+            m.insert(g.id.0, v);
+        }
     }
     m
 }
@@ -489,17 +490,19 @@ impl Lowerer<'_> {
                     array,
                     new_len,
                 } = &value.kind
-                    && same_place_expr(place, array) && is_pure_place(place) {
-                        let dest = self.lower_place(place);
-                        let new_len_op = self.lower_operand(new_len);
-                        let rv = Rvalue::ArrayRealloc {
-                            elem_ty: *elem_ty,
-                            array: Operand::Copy(dest.clone()),
-                            new_len: new_len_op,
-                        };
-                        self.b.assign(dest, rv);
-                        return;
-                    }
+                    && same_place_expr(place, array)
+                    && is_pure_place(place)
+                {
+                    let dest = self.lower_place(place);
+                    let new_len_op = self.lower_operand(new_len);
+                    let rv = Rvalue::ArrayRealloc {
+                        elem_ty: *elem_ty,
+                        array: Operand::Copy(dest.clone()),
+                        new_len: new_len_op,
+                    };
+                    self.b.assign(dest, rv);
+                    return;
+                }
                 let rv = self.lower_rvalue(value);
                 let p = self.lower_place(place);
                 self.b.assign(p, rv);
@@ -598,8 +601,24 @@ impl Lowerer<'_> {
                 // `Buffer.free<T>(arr)` (`@unsafe`) lowers to a dedicated void statement (no result
                 // to materialize, unlike the `Rvalue::ArrayRealloc` expression form).
                 HExprKind::ForceFree(array) => {
-                    let o = self.lower_operand(array);
-                    self.b.push(Statement::ForceFree(o));
+                    // Keep the owning slot identifiable so free can clear it without a second drop.
+                    let o = match &array.kind {
+                        HExprKind::Field { obj, field } => Operand::Copy(Place::Field {
+                            base: self.operand_into_local(obj),
+                            field: *field,
+                        }),
+                        HExprKind::Index { array, index } => {
+                            let base = self.operand_into_local(array);
+                            let index = self.lower_operand(index);
+                            Operand::Copy(Place::index(base, index))
+                        }
+                        _ => self.lower_operand(array),
+                    };
+                    self.b.push(Statement::ForceFree(o.clone()));
+                    if let Operand::Copy(place) = o {
+                        self.b
+                            .assign(place, Rvalue::Use(Operand::Const(Const::Null)));
+                    }
                 }
                 HExprKind::ArraySetUnchecked {
                     array,
@@ -793,9 +812,10 @@ mod tests {
             Terminator::If { .. }
         ));
         // at least one block returns.
-        assert!(mir
-            .blocks
-            .iter()
-            .any(|b| matches!(b.terminator, Terminator::Return(_))));
+        assert!(
+            mir.blocks
+                .iter()
+                .any(|b| matches!(b.terminator, Terminator::Return(_)))
+        );
     }
 }

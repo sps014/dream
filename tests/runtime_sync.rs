@@ -24,7 +24,7 @@ fn lock_registry_reclaims_reused_addresses_and_checks_ownership() {
         .arg(native.join("platform.c"));
     for unit in [
         "heap.c",
-        "cycles.c",
+        "ownership.c",
         "heap_maps.c",
         "publish.c",
         "region.c",

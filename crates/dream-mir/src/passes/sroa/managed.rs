@@ -13,8 +13,8 @@
 use super::zero_for;
 use crate::analysis::escape::{Escape, LocalEscape, ParamSummaries};
 use crate::analysis::object_life::lifetime;
-use crate::passes::licm::{stmt_reads, terminator_reads};
 use crate::passes::ModulePass;
+use crate::passes::licm::{stmt_reads, terminator_reads};
 use crate::rc_store::store_adopts;
 use crate::visit::{stmt_operands_mut, terminator_operands_mut};
 use crate::{
@@ -84,8 +84,7 @@ fn promote_one(f: &mut MirFunction, interner: &TypeInterner, layouts: &LayoutTab
 
 /// Every field's type, or `None` if the object must stay whole.
 fn field_types(ty: TypeId, interner: &TypeInterner, layouts: &LayoutTable) -> Option<Vec<TypeId>> {
-    if crate::ownership::cycle_capable(layouts, interner, ty)
-        || !matches!(interner.kind(ty), TyKind::Struct(..))
+    if !matches!(interner.kind(ty), TyKind::Struct(..))
         || interner.is_value_type(ty)
         || interner.is_shared_type(ty)
     {
@@ -134,21 +133,22 @@ fn only_field_uses(f: &MirFunction, members: &BTreeSet<Local>) -> bool {
             match s {
                 Statement::Assign(Place::Local(d), _) if members.contains(d) => continue,
                 Statement::Retain(op) | Statement::Release(op) if is_member(op, members) => {
-                    continue
+                    continue;
                 }
                 _ => {}
             }
             let mut s = s.clone();
             stmt_operands_mut(&mut s, &mut hide);
             if let Statement::Assign(Place::Field { base, .. }, rv) = &s
-                && members.contains(base) {
-                    if matches!(rv, Rvalue::ArrayRealloc { .. })
-                        || mentions(&Statement::Assign(Place::Local(hidden), rv.clone()))
-                    {
-                        return false;
-                    }
-                    continue;
+                && members.contains(base)
+            {
+                if matches!(rv, Rvalue::ArrayRealloc { .. })
+                    || mentions(&Statement::Assign(Place::Local(hidden), rv.clone()))
+                {
+                    return false;
                 }
+                continue;
+            }
             if mentions(&s) {
                 return false;
             }
@@ -215,22 +215,23 @@ fn transform(
                 continue;
             }
             if let Statement::Assign(Place::Local(d), rv) = &s
-                && members.contains(d) {
-                    if matches!(rv, Rvalue::New { .. }) {
-                        for (i, &p) in promo.iter().enumerate() {
-                            let zero = if is_ref[i] {
-                                Const::Null
-                            } else {
-                                zero_for(interner, fields[i])
-                            };
-                            block.stmts.push(Statement::Assign(
-                                Place::Local(p),
-                                Rvalue::Use(Operand::Const(zero)),
-                            ));
-                        }
+                && members.contains(d)
+            {
+                if matches!(rv, Rvalue::New { .. }) {
+                    for (i, &p) in promo.iter().enumerate() {
+                        let zero = if is_ref[i] {
+                            Const::Null
+                        } else {
+                            zero_for(interner, fields[i])
+                        };
+                        block.stmts.push(Statement::Assign(
+                            Place::Local(p),
+                            Rvalue::Use(Operand::Const(zero)),
+                        ));
                     }
-                    continue;
                 }
+                continue;
+            }
             stmt_operands_mut(&mut s, &mut expose);
             let Statement::Assign(Place::Field { base, field }, rv) = s else {
                 block.stmts.push(s);

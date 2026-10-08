@@ -63,9 +63,6 @@ impl Fx<'_, '_> {
         let action = RefAction::Publish(owner.clone());
         if self.is_value(ty) {
             self.walk_value_refs(ty, base, &action);
-        } else if self.is_rc(ty) && self.store_checked {
-            let child = self.as_ref(base);
-            self.call("dream_publish_edge", &[owner.clone(), child]);
         } else if self.is_rc(ty) {
             self.ref_action(ty, base, &action);
         }

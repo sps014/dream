@@ -1,5 +1,6 @@
+use crate::Const;
 use crate::{Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
-use dream_types::TypeInterner;
+use dream_types::{DefId, TypeInterner};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) fn run(mir: &mut Mir, interner: &TypeInterner) {
@@ -13,8 +14,7 @@ pub(super) fn run(mir: &mut Mir, interner: &TypeInterner) {
         .iter()
         .filter_map(|f| {
             let this = *f.params.first()?;
-            super::construction_builders::null_initializer(mir, interner, f.def, f.local_ty(this))
-                .then_some(f.def)
+            null_initializer(mir, interner, f.def, f.local_ty(this)).then_some(f.def)
         })
         .collect();
     for f in &mut mir.functions {
@@ -27,12 +27,11 @@ pub(super) fn run(mir: &mut Mir, interner: &TypeInterner) {
                     // no observer and require no constructor call or ownership boundary.
                     *ctor = None;
                 } else {
-                    initializer.batched = safe.get(&initializer.def).copied().unwrap_or(false);
+                    initializer.field_init = safe.get(&initializer.def).copied().unwrap_or(false);
                 }
             }
         }
     }
-    super::construction_builders::run(mir, interner);
 }
 
 fn simple_initializer(f: &MirFunction, mir: &Mir, interner: &TypeInterner) -> bool {
@@ -40,9 +39,7 @@ fn simple_initializer(f: &MirFunction, mir: &Mir, interner: &TypeInterner) -> bo
         return false;
     }
     let this = f.params[0];
-    if !crate::ownership::cycle_capable(&mir.layouts, interner, f.local_ty(this)) {
-        return false;
-    }
+
     let Some(layout) = mir.layouts.get(f.local_ty(this)) else {
         return false;
     };
@@ -99,6 +96,46 @@ fn simple_initializer(f: &MirFunction, mir: &Mir, interner: &TypeInterner) -> bo
     !fields.is_empty()
 }
 
+pub(super) fn null_initializer(
+    mir: &Mir,
+    interner: &TypeInterner,
+    def: DefId,
+    ty: dream_types::TypeId,
+) -> bool {
+    let Some(f) = mir
+        .functions
+        .iter()
+        .find(|f| f.def == def && f.instance.is_empty())
+    else {
+        return false;
+    };
+    if f.is_async || f.params.len() != 1 || f.local_ty(f.params[0]) != ty || f.blocks.len() != 1 {
+        return false;
+    }
+    let this = f.params[0];
+    matches!(f.blocks[0].terminator, Terminator::Return(None))
+        && f.blocks[0].stmts.iter().all(|s| match s {
+            Statement::SourceLine(_) | Statement::Nop => true,
+            Statement::Assign(Place::Field { base, .. }, value) if *base == this => match value {
+                Rvalue::Use(Operand::Const(Const::Null)) => true,
+                Rvalue::UnionNew {
+                    ty, variant, args, ..
+                } => {
+                    interner.is_niche_union(*ty)
+                        && args.is_empty()
+                        && mir
+                            .layouts
+                            .unions
+                            .get(ty)
+                            .and_then(|layout| layout.variants.get(*variant))
+                            .is_some_and(|variant| variant.fields.is_empty())
+                }
+                _ => false,
+            },
+            _ => false,
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,7 +144,7 @@ mod tests {
     use dream_types::{DefKind, TypeCtx};
 
     #[test]
-    fn only_fresh_field_initialization_can_hold_the_runtime_gate() {
+    fn fresh_initialization_rejects_observable_work() {
         for variant in 0..7 {
             let mut ctx = TypeCtx::new();
             let def = ctx.register(DefKind::Struct, "Node", vec![]);

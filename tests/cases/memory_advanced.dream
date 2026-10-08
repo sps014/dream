@@ -1,4 +1,5 @@
 import system;
+@allow_cycle
 class Node {
     val: int;
     next: Option<Node>;

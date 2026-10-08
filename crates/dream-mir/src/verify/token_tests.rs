@@ -55,9 +55,11 @@ fn an_ignored_owning_call_result_must_be_materialized_by_lowering() {
     };
     f.push(Statement::Call { callee, args });
     f.terminate(Terminator::Return(None));
-    assert!(check(&f.finish(), &ctx.interner)
-        .iter()
-        .any(|v| v.msg.contains("explicit destination")));
+    assert!(
+        check(&f.finish(), &ctx.interner)
+            .iter()
+            .any(|v| v.msg.contains("explicit destination"))
+    );
 }
 
 #[test]
@@ -196,9 +198,11 @@ fn a_container_move_cannot_zero_untransferred_credits() {
         Rvalue::Move { src: x, cast: None },
     );
     f.terminate(Terminator::Return(None));
-    assert!(check(&f.finish(), &ctx.interner)
-        .iter()
-        .any(|v| v.msg.contains("overwritten")));
+    assert!(
+        check(&f.finish(), &ctx.interner)
+            .iter()
+            .any(|v| v.msg.contains("overwritten"))
+    );
 }
 
 #[test]
@@ -224,9 +228,11 @@ fn every_incoming_path_must_balance_before_exit() {
     f.terminate(Terminator::Goto(join));
     f.switch_to(join);
     f.terminate(Terminator::Return(None));
-    assert!(check(&f.finish(), &ctx.interner)
-        .iter()
-        .any(|v| v.block == join.0 as usize && v.msg.contains("function exit")));
+    assert!(
+        check(&f.finish(), &ctx.interner)
+            .iter()
+            .any(|v| v.block == join.0 as usize && v.msg.contains("function exit"))
+    );
 }
 
 #[test]
@@ -329,9 +335,11 @@ fn awaited_results_cannot_overwrite_a_live_owned_slot() {
     });
     f.switch_to(resume);
     f.terminate(Terminator::AsyncComplete(Some(copy(dest))));
-    assert!(check(&f.finish(), &ctx.interner)
-        .iter()
-        .any(|v| v.msg.contains("overwritten")));
+    assert!(
+        check(&f.finish(), &ctx.interner)
+            .iter()
+            .any(|v| v.msg.contains("overwritten"))
+    );
 }
 
 #[test]
@@ -365,4 +373,33 @@ fn released_await_destinations_must_be_cleared_before_cancellation_can_observe_t
             matches!(f.blocks[resume.0 as usize].terminator, Terminator::AsyncComplete(Some(Operand::Copy(Place::Local(l)))) if l == dest)
         );
     }
+}
+
+#[test]
+fn reallocation_and_unsafe_free_discharge_the_original_token() {
+    let mut ctx = TypeCtx::new();
+    let elem = ctx.interner.int();
+    let ty = ctx.interner.array(elem);
+    let mut f = FunctionBuilder::new("resize", ctx.interner.void());
+    let array = f.new_local(ty, None);
+    f.assign(
+        Place::Local(array),
+        Rvalue::ArrayNew {
+            elem_ty: elem,
+            len: Operand::Const(Const::Int(3)),
+            closure_env: false,
+        },
+    );
+    f.assign(
+        Place::Local(array),
+        Rvalue::ArrayRealloc {
+            elem_ty: elem,
+            array: copy(array),
+            new_len: Operand::Const(Const::Int(5)),
+        },
+    );
+    f.push(Statement::ForceFree(copy(array)));
+    null(&mut f, array);
+    f.terminate(Terminator::Return(None));
+    assert!(check(&f.finish(), &ctx.interner).is_empty());
 }

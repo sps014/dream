@@ -300,7 +300,8 @@ fn collect_rvalue_types(rv: &Rvalue, seed: &mut impl FnMut(TypeId)) {
             seed(*sig);
             seed(*ret);
         }
-        Rvalue::Use(_)
+        Rvalue::ObservedLoad(_)
+        | Rvalue::Use(_)
         | Rvalue::Select { .. }
         | Rvalue::Binary(_, _, _)
         | Rvalue::CheckedBinary(_, _, _)
@@ -708,7 +709,8 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
             collect_global_reads_operand(then_val, out);
             collect_global_reads_operand(else_val, out);
         }
-        Rvalue::Use(o)
+        Rvalue::ObservedLoad(o)
+        | Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::CheckedNeg(o)
         | Rvalue::ArrayLen(o)

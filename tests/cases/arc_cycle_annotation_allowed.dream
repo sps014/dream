@@ -1,0 +1,12 @@
+import system;
+@allow_cycle
+class Node {
+    public next: Option<Node>;
+    public constructor() { this.next = Option.None; }
+    del() { System.println("drop"); }
+}
+fun main() {
+    let node = Node();
+    node.next = Option.Some(node);
+    node.next = Option.None;
+}

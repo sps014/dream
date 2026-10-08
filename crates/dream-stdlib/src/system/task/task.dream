@@ -130,6 +130,7 @@ public class Task {
 }
 
 // Owns the spawn-time funcbox and terminates the thread when dropped (after `.await` or Future cancel).
+@allow_cycle
 class TaskSession {
     id: int;
     sync_body: fun(string): string;

@@ -22,7 +22,8 @@ pub(super) fn rvalue_local_operands(rv: &Rvalue) -> Vec<u32> {
     let mut ops: Vec<&Operand> = Vec::new();
     match rv {
         Rvalue::Move { src, .. } => out.push(src.0),
-        Rvalue::Use(o)
+        Rvalue::ObservedLoad(o)
+        | Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::CheckedNeg(o)
         | Rvalue::ArrayLen(o)

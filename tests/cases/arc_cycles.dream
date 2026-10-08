@@ -1,5 +1,6 @@
 import system;
 
+@allow_cycle
 class CycleNode {
     public id: int;
     public next: Option<CycleNode>;
@@ -15,12 +16,15 @@ class CycleNode {
 fun self_cycle() {
     let node = CycleNode(1);
     node.next = Option.Some(node);
+    node.next = Option.None;
 }
 fun mutual_cycle() {
     let first = CycleNode(2);
     let second = CycleNode(3);
     first.next = Option.Some(second);
     second.next = Option.Some(first);
+    first.next = Option.None;
+    second.next = Option.None;
 }
 fun main() {
     self_cycle();

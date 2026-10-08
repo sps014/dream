@@ -13,6 +13,7 @@ fun compare_ascending<T : Comparable<T>>(borrow a: T, borrow b: T): int {
 //
 // Invariant: `0 <= count <= items.length`. Every mutation of `items`/`count` preserves it, which is
 // what makes the `Buffer.get_unchecked`/`set_unchecked` accesses on `[0, count)` sound.
+@allow_cycle
 public class List<T> : IndexedCollection<T> {
     items: T[];
     count: int;

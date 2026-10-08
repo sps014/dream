@@ -1,0 +1,4 @@
+class ErasedOwner {
+    public value: object;
+}
+fun main() {}

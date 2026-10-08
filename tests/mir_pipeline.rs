@@ -199,7 +199,11 @@ fn release_opt_ll(source: &str) -> String {
         .arg(&out)
         .output()
         .unwrap();
-    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
     std::fs::read_to_string(out.with_extension("opt.ll")).unwrap()
 }
 
@@ -241,20 +245,29 @@ fn spans_scalarize_and_drop_bounds_checks() {
     );
     let span_len = common::ir_func_body(&ir, "span_len");
     for needle in ["alloca", "atomic"] {
-        assert!(!span_len.contains(needle), "`{needle}` left in span_len:\n{span_len}");
+        assert!(
+            !span_len.contains(needle),
+            "`{needle}` left in span_len:\n{span_len}"
+        );
     }
     assert!(
-        !span_len.lines().any(|l| l.contains("call ") && !l.contains("@llvm.")),
+        !span_len
+            .lines()
+            .any(|l| l.contains("call ") && !l.contains("@llvm.")),
         "runtime call left in span_len:\n{span_len}"
     );
     let sum_span = common::ir_func_body(&ir, "sum_span");
-    assert!(sum_span.contains("vector.body"), "sum_span did not vectorize:\n{sum_span}");
+    assert!(
+        sum_span.contains("vector.body"),
+        "sum_span did not vectorize:\n{sum_span}"
+    );
 }
 
 #[cfg(feature = "native")]
 #[test]
 fn spans_over_private_owned_strings_do_not_count_references_in_the_loop() {
-    let ir = release_opt_ll(r#"
+    let ir = release_opt_ll(
+        r#"
         import system;
         @noinline
         fun owned_span(borrow suffix: string, n: int): int {
@@ -272,11 +285,23 @@ fn spans_over_private_owned_strings_do_not_count_references_in_the_loop() {
         fun main(): void {
             System.println(owned_span(System.env_or("DREAM_SPAN_INPUT", "!"), 100));
         }
-    "#);
+    "#,
+    );
     let body = common::ir_func_body(&ir, "owned_span");
-    assert_eq!(body.matches("@dream_rc_last_slow(").count(), 1,
-        "only the original source owner's cleanup may remain:\n{body}");
-    assert!(!body.contains("atomicrmw"), "a span retained its private source:\n{body}");
+    assert_eq!(
+        body.matches("@dream_rc_last_slow(").count(),
+        2,
+        "only the observed/unobserved branches of the source owner's cleanup may remain:\n{body}"
+    );
+    assert_eq!(
+        body.matches("@dream_free(").count(),
+        1,
+        "one source owner: {body}"
+    );
+    assert!(
+        !body.contains("atomicrmw"),
+        "a span retained its private source:\n{body}"
+    );
 }
 
 #[cfg(feature = "native")]
@@ -345,51 +370,91 @@ fn value_struct_constructors_and_borrow_parameters_elide_arc() {
         }
         "#,
     );
-    for name in ["array_view", "readonly_view", "struct_view", "borrowed_array", "borrowed_string", "borrowed_struct", "span_equals", "string_equals"] {
+    for name in [
+        "array_view",
+        "readonly_view",
+        "struct_view",
+        "borrowed_array",
+        "borrowed_string",
+        "borrowed_struct",
+        "span_equals",
+        "string_equals",
+    ] {
         let body = common::ir_func_body(&ir, name);
-        for operation in ["atomic", "@dream_retain", "@dream_release", "@dream_malloc", "@dream_str_sub"] {
-            assert!(!body.contains(operation), "{operation} left in {name}:\n{body}");
+        for operation in [
+            "atomic",
+            "@dream_retain",
+            "@dream_release",
+            "@dream_malloc",
+            "@dream_str_sub",
+        ] {
+            assert!(
+                !body.contains(operation),
+                "{operation} left in {name}:\n{body}"
+            );
         }
-        assert!(!body.contains("alloca"), "value did not scalarize in {name}:\n{body}");
+        assert!(
+            !body.contains("alloca"),
+            "value did not scalarize in {name}:\n{body}"
+        );
     }
     for name in ["array_view", "readonly_view", "struct_view"] {
         let body = common::ir_func_body(&ir, name);
-        assert!(body.contains("dream_panic"), "constructor validation lost in {name}:\n{body}");
+        assert!(
+            body.contains("dream_panic"),
+            "constructor validation lost in {name}:\n{body}"
+        );
     }
 }
-
 
 #[test]
 fn source_weak_forest_builder_batches_niche_null_initialization() {
     let fixture = include_str!("cases/arc_weak_forest.dream");
     let (_, fixture) = fixture.split_once("class ForestNode").unwrap();
     let (fixture, _) = fixture.split_once("fun main()").unwrap();
-    let source = format!("enum Option<T> {{ Some(T), None }} class ForestNode{fixture} fun main(): void {{ let root = forest(5); }}");
+    let source = format!(
+        "enum Option<T> {{ Some(T), None }} @allow_cycle class ForestNode{fixture} fun main(): void {{ let root = forest(5); }}"
+    );
     common::compile_test_pipeline(&source, |hir, interner| {
         let mut mir = lower_program(hir, interner);
         let mut dump = dream_mir::passes::MirDump::default();
         dream_mir::passes::optimize_module_opts(&mut mir, interner, true, &mut dump);
         dream_mir::passes::run_function_pipelines(
-            &mut mir, interner, &PassManager::release_pipeline(),
-            &PassManager::async_poll_pipeline(), &mut dump,
+            &mut mir,
+            interner,
+            &PassManager::release_pipeline(),
+            &PassManager::async_poll_pipeline(),
+            &mut dump,
         );
         dream_mir::passes::run_late_module_passes(&mut mir, interner, &mut dump);
-        let forest = mir.functions.iter().find(|function| function.name == "forest").unwrap();
-        assert_eq!(forest.batched_construction, Some(dream_mir::AllocPolicy::Tracked));
-        assert!(forest.blocks.iter().flat_map(|b| &b.stmts).any(|statement| {
-            matches!(statement, dream_mir::Statement::Assign(_, dream_mir::Rvalue::New { ctor: None, .. }))
-        }));
+        let forest = mir
+            .functions
+            .iter()
+            .find(|function| function.name == "forest")
+            .unwrap();
+        assert!(
+            forest
+                .blocks
+                .iter()
+                .flat_map(|b| &b.stmts)
+                .any(|statement| {
+                    matches!(
+                        statement,
+                        dream_mir::Statement::Assign(_, dream_mir::Rvalue::New { ctor: None, .. })
+                    )
+                })
+        );
         let ir = common::emit_ll(&mir, interner);
         let ordinary = common::ir_func_body(&ir, "forest");
-        assert!(ordinary.contains("dream_cycle_construction_begin"));
-        assert!(!ordinary.contains("dream_cycle_graph_begin"));
+        assert!(!ordinary.contains("dream_cycle_"));
     });
 }
 
 #[test]
-fn private_recursive_builder_checks_the_region_only_at_its_outer_call() {
+fn recursive_builder_uses_plain_arc_without_collector_clones() {
     let source = r#"
         enum Option<T> { Some(T), None }
+        @allow_cycle
         class Tree {
             public left: Option<Tree>;
             public right: Option<Tree>;
@@ -415,22 +480,18 @@ fn private_recursive_builder_checks_the_region_only_at_its_outer_call() {
         let mut dump = dream_mir::passes::MirDump::disabled();
         dream_mir::passes::optimize_module_opts(&mut mir, interner, true, &mut dump);
         dream_mir::passes::run_function_pipelines(
-            &mut mir, interner, &PassManager::release_pipeline(),
-            &PassManager::async_poll_pipeline(), &mut dump,
+            &mut mir,
+            interner,
+            &PassManager::release_pipeline(),
+            &PassManager::async_poll_pipeline(),
+            &mut dump,
         );
         dream_mir::passes::run_late_module_passes(&mut mir, interner, &mut dump);
-        let builder = mir.functions.iter().find(|f| f.name == "build_tree").unwrap();
-        assert_eq!(builder.batched_construction, Some(dream_mir::AllocPolicy::Private));
         let ir = common::emit_ll(&mir, interner);
-        let body = common::ir_func_body(&ir, "build_tree__private_graph");
-        assert!(!body.contains("dream_cycle_graph_begin"));
-        assert!(body.contains("@build_tree__private_graph("));
-        let tracked = common::ir_func_body(&ir, "build_tree__tracked_graph");
-        assert!(!tracked.contains("dream_cycle_graph_begin"));
-        assert!(tracked.contains("@build_tree__tracked_graph("));
-        let ordinary = common::ir_func_body(&ir, "build_tree");
-        assert!(ordinary.contains("dream_cycle_graph_begin"));
-        assert!(ordinary.contains("@build_tree__tracked_graph("));
-        assert!(ordinary.contains("dream_cycle_graph_end"));
+        let body = common::ir_func_body(&ir, "build_tree");
+        assert!(!body.contains("dream_cycle_"));
+        assert!(!ir.contains("__tracked_graph"));
+        assert!(!ir.contains("__private_graph"));
+        assert!(body.contains("@build_tree("));
     });
 }

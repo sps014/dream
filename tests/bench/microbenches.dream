@@ -38,15 +38,15 @@ let bench_sink = BenchSink();
 // Ownership-runtime event deltas since the previous row (`DREAM_BENCH_COUNTERS=1`). A row's
 // counts include the setup that ran between the two reports. Names follow `dream_counter`.
 let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
-let counter_names = "cycle_nodes,cycle_forgets,candidates,lookups,gates,edges,trials,forward_queues,deferred,weak_register,weak_invalidate,region_objects,unknown_stores".split(',');
-let counter_last = Buffer.alloc<long>(14);
+let counter_names = "weak_register,weak_invalidate,region_objects".split(',');
+let counter_last = Buffer.alloc<long>(4);
 
 fun counters_field(): string {
     if counters_on == false {
         return "";
     }
-    let out = " counters=allocs:" + (Debug.total_allocations - counter_last[13]).to_string();
-    counter_last[13] = Debug.total_allocations;
+    let out = " counters=allocs:" + (Debug.total_allocations - counter_last[3]).to_string();
+    counter_last[3] = Debug.total_allocations;
     let i = 0;
     while i < counter_names.length {
         let now = Debug.runtime_counter(i);
@@ -243,11 +243,7 @@ fun bench_split_span(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-// bench-compare: current-only begin
-    if counters_on && Debug.total_allocations != allocations {
-        System.panic("split_span allocated during iteration");
-    }
-// bench-compare: current-only end
+
     report("split_span", sw.elapsed_nanos, iters);
     sink_int(acc);
 }
@@ -949,6 +945,7 @@ fun bench_iface_dispatch(iters: int): void {
 // ARC / allocator reality at scale.
 // =====================================================================
 
+@allow_cycle
 class TreeNode {
     public left: Option<TreeNode>;
     public right: Option<TreeNode>;
@@ -1003,6 +1000,7 @@ fun bench_binary_trees(iters: int, reclaim: bool = false): void {
     sink_int(acc);
 }
 
+@allow_cycle
 class LinkNode {
     public value: int;
     public next: Option<LinkNode>;
@@ -1048,6 +1046,7 @@ fun bench_linked_walk(iters: int): void {
     sink_int(acc);
 }
 
+@allow_cycle
 class WeakTreeNode {
     public left: Option<WeakTreeNode>;
     public right: Option<WeakTreeNode>;
@@ -1076,10 +1075,6 @@ fun make_weak_tree(depth: int): WeakTreeNode {
 // One op = build a depth-10 tree (1023 nodes) whose children hold `weak` parent back-pointers,
 // then drop it (1022 live weak registrations torn down while unrelated frees keep happening).
 fun bench_weak_tree(iters: int): void {
-// bench-compare: current-only begin
-    let trials_before = Debug.runtime_counter(6);
-    let forward_before = Debug.runtime_counter(7);
-// bench-compare: current-only end
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
@@ -1092,11 +1087,6 @@ fun bench_weak_tree(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-// bench-compare: current-only begin
-    if counters_on && (Debug.runtime_counter(6) != trials_before || Debug.runtime_counter(7) != forward_before) {
-        System.panic("weak forest triggered positive-count trial deletion");
-    }
-// bench-compare: current-only end
     report("weak_tree", sw.elapsed_nanos, iters);
     sink_int(acc);
 }

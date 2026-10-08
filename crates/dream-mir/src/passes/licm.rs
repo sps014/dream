@@ -14,8 +14,8 @@
 //! block; latch (back) edges keep targeting the header. Empty leftover statements become `Nop`s for
 //! DCE to clear.
 
-use super::cfg::DomTree;
 use super::MirPass;
+use super::cfg::DomTree;
 use crate::{
     BasicBlock, BinOp, BlockId, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
 };
@@ -383,7 +383,8 @@ fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
             operand_reads(then_val, f);
             operand_reads(else_val, f);
         }
-        Rvalue::Use(o)
+        Rvalue::ObservedLoad(o)
+        | Rvalue::Use(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)

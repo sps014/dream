@@ -98,17 +98,7 @@ dream_ptr dream_region_try_malloc(dream_size size, int32_t tag) {
         return 0;
     }
     const dream_type_info *info = dream_type_info_for_tag(tag & TAG_VALUE_MASK);
-    /* Bulk reclamation would strand a collector registration; only `dream_malloc_private`
-     * may place a cycle-capable type in a region. */
-    if (info && info->cycle_capable) {
-        return 0;
-    }
     return region_bump(s, size, tag, info);
-}
-
-dream_ptr dream_region_try_malloc_private(dream_size size, int32_t tag, const dream_type_info *untracked) {
-    region_state *s = active_region();
-    return s == NULL ? 0 : region_bump(s, size, tag, untracked);
 }
 
 int dream_region_owns(dream_ptr pointer) {

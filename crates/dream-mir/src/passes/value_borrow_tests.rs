@@ -121,7 +121,6 @@ fn owned_view(early_release: bool, opaque_call: bool, source_escape: bool) -> (M
             ty: view_ty,
             ctor: None,
             args: vec![],
-            policy: crate::AllocPolicy::Tracked,
         },
     );
     b.assign(

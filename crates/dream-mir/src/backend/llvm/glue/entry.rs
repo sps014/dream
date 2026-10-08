@@ -3,16 +3,16 @@
 //! On wasm32 the entry is exported as `main` and an async `main` hands its pending Future to the
 //! JS host, which collects the status later through `__dream_main_report`.
 
-use super::super::fx::{align_at, V};
+use super::super::fx::{V, align_at};
 use super::super::ir::{GlobalDef, Linkage, Ty, Value};
 use super::super::lcx::Lcx;
 use super::{glue, register};
-use crate::backend::shared::entry::{
-    entry_exit, err_variant, EntryExit, ERROR_PREFIX, RC_SLOT, STATUS_FN,
-};
-use crate::backend::shared::glue::release_sym;
-use crate::backend::shared::protocol_names::to_string_fn;
 use crate::MirFunction;
+use crate::backend::shared::entry::{
+    ERROR_PREFIX, EntryExit, RC_SLOT, STATUS_FN, entry_exit, err_variant,
+};
+use crate::backend::shared::glue::{release_sym, retain_sym};
+use crate::backend::shared::protocol_names::to_string_fn;
 use dream_types::TypeId;
 
 pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
@@ -163,9 +163,10 @@ fn guest_entry(l: &mut Lcx<'_>, main: &MirFunction, exit: EntryExit) {
         return;
     }
     if main.is_async
-        && let Some(mf) = &r {
-            fx.call("dream_release", std::slice::from_ref(mf));
-        }
+        && let Some(mf) = &r
+    {
+        fx.call("dream_release", std::slice::from_ref(mf));
+    }
     fx.call("dream_drop_globals", &[]);
     fx.call("dream_callback_owner_finish", &[]);
     if exit == EntryExit::Void {
@@ -180,7 +181,12 @@ fn guest_entry(l: &mut Lcx<'_>, main: &MirFunction, exit: EntryExit) {
 fn settled_value(fx: &mut super::super::fx::Fx<'_, '_>, fut: &V, ty: &Ty, exit: EntryExit) -> V {
     let off = fx.l.cx.target.abi().future.result as i64;
     let at = fx.addr(fut, off);
-    fx.load_ty(ty.clone(), &at, align_at(ty, off), exit != EntryExit::Code)
+    let value = fx.load_ty(ty.clone(), &at, align_at(ty, off), exit != EntryExit::Code);
+    if let EntryExit::Report(result) = exit {
+        // The status reporter consumes a token; the settled future keeps its result owner.
+        fx.call(retain_sym(&fx.l.cx, result), std::slice::from_ref(&value));
+    }
+    value
 }
 
 fn store_status(fx: &mut super::super::fx::Fx<'_, '_>, exit: EntryExit, value: V) {

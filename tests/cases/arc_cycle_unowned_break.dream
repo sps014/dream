@@ -1,0 +1,14 @@
+import system;
+class Node {
+    public unowned next: Node;
+    public value: int;
+    public constructor() {
+        this.next = this;
+        this.value = 42;
+    }
+    del() { System.println("drop"); }
+}
+fun main() {
+    let node = Node();
+    System.println(node.next.value);
+}

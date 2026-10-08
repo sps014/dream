@@ -111,6 +111,10 @@ impl<'a> Analyzer<'a> {
         // Built before the borrow-immutable `SemanticInfo` literal below, since lowering field types
         // needs `&mut self.type_ctx`.
         let layouts = self.hir_build_layouts();
+        self.validate_cycle_capability(node, &layouts, diagnostics);
+        if diagnostics.has_errors() {
+            return Err(SemanticError::AnalysisFailed);
+        }
         let object_methods = layouts
             .structs
             .keys()

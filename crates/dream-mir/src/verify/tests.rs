@@ -300,7 +300,6 @@ fn new_node(ty: dream_types::TypeId) -> Rvalue {
         ty,
         ctor: None,
         args: vec![],
-        policy: crate::AllocPolicy::Tracked,
     }
 }
 

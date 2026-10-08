@@ -9,6 +9,7 @@ module system.collections;
 // Stages are a parent-linked chain of the same element type `T` (Dream cannot yet put function
 // types in generic containers, so predicates hang off nodes instead of a list).
 
+@allow_cycle
 public class Seq<T> {
     // Source storage; meaningful on the base node only.
     items: List<T>;

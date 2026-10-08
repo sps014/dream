@@ -1,0 +1,10 @@
+import system;
+class Node {
+    public weak next: Option<Node>;
+    public constructor() { this.next = Option.None; }
+    del() { System.println("drop"); }
+}
+fun main() {
+    let node = Node();
+    node.next = Option.Some(node);
+}

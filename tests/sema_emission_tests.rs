@@ -446,7 +446,7 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
     // tag-dispatches to those per-type destroys. Non-reference fields (`v: int`) are not released.
     let code = format!(
         "{SYSTEM_STUB}
-                class Node {{ public next: Node; public v: int;
+                @allow_cycle class Node {{ public next: Node; public v: int;
             del() {{ System.print(0); }}
             public constructor(v: int) {{ this.v = v; }}
         }}
@@ -1020,7 +1020,7 @@ fn exec_container_store_retains_no_double_free() {
     // this double-frees `b`.
     let code = format!(
         "{SYSTEM_STUB}
-                class Node {{ public next: Node;
+                @allow_cycle class Node {{ public next: Node;
             del() {{ System.print(1); }}
             public constructor() {{ }}
         }}

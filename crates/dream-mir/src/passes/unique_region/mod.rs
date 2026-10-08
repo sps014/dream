@@ -33,7 +33,6 @@ impl ModulePass for UniqueRegion {
         let ctor_only = ctor_only_defs(mir);
         let index = FunctionIndex::new(mir);
         let safe = compute_safety(mir, interner, &ctor_only, &index);
-        mark_private(mir, interner, &safe);
         let mut changed = false;
         let n = mir.functions.len();
         for i in 0..n {

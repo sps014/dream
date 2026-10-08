@@ -59,10 +59,11 @@ fn resolve(op: &Operand, known: &HashMap<Local, Operand>) -> Option<Operand> {
     // At most one visit per binding can resolve a copy chain. A cycle carries no known value.
     for _ in 0..=known.len() {
         if let Operand::Copy(Place::Local(local)) = value
-            && let Some(next) = known.get(local) {
-                value = next;
-                continue;
-            }
+            && let Some(next) = known.get(local)
+        {
+            value = next;
+            continue;
+        }
         return (!matches!(value, Operand::Copy(Place::Local(local)) if local == start))
             .then(|| value.clone());
     }
@@ -197,7 +198,8 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
                 | subst_operand(then_val, known)
                 | subst_operand(else_val, known)
         }
-        Rvalue::Use(o)
+        Rvalue::ObservedLoad(o)
+        | Rvalue::Use(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)

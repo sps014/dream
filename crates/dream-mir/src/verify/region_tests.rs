@@ -12,7 +12,6 @@ fn new(ty: TypeId) -> Rvalue {
         ty,
         ctor: None,
         args: vec![],
-        policy: crate::AllocPolicy::Tracked,
     }
 }
 fn node(ctx: &mut TypeCtx) -> TypeId {
@@ -40,9 +39,11 @@ fn alias_mutations_are_visible_to_the_original_caller_graph_without_later_reads(
     );
     f.push(Statement::RegionLeave);
     f.terminate(Terminator::Return(None));
-    assert!(verify_function(&f.finish(), &ctx.interner)
-        .iter()
-        .any(|v| v.msg.contains("caller or global graph")));
+    assert!(
+        verify_function(&f.finish(), &ctx.interner)
+            .iter()
+            .any(|v| v.msg.contains("caller or global graph"))
+    );
 }
 
 #[test]
@@ -56,9 +57,11 @@ fn globals_cannot_publish_regional_allocations_even_without_later_reads() {
     f.assign(Place::Global(crate::Global(0)), Rvalue::Use(copy(child)));
     f.push(Statement::RegionLeave);
     f.terminate(Terminator::Return(None));
-    assert!(verify_function(&f.finish(), &ctx.interner)
-        .iter()
-        .any(|v| v.msg.contains("caller or global graph")));
+    assert!(
+        verify_function(&f.finish(), &ctx.interner)
+            .iter()
+            .any(|v| v.msg.contains("caller or global graph"))
+    );
 }
 
 #[test]
@@ -146,7 +149,9 @@ fn direct_callee_publication_is_checked_at_the_call_boundary() {
         functions: vec![caller.finish(), publish.finish()],
         ..Mir::default()
     };
-    assert!(verify_module(&mir, &ctx.interner)
-        .iter()
-        .any(|v| v.func == "caller" && v.msg.contains("escape through a call")));
+    assert!(
+        verify_module(&mir, &ctx.interner)
+            .iter()
+            .any(|v| v.func == "caller" && v.msg.contains("escape through a call"))
+    );
 }

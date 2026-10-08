@@ -25,6 +25,7 @@ use super::*;
 
 mod array_interfaces;
 mod c_boundary;
+mod cycle_capability;
 mod enums;
 pub(in crate::analyzer) mod functions;
 mod globals;

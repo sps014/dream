@@ -18,7 +18,6 @@ fn new_obj(def: dream_types::DefId, ty: dream_types::TypeId) -> Rvalue {
         ty,
         ctor: None,
         args: vec![],
-        policy: crate::AllocPolicy::Tracked,
     }
 }
 

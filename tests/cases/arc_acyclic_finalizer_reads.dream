@@ -4,13 +4,8 @@ class ReadSelf {
     public id: int;
     public constructor(id: int) { this.id = id; }
     del() {
-        let alias = this;
-        System.println(alias.id);
-        let temporary = Option.Some(this);
-        switch (temporary) {
-            Some(peer) => { System.println(peer.id); }
-            None => {}
-        }
+        System.println(this.id);
+        System.println(this.id);
     }
 }
 

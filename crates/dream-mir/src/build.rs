@@ -156,7 +156,6 @@ impl FunctionBuilder {
 
     pub fn finish(self) -> MirFunction {
         MirFunction {
-            batched_construction: None,
             def: self.def,
             symbol: self.symbol,
             instance: self.instance,

@@ -1,0 +1,10 @@
+import system;
+class Value {
+    public n: int;
+    public constructor(n: int) { this.n = n; }
+}
+fun main() {
+    let erased: object = Value(5);
+    let value = (Value)erased;
+    System.println(value.n);
+}

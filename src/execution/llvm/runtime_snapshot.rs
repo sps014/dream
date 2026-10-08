@@ -24,7 +24,9 @@ pub(super) fn publish(root: &Path, files: &[PathBuf]) -> Result<Vec<PathBuf>, St
         if rt_stamp::content_hash(&output) != Some(hash) {
             let partial = output.with_extension("partial");
             std::fs::copy(file, &partial).map_err(|e| e.to_string())?;
-            std::fs::File::open(&partial)
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(&partial)
                 .and_then(|file| file.sync_all())
                 .map_err(|e| e.to_string())?;
             std::fs::rename(partial, &output).map_err(|e| e.to_string())?;

@@ -9,6 +9,7 @@ public struct Point {
 }
 
 @cpp("kv.hpp", "kv::Store")
+@allow_cycle
 public class Store {
     extern constructor(path: string);
     extern fun put(key: string, value: string): void;
@@ -34,6 +35,7 @@ public class Store {
 }
 
 @cpp("kv.hpp", "kv::Entry")
+@allow_cycle
 public class Entry {
     @cpp_name("name") extern fun key(): string;
     extern fun val(): string;

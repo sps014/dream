@@ -1,6 +1,7 @@
 module system.collections;
 
 // Cursor produced by `Map.iterator()` — walks occupied slots in place (no snapshot).
+@allow_cycle
 public class MapIterator<K, V> : Iterator<KeyValuePair<K, V>> {
     map: Map<K, V>;
     idx: int;

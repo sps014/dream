@@ -43,7 +43,6 @@ void dream_panic(dream_ptr message) {
 }
 
 void dream_defer_drain_all(void) {}
-void dream_cycle_retain(dream_ptr ptr) { (void)ptr; abort(); }
 void dream_retain_slow(int32_t *rc, int32_t v) {
     (void)v;
     __atomic_fetch_add(rc, 1, __ATOMIC_RELAXED);

@@ -1,7 +1,7 @@
 //! Static counts of one local-only allocation: deaths are the releases that drop the last
 //! count, and any path that could leak, double-free, or hand the count away is refused.
 
-use super::object_life::{lifetime, Lifetime};
+use super::object_life::{Lifetime, lifetime};
 use crate::build::FunctionBuilder;
 use crate::{Callee, Const, Local, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{DefId, TypeId, TypeInterner};
@@ -18,7 +18,6 @@ fn new_node(ty: TypeId) -> Rvalue {
         ty,
         ctor: None,
         args: vec![],
-        policy: crate::AllocPolicy::Tracked,
     }
 }
 
@@ -51,12 +50,14 @@ fn the_last_release_is_the_death() {
 
 #[test]
 fn releasing_a_stale_alias_is_refused() {
-    assert!(run(|b, _, o, a| {
-        b.push(Statement::Release(copy(o)));
-        b.push(Statement::Release(copy(a)));
-        b.terminate(Terminator::Return(None));
-    })
-    .is_none());
+    assert!(
+        run(|b, _, o, a| {
+            b.push(Statement::Release(copy(o)));
+            b.push(Statement::Release(copy(a)));
+            b.terminate(Terminator::Return(None));
+        })
+        .is_none()
+    );
 }
 
 #[test]
@@ -66,19 +67,21 @@ fn returning_with_a_live_count_is_refused() {
 
 #[test]
 fn a_take_argument_is_refused() {
-    assert!(run(|b, i, o, _| {
-        b.push(Statement::Call {
-            callee: Callee {
-                def: DefId::root(40),
-                args: vec![],
-                ret: i.void(),
-                take_params: vec![true],
-            },
-            args: vec![copy(o)],
-        });
-        b.terminate(Terminator::Return(None));
-    })
-    .is_none());
+    assert!(
+        run(|b, i, o, _| {
+            b.push(Statement::Call {
+                callee: Callee {
+                    def: DefId::root(40),
+                    args: vec![],
+                    ret: i.void(),
+                    take_params: vec![true],
+                },
+                args: vec![copy(o)],
+            });
+            b.terminate(Terminator::Return(None));
+        })
+        .is_none()
+    );
 }
 
 /// `loop { o = new; a = o; release o; o = null }`: the header sees `a` null on entry and stale

@@ -263,7 +263,7 @@ dream_ptr dream_region_activate(char *block, int32_t total, int32_t tag, const d
     int32_t address = (int32_t)(uintptr_t)block;
     i32_put(address, total);
     dream_ptr ptr = finish_block(address, tag);
-    dream_set_type_new(ptr, info);
+    dream_set_type(ptr, info);
     return ptr;
 }
 
@@ -323,15 +323,12 @@ int32_t debug_get_ref_count(dream_ptr ptr) {
 
 void dream_pin_immortal(dream_ptr s) {
     if (!s) { return; }
-    int locked = dream_cycle_store_begin(s, 0, 1);
     if (__atomic_exchange_n(dream_rc_word(s), DREAM_RC_IMMORTAL, __ATOMIC_RELAXED) != DREAM_RC_IMMORTAL) {
-        dream_cycle_forget(s);
         int64_t live = __atomic_load_n(&live_objects, __ATOMIC_RELAXED);
         while (live > 0 && !__atomic_compare_exchange_n(
             &live_objects, &live, live - 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
         }
     }
-    dream_cycle_store_end(locked);
 }
 
 void dream_retain_slow(int32_t *rc, int32_t v) {
@@ -355,6 +352,7 @@ __attribute__((noinline)) int dream_rc_last_slow(int32_t *rc, int32_t v) {
             return last;
         }
     }
+    if (v == 0) { DREAM_PANIC_LITERAL(u"panic: reference count underflow"); }
     return 0;
 }
 
@@ -381,13 +379,8 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
         return pointer;
     }
     pointer = malloc_private(size, tag);
-    dream_set_type_new(pointer, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
+    dream_set_type(pointer, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
     return pointer;
-}
-
-dream_ptr dream_malloc_private(int32_t size, int32_t tag, const dream_type_info *untracked) {
-    dream_ptr pointer = dream_region_try_malloc_private(size, tag, untracked);
-    return pointer != 0 ? pointer : dream_malloc(size, tag);
 }
 
 dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
@@ -398,7 +391,7 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
     dream_platform_current->lock(DREAM_LOCK_HEAP);
     p = malloc_locked(size, tag, 1);
     dream_platform_current->unlock(DREAM_LOCK_HEAP);
-    dream_set_type_new(p, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
+    dream_set_type(p, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
     return p;
 }
 
@@ -436,7 +429,9 @@ int dream_heap_is_live(dream_ptr ptr) {
         return 0;
     }
     int32_t rc = __atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED);
-    return rc != 0 && rc != DREAM_RC_IMMORTAL;
+    /* A claimed object remains readable until finalization completes. Reclaimed
+     * blocks clear both words, including raw frees that bypass ARC. */
+    return rc != 0 || dream_object_info(ptr) != NULL;
 }
 
 /* Free a large block, merging with physically adjacent free neighbors (the large list is
@@ -484,6 +479,8 @@ static void recycle_locked(dream_ptr ptr, int account) {
     if (sz == 0) {
         return;
     }
+    __atomic_store_n(dream_rc_word(ptr), 0, __ATOMIC_RELAXED);
+    dream_set_type(ptr, NULL);
     if (account) { account_free_n(1); }
     free_list_head = block_start;
     idx = size_class(sz);
@@ -503,7 +500,6 @@ void dream_recycle(dream_ptr ptr) {
     if (!ptr) {
         return;
     }
-    dream_cycle_forget(ptr);
     if (*dream_tag_word(ptr) & DREAM_TAG_WEAK_TARGET) {
         dream_weak_clear_all(ptr);
     }
@@ -521,6 +517,8 @@ void dream_recycle(dream_ptr ptr) {
     if (sz == 0) {
         return;
     }
+    __atomic_store_n(dream_rc_word(ptr), 0, __ATOMIC_RELAXED);
+    dream_set_type(ptr, NULL);
     account_free_n(1);
     idx = size_class(sz);
     if (idx <= 12 && sz == class_bytes(idx)) {
@@ -569,8 +567,6 @@ dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {
         return ptr;
     }
     const dream_type_info *info = dream_object_info(ptr);
-    int locked = info && info->visit;
-    if (locked) { dream_cycle_enter(); }
     np = dream_tag_shared(ptr) ? dream_malloc_shared(new_size, tag) : dream_malloc(new_size, tag);
     dream_set_type(np, info);
     int unique = dream_rc_count(ptr) == 1;
@@ -587,6 +583,5 @@ dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {
         memset(dream_p(ptr), 0, (size_t)copy);
     }
     dream_release(ptr);
-    if (locked) { dream_cycle_leave(); dream_cycle_drain(); }
     return np;
 }

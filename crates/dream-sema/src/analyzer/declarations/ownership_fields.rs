@@ -10,7 +10,9 @@ impl<'a> Analyzer<'a> {
         node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
+        let previous_file = diagnostics.file_path.clone();
         for struct_decl in node.structs.iter() {
+            diagnostics.file_path = file_path_string(&struct_decl.file_path);
             self.type_ctx
                 .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
             for field in &struct_decl.fields {
@@ -57,5 +59,6 @@ impl<'a> Analyzer<'a> {
                 }
             }
         }
+        diagnostics.file_path = previous_file;
     }
 }

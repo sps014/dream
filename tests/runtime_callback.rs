@@ -9,7 +9,8 @@ fn foreign_callback_releases_keep_arc_on_the_owner() {
     let temp = tempfile::tempdir().expect("callback test directory");
     let binary = temp.path().join("callbacks");
     let mut command = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
-    command.args([
+    command
+        .args([
             "-std=gnu11",
             "-O2",
             "-pthread",
@@ -28,7 +29,8 @@ fn foreign_callback_releases_keep_arc_on_the_owner() {
         assert!(matches!(sanitizer.as_str(), "thread" | "address,undefined"));
         command.arg(format!("-fsanitize={sanitizer}")).arg("-g");
     }
-    let build = command.output()
+    let build = command
+        .output()
         .expect("C compiler for callback regressions");
     assert!(
         build.status.success(),

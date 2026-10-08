@@ -165,7 +165,8 @@ fn operand_local_reads(op: &Operand, local: u32) -> u32 {
 fn rvalue_local_reads(rv: &Rvalue, local: u32) -> u32 {
     match rv {
         Rvalue::Move { src, .. } => u32::from(src.0 == local),
-        Rvalue::Use(o)
+        Rvalue::ObservedLoad(o)
+        | Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::CheckedNeg(o)
         | Rvalue::ArrayLen(o)
@@ -297,11 +298,7 @@ fn pointer_pun_escape(rvalue: &Rvalue, dest: u32, is_owned: &dyn Fn(u32) -> bool
         | Rvalue::Cast(Operand::Copy(Place::Local(s)), _, _) => s.0,
         _ => return None,
     };
-    if is_owned(src) {
-        Some(src)
-    } else {
-        None
-    }
+    if is_owned(src) { Some(src) } else { None }
 }
 
 pub(crate) fn apply_stmt_unique(
@@ -358,9 +355,11 @@ pub(crate) fn apply_stmt_unique(
         }
     }
     if let Statement::Assign(Place::Local(dest), rvalue) = stmt
-        && is_owned(dest.0) && is_fresh_alloc(rvalue) {
-            unique[dest.0 as usize] = true;
-        }
+        && is_owned(dest.0)
+        && is_fresh_alloc(rvalue)
+    {
+        unique[dest.0 as usize] = true;
+    }
 }
 
 pub(crate) fn meet_unique(a: bool, b: bool) -> bool {

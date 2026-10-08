@@ -13,16 +13,6 @@ impl<'l, 'a> Fx<'l, 'a> {
     pub fn call_expr(&mut self, callee: &Callee, args: &[Operand]) -> Option<V> {
         let raw = self.l.cx.callee_sym(callee.def, &callee.args);
         let name = runtime_c_name(&raw);
-        let name = if self.private_builder && self.mir.functions.iter().any(|f| {
-            f.def == callee.def && f.instance == callee.args
-                && f.batched_construction == Some(crate::AllocPolicy::Private)
-        }) {
-            super::construction::builder_name(&name)
-        } else if self.tracked_builder && self.mir.functions.iter().any(|f| {
-            f.def == callee.def && f.instance == callee.args && f.batched_construction.is_some()
-        }) {
-            super::construction::tracked_builder_name(&name)
-        } else { name };
         if name == "dream_sb_push" && self.sb_push_units(args) {
             return None;
         }
@@ -32,20 +22,30 @@ impl<'l, 'a> Fx<'l, 'a> {
             vals.push(self.operand(a));
         }
         let combinator_result = if name == "dream_all" || name == "dream_any" {
-            let TyKind::Struct(_, arguments) = self.interner.kind(callee.ret) else { crate::internal_error!("combinator must return a Future"); };
+            let TyKind::Struct(_, arguments) = self.interner.kind(callee.ret) else {
+                crate::internal_error!("combinator must return a Future");
+            };
             Some(*arguments.first().unwrap())
-        } else { None };
+        } else {
+            None
+        };
         if name == "dream_all" {
-            let TyKind::Array(elem) = self.interner.kind(combinator_result.unwrap()) else { crate::internal_error!("all must return an array"); };
+            let TyKind::Array(elem) = self.interner.kind(combinator_result.unwrap()) else {
+                crate::internal_error!("all must return an array");
+            };
             vals.push(V::i32(elem_size(&self.l.cx, *elem) as i64));
             let (copy, _) = super::glue::future_ownership::copies(self.l, *elem);
             vals.push(V::s(Value::global(copy)));
-            let array_info = if crate::backend::shared::glue::glue_array_elems(&self.l.cx).contains(elem) {
-                Value::global(super::glue::ownership::array_info(*elem))
-            } else { Value::zero(Ty::Ptr) };
+            let array_info =
+                if crate::backend::shared::glue::glue_array_elems(&self.l.cx).contains(elem) {
+                    Value::global(super::glue::ownership::array_info(*elem))
+                } else {
+                    Value::zero(Ty::Ptr)
+                };
             vals.push(V::s(array_info));
         } else if name == "dream_any" {
-            let (_, clone) = super::glue::future_ownership::copies(self.l, combinator_result.unwrap());
+            let (_, clone) =
+                super::glue::future_ownership::copies(self.l, combinator_result.unwrap());
             vals.push(V::s(Value::global(clone)));
         }
         if IntrinsicOp::from_key(&raw) == Some(IntrinsicOp::Panic) {
@@ -63,10 +63,14 @@ impl<'l, 'a> Fx<'l, 'a> {
         let result = self.call(&name, &vals);
         if let (Some(ty), Some(future)) = (combinator_result, &result) {
             let info = super::glue::future_ownership::info(self.l, ty);
-            self.call("dream_set_type", &[future.clone(), V::s(Value::global(info))]);
+            self.call(
+                "dream_set_type",
+                &[future.clone(), V::s(Value::global(info))],
+            );
         }
         if self.l.sigs.has_function(&name)
-            && let (Some(array), TyKind::Array(elem)) = (&result, self.interner.kind(callee.ret)) {
+            && let (Some(array), TyKind::Array(elem)) = (&result, self.interner.kind(callee.ret))
+        {
             self.install_array_info(array, *elem);
         }
         result

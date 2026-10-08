@@ -2,6 +2,7 @@
 // must rewind so live_objects returns to the pre-loop baseline.
 import system;
 
+@allow_cycle
 class TreeNode {
     public left: Option<TreeNode>;
     public right: Option<TreeNode>;

@@ -12,11 +12,11 @@
 #include <os/lock.h>
 /* The ownership domains never wait on a condition and are taken several times per tracked
  * allocation, where a pthread mutex costs more than the work it guards. */
-static os_unfair_lock locks[3] = {OS_UNFAIR_LOCK_INIT, OS_UNFAIR_LOCK_INIT, OS_UNFAIR_LOCK_INIT};
+static os_unfair_lock locks[2] = {OS_UNFAIR_LOCK_INIT, OS_UNFAIR_LOCK_INIT};
 static void platform_lock(unsigned domain) { os_unfair_lock_lock(&locks[domain]); }
 static void platform_unlock(unsigned domain) { os_unfair_lock_unlock(&locks[domain]); }
 #else
-static dream_mutex locks[3] = {DREAM_MUTEX_INIT, DREAM_MUTEX_INIT, DREAM_MUTEX_INIT};
+static dream_mutex locks[2] = {DREAM_MUTEX_INIT, DREAM_MUTEX_INIT};
 static void platform_lock(unsigned domain) { dream_mutex_lock(&locks[domain]); }
 static void platform_unlock(unsigned domain) { dream_mutex_unlock(&locks[domain]); }
 #endif

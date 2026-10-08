@@ -250,7 +250,8 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
             read_operand(then_val, read);
             read_operand(else_val, read);
         }
-        Rvalue::Use(o)
+        Rvalue::ObservedLoad(o)
+        | Rvalue::Use(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
         | Rvalue::StrByteSize(o)

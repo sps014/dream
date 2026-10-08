@@ -15,21 +15,26 @@ pub(crate) fn apply_stmt_tokens(
     tokens: &mut [bool],
 ) {
     if let Statement::Assign(Place::Local(dest), rvalue) = stmt
-        && is_owned(dest.0) {
-            let self_ref = rvalue_reads_local(rvalue, dest.0);
-            if !self_ref {
-                tokens[dest.0 as usize] = false;
-                if is_borrowed_copy(rvalue, interner) {
-                    if let Some(src) = move_source(rvalue, is_owned)
-                        && assign_is_move {
-                            tokens[src.0 as usize] = false;
-                        }
-                    tokens[dest.0 as usize] = true;
-                } else {
-                    tokens[dest.0 as usize] = true;
+        && is_owned(dest.0)
+    {
+        let self_ref = rvalue_reads_local(rvalue, dest.0);
+        if !self_ref {
+            tokens[dest.0 as usize] = false;
+            if is_borrowed_copy(rvalue, interner) {
+                if let Some(src) = move_source(rvalue, is_owned)
+                    && assign_is_move
+                {
+                    tokens[src.0 as usize] = false;
                 }
+                tokens[dest.0 as usize] = true;
+            } else {
+                tokens[dest.0 as usize] = true;
             }
         }
+    }
+    if let Statement::ForceFree(crate::Operand::Copy(Place::Local(local))) = stmt {
+        tokens[local.0 as usize] = false;
+    }
     for local in take_owned_arg_locals(stmt, is_owned) {
         if sink_is_move(local) {
             tokens[local as usize] = false;

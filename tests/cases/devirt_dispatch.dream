@@ -62,6 +62,7 @@ interface Sized {
     fun size(): int;
 }
 
+@allow_cycle
 class Holder<T> : Sized {
     public items: List<T>;
     public constructor() {

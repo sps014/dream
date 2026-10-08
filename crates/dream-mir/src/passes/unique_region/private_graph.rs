@@ -1,7 +1,7 @@
 //! Private-graph proof for cycle-capable allocations inside region-safe functions.
 //!
 //! A region object is reclaimed in bulk, so a cycle-capable class may only enter the region when
-//! the collector never needs to see it: it gets the untracked descriptor (`AllocPolicy::Private`).
+//! references stored in the object remain confined to that region.
 //! That is sound only if the object can reach nothing but other objects born in the same region
 //! and nothing outside can reach it. `region_safe_body` already rules out escape through globals,
 //! containers, closures, interface/indirect calls, async and destructors; this adds the inward
@@ -79,36 +79,10 @@ pub(super) fn private_graph_ok(cx: &mut SafeCx<'_>, f: &MirFunction) -> bool {
     true
 }
 
-/// Rewrite every cycle-capable `New` in a region-safe function to `AllocPolicy::Private`. The
-/// policy only matters while a region is active; outside one the runtime tracks it as usual.
-pub(super) fn mark_private(
-    mir: &mut Mir,
-    interner: &TypeInterner,
-    safe: &IndexMap<(DefId, Vec<TypeId>), bool>,
-) {
-    let layouts = &mir.layouts;
-    for f in &mut mir.functions {
-        if !safe
-            .get(&(f.def, f.instance.clone()))
-            .copied()
-            .unwrap_or(false)
-        {
-            continue;
-        }
-        for s in f.blocks.iter_mut().flat_map(|b| &mut b.stmts) {
-            if let Statement::Assign(_, Rvalue::New { ty, policy, .. }) = s
-                && crate::ownership::cycle_capable(layouts, interner, *ty)
-            {
-                *policy = crate::AllocPolicy::Private;
-            }
-        }
-    }
-}
-
 fn constructs_cycle_capable(cx: &SafeCx<'_>, f: &MirFunction) -> bool {
-    f.params
-        .first()
-        .is_some_and(|this| crate::ownership::cycle_capable(&cx.mir.layouts, cx.interner, f.local_ty(*this)))
+    f.params.first().is_some_and(|this| {
+        crate::ownership::cycle_capable(&cx.mir.layouts, cx.interner, f.local_ty(*this))
+    })
 }
 
 fn stores_into_cycle_capable(cx: &SafeCx<'_>, f: &MirFunction) -> bool {

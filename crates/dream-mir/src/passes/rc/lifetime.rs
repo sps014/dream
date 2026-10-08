@@ -124,7 +124,8 @@ pub(crate) fn stmt_borrow(stmt: &Statement, holds: &IndexSet<DefId>) -> StmtBorr
 fn rvalue_borrow(rv: &Rvalue, holds: &IndexSet<DefId>) -> StmtBorrow {
     match rv {
         Rvalue::Call { callee, .. } | Rvalue::JsCall { callee, .. } => callee_borrow(callee, holds),
-        Rvalue::Use(_)
+        Rvalue::ObservedLoad(_)
+        | Rvalue::Use(_)
         | Rvalue::Move { .. }
         | Rvalue::Select { .. }
         | Rvalue::Binary(_, _, _)

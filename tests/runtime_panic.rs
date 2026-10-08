@@ -44,7 +44,8 @@ fn fatal_runtime_paths_report_without_allocating_or_deadlocking() {
         .arg(runtime.join("core/utf8.c"))
         .arg(native.join("platform.c"));
     for unit in [
-        "heap_maps.c", "cycles.c",
+        "heap_maps.c",
+        "ownership.c",
         "publish.c",
         "region.c",
         "weak.c",
@@ -73,6 +74,9 @@ fn fatal_runtime_paths_report_without_allocating_or_deadlocking() {
         String::from_utf8_lossy(&build.stderr)
     );
     for (mode, reason) in [
+        ("arc-underflow", "reference count underflow"),
+        ("arc-resurrection", "resurrection of a dying object"),
+        ("arc-overflow", "reference count overflow"),
         (
             "private-size",
             "allocation size exceeds the supported limit",

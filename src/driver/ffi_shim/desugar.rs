@@ -68,6 +68,9 @@ fn class_source(
     uses_result: &mut bool,
 ) {
     let n = &c.name;
+    if c.allow_cycle {
+        out.push_str("@allow_cycle\n");
+    }
     let vis = if c.public { "public " } else { "" };
     let _ = write!(
         out,

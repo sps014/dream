@@ -1,6 +1,7 @@
 // UI-style parent/child tree: strong `children`, `weak parent`. Replacing/dropping the root
 // reclaims the whole tree (`live_objects` delta 0). Last-use destroy runs `del` before later work.
 import system;
+@allow_cycle
 class Node {
     public id: int;
     public children: List<Node>;

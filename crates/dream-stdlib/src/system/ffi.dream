@@ -63,6 +63,7 @@ public class OwnedCPtr {
 // A Dream `fun` (capturing or not) handed to a `@c` extern as a `(fn, void* user_data)` pair. C may
 // call it for as long as this object is alive: keep it in a field while C holds the pointer.
 // Calls from threads Dream did not start trap.
+@allow_cycle
 public class NativeCallback<F> {
     f: F;
 

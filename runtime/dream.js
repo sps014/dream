@@ -446,20 +446,17 @@ class DreamInstance {
   __awaitWorkerResult(r) {
     const F_RESULT = 8;
     if (!r) {
-      this.exports.dream_cycle_finish();
       return Promise.resolve("");
     }
     if (!this.__isFutureFrame(r)) {
       const text = this.readString(r);
       this.__guestFree(r);
-      this.exports.dream_cycle_finish();
       return Promise.resolve(text);
     }
     return this.__awaitFuture(r).then(() => {
       const out = this.i32(r + F_RESULT);
       const text = this.readString(out);
       this.__guestFree(r);
-      this.exports.dream_cycle_finish();
       return text;
     });
   }

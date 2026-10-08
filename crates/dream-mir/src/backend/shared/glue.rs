@@ -10,20 +10,13 @@ use dream_types::{TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap as HashMap;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(crate) fn acyclic_arc(cx: &Cx<'_>, ty: TypeId) -> bool {
-    !cx.mir.profile.is_debug()
-        && !crate::ownership::contains_cycle_refs(&cx.mir.layouts, cx.interner, ty)
-}
-
-pub(crate) fn last_sym(cx: &Cx<'_>, ty: TypeId) -> &'static str {
-    if acyclic_arc(cx, ty) { "dream_rc_last_acyclic" } else { "dream_rc_last" }
+pub(crate) fn last_sym(_cx: &Cx<'_>, _ty: TypeId) -> &'static str {
+    "dream_rc_last"
 }
 
 pub(crate) fn retain_sym(cx: &Cx<'_>, ty: TypeId) -> &'static str {
     if cx.target.spec().capabilities.js_interop && matches!(cx.interner.kind(ty), TyKind::Js) {
         "js_retain"
-    } else if acyclic_arc(cx, ty) {
-        "dream_retain_acyclic"
     } else {
         "dream_retain"
     }
@@ -130,7 +123,6 @@ pub(crate) fn release_sym(cx: &Cx<'_>, ty: TypeId) -> String {
         // pick the cascade — a flat `dream_release` recycles the block and strands its fields.
         // `destroy_sym` already dispatches this way.
         TyKind::Object | TyKind::Interface(..) => c_ident("dream_release_object"),
-        _ if acyclic_arc(cx, ty) => "dream_release_acyclic".into(),
         _ => "dream_release".into(),
     }
 }
@@ -240,7 +232,7 @@ fn redirects(cands: Vec<(String, TypeId, String)>) -> HashMap<TypeId, String> {
     out
 }
 
-/// The `del` symbol a type's last drop calls (after reviving the object), when it has one.
+/// The `del` symbol called after claiming a type's last reference, when it has one.
 pub(crate) fn del_symbol(cx: &Cx<'_>, def: dream_types::DefId) -> String {
     let function = cx
         .mir
@@ -290,6 +282,10 @@ fn union_profile_key(cx: &Cx<'_>, layout: &dream_hir::UnionLayout) -> String {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FieldDrop {
     None,
+    Weak {
+        offset: u32,
+        ty: TypeId,
+    },
     /// Unowned slots live in the weak registry (registered on store); destroying the holder
     /// must unregister them or a later clear of the target writes into freed memory.
     Unregister {
@@ -308,7 +304,13 @@ pub(crate) enum FieldDrop {
 }
 
 pub(crate) fn field_drop(cx: &Cx<'_>, f: &dream_hir::FieldLayout, in_union: bool) -> FieldDrop {
-    if f.is_weak || (in_union && f.is_unowned) {
+    if f.is_weak {
+        return FieldDrop::Weak {
+            offset: f.offset,
+            ty: f.ty,
+        };
+    }
+    if in_union && f.is_unowned {
         return FieldDrop::None;
     }
     if f.is_unowned {
@@ -359,7 +361,7 @@ pub(crate) fn drop_nonempty(cx: &Cx<'_>, d: FieldDrop) -> bool {
     match d {
         FieldDrop::None => false,
         FieldDrop::Value { ty, .. } => value_walk_nonempty(cx, ty),
-        FieldDrop::Unregister { .. } | FieldDrop::Rc { .. } => true,
+        FieldDrop::Weak { .. } | FieldDrop::Unregister { .. } | FieldDrop::Rc { .. } => true,
     }
 }
 
@@ -378,7 +380,8 @@ pub(crate) fn self_tail_field(
     }
     let i = has_teardown.iter().rposition(|d| *d)?;
     let f = &layout.fields[i];
-    let self_typed = !f.is_unowned
+    let self_typed = !f.is_weak
+        && !f.is_unowned
         && !cx.interner.is_value_type(f.ty)
         && cx.interner.is_rc_tracked(f.ty)
         && destroy_sym(cx, f.ty) == destroy
@@ -393,9 +396,10 @@ fn collect_array_elems(
 ) {
     for local in &f.locals {
         if let TyKind::Array(e) = interner.kind(local.ty)
-            && (interner.is_reference(*e) || interner.is_value_type(*e)) {
-                array_elems.insert(*e);
-            }
+            && (interner.is_reference(*e) || interner.is_value_type(*e))
+        {
+            array_elems.insert(*e);
+        }
     }
 }
 
@@ -406,9 +410,10 @@ pub(crate) fn glue_array_elems(cx: &Cx<'_>) -> BTreeSet<TypeId> {
     for layout in cx.mir.layouts.structs.values() {
         for f in &layout.fields {
             if let TyKind::Array(e) = interner.kind(f.ty)
-                && (interner.is_reference(*e) || interner.is_value_type(*e)) {
-                    array_elems.insert(*e);
-                }
+                && (interner.is_reference(*e) || interner.is_value_type(*e))
+            {
+                array_elems.insert(*e);
+            }
         }
     }
     for f in &cx.mir.functions {
@@ -423,7 +428,7 @@ pub(crate) fn glue_array_elems(cx: &Cx<'_>) -> BTreeSet<TypeId> {
 }
 
 #[cfg(test)]
-mod acyclic_tests {
+mod plain_arc_tests {
     use super::*;
     use crate::Mir;
     use crate::backend::shared::target::Target;
@@ -432,7 +437,7 @@ mod acyclic_tests {
     use dream_types::{DefKind, TypeCtx};
 
     #[test]
-    fn unchecked_arc_requires_release_and_complete_acyclic_layouts() {
+    fn plain_arc_symbols_do_not_depend_on_profile_or_cycle_shape() {
         let mut ctx = TypeCtx::new();
         let leaf_def = ctx.register(DefKind::Struct, "Leaf", vec![]);
         let leaf = ctx.interner.struct_ty(leaf_def, vec![]);
@@ -441,16 +446,25 @@ mod acyclic_tests {
         let opaque_def = ctx.register(DefKind::Struct, "Opaque", vec![]);
         let opaque = ctx.interner.struct_ty(opaque_def, vec![]);
         let mut mir = Mir::default();
-        mir.layouts.insert(leaf, TypeLayout::from_fields(&ctx.interner, "Leaf", []));
-        mir.layouts.insert(node, TypeLayout::from_fields(&ctx.interner, "Node", [("next".into(), node, false, false)]));
+        mir.layouts
+            .insert(leaf, TypeLayout::from_fields(&ctx.interner, "Leaf", []));
+        mir.layouts.insert(
+            node,
+            TypeLayout::from_fields(&ctx.interner, "Node", [("next".into(), node, false, false)]),
+        );
         for profile in [CompileProfile::Debug, CompileProfile::Release] {
             mir.profile = profile;
             let cx = Cx::new(&mir, &ctx.interner, Target::native());
-            assert_eq!(acyclic_arc(&cx, leaf), profile == CompileProfile::Release);
-            assert_eq!(acyclic_arc(&cx, ctx.interner.string()), profile == CompileProfile::Release);
-            assert!(!acyclic_arc(&cx, node));
-            assert!(!acyclic_arc(&cx, opaque));
-            assert!(!acyclic_arc(&cx, ctx.interner.object()));
+            for ty in [
+                leaf,
+                node,
+                opaque,
+                ctx.interner.string(),
+                ctx.interner.object(),
+            ] {
+                assert_eq!(retain_sym(&cx, ty), "dream_retain");
+                assert_eq!(last_sym(&cx, ty), "dream_rc_last");
+            }
             assert_eq!(retain_sym(&cx, node), "dream_retain");
             assert_eq!(last_sym(&cx, opaque), "dream_rc_last");
         }

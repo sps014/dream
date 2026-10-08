@@ -34,6 +34,14 @@ int main(int argc, char **argv) {
     dream_set_platform(&platform);
     alarm(5);
     assert(argc == 2);
+    _Alignas(8) int32_t reference_header[NATIVE_HEAP_HEADER_SIZE / sizeof(int32_t)] = {0};
+    dream_ptr reference = (dream_ptr)(reference_header + sizeof(reference_header) / sizeof(int32_t));
+    if (strcmp(argv[1], "arc-underflow") == 0) { dream_rc_last(reference); }
+    if (strcmp(argv[1], "arc-resurrection") == 0) { dream_retain(reference); }
+    if (strcmp(argv[1], "arc-overflow") == 0) {
+        *dream_rc_word(reference) = INT32_MAX;
+        dream_retain(reference);
+    }
     if (strcmp(argv[1], "private-size") == 0) { dream_malloc_slow(SIZE_MAX, 0); }
     if (strcmp(argv[1], "shared-size") == 0) { dream_malloc_shared(-1, 0); }
     if (strcmp(argv[1], "realloc-size") == 0) { dream_realloc(0, SIZE_MAX, 0); }

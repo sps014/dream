@@ -75,6 +75,7 @@ public class GenLocation {
 }
 
 // A resolved type: `kind` + structured `args` instead of a type string to parse.
+@allow_cycle
 public class GenTypeRef {
     public kind: TypeRefKind;
     // `int`, `List`, `T`, or empty for arrays/tuples/functions.

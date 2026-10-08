@@ -23,7 +23,6 @@ pub(super) fn expand(
                     ty,
                     ctor: Some(ctor),
                     args,
-                    policy,
                 },
             ) = &statement
             else {
@@ -52,8 +51,7 @@ pub(super) fn expand(
                 statements.push(statement);
                 continue;
             }
-            let (dest, def, ty, ctor, mut args, policy) =
-                (*dest, *def, *ty, ctor.clone(), args.clone(), *policy);
+            let (dest, def, ty, ctor, mut args) = (*dest, *def, *ty, ctor.clone(), args.clone());
             statements.push(Statement::Assign(
                 Place::Local(dest),
                 Rvalue::New {
@@ -61,7 +59,6 @@ pub(super) fn expand(
                     ty,
                     ctor: None,
                     args: Vec::new(),
-                    policy,
                 },
             ));
             args.insert(0, Operand::Copy(Place::Local(dest)));
@@ -117,7 +114,7 @@ mod tests {
                     def,
                     ty,
                     ctor: Some(NewCtor {
- batched: false,
+                        field_init: false,
                         def: ctor_def,
                         take_params: vec![false],
                     }),
@@ -129,7 +126,6 @@ mod tests {
                     } else {
                         Operand::Const(Const::Int(3))
                     }],
-                    policy: crate::AllocPolicy::Tracked,
                 },
             );
             b.terminate(Terminator::Return(None));

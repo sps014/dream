@@ -52,10 +52,24 @@ void dream_future_fini(dream_ptr f) {
     if (!f) {
         return;
     }
-    poll = i32_at(f, F_POLL)[0];
-    if (poll <= 0) {
+    int32_t kind = i32_at(f, F_KIND)[0];
+    if (kind == KIND_ALL || kind == KIND_ANY) {
+        dream_ptr children = ptr_at(f, F_CHILDREN)[0];
+        int32_t count = i32_at(f, F_COUNT)[0];
+        for (int32_t i = 0; children && i < count; ++i) {
+            dream_ptr child = arr_get(children, i);
+            if (child && ptr_at(child, F_WAKER)[0] == f) {
+                ptr_at(child, F_WAKER)[0] = 0;
+            }
+        }
+    }
+    const dream_type_info *info = dream_object_info(f);
+    if (info && info->clear) {
+        info->clear(f);
         return;
     }
+    poll = i32_at(f, F_POLL)[0];
+    if (poll <= 0) { return; }
     drop = (void (*)(dream_ptr))dream_fd_get(poll);
     if (drop) {
         drop(f);
@@ -161,13 +175,10 @@ void dream_complete_foreign(dream_ptr f, dream_result res) {
         return;
     }
     dream_mutex_lock(&wake_mu);
-    dream_cycle_enter();
-    dream_cycle_check_store(f, 0);
     /* Publish under the lock so a concurrent dream_await cannot set its waker between our
      * status flip and our waker read (lost-wakeup guard). */
     if (!__atomic_compare_exchange_n(i32_at(f, F_STATUS), &expected, 1, 0,
                                      __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
-        dream_cycle_leave();
         dream_mutex_unlock(&wake_mu);
         free(n);
         return; /* already completed or cancelled */
@@ -184,9 +195,7 @@ void dream_complete_foreign(dream_ptr f, dream_result res) {
         dream_cond_signal(&wake_cv);
         n = NULL; /* drained by the loop */
     }
-    dream_cycle_leave();
     dream_mutex_unlock(&wake_mu);
-    dream_cycle_drain();
     free(n);
     if (!had_waker) {
         scheduler_drop_start_retain(f);
@@ -271,9 +280,7 @@ void dream_async_complete(dream_ptr f, dream_result res) {
     dream_ptr w;
     int32_t wk;
     if (!f) { return; }
-    dream_cycle_enter();
-    dream_cycle_check_store(f, 0);
-    if (i32_at(f, F_STATUS)[0]) { dream_cycle_leave(); return; }
+    if (i32_at(f, F_STATUS)[0]) { return; }
     *result_at(f) = res;
     i32_at(f, F_STATUS)[0] = 1;
     w = ptr_at(f, F_WAKER)[0];
@@ -287,8 +294,6 @@ void dream_async_complete(dream_ptr f, dream_result res) {
         }
     }
     scheduler_drop_start_retain(f);
-    dream_cycle_leave();
-    dream_cycle_drain();
 }
 
 void dream_cancel(dream_ptr f) {
@@ -298,15 +303,29 @@ void dream_cancel(dream_ptr f) {
     }
     i32_at(f, F_STATUS)[0] = 2;
     ptr_at(f, F_WAKER)[0] = 0;
-    scheduler_drop_start_retain(f);
-    for (link = &timer_head; *link; link = &(*link)->next) {
-        if ((*link)->f == f) {
-            Node *node = *link;
+    /* Queues borrow the scheduler token. Unlink before dropping it so cancelled
+     * frames cannot leave a raw queue pointer into reclaimed storage. */
+    Node *previous = NULL;
+    for (link = &rq_head; *link;) {
+        Node *node = *link;
+        if (node->f == f) {
             *link = node->next;
+            if (rq_tail == node) { rq_tail = previous; }
             free(node);
-            return;
+        } else {
+            previous = node;
+            link = &node->next;
         }
     }
+    i32_at(f, F_QUEUED)[0] = 0;
+    for (link = &timer_head; *link;) {
+        Node *node = *link;
+        if (node->f == f) {
+            *link = node->next;
+            free(node);
+        } else { link = &node->next; }
+    }
+    scheduler_drop_start_retain(f);
 }
 
 int32_t dream_async_await(dream_ptr future, dream_result *dest, int32_t resume_pc) {

@@ -1,0 +1,16 @@
+import system;
+@allow_cycle
+class Node {
+    public next: Option<Node>;
+    public constructor() { this.next = Option.None; }
+}
+fun leak() {
+    let node = Node();
+    node.next = Option.Some(node);
+}
+fun main() {
+    let before = Debug.live_objects;
+    leak();
+    if Debug.live_objects != before + 1 { System.panic("unexpected cycle count"); }
+    System.panic("intentional strong-cycle leak");
+}

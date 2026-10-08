@@ -1,6 +1,7 @@
 module system.collections;
 
 // LIFO stack backed by `List<T>`.
+@allow_cycle
 public class Stack<T> : Collection<T> {
     items: List<T>;
 

@@ -208,7 +208,8 @@ fn add_rvalue_reads(rv: &Rvalue, live: &mut IndexSet<u32>) {
             add(then_val);
             add(else_val);
         }
-        Rvalue::Use(o)
+        Rvalue::ObservedLoad(o)
+        | Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::CheckedNeg(o)
         | Rvalue::ArrayLen(o)

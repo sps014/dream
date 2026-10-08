@@ -28,7 +28,7 @@ fn worker_registry_grows_and_cleans_up_failed_starts() {
         .arg(native.join("platform.c"));
     for unit in [
         "heap.c",
-        "cycles.c",
+        "ownership.c",
         "heap_maps.c",
         "publish.c",
         "region.c",

@@ -123,11 +123,6 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     fn maybe_defer(&mut self, p: &V, destroy: &str) {
-        let current = self.w.name().to_string();
-        let function = V::u(self.l.fn_ref(&current));
-        let queued = self.call_v("dream_cycle_defer_destroy", &[p.clone(), function]);
-        let queued = self.truthy(&queued);
-        self.if_then(&queued, |fx| fx.w.ret(None));
         if !self.mir.uses_defer {
             return;
         }
@@ -160,7 +155,29 @@ impl<'l, 'a> Fx<'l, 'a> {
     pub(super) fn field_drop_code(&mut self, p: &V, d: FieldDrop) {
         match d {
             FieldDrop::None => {}
+            FieldDrop::Weak { offset, ty } => {
+                let at = self.addr(p, offset as i64);
+                let at = self.as_ref(&V::s(at));
+                let (kind, none, payload) = if self.interner.is_niche_union(ty) {
+                    (2, 0, 0)
+                } else {
+                    let u = self.l.cx.nunion(ty).expect("validated weak Option layout");
+                    let none = u.variant("None").expect("Option None").discriminant;
+                    let payload = u.variant("Some").expect("Option Some").fields[0].offset;
+                    (0, none, payload)
+                };
+                self.call(
+                    "dream_weak_drop_field",
+                    &[
+                        at,
+                        V::i32(kind),
+                        V::i32(none as i64),
+                        V::i32(payload as i64),
+                    ],
+                );
+            }
             FieldDrop::Unregister { offset } => {
+                self.call("dream_weak_enter", &[]);
                 let cur = self.field_word(p, offset);
                 let nz = self.truthy(&cur);
                 self.if_then(&nz, |fx| {
@@ -168,6 +185,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     let at = fx.as_ref(&V::s(at));
                     fx.call("dream_weak_unregister", &[cur.clone(), at]);
                 });
+                self.call("dream_weak_leave", &[]);
             }
             FieldDrop::Value { offset, ty } => {
                 let at = self.addr(p, offset as i64);
@@ -514,7 +532,9 @@ fn tag_dispatch(l: &mut Lcx<'_>, name: &str, destroy: bool) {
             let open = fx.load_ty(ty, &g, 4, false);
             let closed = fx.w.icmp("eq", &open.v, &Value::zero(open.ty().clone()));
             fx.if_then(&closed, release_extra);
-        } else { release_extra(&mut fx); }
+        } else {
+            release_extra(&mut fx);
+        }
     }
     fx.maybe_defer(&p, name);
     let tag = fx.call_v("dream_object_tag", std::slice::from_ref(&p));

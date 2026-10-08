@@ -1,0 +1,2 @@
+class 'Data' can form a strong ownership cycle
+class 'C' can form a strong ownership cycle

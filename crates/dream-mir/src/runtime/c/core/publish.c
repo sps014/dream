@@ -28,7 +28,9 @@ static void publish_enqueue(PublishGraph *graph, dream_ptr ptr) {
     if (!dream_heap_is_live(ptr)) {
         return;
     }
-    dream_cycle_check_store(0, ptr);
+    if (__atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED) == 0) {
+        DREAM_PANIC_LITERAL(u"panic: publication of a dying object");
+    }
     HASH_FIND(hh, graph->seen, &ptr, sizeof(ptr), entry);
     if (entry != NULL) {
         return;
@@ -52,8 +54,6 @@ __attribute__((export_name("dream_publish")))
 #endif
 void dream_publish(dream_ptr ptr) {
     /* TAG_SHARED is ownership, not visitation: shared roots can contain new private children. */
-    dream_cycle_enter();
-    dream_cycle_check_store(0, ptr);
     PublishGraph graph = {0};
     publish_enqueue(&graph, ptr);
     while (graph.pending != NULL) {
@@ -79,5 +79,4 @@ void dream_publish(dream_ptr ptr) {
         HASH_DEL(graph.seen, entry);
         dream_platform_current->deallocate(entry);
     }
-    dream_cycle_leave();
 }

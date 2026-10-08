@@ -1,0 +1,61 @@
+import system;
+
+public class CharacterCell {
+    public before: byte;
+    public value: char;
+    public after: int;
+    public constructor(value: char) {
+        this.before = 123;
+        this.value = value;
+        this.after = 456;
+    }
+}
+
+public struct CharacterValue {
+    public before: byte;
+    public value: char;
+    public after: int;
+}
+
+@noinline
+fun read_cell(borrow cell: CharacterCell): int {
+    return (int)cell.value + cell.before + cell.after;
+}
+
+@noinline
+fun read_value(value: CharacterValue): int {
+    return (int)value.value + value.before + value.after;
+}
+
+@noinline
+fun read_chars(borrow chars: char[]): void {
+    let span = Span<char>.of(chars);
+    let read_only = span.as_read_only();
+    let i = 0;
+    while i < span.length {
+        System.println((int)read_only[i]);
+        i = i + 1;
+    }
+    span.set(1, '界');
+    System.println((int)span[1]);
+}
+
+fun main(): void {
+    let chars = ['Ω', '界', '😀'];
+    read_chars(chars);
+    let allocated = Buffer.alloc<char>(2);
+    allocated[0] = '😀';
+    allocated[1] = 'Ω';
+    read_chars(allocated);
+    System.println(read_cell(CharacterCell('界')));
+    let value = CharacterValue();
+    value.before = 123;
+    value.value = '😀';
+    value.after = 456;
+    System.println(read_value(value));
+    let list = List<char>();
+    list.push('Ω');
+    list.push('😀');
+    System.println((int)list[0]);
+    System.println((int)list[1]);
+}

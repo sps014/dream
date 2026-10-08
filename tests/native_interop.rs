@@ -226,8 +226,10 @@ fn run_c(tag: &str, c: &str, dream: &str, level: OptLevel) -> Result<String, Str
 fn c_structs_pass_and_return_by_value() {
     let c = r#"#include <stdint.h>
 typedef struct { float x, y; } Vec2;
+typedef struct { uint8_t before; char value; int32_t after; } Character;
 typedef struct { int64_t a, b, c; } Triple;
 typedef struct { double w; int32_t id; int64_t big; float f; } Wide;
+Character character_echo(Character c) { c.after += (unsigned char)c.value; c.value = (char)255; return c; }
 Vec2 vec2_scale(Vec2 v, float k) { Vec2 r = { v.x * k, v.y * k }; return r; }
 Triple triple_rotate(Triple t) { Triple r = { t.b, t.c, t.a }; return r; }
 Wide wide_bump(Wide w, int32_t by) { w.w += 0.5; w.id += by; w.big *= 2; w.f -= 1.0f; return w; }
@@ -235,14 +237,22 @@ Wide wide_bump(Wide w, int32_t by) { w.w += 0.5; w.id += by; w.big *= 2; w.f -= 
     let dream = r#"import system;
 
 public struct Vec2 { public x: float; public y: float; }
+public struct Character { public before: byte; public value: char; public after: int; }
 public struct Triple { public a: long; public b: long; public c: long; }
 public struct Wide { public w: double; public id: int; public big: long; public f: float; }
 
+@c extern fun character_echo(c: Character): Character;
 @c extern fun vec2_scale(v: Vec2, k: float): Vec2;
 @c extern fun triple_rotate(t: Triple): Triple;
 @c extern fun wide_bump(w: Wide, by: int): Wide;
 
 fun main(): void {
+    let c = Character();
+    c.before = 123;
+    c.value = 'Ω';
+    c.after = 456;
+    let ch = character_echo(c);
+    System.println("char " + ch.before.to_string() + " " + ((int)ch.value).to_string() + " " + ch.after.to_string());
     let v = Vec2();
     v.x = 1.5f;
     v.y = -2.0f;
@@ -267,7 +277,7 @@ fun main(): void {
         let out = run_c(tag, c, dream, level).unwrap();
         assert_eq!(
             out.trim(),
-            "vec2 3 -4\ntriple 5000000000 -3 1\nwide 1.75 42 42 2.5"
+            "char 123 255 625\nvec2 3 -4\ntriple 5000000000 -3 1\nwide 1.75 42 42 2.5"
         );
     }
 }

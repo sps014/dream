@@ -2,7 +2,7 @@ import { TAGS, HEAP_HEADER_SIZE } from "./abi.js";
 export { TAGS, HEAP_HEADER_SIZE };
 
 export function elementSize(typeName) {
-  if (typeName === "bool" || typeName === "char" || typeName === "byte") return 1;
+  if (typeName === "bool" || typeName === "byte") return 1;
   if (typeName === "double" || typeName === "long" || typeName === "ulong") return 8;
   return 4;
 }

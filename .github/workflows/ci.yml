@@ -233,6 +233,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: JavaScript runtime storage and generated bundle
+        run: |
+          node scripts/bundle-runtime.mjs --check
+          node --test scripts/test-pointer-integers.mjs scripts/test-bundle-runtime.mjs
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci-o1-${{ runner.os }}-${{ runner.arch }}

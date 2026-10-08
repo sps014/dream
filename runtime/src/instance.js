@@ -149,8 +149,8 @@ export class DreamInstance {
     switch (t) {
       case "int":
       case "isize":
-        return this.i32(addr);
       case "char":
+        return this.i32(addr);
       case "byte":
         return this.bytes[addr]; // 1-byte element
       case "bool":
@@ -180,9 +180,9 @@ export class DreamInstance {
     switch (t) {
       case "int":
       case "isize":
+      case "char":
         this.view.setInt32(addr, value | 0, true);
         break;
-      case "char":
       case "byte":
         this.bytes[addr] = value & 0xff; // 1-byte element
         break;
@@ -215,7 +215,7 @@ export class DreamInstance {
 
   /**
    * Allocates a Dream array from a JS array (or typed array) of `elemType`, returning its data
-   * pointer, so JS-implemented externs can return arrays (e.g. `char[]` file bytes) back into
+   * pointer, so JS-implemented externs can return arrays (e.g. `byte[]` process output) back into
    * Dream. Layout: [count:i32] followed by `count` elements. Requires the module to export `malloc`.
    */
   writeArray(arr, elemType = "int") {
@@ -224,7 +224,7 @@ export class DreamInstance {
     const count = arr.length;
     const ptr = this.guestMalloc(4 + count * size, TAGS.ARRAY);
     this.view.setInt32(ptr, count, true);
-    if (elem === "char" || elem === "byte") {
+    if (elem === "byte") {
       // Bulk copy for the common byte-array case.
       this.bytes.set(Uint8Array.from(arr), ptr + 4);
     } else {

@@ -1,6 +1,7 @@
 //! Renders a program's [`CShim`] description to the C source clang compiles beside the module.
 
 use dream_abi::c_abi::shim::{CField, CShim, CStruct, CTy, Forward, Reverse, SHIM_PREFIX};
+use dream_types::CScalar;
 use std::fmt::Write;
 
 pub fn render(shim: &CShim) -> String {
@@ -103,6 +104,17 @@ impl Render<'_> {
         );
         for (j, (off, f)) in s.fields.iter().enumerate() {
             match f {
+                CField::Scalar(CScalar::Char) => {
+                    let _ = writeln!(
+                        out,
+                        "    int32_t c{j}; __builtin_memcpy(&c{j}, p + {off}, sizeof c{j});"
+                    );
+                    let _ = writeln!(
+                        out,
+                        "    v->f{j} = {};",
+                        CScalar::Char.from_carrier(&format!("c{j}"))
+                    );
+                }
                 CField::Scalar(_) => {
                     let _ = writeln!(
                         out,
@@ -121,6 +133,13 @@ impl Render<'_> {
         );
         for (j, (off, f)) in s.fields.iter().enumerate() {
             match f {
+                CField::Scalar(CScalar::Char) => {
+                    let value = CScalar::Char.to_carrier(&format!("v->f{j}"));
+                    let _ = writeln!(
+                        out,
+                        "    int32_t c{j} = {value}; __builtin_memcpy(p + {off}, &c{j}, sizeof c{j});"
+                    );
+                }
                 CField::Scalar(_) => {
                     let _ = writeln!(
                         out,

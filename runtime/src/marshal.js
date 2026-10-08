@@ -47,7 +47,7 @@ export function marshalResult(inst, result, ret) {
   if (result === "bool") return ret ? 1 : 0;
   if (result === "js") return inst.registerHandle(ret); // live JS value -> i32 handle id
   if (typeof result === "string" && result.endsWith("[]")) {
-    return inst.writeArray(ret == null ? [] : ret, result.slice(0, -2)); // e.g. char[] file bytes
+    return inst.writeArray(ret == null ? [] : ret, result.slice(0, -2)); // e.g. byte[] process output
   }
   if (result === "void" || result == null) return ret == null ? 0 : ret;
   return ret;

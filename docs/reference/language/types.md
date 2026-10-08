@@ -16,7 +16,7 @@ A type describes the values a variable can hold and the operations it supports. 
 | `float` | 32-bit floating point | `3.14f`, `1.0` |
 | `double` | 64-bit floating point | `3.14d`, or bare `3.14` / `0` when the expected type is `double` |
 | `bool` | `true` or `false` | `true` |
-| `char` | A single character (code point) | `'A'`, `'\n'` |
+| `char` | A single character (code point), stored in 32 bits | `'A'`, `'\n'` |
 | `string` | UTF-16 text, heap allocated | `"hello"`, `$"hi {name}"` |
 | `void` | No value — only valid as a return type | — |
 

@@ -34,3 +34,14 @@ test("dynamic slots decode target-sized scalars and array elements", () => {
   guest.view.setInt32(56, array, true);
   assert.deepEqual(decodeJsSlots(guest, 16, 3), [-1, 4294967295, values]);
 });
+
+
+test("character arrays preserve Unicode without widening byte arrays", () => {
+  const guest = instance();
+  const chars = [0x41, 0x3a9, 0x754c, 0x1f600];
+  const pointer = guest.writeArray(chars, "char");
+  assert.deepEqual(guest.readArray(pointer, "char"), chars);
+  assert.equal(guest.view.getInt32(pointer + 4 + 3 * 4, true), 0x1f600);
+  const bytes = guest.writeArray([0, 128, 255], "byte");
+  assert.deepEqual([...guest.bytes.slice(bytes + 4, bytes + 7)], [0, 128, 255]);
+});

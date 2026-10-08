@@ -56,7 +56,7 @@ pub(crate) fn abi_ty(interner: &TypeInterner, ty: TypeId) -> AbiTy {
 }
 
 /// How a value of a type is read from memory: the in-memory width can be narrower than its
-/// [`AbiTy`] (`bool`/`byte`/`char` fields are one byte, zero-extended on load).
+/// [`AbiTy`] (`bool`/`byte` fields are one byte, zero-extended on load).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum MemTy {
     U8,
@@ -76,8 +76,10 @@ pub(crate) fn mem_ty(cx: &Cx<'_>, ty: TypeId) -> MemTy {
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => MemTy::I64,
         TyKind::Prim(PrimTy::ISize) => MemTy::Word,
         TyKind::Prim(PrimTy::USize) => MemTy::UWord,
-        TyKind::Prim(PrimTy::Byte | PrimTy::Bool | PrimTy::Char) => MemTy::U8,
-        TyKind::Prim(PrimTy::Int | PrimTy::UInt) | TyKind::Enum(_) | TyKind::Js => MemTy::I32,
+        TyKind::Prim(PrimTy::Byte | PrimTy::Bool) => MemTy::U8,
+        TyKind::Prim(PrimTy::Char | PrimTy::Int | PrimTy::UInt) | TyKind::Enum(_) | TyKind::Js => {
+            MemTy::I32
+        }
         _ if cx.interner.is_value_type(ty) => MemTy::I32,
         _ => MemTy::Ptr,
     }
@@ -116,7 +118,10 @@ pub(crate) fn native_header_fn_names() -> Vec<String> {
 
 fn parse_native_header_fns() -> HashSet<String> {
     let mut names = HashSet::new();
-    for raw in NATIVE_RT_HEADER.lines().chain(include_str!("../../runtime/c/core/include/dream_ownership.h").lines()) {
+    for raw in NATIVE_RT_HEADER
+        .lines()
+        .chain(include_str!("../../runtime/c/core/include/dream_ownership.h").lines())
+    {
         let line = raw.trim();
         if line.is_empty()
             || line.starts_with('#')

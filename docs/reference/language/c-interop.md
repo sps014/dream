@@ -146,6 +146,10 @@ import system;
 | `ref x: T` | `T*`: C writes through it (`ref p: CPtr` is `T**`) |
 | `fun(...)` | a C function pointer (see [Callbacks](cpp-interop.md#callbacks)) |
 | `NativeCallback<F>` | a `(fn, void* user_data)` pair |
+
+By-value `char` converts to C’s narrow `char`, including fields of structs passed by value.
+Pointers and `ref` arguments expose Dream storage: a `char` occupies four bytes, so use
+`int32_t*` for a character slot and `byte[]` for a raw C character buffer.
 | `Option<fun(...)>`, `Option<NativeCallback<F>>` | a nullable function pointer |
 | `OwnedCPtr` result with `@owned("free_fn")` | `void*` that Dream frees with `free_fn` |
 

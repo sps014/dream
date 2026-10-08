@@ -23,7 +23,8 @@ fun main() {
 
 ## `StringSpan`
 
-`Span<char>` permits writes to a `char[]`; strings are immutable and may use sliced storage.
+`Span<char>` permits writes to a `char[]` of 32-bit code points; strings are immutable and
+store 16-bit UTF-16 units, including surrogate pairs, and may use sliced storage.
 `StringSpan` keeps the string owner alive and views its UTF-16 units directly, without converting
 them into an array. Both views are stored inline. Release can hoist the string payload address
 out of read-only loops when the source lifetime and view fields are proven stable.

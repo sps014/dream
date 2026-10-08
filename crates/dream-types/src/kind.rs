@@ -86,15 +86,15 @@ impl PrimTy {
     }
 
     /// Byte size and alignment of a scalar value of this primitive when stored inline (a struct
-    /// field, array element, or local): `bool`/`char`/`byte` occupy a single byte;
-    /// `double`/`long`/`ulong` are 8 bytes; everything else (`int`, `uint`, `float`, and `string`,
+    /// field, array element, or local): `bool`/`byte` occupy a single byte;
+    /// `double`/`long`/`ulong` are 8 bytes; everything else (`char`, `int`, `uint`, `float`, and `string`,
     /// whose entry here is only its wasm32 representation) is a 4-byte word. Target-sized integers
     /// must be queried through the HIR layout table, which also overrides `string`'s width.
     pub fn size_align(self) -> (u32, u32) {
         match self {
-            PrimTy::Bool | PrimTy::Char | PrimTy::Byte => (1, 1),
+            PrimTy::Bool | PrimTy::Byte => (1, 1),
             PrimTy::Double | PrimTy::Long | PrimTy::ULong => (8, 8),
-            PrimTy::Int | PrimTy::UInt | PrimTy::Float | PrimTy::String => (4, 4),
+            PrimTy::Char | PrimTy::Int | PrimTy::UInt | PrimTy::Float | PrimTy::String => (4, 4),
             PrimTy::ISize | PrimTy::USize => {
                 panic!("pointer-sized integers require a target layout")
             }

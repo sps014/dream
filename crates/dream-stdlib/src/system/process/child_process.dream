@@ -15,28 +15,28 @@ public class ChildProcess {
     // `stream`: 0 = stdout, 1 = stderr.
     @native @node
     @runtime("processReadStream")
-    static extern async fun host_read_stream(handle: int, stream: int, max_bytes: int): char[];
+    static extern async fun host_read_stream(handle: int, stream: int, max_bytes: int): byte[];
 
     @native @node
     @runtime("processReadStreamLine")
-    static extern async fun host_read_stream_line(handle: int, stream: int): char[];
+    static extern async fun host_read_stream_line(handle: int, stream: int): byte[];
 
     @native @node
     @runtime("processWait")
-    static extern async fun host_wait(handle: int): char[];
+    static extern async fun host_wait(handle: int): byte[];
 
     @native @node
     @runtime("processKill")
     static extern fun host_kill(handle: int): bool;
 
-    // Copies `data[start..]` into a fresh `byte[]` (byte-exact; each `char` is one raw byte).
-    static fun slice_to_bytes(data: char[], start: int): byte[] {
+    // Copies `data[start..]` into a fresh `byte[]` without Unicode conversion.
+    static fun slice_to_bytes(data: byte[], start: int): byte[] {
         let n = data.length - start;
         let out = Buffer.alloc<byte>(n);
-        let src = Span<char>(data, start, n);
+        let src = Span<byte>(data, start, n);
         let i = 0;
         while i < n {
-            out[i] = (byte)src.get(i);
+            out[i] = src.get(i);
             i = i + 1;
         }
         return out;
@@ -49,7 +49,7 @@ public class ChildProcess {
         if raw.length == 0 {
             return Option.None;
         }
-        if raw[0] == '0' {
+        if raw[0] == (byte)48 {
             return Option.None;
         }
         return Option.Some(Encoding.utf8_decode(ChildProcess.slice_to_bytes(raw, 1)));

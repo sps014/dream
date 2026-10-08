@@ -1,23 +1,22 @@
 module system.process;
 
-// Sequential reader over a `char[]` wire payload shared by the process host functions: a decimal
-// header line, then raw bytes for the remainder. Each `char` element of the payload is one raw
-// byte (0-255), preserving process output without Unicode conversion.
+// Sequential reader over a `byte[]` wire payload shared by the process host functions: a decimal
+// header line, then raw bytes for the remainder, preserving output without Unicode conversion.
 internal class ProcessWireReader {
-    data: char[];
+    data: byte[];
     pos: int;
 
-    internal constructor(data: char[]) {
+    internal constructor(data: byte[]) {
         this.data = data;
         this.pos = 0;
     }
 
     fun slice_text(start: int, len: int): string {
         let result = string.alloc(len);
-        let src = Span<char>(this.data, start, len);
+        let src = Span<byte>(this.data, start, len);
         let i = 0;
         while i < len {
-            string.set(result, i, src.get(i));
+            string.set(result, i, (char)src.get(i));
             i = i + 1;
         }
         return result;
@@ -28,7 +27,7 @@ internal class ProcessWireReader {
         let n = this.data.length;
         let start = this.pos;
         let i = start;
-        while (i < n) && (this.data[i] != '\n') {
+        while (i < n) && (this.data[i] != (byte)10) {
             i = i + 1;
         }
         let line = this.slice_text(start, i - start);
@@ -48,10 +47,10 @@ internal class ProcessWireReader {
             take = 0;
         }
         let out = Buffer.alloc<byte>(take);
-        let src = Span<char>(this.data, start, take);
+        let src = Span<byte>(this.data, start, take);
         let i = 0;
         while i < take {
-            out[i] = (byte)src.get(i);
+            out[i] = src.get(i);
             i = i + 1;
         }
         this.pos = start + take;

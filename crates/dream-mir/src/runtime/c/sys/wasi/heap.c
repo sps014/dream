@@ -11,6 +11,8 @@ int dream_rt_mt;
 #endif
 int64_t live_objects;
 int64_t total_allocations;
+uint64_t dream_weak_allocations;
+uint64_t dream_weak_frees;
 int32_t last_freed;
 int32_t free_list_head;
 
@@ -306,10 +308,14 @@ static dream_ptr malloc_locked(int32_t size, int32_t tag, int account) {
 }
 
 int64_t debug_get_live_objects(void) {
-    return __atomic_load_n(&live_objects, __ATOMIC_RELAXED);
+    uint64_t allocations = __atomic_load_n(&dream_weak_allocations, __ATOMIC_RELAXED);
+    uint64_t frees = __atomic_load_n(&dream_weak_frees, __ATOMIC_RELAXED);
+    return __atomic_load_n(&live_objects, __ATOMIC_RELAXED)
+        + (int64_t)(allocations > frees ? allocations - frees : 0);
 }
 int64_t debug_get_total_allocations(void) {
-    return __atomic_load_n(&total_allocations, __ATOMIC_RELAXED);
+    return __atomic_load_n(&total_allocations, __ATOMIC_RELAXED)
+        + (int64_t)__atomic_load_n(&dream_weak_allocations, __ATOMIC_RELAXED);
 }
 int32_t debug_get_ref_count(dream_ptr ptr) {
     return ptr ? dream_rc_count(ptr) : 0;

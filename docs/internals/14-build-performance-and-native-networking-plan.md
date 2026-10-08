@@ -117,6 +117,12 @@ erased objects, interfaces, and closures stay conservative. Shared counts still 
 operations, and canonicalized release wrappers retain their runtime collector check. Weak
 registrations and target claims use the same collector gate; their table does not need a
 second mutex. Nested weak operations borrow the gate without ending the outer cleanup boundary.
+Weak registration records use a gate-protected metadata pool instead of individual ARC
+allocations. Registrations and removals still contribute to allocation and live-object
+diagnostics on native and WASM; pooled capacity is runtime storage, not a live registration.
+Tracked registration, retain, and release reuse the acquired thread context. A release with
+no pending candidate avoids entering the drain; zero-count and suspect candidates still drain
+synchronously at the outer ownership boundary.
 
 Release span borrowing also admits fresh private string owners. Ownership dataflow proves
 that the original owner remains alive at every view and derived-reference read, including

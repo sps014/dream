@@ -3,8 +3,8 @@
 
 /* Weak / unowned / `Weak<T>` registrations, indexed by target. A target carries
  * `DREAM_TAG_WEAK_TARGET` from its first registration on, so frees of every other object
- * skip the registry entirely and a dying target only visits its own bucket. Nodes stay on
- * the Dream heap (tag 0) so `Debug.live_objects` counts a live registration as before. */
+ * skip the registry entirely and a dying target only visits its own bucket. Registration
+ * records have no ARC edges or destructors, so pooled metadata needs no object header. */
 typedef struct dream_weak_node {
     dream_ptr target;
     dream_ptr slot;
@@ -16,11 +16,35 @@ typedef struct dream_weak_node {
 #define WEAK_BUCKETS 4096u
 
 static dream_weak_node *weak_buckets[WEAK_BUCKETS];
+static dream_weak_node *free_nodes;
 
 /* The cycle gate serializes both target claims and every weak-table access. A second
  * mutex adds no protection; borrowing an outer gate preserves its cleanup boundary. */
 static int weak_lock(void) { return dream_cycle_acquire(); }
 static void weak_unlock(int acquired) { if (acquired) { dream_cycle_leave(); } }
+
+static dream_weak_node *weak_take_locked(void) {
+    if (!free_nodes) {
+        dream_weak_node *chunk = dream_raw_calloc(1024, sizeof(*chunk));
+        if (!chunk) { DREAM_PANIC_LITERAL(u"panic: out of memory registering weak references"); }
+        for (size_t i = 1024; i-- > 0;) {
+            chunk[i].next = free_nodes;
+            free_nodes = &chunk[i];
+        }
+    }
+    dream_weak_node *node = free_nodes;
+    free_nodes = node->next;
+    uint64_t allocations = __atomic_load_n(&dream_weak_allocations, __ATOMIC_RELAXED);
+    __atomic_store_n(&dream_weak_allocations, allocations + 1, __ATOMIC_RELAXED);
+    return node;
+}
+
+static void weak_give_locked(dream_weak_node *node) {
+    node->next = free_nodes;
+    free_nodes = node;
+    uint64_t frees = __atomic_load_n(&dream_weak_frees, __ATOMIC_RELAXED);
+    __atomic_store_n(&dream_weak_frees, frees + 1, __ATOMIC_RELAXED);
+}
 
 static dream_weak_node **weak_bucket(dream_ptr target) {
     uint64_t h = ((uint64_t)(uintptr_t)target >> 3) * 0x9E3779B97F4A7C15ull;
@@ -31,24 +55,22 @@ static void weak_free_list(dream_weak_node *dead) {
     while (dead) {
         dream_weak_node *node = dead;
         dead = node->next;
-        dream_free((dream_ptr)node);
+        weak_give_locked(node);
     }
 }
 
 void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, int32_t none_tag) {
     dream_weak_node *node;
     dream_weak_node **head;
-    dream_ptr block;
     if (!target || !slot) {
         return;
     }
-    block = dream_malloc((int32_t)sizeof(dream_weak_node), 0);
-    node = (dream_weak_node *)dream_p(block);
+    int acquired = weak_lock();
+    node = weak_take_locked();
     node->target = target;
     node->slot = slot;
     node->none_tag = none_tag;
     node->kind = kind;
-    int acquired = weak_lock();
     __atomic_fetch_or(dream_tag_word(target), DREAM_TAG_WEAK_TARGET, __ATOMIC_RELAXED);
     dream_count(DREAM_COUNT_WEAK_REGISTER, 1);
     head = weak_bucket(target);
@@ -77,10 +99,10 @@ static dream_weak_node *weak_remove_locked(dream_ptr target, dream_ptr slot) {
 void dream_weak_unregister(dream_ptr target, dream_ptr slot) {
     int acquired = weak_lock();
     dream_weak_node *node = weak_remove_locked(target, slot);
-    weak_unlock(acquired);
     if (node != NULL) {
-        dream_free((dream_ptr)node);
+        weak_give_locked(node);
     }
+    weak_unlock(acquired);
 }
 
 void dream_weak_clear_all(dream_ptr obj) {
@@ -111,8 +133,8 @@ void dream_weak_clear_all(dream_ptr obj) {
         }
     }
     __atomic_fetch_and(dream_tag_word(obj), ~DREAM_TAG_WEAK_TARGET, __ATOMIC_RELAXED);
-    weak_unlock(acquired);
     weak_free_list(dead);
+    weak_unlock(acquired);
 }
 
 void dream_weak_prepare_destroy(dream_ptr ptr) {
@@ -215,9 +237,9 @@ void weakReleaseRaw(uintptr_t slot) {
     WeakBox *data = (WeakBox *)dream_p(box);
     dream_weak_node *node = weak_remove_locked(data->value, box);
     data->value = 0;
-    weak_unlock(acquired);
     if (node != NULL) {
-        dream_free((dream_ptr)node);
+        weak_give_locked(node);
     }
+    weak_unlock(acquired);
     dream_free(box);
 }

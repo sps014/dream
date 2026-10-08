@@ -97,36 +97,42 @@ int64_t debug_get_runtime_counter(int32_t id) {
     return (int64_t)__atomic_load_n(&dream_runtime_counters[id], __ATOMIC_RELAXED);
 }
 
-void dream_cycle_enter(void) {
-    CycleContext *c = context();
+static void enter_context(CycleContext *c) {
     if (c->gate_depth++ == 0) {
         dream_platform_current->lock(DREAM_LOCK_CYCLE);
         dream_count(DREAM_COUNT_GATES, 1);
     }
 }
 
+void dream_cycle_enter(void) { enter_context(context()); }
+
+static int acquire_context(CycleContext *c) {
+    if (c->gate_depth) { return 0; }
+    enter_context(c);
+    return 1;
+}
+
 int dream_cycle_construction_begin(int private_graph) {
     CycleContext *c = peek_context();
     if (c && c->gate_depth) { return 2; }
     if (private_graph && dream_region_active()) { return 0; }
-    dream_cycle_enter();
+    enter_context(c ? c : context());
     return 1;
 }
 #include "cycle_construction.h"
 int dream_cycle_acquire(void) {
-    if (context()->gate_depth) { return 0; }
-    dream_cycle_enter();
-    return 1;
+    return acquire_context(context());
 }
 
-void dream_cycle_leave(void) {
-    CycleContext *c = context();
+static void leave_context(CycleContext *c) {
     if (--c->gate_depth == 0) {
         c->heap_empty = live_nodes == 0;
         dream_platform_current->unlock(DREAM_LOCK_CYCLE);
     }
     release_idle_context(c);
 }
+
+void dream_cycle_leave(void) { leave_context(context()); }
 
 __attribute__((weak)) const dream_type_info *dream_type_info_for_tag(int32_t tag) {
     (void)tag;
@@ -198,7 +204,7 @@ static __attribute__((noinline, cold)) void grow_nodes(void) {
     }
 }
 
-static CycleNode *take_node(dream_ptr ptr) {
+static CycleNode *take_node(dream_ptr ptr, CycleContext *c) {
     if (!free_nodes) { grow_nodes(); }
     CycleNode *node = free_nodes;
     free_nodes = node->next_free;
@@ -210,7 +216,7 @@ static CycleNode *take_node(dream_ptr ptr) {
     node->trial = NULL;
     int32_t tag = dream_object_tag(ptr);
     int dynamic = tag == TAG_FUTURE || tag == TAG_FUNCBOX || tag == TAG_CLOSURE_ENV || tag == TAG_ARRAY;
-    node->component = construction_component(dynamic);
+    node->component = construction_component(c, dynamic);
     ++live_nodes;
     return node;
 }
@@ -245,10 +251,11 @@ static void unlink_node(CycleNode *node) {
 
 void dream_cycle_register(dream_ptr ptr) {
     if (dream_rc_immortal(ptr)) { return; }
-    int acquired = dream_cycle_acquire();
+    CycleContext *c = context();
+    int acquired = acquire_context(c);
     if (!find_node(ptr)) {
         if (next_sequence == UINT64_MAX) { DREAM_PANIC_LITERAL(u"panic: cycle allocation identity exhausted"); }
-        CycleNode *node = take_node(ptr);
+        CycleNode *node = take_node(ptr, c);
 #ifdef DREAM_WASM32
         HASH_ADD(hh, nodes, ptr, sizeof(ptr), node);
 #else
@@ -256,20 +263,21 @@ void dream_cycle_register(dream_ptr ptr) {
 #endif
         dream_count(DREAM_COUNT_CYCLE_NODES, 1);
     }
-    if (acquired) { dream_cycle_leave(); }
+    if (acquired) { leave_context(c); }
 }
 
 void dream_cycle_register_new(dream_ptr ptr) {
-    int acquired = dream_cycle_acquire();
+    CycleContext *c = context();
+    int acquired = acquire_context(c);
     if (next_sequence == UINT64_MAX) { DREAM_PANIC_LITERAL(u"panic: cycle allocation identity exhausted"); }
-    CycleNode *node = take_node(ptr);
+    CycleNode *node = take_node(ptr, c);
 #ifdef DREAM_WASM32
     HASH_ADD(hh, nodes, ptr, sizeof(ptr), node);
 #else
     *dream_cycle_slot(ptr) = node->slot;
 #endif
     dream_count(DREAM_COUNT_CYCLE_NODES, 1);
-    if (acquired) { dream_cycle_leave(); }
+    if (acquired) { leave_context(c); }
 }
 
 void dream_visit_edge(dream_ptr ptr) {
@@ -332,10 +340,11 @@ int dream_cycle_defer_destroy(dream_ptr ptr, void (*destroy)(dream_ptr)) {
 }
 
 void dream_cycle_retain(dream_ptr ptr) {
-    int acquired = dream_cycle_acquire();
+    CycleContext *c = context();
+    int acquired = acquire_context(c);
     CycleNode *node = find_node(ptr);
     if (node && node->dying) {
-        if (!context()->finalizing) { DREAM_PANIC_LITERAL(u"panic: resurrection of a dying object"); }
+        if (!c->finalizing) { DREAM_PANIC_LITERAL(u"panic: resurrection of a dying object"); }
     } else {
         int32_t *rc = dream_rc_word(ptr);
         int32_t v = __atomic_load_n(rc, __ATOMIC_RELAXED);
@@ -344,7 +353,7 @@ void dream_cycle_retain(dream_ptr ptr) {
             __atomic_store_n(rc, v + 1, __ATOMIC_RELAXED);
         }
     }
-    if (acquired) { dream_cycle_leave(); }
+    if (acquired) { leave_context(c); }
 }
 
 static int node_possible(CycleNode *node) {
@@ -522,7 +531,8 @@ void dream_cycle_drain(void) {
 }
 
 int dream_cycle_release(dream_ptr ptr) {
-    int acquired = dream_cycle_acquire();
+    CycleContext *c = context();
+    int acquired = acquire_context(c);
     CycleNode *node = find_node(ptr);
     if (node && !node->dying) {
         int32_t *rc = dream_rc_word(ptr);
@@ -539,8 +549,9 @@ int dream_cycle_release(dream_ptr ptr) {
             }
         }
     }
-    if (acquired) { dream_cycle_leave(); }
-    if (acquired) { dream_cycle_drain(); }
+    int pending = acquired && c->head && !c->draining && !c->postponed;
+    if (acquired) { leave_context(c); }
+    if (pending) { dream_cycle_drain(); }
     return 0;
 }
 

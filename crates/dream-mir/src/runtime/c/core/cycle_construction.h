@@ -20,8 +20,8 @@ void dream_cycle_graph_end(int token) {
     dream_cycle_store_end(token & 3);
 }
 
-static CycleComponent *construction_component(int dynamic) {
-    CycleComponent *component = context()->construction_component;
+static CycleComponent *construction_component(CycleContext *c, int dynamic) {
+    CycleComponent *component = c->construction_component;
     if (!component) { return dynamic ? component_take(1) : NULL; }
     if (component->references == UINT32_MAX) {
         DREAM_PANIC_LITERAL(u"panic: ownership component reference overflow");

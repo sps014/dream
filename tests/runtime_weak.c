@@ -87,7 +87,32 @@ static DREAM_THREAD_PROC(reader) {
     return 0;
 }
 
+static void pool_growth_and_reuse(void) {
+    enum { COUNT = 2500 };
+    dream_ptr slots[COUNT];
+    for (int round = 0; round < 3; ++round) {
+        int64_t allocations = debug_get_total_allocations();
+        dream_ptr target = dream_malloc(4, TAG_INT);
+        for (int i = 0; i < COUNT; ++i) {
+            slots[i] = target;
+            dream_weak_register(target, (dream_ptr)&slots[i], 2, 0);
+        }
+        assert(debug_get_live_objects() == COUNT + 1);
+        assert(debug_get_total_allocations() == allocations + COUNT + 1);
+        for (int i = 1; i < COUNT; i += 2) {
+            dream_weak_unregister(target, (dream_ptr)&slots[i]);
+        }
+        assert(debug_get_live_objects() == COUNT / 2 + 1);
+        dream_release(target);
+        for (int i = 0; i < COUNT; ++i) {
+            assert(slots[i] == (i & 1 ? target : 0));
+        }
+        assert(debug_get_live_objects() == 0);
+    }
+}
+
 int main(void) {
+    pool_growth_and_reuse();
     struct {
         int32_t tag;
         dream_ptr payload;

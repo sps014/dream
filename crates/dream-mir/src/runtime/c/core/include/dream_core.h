@@ -1458,6 +1458,10 @@ int32_t regex_test(uintptr_t h, dream_ptr input);
 
 int64_t debug_get_live_objects(void);
 int64_t debug_get_total_allocations(void);
+/* Pooled weak registrations remain visible to ARC leak diagnostics. Their updates
+ * hold the cycle gate; diagnostic readers use atomic loads. */
+extern uint64_t dream_weak_allocations;
+extern uint64_t dream_weak_frees;
 int32_t debug_get_ref_count(dream_ptr ptr);
 int32_t debug_get_heap_ptr(void);
 int32_t debug_get_free_list_head(void);

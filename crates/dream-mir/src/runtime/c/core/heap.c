@@ -23,6 +23,8 @@ static size_t arena_len;
  * `pinned` counts immortal singletons that left `Debug.live_objects` without being freed. */
 static dream_heap_counters *counters_head;
 static uint64_t pinned;
+uint64_t dream_weak_allocations;
+uint64_t dream_weak_frees;
 
 int dream_rt_mt;
 
@@ -88,6 +90,8 @@ static void heap_sums(uint64_t *allocs, uint64_t *frees) {
         f += __atomic_load_n(&c->frees, __ATOMIC_RELAXED);
     }
     f += __atomic_load_n(&pinned, __ATOMIC_RELAXED);
+    a += __atomic_load_n(&dream_weak_allocations, __ATOMIC_RELAXED);
+    f += __atomic_load_n(&dream_weak_frees, __ATOMIC_RELAXED);
     heap_unlock();
     *allocs = a;
     *frees = f;

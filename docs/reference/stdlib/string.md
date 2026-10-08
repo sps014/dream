@@ -46,7 +46,7 @@ fun main() {
 
 ## Views without allocating
 
-`substring` returns a new `string`. When you only need to look at part of a string (to compare it, parse it, or look it up in a map), take a `StringSpan` instead. `s.span(start, end)` clamps like `substring`, but never allocates:
+`substring` returns a new `string`. When you only need to look at part of a string (to compare it, parse it, or look it up in a map), take a `ReadOnlySpan<char>` instead. `s.span(start, end)` clamps like `substring`, but never allocates:
 
 ```dream
 let line = "port=8080";

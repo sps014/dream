@@ -8,7 +8,7 @@
 //!
 //! Wrapping each target in a retaining thunk would not pay: most funcboxes are lambdas whose
 //! parameters are `take`, so nearly every callback would grow a thunk and the retain would only
-//! move. Instead an address-taken function switches its reference parameters to borrowed, and every
+//! move. Instead an address-taken function switches reference-bearing parameters to borrowed, and every
 //! call site — direct and indirect alike — then passes at +0. The caller keeps ownership across the
 //! call, which it already has to, so nothing needs to retain on the callee's behalf.
 //!
@@ -85,13 +85,13 @@ pub(crate) fn address_taken(mir: &Mir) -> HashSet<FnKey> {
     out
 }
 
-/// Switches the function's reference parameters to the borrowed mode. `RcInsertion` then skips the
+/// Switches reference and by-value parameters to the borrowed mode. `RcInsertion` then skips the
 /// scope-exit releases that paired with the caller's now-absent retain, and any store of a parameter
 /// into a container retains at the store the same way it already does for a declared `borrow`.
 fn borrow_params(f: &mut MirFunction, interner: &TypeInterner) {
     for p in &f.params {
         let d = &mut f.locals[p.0 as usize];
-        if d.is_take && interner.is_rc_tracked(d.ty) {
+        if d.is_take && (interner.is_rc_tracked(d.ty) || interner.is_value_type(d.ty)) {
             d.is_take = false;
         }
     }

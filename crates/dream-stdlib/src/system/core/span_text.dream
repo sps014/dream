@@ -1,0 +1,169 @@
+module system.core;
+
+extend ReadOnlySpan<T: SpanCharacter> {
+    @inline
+    public fun char_at(index: int): char {
+        return this[index];
+    }
+
+    // String payloads use UTF-16; character arrays store full 32-bit values.
+    public fun byte_size(): int {
+        if this._text { return this._length * 2; }
+        return this._length * 4;
+    }
+
+    public fun byte_at(index: int): int {
+        if (index < 0) || (index >= this.byte_size()) {
+            System.panic("Span byte index out of range");
+        }
+        if this._text { return this.src.byte_at(this.offset * 2 + index); }
+        return ((int)this.at_unchecked(index / 4) >> ((index & 3) * 8)) & 255;
+    }
+
+    public override fun to_string(): string {
+        if this._text {
+            return string.substring_raw(this.src, this.offset, this.offset + this._length);
+        }
+        let result = StringBuilder();
+        let i = 0;
+        while i < this._length {
+            result.append_char(this.at_unchecked(i));
+            i = i + 1;
+        }
+        return result.to_string();
+    }
+
+    // Matches string hashing for UTF-16 elements without allocating a string.
+    public override fun hash_code(): int {
+        if this._text { return string.view_hash(this.src, this.offset, this._length); }
+        let hash = 2166136261u;
+        let i = 0;
+        unchecked {
+            while i < this._length {
+                hash = (hash ^ (uint)(int)this.at_unchecked(i)) * 16777619u;
+                i = i + 1;
+            }
+            if hash <= 1u { hash = hash + 2u; }
+        }
+        return (int)hash;
+    }
+
+    fun operator ==(other: ReadOnlySpan<T>): bool {
+        if this._text && other._text {
+            return string.view_eq(this.src, this.offset, this._length, other.src, other.offset, other._length) != 0;
+        }
+        return this.sequence_equal(other);
+    }
+
+    fun operator ==(borrow other: string): bool {
+        return this.equals(other);
+    }
+
+    public fun equals(borrow other: string): bool {
+        if this._text {
+            return string.view_eq(this.src, this.offset, this._length, other, 0, other.length) != 0;
+        }
+        if this._length != other.length { return false; }
+        let i = 0;
+        while i < this._length {
+            if this.at_unchecked(i) != other.char_at(i) { return false; }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    public fun compare(other: ReadOnlySpan<T>): int {
+        if this._text && other._text {
+            return string.view_compare(this.src, this.offset, this._length, other.src, other.offset, other._length);
+        }
+        let n = this._length;
+        if other._length < n { n = other._length; }
+        let i = 0;
+        while i < n {
+            let a = this.at_unchecked(i);
+            let b = other.at_unchecked(i);
+            if a < b { return -1; }
+            if a > b { return 1; }
+            i = i + 1;
+        }
+        return this._length - other._length;
+    }
+
+    public fun compare(borrow other: string): int {
+        if this._text {
+            return string.view_compare(this.src, this.offset, this._length, other, 0, other.length);
+        }
+        return this.compare(other.span());
+    }
+
+    public fun starts_with(borrow prefix: string): bool {
+        let n = prefix.length;
+        if n > this._length { return false; }
+        if this._text {
+            return string.view_eq(this.src, this.offset, n, prefix, 0, n) != 0;
+        }
+        return this.slice(0, n).equals(prefix);
+    }
+
+    public fun ends_with(borrow suffix: string): bool {
+        let n = suffix.length;
+        if n > this._length { return false; }
+        if this._text {
+            return string.view_eq(this.src, this.offset + this._length - n, n, suffix, 0, n) != 0;
+        }
+        return this.slice(this._length - n, n).equals(suffix);
+    }
+
+    public fun trim(): ReadOnlySpan<T> {
+        return this.trim_start().trim_end();
+    }
+
+    public fun trim_start(): ReadOnlySpan<T> {
+        let s = 0;
+        while (s < this._length) && this.at_unchecked(s).is_whitespace() { s = s + 1; }
+        return this.slice(s);
+    }
+
+    public fun trim_end(): ReadOnlySpan<T> {
+        let e = this._length;
+        while (e > 0) && this.at_unchecked(e - 1).is_whitespace() { e = e - 1; }
+        return this.slice(0, e);
+    }
+
+    public fun parse_int(): Result<int, ParseError> {
+        let n = this._length;
+        if n == 0 { return Result.Err(ParseError.invalid("cannot parse int from empty string")); }
+        let i = 0;
+        let neg = false;
+        if this.at_unchecked(0) == '-' { neg = true; i = 1; }
+        if i >= n { return Result.Err(ParseError.invalid("cannot parse int: no digits")); }
+        let limit = 2147483647L;
+        if neg { limit = 2147483648L; }
+        let result = 0L;
+        while i < n {
+            let c = this.at_unchecked(i);
+            if (c < '0') || (c > '9') { return Result.Err(ParseError.invalid("cannot parse int: invalid digit")); }
+            result = result * 10L + (long)((int)c - 48);
+            if result > limit { return Result.Err(ParseError.invalid("cannot parse int: value out of range")); }
+            i = i + 1;
+        }
+        if neg { return Result.Ok((int)(0L - result)); }
+        return Result.Ok((int)result);
+    }
+
+    public fun parse_double(): Result<double, ParseError> {
+        return double.parse(this.to_string());
+    }
+
+    public fun split_iter(sep: char): StringSplit {
+        return StringSplit(this, string.empty, (int)sep);
+    }
+
+    public fun split_iter(borrow sep: string): StringSplit {
+        return StringSplit(this, sep, -1);
+    }
+
+    public fun lines(): StringLines {
+        return StringLines(this);
+    }
+}

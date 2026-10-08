@@ -1,7 +1,7 @@
-// A `StringSpan` cannot be a generic argument: `List<T>` keeps its elements on the heap.
+// A `ReadOnlySpan<char>` cannot be a generic argument: `List<T>` keeps its elements on the heap.
 
 import system.collections;
 
 fun main(): void {
-    let xs = List<StringSpan>();
+    let xs = List<ReadOnlySpan<char>>();
 }

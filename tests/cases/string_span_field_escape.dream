@@ -1,9 +1,9 @@
-// A `StringSpan` is a `ref struct`: it cannot be stored as a field of a class or ordinary struct.
+// A `ReadOnlySpan<char>` is a `ref struct`: it cannot be stored as a field of a class or ordinary struct.
 
 class Holder {
-    public view: StringSpan;
+    public view: ReadOnlySpan<char>;
 
-    public constructor(view: StringSpan) {
+    public constructor(view: ReadOnlySpan<char>) {
         this.view = view;
     }
 }

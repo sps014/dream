@@ -77,19 +77,19 @@ public fun get(borrow key: K): Option<V>
 Value for the `string` key equal to `key`, without building a `string`.
 
 ```dream
-public fun get(key: StringSpan): Option<V> where K : StringKey
+public fun get(key: ReadOnlySpan<char>): Option<V> where K : StringKey
 ```
 
 ## `get_or`
 
 ```dream
-public fun get_or(key: StringSpan, fallback: V): V where K : StringKey
+public fun get_or(key: ReadOnlySpan<char>, fallback: V): V where K : StringKey
 ```
 
 ## `contains`
 
 ```dream
-public fun contains(key: StringSpan): bool where K : StringKey
+public fun contains(key: ReadOnlySpan<char>): bool where K : StringKey
 ```
 
 ## `this`

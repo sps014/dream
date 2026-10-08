@@ -22,7 +22,7 @@ fun span_sum(borrow span: Span<int>): int {
     return sum;
 }
 @noinline
-fun span_text(borrow span: StringSpan): bool {
+fun span_text(borrow span: ReadOnlySpan<char>): bool {
     let copy = span;
     return copy == "number=42";
 }

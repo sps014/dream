@@ -313,3 +313,7 @@ The late `value-borrow` proof applies to ordinary structs and ref structs, inclu
 by-value `borrow` parameters. Their private copies remain by-value, but frame-stable reference
 fields need no retains or drops. Mutation, escape, sink parameters, and opaque forwarding keep
 owning behavior.
+
+Address-taken functions and interface methods use a +0 ABI for reference-bearing value
+arguments as well as heap references. Inlining preserves the private copy of a borrowed
+value argument and does not drop its caller-owned fields at the continuation.

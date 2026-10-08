@@ -1,10 +1,15 @@
 module system.core;
 
+internal interface SpanCharacter {}
+extend char : SpanCharacter {}
+
 // `ReadOnlySpan<T>` - a `Span<T>` without the writers: no indexer setter, `set`, `fill`, or
 // `copy_from`. Take one when a function borrows a run of elements and promises not to change them.
 // The same `ref struct` escape rules as `Span<T>` apply (see `docs/reference/language/spans.md`).
 public ref struct ReadOnlySpan<T> {
     internal array: T[];
+    internal src: string;
+    internal _text: bool;
     internal offset: int;
     internal _length: int;
 
@@ -14,8 +19,24 @@ public ref struct ReadOnlySpan<T> {
             System.panic("Span range out of bounds");
         }
         this.array = array;
+        this._text = false;
         this.offset = offset;
         this._length = length;
+    }
+
+    constructor(borrow src: string, offset: int, length: int) {
+        this.src = src;
+        this._text = true;
+        this.offset = offset;
+        this._length = length;
+    }
+
+    internal static fun from_text(borrow src: string, offset: int, length: int): ReadOnlySpan<T> where T: SpanCharacter {
+        return ReadOnlySpan<T>(src, offset, length);
+    }
+
+    public static fun of(borrow src: string): ReadOnlySpan<T> where T: SpanCharacter {
+        return ReadOnlySpan<T>(src, 0, src.length);
     }
 
     // A read-only span over the whole of `array`.
@@ -42,6 +63,13 @@ public ref struct ReadOnlySpan<T> {
         return this.array[this.offset + index];
     }
 
+    public fun this[index: int]: char where T: SpanCharacter {
+        if (index < 0) || (index >= this._length) {
+            System.panic("Span index out of range");
+        }
+        return this.at_unchecked(index);
+    }
+
     public fun get(index: int): T {
         return this[index];
     }
@@ -52,10 +80,28 @@ public ref struct ReadOnlySpan<T> {
         return Buffer.get_unchecked<T>(this.array, this.offset + index);
     }
 
+    @inline
+    internal fun at_unchecked(index: int): char where T: SpanCharacter {
+        if this._text {
+            return this.src.char_at(this.offset + index);
+        }
+        return Buffer.get_unchecked<T>(this.array, this.offset + index);
+    }
+
     // A sub-span covering `[start, start + count)`. Traps if the range doesn't fit.
     public fun slice(start: int, count: int): ReadOnlySpan<T> {
         if (start < 0) || (count < 0) || (count > this._length - start) {
             System.panic("Span slice out of range");
+        }
+        return ReadOnlySpan<T>(this.array, this.offset + start, count);
+    }
+
+    public fun slice(start: int, count: int): ReadOnlySpan<T> where T: SpanCharacter {
+        if (start < 0) || (count < 0) || (count > this._length - start) {
+            System.panic("Span slice out of range");
+        }
+        if this._text {
+            return ReadOnlySpan<T>(this.src, this.offset + start, count);
         }
         return ReadOnlySpan<T>(this.array, this.offset + start, count);
     }
@@ -69,9 +115,21 @@ public ref struct ReadOnlySpan<T> {
     public fun index_of(borrow value: T): Option<int> {
         let i = 0;
         while i < this._length {
-            if Buffer.get_unchecked<T>(this.array, this.offset + i) == value {
+            if this.at_unchecked(i) == value {
                 return Option.Some(i);
             }
+            i = i + 1;
+        }
+        return Option.None;
+    }
+
+    public fun index_of(borrow value: T): Option<int> where T: SpanCharacter {
+        if this._text {
+            return span_found(string.view_find_char(this.src, this.offset, this._length, 0, (int)value));
+        }
+        let i = 0;
+        while i < this._length {
+            if this.at_unchecked(i) == value { return Option.Some(i); }
             i = i + 1;
         }
         return Option.None;
@@ -88,13 +146,13 @@ public ref struct ReadOnlySpan<T> {
         if this._length != other._length {
             return false;
         }
-        if (this.array == other.array) && (this.offset == other.offset) {
+        if (this._text == other._text) && (this.array == other.array) && (this.src == other.src) && (this.offset == other.offset) {
             return true;
         }
         let i = 0;
         while i < this._length {
-            let a = Buffer.get_unchecked<T>(this.array, this.offset + i);
-            if a != Buffer.get_unchecked<T>(other.array, other.offset + i) {
+            let a = this.at_unchecked(i);
+            if a != other.at_unchecked(i) {
                 return false;
             }
             i = i + 1;
@@ -112,21 +170,29 @@ public ref struct ReadOnlySpan<T> {
             let i = this._length;
             while i > 0 {
                 i = i - 1;
-                dst.array[dst.offset + i] = this.array[this.offset + i];
+                dst.array[dst.offset + i] = this.at_unchecked(i);
             }
             return;
         }
         let i = 0;
         while i < this._length {
-            dst.array[dst.offset + i] = this.array[this.offset + i];
+            dst.array[dst.offset + i] = this.at_unchecked(i);
             i = i + 1;
         }
     }
 
-    // Unmanaged fast path: one `memory.copy`.
+    // Array-backed unmanaged elements use one bulk copy; strings widen UTF-16 units.
     public fun copy_to(dst: Span<T>): void where T : unmanaged {
         if this._length > dst._length {
             System.panic("Span copy_to overflow");
+        }
+        if this._text {
+            let i = 0;
+            while i < this._length {
+                dst.set(i, this.at_unchecked(i));
+                i = i + 1;
+            }
+            return;
         }
         Buffer.elems_copy<T>(dst.array, dst.offset, this.array, this.offset, this._length);
     }
@@ -136,7 +202,7 @@ public ref struct ReadOnlySpan<T> {
         let result = Buffer.alloc<T>(this._length);
         let i = 0;
         while i < this._length {
-            result[i] = this.array[this.offset + i];
+            result[i] = this.at_unchecked(i);
             i = i + 1;
         }
         return result;
@@ -144,6 +210,14 @@ public ref struct ReadOnlySpan<T> {
 
     public fun to_array(): T[] where T : unmanaged {
         let result = Buffer.alloc<T>(this._length);
+        if this._text {
+            let i = 0;
+            while i < this._length {
+                result[i] = this.at_unchecked(i);
+                i = i + 1;
+            }
+            return result;
+        }
         Buffer.elems_copy<T>(result, 0, this.array, this.offset, this._length);
         return result;
     }

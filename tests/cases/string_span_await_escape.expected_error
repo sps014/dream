@@ -1,1 +1,1 @@
-'v' of 'ref struct' type 'StringSpan' is still in scope at this 'await'
+'v' of 'ref struct' type 'ReadOnlySpan<char>' is still in scope at this 'await'

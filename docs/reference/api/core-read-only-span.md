@@ -2,9 +2,9 @@
 
 No import is needed.
 
-Read the [usage guide](../language/spans.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+Read the [span guide](../language/spans.md) for usage and backing-storage semantics.
 
-## `ref struct ReadOnlySpan<T>`
+## `ReadOnlySpan<T>`
 
 `ReadOnlySpan<T>` - a `Span<T>` without the writers: no indexer setter, `set`, `fill`, or `copy_from`. Take one when a function borrows a run of elements and promises not to change them. The same `ref struct` escape rules as `Span<T>` apply (see `docs/reference/language/spans.md`).
 
@@ -18,6 +18,12 @@ A view of `array[offset .. offset + length)`. Traps unless that range lies insid
 
 ```dream
 public constructor(borrow array: T[], offset: int, length: int)
+```
+
+## `of`
+
+```dream
+public static fun of(borrow src: string): ReadOnlySpan<T> where T: SpanCharacter
 ```
 
 ## `of`
@@ -52,6 +58,12 @@ The element at `index` (relative to this span). Traps if out of range.
 public fun this[index: int]: T
 ```
 
+## `this`
+
+```dream
+public fun this[index: int]: char where T: SpanCharacter
+```
+
 ## `get`
 
 ```dream
@@ -68,6 +80,12 @@ public fun slice(start: int, count: int): ReadOnlySpan<T>
 
 ## `slice`
 
+```dream
+public fun slice(start: int, count: int): ReadOnlySpan<T> where T: SpanCharacter
+```
+
+## `slice`
+
 The sub-span from `start` to the end. Traps if `start` is outside `[0, length]`.
 
 ```dream
@@ -80,6 +98,12 @@ Index of the first element equal to `value` (by value equality), or `None`.
 
 ```dream
 public fun index_of(borrow value: T): Option<int>
+```
+
+## `index_of`
+
+```dream
+public fun index_of(borrow value: T): Option<int> where T: SpanCharacter
 ```
 
 ## `contains`
@@ -108,7 +132,7 @@ public fun copy_to(dst: Span<T>): void
 
 ## `copy_to`
 
-Unmanaged fast path: one `memory.copy`.
+Array-backed unmanaged elements use one bulk copy; strings widen UTF-16 units.
 
 ```dream
 public fun copy_to(dst: Span<T>): void where T : unmanaged

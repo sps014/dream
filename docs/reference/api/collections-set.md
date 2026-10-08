@@ -57,7 +57,7 @@ public fun contains(borrow value: T): bool
 True when the set holds the `string` equal to `value`, without building a `string`.
 
 ```dream
-public fun contains(value: StringSpan): bool where T : StringKey
+public fun contains(value: ReadOnlySpan<char>): bool where T : StringKey
 ```
 
 ## `add_all`

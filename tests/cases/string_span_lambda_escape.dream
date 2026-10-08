@@ -1,4 +1,4 @@
-// A lambda's captures live in a heap closure environment, so a `StringSpan` cannot be captured.
+// A lambda's captures live in a heap closure environment, so a `ReadOnlySpan<char>` cannot be captured.
 
 import system;
 

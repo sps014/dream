@@ -140,6 +140,11 @@ impl<'a> Analyzer<'a> {
         } else {
             opr.kind
         };
+        // Generic instances (and their constrained `extend` blocks) attach lazily; an operator
+        // can be the first use of a type that so far only appeared in signatures.
+        if let Some((base_name, generic_args)) = Self::resolve_struct_parts(&left_value) {
+            self.ensure_struct_instantiated(&base_name, &generic_args, &opr.position, diagnostics);
+        }
         match self.operator_binary_fn(&left_value, &right_value, operator_kind) {
             Ok(Some(method)) => {
                 if let Some(target) = method.param_type {

@@ -133,7 +133,7 @@ pub const ATTR_STRING_SUBSTRING: &str = "string_substring_raw";
 pub const ATTR_STRING_COPY_UTF8: &str = "string_copy_utf8";
 /// `string.compare_raw(a, b)` — UTF-8 lexicographic compare (`$string_compare`).
 pub const ATTR_STRING_COMPARE: &str = "string_compare";
-/// `StringSpan` helpers over `(string, offset, length)` views (`core/string_view.c`).
+/// `ReadOnlySpan<char>` helpers over `(string, offset, length)` views (`core/string_view.c`).
 pub const ATTR_STRING_VIEW_EQ: &str = "string_view_eq";
 pub const ATTR_STRING_VIEW_COMPARE: &str = "string_view_compare";
 pub const ATTR_STRING_VIEW_HASH: &str = "string_view_hash";
@@ -318,7 +318,7 @@ pub enum IntrinsicOp {
     StringCopyUtf8,
     /// `string.compare_raw(a, b)` — UTF-8 lexicographic compare.
     StringCompare,
-    /// Read-only `StringSpan` scans and compares (`string_view_*`), and the slice header a
+    /// Read-only `ReadOnlySpan<char>` scans and compares (`string_view_*`), and the slice header a
     /// `StringBuilder` span views its buffer through (retains only that buffer).
     StringView,
     StringBuilderBuffer,

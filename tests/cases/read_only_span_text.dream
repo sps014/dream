@@ -1,0 +1,59 @@
+import system;
+import system.collections;
+
+@noinline
+fun inspect(borrow view: ReadOnlySpan<char>): void {
+    System.println(view.slice(1, 2).to_string());
+    System.println(view.index_of('界').unwrap_or(-1));
+    System.println(view.hash_code() == "aΩ界b".hash_code());
+}
+
+fun main(): void {
+    let chars = ['a', 'Ω', '界', 'b'];
+    let array = Span<char>.of(chars).as_read_only();
+    let text = ReadOnlySpan<char>.of("aΩ界b");
+    inspect(array);
+    inspect(text);
+    System.println(array.sequence_equal(text));
+    System.println(array == text);
+    System.println(array.equals("aΩ界b"));
+    System.println(array.compare(text));
+    System.println(text.slice(1).length);
+    System.println(array.byte_size());
+    System.println(text.byte_size());
+    let copy = Buffer.alloc<char>(4);
+    text.copy_to(Span<char>.of(copy));
+    System.println(ReadOnlySpan<char>.of(copy).sequence_equal(text));
+    System.println((int)text.to_array()[2]);
+    let joined = StringBuilder();
+    joined.append(array.slice(1, 2));
+    joined.append(text.slice(1, 2));
+    System.println(joined.to_string());
+    let keys = Map<string, int>();
+    keys.set("aΩ界b", 42);
+    System.println(keys.get(array).unwrap_or(-1));
+    System.println(keys.get(text).unwrap_or(-1));
+    let empty = string.empty.span();
+    System.println(empty.to_array().length);
+    System.println(empty.slice(0, 0).equals(""));
+    let split = ReadOnlySpan<char>.of(['a', ',', 'b']).split_iter(',');
+    while split.move_next() { System.println(split.current.to_string()); }
+    let retained = ReadOnlySpan<char>.of(['a', ',', 'b']).split_iter(',');
+    retained.move_next();
+    let first = retained.current;
+    retained.move_next();
+    System.println(first.to_string());
+    System.println(retained.current.to_string());
+    let lines = ReadOnlySpan<char>.of(['x', '\n', 'y']).lines();
+    while lines.move_next() { System.println(lines.current.to_string()); }
+    System.println(ReadOnlySpan<char>.of([' ', '-', '4', '2', ' ']).trim().parse_int().unwrap_or(0));
+    let temporary = ("Ω" + System.env_or("DREAM_SPAN_TEXT_SUFFIX", "界")).span();
+    System.println(temporary.to_string());
+    let offsets = "012345".span(1, 5).slice(1, 2);
+    System.println(offsets.to_string());
+    let astral = "😀".span();
+    System.println(astral.length);
+    System.println((int)astral.get(0));
+    System.println((int)astral.get(1));
+    System.println((int)ReadOnlySpan<char>.of(['😀']).get(0));
+}

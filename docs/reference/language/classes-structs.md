@@ -84,7 +84,7 @@ ref struct Pair {
 
 A `ref struct` value behaves exactly like an ordinary `struct` as a local variable, a function parameter, or a function return value (inline storage, copy semantics, zero heap allocation). What's rejected:
 
-- **Storing it in a field** of a `class` or an ordinary `struct` — that would keep it alive past the frame that created it. A field of another `ref struct` is fine, since the outer value is bound by the same rules (`StringSplit` holds a `StringSpan` this way).
+- **Storing it in a field** of a `class` or an ordinary `struct` — that would keep it alive past the frame that created it. A field of another `ref struct` is fine, since the outer value is bound by the same rules (`StringSplit` holds a `ReadOnlySpan<char>` this way).
 - **Using it as a generic type argument** of a type or a function (`List<Pair>`, `Option<Pair>`, `identity<Pair>(p)`, ...) — generic code may store a `T` anywhere, including on the heap.
 - **Using it as an array element type** (`Pair[]`, `[p, q]`) — arrays are heap-allocated.
 - **Capturing it in a lambda** — a capturing lambda's environment is a heap-allocated cell.

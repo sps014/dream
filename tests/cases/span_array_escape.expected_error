@@ -1,1 +1,1 @@
-'StringSpan' is a 'ref struct' and cannot be an array element type
+'ReadOnlySpan<char>' is a 'ref struct' and cannot be an array element type

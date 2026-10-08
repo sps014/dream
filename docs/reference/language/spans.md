@@ -17,37 +17,38 @@ fun main() {
 
 | View | Over | Get one with |
 | --- | --- | --- |
-| `StringSpan` | `string` text | `s.span()`, `s.span(start, end)`, `builder.as_span()` |
+| `ReadOnlySpan<char>` | `string` text | `s.span()`, `s.span(start, end)`, `builder.as_span()` |
 | `Span<T>` | `T[]` elements, writable | `Span.of(xs)`, `Span(xs, offset, length)`, `list.as_span()` |
 | `ReadOnlySpan<T>` | `T[]` elements, read-only | `ReadOnlySpan.of(xs)`, `span.as_read_only()`, `list.as_read_only_span()` |
 
-## `StringSpan`
+## Character views
 
 `Span<char>` permits writes to a `char[]` of 32-bit code points; strings are immutable and
 store 16-bit UTF-16 units, including surrogate pairs, and may use sliced storage.
-`StringSpan` keeps the string owner alive and views its UTF-16 units directly, without converting
-them into an array. Both views are stored inline. Release can hoist the string payload address
+`ReadOnlySpan<char>` views either backing without copying: it keeps its source owner alive and
+reads UTF-16 units from strings or full 32-bit values from arrays. `ReadOnlySpan<char>.of(s)`
+and `s.span()` create string views; `Span<char>.of(chars).as_read_only()` creates an array view. Both views are stored inline. Release can hoist the string payload address
 out of read-only loops when the source lifetime and view fields are proven stable.
 
-`s.span(start, end)` clamps its bounds exactly like `s.substring(start, end)`, but returns a view instead of a new `string`. It supports the read-only `string` surface:
+`s.span(start, end)` clamps its bounds exactly like `s.substring(start, end)`, but returns a view instead of a new `string`. Once a view exists, `view.slice(start, count)` uses a checked start and element count, just like every other span. String-backed views have no setters; writes fail at compile time. It supports the read-only `string` surface:
 
 | Call | Meaning |
 | --- | --- |
-| `length` / `is_empty()` / `byte_size()` | size in UTF-16 units / payload bytes |
-| `char_at(i)` / `sp[i]` / `byte_at(i)` | one code unit / payload byte |
-| `==` / `equals(s)` / `compare` | equality with a `StringSpan` or `string` / named string equality / ordering against either |
+| `length` / `is_empty()` / `byte_size()` | element count / payload bytes (2 per string unit, 4 per array character) |
+| `char_at(i)` / `sp[i]` / `byte_at(i)` | one UTF-16 unit or array character / payload byte |
+| `==` / `equals(s)` / `compare` | equality with a `ReadOnlySpan<char>` or `string` / named string equality / ordering against either |
 | `starts_with` / `ends_with` / `contains` | tests |
 | `index_of` / `last_index_of` | `Option<int>`, by `char` or `string` |
-| `slice(start, end)` / `slice(start)` | a narrower view, clamped |
+| `slice(start, count)` / `slice(start)` | a narrower view, checked |
 | `trim` / `trim_start` / `trim_end` | a view without surrounding whitespace |
 | `parse_int()` / `parse_double()` | `Result` like the `string` versions |
-| `split_iter(sep)` / `lines()` | allocation-free iterators of `StringSpan` pieces |
+| `split_iter(sep)` / `lines()` | allocation-free iterators of `ReadOnlySpan<char>` pieces |
 | `to_string()` | copy the view into an owned `string` |
 
 `==` and `!=` compare contents without allocating: `sp == "text"`, `"text" == sp`,
 and `sp == other_span` all work. `equals(string)` is also available.
 
-A span hashes like the equal `string`, so `Map<string, V>` and `Set<string>` look it up without building a key:
+String-backed spans and arrays of matching UTF-16 elements hash like the equal `string`, so `Map<string, V>` and `Set<string>` look it up without building a key:
 
 ```dream
 let ages = Map<string, int>();
@@ -56,7 +57,7 @@ let text = "ada,grace";
 System.println(ages.get_or(text.span(0, 3), 0));   // 36
 ```
 
-`Map.get`, `Map.get_or`, `Map.contains` and `Set.contains` accept a `StringSpan` when the key type is `string`.
+`Map.get`, `Map.get_or`, `Map.contains` and `Set.contains` accept a `ReadOnlySpan<char>` when the key type is `string`.
 
 Split and line iterators are cursors: call `move_next()`, then read `current`.
 
@@ -83,7 +84,7 @@ Both view `array[offset .. offset + length)`. Creating one with a range outside 
 | `copy_to(dst)` / `to_array()` | yes | yes |
 | `as_read_only()` | yes | — |
 
-`for (let x in span)` walks either kind with an index loop; no iterator object is allocated. Copies and comparisons of `unmanaged` element types use bulk memory operations.
+`for (let x in span)` walks either kind with an index loop; no iterator object is allocated. Copies of array-backed `unmanaged` elements use bulk memory operations. String-backed character copies widen UTF-16 units into 32-bit array elements. Comparisons use element equality.
 
 `list.as_span()` views the list's elements at the moment it is called. Like C#'s `CollectionsMarshal.AsSpan`, it keeps the backing array it saw alive: if the list later grows into a new array, the span still shows the old one.
 
@@ -92,7 +93,7 @@ Both view `array[offset .. offset + length)`. Creating one with a range outside 
 A span may be a local, a parameter, a return value, or a field of another `ref struct`. The compiler rejects anything that could let it outlive its stack frame:
 
 - a field of a `class` or ordinary `struct`
-- a generic type or function argument (`List<StringSpan>`, `identity(sp)`)
+- a generic type or function argument (`List<ReadOnlySpan<char>>`, `identity(sp)`)
 - an array element
 - a lambda capture
 - an `async` parameter, or a local still in scope at an `await`

@@ -366,7 +366,15 @@ impl<'l, 'a> Fx<'l, 'a> {
                     )) | Rvalue::UnionField { .. }
                 );
                 let dest = self.read_local(*l);
-                self.memcpy_value(rv, &rhs, lty, &dest, retain_copy, false);
+                let decl = &self.f.locals[l.0 as usize];
+                let owns = !decl.is_ref
+                    && !decl.borrows_refs
+                    && decl.name.as_deref() != Some("this")
+                    && (!self.f.params.contains(l) || decl.is_take);
+                // Producer results already own their references and are evaluated in separate
+                // storage, so rebinding can release the previous value before adopting them.
+                let drop_old = owns && crate::rc_store::rvalue_allocates(rv);
+                self.memcpy_value(rv, &rhs, lty, &dest, retain_copy, drop_old);
             }
             Place::Local(l) => self.write_local(*l, &rhs),
             Place::Global(g) => self.store_global(*g, place, rv, rhs),

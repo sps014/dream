@@ -68,6 +68,7 @@ pub(super) fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, intern
         .enumerate()
         .filter(|(i, d)| {
             !d.manual_drop
+                && (!g_params.contains(&Local(*i as u32)) || d.is_take)
                 && matches!(
                     callee_frame.kind(Local(*i as u32)),
                     Some(
@@ -96,8 +97,8 @@ pub(super) fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, intern
     let orig_term = f.blocks[site.block].terminator.clone();
     let tail: Vec<Statement> = f.blocks[site.block].stmts.split_off(site.stmt + 1);
     f.blocks[site.block].stmts.pop(); // remove the call statement itself
-                                      // Bind parameters to the argument operands, applying the same numeric widening the call ABI would
-                                      // (a narrower argument passed to a wider parameter), then jump into the (renumbered) callee entry.
+    // Bind parameters to the argument operands, applying the same numeric widening the call ABI would
+    // (a narrower argument passed to a wider parameter), then jump into the (renumbered) callee entry.
     let params: HashSet<u32> = g_params.iter().map(|p| p.0).collect();
     // A `ref` value parameter is the caller's storage itself; binding it by assignment would
     // memcpy the value into a fresh buffer and drop the callee's writes.
@@ -106,11 +107,11 @@ pub(super) fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, intern
         let decl = &g_locals[p.0 as usize];
         if let Operand::Copy(Place::Local(src)) = &site.args[i]
             && (decl.is_ref || decl.name.as_deref() == Some("this"))
-                && interner.is_value_type(decl.ty)
-                && mir.functions[fi].local_ty(*src) == decl.ty
-            {
-                aliased[p.0 as usize] = Some(*src);
-            }
+            && interner.is_value_type(decl.ty)
+            && mir.functions[fi].local_ty(*src) == decl.ty
+        {
+            aliased[p.0 as usize] = Some(*src);
+        }
     }
     for (i, p) in g_params.iter().enumerate() {
         if aliased[p.0 as usize].is_some() {

@@ -645,3 +645,59 @@ fn inlined_value_this_stores_into_caller_storage() {
         Statement::Assign(Place::Field { base, field: 0 }, _) if *base == dest))
     );
 }
+
+#[test]
+fn inlined_borrowed_value_parameter_does_not_drop_caller_fields() {
+    let mut ctx = TypeCtx::new();
+    let value_def = ctx.register(DefKind::Struct, "Payload", vec![]);
+    ctx.defs.mark_value(value_def);
+    ctx.interner.mark_value_def(value_def);
+    let value = ctx.interner.struct_ty(value_def, vec![]);
+    let callee_def = ctx.register(DefKind::Function, "read", vec![]);
+    let mut b = FunctionBuilder::new("read", ctx.interner.int());
+    b.set_def(callee_def, vec![]);
+    b.new_param(value, Some("payload".into()));
+    b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(1)))));
+    let callee = b.finish();
+    let mut b = FunctionBuilder::new("caller", ctx.interner.int());
+    let input = b.new_local(value, Some("input".into()));
+    let result = b.new_temp(ctx.interner.int());
+    b.assign(
+        Place::Local(result),
+        Rvalue::Call {
+            callee: crate::Callee {
+                def: callee_def,
+                args: vec![],
+                ret: ctx.interner.int(),
+                take_params: vec![false],
+            },
+            args: vec![Operand::Copy(Place::Local(input))],
+        },
+    );
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(
+        result,
+    )))));
+    let mut mir = crate::Mir {
+        functions: vec![callee, b.finish()],
+        ..Default::default()
+    };
+    assert!(Inliner.run(&mut mir, &ctx.interner));
+    let caller = mir.functions.iter().find(|f| f.name == "caller").unwrap();
+    assert!(
+        !caller
+            .blocks
+            .iter()
+            .flat_map(|b| &b.stmts)
+            .any(|s| matches!(s, Statement::ValueDrop(_)))
+    );
+    let param = caller
+        .locals
+        .iter()
+        .find(|d| d.name.as_deref() == Some("payload"))
+        .unwrap();
+    assert!(param.manual_drop);
+    assert!(
+        !param.is_ref,
+        "borrowed by-value arguments keep their private copy"
+    );
+}

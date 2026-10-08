@@ -167,7 +167,10 @@ fn is_place_copy(rv: &Rvalue) -> bool {
 }
 
 pub(crate) fn is_value_place_alias(f: &MirFunction, local: Local, rv: &Rvalue) -> bool {
-    if f.locals[local.0 as usize].name.is_some() || !is_place_copy(rv) {
+    if f.locals[local.0 as usize].name.is_some()
+        || f.locals[local.0 as usize].manual_drop
+        || !is_place_copy(rv)
+    {
         return false;
     }
     f.blocks

@@ -1,0 +1,1 @@
+type 'ReadOnlySpan<char>' is not index-assignable

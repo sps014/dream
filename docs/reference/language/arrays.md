@@ -122,7 +122,7 @@ let owned = mid.to_array();        // copies into a fresh, independently-owned a
 
 `Span<T>` keeps its backing array strongly referenced (unlike `Pointer<T>` below), so the memory it views can never be freed out from under it. Prefer `Span<T>` over a raw index range whenever a function only needs to read/write a *slice* of an array without owning or resizing it.
 
-`ReadOnlySpan<T>` is the same view without writes (`span.as_read_only()`, or `ReadOnlySpan.of(xs)`), and `list.as_span()` / `list.as_read_only_span()` view a `List<T>`'s live elements. `for (let x in span)` iterates any of them without allocating an iterator. See [Spans](spans.md) for the full API, the string view `StringSpan`, and what makes spans free at runtime.
+`ReadOnlySpan<T>` is the same view without writes (`span.as_read_only()`, or `ReadOnlySpan.of(xs)`), and `list.as_span()` / `list.as_read_only_span()` view a `List<T>`'s live elements. `for (let x in span)` iterates any of them without allocating an iterator. See [Spans](spans.md) for the full API, the string view `ReadOnlySpan<char>`, and what makes spans free at runtime.
 
 ## `Pointer<T>`: manual allocation (`@unsafe`)
 

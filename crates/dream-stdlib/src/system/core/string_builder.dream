@@ -97,9 +97,17 @@ public class StringBuilder {
         StringBuilder.push_raw(this, text);
     }
 
-    // Appends the units a `StringSpan` views, with no intermediate string.
-    public fun append(span: StringSpan): void {
-        this.append_utf8_slice(span.src, span.offset * 2, span._length * 2);
+    // Appends the units a `ReadOnlySpan<char>` views, with no intermediate string.
+    public fun append(span: ReadOnlySpan<char>): void {
+        if span._text {
+            this.append_utf8_slice(span.src, span.offset * 2, span._length * 2);
+            return;
+        }
+        let i = 0;
+        while i < span.length {
+            this.append_char(span.get(i));
+            i = i + 1;
+        }
     }
 
     // Appends `byte_len` payload bytes starting at byte index `start` of `text`.
@@ -161,13 +169,13 @@ public class StringBuilder {
 
     // A view of everything appended so far, without copying the units. Later appends and
     // `clear` leave the view unchanged: it is a snapshot.
-    public fun as_span(): StringSpan {
+    public fun as_span(): ReadOnlySpan<char> {
         if this.count <= 0 {
             return string.empty.span();
         }
         this.viewed = true;
         let s = StringBuilder.view_raw(this.bytes, this.count);
-        return StringSpan(s, 0, this.count / 2);
+        return ReadOnlySpan<char>.from_text(s, 0, this.count / 2);
     }
 
     // Snapshot into a new string. `from_builder` copies once; do not stage through a

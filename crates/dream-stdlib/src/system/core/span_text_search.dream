@@ -1,0 +1,63 @@
+module system.core;
+
+extend ReadOnlySpan<T: SpanCharacter> {
+    public fun contains(borrow sub: string): bool {
+        return this.index_of(sub).is_some();
+    }
+
+    public fun index_of(c: char, from: int): Option<int> {
+        if this._text {
+            return span_found(string.view_find_char(this.src, this.offset, this._length, from, (int)c));
+        }
+        let i = from;
+        if i < 0 { i = 0; }
+        while i < this._length {
+            if this.at_unchecked(i) == c { return Option.Some(i); }
+            i = i + 1;
+        }
+        return Option.None;
+    }
+
+    public fun index_of(borrow sub: string): Option<int> {
+        return this.index_of(sub, 0);
+    }
+
+    public fun index_of(borrow sub: string, from: int): Option<int> {
+        if this._text {
+            return span_found(string.view_find(this.src, this.offset, this._length, sub, 0, sub.length, from));
+        }
+        let i = from;
+        if i < 0 { i = 0; }
+        let n = sub.length;
+        while i <= this._length - n {
+            if this.slice(i, n).equals(sub) { return Option.Some(i); }
+            i = i + 1;
+        }
+        return Option.None;
+    }
+
+    public fun last_index_of(c: char): Option<int> {
+        if this._text {
+            return span_found(string.view_rfind_char(this.src, this.offset, this._length, (int)c));
+        }
+        let i = this._length;
+        while i > 0 {
+            i = i - 1;
+            if this.at_unchecked(i) == c { return Option.Some(i); }
+        }
+        return Option.None;
+    }
+
+    public fun last_index_of(borrow sub: string): Option<int> {
+        if this._text {
+            return span_found(string.view_rfind(this.src, this.offset, this._length, sub, 0, sub.length));
+        }
+        let n = sub.length;
+        let i = this._length - n;
+        while i >= 0 {
+            if this.slice(i, n).equals(sub) { return Option.Some(i); }
+            i = i - 1;
+        }
+        return Option.None;
+    }
+}

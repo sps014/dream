@@ -46,8 +46,16 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/string_abi.dream"),
         ),
         (
-            "<std>/system/core/string_span.dream",
-            include_str!("../system/core/string_span.dream"),
+            "<std>/system/core/span_text.dream",
+            include_str!("../system/core/span_text.dream"),
+        ),
+        (
+            "<std>/system/core/span_text_search.dream",
+            include_str!("../system/core/span_text_search.dream"),
+        ),
+        (
+            "<std>/system/core/span_text_iterators.dream",
+            include_str!("../system/core/span_text_iterators.dream"),
         ),
         (
             "<std>/system/core/string_builder.dream",

@@ -1,0 +1,5 @@
+import system;
+fun main(): void {
+    let view = "abc".span();
+    view.set(0, 'x');
+}

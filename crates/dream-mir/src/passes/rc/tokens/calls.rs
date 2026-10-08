@@ -37,15 +37,13 @@ pub(crate) fn sink_call_args(stmt: &Statement) -> Option<(Vec<bool>, &[Operand])
             };
             Some((flags, args))
         }
-        // A funcbox target has been given the +0 ABI by `FuncboxAbi` (it retains its own `take`
-        // parameters on entry), so an indirect call transfers nothing: retaining here would be the
-        // second half of a pair the callee never completes.
+        // FuncboxAbi makes address-taken parameters borrowed (+0), including reference-bearing
+        // values. The caller keeps ownership; a callee retains only when ownership escapes.
         Statement::IndirectCall { args, .. } => Some((vec![false; args.len()], args)),
         Statement::Assign(_, Rvalue::IndirectCall { args, .. }) => {
             Some((vec![false; args.len()], args))
         }
-        // Interface dispatch passes at +0 for the same reason as `IndirectCall`: the itable slot
-        // hides the concrete method, so the implementation does its own entry retain.
+        // Interface implementations use the same borrowed ABI as indirect targets.
         Statement::InterfaceCall { args, .. } => Some((vec![false; args.len()], args)),
         Statement::Assign(_, Rvalue::InterfaceCall { args, .. }) => {
             Some((vec![false; args.len()], args))
@@ -119,9 +117,10 @@ pub(crate) fn take_owned_arg_locals(
             continue;
         }
         if let Operand::Copy(Place::Local(l)) = arg
-            && is_owned_ref(l.0) {
-                out.push(l.0);
-            }
+            && is_owned_ref(l.0)
+        {
+            out.push(l.0);
+        }
     }
     out
 }
@@ -134,9 +133,10 @@ pub(crate) fn call_escape_locals(stmt: &Statement, is_owned_ref: &dyn Fn(u32) ->
     let mut out = Vec::new();
     for arg in args {
         if let Operand::Copy(Place::Local(l)) = arg
-            && is_owned_ref(l.0) {
-                out.push(l.0);
-            }
+            && is_owned_ref(l.0)
+        {
+            out.push(l.0);
+        }
     }
     out
 }

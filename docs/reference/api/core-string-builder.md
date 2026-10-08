@@ -54,10 +54,10 @@ public fun append(borrow text: string): void
 
 ## `append`
 
-Appends the units a `StringSpan` views, with no intermediate string.
+Appends the units a `ReadOnlySpan<char>` views, with no intermediate string.
 
 ```dream
-public fun append(span: StringSpan): void
+public fun append(span: ReadOnlySpan<char>): void
 ```
 
 ## `append_utf8_slice`
@@ -121,7 +121,7 @@ public fun clear(): void
 A view of everything appended so far, without copying the units. Later appends and `clear` leave the view unchanged: it is a snapshot.
 
 ```dream
-public fun as_span(): StringSpan
+public fun as_span(): ReadOnlySpan<char>
 ```
 
 ## `build`

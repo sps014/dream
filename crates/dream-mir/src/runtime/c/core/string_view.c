@@ -1,4 +1,4 @@
-/* `StringSpan` helpers. Every view is `(string, offset, length)` in UTF-16 units; the Dream
+/* `ReadOnlySpan<char>` helpers. Every view is `(string, offset, length)` in UTF-16 units; the Dream
  * side clamps, so `offset + length <= dream_str_len(s)` holds on entry. */
 #include "dream_core.h"
 

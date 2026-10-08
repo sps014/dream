@@ -77,7 +77,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return result;
     }
 
-    fun find_span(key: StringSpan): int where K : StringKey {
+    fun find_span(key: ReadOnlySpan<char>): int where K : StringKey {
         let slots = this.slots;
         let cap = this.cap;
         let epoch = this.epoch;
@@ -219,7 +219,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     // Value for the `string` key equal to `key`, without building a `string`.
-    public fun get(key: StringSpan): Option<V> where K : StringKey {
+    public fun get(key: ReadOnlySpan<char>): Option<V> where K : StringKey {
         let i = this.find_span(key);
         if i >= 0 {
             return Option.Some(this.slots[i].value);
@@ -227,7 +227,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return Option.None;
     }
 
-    public fun get_or(key: StringSpan, fallback: V): V where K : StringKey {
+    public fun get_or(key: ReadOnlySpan<char>, fallback: V): V where K : StringKey {
         let i = this.find_span(key);
         if i >= 0 {
             return this.slots[i].value;
@@ -235,7 +235,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return fallback;
     }
 
-    public fun contains(key: StringSpan): bool where K : StringKey {
+    public fun contains(key: ReadOnlySpan<char>): bool where K : StringKey {
         return this.find_span(key) >= 0;
     }
 

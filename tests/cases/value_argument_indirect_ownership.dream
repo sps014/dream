@@ -1,0 +1,31 @@
+import system;
+
+struct Payload {
+    public data: string;
+    public constructor(borrow data: string) { this.data = data; }
+}
+
+interface Reader { fun read(value: Payload): string; }
+class Echo : Reader {
+    public fun read(value: Payload): string { return value.data; }
+fun identity(value: Payload): Payload { return value; }
+}
+
+@noinline
+fun call_reader(reader: Reader, value: Payload): string {
+    return reader.read(value);
+}
+fun read(value: Payload): string { return value.data; }
+fun identity(value: Payload): Payload { return value; }
+
+fun main(): void {
+    let value = Payload("hello" + System.env_or("DREAM_VALUE_SUFFIX", " world"));
+    let callback: fun(Payload): string = read;
+    System.println(callback(value));
+    System.println(callback(value));
+    System.println(call_reader(Echo(), value));
+    let identity_callback: fun(Payload): Payload = identity;
+    let copy = identity_callback(value);
+    System.println(copy.data);
+    System.println(value.data);
+}

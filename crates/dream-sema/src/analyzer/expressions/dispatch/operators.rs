@@ -108,6 +108,14 @@ impl<'a> Analyzer<'a> {
                 // User-defined unary operator overload: `@operator("-")`/`@operator("!")`/
                 // `@operator("~")` on the operand's type, checked before the built-in
                 // bool/numeric/integer rules below so a struct's overload always wins.
+                if let Some((base_name, generic_args)) = Self::resolve_struct_parts(&right_type) {
+                    self.ensure_struct_instantiated(
+                        &base_name,
+                        &generic_args,
+                        &opr.position,
+                        diagnostics,
+                    );
+                }
                 if let Some(op_method) = self.operator_unary_fn(&right_type, opr.kind) {
                     let return_type = op_method.return_type;
                     self.hir_set_method_call(operand, &op_method.identity, vec![], &return_type);

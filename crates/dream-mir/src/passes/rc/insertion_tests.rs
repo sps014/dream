@@ -1788,3 +1788,106 @@ fn borrowed_value_passed_to_sink_takes_an_independent_owner() {
         )
     );
 }
+
+#[test]
+fn borrowed_value_return_retains_on_every_return_path() {
+    let mut ctx = TypeCtx::new();
+    let value = point_ty(&mut ctx);
+    let mut b = FunctionBuilder::new("copy", value);
+    let input = b.new_param(value, Some("input".into()));
+    let choice = b.new_param(ctx.interner.bool(), Some("choice".into()));
+    let yes = b.new_block();
+    let no = b.new_block();
+    b.terminate(Terminator::If {
+        cond: Operand::Copy(Place::Local(choice)),
+        then_blk: yes,
+        else_blk: no,
+    });
+    b.switch_to(yes);
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(input)))));
+    b.switch_to(no);
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(input)))));
+    let mut func = b.finish();
+    RcInsertion.run(&mut func, &ctx.interner);
+    for block in [yes, no] {
+        assert!(
+            func.block(block)
+                .stmts
+                .iter()
+                .any(|s| matches!(s, Statement::ValueRetain(l) if *l == input))
+        );
+    }
+}
+
+#[test]
+fn borrowed_this_value_passed_to_sink_retains_without_killing_receiver() {
+    let mut ctx = TypeCtx::new();
+    let value = point_ty(&mut ctx);
+    let target = ctx.register(DefKind::Function, "store", vec![]);
+    let mut b = FunctionBuilder::new("copy", ctx.interner.void());
+    let receiver = b.new_param(value, Some("this".into()));
+    b.push(Statement::Call {
+        callee: Callee {
+            def: target,
+            args: vec![],
+            ret: ctx.interner.void(),
+            take_params: vec![true],
+        },
+        args: vec![Operand::Copy(Place::Local(receiver))],
+    });
+    b.terminate(Terminator::Return(None));
+    let mut func = b.finish();
+    RcInsertion.run(&mut func, &ctx.interner);
+    let statements = &func.blocks[0].stmts;
+    assert!(
+        statements
+            .iter()
+            .any(|s| matches!(s, Statement::ValueRetain(l) if *l == receiver))
+    );
+    assert!(
+        !statements.iter().any(
+            |s| matches!(s, Statement::ValueKill(l) | Statement::ValueDrop(l) if *l == receiver)
+        )
+    );
+}
+
+#[test]
+fn early_value_drop_clears_storage_and_cleans_up_the_other_exit() {
+    let mut ctx = TypeCtx::new();
+    let value = point_ty(&mut ctx);
+    let target = ctx.register(DefKind::Function, "read", vec![]);
+    let mut b = FunctionBuilder::new("conditional", ctx.interner.void());
+    let choice = b.new_param(ctx.interner.bool(), Some("choice".into()));
+    let input = b.new_local(value, Some("input".into()));
+    let used = b.new_block();
+    let unused = b.new_block();
+    b.terminate(Terminator::If {
+        cond: Operand::Copy(Place::Local(choice)),
+        then_blk: used,
+        else_blk: unused,
+    });
+    b.switch_to(used);
+    b.push(Statement::Call {
+        callee: Callee {
+            def: target,
+            args: vec![],
+            ret: ctx.interner.void(),
+            take_params: vec![false],
+        },
+        args: vec![Operand::Copy(Place::Local(input))],
+    });
+    b.terminate(Terminator::Return(None));
+    b.switch_to(unused);
+    b.terminate(Terminator::Return(None));
+    let mut func = b.finish();
+    let mut changed = false;
+    super::super::value::insert_early_value_drops(&mut func, &ctx.interner, &mut changed, false);
+    assert!(changed);
+    assert!(func.block(used).stmts.windows(2).any(|s| matches!(s, [Statement::ValueDrop(d), Statement::ValueKill(k)] if *d == input && *k == input)));
+    assert!(
+        func.block(unused)
+            .stmts
+            .iter()
+            .any(|s| matches!(s, Statement::ValueDrop(d) if *d == input))
+    );
+}

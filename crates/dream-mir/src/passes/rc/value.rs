@@ -17,13 +17,14 @@ pub(super) fn insert_value_struct_moves(
     let is_value_src = |idx: usize| {
         let d = &func.locals[idx];
         interner.is_value_type(d.ty)
-            && !d.is_ref
-            && (d.name.is_some() || defined_only_by_producers(func, idx as u32))
-            && d.name.as_deref() != Some("this")
+            && (d.is_ref || d.name.is_some() || defined_only_by_producers(func, idx as u32))
     };
     let owns_source = |local: u32| {
         let decl = &func.locals[local as usize];
-        !decl.borrows_refs && (!func.params.contains(&Local(local)) || decl.is_take)
+        !decl.borrows_refs
+            && !decl.is_ref
+            && decl.name.as_deref() != Some("this")
+            && (!func.params.contains(&Local(local)) || decl.is_take)
     };
     let live_out = liveness::live_out(func);
     let mut retain_before: Vec<(usize, usize, u32, u32)> = Vec::new();
@@ -231,13 +232,28 @@ pub(super) fn mark_returned_value_locals_moved(
     if !interner.is_value_type(func.ret) {
         return;
     }
-    for block in &func.blocks {
+    let already_moved: BTreeSet<_> = func
+        .locals
+        .iter()
+        .enumerate()
+        .filter_map(|(i, d)| d.manual_drop.then_some(Local(i as u32)))
+        .collect();
+    let borrowed_params: BTreeSet<_> = func
+        .params
+        .iter()
+        .copied()
+        .filter(|l| !func.locals[l.0 as usize].is_take)
+        .collect();
+    for block in &mut func.blocks {
         if let Terminator::Return(Some(Operand::Copy(Place::Local(l))))
         | Terminator::AsyncComplete(Some(Operand::Copy(Place::Local(l)))) = &block.terminator
             && interner.is_value_type(func.locals[l.0 as usize].ty)
-            && !func.locals[l.0 as usize].is_ref
-            && !func.locals[l.0 as usize].manual_drop
+            && !already_moved.contains(l)
         {
+            // A borrowed parameter has no ownership to transfer to the caller's result.
+            if borrowed_params.contains(l) || func.locals[l.0 as usize].is_ref {
+                block.stmts.push(Statement::ValueRetain(*l));
+            }
             func.locals[l.0 as usize].manual_drop = true;
             *changed = true;
         }
@@ -375,7 +391,11 @@ pub(super) fn insert_early_value_drops(
         return;
     }
     let mut by_block: IndexMap<usize, Vec<(usize, u32)>> = IndexMap::new();
+    let mut newly_dropped = BTreeSet::new();
     for (bi, si, local) in drop_at {
+        if !func.locals[local as usize].manual_drop {
+            newly_dropped.insert(local);
+        }
         by_block.entry(bi).or_default().push((si, local));
         func.locals[local as usize].manual_drop = true;
     }
@@ -386,12 +406,14 @@ pub(super) fn insert_early_value_drops(
             for (ssi, local) in &sites {
                 if *ssi == si {
                     out.push(Statement::ValueDrop(Local(*local)));
+                    out.push(Statement::ValueKill(Local(*local)));
                     *changed = true;
                 }
             }
         }
         func.blocks[bi].stmts = out;
     }
+    insert_killed_value_exit_drops(func, &newly_dropped, changed);
 }
 
 /// Cursor locals bound (unretained) to a reference inside an owning value local — a union payload

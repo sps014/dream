@@ -340,7 +340,7 @@ fn value_struct_constructors_and_borrow_parameters_elide_arc() {
             return copy.length;
         }
         @noinline
-        fun borrowed_string(borrow view: StringSpan): int {
+        fun borrowed_string(borrow view: ReadOnlySpan<char>): int {
             let copy = view;
             return copy.length;
         }

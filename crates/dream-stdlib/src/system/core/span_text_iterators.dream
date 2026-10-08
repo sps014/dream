@@ -1,0 +1,146 @@
+module system.core;
+
+internal fun span_found(i: int): Option<int> {
+    if i < 0 {
+        return Option.None;
+    }
+    return Option.Some(i);
+}
+
+// Cursor over the pieces of a `ReadOnlySpan<char>` between separators. Every piece is a view of the
+// same source; nothing is allocated.
+public ref struct StringSplit {
+    rest: ReadOnlySpan<char>;
+    sep: string;
+    sep_char: int;
+    done: bool;
+    _current: ReadOnlySpan<char>;
+
+    internal constructor(rest: ReadOnlySpan<char>, borrow sep: string, sep_char: int) {
+        this.rest = rest;
+        this.sep = sep;
+        this.sep_char = sep_char;
+        this.done = (sep_char < 0) && sep.length == 0;
+        this._current = rest.slice(0, 0);
+        if this.done {
+            this._current = rest;
+        }
+    }
+
+    // Advances to the next piece; `false` once every piece has been produced.
+    public fun move_next(): bool {
+        if this.done {
+            return false;
+        }
+        let r = this.rest;
+        let at = 0;
+        let width = 1;
+        if this.sep_char >= 0 {
+            at = r.index_of((char)this.sep_char).unwrap_or(-1);
+        } else {
+            at = r.index_of(this.sep).unwrap_or(-1);
+            width = this.sep.length;
+        }
+        if at < 0 {
+            this._current = r;
+            this.done = true;
+            this.rest = r.slice(r._length);
+            return true;
+        }
+        this._current = r.slice(0, at);
+        this.rest = r.slice(at + width);
+        return true;
+    }
+
+    // The piece produced by the last `move_next()`.
+    public get current(): ReadOnlySpan<char> {
+        return this._current;
+    }
+}
+
+// Cursor over the lines of a `ReadOnlySpan<char>`.
+public ref struct StringLines {
+    rest: ReadOnlySpan<char>;
+    _current: ReadOnlySpan<char>;
+
+    internal constructor(rest: ReadOnlySpan<char>) {
+        this.rest = rest;
+        this._current = rest.slice(0, 0);
+    }
+
+    public fun move_next(): bool {
+        let r = this.rest;
+        if r._length == 0 {
+            return false;
+        }
+        let at = r.index_of('\n').unwrap_or(-1);
+        let line = r;
+        if at < 0 {
+            this.rest = r.slice(r._length);
+        } else {
+            line = r.slice(0, at);
+            this.rest = r.slice(at + 1);
+        }
+        if line.ends_with("\r") {
+            line = line.slice(0, line._length - 1);
+        }
+        this._current = line;
+        return true;
+    }
+
+    public get current(): ReadOnlySpan<char> {
+        return this._current;
+    }
+}
+
+// A `Map`/`Set` key that can be found by a `ReadOnlySpan<char>` without building a `string`.
+public interface StringKey {
+    fun matches_span(other: ReadOnlySpan<char>): bool;
+}
+
+extend string : StringKey {
+    // A view of the whole string.
+    public fun span(): ReadOnlySpan<char> {
+        return ReadOnlySpan<char>.from_text(this, 0, this.length);
+    }
+
+    // A view of `[start, end)`, clamped exactly like `substring`.
+    public fun span(start: int, end: int): ReadOnlySpan<char> {
+        let n = this.length;
+        let s = start;
+        let e = end;
+        if s < 0 { s = 0; } else if s > n { s = n; }
+        if e < 0 { e = 0; } else if e > n { e = n; }
+        if e < s { e = s; }
+        return ReadOnlySpan<char>.from_text(this, s, e - s);
+    }
+
+    fun operator ==(other: ReadOnlySpan<char>): bool {
+        return this.matches_span(other);
+    }
+
+    public fun matches_span(other: ReadOnlySpan<char>): bool {
+        return other.equals(this);
+    }
+
+    @intrinsic("string_view_eq")
+    static extern fun view_eq(borrow a: string, ao: int, an: int, borrow b: string, bo: int, bn: int): int;
+
+    @intrinsic("string_view_compare")
+    static extern fun view_compare(borrow a: string, ao: int, an: int, borrow b: string, bo: int, bn: int): int;
+
+    @intrinsic("string_view_hash")
+    static extern fun view_hash(borrow s: string, off: int, n: int): int;
+
+    @intrinsic("string_view_find")
+    static extern fun view_find(borrow h: string, ho: int, hn: int, borrow nd: string, no: int, nn: int, from: int): int;
+
+    @intrinsic("string_view_rfind")
+    static extern fun view_rfind(borrow h: string, ho: int, hn: int, borrow nd: string, no: int, nn: int): int;
+
+    @intrinsic("string_view_find_char")
+    static extern fun view_find_char(borrow s: string, off: int, n: int, from: int, c: int): int;
+
+    @intrinsic("string_view_rfind_char")
+    static extern fun view_rfind_char(borrow s: string, off: int, n: int, c: int): int;
+}

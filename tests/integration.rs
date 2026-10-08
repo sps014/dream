@@ -18,6 +18,7 @@ mod generator_cache;
 mod host_capability_tests;
 mod host_library_tests;
 mod inline_value_types_test;
+mod leak_diagnostics;
 mod library_outputs;
 mod llvm_backend_tests;
 mod lock_emission;

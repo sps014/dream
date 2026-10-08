@@ -808,7 +808,6 @@ public static class JsonGenerator {
         cb.line("let __aprevious_" + out_var + " = -1;");
         cb.line("while __agoing_" + out_var + " {");
         cb.indent();
-        cb.line("p.skip_ws();");
         cb.line("if p.container_end(93, __aprevious_" + out_var + ") {");
         cb.indent();
         cb.line("__agoing_" + out_var + " = false;");
@@ -880,7 +879,6 @@ public static class JsonGenerator {
         body.line("let __previous = -1;");
         body.line("while __going {");
         body.indent();
-        body.line("p.skip_ws();");
         body.line("if p.container_end(125, __previous) {");
         body.indent();
         body.line("__going = false;");
@@ -978,7 +976,6 @@ public static class JsonGenerator {
                 body.line("let __lprevious_" + fname + " = -1;");
                 body.line("while __lgoing_" + fname + " {");
                 body.indent();
-                body.line("p.skip_ws();");
                 body.line("if p.container_end(93, __lprevious_" + fname + ") {");
                 body.indent();
                 body.line("__lgoing_" + fname + " = false;");

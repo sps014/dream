@@ -1,0 +1,31 @@
+import system;
+import system.json;
+import system.collections;
+
+@json
+class Record {
+    public values: int[];
+    public items: List<int>;
+    public constructor(values: int[], items: List<int>) {
+        this.values = values;
+        this.items = items;
+    }
+}
+
+fun check(text: string): void {
+    switch (Json.deserialize<Record>(text)) {
+        Ok(record) => {
+            System.println(record.values.length);
+            System.println(record.items.length);
+        },
+        Err(error) => System.println(error.message()),
+    }
+}
+
+fun main(): void {
+    check(" { \n\t\"values\" : [ 1 , 2 ] , \"items\" : [ 3 , 4 ] \r\n } ");
+    check("{\"values\": [ ], \"items\": [ ] }");
+    check("{\"values\": [ 1 ");
+    check("{\"values\": [ true ] }");
+    check("{\"values\": [1], \"items\": [2] ");
+}

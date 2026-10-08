@@ -58,7 +58,11 @@ public class JsonParser {
             this.invalid = true;
             return true;
         }
-        return this.try_consume(close);
+        if this.b() == close {
+            this.pos = this.pos + 1;
+            return true;
+        }
+        return false;
     }
 
     public fun keyword(length: int, value: JsonValue): JsonValue {

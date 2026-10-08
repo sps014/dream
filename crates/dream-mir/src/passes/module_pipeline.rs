@@ -136,6 +136,16 @@ pub fn run_late_module_passes(mir: &mut Mir, interner: &TypeInterner, dump: &mut
     dump.module(rc::held::STAGE, mir, interner);
     let _ = value_borrow::run(mir, interner);
     dump.module(value_borrow::STAGE, mir, interner);
+    let panics = value_borrow::panic_defs(mir);
+    for f in &mut mir.functions {
+        if !borrowed_fields::run(f, interner, &panics) {
+            continue;
+        }
+        let mut analyses = FunctionAnalyses::default();
+        GlobalProp.transform(f, interner, &mir.layouts, &mut analyses);
+        StrCursor.transform(f, interner, &mir.layouts, &mut analyses);
+    }
+    dump.module("borrowed-fields", mir, interner);
     let _ = frame_alloc::run(mir, interner);
     dump.module(frame_alloc::STAGE, mir, interner);
     construction::run(mir, interner);

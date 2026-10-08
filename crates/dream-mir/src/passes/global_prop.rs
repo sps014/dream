@@ -114,7 +114,7 @@ fn meet(preds: &[crate::BlockId], exit: &[Facts]) -> Facts {
 
 /// Equality over the restricted operand shapes `update_known` ever stores: `Const`s and copies of a
 /// local. (`Operand` deliberately has no `PartialEq`, so we compare the cases we rely on.)
-fn operand_eq(a: &Operand, b: &Operand) -> bool {
+pub(super) fn operand_eq(a: &Operand, b: &Operand) -> bool {
     match (a, b) {
         (Operand::Const(x), Operand::Const(y)) => x == y,
         (Operand::Copy(Place::Local(x)), Operand::Copy(Place::Local(y))) => x == y,

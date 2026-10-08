@@ -23,6 +23,11 @@ fun main() {
 
 ## `StringSpan`
 
+`Span<char>` permits writes to a `char[]`; strings are immutable and may use sliced storage.
+`StringSpan` keeps the string owner alive and views its UTF-16 units directly, without converting
+them into an array. Both views are stored inline. Release can hoist the string payload address
+out of read-only loops when the source lifetime and view fields are proven stable.
+
 `s.span(start, end)` clamps its bounds exactly like `s.substring(start, end)`, but returns a view instead of a new `string`. It supports the read-only `string` surface:
 
 | Call | Meaning |

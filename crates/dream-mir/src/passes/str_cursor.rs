@@ -65,7 +65,7 @@ fn apply(
     analyses: &mut crate::passes::FunctionAnalyses,
 ) -> bool {
     let bases = scan_bases(func, body);
-    if bases.is_empty() || !body_is_scan(func, body, &bases) {
+    if bases.is_empty() || !body_is_scan(func, interner, body, &bases) {
         return false;
     }
     let mut ptr_of: BTreeMap<u32, Local> = BTreeMap::new();
@@ -134,9 +134,10 @@ fn scan_bases(func: &MirFunction, body: &BTreeSet<BlockId>) -> BTreeSet<u32> {
                 defined.insert(d.0);
             }
             if let Statement::Assign(_, Rvalue::ByteAt(s, _, _) | Rvalue::CharAt(s, _, _)) = stmt
-                && let Some(base) = base_local(s) {
-                    bases.insert(base);
-                }
+                && let Some(base) = base_local(s)
+            {
+                bases.insert(base);
+            }
         }
     }
     bases.retain(|b| !defined.contains(b));
@@ -152,11 +153,16 @@ fn base_local(op: &Operand) -> Option<u32> {
 
 /// The body may read the string and do scalar work. A call, a store, or a release of the string
 /// can free or rewrite the payload, so the hoisted pointer would dangle.
-fn body_is_scan(func: &MirFunction, body: &BTreeSet<BlockId>, bases: &BTreeSet<u32>) -> bool {
+fn body_is_scan(
+    func: &MirFunction,
+    interner: &TypeInterner,
+    body: &BTreeSet<BlockId>,
+    bases: &BTreeSet<u32>,
+) -> bool {
     for &b in body {
         let block = func.block(b);
         for stmt in &block.stmts {
-            if !stmt_is_scan(stmt, bases) {
+            if !stmt_is_scan(stmt, func, interner, bases) {
                 return false;
             }
         }
@@ -168,18 +174,34 @@ fn body_is_scan(func: &MirFunction, body: &BTreeSet<BlockId>, bases: &BTreeSet<u
     true
 }
 
-fn stmt_is_scan(stmt: &Statement, bases: &BTreeSet<u32>) -> bool {
+fn stmt_is_scan(
+    stmt: &Statement,
+    func: &MirFunction,
+    interner: &TypeInterner,
+    bases: &BTreeSet<u32>,
+) -> bool {
     match stmt {
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => true,
-        Statement::Retain(op) | Statement::Release(op) => {
-            base_local(op).is_none_or(|b| !bases.contains(&b))
+        Statement::Retain(op) => base_local(op).is_none_or(|b| !bases.contains(&b)),
+        // A different local may own the same string; local identity alone cannot prove
+        // that its final release leaves the hoisted payload alive.
+        Statement::Release(_) => false,
+        Statement::Assign(Place::Local(d), Rvalue::New { ctor: None, .. }) => {
+            func.locals[d.0 as usize].borrows_refs && interner.is_value_type(func.local_ty(*d))
+        }
+        Statement::Assign(Place::Field { base, .. }, rv) => {
+            // Borrowing proved these frame-local aliases cannot publish, retain, or release
+            // the source while the payload pointer is in use.
+            func.locals[base.0 as usize].borrows_refs
+                && interner.is_value_type(func.local_ty(*base))
+                && rvalue_is_scan(rv)
         }
         Statement::Assign(Place::Local(_), rv) => rvalue_is_scan(rv),
         _ => false,
     }
 }
 
-fn rvalue_is_scan(rv: &Rvalue) -> bool {
+pub(super) fn rvalue_is_scan(rv: &Rvalue) -> bool {
     matches!(
         rv,
         Rvalue::Use(_)

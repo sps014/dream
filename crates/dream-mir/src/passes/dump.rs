@@ -35,6 +35,7 @@ const MODULE_STAGES: &[&str] = &[
     super::value_borrow::STAGE,
     super::frame_alloc::STAGE,
     "construction",
+    "borrowed-fields",
 ];
 
 /// Every name `--emit-mir=after:<pass>` accepts: module stages in pipeline order, then every

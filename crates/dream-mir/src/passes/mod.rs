@@ -6,6 +6,7 @@ mod analyses;
 mod autovec;
 #[cfg(test)]
 mod await_facts_tests;
+mod borrowed_fields;
 mod cfg;
 mod const_fold;
 mod construction;

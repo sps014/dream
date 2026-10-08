@@ -42,15 +42,7 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
     let sigs = signatures(mir, interner);
     let modref =
         (!mir.profile.is_debug()).then(|| super::rc::modref::ModRefTable::compute(mir, interner));
-    let panics: BTreeSet<DefId> = mir
-        .intrinsics
-        .iter()
-        .filter_map(|(def, key)| {
-            (dream_abi::intrinsics::IntrinsicOp::from_key(key)
-                == Some(dream_abi::intrinsics::IntrinsicOp::Panic))
-            .then_some(*def)
-        })
-        .collect();
+    let panics = panic_defs(mir);
     let mut changed = false;
     for f in &mut mir.functions {
         if !f.is_async {
@@ -58,6 +50,17 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
         }
     }
     changed
+}
+
+pub(super) fn panic_defs(mir: &Mir) -> BTreeSet<DefId> {
+    mir.intrinsics
+        .iter()
+        .filter_map(|(def, key)| {
+            (dream_abi::intrinsics::IntrinsicOp::from_key(key)
+                == Some(dream_abi::intrinsics::IntrinsicOp::Panic))
+            .then_some(*def)
+        })
+        .collect()
 }
 
 fn signatures(mir: &Mir, interner: &TypeInterner) -> Signatures {

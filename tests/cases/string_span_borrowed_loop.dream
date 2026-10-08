@@ -1,0 +1,28 @@
+import system;
+
+@noinline
+fun scan(borrow suffix: string): int {
+    let source = "abcdefghijklmnopqrstuvwxyz" + suffix;
+    let other = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + suffix;
+    let sum = 0;
+    let i = 0;
+    while i < 100 {
+        let view = source.span(i & 7, 20);
+        sum = sum + (int)view.char_at(0);
+        let second = other.span(i & 7, 20);
+        sum = sum + (int)second.char_at(0);
+        i = i + 1;
+    }
+    let sliced = source.substring(2, 20);
+    i = 0;
+    while i < 100 {
+        let view = sliced.span(i & 3, 8);
+        sum = sum + (int)view.char_at(0);
+        i = i + 1;
+    }
+    return sum;
+}
+
+fun main(): void {
+    System.println(scan(System.env_or("DREAM_SPAN_SUFFIX", "!")));
+}

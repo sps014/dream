@@ -374,15 +374,16 @@ def main() -> int:
                    and (s.get("ns_total") == 0 or s["ns_per_op"] < MIN_NS_PER_OP)})
     if tiny:
         print("SUB-TIMER rows cannot substantiate a speed claim: " + ", ".join(tiny))
-        status = 1
+        # A single arm collects diagnostics; comparisons must reject suspect timings.
+        status = int(len(args.arms) > 1)
     if args.save_baseline:
-        if status:
+        if tiny:
             raise ValueError("invalid timing rows cannot form a reference")
         arm = "baseline" if "baseline" in args.arms else "current"
         bench_gate.save(args.save_baseline, ROOT, compatibility, commands[arm], samples, arm,
                         args.passes, args.rounds, rss, identities)
     if args.gate:
-        if status:
+        if tiny:
             raise ValueError("invalid timing rows cannot pass a gate")
         status, decisions = bench_gate.evaluate(samples, reference, args.passes, args.rounds, rss, args.regression_threshold)
         (out / "gate.json").write_text(json.dumps(decisions, indent=2) + "\n")

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Regression decisions must never turn invalid data into a passing gate."""
+import argparse
+import contextlib
 import copy
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -9,6 +12,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+
+import bench
 
 from benchmarks.process import peak_working_set, with_exe
 
@@ -227,6 +233,74 @@ class GateTests(unittest.TestCase):
             mutation(samples[-1])
             with self.assertRaises(ValueError):
                 stats.summarize(samples, self.rss, ['baseline', 'current'], 5, 10)
+
+
+class MeasurementTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.binary = self.root / 'program'
+        self.binary.write_bytes(b'benchmark executable')
+        self.fixture = self.root / 'fixture.dream'
+        self.fixture.write_text('report("work", elapsed, iterations);')
+
+    def run_measurement(self, total=230000, claim=None, comparison=False):
+        args = argparse.Namespace(
+            counters=False, gate=None, save_baseline=None, arms=['current'],
+            warmup=1, rounds=1, passes=1, input_seed=1, target='native',
+            regression_threshold=.1, benchmark=self.fixture, runner_id='test',
+            filter=[], out=str(self.root / 'output'), current_dream='compiler',
+            baseline_dream='compiler',
+        )
+        if comparison:
+            args.arms = ['baseline', 'current']
+        if claim:
+            setattr(args, claim, str(self.root / 'reference.json'))
+            args.rounds, args.passes = 10, 5
+        stdout = ('bench work ns_total=' + str(total) + ' iters=1000000 checksum=42\n') * args.passes
+        stdout += 'sink 123\n'
+        self.output = io.StringIO()
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(contextlib.redirect_stdout(self.output))
+            stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+            stack.enter_context(patch.object(bench, 'parse_args', return_value=args))
+            stack.enter_context(patch.object(bench, 'tool_versions', return_value={}))
+            stack.enter_context(patch.object(bench, 'prepare_dream', return_value=[str(self.binary)]))
+            stack.enter_context(patch.object(bench, 'run_once', return_value=(stdout, 1000)))
+            stack.enter_context(patch.object(bench_gate, 'load', return_value=({'tools': {}}, [str(self.binary)])))
+            save = stack.enter_context(patch.object(bench_gate, 'save'))
+            evaluate = stack.enter_context(patch.object(bench_gate, 'evaluate', return_value=(1, {})))
+            try:
+                return bench.main()
+            finally:
+                self.saved, self.evaluated = save.called, evaluate.called
+
+    def test_under_floor_diagnostics_preserve_samples_and_succeed(self):
+        self.assertEqual(self.run_measurement(), 0)
+        self.assertIn('SUB-TIMER', self.output.getvalue())
+        summary = json.loads((self.root / 'output/summary.json').read_text())
+        self.assertEqual(summary['benchmarks']['work']['current']['median'], .23)
+        self.assertTrue((self.root / 'output/raw.jsonl').is_file())
+
+    def test_under_floor_cannot_create_a_reference_or_pass_a_gate(self):
+        for claim, message in [('save_baseline', 'cannot form a reference'),
+                               ('gate', 'cannot pass a gate')]:
+            with self.subTest(claim=claim), self.assertRaisesRegex(ValueError, message):
+                self.run_measurement(claim=claim)
+            self.assertFalse(self.saved)
+            self.assertFalse(self.evaluated)
+
+    def test_zero_elapsed_diagnostics_still_fail(self):
+        with self.assertRaisesRegex(ValueError, 'invalid or zero-time sample'):
+            self.run_measurement(total=0)
+
+    def test_under_floor_comparison_still_fails(self):
+        self.assertEqual(self.run_measurement(comparison=True), 1)
+
+    def test_valid_timing_preserves_a_failing_regression_gate(self):
+        self.assertEqual(self.run_measurement(total=1000000, claim='gate'), 1)
+        self.assertTrue(self.evaluated)
 
 
 if __name__ == '__main__':

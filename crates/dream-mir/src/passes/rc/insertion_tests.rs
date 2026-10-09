@@ -118,7 +118,25 @@ fn last_use_value_assign_kills_source() {
             _ => None,
         })
         .collect();
-    assert_eq!(kills, vec![s.0], "last-use dest=src should ValueKill src");
+    assert_eq!(
+        kills,
+        vec![s.0, t.0],
+        "move clears the source and early drop clears the destination"
+    );
+    assert!(func.blocks[0].stmts.windows(2).any(|stmts| matches!(
+        stmts,
+        [Statement::ValueDrop(d), Statement::ValueKill(k)] if *d == t && *k == t
+    )));
+    let source_kill = func.blocks[0]
+        .stmts
+        .iter()
+        .position(|stmt| matches!(stmt, Statement::ValueKill(l) if *l == s))
+        .unwrap();
+    assert!(
+        func.blocks[0].stmts[..source_kill]
+            .iter()
+            .all(|stmt| !matches!(stmt, Statement::ValueDrop(l) if *l == s))
+    );
     assert!(func.locals[s.0 as usize].manual_drop);
     let retains = func.blocks[0]
         .stmts

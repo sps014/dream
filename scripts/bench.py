@@ -33,6 +33,7 @@ import tempfile
 import time
 from pathlib import Path
 from benchmarks import gate as bench_gate, stats as bench_stats
+from benchmarks.process import dream_name, peak_working_set, with_exe
 
 ROOT = Path(__file__).resolve().parent.parent
 BENCH = ROOT / "tests/bench/microbenches.dream"
@@ -49,8 +50,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--diagnostics", action="store_true", help="save optimized IR and first-pass LLVM remarks")
     p.add_argument("--arms", nargs="+", default=["current", "csharp"],
                    choices=["baseline", "current", "csharp"])
-    p.add_argument("--current-dream", default=str(ROOT / "target/release/dream"))
-    p.add_argument("--baseline-dream", default=str(ROOT / "target/bench-baseline/target/release/dream"))
+    p.add_argument("--current-dream", default=str(ROOT / "target" / "release" / dream_name()))
+    p.add_argument("--baseline-dream", default=str(ROOT / "target" / "bench-baseline" / "target" / "release" / dream_name()))
     p.add_argument("--rounds", type=int, default=20, help="measured process starts per arm (10-20 for gating)")
     p.add_argument("--warmup", type=int, default=2, help="discarded process starts per arm")
     p.add_argument("--passes", type=int, default=10, help="DREAM_BENCH_PASSES per process")
@@ -77,6 +78,7 @@ def tool_versions(args) -> dict:
     out = {"host": platform.platform(), "python": platform.python_version()}
     for arm, exe in (("current", args.current_dream), ("baseline", args.baseline_dream)):
         if arm in args.arms and not (arm == 'baseline' and args.gate):
+            exe = str(with_exe(Path(exe)))
             out[f"{arm}_dream"] = exe
             out[f"{arm}_sha256"] = bench_gate.digest(exe)
             try:
@@ -90,7 +92,8 @@ def tool_versions(args) -> dict:
         out["node_version"] = run([args.node, "--version"]).strip()
         registry = (ROOT / "crates/dream-abi/src/toolchain.rs").read_text()
         version = re.search(r'BINARYEN_VERSION[^"\n]*"([^"]+)"', registry).group(1)
-        optimizer = Path(os.environ.get("DREAM_WASM_OPT", str(Path.home() / ".dream/toolchains" / f"binaryen-{version}" / "bin/wasm-opt")))
+        optimizer = with_exe(Path(os.environ.get(
+            "DREAM_WASM_OPT", str(Path.home() / ".dream" / "toolchains" / f"binaryen-{version}" / "bin" / "wasm-opt"))))
         out["wasm_opt_sha256"] = bench_gate.digest(optimizer)
         out["wasm_opt_version"] = run([str(optimizer), "--version"]).strip()
     tools = ROOT / "src/execution/llvm/tools.rs"
@@ -100,7 +103,7 @@ def tool_versions(args) -> dict:
     if (llvm / "bin").is_dir():
         llvm /= "bin"
     for name in ("clang", "opt", "llc", "llvm-link"):
-        executable = llvm / name
+        executable = with_exe(llvm / name)
         if executable.is_file():
             out[f"{name}_sha256"] = bench_gate.digest(executable)
             out[f"{name}_version"] = run([str(executable), "--version"]).strip()
@@ -126,16 +129,15 @@ def tool_versions(args) -> dict:
 
 
 def prepare_dream(arm: str, exe: str, out: Path, args) -> list[str]:
-    exe = str(Path(exe).resolve())
+    exe = str(with_exe(Path(exe)).resolve())
     out = out.resolve()
     if not Path(exe).is_file():
         raise SystemExit(f"{arm}: dream binary not found at {exe}")
     work = out / arm
     work.mkdir(parents=True, exist_ok=True)
-    src = args.benchmark_source.decode("utf-8")
     path = work / "microbenches.dream"
-    if not path.exists() or path.read_text() != src:
-        path.write_text(src)
+    if not path.exists() or path.read_bytes() != args.benchmark_source:
+        path.write_bytes(args.benchmark_source)
     compile_env = dict(os.environ, DREAM_RUNTIME_COUNTERS="1" if args.counters else "0")
     flags = ["--release"]
     if args.diagnostics:
@@ -166,7 +168,7 @@ def prepare_dream(arm: str, exe: str, out: Path, args) -> list[str]:
         llvm = Path(os.environ.get("DREAM_LLVM", str(Path.home() / ".dream/toolchains" / f"llvm-{version}" / "bin")))
         if (llvm / "bin").is_dir():
             llvm /= "bin"
-        run([str(llvm / "llc"), "-O3", "-mcpu=native", "-filetype=asm",
+        run([str(with_exe(llvm / "llc")), "-O3", "-mcpu=native", "-filetype=asm",
              str(artifact.with_suffix(".opt.ll")), "-o", str(artifact.with_suffix(".s"))])
     (work / "build.json").write_text(json.dumps({"compile_seconds": elapsed,
         "artifact_bytes": artifact.stat().st_size, "sha256": bench_gate.digest(artifact)}, indent=2) + "\n")
@@ -199,18 +201,22 @@ def prepare_csharp(out, args) -> list[str]:
 
 def run_once(cmd: list[str], env: dict) -> tuple[str, int]:
     """Runs one process and returns stdout plus its own peak RSS in bytes."""
-    # Output goes to files and the child is reaped here, so wait4 reports this process alone.
-    with tempfile.TemporaryFile("w+") as out, tempfile.TemporaryFile("w+") as err:
-        proc = subprocess.Popen(cmd, env=env, stdout=out, stderr=err, text=True)
-        _, status, usage = os.wait4(proc.pid, 0)
-        proc.returncode = os.waitstatus_to_exitcode(status)
+    # Output goes to files so the measured process is reaped here, not through a pipe.
+    with tempfile.TemporaryFile("w+", encoding="utf-8") as out, tempfile.TemporaryFile("w+", encoding="utf-8") as err:
+        proc = subprocess.Popen(cmd, env=env, stdout=out, stderr=err, text=True, encoding="utf-8")
+        if os.name == "nt":
+            proc.wait()
+            rss = peak_working_set(proc)
+        else:
+            _, status, usage = os.wait4(proc.pid, 0)
+            proc.returncode = os.waitstatus_to_exitcode(status)
+            rss = usage.ru_maxrss if sys.platform == "darwin" else usage.ru_maxrss * 1024
         out.seek(0)
         err.seek(0)
         stdout, stderr = out.read(), err.read()
     if proc.returncode != 0 or re.search(r"^panic:", stdout + stderr, re.M):
         sys.stderr.write(stdout[-3000:] + stderr[-3000:])
         raise SystemExit(f"run failed: {' '.join(cmd)}")
-    rss = usage.ru_maxrss if sys.platform == "darwin" else usage.ru_maxrss * 1024
     return stdout, rss
 
 

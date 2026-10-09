@@ -33,18 +33,21 @@ pub(crate) fn stage_runtime(
     Ok(output_dir.to_path_buf())
 }
 
+/// `zig_driver` selects the force-undefined spelling for MSVC targets: `zig cc` parses `-Wl`
+/// arguments itself and rejects `/include:`, while clang forwards them verbatim to `lld-link`.
 pub(crate) fn link_runtime(
     command: &mut Command,
     source_dir: &Path,
     bundled: Option<&Path>,
     capabilities: &[HostCapability],
     spec: &dream_abi::target::TargetSpec,
+    zig_driver: bool,
 ) {
     // A stale capability library must fail at link time, before any mixed-ABI callback runs.
     for capability in capabilities {
         let symbol = format!("dream_host_{}_abi_v2", capability.name());
         if spec.is_windows() {
-            command.arg(if spec.is_msvc() {
+            command.arg(if spec.is_msvc() && !zig_driver {
                 format!("-Wl,/include:{symbol}")
             } else {
                 format!("-Wl,-u,{symbol}")
@@ -100,6 +103,7 @@ mod tests {
             None,
             &[HostCapability::Core, HostCapability::Crypto],
             &dream_abi::target::TargetSpec::host(),
+            false,
         );
         let args: Vec<_> = command
             .get_args()
@@ -123,6 +127,16 @@ mod tests {
             .iter()
             .any(|arg| arg.contains("dream_host_process_abi")));
         assert!(!args.iter().any(|arg| arg.contains("abi_v1")));
+    }
+
+    #[test]
+    fn zig_msvc_link_uses_the_gnu_force_undefined_spelling() {
+        let spec = dream_abi::target::TargetSpec::parse("x86_64-pc-windows-msvc").unwrap();
+        let mut command = Command::new("zig");
+        link_runtime(&mut command, Path::new("/toolchain"), None, &[HostCapability::Core], &spec, true);
+        let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy()).collect();
+        assert!(args.iter().any(|a| a == "-Wl,-u,dream_host_core_abi_v2"));
+        assert!(!args.iter().any(|a| a.contains("/include:")));
     }
 
     #[test]
@@ -151,6 +165,7 @@ mod tests {
             Some(output.path()),
             &[HostCapability::Core],
             &dream_abi::target::TargetSpec::host(),
+            false,
         );
         let args = format!("{command:?}");
         for capability in [
@@ -171,6 +186,7 @@ mod tests {
             Some(Path::new("/package")),
             &HostCapability::ALL,
             &dream_abi::target::TargetSpec::host(),
+            false,
         );
         let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy()).collect();
         for capability in HostCapability::ALL {
@@ -240,6 +256,7 @@ mod tests {
             Some(Path::new(".")),
             &HostCapability::ALL,
             &dream_abi::target::TargetSpec::host(),
+            false,
         );
         for capability in HostCapability::ALL {
             assert!(command.get_args().any(|arg| arg

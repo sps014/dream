@@ -145,7 +145,8 @@ def save(path, root, compatibility, command, samples, arm, passes, rounds, rss, 
                 temporary_path = Path(temporary.name)
             try:
                 shutil.copy2(source, temporary_path)
-                with temporary_path.open("rb") as contents:
+                # A read-only handle cannot be flushed on Windows (`os.fsync` returns EBADF).
+                with temporary_path.open("r+b") as contents:
                     os.fsync(contents.fileno())
                 os.replace(temporary_path, snapshot)
             finally:

@@ -471,7 +471,7 @@ pub fn compile_llvm(
         let mut flags = Vec::new();
         let mut host = std::process::Command::new("cc");
         if let Some(dir) = &dir {
-            link_runtime(&mut host, dir, None, &capabilities, &spec);
+            link_runtime(&mut host, dir, None, &capabilities, &spec, false);
         }
         flags.extend(host.get_args().map(|a| a.to_string_lossy().into_owned()));
         if !spec.is_windows() {
@@ -550,7 +550,8 @@ pub fn compile_llvm(
         lcmd.args(["-lm", "-lpthread"]);
     }
     if let Some(dir) = &dir {
-        link_runtime(&mut lcmd, dir, bundled.as_deref(), &capabilities, &spec);
+        let zig_driver = *pgo != Pgo::Generate && matches!(driver, cc::Cc::Zig(_));
+        link_runtime(&mut lcmd, dir, bundled.as_deref(), &capabilities, &spec, zig_driver);
     }
     let c_libs = read_c_libs_from_abi(&abi_path);
     if !c_libs.is_empty() {

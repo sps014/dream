@@ -86,7 +86,11 @@ dream_ptr processExePath(void) {
 
 dream_ptr processCwd(void) {
     char path[4096];
+#ifdef _WIN32
+    if (!_getcwd(path, (int)sizeof(path))) {
+#else
     if (!getcwd(path, sizeof(path))) {
+#endif
         return 0;
     }
     return dream_str_from_utf8(path);
@@ -94,7 +98,11 @@ dream_ptr processCwd(void) {
 
 int32_t processSetCwd(dream_ptr path) {
     char *text = dream_str_utf8(path);
+#ifdef _WIN32
+    int32_t ok = text && _chdir(text) == 0;
+#else
     int32_t ok = text && chdir(text) == 0;
+#endif
     free(text);
     return ok;
 }

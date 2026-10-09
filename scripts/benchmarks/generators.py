@@ -7,15 +7,18 @@ import subprocess
 import tempfile
 import time
 
+from benchmarks.process import dream_name, with_exe
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary", type=Path, default=ROOT / "target/release/dream")
+    parser.add_argument("--binary", type=Path, default=ROOT / "target" / "release" / dream_name())
     parser.add_argument("--save", type=Path)
     parser.add_argument("--check", type=Path)
     args = parser.parse_args()
+    args.binary = with_exe(args.binary)
     if not args.binary.is_file():
         parser.error("build the compiler first: cargo build --release --workspace")
     small = (ROOT / "tests/cases/json_derive.dream").read_text()

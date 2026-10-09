@@ -3,9 +3,14 @@
 import copy
 import importlib.util
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
+
+from benchmarks.process import peak_working_set, with_exe
 
 from benchmarks import gate as bench_gate, stats
 
@@ -200,6 +205,21 @@ class GateTests(unittest.TestCase):
         rss = {'current': self.rss['current'], 'csharp': self.rss['baseline']}
         rows, _ = stats.summarize(samples, rss, ['current', 'csharp'], 5, 10)
         self.assertEqual(rows['binary_trees']['comparisons']['csharp']['decision'], 'different-contract')
+
+    def test_with_exe_keeps_an_existing_file(self):
+        path = self.root / "tool"
+        path.write_bytes(b"x")
+        self.assertEqual(with_exe(path), path)
+
+    def test_windows_peak_working_set(self):
+        if os.name != "nt":
+            self.skipTest("windows process accounting")
+        proc = subprocess.Popen([sys.executable, "-c", "print('ok')"], stdout=subprocess.DEVNULL)
+        proc.wait()
+        self.assertGreater(peak_working_set(proc), 0)
+        exe = self.root / "dream.exe"
+        exe.write_bytes(b"x")
+        self.assertEqual(with_exe(self.root / "dream"), exe)
 
     def test_missing_checksum_and_results_varying_between_passes(self):
         for mutation in (lambda s: s.pop('checksum'), lambda s: s.update(checksum=43)):

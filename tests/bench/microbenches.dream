@@ -6,7 +6,7 @@ import system.text;
 
 // Microbench suite for ARC / string / collection / allocator hot paths.
 // Run: `dream --release run tests/bench/microbenches.dream`
-// Or:  `./scripts/run-microbenches.sh` (optional C# compare when `dotnet` is available)
+// Or:  `./scripts/bench.py` (optional C# compare when `dotnet` is available)
 // Output lines: `bench <name> ns_total=<n> iters=<n> ns_per_op=<n>`
 //
 // Notes vs C# (`tests/bench/csharp`):
@@ -34,7 +34,6 @@ class BenchSink {
 }
 let bench_sink = BenchSink();
 
-// bench-compare: current-only begin
 // Ownership-runtime event deltas since the previous row (`DREAM_BENCH_COUNTERS=1`). A row's
 // counts include the setup that ran between the two reports. Names follow `dream_counter`.
 let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
@@ -56,10 +55,9 @@ fun counters_field(): string {
     }
     return out;
 }
-// bench-compare: current-only end
 
-fun report(name: string, nanos: long, iters: int): void {
-    let counters = counters_field(); // bench-compare: baseline=let counters = "";
+fun report(name: string, nanos: long, iters: int, checksum: int): void {
+    let counters = counters_field();
     if measuring == false {
         return;
     }
@@ -69,6 +67,7 @@ fun report(name: string, nanos: long, iters: int): void {
             + " ns_total=" + nanos.to_string()
             + " iters=" + iters.to_string()
             + " ns_per_op=" + per.to_string()
+            + " checksum=" + checksum.to_string()
             + counters
     );
 }
@@ -104,7 +103,7 @@ fun bench_arc_locals(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("arc_locals", sw.elapsed_nanos, iters);
+    report("arc_locals", sw.elapsed_nanos, iters, acc / 2);
     sink_int(acc);
 }
 
@@ -118,7 +117,7 @@ fun bench_string_concat(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("string_concat", sw.elapsed_nanos, iters);
+    report("string_concat", sw.elapsed_nanos, iters, acc / 2);
     sink_int(acc);
 }
 
@@ -146,7 +145,7 @@ fun bench_string_eq(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("string_eq", sw.elapsed_nanos, iters);
+    report("string_eq", sw.elapsed_nanos, iters, hits);
     sink_int(hits);
 }
 
@@ -168,7 +167,7 @@ fun bench_char_scan(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("char_scan", sw.elapsed_nanos, iters);
+    report("char_scan", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -189,7 +188,7 @@ fun bench_byte_scan(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("byte_scan", sw.elapsed_nanos, iters);
+    report("byte_scan", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -204,7 +203,7 @@ fun bench_substring(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("substring", sw.elapsed_nanos, iters);
+    report("substring", sw.elapsed_nanos, iters, acc / 2);
     sink_int(acc);
 }
 
@@ -223,7 +222,7 @@ fun bench_substring_span(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("substring_span", sw.elapsed_nanos, iters);
+    report("substring_span", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -241,7 +240,7 @@ fun bench_split_span(iters: int): void {
     }
     sw.stop();
 
-    report("split_span", sw.elapsed_nanos, iters);
+    report("split_span", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -262,7 +261,7 @@ fun bench_map_get_span(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("map_get_span", sw.elapsed_nanos, iters);
+    report("map_get_span", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -275,11 +274,12 @@ fun bench_list_push(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("list_push", sw.elapsed_nanos, iters);
+    report("list_push", sw.elapsed_nanos, iters, list.length);
     sink_int(list.length);
 }
 
 fun bench_list_insert_mid(iters: int): void {
+    let acc = 0;
     let n = 256;
     let rounds = iters / n;
     if rounds < 1 {
@@ -294,10 +294,11 @@ fun bench_list_insert_mid(iters: int): void {
             list.insert(list.length / 2, i);
             i = i + 1;
         }
+        acc = acc + list[list.length / 2];
         r = r + 1;
     }
     sw.stop();
-    report("list_insert_mid", sw.elapsed_nanos, rounds * n);
+    report("list_insert_mid", sw.elapsed_nanos, rounds * n, acc);
 }
 
 fun bench_map_get_set(iters: int): void {
@@ -315,7 +316,7 @@ fun bench_map_get_set(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("map_get_set", sw.elapsed_nanos, iters);
+    report("map_get_set", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -338,7 +339,7 @@ fun bench_map_clear_reuse(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("map_clear_reuse", sw.elapsed_nanos, rounds * per);
+    report("map_clear_reuse", sw.elapsed_nanos, rounds * per, map.length);
     sink_int(map.capacity);
 }
 
@@ -358,7 +359,7 @@ fun bench_set_probe(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("set_probe", sw.elapsed_nanos, iters);
+    report("set_probe", sw.elapsed_nanos, iters, acc + set.length);
     sink_int(acc + set.length);
 }
 
@@ -379,7 +380,7 @@ fun bench_set_clear_reuse(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("set_clear_reuse", sw.elapsed_nanos, rounds * per);
+    report("set_clear_reuse", sw.elapsed_nanos, rounds * per, set.length);
     sink_int(set.capacity);
 }
 
@@ -394,7 +395,7 @@ fun bench_alloc_churn(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("alloc_churn", sw.elapsed_nanos, iters);
+    report("alloc_churn", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -417,7 +418,7 @@ fun bench_list_clear_reuse(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("list_clear_reuse", sw.elapsed_nanos, rounds * per);
+    report("list_clear_reuse", sw.elapsed_nanos, rounds * per, buf.length);
     sink_int(buf.capacity);
 }
 
@@ -439,7 +440,7 @@ fun bench_scratch_arena(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("scratch_arena", sw.elapsed_nanos, iters);
+    report("scratch_arena", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 // Public find-all API — pattern is intentionally NOT bare `\d+` (that hits a digit-run
@@ -461,7 +462,7 @@ fun bench_regex_find(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("regex_find", sw.elapsed_nanos, iters);
+    report("regex_find", sw.elapsed_nanos, iters, acc / 2);
     sink_int(acc);
 }
 
@@ -510,7 +511,7 @@ fun bench_json_serialize(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("json_serialize", sw.elapsed_nanos, iters);
+    report("json_serialize", sw.elapsed_nanos, iters, acc / 2);
     sink_int(acc);
 }
 
@@ -526,7 +527,7 @@ fun bench_json_deserialize(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("json_deserialize", sw.elapsed_nanos, iters);
+    report("json_deserialize", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -582,7 +583,7 @@ fun bench_arr_add(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("arr_add", sw.elapsed_nanos, iters);
+    report("arr_add", sw.elapsed_nanos, iters, checksum_floats(c) + checksum_ints(ci));
     sink_int(checksum_floats(c) + checksum_ints(ci));
 }
 
@@ -615,7 +616,7 @@ fun bench_vec_add(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("vec_add", sw.elapsed_nanos, iters);
+    report("vec_add", sw.elapsed_nanos, iters, checksum_floats(c));
     sink_int(checksum_floats(c));
 }
 
@@ -630,7 +631,7 @@ fun bench_string_builder(iters: int): void {
     }
     let built = sb.build();
     sw.stop();
-    report("string_builder", sw.elapsed_nanos, iters);
+    report("string_builder", sw.elapsed_nanos, iters, built.length);
     sink_string(built);
 }
 
@@ -706,7 +707,7 @@ fun bench_nbody(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("nbody", sw.elapsed_nanos, iters);
+    report("nbody", sw.elapsed_nanos, iters, (int)(bodies[0].x * 1000.0d));
     sink_int((int)(bodies[0].x * 1000.0d));
 }
 
@@ -745,7 +746,7 @@ fun bench_mandelbrot(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("mandelbrot", sw.elapsed_nanos, iters);
+    report("mandelbrot", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -784,7 +785,7 @@ fun bench_matmul(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("matmul_64", sw.elapsed_nanos, iters);
+    report("matmul_64", sw.elapsed_nanos, iters, (int)c[0]);
     sink_int((int)c[0]);
 }
 
@@ -833,7 +834,7 @@ fun bench_quicksort(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("quicksort", sw.elapsed_nanos, iters);
+    report("quicksort", sw.elapsed_nanos, iters, a[0]);
     sink_int(a[0]);
 }
 
@@ -869,7 +870,7 @@ fun bench_sieve(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("sieve", sw.elapsed_nanos, iters);
+    report("sieve", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -895,7 +896,7 @@ fun bench_fib_rec(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("fib_rec", sw.elapsed_nanos, iters);
+    report("fib_rec", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -975,7 +976,7 @@ fun bench_iface_dispatch(iters: int): void {
         r = r + 1;
     }
     sw.stop();
-    report("iface_dispatch", sw.elapsed_nanos, rounds * IFACE_OPS);
+    report("iface_dispatch", sw.elapsed_nanos, rounds * IFACE_OPS, acc);
     sink_int(acc);
 }
 
@@ -1013,7 +1014,7 @@ fun bench_binary_trees_alloc(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("binary_trees_alloc", sw.elapsed_nanos, iters);
+    report("binary_trees_alloc", sw.elapsed_nanos, iters, keep.length);
     sink_int(keep.length);
 }
 
@@ -1034,7 +1035,7 @@ fun bench_binary_trees(iters: int, reclaim: bool = false): void {
     sw.stop();
     let label = "binary_trees";
     if reclaim { label = "binary_trees_reclaim"; }
-    report(label, sw.elapsed_nanos, iters);
+    report(label, sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -1080,7 +1081,7 @@ fun bench_linked_walk(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("linked_walk", sw.elapsed_nanos, iters);
+    report("linked_walk", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -1125,7 +1126,7 @@ fun bench_weak_tree(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("weak_tree", sw.elapsed_nanos, iters);
+    report("weak_tree", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -1150,7 +1151,7 @@ fun bench_wordcount(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("wordcount", sw.elapsed_nanos, iters * count);
+    report("wordcount", sw.elapsed_nanos, iters * count, map.get_or("the", 0));
     sink_int(map.get_or("the", 0));
 }
 
@@ -1180,7 +1181,7 @@ fun bench_parse_ints(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("parse_ints", sw.elapsed_nanos, iters);
+    report("parse_ints", sw.elapsed_nanos, iters, (int)acc);
     sink_int((int)acc);
 }
 
@@ -1214,7 +1215,7 @@ fun bench_sum_options(iters: int): void {
         i = i + 1;
     }
     sw.stop();
-    report("sum_options", sw.elapsed_nanos, iters);
+    report("sum_options", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -1235,7 +1236,7 @@ fun bench_closure_dispatch(iters: int): void {
     }
     sw.stop();
     sink_int(total);
-    report("closure_dispatch", sw.elapsed_nanos, iters);
+    report("closure_dispatch", sw.elapsed_nanos, iters, total);
 }
 
 async fun scheduler_value(value: int): int {
@@ -1253,7 +1254,7 @@ async fun bench_async_poll(iters: int): void {
     }
     sw.stop();
     sink_int(total);
-    report("async_poll", sw.elapsed_nanos, iters);
+    report("async_poll", sw.elapsed_nanos, iters, total);
 }
 
 async fun bench_scheduler_queue(iters: int): void {
@@ -1268,7 +1269,7 @@ async fun bench_scheduler_queue(iters: int): void {
     }
     sw.stop();
     sink_int(total);
-    report("scheduler_queue", sw.elapsed_nanos, iters);
+    report("scheduler_queue", sw.elapsed_nanos, iters, total);
 }
 
 fun run_suite(scale: int): void {

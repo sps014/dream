@@ -139,7 +139,7 @@ dream --release --emit-mir=after:gvn,each app.dream       # every run of gvn tha
 dream --release --emit-mir=all --emit-mir-fn=main,parse app.dream  # every module stage, two fns
 ```
 
-Snapshots land in `<output>.mir/<NN>-<pass>.mir`, numbered so lexicographic order is pipeline order. `after:<pass>` accepts every module stage (`lower`, `expand-simple-ctors`, `funcbox-abi`, `param-modes`, `ownership-args`, `rc-insertion`, `devirt`, `inline`, `unique-region`, `rc-held-by-owner`, `sroa-managed`, `fixpoint`, `frame-alloc`) and every per-function pass name; an unknown name errors with the valid list. For a per-function pass without `each`, the file holds each function's body after that pass's last run in the fixpoint. When a pass misbehaves, dump before and after it; the CFG text is far easier to read than the LLVM IR.
+Snapshots land in `<output>.mir/<NN>-<pass>.mir`, numbered so lexicographic order is pipeline order. `after:<pass>` accepts every module stage (`lower`, `expand-simple-ctors`, `funcbox-abi`, `param-modes`, `ownership-args`, `rc-insertion`, `devirt`, `recursive-inline`, `inline`, `unique-region`, `rc-held-by-owner`, `sroa-managed`, `fixpoint`, `frame-alloc`) and every per-function pass name; an unknown name errors with the valid list. For a per-function pass without `each`, the file holds each function's body after that pass's last run in the fixpoint. When a pass misbehaves, dump before and after it; the CFG text is far easier to read than the LLVM IR.
 
 ## Verifier — `crates/dream-mir/src/verify/`
 

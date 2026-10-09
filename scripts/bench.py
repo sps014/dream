@@ -12,10 +12,12 @@ the summary reports the median with a bootstrap 95% confidence interval, peak RS
 and runtime counters when the binary was built with them.
 
 Examples:
-  scripts/bench-compare.py --rounds 6 --passes 5
-  scripts/bench-compare.py --arms current --filter binary_trees weak_tree
-  scripts/bench-compare.py --arms current --save-baseline tests/bench/results/dream-baseline.json
-  scripts/bench-compare.py --arms current --gate tests/bench/results/dream-baseline.json
+  scripts/bench.py                        # native Dream/C#, 20 rounds, 10 passes
+  scripts/bench.py build --help           # compiler cold/warm/edited builds
+  scripts/bench.py generators --help      # isolated source-generator caches
+  scripts/bench.py --arms current --filter binary_trees weak_tree
+  scripts/bench.py --arms current --save-baseline tests/bench/results/dream-baseline.json
+  scripts/bench.py --arms current --gate tests/bench/results/dream-baseline.json
 """
 from __future__ import annotations
 
@@ -23,16 +25,14 @@ import argparse
 import json
 import os
 import platform
-import random
 import re
 import shutil
-import statistics
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
-import bench_gate
+from benchmarks import gate as bench_gate, stats as bench_stats
 
 ROOT = Path(__file__).resolve().parent.parent
 BENCH = ROOT / "tests/bench/microbenches.dream"
@@ -47,22 +47,21 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--benchmark", type=Path, default=BENCH, help="fixture path, including a preserved campaign snapshot")
     p.add_argument("--node", default=shutil.which("node"), help="Node executable for wasm measurements")
     p.add_argument("--diagnostics", action="store_true", help="save optimized IR and first-pass LLVM remarks")
-    p.add_argument("--arms", nargs="+", default=["baseline", "current", "csharp"],
+    p.add_argument("--arms", nargs="+", default=["current", "csharp"],
                    choices=["baseline", "current", "csharp"])
     p.add_argument("--current-dream", default=str(ROOT / "target/release/dream"))
     p.add_argument("--baseline-dream", default=str(ROOT / "target/bench-baseline/target/release/dream"))
-    p.add_argument("--rounds", type=int, default=10, help="measured process starts per arm (10-20 for gating)")
-    p.add_argument("--warmup", type=int, default=1, help="discarded process starts per arm")
-    p.add_argument("--passes", type=int, default=5, help="DREAM_BENCH_PASSES per process")
+    p.add_argument("--rounds", type=int, default=20, help="measured process starts per arm (10-20 for gating)")
+    p.add_argument("--warmup", type=int, default=2, help="discarded process starts per arm")
+    p.add_argument("--passes", type=int, default=10, help="DREAM_BENCH_PASSES per process")
     p.add_argument("--filter", nargs="*", default=[], help="only report these bench names")
     p.add_argument("--out", default=str(ROOT / "tests/bench/out/compare"))
     p.add_argument("--counters", action="store_true", help="set DREAM_BENCH_COUNTERS=1 for Dream arms")
-    p.add_argument("--seed", type=int, default=0x5eed)
+    p.add_argument("--regression-threshold", type=float, default=0.05)
     p.add_argument("--save-baseline", help="save a validated immutable reference and complete samples")
     p.add_argument("--gate", help="compare current against the saved reference in paired rounds")
     p.add_argument("--runner-id", default=os.environ.get("DREAM_BENCH_RUNNER_ID"), help="controlled runner identity (required for gating)")
     p.add_argument("--input-seed", type=int, default=1)
-    p.add_argument("--allow-tiny", action="store_true", help="do not fail on zero-time rows")
     return p.parse_args()
 
 
@@ -109,19 +108,21 @@ def tool_versions(args) -> dict:
             out[f"{name}_version"] = "unknown"
     if "csharp" in args.arms and shutil.which("dotnet"):
         out["dotnet"] = run(["dotnet", "--version"]).strip()
+        out["dotnet_info"] = run(["dotnet", "--info"]).strip()
+        out["dotnet_sha256"] = bench_gate.digest(Path(shutil.which("dotnet")).resolve())
+        runtimes = run(["dotnet", "--list-runtimes"])
+        out["dotnet_runtimes"] = runtimes.strip()
+        out["dotnet_runtime_files"] = {
+            str(p): bench_gate.digest(p)
+            for version, directory in re.findall(r"^Microsoft.NETCore.App (\S+) \[(.+)\]$", runtimes, re.M)
+            for p in sorted((Path(directory) / version).iterdir()) if p.is_file()
+        }
+    out["runtime_sources"] = {str(p.relative_to(ROOT)): bench_gate.digest(p)
+        for p in sorted((ROOT / "crates/dream-mir/src/runtime").rglob("*")) if p.is_file()}
+    out["host_libraries"] = {str(p): bench_gate.digest(p)
+        for directory in (ROOT / "target/release", Path.home() / ".dream/lib")
+        if directory.is_dir() for p in sorted(directory.glob("*dream_host*")) if p.is_file()}
     return out
-
-
-def baseline_source(src: str) -> str:
-    """The same benchmark bodies, minus instrumentation the reference compiler cannot build.
-
-    `// bench-compare: current-only begin`/`end` blocks are dropped, and a line ending in
-    `// bench-compare: baseline=<text>` is replaced by `<text>` at the same indentation.
-    """
-    src = re.sub(r"^// bench-compare: current-only begin\n.*?^// bench-compare: current-only end\n",
-                 "", src, flags=re.M | re.S)
-    src = re.sub(r"^(\s*).*// bench-compare: baseline=(.*)$", r"\1\2", src, flags=re.M)
-    return src
 
 
 def prepare_dream(arm: str, exe: str, out: Path, args) -> list[str]:
@@ -132,8 +133,6 @@ def prepare_dream(arm: str, exe: str, out: Path, args) -> list[str]:
     work = out / arm
     work.mkdir(parents=True, exist_ok=True)
     src = args.benchmark_source.decode("utf-8")
-    if arm == "baseline":
-        src = baseline_source(src)
     path = work / "microbenches.dream"
     if not path.exists() or path.read_text() != src:
         path.write_text(src)
@@ -174,14 +173,28 @@ def prepare_dream(arm: str, exe: str, out: Path, args) -> list[str]:
     return command
 
 
-def prepare_csharp() -> list[str]:
+def prepare_csharp(out, args) -> list[str]:
     if not shutil.which("dotnet"):
         raise SystemExit("csharp: dotnet not found")
-    run(["dotnet", "build", "-c", "Release", "--nologo", "-v", "q"], cwd=CSHARP)
-    dlls = sorted(CSHARP.glob("bin/Release/*/DreamBench.dll"))
+    work = out.resolve() / "csharp"
+    work.mkdir(parents=True, exist_ok=True)
+    (work / "Program.cs").write_bytes(args.csharp_source)
+    (work / "DreamBench.csproj").write_bytes(args.csharp_project)
+    started = time.monotonic()
+    run(["dotnet", "build", "-c", "Release", "--nologo", "-v", "q"], cwd=work)
+    dlls = sorted(work.glob("bin/Release/*/DreamBench.dll"))
     if not dlls:
         raise SystemExit("csharp: DreamBench.dll not found after build")
-    return ["dotnet", str(dlls[-1])]
+    artifact = dlls[-1]
+    (work / "build.json").write_text(json.dumps({"compile_seconds": time.monotonic() - started,
+        "artifact_bytes": artifact.stat().st_size, "sha256": bench_gate.digest(artifact)}, indent=2) + "\n")
+    if args.diagnostics:
+        env = dict(os.environ, DREAM_BENCH_PASSES="1", DREAM_BENCH_SEED=str(args.input_seed),
+                   DOTNET_JitDisasm="BenchNbody Fib QsortRange",
+                   DOTNET_JitStdOutFile=str(work / "jit-disassembly.txt"))
+        stdout = run(["dotnet", str(artifact)], env=env)
+        (work / "diagnostic-stdout.txt").write_text(stdout)
+    return ["dotnet", str(artifact)]
 
 
 def run_once(cmd: list[str], env: dict) -> tuple[str, int]:
@@ -214,46 +227,16 @@ def parse_lines(text: str):
             row["ns_per_op"] = row["ns_total"] / row["iters"] if row["iters"] else 0.0
         else:
             row["ns_per_op"] = float(kv.get("ns_per_op", "nan"))
+        if "checksum" in kv:
+            row["checksum"] = int(kv["checksum"])
         if "counters" in kv:
             row["counters"] = {k: int(v) for k, v in (c.split(":", 1) for c in kv["counters"].split(",") if ":" in c)}
         yield row
 
 
-def bootstrap_ci(values: list[float], rng: random.Random, n: int = 2000) -> tuple[float, float]:
-    if len(values) < 2:
-        return (values[0], values[0]) if values else (float("nan"), float("nan"))
-    meds = sorted(statistics.median(rng.choices(values, k=len(values))) for _ in range(n))
-    return meds[int(0.025 * n)], meds[int(0.975 * n) - 1]
-
-
 def order_for(round_index: int, arms: list[str]) -> list[str]:
     rotated = arms[round_index % len(arms):] + arms[:round_index % len(arms)]
     return rotated if (round_index // len(arms)) % 2 == 0 else list(reversed(rotated))
-
-
-def summarize(samples: list[dict], rss: dict, arms: list[str], rng: random.Random, names_filter):
-    by = {}
-    counters = {}
-    for s in samples:
-        by.setdefault((s["name"], s["arm"]), []).append(s["ns_per_op"])
-        if "counters" in s:
-            counters.setdefault((s["name"], s["arm"]), s["counters"])
-    names = sorted({n for n, _ in by})
-    if names_filter:
-        names = [n for n in names if n in names_filter]
-    summary = {}
-    for name in names:
-        summary[name] = {}
-        for arm in arms:
-            vals = by.get((name, arm))
-            if not vals:
-                continue
-            lo, hi = bootstrap_ci(vals, rng)
-            summary[name][arm] = {
-                "median": statistics.median(vals), "ci_low": lo, "ci_high": hi, "samples": len(vals),
-                **({"counters": counters[(name, arm)]} if (name, arm) in counters else {}),
-            }
-    return summary, {arm: max(v) if v else 0 for arm, v in rss.items()}
 
 
 def fmt(v: float) -> str:
@@ -263,9 +246,9 @@ def fmt(v: float) -> str:
 def print_table(summary: dict, peak: dict, arms: list[str]) -> None:
     head = f"{'bench':<22}" + "".join(f"{arm + ' ns/op [95% CI]':>34}" for arm in arms)
     if "current" in arms and "baseline" in arms:
-        head += f"{'cur/base':>10}"
+        head += f"{'cur/base [95% CI] decision':>39}"
     if "current" in arms and "csharp" in arms:
-        head += f"{'cur/C#':>9}"
+        head += f"{'cur/C# [95% CI] decision':>39}"
     print(head)
     print("-" * len(head))
     for name, row in summary.items():
@@ -276,9 +259,11 @@ def print_table(summary: dict, peak: dict, arms: list[str]) -> None:
             line += f"{cell:>34}"
         for other in ("baseline", "csharp"):
             if "current" in arms and other in arms:
-                c, o = row.get("current"), row.get(other)
-                ratio = f"{c['median'] / o['median']:.2f}x" if c and o and o["median"] > 0 else "-"
-                line += f"{ratio:>10}" if other == "baseline" else f"{ratio:>9}"
+                comparison = row["comparisons"].get(other)
+                cell = (f"{comparison['ratio']:.2f} [{comparison['ci_low']:.2f}, {comparison['ci_high']:.2f}] "
+                        f"{comparison['decision']}" if comparison else "-")
+                line += f"{cell:>39}"
+
         print(line)
     print()
     print("peak RSS (max over processes): " + ", ".join(f"{a}={peak.get(a, 0) / 1e6:.1f} MB" for a in arms))
@@ -291,6 +276,8 @@ def print_table(summary: dict, peak: dict, arms: list[str]) -> None:
 
 def main() -> int:
     args = parse_args()
+    if args.counters and (args.gate or args.save_baseline or args.arms != ["current"]):
+        raise ValueError("counter runs require --arms current and cannot establish latency comparisons")
     if args.gate and args.save_baseline:
         raise ValueError("choose either reference creation or gating")
     if args.warmup < 1 or args.rounds < 1 or args.passes < 1 or not 0 <= args.input_seed <= 2147483647:
@@ -298,13 +285,17 @@ def main() -> int:
     reference = None
     if args.target == "wasm" and "csharp" in args.arms:
         raise ValueError("wasm comparisons use Dream arms only; select --arms current or baseline current")
+    if not 0 <= args.regression_threshold < 1:
+        raise ValueError("invalid regression threshold")
     args.benchmark_source = args.benchmark.read_bytes()
+    args.csharp_source = (CSHARP / "Program.cs").read_bytes()
+    args.csharp_project = (CSHARP / "DreamBench.csproj").read_bytes()
     compatibility = bench_gate.identity(args.benchmark, CSHARP / "Program.cs", args.runner_id,
                                         args.input_seed, args.passes, args.target, args.benchmark_source)
     if args.gate or args.save_baseline:
         if os.environ.get("DREAM_NATIVE_SANITIZE"):
             raise ValueError("sanitizer instrumentation cannot form a timing reference or gate")
-        if args.counters or args.allow_tiny or args.filter:
+        if args.counters or args.filter:
             raise ValueError("references and gates require complete, uninstrumented, valid measurements")
         if not args.runner_id or not 10 <= args.rounds <= 20 or args.passes < 5 or "current" not in args.arms:
             raise ValueError("references and gates require a runner id, 10-20 rounds, five passes and the current arm")
@@ -313,7 +304,6 @@ def main() -> int:
             if "baseline" not in args.arms: args.arms.insert(0, "baseline")
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    rng = random.Random(args.seed)
     commands = {}
     identities = tool_versions(args)
     if reference:
@@ -329,7 +319,7 @@ def main() -> int:
         if arm == "baseline" and reference:
             commands[arm] = control
         elif arm == "csharp":
-            commands[arm] = prepare_csharp()
+            commands[arm] = prepare_csharp(out, args)
         else:
             exe = args.current_dream if arm == "current" else args.baseline_dream
             commands[arm] = prepare_dream(arm, exe, out, args)
@@ -363,19 +353,22 @@ def main() -> int:
                     raw.write(json.dumps(row) + "\n")
                     samples.append(row)
             print(f"round {r + 1}/{args.warmup + args.rounds} done", file=sys.stderr)
-    summary, peak = summarize(samples, rss, args.arms, rng, set(args.filter))
+    summary, peak = bench_stats.summarize(samples, rss, args.arms, args.passes, args.rounds,
+                                         args.regression_threshold)
+    if args.filter:
+        summary = {n: r for n, r in summary.items() if n in args.filter}
     (out / "summary.json").write_text(json.dumps(
         {"tools": identities, "passes": args.passes, "rounds": args.rounds,
-         "target": args.target, "peak_rss": peak, "benchmarks": summary}, indent=2))
+         "target": args.target, "instrumented": args.counters, "identity": compatibility, "regression_threshold": args.regression_threshold,
+         "peak_rss": peak, "benchmarks": summary}, indent=2))
     print_table(summary, peak, args.arms)
     print(f"\nraw samples: {raw_path}\nsummary: {out / 'summary.json'}")
     status = 0
-    if not args.allow_tiny:
-        tiny = sorted({s["name"] for s in samples if s["arm"] != "csharp"
-                       and (s.get("ns_total") == 0 or s["ns_per_op"] < MIN_NS_PER_OP)})
-        if tiny:
-            print("ZERO-TIME rows (measured work was optimized away): " + ", ".join(tiny))
-            status = 1
+    tiny = sorted({s["name"] for s in samples if s["arm"] != "csharp"
+                   and (s.get("ns_total") == 0 or s["ns_per_op"] < MIN_NS_PER_OP)})
+    if tiny:
+        print("SUB-TIMER rows cannot substantiate a speed claim: " + ", ".join(tiny))
+        status = 1
     if args.save_baseline:
         if status:
             raise ValueError("invalid timing rows cannot form a reference")
@@ -385,7 +378,7 @@ def main() -> int:
     if args.gate:
         if status:
             raise ValueError("invalid timing rows cannot pass a gate")
-        status, decisions = bench_gate.evaluate(samples, reference, args.passes, args.rounds, rss, 0.10)
+        status, decisions = bench_gate.evaluate(samples, reference, args.passes, args.rounds, rss, args.regression_threshold)
         (out / "gate.json").write_text(json.dumps(decisions, indent=2) + "\n")
         for name, decision in decisions.items():
             print(f"GATE {name}: {decision['decision']} ({decision['ratio']:.3f}x)")
@@ -394,6 +387,13 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
+        if len(sys.argv) > 1 and sys.argv[1] in ("build", "generators"):
+            command = sys.argv.pop(1)
+            if command == "build":
+                from benchmarks import build
+                sys.exit(build.main())
+            from benchmarks import generators
+            sys.exit(generators.main())
         sys.exit(main())
     except ValueError as error:
         sys.stderr.write(f"invalid benchmark measurement: {error}\n")

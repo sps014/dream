@@ -8,4 +8,4 @@ It owns mapped pages, platform locks, standard streams, files, environment varia
 
 `../../../modules.rs` registers these units. The pinned Clang builds them into runtime bitcode. Regular expressions and host capabilities keep their own registries.
 
-Run `scripts/bench-runtime.sh` from the repository root for runtime benchmarks. Read the [runtime layer guide](../../README.md) before changing an embedding callback or allocation contract.
+Run `scripts/bench.py --arms current --counters` from the repository root for runtime benchmarks. Read the [runtime layer guide](../../README.md) before changing an embedding callback or allocation contract.

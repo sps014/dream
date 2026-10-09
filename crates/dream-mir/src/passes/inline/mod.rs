@@ -15,6 +15,9 @@
 //! rather than Borrow-rebinding a synthetic temp.
 
 pub(crate) mod graph;
+pub(crate) mod recursive;
+#[cfg(test)]
+mod recursive_tests;
 mod remap;
 #[cfg(test)]
 mod return_tests;

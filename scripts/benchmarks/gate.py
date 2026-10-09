@@ -12,7 +12,7 @@ import statistics
 import subprocess
 import tempfile
 
-VERSION = 3
+VERSION = 4
 
 
 def digest(path):
@@ -30,8 +30,9 @@ def identity(bench, csharp, runner, seed, passes, target="native", benchmark_sou
                       if line.startswith('model name') or line.startswith('Hardware')), model)
     return {
         "benchmark": hashlib.sha256(source).hexdigest(), "csharp": digest(csharp),
-        "harness": {name: digest(Path(__file__).with_name(name))
-                    for name in ('bench-compare.py', 'bench_gate.py')},
+        "csharp_project": digest(Path(csharp).with_name("DreamBench.csproj")) if Path(csharp).with_name("DreamBench.csproj").is_file() else None,
+        "harness": {name: digest(Path(__file__).resolve().parents[1] / name)
+                    for name in ('bench.py', 'benchmarks/gate.py', 'benchmarks/stats.py')},
         "hardware": {"platform": platform.platform(), "machine": platform.machine(),
                      "processor": model, "cpus": os.cpu_count(), "runner": runner},
         "target": target,
@@ -45,6 +46,7 @@ def process_samples(samples, arm, passes, rounds):
         raise ValueError("benchmark samples must be a list")
     groups = {}
     sinks = set()
+    checksums = {}
     for sample in samples:
         if not isinstance(sample, dict) or not isinstance(sample.get("arm"), str):
             raise ValueError("invalid benchmark sample")
@@ -61,6 +63,9 @@ def process_samples(samples, arm, passes, rounds):
         if type(sample.get("sink")) is not int:
             raise ValueError("missing result sink")
         sinks.add(sample["sink"])
+        if type(sample.get("checksum")) is not int or type(sample.get("iters")) is not int or sample["iters"] <= 0:
+            raise ValueError("missing checksum or invalid iteration count")
+        checksums.setdefault(sample["name"], set()).add((sample["checksum"], sample["iters"]))
         if not math.isfinite(value) or not math.isfinite(total) or value <= 0 or total <= 0:
             raise ValueError(f"invalid or zero-time sample: {sample['name']}")
         key = (sample["name"], sample["round"])
@@ -72,6 +77,8 @@ def process_samples(samples, arm, passes, rounds):
     names = {name for name, _ in groups}
     if not names:
         raise ValueError(f"no benchmark samples for {arm}")
+    if any(len(values) != 1 for values in checksums.values()):
+        raise ValueError("workload result or iteration count changed")
     if len(sinks) != 1:
         raise ValueError("result sink changed between processes")
     result = {}
@@ -213,6 +220,9 @@ def evaluate(samples, reference, passes, rounds, rss, threshold):
     sinks = {arm: next(s["sink"] for s in samples if s["arm"] == arm) for arm in ("current", "baseline")}
     if sinks["current"] != sinks["baseline"] or sinks["baseline"] != reference["samples"][0]["sink"]:
         raise ValueError("current/reference result sink mismatch")
+    expected_results = {s["name"]: (s["checksum"], s["iters"]) for s in reference["samples"]}
+    if any((s["checksum"], s["iters"]) != expected_results.get(s["name"]) for s in samples if s["arm"] in ("baseline", "current")):
+        raise ValueError("reference workload checksum/iteration mismatch")
     expected = set(reference["confidence_intervals"])
     if set(current) != expected or set(control) != expected:
         raise ValueError("missing or unexpected benchmark rows")

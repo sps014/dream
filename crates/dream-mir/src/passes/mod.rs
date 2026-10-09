@@ -33,6 +33,9 @@ mod overflow_elim;
 mod ownership_args;
 #[cfg(test)]
 mod ownership_args_tests;
+mod param_modes;
+#[cfg(test)]
+mod param_modes_tests;
 mod prop;
 pub(crate) mod rc;
 mod sccp;

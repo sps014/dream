@@ -1,0 +1,24 @@
+import system;
+import system.collections;
+
+fun main(): void {
+    let map = Map<string, int>();
+    map["Ω界😀"] = 42;
+    map[""] = 7;
+    let chars = ['x', 'Ω', '界', (char)55357, (char)56832, 'y'];
+    let view = ReadOnlySpan<char>.of(chars).slice(1, 4);
+    System.println(view.hash_code() == "Ω界😀".hash_code());
+    System.println(map.get_or(view, -1));
+    System.println(map.get_or("xΩ界😀y".span(1, 5), -1));
+    let empty: char[] = [];
+    System.println(map.get_or(ReadOnlySpan<char>.of(empty), -1));
+    System.println(map.contains(ReadOnlySpan<char>.of(['Ω', '界'])));
+    System.println(map.remove("Ω界😀"));
+    System.println(map.get_or(view, -1));
+    map["Ω界😀"] = 99;
+    System.println(map.get_or(view, -1));
+    map.clear();
+    System.println(map.get_or(view, -1));
+    map["Ω界😀"] = 100;
+    System.println(map.get_or(view, -1));
+}

@@ -7,12 +7,12 @@ from pathlib import Path
 import tempfile
 import unittest
 
-import bench_gate
+from benchmarks import gate as bench_gate, stats
 
 
 class GateTests(unittest.TestCase):
     def test_two_arm_order_is_balanced(self):
-        spec = importlib.util.spec_from_file_location('comparison', Path(__file__).with_name('bench-compare.py'))
+        spec = importlib.util.spec_from_file_location('comparison', Path(__file__).with_name('bench.py'))
         comparison = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(comparison)
         arms = ['baseline', 'current']
@@ -20,9 +20,6 @@ class GateTests(unittest.TestCase):
         self.assertEqual(sum(order == arms for order in orders), 10)
         self.assertEqual(sum(order == arms[::-1] for order in orders), 10)
         self.assertEqual(arms, ['baseline', 'current'])
-        source = comparison.baseline_source(comparison.BENCH.read_text())
-        self.assertNotIn('counters_on', source)
-        self.assertNotIn('Debug.runtime_counter', source)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -32,7 +29,7 @@ class GateTests(unittest.TestCase):
         self.binary.write_bytes(b'immutable benchmark')
         self.identity = {'passes': 5, 'names': ['work'], 'target': 'native'}
         self.samples = [dict(name='work', arm=arm, round=r, pass_index=p,
-                             ns_total=1000, ns_per_op=value, sink=123)
+                             ns_total=1000, ns_per_op=value, sink=123, checksum=42, iters=10)
                         for arm, value in [('baseline', 100), ('current', 100)]
                         for r in range(10) for p in range(5)]
         self.rss = {arm: [1000] * 10 for arm in ('baseline', 'current')}
@@ -164,6 +161,52 @@ class GateTests(unittest.TestCase):
                 sample['sink'] = 456
         with self.assertRaises(ValueError):
             bench_gate.evaluate(samples, self.record, 5, 10, self.rss, .1)
+
+    def test_checksum_and_iteration_mismatches(self):
+        for field in ('checksum', 'iters'):
+            samples = copy.deepcopy(self.samples)
+            for sample in samples:
+                if sample['arm'] == 'current':
+                    sample[field] += 1
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                bench_gate.evaluate(samples, self.record, 5, 10, self.rss, .05)
+            with self.assertRaises(ValueError):
+                stats.summarize(samples, self.rss, ['baseline', 'current'], 5, 10)
+
+    def test_csharp_is_paired_and_process_clustered(self):
+        samples = copy.deepcopy(self.samples)
+        for sample in samples:
+            if sample['arm'] == 'baseline':
+                sample['arm'] = 'csharp'
+                sample['ns_per_op'] *= 2
+        rss = {'current': self.rss['current'], 'csharp': self.rss['baseline']}
+        rows, _ = stats.summarize(samples, rss, ['current', 'csharp'], 5, 10)
+        self.assertEqual(rows['work']['current']['processes'], 10)
+        self.assertEqual(rows['work']['comparisons']['csharp']['decision'], 'win')
+        self.assertEqual(rows['work']['comparisons']['csharp']['ci_high'], .5)
+        # More samples inside a process do not create independent process starts.
+        repeated = [dict(s, pass_index=s['pass_index'] + offset)
+                    for offset in (0, 5) for s in samples]
+        more, _ = stats.summarize(repeated, rss, ['current', 'csharp'], 10, 10)
+        self.assertEqual(rows['work']['comparisons'], more['work']['comparisons'])
+
+    def test_contract_differences_cannot_claim_csharp_victory(self):
+        samples = copy.deepcopy(self.samples)
+        for sample in samples:
+            sample['name'] = 'binary_trees'
+            if sample['arm'] == 'baseline':
+                sample['arm'] = 'csharp'
+                sample['ns_per_op'] *= 2
+        rss = {'current': self.rss['current'], 'csharp': self.rss['baseline']}
+        rows, _ = stats.summarize(samples, rss, ['current', 'csharp'], 5, 10)
+        self.assertEqual(rows['binary_trees']['comparisons']['csharp']['decision'], 'different-contract')
+
+    def test_missing_checksum_and_results_varying_between_passes(self):
+        for mutation in (lambda s: s.pop('checksum'), lambda s: s.update(checksum=43)):
+            samples = copy.deepcopy(self.samples)
+            mutation(samples[-1])
+            with self.assertRaises(ValueError):
+                stats.summarize(samples, self.rss, ['baseline', 'current'], 5, 10)
 
 
 if __name__ == '__main__':

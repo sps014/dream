@@ -26,6 +26,7 @@ const MODULE_STAGES: &[&str] = &[
     super::ownership_args::STAGE,
     "rc-insertion",
     "devirt",
+    "recursive-inline",
     "inline",
     "unique-region",
     super::rc::held::STAGE,

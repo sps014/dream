@@ -1,0 +1,33 @@
+import system;
+
+fun reverse_range(values: int[], lo: int, hi: int): void {
+    if lo >= hi { return; }
+    let first = values[lo];
+    values[lo] = values[hi];
+    values[hi] = first;
+    reverse_range(values, lo + 1, hi - 1);
+}
+
+fun add_twice(left: int[], right: int[], n: int): int {
+    if n == 0 { return 0; }
+    return left[n - 1] + right[n - 1] + add_twice(left, right, n - 1);
+}
+
+let shared_values: int[] = [1, 2, 3];
+
+fun clear_owner_then_read(values: int[]): int {
+    shared_values = [99];
+    return values[2];
+}
+
+fun main() {
+    let values: int[] = [10, 20, 30, 40, 50];
+    reverse_range(values, 0, 4);
+    System.println(values[0]);
+    System.println(values[4]);
+    System.println(add_twice(values, values, 5));
+    System.println(clear_owner_then_read(shared_values));
+    System.println(shared_values[0]);
+    reverse_range(values, 3, 2);
+    System.println(values[3]);
+}

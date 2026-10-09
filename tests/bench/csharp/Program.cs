@@ -10,14 +10,12 @@ namespace DreamBench;
 
 /// <summary>
 /// 1:1 C# port of tests/bench/microbenches.dream for side-by-side ns/op comparison.
-/// Pass --dream-scores path/to/native.txt (from run-microbenches.sh) for live ratios.
 /// Dream runs as native LLVM + ARC; this is Release JIT + GC — substrate differs.
 /// JSON uses the compile-time source generator, matching Dream's `@json` codegen.
 /// Regex uses the interpreted .NET matcher; Dream uses PCRE2 JIT on native targets.
 /// </summary>
 public static class Program
 {
-    static readonly Dictionary<string, long> DreamScores = new();
     static bool IsWarmup = true;
     static int Sink;
 
@@ -47,24 +45,14 @@ public static class Program
         public void Reset() => used = 0;
     }
 
-    static void Report(string name, long elapsedNanos, int iters)
+    static void Report(string name, long elapsedNanos, int iters, int checksum)
     {
         if (IsWarmup) return;
-        // Fractional ns/op: integer division truncates sub-nanosecond benches to 0-1.
-        double csharpNs = (double)elapsedNanos / iters;
-        Console.WriteLine($"bench {name} ns_per_op={csharpNs.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}");
-        if (DreamScores.TryGetValue(name, out long dreamNs) && dreamNs > 0)
-        {
-            double ratio = csharpNs / dreamNs;
-            string cmp = ratio > 1.0
-                ? $"C# is {ratio:F1}x slower"
-                : $"C# is {(1.0 / ratio):F1}x faster";
-            Console.Error.WriteLine($"  compare {name,-18} C#={csharpNs,6:F1} Dream={dreamNs,6} | {cmp}");
-        }
+        Console.WriteLine($"bench {name} ns_total={elapsedNanos} iters={iters} checksum={checksum}");
     }
 
     static long ElapsedNs(Stopwatch sw) =>
-        sw.ElapsedTicks * (1_000_000_000L / Stopwatch.Frequency);
+        (long)((decimal)sw.ElapsedTicks * 1_000_000_000L / Stopwatch.Frequency);
 
     static void BenchArcLocals(int iters)
     {
@@ -78,7 +66,7 @@ public static class Program
             acc += c.Length;
         }
         sw.Stop();
-        Report("arc_locals", ElapsedNs(sw), iters);
+        Report("arc_locals", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -92,7 +80,7 @@ public static class Program
             acc += s.Length;
         }
         sw.Stop();
-        Report("string_concat", ElapsedNs(sw), iters);
+        Report("string_concat", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -117,7 +105,7 @@ public static class Program
             Sink += hits;
         }
         sw.Stop();
-        Report("string_eq", ElapsedNs(sw), iters);
+        Report("string_eq", ElapsedNs(sw), iters, hits);
         Sink = hits;
     }
 
@@ -133,7 +121,7 @@ public static class Program
                 acc += (int)s[j];
         }
         sw.Stop();
-        Report("char_scan", ElapsedNs(sw), iters);
+        Report("char_scan", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -152,7 +140,7 @@ public static class Program
                 acc += bytes[j];
         }
         sw.Stop();
-        Report("byte_scan", ElapsedNs(sw), iters);
+        Report("byte_scan", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -168,7 +156,7 @@ public static class Program
             acc += sub.Length;
         }
         sw.Stop();
-        Report("substring", ElapsedNs(sw), iters);
+        Report("substring", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -185,7 +173,7 @@ public static class Program
             acc += sub.Length + sub[0];
         }
         sw.Stop();
-        Report("substring_span", ElapsedNs(sw), iters);
+        Report("substring_span", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -201,7 +189,7 @@ public static class Program
                 acc += text[r].Length;
         }
         sw.Stop();
-        Report("split_span", ElapsedNs(sw), iters);
+        Report("split_span", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -220,7 +208,7 @@ public static class Program
             acc += lookup.TryGetValue(text.AsSpan(j * 2, 2), out int v) ? v : 0;
         }
         sw.Stop();
-        Report("map_get_span", ElapsedNs(sw), iters);
+        Report("map_get_span", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -231,13 +219,14 @@ public static class Program
         for (int i = 0; i < iters; i++)
             list.Add(i);
         sw.Stop();
-        Report("list_push", ElapsedNs(sw), iters);
+        Report("list_push", ElapsedNs(sw), iters, list.Count);
         Sink = list.Count;
     }
 
     static void BenchListInsertMid(int iters)
     {
         int n = 256;
+        int acc = 0;
         int rounds = Math.Max(1, iters / n);
         var sw = Stopwatch.StartNew();
         for (int r = 0; r < rounds; r++)
@@ -245,9 +234,10 @@ public static class Program
             var list = new List<int>(n);
             for (int i = 0; i < n; i++)
                 list.Insert(list.Count / 2, i);
+            acc += list[list.Count / 2];
         }
         sw.Stop();
-        Report("list_insert_mid", ElapsedNs(sw), rounds * n);
+        Report("list_insert_mid", ElapsedNs(sw), rounds * n, acc);
     }
 
     static void BenchMapGetSet(int iters)
@@ -260,7 +250,7 @@ public static class Program
         for (int i = 0; i < iters; i++)
             acc += map.TryGetValue(i, out int val) ? val : 0;
         sw.Stop();
-        Report("map_get_set", ElapsedNs(sw), iters);
+        Report("map_get_set", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -277,7 +267,7 @@ public static class Program
             map.Clear();
         }
         sw.Stop();
-        Report("map_clear_reuse", ElapsedNs(sw), rounds * per);
+        Report("map_clear_reuse", ElapsedNs(sw), rounds * per, map.Count);
         Sink = map.Count;
     }
 
@@ -292,7 +282,7 @@ public static class Program
             acc += buf[0];
         }
         sw.Stop();
-        Report("alloc_churn", ElapsedNs(sw), iters);
+        Report("alloc_churn", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -309,7 +299,7 @@ public static class Program
             buf.Clear();
         }
         sw.Stop();
-        Report("list_clear_reuse", ElapsedNs(sw), rounds * per);
+        Report("list_clear_reuse", ElapsedNs(sw), rounds * per, buf.Count);
         Sink = buf.Capacity;
     }
 
@@ -327,7 +317,7 @@ public static class Program
                 arena.Reset();
         }
         sw.Stop();
-        Report("scratch_arena", ElapsedNs(sw), iters);
+        Report("scratch_arena", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -347,7 +337,7 @@ public static class Program
                 acc += m.Length;
         }
         sw.Stop();
-        Report("regex_find", ElapsedNs(sw), iters);
+        Report("regex_find", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -389,7 +379,7 @@ public static class Program
             acc += text.Length;
         }
         sw.Stop();
-        Report("json_serialize", ElapsedNs(sw), iters);
+        Report("json_serialize", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -405,7 +395,7 @@ public static class Program
             acc += back.age + back.scores[2];
         }
         sw.Stop();
-        Report("json_deserialize", ElapsedNs(sw), iters);
+        Report("json_deserialize", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -434,10 +424,10 @@ public static class Program
                 ci[j] = ai[j] + bi[j];
         }
         sw.Stop();
-        Report("arr_add", ElapsedNs(sw), iters);
         int acc = 0;
         for (int i = 0; i < n; i++)
             acc += (int)c[i] + ci[i];
+        Report("arr_add", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -467,10 +457,10 @@ public static class Program
                 c[i] = a[i] + b[i];
         }
         sw.Stop();
-        Report("vec_add", ElapsedNs(sw), iters);
         int acc = 0;
         for (int i = 0; i < n; i++)
             acc += (int)c[i];
+        Report("vec_add", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -483,7 +473,7 @@ public static class Program
             sb.Append(chunk);
         string built = sb.ToString();
         sw.Stop();
-        Report("string_builder", ElapsedNs(sw), iters);
+        Report("string_builder", ElapsedNs(sw), iters, built.Length);
         Sink = built.Length;
     }
 
@@ -534,7 +524,7 @@ public static class Program
             }
         }
         sw.Stop();
-        Report("nbody", ElapsedNs(sw), iters);
+        Report("nbody", ElapsedNs(sw), iters, (int)(bodies[0].X * 1000.0));
         Sink = (int)(bodies[0].X * 1000.0);
     }
 
@@ -567,7 +557,7 @@ public static class Program
             }
         }
         sw.Stop();
-        Report("mandelbrot", ElapsedNs(sw), iters);
+        Report("mandelbrot", ElapsedNs(sw), iters, (int)acc);
         Sink = (int)acc;
     }
 
@@ -599,7 +589,7 @@ public static class Program
             }
         }
         sw.Stop();
-        Report("matmul_64", ElapsedNs(sw), iters);
+        Report("matmul_64", ElapsedNs(sw), iters, (int)c[0]);
         Sink = (int)c[0];
     }
 
@@ -638,7 +628,7 @@ public static class Program
             QsortRange(a, 0, n - 1);
         }
         sw.Stop();
-        Report("quicksort", ElapsedNs(sw), iters);
+        Report("quicksort", ElapsedNs(sw), iters, a[0]);
         Sink = a[0];
     }
 
@@ -663,7 +653,7 @@ public static class Program
             Sink = (int)acc;
         }
         sw.Stop();
-        Report("sieve", ElapsedNs(sw), iters);
+        Report("sieve", ElapsedNs(sw), iters, (int)acc);
         Sink = (int)acc;
     }
 
@@ -680,7 +670,7 @@ public static class Program
         for (int i = 0; i < iters; i++)
             acc += Fib(20 + (i & 1));
         sw.Stop();
-        Report("fib_rec", ElapsedNs(sw), iters);
+        Report("fib_rec", ElapsedNs(sw), iters, (int)acc);
         Sink = (int)acc;
     }
 
@@ -716,7 +706,7 @@ public static class Program
             foreach (var op in ops)
                 acc += op.Apply(r);
         sw.Stop();
-        Report("iface_dispatch", ElapsedNs(sw), rounds * IfaceOps);
+        Report("iface_dispatch", ElapsedNs(sw), rounds * IfaceOps, acc);
         Sink = acc;
     }
 
@@ -741,7 +731,7 @@ public static class Program
         for (int i = 0; i < iters; i++)
             keep.Add(MakeTree(12));
         sw.Stop();
-        Report("binary_trees_alloc", ElapsedNs(sw), iters);
+        Report("binary_trees_alloc", ElapsedNs(sw), iters, keep.Count);
         Sink = keep.Count;
     }
 
@@ -769,7 +759,7 @@ public static class Program
             GC.Collect();
         }
         sw.Stop();
-        Report(reclaim ? "binary_trees_reclaim" : "binary_trees", ElapsedNs(sw), iters);
+        Report(reclaim ? "binary_trees_reclaim" : "binary_trees", ElapsedNs(sw), iters, (int)acc);
         Sink = (int)acc;
     }
 
@@ -797,7 +787,7 @@ public static class Program
             }
         }
         sw.Stop();
-        Report("linked_walk", ElapsedNs(sw), iters);
+        Report("linked_walk", ElapsedNs(sw), iters, (int)acc);
         Sink = (int)acc;
     }
 
@@ -833,7 +823,7 @@ public static class Program
             else acc--;
         }
         sw.Stop();
-        Report("weak_tree", ElapsedNs(sw), iters);
+        Report("weak_tree", ElapsedNs(sw), iters, (int)acc);
         Sink = (int)acc;
     }
 
@@ -853,7 +843,7 @@ public static class Program
                 map[w] = map.TryGetValue(w, out int v) ? v + 1 : 1;
         }
         sw.Stop();
-        Report("wordcount", ElapsedNs(sw), iters * words.Length);
+        Report("wordcount", ElapsedNs(sw), iters * words.Length, map.GetValueOrDefault("the"));
         Sink = map.GetValueOrDefault("the");
     }
 
@@ -874,7 +864,7 @@ public static class Program
             acc += v;
         }
         sw.Stop();
-        Report("parse_ints", ElapsedNs(sw), iters);
+        Report("parse_ints", ElapsedNs(sw), iters, (int)acc);
         Sink = (int)acc;
     }
 
@@ -892,7 +882,7 @@ public static class Program
             if (opts[(i + 3) & 7] is int nv) acc += nv; else acc++;
         }
         sw.Stop();
-        Report("sum_options", ElapsedNs(sw), iters);
+        Report("sum_options", ElapsedNs(sw), iters, (int)acc);
         Sink = (int)acc;
     }
 
@@ -949,35 +939,8 @@ public static class Program
         BenchBinaryTrees(scale / 200, true);
     }
 
-    static void LoadDreamScores(string path)
+    public static int Main()
     {
-        foreach (string line in File.ReadLines(path))
-        {
-            // bench <name> ns_total=… iters=… ns_per_op=<n>
-            if (!line.StartsWith("bench ", StringComparison.Ordinal)) continue;
-            int nsIdx = line.LastIndexOf("ns_per_op=", StringComparison.Ordinal);
-            if (nsIdx < 0) continue;
-            string rest = line["bench ".Length..];
-            int sp = rest.IndexOf(' ');
-            if (sp <= 0) continue;
-            string name = rest[..sp];
-            string num = line[(nsIdx + "ns_per_op=".Length)..].Trim();
-            if (long.TryParse(num, out long v))
-                DreamScores[name] = v;
-        }
-    }
-
-    public static int Main(string[] args)
-    {
-        string? scores = Environment.GetEnvironmentVariable("DREAM_SCORES");
-        for (int i = 0; i < args.Length; i++)
-        {
-            if (args[i] == "--dream-scores" && i + 1 < args.Length)
-                scores = args[++i];
-        }
-        if (!string.IsNullOrEmpty(scores) && File.Exists(scores))
-            LoadDreamScores(scores);
-
         IsWarmup = true;
         RunSuite();
         GC.Collect();

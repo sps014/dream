@@ -112,8 +112,6 @@ pub(crate) fn rvalue_operands_mut(rv: &mut Rvalue, f: &mut impl FnMut(&mut Opera
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
         | Rvalue::ByteAt(a, b, _)
-        | Rvalue::LoadU8(a, b)
-        | Rvalue::LoadU16(a, b)
         | Rvalue::ArrayRealloc {
             array: a,
             new_len: b,
@@ -121,6 +119,13 @@ pub(crate) fn rvalue_operands_mut(rv: &mut Rvalue, f: &mut impl FnMut(&mut Opera
         } => {
             operand_mut(a, f);
             operand_mut(b, f);
+        }
+        Rvalue::LoadU8(a, b, n) | Rvalue::LoadU16(a, b, n) => {
+            operand_mut(a, f);
+            operand_mut(b, f);
+            if let Some(n) = n {
+                operand_mut(n, f);
+            }
         }
         Rvalue::Select {
             cond,

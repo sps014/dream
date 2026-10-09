@@ -416,6 +416,7 @@ void dream_recycle_slow(dream_ptr ptr) {
     }
     idx = size_class(sz);
     *dream_block_magic(block) = MAGIC_FREE;
+    DREAM_POISON(block + NATIVE_HEAP_HEADER_SIZE, sz - NATIVE_HEAP_HEADER_SIZE);
     account_frees(1);
     if (dream_tag_shared(ptr) || idx >= NCLASS) {
         heap_lock();

@@ -137,8 +137,8 @@ fn rvalue_borrow(rv: &Rvalue, holds: &IndexSet<DefId>) -> StmtBorrow {
         | Rvalue::CharAt(_, _, _)
         | Rvalue::ByteAt(_, _, _)
         | Rvalue::StrBytes(_)
-        | Rvalue::LoadU8(_, _)
-        | Rvalue::LoadU16(_, _)
+        | Rvalue::LoadU8(..)
+        | Rvalue::LoadU16(..)
         | Rvalue::ArrayNew { .. }
         | Rvalue::HashCode(_)
         | Rvalue::ToString(_)

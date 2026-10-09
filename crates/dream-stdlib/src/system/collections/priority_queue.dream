@@ -53,11 +53,7 @@ public class PriorityQueue<T> : Collection<T> {
 
     fun grow(): void {
         let old_cap = this.items.length;
-        let new_cap = old_cap * 2;
-        if new_cap < sequence_min_capacity() {
-            new_cap = sequence_min_capacity();
-        }
-        this.items = Buffer.realloc<T>(this.items, new_cap);
+        this.items = Buffer.realloc<T>(this.items, grow_capacity(old_cap, old_cap + 1));
     }
 
     // True when `items[i]` sorts before `items[j]` under the active comparator.

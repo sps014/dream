@@ -313,14 +313,14 @@ extend string : Comparable<string>, Equatable<string> {
         if n == 0 {
             return string.empty;
         }
-        let total = n * times;
+        let total = checked_size(n, times);
         let buf = Buffer.alloc<byte>(total);
         let i = 0;
         while i < times {
             string.copy_utf8(buf, i * n, this, 0, n);
             i = i + 1;
         }
-        return string.from_utf8_prefix_n(buf, total, this.length * times);
+        return string.from_utf8_prefix_n(buf, total, total / 2);
     }
 
     // Value equality (`Equatable<string>`); identical to `this == other`.

@@ -24,10 +24,7 @@ public class Queue<T> : Collection<T> {
 
     fun grow(): void {
         let old_cap = this.items.length;
-        let new_cap = old_cap * 2;
-        if new_cap < sequence_min_capacity() {
-            new_cap = sequence_min_capacity();
-        }
+        let new_cap = grow_capacity(old_cap, old_cap + 1);
         let next = Buffer.alloc<T>(new_cap);
         // Linearize the ring into `[0, count)` with at most two contiguous Span copies (handles
         // wrap-around without an element loop).

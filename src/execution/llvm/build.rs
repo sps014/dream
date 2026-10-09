@@ -43,8 +43,12 @@ fn optimize_linked(
     let (opt, debug, remarks) = level;
     let out = linked.with_extension("opt.bc");
     let mut cmd = tools.command("opt");
-    cmd.arg(format!("-passes={}", pipeline(opt)))
-        .args(cpu_args(opt, spec))
+    cmd.arg(format!(
+        "-passes={}{}",
+        pipeline(opt),
+        sanitizer_passes(&tools.config, spec)
+    ))
+    .args(cpu_args(opt, spec))
         .arg(public_api_list(exports));
     if !debug {
         // COFF CodeView records llc's output path even for runtime-only debug units.
@@ -58,6 +62,20 @@ fn optimize_linked(
     cmd.arg(linked).arg("-o").arg(&out);
     run_captured(&mut cmd, "opt")?;
     Ok(out)
+}
+
+/// Instrumentation for the whole-program module. Clang marks runtime functions with the
+/// `sanitize_*` attribute but leaves the instrumentation itself to the LTO pipeline, which here
+/// is `opt`; UBSan checks are already inline in the runtime bitcode.
+fn sanitizer_passes(
+    config: &crate::driver::toolchain::ToolchainConfig,
+    spec: &dream_abi::target::TargetSpec,
+) -> &'static str {
+    match super::runtime::native_sanitize_flag(config, spec) {
+        Some(flag) if flag.contains("address") => ",asan",
+        Some(flag) if flag.contains("thread") => ",tsan-module,function(tsan)",
+        _ => "",
+    }
 }
 
 /// Explicit module exports, the embedding API, and native-source runtime anchors.
@@ -496,9 +514,16 @@ pub fn compile_llvm(
         let _ = std::fs::remove_file(&obj);
         return Ok(bin);
     }
+    let sanitize = super::runtime::native_sanitize_flag(config, &spec);
     let mut lcmd = if *pgo == Pgo::Generate {
         let mut c = std::process::Command::new(cc::resolve_system_cc(config).ok_or(PGO_NEEDS_CC)?);
         c.arg(&obj).args(profile_link_args(&tools)?);
+        c
+    } else if sanitize.is_some() {
+        // Only the pinned clang ships sanitizer runtimes matching the instrumentation it emitted;
+        // Zig carries none on macOS and the system compiler's may be a different ABI version.
+        let mut c = super::runtime::runtime_command(config, &spec, &tools.clang()?)?;
+        c.arg(&obj);
         c
     } else {
         let cc = cc::resolve_target_cc(config, &spec)?;
@@ -550,7 +575,8 @@ pub fn compile_llvm(
         lcmd.args(["-lm", "-lpthread"]);
     }
     if let Some(dir) = &dir {
-        let zig_driver = *pgo != Pgo::Generate && matches!(driver, cc::Cc::Zig(_));
+        let zig_driver =
+            *pgo != Pgo::Generate && sanitize.is_none() && matches!(driver, cc::Cc::Zig(_));
         link_runtime(&mut lcmd, dir, bundled.as_deref(), &capabilities, &spec, zig_driver);
     }
     let c_libs = read_c_libs_from_abi(&abi_path);
@@ -559,6 +585,9 @@ pub fn compile_llvm(
         lcmd.args(cc_link_flags(config, &c_libs, &roots, &spec));
     }
     lcmd.args(&native.link_args);
+    if let Some(sanitize) = &sanitize {
+        lcmd.arg(sanitize);
+    }
     lcmd.arg("-o").arg(&bin);
     if let Err(e) = run_captured(&mut lcmd, &format!("cc link ({})", obj.display())) {
         let _ = std::fs::remove_file(&bin);

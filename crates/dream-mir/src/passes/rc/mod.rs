@@ -139,11 +139,16 @@ pub(crate) fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
-        | Rvalue::ByteAt(a, b, _)
-        | Rvalue::LoadU8(a, b)
-        | Rvalue::LoadU16(a, b) => {
+        | Rvalue::ByteAt(a, b, _) => {
             check(a);
             check(b);
+        }
+        Rvalue::LoadU8(a, b, n) | Rvalue::LoadU16(a, b, n) => {
+            check(a);
+            check(b);
+            if let Some(n) = n {
+                check(n);
+            }
         }
         Rvalue::Concat(parts) => {
             for p in parts {

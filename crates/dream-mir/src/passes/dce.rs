@@ -85,8 +85,9 @@ fn remove_dead_assignments(func: &mut MirFunction) -> bool {
 }
 
 /// An rvalue with no observable effect beyond producing its value; safe to drop if the result is
-/// unused. Calls and allocations are conservatively impure, as are checked arithmetic and a division
-/// whose divisor is not a known non-zero constant, since both can panic.
+/// unused. Calls and allocations are conservatively impure, as are checked arithmetic, string reads
+/// not proven in range, and a division whose divisor is not a known non-zero constant, since all
+/// of them can panic.
 pub(crate) fn is_pure(rvalue: &Rvalue) -> bool {
     if let Rvalue::Binary(crate::BinOp::Div | crate::BinOp::Rem, _, divisor) = rvalue {
         return matches!(
@@ -103,11 +104,11 @@ pub(crate) fn is_pure(rvalue: &Rvalue) -> bool {
             | Rvalue::ArrayLen(_)
             | Rvalue::StrLen(_)
             | Rvalue::StrByteSize(_)
-            | Rvalue::CharAt(..)
-            | Rvalue::ByteAt(..)
+            | Rvalue::CharAt(_, _, true)
+            | Rvalue::ByteAt(_, _, true)
             | Rvalue::StrBytes(_)
-            | Rvalue::LoadU8(..)
-            | Rvalue::LoadU16(..)
+            | Rvalue::LoadU8(_, _, None)
+            | Rvalue::LoadU16(_, _, None)
             | Rvalue::Concat(..)
             | Rvalue::ConcatInt { .. }
             | Rvalue::EnumName { .. }
@@ -266,11 +267,16 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
-        | Rvalue::ByteAt(a, b, _)
-        | Rvalue::LoadU8(a, b)
-        | Rvalue::LoadU16(a, b) => {
+        | Rvalue::ByteAt(a, b, _) => {
             read_operand(a, read);
             read_operand(b, read);
+        }
+        Rvalue::LoadU8(a, b, n) | Rvalue::LoadU16(a, b, n) => {
+            read_operand(a, read);
+            read_operand(b, read);
+            if let Some(n) = n {
+                read_operand(n, read);
+            }
         }
         Rvalue::Concat(parts) => {
             for p in parts {

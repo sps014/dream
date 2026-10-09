@@ -14,8 +14,11 @@
 #include <limits.h>
 #if __STDC_HOSTED__
 #include <string.h>
-#else
-/* Declaration-only cross emission needs no target libc SDK. Clang supplies these intrinsics. */
+#endif
+/* Declaration-only cross emission needs no target libc SDK; wasm runtime units build with
+ * -fno-builtin, which would leave every fixed-size copy (header words, SIMD lanes) an
+ * out-of-line call. Clang supplies these intrinsics. */
+#if !__STDC_HOSTED__ || defined(DREAM_WASM32)
 #define memcpy __builtin_memcpy
 #define memset __builtin_memset
 #define memmove __builtin_memmove
@@ -50,6 +53,24 @@ _Noreturn void dream_platform_abort(void);
 #define DREAM_LIKELY(x) __builtin_expect(!!(x), 1)
 #define DREAM_UNLIKELY(x) __builtin_expect(!!(x), 0)
 
+/* Under ASan the size-class allocator poisons a block's payload while it sits on a freelist,
+ * so reads through a dangling reference trap instead of seeing a recycled object. Headers stay
+ * addressable: the freelist link and the magic/size words live there. */
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define DREAM_ASAN 1
+#endif
+#endif
+#ifdef DREAM_ASAN
+void __asan_poison_memory_region(void const volatile *addr, size_t size);
+void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
+#define DREAM_POISON(addr, size) __asan_poison_memory_region((addr), (size))
+#define DREAM_UNPOISON(addr, size) __asan_unpoison_memory_region((addr), (size))
+#else
+#define DREAM_POISON(addr, size) ((void)(addr), (void)(size))
+#define DREAM_UNPOISON(addr, size) ((void)(addr), (void)(size))
+#endif
+
 #ifdef DREAM_WASM32
 dream_ptr dream_g0_get(void);
 void dream_g0_set(dream_ptr v);
@@ -61,8 +82,10 @@ int32_t dream_priv_off_get(void);
 void dream_priv_off_set(int32_t v);
 int32_t dream_priv_cap_get(void);
 void dream_priv_cap_set(int32_t v);
-int32_t dream_priv_fl_get(int32_t idx);
-void dream_priv_fl_set(int32_t idx, int32_t v);
+int32_t dream_priv_table_get(void);
+void dream_priv_table_set(int32_t v);
+int32_t dream_priv_fast_get(void);
+void dream_priv_fast_set(int32_t v);
 #else
 extern _Thread_local dream_ptr g0;
 DREAM_ALWAYS_INLINE dream_ptr dream_g0_get(void) { return g0; }
@@ -186,7 +209,8 @@ DREAM_ALWAYS_INLINE void dream_mem_copy(dream_ptr dst, dream_ptr src, size_t n) 
     if (n == 0 || dst == 0 || src == 0) {
         return;
     }
-    memcpy(dream_p(dst), dream_p(src), n);
+    /* `Buffer.elems_copy` shifts within one array (`List.insert`/`remove_at`), so ranges may overlap. */
+    memmove(dream_p(dst), dream_p(src), n);
 }
 
 DREAM_ALWAYS_INLINE int32_t *dream_tag_word(dream_ptr ptr) {
@@ -243,6 +267,12 @@ dream_ptr dream_malloc_shared(dream_size size, int32_t tag);
 /* Mark a singleton immortal: its rc word is never mutated again and it leaves
  * `Debug.live_objects` accounting (it will never be freed). */
 void dream_pin_immortal(dream_ptr s);
+/* Publish `fresh` as the process-wide immortal value of `*slot`, or return the value another
+ * thread published first (the losing block stays pinned and is never reused). */
+dream_ptr dream_singleton_publish(dream_ptr *slot, dream_ptr fresh);
+DREAM_ALWAYS_INLINE dream_ptr dream_singleton_get(dream_ptr *slot) {
+    return __atomic_load_n(slot, __ATOMIC_ACQUIRE);
+}
 
 int dream_region_active(void);
 #ifdef DREAM_WASM32
@@ -322,6 +352,7 @@ DREAM_ALWAYS_INLINE int32_t dream_class_bytes(int idx) {
 
 DREAM_ALWAYS_INLINE void dream_block_activate_info(char *block, int32_t tag, const dream_type_info *info) {
     dream_heap_header *header = (dream_heap_header *)block;
+    DREAM_UNPOISON(block + NATIVE_HEAP_HEADER_SIZE, header->size - NATIVE_HEAP_HEADER_SIZE);
     header->magic = DREAM_MAGIC_LIVE;
     header->tag = tag;
     header->rc = dream_rc_init(tag);
@@ -381,6 +412,7 @@ DREAM_ALWAYS_INLINE void dream_recycle(dream_ptr ptr) {
     }
     idx = dream_size_class((uint32_t)sz);
     *dream_block_magic(block) = DREAM_MAGIC_FREE;
+    DREAM_POISON(block + NATIVE_HEAP_HEADER_SIZE, sz - NATIVE_HEAP_HEADER_SIZE);
     dream_heap_count(&c->frees, UINT64_C(1));
     memcpy(block + 8, &h->free[idx], sizeof(char *));
     h->free[idx] = block;
@@ -539,6 +571,24 @@ DREAM_ALWAYS_INLINE char *dream_array_at(dream_ptr p, int64_t i, int32_t esize,
         dream_panic_at(panic_msg, location);
     }
     return (char *)dream_p(p) + 4 + i * esize;
+}
+
+/* Bounds-checked `char_at` / `byte_at`; the unchecked readers are only for indices the
+ * compiler proved in range. A null string has length zero, so any index traps. */
+DREAM_ALWAYS_INLINE uint16_t dream_char_at_checked(dream_ptr str, int32_t i,
+                                                   dream_ptr panic_msg, const char *location) {
+    if (DREAM_UNLIKELY((uint32_t)i >= (uint32_t)dream_str_len(str))) {
+        dream_panic_at(panic_msg, location);
+    }
+    return dream_str_units(str)[i];
+}
+
+DREAM_ALWAYS_INLINE uint8_t dream_byte_at_checked(dream_ptr str, int32_t i,
+                                                  dream_ptr panic_msg, const char *location) {
+    if (DREAM_UNLIKELY((uint64_t)(uint32_t)i >= (uint64_t)(uint32_t)dream_str_len(str) * 2u)) {
+        dream_panic_at(panic_msg, location);
+    }
+    return dream_str_bytes(str)[i];
 }
 
 void dream_publish(dream_ptr ptr);
@@ -1194,7 +1244,7 @@ typedef struct {
     int32_t cap;
 } dream_sb;
 
-dream_ptr dream_sb_grow_bytes(dream_sb *sb, dream_ptr bytes, int32_t need);
+dream_ptr dream_sb_grow_bytes(dream_sb *sb, dream_ptr bytes, int64_t need);
 dream_ptr dream_sb_buffer(int32_t capacity);
 
 double dream_host_abs(double value);
@@ -1212,8 +1262,15 @@ DREAM_ALWAYS_INLINE const void *dream_str_units_fast(dream_ptr s) {
     return (const char *)dream_p(s) + STRING_UNITS_OFFSET;
 }
 
+/* Byte capacity a push of `n` units needs (payload plus the 4-byte pad the builder keeps). Widened
+ * so one compare against `cap` also sends an unrepresentable length to the grow path, which traps. */
+DREAM_ALWAYS_INLINE int64_t dream_sb_need(int32_t count, int32_t n) {
+    return (int64_t)count + (int64_t)n * 2 + 4;
+}
+
 DREAM_ALWAYS_INLINE void dream_sb_push(dream_ptr sb, dream_ptr text) {
     dream_sb *restrict s;
+    int64_t need;
     int32_t n;
     int32_t nbytes;
     int32_t count;
@@ -1228,13 +1285,14 @@ DREAM_ALWAYS_INLINE void dream_sb_push(dream_ptr sb, dream_ptr text) {
     if (__builtin_expect(n <= 0, 0)) {
         return;
     }
-    nbytes = n << 1;
     s = (dream_sb *)dream_p(sb);
     bytes = s->bytes;
     count = s->count;
     cap = s->cap;
-    if (__builtin_expect(count + nbytes + 4 > cap, 0)) {
-        bytes = dream_sb_grow_bytes(s, bytes, count + nbytes + 4);
+    need = dream_sb_need(count, n);
+    nbytes = n << 1;
+    if (__builtin_expect(need > cap, 0)) {
+        bytes = dream_sb_grow_bytes(s, bytes, need);
         cap = s->cap;
     }
     src = (const char *)dream_str_units_fast(text);
@@ -1245,6 +1303,7 @@ DREAM_ALWAYS_INLINE void dream_sb_push(dream_ptr sb, dream_ptr text) {
 
 DREAM_ALWAYS_INLINE void dream_sb_push_units(dream_ptr sb, const void *src, int32_t n) {
     dream_sb *restrict s;
+    int64_t need;
     int32_t nbytes;
     int32_t count;
     int32_t cap;
@@ -1253,13 +1312,14 @@ DREAM_ALWAYS_INLINE void dream_sb_push_units(dream_ptr sb, const void *src, int3
     if (__builtin_expect(!sb || !src || n <= 0, 0)) {
         return;
     }
-    nbytes = n << 1;
     s = (dream_sb *)dream_p(sb);
     bytes = s->bytes;
     count = s->count;
     cap = s->cap;
-    if (__builtin_expect(count + nbytes + 4 > cap, 0)) {
-        bytes = dream_sb_grow_bytes(s, bytes, count + nbytes + 4);
+    need = dream_sb_need(count, n);
+    nbytes = n << 1;
+    if (__builtin_expect(need > cap, 0)) {
+        bytes = dream_sb_grow_bytes(s, bytes, need);
         cap = s->cap;
     }
     dst = (char *)dream_p(bytes) + STRING_UNITS_OFFSET + (size_t)(uint32_t)count;
@@ -1274,7 +1334,7 @@ DREAM_ALWAYS_INLINE void dream_sb_push_int(dream_ptr sb, int32_t v) {
     int32_t n = 12;
     uint32_t x;
     if (v == INT32_MIN) {
-        dream_sb_push_units(sb, "-2147483648", 11);
+        dream_sb_push_units(sb, u"-2147483648", 11);
         return;
     }
     x = (uint32_t)(v < 0 ? -v : v);
@@ -1293,7 +1353,7 @@ DREAM_ALWAYS_INLINE void dream_sb_push_long(dream_ptr sb, int64_t v) {
     int32_t n = 20;
     uint64_t x;
     if (v == INT64_MIN) {
-        dream_sb_push_units(sb, "-9223372036854775808", 20);
+        dream_sb_push_units(sb, u"-9223372036854775808", 20);
         return;
     }
     x = (uint64_t)(v < 0 ? -v : v);

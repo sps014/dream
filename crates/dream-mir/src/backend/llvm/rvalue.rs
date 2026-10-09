@@ -4,6 +4,7 @@ use super::fx::{Fx, V};
 use super::ir::{Ty, Value};
 use crate::backend::shared::abi_types::{elem_size, mem_ty, runtime_c_name};
 use crate::backend::shared::glue::{release_sym, retain_sym};
+use crate::backend::shared::panic_msgs;
 use crate::backend::shared::protocol_names::{HashFn, hash_fn, runtime_tag, to_string_fn};
 use crate::{Operand, Rvalue, UnOp};
 use dream_types::{DefId, PrimTy, TyKind, TypeId};
@@ -89,16 +90,12 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let s = self.operand(s);
                 self.call_v("dream_str_byte_size", &[s])
             }
-            Rvalue::CharAt(s, i, _) => {
-                let (s, i) = (self.operand(s), self.operand(i));
-                let i = self.conv_v(&i, &Ty::I32, false);
-                let c = self.call_v("dream_char_at_u", &[s, i]);
+            Rvalue::CharAt(s, i, unchecked) => {
+                let c = self.str_unit_read(s, i, *unchecked, "dream_char_at_u", "dream_char_at_checked");
                 self.conv_v(&V::u(c.v), &Ty::I32, false)
             }
-            Rvalue::ByteAt(s, i, _) => {
-                let (s, i) = (self.operand(s), self.operand(i));
-                let i = self.conv_v(&i, &Ty::I32, false);
-                let c = self.call_v("dream_byte_at_u", &[s, i]);
+            Rvalue::ByteAt(s, i, unchecked) => {
+                let c = self.str_unit_read(s, i, *unchecked, "dream_byte_at_u", "dream_byte_at_checked");
                 self.conv_v(&V::u(c.v), &Ty::I32, false)
             }
             Rvalue::StrBytes(s) => {
@@ -106,8 +103,8 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let p = self.call_v("dream_str_bytes", &[s]);
                 self.as_ref(&V::u(p.v))
             }
-            Rvalue::LoadU8(p, i) => self.load_unit(p, i, Ty::I8, 1),
-            Rvalue::LoadU16(p, i) => self.load_unit(p, i, Ty::I16, 2),
+            Rvalue::LoadU8(p, i, n) => self.load_unit(p, i, n.as_ref(), Ty::I8, 1),
+            Rvalue::LoadU16(p, i, n) => self.load_unit(p, i, n.as_ref(), Ty::I16, 2),
             Rvalue::ArrayNew { elem_ty, len, .. } => {
                 let es = elem_size(&self.l.cx, *elem_ty);
                 let n = self.operand(len);
@@ -367,10 +364,19 @@ impl<'l, 'a> Fx<'l, 'a> {
         }
     }
 
-    fn load_unit(&mut self, p: &Operand, i: &Operand, ty: Ty, size: i64) -> V {
+    fn load_unit(&mut self, p: &Operand, i: &Operand, len: Option<&Operand>, ty: Ty, size: i64) -> V {
         let base = self.operand(p);
         let idx = self.operand(i);
         let idx = self.conv_v(&idx, &Ty::I32, false);
+        if let Some(len) = len {
+            let len = self.operand(len);
+            let len = self.conv_v(&len, &Ty::I32, true);
+            let len = self.conv(&len, &Ty::I64);
+            let limit = self.w.bin("mul", &len, &Value::i64(2 / size));
+            let wide = self.conv(&V::u(idx.v.clone()), &Ty::I64);
+            let out = self.w.icmp("uge", &wide, &limit);
+            self.panic_if(&out, panic_msgs::INDEX_OUT_OF_BOUNDS);
+        }
         let idx = self.conv(&idx, &Ty::I64);
         let off = self.w.bin("mul", &idx, &Value::i64(size));
         let bp = self.ptr(&base);

@@ -358,7 +358,7 @@ mod tests {
             Rvalue::CharAt(
                 Operand::Copy(Place::Local(read)),
                 Operand::Const(Const::Int(0)),
-                false,
+                true,
             ),
         );
         b.push(Statement::ValueKill(view));

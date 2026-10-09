@@ -1,0 +1,2 @@
+panic: index out of bounds
+string_scan_loop_oob_trap.dream:10

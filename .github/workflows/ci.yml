@@ -276,6 +276,64 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  corpus-sanitizers:
+    name: Golden corpus under ${{ matrix.sanitizer }} sanitizer
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DREAM_NATIVE_SANITIZE: ${{ matrix.sanitizer }}
+      ASAN_OPTIONS: detect_leaks=0:halt_on_error=1:abort_on_error=0
+      TSAN_OPTIONS: halt_on_error=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+      RUSTC_WRAPPER: ''
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: ['address,undefined', thread]
+    steps:
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libclang-dev \
+            ninja-build pkg-config python3 xz-utils
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-o1-${{ runner.os }}-${{ runner.arch }}
+          save-if: false
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.dream/toolchains/llvm-22.1.8
+          key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
+      - name: Install pinned LLVM and wasi-sdk support
+        run: scripts/fetch-dev-llvm.sh
+      # The runtime's own allocator hides heap blocks from ASan's malloc interposition; the
+      # runtime poisons freed payloads instead, so dangling reads through ARC bugs still trap.
+      - name: Full native corpus (runtime instrumented)
+        if: matrix.sanitizer != 'thread'
+        shell: bash
+        run: ./scripts/probe_test.sh 2>&1 | tee target/probe-sanitize.log
+      - name: Concurrency cases (runtime instrumented)
+        if: matrix.sanitizer == 'thread'
+        shell: bash
+        run: |
+          stems=$(ls tests/cases/*.dream | xargs -n1 basename | sed 's/\.dream$//' \
+            | grep -Ei 'worker|task|async|thread|channel|mutex|parallel|shared|atomic|lock|semaphore')
+          ./scripts/probe_test.sh $stems 2>&1 | tee target/probe-sanitize.log
+      - name: Runtime fuzz harnesses (60 s each)
+        if: matrix.sanitizer != 'thread'
+        shell: bash
+        run: scripts/fuzz_runtime.sh 60
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: corpus-sanitize-${{ strategy.job-index }}
+          path: target/probe-sanitize.log
+          retention-days: 7
+          if-no-files-found: ignore
+
   worker-sanitizers:
     name: Worker sanitizer (${{ matrix.sanitizer }})
     runs-on: ubuntu-latest

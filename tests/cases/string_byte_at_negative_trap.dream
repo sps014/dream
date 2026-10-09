@@ -1,0 +1,11 @@
+// A negative `byte_at` index must panic; it is not reinterpreted as a large offset.
+import system;
+
+fun main(): void {
+    let s = 77.to_string();
+    let i = s.byte_size() - 4;
+    System.println(s.byte_at(i));
+    i = i - 1;
+    System.println(s.byte_at(i));
+    System.println("after");
+}

@@ -1,0 +1,11 @@
+// Requesting a hash-table capacity beyond the largest power of two must panic; it used to wrap the
+// doubling loop and spin forever.
+import system;
+import system.collections;
+
+fun main(): void {
+    let small = Set<int>(9);
+    System.println(small.capacity);
+    let huge = Set<int>(2000000000);
+    System.println(huge.capacity);
+}

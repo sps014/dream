@@ -278,6 +278,73 @@ fn char_at_scan_shape_is_unchecked() {
 }
 
 #[test]
+fn byte_scan_over_cleared_local_is_unchecked() {
+    let i = TypeInterner::new();
+    let mut b = FunctionBuilder::new("f", i.int());
+    let p = b.new_param(i.string(), Some("p".into()));
+    let s = b.new_temp(i.string());
+    let idx = b.new_temp(i.int());
+    let len = b.new_temp(i.int());
+    let cmp = b.new_temp(i.bool());
+    let byte = b.new_temp(i.int());
+    b.assign(Place::Local(s), Rvalue::Use(Operand::Copy(Place::Local(p))));
+    b.assign(
+        Place::Local(idx),
+        Rvalue::Use(Operand::Const(Const::Int(0))),
+    );
+    let cond = b.new_block();
+    let body = b.new_block();
+    let after = b.new_block();
+    b.terminate(Terminator::Goto(cond));
+    b.switch_to(cond);
+    b.assign(
+        Place::Local(len),
+        Rvalue::StrByteSize(Operand::Copy(Place::Local(s))),
+    );
+    b.assign(
+        Place::Local(cmp),
+        Rvalue::Binary(
+            BinOp::Lt,
+            Operand::Copy(Place::Local(idx)),
+            Operand::Copy(Place::Local(len)),
+        ),
+    );
+    b.terminate(Terminator::If {
+        cond: Operand::Copy(Place::Local(cmp)),
+        then_blk: body,
+        else_blk: after,
+    });
+    b.switch_to(body);
+    b.assign(
+        Place::Local(byte),
+        Rvalue::ByteAt(
+            Operand::Copy(Place::Local(s)),
+            Operand::Copy(Place::Local(idx)),
+            false,
+        ),
+    );
+    b.assign(
+        Place::Local(idx),
+        Rvalue::Binary(
+            BinOp::Add,
+            Operand::Copy(Place::Local(idx)),
+            Operand::Const(Const::Int(1)),
+        ),
+    );
+    b.terminate(Terminator::Goto(cond));
+    b.switch_to(after);
+    // The RC inserter clears an owned local after its last use; that must not break the proof.
+    b.assign(Place::Local(s), Rvalue::Use(Operand::Const(Const::Null)));
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(byte)))));
+    let mut func = b.finish();
+    assert!(Abc.run(&mut func, &i));
+    match &func.blocks[body.0 as usize].stmts[0] {
+        Statement::Assign(_, Rvalue::ByteAt(_, _, true)) => {}
+        other => panic!("expected unchecked byte_at, got {:?}", other),
+    }
+}
+
+#[test]
 fn interned_string_scan_is_unchecked() {
     let i = TypeInterner::new();
     let mut b = FunctionBuilder::new("f", i.int());

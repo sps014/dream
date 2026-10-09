@@ -121,11 +121,11 @@ int main(void) {
         ((dream_sb *)dream_p(sb))->bytes = 0;
         ((dream_sb *)dream_p(sb))->count = 0;
         ((dream_sb *)dream_p(sb))->cap = 0;
-        dream_sb_push_units(sb, "abcdefghijklmnopqrstuvwxyz", 26); /* warm paths */
+        dream_sb_push_units(sb, u"abcdefghijklmnopqrstuvwxyz", 26); /* warm paths */
 
         BENCH_MIN("sb_push_reserved", 5, pushes, {
             for (i = 0; i < pushes; i++) {
-                dream_sb_push_units(sb, "abcdefghijklmnopqrstuvwxyz", 26);
+                dream_sb_push_units(sb, u"abcdefghijklmnopqrstuvwxyz", 26);
             }
             sb_count_reset(sb);
         });
@@ -137,7 +137,7 @@ int main(void) {
             ((dream_sb *)dream_p(sb2))->count = 0;
             ((dream_sb *)dream_p(sb2))->cap = 0;
             for (i = 0; i < iters; i++) {
-                dream_sb_push_units(sb2, "abcdefghijklmnopqrstuvwxyz", 26);
+                dream_sb_push_units(sb2, u"abcdefghijklmnopqrstuvwxyz", 26);
             }
             acc += dream_i32(((dream_sb *)dream_p(sb2))->bytes)[1];
             dream_release(((dream_sb *)dream_p(sb2))->bytes);

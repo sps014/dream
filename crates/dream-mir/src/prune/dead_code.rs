@@ -312,8 +312,8 @@ fn collect_rvalue_types(rv: &Rvalue, seed: &mut impl FnMut(TypeId)) {
         | Rvalue::CharAt(_, _, _)
         | Rvalue::ByteAt(_, _, _)
         | Rvalue::StrBytes(_)
-        | Rvalue::LoadU8(_, _)
-        | Rvalue::LoadU16(_, _)
+        | Rvalue::LoadU8(..)
+        | Rvalue::LoadU16(..)
         | Rvalue::HashCode(_)
         | Rvalue::ToString(_)
         | Rvalue::Concat(_)
@@ -735,11 +735,16 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
-        | Rvalue::ByteAt(a, b, _)
-        | Rvalue::LoadU8(a, b)
-        | Rvalue::LoadU16(a, b) => {
+        | Rvalue::ByteAt(a, b, _) => {
             collect_global_reads_operand(a, out);
             collect_global_reads_operand(b, out);
+        }
+        Rvalue::LoadU8(a, b, n) | Rvalue::LoadU16(a, b, n) => {
+            collect_global_reads_operand(a, out);
+            collect_global_reads_operand(b, out);
+            if let Some(n) = n {
+                collect_global_reads_operand(n, out);
+            }
         }
         Rvalue::Concat(parts) => {
             for p in parts {

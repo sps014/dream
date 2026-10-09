@@ -574,7 +574,7 @@ fn link_local(
             Rvalue::StrLen(s) | Rvalue::StrByteSize(s) => {
                 if let Some(b) = str_base(s) {
                     let ok = match &b {
-                        StrBase::Local(l) => tied(*l),
+                        StrBase::Local(l) => defs.stable_until_cleared(*l) || tied(*l),
                         StrBase::Lit(_) => true,
                     };
                     if ok {

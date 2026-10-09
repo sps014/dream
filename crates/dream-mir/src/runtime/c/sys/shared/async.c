@@ -35,8 +35,11 @@ static dream_result *result_at(dream_ptr p) {
     return (dream_result *)((char *)dream_p(p) + F_RESULT);
 }
 
+/* The 4-byte length prefix leaves native 8-byte elements only 4-aligned. */
 static dream_ptr arr_get(dream_ptr arr, int32_t i) {
-    return ((dream_ptr *)((char *)dream_p(arr) + LEN_PREFIX_SIZE))[i];
+    dream_ptr element;
+    memcpy(&element, (char *)dream_p(arr) + LEN_PREFIX_SIZE + (size_t)i * sizeof(dream_ptr), sizeof(element));
+    return element;
 }
 
 void *dream_ft_get(int32_t i);

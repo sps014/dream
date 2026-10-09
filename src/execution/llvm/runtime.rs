@@ -137,6 +137,16 @@ pub(super) fn runtime_command(
     Ok(command)
 }
 
+/// `-fsanitize=<list>` from `DREAM_NATIVE_SANITIZE` for host-runnable native builds. Prebuilt
+/// runtime bundles are never sanitized, so callers that see `Some` must compile the runtime.
+pub(crate) fn native_sanitize_flag(
+    config: &crate::driver::toolchain::ToolchainConfig,
+    spec: &TargetSpec,
+) -> Option<String> {
+    let list = config.native_sanitize.as_ref()?.to_str()?.trim();
+    (!list.is_empty() && spec.can_link_on_host()).then(|| format!("-fsanitize={list}"))
+}
+
 /// Clang's default may describe its runner rather than the compiler's selected target.
 fn native_target_arg(spec: &TargetSpec) -> String {
     format!("--target={}", spec.llvm_triple())
@@ -203,6 +213,13 @@ pub(super) fn clang_unit(
             &["-pthread"][..]
         })
         .args(flags);
+    if let Some(sanitize) = native_sanitize_flag(config, spec) {
+        cmd.args([
+            sanitize.as_str(),
+            "-fno-sanitize-recover=all",
+            "-fno-omit-frame-pointer",
+        ]);
+    }
     for inc in &u.include_dirs {
         cmd.arg(format!("-I{}", inc.display()));
     }
@@ -226,8 +243,9 @@ pub fn llvm_runtime(
     need: RuntimeNeed,
     _debug: bool,
 ) -> Result<LlvmRuntime, String> {
+    let sanitized = native_sanitize_flag(&tools.config, spec).is_some();
     match rt_dir(&tools.config, "native", opt, need) {
-        RtDir::Prebuilt(_) if !spec.can_link_on_host() => build_native_runtime(
+        RtDir::Prebuilt(_) if !spec.can_link_on_host() || sanitized => build_native_runtime(
             tools,
             spec,
             opt,

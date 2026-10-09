@@ -298,6 +298,24 @@ impl<'l, 'a> Fx<'l, 'a> {
             .v
     }
 
+    pub(super) fn str_unit_read(
+        &mut self,
+        s: &Operand,
+        index: &Operand,
+        unchecked: bool,
+        raw: &str,
+        checked: &str,
+    ) -> V {
+        let (s, i) = (self.operand(s), self.operand(index));
+        let i = self.conv_v(&i, &Ty::I32, false);
+        if unchecked {
+            return self.call_v(raw, &[s, i]);
+        }
+        let msg = self.str_v(panic_msgs::INDEX_OUT_OF_BOUNDS);
+        let at = self.panic_location();
+        self.call_v(checked, &[s, i, msg, at])
+    }
+
     // ---- stores -------------------------------------------------------------------------------
 
     pub(super) fn clear_freed_place(&mut self, place: &Place) {

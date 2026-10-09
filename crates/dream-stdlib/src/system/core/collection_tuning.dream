@@ -25,3 +25,45 @@ public fun hash_epoch_initial(): int { return 1; }
 // i.e. before the table would exceed 3/4 full, keeping the average probe length short.
 public fun hash_load_factor_num(): int { return 3; }
 public fun hash_load_factor_denom(): int { return 4; }
+
+// Next capacity for a growable buffer of `old` slots that must hold at least `need`: doubles
+// (floored at `sequence_min_capacity()`), saturates instead of wrapping, and panics when `need`
+// itself is not representable.
+public fun grow_capacity(old: int, need: int): int {
+    if need < 0 {
+        System.panic("panic: capacity exceeds the supported limit");
+    }
+    let c = old;
+    if c < sequence_min_capacity() {
+        c = sequence_min_capacity();
+    } else if c <= 1073741823 {
+        c = c * 2;
+    } else {
+        c = 2147483647;
+    }
+    if c < need {
+        c = need;
+    }
+    return c;
+}
+
+// Smallest power-of-two hash-table capacity (at least `hash_min_capacity()`) that is `>= need`.
+// The largest representable power of two is 2^30; asking for more panics instead of wrapping.
+public fun hash_capacity_for(need: int): int {
+    if need > 1073741824 {
+        System.panic("panic: capacity exceeds the supported limit");
+    }
+    let c = hash_min_capacity();
+    while c < need {
+        c = c * 2;
+    }
+    return c;
+}
+
+// `a * b` for non-negative sizes, panicking instead of wrapping.
+public fun checked_size(a: int, b: int): int {
+    if (a < 0) || (b < 0) || ((a != 0) && (b > 2147483647 / a)) {
+        System.panic("panic: size exceeds the supported limit");
+    }
+    return a * b;
+}

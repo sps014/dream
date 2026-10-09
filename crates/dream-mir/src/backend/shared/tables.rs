@@ -314,11 +314,16 @@ fn strings_in_rv(rv: &Rvalue, out: &mut Vec<String>) {
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
-        | Rvalue::ByteAt(a, b, _)
-        | Rvalue::LoadU8(a, b)
-        | Rvalue::LoadU16(a, b) => {
+        | Rvalue::ByteAt(a, b, _) => {
             strings_in_op(a, out);
             strings_in_op(b, out);
+        }
+        Rvalue::LoadU8(a, b, n) | Rvalue::LoadU16(a, b, n) => {
+            strings_in_op(a, out);
+            strings_in_op(b, out);
+            if let Some(n) = n {
+                strings_in_op(n, out);
+            }
         }
         Rvalue::Concat(parts) => {
             for p in parts {

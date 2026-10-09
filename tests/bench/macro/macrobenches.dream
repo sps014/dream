@@ -1,0 +1,435 @@
+import system;
+import system.collections;
+import system.json;
+import system.task;
+import system.text;
+
+// Application-shaped workloads: each op is one request/document/query/batch, so the time covers
+// allocation, ARC, collections, strings and scheduling together instead of one isolated loop.
+// Run: `scripts/bench.py --suite macro`; profile: `scripts/bench.py profile --suite macro`.
+// Output lines follow tests/bench/microbenches.dream: `bench <name> ns_total=… iters=… checksum=…`.
+// Inputs come from fixed LCG streams (plus `DREAM_BENCH_SEED & 1`), matched by the C# twin.
+
+let measuring: bool = true;
+
+class Sink {
+    public v: int;
+    public constructor() {
+        this.v = 0;
+    }
+}
+let sink = Sink();
+
+@noinline
+fun sink_int(x: int): int {
+    sink.v = sink.v + x;
+    return x;
+}
+
+fun report(name: string, nanos: long, iters: int, checksum: int): void {
+    if measuring == false {
+        return;
+    }
+    let per = nanos / (long)iters;
+    System.println(
+        "bench " + name
+            + " ns_total=" + nanos.to_string()
+            + " iters=" + iters.to_string()
+            + " ns_per_op=" + per.to_string()
+            + " checksum=" + checksum.to_string()
+    );
+}
+
+fun seed_bit(): int {
+    return int.parse(System.env_or("DREAM_BENCH_SEED", "1")).unwrap_or(1) & 1;
+}
+
+class Lcg {
+    public s: int;
+    public constructor(seed: int) {
+        this.s = seed;
+    }
+    public fun next(bound: int): int {
+        this.s = this.s * 1103515245 + 12345;
+        return ((this.s >> 8) & 16777215) % bound;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// json_service: decode an order, price it, attach a summary, encode the response.
+
+@json
+class LineItem {
+    public sku: string;
+    public qty: int;
+    public price: double;
+
+    public constructor(sku: string, qty: int, price: double) {
+        this.sku = sku;
+        this.qty = qty;
+        this.price = price;
+    }
+}
+
+@json
+class Order {
+    public id: int;
+    public customer: string;
+    public tags: List<string>;
+    public items: List<LineItem>;
+
+    public constructor(id: int, customer: string, tags: List<string>, items: List<LineItem>) {
+        this.id = id;
+        this.customer = customer;
+        this.tags = tags;
+        this.items = items;
+    }
+}
+
+@json
+class Receipt {
+    public order: int;
+    public customer: string;
+    public total: double;
+    public units: int;
+    public skus: List<string>;
+
+    public constructor(order: int, customer: string, total: double, units: int, skus: List<string>) {
+        this.order = order;
+        this.customer = customer;
+        this.total = total;
+        this.units = units;
+        this.skus = skus;
+    }
+}
+
+fun make_order_text(rng: Lcg, id: int): string {
+    let tags = List<string>();
+    tags.push("priority-" + rng.next(4).to_string());
+    tags.push("region-" + rng.next(16).to_string());
+    let items = List<LineItem>();
+    let n = 8 + rng.next(24);
+    let i = 0;
+    while i < n {
+        items.push(LineItem("SKU-" + rng.next(5000).to_string(), 1 + rng.next(9), (double)(rng.next(100000)) / 100.0));
+        i = i + 1;
+    }
+    return Json.serialize(Order(id, "customer-" + rng.next(100000).to_string(), tags, items));
+}
+
+fun bench_json_service(iters: int): void {
+    let rng = Lcg(17 + seed_bit());
+    let docs = List<string>();
+    let d = 0;
+    while d < 64 {
+        docs.push(make_order_text(rng, d));
+        d = d + 1;
+    }
+    let fallback = Order(0, "", List<string>(), List<LineItem>());
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while i < iters {
+        let order = Json.deserialize<Order>(docs[i & 63]).unwrap_or(fallback);
+        let total: double = 0.0;
+        let units = 0;
+        let skus = List<string>();
+        let k = 0;
+        while k < order.items.length {
+            let it = order.items[k];
+            total = total + it.price * (double)it.qty;
+            units = units + it.qty;
+            if it.qty > 5 {
+                skus.push(it.sku);
+            }
+            k = k + 1;
+        }
+        let out = Json.serialize(Receipt(order.id, order.customer, total, units, skus));
+        sink_int(out.length);
+        acc = acc + order.id + units * 3 + skus.length * 7 + order.tags.length;
+        i = i + 1;
+    }
+    sw.stop();
+    sink_int(acc);
+    report("json_service", sw.elapsed_nanos, iters, acc);
+}
+
+// ---------------------------------------------------------------------------------------------
+// log_processor: split lines, classify with a regex, count by key in Map<string, int>.
+
+fun make_log(rng: Lcg, lines: int): string {
+    let levels = "INFO,WARN,ERROR,DEBUG".split(',');
+    let paths = "/api/users,/api/orders,/static/app.js,/health,/api/search,/login".split(',');
+    let sb = StringBuilder(lines * 64);
+    let i = 0;
+    while i < lines {
+        sb.append("2026-10-09T12:");
+        sb.append_int(10 + rng.next(50));
+        sb.append(" ");
+        sb.append(levels[rng.next(4)]);
+        sb.append(" ");
+        sb.append(paths[rng.next(6)]);
+        sb.append(" status=");
+        sb.append_int(200 + rng.next(4) * 100 + rng.next(3));
+        sb.append(" ms=");
+        sb.append_int(rng.next(900));
+        sb.append(" user=u");
+        sb.append_int(rng.next(500));
+        sb.append("\n");
+        i = i + 1;
+    }
+    return sb.build();
+}
+
+fun bench_log_processor(iters: int): void {
+    let rng = Lcg(29 + seed_bit());
+    let text = make_log(rng, 2000);
+    let status_re = Regex("status=(5\\d\\d)");
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while i < iters {
+        let by_path = Map<string, int>();
+        let errors = 0;
+        let lines = text.split('\n');
+        let j = 0;
+        while j < lines.length {
+            let line = lines[j];
+            if line.length > 0 {
+                let parts = line.split(' ');
+                let key = parts[1] + " " + parts[2];
+                by_path[key] = by_path.get_or(key, 0) + 1;
+                if status_re.test(line) {
+                    errors = errors + 1;
+                }
+            }
+            j = j + 1;
+        }
+        acc = acc + by_path.length * 1000 + errors;
+        i = i + 1;
+    }
+    sw.stop();
+    sink_int(acc);
+    report("log_processor", sw.elapsed_nanos, iters, acc);
+}
+
+// ---------------------------------------------------------------------------------------------
+// graph_paths: Dijkstra over class nodes with adjacency lists and a priority queue.
+
+class Edge {
+    public to: int;
+    public w: int;
+    public constructor(to: int, w: int) {
+        this.to = to;
+        this.w = w;
+    }
+}
+
+class Vertex {
+    public id: int;
+    public out: List<Edge>;
+    public constructor(id: int) {
+        this.id = id;
+        this.out = List<Edge>();
+    }
+}
+
+class Visit : Comparable<Visit> {
+    public node: int;
+    public dist: int;
+    public constructor(node: int, dist: int) {
+        this.node = node;
+        this.dist = dist;
+    }
+    public fun compare(other: Visit): int {
+        return this.dist - other.dist;
+    }
+}
+
+fun make_graph(rng: Lcg, n: int, degree: int): List<Vertex> {
+    let g = List<Vertex>();
+    let i = 0;
+    while i < n {
+        g.push(Vertex(i));
+        i = i + 1;
+    }
+    i = 0;
+    while i < n {
+        let k = 0;
+        while k < degree {
+            g[i].out.push(Edge(rng.next(n), 1 + rng.next(100)));
+            k = k + 1;
+        }
+        g[(i + 1) % n].out.push(Edge(i, 50));
+        i = i + 1;
+    }
+    return g;
+}
+
+fun shortest_sum(borrow g: List<Vertex>, src: int): int {
+    let n = g.length;
+    let dist = Buffer.alloc<int>(n);
+    let i = 0;
+    while i < n {
+        dist[i] = 2147483647;
+        i = i + 1;
+    }
+    let pq = PriorityQueue<Visit>();
+    dist[src] = 0;
+    pq.push(Visit(src, 0));
+    while pq.is_empty() == false {
+        let v = pq.pop().unwrap();
+        if v.dist <= dist[v.node] {
+            let edges = g[v.node].out;
+            let e = 0;
+            while e < edges.length {
+                let edge = edges[e];
+                let nd = v.dist + edge.w;
+                if nd < dist[edge.to] {
+                    dist[edge.to] = nd;
+                    pq.push(Visit(edge.to, nd));
+                }
+                e = e + 1;
+            }
+        }
+    }
+    let total = 0;
+    i = 0;
+    while i < n {
+        if dist[i] != 2147483647 {
+            total = total + dist[i];
+        }
+        i = i + 1;
+    }
+    return total;
+}
+
+fun bench_graph_paths(iters: int): void {
+    let rng = Lcg(41 + seed_bit());
+    let g = make_graph(rng, 2000, 6);
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while i < iters {
+        acc = acc + shortest_sum(g, (i * 37) % 2000);
+        i = i + 1;
+    }
+    sw.stop();
+    sink_int(acc);
+    report("graph_paths", sw.elapsed_nanos, iters, acc);
+}
+
+// ---------------------------------------------------------------------------------------------
+// async_fanout: a batch of 256 dependent futures with virtual-clock timers, joined with all/any.
+
+async fun leaf_job(i: int): int {
+    if (i & 7) == 0 {
+        Time.sleep(0).await;
+    }
+    return (i * 31) & 1023;
+}
+
+async fun mid_job(base: int): int {
+    let parts = Promise.all([leaf_job(base), leaf_job(base + 1), leaf_job(base + 2), leaf_job(base + 3)]).await;
+    return parts[0] + parts[1] + parts[2] + parts[3];
+}
+
+async fun bench_async_fanout(iters: int): void {
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while i < iters {
+        let batch = Buffer.alloc<Future<int>>(64);
+        let k = 0;
+        while k < 64 {
+            batch[k] = mid_job(i + k * 4);
+            k = k + 1;
+        }
+        let results = Promise.all(batch).await;
+        k = 0;
+        while k < results.length {
+            acc = acc + results[k];
+            k = k + 1;
+        }
+        // Both racers carry the same value, so the winner never changes the checksum.
+        acc = acc + Promise.any([leaf_job(i), leaf_job(i + 1024)]).await;
+        i = i + 1;
+    }
+    sw.stop();
+    sink_int(acc);
+    report("async_fanout", sw.elapsed_nanos, iters, acc);
+}
+
+// ---------------------------------------------------------------------------------------------
+// task_parallel: CPU-bound chunks fanned out to worker tasks and reduced on the caller.
+
+fun chunk_work(seed: int): int {
+    let h = seed;
+    let acc = 0;
+    let i = 0;
+    while i < 20000 {
+        h = h * 1103515245 + 12345;
+        acc = acc + ((h >> 16) & 255);
+        i = i + 1;
+    }
+    return acc;
+}
+
+async fun bench_task_parallel(iters: int): void {
+    let seeds = Buffer.alloc<int>(16);
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while i < iters {
+        let k = 0;
+        while k < 16 {
+            seeds[k] = i * 16 + k + seed_bit();
+            k = k + 1;
+        }
+        let parts = Task.map(seeds, (s) => chunk_work(s)).await;
+        k = 0;
+        while k < parts.length {
+            acc = acc + parts[k];
+            k = k + 1;
+        }
+        i = i + 1;
+    }
+    sw.stop();
+    sink_int(acc);
+    report("task_parallel", sw.elapsed_nanos, iters, acc);
+}
+
+// ---------------------------------------------------------------------------------------------
+
+async fun run_suite(scale: int): void {
+    bench_json_service(scale * 20);
+    bench_log_processor(scale / 10);
+    bench_graph_paths(scale / 4);
+    bench_async_fanout(scale * 2).await;
+    bench_task_parallel(scale / 2).await;
+}
+
+fun bench_passes(): int {
+    let n = int.parse(System.env_or("DREAM_BENCH_PASSES", "1")).unwrap_or(1);
+    if n < 1 {
+        return 1;
+    }
+    if n > 30 {
+        return 30;
+    }
+    return n;
+}
+
+async fun main(): void {
+    let scale = 100;
+    measuring = false;
+    run_suite(scale).await;
+    measuring = true;
+    let p = 0;
+    let passes = bench_passes();
+    while p < passes {
+        run_suite(scale).await;
+        p = p + 1;
+    }
+    System.println("sink " + sink.v.to_string());
+}

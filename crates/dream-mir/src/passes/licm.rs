@@ -399,11 +399,16 @@ fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
-        | Rvalue::ByteAt(a, b, _)
-        | Rvalue::LoadU8(a, b)
-        | Rvalue::LoadU16(a, b) => {
+        | Rvalue::ByteAt(a, b, _) => {
             operand_reads(a, f);
             operand_reads(b, f);
+        }
+        Rvalue::LoadU8(a, b, n) | Rvalue::LoadU16(a, b, n) => {
+            operand_reads(a, f);
+            operand_reads(b, f);
+            if let Some(n) = n {
+                operand_reads(n, f);
+            }
         }
         Rvalue::Concat(parts) => {
             for p in parts {

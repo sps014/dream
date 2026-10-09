@@ -9,16 +9,15 @@ public class Set<T> : Collection<T> {
     used: int;
     cap: int;
     epoch: int;
+    empty_keys: T[];
 
     // Allocates an empty set with an initial capacity (defaults to 8, rounded up to power of 2).
     public constructor(capacity: int = 8) {
-        let c = hash_min_capacity();
-        while c < capacity {
-            c = c * 2;
-        }
+        let c = hash_capacity_for(capacity);
         this.cap = c;
         this.keys = Buffer.alloc<T>(c);
         this.states = Buffer.alloc<int>(c);
+        this.empty_keys = Buffer.alloc<T>(1);
         this.count = 0;
         this.used = 0;
         this.epoch = hash_epoch_initial();
@@ -134,10 +133,7 @@ public class Set<T> : Collection<T> {
         let old_keys = this.keys;
         let old_states = this.states;
         let old_cap = this.cap;
-        let new_cap = old_cap * 2;
-        if new_cap < hash_min_capacity() {
-            new_cap = hash_min_capacity();
-        }
+        let new_cap = hash_capacity_for(old_cap + 1);
         this.keys = Buffer.alloc<T>(new_cap);
         this.states = Buffer.alloc<int>(new_cap);
         this.cap = new_cap;
@@ -212,6 +208,18 @@ public class Set<T> : Collection<T> {
         let i = this.find(value);
         if i >= 0 {
             this.states[i] = 0 - this.epoch;
+            // A tombstoned slot must not keep a managed key alive until it is reused.
+            this.keys[i] = this.empty_keys[0];
+            this.count = this.count - 1;
+            return true;
+        }
+        return false;
+    }
+
+    public fun remove(borrow value: T): bool where T : unmanaged {
+        let i = this.find(value);
+        if i >= 0 {
+            this.states[i] = 0 - this.epoch;
             this.count = this.count - 1;
             return true;
         }
@@ -228,11 +236,11 @@ public class Set<T> : Collection<T> {
     public fun clear(): void {
         let c = this.cap;
         let e = this.epoch;
-        let z = Buffer.alloc<T>(1);
+        let z = this.empty_keys[0];
         let i = 0;
         while i < c {
             if this.states[i] == e {
-                this.keys[i] = z[0];
+                this.keys[i] = z;
             }
             i = i + 1;
         }

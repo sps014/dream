@@ -9,8 +9,10 @@ int dream_rt_mt = 1;
 #else
 int dream_rt_mt;
 #endif
-int64_t live_objects;
+/* `Debug.live_objects` is derived on read, so each allocation and free bumps one counter. */
 int64_t total_allocations;
+int64_t total_frees;
+int64_t pinned_objects;
 uint64_t dream_weak_allocations;
 uint64_t dream_weak_frees;
 int32_t last_freed;
@@ -168,44 +170,53 @@ static void recycle_locked(dream_ptr ptr, int account);
 #define PRIV_SLAB (2 << 20)
 
 static void account_alloc(void) {
-    __atomic_fetch_add(&live_objects, 1, __ATOMIC_RELAXED);
     __atomic_fetch_add(&total_allocations, 1, __ATOMIC_RELAXED);
 }
 
 static void account_free_n(int32_t n) {
-    int64_t v;
-    int64_t next;
     __atomic_fetch_add(&last_freed, n, __ATOMIC_RELAXED);
-    if (n <= 0) {
-        return;
+    if (n > 0) {
+        __atomic_fetch_add(&total_frees, n, __ATOMIC_RELAXED);
     }
-    for (;;) {
-        v = __atomic_load_n(&live_objects, __ATOMIC_RELAXED);
-        next = v > n ? v - n : 0;
-        if (__atomic_compare_exchange_n(
-                &live_objects, &v, next, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED
-            )) {
-            return;
+}
+
+/* Per-instance exact-class freelists live in linear memory, indexed by class. `fast` aliases
+ * the table except while a region is open (and before first use), so the inline paths below
+ * fall through to the out-of-line ones with one test. */
+enum { PRIV_CLASSES = 13, PRIV_SMALL_TOTAL = 1 << 16 };
+
+static int32_t *priv_table(void) {
+    int32_t table = dream_priv_table_get();
+    if (table == 0) {
+        table = dream_wasm_heap_claim((PRIV_CLASSES * 4 + 15) & -16);
+        memset((void *)(uintptr_t)(uint32_t)table, 0, PRIV_CLASSES * 4);
+        dream_priv_table_set(table);
+        if (!dream_region_active()) {
+            dream_priv_fast_set(table);
         }
     }
+    return (int32_t *)(uintptr_t)(uint32_t)table;
 }
 
 static void priv_class_push(int32_t idx, int32_t block) {
-    int32_t head = dream_priv_fl_get(idx);
-    blk_set_next(block, head);
-    dream_priv_fl_set(idx, block);
+    int32_t *table = priv_table();
+    blk_set_next(block, table[idx]);
+    table[idx] = block;
 }
 
-static dream_ptr finish_block_ex(int32_t block, int32_t tag, int32_t account) {
+DREAM_ALWAYS_INLINE dream_ptr activate_block(int32_t block, int32_t tag, const dream_type_info *info, int32_t account) {
     i32_put(block + (int32_t)HEADER_TAG_OFFSET, tag);
     i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, dream_rc_init(tag));
     if (account) {
         account_alloc();
     }
     dream_ptr ptr = (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
-    const dream_type_info *info = NULL;
-    memcpy((char *)dream_p(ptr) - DREAM_BLOCK_HEADER + sizeof(dream_size), &info, sizeof(info));
+    dream_set_type(ptr, info);
     return ptr;
+}
+
+static dream_ptr finish_block_ex(int32_t block, int32_t tag, int32_t account) {
+    return activate_block(block, tag, NULL, account);
 }
 
 static dream_ptr finish_block(int32_t block, int32_t tag) {
@@ -231,10 +242,11 @@ static dream_ptr malloc_private_ex(int32_t size, int32_t tag, int32_t account) {
     total = round_total(size);
     idx = size_class(total);
     if (idx <= 12) {
-        block = dream_priv_fl_get(idx);
+        int32_t *table = priv_table();
+        block = table[idx];
         if (block) {
             next = blk_next(block);
-            dream_priv_fl_set(idx, next);
+            table[idx] = next;
             return finish_block_ex(block, tag, account);
         }
     }
@@ -272,7 +284,7 @@ void dream_region_account_free(uint32_t count) {
 }
 
 void dream_region_heap_mode(int active) {
-    (void)active;
+    dream_priv_fast_set(active ? 0 : dream_priv_table_get());
 }
 
 static dream_ptr malloc_locked(int32_t size, int32_t tag, int account) {
@@ -310,8 +322,10 @@ static dream_ptr malloc_locked(int32_t size, int32_t tag, int account) {
 int64_t debug_get_live_objects(void) {
     uint64_t allocations = __atomic_load_n(&dream_weak_allocations, __ATOMIC_RELAXED);
     uint64_t frees = __atomic_load_n(&dream_weak_frees, __ATOMIC_RELAXED);
-    return __atomic_load_n(&live_objects, __ATOMIC_RELAXED)
-        + (int64_t)(allocations > frees ? allocations - frees : 0);
+    int64_t live = __atomic_load_n(&total_allocations, __ATOMIC_RELAXED)
+        - __atomic_load_n(&total_frees, __ATOMIC_RELAXED)
+        - __atomic_load_n(&pinned_objects, __ATOMIC_RELAXED);
+    return (live > 0 ? live : 0) + (int64_t)(allocations > frees ? allocations - frees : 0);
 }
 int64_t debug_get_total_allocations(void) {
     return __atomic_load_n(&total_allocations, __ATOMIC_RELAXED)
@@ -324,10 +338,7 @@ int32_t debug_get_ref_count(dream_ptr ptr) {
 void dream_pin_immortal(dream_ptr s) {
     if (!s) { return; }
     if (__atomic_exchange_n(dream_rc_word(s), DREAM_RC_IMMORTAL, __ATOMIC_RELAXED) != DREAM_RC_IMMORTAL) {
-        int64_t live = __atomic_load_n(&live_objects, __ATOMIC_RELAXED);
-        while (live > 0 && !__atomic_compare_exchange_n(
-            &live_objects, &live, live - 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
-        }
+        __atomic_fetch_add(&pinned_objects, 1, __ATOMIC_RELAXED);
     }
 }
 
@@ -368,8 +379,27 @@ int32_t debug_get_heap_ptr(void) { return dream_wasm_heap_ptr_get(); }
  * not this allocator's internal list head, which coalescing keeps stable. */
 int32_t debug_get_free_list_head(void) { return last_freed; }
 
-__attribute__((export_name(DREAM_SYM_MALLOC)))
+static __attribute__((noinline)) dream_ptr malloc_slow(int32_t size, int32_t tag);
+
+/* Small enough to inline at every allocation site after the runtime is linked with the
+ * program; everything else (regions, shared, refills, large blocks) stays out of line. */
+__attribute__((export_name(DREAM_SYM_MALLOC), always_inline))
 dream_ptr dream_malloc(int32_t size, int32_t tag) {
+    int32_t *table = (int32_t *)(uintptr_t)(uint32_t)dream_priv_fast_get();
+    if (DREAM_LIKELY(table != NULL && (uint32_t)size <= PRIV_SMALL_TOTAL - HEAP_HEADER_SIZE
+                     && (tag & TAG_VALUE_MASK) != 0 && (tag & TAG_SHARED) == 0)) {
+        int32_t total = (((size + 7) & -8) + (int32_t)HEAP_HEADER_SIZE + 15) & -16;
+        int32_t idx = size_class(total);
+        int32_t block = table[idx];
+        if (DREAM_LIKELY(block != 0)) {
+            table[idx] = blk_next(block);
+            return activate_block(block, tag, dream_type_info_for_tag(tag & TAG_VALUE_MASK), 1);
+        }
+    }
+    return malloc_slow(size, tag);
+}
+
+static __attribute__((noinline)) dream_ptr malloc_slow(int32_t size, int32_t tag) {
     if ((tag & TAG_VALUE_MASK) == 0 || (tag & TAG_SHARED)) {
         return dream_malloc_shared(size, tag);
     }
@@ -493,13 +523,35 @@ static void recycle_locked(dream_ptr ptr, int account) {
     }
 }
 
+static __attribute__((noinline)) void recycle_slow(dream_ptr ptr);
+
+__attribute__((always_inline))
 void dream_recycle(dream_ptr ptr) {
-    int32_t block_start;
-    int32_t idx;
-    int32_t sz;
     if (!ptr) {
         return;
     }
+    int32_t *table = (int32_t *)(uintptr_t)(uint32_t)dream_priv_fast_get();
+    int32_t block = (int32_t)ptr - (int32_t)HEAP_HEADER_SIZE;
+    int32_t sz = i32_at(block);
+    int32_t tag = *dream_tag_word(ptr);
+    /* Exact private class blocks are the powers of two from 16 bytes to PRIV_SMALL_TOTAL. */
+    if (DREAM_LIKELY(table != NULL && (tag & (DREAM_TAG_WEAK_TARGET | TAG_SHARED)) == 0
+                     && (uint32_t)(sz - 16) <= (uint32_t)(PRIV_SMALL_TOTAL - 16) && (sz & (sz - 1)) == 0)) {
+        __atomic_store_n(dream_rc_word(ptr), 0, __ATOMIC_RELAXED);
+        dream_set_type(ptr, NULL);
+        account_free_n(1);
+        int32_t idx = size_class(sz);
+        blk_set_next(block, table[idx]);
+        table[idx] = block;
+        return;
+    }
+    recycle_slow(ptr);
+}
+
+static __attribute__((noinline)) void recycle_slow(dream_ptr ptr) {
+    int32_t block_start;
+    int32_t idx;
+    int32_t sz;
     if (*dream_tag_word(ptr) & DREAM_TAG_WEAK_TARGET) {
         dream_weak_clear_all(ptr);
     }

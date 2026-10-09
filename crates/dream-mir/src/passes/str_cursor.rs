@@ -68,22 +68,26 @@ fn apply(
     if bases.is_empty() || !body_is_scan(func, interner, body, &bases) {
         return false;
     }
-    let mut ptr_of: BTreeMap<u32, Local> = BTreeMap::new();
+    let checked = checked_bases(func, body);
+    let mut cursor_of: BTreeMap<u32, Cursor> = BTreeMap::new();
     let mut setup = Vec::new();
     for base in bases {
+        let s = || Operand::Copy(Place::Local(Local(base)));
         let ptr = new_int_temp(func, interner);
-        ptr_of.insert(base, ptr);
-        setup.push(Statement::Assign(
-            Place::Local(ptr),
-            Rvalue::StrBytes(Operand::Copy(Place::Local(Local(base)))),
-        ));
+        setup.push(Statement::Assign(Place::Local(ptr), Rvalue::StrBytes(s())));
+        let len = checked.contains(&base).then(|| {
+            let len = new_int_temp(func, interner);
+            setup.push(Statement::Assign(Place::Local(len), Rvalue::StrLen(s())));
+            len
+        });
+        cursor_of.insert(base, Cursor { ptr, len });
     }
     for &b in body {
         for stmt in &mut func.block_mut(b).stmts {
             let Statement::Assign(_, rv) = stmt else {
                 continue;
             };
-            rewrite_rvalue(rv, &ptr_of);
+            rewrite_rvalue(rv, &cursor_of);
         }
     }
     let incoming: Vec<BlockId> = analyses
@@ -108,19 +112,43 @@ fn apply(
     true
 }
 
-fn rewrite_rvalue(rv: &mut Rvalue, ptr_of: &BTreeMap<u32, Local>) {
-    match rv {
-        Rvalue::ByteAt(s, i, _) => {
-            if let Some(ptr) = base_local(s).and_then(|b| ptr_of.get(&b).copied()) {
-                *rv = Rvalue::LoadU8(Operand::Copy(Place::Local(ptr)), i.clone());
-            }
+/// The hoisted payload pointer, plus the hoisted length when some read was not proven in range.
+#[derive(Clone, Copy)]
+struct Cursor {
+    ptr: Local,
+    len: Option<Local>,
+}
+
+fn rewrite_rvalue(rv: &mut Rvalue, cursor_of: &BTreeMap<u32, Cursor>) {
+    let (Rvalue::ByteAt(s, i, unchecked) | Rvalue::CharAt(s, i, unchecked)) = rv else {
+        return;
+    };
+    let Some(cursor) = base_local(s).and_then(|b| cursor_of.get(&b).copied()) else {
+        return;
+    };
+    let ptr = Operand::Copy(Place::Local(cursor.ptr));
+    let len = if *unchecked {
+        None
+    } else {
+        let len = cursor.len.unwrap_or_else(|| {
+            crate::internal_error!("str-cursor: checked read without a hoisted length")
+        });
+        Some(Operand::Copy(Place::Local(len)))
+    };
+    let i = i.clone();
+    *rv = if matches!(rv, Rvalue::ByteAt(..)) {
+        Rvalue::LoadU8(ptr, i, len)
+    } else {
+        Rvalue::LoadU16(ptr, i, len)
+    };
+}
+
+fn read_base(stmt: &Statement) -> Option<(u32, bool)> {
+    match stmt {
+        Statement::Assign(_, Rvalue::ByteAt(s, _, unchecked) | Rvalue::CharAt(s, _, unchecked)) => {
+            base_local(s).map(|b| (b, *unchecked))
         }
-        Rvalue::CharAt(s, i, _) => {
-            if let Some(ptr) = base_local(s).and_then(|b| ptr_of.get(&b).copied()) {
-                *rv = Rvalue::LoadU16(Operand::Copy(Place::Local(ptr)), i.clone());
-            }
-        }
-        _ => {}
+        _ => None,
     }
 }
 
@@ -133,15 +161,22 @@ fn scan_bases(func: &MirFunction, body: &BTreeSet<BlockId>) -> BTreeSet<u32> {
             if let Statement::Assign(Place::Local(d), _) = stmt {
                 defined.insert(d.0);
             }
-            if let Statement::Assign(_, Rvalue::ByteAt(s, _, _) | Rvalue::CharAt(s, _, _)) = stmt
-                && let Some(base) = base_local(s)
-            {
+            if let Some((base, _)) = read_base(stmt) {
                 bases.insert(base);
             }
         }
     }
     bases.retain(|b| !defined.contains(b));
     bases
+}
+
+fn checked_bases(func: &MirFunction, body: &BTreeSet<BlockId>) -> BTreeSet<u32> {
+    body.iter()
+        .flat_map(|&b| func.block(b).stmts.iter())
+        .filter_map(read_base)
+        .filter(|&(_, unchecked)| !unchecked)
+        .map(|(base, _)| base)
+        .collect()
 }
 
 fn base_local(op: &Operand) -> Option<u32> {
@@ -270,5 +305,82 @@ fn redirect(t: &mut Terminator, from: BlockId, to: BlockId) {
         | Terminator::AsyncComplete(_)
         | Terminator::TailCall { .. }
         | Terminator::Unreachable => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::build::FunctionBuilder;
+    use dream_types::TypeCtx;
+
+    fn scan(unchecked: bool) -> (MirFunction, BlockId) {
+        let ctx = TypeCtx::new();
+        let i = &ctx.interner;
+        let mut b = FunctionBuilder::new("scan", i.void());
+        let s = b.new_param(i.string(), None);
+        let idx = b.new_param(i.int(), None);
+        let cond = b.new_param(i.bool(), None);
+        let unit = b.new_local(i.char(), None);
+        let header = b.new_block();
+        let body = b.new_block();
+        let done = b.new_block();
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(header);
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(cond)),
+            then_blk: body,
+            else_blk: done,
+        });
+        b.switch_to(body);
+        b.assign(
+            Place::Local(unit),
+            Rvalue::CharAt(
+                Operand::Copy(Place::Local(s)),
+                Operand::Copy(Place::Local(idx)),
+                unchecked,
+            ),
+        );
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(done);
+        b.terminate(Terminator::Return(None));
+        let mut f = b.finish();
+        assert!(StrCursor.transform(&mut f, i, &Default::default(), &mut Default::default()));
+        (f, body)
+    }
+
+    fn body_load(f: &MirFunction, body: BlockId) -> &Rvalue {
+        f.block(body)
+            .stmts
+            .iter()
+            .find_map(|s| match s {
+                Statement::Assign(_, rv @ Rvalue::LoadU16(..)) => Some(rv),
+                _ => None,
+            })
+            .expect("the read becomes a cursor load")
+    }
+
+    fn preheader_has(f: &MirFunction, pred: impl Fn(&Rvalue) -> bool) -> bool {
+        f.blocks.last().is_some_and(|ph| {
+            ph.stmts
+                .iter()
+                .any(|s| matches!(s, Statement::Assign(_, rv) if pred(rv)))
+        })
+    }
+
+    #[test]
+    fn proven_read_loads_without_a_bound() {
+        let (f, body) = scan(true);
+        assert!(matches!(body_load(&f, body), Rvalue::LoadU16(_, _, None)));
+        assert!(!preheader_has(&f, |rv| matches!(rv, Rvalue::StrLen(_))));
+    }
+
+    #[test]
+    fn checked_read_keeps_its_bound_against_a_hoisted_length() {
+        let (f, body) = scan(false);
+        assert!(matches!(body_load(&f, body), Rvalue::LoadU16(_, _, Some(_))));
+        assert!(preheader_has(&f, |rv| matches!(rv, Rvalue::StrLen(_))));
+        assert!(preheader_has(&f, |rv| matches!(rv, Rvalue::StrBytes(_))));
+        assert!(!crate::passes::dce::is_pure(body_load(&f, body)));
     }
 }

@@ -1,0 +1,14 @@
+// A scan loop whose bound overshoots by one still traps on the final read once the payload
+// pointer is hoisted out of the loop.
+import system;
+
+fun main(): void {
+    let s = 4321.to_string();
+    let sum = 0;
+    let i = 0;
+    while i <= s.length {
+        sum = sum + (int)s.char_at(i);
+        i = i + 1;
+    }
+    System.println(sum);
+}

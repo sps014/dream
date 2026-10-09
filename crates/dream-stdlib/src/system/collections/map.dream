@@ -12,10 +12,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     epoch: int;
 
     public constructor(capacity: int = 8) {
-        let c = hash_min_capacity();
-        while c < capacity {
-            c = c * 2;
-        }
+        let c = hash_capacity_for(capacity);
         this.cap = c;
         this.slots = Buffer.alloc<MapSlot<K, V>>(c);
         this.defaults = Buffer.alloc<V>(1);
@@ -142,10 +139,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     fun rehash(): void {
         let old = this.slots;
         let old_cap = this.cap;
-        let new_cap = old_cap * 2;
-        if new_cap < hash_min_capacity() {
-            new_cap = hash_min_capacity();
-        }
+        let new_cap = hash_capacity_for(old_cap + 1);
         this.slots = Buffer.alloc<MapSlot<K, V>>(new_cap);
         this.cap = new_cap;
         this.count = 0;

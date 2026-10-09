@@ -1,0 +1,17 @@
+// The most negative int and long have no positive counterpart, so the builder appends them from a
+// fixed UTF-16 spelling; the surrounding text must stay intact.
+import system;
+
+fun main(): void {
+    let sb = StringBuilder();
+    let lo = 0 - 2147483647 - 1;
+    let llo: long = 0L - 9223372036854775807L - 1L;
+    sb.append("[");
+    sb.append_int(lo);
+    sb.append("|");
+    sb.append_long(llo);
+    sb.append("|");
+    sb.append_int(2147483647);
+    sb.append("]");
+    System.println(sb.build());
+}

@@ -147,6 +147,7 @@ pub(super) fn native(
 ) -> Result<Vec<PathBuf>, String> {
     let config = &tools.config;
     if spec.can_link_on_host()
+        && super::runtime::native_sanitize_flag(config, spec).is_none()
         && let super::bundle::RtDir::Prebuilt(dir) =
             super::bundle::rt_dir(config, "native", OptLevel::O0, need)
     {

@@ -130,11 +130,16 @@ fn remap_rvalue(rv: &mut Rvalue, base: LocalMap<'_>) {
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
-        | Rvalue::ByteAt(a, b, _)
-        | Rvalue::LoadU8(a, b)
-        | Rvalue::LoadU16(a, b) => {
+        | Rvalue::ByteAt(a, b, _) => {
             remap_operand(a, base);
             remap_operand(b, base);
+        }
+        Rvalue::LoadU8(a, b, n) | Rvalue::LoadU16(a, b, n) => {
+            remap_operand(a, base);
+            remap_operand(b, base);
+            if let Some(n) = n {
+                remap_operand(n, base);
+            }
         }
         Rvalue::Concat(parts) => {
             for p in parts {

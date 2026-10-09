@@ -13,6 +13,7 @@ COMPARABILITY = {
     "weak_tree": "weak registration and reclamation contracts differ",
     "regex_find": "PCRE2 JIT versus interpreted .NET Regex",
     "substring": "Dream owns a retained slice; C# copies its payload",
+    "fib_rec": "LLVM proves fib pure and merges the repeated fib(n-3) call; C# executes every call",
 }
 
 

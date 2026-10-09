@@ -50,13 +50,15 @@ pub(super) fn rvalue_local_operands(rv: &Rvalue) -> Vec<u32> {
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
         | Rvalue::ByteAt(a, b, _)
-        | Rvalue::LoadU8(a, b)
-        | Rvalue::LoadU16(a, b)
         | Rvalue::ArrayRealloc {
             array: a,
             new_len: b,
             ..
         } => ops.extend([a, b]),
+        Rvalue::LoadU8(a, b, n) | Rvalue::LoadU16(a, b, n) => {
+            ops.extend([a, b]);
+            ops.extend(n.as_ref());
+        }
         Rvalue::ConcatInt {
             prefix,
             value,

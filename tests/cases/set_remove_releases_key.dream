@@ -1,0 +1,19 @@
+// `Set.remove` must release a managed key immediately, not when the tombstoned slot is reused.
+import system;
+import system.collections;
+
+fun main(): void {
+    let s = Set<string>();
+    let i = 0;
+    while i < 4 {
+        s.add(i.to_string() + "-key");
+        i = i + 1;
+    }
+    let base = Debug.live_objects;
+    System.println(s.remove("2-key"));
+    System.println(s.remove("2-key"));
+    System.println(Debug.live_objects - base);
+    System.println(s.length);
+    System.println(s.contains("1-key"));
+    System.println(s.contains("2-key"));
+}

@@ -18,45 +18,13 @@ __dream_priv_off:
 	.globaltype	__dream_priv_cap, i32
 __dream_priv_cap:
 
-	.hidden	__dream_priv_fl0
-	.globaltype	__dream_priv_fl0, i32
-__dream_priv_fl0:
-	.hidden	__dream_priv_fl1
-	.globaltype	__dream_priv_fl1, i32
-__dream_priv_fl1:
-	.hidden	__dream_priv_fl2
-	.globaltype	__dream_priv_fl2, i32
-__dream_priv_fl2:
-	.hidden	__dream_priv_fl3
-	.globaltype	__dream_priv_fl3, i32
-__dream_priv_fl3:
-	.hidden	__dream_priv_fl4
-	.globaltype	__dream_priv_fl4, i32
-__dream_priv_fl4:
-	.hidden	__dream_priv_fl5
-	.globaltype	__dream_priv_fl5, i32
-__dream_priv_fl5:
-	.hidden	__dream_priv_fl6
-	.globaltype	__dream_priv_fl6, i32
-__dream_priv_fl6:
-	.hidden	__dream_priv_fl7
-	.globaltype	__dream_priv_fl7, i32
-__dream_priv_fl7:
-	.hidden	__dream_priv_fl8
-	.globaltype	__dream_priv_fl8, i32
-__dream_priv_fl8:
-	.hidden	__dream_priv_fl9
-	.globaltype	__dream_priv_fl9, i32
-__dream_priv_fl9:
-	.hidden	__dream_priv_fl10
-	.globaltype	__dream_priv_fl10, i32
-__dream_priv_fl10:
-	.hidden	__dream_priv_fl11
-	.globaltype	__dream_priv_fl11, i32
-__dream_priv_fl11:
-	.hidden	__dream_priv_fl12
-	.globaltype	__dream_priv_fl12, i32
-__dream_priv_fl12:
+	.hidden	__dream_priv_table
+	.globaltype	__dream_priv_table, i32
+__dream_priv_table:
+
+	.hidden	__dream_priv_fast
+	.globaltype	__dream_priv_fast, i32
+__dream_priv_fast:
 
 	.globl	dream_g0_get
 	.type	dream_g0_get,@function
@@ -133,186 +101,34 @@ dream_priv_cap_set:
 	global.set	__dream_priv_cap
 	end_function
 
-	.globl	dream_priv_fl0_get
-	.type	dream_priv_fl0_get,@function
-dream_priv_fl0_get:
-	.functype	dream_priv_fl0_get () -> (i32)
-	global.get	__dream_priv_fl0
-	end_function
-	.globl	dream_priv_fl0_set
-	.type	dream_priv_fl0_set,@function
-dream_priv_fl0_set:
-	.functype	dream_priv_fl0_set (i32) -> ()
-	local.get	0
-	global.set	__dream_priv_fl0
+	.globl	dream_priv_table_get
+	.type	dream_priv_table_get,@function
+dream_priv_table_get:
+	.functype	dream_priv_table_get () -> (i32)
+	global.get	__dream_priv_table
 	end_function
 
-	.globl	dream_priv_fl1_get
-	.type	dream_priv_fl1_get,@function
-dream_priv_fl1_get:
-	.functype	dream_priv_fl1_get () -> (i32)
-	global.get	__dream_priv_fl1
-	end_function
-	.globl	dream_priv_fl1_set
-	.type	dream_priv_fl1_set,@function
-dream_priv_fl1_set:
-	.functype	dream_priv_fl1_set (i32) -> ()
+	.globl	dream_priv_table_set
+	.type	dream_priv_table_set,@function
+dream_priv_table_set:
+	.functype	dream_priv_table_set (i32) -> ()
 	local.get	0
-	global.set	__dream_priv_fl1
+	global.set	__dream_priv_table
 	end_function
 
-	.globl	dream_priv_fl2_get
-	.type	dream_priv_fl2_get,@function
-dream_priv_fl2_get:
-	.functype	dream_priv_fl2_get () -> (i32)
-	global.get	__dream_priv_fl2
-	end_function
-	.globl	dream_priv_fl2_set
-	.type	dream_priv_fl2_set,@function
-dream_priv_fl2_set:
-	.functype	dream_priv_fl2_set (i32) -> ()
-	local.get	0
-	global.set	__dream_priv_fl2
+	.globl	dream_priv_fast_get
+	.type	dream_priv_fast_get,@function
+dream_priv_fast_get:
+	.functype	dream_priv_fast_get () -> (i32)
+	global.get	__dream_priv_fast
 	end_function
 
-	.globl	dream_priv_fl3_get
-	.type	dream_priv_fl3_get,@function
-dream_priv_fl3_get:
-	.functype	dream_priv_fl3_get () -> (i32)
-	global.get	__dream_priv_fl3
-	end_function
-	.globl	dream_priv_fl3_set
-	.type	dream_priv_fl3_set,@function
-dream_priv_fl3_set:
-	.functype	dream_priv_fl3_set (i32) -> ()
+	.globl	dream_priv_fast_set
+	.type	dream_priv_fast_set,@function
+dream_priv_fast_set:
+	.functype	dream_priv_fast_set (i32) -> ()
 	local.get	0
-	global.set	__dream_priv_fl3
-	end_function
-
-	.globl	dream_priv_fl4_get
-	.type	dream_priv_fl4_get,@function
-dream_priv_fl4_get:
-	.functype	dream_priv_fl4_get () -> (i32)
-	global.get	__dream_priv_fl4
-	end_function
-	.globl	dream_priv_fl4_set
-	.type	dream_priv_fl4_set,@function
-dream_priv_fl4_set:
-	.functype	dream_priv_fl4_set (i32) -> ()
-	local.get	0
-	global.set	__dream_priv_fl4
-	end_function
-
-	.globl	dream_priv_fl5_get
-	.type	dream_priv_fl5_get,@function
-dream_priv_fl5_get:
-	.functype	dream_priv_fl5_get () -> (i32)
-	global.get	__dream_priv_fl5
-	end_function
-	.globl	dream_priv_fl5_set
-	.type	dream_priv_fl5_set,@function
-dream_priv_fl5_set:
-	.functype	dream_priv_fl5_set (i32) -> ()
-	local.get	0
-	global.set	__dream_priv_fl5
-	end_function
-
-	.globl	dream_priv_fl6_get
-	.type	dream_priv_fl6_get,@function
-dream_priv_fl6_get:
-	.functype	dream_priv_fl6_get () -> (i32)
-	global.get	__dream_priv_fl6
-	end_function
-	.globl	dream_priv_fl6_set
-	.type	dream_priv_fl6_set,@function
-dream_priv_fl6_set:
-	.functype	dream_priv_fl6_set (i32) -> ()
-	local.get	0
-	global.set	__dream_priv_fl6
-	end_function
-
-	.globl	dream_priv_fl7_get
-	.type	dream_priv_fl7_get,@function
-dream_priv_fl7_get:
-	.functype	dream_priv_fl7_get () -> (i32)
-	global.get	__dream_priv_fl7
-	end_function
-	.globl	dream_priv_fl7_set
-	.type	dream_priv_fl7_set,@function
-dream_priv_fl7_set:
-	.functype	dream_priv_fl7_set (i32) -> ()
-	local.get	0
-	global.set	__dream_priv_fl7
-	end_function
-
-	.globl	dream_priv_fl8_get
-	.type	dream_priv_fl8_get,@function
-dream_priv_fl8_get:
-	.functype	dream_priv_fl8_get () -> (i32)
-	global.get	__dream_priv_fl8
-	end_function
-	.globl	dream_priv_fl8_set
-	.type	dream_priv_fl8_set,@function
-dream_priv_fl8_set:
-	.functype	dream_priv_fl8_set (i32) -> ()
-	local.get	0
-	global.set	__dream_priv_fl8
-	end_function
-
-	.globl	dream_priv_fl9_get
-	.type	dream_priv_fl9_get,@function
-dream_priv_fl9_get:
-	.functype	dream_priv_fl9_get () -> (i32)
-	global.get	__dream_priv_fl9
-	end_function
-	.globl	dream_priv_fl9_set
-	.type	dream_priv_fl9_set,@function
-dream_priv_fl9_set:
-	.functype	dream_priv_fl9_set (i32) -> ()
-	local.get	0
-	global.set	__dream_priv_fl9
-	end_function
-
-	.globl	dream_priv_fl10_get
-	.type	dream_priv_fl10_get,@function
-dream_priv_fl10_get:
-	.functype	dream_priv_fl10_get () -> (i32)
-	global.get	__dream_priv_fl10
-	end_function
-	.globl	dream_priv_fl10_set
-	.type	dream_priv_fl10_set,@function
-dream_priv_fl10_set:
-	.functype	dream_priv_fl10_set (i32) -> ()
-	local.get	0
-	global.set	__dream_priv_fl10
-	end_function
-
-	.globl	dream_priv_fl11_get
-	.type	dream_priv_fl11_get,@function
-dream_priv_fl11_get:
-	.functype	dream_priv_fl11_get () -> (i32)
-	global.get	__dream_priv_fl11
-	end_function
-	.globl	dream_priv_fl11_set
-	.type	dream_priv_fl11_set,@function
-dream_priv_fl11_set:
-	.functype	dream_priv_fl11_set (i32) -> ()
-	local.get	0
-	global.set	__dream_priv_fl11
-	end_function
-
-	.globl	dream_priv_fl12_get
-	.type	dream_priv_fl12_get,@function
-dream_priv_fl12_get:
-	.functype	dream_priv_fl12_get () -> (i32)
-	global.get	__dream_priv_fl12
-	end_function
-	.globl	dream_priv_fl12_set
-	.type	dream_priv_fl12_set,@function
-dream_priv_fl12_set:
-	.functype	dream_priv_fl12_set (i32) -> ()
-	local.get	0
-	global.set	__dream_priv_fl12
+	global.set	__dream_priv_fast
 	end_function
 
 	.hidden	__dream_region_state

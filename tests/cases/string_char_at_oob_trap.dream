@@ -1,0 +1,11 @@
+// `char_at` past the last code unit must panic rather than read beyond the payload.
+import system;
+
+fun main(): void {
+    let s = 4321.to_string();
+    let i = s.length - 1;
+    System.println(s.char_at(i));
+    i = i + 1;
+    System.println(s.char_at(i));
+    System.println("after");
+}

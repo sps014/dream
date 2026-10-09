@@ -15,6 +15,8 @@ Examples:
   scripts/bench.py                        # native Dream/C#, 20 rounds, 10 passes
   scripts/bench.py build --help           # compiler cold/warm/edited builds
   scripts/bench.py generators --help      # isolated source-generator caches
+  scripts/bench.py profile --suite macro  # CPU profile (samply, perf or xctrace)
+  scripts/bench.py --suite macro          # application workloads vs their C# twins
   scripts/bench.py --arms current --filter binary_trees weak_tree
   scripts/bench.py --arms current --save-baseline tests/bench/results/dream-baseline.json
   scripts/bench.py --arms current --gate tests/bench/results/dream-baseline.json
@@ -36,8 +38,10 @@ from benchmarks import gate as bench_gate, stats as bench_stats
 from benchmarks.process import dream_name, peak_working_set, with_exe
 
 ROOT = Path(__file__).resolve().parent.parent
-BENCH = ROOT / "tests/bench/microbenches.dream"
-CSHARP = ROOT / "tests/bench/csharp"
+SUITES = {
+    "micro": (ROOT / "tests/bench/microbenches.dream", ROOT / "tests/bench/csharp"),
+    "macro": (ROOT / "tests/bench/macro/macrobenches.dream", ROOT / "tests/bench/macro/csharp"),
+}
 # Rows below this are timer noise or a deleted loop and cannot substantiate a claim.
 MIN_NS_PER_OP = 0.25
 
@@ -45,7 +49,11 @@ MIN_NS_PER_OP = 0.25
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--target", choices=["native", "wasm"], default="native")
-    p.add_argument("--benchmark", type=Path, default=BENCH, help="fixture path, including a preserved campaign snapshot")
+    p.add_argument("--suite", choices=sorted(SUITES), default="micro",
+                   help="fixture and C# twin pair; --benchmark/--csharp override either path")
+    p.add_argument("--benchmark", type=Path, help="fixture path, including a preserved campaign snapshot")
+    p.add_argument("--csharp", type=Path,
+                   help="C# twin project directory (Program.cs + DreamBench.csproj) for the fixture")
     p.add_argument("--node", default=shutil.which("node"), help="Node executable for wasm measurements")
     p.add_argument("--diagnostics", action="store_true", help="save optimized IR and first-pass LLVM remarks")
     p.add_argument("--arms", nargs="+", default=["current", "csharp"],
@@ -63,7 +71,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--gate", help="compare current against the saved reference in paired rounds")
     p.add_argument("--runner-id", default=os.environ.get("DREAM_BENCH_RUNNER_ID"), help="controlled runner identity (required for gating)")
     p.add_argument("--input-seed", type=int, default=1)
-    return p.parse_args()
+    args = p.parse_args()
+    args.benchmark = args.benchmark or SUITES[args.suite][0]
+    args.csharp = args.csharp or SUITES[args.suite][1]
+    return args
 
 
 def run(cmd, cwd=None, env=None):
@@ -294,9 +305,9 @@ def main() -> int:
     if not 0 <= args.regression_threshold < 1:
         raise ValueError("invalid regression threshold")
     args.benchmark_source = args.benchmark.read_bytes()
-    args.csharp_source = (CSHARP / "Program.cs").read_bytes()
-    args.csharp_project = (CSHARP / "DreamBench.csproj").read_bytes()
-    compatibility = bench_gate.identity(args.benchmark, CSHARP / "Program.cs", args.runner_id,
+    args.csharp_source = (args.csharp / "Program.cs").read_bytes()
+    args.csharp_project = (args.csharp / "DreamBench.csproj").read_bytes()
+    compatibility = bench_gate.identity(args.benchmark, args.csharp / "Program.cs", args.runner_id,
                                         args.input_seed, args.passes, args.target, args.benchmark_source)
     if args.gate or args.save_baseline:
         if os.environ.get("DREAM_NATIVE_SANITIZE"):
@@ -394,11 +405,14 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) > 1 and sys.argv[1] in ("build", "generators"):
+        if len(sys.argv) > 1 and sys.argv[1] in ("build", "generators", "profile"):
             command = sys.argv.pop(1)
             if command == "build":
                 from benchmarks import build
                 sys.exit(build.main())
+            if command == "profile":
+                from benchmarks import profile
+                sys.exit(profile.main())
             from benchmarks import generators
             sys.exit(generators.main())
         sys.exit(main())

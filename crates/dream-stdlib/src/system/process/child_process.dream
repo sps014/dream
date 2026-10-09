@@ -135,14 +135,7 @@ public class ChildProcess {
             }
             let need = n + chunk.length;
             if need > acc.length {
-                let cap = acc.length;
-                if cap < 1 {
-                    cap = chunk.length;
-                }
-                while cap < need {
-                    cap = cap * 2;
-                }
-                acc = Buffer.realloc<byte>(acc, cap);
+                acc = Buffer.realloc<byte>(acc, grow_capacity(acc.length, need));
             }
             let i = 0;
             while i < chunk.length {

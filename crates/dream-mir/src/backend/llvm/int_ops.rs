@@ -139,7 +139,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         }
     }
 
-    fn panic_if(&mut self, cond: &Value, msg: &str) {
+    pub(super) fn panic_if(&mut self, cond: &Value, msg: &str) {
         let bad = self.w.new_block("panic");
         let ok = self.w.new_block("ok");
         self.w.cond_br(cond, bad, ok);

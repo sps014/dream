@@ -249,7 +249,7 @@ class MeasurementTests(unittest.TestCase):
         args = argparse.Namespace(
             counters=False, gate=None, save_baseline=None, arms=['current'],
             warmup=1, rounds=1, passes=1, input_seed=1, target='native',
-            regression_threshold=.1, benchmark=self.fixture, runner_id='test',
+            regression_threshold=.1, benchmark=self.fixture, csharp=bench.SUITES['micro'][1], runner_id='test',
             filter=[], out=str(self.root / 'output'), current_dream='compiler',
             baseline_dream='compiler',
         )

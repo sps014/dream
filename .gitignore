@@ -65,6 +65,8 @@ sample/sqlite/*.db
 # C# microbench side-by-side harness
 tests/bench/csharp/bin/
 tests/bench/csharp/obj/
+tests/bench/macro/csharp/bin/
+tests/bench/macro/csharp/obj/
 tests/bench/out/
 .tmp-agent/
 

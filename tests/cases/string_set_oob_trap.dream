@@ -1,0 +1,10 @@
+// Writing one past the end through the string indexer must panic, not grow or corrupt the string.
+import system;
+
+fun main(): void {
+    let s = 123.to_string();
+    s[2] = '9';
+    System.println(s);
+    s[3] = '9';
+    System.println("after");
+}

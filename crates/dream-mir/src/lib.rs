@@ -507,10 +507,12 @@ pub enum Rvalue {
     /// Address of the string's UTF-16 payload bytes (slice parent or inline units). The bits are a
     /// host pointer stored in an `int` local, widened to pointer size on native.
     StrBytes(Operand),
-    /// Byte load `ptr[index]`. `ptr` is a [`Self::StrBytes`] result.
-    LoadU8(Operand, Operand),
-    /// UTF-16 code-unit load `ptr[index]`. `ptr` is a [`Self::StrBytes`] result.
-    LoadU16(Operand, Operand),
+    /// Byte load `ptr[index]`. `ptr` is a [`Self::StrBytes`] result. A `Some` bound is the
+    /// string's [`Self::StrLen`]; the load panics unless `index < 2 * bound`.
+    LoadU8(Operand, Operand, Option<Operand>),
+    /// UTF-16 code-unit load `ptr[index]`. `ptr` is a [`Self::StrBytes`] result. A `Some` bound
+    /// is the string's [`Self::StrLen`]; the load panics unless `index < bound`.
+    LoadU16(Operand, Operand, Option<Operand>),
     /// `Buffer.alloc<T>(len)` — allocate a zero-initialized `T[]` block of a runtime length.
     /// `closure_env` allocates a `TAG_CLOSURE_ENV` block (see `HExprKind::ArrayNew`); it rides on the
     /// rvalue so passes that move the allocation into a temp cannot drop the tag.

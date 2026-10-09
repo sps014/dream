@@ -214,9 +214,12 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
-        | Rvalue::ByteAt(a, b, _)
-        | Rvalue::LoadU8(a, b)
-        | Rvalue::LoadU16(a, b) => subst_operand(a, known) | subst_operand(b, known),
+        | Rvalue::ByteAt(a, b, _) => subst_operand(a, known) | subst_operand(b, known),
+        Rvalue::LoadU8(a, b, n) | Rvalue::LoadU16(a, b, n) => {
+            subst_operand(a, known)
+                | subst_operand(b, known)
+                | n.as_mut().is_some_and(|n| subst_operand(n, known))
+        }
         Rvalue::Concat(parts) => parts
             .iter_mut()
             .fold(false, |acc, p| acc | subst_operand(p, known)),

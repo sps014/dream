@@ -40,10 +40,7 @@ public class StringBuilder {
     // Grows the backing buffer to at least `min_capacity` bytes via in-place realloc when possible.
     @inline
     fun grow(min_capacity: int): void {
-        let new_cap = this.cap * 2;
-        if new_cap < min_capacity {
-            new_cap = min_capacity;
-        }
+        let new_cap = grow_capacity(this.cap, min_capacity);
         this.bytes = Buffer.realloc<byte>(this.bytes, new_cap);
         this.cap = new_cap;
     }

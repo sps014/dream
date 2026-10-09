@@ -74,14 +74,12 @@ dream_ptr dream_byte_to_string(int32_t v) {
 static dream_ptr bool_intern[2];
 
 static dream_ptr intern_bool(int32_t v) {
-    dream_ptr slot = bool_intern[v ? 1 : 0];
-    if (!slot) {
-        dream_ptr s = from_utf8(v ? "true" : "false");
-        dream_pin_immortal(s);
-        bool_intern[v ? 1 : 0] = s;
-        return s;
+    dream_ptr *slot = &bool_intern[v ? 1 : 0];
+    dream_ptr s = dream_singleton_get(slot);
+    if (DREAM_UNLIKELY(!s)) {
+        s = dream_singleton_publish(slot, from_utf8(v ? "true" : "false"));
     }
-    return slot;
+    return s;
 }
 
 dream_ptr dream_bool_to_string(int32_t v) {

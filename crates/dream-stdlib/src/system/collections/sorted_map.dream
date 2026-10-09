@@ -50,10 +50,7 @@ public class SortedMap<K : Comparable<K>, V> {
 
     fun grow(): void {
         let old_cap = this.keys_arr.length;
-        let new_cap = old_cap * 2;
-        if new_cap < sequence_min_capacity() {
-            new_cap = sequence_min_capacity();
-        }
+        let new_cap = grow_capacity(old_cap, old_cap + 1);
         this.keys_arr = Buffer.realloc<K>(this.keys_arr, new_cap);
         this.values_arr = Buffer.realloc<V>(this.values_arr, new_cap);
     }

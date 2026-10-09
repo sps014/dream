@@ -5,20 +5,29 @@
 
 static dream_ptr empty_string_singleton;
 
+dream_ptr dream_singleton_publish(dream_ptr *slot, dream_ptr fresh) {
+    dream_ptr expected = 0;
+    dream_pin_immortal(fresh);
+    if (__atomic_compare_exchange_n(slot, &expected, fresh, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+        return fresh;
+    }
+    return expected;
+}
+
 dream_ptr dream_string_alloc(int32_t units) {
     dream_ptr p;
     if (units <= 0) {
         /* Immortal shared empty string: callers release through ordinary ARC, so the
          * cached block is pinned (rc == DREAM_RC_IMMORTAL is ignored by retain/release).
          * Immutable + zero units means sharing is invisible. */
-        if (!empty_string_singleton) {
+        p = dream_singleton_get(&empty_string_singleton);
+        if (DREAM_UNLIKELY(!p)) {
             p = dream_malloc(8, TAG_STRING);
             dream_i32(p)[0] = 0;
             dream_str_init_owned(p);
-            dream_pin_immortal(p);
-            empty_string_singleton = p;
+            p = dream_singleton_publish(&empty_string_singleton, p);
         }
-        return empty_string_singleton;
+        return p;
     }
     p = dream_malloc(dream_string_bytes(units), TAG_STRING);
     dream_i32(p)[0] = units;
@@ -80,11 +89,14 @@ dream_ptr dream_sb_buffer(int32_t capacity) {
 }
 
 __attribute__((cold, noinline)) dream_ptr dream_sb_grow_bytes(dream_sb *sb, dream_ptr bytes,
-                                                              int32_t need) {
+                                                              int64_t need) {
     int32_t cap = bytes ? dream_i32(bytes)[0] : 0;
     int32_t new_cap = cap <= INT32_MAX / 2 ? cap * 2 : INT32_MAX;
+    if (DREAM_UNLIKELY(need > INT32_MAX)) {
+        DREAM_PANIC_LITERAL(u"panic: string builder length exceeds the supported limit");
+    }
     if (new_cap < need) {
-        new_cap = need;
+        new_cap = (int32_t)need;
     }
     bytes = sb_realloc_no_zero(bytes, new_cap);
     if (sb) {
@@ -273,8 +285,13 @@ dream_ptr string_from_utf8(dream_ptr bytes) {
 }
 
 dream_ptr string_from_utf8_prefix(dream_ptr bytes, int32_t len) {
+    int32_t count;
     if (!bytes || len <= 0) {
         return dream_string_alloc(0);
+    }
+    count = dream_i32(bytes)[0];
+    if (len > count) {
+        len = count;
     }
     return utf8_to_utf16((const uint8_t *)((char *)dream_p(bytes) + 4), len);
 }
@@ -295,11 +312,14 @@ dream_ptr string_from_utf8_prefix_n(dream_ptr bytes, int32_t len, int32_t scalar
     if (len == 0) {
         return dream_string_alloc(0);
     }
-    if (scalars < 0) {
+    /* The unit count never exceeds what `len` bytes hold, and the copy never exceeds the
+     * allocation, whatever `scalars` claims. */
+    if (scalars < 0 || scalars > (len >> 1)) {
         scalars = len >> 1;
     }
     p = dream_string_alloc(scalars);
-    memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, (char *)dream_p(bytes) + 4, (size_t)len);
+    memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, (char *)dream_p(bytes) + 4,
+           (size_t)scalars * 2u);
     return p;
 }
 

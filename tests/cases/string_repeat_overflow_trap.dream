@@ -1,0 +1,9 @@
+// A repeat whose byte size overflows int must panic instead of wrapping into a short buffer.
+import system;
+
+fun main(): void {
+    let s = "abcd";
+    System.println(s.repeat(2));
+    System.println(s.repeat(400000000).length);
+    System.println("after");
+}

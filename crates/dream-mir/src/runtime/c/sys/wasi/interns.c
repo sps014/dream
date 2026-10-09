@@ -20,15 +20,15 @@ static dream_ptr intern_latin1(const char *text) {
     for (int32_t i = 0; i < n; i++) {
         units[i] = (uint16_t)(unsigned char)text[i];
     }
-    dream_pin_immortal(s);
     return s;
 }
 
 static int32_t intern_slot(int32_t slot, const char *text) {
-    if (!interned[slot]) {
-        interned[slot] = intern_latin1(text);
+    dream_ptr s = dream_singleton_get(&interned[slot]);
+    if (!s) {
+        s = dream_singleton_publish(&interned[slot], intern_latin1(text));
     }
-    return (int32_t)interned[slot];
+    return (int32_t)s;
 }
 
 int32_t intern_empty(void) { return intern_slot(0, ""); }

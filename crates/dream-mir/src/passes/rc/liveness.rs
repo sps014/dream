@@ -226,11 +226,16 @@ fn add_rvalue_reads(rv: &Rvalue, live: &mut IndexSet<u32>) {
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
-        | Rvalue::ByteAt(a, b, _)
-        | Rvalue::LoadU8(a, b)
-        | Rvalue::LoadU16(a, b) => {
+        | Rvalue::ByteAt(a, b, _) => {
             add(a);
             add(b);
+        }
+        Rvalue::LoadU8(a, b, n) | Rvalue::LoadU16(a, b, n) => {
+            add(a);
+            add(b);
+            if let Some(n) = n {
+                add(n);
+            }
         }
         Rvalue::Concat(parts) => {
             for p in parts {

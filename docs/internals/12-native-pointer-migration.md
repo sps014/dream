@@ -144,7 +144,7 @@ zero-cost operations. Re-measure after migration with the same executable flags,
 source and warmup protocol, ideally with other builds stopped. Investigate material
 regressions instead of requiring an arbitrary improvement percentage.
 
-The C hotpath uses the source set and protocol in `scripts/bench-runtime.sh`:
+The historical C hotpath used a separate minimum-based harness, now retired. Current runtime attribution uses `scripts/bench.py --arms current --counters`:
 `-O3 -flto -march=native`, minimum of five runs for each kernel. The pinned LLVM
 22 clang's LTO objects cannot be read by this machine's Apple LLVM 21 linker
 (`Unknown attribute kind (105)`), so this separate baseline used Apple clang

@@ -29,7 +29,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: scripts/fetch-dev-llvm.sh
       - run: cargo build --locked --release -p dream --bin dream
-      - run: python3 scripts/bench-compare.py --arms current --rounds 10 --passes 5 --out target/performance
+      - run: python3 scripts/bench.py --arms current --rounds 20 --passes 10 --out target/performance
       - name: Publish samples for inspection
         if: always()
         uses: actions/upload-artifact@v4
@@ -54,7 +54,7 @@ jobs:
           test -n "$DREAM_BENCH_RUNNER_ID"
           test -f "$DREAM_PERF_REFERENCE"
       - run: cargo build --locked --release -p dream --bin dream
-      - run: python3 scripts/bench-compare.py --arms current --rounds 20 --passes 5 --gate "$DREAM_PERF_REFERENCE" --out target/performance-gate
+      - run: python3 scripts/bench.py --arms current --rounds 20 --passes 10 --gate "$DREAM_PERF_REFERENCE" --out target/performance-gate
       - name: Preserve gate evidence
         if: always()
         uses: actions/upload-artifact@v4

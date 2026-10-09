@@ -1,0 +1,36 @@
+import system;
+
+fun count_paths(n: int): int {
+    if n < 2 { return n; }
+    return count_paths(n - 1) + count_paths(n - 2);
+}
+
+fun signed_sum(n: int): int {
+    if n < 2 { return n * 3; }
+    return signed_sum(n - 1) - signed_sum(n - 2);
+}
+
+fun duplicate(n: int, x: double): double {
+    if n < 1 { return x; }
+    return duplicate(n - 1, x) + duplicate(n - 1, x);
+}
+
+fun wrap_sum(n: int, x: int): int {
+    if n < 1 { return x; }
+    return wrap_sum(n - 1, x) + wrap_sum(n - 1, x);
+}
+
+fun main() {
+    System.println(count_paths(-7));
+    System.println(count_paths(0));
+    System.println(count_paths(1));
+    System.println(count_paths(10));
+    System.println(count_paths(20));
+    System.println(signed_sum(12));
+    System.println(wrap_sum(1, 2147483647));
+    let infinity: double = (double)1 / (double)0;
+    System.println((double)1 / duplicate(3, -(double)0) == -infinity);
+    System.println(duplicate(3, infinity) == infinity);
+    let nan = duplicate(3, infinity - infinity);
+    System.println(nan != nan);
+}

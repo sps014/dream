@@ -5,7 +5,7 @@ native/Node inventory, optimization mechanisms, attribution and acceptance resul
 
 ## Measurement protocol (read before comparing numbers)
 
-Use `scripts/bench-compare.py` for regression decisions. Timing runs compile without runtime
+Use `scripts/bench.py` for regression decisions. Timing runs compile without runtime
 counters. `--counters` builds a separate instrumented runtime for attribution and cannot create
 or pass a performance reference.
 
@@ -16,12 +16,14 @@ includes the engine and JIT. Rebuild references after changing the fixture or ha
 `--benchmark <path>` selects a preserved fixture snapshot; each invocation reads it once for
 all arms and fingerprints those exact bytes, so editing the live fixture cannot mix arm inputs.
 `--diagnostics` also saves first-pass remarks and optimized IR, plus native assembly or WAT;
+C# diagnostics save JIT disassembly for n-body, Fibonacci and quicksort. .NET SDK, host and
+installed runtime binaries are fingerprinted alongside the benchmark assembly.
 `build.json` records compile duration and artifact size. Compile duration includes diagnostic
 emission when requested and must be compared with matching flags.
 
 `gate.json` distinguishes regression acceptance (`decision`) from a demonstrated speedup
 (`improvement`: the upper bound of the paired ratio's 95% interval is below 1.0). Passing the
-10% regression gate alone does not establish a win.
+5% regression gate alone does not establish a win.
 
 The fixture includes `closure_dispatch`, `async_poll`, `scheduler_queue`, `set_probe` and
 `set_clear_reuse` (42 workloads in total). Runtime attribution
@@ -31,26 +33,26 @@ weak/region counters. Immortal no-op retain/releases are included; these are hel
 not an instruction count. Attribution runs remain separate from timing runs.
 
 ```sh
-scripts/bench-compare.py --target wasm --arms current --runner-id controlled-runner \
+scripts/bench.py --target wasm --arms current --runner-id controlled-runner \
   --save-baseline target/wasm-reference.json
-scripts/bench-compare.py --target wasm --arms current --runner-id controlled-runner \
+scripts/bench.py --target wasm --arms current --runner-id controlled-runner \
   --gate target/wasm-reference.json --rounds 20
-scripts/bench-compare.py --target wasm --arms current --counters --rounds 1 --passes 1
+scripts/bench.py --target wasm --arms current --counters --rounds 1 --passes 1
 ```
 
 Use a quiet, controlled runner with a stable `--runner-id`. Arms rotate across process starts;
-a discarded warmup precedes ten measured rounds with five passes each. A round contributes its
+two discarded warmups precede twenty measured rounds with ten passes each. A round contributes its
 median pass time. The gate bootstraps paired current/reference round ratios and reports their
-95% confidence interval: an upper bound at or below 1.10 passes, a lower bound above 1.10 fails,
+95% confidence interval: an upper bound at or below 1.05 passes, a lower bound above 1.05 fails,
 and an overlapping interval is inconclusive (exit 2). Inconclusive measurements can be repeated
-with `--rounds 20`. Neither minima nor noisy hosted-runner results establish acceptance.
+with `--rounds 40` after resolving background load. Neither minima nor noisy hosted-runner results establish acceptance.
 
 Recompile historical Dream against the current fixtures before recording a reference:
 
 ```sh
-scripts/bench-compare.py --arms baseline current --runner-id controlled-runner \
+scripts/bench.py --arms baseline current --runner-id controlled-runner \
   --save-baseline target/perf-reference.json
-scripts/bench-compare.py --arms current --runner-id controlled-runner \
+scripts/bench.py --arms current --runner-id controlled-runner \
   --gate target/perf-reference.json
 ```
 
@@ -59,7 +61,7 @@ hardware identity, compiler hashes, tool identities and per-process peak RSS. It
 reference executable and replays that executable in paired control rounds when gating. Keep its
 linked host libraries available. References from another runner or fixture version, corrupted
 executables, invalid timing rows and incomplete measurements are rejected. Old median-only
-reference files must be regenerated. Peak current RSS must remain within 10% of the live control.
+reference files must be regenerated. Peak current RSS must remain within 5% of the live control.
 
 Dream and C# comparisons are reported separately from Dream regression decisions. Both arms use
 `DREAM_BENCH_SEED` for matched runtime-generated inputs. The comparator derives fractional
@@ -76,17 +78,25 @@ the timer and a clean heap beforehand. Forced full collections add synthetic ove
 this row does not model normal GC scheduling or establish a general ARC/GC ranking.
 The reclamation row runs last so its forced GC cannot perturb other rows in that pass.
 
-| Bench | Dream | C# |
-|-------|-------|-----|
-| `char_scan` | indexed `char_at` over UTF-16 code units | indexed `s[j]` over the same units |
-| `byte_scan` | `byte_at` walk of UTF-16 LE payload (`byte_size` = 2 × `length`) | same payload, `MemoryMarshal.AsBytes` (two bytes per code unit) |
-| `substring` | `substring(start, end)`, an O(1) slice | `AsSpan(start, length)`, the same slice (not `Substring`, which copies) |
-| `sieve` | scalar loop writes `flags[t] = 1` | same scalar fill (not `Array.Fill`) |
-| `scratch_arena` | `bump` / `set_at` / `at` (no Span RC) | same index API |
-| `regex_find` | Global `[a-z]+\d+` via PCRE2 JIT (not bare `\d+`) | same pattern, interpreted `Regex` (not source-generated or `Compiled`) |
-| `json_serialize` / `json_deserialize` | Nested `@json` User+Address, payload built once; deserialize text outside timer; scale `/10` | `System.Text.Json` source generation |
-| `arr_add` | Scalar `c[i]=a[i]+b[i]` (`float[]`+`int[]`, n=256); Dream autovecs to `v128` | same scalar `for` (RyuJIT autovec) |
-| `vec_add` | `Vector<float>` stride + scalar tail (`count()` lanes; WASM `v128` locals) | `System.Numerics.Vector<float>` |
+The span rows use stack views on both sides. Owned substring is a separate contract: Dream
+retains a slice and C# copies. Array and vector addition consume checksums of every output
+outside the timer. Every row emits exact elapsed nanoseconds, iteration counts and a result
+checksum; mismatched outputs or counts invalidate the comparison. Confidence intervals use
+process medians, never independent resampling of correlated passes.
+
+There is one entry point:
+
+```sh
+scripts/bench.py                       # native Dream vs C#, paired 20 × 10
+scripts/bench.py --arms current        # Dream inventory without .NET
+scripts/bench.py build --help          # cold, edited and cached compiler builds
+scripts/bench.py generators --help     # isolated source-generator cache measurements
+```
+
+The old minimum-based C hotpath harness is retired as a measurement entry point. Language
+workloads exercise the allocator, weak references, strings and queues with matched inputs.
+Counter runs attribute mechanisms but cannot establish latency wins. Different lifecycle/engine
+contracts are explicitly marked and excluded from suite-wide C# victory claims.
 
 ## Campaign snapshots (Dream ns/op)
 
@@ -146,7 +156,7 @@ Representative Dream vs C# after those opts (same host):
 
 ### After (JSON benches, autovec, `Vector<T>`)
 
-Same host as `./scripts/run-microbenches.sh`. `arr_add` is the autovec row (`f32x4.add` /
+Same host as `./scripts/bench.py`. `arr_add` is the autovec row (`f32x4.add` /
 `i32x4.add` in `--release` WAT plus a scalar remainder). `vec_add` is explicit `Vector<T>`
 and currently pays extra `v128` store/reload through struct sret (not a register SIMD loop
 like RyuJIT).
@@ -164,7 +174,7 @@ like RyuJIT).
 
 ### After (`Vector` `v128` locals, typed JSON parse, Pike skip)
 
-Same host as `./scripts/run-microbenches.sh`. Owning `Vector<T>` is a WASM `v128` local
+Same host as `./scripts/bench.py`. Owning `Vector<T>` is a WASM `v128` local
 (`v128.load` / lane op / `v128.store`; inlined `this` included). `json_deserialize<T>`
 fills `T` from `JsonParser` (`from_json_parser_text`); `Json.deserialize<JsonValue>` / `from_json` stay for
 the dynamic tree. `regex_find` is still Pike `[a-z]+\d+` (ASCII byte skip when the hint is
@@ -185,7 +195,7 @@ kind 5/7). `"hello" + i.to_string() + "world"` is `$concat_str_int_str`.
 
 Heap `string` is UTF-16 LE code units (C#/JS `char` indexing). `.length` / `char_at` /
 `substring` are O(1) `i32.load` / `i32.load16_u` / `memory.copy`. Same host as
-`./scripts/run-microbenches.sh`.
+`./scripts/bench.py`.
 
 | Bench | Dream | C# | vs prior Dream |
 |-------|------:|---:|----------------|
@@ -205,7 +215,7 @@ Heap `string` is UTF-16 LE code units (C#/JS `char` indexing). `.length` / `char
 the per-index `ge_u` on `while (i < s.length)` / `byte_size` loops (including interned
 literals). Same-type forwarding copies (`let b = a`) are RC cursors. Unmanaged `Map`/`Set.clear`
 bumps an occupancy epoch instead of `memory.fill`. `map_get_set` uses `get_or` (C# `TryGetValue`).
-Same host as `./scripts/run-microbenches.sh`.
+Same host as `./scripts/bench.py`.
 
 | Bench | Dream | C# | vs C# |
 |-------|------:|---:|-------|
@@ -239,7 +249,7 @@ Same host as `./scripts/run-microbenches.sh`.
 > ns/op — beats C# (1.7-2.0k)**; binary_trees ~57-70k; arc_locals 7→6; no regressions
 > elsewhere. Per list hop: 3 RMWs + 2 calls → 1 RMW + 1 transition-only call.
 
-Same host, `./scripts/run-microbenches.sh` — now a **three-way** table: Dream native C
+Same host, `./scripts/bench.py` — now a **three-way** table: Dream native C
 (cc -O3; `-flto` is only passed on Linux — `host_cc_opt_flags` drops it on macOS and Windows,
 so these macOS numbers are without LTO), Dream wasm32 under Node (`--wasm --release --runtime --node`), C# RyuJIT.
 Also records `.wasm`/gz/br sizes at `-O3`/`-Os`/`-Oz` into `out/wasm_sizes.txt`.
@@ -292,7 +302,7 @@ arrays use `List.take_array`. Serialize starts `StringBuilder` at 256 bytes; `wr
 `bench_vec_add`). Builder finish copies from a reserved pad word (`$string_from_builder`).
 
 `--release` WAT: `$RegexVM_find` has no `array_new`; `$JsonParser_parse_int` has no `JsonValue`;
-`$bench_vec_add` has `f32x4.add` and 0 sret. Same host as `./scripts/run-microbenches.sh`.
+`$bench_vec_add` has `f32x4.add` and 0 sret. Same host as `./scripts/bench.py`.
 
 | Bench | Dream | C# | vs prior Dream / vs C# |
 |-------|------:|---:|------------------------|
@@ -435,16 +445,16 @@ Notes, honestly:
   sub-ns rows (`sum_options`, `list_push`, `list_clear_reuse`, `scratch_arena`) move in 0.05 ns
   timer steps. C# rows swung widely between reps under this load; treat the C# column as
   indicative only.
-- The `byte_scan` C# cell in the table above (20.9 ns) walked code units (`s[j]` over `s.Length`), half of Dream's payload-byte trip count, so the ~3× gap was the bench. C# now walks the UTF-16 LE bytes (`MemoryMarshal.AsBytes`), the same accesses as Dream `byte_at`. One Release run of that loop reported 39 ns/op against Dream's 62 ns min above. The scan now hoists the payload pointer (`dream_str_bytes` once per outer iteration, then a raw byte load). A matching loop with the sink call timed 15 ns/op. Re-run `./scripts/run-microbenches.sh` before replacing the table cell.
+- The `byte_scan` C# cell in the table above (20.9 ns) walked code units (`s[j]` over `s.Length`), half of Dream's payload-byte trip count, so the ~3× gap was the bench. C# now walks the UTF-16 LE bytes (`MemoryMarshal.AsBytes`), the same accesses as Dream `byte_at`. One Release run of that loop reported 39 ns/op against Dream's 62 ns min above. The scan now hoists the payload pointer (`dream_str_bytes` once per outer iteration, then a raw byte load). A matching loop with the sink call timed 15 ns/op. Re-run `./scripts/bench.py` before replacing the table cell.
 
 The tables above predate the LLVM backend; `dream run` now builds through it (see
 [`docs/internals/06-llvm-backend.md`](../../docs/internals/06-llvm-backend.md)). Re-run
-`./scripts/run-microbenches.sh` before comparing against them.
+`./scripts/bench.py` before comparing against them.
 
 Raw logs: `out/native.txt`, `out/csharp.txt`, `out/compare.txt`.
 
 ```bash
-./scripts/run-microbenches.sh
+./scripts/bench.py
 # or
 dream --release run tests/bench/microbenches.dream
 # C# only:

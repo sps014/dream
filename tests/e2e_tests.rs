@@ -161,7 +161,8 @@ fn run_native_case(dream_file: &Path) {
     };
 
     let ll_str = ll_path.to_str().unwrap();
-    let timeout_secs = 30;
+    // Cold native launches can stall on loaded hosts; match the full golden probe deadline.
+    let timeout_secs = 180;
     let extra_args: &[&str] = if stem == "process_args_basic" {
         &["alpha", "beta"]
     } else {

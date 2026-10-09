@@ -172,7 +172,7 @@ node scripts/bundle-runtime.mjs            # writes runtime/dream.js
 node scripts/bundle-runtime.mjs --check    # fails if dream.js is stale
 
 # Fast default gate (unit tests + e2e smoke). DAP / wasm-opt / dreamer e2e behind --ignored:
-# C runtime hotpath: scripts/bench-runtime.sh; language benches: scripts/run-microbenches.sh
+# Runtime/language benchmarks: scripts/bench.py; compile builds: scripts/bench.py build
 
 cargo test --workspace
 cargo test --workspace -- --ignored

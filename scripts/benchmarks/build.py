@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 import time
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 WRAPPER = '''#!/usr/bin/env python3
 import fcntl,json,os,subprocess,sys,time
 from pathlib import Path
@@ -156,5 +156,3 @@ def main():
                     print(f"{key}: {row['seconds']:.3f}s {row['subprocesses']}", flush=True)
 
 
-if __name__ == "__main__":
-    main()

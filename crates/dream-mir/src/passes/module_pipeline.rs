@@ -50,6 +50,8 @@ pub(super) fn optimize_module_rounds(
     if inline {
         let _ = Devirt.run(mir, interner);
         dump.module(Devirt.name(), mir, interner);
+        let _ = inline::recursive::run(mir, interner);
+        dump.module("recursive-inline", mir, interner);
         let inliner = Inliner;
         for round in 0..max_rounds {
             let changed = inliner.run(mir, interner);
@@ -87,6 +89,8 @@ pub fn prepare_ownership(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirD
     let _ = FuncboxAbi.run(mir, interner);
     crate::prune_module(mir, interner);
     dump.module(FuncboxAbi.name(), mir, interner);
+    let _ = param_modes::run(mir, interner);
+    dump.module(param_modes::STAGE, mir, interner);
     ownership_args::run(mir, interner);
     dump.module(ownership_args::STAGE, mir, interner);
     let layouts = mir.layouts.clone();

@@ -107,7 +107,7 @@ levers (no SSO / `@stack` class / value collections):
 Authoring rule: borrow + move + dense memory + clear/reuse → ARC can beat gen0 on the *same*
 shapes; `new` + share a class graph every iteration will not.
 
-Measure: `./scripts/run-microbenches.sh` → `tests/bench/out/native.txt` / [`BASELINE.md`](https://github.com/sps014/dream/blob/main/tests/bench/BASELINE.md).
+Measure: `./scripts/bench.py` → `tests/bench/out/compare/summary.json` / [`BASELINE.md`](https://github.com/sps014/dream/blob/main/tests/bench/BASELINE.md).
 
 ## Raw-buffer memory model (verified)
 

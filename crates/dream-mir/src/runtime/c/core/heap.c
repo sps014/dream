@@ -292,6 +292,16 @@ static dream_ptr malloc_general(dream_size size, int32_t tag) {
             activate(block, tag);
             return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
         }
+    } else {
+        /* `dream_recycle_slow` returns every large block, private or shared, to the
+         * process-wide list; bump-allocating past it would never reuse freed buffers. */
+        heap_lock();
+        block = large_try_take(alloc_size);
+        heap_unlock();
+        if (block != NULL) {
+            activate(block, tag);
+            return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
+        }
     }
     block = tls_bump((size_t)alloc_size);
     *dream_block_size(block) = alloc_size;

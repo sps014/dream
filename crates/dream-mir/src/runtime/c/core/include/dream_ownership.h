@@ -26,13 +26,16 @@ typedef enum dream_counter {
     DREAM_COUNT_WEAK_REGISTER = 0,
     DREAM_COUNT_WEAK_INVALIDATE,
     DREAM_COUNT_REGION_OBJECTS,
+    DREAM_COUNT_RETAIN,
+    DREAM_COUNT_RELEASE,
+    DREAM_COUNT_ENQUEUE,
+    DREAM_COUNT_READY_ALLOC,
     DREAM_COUNT_LIMIT
 } dream_counter;
 extern uint64_t dream_runtime_counters[DREAM_COUNT_LIMIT];
 DREAM_ALWAYS_INLINE void dream_count(dream_counter k, uint64_t n) {
 #if defined(DREAM_RUNTIME_COUNTERS) && DREAM_RUNTIME_COUNTERS
-    uint64_t v = __atomic_load_n(&dream_runtime_counters[k], __ATOMIC_RELAXED);
-    __atomic_store_n(&dream_runtime_counters[k], v + n, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&dream_runtime_counters[k], n, __ATOMIC_RELAXED);
 #else
     (void)k;
     (void)n;

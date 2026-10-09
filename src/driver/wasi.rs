@@ -98,6 +98,10 @@ pub(crate) fn guest_include_dirs(root: &Path) -> Vec<PathBuf> {
     ]
 }
 
+// Generated functions inherit the signature anchor's features; its cache and runtime caches
+// must fingerprint the same policy as the C units.
+pub(crate) const GUEST_FEATURES: &[&str] = &["-mbulk-memory", "-mmutable-globals", "-msimd128"];
+
 pub(crate) struct GuestUnitOutput<'a> {
     pub stable_name: &'a str,
     pub bitcode: bool,
@@ -130,17 +134,13 @@ pub(crate) fn unit_command(
             "-fno-ident",
             "-fno-exceptions",
             "-fno-builtin",
-            // Bulk-memory + mutable-globals unconditionally: the guest libc lowers
-            // memcpy/memset to `memory.copy`/`memory.fill`, and wasm-opt already assumes
-            // these features in every emitted module.
-            "-mbulk-memory",
-            "-mmutable-globals",
             "-ffunction-sections",
             "-fdata-sections",
             "-frandom-seed=0",
             "-Wno-unused-value",
             "-DDREAM_WASM32",
         ]);
+        cmd.args(GUEST_FEATURES);
         if output.bitcode {
             cmd.arg("-emit-llvm");
         }

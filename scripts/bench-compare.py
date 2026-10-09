@@ -43,6 +43,10 @@ MIN_NS_PER_OP = 0.25
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--target", choices=["native", "wasm"], default="native")
+    p.add_argument("--benchmark", type=Path, default=BENCH, help="fixture path, including a preserved campaign snapshot")
+    p.add_argument("--node", default=shutil.which("node"), help="Node executable for wasm measurements")
+    p.add_argument("--diagnostics", action="store_true", help="save optimized IR and first-pass LLVM remarks")
     p.add_argument("--arms", nargs="+", default=["baseline", "current", "csharp"],
                    choices=["baseline", "current", "csharp"])
     p.add_argument("--current-dream", default=str(ROOT / "target/release/dream"))
@@ -80,6 +84,16 @@ def tool_versions(args) -> dict:
                 out[f"{arm}_version"] = run([exe, "--version"]).strip()
             except SystemExit:
                 out[f"{arm}_version"] = "unknown"
+    if args.target == "wasm":
+        if not args.node or not Path(args.node).is_file():
+            raise ValueError("wasm measurements require a Node executable")
+        out["node_sha256"] = bench_gate.digest(args.node)
+        out["node_version"] = run([args.node, "--version"]).strip()
+        registry = (ROOT / "crates/dream-abi/src/toolchain.rs").read_text()
+        version = re.search(r'BINARYEN_VERSION[^"\n]*"([^"]+)"', registry).group(1)
+        optimizer = Path(os.environ.get("DREAM_WASM_OPT", str(Path.home() / ".dream/toolchains" / f"binaryen-{version}" / "bin/wasm-opt")))
+        out["wasm_opt_sha256"] = bench_gate.digest(optimizer)
+        out["wasm_opt_version"] = run([str(optimizer), "--version"]).strip()
     tools = ROOT / "src/execution/llvm/tools.rs"
     m = re.search(r'LLVM_VERSION[^"]*"([^"]+)"', tools.read_text()) if tools.exists() else None
     out["llvm"] = m.group(1) if m else "unknown"
@@ -110,25 +124,54 @@ def baseline_source(src: str) -> str:
     return src
 
 
-def prepare_dream(arm: str, exe: str, out: Path, counters: bool = False) -> list[str]:
+def prepare_dream(arm: str, exe: str, out: Path, args) -> list[str]:
     exe = str(Path(exe).resolve())
     out = out.resolve()
     if not Path(exe).is_file():
         raise SystemExit(f"{arm}: dream binary not found at {exe}")
     work = out / arm
     work.mkdir(parents=True, exist_ok=True)
-    src = BENCH.read_text()
+    src = args.benchmark_source.decode("utf-8")
     if arm == "baseline":
         src = baseline_source(src)
     path = work / "microbenches.dream"
     if not path.exists() or path.read_text() != src:
         path.write_text(src)
-    compile_env = dict(os.environ, DREAM_RUNTIME_COUNTERS="1" if counters and arm == "current" else "0")
-    run([exe, "--release", str(path)], cwd=work, env=compile_env)
-    binary = work / "target/release/microbenches.bin"
-    if not binary.is_file():
-        raise SystemExit(f"{arm}: compile produced no {binary}")
-    return [str(binary)]
+    compile_env = dict(os.environ, DREAM_RUNTIME_COUNTERS="1" if args.counters else "0")
+    flags = ["--release"]
+    if args.diagnostics:
+        flags += ["--opt-remarks", "--emit-opt-ir"]
+    if args.target == "wasm":
+        flags += ["--wasm", "--node"]
+    started = time.monotonic()
+    run([exe, *flags, str(path)], cwd=work, env=compile_env)
+    artifacts = work / ("target/web" if args.target == "wasm" else "target/release")
+    if args.target == "wasm":
+        runtime = artifacts / "microbenches.node.runtime.js"
+        shutil.copy2(runtime, runtime.with_suffix(".mjs"))
+        runner = artifacts / "microbenches.mjs"
+        runner.write_text('import { run } from "./microbenches.node.runtime.mjs";\n'
+                          'import { fileURLToPath } from "node:url";\n'
+                          'await run(fileURLToPath(new URL("./microbenches.wasm", import.meta.url)), '
+                          '{ stdout: s => process.stdout.write(s) });\n')
+        command = [str(Path(args.node).resolve()), str(runner)]
+        artifact = artifacts / "microbenches.wasm"
+    else:
+        command = [str(artifacts / "microbenches.bin")]
+        artifact = Path(command[0])
+    if not artifact.is_file():
+        raise ValueError(f"{arm}: missing compiled artifact {artifact}")
+    elapsed = time.monotonic() - started
+    if args.diagnostics and args.target == "native":
+        version = re.search(r'LLVM_VERSION[^"\n]*"([^"]+)"', (ROOT / "src/execution/llvm/tools.rs").read_text()).group(1)
+        llvm = Path(os.environ.get("DREAM_LLVM", str(Path.home() / ".dream/toolchains" / f"llvm-{version}" / "bin")))
+        if (llvm / "bin").is_dir():
+            llvm /= "bin"
+        run([str(llvm / "llc"), "-O3", "-mcpu=native", "-filetype=asm",
+             str(artifact.with_suffix(".opt.ll")), "-o", str(artifact.with_suffix(".s"))])
+    (work / "build.json").write_text(json.dumps({"compile_seconds": elapsed,
+        "artifact_bytes": artifact.stat().st_size, "sha256": bench_gate.digest(artifact)}, indent=2) + "\n")
+    return command
 
 
 def prepare_csharp() -> list[str]:
@@ -253,7 +296,11 @@ def main() -> int:
     if args.warmup < 1 or args.rounds < 1 or args.passes < 1 or not 0 <= args.input_seed <= 2147483647:
         raise ValueError("invalid warmup, round, pass count or input seed")
     reference = None
-    compatibility = bench_gate.identity(BENCH, CSHARP / "Program.cs", args.runner_id, args.input_seed, args.passes)
+    if args.target == "wasm" and "csharp" in args.arms:
+        raise ValueError("wasm comparisons use Dream arms only; select --arms current or baseline current")
+    args.benchmark_source = args.benchmark.read_bytes()
+    compatibility = bench_gate.identity(args.benchmark, CSHARP / "Program.cs", args.runner_id,
+                                        args.input_seed, args.passes, args.target, args.benchmark_source)
     if args.gate or args.save_baseline:
         if os.environ.get("DREAM_NATIVE_SANITIZE"):
             raise ValueError("sanitizer instrumentation cannot form a timing reference or gate")
@@ -271,6 +318,10 @@ def main() -> int:
     identities = tool_versions(args)
     if reference:
         identities.update({key: value for key, value in reference['tools'].items() if key.startswith('baseline_')})
+        if args.target == "wasm":
+            for key in ("node_sha256", "node_version", "wasm_opt_sha256", "wasm_opt_version"):
+                if identities.get(key) != reference["tools"].get(key):
+                    raise ValueError(f"incompatible reference tool: {key}")
         for key in ('llvm', *(f'{name}_{suffix}' for name in ('clang', 'opt', 'llc', 'llvm-link') for suffix in ('sha256', 'version'))):
             if identities.get(key) != reference['tools'].get(key):
                 raise ValueError(f'incompatible reference tool: {key}')
@@ -281,10 +332,13 @@ def main() -> int:
             commands[arm] = prepare_csharp()
         else:
             exe = args.current_dream if arm == "current" else args.baseline_dream
-            commands[arm] = prepare_dream(arm, exe, out, args.counters)
+            commands[arm] = prepare_dream(arm, exe, out, args)
     for arm, command in commands.items():
-        artifact = Path(command[-1]) if arm == 'csharp' else Path(command[0])
+        artifact = (Path(command[-1]).with_suffix(".wasm") if args.target == "wasm"
+                    else Path(command[-1]) if arm == "csharp" else Path(command[0]))
         identities[f'{arm}_artifact_sha256'] = bench_gate.digest(artifact)
+        if args.target == "wasm":
+            identities[f"{arm}_runtime_sha256"] = bench_gate.digest(artifact.with_suffix(".node.runtime.mjs"))
     env = dict(os.environ, DREAM_BENCH_PASSES=str(args.passes), DREAM_BENCH_SEED=str(args.input_seed))
     dream_env = dict(env, DREAM_BENCH_COUNTERS="1" if args.counters else "0")
     samples: list[dict] = []
@@ -312,7 +366,7 @@ def main() -> int:
     summary, peak = summarize(samples, rss, args.arms, rng, set(args.filter))
     (out / "summary.json").write_text(json.dumps(
         {"tools": identities, "passes": args.passes, "rounds": args.rounds,
-         "peak_rss": peak, "benchmarks": summary}, indent=2))
+         "target": args.target, "peak_rss": peak, "benchmarks": summary}, indent=2))
     print_table(summary, peak, args.arms)
     print(f"\nraw samples: {raw_path}\nsummary: {out / 'summary.json'}")
     status = 0

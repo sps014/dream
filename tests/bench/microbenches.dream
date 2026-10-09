@@ -38,15 +38,15 @@ let bench_sink = BenchSink();
 // Ownership-runtime event deltas since the previous row (`DREAM_BENCH_COUNTERS=1`). A row's
 // counts include the setup that ran between the two reports. Names follow `dream_counter`.
 let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
-let counter_names = "weak_register,weak_invalidate,region_objects".split(',');
-let counter_last = Buffer.alloc<long>(4);
+let counter_names = "weak_register,weak_invalidate,region_objects,retain,release,enqueue,ready_alloc".split(',');
+let counter_last = Buffer.alloc<long>(8);
 
 fun counters_field(): string {
     if counters_on == false {
         return "";
     }
-    let out = " counters=allocs:" + (Debug.total_allocations - counter_last[3]).to_string();
-    counter_last[3] = Debug.total_allocations;
+    let out = " counters=allocs:" + (Debug.total_allocations - counter_last[7]).to_string();
+    counter_last[7] = Debug.total_allocations;
     let i = 0;
     while i < counter_names.length {
         let now = Debug.runtime_counter(i);
@@ -229,9 +229,6 @@ fun bench_substring_span(iters: int): void {
 
 fun bench_split_span(iters: int): void {
     let line = "alpha,beta,gamma,delta,epsilon,zeta,eta,theta";
-// bench-compare: current-only begin
-    let allocations = Debug.total_allocations;
-// bench-compare: current-only end
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
@@ -343,6 +340,47 @@ fun bench_map_clear_reuse(iters: int): void {
     sw.stop();
     report("map_clear_reuse", sw.elapsed_nanos, rounds * per);
     sink_int(map.capacity);
+}
+
+fun bench_set_probe(iters: int): void {
+    let set = Set<int>();
+    let sw = Stopwatch();
+    let i = 0;
+    while i < iters {
+        set.add(i);
+        i = i + 1;
+    }
+    let acc = 0;
+    i = 0;
+    while i < iters {
+        if set.contains(i) { acc = acc + 1; }
+        if set.remove(i) { acc = acc + 1; }
+        i = i + 1;
+    }
+    sw.stop();
+    report("set_probe", sw.elapsed_nanos, iters);
+    sink_int(acc + set.length);
+}
+
+fun bench_set_clear_reuse(iters: int): void {
+    let set = Set<int>(1024);
+    let rounds = 64;
+    let per = iters / rounds;
+    if per < 1 { per = 1; }
+    let sw = Stopwatch();
+    let r = 0;
+    while r < rounds {
+        let i = 0;
+        while i < per {
+            set.add(i);
+            i = i + 1;
+        }
+        set.clear();
+        r = r + 1;
+    }
+    sw.stop();
+    report("set_clear_reuse", sw.elapsed_nanos, rounds * per);
+    sink_int(set.capacity);
 }
 
 fun bench_alloc_churn(iters: int): void {
@@ -1180,6 +1218,59 @@ fun bench_sum_options(iters: int): void {
     sink_int(acc);
 }
 
+@noinline
+fun closure_offset(offset: int): fun(int): int {
+    return (value) => value + offset;
+}
+
+fun bench_closure_dispatch(iters: int): void {
+    let callback = closure_offset(int.parse(System.env_or("DREAM_BENCH_SEED", "1")).unwrap_or(1));
+    let total = 0;
+    let sw = Stopwatch();
+    sw.start();
+    let i = 0;
+    while i < iters {
+        total = total + callback(i);
+        i = i + 1;
+    }
+    sw.stop();
+    sink_int(total);
+    report("closure_dispatch", sw.elapsed_nanos, iters);
+}
+
+async fun scheduler_value(value: int): int {
+    return value + 1;
+}
+
+async fun bench_async_poll(iters: int): void {
+    let total = 0;
+    let sw = Stopwatch();
+    sw.start();
+    let i = 0;
+    while i < iters {
+        total = total + scheduler_value(i).await;
+        i = i + 1;
+    }
+    sw.stop();
+    sink_int(total);
+    report("async_poll", sw.elapsed_nanos, iters);
+}
+
+async fun bench_scheduler_queue(iters: int): void {
+    let total = 0;
+    let sw = Stopwatch();
+    sw.start();
+    let i = 0;
+    while i < iters {
+        let values = Promise.all([scheduler_value(i), scheduler_value(i + 1)]).await;
+        total = total + values[0] + values[1];
+        i = i + 1;
+    }
+    sw.stop();
+    sink_int(total);
+    report("scheduler_queue", sw.elapsed_nanos, iters);
+}
+
 fun run_suite(scale: int): void {
     // Counts are sized so each timed region lasts a few milliseconds. A 10µs
     // sample is one scheduling tick and moves tens of percent between runs.
@@ -1192,6 +1283,7 @@ fun run_suite(scale: int): void {
     // ---- call/dispatch/recursion ----
     bench_fib_rec(scale / 20);
     bench_iface_dispatch(scale * 12);
+    bench_closure_dispatch(scale * 12);
     // ---- ARC / allocator reality at scale ----
     bench_binary_trees(scale / 200);
     bench_binary_trees_alloc(scale / 200);
@@ -1215,6 +1307,8 @@ fun run_suite(scale: int): void {
     bench_map_get_set(scale * 35);
     bench_map_get_span(scale * 35);
     bench_map_clear_reuse(scale * 70);
+    bench_set_probe(scale * 35);
+    bench_set_clear_reuse(scale * 70);
     bench_list_clear_reuse(scale * 500);
     bench_alloc_churn(scale * 30);
     bench_scratch_arena(scale * 400);
@@ -1240,18 +1334,22 @@ fun bench_passes(): int {
     return n;
 }
 
-fun main(): void {
+async fun main(): void {
     let scale = 20000;
     // TCO sentinel: 5M-deep tail recursion must not overflow the stack (crashes if TCO broke).
     sink_int(tco_sum(5000000, 0));
     // Warmup (discard): mirrors C# JIT warmup so ratios are not cold-vs-hot.
     measuring = false;
     run_suite(scale);
+    bench_async_poll(scale).await;
+    bench_scheduler_queue(scale / 4).await;
     measuring = true;
     let p = 0;
     let passes = bench_passes();
     while p < passes {
         run_suite(scale);
+        bench_async_poll(scale).await;
+        bench_scheduler_queue(scale / 4).await;
         p = p + 1;
     }
     // Observing the sink keeps every `bench_sink` store live across the whole suite.

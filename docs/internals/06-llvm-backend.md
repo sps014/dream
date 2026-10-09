@@ -208,6 +208,27 @@ line markers; LLVM can inline after locations have become constant operands. LLV
 omits the input-path ModuleID comment. Prebuilt Dream-to-Dream library linking is not implemented;
 its future interface metadata must describe the hidden caller-location ABI explicitly.
 
+`--opt-remarks` writes `<stem>.remarks.yaml` from the actual first optimization pipeline,
+for both native and wasm32. It captures successful, missed and analysis remarks for GVN,
+LICM, loop/SLP vectorization and inlining. Requested remarks force compilation rather than
+replaying a cached build; O0 writes an empty file when no remark-producing pass runs.
+`scripts/llvm-remarks.py` groups these records by function, pass, reason and message,
+including clobber/callee arguments. Install `scripts/requirements-perf.txt` into a Python
+environment before using the summarizer. Re-running O3 over already optimized IR does not
+substitute for these first-pass records.
+
+The wasm signature anchor and C guest units share `GUEST_FEATURES` in `driver/wasi.rs`.
+SIMD128, bulk memory and mutable globals are enabled together; generated functions inherit
+the anchor's target attributes and wasm codegen explicitly enables SIMD128. Signature,
+runtime-bitcode and debug-object cache identities include this feature policy. No relaxed
+floating-point semantics or additional alias/overflow attributes follow from enabling SIMD.
+
+Ready-queue entries use bounded per-thread reusable storage, with ordinary allocation for
+bursts beyond 64 entries. Dequeue and cancellation return an entry only after unlinking it;
+the future's scheduler retain and poll/drop ordering are unchanged. Timer and foreign-thread
+completion entries retain their separate storage. The cache uses 1,536 bytes per native
+64-bit thread or 768 bytes per wasm32 thread, plus its bookkeeping; it retains no futures.
+
 Static archives include compiled native sources and any vendored runtime archive. A `.link.json`
 sidecar lists additional linker arguments for system libraries and required capability libraries.
 Shared libraries retain exactly the explicit exports and embedding API in their dynamic symbol

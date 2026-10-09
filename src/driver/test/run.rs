@@ -170,6 +170,7 @@ fn run_one_file(
         crate::execution::llvm::NativeBuildOptions {
             target: dream_abi::target::TargetSpec::host(),
             opt_ll: None,
+            opt_remarks: None,
             opt,
             debug: false,
             profile: dream_abi::profile::CompileProfile::from_release(opts.release),

@@ -1,10 +1,42 @@
 # Microbench baseline and C# parity notes
 
+The [2026-10-09 runtime hot-loop campaign](results/hotloops-2026-10-09.md) records the
+native/Node inventory, optimization mechanisms, attribution and acceptance results.
+
 ## Measurement protocol (read before comparing numbers)
 
 Use `scripts/bench-compare.py` for regression decisions. Timing runs compile without runtime
 counters. `--counters` builds a separate instrumented runtime for attribution and cannot create
 or pass a performance reference.
+
+`--target wasm --arms current` measures the same Dream workloads through Node. A wasm
+reference preserves the module, selective JS host and launcher together, and records Node
+and Binaryen identities. Native and wasm references are incompatible; Node process RSS
+includes the engine and JIT. Rebuild references after changing the fixture or harness.
+`--benchmark <path>` selects a preserved fixture snapshot; each invocation reads it once for
+all arms and fingerprints those exact bytes, so editing the live fixture cannot mix arm inputs.
+`--diagnostics` also saves first-pass remarks and optimized IR, plus native assembly or WAT;
+`build.json` records compile duration and artifact size. Compile duration includes diagnostic
+emission when requested and must be compared with matching flags.
+
+`gate.json` distinguishes regression acceptance (`decision`) from a demonstrated speedup
+(`improvement`: the upper bound of the paired ratio's 95% interval is below 1.0). Passing the
+10% regression gate alone does not establish a win.
+
+The fixture includes `closure_dispatch`, `async_poll`, `scheduler_queue`, `set_probe` and
+`set_clear_reuse` (42 workloads in total). Runtime attribution
+adds non-null retain/release helper events, accepted ready-queue enqueues and queue-node heap
+allocations to the existing
+weak/region counters. Immortal no-op retain/releases are included; these are helper events,
+not an instruction count. Attribution runs remain separate from timing runs.
+
+```sh
+scripts/bench-compare.py --target wasm --arms current --runner-id controlled-runner \
+  --save-baseline target/wasm-reference.json
+scripts/bench-compare.py --target wasm --arms current --runner-id controlled-runner \
+  --gate target/wasm-reference.json --rounds 20
+scripts/bench-compare.py --target wasm --arms current --counters --rounds 1 --passes 1
+```
 
 Use a quiet, controlled runner with a stable `--runner-id`. Arms rotate across process starts;
 a discarded warmup precedes ten measured rounds with five passes each. A round contributes its

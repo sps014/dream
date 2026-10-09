@@ -159,6 +159,7 @@ impl Compiler {
     ) -> Option<Vec<PathBuf>> {
         if self.virtual_entry.is_some()
             || self.emit_mir.is_some()
+            || self.opt_remarks
             || !self.toolchain_config.compiler_environment.is_empty()
         {
             return None;
@@ -316,7 +317,8 @@ impl Compiler {
         main_file_path: &str,
         out_path: &str,
     ) -> Option<BuildStamp> {
-        if self.emit_mir.is_some()
+        if self.opt_remarks
+            || self.emit_mir.is_some()
             || !self.toolchain_config.compiler_environment.is_empty()
             || !loaded.native_graph.sets.is_empty()
             || !loaded.cpp_bridge.is_empty()

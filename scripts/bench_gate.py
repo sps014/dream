@@ -12,7 +12,7 @@ import statistics
 import subprocess
 import tempfile
 
-VERSION = 2
+VERSION = 3
 
 
 def digest(path):
@@ -20,7 +20,8 @@ def digest(path):
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def identity(bench, csharp, runner, seed, passes):
+def identity(bench, csharp, runner, seed, passes, target="native", benchmark_source=None):
+    source = Path(bench).read_bytes() if benchmark_source is None else benchmark_source
     model = platform.processor()
     if platform.system() == 'Darwin':
         model = subprocess.check_output(['sysctl', '-n', 'hw.model', 'machdep.cpu.brand_string'], text=True).strip()
@@ -28,13 +29,14 @@ def identity(bench, csharp, runner, seed, passes):
         model = next((line.split(':', 1)[1].strip() for line in Path('/proc/cpuinfo').read_text().splitlines()
                       if line.startswith('model name') or line.startswith('Hardware')), model)
     return {
-        "benchmark": digest(bench), "csharp": digest(csharp),
+        "benchmark": hashlib.sha256(source).hexdigest(), "csharp": digest(csharp),
         "harness": {name: digest(Path(__file__).with_name(name))
                     for name in ('bench-compare.py', 'bench_gate.py')},
         "hardware": {"platform": platform.platform(), "machine": platform.machine(),
                      "processor": model, "cpus": os.cpu_count(), "runner": runner},
+        "target": target,
         "seed": seed, "passes": passes, "profile": "Release", "counters": False,
-        "names": sorted(set(re.findall(r'report\("([a-z0-9_]+)"', Path(bench).read_text())) | {"binary_trees", "binary_trees_reclaim"}),
+        "names": sorted(set(re.findall(r'report\("([a-z0-9_]+)"', source.decode("utf-8"))) | {"binary_trees", "binary_trees_reclaim"}),
     }
 
 
@@ -117,25 +119,37 @@ def save(path, root, compatibility, command, samples, arm, passes, rounds, rss, 
     validate_rows(processed, compatibility)
     validate_memory(rss[arm], rounds)
     validate_tools(tools, arm)
-    binary = Path(command[0])
-    binary_hash = digest(binary)
-    snapshot = root / "target/perf-references" / binary_hash / "benchmark.bin"
-    snapshot.parent.mkdir(parents=True, exist_ok=True)
-    if not snapshot.exists():
-        with tempfile.NamedTemporaryFile(dir=snapshot.parent, delete=False) as temporary:
-            temporary_binary = Path(temporary.name)
-        try:
-            shutil.copy2(binary, temporary_binary)
-            with temporary_binary.open("rb") as source:
-                os.fsync(source.fileno())
-            os.replace(temporary_binary, snapshot)
-        finally:
-            temporary_binary.unlink(missing_ok=True)
-    if digest(snapshot) != binary_hash:
-        raise ValueError("corrupt reference binary")
+    wasm = compatibility["target"] == "wasm"
+    if wasm:
+        for key in ("node_sha256", "wasm_opt_sha256", f"{arm}_runtime_sha256"):
+            if not isinstance(tools.get(key), str) or not re.fullmatch('[0-9a-f]{64}', tools[key]):
+                raise ValueError("missing wasm execution identity")
+    artifact = Path(command[-1]).with_suffix(".wasm") if wasm else Path(command[0])
+    sources = ([Path(command[-1]), artifact, artifact.with_suffix(".node.runtime.mjs")]
+               if wasm else [artifact])
+    bundle_hash = hashlib.sha256("".join(digest(p) for p in sources).encode()).hexdigest()
+    directory = root / "target/perf-references" / bundle_hash
+    directory.mkdir(parents=True, exist_ok=True)
+    files = {}
+    for source in sources:
+        snapshot = directory / source.name
+        if not snapshot.exists():
+            with tempfile.NamedTemporaryFile(dir=directory, delete=False) as temporary:
+                temporary_path = Path(temporary.name)
+            try:
+                shutil.copy2(source, temporary_path)
+                with temporary_path.open("rb") as contents:
+                    os.fsync(contents.fileno())
+                os.replace(temporary_path, snapshot)
+            finally:
+                temporary_path.unlink(missing_ok=True)
+        if digest(snapshot) != digest(source):
+            raise ValueError("corrupt reference artifact")
+        files[str(snapshot.resolve())] = digest(source)
+    replay = [command[0], str((directory / Path(command[-1]).name).resolve())] if wasm else [str((directory / artifact.name).resolve())]
     rng = random.Random(0x5eed)
     record = {"version": VERSION, "identity": compatibility,
-              "reference": {"binary": str(snapshot.resolve()), "sha256": binary_hash},
+              "reference": {"command": replay, "files": files},
               "tools": tools, "rounds": rounds,
               "samples": [s for s in samples if s["arm"] == arm], "arm": arm,
               "confidence_intervals": {name: interval(values, rng) for name, values in processed.items()},
@@ -170,10 +184,23 @@ def load(path, compatibility):
                 raise ValueError("invalid reference confidence intervals")
         validate_memory(record["peak_rss"], record["rounds"])
         validate_tools(record['tools'], record['arm'])
-        binary = record["reference"]["binary"]
-        if digest(binary) != record["reference"]["sha256"]:
-            raise ValueError("reference binary integrity failure")
-        return record, [binary]
+        replay = record["reference"]["command"]
+        files = record["reference"]["files"]
+        if not isinstance(replay, list) or not replay or not isinstance(files, dict) or not files:
+            raise ValueError("invalid reference bundle")
+        for path, expected in files.items():
+            if digest(path) != expected:
+                raise ValueError("reference artifact integrity failure")
+        if compatibility["target"] == "wasm":
+            if len(replay) != 2 or digest(replay[0]) != record["tools"].get("node_sha256"):
+                raise ValueError("reference Node integrity failure")
+            artifact = Path(replay[-1]).with_suffix(".wasm")
+            required = {str(Path(replay[-1])), str(artifact), str(artifact.with_suffix(".node.runtime.mjs"))}
+            if required != set(files):
+                raise ValueError("incomplete wasm reference bundle")
+        elif len(replay) != 1 or set(replay) != set(files):
+            raise ValueError("invalid native reference command")
+        return record, replay
     except (KeyError, TypeError, OSError, json.JSONDecodeError) as error:
         raise ValueError(f"invalid benchmark reference: {error}") from error
 
@@ -196,7 +223,8 @@ def evaluate(samples, reference, passes, rounds, rss, threshold):
         ratios = [a / b for a, b in zip(current[name], control[name], strict=True)]
         low, high = interval(ratios, rng)
         decision = "regression" if low > 1 + threshold else "pass" if high <= 1 + threshold else "inconclusive"
-        results[name] = {"ratio": statistics.median(ratios), "ci_low": low, "ci_high": high, "decision": decision}
+        results[name] = {"ratio": statistics.median(ratios), "ci_low": low, "ci_high": high, "decision": decision,
+                         "improvement": high < 1.0}
         if decision == "regression":
             status = 1
         elif decision == "inconclusive" and status != 1:

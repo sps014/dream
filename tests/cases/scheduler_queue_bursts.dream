@@ -1,0 +1,35 @@
+import system;
+import system.collections;
+
+let completed = 0;
+
+async fun work(n: int): int {
+    completed = completed + 1;
+    return n;
+}
+
+async fun main(): void {
+    let total = 0;
+    let round = 0;
+    while round < 3 {
+        let futures = List<Future<int>>();
+        let i = 0;
+        while i < 257 {
+            let future = work(i);
+            Promise.start(future);
+            futures.push(future);
+            i = i + 1;
+        }
+        Promise.cancel(futures[0]);
+        Promise.cancel(futures[128]);
+        Promise.cancel(futures[256]);
+        i = 1;
+        while i < 256 {
+            if i != 128 { total = total + futures[i].await; }
+            i = i + 1;
+        }
+        round = round + 1;
+    }
+    System.println(completed);
+    System.println(total);
+}

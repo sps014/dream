@@ -30,7 +30,7 @@ class GateTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.binary = self.root / 'program'
         self.binary.write_bytes(b'immutable benchmark')
-        self.identity = {'passes': 5, 'names': ['work']}
+        self.identity = {'passes': 5, 'names': ['work'], 'target': 'native'}
         self.samples = [dict(name='work', arm=arm, round=r, pass_index=p,
                              ns_total=1000, ns_per_op=value, sink=123)
                         for arm, value in [('baseline', 100), ('current', 100)]
@@ -57,6 +57,57 @@ class GateTests(unittest.TestCase):
                 sample['ns_per_op'] *= 1 if sample['round'] < 5 else 1.2
         self.assertEqual(bench_gate.evaluate(samples, self.record, 5, 10, self.rss, .1)[0], 2)
 
+    def test_improvement_is_separate_from_regression_gate(self):
+        samples = copy.deepcopy(self.samples)
+        for sample in samples:
+            if sample['arm'] == 'current':
+                sample['ns_per_op'] *= .8
+        status, rows = bench_gate.evaluate(samples, self.record, 5, 10, self.rss, .1)
+        self.assertEqual(status, 0)
+        self.assertTrue(rows['work']['improvement'])
+        _, rows = bench_gate.evaluate(self.samples, self.record, 5, 10, self.rss, .1)
+        self.assertFalse(rows['work']['improvement'])
+
+    def test_identity_uses_the_frozen_fixture(self):
+        fixture = self.root / 'fixture.dream'
+        source = b'report("work", elapsed, iterations);'
+        fixture.write_bytes(source)
+        expected = bench_gate.identity(fixture, fixture, 'test', 1, 5)
+        fixture.write_bytes(b'report("changed", elapsed, iterations);')
+        actual = bench_gate.identity(fixture, fixture, 'test', 1, 5, benchmark_source=source)
+        self.assertEqual(actual['benchmark'], expected['benchmark'])
+        self.assertEqual(actual['names'], expected['names'])
+
+    def test_wasm_reference_preserves_and_checks_entire_bundle(self):
+        node = self.root / 'node'
+        node.write_bytes(b'node executable')
+        runner = self.root / 'microbenches.mjs'
+        runner.write_bytes(b'runner')
+        wasm = runner.with_suffix('.wasm')
+        wasm.write_bytes(b'wasm module')
+        host = wasm.with_suffix('.node.runtime.mjs')
+        host.write_bytes(b'JS host')
+        identity = dict(self.identity, target='wasm')
+        tools = dict(self.record['tools'], node_sha256=bench_gate.digest(node), node_version='test',
+                     wasm_opt_sha256='a' * 64, baseline_runtime_sha256=bench_gate.digest(host))
+        bench_gate.save(self.path, self.root, identity, [str(node), str(runner)],
+                        self.samples, 'baseline', 5, 10, self.rss, tools)
+        record, command = bench_gate.load(self.path, identity)
+        self.assertEqual(command[0], str(node))
+        self.assertEqual(len(record['reference']['files']), 3)
+        wasm.write_bytes(b'rebuilt module')
+        host.unlink()
+        bench_gate.load(self.path, identity)
+        for path in record['reference']['files']:
+            contents = Path(path).read_bytes()
+            Path(path).write_bytes(b'corrupt')
+            with self.assertRaises(ValueError):
+                bench_gate.load(self.path, identity)
+            Path(path).write_bytes(contents)
+        node.write_bytes(b'updated Node')
+        with self.assertRaises(ValueError):
+            bench_gate.load(self.path, identity)
+
     def test_partial_duplicate_zero_and_missing_rows(self):
         variants = [self.samples[:-1], self.samples + [self.samples[-1]],
                     [s for s in self.samples if s['arm'] != 'current']]
@@ -81,7 +132,7 @@ class GateTests(unittest.TestCase):
         self.path.write_text(json.dumps(self.record))
         with self.assertRaises(ValueError):
             bench_gate.load(self.path, {'passes': 5, 'names': ['changed']})
-        Path(self.record['reference']['binary']).write_bytes(b'changed')
+        Path(self.record['reference']['command'][0]).write_bytes(b'changed')
         with self.assertRaises(ValueError):
             bench_gate.load(self.path, self.identity)
 

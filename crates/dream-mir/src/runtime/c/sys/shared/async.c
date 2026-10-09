@@ -17,8 +17,8 @@ typedef struct Node {
     struct Node *next;
 } Node;
 
-static _Thread_local Node *rq_head;
-static _Thread_local Node *rq_tail;
+#include "ready_queue.h"
+
 static _Thread_local Node *timer_head;
 static _Thread_local dream_ptr poll_current;
 static _Thread_local int32_t poll_drop_start_retain;
@@ -253,13 +253,13 @@ dream_ptr dream_new_future(dream_size size, int32_t poll, int32_t kind) {
 }
 
 void dream_enqueue(dream_ptr f) {
-    Node *n;
+    ReadyNode *n;
     if (!f || i32_at(f, F_QUEUED)[0]) {
         return;
     }
+    dream_count(DREAM_COUNT_ENQUEUE, 1);
     i32_at(f, F_QUEUED)[0] = 1;
-    n = (Node *)calloc(1, sizeof(Node));
-    n->f = f;
+    n = ready_take(f);
     if (!rq_tail) {
         rq_head = n;
         rq_tail = n;
@@ -305,16 +305,16 @@ void dream_cancel(dream_ptr f) {
     ptr_at(f, F_WAKER)[0] = 0;
     /* Queues borrow the scheduler token. Unlink before dropping it so cancelled
      * frames cannot leave a raw queue pointer into reclaimed storage. */
-    Node *previous = NULL;
-    for (link = &rq_head; *link;) {
-        Node *node = *link;
+    ReadyNode *previous = NULL;
+    for (ReadyNode **ready_link = &rq_head; *ready_link;) {
+        ReadyNode *node = *ready_link;
         if (node->f == f) {
-            *link = node->next;
+            *ready_link = node->next;
             if (rq_tail == node) { rq_tail = previous; }
-            free(node);
+            ready_put(node);
         } else {
             previous = node;
-            link = &node->next;
+            ready_link = &node->next;
         }
     }
     i32_at(f, F_QUEUED)[0] = 0;
@@ -400,13 +400,13 @@ void dream_run_loop(void) {
         dream_callback_drain();
 #endif
         while (rq_head) {
-            Node *n = rq_head;
+            ReadyNode *n = rq_head;
             dream_ptr f = n->f;
             rq_head = n->next;
             if (!rq_head) {
                 rq_tail = NULL;
             }
-            free(n);
+            ready_put(n);
             i32_at(f, F_QUEUED)[0] = 0;
             if (i32_at(f, F_STATUS)[0]) {
                 continue;

@@ -301,6 +301,7 @@ fn build_into(config: &Arc<ToolchainConfig>, plan: &ExePlan, dir: &Path) -> Resu
         crate::execution::llvm::NativeBuildOptions {
             target: dream_abi::target::TargetSpec::host(),
             opt_ll: None,
+            opt_remarks: None,
             opt: OptLevel::O0,
             debug: true,
             profile: dream_abi::profile::CompileProfile::Release,

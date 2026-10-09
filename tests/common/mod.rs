@@ -92,11 +92,12 @@ pub fn emit_ll_for(
     target: dream_mir::backend::Target,
 ) -> String {
     let req = LlvmRuntimeRequest {
-            profile: dream_abi::profile::CompileProfile::Debug,
+        profile: dream_abi::profile::CompileProfile::Debug,
         need: dream_mir::runtime::runtime_need_from_mir(mir),
         target: target.clone(),
         threads: false,
         wasm_opt: OptLevel::O0,
+        opt_remarks: None,
     };
     let toolchain = Toolchain {
         config: std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),

@@ -48,6 +48,7 @@ pub fn compile_and_capture_ex(
         crate::execution::llvm::NativeBuildOptions {
             target: dream_abi::target::TargetSpec::host(),
             opt_ll: None,
+            opt_remarks: None,
             opt,
             debug: false,
             profile: dream_abi::profile::CompileProfile::Release,

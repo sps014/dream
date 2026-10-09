@@ -27,6 +27,7 @@ pub struct LlvmRuntimeRequest {
     pub target: dream_mir::backend::Target,
     pub threads: bool,
     pub wasm_opt: OptLevel,
+    pub opt_remarks: Option<std::path::PathBuf>,
 }
 
 /// The reduced runtime signature table and the cache artifact it came from.
@@ -95,6 +96,7 @@ pub struct Compiler {
     emit_mir: Option<dream_mir::passes::MirDumpSpec>,
     /// Artifact requests are independent of profile and debugger information.
     opt_ir: bool,
+    opt_remarks: bool,
     raw_ir_intermediate: bool,
     output_kind: crate::driver::output::OutputKind,
     llvm: Option<Arc<dyn LlvmToolchain>>,
@@ -136,6 +138,7 @@ impl Compiler {
             reporter: Arc::new(SilentReporter),
             emit_mir: None,
             opt_ir: false,
+            opt_remarks: false,
             raw_ir_intermediate: false,
             llvm: None,
             build_cache: None,
@@ -308,6 +311,11 @@ impl Compiler {
     /// caller removes once linked.
     pub fn with_raw_ll_intermediate(mut self, on: bool) -> Self {
         self.raw_ir_intermediate = on;
+        self
+    }
+
+    pub fn with_opt_remarks(mut self, on: bool) -> Self {
+        self.opt_remarks = on;
         self
     }
 

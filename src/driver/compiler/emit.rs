@@ -33,6 +33,7 @@ impl Compiler {
             target: self.target.clone(),
             threads,
             wasm_opt: self.guest_opt(),
+            opt_remarks: None,
         };
         let runtime = llvm
             .ok_or_else(|| CompileError::Toolchain("no LLVM toolchain configured".into()))?
@@ -161,10 +162,16 @@ impl Compiler {
             target: self.target.clone(),
             threads: emitted.threads,
             wasm_opt: self.guest_opt(),
+            opt_remarks: self
+                .opt_remarks
+                .then(|| ll_path.with_extension("remarks.yaml")),
         };
         llvm.ok_or_else(|| CompileError::Internal("no LLVM toolchain configured".into()))?
             .link_wasm(&ll_path, &wasm_path, opt_ll.as_deref(), &req)
             .map_err(CompileError::Toolchain)?;
+        if let Some(path) = &req.opt_remarks {
+            self.reporter.artifact(path);
+        }
         if let Some(path) = &opt_ll {
             self.reporter.artifact(path);
         } else if !self.raw_ir_intermediate {

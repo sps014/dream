@@ -165,9 +165,10 @@ pub(super) fn build_wasm_runtime(
         let mut all = inputs.clone();
         all.extend_from_slice(deps);
         format!(
-            "{}|{opt:?}|{threads}|{}",
+            "{}|{opt:?}|{threads}|{}|{:?}",
             rt_stamp::content_fingerprint(all),
-            tools.config.fingerprint()
+            tools.config.fingerprint(),
+            crate::driver::wasi::GUEST_FEATURES
         )
     };
     let fingerprint = fingerprint_for(previous_dependencies.as_deref().unwrap_or_default());
@@ -333,6 +334,7 @@ pub fn link_wasm(
     opt_ll: Option<&Path>,
     request: &crate::driver::compiler::LlvmRuntimeRequest,
 ) -> Result<(), String> {
+    super::remarks::prepare(request.opt_remarks.as_deref()).map_err(|e| e.to_string())?;
     let (need, threads, opt, profile) = (
         request.need,
         request.threads,
@@ -390,6 +392,9 @@ pub fn link_wasm(
                     .arg(input)
                     .arg("-o")
                     .arg(&optimized);
+                if i == 0 {
+                    super::remarks::configure(&mut command, request.opt_remarks.as_deref());
+                }
                 run_captured(&mut command, "opt (wasm program)")?;
                 &optimized
             };
@@ -405,6 +410,7 @@ pub fn link_wasm(
             let mut command = tools.command("llc");
             command
                 .arg(llc_level(opt))
+                .arg("-mattr=+simd128")
                 .arg("-filetype=obj")
                 .arg(source)
                 .arg("-o")
@@ -442,6 +448,7 @@ pub fn link_wasm(
             .arg(&linked)
             .arg("-o")
             .arg(&optimized);
+        super::remarks::configure(&mut o, request.opt_remarks.as_deref());
         let r = run_captured(&mut o, "opt");
         let _ = std::fs::remove_file(&linked);
         r?;
@@ -453,6 +460,7 @@ pub fn link_wasm(
         }
         let mut llc = tools.command("llc");
         llc.arg(llc_level(opt))
+            .arg("-mattr=+simd128")
             .arg("-filetype=obj")
             .arg(&optimized)
             .arg("-o")

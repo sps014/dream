@@ -104,11 +104,12 @@ fn unsigned_string_reads_do_not_depend_on_abi_extension_attributes() {
     };
     let target = dream_mir::backend::Target::native();
     let req = LlvmRuntimeRequest {
-            profile: dream_abi::profile::CompileProfile::Debug,
+        profile: dream_abi::profile::CompileProfile::Debug,
         need: dream_mir::runtime::runtime_need_from_mir(&mir),
         target: target.clone(),
         threads: false,
         wasm_opt: OptLevel::O0,
+        opt_remarks: None,
     };
     let toolchain = Toolchain {
         config: std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
@@ -141,6 +142,57 @@ fn out_dir(tag: &str) -> PathBuf {
     dir
 }
 
+#[test]
+fn cli_optimization_remarks_are_first_pass_artifacts() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("remarks.dream");
+    fs::write(
+        &source,
+        "import system; fun main(): void { System.println(42); }",
+    )
+    .unwrap();
+    for wasm in [false, true] {
+        let output = dir
+            .path()
+            .join(if wasm { "guest.wat" } else { "native.ll" });
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_dream"));
+        command.args(["--release", "--opt-remarks", "--emit-opt-ir"]);
+        if wasm {
+            command.arg("--wasm");
+        }
+        let result = command
+            .arg(&source)
+            .arg("-o")
+            .arg(&output)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let remarks = output.with_extension("remarks.yaml");
+        let text = fs::read_to_string(&remarks).unwrap();
+        assert!(text.contains("Pass:"), "{text}");
+        let optimized = fs::read_to_string(output.with_extension("opt.ll")).unwrap();
+        if wasm {
+            assert!(optimized.contains("+simd128"));
+        }
+        fs::write(&remarks, "stale remarks").unwrap();
+        let result = command.output().unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(
+            !fs::read_to_string(&remarks)
+                .unwrap()
+                .contains("stale remarks")
+        );
+    }
+}
+
 fn compile_ll(src: &Path, ll: &Path, opt: OptLevel) {
     Compiler::new(Target::native())
         .with_release(opt != OptLevel::O0)
@@ -163,6 +215,7 @@ fn run_llvm(src: &Path, opt: OptLevel) -> Result<String, String> {
         dream::execution::llvm::NativeBuildOptions {
             target: dream_abi::target::TargetSpec::host(),
             opt_ll: None,
+            opt_remarks: None,
             opt,
             debug: false,
             profile: dream_abi::profile::CompileProfile::Release,
@@ -203,6 +256,7 @@ fn llvm_relocatable_binary_runs_after_move() {
         dream::execution::llvm::NativeBuildOptions {
             target: dream_abi::target::TargetSpec::host(),
             opt_ll: None,
+            opt_remarks: None,
             opt: OptLevel::O0,
             debug: false,
             profile: dream_abi::profile::CompileProfile::Release,
@@ -327,6 +381,7 @@ fn llvm_runtime_declarations_match_bitcode() {
             target: dream_mir::backend::Target::native(),
             threads: false,
             wasm_opt: OptLevel::O2,
+            opt_remarks: None,
         };
         let runtime = toolchain.runtime_sigs(&req).unwrap();
         let rt = RuntimeSigs::parse(&runtime.text).unwrap();
@@ -462,6 +517,7 @@ fn llvm_pgo_round_trip() {
         dream::execution::llvm::NativeBuildOptions {
             target: dream_abi::target::TargetSpec::host(),
             opt_ll: None,
+            opt_remarks: None,
             opt: OptLevel::O2,
             debug: false,
             profile: dream_abi::profile::CompileProfile::Release,
@@ -486,6 +542,7 @@ fn llvm_pgo_round_trip() {
         dream::execution::llvm::NativeBuildOptions {
             target: dream_abi::target::TargetSpec::host(),
             opt_ll: None,
+            opt_remarks: None,
             opt: OptLevel::O2,
             debug: false,
             profile: dream_abi::profile::CompileProfile::Release,

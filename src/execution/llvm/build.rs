@@ -35,12 +35,12 @@ type PgoPipeline = Option<(&'static str, PathBuf)>;
 fn optimize_linked(
     tools: &LlvmTools,
     linked: &Path,
-    level: (OptLevel, bool),
+    level: (OptLevel, bool, Option<&Path>),
     pgo: &PgoPipeline,
     exports: &[String],
     spec: &dream_abi::target::TargetSpec,
 ) -> Result<PathBuf, String> {
-    let (opt, debug) = level;
+    let (opt, debug, remarks) = level;
     let out = linked.with_extension("opt.bc");
     let mut cmd = tools.command("opt");
     cmd.arg(format!("-passes={}", pipeline(opt)))
@@ -54,6 +54,7 @@ fn optimize_linked(
         cmd.arg(format!("-pgo-kind={kind}"))
             .arg(format!("-profile-file={}", file.display()));
     }
+    super::remarks::configure(&mut cmd, remarks);
     cmd.arg(linked).arg("-o").arg(&out);
     run_captured(&mut cmd, "opt")?;
     Ok(out)
@@ -76,7 +77,7 @@ fn link_and_optimize(
     tools: &LlvmTools,
     ll_path: &Path,
     modules: &[&Path],
-    level: (OptLevel, bool),
+    level: (OptLevel, bool, Option<&Path>),
     pgo: &PgoPipeline,
     exports: &[String],
     spec: &dream_abi::target::TargetSpec,
@@ -135,8 +136,10 @@ pub fn emit_llvm_artifacts(
     opt: OptLevel,
     debug: bool,
     icon: Option<&Path>,
-    profile: dream_abi::profile::CompileProfile,
+    diagnostics: (dream_abi::profile::CompileProfile, Option<&Path>),
 ) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    let (profile, remarks) = diagnostics;
+    super::remarks::prepare(remarks)?;
     let tools = resolve_llvm(config)?;
     let src = std::fs::read_to_string(ll_path)?;
     if profile.is_debug() {
@@ -155,6 +158,7 @@ pub fn emit_llvm_artifacts(
                 .arg(ll_path)
                 .arg("-o")
                 .arg(&bc);
+            super::remarks::configure(&mut command, remarks);
             run_captured(&mut command, "opt (program)")?;
             write_ir(&tools, &bc, &opt_ll)?;
             bc
@@ -190,7 +194,7 @@ pub fn emit_llvm_artifacts(
             .flatten()
             .copied()
             .collect::<Vec<_>>(),
-        (opt, debug),
+        (opt, debug, remarks),
         &None,
         &library::exports(&ll_path.with_extension("abi.json"))?,
         target,
@@ -214,6 +218,7 @@ pub fn emit_llvm_artifacts(
 pub struct NativeBuildOptions<'a> {
     pub target: dream_abi::target::TargetSpec,
     pub opt_ll: Option<&'a Path>,
+    pub opt_remarks: Option<&'a Path>,
     pub opt: OptLevel,
     pub profile: dream_abi::profile::CompileProfile,
     pub debug: bool,
@@ -231,6 +236,7 @@ pub fn compile_llvm(
     let NativeBuildOptions {
         target: spec,
         opt_ll,
+        opt_remarks,
         opt,
         profile: compile_profile,
         debug,
@@ -239,6 +245,7 @@ pub fn compile_llvm(
         relocatable,
         output_kind,
     } = options;
+    super::remarks::prepare(opt_remarks)?;
     if !spec.can_link_on_host() && *pgo != Pgo::Off {
         return Err("cross-target PGO requires running the profile on its target".into());
     }
@@ -383,6 +390,7 @@ pub fn compile_llvm(
         && native_bin_fresh(&bin, ll_path, runtime_input, input)
         && runtime_objects.iter().all(|o| !newer_than(o, &bin))
         && native.objects.iter().all(|o| !newer_than(o, &bin))
+        && opt_remarks.is_none()
         && opt_ll.is_none_or(Path::exists)
         && (output_kind != OutputKind::Staticlib || ll_path.with_extension("link.json").is_file())
         && std::fs::read_to_string(&stamp_path).is_ok_and(|s| s == stamp)
@@ -420,6 +428,7 @@ pub fn compile_llvm(
                 .arg(ll_path)
                 .arg("-o")
                 .arg(&out);
+            super::remarks::configure(&mut command, opt_remarks);
             run_captured(&mut command, "opt (program)").map(|()| out)
         }
     } else {
@@ -435,7 +444,7 @@ pub fn compile_llvm(
             .flatten()
             .copied()
             .collect::<Vec<_>>(),
-            (opt, debug),
+            (opt, debug, opt_remarks),
             &profile,
             &exports,
             &spec,

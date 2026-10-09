@@ -228,6 +228,7 @@ DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
     if (ptr == 0) {
         return;
     }
+    dream_count(DREAM_COUNT_RETAIN, 1);
     rc = dream_rc_word(ptr);
     v = __atomic_load_n(rc, __ATOMIC_RELAXED);
     if (DREAM_LIKELY(v > 0 && v < INT32_MAX)) {
@@ -426,6 +427,7 @@ DREAM_ALWAYS_INLINE int dream_rc_last_raw(dream_ptr p) {
 }
 
 DREAM_ALWAYS_INLINE int dream_rc_last(dream_ptr p) {
+    dream_count(DREAM_COUNT_RELEASE, 1);
     if (__atomic_load_n(dream_tag_word(p), __ATOMIC_RELAXED) & DREAM_TAG_WEAK_TARGET) { return dream_rc_last_observed(p); }
     return dream_rc_last_raw(p);
 }
@@ -437,10 +439,12 @@ DREAM_ALWAYS_INLINE int dream_release_nonlast(dream_ptr ptr) {
     if (!ptr) { return 0; }
     int32_t *rc = dream_rc_word(ptr);
     int32_t v = __atomic_load_n(rc, __ATOMIC_RELAXED);
-    if (DREAM_LIKELY(v > 1)) { *rc = v - 1; return 1; }
-    if (v == DREAM_RC_IMMORTAL) { return 1; }
+    if (DREAM_LIKELY(v > 1)) { dream_count(DREAM_COUNT_RELEASE, 1); *rc = v - 1; return 1; }
+    if (v == DREAM_RC_IMMORTAL) { dream_count(DREAM_COUNT_RELEASE, 1); return 1; }
     if (v >= 0 || (v & INT32_MAX) <= 1) { return 0; }
-    return dream_release_nonlast_slow(rc, v);
+    int released = dream_release_nonlast_slow(rc, v);
+    if (released) { dream_count(DREAM_COUNT_RELEASE, 1); }
+    return released;
 }
 
 DREAM_ALWAYS_INLINE void dream_release(dream_ptr ptr) {

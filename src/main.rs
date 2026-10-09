@@ -99,6 +99,10 @@ struct Cli {
     #[arg(long = "emit-opt-ir", global = true)]
     emit_opt_ir: bool,
 
+    /// Save first-pass LLVM optimization remarks to <output>.remarks.yaml
+    #[arg(long, global = true, conflicts_with = "object")]
+    opt_remarks: bool,
+
     /// Bundle required host libraries beside the native binary with package-relative lookup
     #[arg(long, global = true, conflicts_with_all = ["wasm", "emit_llvm"])]
     relocatable: bool,
@@ -682,7 +686,7 @@ fn main() -> ExitCode {
     // `with_release` installs RELEASE_DEFAULT wasm-opt; an explicit `-O` overrides.
     let cc_opt = OptLevel::from_cli(cli.release, optimize);
     // Profiles change between runs without touching any compiler input, so PGO builds never reuse.
-    let build_cache = (!cli.profile && cli.use_profile.is_none()).then(|| {
+    let build_cache = (!cli.profile && cli.use_profile.is_none() && !cli.opt_remarks).then(|| {
         let icon = cli
             .icon
             .clone()
@@ -707,6 +711,7 @@ fn main() -> ExitCode {
         .with_emit_mir(emit_mir)
         .with_raw_ll_intermediate(true)
         .with_opt_ir(cli.emit_llvm || cli.emit_opt_ir)
+        .with_opt_remarks(cli.opt_remarks)
         .with_reporter(reporter.clone());
     if let Some(level) = optimize {
         compiler = compiler.with_optimize(Some(level));
@@ -785,6 +790,9 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    let remarks = cli
+        .opt_remarks
+        .then(|| raw_ll.with_extension("remarks.yaml"));
     if cli.emit_llvm {
         match emit_llvm_artifacts(
             &config,
@@ -793,11 +801,15 @@ fn main() -> ExitCode {
             cc_opt,
             debug_info,
             cli.icon.as_deref(),
-            dream_abi::profile::CompileProfile::from_release(cli.release),
+            (
+                dream_abi::profile::CompileProfile::from_release(cli.release),
+                remarks.as_deref(),
+            ),
         ) {
             Ok(paths) => {
                 drop_raw_ll();
                 artifacts.extend(paths);
+                artifacts.extend(remarks);
             }
             Err(e) => {
                 ui.error(&e.to_string());
@@ -827,6 +839,7 @@ fn main() -> ExitCode {
             dream::execution::llvm::NativeBuildOptions {
                 target: target.spec().clone(),
                 opt_ll: cli.emit_opt_ir.then_some(opt_ll.as_path()),
+                opt_remarks: remarks.as_deref(),
                 opt: cc_opt,
                 debug: debug_info,
                 profile: dream_abi::profile::CompileProfile::from_release(cli.release),
@@ -839,8 +852,13 @@ fn main() -> ExitCode {
             Ok(bin) => {
                 drop_raw_ll();
                 artifacts.push(bin.clone());
-                if debug_adapter { artifacts.push(raw_ll.to_path_buf()); }
-                if cli.emit_opt_ir { artifacts.push(opt_ll); }
+                if debug_adapter {
+                    artifacts.push(raw_ll.to_path_buf());
+                }
+                if cli.emit_opt_ir {
+                    artifacts.push(opt_ll);
+                }
+                artifacts.extend(remarks);
                 if output_kind == dream::driver::output::OutputKind::Staticlib {
                     artifacts.push(raw_ll.with_extension("link.json"));
                 } else if target.spec().is_windows()

@@ -556,7 +556,7 @@ fn protocol_is_builtin(ty: TypeId, interner: &TypeInterner) -> bool {
     ty == interner.string() || matches!(interner.kind(ty), TyKind::Prim(_))
 }
 
-fn pure_math_import(imp: &dream_hir::HImport, interner: &TypeInterner) -> bool {
+pub(crate) fn pure_math_import(imp: &dream_hir::HImport, interner: &TypeInterner) -> bool {
     let field = if imp.field.is_empty() {
         &imp.name
     } else {

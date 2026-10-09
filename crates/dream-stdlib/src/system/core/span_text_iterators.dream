@@ -105,8 +105,14 @@ extend string : StringKey {
     }
 
     // A view of `[start, end)`, clamped exactly like `substring`.
+    @inline
     public fun span(start: int, end: int): ReadOnlySpan<char> {
         let n = this.length;
+        // Unsigned ordering also excludes negative endpoints because string lengths
+        // are nonnegative. Keep the common valid range out of the clamping chain.
+        if ((uint)start <= (uint)end) && ((uint)end <= (uint)n) {
+            return ReadOnlySpan<char>.from_text(this, start, end - start);
+        }
         let s = start;
         let e = end;
         if s < 0 { s = 0; } else if s > n { s = n; }

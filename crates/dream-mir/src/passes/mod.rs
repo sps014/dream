@@ -26,6 +26,7 @@ mod licm;
 mod limits;
 #[cfg(test)]
 mod limits_tests;
+mod loop_fields;
 mod loop_unroll;
 mod manager;
 mod module_pipeline;

@@ -164,6 +164,18 @@ Function-local `MirPass`es:
 
 - **`HopElision` (`rc/hop.rs`)** — slims the retain/release pattern of union-payload chain hops (`n = c as Some; …; c = n.next`) that survive as owned locals.
 
+Late `borrowed-fields` forwarding is followed by SCCP, CFG cleanup and DCE before `StrCursor`.
+This exposes the original string behind a borrowed span and removes its dead array branch;
+clearing a private borrowed view does not invalidate the source payload pointer.
+
+The late `loop-fields` stage caches unchanged scalar class fields in straight-line two-block
+loops. It peels the entry test and first iteration, preserving zero-trip behavior and the original
+order of reads, traps and stores. Repeated iterations reuse a field only if its base is stable
+and no store hits the same concrete `(TypeId, field)` slot, including through another alias.
+Shared objects, raw/global stores, allocation, ownership effects, async bodies and calls other
+than the registry's pure numeric math imports reject the proof. It emits no alias metadata or
+floating-point reassociation promises. Inspect it with `--emit-mir after:loop-fields`.
+
 Module passes (`ModulePass` or module-level functions) are listed in the driver section above. The largest is **`Inliner` (`inline/`)**:
 
 - **Eligibility:** direct calls to sync, non-recursive, non-entry callees. Size-gated: ≤64 statements and ≤16 blocks (≤128 / ≤24 when the callee has `@inline` / `prefer_inline`). Address-taken and recursive-SCC callees are skipped. Looping callees are eligible (the backend maps every MIR block to an LLVM block, so any reducible shape lowers). Async bodies, heap `New`/indirect calls, interface calls that `Devirt` could not make direct, and wide-arg sites with unknown argument types are skipped. Calls into `main` / the module init function are never inlined.

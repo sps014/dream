@@ -361,6 +361,7 @@ mod tests {
                 false,
             ),
         );
+        b.push(Statement::ValueKill(view));
         b.terminate(Terminator::Goto(header));
         b.switch_to(done);
         b.terminate(Terminator::Return(None));

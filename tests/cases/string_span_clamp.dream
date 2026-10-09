@@ -4,9 +4,13 @@ import system;
 
 fun main(): void {
     let s = "hello world";
+    let min: int = -2147483647 - 1;
     System.println(s.span(-5, 3).to_string() + "|");
     System.println(s.span(6, 100).to_string() + "|");
     System.println(s.span(8, 2).length);
+    System.println(s.span(min, 2147483647).length);
+    System.println(s.span(min, -1).length);
+    System.println(s.span(2147483647, min).length);
     let w = s.span(6, 11);
     System.println(w.slice(1, 3).to_string());
     System.println(w.slice(3).to_string());

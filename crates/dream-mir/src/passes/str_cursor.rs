@@ -186,6 +186,13 @@ fn stmt_is_scan(
         // A different local may own the same string; local identity alone cannot prove
         // that its final release leaves the hoisted payload alive.
         Statement::Release(_) => false,
+        // Clearing a nonescaping borrowed view changes only its frame storage, never
+        // the source string's payload or ownership.
+        Statement::ValueKill(l) => {
+            func.locals[l.0 as usize].borrows_refs
+                && !func.locals[l.0 as usize].is_ref
+                && interner.is_value_type(func.local_ty(*l))
+        }
         Statement::Assign(Place::Local(d), Rvalue::New { ctor: None, .. }) => {
             func.locals[d.0 as usize].borrows_refs && interner.is_value_type(func.local_ty(*d))
         }

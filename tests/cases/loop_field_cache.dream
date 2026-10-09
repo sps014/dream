@@ -1,0 +1,65 @@
+import system;
+
+class Particle {
+    public x: double;
+    public velocity: double;
+    public constructor(x: double) {
+        this.x = x;
+        this.velocity = 0.0d;
+    }
+}
+
+@noinline
+fun sum(borrow source: Particle, borrow alias: Particle, n: int): double {
+    let total = 0.0d;
+    let k = 0;
+    while k < n {
+        total = total + source.x;
+        alias.velocity = alias.velocity + 1.0d;
+        k = k + 1;
+    }
+    return total;
+}
+
+@noinline
+fun changing(borrow source: Particle, borrow alias: Particle, n: int): double {
+    let total = 0.0d;
+    let k = 0;
+    while k < n {
+        total = total + source.x;
+        alias.x = alias.x + 1.0d;
+        k = k + 1;
+    }
+    return total;
+}
+
+@noinline
+fun mutate(borrow p: Particle): void {
+    p.x = p.x + 1.0d;
+}
+
+@noinline
+fun calling(borrow p: Particle, n: int): double {
+    let total = 0.0d;
+    let k = 0;
+    while k < n {
+        total = total + p.x;
+        mutate(p);
+        k = k + 1;
+    }
+    return total;
+}
+
+fun main(): void {
+    let p = Particle(2.0d);
+    System.println((int)sum(p, p, 10));
+    System.println((int)p.velocity);
+    System.println((int)sum(p, p, 0));
+    System.println((int)sum(p, p, -1));
+    System.println((int)changing(p, p, 3));
+    System.println((int)calling(p, 3));
+    System.println((int)p.x);
+    let q = Particle(20.0d);
+    System.println((int)sum(p, q, 2));
+    System.println((int)q.velocity);
+}

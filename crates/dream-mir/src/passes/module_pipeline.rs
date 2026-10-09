@@ -147,9 +147,15 @@ pub fn run_late_module_passes(mir: &mut Mir, interner: &TypeInterner, dump: &mut
         }
         let mut analyses = FunctionAnalyses::default();
         GlobalProp.transform(f, interner, &mir.layouts, &mut analyses);
+        Sccp.transform(f, interner, &mir.layouts, &mut analyses);
+        SimplifyCfg.transform(f, interner, &mir.layouts, &mut analyses);
+        Dce.transform(f, interner, &mir.layouts, &mut analyses);
+        analyses.invalidate();
         StrCursor.transform(f, interner, &mir.layouts, &mut analyses);
     }
     dump.module("borrowed-fields", mir, interner);
+    loop_fields::run(mir, interner);
+    dump.module("loop-fields", mir, interner);
     let _ = frame_alloc::run(mir, interner);
     dump.module(frame_alloc::STAGE, mir, interner);
     construction::run(mir, interner);

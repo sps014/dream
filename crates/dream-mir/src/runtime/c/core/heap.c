@@ -104,7 +104,7 @@ void dream_pin_immortal(dream_ptr s) {
     }
 }
 
-void dream_retain_slow(int32_t *rc, int32_t v) {
+__attribute__((cold, noinline)) void dream_retain_slow(int32_t *rc, int32_t v) {
     for (;;) {
         if (v == DREAM_RC_IMMORTAL) { return; }
         if (v == 0) { DREAM_PANIC_LITERAL(u"panic: resurrection of a dying object"); }

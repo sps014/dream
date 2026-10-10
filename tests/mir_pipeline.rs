@@ -289,8 +289,11 @@ fn spans_over_private_owned_strings_do_not_count_references_in_the_loop() {
     );
     let body = common::ir_func_body(&ir, "owned_span");
     assert_eq!(
-        body.matches("@dream_rc_last_slow(").count(),
-        2,
+        (
+            body.matches("@dream_rc_last_slow(").count(),
+            body.matches("@dream_rc_last_observed(").count()
+        ),
+        (1, 1),
         "only the observed/unobserved branches of the source owner's cleanup may remain:\n{body}"
     );
     assert_eq!(

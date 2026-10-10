@@ -44,13 +44,13 @@ void dream_weak_leave(void) {
 static int weak_lock(void) { dream_weak_enter(); return 1; }
 static void weak_unlock(int acquired) { if (acquired) { dream_weak_leave(); } }
 
-int dream_rc_last_observed(dream_ptr ptr) {
+__attribute__((cold, noinline)) int dream_rc_last_observed(dream_ptr ptr) {
     dream_weak_enter();
     int last = dream_rc_last_raw(ptr);
     dream_weak_leave();
     return last;
 }
-int dream_rc_claim_observed(dream_ptr ptr) {
+__attribute__((cold, noinline)) int dream_rc_claim_observed(dream_ptr ptr) {
     dream_weak_enter();
     int32_t expected = __atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED);
     int last = (expected & INT32_MAX) == 1 && __atomic_compare_exchange_n(

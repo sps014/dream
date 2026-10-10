@@ -106,7 +106,9 @@ __attribute__((cold, noinline)) dream_ptr dream_sb_grow_bytes(dream_sb *sb, drea
     return bytes;
 }
 
-dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len, int32_t esize) {
+/* Growth is amortized and cold; inlined, its header stores and tail zeroing bloat every push loop. */
+__attribute__((cold, noinline)) dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len,
+                                                              int32_t esize) {
     int32_t old_len = arr ? dream_i32(arr)[0] : 0;
     dream_ptr p = dream_realloc(arr, array_bytes(new_len, esize), TAG_ARRAY);
     dream_i32(p)[0] = new_len;
@@ -120,8 +122,8 @@ dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len, int32_t esize) {
 /* Same as `dream_array_realloc`, but for arrays of RC-tracked elements: shrinking releases the
  * dropped tail slots before `realloc` (the pointers go stale once the block moves), so truncated
  * elements do not stay retained until their slots happen to be overwritten. */
-dream_ptr dream_array_realloc_rc(dream_ptr arr, int32_t new_len, int32_t esize,
-                                 void (*release)(dream_ptr)) {
+__attribute__((cold, noinline)) dream_ptr dream_array_realloc_rc(dream_ptr arr, int32_t new_len,
+                                                                 int32_t esize, void (*release)(dream_ptr)) {
     int32_t old_len = arr ? dream_i32(arr)[0] : 0;
     (void)array_bytes(new_len, esize);
     if (arr && release && new_len < old_len) {

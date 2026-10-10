@@ -133,7 +133,6 @@ pub(crate) fn unit_command(
             opt.wasm_clang_opt_flag(),
             "-fno-ident",
             "-fno-exceptions",
-            "-fno-builtin",
             "-ffunction-sections",
             "-fdata-sections",
             "-frandom-seed=0",
@@ -141,6 +140,9 @@ pub(crate) fn unit_command(
             "-DDREAM_WASM32",
         ]);
         cmd.args(GUEST_FEATURES);
+        if dream_mir::runtime::wasm32_unit_defines_libc(src) {
+            cmd.arg("-fno-builtin");
+        }
         if output.bitcode {
             cmd.arg("-emit-llvm");
         }

@@ -68,3 +68,36 @@ Unlike the micro suite, three of five application workloads lose to C#. `graph_p
 (class nodes, `PriorityQueue` of small objects, ARC traffic), `task_parallel` (worker spawn and
 cross-thread frees) and `log_processor` (split, concat, `Map<string, int>`) set the priorities
 for the allocator, remote-free and hashing work below.
+
+## Phase 2: wasm allocator and runtime inlining (2026-10-10)
+
+The wasm guest now inlines the thread-local freelist `malloc`/`recycle` fast paths, and only the
+libc-defining units (`WASM32_LIBC_UNITS`) build with `-fno-builtin`, so runtime header helpers
+inline into Dream code. Cold paths that inlining would drag into hot loops are `cold, noinline`
+(`dream_array_realloc*`, `dream_retain_slow`, the weak-observed count paths). String equality on
+wasm compares 8-byte words directly: an inlined `memcmp(...) == 0` reached codegen behind a
+`freeze` and expanded into the ordering form built from byte swaps wasm does not have.
+
+Paired wasm run against `fc499d07` (8 rounds × 5 passes, loaded machine):
+
+| bench | cur/base | | bench | cur/base |
+|---|---|---|---|---|
+| vec_add | 0.18 | | json_deserialize | 0.70 |
+| binary_trees_alloc | 0.43 | | split_span | 0.77 |
+| alloc_churn | 0.56 | | weak_tree | 0.77 |
+| string_eq | 0.56 | | json_serialize | 0.80 |
+| arc_locals | 0.57 | | scheduler_queue | 0.83 |
+| set_probe | 0.68 | | regex_find | 0.89 |
+| substring, sum_options | 0.68–0.69 | | **binary_trees(_reclaim)** | **1.41–1.45** |
+| | | | **closure_dispatch** | **1.29** |
+
+Other rows are inconclusive within ±5%. The three regressions are V8 speculative-inlining
+effects, not codegen: the hot loops and the closure body are byte-identical to the baseline's,
+and under `node --no-wasm-inlining` all three tie (1.00–1.05). V8 inlines more into the
+baseline's smaller functions; raising `--wasm-inlining-budget` or `--wasm-inlining-max-size`
+does not change it. Accepted for the wins above; revisit if function size can be cut without
+losing the runtime inlining.
+
+Native rows `substring`, `map_get_span` and `json_serialize` that drifted in Phase 1 have
+identical machine code across builds (code layout). Follow-up: `leak_diagnostics` can flake while
+the runtime cache rebuilds concurrently.

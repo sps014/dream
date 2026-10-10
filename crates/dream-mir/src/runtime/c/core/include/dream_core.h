@@ -15,9 +15,9 @@
 #if __STDC_HOSTED__
 #include <string.h>
 #endif
-/* Declaration-only cross emission needs no target libc SDK; wasm runtime units build with
- * -fno-builtin, which would leave every fixed-size copy (header words, SIMD lanes) an
- * out-of-line call. Clang supplies these intrinsics. */
+/* Declaration-only cross emission needs no target libc SDK; the wasm units that define libc
+ * build with -fno-builtin, which would leave every fixed-size copy (header words, SIMD lanes)
+ * an out-of-line call. Clang supplies these intrinsics. */
 #if !__STDC_HOSTED__ || defined(DREAM_WASM32)
 #define memcpy __builtin_memcpy
 #define memset __builtin_memset
@@ -1194,6 +1194,32 @@ DREAM_ALWAYS_INLINE void dream_simd_binop(dream_ptr dest, dream_ptr lhs, dream_p
     dream_v128_f32_bin(dream_p(dest), dream_p(lhs), dream_p(rhs), op);
 }
 
+/* On wasm32 an inlined `memcmp(...) == 0` often reaches codegen behind a `freeze`, which hides
+ * the equality-only use from memcmp expansion: it then emits the ordering form, built on byte
+ * swaps wasm lacks. The guest `memcmp` is this same word loop, so comparing for equality here
+ * costs nothing; native keeps libc's vectorized `memcmp`. */
+DREAM_ALWAYS_INLINE int dream_units_equal(const void *a, const void *b, size_t bytes) {
+#if defined(__wasm__)
+    const unsigned char *x = (const unsigned char *)a;
+    const unsigned char *y = (const unsigned char *)b;
+    uint64_t diff = 0;
+    for (; bytes >= 8; bytes -= 8, x += 8, y += 8) {
+        uint64_t xa, ya;
+        __builtin_memcpy(&xa, x, 8);
+        __builtin_memcpy(&ya, y, 8);
+        if (xa != ya) {
+            return 0;
+        }
+    }
+    for (; bytes; bytes--, x++, y++) {
+        diff |= (uint64_t)(*x ^ *y);
+    }
+    return diff == 0;
+#else
+    return memcmp(a, b, bytes) == 0;
+#endif
+}
+
 DREAM_ALWAYS_INLINE int32_t dream_string_eq(dream_ptr a, dream_ptr b) {
     int32_t n;
     if (a == b) {
@@ -1206,7 +1232,7 @@ DREAM_ALWAYS_INLINE int32_t dream_string_eq(dream_ptr a, dream_ptr b) {
     if (n != dream_str_len(b)) {
         return 0;
     }
-    return memcmp(dream_str_units(a), dream_str_units(b), (size_t)n << 1) == 0;
+    return dream_units_equal(dream_str_units(a), dream_str_units(b), (size_t)n << 1);
 }
 
 DREAM_ALWAYS_INLINE int32_t dream_object_tag(dream_ptr p) {

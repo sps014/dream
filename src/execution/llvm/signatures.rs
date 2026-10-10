@@ -37,9 +37,10 @@ pub(super) fn load(
         tools.config.fingerprint(),
         rt_stamp::content_fingerprint(inputs),
         tools.bin,
-        spec.capabilities
-            .linear_memory
-            .then_some(crate::driver::wasi::GUEST_FEATURES)
+        spec.capabilities.linear_memory.then_some((
+            crate::driver::wasi::GUEST_FEATURES,
+            dream_mir::runtime::WASM32_LIBC_UNITS
+        ))
     );
     let dir = tools
         .config

@@ -16,7 +16,7 @@ int32_t string_view_eq(dream_ptr a, int32_t ao, int32_t an, dream_ptr b, int32_t
     if (an <= 0 || (a == b && ao == bo)) {
         return 1;
     }
-    return memcmp(view_units(a, ao), view_units(b, bo), (size_t)an << 1) == 0;
+    return dream_units_equal(view_units(a, ao), view_units(b, bo), (size_t)an << 1);
 }
 
 int32_t string_view_compare(dream_ptr a, int32_t ao, int32_t an, dream_ptr b, int32_t bo,
@@ -70,7 +70,7 @@ int32_t string_view_find(dream_ptr h, int32_t ho, int32_t hn, dream_ptr nd, int3
     hu = view_units(h, ho);
     nu = view_units(nd, no);
     for (i = from; i <= hn - nn; i++) {
-        if (hu[i] == nu[0] && memcmp(hu + i, nu, (size_t)nn << 1) == 0) {
+        if (hu[i] == nu[0] && dream_units_equal(hu + i, nu, (size_t)nn << 1)) {
             return i;
         }
     }
@@ -92,7 +92,7 @@ int32_t string_view_rfind(dream_ptr h, int32_t ho, int32_t hn, dream_ptr nd, int
     hu = view_units(h, ho);
     nu = view_units(nd, no);
     for (i = hn - nn; i >= 0; i--) {
-        if (hu[i] == nu[0] && memcmp(hu + i, nu, (size_t)nn << 1) == 0) {
+        if (hu[i] == nu[0] && dream_units_equal(hu + i, nu, (size_t)nn << 1)) {
             return i;
         }
     }

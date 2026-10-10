@@ -160,6 +160,15 @@ const WASI_SYS_C: &[&str] = &[
     "platform.c",
 ];
 
+/// Guest units that define libc symbols (`memcpy`, `malloc`, …). Only these build with
+/// `-fno-builtin`, which keeps clang from folding their bodies back into calls to themselves;
+/// LLVM never inlines a `no-builtins` function into the program, so no other unit may carry it.
+pub const WASM32_LIBC_UNITS: &[&str] = &["core/memory.c", "sys/wasi/allocation.c"];
+
+pub fn wasm32_unit_defines_libc(path: &Path) -> bool {
+    WASM32_LIBC_UNITS.iter().any(|unit| path.ends_with(unit))
+}
+
 pub const SOURCE_RUNTIME_C_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/runtime/c");
 
 pub fn core_runtime_include_dir(root: &Path) -> PathBuf {

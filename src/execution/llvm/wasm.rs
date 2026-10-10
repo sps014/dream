@@ -28,7 +28,20 @@ pub struct WasmRuntime {
 /// Libcalls `llc` may emit after `opt` ran; internalizing them would let `opt` drop the runtime
 /// libc's definitions and turn the calls into host imports.
 /// Heap bootstrap and raw deallocation also remain callable by the JS worker loader.
-const KEEP_PUBLIC: &[&str] = &["memcpy", "memmove", "memset", "memcmp", "dream_heap_init"];
+// The guest libc definitions `opt` may synthesize fresh calls to (`malloc` + zeroing becomes
+// `calloc`, a byte loop becomes `strlen`) must survive internalization.
+const KEEP_PUBLIC: &[&str] = &[
+    "memcpy",
+    "memmove",
+    "memset",
+    "memcmp",
+    "strlen",
+    "malloc",
+    "calloc",
+    "realloc",
+    "free",
+    "dream_heap_init",
+];
 
 pub(super) struct Unit {
     pub path: PathBuf,
@@ -165,10 +178,11 @@ pub(super) fn build_wasm_runtime(
         let mut all = inputs.clone();
         all.extend_from_slice(deps);
         format!(
-            "{}|{opt:?}|{threads}|{}|{:?}",
+            "{}|{opt:?}|{threads}|{}|{:?}|{:?}",
             rt_stamp::content_fingerprint(all),
             tools.config.fingerprint(),
-            crate::driver::wasi::GUEST_FEATURES
+            crate::driver::wasi::GUEST_FEATURES,
+            dream_mir::runtime::WASM32_LIBC_UNITS
         )
     };
     let fingerprint = fingerprint_for(previous_dependencies.as_deref().unwrap_or_default());

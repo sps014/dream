@@ -91,10 +91,11 @@ pub(super) fn wasm(
     let clang = tools.clang()?;
     let sysroot = super::wasm::wasi_sysroot(&clang)?;
     let identity = format!(
-        "wasm-objects-v1:{need:?}:{threads}:{}:{}:{:?}",
+        "wasm-objects-v1:{need:?}:{threads}:{}:{}:{:?}:{:?}",
         config.fingerprint(),
         rt_stamp::content_fingerprint(vec![clang.clone()]),
-        crate::driver::wasi::GUEST_FEATURES
+        crate::driver::wasi::GUEST_FEATURES,
+        dream_mir::runtime::WASM32_LIBC_UNITS
     );
     let dir = config
         .native_rt_cache_root()

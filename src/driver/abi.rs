@@ -3,7 +3,7 @@ use std::fs;
 use std::io::Error;
 use std::path::Path;
 
-use crate::driver::ffi_shim::{CppBridge, WrittenShim, SHIM_RUNTIME_EXPORTS};
+use crate::driver::ffi_shim::{CppBridge, SHIM_RUNTIME_EXPORTS, WrittenShim};
 use crate::driver::native_sets::{NativeGraph, NativeSet};
 use dream_abi::attributes::{c_import_target, c_marshal_charset, extern_import_target, has_c_attr};
 use dream_sema::module_graph::ProgramView;
@@ -190,9 +190,10 @@ pub(crate) fn build_abi_json(
             return fn_tag_from_types(params, ret, ptr_size);
         }
         if let Type::Array(inner) = ty
-            && matches!(**inner, Type::Byte(_)) {
-                return "bytes".to_string();
-            }
+            && matches!(**inner, Type::Byte(_))
+        {
+            return "bytes".to_string();
+        }
         let type_str = ty.get_type();
         match type_str.as_str() {
             "string" => {
@@ -431,9 +432,11 @@ fn build_c_structs_section(
         resolved.insert(name.clone(), *decl);
         for field in &decl.fields {
             if let Some(inner) = value_struct_name(&field.field_type)
-                && by_name.contains_key(inner) && !resolved.contains_key(inner) {
-                    work.push(inner.to_string());
-                }
+                && by_name.contains_key(inner)
+                && !resolved.contains_key(inner)
+            {
+                work.push(inner.to_string());
+            }
         }
     }
     if resolved.is_empty() {

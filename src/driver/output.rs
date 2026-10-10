@@ -21,9 +21,19 @@ mod tests {
     fn artifact_extensions_share_a_lock_until_publication_finishes() {
         let temp = tempfile::tempdir().unwrap();
         let guard = acquire_lock(&temp.path().join("program.ll")).unwrap();
-        let other = std::fs::OpenOptions::new().read(true).write(true)
-            .open(temp.path().join("program.wasm").with_extension("dream-output.lock")).unwrap();
-        assert!(matches!(other.try_lock(), Err(std::fs::TryLockError::WouldBlock)));
+        let other = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(
+                temp.path()
+                    .join("program.wasm")
+                    .with_extension("dream-output.lock"),
+            )
+            .unwrap();
+        assert!(matches!(
+            other.try_lock(),
+            Err(std::fs::TryLockError::WouldBlock)
+        ));
         drop(guard);
         other.try_lock().unwrap();
     }

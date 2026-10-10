@@ -152,10 +152,10 @@ impl<'a> Analyzer<'a> {
         let mut concrete_args: Option<Vec<Type>> = None;
         if let Some(Type::Struct(b, Some(eargs))) = &self.current_expected_type
             && self.type_ctx.resolve(DefKind::Union, &b.text) == Some(def)
-                && eargs.len() == params.len()
-            {
-                concrete_args = Some(eargs.clone());
-            }
+            && eargs.len() == params.len()
+        {
+            concrete_args = Some(eargs.clone());
+        }
         if concrete_args.is_none() {
             let arg_ids: Vec<_> = arg_types
                 .iter()

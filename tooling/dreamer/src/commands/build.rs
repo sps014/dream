@@ -2,7 +2,7 @@ use crate::artifact_alias;
 use crate::compile_flags::CompileFlags;
 use crate::manifest::{PackageType, RunTarget};
 use crate::workspace::Workspace;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::path::Path;
 use std::process::Command;
 
@@ -53,9 +53,10 @@ pub fn compile_target(
         cmd.args(["--target", triple, "-o"]).arg(output);
     }
     if flags.native
-        && let Some(icon) = crate::app_icon::resolve(workspace)? {
-            cmd.arg("--icon").arg(icon);
-        }
+        && let Some(icon) = crate::app_icon::resolve(workspace)?
+    {
+        cmd.arg("--icon").arg(icon);
+    }
 
     match pkg.package_type {
         PackageType::Lib => {

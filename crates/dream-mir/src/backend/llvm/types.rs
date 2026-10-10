@@ -5,7 +5,7 @@
 use super::fx::Fx;
 use super::ir::{FnTy, Ty};
 use super::lcx::FnSig;
-use crate::backend::shared::abi_types::{abi_ty, fn_sig, AbiTy};
+use crate::backend::shared::abi_types::{AbiTy, abi_ty, fn_sig};
 use crate::{Local, MirFunction};
 use dream_types::{TypeId, TypeInterner};
 

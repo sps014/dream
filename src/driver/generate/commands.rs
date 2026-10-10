@@ -1,10 +1,10 @@
 //! `dream generate` subcommands and `dream debug-adapter --generator`: everything runs on a
 //! [`GenInspection`], so none of them merges generated code or compiles the program itself.
 
-use super::exe::{ensure_built, ExePlan, GenExe};
+use super::exe::{ExePlan, GenExe, ensure_built};
 use super::inspect::{GenInspection, InspectedGenerator};
 use super::model::{GenResult, Output};
-use super::run::{write_capture, Capture, CAPTURE_FILE, SNAPSHOT_FILE};
+use super::run::{CAPTURE_FILE, Capture, SNAPSHOT_FILE, write_capture};
 use crate::driver::toolchain::ToolchainConfig;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -127,7 +127,11 @@ pub fn explain(
 ) -> Result<String, String> {
     let g = find(insp, name)?;
     let mut out = String::new();
-    let _ = writeln!(out, "generator '{}' ({})", g.registered.name, g.registered.file);
+    let _ = writeln!(
+        out,
+        "generator '{}' ({})",
+        g.registered.name, g.registered.file
+    );
     let _ = writeln!(
         out,
         "executable {} — {}",

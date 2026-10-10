@@ -1,7 +1,7 @@
 //! A whole `.ll` module: header, named types, globals, declarations, definitions, metadata.
 //! All tables are insertion-ordered so two emissions of the same MIR are byte-identical.
 
-use super::attrs::{join, CallConv, FnAttr, Linkage, ParamAttr};
+use super::attrs::{CallConv, FnAttr, Linkage, ParamAttr, join};
 use super::fmt;
 use super::function::FunctionWriter;
 use super::metadata::Metadata;

@@ -1,9 +1,9 @@
 use super::catalog::{self, ArchiveKind, Artifact};
 use super::{
-    dream_prefix, is_installed, toolchains_dir, toolchains_env_path, zig_binary, Component, Host,
+    Component, Host, dream_prefix, is_installed, toolchains_dir, toolchains_env_path, zig_binary,
 };
 use crate::fetch::cache_dir;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};

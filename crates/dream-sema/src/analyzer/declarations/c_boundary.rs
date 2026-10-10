@@ -5,9 +5,9 @@
 //! [`HImport`]: dream_hir::HImport
 
 use super::*;
-use dream_abi::attributes::{c_import_target, owned_result, OwnedResult};
+use dream_abi::attributes::{OwnedResult, c_import_target, owned_result};
 use dream_abi::c_abi::{
-    is_c_identifier, C_PTR_TYPE, MARSHAL_USER_DATA_LAST, NATIVE_CALLBACK_TYPE, OWNED_C_PTR_TYPE,
+    C_PTR_TYPE, MARSHAL_USER_DATA_LAST, NATIVE_CALLBACK_TYPE, OWNED_C_PTR_TYPE, is_c_identifier,
 };
 use dream_hir::CShape;
 use dream_syntax::nodes::{ConstraintKind, ExpressionNode, FunctionNode, ParameterNode, Type};

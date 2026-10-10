@@ -175,9 +175,10 @@ impl Builder {
                 continue;
             }
             if let ExpressionNode::Identifier(tok) = arg
-                && &tok.text == param {
-                    continue;
-                }
+                && &tok.text == param
+            {
+                continue;
+            }
             if let Some(span) = arg.start_position() {
                 self.inlay_hints.push(InlayHintOut {
                     offset: span.start,

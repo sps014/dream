@@ -6,7 +6,7 @@
 
 use super::super::body::{drop_name, poll_name};
 use super::super::fx::V;
-use super::super::ir::{fmt, GlobalDef, Linkage, Ty, Value};
+use super::super::ir::{GlobalDef, Linkage, Ty, Value, fmt};
 use super::super::lcx::Lcx;
 use super::super::types::{abi_ll, ll_ty};
 use super::{glue, register};

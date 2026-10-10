@@ -211,9 +211,10 @@ fn access_in_range(a: &Access<'_>, facts: &facts::FactView<'_>) -> bool {
         return false;
     }
     if let Access::Index { base, index, .. } = a
-        && let Some(k) = const_int(index) {
-            return facts.const_below_len(k, base.0);
-        }
+        && let Some(k) = const_int(index)
+    {
+        return facts.const_below_len(k, base.0);
+    }
     match a.required() {
         Some((idx, bound)) => facts.holds(&Fact::Below(idx.0, bound)) && facts.nonneg(idx.0),
         None => false,

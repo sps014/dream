@@ -444,7 +444,11 @@ impl FnPrinter<'_> {
             }
             Rvalue::StrBytes(s) => format!("str_bytes({})", self.operand(s)),
             Rvalue::LoadU8(p, i, n) | Rvalue::LoadU16(p, i, n) => {
-                let op = if matches!(r, Rvalue::LoadU8(..)) { "load_u8" } else { "load_u16" };
+                let op = if matches!(r, Rvalue::LoadU8(..)) {
+                    "load_u8"
+                } else {
+                    "load_u16"
+                };
                 match n {
                     Some(n) => format!(
                         "{op}({}, {}, len={})",

@@ -8,8 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 mod target;
 
-const MISSING_CC: &str =
-    "no linker driver found for native builds; run `dreamer toolchain install cc`, \
+const MISSING_CC: &str = "no linker driver found for native builds; run `dreamer toolchain install cc`, \
      or set CC / DREAM_CC to a clang-compatible compiler";
 
 #[derive(Debug, Clone)]
@@ -73,9 +72,9 @@ pub fn resolve_existing_target_cc(
         && let Some(p) = config
             .find_on_path("cc")
             .or_else(|| config.find_on_path("clang"))
-        {
-            return Ok(Cc::Program(p));
-        }
+    {
+        return Ok(Cc::Program(p));
+    }
     Err(MISSING_CC.into())
 }
 
@@ -98,9 +97,10 @@ fn resolve_uncached(config: &ToolchainConfig) -> Result<Cc, String> {
         return Ok(classify_program(p));
     }
     if let Some(p) = config.zig.clone()
-        && p.is_file() {
-            return Ok(Cc::Zig(p));
-        }
+        && p.is_file()
+    {
+        return Ok(Cc::Zig(p));
+    }
     if let Some(zig) = find_toolchain_zig(config) {
         return Ok(Cc::Zig(zig));
     }

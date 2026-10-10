@@ -1,7 +1,7 @@
 //! Token death analysis across the function CFG.
 
 use super::operands::{other_stmt_locals, rvalue_local_operands, terminator_reads};
-use super::{violation, Violation};
+use super::{Violation, violation};
 use crate::{BasicBlock, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -79,9 +79,10 @@ fn check_block_paths(
         }
         if let Statement::Release(o) = s
             && let Some(l) = rc_local(o)
-                && single_token.contains(&l.0) {
-                    mark(&mut dead, l.0, Dead::Released);
-                }
+            && single_token.contains(&l.0)
+        {
+            mark(&mut dead, l.0, Dead::Released);
+        }
     }
     let term_reads = terminator_reads(&block.terminator);
     for (&l, &how) in &dead {
@@ -114,9 +115,10 @@ pub(super) fn check_paths(f: &MirFunction, out: &mut Vec<Violation>) {
                 state.remove(&d);
             }
             if let Statement::Release(op) = stmt
-                && let Some(l) = rc_local(op).filter(|l| single_token.contains(&l.0)) {
-                    mark(&mut state, l.0, Dead::Released);
-                }
+                && let Some(l) = rc_local(op).filter(|l| single_token.contains(&l.0))
+            {
+                mark(&mut state, l.0, Dead::Released);
+            }
         }
         for successor in f.blocks[bi.0 as usize].terminator.successors() {
             let row = &mut incoming[successor.0 as usize];

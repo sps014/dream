@@ -133,9 +133,10 @@ fn find_iv_index(
                 Operand::Const(Const::Int(1)),
             ),
         ) = stmt
-            && d.0 == a.0 {
-                step_idx = Some(*d);
-            }
+            && d.0 == a.0
+        {
+            step_idx = Some(*d);
+        }
     }
     let idx = step_idx?;
     let mut found = None;
@@ -160,9 +161,10 @@ fn find_iv_index(
                 ) => {
                     if let Operand::Copy(Place::Local(i)) = index.as_ref()
                         && i.0 == idx.0
-                            && let TyKind::Array(elem) = interner.kind(func.local_ty(*base)) {
-                                found = Some((idx, *base, *elem));
-                            }
+                        && let TyKind::Array(elem) = interner.kind(func.local_ty(*base))
+                    {
+                        found = Some((idx, *base, *elem));
+                    }
                 }
                 _ => {}
             }
@@ -244,8 +246,9 @@ fn replace_place(place: &mut Place, idx: Local, arr: Local, ptr: Local, elem_ty:
         unchecked: true,
     } = place
         && base.0 == arr.0
-            && let Operand::Copy(Place::Local(i)) = index.as_ref()
-                && i.0 == idx.0 {
-                    *place = Place::Deref { ptr, elem_ty };
-                }
+        && let Operand::Copy(Place::Local(i)) = index.as_ref()
+        && i.0 == idx.0
+    {
+        *place = Place::Deref { ptr, elem_ty };
+    }
 }

@@ -8,7 +8,7 @@ pub use catalog::ZIG_VERSION;
 pub use dream_abi::toolchain::BINARYEN_VERSION;
 pub use install::{install, list, uninstall};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -88,20 +88,23 @@ pub fn detect_host() -> Result<Host> {
 /// `~/.dream`, or `DREAM_HOME`'s prefix when that is not a Cargo `target/` dir / `bin/`.
 pub fn dream_prefix() -> PathBuf {
     if let Ok(p) = std::env::var("DREAM_PREFIX")
-        && !p.is_empty() {
-            return PathBuf::from(p);
-        }
+        && !p.is_empty()
+    {
+        return PathBuf::from(p);
+    }
     if let Ok(home) = std::env::var("DREAM_HOME")
-        && !home.is_empty() {
-            let p = PathBuf::from(&home);
-            if p.file_name().and_then(|s| s.to_str()) == Some("bin")
-                && let Some(parent) = p.parent() {
-                    return parent.to_path_buf();
-                }
-            if !is_cargo_target_dir(&p) {
-                return p;
-            }
+        && !home.is_empty()
+    {
+        let p = PathBuf::from(&home);
+        if p.file_name().and_then(|s| s.to_str()) == Some("bin")
+            && let Some(parent) = p.parent()
+        {
+            return parent.to_path_buf();
         }
+        if !is_cargo_target_dir(&p) {
+            return p;
+        }
+    }
     default_user_dream()
 }
 
@@ -125,9 +128,10 @@ fn is_cargo_target_dir(p: &Path) -> bool {
 
 pub fn toolchains_dir() -> PathBuf {
     if let Ok(p) = std::env::var("DREAM_TOOLCHAINS")
-        && !p.is_empty() {
-            return PathBuf::from(p);
-        }
+        && !p.is_empty()
+    {
+        return PathBuf::from(p);
+    }
     dream_prefix().join("toolchains")
 }
 

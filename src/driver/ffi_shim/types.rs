@@ -180,12 +180,13 @@ impl Known {
             }
         }
         if let Type::Struct(tok, _) = ty
-            && tok.text == NATIVE_CALLBACK_TYPE {
-                return Err(
-                    "a `@cpp` member takes `fun(...)` directly; `NativeCallback` is for `@c`"
-                        .to_string(),
-                );
-            }
+            && tok.text == NATIVE_CALLBACK_TYPE
+        {
+            return Err(
+                "a `@cpp` member takes `fun(...)` directly; `NativeCallback` is for `@c`"
+                    .to_string(),
+            );
+        }
         Err(format!(
             "type '{}' cannot cross the C++ boundary; allowed: {BRIDGEABLE}",
             ty.display_name()
@@ -202,7 +203,7 @@ impl Known {
                         "callback parameter type '{}' cannot cross the C++ boundary; use numbers, \
                          `string`, `CPtr`, or their `Option`",
                         p.display_name()
-                    ))
+                    ));
                 }
             }
         }
@@ -215,7 +216,7 @@ impl Known {
                         "callback result type '{}' cannot cross the C++ boundary; use `void`, a \
                          number, or `CPtr`",
                         r.display_name()
-                    ))
+                    ));
                 }
             },
         };

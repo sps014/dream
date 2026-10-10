@@ -206,14 +206,15 @@ impl<'s> Extractor<'s> {
                 _ => None,
             };
             if let Some(borrowed) = borrowed
-                && let (Some(underlying), Some(span)) = (self.recv_key(borrowed), init_span(init)) {
-                    self.events.push(Ev::Open {
-                        cursor: name.to_string(),
-                        underlying,
-                        span,
-                    });
-                    return;
-                }
+                && let (Some(underlying), Some(span)) = (self.recv_key(borrowed), init_span(init))
+            {
+                self.events.push(Ev::Open {
+                    cursor: name.to_string(),
+                    underlying,
+                    span,
+                });
+                return;
+            }
         }
         self.walk_expr(init, class_fields);
     }

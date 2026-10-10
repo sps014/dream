@@ -10,8 +10,8 @@ use super::{
         insert_early_value_drops, insert_value_struct_moves, mark_returned_value_locals_moved,
     },
 };
-use crate::passes::MirPass;
 use crate::MirFunction;
+use crate::passes::MirPass;
 use dream_types::{DefId, TypeInterner};
 use indexmap::IndexSet;
 pub struct RcInsertion;

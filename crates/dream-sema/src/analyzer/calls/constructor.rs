@@ -54,10 +54,11 @@ impl<'a> Analyzer<'a> {
                 &info.file_path,
                 info.visibility,
                 parent_function.file_path.as_ref(),
-            ) {
-                let decl_file = info.file_path.clone();
-                self.report_not_public("Class", &name.text, &decl_file, name.position, diagnostics);
-            }
+            )
+        {
+            let decl_file = info.file_path.clone();
+            self.report_not_public("Class", &name.text, &decl_file, name.position, diagnostics);
+        }
 
         // A struct with more than one `constructor` overload is resolved exactly like an
         // overloaded free function/method: the implicit `this` (the struct itself) plus the given

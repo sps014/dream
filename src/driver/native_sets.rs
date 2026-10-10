@@ -12,9 +12,9 @@ use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
 
 use crate::driver::project_manifest::{
-    find_project_root_from, import_segment, NativeTable, ProjectManifest, MANIFEST_FILE_NAME,
+    MANIFEST_FILE_NAME, NativeTable, ProjectManifest, find_project_root_from, import_segment,
 };
-use crate::driver::source_loader::{find_dream_packages_dir, ProgramAccumulator};
+use crate::driver::source_loader::{ProgramAccumulator, find_dream_packages_dir};
 
 pub const C_EXTENSIONS: [&str; 1] = ["c"];
 pub const CXX_EXTENSIONS: [&str; 3] = ["cpp", "cc", "cxx"];
@@ -76,14 +76,15 @@ impl NativeGraph {
         if let Some(root) = entry.parent().and_then(find_project_root_from) {
             roots.insert(canonical(&root));
             if let Some(pkgs) = find_dream_packages_dir(&root)
-                && let Ok(rd) = std::fs::read_dir(&pkgs) {
-                    for e in rd.flatten() {
-                        let p = e.path();
-                        if p.join(MANIFEST_FILE_NAME).is_file() {
-                            roots.insert(canonical(&p));
-                        }
+                && let Ok(rd) = std::fs::read_dir(&pkgs)
+            {
+                for e in rd.flatten() {
+                    let p = e.path();
+                    if p.join(MANIFEST_FILE_NAME).is_file() {
+                        roots.insert(canonical(&p));
                     }
                 }
+            }
         }
         for file in acc.file_contents.keys() {
             let path = Path::new(file);
@@ -101,14 +102,15 @@ impl NativeGraph {
             let manifest = ProjectManifest::load(&root)?;
             let manifest_path = root.join(MANIFEST_FILE_NAME);
             if let Some(links) = &manifest.links
-                && let Some(prev) = links_owner.insert(links.clone(), manifest_path.clone()) {
-                    return Err(format!(
-                        "native library '{links}' is provided by two packages: {} and {} \
+                && let Some(prev) = links_owner.insert(links.clone(), manifest_path.clone())
+            {
+                return Err(format!(
+                    "native library '{links}' is provided by two packages: {} and {} \
                          (`[package] links` must be unique across the dependency graph)",
-                        prev.display(),
-                        manifest_path.display()
-                    ));
-                }
+                    prev.display(),
+                    manifest_path.display()
+                ));
+            }
             for set in sets_for_package(&root, &manifest, target)? {
                 if let Some(prev) = set_owner.insert(set.name.clone(), manifest_path.clone()) {
                     return Err(format!(
@@ -121,9 +123,10 @@ impl NativeGraph {
                 graph.sets.insert(set.name.clone(), set);
             }
             if let Some(name) = implicit_set_name(&root, &manifest)
-                && graph.sets.contains_key(&name) {
-                    graph.implicit.insert(root.clone(), name);
-                }
+                && graph.sets.contains_key(&name)
+            {
+                graph.implicit.insert(root.clone(), name);
+            }
         }
         Ok(graph)
     }

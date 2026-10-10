@@ -7,7 +7,7 @@ use super::exe::{self, ExePlan};
 use super::incremental;
 use super::model::GenResult;
 use super::registry::RegisteredGenerator;
-use super::stats::{record, Event};
+use super::stats::{Event, record};
 use crate::driver::toolchain::ToolchainConfig;
 use dream_diagnostics::{Diagnostic, DiagnosticBag};
 use std::sync::Arc;
@@ -79,7 +79,10 @@ pub fn execute<'g>(
         let job = &jobs[i];
         let p = plan_of(job.registered);
         let Some((_, exe)) = built.iter().find(|(bp, _)| *bp == p) else {
-            return Outcome::Failed(format!("generator '{}': no executable", job.registered.name));
+            return Outcome::Failed(format!(
+                "generator '{}': no executable",
+                job.registered.name
+            ));
         };
         let exe = match exe {
             Ok(exe) => exe,
@@ -111,7 +114,8 @@ pub fn execute<'g>(
             Some(Outcome::Done(result, replayed)) => {
                 let clean = result.diagnostics.iter().all(|d| d.severity == "warning");
                 if job.registered.incremental && !replayed && clean {
-                    let key = incremental::result_key(&plans[plan_of(job.registered)].key, &job.json);
+                    let key =
+                        incremental::result_key(&plans[plan_of(job.registered)].key, &job.json);
                     incremental::store(&cache_root, &key, &result);
                 }
                 runs.push(GenRun {

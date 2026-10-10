@@ -4,7 +4,7 @@ use bumpalo::Bump;
 use dream_diagnostics::DiagnosticBag;
 
 use crate::driver::native_sets::NativeGraph;
-use crate::driver::source_loader::{parse_file_recursive, ProgramAccumulator};
+use crate::driver::source_loader::{ProgramAccumulator, parse_file_recursive};
 
 /// A package `kv` with one C++ source and `src/main.dream` holding `source`.
 fn package(tag: &str, source: &str, with_native: bool) -> PathBuf {

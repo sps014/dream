@@ -280,14 +280,16 @@ fn thread_empty_jumps(func: &mut MirFunction) -> bool {
     for i in 0..func.blocks.len() {
         let here = BlockId(i as u32);
         if let Terminator::Goto(t) = func.blocks[i].terminator
-            && t != here && func.block(t).stmts.is_empty() {
-                let forwarded = func.block(t).terminator.clone();
-                // Only thread when it actually changes the target (avoid no-op churn / cycles).
-                if !matches!(&forwarded, Terminator::Goto(u) if *u == t) {
-                    func.blocks[i].terminator = forwarded;
-                    changed = true;
-                }
+            && t != here
+            && func.block(t).stmts.is_empty()
+        {
+            let forwarded = func.block(t).terminator.clone();
+            // Only thread when it actually changes the target (avoid no-op churn / cycles).
+            if !matches!(&forwarded, Terminator::Goto(u) if *u == t) {
+                func.blocks[i].terminator = forwarded;
+                changed = true;
             }
+        }
     }
     changed
 }

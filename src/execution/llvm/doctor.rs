@@ -1,7 +1,7 @@
 use crate::driver::toolchain::ToolchainConfig;
 use crate::execution::native::{cc, host_library_dir};
 use dream_abi::{host_capability::HostCapability, target::TargetSpec};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 pub fn run(
@@ -102,9 +102,10 @@ pub fn run(
     }
     let sdk_args = super::runtime::sysroot_args(&config, &spec);
     if let Some(root) = &config.sysroot
-        && !root.is_dir() {
-            errors.push(format!("sysroot does not exist: {}", root.display()));
-        }
+        && !root.is_dir()
+    {
+        errors.push(format!("sysroot does not exist: {}", root.display()));
+    }
     for capability in HostCapability::ALL {
         let path = host_dir
             .as_ref()

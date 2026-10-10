@@ -116,34 +116,36 @@ impl<'a> Analyzer<'a> {
             && !self.function_overloaded(&function_name)
             && self.generic_function_template(&function_name).is_none()
             && generic_args.as_ref().is_none_or(|g| g.is_empty())
-            && let Some(expected) = self.current_expected_type.clone() {
-                let enum_name = match &expected {
-                    Type::Struct(tok, _) => tok.text.clone(),
-                    other => other.get_type(),
-                };
-                let expected_id = self.type_ctx.lower(&expected);
-                let variant_known = self
-                    .type_ctx
-                    .resolve(DefKind::Union, &enum_name)
-                    .and_then(|def| self.generic_union(def))
-                    .map(|t| t.variants.iter().any(|v| v.name.text == name.text))
-                    .or_else(|| {
-                        self.union_info(expected_id)
-                            .map(|info| info.variant(&name.text).is_some())
-                    })
-                    .unwrap_or(false);
-                if variant_known
-                    && let Some(t) = self.analyze_variant_construction(
-                        &enum_name,
-                        name,
-                        params,
-                        parent_function,
-                        symbol_table,
-                        diagnostics,
-                    )? {
-                        return Ok(t);
-                    }
+            && let Some(expected) = self.current_expected_type.clone()
+        {
+            let enum_name = match &expected {
+                Type::Struct(tok, _) => tok.text.clone(),
+                other => other.get_type(),
+            };
+            let expected_id = self.type_ctx.lower(&expected);
+            let variant_known = self
+                .type_ctx
+                .resolve(DefKind::Union, &enum_name)
+                .and_then(|def| self.generic_union(def))
+                .map(|t| t.variants.iter().any(|v| v.name.text == name.text))
+                .or_else(|| {
+                    self.union_info(expected_id)
+                        .map(|info| info.variant(&name.text).is_some())
+                })
+                .unwrap_or(false);
+            if variant_known
+                && let Some(t) = self.analyze_variant_construction(
+                    &enum_name,
+                    name,
+                    params,
+                    parent_function,
+                    symbol_table,
+                    diagnostics,
+                )?
+            {
+                return Ok(t);
             }
+        }
 
         // When the callee is an unambiguous (non-overloaded) free function, publish each parameter's
         // declared type as the expected type while analyzing the matching argument, so untyped
@@ -247,12 +249,13 @@ impl<'a> Analyzer<'a> {
         // Calling a `js`-typed local (`cb(a, b)`) invokes the underlying JS value dynamically.
         let name_sym = (*symbol_table).as_ref().borrow().get_symbol(name);
         if let Ok(sym_ty) = name_sym
-            && self.is_js_type(&sym_ty) {
-                self.hir_set_var(&name.text);
-                let recv = self.hir_take();
-                self.desugar_js_invoke(recv, arg_hirs, Some(name.position), diagnostics);
-                return Ok(Self::js_type());
-            }
+            && self.is_js_type(&sym_ty)
+        {
+            self.hir_set_var(&name.text);
+            let recv = self.hir_take();
+            self.desugar_js_invoke(recv, arg_hirs, Some(name.position), diagnostics);
+            return Ok(Self::js_type());
+        }
 
         // Default: no call HIR. Only the plain free-function tail below opts back in; every other
         // path (indirect, constructor, generic, async, overload/arity errors) leaves `last` cleared.

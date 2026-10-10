@@ -19,7 +19,7 @@ mod syntax;
 pub use c_scalar::CScalar;
 pub use compat::{assignable, numeric_widen, overload_compatible};
 pub use def::{DefInfo, DefKind, DefTable};
-pub use display::{display_name, UNKNOWN_TYPE_NAME};
+pub use display::{UNKNOWN_TYPE_NAME, display_name};
 pub use interner::TypeInterner;
 pub use kind::{PrimTy, TyKind};
 pub use lower::TypeCtx;

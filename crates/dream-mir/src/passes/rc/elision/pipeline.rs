@@ -2,8 +2,8 @@ use super::branches::elide_around_transparent_loops;
 use super::branches::elide_transparent_diamonds;
 use super::chains::elide_goto_chains;
 use super::postdom::elide_postdom_transparent;
-use crate::passes::MirPass;
 use crate::MirFunction;
+use crate::passes::MirPass;
 use dream_types::TypeInterner;
 
 pub struct RcElision;

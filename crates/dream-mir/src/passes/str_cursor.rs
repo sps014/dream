@@ -378,7 +378,10 @@ mod tests {
     #[test]
     fn checked_read_keeps_its_bound_against_a_hoisted_length() {
         let (f, body) = scan(false);
-        assert!(matches!(body_load(&f, body), Rvalue::LoadU16(_, _, Some(_))));
+        assert!(matches!(
+            body_load(&f, body),
+            Rvalue::LoadU16(_, _, Some(_))
+        ));
         assert!(preheader_has(&f, |rv| matches!(rv, Rvalue::StrLen(_))));
         assert!(preheader_has(&f, |rv| matches!(rv, Rvalue::StrBytes(_))));
         assert!(!crate::passes::dce::is_pure(body_load(&f, body)));

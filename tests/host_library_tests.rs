@@ -3,7 +3,7 @@
 use dream_abi::host_capability::HostCapability;
 use libloading::{Library, Symbol};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{mpsc, Mutex};
+use std::sync::{Mutex, mpsc};
 
 static ALLOCATIONS: Mutex<Vec<Box<[u64]>>> = Mutex::new(Vec::new());
 static STRINGS: AtomicUsize = AtomicUsize::new(0);

@@ -19,7 +19,7 @@
 
 use super::cursor::{is_null_init, mark_stmt_escapes, mark_term_escapes};
 use super::liveness::{self, add_terminator_reads, transfer_stmt};
-use super::modref::{stmt_effects, Effect, ModRef, ModRefTable};
+use super::modref::{Effect, ModRef, ModRefTable, stmt_effects};
 use crate::{MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_hir::LayoutTable;
 use dream_types::{TypeId, TypeInterner};
@@ -412,9 +412,10 @@ impl FamilyCx<'_> {
                             .union(ty)
                             .and_then(|u| u.variants.get(variant))
                             .and_then(|v| v.fields.get(field))
-                            && (f.is_weak || f.is_unowned) {
-                                return None;
-                            }
+                            && (f.is_weak || f.is_unowned)
+                        {
+                            return None;
+                        }
                         unions.insert(ty);
                     }
                 }
@@ -442,7 +443,7 @@ impl FamilyCx<'_> {
         match stmt {
             Statement::Assign(Place::Local(l), _) if roots.contains(&l.0) => return false,
             Statement::Release(Operand::Copy(Place::Local(l))) if roots.contains(&l.0) => {
-                return false
+                return false;
             }
             Statement::RegionLeave => return false,
             _ => {}

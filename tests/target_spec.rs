@@ -126,9 +126,11 @@ fn selected_target_reaches_runtime_loading_unchanged() {
                 &output.to_string_lossy(),
             )
             .unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("target captured before loading runtime"));
+        assert!(
+            error
+                .to_string()
+                .contains("target captured before loading runtime")
+        );
         assert_eq!(*capture.0.lock().unwrap(), Some(spec));
     }
 }
@@ -213,9 +215,11 @@ fn mobile_library_objects_have_the_selected_architecture_and_typed_exports() {
         let object = object::File::parse(bytes.as_slice()).unwrap();
         assert_eq!(object.architecture(), architecture);
         assert_eq!(object.format(), format);
-        assert!(std::fs::read_to_string(ir.with_extension("h"))
-            .unwrap()
-            .contains("int32_t add(int32_t arg0, int32_t arg1)"));
+        assert!(
+            std::fs::read_to_string(ir.with_extension("h"))
+                .unwrap()
+                .contains("int32_t add(int32_t arg0, int32_t arg1)")
+        );
         let abi: serde_json::Value =
             serde_json::from_slice(&std::fs::read(ir.with_extension("abi.json")).unwrap()).unwrap();
         assert_eq!(abi["export_functions"][0]["name"], "add");

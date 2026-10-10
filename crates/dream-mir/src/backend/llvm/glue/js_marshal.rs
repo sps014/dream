@@ -1,7 +1,7 @@
 //! wasm32 struct/union/array `<-> js` marshalers (policy in `shared::js_marshal`). Every JS value
 //! is an integer registry ID, distinct from a managed Dream reference.
 
-use super::super::fx::{align_at, Fx, V};
+use super::super::fx::{Fx, V, align_at};
 use super::super::ir::{Ty, Value};
 use super::super::lcx::Lcx;
 use super::{glue, register};

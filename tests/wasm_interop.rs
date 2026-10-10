@@ -60,7 +60,10 @@ fn c_package_callbacks_strings_and_owned_pointer_drop() {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("main.wat");
     compile(&repo("sample/native_c/src/main.dream"), &out, None).unwrap();
-    assert_eq!(run(&out).trim(), "demo total = 30\ndemo total = 70\ncallbacks = 5\ndemo#4\n(none)\nfingerprint = 726441\n[c] ticker_free(demo)");
+    assert_eq!(
+        run(&out).trim(),
+        "demo total = 30\ndemo total = 70\ncallbacks = 5\ndemo#4\n(none)\nfingerprint = 726441\n[c] ticker_free(demo)"
+    );
 }
 
 #[test]
@@ -84,7 +87,10 @@ fn cpp_package_ownership_callbacks_layout_and_exceptions_at_all_levels() {
         let dir = tempfile::tempdir().unwrap();
         let out = dir.path().join("main.wat");
         compile(&repo("sample/native_cpp/src/main.dream"), &out, level).unwrap();
-        assert_eq!(run(&out).trim(), "changed: a,ab,b\nab = 22\nzz = (none)\nb as int = 333\ncount = 3\ncount(a) = 2\nscaled = 30\nsum = 10\nnorm = 5\norigin = 1.5,-2\ncompact ok true\nsnapshot failed\nsnapshot ab=22\nstore out of scope\nborrowed entry ab\n[c++] ~Store(main.db)\nkv 1.0\nhello, dream\n[c++] ~Store(default)\ncompact failed: nothing to compact\n[c++] ~Store(empty)");
+        assert_eq!(
+            run(&out).trim(),
+            "changed: a,ab,b\nab = 22\nzz = (none)\nb as int = 333\ncount = 3\ncount(a) = 2\nscaled = 30\nsum = 10\nnorm = 5\norigin = 1.5,-2\ncompact ok true\nsnapshot failed\nsnapshot ab=22\nstore out of scope\nborrowed entry ab\n[c++] ~Store(main.db)\nkv 1.0\nhello, dream\n[c++] ~Store(default)\ncompact failed: nothing to compact\n[c++] ~Store(empty)"
+        );
     }
 }
 
@@ -92,7 +98,11 @@ fn cpp_package_ownership_callbacks_layout_and_exceptions_at_all_levels() {
 fn c_bitcode_inlines_and_preserves_aggregate_and_allocator_abi() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
-    write(root, "dream.toml", "[package]\nname = \"portable\"\n[native.portable.windows]\ndefines = [\"HOST_ONLY=1\"]\n[native.portable.wasm]\ndefines = [\"GUEST_ONLY=1\"]\n");
+    write(
+        root,
+        "dream.toml",
+        "[package]\nname = \"portable\"\n[native.portable.windows]\ndefines = [\"HOST_ONLY=1\"]\n[native.portable.wasm]\ndefines = [\"GUEST_ONLY=1\"]\n",
+    );
     write(
         root,
         "main.dream",
@@ -162,9 +172,17 @@ fn cpp_global_constructors_and_destructors_run_once() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     write(root, "dream.toml", "[package]\nname = \"lifetime\"\n");
-    write(root, "main.dream", "@cpp(\"lifetime.hpp\", \"value\") extern fun value(): int;\nfun main(): int { System.println(value()); return 0; }\n");
+    write(
+        root,
+        "main.dream",
+        "@cpp(\"lifetime.hpp\", \"value\") extern fun value(): int;\nfun main(): int { System.println(value()); return 0; }\n",
+    );
     write(root, "native/include/lifetime.hpp", "int value();\n");
-    write(root, "native/lifetime.cpp", "#include <cstdio>\nstruct Global { Global() { std::puts(\"constructed\"); } ~Global() { std::puts(\"destroyed\"); } };\nGlobal global;\nint value() { return 7; }\n");
+    write(
+        root,
+        "native/lifetime.cpp",
+        "#include <cstdio>\nstruct Global { Global() { std::puts(\"constructed\"); } ~Global() { std::puts(\"destroyed\"); } };\nGlobal global;\nint value() { return 7; }\n",
+    );
     let out = root.join("main.wat");
     compile(&root.join("main.dream"), &out, None).unwrap();
     assert_eq!(run(&out), "constructed\n7\ndestroyed\n");

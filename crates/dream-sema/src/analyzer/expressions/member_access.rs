@@ -54,7 +54,7 @@ impl<'a> Analyzer<'a> {
                 return MemberField::NotAField {
                     struct_name,
                     struct_ty,
-                }
+                };
             }
         };
 
@@ -103,52 +103,53 @@ impl<'a> Analyzer<'a> {
                 parent_function,
                 symbol_table,
                 diagnostics,
-            )? {
-                // `analyze_variant_construction` records the `UnionNew` (or clears `last`) itself.
-                let summary = self.ide_summary(&t);
-                let owner = self.type_ctx.lower(&t);
-                self.record_ide_member_ref(
+            )?
+        {
+            // `analyze_variant_construction` records the `UnionNew` (or clears `last`) itself.
+            let summary = self.ide_summary(&t);
+            let owner = self.type_ctx.lower(&t);
+            self.record_ide_member_ref(
+                owner,
+                member,
+                ide::IdeTarget::UnionVariant {
                     owner,
-                    member,
-                    ide::IdeTarget::UnionVariant {
-                        owner,
-                        variant: member.text.clone(),
-                    },
-                    summary,
-                );
-                return Ok(t);
-            }
+                    variant: member.text.clone(),
+                },
+                summary,
+            );
+            return Ok(t);
+        }
         // Enum member access `EnumName.Member` resolves to the enum type (an i32 at runtime).
         if let ExpressionNode::Identifier(id) = obj
             && self
                 .type_ctx
                 .resolve(DefKind::Enum, &id.text)
                 .is_some_and(|def| self.enum_members(def).is_some())
-            {
-                let enum_ty = Type::Struct(id.clone(), None);
-                match self.enum_member_value(&id.text, &member.text) {
-                    Some(value) => self.hir_set_enum_value(value as i64, &enum_ty),
-                    None => {
-                        diagnostics.report_error(
-                            format!("Enum '{}' has no member '{}'", id.text, member.text),
-                            Some(member.position),
-                        );
-                        self.hir_none();
-                    }
+        {
+            let enum_ty = Type::Struct(id.clone(), None);
+            match self.enum_member_value(&id.text, &member.text) {
+                Some(value) => self.hir_set_enum_value(value as i64, &enum_ty),
+                None => {
+                    diagnostics.report_error(
+                        format!("Enum '{}' has no member '{}'", id.text, member.text),
+                        Some(member.position),
+                    );
+                    self.hir_none();
                 }
-                let enum_summary = self.ide_summary(&enum_ty);
-                let owner = self.type_ctx.lower(&enum_ty);
-                self.record_ide_member_ref(
-                    owner,
-                    member,
-                    ide::IdeTarget::EnumMember {
-                        owner,
-                        member: member.text.clone(),
-                    },
-                    enum_summary,
-                );
-                return Ok(enum_ty);
             }
+            let enum_summary = self.ide_summary(&enum_ty);
+            let owner = self.type_ctx.lower(&enum_ty);
+            self.record_ide_member_ref(
+                owner,
+                member,
+                ide::IdeTarget::EnumMember {
+                    owner,
+                    member: member.text.clone(),
+                },
+                enum_summary,
+            );
+            return Ok(enum_ty);
+        }
         // `js.global` as a value (not the `js.global("name")` call form) is `globalThis`, so
         // `js.global.document` / `js.global.fetch(...)` chain naturally off the JS global scope.
         if let ExpressionNode::Identifier(id) = obj {
@@ -271,13 +272,13 @@ impl<'a> Analyzer<'a> {
         if self.interface_receiver_name(&obj_type).is_some() {
             if let Some((base, args)) = Self::resolve_struct_parts(&obj_type)
                 && !args.is_empty()
-                    && self
-                        .type_ctx
-                        .resolve(DefKind::Interface, &base)
-                        .is_some_and(|def| self.is_generic_interface(def))
-                {
-                    self.ensure_interface_instantiated(&base, &args, &member.position, diagnostics);
-                }
+                && self
+                    .type_ctx
+                    .resolve(DefKind::Interface, &base)
+                    .is_some_and(|def| self.is_generic_interface(def))
+            {
+                self.ensure_interface_instantiated(&base, &args, &member.position, diagnostics);
+            }
             let getter = getter_member_name(&member.text);
             let iface_ty = self.type_ctx.lower(&obj_type);
             let methods = self

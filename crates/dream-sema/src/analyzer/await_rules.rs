@@ -8,10 +8,10 @@
 use super::Analyzer;
 use crate::symbol_table::SymbolTable;
 use dream_diagnostics::DiagnosticBag;
+use dream_syntax::nodes::{ExpressionNode, FunctionNode, LambdaBody, LambdaNode, StatementNode};
 use dream_text::text_span::TextSpan;
 use std::cell::RefCell;
 use std::rc::Rc;
-use dream_syntax::nodes::{ExpressionNode, FunctionNode, LambdaBody, LambdaNode, StatementNode};
 
 impl<'a> Analyzer<'a> {
     /// Awaiting is allowed anywhere inside an `async` function; in a non-async function every

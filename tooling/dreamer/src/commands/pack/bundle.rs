@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::path::{Component, Path, PathBuf};
 
 pub struct BundleWriter {
@@ -117,7 +117,10 @@ impl BundleWriter {
                 })();
                 if let Err(rollback) = rollback {
                     let recovery = backup.keep();
-                    bail!("publishing bundle failed: {error}; rollback failed: {rollback}; previous products preserved in {}", recovery.display());
+                    bail!(
+                        "publishing bundle failed: {error}; rollback failed: {rollback}; previous products preserved in {}",
+                        recovery.display()
+                    );
                 }
                 return Err(error.context("publishing bundle"));
             }
@@ -141,10 +144,11 @@ mod tests {
         let writer = BundleWriter::new(temp.path()).unwrap();
         writer.write("hello", b"new").unwrap();
         assert!(writer.publish_native(&["missing".into()], &spec).is_err());
-        assert!(temp
-            .path()
-            .join(dream_abi::host_capability::HostCapability::Core.library_name(&spec))
-            .is_file());
+        assert!(
+            temp.path()
+                .join(dream_abi::host_capability::HostCapability::Core.library_name(&spec))
+                .is_file()
+        );
         writer.publish_native(&["hello".into()], &spec).unwrap();
         for capability in dream_abi::host_capability::HostCapability::ALL {
             assert!(!temp.path().join(capability.library_name(&spec)).exists());
@@ -186,9 +190,11 @@ mod tests {
         std::fs::write(old.join("stale"), b"old").unwrap();
         let writer = BundleWriter::new(temp.path()).unwrap();
         writer.write("demo-package/current", b"new").unwrap();
-        assert!(writer
-            .publish(&["demo-package".into(), "missing".into()])
-            .is_err());
+        assert!(
+            writer
+                .publish(&["demo-package".into(), "missing".into()])
+                .is_err()
+        );
         assert_eq!(std::fs::read(old.join("stale")).unwrap(), b"old");
         writer.publish(&["demo-package".into()]).unwrap();
         assert!(!old.join("stale").exists());

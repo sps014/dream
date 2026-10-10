@@ -91,51 +91,52 @@ impl Backend {
             .filter_map(|u| Self::file_path_of(&u))
             .collect();
         if !open_paths.is_empty()
-            && let Some(root) = crate::workspace::project_root(&open_paths) {
-                let mut cache = self.workspace_cache.lock().await;
-                let fresh = cache.as_ref().is_some_and(|w| w.is_fresh(&root));
-                if !fresh {
-                    let symbols = crate::workspace::scan(&root);
-                    *cache = Some(crate::workspace::WorkspaceIndex::new(root, symbols));
-                }
-                if let Some(index) = cache.as_ref() {
-                    let open_set: std::collections::HashSet<&String> = open_paths.iter().collect();
-                    let lower_query = query.to_lowercase();
-                    for s in &index.symbols {
-                        if open_set.contains(&s.path) {
-                            continue;
-                        }
-                        if !s.name.to_lowercase().contains(&lower_query) {
-                            continue;
-                        }
-                        let Ok(path) = std::path::PathBuf::from(&s.path).canonicalize() else {
-                            continue;
-                        };
-                        let Some(text) = std::fs::read_to_string(&path).ok() else {
-                            continue;
-                        };
-                        let Some(uri) = Url::from_file_path(&path).ok() else {
-                            continue;
-                        };
-                        let line_index = LineIndex::new(&text);
-                        #[allow(deprecated)]
-                        out.push(SymbolInformation {
-                            name: s.name.clone(),
-                            kind: symbol_kind(s.kind),
-                            tags: None,
-                            deprecated: None,
-                            location: Location {
-                                uri,
-                                range: Range {
-                                    start: map_position(line_index.position(s.start)),
-                                    end: map_position(line_index.position(s.end)),
-                                },
-                            },
-                            container_name: None,
-                        });
+            && let Some(root) = crate::workspace::project_root(&open_paths)
+        {
+            let mut cache = self.workspace_cache.lock().await;
+            let fresh = cache.as_ref().is_some_and(|w| w.is_fresh(&root));
+            if !fresh {
+                let symbols = crate::workspace::scan(&root);
+                *cache = Some(crate::workspace::WorkspaceIndex::new(root, symbols));
+            }
+            if let Some(index) = cache.as_ref() {
+                let open_set: std::collections::HashSet<&String> = open_paths.iter().collect();
+                let lower_query = query.to_lowercase();
+                for s in &index.symbols {
+                    if open_set.contains(&s.path) {
+                        continue;
                     }
+                    if !s.name.to_lowercase().contains(&lower_query) {
+                        continue;
+                    }
+                    let Ok(path) = std::path::PathBuf::from(&s.path).canonicalize() else {
+                        continue;
+                    };
+                    let Some(text) = std::fs::read_to_string(&path).ok() else {
+                        continue;
+                    };
+                    let Some(uri) = Url::from_file_path(&path).ok() else {
+                        continue;
+                    };
+                    let line_index = LineIndex::new(&text);
+                    #[allow(deprecated)]
+                    out.push(SymbolInformation {
+                        name: s.name.clone(),
+                        kind: symbol_kind(s.kind),
+                        tags: None,
+                        deprecated: None,
+                        location: Location {
+                            uri,
+                            range: Range {
+                                start: map_position(line_index.position(s.start)),
+                                end: map_position(line_index.position(s.end)),
+                            },
+                        },
+                        container_name: None,
+                    });
                 }
             }
+        }
 
         Ok(Some(out))
     }

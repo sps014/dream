@@ -63,10 +63,9 @@ fn macos_rpaths(text: &str) -> Vec<&str> {
         if line.starts_with("cmd ") {
             in_rpath = line == "cmd LC_RPATH";
         }
-        if in_rpath
-            && let Some(path) = line.strip_prefix("path ") {
-                paths.push(path.split_once(" (offset ").expect("otool rpath offset").0);
-            }
+        if in_rpath && let Some(path) = line.strip_prefix("path ") {
+            paths.push(path.split_once(" (offset ").expect("otool rpath offset").0);
+        }
     }
     paths
 }
@@ -263,5 +262,10 @@ fn loader_path_checks_reject_builder_and_working_directory_paths() {
         bracket_value("(RUNPATH) Library runpath: [/builder path:$ORIGIN]"),
         Some("/builder path:$ORIGIN")
     );
-    assert_eq!(macos_rpaths("cmd LC_RPATH\npath /builder path (offset 12)\ncmd LC_LOAD_DYLIB\npath /not/an/rpath (offset 24)"), ["/builder path"]);
+    assert_eq!(
+        macos_rpaths(
+            "cmd LC_RPATH\npath /builder path (offset 12)\ncmd LC_LOAD_DYLIB\npath /not/an/rpath (offset 24)"
+        ),
+        ["/builder path"]
+    );
 }

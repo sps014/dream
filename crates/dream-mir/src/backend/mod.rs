@@ -3,7 +3,7 @@
 pub mod llvm;
 pub(crate) mod shared;
 
-pub use shared::{print_wasm, Target};
+pub use shared::{Target, print_wasm};
 
 use crate::Mir;
 use dream_abi::{js_abi, runtime_hosts};

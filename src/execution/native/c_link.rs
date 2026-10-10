@@ -142,10 +142,11 @@ pub fn cc_link_flags(
             continue;
         }
         if let Some(path) = find_library_path(config, lib, search_roots, spec)
-            && let Some(dir) = path.parent() {
-                flags.push(format!("-L{}", dir.display()));
-                rpaths.insert(dir.to_path_buf());
-            }
+            && let Some(dir) = path.parent()
+        {
+            flags.push(format!("-L{}", dir.display()));
+            rpaths.insert(dir.to_path_buf());
+        }
         flags.push(format!("-l{lib}"));
     }
     if !spec.is_windows() {

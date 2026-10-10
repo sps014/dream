@@ -120,12 +120,16 @@ mod tests {
             };
             assert!(args.iter().any(|arg| *arg == required));
         }
-        assert!(!args
-            .iter()
-            .any(|arg| arg.contains("dream_host_unicode_abi")));
-        assert!(!args
-            .iter()
-            .any(|arg| arg.contains("dream_host_process_abi")));
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.contains("dream_host_unicode_abi"))
+        );
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.contains("dream_host_process_abi"))
+        );
         assert!(!args.iter().any(|arg| arg.contains("abi_v1")));
     }
 
@@ -133,7 +137,14 @@ mod tests {
     fn zig_msvc_link_uses_the_gnu_force_undefined_spelling() {
         let spec = dream_abi::target::TargetSpec::parse("x86_64-pc-windows-msvc").unwrap();
         let mut command = Command::new("zig");
-        link_runtime(&mut command, Path::new("/toolchain"), None, &[HostCapability::Core], &spec, true);
+        link_runtime(
+            &mut command,
+            Path::new("/toolchain"),
+            None,
+            &[HostCapability::Core],
+            &spec,
+            true,
+        );
         let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy()).collect();
         assert!(args.iter().any(|a| a == "-Wl,-u,dream_host_core_abi_v2"));
         assert!(!args.iter().any(|a| a.contains("/include:")));
@@ -197,14 +208,16 @@ mod tests {
                 Path::new("/package")
                     .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
             };
-            assert!(args
-                .iter()
-                .any(|a| a.as_ref() == expected.to_string_lossy()));
+            assert!(
+                args.iter()
+                    .any(|a| a.as_ref() == expected.to_string_lossy())
+            );
         }
         if cfg!(target_os = "macos") {
-            assert!(args
-                .iter()
-                .any(|a| a == "-Wl,-rpath,@executable_path/../Frameworks"));
+            assert!(
+                args.iter()
+                    .any(|a| a == "-Wl,-rpath,@executable_path/../Frameworks")
+            );
         } else if cfg!(target_os = "linux") {
             assert!(args.iter().any(|a| a == "-Wl,-rpath,$ORIGIN"));
         }
@@ -224,13 +237,15 @@ mod tests {
             )
             .unwrap();
         }
-        assert!(stage_runtime(
-            directory.path(),
-            directory.path(),
-            &HostCapability::ALL,
-            &dream_abi::target::TargetSpec::host()
-        )
-        .is_err());
+        assert!(
+            stage_runtime(
+                directory.path(),
+                directory.path(),
+                &HostCapability::ALL,
+                &dream_abi::target::TargetSpec::host()
+            )
+            .is_err()
+        );
         for capability in HostCapability::ALL {
             assert_eq!(
                 std::fs::read(
@@ -259,9 +274,10 @@ mod tests {
             false,
         );
         for capability in HostCapability::ALL {
-            assert!(command.get_args().any(|arg| arg
-                == Path::new(".")
-                    .join(capability.library_name(&dream_abi::target::TargetSpec::host()))));
+            assert!(command.get_args().any(|arg| {
+                arg == Path::new(".")
+                    .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
+            }));
         }
         assert!(!command.get_args().any(|arg| arg == "-L."));
     }

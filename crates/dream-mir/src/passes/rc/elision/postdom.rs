@@ -1,9 +1,9 @@
-use super::super::is_transparent_stmt;
 use super::super::RcKey;
-use crate::passes::cfg;
+use super::super::is_transparent_stmt;
 use crate::BlockId;
 use crate::MirFunction;
 use crate::Statement;
+use crate::passes::cfg;
 use std::collections::BTreeSet;
 
 /// Cancel `Retain`/`Release` when the release postdominates the retain, the retain dominates the

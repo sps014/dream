@@ -96,12 +96,14 @@ mod tests {
             r#"{"native_abi_version":2,"host_capabilities":["core","unicode","crypto","process","timezone"]}"#,
         )
         .unwrap();
-        assert!(copy(
-            &binary,
-            &destination,
-            &dream_abi::target::TargetSpec::host()
-        )
-        .is_err());
+        assert!(
+            copy(
+                &binary,
+                &destination,
+                &dream_abi::target::TargetSpec::host()
+            )
+            .is_err()
+        );
         for capability in HostCapability::ALL {
             std::fs::write(
                 binary.with_file_name(

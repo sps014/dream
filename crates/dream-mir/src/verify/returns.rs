@@ -167,10 +167,11 @@ fn apply_effects(
         .extend(&substitute(&facts.escaped, args, &old));
     for (index, sources) in facts.writes {
         if let Some(local) = args.get(index).and_then(argument_local)
-            && refs.contains(f.local_ty(local)) {
-                let effect = substitute(&sources, args, &old);
-                changed |= record_write(local, &effect, locals, result);
-            }
+            && refs.contains(f.local_ty(local))
+        {
+            let effect = substitute(&sources, args, &old);
+            changed |= record_write(local, &effect, locals, result);
+        }
     }
     changed
 }

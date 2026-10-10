@@ -4,7 +4,9 @@ use std::fmt::Write;
 mod registry;
 
 pub fn header() -> String {
-    let mut out = String::from("/* GENERATED from abi_registry.rs; run scripts/generate-abi.sh. */\n#ifndef DREAM_ABI_H\n#define DREAM_ABI_H\n#include <stdint.h>\n\n");
+    let mut out = String::from(
+        "/* GENERATED from abi_registry.rs; run scripts/generate-abi.sh. */\n#ifndef DREAM_ABI_H\n#define DREAM_ABI_H\n#include <stdint.h>\n\n",
+    );
     for &(name, value) in registry::ABI_NUMBERS {
         writeln!(out, "#define {name} {value}").unwrap();
     }

@@ -1,6 +1,6 @@
 //! Region stack balance must agree at every CFG join and survive no suspension or exit.
 
-use super::{violation, Violation};
+use super::{Violation, violation};
 use crate::{MirFunction, Statement, Terminator};
 use dream_types::TypeInterner;
 use std::collections::VecDeque;

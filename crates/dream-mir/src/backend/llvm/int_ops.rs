@@ -313,11 +313,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         let bits = |t: &Ty| t.int_bits().unwrap_or(64);
         let promote = |x: &V| -> (u32, bool) {
             let b = bits(x.ty());
-            if b < 32 {
-                (32, false)
-            } else {
-                (b, x.unsigned)
-            }
+            if b < 32 { (32, false) } else { (b, x.unsigned) }
         };
         let (bl, ul) = promote(l);
         let (br, ur) = promote(r);

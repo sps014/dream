@@ -8,8 +8,8 @@
 //! that named it), which keeps the analysis sound across loops: a back edge whose body redefines a
 //! local drops that fact from the meet.
 
-use super::prop::{invalidate, subst_stmt_reads, subst_terminator_reads, update_known};
 use super::MirPass;
+use super::prop::{invalidate, subst_stmt_reads, subst_terminator_reads, update_known};
 use crate::{Local, MirFunction, Operand, Place, Terminator};
 use dream_types::TypeInterner;
 use indexmap::IndexMap as HashMap;

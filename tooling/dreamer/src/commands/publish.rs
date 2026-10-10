@@ -1,9 +1,9 @@
 use crate::fetch;
 use crate::registry::{
-    checksum, open_registry_with_token, IndexDependency, IndexEntry, MAX_TARBALL_BYTES,
+    IndexDependency, IndexEntry, MAX_TARBALL_BYTES, checksum, open_registry_with_token,
 };
 use crate::workspace::Workspace;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::path::Path;
 
 pub fn run(

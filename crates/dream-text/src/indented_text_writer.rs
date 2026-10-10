@@ -21,11 +21,7 @@ impl IndentedTextWriter {
         }
     }
     fn new_line() -> &'static str {
-        if cfg!(windows) {
-            "\r\n"
-        } else {
-            "\n"
-        }
+        if cfg!(windows) { "\r\n" } else { "\n" }
     }
 
     fn indent_string(&mut self) {

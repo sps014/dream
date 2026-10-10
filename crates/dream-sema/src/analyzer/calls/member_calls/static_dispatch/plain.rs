@@ -132,9 +132,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
                 format!(
                     "'{}' is an instance method of '{}'; call it on a '{}' value, not on the type name",
-                    method.text,
-                    type_name,
-                    type_name
+                    method.text, type_name, type_name
                 ),
                 Some(method.position),
             ));

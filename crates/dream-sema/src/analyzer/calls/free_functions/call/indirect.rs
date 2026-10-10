@@ -17,16 +17,17 @@ impl<'a> Analyzer<'a> {
             .as_ref()
             .map(|g| !g.is_empty())
             .unwrap_or(false)
-            && let Some(name) = unwrap_callee_ident(callee) {
-                return self.analyze_function_call(
-                    name,
-                    generic_args,
-                    params,
-                    parent_function,
-                    symbol_table,
-                    diagnostics,
-                );
-            }
+            && let Some(name) = unwrap_callee_ident(callee)
+        {
+            return self.analyze_function_call(
+                name,
+                generic_args,
+                params,
+                parent_function,
+                symbol_table,
+                diagnostics,
+            );
+        }
 
         let callee_ty =
             self.analyze_expression(callee, parent_function, symbol_table, diagnostics)?;

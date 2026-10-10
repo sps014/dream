@@ -8,7 +8,7 @@ use super::super::places::ELEM_ALIGN;
 use super::{glue, register};
 use crate::abi;
 use crate::backend::shared::abi_types::{c_ident, elem_size, mem_ty};
-use crate::backend::shared::protocol_names::{hash_fn, to_string_fn, HashFn};
+use crate::backend::shared::protocol_names::{HashFn, hash_fn, to_string_fn};
 use crate::backend::shared::reach::ProtocolReach;
 use crate::backend::shared::tables::{BUILTIN_TYPE_NAMES, NULL_TYPE_NAME, UNKNOWN_TYPE_NAME};
 use dream_hir::FieldLayout;
@@ -92,23 +92,27 @@ pub(in super::super) fn plan(l: &Lcx<'_>, reach: &ProtocolReach) -> Plan {
     };
     for (ty, layout) in &cx.mir.layouts.structs {
         if reach.needs_to_string(*ty)
-            && let Some(s) = pick(*ty, &layout.name, "_to_string") {
-                p.struct_to_string.push((*ty, s));
-            }
+            && let Some(s) = pick(*ty, &layout.name, "_to_string")
+        {
+            p.struct_to_string.push((*ty, s));
+        }
         if reach.needs_hash_code(*ty)
-            && let Some(s) = pick(*ty, &layout.name, "_hash_code") {
-                p.struct_hash.push((*ty, s));
-            }
+            && let Some(s) = pick(*ty, &layout.name, "_hash_code")
+        {
+            p.struct_hash.push((*ty, s));
+        }
     }
     for (ty, layout) in &cx.mir.layouts.unions {
         if (reach.needs_to_string(*ty) || reach.to_string.contains(ty))
-            && let Some(s) = pick(*ty, &layout.name, "_to_string") {
-                p.union_to_string.push((*ty, s));
-            }
+            && let Some(s) = pick(*ty, &layout.name, "_to_string")
+        {
+            p.union_to_string.push((*ty, s));
+        }
         if reach.needs_hash_code(*ty)
-            && let Some(s) = pick(*ty, &layout.name, "_hash_code") {
-                p.union_hash.push((*ty, s));
-            }
+            && let Some(s) = pick(*ty, &layout.name, "_hash_code")
+        {
+            p.union_hash.push((*ty, s));
+        }
     }
     p
 }

@@ -92,24 +92,25 @@ impl<'a> Analyzer<'a> {
         let gen_params = template.generic_parameters.as_deref().unwrap_or(&[]);
 
         if let Some(generics) = generic_args
-            && !generics.is_empty() {
-                Self::check_generic_arity(
-                    "function",
-                    &template.name.text,
-                    gen_params.len(),
-                    generics.len(),
-                    position,
-                    diagnostics,
-                );
-                return gen_params
-                    .iter()
-                    .zip(generics.iter())
-                    .map(|(param, arg)| {
-                        let id = self.type_ctx.lower(arg);
-                        (param.text.clone(), self.type_ctx.syntax_type(id))
-                    })
-                    .collect();
-            }
+            && !generics.is_empty()
+        {
+            Self::check_generic_arity(
+                "function",
+                &template.name.text,
+                gen_params.len(),
+                generics.len(),
+                position,
+                diagnostics,
+            );
+            return gen_params
+                .iter()
+                .zip(generics.iter())
+                .map(|(param, arg)| {
+                    let id = self.type_ctx.lower(arg);
+                    (param.text.clone(), self.type_ctx.syntax_type(id))
+                })
+                .collect();
+        }
 
         let scope = self.type_ctx.scope();
         self.type_ctx
@@ -381,9 +382,10 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) {
         if let Type::Array(inner) = ty
-            && self.type_satisfies_kind(inner, dream_syntax::nodes::ConstraintKind::Unmanaged) {
-                return;
-            }
+            && self.type_satisfies_kind(inner, dream_syntax::nodes::ConstraintKind::Unmanaged)
+        {
+            return;
+        }
         self.require_unmanaged(ty, who, position, diagnostics);
     }
 

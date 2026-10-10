@@ -12,9 +12,9 @@
 //! `Retain`/`Release` — are cloned verbatim per iteration, so effects and refcount balance match the
 //! original loop exactly.
 
+use super::MirPass;
 use super::cfg::DomTree;
 use super::licm::{stmt_reads, terminator_reads};
-use super::MirPass;
 use crate::{
     BasicBlock, BinOp, BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement,
     Terminator,
@@ -292,9 +292,10 @@ fn induction(
             }
         }
         if let Terminator::Await { dest: Some(d), .. } = &block.terminator
-            && *d == iv {
-                return None; // async-bound induction var: bail
-            }
+            && *d == iv
+        {
+            return None; // async-bound induction var: bail
+        }
     }
     if def_count != 2 {
         return None;

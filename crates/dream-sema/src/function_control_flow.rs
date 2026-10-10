@@ -52,15 +52,17 @@ impl<'a, 'd> FunctionControlGraph<'a, 'd> {
 
         if flow.falls_through
             && let Some(ret) = &self.function.return_type
-                && ret != &Type::Void && entry_tail_return(self.function).is_none() {
-                    self.diagnostics.report_error(
-                        format!(
-                            "function '{}': not all code paths return a value",
-                            self.function.name.text
-                        ),
-                        Some(self.function.name.position),
-                    );
-                }
+            && ret != &Type::Void
+            && entry_tail_return(self.function).is_none()
+        {
+            self.diagnostics.report_error(
+                format!(
+                    "function '{}': not all code paths return a value",
+                    self.function.name.text
+                ),
+                Some(self.function.name.position),
+            );
+        }
     }
 
     fn visit_block(&mut self, stmts: &[StatementNode<'a>]) -> Flow {

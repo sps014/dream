@@ -126,9 +126,10 @@ impl Index {
         // pull the generic argument out of the angle brackets.
         let mut generic_arg = None;
         if let Some(start) = receiver_ty.find('<')
-            && let Some(end) = receiver_ty.rfind('>') {
-                generic_arg = Some(&receiver_ty[start + 1..end]);
-            }
+            && let Some(end) = receiver_ty.rfind('>')
+        {
+            generic_arg = Some(&receiver_ty[start + 1..end]);
+        }
 
         let Some(generic_arg) = generic_arg else {
             return detail.to_string();

@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::{mpsc, Mutex};
+use std::sync::{Mutex, mpsc};
 use std::time::Duration;
 
 pub fn lldb_dap_available() -> bool {
@@ -15,10 +15,11 @@ pub fn lldb_dap_available() -> bool {
     }
     if cfg!(target_os = "macos")
         && let Ok(out) = Command::new("xcrun").args(["--find", "lldb-dap"]).output()
-            && out.status.success() {
-                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                return !s.is_empty() && std::path::Path::new(&s).is_file();
-            }
+        && out.status.success()
+    {
+        let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        return !s.is_empty() && std::path::Path::new(&s).is_file();
+    }
     false
 }
 

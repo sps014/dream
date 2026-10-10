@@ -1,5 +1,5 @@
 use super::identifier;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use dream_abi::exports::{ExportFunction, ExportKind as K, ExportType};
 use std::collections::BTreeSet;
 
@@ -38,8 +38,12 @@ pub(super) fn validate(functions: &[ExportFunction]) -> Result<()> {
 
 pub(super) fn objc(name: &str, functions: &[ExportFunction]) -> (String, String) {
     let class = format!("Dream_{name}");
-    let mut header = format!("#import <Foundation/Foundation.h>\n#include <stdint.h>\n#include \"dream_library.h\"\n@interface {class} : NSObject\n+ (void)attach;\n+ (void)detach;\n+ (void)releaseHandle:(uintptr_t)handle;\n");
-    let mut implementation = format!("#import \"{class}.h\"\n@implementation {class}\n+ (void)attach {{ dream_thread_attach(); }}\n+ (void)detach {{ dream_thread_detach(); }}\n+ (void)releaseHandle:(uintptr_t)handle {{ dream_release((void *)handle); }}\n");
+    let mut header = format!(
+        "#import <Foundation/Foundation.h>\n#include <stdint.h>\n#include \"dream_library.h\"\n@interface {class} : NSObject\n+ (void)attach;\n+ (void)detach;\n+ (void)releaseHandle:(uintptr_t)handle;\n"
+    );
+    let mut implementation = format!(
+        "#import \"{class}.h\"\n@implementation {class}\n+ (void)attach {{ dream_thread_attach(); }}\n+ (void)detach {{ dream_thread_detach(); }}\n+ (void)releaseHandle:(uintptr_t)handle {{ dream_release((void *)handle); }}\n"
+    );
     for f in functions {
         let mut method = format!("+ ({})call_{}", f.ret.c_type, f.name);
         for (i, p) in f.params.iter().enumerate() {
@@ -158,8 +162,12 @@ pub(super) fn java_package(value: &str) -> Result<()> {
 pub(super) fn jni(name: &str, package: &str, functions: &[ExportFunction]) -> (String, String) {
     let class = "DreamLibrary";
     let prefix = format!("Java_{}_{}", jni_name(package), class);
-    let mut java = format!("package {package};\npublic final class {class} {{\n    private {class}() {{}}\n    static {{ System.loadLibrary(\"{name}_jni\"); }}\n    public static native void attach();\n    public static native void detach();\n    public static native void releaseHandle(long handle);\n");
-    let mut c = format!("#include <jni.h>\n#include <stdint.h>\n#include \"dream_library.h\"\nJNIEXPORT void JNICALL {prefix}_attach(JNIEnv *env, jclass cls) {{ (void)env; (void)cls; dream_thread_attach(); }}\nJNIEXPORT void JNICALL {prefix}_detach(JNIEnv *env, jclass cls) {{ (void)env; (void)cls; dream_thread_detach(); }}\nJNIEXPORT void JNICALL {prefix}_releaseHandle(JNIEnv *env, jclass cls, jlong handle) {{ (void)env; (void)cls; dream_release((void *)(uintptr_t)handle); }}\n");
+    let mut java = format!(
+        "package {package};\npublic final class {class} {{\n    private {class}() {{}}\n    static {{ System.loadLibrary(\"{name}_jni\"); }}\n    public static native void attach();\n    public static native void detach();\n    public static native void releaseHandle(long handle);\n"
+    );
+    let mut c = format!(
+        "#include <jni.h>\n#include <stdint.h>\n#include \"dream_library.h\"\nJNIEXPORT void JNICALL {prefix}_attach(JNIEnv *env, jclass cls) {{ (void)env; (void)cls; dream_thread_attach(); }}\nJNIEXPORT void JNICALL {prefix}_detach(JNIEnv *env, jclass cls) {{ (void)env; (void)cls; dream_thread_detach(); }}\nJNIEXPORT void JNICALL {prefix}_releaseHandle(JNIEnv *env, jclass cls, jlong handle) {{ (void)env; (void)cls; dream_release((void *)(uintptr_t)handle); }}\n"
+    );
     for f in functions {
         let params = f
             .params

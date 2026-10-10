@@ -6,12 +6,12 @@ use dream::diagnostics::DiagnosticBag;
 use dream::syntax::lexer::Lexer;
 use dream::syntax::token::syntax_token::SyntaxToken;
 use dream::syntax::token::syntax_trivia::SyntaxTrivia;
-use dream::syntax::token::token_kind::{TokenKind, SOFT_SPECIALS};
+use dream::syntax::token::token_kind::{SOFT_SPECIALS, TokenKind};
 use tower_lsp::lsp_types::{SemanticToken, SemanticTokenType};
 
 use crate::index::{Index, SymKind};
 use crate::position::LineIndex;
-use crate::tokens::{lex_category, LexCategory};
+use crate::tokens::{LexCategory, lex_category};
 
 /// The ordered semantic-token legend advertised in the server capabilities. A token's
 /// `token_type` is an index into this slice.

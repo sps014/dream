@@ -157,16 +157,13 @@ impl<'a> Analyzer<'a> {
                 let ftype = substitute_generic_type(&field.field_type, bindings);
                 // Instantiate any generic union/struct referenced by a payload field type.
                 if let Some((base, args)) = Self::resolve_struct_parts(&ftype)
-                    && !args.is_empty() {
-                        self.ensure_type_instantiated(
-                            &base,
-                            &args,
-                            &field.name.position,
-                            diagnostics,
-                        );
-                    }
+                    && !args.is_empty()
+                {
+                    self.ensure_type_instantiated(&base, &args, &field.name.position, diagnostics);
+                }
                 let ftid = self.type_ctx.lower(&ftype);
-                if self.type_ctx.interner.is_ref_struct_type(ftid) && !self.ref_struct_escape_muted {
+                if self.type_ctx.interner.is_ref_struct_type(ftid) && !self.ref_struct_escape_muted
+                {
                     diagnostics.report_error(
                         format!(
                             "field '{}' of variant '{}' cannot have type '{}': a 'ref struct' cannot be stored as a union payload (it would let a stack-only value escape its stack frame)",
@@ -321,7 +318,8 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
         let muted = self.ref_struct_escape_muted;
-        self.ref_struct_escape_muted |= self.reject_ref_struct_type_args(&args, position, diagnostics);
+        self.ref_struct_escape_muted |=
+            self.reject_ref_struct_type_args(&args, position, diagnostics);
         let bindings = generic_bindings(params, &args);
         self.register_union(
             instance,

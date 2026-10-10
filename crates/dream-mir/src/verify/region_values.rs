@@ -2,7 +2,7 @@
 
 use super::operands::{operand_locals, other_stmt_locals, rvalue_local_operands, terminator_reads};
 use super::region_graph::{Graph, Origins};
-use super::{violation, Violation};
+use super::{Violation, violation};
 use crate::{MirFunction, Operand, Place, Statement, Terminator};
 use dream_types::TypeInterner;
 use std::collections::{BTreeSet, VecDeque};
@@ -95,14 +95,16 @@ pub(super) fn check(
                 ));
             }
             if let Some((args, facts)) = super::call_effects::effects(stmt, returns)
-                && depth > 0 && !effect_origins(&facts.escaped, &args, &graph, depth).is_empty() {
-                    out.push(violation(
-                        f,
-                        bi,
-                        si,
-                        "region allocation may escape through a call".into(),
-                    ));
-                }
+                && depth > 0
+                && !effect_origins(&facts.escaped, &args, &graph, depth).is_empty()
+            {
+                out.push(violation(
+                    f,
+                    bi,
+                    si,
+                    "region allocation may escape through a call".into(),
+                ));
+            }
             analysis.transfer(stmt, &mut depth, &mut graph, (bi, si));
         }
         check_reads(
@@ -215,9 +217,10 @@ impl Analysis<'_> {
                     }
                     graph.define(place, rv, origins, sources.fresh, at.0, at.1);
                     if let crate::Rvalue::Move { src, .. } = rv
-                        && !matches!(place, Place::Local(dest) if dest == src) {
-                            graph.clear(&Place::Local(*src));
-                        }
+                        && !matches!(place, Place::Local(dest) if dest == src)
+                    {
+                        graph.clear(&Place::Local(*src));
+                    }
                     match rv {
                         crate::Rvalue::Call { callee, args } => {
                             let facts = super::returns::call_facts(callee, args.len(), returns);

@@ -28,7 +28,7 @@ fn formatter_init_commands(formatters: &Path) -> Vec<String> {
 }
 
 use protocol::{read_message, write_message};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{self, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -92,9 +92,9 @@ pub fn run_debug_adapter(
     let formatters = module_p.with_file_name(format!("{stem}_lldb_dream.py"));
     std::fs::write(&formatters, LLDB_FORMATTERS)?;
     // The import hook reads this generated list to know which view names get summaries.
-    let names = view_type_names(&std::fs::read_to_string(ir).map_err(|e| {
-        format!("read {}: {e}", ir.display())
-    })?);
+    let names = view_type_names(
+        &std::fs::read_to_string(ir).map_err(|e| format!("read {}: {e}", ir.display()))?,
+    );
     let list: Vec<String> = names.iter().map(|n| format!("\"{n}\"")).collect();
     std::fs::write(
         module_p.with_file_name(format!("{stem}_lldb_names.py")),
@@ -228,15 +228,16 @@ fn find_lldb_dap(
     }
     if cfg!(target_os = "macos")
         && let Ok(out) = Command::new("xcrun").args(["--find", "lldb-dap"]).output()
-            && out.status.success() {
-                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if !s.is_empty() {
-                    let p = PathBuf::from(s);
-                    if p.is_file() {
-                        return Ok(p);
-                    }
-                }
+        && out.status.success()
+    {
+        let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if !s.is_empty() {
+            let p = PathBuf::from(s);
+            if p.is_file() {
+                return Ok(p);
             }
+        }
+    }
     Err(lldb_dap_hint().into())
 }
 

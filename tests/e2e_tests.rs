@@ -9,7 +9,7 @@ use crate::common;
 use pretty_assertions::assert_eq;
 use rayon::prelude::*;
 use std::fs;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
@@ -537,7 +537,13 @@ fn codegen_is_deterministic() {
     if !cases_dir.exists() {
         return;
     }
-    for name in ["classes", "async_basic", "arc_cycles", "arc_cycles_dynamic", "arc_cycles_async_values"] {
+    for name in [
+        "classes",
+        "async_basic",
+        "arc_cycles",
+        "arc_cycles_dynamic",
+        "arc_cycles_async_values",
+    ] {
         let src = cases_dir.join(format!("{}.dream", name));
         if src.exists() {
             assert_deterministic("dream_det", name, &src, true);
@@ -563,13 +569,15 @@ fn codegen_is_deterministic_full_corpus() {
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
     std::thread::scope(|s| {
         for _ in 0..workers {
-            s.spawn(|| loop {
-                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let Some(name) = names.get(i) else {
-                    break;
-                };
-                let src = Path::new("tests/cases").join(format!("{}.dream", name));
-                assert_deterministic("dream_det_all", name, &src, false);
+            s.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(name) = names.get(i) else {
+                        break;
+                    };
+                    let src = Path::new("tests/cases").join(format!("{}.dream", name));
+                    assert_deterministic("dream_det_all", name, &src, false);
+                }
             });
         }
     });

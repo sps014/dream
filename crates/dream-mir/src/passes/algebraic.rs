@@ -145,16 +145,16 @@ fn simplify(rvalue: &Rvalue, unsigned: bool) -> Option<Rvalue> {
         BinOp::Ne if bool_val(b) == Some(false) => return Some(Rvalue::Use(a.clone())),
         BinOp::Ne if bool_val(a) == Some(false) => return Some(Rvalue::Use(b.clone())),
         BinOp::Eq if bool_val(b) == Some(false) => {
-            return Some(Rvalue::Unary(crate::UnOp::Not, a.clone()))
+            return Some(Rvalue::Unary(crate::UnOp::Not, a.clone()));
         }
         BinOp::Eq if bool_val(a) == Some(false) => {
-            return Some(Rvalue::Unary(crate::UnOp::Not, b.clone()))
+            return Some(Rvalue::Unary(crate::UnOp::Not, b.clone()));
         }
         BinOp::Ne if bool_val(b) == Some(true) => {
-            return Some(Rvalue::Unary(crate::UnOp::Not, a.clone()))
+            return Some(Rvalue::Unary(crate::UnOp::Not, a.clone()));
         }
         BinOp::Ne if bool_val(a) == Some(true) => {
-            return Some(Rvalue::Unary(crate::UnOp::Not, b.clone()))
+            return Some(Rvalue::Unary(crate::UnOp::Not, b.clone()));
         }
         _ => {}
     }
@@ -201,17 +201,15 @@ fn simplify(rvalue: &Rvalue, unsigned: bool) -> Option<Rvalue> {
             }
             // Unsigned x / 2^k -> x >> k (emits `shr_u` for the unsigned destination). Signed
             // division rounds toward zero, so a shift would be wrong for negatives — skip it.
-            if unsigned
-                && let Some(k) = bc.and_then(log2_pow2) {
-                    return Some(Rvalue::Binary(BinOp::Shr, a.clone(), shift_const(b, k)));
-                }
+            if unsigned && let Some(k) = bc.and_then(log2_pow2) {
+                return Some(Rvalue::Binary(BinOp::Shr, a.clone(), shift_const(b, k)));
+            }
         }
         BinOp::Rem => {
             // Unsigned x % 2^k -> x & (2^k - 1).
-            if unsigned
-                && let Some(k) = bc.and_then(log2_pow2) {
-                    return Some(Rvalue::Binary(BinOp::BitAnd, a.clone(), mask_const(b, k)));
-                }
+            if unsigned && let Some(k) = bc.and_then(log2_pow2) {
+                return Some(Rvalue::Binary(BinOp::BitAnd, a.clone(), mask_const(b, k)));
+            }
         }
         BinOp::BitOr => {
             if bc == Some(0) {

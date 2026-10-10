@@ -12,13 +12,13 @@ use super::super::uniqueness::collect_container_moves;
 use super::aliases::leftover_alias_parent;
 use super::calls::move_source;
 use super::calls::take_owned_arg_locals;
+use super::destroy::DestroySite;
 use super::destroy::cursor_riders;
 use super::destroy::rc_snapshots_of;
-use super::destroy::DestroySite;
+use super::flow::TokenFlow;
 use super::flow::join_tokens;
 use super::flow::join_unique;
 use super::flow::transfer_block;
-use super::flow::TokenFlow;
 use super::locals::assigns_local;
 use super::locals::is_owned_local;
 use super::locals::rc_op_on_local;
@@ -103,9 +103,10 @@ impl TokenAnalysis {
         let mut transferred: IndexSet<(usize, usize, u32)> = IndexSet::new();
         for &(bi, si) in &assign_move {
             if let Statement::Assign(_, rvalue) = &func.blocks[bi].stmts[si]
-                && let Some(src) = move_source(rvalue, &is_owned) {
-                    transferred.insert((bi, si, src.0));
-                }
+                && let Some(src) = move_source(rvalue, &is_owned)
+            {
+                transferred.insert((bi, si, src.0));
+            }
         }
         collect_container_moves(func, interner, &live_out, is_owned, layouts, &mut sink_move);
         transferred.extend(sink_move.iter().copied());

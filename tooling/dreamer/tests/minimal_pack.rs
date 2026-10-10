@@ -80,7 +80,10 @@ fn minimal_pack_runs_without_hosts_and_replaces_capability_heavy_pack() {
         );
     }
     for (program, stdout) in [
-        ("import system; import system.crypto; import system.process; import system.text; fun main(): void { System.println(\"Hello, world!\"); }", "Hello, world!\n"),
+        (
+            "import system; import system.crypto; import system.process; import system.text; fun main(): void { System.println(\"Hello, world!\"); }",
+            "Hello, world!\n",
+        ),
         ("fun main(): void {}", ""),
     ] {
         std::fs::write(&source, program).unwrap();
@@ -96,10 +99,18 @@ fn minimal_pack_runs_without_hosts_and_replaces_capability_heavy_pack() {
         #[cfg(windows)]
         {
             let system = std::env::var_os("SystemRoot").unwrap();
-            run.env("SystemRoot", &system).env("PATH", Path::new(&system).join("System32"));
+            run.env("SystemRoot", &system)
+                .env("PATH", Path::new(&system).join("System32"));
         }
         let output = run.output().unwrap();
-        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-        assert_eq!(String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n"), stdout);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n"),
+            stdout
+        );
     }
 }

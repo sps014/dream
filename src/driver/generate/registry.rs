@@ -8,8 +8,8 @@ use crate::driver::project_manifest::GeneratorEntry;
 use crate::driver::source_loader::ProgramAccumulator;
 use bumpalo::Bump;
 use dream_abi::attributes::{
-    decl_identity, UserAttributes, INCREMENTAL_ATTR, ON_ATTRIBUTE_ATTR, ON_CALL_ATTR,
-    SYNTAX_BLOCK_ATTR,
+    INCREMENTAL_ATTR, ON_ATTRIBUTE_ATTR, ON_CALL_ATTR, SYNTAX_BLOCK_ATTR, UserAttributes,
+    decl_identity,
 };
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{AttributeArg, AttributeNode, FunctionNode, Type};

@@ -8,8 +8,8 @@ use super::attr_ide::{
 use super::detail_belongs_to;
 use super::detail_is_static_method;
 use super::{
-    is_ident_byte, keywords, substitute_method_type_args, substitute_type_param_t, type_base, Decl,
-    Index, Located, Ref, SymKind, GLOBAL,
+    Decl, GLOBAL, Index, Located, Ref, SymKind, is_ident_byte, keywords,
+    substitute_method_type_args, substitute_type_param_t, type_base,
 };
 use crate::code_actions::imported_packages;
 use dream::driver::source_loader::find_dream_packages_dir;
@@ -138,54 +138,51 @@ fn import_path_completions(
                         push_module_completion(&mut out, name, "directory", &imported);
                     }
                 } else if let Some(stem) = name.strip_suffix(".dream")
-                    && stem.starts_with(partial) {
-                        push_module_completion(&mut out, stem.to_string(), "module", &imported);
-                    }
+                    && stem.starts_with(partial)
+                {
+                    push_module_completion(&mut out, stem.to_string(), "module", &imported);
+                }
             }
         }
 
         if let Some(packages_dir) = find_dream_packages_dir(parent_dir)
-            && let Ok(entries) = std::fs::read_dir(&packages_dir) {
-                for entry in entries.flatten() {
-                    if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                        continue;
-                    }
-                    let pkg_name = entry.file_name().to_string_lossy().to_string();
-                    // Bare package name: `import sem` / `import |`
-                    if pkg_name.starts_with(partial) {
-                        push_module_completion(&mut out, pkg_name.clone(), "package", &imported);
-                    }
-                    // Submodules: `import mathpkg.` / `import mathpkg.op`
-                    let pkg_prefix = format!("{}.", pkg_name);
-                    if partial.starts_with(&pkg_prefix) || partial == pkg_name {
-                        let src_dir = entry.path().join("src");
-                        if let Ok(src_entries) = std::fs::read_dir(&src_dir) {
-                            for src_entry in src_entries.flatten() {
-                                let Some(stem) = src_entry
-                                    .file_name()
-                                    .to_str()
-                                    .and_then(|n| n.strip_suffix(".dream").map(str::to_string))
-                                else {
-                                    continue;
-                                };
-                                // Entry file is imported as bare `pkg`, not `pkg.pkg`.
-                                if stem == pkg_name {
-                                    continue;
-                                }
-                                let full = format!("{}.{}", pkg_name, stem);
-                                if full.starts_with(partial) {
-                                    push_module_completion(
-                                        &mut out,
-                                        full,
-                                        "package module",
-                                        &imported,
-                                    );
-                                }
+            && let Ok(entries) = std::fs::read_dir(&packages_dir)
+        {
+            for entry in entries.flatten() {
+                if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    continue;
+                }
+                let pkg_name = entry.file_name().to_string_lossy().to_string();
+                // Bare package name: `import sem` / `import |`
+                if pkg_name.starts_with(partial) {
+                    push_module_completion(&mut out, pkg_name.clone(), "package", &imported);
+                }
+                // Submodules: `import mathpkg.` / `import mathpkg.op`
+                let pkg_prefix = format!("{}.", pkg_name);
+                if partial.starts_with(&pkg_prefix) || partial == pkg_name {
+                    let src_dir = entry.path().join("src");
+                    if let Ok(src_entries) = std::fs::read_dir(&src_dir) {
+                        for src_entry in src_entries.flatten() {
+                            let Some(stem) = src_entry
+                                .file_name()
+                                .to_str()
+                                .and_then(|n| n.strip_suffix(".dream").map(str::to_string))
+                            else {
+                                continue;
+                            };
+                            // Entry file is imported as bare `pkg`, not `pkg.pkg`.
+                            if stem == pkg_name {
+                                continue;
+                            }
+                            let full = format!("{}.{}", pkg_name, stem);
+                            if full.starts_with(partial) {
+                                push_module_completion(&mut out, full, "package module", &imported);
                             }
                         }
                     }
                 }
             }
+        }
     }
 
     out.sort_by(|a, b| a.0.cmp(&b.0));

@@ -1,6 +1,6 @@
+use super::super::RcKey;
 use super::super::is_pure_rvalue;
 use super::super::is_transparent_stmt;
-use super::super::RcKey;
 use crate::BlockId;
 use crate::MirFunction;
 use crate::Place;
@@ -140,12 +140,13 @@ pub(super) fn elide_region(func: &mut MirFunction, chain: &[BlockId]) -> bool {
             Statement::Release(op) => {
                 if let Some(key) = RcKey::of(op)
                     && let Some(stack) = pending.get_mut(&key)
-                        && let Some(retain_idx) = stack.pop() {
-                            keep[retain_idx] = false;
-                            keep[i] = false;
-                            region_changed = true;
-                            continue;
-                        }
+                    && let Some(retain_idx) = stack.pop()
+                {
+                    keep[retain_idx] = false;
+                    keep[i] = false;
+                    region_changed = true;
+                    continue;
+                }
                 // An unmatched (or differently-keyed) `Release` may drop the last count of
                 // an object some *other* pending key aliases — not provably safe to ignore.
                 pending.clear();

@@ -7,7 +7,7 @@ use super::client::RegistryClient;
 use super::http_registry::HttpRegistry;
 use super::index::IndexEntry;
 use super::{CatalogEntry, MAX_TARBALL_BYTES};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use base64::Engine;
 use serde::Deserialize;
 use std::path::Path;
@@ -295,10 +295,12 @@ mod tests {
 
     #[test]
     fn rejects_deeper_raw_paths() {
-        assert!(parse_github_registry_url(
-            "https://raw.githubusercontent.com/sps014/dream-registry/main/index/foo"
-        )
-        .is_none());
+        assert!(
+            parse_github_registry_url(
+                "https://raw.githubusercontent.com/sps014/dream-registry/main/index/foo"
+            )
+            .is_none()
+        );
     }
 
     #[test]

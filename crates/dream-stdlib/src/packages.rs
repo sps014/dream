@@ -1,4 +1,4 @@
-use crate::{StdPackage, BOOTSTRAP_PACKAGES, STD_PACKAGES};
+use crate::{BOOTSTRAP_PACKAGES, STD_PACKAGES, StdPackage};
 use indexmap::IndexSet;
 
 /// Returns every `(virtual_path, source)` across all packages in deterministic registry order.

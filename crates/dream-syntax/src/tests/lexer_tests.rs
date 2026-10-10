@@ -108,7 +108,9 @@ fn test_lex_suffixed_number_literals() {
         .collect();
     assert_eq!(
         texts,
-        vec!["42L", "7u", "7U", "9uL", "9UL", "9Lu", "255b", "255B", "3.0d", "3.0f"]
+        vec![
+            "42L", "7u", "7U", "9uL", "9UL", "9Lu", "255b", "255B", "3.0d", "3.0f"
+        ]
     );
 }
 

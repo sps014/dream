@@ -1,8 +1,8 @@
 use super::pipeline::RcElision;
-use crate::build::FunctionBuilder;
-use crate::passes::rc::RcInsertion;
-use crate::passes::MirPass;
 use crate::Statement;
+use crate::build::FunctionBuilder;
+use crate::passes::MirPass;
+use crate::passes::rc::RcInsertion;
 use crate::{Local, Operand, Place, Rvalue, Terminator};
 use dream_types::TypeInterner;
 

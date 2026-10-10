@@ -17,9 +17,10 @@ impl Builder {
         if let Some(ty) = ty {
             self.record_decl_type(ty);
         } else if let Some(id) = self.infer_id(expr, scope, &[])
-            && let Some(index) = self.decls.len().checked_sub(1) {
-                self.inferred_types.insert(index, id);
-            }
+            && let Some(index) = self.decls.len().checked_sub(1)
+        {
+            self.inferred_types.insert(index, id);
+        }
     }
 
     pub(crate) fn record_callable(&mut self, func: &FunctionNode, owner: Option<&str>) {
@@ -122,20 +123,21 @@ impl Builder {
                         .iter()
                         .find(|d| d.kind == SymKind::Type && d.name == token.text)
                 })
-                && matches!(
-                    decl.kind,
-                    SymKind::Class
-                        | SymKind::Struct
-                        | SymKind::Interface
-                        | SymKind::Enum
-                        | SymKind::Type
-                ) {
-                    return Some(
-                        self.type_ctx
-                            .borrow_mut()
-                            .lower(&Type::Struct(token.clone(), None)),
-                    );
-                }
+            && matches!(
+                decl.kind,
+                SymKind::Class
+                    | SymKind::Struct
+                    | SymKind::Interface
+                    | SymKind::Enum
+                    | SymKind::Type
+            )
+        {
+            return Some(
+                self.type_ctx
+                    .borrow_mut()
+                    .lower(&Type::Struct(token.clone(), None)),
+            );
+        }
         self.infer_id(recv, scope, extras)
     }
 

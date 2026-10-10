@@ -4,5 +4,5 @@
 mod discovery;
 mod run;
 
-pub use discovery::{discover_tests_in_source, DiscoveredTest};
-pub use run::{run_tests, TestOptions, TestRunResult};
+pub use discovery::{DiscoveredTest, discover_tests_in_source};
+pub use run::{TestOptions, TestRunResult, run_tests};

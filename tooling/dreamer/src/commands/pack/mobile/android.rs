@@ -1,5 +1,5 @@
-use super::{bridge, command, Options, Slice};
-use anyhow::{bail, Context, Result};
+use super::{Options, Slice, bridge, command};
+use anyhow::{Context, Result, bail};
 use dream_abi::exports::ExportFunction;
 use std::collections::BTreeMap;
 use std::io::Write;

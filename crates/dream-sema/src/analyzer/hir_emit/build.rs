@@ -18,10 +18,12 @@ impl<'a> Analyzer<'a> {
     /// Stores the captured initializer for global `name` (if it was fully representable) and turns
     /// collection back off.
     pub(in crate::analyzer) fn hir_global_init_finish(&mut self, name: &str) {
-        if self.hir.collecting && self.hir.ok
-            && let Some(init) = self.hir.last.take() {
-                self.hir.pending_global_inits.insert(name.to_string(), init);
-            }
+        if self.hir.collecting
+            && self.hir.ok
+            && let Some(init) = self.hir.last.take()
+        {
+            self.hir.pending_global_inits.insert(name.to_string(), init);
+        }
         self.hir.collecting = false;
         self.hir.last = None;
     }
@@ -349,15 +351,17 @@ impl<'a> Analyzer<'a> {
         let mut out = self.intrinsic_defs.clone();
         for func in node.functions.iter() {
             if let Some(key) = dream_abi::intrinsics::intrinsic_key(&func.attributes)
-                && let Some(identity) = self.function_table.declaration_node(func) {
-                    out.push((identity.0, key));
-                }
+                && let Some(identity) = self.function_table.declaration_node(func)
+            {
+                out.push((identity.0, key));
+            }
         }
         for (identity, info) in &self.function_table.functions {
             if let Some(key) = &info.intrinsic_name
-                && !out.iter().any(|(def, _)| *def == identity.0) {
-                    out.push((identity.0, key.clone()));
-                }
+                && !out.iter().any(|(def, _)| *def == identity.0)
+            {
+                out.push((identity.0, key.clone()));
+            }
         }
         out
     }

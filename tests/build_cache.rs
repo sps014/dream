@@ -121,14 +121,29 @@ fn concurrent_cli_requests_do_not_remove_each_others_llvm_input() {
     let mut children = Vec::new();
     for debug in [false, true, false, true] {
         let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_dream"));
-        command.arg("--object").arg("--output").arg(&output).arg(&source);
-        if debug { command.arg("--debug-info"); }
-        children.push(command.stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped()).spawn().unwrap());
+        command
+            .arg("--object")
+            .arg("--output")
+            .arg(&output)
+            .arg(&source);
+        if debug {
+            command.arg("--debug-info");
+        }
+        children.push(
+            command
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap(),
+        );
     }
     for child in children {
         let result = child.wait_with_output().unwrap();
-        assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
     }
     assert!(output.is_file());
 }

@@ -1,7 +1,7 @@
 //! Function-scoped CFG caches. Statement facts deliberately stay outside this cache: changing a
 //! definition can invalidate range, liveness or ownership facts without changing any CFG edge.
 
-use super::{cfg, MirPass};
+use super::{MirPass, cfg};
 use crate::{BlockId, MirFunction};
 use dream_hir::LayoutTable;
 use dream_types::TypeInterner;

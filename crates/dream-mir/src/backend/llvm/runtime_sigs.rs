@@ -140,12 +140,13 @@ impl RuntimeSigs {
         let mut groups: IndexMap<String, String> = IndexMap::new();
         for line in text.lines() {
             if let Some(rest) = line.strip_prefix("attributes #")
-                && let Some((id, body)) = rest.split_once(" = { ") {
-                    groups.insert(
-                        id.to_string(),
-                        body.trim_end_matches('}').trim().to_string(),
-                    );
-                }
+                && let Some((id, body)) = rest.split_once(" = { ")
+            {
+                groups.insert(
+                    id.to_string(),
+                    body.trim_end_matches('}').trim().to_string(),
+                );
+            }
         }
         let mut target_group: Option<String> = None;
         for line in text.lines() {
@@ -169,9 +170,10 @@ impl RuntimeSigs {
                     out.fns.entry(name).or_insert(f);
                 }
             } else if line.starts_with('@')
-                && let Some((name, g)) = parse_global(line) {
-                    out.globals.insert(name, g);
-                }
+                && let Some((name, g)) = parse_global(line)
+            {
+                out.globals.insert(name, g);
+            }
         }
         if let Some(body) = target_group.and_then(|g| groups.get(&g).cloned()) {
             for key in TARGET_ATTR_KEYS {
@@ -425,9 +427,10 @@ pub(crate) fn parse_ty(s: &str) -> Option<(Ty, &str)> {
         ("ptr", Ty::Ptr),
     ] {
         if let Some(rest) = s.strip_prefix(kw)
-            && !rest.starts_with(|c: char| c.is_ascii_alphanumeric()) {
-                return Some((ty, rest));
-            }
+            && !rest.starts_with(|c: char| c.is_ascii_alphanumeric())
+        {
+            return Some((ty, rest));
+        }
     }
     if let Some(rest) = s.strip_prefix('i') {
         let n: String = rest.chars().take_while(char::is_ascii_digit).collect();
@@ -554,17 +557,20 @@ attributes #2 = { nounwind }
         sigs.validate_target(&target).unwrap();
 
         let wrong_target = TargetSpec::parse("x86_64-unknown-linux-gnu").unwrap();
-        assert!(sigs
-            .validate_target(&wrong_target)
-            .unwrap_err()
-            .contains("target triple"));
+        assert!(
+            sigs.validate_target(&wrong_target)
+                .unwrap_err()
+                .contains("target triple")
+        );
 
         let mut wrong_layout = sigs.clone();
         wrong_layout.datalayout = "e-p:32:32".into();
-        assert!(wrong_layout
-            .validate_target(&target)
-            .unwrap_err()
-            .contains("pointer layout"));
+        assert!(
+            wrong_layout
+                .validate_target(&target)
+                .unwrap_err()
+                .contains("pointer layout")
+        );
     }
 
     #[test]
@@ -584,7 +590,9 @@ attributes #2 = { nounwind }
             ("x86_64-unknown-linux-gnu", "ptr"),
             ("wasm32-unknown-wasip1", "i32"),
         ] {
-            let text = format!("target triple = \"{triple}\"\ntarget datalayout = \"e\"\ndeclare {reference} @dream_malloc(i64, i32)\ndeclare void @dream_retain({reference})\ndeclare void @dream_release({reference})\n");
+            let text = format!(
+                "target triple = \"{triple}\"\ntarget datalayout = \"e\"\ndeclare {reference} @dream_malloc(i64, i32)\ndeclare void @dream_retain({reference})\ndeclare void @dream_release({reference})\n"
+            );
             RuntimeSigs::parse(&text)
                 .unwrap()
                 .validate_reference_abi(&TargetSpec::parse(triple).unwrap())

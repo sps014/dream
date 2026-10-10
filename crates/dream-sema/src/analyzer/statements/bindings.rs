@@ -95,17 +95,17 @@ impl<'a> Analyzer<'a> {
         // analysis uses to allocate a zero-length array, or lower to `List<T>.from_array([])`).
         if let ExpressionNode::ArrayLiteral(_, elements) = right
             && elements.is_empty()
-                && !type_annotation.as_ref().is_some_and(|t| {
-                    t.is_array() || Self::collection_generic_arg(t, "List").is_some()
-                })
-            {
-                self.hir_fail();
-                diagnostics.report_error(
+            && !type_annotation
+                .as_ref()
+                .is_some_and(|t| t.is_array() || Self::collection_generic_arg(t, "List").is_some())
+        {
+            self.hir_fail();
+            diagnostics.report_error(
                     "cannot infer the element type of an empty array literal; add an array type annotation, e.g. `let xs: int[] = [];`".to_string(),
                     Some(left.position),
                 );
-                return Ok(());
-            }
+            return Ok(());
+        }
         //return right type. A type annotation is published as the expected type so a generic
         // union's nullary variant (`let o: Option<int> = Option.None;`) can resolve its arguments.
         let saved_expected = self.current_expected_type.take();
@@ -197,24 +197,18 @@ impl<'a> Analyzer<'a> {
         match pattern {
             PatternNode::Tuple(pats) => {
                 if let ExpressionNode::TupleLiteral(_, elems) = expr
-                    && elems.len() == pats.len() {
-                        let expected_elems: Option<Vec<Type>> = match expected {
-                            Some(Type::Tuple(ts)) if ts.len() == elems.len() => Some(ts.clone()),
-                            _ => None,
-                        };
-                        for (i, (p, e)) in pats.iter().zip(elems.iter()).enumerate() {
-                            let slot_ty = expected_elems.as_ref().map(|es| &es[i]);
-                            self.bind_destructure_pattern(
-                                p,
-                                e,
-                                slot_ty,
-                                is_const,
-                                ctx,
-                                diagnostics,
-                            )?;
-                        }
-                        return Ok(());
+                    && elems.len() == pats.len()
+                {
+                    let expected_elems: Option<Vec<Type>> = match expected {
+                        Some(Type::Tuple(ts)) if ts.len() == elems.len() => Some(ts.clone()),
+                        _ => None,
+                    };
+                    for (i, (p, e)) in pats.iter().zip(elems.iter()).enumerate() {
+                        let slot_ty = expected_elems.as_ref().map(|es| &es[i]);
+                        self.bind_destructure_pattern(p, e, slot_ty, is_const, ctx, diagnostics)?;
                     }
+                    return Ok(());
+                }
                 let saved_expected = self.current_expected_type.take();
                 self.current_expected_type = expected.cloned();
                 let right_type = self

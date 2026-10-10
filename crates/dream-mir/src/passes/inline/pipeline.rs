@@ -1,10 +1,10 @@
 use super::super::ModulePass;
+use super::FnKey;
 use super::eligibility::find_site;
 use super::graph::address_taken;
 use super::graph::count_call_sites;
 use super::graph::recursive_set;
 use super::splice::perform_inline;
-use super::FnKey;
 use dream_types::TypeInterner;
 use indexmap::IndexMap as HashMap;
 

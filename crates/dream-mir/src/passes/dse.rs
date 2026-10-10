@@ -9,8 +9,8 @@
 //! it drops no side effect). Stores still pending at the block end are kept (they may be read in a
 //! successor).
 
-use super::dce::is_pure;
 use super::MirPass;
+use super::dce::is_pure;
 use crate::{Const, Global, Local, MirFunction, Operand, Place, Rvalue, Statement};
 use dream_types::TypeInterner;
 use indexmap::IndexMap as HashMap;

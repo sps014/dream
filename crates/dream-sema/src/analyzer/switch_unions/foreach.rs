@@ -115,18 +115,13 @@ impl<'a> Analyzer<'a> {
             let enum_ty = method.return_type.clone().unwrap_or(Type::Unknown);
             if let Some((ebase, eargs)) = Self::resolve_struct_parts(&enum_ty)
                 && !eargs.is_empty()
-                    && self
-                        .type_ctx
-                        .resolve(DefKind::Interface, &ebase)
-                        .is_some_and(|def| self.is_generic_interface(def))
-                {
-                    self.ensure_interface_instantiated(
-                        &ebase,
-                        &eargs,
-                        &element.position,
-                        diagnostics,
-                    );
-                }
+                && self
+                    .type_ctx
+                    .resolve(DefKind::Interface, &ebase)
+                    .is_some_and(|def| self.is_generic_interface(def))
+            {
+                self.ensure_interface_instantiated(&ebase, &eargs, &element.position, diagnostics);
+            }
             self.hir_iface_call0(iter_hir, iface_name, method, slot, &enum_ty);
             let it_call = self.hir_take();
             (enum_ty, it_call)
@@ -135,13 +130,13 @@ impl<'a> Analyzer<'a> {
         let enum_iface = self.type_ctx.lower(&enumerator_type);
         if let Some((ebase, eargs)) = Self::resolve_struct_parts(&enumerator_type)
             && !eargs.is_empty()
-                && self
-                    .type_ctx
-                    .resolve(DefKind::Interface, &ebase)
-                    .is_some_and(|def| self.is_generic_interface(def))
-            {
-                self.ensure_interface_instantiated(&ebase, &eargs, &element.position, diagnostics);
-            }
+            && self
+                .type_ctx
+                .resolve(DefKind::Interface, &ebase)
+                .is_some_and(|def| self.is_generic_interface(def))
+        {
+            self.ensure_interface_instantiated(&ebase, &eargs, &element.position, diagnostics);
+        }
 
         let Some((next_slot, next_method)) = self.iface_method_slot(enum_iface, "next") else {
             self.hir_fail();

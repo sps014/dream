@@ -12,9 +12,10 @@ pub(super) fn prefix(
     }
     if let Some(p) = home {
         if p.file_name().and_then(|s| s.to_str()) == Some("bin")
-            && let Some(parent) = p.parent() {
-                return parent.to_path_buf();
-            }
+            && let Some(parent) = p.parent()
+        {
+            return parent.to_path_buf();
+        }
         let cargo_target = matches!(
             p.file_name().and_then(|s| s.to_str()),
             Some("debug" | "release")
@@ -46,9 +47,10 @@ pub(super) fn runtime_sources(
     if let Some(home) = home {
         roots.push(home.join("lib/runtime/c"));
         if home.file_name().and_then(|s| s.to_str()) == Some("bin")
-            && let Some(parent) = home.parent() {
-                roots.push(parent.join("lib/runtime/c"));
-            }
+            && let Some(parent) = home.parent()
+        {
+            roots.push(parent.join("lib/runtime/c"));
+        }
     }
     if let Some(user) = user {
         roots.push(user.join(".dream/lib/runtime/c"));
@@ -71,9 +73,10 @@ pub(super) fn host_library_dirs(config: &ToolchainConfig) -> Vec<PathBuf> {
             if let Some(p) = exe.parent() {
                 push(p.to_path_buf());
                 if p.file_name().and_then(|s| s.to_str()) == Some("deps")
-                    && let Some(parent) = p.parent() {
-                        push(parent.to_path_buf());
-                    }
+                    && let Some(parent) = p.parent()
+                {
+                    push(parent.to_path_buf());
+                }
             }
         }
     }
@@ -82,9 +85,10 @@ pub(super) fn host_library_dirs(config: &ToolchainConfig) -> Vec<PathBuf> {
         push(home.join("bin"));
     }
     if let Some(bin) = &config.bin
-        && let Some(parent) = bin.parent() {
-            push(parent.to_path_buf());
-        }
+        && let Some(parent) = bin.parent()
+    {
+        push(parent.to_path_buf());
+    }
     if let Some(user) = &config.user_home {
         push(user.join(".dream/bin"));
     }

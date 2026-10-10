@@ -1,8 +1,8 @@
 use super::model::Rewriter;
 use bumpalo::Bump;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::function::FunctionNode;
 use dream_syntax::nodes::StatementNode;
+use dream_syntax::nodes::function::FunctionNode;
 use indexmap::IndexMap;
 use std::io::Error;
 

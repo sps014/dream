@@ -10,7 +10,7 @@ use dream_sema::analyzer::ide::{
     IdeRef, IdeSnapshot, IdeTarget, MemberInfo, MemberKind, TypeSummary,
 };
 
-use crate::index::{is_ident_byte, Index, SymKind};
+use crate::index::{Index, SymKind, is_ident_byte};
 
 /// Finds the reference recorded for the receiver in a `receiver.<cursor>` completion at `offset`.
 ///

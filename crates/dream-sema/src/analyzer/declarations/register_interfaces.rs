@@ -442,10 +442,11 @@ impl<'a> Analyzer<'a> {
         let class_ret =
             substitute_generic_type(&class.return_type.clone().unwrap_or(Type::Void), bindings);
         if let Some((base, args)) = Self::resolve_struct_parts(&class_ret)
-            && !args.is_empty() {
-                let position = class.name.position;
-                self.ensure_type_instantiated(&base, &args, &position, diagnostics);
-            }
+            && !args.is_empty()
+        {
+            let position = class.name.position;
+            self.ensure_type_instantiated(&base, &args, &position, diagnostics);
+        }
         let b = self.type_ctx.lower(&class_ret);
         self.type_ctx.set_scope(scope);
         self.value_type_assignable(a, b, diagnostics)

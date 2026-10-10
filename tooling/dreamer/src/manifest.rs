@@ -718,8 +718,14 @@ mod tests {
             "git = 'https://example.com/repo', branch = 'main', rev = 'abc'",
             "branch = 'main'",
         ] {
-            let dependency: Dependency = toml::from_str::<toml::Value>(&format!("dep = {{ {source} }}"))
-                .unwrap().get("dep").unwrap().clone().try_into().unwrap();
+            let dependency: Dependency =
+                toml::from_str::<toml::Value>(&format!("dep = {{ {source} }}"))
+                    .unwrap()
+                    .get("dep")
+                    .unwrap()
+                    .clone()
+                    .try_into()
+                    .unwrap();
             assert!(dependency.validate().is_err(), "{source}");
         }
         for name in ["../escape", "a/b", "a\\b", ".", "..", "a%2fb"] {

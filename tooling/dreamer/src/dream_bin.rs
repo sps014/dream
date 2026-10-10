@@ -7,7 +7,7 @@
 //! 4. `dream` on `PATH`
 //! 5. Sibling of this `dreamer` executable (same Cargo `target/{debug,release}/`)
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -89,9 +89,10 @@ pub fn locate() -> Result<PathBuf> {
     // shared target dir per Cargo workspace), independent of the project being built.
     if let Ok(exe) = std::env::current_exe()
         && let Some(dir) = exe.parent()
-            && let Some(sibling) = binary_in_dir(dir, "dream") {
-                return Ok(sibling);
-            }
+        && let Some(sibling) = binary_in_dir(dir, "dream")
+    {
+        return Ok(sibling);
+    }
 
     bail!(
         "could not find the `dream` compiler executable; install it on PATH, set DREAM_HOME \
@@ -128,9 +129,10 @@ pub fn locate_dreamer() -> Result<PathBuf> {
 
     if let Ok(exe) = std::env::current_exe()
         && let Some(dir) = exe.parent()
-            && let Some(sibling) = binary_in_dir(dir, "dreamer") {
-                return Ok(sibling);
-            }
+        && let Some(sibling) = binary_in_dir(dir, "dreamer")
+    {
+        return Ok(sibling);
+    }
 
     bail!(
         "could not find the `dreamer` executable; install it on PATH, set DREAMER_HOME \

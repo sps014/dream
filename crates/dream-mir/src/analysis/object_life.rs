@@ -54,12 +54,13 @@ pub(crate) fn lifetime(f: &MirFunction, members: &[Local], new_local: Local) -> 
     for b in &f.blocks {
         for s in &b.stmts {
             if let Statement::Assign(Place::Local(d), Rvalue::New { .. }) = s
-                && pos.contains_key(d) {
-                    news += 1;
-                    if *d != new_local {
-                        return None;
-                    }
+                && pos.contains_key(d)
+            {
+                news += 1;
+                if *d != new_local {
+                    return None;
                 }
+            }
             if gives_count_away(s, &pos) {
                 return None;
             }

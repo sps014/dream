@@ -3,7 +3,7 @@
 
 use super::c_shim::shim_bitcode;
 use super::runtime::{anchor_unit, reduce_disassembly};
-use super::tools::{resolve_llvm, LlvmTools};
+use super::tools::{LlvmTools, resolve_llvm};
 use crate::driver::compiler::RuntimeSignatures;
 use crate::driver::toolchain::ToolchainConfig;
 use crate::driver::wasi::run_captured;

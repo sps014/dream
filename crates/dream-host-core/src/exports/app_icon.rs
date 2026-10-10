@@ -8,25 +8,29 @@ static APP_ICON_PNG: OnceLock<&'static [u8]> = OnceLock::new();
 /// # Safety
 /// `png` must point to `len` bytes that live for the whole process (a constant global).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dream_set_app_icon(png: *const u8, len: i32) { unsafe {
-    if png.is_null() || len <= 0 {
-        return;
+pub unsafe extern "C" fn dream_set_app_icon(png: *const u8, len: i32) {
+    unsafe {
+        if png.is_null() || len <= 0 {
+            return;
+        }
+        let _ = APP_ICON_PNG.set(std::slice::from_raw_parts(png, len as usize));
     }
-    let _ = APP_ICON_PNG.set(std::slice::from_raw_parts(png, len as usize));
-}}
+}
 
 /// # Safety
 /// `length` must point to a writable usize.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dream_host_app_icon(length: *mut usize) -> *const u8 { unsafe {
-    match APP_ICON_PNG.get() {
-        Some(png) => {
-            length.write(png.len());
-            png.as_ptr()
-        }
-        None => {
-            length.write(0);
-            std::ptr::null()
+pub unsafe extern "C" fn dream_host_app_icon(length: *mut usize) -> *const u8 {
+    unsafe {
+        match APP_ICON_PNG.get() {
+            Some(png) => {
+                length.write(png.len());
+                png.as_ptr()
+            }
+            None => {
+                length.write(0);
+                std::ptr::null()
+            }
         }
     }
-}}
+}

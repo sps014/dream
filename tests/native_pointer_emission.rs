@@ -1,7 +1,7 @@
 use crate::common;
 
 use common::{
-    compile_test_pipeline_for, emit_hir_to_module, emit_ll_for, ir_func_body, CLOSURE_STUB,
+    CLOSURE_STUB, compile_test_pipeline_for, emit_hir_to_module, emit_ll_for, ir_func_body,
 };
 use dream_mir::backend::Target;
 

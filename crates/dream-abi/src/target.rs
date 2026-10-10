@@ -1,6 +1,6 @@
 //! Target facts shared across the driver/backend boundary, independent of the build machine.
 
-use target_lexicon::{Architecture, Environment, OperatingSystem, Triple, HOST};
+use target_lexicon::{Architecture, Environment, HOST, OperatingSystem, Triple};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TargetCapabilities {
@@ -277,10 +277,12 @@ mod tests {
             .unwrap();
         assert_eq!(mac.triple.to_string(), "aarch64-apple-macosx13.2.0");
         assert_eq!(mac.min_os.unwrap().minor, 2);
-        assert!(TargetSpec::parse("x86_64-unknown-linux-gnu")
-            .unwrap()
-            .with_min_os("13".parse().unwrap())
-            .is_err());
+        assert!(
+            TargetSpec::parse("x86_64-unknown-linux-gnu")
+                .unwrap()
+                .with_min_os("13".parse().unwrap())
+                .is_err()
+        );
     }
 
     #[test]
@@ -315,17 +317,23 @@ mod tests {
             "aarch64-pc-windows-msvc",
             "wasm32-unknown-wasip1",
         ] {
-            assert!(!TargetSpec::parse(other)
-                .unwrap()
-                .link_compatible_with(&host));
+            assert!(
+                !TargetSpec::parse(other)
+                    .unwrap()
+                    .link_compatible_with(&host)
+            );
         }
         let linux = TargetSpec::parse("x86_64-unknown-linux-gnu").unwrap();
-        assert!(!TargetSpec::parse("x86_64-unknown-linux-musl")
-            .unwrap()
-            .link_compatible_with(&linux));
-        assert!(!TargetSpec::parse("x86_64-unknown-linux-gnux32")
-            .unwrap()
-            .link_compatible_with(&linux));
+        assert!(
+            !TargetSpec::parse("x86_64-unknown-linux-musl")
+                .unwrap()
+                .link_compatible_with(&linux)
+        );
+        assert!(
+            !TargetSpec::parse("x86_64-unknown-linux-gnux32")
+                .unwrap()
+                .link_compatible_with(&linux)
+        );
         assert!(!TargetSpec::wasm32().can_link_on_host());
         assert!(TargetSpec::host().can_link_on_host());
     }

@@ -2,9 +2,11 @@
 fn compiler_does_not_embed_native_hosts() {
     let manifest: toml::Value = toml::from_str(include_str!("../Cargo.toml")).unwrap();
     let dependencies = manifest["dependencies"].as_table().unwrap();
-    assert!(!dependencies
-        .keys()
-        .any(|name| name.starts_with("dream-host")));
+    assert!(
+        !dependencies
+            .keys()
+            .any(|name| name.starts_with("dream-host"))
+    );
     for name in ["dream-host", "wgpu", "winit", "wry", "reqwest"] {
         assert!(
             !dependencies.contains_key(name),

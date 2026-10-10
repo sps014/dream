@@ -63,28 +63,30 @@ impl<'a> Analyzer<'a> {
             .type_ctx
             .lookup_type(ty)
             .and_then(|ty| self.struct_info(ty))
-            && !struct_info.visibility.is_public() {
-                diagnostics.report_error(
-                    format!(
-                        "Public function '{}' exposes private class '{}'",
-                        function.name.text, name
-                    ),
-                    Some(function.name.position),
-                );
-            }
+            && !struct_info.visibility.is_public()
+        {
+            diagnostics.report_error(
+                format!(
+                    "Public function '{}' exposes private class '{}'",
+                    function.name.text, name
+                ),
+                Some(function.name.position),
+            );
+        }
         let def = self
             .type_ctx
             .nominal_kind(name)
             .and_then(|kind| self.type_ctx.resolve(kind, name));
         if let Some((_, visibility)) = def.and_then(|def| self.type_visibility.get(&def))
-            && !visibility.is_public() {
-                diagnostics.report_error(
-                    format!(
-                        "Public function '{}' exposes private type '{}'",
-                        function.name.text, name
-                    ),
-                    Some(function.name.position),
-                );
-            }
+            && !visibility.is_public()
+        {
+            diagnostics.report_error(
+                format!(
+                    "Public function '{}' exposes private type '{}'",
+                    function.name.text, name
+                ),
+                Some(function.name.position),
+            );
+        }
     }
 }

@@ -77,9 +77,10 @@ pub fn imported_packages(text: &str) -> std::collections::HashSet<String> {
         let t = line.trim();
         if let Some(rest) = t.strip_prefix("import ")
             && let Some(path) = rest.strip_suffix(';')
-                && !path.contains(" as ") {
-                    set.insert(path.trim().to_string());
-                }
+            && !path.contains(" as ")
+        {
+            set.insert(path.trim().to_string());
+        }
     }
     set
 }
@@ -143,15 +144,16 @@ pub fn unresolved_names_from_message(message: &str) -> Vec<String> {
     }
     // Quoted identifiers as a fallback (`Struct 'X' not found`).
     if names.is_empty()
-        && let Some(start) = message.find('\'') {
-            let rest = &message[start + 1..];
-            if let Some(end) = rest.find('\'') {
-                let name = &rest[..end];
-                if !name.is_empty() {
-                    names.push(name.to_string());
-                }
+        && let Some(start) = message.find('\'')
+    {
+        let rest = &message[start + 1..];
+        if let Some(end) = rest.find('\'') {
+            let name = &rest[..end];
+            if !name.is_empty() {
+                names.push(name.to_string());
             }
         }
+    }
     names
 }
 
@@ -161,11 +163,7 @@ fn quoted_after(message: &str, marker: &str) -> Option<String> {
         .chars()
         .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
         .collect();
-    if name.is_empty() {
-        None
-    } else {
-        Some(name)
-    }
+    if name.is_empty() { None } else { Some(name) }
 }
 
 /// Pull a likely identifier from a diagnostic message / cursor word.

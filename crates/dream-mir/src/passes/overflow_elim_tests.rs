@@ -1,6 +1,6 @@
 use super::*;
-use crate::build::FunctionBuilder;
 use crate::Const;
+use crate::build::FunctionBuilder;
 use dream_types::TypeInterner;
 
 fn local(l: Local) -> Operand {

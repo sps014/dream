@@ -1,7 +1,7 @@
 // Not every integration-test crate that includes this module exercises every helper.
 #![allow(dead_code)]
 
-use dream_lsp::analysis::{analyze_document, collect_diagnostics, DiagnosticOut};
+use dream_lsp::analysis::{DiagnosticOut, analyze_document, collect_diagnostics};
 use dream_lsp::index::Index;
 
 pub struct TestHarness {
@@ -60,11 +60,7 @@ impl XorShift {
 
     /// A value in `0..n` (returns 0 when `n == 0`).
     pub fn below(&mut self, n: u32) -> u32 {
-        if n == 0 {
-            0
-        } else {
-            self.next_u32() % n
-        }
+        if n == 0 { 0 } else { self.next_u32() % n }
     }
 }
 

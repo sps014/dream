@@ -3,7 +3,7 @@ use super::super::{
     liveness::{self, live_after_stmt},
     modref::ModRefTable,
     tokens::{
-        funcbox_env_rc_roots, is_owned_local, leftover_alias_parent, leftover_keep, TokenAnalysis,
+        TokenAnalysis, funcbox_env_rc_roots, is_owned_local, leftover_alias_parent, leftover_keep,
     },
 };
 use crate::{Global, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
@@ -127,12 +127,13 @@ impl State {
                         _ => None,
                     };
                     if let Some(Place::Field { .. } | Place::Index { .. }) = read_place
-                        && interner.is_rc_tracked(func.locals[dest.0 as usize].ty) {
-                            slot_readers
-                                .entry(slot_id(read_place.unwrap()))
-                                .or_default()
-                                .push(dest.0);
-                        }
+                        && interner.is_rc_tracked(func.locals[dest.0 as usize].ty)
+                    {
+                        slot_readers
+                            .entry(slot_id(read_place.unwrap()))
+                            .or_default()
+                            .push(dest.0);
+                    }
                 }
                 let Statement::Assign(dest_place, Rvalue::ArrayRealloc { array, .. }) = stmt else {
                     continue;

@@ -2,7 +2,7 @@
 //! Container/call handoffs are excluded: their counts need ownership facts, not pointer equality.
 
 use super::operands::{operand_locals, other_stmt_locals, rvalue_local_operands, terminator_reads};
-use super::{violation, Violation};
+use super::{Violation, violation};
 use crate::{Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -54,11 +54,12 @@ fn families(f: &MirFunction, interner: &TypeInterner) -> Vec<Family> {
     for block in &f.blocks {
         for stmt in &block.stmts {
             if let Statement::Assign(Place::Local(dest), rv) = stmt
-                && let Some(src) = alias(rv) {
-                    let a = root(&mut parent, dest.0 as usize);
-                    let b = root(&mut parent, src as usize);
-                    parent[a.max(b)] = a.min(b);
-                }
+                && let Some(src) = alias(rv)
+            {
+                let a = root(&mut parent, dest.0 as usize);
+                let b = root(&mut parent, src as usize);
+                parent[a.max(b)] = a.min(b);
+            }
         }
     }
     let mut excluded: BTreeSet<u32> = f.params.iter().map(|p| p.0).collect();
@@ -293,9 +294,9 @@ fn check_family(f: &MirFunction, family: &Family, out: &mut Vec<Violation>) {
                 .and_then(local)
                 .and_then(|l| family.locals.get(&l))
                 .is_some_and(|&i| state.bound[i] == Binding::Live)
-            {
-                state.count -= 1;
-            }
+        {
+            state.count -= 1;
+        }
         if state.count != 0
             && matches!(
                 block.terminator,

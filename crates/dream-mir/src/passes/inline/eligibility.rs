@@ -1,7 +1,7 @@
+use super::FnKey;
+use super::remap::WasmKind;
 use super::remap::arg_type;
 use super::remap::wasm_kind;
-use super::remap::WasmKind;
-use super::FnKey;
 use crate::Operand;
 use crate::Place;
 use crate::Rvalue;

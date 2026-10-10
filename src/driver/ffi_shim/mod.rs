@@ -27,7 +27,7 @@ use dream_diagnostics::DiagnosticBag;
 use dream_text::text_span::TextSpan;
 
 use crate::driver::native_sets::NativeGraph;
-use crate::driver::source_loader::{collect_declarations, ProgramAccumulator};
+use crate::driver::source_loader::{ProgramAccumulator, collect_declarations};
 
 /// The generated shims, by native set name.
 #[derive(Debug, Default)]

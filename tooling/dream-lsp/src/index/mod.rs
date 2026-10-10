@@ -19,9 +19,9 @@ mod model;
 mod queries;
 
 pub use attr_ide::{
-    attribute_arg_context, attribute_name_partial, attribute_signature, AttrArgContext,
+    AttrArgContext, attribute_arg_context, attribute_name_partial, attribute_signature,
 };
-pub use declared_attrs::{std_attributes, DeclaredAttribute};
+pub use declared_attrs::{DeclaredAttribute, std_attributes};
 pub use model::*;
 pub(crate) use queries::import_path_partial;
 pub use queries::is_member_completion_context;
@@ -112,14 +112,15 @@ impl Index {
                         dream::driver::source_loader::resolve_import_path(parent_dir, module_name);
 
                     if let Some(import_path_str) = import_path.to_str()
-                        && import_path.exists() {
-                            let _ = dream::driver::source_loader::parse_file_recursive(
-                                &import_path_str.to_string(),
-                                &mut acc,
-                                &arena,
-                                &mut scratch,
-                            );
-                        }
+                        && import_path.exists()
+                    {
+                        let _ = dream::driver::source_loader::parse_file_recursive(
+                            &import_path_str.to_string(),
+                            &mut acc,
+                            &arena,
+                            &mut scratch,
+                        );
+                    }
                 }
             }
 
@@ -147,12 +148,18 @@ impl Index {
                 acc.all_globals,
             );
             for s in &combined.structs {
-                let Some(path) = s.file_path.as_deref() else { continue };
+                let Some(path) = s.file_path.as_deref() else {
+                    continue;
+                };
                 if dream_stdlib::is_std_source(path) {
                     continue;
                 }
                 if let Some(source) = acc.file_contents.get(path) {
-                    attributes.extend(declared_attrs::collect(source, std::slice::from_ref(s), None));
+                    attributes.extend(declared_attrs::collect(
+                        source,
+                        std::slice::from_ref(s),
+                        None,
+                    ));
                 }
             }
             // Pass 1.5: Declare all imported and prelude symbols

@@ -188,16 +188,17 @@ impl Index {
     ) -> Vec<(String, SymKind, String, Option<String>)> {
         // Locals / params win over a same-named enum type (`let Color = …; Color.`).
         if let Some(decl) = self.resolve(receiver, scope, before)
-            && matches!(decl.kind, SymKind::Variable | SymKind::Param) {
-                return match &decl.ty {
-                    Some(ty) => {
-                        let base = ty.trim_end_matches('?').trim_end_matches("[]");
-                        self.members_of_struct(base, /*static_only*/ false)
-                    }
-                    // In-scope local with unknown type: never fall through to the enum type.
-                    None => Vec::new(),
-                };
-            }
+            && matches!(decl.kind, SymKind::Variable | SymKind::Param)
+        {
+            return match &decl.ty {
+                Some(ty) => {
+                    let base = ty.trim_end_matches('?').trim_end_matches("[]");
+                    self.members_of_struct(base, /*static_only*/ false)
+                }
+                // In-scope local with unknown type: never fall through to the enum type.
+                None => Vec::new(),
+            };
+        }
 
         if self
             .decls

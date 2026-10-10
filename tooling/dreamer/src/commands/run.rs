@@ -1,7 +1,7 @@
 use crate::compile_flags::CompileFlags;
-use crate::manifest::{resolve_run_target, PackageType, RunTarget};
+use crate::manifest::{PackageType, RunTarget, resolve_run_target};
 use crate::workspace::Workspace;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::path::Path;
 use std::process::Command;
 

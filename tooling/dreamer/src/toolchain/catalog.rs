@@ -140,9 +140,11 @@ mod tests {
         for os in [HostOs::Linux, HostOs::Macos, HostOs::Windows] {
             for arch in [HostArch::X64, HostArch::Arm64] {
                 let artifact = binaryen_artifact(Host { os, arch }).unwrap();
-                assert!(artifact
-                    .url
-                    .contains(&format!("version_{}/", super::super::BINARYEN_VERSION)));
+                assert!(
+                    artifact
+                        .url
+                        .contains(&format!("version_{}/", super::super::BINARYEN_VERSION))
+                );
                 assert_eq!(artifact.sha256.len(), 64);
                 assert!(artifact.sha256.chars().all(|ch| ch.is_ascii_hexdigit()));
                 assert!(matches!(artifact.kind, ArchiveKind::TarGz));

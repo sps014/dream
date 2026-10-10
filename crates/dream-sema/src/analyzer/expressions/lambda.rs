@@ -565,10 +565,7 @@ impl<'a> Analyzer<'a> {
                     diagnostics,
                     format!(
                         "cannot capture '{}' of type '{}' in a `{}` body: '{}' is not shared — mark the class 'shared', capture a blittable value, string, or a struct of those, or pass a heap object by move (its binding cannot be used afterwards)",
-                        bad,
-                        pretty,
-                        who,
-                        pretty
+                        bad, pretty, who, pretty
                     ),
                     Some(lambda.open_paren_position),
                 ));
@@ -653,11 +650,11 @@ impl<'a> Analyzer<'a> {
                         // Propagate captures onto the mangled instance if any.
                         if let Some(caps) = self.closure_captures.get(&def).cloned()
                             && let Some(Type::Function(_, _)) = self.current_expected_type.as_ref()
-                            {
-                                // Instance name is mangled; find latest registered instance.
-                                // `instantiate_generic_function_value` already emitted HIR.
-                                let _ = caps;
-                            }
+                        {
+                            // Instance name is mangled; find latest registered instance.
+                            // `instantiate_generic_function_value` already emitted HIR.
+                            let _ = caps;
+                        }
                         Ok(func_ty)
                     }
                     None => Ok(Type::Unknown),

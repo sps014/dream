@@ -1,4 +1,4 @@
-use super::{Cc, TargetSpec, ToolchainConfig, MISSING_CXX};
+use super::{Cc, MISSING_CXX, TargetSpec, ToolchainConfig};
 use std::process::Command;
 
 pub(super) fn command(

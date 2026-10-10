@@ -25,10 +25,12 @@ fn module_resolution_preserves_definition_identity_and_primary_spans() {
         outcome.diagnostics
     );
     let snapshot = outcome.sema.expect("snapshot");
-    assert!(snapshot
-        .refs
-        .iter()
-        .all(|reference| reference.file.as_deref() == Some(dream_lsp::analysis::MAIN_FILE)));
+    assert!(
+        snapshot
+            .refs
+            .iter()
+            .all(|reference| reference.file.as_deref() == Some(dream_lsp::analysis::MAIN_FILE))
+    );
     let local_declaration = source.find("second_user_value").unwrap();
     let local_call = source.rfind("second_user_value").unwrap();
     let declaration = &snapshot.ref_covering(local_declaration).unwrap().target;
@@ -53,8 +55,10 @@ fn module_resolution_preserves_definition_identity_and_primary_spans() {
         panic!("typed imported definition");
     };
     assert_ne!(local_def.module, imported_def.module);
-    assert!(std::path::Path::new(imported_source.file.as_ref().unwrap())
-        .ends_with("helpers/module_users_a.dream"));
+    assert!(
+        std::path::Path::new(imported_source.file.as_ref().unwrap())
+            .ends_with("helpers/module_users_a.dream")
+    );
     assert!(!sema_ide::target_matches(
         call,
         &snapshot.ref_covering(imported_call).unwrap().target

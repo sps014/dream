@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use crate::driver::source_loader::collect_declarations;
 use dream_diagnostics::DiagnosticBag;
-use dream_stdlib::{resolve_packages_to_load, StdPackage};
+use dream_stdlib::{StdPackage, resolve_packages_to_load};
 use dream_syntax::lexer::Lexer;
 use dream_syntax::parser::Parser;
 

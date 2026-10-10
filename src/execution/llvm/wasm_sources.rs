@@ -76,7 +76,10 @@ pub(super) fn compile(
             if cxx {
                 let headers = sysroot.join("include").join(target).join("eh/c++/v1");
                 if !headers.join("string").is_file() {
-                    return Err(format!("WASM C++ headers not found at {}; run scripts/fetch-dev-llvm.sh (Windows: scripts/fetch-dev-llvm.ps1)", headers.display()));
+                    return Err(format!(
+                        "WASM C++ headers not found at {}; run scripts/fetch-dev-llvm.sh (Windows: scripts/fetch-dev-llvm.ps1)",
+                        headers.display()
+                    ));
                 }
                 cmd.args(["-nostdinc++", "-isystem"]).arg(headers).args([
                     "-fuse-cxa-atexit",
@@ -150,7 +153,10 @@ fn required_library(dir: &Path, name: &str) -> Result<PathBuf, String> {
     if path.is_file() {
         Ok(path)
     } else {
-        Err(format!("WASM library '{name}' not found at {}; provide a WASI sysroot with this library beside the pinned LLVM", path.display()))
+        Err(format!(
+            "WASM library '{name}' not found at {}; provide a WASI sysroot with this library beside the pinned LLVM",
+            path.display()
+        ))
     }
 }
 
@@ -165,9 +171,13 @@ pub(super) fn validate_signatures(
     let compare = |actual: &RuntimeSigs| -> Result<(), String> {
         for (name, declared) in &expected.fns {
             if let Some(defined) = actual.fns.get(name)
-                && declared.fty != defined.fty {
-                    return Err(format!("WASM C ABI mismatch for '{name}': Dream declares {}, package source uses {}; use usize/isize for pointer-sized C integers", declared.fty, defined.fty));
-                }
+                && declared.fty != defined.fty
+            {
+                return Err(format!(
+                    "WASM C ABI mismatch for '{name}': Dream declares {}, package source uses {}; use usize/isize for pointer-sized C integers",
+                    declared.fty, defined.fty
+                ));
+            }
         }
         Ok(())
     };
@@ -195,9 +205,10 @@ pub(super) fn validate_imports(
     if let Some(externs) = abi["externs"].as_array() {
         for entry in externs {
             if let (Some(module), Some(field)) = (entry["module"].as_str(), entry["field"].as_str())
-                && !module.starts_with("c/") {
-                    allowed.insert((module.to_string(), field.to_string()));
-                }
+                && !module.starts_with("c/")
+            {
+                allowed.insert((module.to_string(), field.to_string()));
+            }
         }
     }
     let bytes = std::fs::read(wasm).map_err(|e| e.to_string())?;
@@ -208,7 +219,10 @@ pub(super) fn validate_imports(
                 if matches!(import.ty, wasmparser::TypeRef::Func(_))
                     && !allowed.contains(&(import.module.to_string(), import.name.to_string()))
                 {
-                    return Err(format!("WASM C/C++ package requires unavailable function '{}.{}'; provide a portable implementation or move the platform operation behind a Dream @js binding", import.module, import.name));
+                    return Err(format!(
+                        "WASM C/C++ package requires unavailable function '{}.{}'; provide a portable implementation or move the platform operation behind a Dream @js binding",
+                        import.module, import.name
+                    ));
                 }
             }
         }

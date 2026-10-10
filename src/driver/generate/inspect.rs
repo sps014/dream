@@ -3,7 +3,7 @@
 //! `dream generate` and `dream debug-adapter --generator`.
 
 use super::exe::ExePlan;
-use super::pass::{gather, GenerateRequest};
+use super::pass::{GenerateRequest, gather};
 use super::registry::RegisteredGenerator;
 use super::snapshot::has_inputs;
 use crate::driver::source_loader::ProgramAccumulator;
@@ -51,7 +51,10 @@ pub fn inspect(
         .collect();
     let mut generators = Vec::with_capacity(inputs.gens.len());
     for registered in &inputs.gens {
-        let Some(plan) = plans.iter().find(|p| p.generators.contains(&registered.name)) else {
+        let Some(plan) = plans
+            .iter()
+            .find(|p| p.generators.contains(&registered.name))
+        else {
             continue;
         };
         let applicable = inputs.applicable(registered, acc, attributes);
@@ -69,7 +72,11 @@ pub fn inspect(
             .filter(|_| registered.incremental)
             .map(|json| super::incremental::result_key(&plan.key, json));
         generators.push(InspectedGenerator {
-            sites: inputs.sites.iter().filter(|s| s.name == registered.name).count(),
+            sites: inputs
+                .sites
+                .iter()
+                .filter(|s| s.name == registered.name)
+                .count(),
             calls: inputs
                 .calls
                 .iter()

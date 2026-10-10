@@ -18,9 +18,10 @@ fn names_after_module(src: &str, module: &str) -> Vec<String> {
         let after = &rest[pos + needle.len()..];
         let trimmed = after.trim_start_matches([' ', '\n', '\r', '\t', ',']);
         if let Some(field) = trimmed.strip_prefix('"')
-            && let Some(end) = field.find('"') {
-                out.push(field[..end].to_string());
-            }
+            && let Some(end) = field.find('"')
+        {
+            out.push(field[..end].to_string());
+        }
         rest = after;
     }
     out
@@ -33,9 +34,10 @@ fn runtime_attr_names(src: &str) -> Vec<String> {
         let after = &rest[pos + "@runtime(".len()..];
         let trimmed = after.trim_start();
         if let Some(field) = trimmed.strip_prefix('"')
-            && let Some(end) = field.find('"') {
-                out.push(field[..end].to_string());
-            }
+            && let Some(end) = field.find('"')
+        {
+            out.push(field[..end].to_string());
+        }
         rest = after;
     }
     out

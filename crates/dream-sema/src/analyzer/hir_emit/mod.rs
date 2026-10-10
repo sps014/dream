@@ -626,9 +626,10 @@ impl<'a> Analyzer<'a> {
     /// Appends a statement to the current (innermost) block, if collection is active.
     fn push_stmt(&mut self, stmt: HStmt) {
         if self.active()
-            && let Some(block) = self.hir.blocks.last_mut() {
-                block.push(stmt);
-            }
+            && let Some(block) = self.hir.blocks.last_mut()
+        {
+            block.push(stmt);
+        }
     }
 
     fn block_position(&self) -> (usize, usize) {

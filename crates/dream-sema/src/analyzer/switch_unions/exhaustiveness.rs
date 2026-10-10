@@ -34,9 +34,10 @@ impl<'a> Analyzer<'a> {
                 // unit-variant pattern; otherwise it binds the whole value.
                 if let Some(info) = &union_info
                     && let Some(v) = info.variant(&name.text)
-                        && v.fields.is_empty() {
-                            return Ok(PatternInfo { irrefutable: false });
-                        }
+                    && v.fields.is_empty()
+                {
+                    return Ok(PatternInfo { irrefutable: false });
+                }
                 if let Err(e) = (*scope)
                     .borrow_mut()
                     .add_symbol(name.text.clone(), expected.clone())
@@ -404,9 +405,10 @@ impl<'a> Analyzer<'a> {
                     .lookup_type(ty)
                     .and_then(|id| self.union_info(id))
                     && let Some(v) = info.variant(&name.text)
-                        && v.fields.is_empty() {
-                            return false;
-                        }
+                    && v.fields.is_empty()
+                {
+                    return false;
+                }
                 true
             }
             PatternNode::Tuple(elems) => {

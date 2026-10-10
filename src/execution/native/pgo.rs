@@ -117,9 +117,9 @@ fn merge_with(raws: &[PathBuf], bin: &Path, tool: &Path, reuse: bool) -> Result<
         && raws
             .iter()
             .all(|r| modified(r).is_some_and(|t| t <= merged))
-        {
-            return Ok(out);
-        }
+    {
+        return Ok(out);
+    }
     let mut cmd = Command::new(tool);
     cmd.arg("merge").arg("-o").arg(&out).args(raws);
     let res = cmd

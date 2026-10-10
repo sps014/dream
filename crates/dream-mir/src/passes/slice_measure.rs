@@ -212,11 +212,7 @@ fn substring_len(func: &MirFunction, rv: &Rvalue, subs: &HashSet<DefId>) -> Opti
 fn slice_n(len: i64, start: i64, end: i64) -> i64 {
     let start = clamp(start, len);
     let end = clamp(end, len);
-    if end < start {
-        0
-    } else {
-        end - start
-    }
+    if end < start { 0 } else { end - start }
 }
 
 fn clamp(v: i64, len: i64) -> i64 {

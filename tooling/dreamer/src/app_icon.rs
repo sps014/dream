@@ -1,7 +1,7 @@
 //! Validation for the PNG icon embedded in native executables.
 
 use crate::workspace::Workspace;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 
 const RECOMMENDED_SIZE: u32 = 256;

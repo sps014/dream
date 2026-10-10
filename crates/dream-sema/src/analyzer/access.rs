@@ -108,8 +108,9 @@ impl<'a> Analyzer<'a> {
             .nominal_kind(type_name)
             .and_then(|kind| self.type_ctx.resolve(kind, type_name));
         if let Some((decl_file, visibility)) = def.and_then(|def| self.type_visibility.get(&def))
-            && !self.visible_across_files(decl_file, *visibility, caller_file) {
-                self.report_not_public("Type", type_name, decl_file, position, diagnostics);
-            }
+            && !self.visible_across_files(decl_file, *visibility, caller_file)
+        {
+            self.report_not_public("Type", type_name, decl_file, position, diagnostics);
+        }
     }
 }

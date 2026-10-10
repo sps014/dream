@@ -152,7 +152,7 @@ impl ProjectManifest {
                             _ => {
                                 return Err(format!(
                                     "[[generators]].options.{k} must be a string, number or bool"
-                                ))
+                                ));
                             }
                         };
                         options.insert(k.clone(), value);
@@ -253,7 +253,7 @@ fn parse_table(ctx: &str, t: &toml::Table) -> Result<NativeTable, String> {
                 return Err(format!(
                     "unknown key '{other}' in [{ctx}] (expected one of {})",
                     LIST_KEYS.join(", ")
-                ))
+                ));
             }
         }
     }

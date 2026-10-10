@@ -2343,7 +2343,7 @@ fun f(a: Vec): void {
 
 #[test]
 fn semantic_tokens_distinguish_class_struct_enum_interface() {
-    use dream_lsp::semantic_tokens::{compute, TOKEN_TYPES};
+    use dream_lsp::semantic_tokens::{TOKEN_TYPES, compute};
     use tower_lsp::lsp_types::SemanticTokenType;
 
     let src = "\

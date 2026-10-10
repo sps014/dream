@@ -39,13 +39,14 @@ impl<'a> Analyzer<'a> {
                             .as_ref()
                             .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings)),
                         Some(Type::Function(_, _))
-                    ) {
-                        let tok = synthetic_token(TokenKind::IdentifierToken, gname);
-                        return match self.instantiate_generic_function_value(&tok, diagnostics) {
-                            Some(func_ty) => Ok(func_ty),
-                            None => Ok(Type::Unknown),
-                        };
-                    }
+                    )
+                {
+                    let tok = synthetic_token(TokenKind::IdentifierToken, gname);
+                    return match self.instantiate_generic_function_value(&tok, diagnostics) {
+                        Some(func_ty) => Ok(func_ty),
+                        None => Ok(Type::Unknown),
+                    };
+                }
                 t
             }
             Err(e) => {
@@ -114,20 +115,15 @@ impl<'a> Analyzer<'a> {
             .borrow()
             .resolves_before_global_root(&id.text)
             && let Some(global) = self.globals.iter().find(|g| g.name == id.text)
-                && !self.visible_across_files(
-                    &global.file_path,
-                    global.visibility,
-                    self.current_file.as_ref(),
-                ) {
-                    let decl_file = global.file_path.clone();
-                    self.report_not_public(
-                        "Variable",
-                        &id.text,
-                        &decl_file,
-                        id.position,
-                        diagnostics,
-                    );
-                }
+            && !self.visible_across_files(
+                &global.file_path,
+                global.visibility,
+                self.current_file.as_ref(),
+            )
+        {
+            let decl_file = global.file_path.clone();
+            self.report_not_public("Variable", &id.text, &decl_file, id.position, diagnostics);
+        }
         let is_local = (*symbol_table)
             .as_ref()
             .borrow()
@@ -240,18 +236,19 @@ impl<'a> Analyzer<'a> {
         // round-trips correctly instead of collapsing to a bogus struct type. Struct generic args
         // mangle to `_`-joined names (no `<`/`>`), so only `(`/`)` and `[`/`]` need nesting tracking.
         if let Some(rest) = name.strip_prefix("fun(")
-            && let Some(close) = matching_close_paren(rest) {
-                let params_str = &rest[..close];
-                if let Some(ret_str) = rest[close + 1..].strip_prefix(':') {
-                    let params = split_top_level_commas(params_str)
-                        .into_iter()
-                        .filter(|s| !s.is_empty())
-                        .map(|p| Self::type_from_name(&p))
-                        .collect();
-                    let ret = Self::type_from_name(ret_str);
-                    return Type::Function(params, Box::new(ret));
-                }
+            && let Some(close) = matching_close_paren(rest)
+        {
+            let params_str = &rest[..close];
+            if let Some(ret_str) = rest[close + 1..].strip_prefix(':') {
+                let params = split_top_level_commas(params_str)
+                    .into_iter()
+                    .filter(|s| !s.is_empty())
+                    .map(|p| Self::type_from_name(&p))
+                    .collect();
+                let ret = Self::type_from_name(ret_str);
+                return Type::Function(params, Box::new(ret));
             }
+        }
         let token = synthetic_token(TokenKind::IdentifierToken, name);
         Type::from_token(token).unwrap_or(Type::Void)
     }

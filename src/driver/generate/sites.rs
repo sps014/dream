@@ -1,7 +1,7 @@
 //! `name { ... }` syntax-block sites, keyed by `(file, block start)` so two identical blocks are
 //! still distinct sites.
 
-use super::walk::{walk_program, Visitor};
+use super::walk::{Visitor, walk_program};
 use crate::driver::source_loader::ProgramAccumulator;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{ExpressionNode, SyntaxBlockPart, Type};

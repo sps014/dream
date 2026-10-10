@@ -1,6 +1,6 @@
 use crate::manifest::{Dependency, DetailedDependency};
 use crate::workspace::Workspace;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::path::Path;
 
 #[allow(clippy::too_many_arguments)]

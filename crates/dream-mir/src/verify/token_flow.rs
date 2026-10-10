@@ -1,7 +1,7 @@
 //! Ownership obligations before optimizations erase local transfers. Pointer liveness is a
 //! separate proof: consuming a local's token need not destroy an object shared by another owner.
 
-use super::{violation, Violation};
+use super::{Violation, violation};
 use crate::{Const, Local, Mir, MirFunction, Operand, Place, Statement, Terminator};
 use dream_types::TypeInterner;
 use std::collections::{BTreeSet, VecDeque};
@@ -170,9 +170,10 @@ pub(super) fn check(f: &MirFunction, interner: &TypeInterner) -> Vec<Violation> 
         match &block.terminator {
             Terminator::Return(value) | Terminator::AsyncComplete(value) => {
                 if interner.is_rc_tracked(f.ret)
-                    && let Some(Operand::Copy(Place::Local(l))) = value {
-                        flow.consume(&mut state, *l, bi, si);
-                    }
+                    && let Some(Operand::Copy(Place::Local(l))) = value
+                {
+                    flow.consume(&mut state, *l, bi, si);
+                }
                 flow.exit(&state, bi, si);
             }
             Terminator::TailCall { callee, args } => {

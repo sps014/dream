@@ -2,7 +2,7 @@
 //! hover text, and signature labels — all driven by [`dream_abi::attributes::all_specs`].
 
 use super::is_ident_byte;
-use dream_abi::attributes::{all_specs, find_spec, ArgKind, ArgShape, AttributeSpec};
+use dream_abi::attributes::{ArgKind, ArgShape, AttributeSpec, all_specs, find_spec};
 use dream_abi::intrinsics::ATTR_KEYS;
 
 /// Cursor is after `@` / `@partial` writing an attribute name (not inside `(...)` args).

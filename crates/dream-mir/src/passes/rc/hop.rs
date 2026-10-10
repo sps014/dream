@@ -71,10 +71,9 @@ impl MirPass for HopElision {
                     continue;
                 }
                 let mut base = base;
-                if plain_copy
-                    && let Some(src) = preceding_copy(&func.blocks[bi].stmts, i, base) {
-                        base = src;
-                    }
+                if plain_copy && let Some(src) = preceding_copy(&func.blocks[bi].stmts, i, base) {
+                    base = src;
+                }
                 let Some(j) = next_matching(&func.blocks[bi].stmts[i + 1..], |s| {
                     matches!(
                         s,
@@ -261,13 +260,16 @@ fn field_then_store(stmts: &[Statement], release_at: usize, n: Local, base: Loca
             Place::Local(d),
             Rvalue::Use(Operand::Copy(Place::Field { base: f, .. })),
         ) = s
-            && *f == n {
-                tmp = Some(*d);
-            }
+            && *f == n
+        {
+            tmp = Some(*d);
+        }
         if let Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Copy(Place::Local(s)))) = s
-            && *d == base && tmp == Some(*s) {
-                return true;
-            }
+            && *d == base
+            && tmp == Some(*s)
+        {
+            return true;
+        }
     }
     false
 }
@@ -362,8 +364,8 @@ fn last_read_of(stmts: &[Statement], local: Local) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::build::FunctionBuilder;
     use crate::Terminator;
+    use crate::build::FunctionBuilder;
 
     fn hop_mir() -> (MirFunction, crate::Local, crate::Local, crate::Local) {
         let mut i = TypeInterner::new();

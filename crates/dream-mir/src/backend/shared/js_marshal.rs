@@ -5,7 +5,7 @@
 use super::abi_types::{c_ident, import_call_name};
 use super::cx::Cx;
 use dream_abi::js_abi;
-use dream_types::{method_fn, PrimTy, TyKind, TypeId};
+use dream_types::{PrimTy, TyKind, TypeId, method_fn};
 
 /// Whether this module gets marshalers at all (wasm32 modules that call a `js.*` bridge).
 pub(crate) fn emits_js_marshal(cx: &Cx<'_>) -> bool {
@@ -104,9 +104,11 @@ pub(crate) fn array_elems(cx: &Cx<'_>) -> Vec<TypeId> {
     let mut out: Vec<TypeId> = Vec::new();
     let mut push = |ty: TypeId| {
         if let TyKind::Array(elem) = cx.interner.kind(ty)
-            && is_marshalable(cx, *elem) && !out.contains(elem) {
-                out.push(*elem);
-            }
+            && is_marshalable(cx, *elem)
+            && !out.contains(elem)
+        {
+            out.push(*elem);
+        }
     };
     for layout in cx.mir.layouts.structs.values() {
         for f in &layout.fields {

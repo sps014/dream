@@ -15,9 +15,10 @@ impl<'a, 'b> Parser<'a, 'b> {
     ) -> Vec<SyntaxTrivia> {
         if first_trivia.is_empty()
             && let Some(first_attr) = attributes.first()
-                && !first_attr.name.leading_trivia.is_empty() {
-                    return first_attr.name.leading_trivia.clone();
-                }
+            && !first_attr.name.leading_trivia.is_empty()
+        {
+            return first_attr.name.leading_trivia.clone();
+        }
         first_trivia
     }
 

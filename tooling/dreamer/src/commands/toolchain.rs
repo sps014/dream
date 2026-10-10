@@ -22,7 +22,9 @@ fn prewarm_generators() {
         .status()
         .is_ok_and(|s| s.success());
     if !ok {
-        eprintln!("note: std generators were not prebuilt; the first build that uses one builds it");
+        eprintln!(
+            "note: std generators were not prebuilt; the first build that uses one builds it"
+        );
     }
 }
 

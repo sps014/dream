@@ -62,11 +62,12 @@ pub(super) fn recursive_set(mir: &crate::Mir, index: &HashMap<FnKey, usize>) -> 
             }
         }
         if f.is_async
-            && let Some(hir_fn) = &f.hir_fn {
-                let mut edges = crate::HirEdges::default();
-                crate::hir_body_edges(&hir_fn.body, &mut edges);
-                keys.extend(edges.callees);
-            }
+            && let Some(hir_fn) = &f.hir_fn
+        {
+            let mut edges = crate::HirEdges::default();
+            crate::hir_body_edges(&hir_fn.body, &mut edges);
+            keys.extend(edges.callees);
+        }
         for k in keys {
             if let Some(&j) = index.get(&k) {
                 adj[i].push(j);

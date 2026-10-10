@@ -32,12 +32,17 @@ fn enum_payloads_know_forward_value_struct_identity() {
 #[test]
 fn recursive_inline_enum_payloads_are_diagnostics() {
     for payload in ["Value", "Value<int>"] {
-        let source = format!("enum Choice {{ Some({payload}), None }} struct Value{} {{ public choice: Choice; }} fun main() {{}}", if payload.contains('<') { "<T>" } else { "" });
+        let source = format!(
+            "enum Choice {{ Some({payload}), None }} struct Value{} {{ public choice: Choice; }} fun main() {{}}",
+            if payload.contains('<') { "<T>" } else { "" }
+        );
         let diagnostics = super::harness::analyze_code(&source);
         assert!(diagnostics.has_errors());
-        assert!(diagnostics
-            .diagnostics
-            .iter()
-            .any(|d| d.message.contains("cannot contain itself by value")));
+        assert!(
+            diagnostics
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("cannot contain itself by value"))
+        );
     }
 }

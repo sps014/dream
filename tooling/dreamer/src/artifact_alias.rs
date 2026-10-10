@@ -4,7 +4,7 @@
 //! build that emitted a Node runtime, dreamer copies the wasm + `*.node.runtime.js` into
 //! `target/node/` so `run.mjs` can use a host-specific folder.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::Path;
 

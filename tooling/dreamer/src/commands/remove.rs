@@ -1,5 +1,5 @@
 use crate::workspace::Workspace;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::path::Path;
 
 pub fn run(start_dir: &Path, name: &str, package: Option<&str>) -> Result<()> {

@@ -12,8 +12,7 @@ use std::sync::Arc;
 pub const LLVM_VERSION: &str = "22.1.8";
 const LLVM_MAJOR: &str = "22.";
 
-const MISSING_LLVM: &str =
-    "LLVM 22 not found: a Dream release ships it in lib/dream/llvm next to the binary; \
+const MISSING_LLVM: &str = "LLVM 22 not found: a Dream release ships it in lib/dream/llvm next to the binary; \
      for a development build run scripts/fetch-dev-llvm.sh, or set DREAM_LLVM to an LLVM 22 bin/";
 
 #[derive(Clone)]

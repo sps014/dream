@@ -30,13 +30,14 @@ impl<'a> Analyzer<'a> {
                 // is copied into the named local, injected by the caller).
                 if let (Some(info), Some(def)) = (union_info, union_def)
                     && let Some(v) = info.variant(&name.text)
-                        && v.fields.is_empty() {
-                            return HirArmShape::Variant {
-                                def,
-                                variant: v.discriminant as usize,
-                                bindings: vec![],
-                            };
-                        }
+                    && v.fields.is_empty()
+                {
+                    return HirArmShape::Variant {
+                        def,
+                        variant: v.discriminant as usize,
+                        bindings: vec![],
+                    };
+                }
                 let ty = self.type_ctx.lower(subject_type);
                 match self.hir_alloc_local(&name.text, subject_type) {
                     Some(local) => HirArmShape::DefaultBind { local, ty },
@@ -277,14 +278,15 @@ impl<'a> Analyzer<'a> {
                 // otherwise it binds the whole value.
                 if let Some(info) = self.union_info(base).cloned()
                     && let Some(v) = info.variant(&name.text)
-                        && v.fields.is_empty() {
-                            let cond = self.hx_bin(
-                                BinOp::Eq,
-                                self.hx_disc(value.clone()),
-                                self.hx_int(v.discriminant as i64),
-                            );
-                            return Some((vec![cond], vec![]));
-                        }
+                    && v.fields.is_empty()
+                {
+                    let cond = self.hx_bin(
+                        BinOp::Eq,
+                        self.hx_disc(value.clone()),
+                        self.hx_int(v.discriminant as i64),
+                    );
+                    return Some((vec![cond], vec![]));
+                }
                 Some((
                     vec![],
                     vec![(name.text.clone(), value_type.clone(), value.clone())],

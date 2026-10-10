@@ -1,6 +1,6 @@
 use crate::common;
 
-use common::{compile_test_pipeline, emit_ll, ir_func_body, SYSTEM_STUB};
+use common::{SYSTEM_STUB, compile_test_pipeline, emit_ll, ir_func_body};
 
 #[test]
 fn destructor_identity_survives_symbol_changes_and_ignores_decoy_names() {

@@ -14,10 +14,11 @@ fn main() {
 
     // Allow CI/local overrides without editing Cargo.toml.
     if let Ok(v) = std::env::var("DREAM_DEFAULT_STACK_SIZE")
-        && !v.trim().is_empty() {
-            println!("cargo:rustc-env=DREAM_DEFAULT_STACK_SIZE={}", v.trim());
-            return;
-        }
+        && !v.trim().is_empty()
+    {
+        println!("cargo:rustc-env=DREAM_DEFAULT_STACK_SIZE={}", v.trim());
+        return;
+    }
 
     let manifest = std::fs::read_to_string("Cargo.toml").unwrap_or_default();
     if let Some(size) = metadata_stack_size(&manifest) {

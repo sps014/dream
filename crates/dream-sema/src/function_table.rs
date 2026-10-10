@@ -330,9 +330,10 @@ impl FunctionTable {
             return None;
         }
         if args.len() == info.parameters.len()
-            && let Some(score) = score_pairs(&info.parameters, args) {
-                return Some(score + 1);
-            }
+            && let Some(score) = score_pairs(&info.parameters, args)
+        {
+            return Some(score + 1);
+        }
         let TyKind::Array(element) = interner.kind(info.parameters[fixed]) else {
             return None;
         };

@@ -1,8 +1,8 @@
 use crate::manifest::{
-    import_segment, parse_target_list, validate_package_name, Manifest, PackageType, RunTarget,
-    MANIFEST_FILE_NAME,
+    MANIFEST_FILE_NAME, Manifest, PackageType, RunTarget, import_segment, parse_target_list,
+    validate_package_name,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 
 const GITIGNORE_ENTRIES: &[&str] = &["dream_packages/", "target/", ".dream/"];

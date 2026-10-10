@@ -4,7 +4,7 @@
 //! entry-block allocas), and `entry` can never be a branch target, so lowering code is free to
 //! jump back to its own first block.
 
-use super::attrs::{join, CallConv, FnAttr, Linkage, ParamAttr};
+use super::attrs::{CallConv, FnAttr, Linkage, ParamAttr, join};
 use super::metadata::MdRef;
 use super::ty::{FnTy, Ty};
 use super::value::{Repr, Value};

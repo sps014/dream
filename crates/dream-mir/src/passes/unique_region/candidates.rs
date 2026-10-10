@@ -365,9 +365,10 @@ pub(super) fn find_switch_after(
         let block = f.blocks.get(bi)?;
         for stmt in block.stmts.iter().skip(si) {
             if let Statement::Assign(Place::Local(d), rv) = stmt
-                && disc_of_alias(rv, &keys) {
-                    keys.insert(d.0);
-                }
+                && disc_of_alias(rv, &keys)
+            {
+                keys.insert(d.0);
+            }
         }
         match &block.terminator {
             Terminator::Switch { value, .. } if operand_alias(value, &keys) => {

@@ -34,18 +34,19 @@ impl Backend {
         // The AST index only resolves receivers it could type heuristically; the analyzer's
         // snapshot covers chained/call-result/tuple positions it cannot.
         if let Some(snapshot) = &sema
-            && let Some((start, end, contents)) = crate::sema_ide::hover_at(snapshot, offset) {
-                return Ok(Some(Hover {
-                    contents: HoverContents::Markup(MarkupContent {
-                        kind: MarkupKind::Markdown,
-                        value: contents,
-                    }),
-                    range: Some(Range {
-                        start: map_position(line_index.position(start)),
-                        end: map_position(line_index.position(end)),
-                    }),
-                }));
-            }
+            && let Some((start, end, contents)) = crate::sema_ide::hover_at(snapshot, offset)
+        {
+            return Ok(Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: contents,
+                }),
+                range: Some(Range {
+                    start: map_position(line_index.position(start)),
+                    end: map_position(line_index.position(end)),
+                }),
+            }));
+        }
         Ok(None)
     }
 
@@ -129,41 +130,42 @@ impl Backend {
         // entries keep the legacy ordering role below.
         if let Some(snapshot) = &sema
             && let Some(r) = snapshot.ref_covering(offset)
-                && !matches!(
-                    r.target,
-                    dream_sema::analyzer::ide::IdeTarget::Local { .. }
-                        | dream_sema::analyzer::ide::IdeTarget::Expr
-                ) {
-                    for other_key in self.documents.iter().map(|e| e.key().clone()) {
-                        if other_key == key {
-                            continue;
-                        }
-                        let Some(other_uri) = Url::parse(&other_key).ok() else {
-                            continue;
-                        };
-                        let Some((_, other_sema)) =
-                            self.models_for(&other_key, Self::file_path_of(&other_uri).as_deref())
-                        else {
-                            continue;
-                        };
-                        let Some(other_sema) = other_sema else {
-                            continue;
-                        };
-                        let Some(other_text) = self.document_text(&other_key) else {
-                            continue;
-                        };
-                        let other_li = LineIndex::new(&other_text);
-                        for (start, end) in crate::sema_ide::references_in(&other_sema, &r.target) {
-                            locations.push(Location {
-                                uri: other_uri.clone(),
-                                range: Range {
-                                    start: map_position(other_li.position(start)),
-                                    end: map_position(other_li.position(end)),
-                                },
-                            });
-                        }
-                    }
+            && !matches!(
+                r.target,
+                dream_sema::analyzer::ide::IdeTarget::Local { .. }
+                    | dream_sema::analyzer::ide::IdeTarget::Expr
+            )
+        {
+            for other_key in self.documents.iter().map(|e| e.key().clone()) {
+                if other_key == key {
+                    continue;
                 }
+                let Some(other_uri) = Url::parse(&other_key).ok() else {
+                    continue;
+                };
+                let Some((_, other_sema)) =
+                    self.models_for(&other_key, Self::file_path_of(&other_uri).as_deref())
+                else {
+                    continue;
+                };
+                let Some(other_sema) = other_sema else {
+                    continue;
+                };
+                let Some(other_text) = self.document_text(&other_key) else {
+                    continue;
+                };
+                let other_li = LineIndex::new(&other_text);
+                for (start, end) in crate::sema_ide::references_in(&other_sema, &r.target) {
+                    locations.push(Location {
+                        uri: other_uri.clone(),
+                        range: Range {
+                            start: map_position(other_li.position(start)),
+                            end: map_position(other_li.position(end)),
+                        },
+                    });
+                }
+            }
+        }
 
         // This document: sema-precise spans when available, legacy name-based otherwise.
         let spans = match sema
@@ -176,9 +178,9 @@ impl Backend {
                     if let Some(snapshot) = &sema
                         && let Some((ds, de)) =
                             crate::sema_ide::definition_at(snapshot, &idx, offset)
-                        {
-                            spans.retain(|&(st, en)| (st, en) != (ds, de));
-                        }
+                    {
+                        spans.retain(|&(st, en)| (st, en) != (ds, de));
+                    }
                 }
                 spans
             }
@@ -195,18 +197,19 @@ impl Backend {
         }
         if include_decl
             && let Some(snapshot) = &sema
-                && let Some(dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. }) =
-                    snapshot.ref_covering(offset).map(|r| &r.target)
-                    && source.file != snapshot.primary_file
-                        && let Some(location) = Self::location_at(
-                            &uri,
-                            &text,
-                            source.start,
-                            source.end,
-                            source.file.as_deref(),
-                        ) {
-                            locations.push(location);
-                        }
+            && let Some(dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. }) =
+                snapshot.ref_covering(offset).map(|r| &r.target)
+            && source.file != snapshot.primary_file
+            && let Some(location) = Self::location_at(
+                &uri,
+                &text,
+                source.start,
+                source.end,
+                source.file.as_deref(),
+            )
+        {
+            locations.push(location);
+        }
         locations.sort_by(|a, b| {
             a.uri.as_str().cmp(b.uri.as_str()).then_with(|| {
                 (
@@ -410,9 +413,10 @@ impl Backend {
                 };
                 let mut spans = crate::sema_ide::references_in(&other_sema, target);
                 if let dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. } = target
-                    && source.file == other_sema.primary_file {
-                        spans.push((source.start, source.end));
-                    }
+                    && source.file == other_sema.primary_file
+                {
+                    spans.push((source.start, source.end));
+                }
                 spans.sort_unstable();
                 spans.dedup();
                 push_edits(&other_key, spans);

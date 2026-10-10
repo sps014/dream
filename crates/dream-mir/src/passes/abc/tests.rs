@@ -1,6 +1,6 @@
 use super::*;
-use crate::build::FunctionBuilder;
 use crate::BinOp;
+use crate::build::FunctionBuilder;
 
 #[test]
 fn foreach_shape_is_unchecked() {

@@ -4,7 +4,7 @@
 
 use crate::common;
 
-use common::{exercise_all, XorShift, VALID_SNIPPETS};
+use common::{VALID_SNIPPETS, XorShift, exercise_all};
 
 #[test]
 fn builds_index_for_stdlib_without_panic() {

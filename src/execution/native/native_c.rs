@@ -90,9 +90,14 @@ pub fn compile_sets(
             let cxx = is_cxx(&src);
             out.needs_cxx |= cxx;
             let args = compile_args(set, &embed_include, &src, &obj, cxx, debug, spec);
-            let mut command = if cxx { cc.cxx_command(config, spec)? } else { cc.cc_command(config, spec)? };
+            let mut command = if cxx {
+                cc.cxx_command(config, spec)?
+            } else {
+                cc.cc_command(config, spec)?
+            };
             command.args(&args);
-            if let Err(error) = run_captured(&mut command, &format!("compiling {}", src.display())) {
+            if let Err(error) = run_captured(&mut command, &format!("compiling {}", src.display()))
+            {
                 let _ = std::fs::remove_file(&obj);
                 return Err(strip_warning_noise(&error));
             }

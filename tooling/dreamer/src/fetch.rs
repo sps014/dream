@@ -62,7 +62,8 @@ fn fetch_at(home: &Path, registry: &dyn RegistryClient, entry: &IndexEntry) -> R
     if !cache_file.is_file()
         || crate::registry::checksum::verify_file(&cache_file, &entry.cksum).is_err()
     {
-        registry.fetch_tarball(entry, &cache_file)
+        registry
+            .fetch_tarball(entry, &cache_file)
             .with_context(|| format!("fetching {} {}", entry.name, entry.vers))?;
     }
     crate::registry::checksum::verify_file(&cache_file, &entry.cksum)?;
@@ -74,20 +75,27 @@ fn fetch_at(home: &Path, registry: &dyn RegistryClient, entry: &IndexEntry) -> R
     validate_identity(&tree, entry)?;
     let expected = tree_digest(&tree)?;
     if std::fs::symlink_metadata(&extract_dir).is_ok_and(|m| m.is_dir())
-        && tree_digest(&extract_dir).is_ok_and(|actual| actual == expected) {
+        && tree_digest(&extract_dir).is_ok_and(|actual| actual == expected)
+    {
         return Ok(extract_dir);
     }
     if let Ok(metadata) = std::fs::symlink_metadata(&extract_dir) {
-        if metadata.is_dir() { std::fs::remove_dir_all(&extract_dir)?; }
-        else { std::fs::remove_file(&extract_dir)?; }
+        if metadata.is_dir() {
+            std::fs::remove_dir_all(&extract_dir)?;
+        } else {
+            std::fs::remove_file(&extract_dir)?;
+        }
     }
     std::fs::rename(tree, &extract_dir)?;
     Ok(extract_dir)
 }
 
 fn validate_identity(root: &Path, entry: &IndexEntry) -> Result<()> {
-    let manifest = crate::manifest::Manifest::load(&root.join(crate::manifest::MANIFEST_FILE_NAME))?;
-    let package = manifest.package.context("registry archive has no package manifest")?;
+    let manifest =
+        crate::manifest::Manifest::load(&root.join(crate::manifest::MANIFEST_FILE_NAME))?;
+    let package = manifest
+        .package
+        .context("registry archive has no package manifest")?;
     if package.name != entry.name || package.version != entry.vers {
         anyhow::bail!("registry package identity does not match its index entry");
     }
@@ -97,13 +105,18 @@ fn validate_identity(root: &Path, entry: &IndexEntry) -> Result<()> {
 fn tree_digest(root: &Path) -> Result<String> {
     use sha2::{Digest, Sha256};
     fn visit(root: &Path, dir: &Path, hash: &mut Sha256, depth: usize) -> Result<()> {
-        if depth > 128 { anyhow::bail!("extracted package exceeds path depth limit"); }
+        if depth > 128 {
+            anyhow::bail!("extracted package exceeds path depth limit");
+        }
         let mut entries = std::fs::read_dir(dir)?.collect::<std::io::Result<Vec<_>>>()?;
         entries.sort_by_key(|entry| entry.file_name());
         for entry in entries {
             let path = entry.path();
             let metadata = std::fs::symlink_metadata(&path)?;
-            let name = path.strip_prefix(root)?.to_str().context("package path is not UTF-8")?;
+            let name = path
+                .strip_prefix(root)?
+                .to_str()
+                .context("package path is not UTF-8")?;
             hash.update((name.len() as u64).to_le_bytes());
             hash.update(name.as_bytes());
             if metadata.is_dir() {
@@ -147,7 +160,8 @@ fn extract_tarball(tarball: &Path, dest: &Path) -> Result<()> {
         }
         let mut entry = entry?;
         let path = entry.path()?.into_owned();
-        if path.components().count() > 128 || path.is_absolute()
+        if path.components().count() > 128
+            || path.is_absolute()
             || path.components().any(|c| {
                 !matches!(
                     c,
@@ -284,8 +298,16 @@ mod tests {
         std::fs::write(outside.path().join("sentinel"), "preserved").unwrap();
         std::os::unix::fs::symlink(outside.path(), &path).unwrap();
         let repaired = fetch_at(home.path(), client.as_ref(), &entry).unwrap();
-        assert!(!std::fs::symlink_metadata(repaired).unwrap().file_type().is_symlink());
-        assert_eq!(std::fs::read_to_string(outside.path().join("sentinel")).unwrap(), "preserved");
+        assert!(
+            !std::fs::symlink_metadata(repaired)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(
+            std::fs::read_to_string(outside.path().join("sentinel")).unwrap(),
+            "preserved"
+        );
     }
 
     #[test]

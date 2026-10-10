@@ -30,9 +30,10 @@ pub(crate) fn infer_cursors(
                     rvalue,
                     Rvalue::Use(Operand::Copy(Place::Index { .. }))
                         | Rvalue::Cast(Operand::Copy(Place::Index { .. }), _, _)
-                ) {
-                    index_defined.insert(dest.0);
-                }
+                )
+            {
+                index_defined.insert(dest.0);
+            }
         }
     }
 
@@ -79,9 +80,10 @@ pub(crate) fn infer_cursors(
         for block in &func.blocks {
             for stmt in &block.stmts {
                 if let Statement::Assign(Place::Local(dest), rvalue) = stmt
-                    && let Some(base) = snapshot_base(rvalue) {
-                        snapshot_of.insert(dest.0, base);
-                    }
+                    && let Some(base) = snapshot_base(rvalue)
+                {
+                    snapshot_of.insert(dest.0, base);
+                }
             }
         }
         let mut copy_of: IndexMap<u32, u32> = IndexMap::new();
@@ -126,9 +128,10 @@ pub(crate) fn infer_cursors(
                 Place::Local(dest),
                 Rvalue::Use(Operand::Copy(Place::Local(src))),
             ) = stmt
-                && !forwarding.contains(&dest.0) {
-                    escaped.insert(src.0);
-                }
+                && !forwarding.contains(&dest.0)
+            {
+                escaped.insert(src.0);
+            }
         }
     }
 
@@ -169,10 +172,11 @@ pub(crate) fn infer_cursors(
                         Place::Local(user),
                         Rvalue::Use(Operand::Copy(Place::Local(src))),
                     ) = stmt
-                        && src.0 == d.0 {
-                            escaped.insert(user.0);
-                            forwarding.swap_remove(&user.0);
-                        }
+                        && src.0 == d.0
+                    {
+                        escaped.insert(user.0);
+                        forwarding.swap_remove(&user.0);
+                    }
                 }
             }
         }
@@ -444,9 +448,10 @@ fn escape_cursors_outliving_base(
     for block in &func.blocks {
         for stmt in &block.stmts {
             if let Statement::Assign(Place::Local(dest), rvalue) = stmt
-                && let Some(base) = snapshot_base(rvalue) {
-                    snapshot_of.insert(dest.0, base);
-                }
+                && let Some(base) = snapshot_base(rvalue)
+            {
+                snapshot_of.insert(dest.0, base);
+            }
         }
     }
     let peel = |mut x: u32| {

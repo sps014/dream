@@ -32,9 +32,9 @@ impl<'a> Analyzer<'a> {
         if let ExpressionNode::Identifier(id) = obj
             && let Some(t) =
                 self.try_analyze_static_method(id, method, generic_args, params, ctx, diagnostics)?
-            {
-                return Ok(t);
-            }
+        {
+            return Ok(t);
+        }
 
         let obj_type =
             self.analyze_expression(obj, ctx.parent_function, ctx.symbol_table, diagnostics)?;

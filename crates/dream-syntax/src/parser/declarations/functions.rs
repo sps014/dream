@@ -383,15 +383,16 @@ impl<'a, 'b> Parser<'a, 'b> {
             };
 
             if let Some(modifier) = ownership_modifier
-                && is_variadic {
-                    self.diagnostics.report_error(
-                        format!(
-                            "parameter '{}' cannot be both '{}' and variadic",
-                            param.text, modifier
-                        ),
-                        Some(param.position),
-                    );
-                }
+                && is_variadic
+            {
+                self.diagnostics.report_error(
+                    format!(
+                        "parameter '{}' cannot be both '{}' and variadic",
+                        param.text, modifier
+                    ),
+                    Some(param.position),
+                );
+            }
 
             if is_variadic {
                 if seen_variadic {

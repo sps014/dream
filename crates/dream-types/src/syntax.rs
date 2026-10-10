@@ -1,5 +1,5 @@
 use crate::{TyKind, TypeCtx, TypeId};
-use dream_syntax::nodes::types::{primitive_type, Type};
+use dream_syntax::nodes::types::{Type, primitive_type};
 use dream_syntax::token::{syntax_token::SyntaxToken, token_kind::TokenKind};
 use dream_text::{line_text::LineText, text_span::TextSpan};
 

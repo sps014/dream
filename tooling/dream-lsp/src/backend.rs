@@ -12,7 +12,7 @@ use std::time::Duration;
 use dashmap::DashMap;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
-use tower_lsp::{jsonrpc, Client, LanguageServer};
+use tower_lsp::{Client, LanguageServer, jsonrpc};
 
 use crate::analysis;
 use crate::conversions::{completion_kind, map_position, map_range, symbol_kind};
@@ -227,9 +227,10 @@ impl Backend {
         let (text, version) = {
             let doc = self.documents.get(uri)?;
             if let Some(cached) = self.index_cache.get(uri)
-                && cached.version == doc.version {
-                    return Some((cached.index.clone(), cached.sema.clone()));
-                }
+                && cached.version == doc.version
+            {
+                return Some((cached.index.clone(), cached.sema.clone()));
+            }
             (doc.text.clone(), doc.version)
         };
 

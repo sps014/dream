@@ -44,16 +44,17 @@ impl<'a> ProgramAccumulator<'a> {
         let line = LineText::new(String::new());
         for (path, program) in &mut programs {
             if program.module.is_none()
-                && let Some(module) = self.file_modules.get(path) {
-                    program.module = Some(ModuleDeclNode {
-                        attributes: vec![],
-                        path: SyntaxToken::new(
-                            TokenKind::IdentifierToken,
-                            TextSpan::new((0, 0), &line),
-                            module.to_string(),
-                        ),
-                    });
-                }
+                && let Some(module) = self.file_modules.get(path)
+            {
+                program.module = Some(ModuleDeclNode {
+                    attributes: vec![],
+                    path: SyntaxToken::new(
+                        TokenKind::IdentifierToken,
+                        TextSpan::new((0, 0), &line),
+                        module.to_string(),
+                    ),
+                });
+            }
         }
         let prelude_paths: Vec<_> = programs
             .keys()

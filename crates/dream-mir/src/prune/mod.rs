@@ -21,7 +21,7 @@ mod hir_edges;
 
 pub(crate) use dead_code::module_uses_js_bridges;
 pub use dead_code::prune_module;
-pub(crate) use hir_edges::{hir_body_edges, HirEdges};
+pub(crate) use hir_edges::{HirEdges, hir_body_edges};
 
 /// Identity of a function/instance for the call graph: its def plus the concrete type-args of the
 /// monomorphized instance (empty for non-generic functions), matching `MirFunction::{def, instance}`

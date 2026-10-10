@@ -2,7 +2,7 @@
 //! leakage checks) and the body-analysis / pending-instantiation fixpoint passes.
 
 use super::*;
-use crate::entry::{entry_tail_return, EntryTail, ENTRY_NAME};
+use crate::entry::{ENTRY_NAME, EntryTail, entry_tail_return};
 use crate::function_table::FunctionTableInfo;
 use dream_hir::{HExpr, HExprKind};
 use dream_syntax::nodes::Type;

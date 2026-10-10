@@ -1,6 +1,6 @@
 //! Minimal static file server for `dreamer run --target web`.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::fs;
 use std::io::Cursor;
 use std::path::{Component, Path, PathBuf};

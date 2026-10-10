@@ -40,9 +40,9 @@ impl<'a> Analyzer<'a> {
                 .type_ctx
                 .resolve(DefKind::Union, &base.text)
                 .is_some_and(|def| self.generic_union(def).is_some())
-            {
-                self.ensure_union_instantiated(&base.text, args, &base.position, diagnostics);
-            }
+        {
+            self.ensure_union_instantiated(&base.text, args, &base.position, diagnostics);
+        }
         let subject_id = self.type_ctx.lower(&subject_type);
         let subject_base =
             dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, subject_id);

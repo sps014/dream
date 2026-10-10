@@ -45,7 +45,11 @@ impl<'a> Analyzer<'a> {
                     // With an array-typed context the empty literal takes that element type; without
                     // one it is genuinely ambiguous (nothing to infer from), so reject it clearly.
                     if let Some(elem) = expected_elem {
-                        self.reject_ref_struct_array_element(&elem, Some(open.position), diagnostics);
+                        self.reject_ref_struct_array_element(
+                            &elem,
+                            Some(open.position),
+                            diagnostics,
+                        );
                         self.hir_set_empty_array(&elem);
                         return Ok(Type::Array(Box::new(elem)));
                     }
@@ -160,7 +164,11 @@ impl<'a> Analyzer<'a> {
                         let span = len.position().unwrap_or(open.position);
                         self.compare_data_type(&int_ty, &len_ty, &span, diagnostics)?;
                     }
-                    self.reject_ref_struct_array_element(&elem_ty, Some(open.position), diagnostics);
+                    self.reject_ref_struct_array_element(
+                        &elem_ty,
+                        Some(open.position),
+                        diagnostics,
+                    );
                     self.hir_set_array_new(&elem_ty, len_hir);
                     return Ok(Type::Array(Box::new(elem_ty)));
                 }

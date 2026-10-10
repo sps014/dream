@@ -10,7 +10,7 @@
 //! `index_set_slot`) share the same module (`Dream`) and slot layout; they are named via
 //! [`bridge_sym`] like every other `js.*` stdlib method.
 
-use dream_types::{method_fn, PrimTy, TyKind, TypeId, TypeInterner};
+use dream_types::{PrimTy, TyKind, TypeId, TypeInterner, method_fn};
 
 /// The host module Dream runtime bridges are imported from: `@runtime("fileRead")` and the
 /// `@js("Dream", …)` attributes in `stdlib/core/js.dream`, matching the module object installed by

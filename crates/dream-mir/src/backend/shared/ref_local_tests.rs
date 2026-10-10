@@ -1,4 +1,4 @@
-use super::{abi_ty, ref_int_locals, AbiTy};
+use super::{AbiTy, abi_ty, ref_int_locals};
 use crate::backend::shared::{cx::Cx, target::Target};
 use crate::build::FunctionBuilder;
 use crate::{BinOp, Callee, Const, Global, Mir, Operand, Place, Rvalue};

@@ -1,8 +1,8 @@
 //! Loop-carried cursor family tests: `curr = head; loop { node = curr as Some; curr = node.next }`
 //! walks without RC only while nothing in flight can overwrite a traversed slot or drop the root.
 
-use super::modref::ModRefTable;
 use super::RcInsertion;
+use super::modref::ModRefTable;
 use crate::build::FunctionBuilder;
 use crate::{
     Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator,

@@ -242,9 +242,10 @@ impl<'a> Analyzer<'a> {
                     })
                 });
             if let Some(concrete) = concrete
-                && concrete != self.type_ctx.interner.error() {
-                    bindings.insert(name.clone(), self.type_ctx.syntax_type(concrete));
-                }
+                && concrete != self.type_ctx.interner.error()
+            {
+                bindings.insert(name.clone(), self.type_ctx.syntax_type(concrete));
+            }
         }
     }
 

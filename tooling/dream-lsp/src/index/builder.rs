@@ -16,8 +16,8 @@ use dream::syntax::nodes::{
 use dream::syntax::token::syntax_token::SyntaxToken;
 
 use super::{
-    base_struct, method_detail, param_names, parse_angle_type_args, signature,
-    substitute_named_type_params, type_base, Decl, InlayHintOut, InlayKind, Ref, SymKind, GLOBAL,
+    Decl, GLOBAL, InlayHintOut, InlayKind, Ref, SymKind, base_struct, method_detail, param_names,
+    parse_angle_type_args, signature, substitute_named_type_params, type_base,
 };
 
 pub(crate) struct Builder {

@@ -151,9 +151,10 @@ impl DeclIndex {
                 };
             }
             if rest.is_empty()
-                && let Some(e) = self.functions.get(name).filter(|e| module_ok(e)) {
-                    return Some(e.id.clone());
-                }
+                && let Some(e) = self.functions.get(name).filter(|e| module_ok(e))
+            {
+                return Some(e.id.clone());
+            }
         }
         None
     }

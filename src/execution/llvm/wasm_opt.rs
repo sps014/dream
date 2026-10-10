@@ -126,9 +126,11 @@ mod tests {
     #[test]
     fn missing_optimizer_respects_offline_configuration() {
         let temp = tempfile::tempdir().unwrap();
-        assert!(resolve(&Arc::new(config(temp.path())))
-            .unwrap_err()
-            .contains("Binaryen not found"));
+        assert!(
+            resolve(&Arc::new(config(temp.path())))
+                .unwrap_err()
+                .contains("Binaryen not found")
+        );
     }
     #[cfg(unix)]
     fn executable(path: &Path, source: &str) {
@@ -144,16 +146,23 @@ mod tests {
         executable(&binary, "#!/bin/sh\necho 'wasm-opt version 116'\n");
         let mut config = config(temp.path());
         config.wasm_opt = Some(binary);
-        assert!(resolve(&Arc::new(config))
-            .unwrap_err()
-            .contains("requires Binaryen 133"));
+        assert!(
+            resolve(&Arc::new(config))
+                .unwrap_err()
+                .contains("requires Binaryen 133")
+        );
     }
     #[test]
     #[cfg(unix)]
     fn optimization_failure_is_an_error() {
         let temp = tempfile::tempdir().unwrap();
         let binary = temp.path().join("wasm-opt");
-        executable(&binary, &format!("#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'wasm-opt version {BINARYEN_VERSION}'; else echo 'invalid wasm input' >&2; exit 2; fi\n"));
+        executable(
+            &binary,
+            &format!(
+                "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'wasm-opt version {BINARYEN_VERSION}'; else echo 'invalid wasm input' >&2; exit 2; fi\n"
+            ),
+        );
         let mut configuration = config(temp.path());
         configuration.wasm_opt = Some(binary);
         let wasm = temp.path().join("main.wasm");
@@ -168,7 +177,12 @@ mod tests {
     fn first_use_installs_once_and_preserves_snapshot_paths() {
         let temp = tempfile::tempdir().unwrap();
         let dreamer = temp.path().join("dreamer");
-        executable(&dreamer, &format!("#!/bin/sh\n[ \"$*\" = 'toolchain install binaryen' ] || exit 1\nmkdir -p \"$DREAM_TOOLCHAINS/binaryen-{BINARYEN_VERSION}/bin\"\nprintf '#!/bin/sh\\necho wasm-opt version {BINARYEN_VERSION}\\n' > \"$DREAM_TOOLCHAINS/binaryen-{BINARYEN_VERSION}/bin/wasm-opt\"\nchmod +x \"$DREAM_TOOLCHAINS/binaryen-{BINARYEN_VERSION}/bin/wasm-opt\"\necho installed >> \"$DREAM_PREFIX/install-count\"\n"));
+        executable(
+            &dreamer,
+            &format!(
+                "#!/bin/sh\n[ \"$*\" = 'toolchain install binaryen' ] || exit 1\nmkdir -p \"$DREAM_TOOLCHAINS/binaryen-{BINARYEN_VERSION}/bin\"\nprintf '#!/bin/sh\\necho wasm-opt version {BINARYEN_VERSION}\\n' > \"$DREAM_TOOLCHAINS/binaryen-{BINARYEN_VERSION}/bin/wasm-opt\"\nchmod +x \"$DREAM_TOOLCHAINS/binaryen-{BINARYEN_VERSION}/bin/wasm-opt\"\necho installed >> \"$DREAM_PREFIX/install-count\"\n"
+            ),
+        );
         let mut config = config(temp.path());
         config.exe = Some(temp.path().join("dream"));
         config.no_auto_install = false;

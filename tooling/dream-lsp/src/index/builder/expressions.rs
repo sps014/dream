@@ -208,11 +208,7 @@ impl Builder {
             .find(|d| d.kind == SymKind::Enum && d.name == name)
             .map(|d| d.detail.as_str())?;
         let args = parse_angle_type_args(detail);
-        if args.is_empty() {
-            None
-        } else {
-            Some(args)
-        }
+        if args.is_empty() { None } else { Some(args) }
     }
 
     /// Payload field types of `Enum.Variant` in declaration order (`Result.Err` → `["E"]`).

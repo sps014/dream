@@ -34,7 +34,8 @@ fn build(root: &Path, kind: OutputKind, extra: &[&str]) -> std::path::PathBuf {
         ),
     )
     .unwrap();
-    cmd.arg("--emit-opt-ir").arg(root.join("src/lib.dream"))
+    cmd.arg("--emit-opt-ir")
+        .arg(root.join("src/lib.dream"))
         .arg("-o")
         .arg(kind.artifact_path(&ll, &dream_abi::target::TargetSpec::host()))
         .args(extra);
@@ -47,9 +48,11 @@ fn build(root: &Path, kind: OutputKind, extra: &[&str]) -> std::path::PathBuf {
         let ir = fs::read_to_string(ll.with_extension("opt.ll")).unwrap();
         assert!(!ir.contains("call void @dream_host_bind_v2("));
         if kind == OutputKind::Staticlib {
-            assert!(!fs::read_to_string(ll.with_extension("link.json"))
-                .unwrap()
-                .contains("dream_host"));
+            assert!(
+                !fs::read_to_string(ll.with_extension("link.json"))
+                    .unwrap()
+                    .contains("dream_host")
+            );
         }
     }
     kind.artifact_path(&ll, &dream_abi::target::TargetSpec::host())
@@ -151,9 +154,10 @@ fun privateHelper(): int { return 999; }
     for kind in [OutputKind::Staticlib, OutputKind::Dylib] {
         let product = build(&root, kind, &["--release"]);
         let ir = fs::read_to_string(root.join("lib.opt.ll")).unwrap();
-        assert!(!ir
-            .lines()
-            .any(|l| l.starts_with("define ") && l.contains("@main(")));
+        assert!(
+            !ir.lines()
+                .any(|l| l.starts_with("define ") && l.contains("@main("))
+        );
         assert!(!ir.contains("privateHelper"));
         let header = fs::read_to_string(root.join("lib.h")).unwrap();
         assert!(header.contains("int32_t add(int32_t arg0, int32_t arg1);"));
@@ -214,7 +218,10 @@ int main(void) {
 fn library_panic_locations_are_relative_and_belong_to_the_library() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("mylib");
-    project(&root, "import system;\nimport system.collections;\nimport dep.helper;\nfun helper(): void {\n    System.panic(\"own\");\n}\n@export fun own(): void { helper(); }\n@export fun std(): void {\n    let xs = List<int>();\n    xs[0];\n}\n@export fun dependency(): void {\n    depFail();\n}\n");
+    project(
+        &root,
+        "import system;\nimport system.collections;\nimport dep.helper;\nfun helper(): void {\n    System.panic(\"own\");\n}\n@export fun own(): void { helper(); }\n@export fun std(): void {\n    let xs = List<int>();\n    xs[0];\n}\n@export fun dependency(): void {\n    depFail();\n}\n",
+    );
     let dep = root.join("dream_packages/dep/src");
     fs::create_dir_all(&dep).unwrap();
     fs::write(dep.join("helper.dream"), "module dep.helper;\nimport system;\npublic fun depFail(): void { System.panic(\"dep\"); }\n").unwrap();
@@ -301,9 +308,11 @@ fn manifest_selects_default_source_and_rejects_array_outputs() {
         .arg("-o")
         .arg(&ll);
     command(cmd);
-    assert!(OutputKind::Staticlib
-        .artifact_path(&ll, &dream_abi::target::TargetSpec::host())
-        .is_file());
+    assert!(
+        OutputKind::Staticlib
+            .artifact_path(&ll, &dream_abi::target::TargetSpec::host())
+            .is_file()
+    );
     fs::write(
         root.join("dream.toml"),
         manifest.replace("\"staticlib\"", "[\"staticlib\"]"),
@@ -342,7 +351,12 @@ fn optional_service_binding_works_in_static_and_shared_libraries() {
                 dream_abi::host_capability::HostCapability::Unicode
             ]
         );
-        let exe = consumer(&root, &product, kind, "#include \"lib.h\"\n#include <assert.h>\nint main(void) { dream_thread_attach(); assert(normalized_len() == 1); dream_thread_detach(); return 0; }\n");
+        let exe = consumer(
+            &root,
+            &product,
+            kind,
+            "#include \"lib.h\"\n#include <assert.h>\nint main(void) { dream_thread_attach(); assert(normalized_len() == 1); dream_thread_detach(); return 0; }\n",
+        );
         command(run_consumer(&exe));
     }
 }

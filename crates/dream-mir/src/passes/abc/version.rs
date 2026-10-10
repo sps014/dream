@@ -8,7 +8,7 @@
 
 use super::facts::{self, Defs};
 use super::{
-    as_local, block_id, const_int, visit_stmt_accesses, visit_terminator_accesses, Access,
+    Access, as_local, block_id, const_int, visit_stmt_accesses, visit_terminator_accesses,
 };
 use crate::passes::cfg::{DomTree, NaturalLoop};
 use crate::{
@@ -148,9 +148,11 @@ fn plan_loop(
         }
         for stmt in &func.blocks[b].stmts {
             if let Statement::Assign(Place::Local(d), rv) = stmt
-                && *d == iv && !is_unit_increment(rv, iv) {
-                    return None;
-                }
+                && *d == iv
+                && !is_unit_increment(rv, iv)
+            {
+                return None;
+            }
         }
     }
     let redef_in = redefined_since_header(func, &body, h, s, iv, analyses);
@@ -168,10 +170,11 @@ fn plan_loop(
                 let mut hit = false;
                 visit_stmt_accesses(stmt, &mut |acc| {
                     if let Some(a) = versionable(&acc, iv)
-                        && invariant(a) {
-                            arrays.insert(a);
-                            hit = true;
-                        }
+                        && invariant(a)
+                    {
+                        arrays.insert(a);
+                        hit = true;
+                    }
                 });
                 if hit {
                     sites.insert((b, Some(si)));
@@ -185,10 +188,11 @@ fn plan_loop(
             let mut hit = false;
             visit_terminator_accesses(&block.terminator, &mut |acc| {
                 if let Some(a) = versionable(&acc, iv)
-                    && invariant(a) {
-                        arrays.insert(a);
-                        hit = true;
-                    }
+                    && invariant(a)
+                {
+                    arrays.insert(a);
+                    hit = true;
+                }
             });
             if hit {
                 sites.insert((b, None));

@@ -146,15 +146,19 @@ impl<'a> ModuleGraph<'a> {
             {
                 if let Some((path, _)) = import.module_name.text.rsplit_once('.')
                     && let Some(&id) = ids.get(path)
-                        && id != module.id && !module.imports.contains(&id) {
-                            module.imports.push(id);
-                        }
+                    && id != module.id
+                    && !module.imports.contains(&id)
+                {
+                    module.imports.push(id);
+                }
             }
             for target in edges.get(&file.path).into_iter().flatten() {
                 if let Some(&id) = paths.get(target.as_str())
-                    && id != module.id && !module.imports.contains(&id) {
-                        module.imports.push(id);
-                    }
+                    && id != module.id
+                    && !module.imports.contains(&id)
+                {
+                    module.imports.push(id);
+                }
             }
         }
         for module in &mut modules {

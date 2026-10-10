@@ -306,9 +306,10 @@ impl TypeCtx {
                     return *bound;
                 }
                 if generic_args.is_none()
-                    && let Some(id) = self.resolved_type(name) {
-                        return id;
-                    }
+                    && let Some(id) = self.resolved_type(name)
+                {
+                    return id;
+                }
                 let args: Vec<TypeId> = generic_args
                     .as_ref()
                     .map(|gs| gs.iter().map(|g| self.lower_with(g, bindings)).collect())
@@ -347,7 +348,7 @@ impl TypeCtx {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{display_name, TyKind};
+    use crate::{TyKind, display_name};
     use dream_syntax::token::syntax_token::SyntaxToken;
     use dream_syntax::token::token_kind::TokenKind;
     use dream_text::line_text::LineText;

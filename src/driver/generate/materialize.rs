@@ -54,7 +54,12 @@ pub fn materialize(
 pub fn located(entry_dir: &Path, files: &[GeneratedFile]) -> Vec<(PathBuf, String)> {
     files
         .iter()
-        .map(|f| (entry_dir.join(&f.generator).join(&f.path), materialized_text(f)))
+        .map(|f| {
+            (
+                entry_dir.join(&f.generator).join(&f.path),
+                materialized_text(f),
+            )
+        })
         .collect()
 }
 

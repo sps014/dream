@@ -3,7 +3,7 @@
 //! Only user files are scanned.
 
 use super::registry::CallTrigger;
-use super::walk::{is_user_file, walk_program, Visitor};
+use super::walk::{Visitor, is_user_file, walk_program};
 use crate::driver::source_loader::ProgramAccumulator;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, StatementNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;

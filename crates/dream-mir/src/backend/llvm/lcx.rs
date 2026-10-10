@@ -6,8 +6,8 @@ use super::ir::{
     ParamAttr, Repr, Ty, Value,
 };
 use super::runtime_sigs::RuntimeSigs;
-use crate::backend::shared::cx::Cx;
 use crate::backend::shared::Target;
+use crate::backend::shared::cx::Cx;
 use crate::{Mir, MirFunction};
 use dream_types::TypeInterner;
 use indexmap::{IndexMap, IndexSet};

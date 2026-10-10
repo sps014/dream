@@ -35,13 +35,13 @@ impl<'a> Analyzer<'a> {
         // in analysis order.
         if let Some((base, args)) = Self::resolve_struct_parts(obj_type)
             && !args.is_empty()
-                && self
-                    .type_ctx
-                    .resolve(DefKind::Interface, &base)
-                    .is_some_and(|def| self.is_generic_interface(def))
-            {
-                self.ensure_interface_instantiated(&base, &args, &method.position, diagnostics);
-            }
+            && self
+                .type_ctx
+                .resolve(DefKind::Interface, &base)
+                .is_some_and(|def| self.is_generic_interface(def))
+        {
+            self.ensure_interface_instantiated(&base, &args, &method.position, diagnostics);
+        }
         // Interface-typed receiver: package `extend Iface` methods (`Collection_int_to_list`) are
         // ordinary `{iface}_{method}` entries — prefer those over itable dispatch.
         let obj_id = self.type_ctx.lower(obj_type);
@@ -131,28 +131,27 @@ impl<'a> Analyzer<'a> {
                 .function_table
                 .generic_methods
                 .contains_key(&(owner, method.text.clone()));
-        if missing
-            && let Some(ifaces) = self.implemented_interfaces(owner).cloned() {
-                for iface in ifaces {
-                    let iface_id = iface;
-                    let iface = self.type_id_display(iface_id);
-                    let ext = method_fn(&iface, &method.text);
-                    if self.method_info(iface_id, &method.text).is_ok()
-                        || self
-                            .function_table
-                            .generic_methods
-                            .contains_key(&(iface_id, method.text.clone()))
-                    {
-                        let iface_ty = self.type_ctx.syntax_type(iface_id);
-                        self.hir_set_cast(receiver.take(), &iface_ty);
-                        receiver = self.hir_take();
-                        mangled_name = ext;
-                        effective_struct = iface;
-                        owner = iface_id;
-                        break;
-                    }
+        if missing && let Some(ifaces) = self.implemented_interfaces(owner).cloned() {
+            for iface in ifaces {
+                let iface_id = iface;
+                let iface = self.type_id_display(iface_id);
+                let ext = method_fn(&iface, &method.text);
+                if self.method_info(iface_id, &method.text).is_ok()
+                    || self
+                        .function_table
+                        .generic_methods
+                        .contains_key(&(iface_id, method.text.clone()))
+                {
+                    let iface_ty = self.type_ctx.syntax_type(iface_id);
+                    self.hir_set_cast(receiver.take(), &iface_ty);
+                    receiver = self.hir_take();
+                    mangled_name = ext;
+                    effective_struct = iface;
+                    owner = iface_id;
+                    break;
                 }
             }
+        }
 
         // Method-level generics (`pool.dispatch<TIn, TOut>(...)`): monomorphize before the plain
         // `function_table` path, which only knows the unbound template signature.

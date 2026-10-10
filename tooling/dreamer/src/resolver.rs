@@ -277,7 +277,9 @@ impl Resolver {
 
                 for entry in &entries {
                     crate::manifest::validate_package_name(&entry.name)?;
-                    if entry.name != name { bail!("registry index contains a different package identity"); }
+                    if entry.name != name {
+                        bail!("registry index contains a different package identity");
+                    }
                     let digest = entry.cksum.strip_prefix("sha256:").unwrap_or("");
                     if digest.len() != 64 || !digest.bytes().all(|b| b.is_ascii_hexdigit()) {
                         bail!("registry package has an invalid checksum");

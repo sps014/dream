@@ -55,12 +55,13 @@ impl<'a> Analyzer<'a> {
             let mut seen = indexmap::IndexSet::new();
             for (label, span) in labels {
                 if let Some(key) = self.const_case_key(&label, Some(layouts))
-                    && !seen.insert(key.clone()) {
-                        diagnostics.report_error(
-                            format!("duplicate case label '{}' in switch statement", key),
-                            span,
-                        );
-                    }
+                    && !seen.insert(key.clone())
+                {
+                    diagnostics.report_error(
+                        format!("duplicate case label '{}' in switch statement", key),
+                        span,
+                    );
+                }
             }
         }
     }
@@ -139,12 +140,13 @@ impl<'a> Analyzer<'a> {
                 )?;
 
                 if let Some(k) = key
-                    && !seen.insert(k.clone()) {
-                        diagnostics.report_error(
-                            format!("duplicate case label '{}' in switch statement", k),
-                            label.position(),
-                        );
-                    }
+                    && !seen.insert(k.clone())
+                {
+                    diagnostics.report_error(
+                        format!("duplicate case label '{}' in switch statement", k),
+                        label.position(),
+                    );
+                }
             }
             self.hir_open_block();
             self.analyze_body(

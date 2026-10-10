@@ -312,7 +312,9 @@ fn main() -> ExitCode {
                     || opt.profile
                     || opt.use_profile.is_some()
                 {
-                    print_error("mobile pack consumes target-built libraries; compilation flags do not apply");
+                    print_error(
+                        "mobile pack consumes target-built libraries; compilation flags do not apply",
+                    );
                     return ExitCode::FAILURE;
                 }
                 return match commands::pack::mobile::run(

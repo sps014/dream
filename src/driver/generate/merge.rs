@@ -3,7 +3,7 @@
 
 use super::rewrite::{rewrite_expression, rewrite_function};
 use super::sites::SiteKey;
-use crate::driver::source_loader::{collect_declarations, ProgramAccumulator};
+use crate::driver::source_loader::{ProgramAccumulator, collect_declarations};
 use bumpalo::Bump;
 use dream_diagnostics::DiagnosticBag;
 use indexmap::IndexMap;

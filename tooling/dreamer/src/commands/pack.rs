@@ -8,7 +8,7 @@ use crate::app_icon;
 use crate::compile_flags::CompileFlags;
 use crate::manifest::PackageType;
 use crate::workspace::Workspace;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 
 /// Supported pack triples (Dream name → rustc target). Cross linking uses the compiler toolchain.

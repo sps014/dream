@@ -67,18 +67,19 @@ impl<'a> Analyzer<'a> {
                 // writer. LSP analysis skips generators, so `Map<string, string>` has no adapter
                 // DefId even though a real compile will produce one.
                 if let Some(arg) = value.as_ref()
-                    && !self.json_type_encodable(arg.ty) {
-                        diagnostics.report_error(
+                    && !self.json_type_encodable(arg.ty)
+                {
+                    diagnostics.report_error(
                             format!(
                                 "'{}' cannot be serialized to JSON: it has no compile-time JSON encoding. Use 'JsonValue' for mixed or unknown data, or mark a named type '@json'",
                                 self.type_id_display(arg.ty),
                             ),
                             Some(method.position),
                         );
-                        self.hir_fail();
-                        self.hir_none();
-                        return Ok(string_ty);
-                    }
+                    self.hir_fail();
+                    self.hir_none();
+                    return Ok(string_ty);
+                }
                 let prim_writer =
                     value
                         .as_ref()

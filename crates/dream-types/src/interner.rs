@@ -285,9 +285,10 @@ impl TypeInterner {
             return false;
         }
         if let TyKind::Struct(def, _) = self.kind(id)
-            && self.value_defs.contains(def) {
-                return false;
-            }
+            && self.value_defs.contains(def)
+        {
+            return false;
+        }
         self.kind(id).is_reference()
     }
 

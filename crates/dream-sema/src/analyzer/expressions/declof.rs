@@ -117,9 +117,9 @@ impl<'a> Analyzer<'a> {
                     .functions
                     .iter()
                     .find(|f| f.name.text == name && module_ok(&f.file_path))
-                {
-                    return Some(identity(&f.file_path));
-                }
+            {
+                return Some(identity(&f.file_path));
+            }
         }
         None
     }

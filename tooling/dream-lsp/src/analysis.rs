@@ -106,20 +106,21 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                     dream::driver::source_loader::resolve_import_path(parent_dir, module_name);
 
                 if let Some(import_path_str) = import_path.to_str()
-                    && import_path.exists() {
-                        let resolved = std::fs::canonicalize(&import_path)
-                            .unwrap_or_else(|_| import_path.clone());
-                        acc.import_edges
-                            .entry(MAIN_FILE.to_string())
-                            .or_default()
-                            .push(resolved.to_string_lossy().into_owned());
-                        let _ = dream::driver::source_loader::parse_file_recursive(
-                            &import_path_str.to_string(),
-                            &mut acc,
-                            &arena,
-                            &mut diagnostics,
-                        );
-                    }
+                    && import_path.exists()
+                {
+                    let resolved =
+                        std::fs::canonicalize(&import_path).unwrap_or_else(|_| import_path.clone());
+                    acc.import_edges
+                        .entry(MAIN_FILE.to_string())
+                        .or_default()
+                        .push(resolved.to_string_lossy().into_owned());
+                    let _ = dream::driver::source_loader::parse_file_recursive(
+                        &import_path_str.to_string(),
+                        &mut acc,
+                        &arena,
+                        &mut diagnostics,
+                    );
+                }
             }
 
             if let Ok(mut graph) = dream::driver::native_sets::NativeGraph::load(
@@ -217,9 +218,10 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                     for reference in &mut snapshot.refs {
                         if let dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. } =
                             &mut reference.target
-                            && source.file.as_deref() == Some(MAIN_FILE) {
-                                source.file = Some(path.clone());
-                            }
+                            && source.file.as_deref() == Some(MAIN_FILE)
+                        {
+                            source.file = Some(path.clone());
+                        }
                     }
                 }
                 sema = Some(snapshot);
@@ -346,9 +348,11 @@ mod pointer_integer_tests {
                 "{diagnostics:?}"
             );
         } else {
-            assert!(diagnostics
-                .iter()
-                .any(|d| d.message.contains("out of range")));
+            assert!(
+                diagnostics
+                    .iter()
+                    .any(|d| d.message.contains("out of range"))
+            );
         }
     }
 }

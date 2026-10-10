@@ -11,51 +11,49 @@ impl<'a> Analyzer<'a> {
         match expression {
             ExpressionNode::Literal(number) => {
                 if let Type::Struct(base, Some(args)) = number
-                    && let [Type::Struct(member, None)] = args.as_slice() {
-                        if let Some(t) = self.analyze_variant_construction(
-                            &base.text,
-                            member,
-                            &[],
-                            parent_function,
-                            symbol_table,
-                            diagnostics,
-                        )? {
-                            return Ok(t);
-                        }
-                        if let Some(def) = self
-                            .type_ctx
-                            .resolve(dream_types::DefKind::Enum, &base.text)
-                            .filter(|&def| self.enum_members(def).is_some())
-                        {
-                            let enum_ty = Type::Struct(base.clone(), None);
-                            match self
-                                .enum_members(def)
-                                .and_then(|members| members.get(&member.text))
-                                .copied()
-                            {
-                                Some(value) => self.hir_set_enum_value(value as i64, &enum_ty),
-                                None => {
-                                    diagnostics.report_error(
-                                        format!(
-                                            "Enum '{}' has no member '{}'",
-                                            base.text, member.text
-                                        ),
-                                        Some(member.position),
-                                    );
-                                    self.hir_none();
-                                }
-                            }
-                            return Ok(enum_ty);
-                        }
-                        diagnostics.report_error(
-                            format!(
-                                "cannot use '{}.{}' as a default value",
-                                base.text, member.text
-                            ),
-                            Some(member.position),
-                        );
-                        return Ok(Type::Unknown);
+                    && let [Type::Struct(member, None)] = args.as_slice()
+                {
+                    if let Some(t) = self.analyze_variant_construction(
+                        &base.text,
+                        member,
+                        &[],
+                        parent_function,
+                        symbol_table,
+                        diagnostics,
+                    )? {
+                        return Ok(t);
                     }
+                    if let Some(def) = self
+                        .type_ctx
+                        .resolve(dream_types::DefKind::Enum, &base.text)
+                        .filter(|&def| self.enum_members(def).is_some())
+                    {
+                        let enum_ty = Type::Struct(base.clone(), None);
+                        match self
+                            .enum_members(def)
+                            .and_then(|members| members.get(&member.text))
+                            .copied()
+                        {
+                            Some(value) => self.hir_set_enum_value(value as i64, &enum_ty),
+                            None => {
+                                diagnostics.report_error(
+                                    format!("Enum '{}' has no member '{}'", base.text, member.text),
+                                    Some(member.position),
+                                );
+                                self.hir_none();
+                            }
+                        }
+                        return Ok(enum_ty);
+                    }
+                    diagnostics.report_error(
+                        format!(
+                            "cannot use '{}.{}' as a default value",
+                            base.text, member.text
+                        ),
+                        Some(member.position),
+                    );
+                    return Ok(Type::Unknown);
+                }
                 let mut ty =
                     Self::retarget_numeric_literal(number, self.current_expected_type.as_ref());
 
@@ -109,12 +107,13 @@ impl<'a> Analyzer<'a> {
                         );
                     }
                 } else if let Type::Float(t) | Type::Double(t) = &ty
-                    && dream_syntax::number::parse_float_literal(&t.text).is_none() {
-                        diagnostics.report_error(
-                            format!("float literal '{}' is out of range or malformed", t.text),
-                            number.get_span(),
-                        );
-                    }
+                    && dream_syntax::number::parse_float_literal(&t.text).is_none()
+                {
+                    diagnostics.report_error(
+                        format!("float literal '{}' is out of range or malformed", t.text),
+                        number.get_span(),
+                    );
+                }
 
                 self.hir_set_literal(&ty);
                 Ok(ty)

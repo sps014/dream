@@ -95,13 +95,14 @@ impl<'s> Extractor<'s> {
             }
             StatementNode::Assignment(name_tok, value) => {
                 if class_fields.contains(&name_tok.text)
-                    && let Some(span) = Some(name_tok.position) {
-                        self.events.push(Ev::UniqueCandidate {
-                            recv: "this".to_string(),
-                            name: format!("set {}", name_tok.text),
-                            span,
-                        });
-                    }
+                    && let Some(span) = Some(name_tok.position)
+                {
+                    self.events.push(Ev::UniqueCandidate {
+                        recv: "this".to_string(),
+                        name: format!("set {}", name_tok.text),
+                        span,
+                    });
+                }
                 self.emit_binding_and_init(&name_tok.text, value, class_fields);
             }
             StatementNode::MemberAssignment(target, name, value) => {
@@ -238,13 +239,14 @@ impl<'s> Extractor<'s> {
             | ExpressionNode::Try(inner) => self.walk_expr(inner, class_fields),
             ExpressionNode::IncDec { target, .. } => {
                 if let Some(key) = canonical_chain_from(target)
-                    && let Some(span) = target_span_opt(target) {
-                        self.events.push(Ev::UniqueCandidate {
-                            recv: key,
-                            name: "incdec".to_string(),
-                            span,
-                        });
-                    }
+                    && let Some(span) = target_span_opt(target)
+                {
+                    self.events.push(Ev::UniqueCandidate {
+                        recv: key,
+                        name: "incdec".to_string(),
+                        span,
+                    });
+                }
                 self.walk_expr(target, class_fields);
             }
             ExpressionNode::ArrayLiteral(_, elems)

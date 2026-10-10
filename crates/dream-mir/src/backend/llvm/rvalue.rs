@@ -91,11 +91,23 @@ impl<'l, 'a> Fx<'l, 'a> {
                 self.call_v("dream_str_byte_size", &[s])
             }
             Rvalue::CharAt(s, i, unchecked) => {
-                let c = self.str_unit_read(s, i, *unchecked, "dream_char_at_u", "dream_char_at_checked");
+                let c = self.str_unit_read(
+                    s,
+                    i,
+                    *unchecked,
+                    "dream_char_at_u",
+                    "dream_char_at_checked",
+                );
                 self.conv_v(&V::u(c.v), &Ty::I32, false)
             }
             Rvalue::ByteAt(s, i, unchecked) => {
-                let c = self.str_unit_read(s, i, *unchecked, "dream_byte_at_u", "dream_byte_at_checked");
+                let c = self.str_unit_read(
+                    s,
+                    i,
+                    *unchecked,
+                    "dream_byte_at_u",
+                    "dream_byte_at_checked",
+                );
                 self.conv_v(&V::u(c.v), &Ty::I32, false)
             }
             Rvalue::StrBytes(s) => {
@@ -364,7 +376,14 @@ impl<'l, 'a> Fx<'l, 'a> {
         }
     }
 
-    fn load_unit(&mut self, p: &Operand, i: &Operand, len: Option<&Operand>, ty: Ty, size: i64) -> V {
+    fn load_unit(
+        &mut self,
+        p: &Operand,
+        i: &Operand,
+        len: Option<&Operand>,
+        ty: Ty,
+        size: i64,
+    ) -> V {
         let base = self.operand(p);
         let idx = self.operand(i);
         let idx = self.conv_v(&idx, &Ty::I32, false);

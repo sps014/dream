@@ -42,59 +42,68 @@ pub fn app_icon_png() -> Option<&'static [u8]> {
 /// # Safety
 /// `p` must be zero or a valid guest string payload. Its header and UTF-16
 /// storage (including a slice's backing storage) must remain readable during this call.
-pub unsafe fn read_string(p: DreamPtr) -> String { unsafe {
-    if p.is_null() {
-        return String::new();
+pub unsafe fn read_string(p: DreamPtr) -> String {
+    unsafe {
+        if p.is_null() {
+            return String::new();
+        }
+        let n = *(p as *const i32);
+        if n <= 0 {
+            return String::new();
+        }
+        const DREAM_STR_SLICE: i32 = dream_mir::abi::DREAM_STR_SLICE;
+        let pad = *((p as *const i32).add(1));
+        let units = if pad == DREAM_STR_SLICE {
+            let d = std::ptr::read(
+                (p as *const u8)
+                    .add(
+                        dream_mir::abi::STRING_HEADER_SIZE as usize
+                            + std::mem::size_of::<DreamPtr>(),
+                    )
+                    .cast::<*const u16>(),
+            );
+            std::slice::from_raw_parts(d, n as usize)
+        } else {
+            std::slice::from_raw_parts(
+                (p as *const u8)
+                    .add(dream_mir::abi::STRING_UNITS_OFFSET as usize)
+                    .cast::<u16>(),
+                n as usize,
+            )
+        };
+        String::from_utf16_lossy(units)
     }
-    let n = *(p as *const i32);
-    if n <= 0 {
-        return String::new();
-    }
-    const DREAM_STR_SLICE: i32 = dream_mir::abi::DREAM_STR_SLICE;
-    let pad = *((p as *const i32).add(1));
-    let units = if pad == DREAM_STR_SLICE {
-        let d = std::ptr::read(
-            (p as *const u8)
-                .add(dream_mir::abi::STRING_HEADER_SIZE as usize + std::mem::size_of::<DreamPtr>())
-                .cast::<*const u16>(),
-        );
-        std::slice::from_raw_parts(d, n as usize)
-    } else {
-        std::slice::from_raw_parts(
-            (p as *const u8)
-                .add(dream_mir::abi::STRING_UNITS_OFFSET as usize)
-                .cast::<u16>(),
-            n as usize,
-        )
-    };
-    String::from_utf16_lossy(units)
-}}
+}
 
 /// # Safety
 /// `p` must be zero or a valid guest byte-array payload with readable header and elements.
-pub unsafe fn read_bytes(p: DreamPtr) -> Vec<u8> { unsafe {
-    if p.is_null() {
-        return Vec::new();
+pub unsafe fn read_bytes(p: DreamPtr) -> Vec<u8> {
+    unsafe {
+        if p.is_null() {
+            return Vec::new();
+        }
+        let n = *(p as *const i32);
+        if n <= 0 {
+            return Vec::new();
+        }
+        std::slice::from_raw_parts((p as *const u8).add(4), n as usize).to_vec()
     }
-    let n = *(p as *const i32);
-    if n <= 0 {
-        return Vec::new();
-    }
-    std::slice::from_raw_parts((p as *const u8).add(4), n as usize).to_vec()
-}}
+}
 
 /// # Safety
 /// `p` must be zero or a valid guest int-array payload with readable, i32-aligned elements.
-pub unsafe fn read_i32s(p: DreamPtr) -> Vec<i32> { unsafe {
-    if p.is_null() {
-        return Vec::new();
+pub unsafe fn read_i32s(p: DreamPtr) -> Vec<i32> {
+    unsafe {
+        if p.is_null() {
+            return Vec::new();
+        }
+        let n = *(p as *const i32);
+        if n <= 0 {
+            return Vec::new();
+        }
+        std::slice::from_raw_parts((p as *const u8).add(4).cast::<i32>(), n as usize).to_vec()
     }
-    let n = *(p as *const i32);
-    if n <= 0 {
-        return Vec::new();
-    }
-    std::slice::from_raw_parts((p as *const u8).add(4).cast::<i32>(), n as usize).to_vec()
-}}
+}
 
 pub fn alloc_string(s: &str) -> DreamPtr {
     let units: Vec<u16> = s.encode_utf16().collect();

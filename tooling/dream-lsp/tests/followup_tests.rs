@@ -73,7 +73,11 @@ fn generated_members_resolve_from_materialized_files() {
     let dir = std::env::temp_dir().join(format!("dream-lsp-test-gen-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join("dream.toml"), "[[generators]]\npath = \"gen.dream\"\n").unwrap();
+    fs::write(
+        dir.join("dream.toml"),
+        "[[generators]]\npath = \"gen.dream\"\n",
+    )
+    .unwrap();
     fs::write(
         dir.join("gen.dream"),
         "module gen;\n\nimport system.codegen;\n\n@attribute(AttributeTarget.Class)\npublic struct dto {}\n\n@generator\n@on_attribute(dto)\npublic fun dto_derive(ctx: GenContext): void {\n    ctx.log(\"run\");\n}\n",

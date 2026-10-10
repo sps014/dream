@@ -182,11 +182,7 @@ fn suffix_from(rest: &str, allow_byte: bool, is_float: bool) -> Option<&str> {
         // Hex: `b`/`d`/`f` are digits, so only unsigned/long suffixes.
         matches!(lower.as_str(), "u" | "l" | "ul" | "lu")
     };
-    if ok {
-        Some(rest)
-    } else {
-        None
-    }
+    if ok { Some(rest) } else { None }
 }
 
 fn is_hex_digit(c: u8) -> bool {

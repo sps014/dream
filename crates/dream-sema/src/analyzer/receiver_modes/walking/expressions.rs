@@ -66,12 +66,13 @@ pub(super) fn walk_expression(
         ExpressionNode::IncDec { target, .. } => {
             note_chain_write(target, direct_unique, first_mutate_span);
             if let ExpressionNode::Identifier(t) = &**target
-                && field_names.contains(&t.text) {
-                    *direct_unique = true;
-                    if first_mutate_span.is_none() {
-                        *first_mutate_span = Some(t.position);
-                    }
+                && field_names.contains(&t.text)
+            {
+                *direct_unique = true;
+                if first_mutate_span.is_none() {
+                    *first_mutate_span = Some(t.position);
                 }
+            }
             walk_expression(
                 target,
                 field_names,

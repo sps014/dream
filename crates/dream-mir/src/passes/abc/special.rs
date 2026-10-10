@@ -1,7 +1,7 @@
 //! Index shapes beyond `i < len`: a `i * i < len` sieve guard and affine `i * n + j` indices over an
 //! `n * n` array.
 
-use super::facts::{arrays_len_at_least, len_bounds, scan, Bound, Defs, Fact, Globals};
+use super::facts::{Bound, Defs, Fact, Globals, arrays_len_at_least, len_bounds, scan};
 use super::{as_local, const_int};
 use crate::{BinOp, Const, Local, MirFunction, Operand, Place, Rvalue, Statement};
 use std::collections::{BTreeMap, BTreeSet};

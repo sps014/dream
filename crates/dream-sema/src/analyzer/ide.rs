@@ -429,9 +429,10 @@ impl<'a> Analyzer<'a> {
             let entries = methods.entry(*receiver).or_insert_with(Vec::new);
             for identity in identities {
                 if let Some(sig) = functions.get(identity)
-                    && let Some(method) = render_method(member, sig) {
-                        entries.push(method);
-                    }
+                    && let Some(method) = render_method(member, sig)
+                {
+                    entries.push(method);
+                }
             }
         }
 
@@ -632,7 +633,7 @@ impl<'a> Analyzer<'a> {
                         .iter()
                         .map(|elem| self.ide_summary_id(*elem))
                         .collect(),
-                }
+                };
             }
             _ => {}
         }

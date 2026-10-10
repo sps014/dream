@@ -226,9 +226,11 @@ impl<'a> Analyzer<'a> {
         // Implicit numeric widening only (e.g. `let w: long = 5;`). Narrowing / opposite-sign
         // pairs are rejected by `compare_data_type`/`assignable`; do not silently cast them here.
         if let (TyKind::Prim(tp), TyKind::Prim(vp)) = (&target_k, &val_k)
-            && tp != vp && dream_types::numeric_widen(*vp, *tp) {
-                return HExpr::new(target, HExprKind::Cast(Box::new(value)));
-            }
+            && tp != vp
+            && dream_types::numeric_widen(*vp, *tp)
+        {
+            return HExpr::new(target, HExprKind::Cast(Box::new(value)));
+        }
         value
     }
 

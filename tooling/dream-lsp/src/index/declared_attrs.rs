@@ -30,7 +30,9 @@ impl DeclaredAttribute {
             out.push_str(doc);
         }
         if let Some(package) = self.package {
-            out.push_str(&format!("\n\n*Declared in* `{package}` (`import {package};`)"));
+            out.push_str(&format!(
+                "\n\n*Declared in* `{package}` (`import {package};`)"
+            ));
         }
         out
     }
@@ -38,7 +40,9 @@ impl DeclaredAttribute {
 
 /// The `//` comment lines directly above the first attribute of the declaration at `at`.
 fn doc_above(source: &str, at: usize) -> Option<String> {
-    let line_start = source[..at.min(source.len())].rfind('\n').map_or(0, |i| i + 1);
+    let line_start = source[..at.min(source.len())]
+        .rfind('\n')
+        .map_or(0, |i| i + 1);
     let mut lines: Vec<&str> = source[..line_start]
         .lines()
         .rev()
@@ -109,7 +113,6 @@ pub fn std_attributes() -> &'static [DeclaredAttribute] {
         out
     })
 }
-
 
 impl Index {
     /// Attribute types the document declares or imports first, then the stdlib's.

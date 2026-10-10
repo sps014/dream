@@ -412,5 +412,8 @@ fn rc_golden_span_over_borrowed_source_has_no_rc() {
     let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
     let body = ir_func_body(&c, "view_len");
     let rc = count_in(body, "@dream_retain(") + count_in(body, "@dream_release(");
-    assert_eq!(rc, 0, "a view over a borrow parameter should not touch RC:\n{body}");
+    assert_eq!(
+        rc, 0,
+        "a view over a borrow parameter should not touch RC:\n{body}"
+    );
 }

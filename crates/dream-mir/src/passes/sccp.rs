@@ -10,9 +10,9 @@
 //! This is weaker than SSA-based SCCP but always sound — a local is never assumed constant unless
 //! all reaching definitions prove it.
 
+use super::MirPass;
 use super::const_fold::fold as fold_rvalue;
 use super::prop::{subst_stmt_reads, subst_terminator_reads};
-use super::MirPass;
 use crate::int_ty::IntTy;
 use crate::{BlockId, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;

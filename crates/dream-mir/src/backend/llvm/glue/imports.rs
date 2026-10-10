@@ -177,13 +177,22 @@ fn async_bridge(l: &mut Lcx<'_>, imp: &HImport, poll_idx: usize) {
     let fut = l.cx.target.abi().future;
     let slot_base = fut.slots as i64;
     let frame_size = slot_base + params.len() as i64 * 8;
-    let result = imp.ret.and_then(|ty| match l.interner.kind(ty) {
-        TyKind::Struct(_, args) => args.first().copied(),
-        _ => None,
-    }).unwrap_or_else(|| l.interner.void());
-    let owned: Vec<_> = imp.params.iter().enumerate()
-        .filter(|(i, ty)| !by_ref(imp, *i) && l.interner.is_rc_tracked(**ty) && !l.interner.is_value_type(**ty))
-        .map(|(i, ty)| (*ty, slot_base + i as i64 * 8)).collect();
+    let result = imp
+        .ret
+        .and_then(|ty| match l.interner.kind(ty) {
+            TyKind::Struct(_, args) => args.first().copied(),
+            _ => None,
+        })
+        .unwrap_or_else(|| l.interner.void());
+    let owned: Vec<_> = imp
+        .params
+        .iter()
+        .enumerate()
+        .filter(|(i, ty)| {
+            !by_ref(imp, *i) && l.interner.is_rc_tracked(**ty) && !l.interner.is_value_type(**ty)
+        })
+        .map(|(i, ty)| (*ty, slot_base + i as i64 * 8))
+        .collect();
     let metadata = super::future_ownership::bridge(l, &name, result, &owned);
 
     let mut fx = glue(l, &name);
@@ -195,11 +204,20 @@ fn async_bridge(l: &mut Lcx<'_>, imp: &HImport, poll_idx: usize) {
             V::i32(crate::abi::FUTURE_KIND_TASK as i64),
         ],
     );
-    fx.call("dream_set_type", &[s.clone(), V::s(Value::global(metadata))]);
+    fx.call(
+        "dream_set_type",
+        &[s.clone(), V::s(Value::global(metadata))],
+    );
     for (i, t) in params.iter().enumerate() {
         let a = fx.arg(i);
-        if owned.iter().any(|(_, offset)| *offset == slot_base + i as i64 * 8) {
-            fx.call(crate::backend::shared::glue::retain_sym(&fx.l.cx, imp.params[i]), std::slice::from_ref(&a));
+        if owned
+            .iter()
+            .any(|(_, offset)| *offset == slot_base + i as i64 * 8)
+        {
+            fx.call(
+                crate::backend::shared::glue::retain_sym(&fx.l.cx, imp.params[i]),
+                std::slice::from_ref(&a),
+            );
         }
         let at = fx.addr(&s, slot_base + i as i64 * 8);
         fx.store_ty(t, &at, &a, 8);

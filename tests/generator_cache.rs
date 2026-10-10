@@ -41,7 +41,10 @@ fn compile(dir: &Path) -> (Vec<String>, String) {
     let out_ll = dir.join("out.ll");
     let output = Command::new(env!("CARGO_BIN_EXE_dream"))
         .current_dir(dir)
-        .env("DREAM_BENCH_NONCE", format!("{:?}", std::time::Instant::now()))
+        .env(
+            "DREAM_BENCH_NONCE",
+            format!("{:?}", std::time::Instant::now()),
+        )
         .args(["-v", "--emit-llvm", "-o"])
         .arg(&out_ll)
         .arg("main.dream")
@@ -53,7 +56,10 @@ fn compile(dir: &Path) -> (Vec<String>, String) {
         .lines()
         .filter_map(|l| l.find("gen ").map(|i| l[i..].to_string()))
         .collect();
-    (gen_lines, std::fs::read_to_string(out_ll.with_extension("opt.ll")).unwrap())
+    (
+        gen_lines,
+        std::fs::read_to_string(out_ll.with_extension("opt.ll")).unwrap(),
+    )
 }
 
 fn has(lines: &[String], want: &str) -> bool {
@@ -76,7 +82,13 @@ fn untriggered_generator_is_skipped_without_a_process() {
     let dir = project("skip", PLAIN_JSON_IMPORT);
     let (lines, _) = compile(&dir);
     assert!(has(&lines, "gen json_derive: skipped"), "{:?}", lines);
-    assert!(!lines.iter().any(|l| l.contains(": run ") || l.contains(": exe ")), "{:?}", lines);
+    assert!(
+        !lines
+            .iter()
+            .any(|l| l.contains(": run ") || l.contains(": exe ")),
+        "{:?}",
+        lines
+    );
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -90,12 +102,25 @@ fn unchanged_incremental_input_replays_and_survives_relocation() {
     let (_, first_ir) = compile(&dir);
     let (warm, warm_ir) = compile(&dir);
     assert!(has(&warm, "gen json_derive: result hit"), "{:?}", warm);
-    assert!(!warm.iter().any(|l| l.contains(": run ") || l.contains("exe miss")), "{:?}", warm);
-    assert_eq!(first_ir, warm_ir, "a replayed result must emit the same IR as a fresh run");
+    assert!(
+        !warm
+            .iter()
+            .any(|l| l.contains(": run ") || l.contains("exe miss")),
+        "{:?}",
+        warm
+    );
+    assert_eq!(
+        first_ir, warm_ir,
+        "a replayed result must emit the same IR as a fresh run"
+    );
 
     let moved = project("replay_moved", JSON_PROGRAM);
     let (relocated, _) = compile(&moved);
-    assert!(has(&relocated, "gen json_derive: result hit"), "{:?}", relocated);
+    assert!(
+        has(&relocated, "gen json_derive: result hit"),
+        "{:?}",
+        relocated
+    );
     let _ = std::fs::remove_dir_all(dir);
     let _ = std::fs::remove_dir_all(moved);
 }
@@ -115,7 +140,11 @@ fn capture_then_replay_reproduces_the_result() {
         .arg(&capture_dir)
         .output()
         .unwrap();
-    assert!(captured.status.success(), "{}", String::from_utf8_lossy(&captured.stderr));
+    assert!(
+        captured.status.success(),
+        "{}",
+        String::from_utf8_lossy(&captured.stderr)
+    );
     for file in ["capture.json", "snapshot.json", "result.json"] {
         assert!(capture_dir.join(file).is_file(), "missing {}", file);
     }
@@ -124,6 +153,10 @@ fn capture_then_replay_reproduces_the_result() {
         .arg(&capture_dir)
         .output()
         .unwrap();
-    assert!(replayed.status.success(), "{}", String::from_utf8_lossy(&replayed.stderr));
+    assert!(
+        replayed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&replayed.stderr)
+    );
     let _ = std::fs::remove_dir_all(dir);
 }

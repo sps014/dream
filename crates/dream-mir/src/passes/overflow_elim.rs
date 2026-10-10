@@ -9,8 +9,8 @@
 //! - a dominating `x < y` / `x > y` branch edge for a local that is not redefined between that
 //!   edge and the use — the loop-counter case, where the counter has several definitions.
 
-use super::cfg::DomTree;
 use super::MirPass;
+use super::cfg::DomTree;
 use crate::int_ty::IntTy;
 use crate::{
     BinOp, BlockId, Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator, UnOp,

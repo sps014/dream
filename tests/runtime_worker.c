@@ -22,6 +22,8 @@ void dream_callback_drain(void) {}
 void dream_callback_owner_finish(void) {}
 int dream_callback_pending(void) { return 0; }
 int dream_callback_owned(void) { return 0; }
+int dream_async_pending(void) { return 0; }
+void dream_run_loop(void) {}
 void dream_callback_set_waker(void (*wake)(void *), void *context) {
     (void)wake;
     (void)context;

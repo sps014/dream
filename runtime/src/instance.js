@@ -19,6 +19,8 @@ export class DreamInstance {
     // captureless table indices, so index identity == function identity: returning the *same* JS
     // callable for the same funcref lets `addEventListener`/`removeEventListener` pair correctly.
     this._callbackWrappers = new Map();
+    // Unsettled `extern async` host calls; a worker that still has one cannot be reused.
+    this._hostPending = 0;
     this.workerStack = 0;
   }
 

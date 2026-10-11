@@ -1,0 +1,21 @@
+// A Task body that starts a host timer and returns leaves the timer running after its reply.
+// Its worker must not serve a later Task, or the timer would settle into that Task's thread.
+import system;
+import system.task;
+
+fun leave_timer(n: int): int {
+    Promise.start(Time.delay(50));
+    return n;
+}
+
+async fun main(): void {
+    System.println(Task.spawn(() => leave_timer(1)).await);
+    let total = 0;
+    let i = 0;
+    while i < 20 {
+        total = total + Task.spawn(() => i * 2).await;
+        i = i + 1;
+    }
+    Time.delay(100).await;
+    System.println(total);
+}

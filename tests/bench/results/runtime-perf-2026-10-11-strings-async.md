@@ -13,15 +13,15 @@ Follow-up to `runtime-perf-2026-10-09.md`. Native, current against C# on the sam
   still scanned inline (split pieces are usually that short); longer runs go to an out-of-line
   eight-unit vector compare, which lowers to SSE2/NEON/simd128 under the program's CPU.
   `split(char)` sizes its result with a new vector `string_view_count_char`. Line splitting in
-  `log_processor` 80 -> 30 ùs, word splitting 160 -> 137 ùs. `split_span` costs 18.7 ns against
-  16.9 for the pure scalar search (pieces of 4-7 units); still 0.57ù C#.
+  `log_processor` 80 -> 30 ¬µs, word splitting 160 -> 137 ¬µs. `split_span` costs 18.7 ns against
+  16.9 for the pure scalar search (pieces of 4-7 units); still 0.57√ó C#.
 - **Regex validation.** Patterns compiled with `PCRE2_UTF` made every match re-validate the
   whole subject. `PCRE2_MATCH_INVALID_UTF` lets the JIT skip that, and a lone surrogate now
-  just fails to match instead of failing the whole call. `log_processor` regex stage 154 -> 110 ùs.
+  just fails to match instead of failing the whole call. `log_processor` regex stage 154 -> 110 ¬µs.
 - **Futures.** Every future came from the locked shared heap and freed back through it, and
   every `dream_await` took the foreign-completion lock. Futures are now private allocations
   (`dream_complete_foreign`, the only cross-thread path, already publishes the frame) and only
-  host-kind children take the lock. 64ù4 fan-out with `Promise.all`: 48.6 -> 22.4 ùs; micro
+  host-kind children take the lock. 64√ó4 fan-out with `Promise.all`: 48.6 -> 22.4 ¬µs; micro
   `async_poll` 82 -> 31.5 ns, `scheduler_queue` 306 -> 107 ns.
 
 ## Native header 32 -> 16 bytes
@@ -33,7 +33,7 @@ holding their size. A free block keeps its free-list link in the first word and 
 (`0x7fffffff`), which sends a second free to the slow path where it is ignored. The magic word
 is gone, so release builds no longer detect double frees beyond that tag check.
 
-A/B against the previous commit (its own runtime, built in a worktree), 10 rounds ù 3 passes:
+A/B against the previous commit (its own runtime, built in a worktree), 10 rounds √ó 3 passes:
 
 | micro | old ns | new ns | new/old |
 |---|---|---|---|
@@ -56,11 +56,11 @@ Against `cb1e219c` (its own runtime, built in a worktree) and C#:
 
 | bench | old | new | new/old | new/C# |
 |---|---|---|---|---|
-| weak_tree | 64 ùs | 36 ùs | 0.55 | 0.90 |
+| weak_tree | 64 ¬µs | 36 ¬µs | 0.55 | 0.90 |
 | scratch_arena | 0.82 ns | 0.58 ns | 0.71 | 1.02 |
 | string_concat | | | 0.95 | |
 | string_builder | | | 0.92 | |
-| task_parallel | ~160 ùs (ù20%) | 87.7 ùs (ù0.3%) | 0.56 | 1.11 |
+| task_parallel | ~160 ¬µs (¬±20%) | 87.7 ¬µs (¬±0.3%) | 0.56 | 1.11 |
 
 - **Weak fields.** Constructing `Some(x)` into a niche weak field retained `x` only for the weak
   store to release it; the payload is now stored borrowed. Only the transition to a zero count
@@ -72,13 +72,21 @@ Against `cb1e219c` (its own runtime, built in a worktree) and C#:
 - **String capacity.** In-place appends asked for the block's capacity in units; they now ask
   whether the block's size class fits the needed bytes.
 - **Task fan-out.** On Windows the CRT `getenv` locks and compares case-insensitively; the
-  `seed_bit` lookup alone cost 2.4 ùs per call. `processEnvGet` now calls
+  `seed_bit` lookup alone cost 2.4 ¬µs per call. `processEnvGet` now calls
   `GetEnvironmentVariableW`. A session holds a pool thread only while it has queued work, so
-  idle `Task`s no longer pin threads. Fan-out overhead per 16 tasks went from 45 to 17 ùs.
+  idle `Task`s no longer pin threads. Fan-out overhead per 16 tasks went from 45 to 17 ¬µs.
 
-`substring_span` stays at C# parity (0.62 vs 0.60 ns). `json_service` remains about 4% slower
-than before the header change (0.13ù C#). `string_view_find`, `find_char` and the capacity check
-were ruled out by interleaved A/B; the cause is unresolved.
+`substring_span` stays at C# parity (0.62 vs 0.60 ns). `json_service` had been about 4% slower
+since the header change, all of it in deserialization. Growing a buffer through `Buffer.realloc`
+costs about 1 ns more per step than before, for no reason visible in the source, and every
+JSON string went through a 16-byte `StringBuilder` that grew several times. `parse_string` now
+sizes the builder to the run before the first quote or backslash, so escape-free strings never
+grow: `json_service` 1.00√ó the old runtime (0.12√ó C#).
+
+A synchronous `Task` body that started a future with `Promise.start` leaked it natively: only
+async bodies ran the scheduler. Every job now drains leftover ready or timed work before its
+reply, as `main` does before exiting. On wasm32 a worker whose job left a host call unsettled is
+terminated instead of pooled.
 
 ### wasm32
 

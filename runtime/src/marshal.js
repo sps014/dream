@@ -167,12 +167,14 @@ export function wrapAsyncImport(getInstance, fn, signature) {
     const exports = inst.exports;
     const args = marshalArgs(inst, params, rawArgs);
     const settle = (rawResult) => {
+      inst._hostPending--;
       const marshaled = boxTag != null
         ? boxLong64(inst, rawResult, boxTag)
         : marshalResult(inst, result, rawResult);
       exports.__dream_resolve(future, marshaled);
       pumpRunLoop(inst);
     };
+    inst._hostPending++;
     Promise.resolve(fn(...args)).then(
       (value) => settle(value),
       (err) => {

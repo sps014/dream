@@ -209,6 +209,15 @@ impl Compiler {
             ))
             .as_bytes(),
         );
+        if !self.runtimes.is_empty() {
+            field(
+                "js-runtime",
+                crate::driver::rt_stamp::content_fingerprint(crate::driver::rt_stamp::files_under(
+                    &crate::driver::js_runtime::runtime_src_dir(),
+                ))
+                .as_bytes(),
+            );
+        }
         let options = format!(
             "{:?}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{:?}|{}",
             self.target,

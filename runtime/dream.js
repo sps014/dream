@@ -100,6 +100,8 @@ class DreamInstance {
     // captureless table indices, so index identity == function identity: returning the *same* JS
     // callable for the same funcref lets `addEventListener`/`removeEventListener` pair correctly.
     this._callbackWrappers = new Map();
+    // Unsettled `extern async` host calls; a worker that still has one cannot be reused.
+    this._hostPending = 0;
     this.workerStack = 0;
   }
 
@@ -732,12 +734,14 @@ function wrapAsyncImport(getInstance, fn, signature) {
     const exports = inst.exports;
     const args = marshalArgs(inst, params, rawArgs);
     const settle = (rawResult) => {
+      inst._hostPending--;
       const marshaled = boxTag != null
         ? boxLong64(inst, rawResult, boxTag)
         : marshalResult(inst, result, rawResult);
       exports.__dream_resolve(future, marshaled);
       pumpRunLoop(inst);
     };
+    inst._hostPending++;
     Promise.resolve(fn(...args)).then(
       (value) => settle(value),
       (err) => {
@@ -2192,7 +2196,7 @@ parentPort.on('message', (m) => {
       inst.__workerReset();
     } else if (m.t === 'msg' || m.t === 'dispatch') {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
-      parentPort.postMessage({ t: 'reply', data: packWire(reply) });
+      parentPort.postMessage({ t: 'reply', data: packWire(reply), idle: inst._hostPending === 0 });
     } else if (m.t === 'term') {
       parentPort.close();
     }
@@ -2214,7 +2218,7 @@ self.onmessage = (e) => {
       inst.__workerReset();
     } else if (m.t === 'msg' || m.t === 'dispatch') {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
-      self.postMessage({ t: 'reply', data: packWire(reply) });
+      self.postMessage({ t: 'reply', data: packWire(reply), idle: inst._hostPending === 0 });
     } else if (m.t === 'term') {
       self.close();
     }
@@ -2261,6 +2265,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       slot.queued = [];
     } else if (m.t === "reply") {
       const state = slot.state;
+      slot.idle = m.idle;
       if (!state) return;
       state.inflight--;
       const text = unpackWire(m.data);
@@ -2300,6 +2305,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       queued: [],
       blobUrl: null,
       stack: 0,
+      idle: true,
     };
 
     const finishSpawn = (worker) => {
@@ -2406,8 +2412,9 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       reg.delete(id);
       for (const p of s.pending) p("");
       const slot = s.slot;
-      // A worker mid-job cannot be handed on; it is stopped like before pooling.
-      if (slot.worker && slot.ready && s.inflight === 0 && idle.length < IDLE_MAX) {
+      // A worker mid-job, or whose last job left host calls running, cannot be handed on: they
+      // would settle into the next session's thread.
+      if (slot.worker && slot.ready && slot.idle && s.inflight === 0 && idle.length < IDLE_MAX) {
         slot.state = null;
         // An idle Node worker must not keep the process alive.
         if (typeof slot.worker.unref === "function") slot.worker.unref();

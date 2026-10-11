@@ -164,6 +164,13 @@ static void run_worker(Worker *w) {
         dream_mutex_unlock(&w->mu);
         /* The invoke ABI consumes the wire argument, but borrows the closure environment. */
         dream_ptr r = dream_worker_invoke(j->fn, j->env, j->msg);
+        /* Futures the body started without awaiting finish here, as they would at the end of
+         * main; the session's teardown would otherwise strand them. The loop installs its own
+         * callback waker, so the session takes its back. */
+        if (dream_async_pending()) {
+            dream_run_loop();
+        }
+        dream_callback_set_waker(callback_wake, w);
         j->msg = 0;
         dream_publish(r);
         dream_mutex_lock(&w->mu);

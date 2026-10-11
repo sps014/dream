@@ -114,7 +114,15 @@ public class JsonParser {
 
     public fun parse_string(): string {
         this.pos = this.pos + 1; // opening quote
-        let sb = StringBuilder();
+        // Most strings have no escapes: sizing the builder to the first run means it never
+        // grows, and a string that ends there is copied once.
+        let first = this.pos;
+        let n = this.len();
+        while (this.pos < n) && (this.b() != 34) && (this.b() != 92) {
+            this.pos = this.pos + 1;
+        }
+        let sb = StringBuilder((this.pos - first) * 2);
+        sb.append_utf8_slice(this.text, first * 2, (this.pos - first) * 2);
         let going = true;
         while going == true {
             if this.pos >= this.len() {

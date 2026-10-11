@@ -5,8 +5,7 @@
 use bumpalo::Bump;
 use indexmap::IndexSet;
 use std::collections::{HashMap, HashSet};
-use std::fs::File;
-use std::io::{Error, ErrorKind, Read};
+use std::io::{Error, ErrorKind};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -203,9 +202,8 @@ pub fn parse_file_recursive<'a>(
         return Ok(()); // Already processed
     }
 
-    let mut file = File::open(&path)?;
-    let mut text = String::new();
-    file.read_to_string(&mut text)?;
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| Error::new(e.kind(), format!("{}: {e}", path.display())))?;
     parse_source_recursive(path_str, text, acc, arena, diagnostics)
 }
 
@@ -339,4 +337,22 @@ pub fn parse_source_recursive<'a>(
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn non_utf8_source_error_names_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("utf16.dream");
+        std::fs::write(&file, [0xff, 0xfe, b'f', 0, b'u', 0, b'n', 0]).unwrap();
+        let arena = Bump::new();
+        let mut acc = ProgramAccumulator::default();
+        let mut diagnostics = DiagnosticBag::new(None);
+        let path = file.to_string_lossy().to_string();
+        let err = parse_file_recursive(&path, &mut acc, &arena, &mut diagnostics).unwrap_err();
+        assert!(err.to_string().contains("utf16.dream"), "{err}");
+    }
 }

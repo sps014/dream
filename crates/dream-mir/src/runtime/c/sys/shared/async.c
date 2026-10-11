@@ -393,6 +393,10 @@ void dream_await(dream_ptr parent, dream_ptr child) {
     dream_start(child);
 }
 
+int dream_async_pending(void) {
+    return rq_head != NULL || timer_head != NULL;
+}
+
 #ifdef DREAM_WASM32
 __attribute__((export_name(DREAM_SYM_RUN_LOOP)))
 #endif

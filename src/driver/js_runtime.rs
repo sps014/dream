@@ -96,7 +96,7 @@ fn parse_manifest(text: &'static str) -> Manifest {
     }
     manifest
 }
-fn runtime_src_dir() -> PathBuf {
+pub(crate) fn runtime_src_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/src")
 }
 

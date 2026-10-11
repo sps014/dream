@@ -54,7 +54,7 @@ pub(crate) fn clear_raw_profiles(bin: &Path) {
 
 fn out_dir(bin: &Path) -> PathBuf {
     let dir = bin.parent().unwrap_or_else(|| Path::new("."));
-    std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf())
+    dunce::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf())
 }
 
 fn stem(bin: &Path) -> String {

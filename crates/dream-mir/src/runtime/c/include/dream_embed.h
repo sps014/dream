@@ -19,6 +19,8 @@
 #ifndef DREAM_EMBED_H
 #define DREAM_EMBED_H
 
+#include <stdint.h>
+
 #include "dream_platform.h"
 
 #ifdef __cplusplus
@@ -35,6 +37,12 @@ void dream_thread_detach(void);
 /* Takes and gives back one count on a Dream object reference. Both accept NULL. */
 void dream_retain(void *ref);
 void dream_release(void *ref);
+
+/* Completes the future an `@async_host` extern handed to its `<name>Async` host, from any thread.
+ * `result` carries the value as the host's synchronous return would (zero for `void`). The
+ * future stays valid until this call; a second completion, or one after the Dream side cancelled
+ * the future, is ignored. */
+void dream_complete_foreign(void *future, uint64_t result);
 
 /* `message` is the panic text in UTF-8. `location` is the Dream source location ("file:line") of
  * the panicking statement, or NULL for a panic the runtime raises itself (such as out of memory).

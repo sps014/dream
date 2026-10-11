@@ -65,12 +65,13 @@ brotli = "8.0.4"
 
 object = { version = "0.37", default-features = false, features = ["read"], optional = true }
 wasmparser = "0.252"
-dunce = { version = "1", optional = true }
+# Canonical paths without Windows' `\\?\` verbatim prefix, which clang cannot resolve includes under.
+dunce = "1"
 
 [features]
 default = ["native"]
 # Native compiler execution/linking tools; runtime hosts are built separately.
-native = ["dep:rayon", "dep:depfile", "dep:image", "dep:object", "dep:dunce", "dep:libc", "dep:windows-sys"]
+native = ["dep:rayon", "dep:depfile", "dep:image", "dep:object", "dep:libc", "dep:windows-sys"]
 [target.'cfg(unix)'.dependencies]
 libc = { version = "0.2", optional = true }
 

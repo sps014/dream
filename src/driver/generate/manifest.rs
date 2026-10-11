@@ -27,7 +27,7 @@ pub fn load_manifest_generators(entry_file: &str) -> Vec<(String, GeneratorEntry
         .into_iter()
         .map(|entry| {
             let resolved = dir.join(&entry.path);
-            let path = resolved.canonicalize().unwrap_or(resolved);
+            let path = dunce::canonicalize(&resolved).unwrap_or(resolved);
             (path.to_string_lossy().into_owned(), entry)
         })
         .collect()

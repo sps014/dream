@@ -352,6 +352,105 @@ fun main(): void {
 }
 
 #[test]
+fn async_host_futures_complete_from_foreign_threads_into_their_own_scheduler() {
+    let c = r#"#include "dream_thread.h"
+#include <stdint.h>
+#include <stdlib.h>
+#include <dream_embed.h>
+struct job { void* future; int32_t value; int32_t ms; };
+static DREAM_THREAD_PROC(run_job) {
+    struct job* j = arg;
+    int64_t until = dream_monotonic_ns() + (int64_t)j->ms * 1000000;
+    while (dream_monotonic_ns() < until) dream_thread_yield();
+    dream_complete_foreign(j->future, (uint64_t)(uint32_t)(j->value * 2));
+    free(j);
+    return 0;
+}
+int32_t host_ready(void) { return 1; }
+int32_t double_laterAsync(void* future, int32_t value, int32_t ms) {
+    struct job* j = malloc(sizeof *j);
+    dream_thread t;
+    j->future = future; j->value = value; j->ms = ms;
+    if (dream_thread_start(&t, run_job, j)) abort();
+    dream_thread_release(t);
+    return 1;
+}
+"#;
+    let dream = r#"import system;
+import system.task;
+
+@c extern fun host_ready(): int;
+
+@async_host
+extern async fun double_later(value: int, ms: int): int;
+
+async fun in_task(n: int): void {
+    let a = double_later(n, 20).await;
+    System.println("task " + n.to_string() + " -> " + double_later(a, 5).await.to_string());
+}
+
+fun task_body(n: int): int {
+    Promise.start(in_task(n));
+    return n;
+}
+
+async fun main(): void {
+    System.println(host_ready());
+    System.println(double_later(21, 10).await);
+    let all = Promise.all([double_later(1, 30), double_later(2, 1), double_later(3, 15)]).await;
+    System.println(all[0] + all[1] + all[2]);
+    let doomed = double_later(100, 40);
+    Promise.start(doomed);
+    Promise.cancel(doomed);
+    let t1 = Task.spawn(() => task_body(3));
+    let first = t1.await;
+    let t2 = Task.spawn(() => task_body(4));
+    let main_side = double_later(50, 60).await;
+    System.println(first + t2.await);
+    System.println(main_side);
+}
+"#;
+    let out = run_c("async_host", c, dream, OptLevel::O0).unwrap();
+    assert_eq!(
+        out.trim(),
+        "1\n42\n12\ntask 3 -> 12\ntask 4 -> 16\n7\n100"
+    );
+}
+
+#[test]
+fn each_task_starts_with_fresh_c_thread_locals() {
+    let c = r#"#include <errno.h>
+static _Thread_local int counter = 41;
+void set_error(int n) { errno = n; }
+int get_error(void) { return errno; }
+int value(void) { return ++counter; }
+"#;
+    let dream = r#"import system;
+import system.task;
+
+@c extern fun value(): int;
+@c extern fun set_error(n: int): void;
+@c extern fun get_error(): int;
+
+async fun main(): void {
+    System.println(value());
+    System.println(Task.spawn(() => value()).await);
+    System.println(Task.spawn(() => value()).await);
+    System.println(value());
+    let pool = TaskPool(1);
+    System.println(pool.dispatch(() => value().to_string()).await);
+    System.println(pool.dispatch(() => value().to_string()).await);
+    pool.shutdown();
+    set_error(1234);
+    System.println(Task.spawn(() => get_error()).await);
+    System.println(get_error());
+}
+"#;
+    let out = run_c("fresh_tls", c, dream, OptLevel::O2).unwrap();
+    assert_eq!(out.trim(), "42\n42\n42\n43\n42\n43\n0\n1234");
+}
+
+#[test]
 fn owned_c_pointer_is_freed_by_its_finalizer() {
     let c = r#"#include <stdint.h>
 #include <stdio.h>
@@ -517,7 +616,7 @@ fn links_conflict_names_both_manifests() {
     assert_contains(&err, "native library 'z' is provided by two packages");
     for package in ["a", "b"] {
         let manifest = root.join("dream_packages").join(package).join("dream.toml");
-        let manifest = fs::canonicalize(manifest).unwrap();
+        let manifest = dunce::canonicalize(manifest).unwrap();
         assert_contains(&err, &manifest.display().to_string());
     }
     let _ = fs::remove_dir_all(&root);

@@ -1682,12 +1682,14 @@ void dream_host_bind_v2(dream_ptr (*string_alloc)(int32_t), dream_ptr (*array_ne
                      void (*complete_foreign)(dream_ptr, dream_result));
 /* Complete an @async_host future from a foreign thread and wake the parked loop. */
 void dream_complete_foreign(dream_ptr f, dream_result res);
-/* Called by a delegate-shape poll thunk after handing work to a deferred host: keeps
- * dream_run_loop parked while the work is in flight. */
-void dream_foreign_work_begin(void);
-/* Undo `dream_foreign_work_begin` when the host completed inline (returned 0). */
-void dream_foreign_work_end(void);
+/* Called by a delegate-shape poll thunk before handing `future` to a deferred host: binds it to
+ * this thread's scheduler, which stays in dream_run_loop while the work is in flight. */
+void dream_foreign_work_begin(dream_ptr future);
+/* Undo `dream_foreign_work_begin` when the host did not defer (returned 0). */
+void dream_foreign_work_end(dream_ptr future);
 dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg);
+/* Called by runtime init when the program links C: worker threads then serve one session each. */
+void dream_worker_isolate_threads(void);
 int32_t workerSpawn(int32_t fn, dream_ptr env);
 int32_t workerPoolSpawn(void);
 void workerPost(int32_t id, dream_ptr msg);

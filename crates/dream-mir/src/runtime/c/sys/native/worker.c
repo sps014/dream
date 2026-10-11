@@ -57,6 +57,12 @@ typedef struct PoolThread {
 } PoolThread;
 
 #define POOL_IDLE_MAX 64u
+/* Dream code keeps no thread-local state a later session could observe, but C linked into the
+ * program may (errno included), and every Task starts on a thread of its own. Set before the
+ * first worker starts. */
+static int isolate_threads;
+
+void dream_worker_isolate_threads(void) { isolate_threads = 1; }
 
 static Worker *workers;
 static int64_t next_id = 1;
@@ -123,7 +129,8 @@ static void serve_on_this_thread(Worker *w) {
 }
 
 /* Serves w until it is dead, or idle with nothing tying it to this thread: native callbacks
- * must run on the thread that registered them, so a session holding one keeps its thread. */
+ * must run on the thread that registered them, so a session holding one keeps its thread, and
+ * with isolated threads every session keeps the thread its C state lives on. */
 static void run_worker(Worker *w) {
     serve_on_this_thread(w);
     for (;;) {
@@ -136,7 +143,7 @@ static void run_worker(Worker *w) {
                 dream_mutex_lock(&w->mu);
                 continue;
             }
-            if (!dream_callback_owned()) {
+            if (!isolate_threads && !dream_callback_owned()) {
                 break;
             }
             dream_cond_wait(&w->cv, &w->mu);
@@ -211,7 +218,7 @@ static DREAM_THREAD_PROC(worker_main) {
         dream_mutex_unlock(&pool_mu);
         run_worker(w);
         dream_mutex_lock(&pool_mu);
-        if (idle_count >= POOL_IDLE_MAX) {
+        if (isolate_threads || idle_count >= POOL_IDLE_MAX) {
             break;
         }
         pt->assigned = NULL;

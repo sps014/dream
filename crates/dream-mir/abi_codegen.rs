@@ -50,10 +50,9 @@ const FIELDS: &[&str] = &[
     "CHILDREN",
     "COUNT",
     "REMAINING",
-    "RESULTS",
+    "SCHEDULER",
     "NEXT",
     "QUEUED",
-    "DUE",
     "ESIZE",
     "WIDE",
     "SLOTS",
@@ -73,10 +72,9 @@ fn write_layout(out: &mut String, suffix: &str, f: registry::FutureLayout) {
         f.children,
         f.count,
         f.remaining,
-        f.results,
+        f.scheduler,
         f.next,
         f.queued,
-        f.due,
         esize,
         f.wide,
         f.slots,
@@ -124,8 +122,8 @@ mod tests {
         let h = header();
         assert!(h.contains("#if UINTPTR_MAX == UINT64_MAX"));
         assert!(h.contains("#elif UINTPTR_MAX == UINT32_MAX"));
-        assert!(h.contains("#define F_SLOTS_NATIVE 104"));
-        assert!(h.contains("#define F_SLOTS_NATIVE 72"));
+        assert!(h.contains("#define F_SLOTS_NATIVE 96"));
+        assert!(h.contains("#define F_SLOTS_NATIVE 64"));
         assert!(h.contains("#define F_SLOTS_WASM 64"));
     }
 }

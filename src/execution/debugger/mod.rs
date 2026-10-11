@@ -131,7 +131,7 @@ pub fn run_debug_adapter(
 
 /// Resolves `path` to its real filesystem spelling; returns the input when resolution fails.
 fn canonicalize_path(path: &str) -> String {
-    std::fs::canonicalize(path)
+    dunce::canonicalize(path)
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|_| path.to_string())
 }

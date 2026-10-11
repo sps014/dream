@@ -16,10 +16,10 @@ impl ProjectPaths {
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
-        let start = start.canonicalize().unwrap_or_else(|_| start.to_path_buf());
+        let start = dunce::canonicalize(start).unwrap_or_else(|_| start.to_path_buf());
         match crate::driver::project_manifest::find_project_root_from(&start) {
             Some(root) => ProjectPaths {
-                root: root.canonicalize().unwrap_or(root),
+                root: dunce::canonicalize(&root).unwrap_or(root),
                 has_manifest: true,
             },
             None => ProjectPaths {
@@ -63,7 +63,7 @@ mod tests {
 
     #[test]
     fn bare_entry_file_is_relative_to_the_working_directory() {
-        let cwd = std::env::current_dir().unwrap().canonicalize().unwrap();
+        let cwd = dunce::canonicalize(std::env::current_dir().unwrap()).unwrap();
         let paths = ProjectPaths::for_entry("main.dream");
         let file = cwd.join("main.dream");
         if paths.has_manifest {

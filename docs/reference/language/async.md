@@ -141,6 +141,11 @@ On native, an `extern async fun` host blocks the whole run loop while it runs.
 Declaring it `@async_host` opts that import into true async: on the native host, the function runs off the main task and completes the future when it finishes — so timers and other tasks keep interleaving while the host op is in flight.
 User-provided native hosts can use this contract; wasm32 bridges are always deferred.
 
+A C host for `@async_host extern async fun read_slowly(id: int): int` is `int32_t read_slowlyAsync(void *future, int32_t id)`.
+It returns `1` after handing the work off, then calls `dream_complete_foreign(future, result)` from `<dream_embed.h>` on any thread when the work is done.
+The result lands on the thread whose task awaited the call, including a `Task` worker; that thread keeps running its loop until every host call it started has completed.
+`Promise.cancel` on an in-flight call stops the awaiting side immediately; the late completion is ignored.
+
 ## Async methods
 
 Instance and `static` class methods can be `async`, so a type can own its asynchronous behavior.

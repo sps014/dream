@@ -109,7 +109,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                     && import_path.exists()
                 {
                     let resolved =
-                        std::fs::canonicalize(&import_path).unwrap_or_else(|_| import_path.clone());
+                        dunce::canonicalize(&import_path).unwrap_or_else(|_| import_path.clone());
                     acc.import_edges
                         .entry(MAIN_FILE.to_string())
                         .or_default()
@@ -211,7 +211,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                 });
                 snapshot.primary_file = Some(MAIN_FILE.to_string());
                 if let Some(path) = file_path {
-                    let path = std::fs::canonicalize(path)
+                    let path = dunce::canonicalize(path)
                         .map(|path| path.to_string_lossy().into_owned())
                         .unwrap_or_else(|_| path.to_string());
                     snapshot.primary_file = Some(path.clone());

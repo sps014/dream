@@ -43,12 +43,15 @@ pub(super) fn link_metadata(ll: &Path, flags: &[String]) -> Result<(), Box<dyn s
     Ok(())
 }
 
+/// `zig_driver`: `zig cc` rejects `/def:` and `/implib:`, but takes the `.def` file as an input
+/// and writes the import library beside the DLL itself.
 pub(super) fn shared_flags(
     cmd: &mut Command,
     ll: &Path,
     out: &Path,
     exports: &[String],
     spec: &dream_abi::target::TargetSpec,
+    zig_driver: bool,
 ) -> Result<PathBuf, String> {
     let mut public = EMBED_EXPORTS
         .iter()
@@ -67,7 +70,9 @@ pub(super) fn shared_flags(
     } else if spec.is_windows() {
         cmd.arg("-shared");
         let import = out.with_extension("lib");
-        if spec.is_msvc() {
+        if spec.is_msvc() && zig_driver {
+            cmd.arg(&list);
+        } else if spec.is_msvc() {
             cmd.arg(format!("-Wl,/def:{}", list.display()))
                 .arg(format!("-Wl,/implib:{}", import.display()));
         } else {

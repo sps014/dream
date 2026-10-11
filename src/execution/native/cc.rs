@@ -127,7 +127,7 @@ fn auto_install_zig(config: &ToolchainConfig) -> Result<PathBuf, String> {
     let beside = config
         .exe
         .clone()
-        .map(|e| std::fs::canonicalize(&e).unwrap_or(e))
+        .map(|e| dunce::canonicalize(&e).unwrap_or(e))
         .and_then(|e| Some(e.parent()?.join(name)))
         .filter(|p| p.is_file());
     let dreamer = beside

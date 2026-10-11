@@ -69,7 +69,7 @@ pub(super) fn host_library_dirs(config: &ToolchainConfig) -> Vec<PathBuf> {
         }
     };
     if let Some(exe) = &config.exe {
-        for exe in exe.canonicalize().ok().iter().chain(std::iter::once(exe)) {
+        for exe in dunce::canonicalize(exe).ok().iter().chain(std::iter::once(exe)) {
             if let Some(p) = exe.parent() {
                 push(p.to_path_buf());
                 if p.file_name().and_then(|s| s.to_str()) == Some("deps")
@@ -119,7 +119,7 @@ impl ToolchainConfig {
 
     pub fn bundle_dir(&self) -> Option<PathBuf> {
         let exe = self.exe.as_ref()?;
-        let exe = exe.canonicalize().unwrap_or_else(|_| exe.clone());
+        let exe = dunce::canonicalize(exe).unwrap_or_else(|_| exe.clone());
         let dir = exe.parent()?;
         [dir.join("lib/dream"), dir.join("../lib/dream")]
             .iter()

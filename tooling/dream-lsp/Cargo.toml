@@ -19,6 +19,7 @@ dream-abi = { path = "../../crates/dream-abi" }
 dream-hir = { path = "../../crates/dream-hir" }
 dream-types = { path = "../../crates/dream-types" }
 indexmap = "2"
+dunce = "1"
 bumpalo = "3.20.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

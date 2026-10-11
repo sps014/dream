@@ -4,7 +4,7 @@ pub(super) fn relativize_sources(
     mir: &mut dream_mir::Mir,
     entry: &str,
 ) -> Result<(), CompileError> {
-    let entry = Path::new(entry).canonicalize()?;
+    let entry = dunce::canonicalize(entry)?;
     let directory = entry.parent().unwrap_or_else(|| Path::new("."));
     let root = crate::driver::project_manifest::find_project_root_from(directory)
         .unwrap_or_else(|| directory.to_path_buf());
@@ -34,7 +34,7 @@ pub(super) fn relativize_sources(
             if dream_stdlib::is_std_source(file) {
                 continue;
             }
-            let path = Path::new(file).canonicalize()?;
+            let path = dunce::canonicalize(&file)?;
             let relative = path.strip_prefix(&root).map_err(|_| {
                 CompileError::Manifest(format!(
                     "library source {} is outside package root {}",

@@ -187,7 +187,7 @@ pub fn parse_file_recursive<'a>(
     arena: &'a Bump,
     diagnostics: &mut DiagnosticBag,
 ) -> Result<(), Error> {
-    let path = Path::new(file_path).canonicalize()?;
+    let path = dunce::canonicalize(file_path)?;
     let path_str = path
         .to_str()
         .ok_or_else(|| {
@@ -315,7 +315,9 @@ pub fn parse_source_recursive<'a>(
             continue;
         }
 
-        let imported = import_path.canonicalize()?.to_string_lossy().into_owned();
+        let imported = dunce::canonicalize(&import_path)?
+            .to_string_lossy()
+            .into_owned();
         acc.import_edges
             .entry(path_str.clone())
             .or_default()

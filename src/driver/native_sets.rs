@@ -142,7 +142,7 @@ impl NativeGraph {
 }
 
 fn canonical(p: &Path) -> PathBuf {
-    p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
+    dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
 fn implicit_set_name(root: &Path, manifest: &ProjectManifest) -> Option<String> {

@@ -14,12 +14,9 @@ pub(crate) fn stage_runtime(
     for capability in capabilities {
         let source = source_dir.join(capability.library_name(spec));
         let destination = output_dir.join(capability.library_name(spec));
-        let canonical_source = source
-            .canonicalize()
+        let canonical_source = dunce::canonicalize(&source)
             .map_err(|e| format!("locating {}: {e}", source.display()))?;
-        if destination
-            .canonicalize()
-            .is_ok_and(|p| p == canonical_source)
+        if dunce::canonicalize(&destination).is_ok_and(|p| p == canonical_source)
         {
             return Err("relocatable output must not overwrite the compiler's host runtime".into());
         }
@@ -61,9 +58,6 @@ pub(crate) fn link_runtime(
     if spec.is_windows() {
         for capability in capabilities {
             command.arg(source_dir.join(capability.import_library_name(spec)));
-        }
-        if spec.is_msvc() {
-            command.arg("-loldnames");
         }
         return;
     }

@@ -1,4 +1,4 @@
-#![cfg(all(feature = "native", unix))]
+#![cfg(feature = "native")]
 
 use std::path::Path;
 use std::process::Command;
@@ -8,9 +8,19 @@ fn worker_registry_grows_and_cleans_up_failed_starts() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let native = root.join("crates/dream-mir/src/runtime/c/sys/native");
     let temp = tempfile::tempdir().expect("worker test directory");
-    let binary = temp.path().join("worker");
-    let mut command = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
-    command.args(["-std=gnu11", "-O2", "-pthread"]);
+    let binary = temp
+        .path()
+        .join(if cfg!(windows) { "worker.exe" } else { "worker" });
+    let mut command = if cfg!(windows) {
+        let config = std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default());
+        let tools = dream::execution::llvm::resolve_llvm(&config).unwrap();
+        Command::new(tools.clang().unwrap())
+    } else {
+        let mut command = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
+        command.arg("-pthread");
+        command
+    };
+    command.args(["-std=gnu11", "-O2"]);
     if let Ok(sanitizer) = std::env::var("DREAM_WORKER_SANITIZER") {
         assert!(matches!(sanitizer.as_str(), "thread" | "address,undefined"));
         command.arg(format!("-fsanitize={sanitizer}")).arg("-g");
@@ -67,7 +77,10 @@ fn worker_registry_grows_and_cleans_up_failed_starts() {
         "worker stress failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(output.stdout, b"worker registry stress passed\n");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim_end(),
+        "worker registry stress passed"
+    );
     for (mode, message) in [
         ("start-failure", "panic: could not start a worker thread"),
         ("id-exhaustion", "panic: worker ID space exhausted"),

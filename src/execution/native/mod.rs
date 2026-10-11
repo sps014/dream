@@ -256,7 +256,7 @@ pub(crate) fn host_library_dir(
                 .iter()
                 .all(|c| d.join(c.library_name(spec)).is_file())
         })
-        .and_then(|d| d.canonicalize().ok())
+        .and_then(|d| dunce::canonicalize(d).ok())
 }
 
 fn mtime(path: &Path) -> Option<std::time::SystemTime> {

@@ -1,12 +1,19 @@
+/* Assertions here carry the calls under test, so they must survive optimized builds. */
+#undef NDEBUG
 #include "../crates/dream-mir/src/runtime/c/sys/native/include/dream_thread.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+
+#if defined(_WIN32)
+typedef unsigned(__stdcall *thread_body)(void *);
+#else
+typedef void *(*thread_body)(void *);
+#endif
 
 static int fail_start;
-static int start_worker(dream_thread *thread, void *(*body)(void *), void *arg) {
+static int start_worker(dream_thread *thread, thread_body body, void *arg) {
     return fail_start ? -1 : dream_thread_start(thread, body, arg);
 }
 
@@ -212,8 +219,23 @@ static void termination_boundaries(void) {
     assert(debug_get_live_objects() == 0);
 }
 
+static DREAM_THREAD_PROC(watchdog) {
+    (void)arg;
+    dream_mutex mu = DREAM_MUTEX_INIT;
+    dream_cond cv = DREAM_COND_INIT;
+    int64_t deadline = dream_monotonic_ns() + 30000000000LL;
+    dream_mutex_lock(&mu);
+    for (int64_t now = dream_monotonic_ns(); now < deadline; now = dream_monotonic_ns()) {
+        dream_cond_wait_ns(&cv, &mu, deadline - now);
+    }
+    fputs("worker harness timed out\n", stderr);
+    abort();
+}
+
 int main(int argc, char **argv) {
-    alarm(30);
+    dream_thread guard;
+    assert(dream_thread_start(&guard, watchdog, NULL) == 0);
+    dream_thread_release(guard);
     if (argc > 1) {
         if (strcmp(argv[1], "start-failure") == 0) { fail_start = 1; }
         else { next_id = (int64_t)INT32_MAX + 1; }

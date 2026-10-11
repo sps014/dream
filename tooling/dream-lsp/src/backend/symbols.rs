@@ -109,7 +109,7 @@ impl Backend {
                     if !s.name.to_lowercase().contains(&lower_query) {
                         continue;
                     }
-                    let Ok(path) = std::path::PathBuf::from(&s.path).canonicalize() else {
+                    let Ok(path) = dunce::canonicalize(&s.path) else {
                         continue;
                     };
                     let Some(text) = std::fs::read_to_string(&path).ok() else {

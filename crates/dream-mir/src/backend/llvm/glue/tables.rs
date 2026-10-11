@@ -466,6 +466,15 @@ fn emit_runtime_init(l: &mut Lcx<'_>) {
         }
     } else {
         fx.call("dream_thread_attach", &[]);
+        if fx
+            .l
+            .mir
+            .imports
+            .iter()
+            .any(crate::backend::shared::abi_types::is_c_import)
+        {
+            fx.call("dream_worker_isolate_threads", &[]);
+        }
         if !dream_abi::host_capability::HostCapability::required_for_imports(
             fx.l.mir
                 .imports

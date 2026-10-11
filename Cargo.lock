@@ -806,6 +806,7 @@ dependencies = [
  "dream-sema",
  "dream-stdlib",
  "dream-types",
+ "dunce",
  "indexmap",
  "serde",
  "serde_json",

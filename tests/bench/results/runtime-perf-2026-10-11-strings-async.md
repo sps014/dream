@@ -20,8 +20,8 @@ Follow-up to `runtime-perf-2026-10-09.md`. Native, current against C# on the sam
   just fails to match instead of failing the whole call. `log_processor` regex stage 154 -> 110 µs.
 - **Futures.** Every future came from the locked shared heap and freed back through it, and
   every `dream_await` took the foreign-completion lock. Futures are now private allocations
-  (`dream_complete_foreign`, the only cross-thread path, already publishes the frame) and only
-  host-kind children take the lock. 64×4 fan-out with `Promise.all`: 48.6 -> 22.4 µs; micro
+  (`dream_complete_foreign`, the only cross-thread path, already publishes the frame), and
+  `dream_await` takes no lock; see "Foreign completions" below. 64×4 fan-out with `Promise.all`: 48.6 -> 22.4 µs; micro
   `async_poll` 82 -> 31.5 ns, `scheduler_queue` 306 -> 107 ns.
 
 ## Native header 32 -> 16 bytes
@@ -106,3 +106,30 @@ keep the heap pointer flat; it used to grow 2 MiB per task.
 | log_processor | 954,825 | 0.97 |
 | graph_paths | 779,208 | 1.03 |
 | task_parallel | 256,499 | ~0.95 (old completes only with one pass per process) |
+
+## Foreign completions, C thread-locals, Windows toolchain
+
+- **Per-thread foreign queue.** `dream_complete_foreign` pushed into one process-wide queue that
+  whichever scheduler polled first drained, so a result completed for a `Task` could resume on
+  `main`'s thread. Each scheduler now owns its queue and condition variable, and a deferred
+  `@async_host` future records the scheduler it completes into (the native future's `results`
+  and `due` words became one `scheduler` word: futures are 8 bytes smaller natively). A
+  cancelled in-flight call keeps its frame alive until the host completes it; before, the
+  completion wrote into a freed future. `dream_complete_foreign` is now exported from embedded
+  builds and declared in `dream_embed.h`.
+- **C thread-locals.** Pooled native threads let a `Task` observe C thread-locals (`errno`
+  included) left by an earlier one; wasm workers restart theirs. A program that links C now
+  gives every `Task` session a thread of its own; pure Dream programs keep the pool.
+- **Windows.** `std::fs::canonicalize` returned `\\?\` paths that clang and the C includes
+  rejected; every site uses `dunce`. MSVC links always take `oldnames`, Zig compiles MSVC C++
+  with its C driver (its own libc++ clashes with the MSVC STL) and receives the export `.def`
+  positionally. The 11 Windows-only test failures are gone, and `tests/runtime_worker.c` builds
+  with the pinned clang on Windows as well as Unix.
+
+`task_parallel` against C#, 10 rounds × 3 passes: 87.5 µs vs 74.0 µs, CI 0.96-1.26
+(inconclusive). Dream clusters at 88 µs with runs down to 51 µs; C# spreads over 61-104 µs.
+Chunks take 5.6 µs on pool threads (6.5 µs on `main`), so the time is thread wake-up on idle
+cores: 16 no-op tasks cost 27 µs, of which posting is 0.8 µs per task. Spinning idle pool
+threads before parking (20-30 µs budget) made the 16-chunk fan-out slower on this hybrid CPU
+(57 -> 61-95 µs) and was not kept. `scratch_arena` is at parity (0.58 vs 0.57 ns). The
+`Buffer.realloc` step cost is still unexplained; no profiler is available on this runner.

@@ -239,10 +239,9 @@ mod abi_h_lockstep {
         assert_eq!(w.children, 28);
         assert_eq!(w.count, 32);
         assert_eq!(w.remaining, 36);
-        assert_eq!(w.results, 40);
+        assert_eq!(w.scheduler, 40);
         assert_eq!(w.next, 44);
         assert_eq!(w.queued, 48);
-        assert_eq!(w.due, 52);
         assert_eq!(w.wide, 56);
         assert_eq!(w.slots, 64);
         assert_eq!(w.esize, 0);
@@ -258,10 +257,9 @@ mod abi_h_lockstep {
             ("F_CHILDREN_WASM", w.children),
             ("F_COUNT_WASM", w.count),
             ("F_REMAINING_WASM", w.remaining),
-            ("F_RESULTS_WASM", w.results),
+            ("F_SCHEDULER_WASM", w.scheduler),
             ("F_NEXT_WASM", w.next),
             ("F_QUEUED_WASM", w.queued),
-            ("F_DUE_WASM", w.due),
             ("F_WIDE_WASM", w.wide),
             ("F_SLOTS_WASM", w.slots),
         ] {
@@ -284,10 +282,9 @@ mod abi_h_lockstep {
             ("F_CHILDREN_NATIVE", n.children),
             ("F_COUNT_NATIVE", n.count),
             ("F_REMAINING_NATIVE", n.remaining),
-            ("F_RESULTS_NATIVE", n.results),
+            ("F_SCHEDULER_NATIVE", n.scheduler),
             ("F_NEXT_NATIVE", n.next),
             ("F_QUEUED_NATIVE", n.queued),
-            ("F_DUE_NATIVE", n.due),
             ("F_ESIZE_NATIVE", n.esize),
             ("F_WIDE_NATIVE", n.wide),
             ("F_SLOTS_NATIVE", n.slots),

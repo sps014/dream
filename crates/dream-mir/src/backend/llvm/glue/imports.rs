@@ -246,14 +246,14 @@ fn async_bridge(l: &mut Lcx<'_>, imp: &HImport, poll_idx: usize) {
             a.extend(saved);
             fx.call(&host, &a);
         } else if imp.async_host {
-            fx.call("dream_foreign_work_begin", &[]);
+            fx.call("dream_foreign_work_begin", std::slice::from_ref(&s));
             let mut a = vec![s.clone()];
             a.extend(saved);
             let deferred = fx.call_v(&format!("{host}Async"), &a);
             let sync =
                 fx.w.icmp("eq", &deferred.v, &Value::zero(deferred.ty().clone()));
             fx.if_then(&sync, |fx| {
-                fx.call("dream_foreign_work_end", &[]);
+                fx.call("dream_foreign_work_end", std::slice::from_ref(&s));
             });
         } else if host_ret.is_void() {
             fx.call(&host, &saved);

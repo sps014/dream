@@ -78,6 +78,18 @@ fn sanitizer_passes(
     }
 }
 
+/// System libraries every native link needs. MSVC keeps POSIX names such as `strdup` in
+/// `oldnames`, which only `cl` links by default.
+fn system_libs(spec: &dream_abi::target::TargetSpec) -> &'static [&'static str] {
+    if spec.is_msvc() {
+        &["-loldnames"]
+    } else if spec.is_windows() {
+        &[]
+    } else {
+        &["-lm", "-lpthread"]
+    }
+}
+
 /// Explicit module exports, the embedding API, and native-source runtime anchors.
 fn public_api_list(exports: &[String]) -> String {
     let mut list = EMBED_EXPORTS.to_vec();
@@ -492,9 +504,7 @@ pub fn compile_llvm(
             link_runtime(&mut host, dir, None, &capabilities, &spec, false);
         }
         flags.extend(host.get_args().map(|a| a.to_string_lossy().into_owned()));
-        if !spec.is_windows() {
-            flags.extend(["-lm".to_string(), "-lpthread".to_string()]);
-        }
+        flags.extend(system_libs(&spec).iter().map(|l| l.to_string()));
         let libs = read_c_libs_from_abi(&abi_path);
         flags.extend(cc_link_flags(
             config,
@@ -553,6 +563,8 @@ pub fn compile_llvm(
             version.patch
         ));
     }
+    let zig_driver =
+        *pgo != Pgo::Generate && sanitize.is_none() && matches!(driver, cc::Cc::Zig(_));
     let export_file = if output_kind == OutputKind::Dylib {
         Some(library::shared_flags(
             &mut lcmd,
@@ -560,6 +572,7 @@ pub fn compile_llvm(
             &bin,
             &library::exports(&abi_path)?,
             &spec,
+            zig_driver,
         )?)
     } else {
         None
@@ -571,12 +584,8 @@ pub fn compile_llvm(
     if let Some(png) = &icon_png.as_ref().filter(|_| spec.is_windows()) {
         lcmd.arg(icon::windows_resource(&tools, ll_path, png)?);
     }
-    if !spec.is_windows() {
-        lcmd.args(["-lm", "-lpthread"]);
-    }
+    lcmd.args(system_libs(&spec));
     if let Some(dir) = &dir {
-        let zig_driver =
-            *pgo != Pgo::Generate && sanitize.is_none() && matches!(driver, cc::Cc::Zig(_));
         link_runtime(
             &mut lcmd,
             dir,

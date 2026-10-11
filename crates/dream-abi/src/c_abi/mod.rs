@@ -73,11 +73,12 @@ pub fn is_c_identifier(name: &str) -> bool {
 
 /// The embedding API declared by the public `include/dream_embed.h`; every native program keeps
 /// these exported so C linked into it can call them.
-pub const EMBED_EXPORTS: [&str; 6] = [
+pub const EMBED_EXPORTS: [&str; 7] = [
     "dream_thread_attach",
     "dream_thread_detach",
     "dream_retain",
     "dream_release",
+    "dream_complete_foreign",
     "dream_set_panic_hook",
     "dream_set_platform",
 ];

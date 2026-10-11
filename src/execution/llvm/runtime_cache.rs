@@ -102,7 +102,7 @@ fn include_namespace(path: &Path, cache: Option<&Path>) -> Option<String> {
     let mut pending = directories.clone();
     let mut visited = std::collections::BTreeSet::new();
     while let Some(dir) = pending.pop() {
-        if dir.exists() && !visited.insert(std::fs::canonicalize(&dir).ok()?) {
+        if dir.exists() && !visited.insert(dunce::canonicalize(&dir).ok()?) {
             continue;
         }
         if let Ok(entries) = std::fs::read_dir(&dir) {

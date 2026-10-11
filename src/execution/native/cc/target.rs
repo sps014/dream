@@ -13,7 +13,9 @@ pub(super) fn command(
     let mut command = match cc {
         Cc::Zig(path) => {
             let mut command = Command::new(path);
-            command.arg(if cxx { "c++" } else { "cc" });
+            // `zig c++` builds its own libc++, which cannot coexist with the MSVC headers; `zig cc`
+            // compiles C++ against the MSVC STL, whose headers name their own import libraries.
+            command.arg(if cxx && !spec.is_msvc() { "c++" } else { "cc" });
             let os = if spec.is_windows() {
                 "windows"
             } else if spec.is_ios() {
@@ -89,5 +91,18 @@ mod tests {
             let command = command(&driver, &config, &spec, false).unwrap();
             assert!(command.get_args().any(|arg| arg == expected));
         }
+    }
+
+    #[test]
+    fn zig_compiles_msvc_cxx_with_the_c_driver() {
+        let config = ToolchainConfig::default();
+        let driver = Cc::Zig("zig".into());
+        let first = |triple: &str| {
+            let spec = TargetSpec::parse(triple).unwrap();
+            let command = command(&driver, &config, &spec, true).unwrap();
+            command.get_args().next().unwrap().to_owned()
+        };
+        assert_eq!(first("x86_64-pc-windows-msvc"), "cc");
+        assert_eq!(first("x86_64-unknown-linux-gnu"), "c++");
     }
 }

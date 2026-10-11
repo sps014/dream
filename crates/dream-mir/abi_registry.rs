@@ -203,10 +203,10 @@ pub struct FutureLayout {
     pub children: u32,
     pub count: u32,
     pub remaining: u32,
-    pub results: u32,
+    /// Native: the scheduler a deferred `@async_host` future completes into.
+    pub scheduler: u32,
     pub next: u32,
     pub queued: u32,
-    pub due: u32,
     /// Combinator element size.
     pub esize: u32,
     pub wide: u32,
@@ -231,10 +231,9 @@ impl FutureLayout {
         let children = place(&mut c, ptr_size, ptr_align);
         let count = place(&mut c, 4, 4);
         let remaining = place(&mut c, 4, 4);
-        let results = place(&mut c, ptr_size, ptr_align);
+        let scheduler = place(&mut c, ptr_size, ptr_align);
         let next = place(&mut c, ptr_size, ptr_align);
         let queued = place(&mut c, 4, 4);
-        let due = place(&mut c, 4, 4);
         let esize = if native { place(&mut c, 4, 4) } else { 0 };
         let wide = place(&mut c, 8, 8);
         let slots = align_up(c, 8);
@@ -249,10 +248,9 @@ impl FutureLayout {
             children,
             count,
             remaining,
-            results,
+            scheduler,
             next,
             queued,
-            due,
             esize,
             wide,
             slots,

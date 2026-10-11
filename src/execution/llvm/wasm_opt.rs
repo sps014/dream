@@ -8,23 +8,6 @@ use std::sync::{Arc, Mutex};
 
 const MISSING: &str =
     "Binaryen not found; run `dreamer toolchain install binaryen` or set DREAM_WASM_OPT";
-const FEATURES: &[&str] = &[
-    "--mvp-features",
-    "--enable-mutable-globals",
-    "--enable-sign-ext",
-    "--enable-nontrapping-float-to-int",
-    "--enable-bulk-memory",
-    "--enable-reference-types",
-    "--enable-multivalue",
-    "--enable-simd",
-    "--enable-multimemory",
-    "--enable-relaxed-simd",
-    "--enable-tail-call",
-    "--enable-extended-const",
-    "--enable-threads",
-    "--enable-exception-handling",
-];
-
 pub fn optimize(path: &Path, level: OptLevel, config: &Arc<ToolchainConfig>) -> Result<(), String> {
     let binary = resolve(config)?;
     let mut command = Command::new(binary);
@@ -33,8 +16,9 @@ pub fn optimize(path: &Path, level: OptLevel, config: &Arc<ToolchainConfig>) -> 
         .arg("-o")
         .arg(path)
         .arg(level.as_cli_flag())
-        .arg("--converge")
-        .args(FEATURES);
+        // No --enable-* flags: Binaryen takes features from wasm-ld's target_features
+        // section, so the output never advertises proposals the module doesn't use.
+        .arg("--converge");
     if matches!(level, OptLevel::Size | OptLevel::SizeAggressive) {
         command.args(["--strip-debug", "--strip-producers"]);
     }

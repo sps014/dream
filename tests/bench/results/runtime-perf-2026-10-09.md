@@ -101,3 +101,23 @@ losing the runtime inlining.
 Native rows `substring`, `map_get_span` and `json_serialize` that drifted in Phase 1 have
 identical machine code across builds (code layout). Follow-up: `leak_diagnostics` can flake while
 the runtime cache rebuilds concurrently.
+
+## Phase 2: wasm calling convention (2026-10-11)
+
+Measured before building; only the feature-flag change shipped.
+
+- **Multivalue span returns: no.** After inlining, only `format_g` still returns a value type
+  through a caller buffer (10 wasm call sites, 2 native) in the microbenches, and none in the
+  macro suite. LLVM's multivalue lowering also needs `-target-abi=experimental-mv`, which changes
+  libcall signatures (`__multi3` and other i128 helpers) away from the prebuilt compiler-rt.
+- **SSA `Vector<T>`: no.** SROA already keeps `vec_add` in `<4 x float>` registers; the wasm hot
+  loop is unaligned `v128` load/add/store unrolled ×2 with no allocas or bounds checks.
+- **Interface guard: working.** On wasm the four-implementor `iface_dispatch` loop switches on the
+  tag with all four `apply` bodies inlined; the itable call is only the fallback. The remaining
+  2.5× gap is the for-each retain of each element plus an out-of-line `dream_release_object` of
+  the previous one, which is ARC elision work (borrowed iteration), not ABI.
+- **Binaryen features: shipped.** `wasm-opt` was forced to enable exception handling, tail calls,
+  relaxed SIMD, extended-const and multi-memory, none of which the module used, and wrote them
+  into the output's `target_features` section (relaxed SIMD alone rules out Safari). It now
+  reads features from wasm-ld's section. Microbench module 787,247 → 787,083 B, same compile
+  time; C++ exception packages still detect EH (`wasm_interop` passes at all levels).

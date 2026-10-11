@@ -259,6 +259,11 @@ DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
         *rc = v + 1;
         return;
     }
+    /* Literals and pinned singletons are immortal; checked inline so retaining one, as every
+     * span over a literal does, never leaves the caller. */
+    if (v == DREAM_RC_IMMORTAL) {
+        return;
+    }
     dream_retain_slow(rc, v);
 }
 

@@ -23,27 +23,29 @@ comparisons rotate arms ABBA-style inside one campaign and never compare across 
 
 ## Native vs wasm (HEAD, ns/op, sorted by gap)
 
-| bench | native | wasm | wasm/native |
-|---|---|---|---|
-| vec_add | 37.37 | 191 | 5.12 |
-| map_get_span | 5.34 | 16.30 | 3.05 |
-| split_span | 41.78 | 120 | 2.88 |
-| alloc_churn | 12.03 | 32.89 | 2.73 |
-| binary_trees_alloc | 27,955 | 73,934 | 2.64 |
-| wordcount | 17.22 | 44.04 | 2.56 |
-| arc_locals | 11.72 | 29.22 | 2.49 |
-| iface_dispatch | 3.04 | 7.57 | 2.49 |
-| substring | 1.66 | 4.10 | 2.47 |
-| string_builder | 6.93 | 16.47 | 2.38 |
-| sieve | 2,135 | 4,962 | 2.32 |
-| list_push | 0.67 | 1.46 | 2.20 |
-| json_deserialize | 889 | 1,822 | 2.05 |
-| json_serialize | 246 | 488 | 1.98 |
-| map_get_set | 3.39 | 6.19 | 1.82 |
-| set_probe | 11.98 | 21.06 | 1.76 |
-| binary_trees | 47,285 | 40,547 | 0.86 |
-| char_scan | 24.27 | 20.32 | 0.84 |
-| closure_dispatch | 3.23 | 1.49 | 0.46 |
+
+| bench              | native | wasm   | wasm/native |
+| ------------------ | ------ | ------ | ----------- |
+| vec_add            | 37.37  | 191    | 5.12        |
+| map_get_span       | 5.34   | 16.30  | 3.05        |
+| split_span         | 41.78  | 120    | 2.88        |
+| alloc_churn        | 12.03  | 32.89  | 2.73        |
+| binary_trees_alloc | 27,955 | 73,934 | 2.64        |
+| wordcount          | 17.22  | 44.04  | 2.56        |
+| arc_locals         | 11.72  | 29.22  | 2.49        |
+| iface_dispatch     | 3.04   | 7.57   | 2.49        |
+| substring          | 1.66   | 4.10   | 2.47        |
+| string_builder     | 6.93   | 16.47  | 2.38        |
+| sieve              | 2,135  | 4,962  | 2.32        |
+| list_push          | 0.67   | 1.46   | 2.20        |
+| json_deserialize   | 889    | 1,822  | 2.05        |
+| json_serialize     | 246    | 488    | 1.98        |
+| map_get_set        | 3.39   | 6.19   | 1.82        |
+| set_probe          | 11.98  | 21.06  | 1.76        |
+| binary_trees       | 47,285 | 40,547 | 0.86        |
+| char_scan          | 24.27  | 20.32  | 0.84        |
+| closure_dispatch   | 3.23   | 1.49   | 0.46        |
+
 
 Rows within ±25% are omitted. Peak RSS: native 85 MB (the old ~1 GB gap is closed); wasm under
 Node 757 MB, because linear memory only grows.
@@ -56,13 +58,15 @@ costs (allocator release path and indirect-call lowering), not at wasm being fas
 Application-shaped work in `tests/bench/macro/`, with C# twins whose integer checksums must
 match exactly. First single-process reading (native, ns/op):
 
-| bench | Dream | C# | Dream/C# |
-|---|---|---|---|
-| json_service | 8,768 | 44,886 | 0.20 |
-| log_processor | 1,753,700 | 1,067,583 | 1.64 |
-| graph_paths | 2,057,640 | 808,327 | 2.55 |
-| async_fanout | 83,565 | 123,124 | 0.68 |
-| task_parallel | 2,202,440 | 1,135,081 | 1.94 |
+
+| bench         | Dream     | C#        | Dream/C# |
+| ------------- | --------- | --------- | -------- |
+| json_service  | 8,768     | 44,886    | 0.20     |
+| log_processor | 1,753,700 | 1,067,583 | 1.64     |
+| graph_paths   | 2,057,640 | 808,327   | 2.55     |
+| async_fanout  | 83,565    | 123,124   | 0.68     |
+| task_parallel | 2,202,440 | 1,135,081 | 1.94     |
+
 
 Unlike the micro suite, three of five application workloads lose to C#. `graph_paths`
 (class nodes, `PriorityQueue` of small objects, ARC traffic), `task_parallel` (worker spawn and
@@ -80,16 +84,18 @@ wasm compares 8-byte words directly: an inlined `memcmp(...) == 0` reached codeg
 
 Paired wasm run against `fc499d07` (8 rounds × 5 passes, loaded machine):
 
-| bench | cur/base | | bench | cur/base |
-|---|---|---|---|---|
-| vec_add | 0.18 | | json_deserialize | 0.70 |
-| binary_trees_alloc | 0.43 | | split_span | 0.77 |
-| alloc_churn | 0.56 | | weak_tree | 0.77 |
-| string_eq | 0.56 | | json_serialize | 0.80 |
-| arc_locals | 0.57 | | scheduler_queue | 0.83 |
-| set_probe | 0.68 | | regex_find | 0.89 |
-| substring, sum_options | 0.68–0.69 | | **binary_trees(_reclaim)** | **1.41–1.45** |
-| | | | **closure_dispatch** | **1.29** |
+
+| bench                  | cur/base  |     | bench                      | cur/base      |
+| ---------------------- | --------- | --- | -------------------------- | ------------- |
+| vec_add                | 0.18      |     | json_deserialize           | 0.70          |
+| binary_trees_alloc     | 0.43      |     | split_span                 | 0.77          |
+| alloc_churn            | 0.56      |     | weak_tree                  | 0.77          |
+| string_eq              | 0.56      |     | json_serialize             | 0.80          |
+| arc_locals             | 0.57      |     | scheduler_queue            | 0.83          |
+| set_probe              | 0.68      |     | regex_find                 | 0.89          |
+| substring, sum_options | 0.68–0.69 |     | **binary_trees(_reclaim)** | **1.41–1.45** |
+|                        |           |     | **closure_dispatch**       | **1.29**      |
+
 
 Other rows are inconclusive within ±5%. The three regressions are V8 speculative-inlining
 effects, not codegen: the hot loops and the closure body are byte-identical to the baseline's,
@@ -107,20 +113,22 @@ the runtime cache rebuilds concurrently.
 Measured before building; only the feature-flag change shipped.
 
 - **Multivalue span returns: no.** After inlining, only `format_g` still returns a value type
-  through a caller buffer (10 wasm call sites, 2 native) in the microbenches, and none in the
-  macro suite. LLVM's multivalue lowering also needs `-target-abi=experimental-mv`, which changes
-  libcall signatures (`__multi3` and other i128 helpers) away from the prebuilt compiler-rt.
-- **SSA `Vector<T>`: no.** SROA already keeps `vec_add` in `<4 x float>` registers; the wasm hot
-  loop is unaligned `v128` load/add/store unrolled ×2 with no allocas or bounds checks.
+through a caller buffer (10 wasm call sites, 2 native) in the microbenches, and none in the
+macro suite. LLVM's multivalue lowering also needs `-target-abi=experimental-mv`, which changes
+libcall signatures (`__multi3` and other i128 helpers) away from the prebuilt compiler-rt.
+- **SSA** `Vector<T>`**: no.** SROA already keeps `vec_add` in `<4 x float>` registers; the wasm hot
+loop is unaligned `v128` load/add/store unrolled ×2 with no allocas or bounds checks.
 - **Interface guard: working.** On wasm the four-implementor `iface_dispatch` loop switches on the
-  tag with all four `apply` bodies inlined; the itable call is only the fallback. The remaining
-  2.5× gap is the for-each retain of each element plus an out-of-line `dream_release_object` of
-  the previous one, which is ARC elision work (borrowed iteration), not ABI.
+tag with all four `apply` bodies inlined; the itable call is only the fallback. The remaining
+2.5× gap is the for-each retain of each element plus an out-of-line `dream_release_object` of
+the previous one, which is ARC elision work (borrowed iteration), not ABI.
 - **Binaryen features: shipped.** `wasm-opt` was forced to enable exception handling, tail calls,
-  relaxed SIMD, extended-const and multi-memory, none of which the module used, and wrote them
-  into the output's `target_features` section (relaxed SIMD alone rules out Safari). It now
-  reads features from wasm-ld's section. Microbench module 787,247 → 787,083 B, same compile
-  time; C++ exception packages still detect EH (`wasm_interop` passes at all levels).
+relaxed SIMD, extended-const and multi-memory, none of which the module used, and wrote them
+into the output's `target_features` section (relaxed SIMD alone rules out Safari). It now
+reads features from wasm-ld's section. Microbench module 787,247 → 787,083 B, same compile
+time; C++ exception packages still detect EH (`wasm_interop` passes at all levels).
+
+
 
 ## Phase 3: Task fan-out (2026-10-11, Windows x64)
 
@@ -131,14 +139,16 @@ before the change: native micro 88 MB, native macro 21 MB (C# 58 MB), wasm micro
 Two causes:
 
 - Every `Task` session started and joined its own OS thread: 16 empty tasks cost 759 µs. A
-  finished worker now parks its thread (up to 64) for the next `workerSpawn`; `workerTerminate`
-  waits for the session to finish instead of joining the thread. Empty fan-out: 759 → 47 µs.
+finished worker now parks its thread (up to 64) for the next `workerSpawn`; `workerTerminate`
+waits for the session to finish instead of joining the thread. Empty fan-out: 759 → 47 µs.
 - `Task.map` awaited lazily-started per-item spawn futures in order, so items ran one at a time.
-  It now posts every item before the first await (`TaskGroup` owns the sessions).
+It now posts every item before the first await (`TaskGroup` owns the sessions).
+
 
 | macro (3 rounds) | before cur/C# | after cur/C# |
-|---|---|---|
-| task_parallel | 10.57 | 1.76 |
+| ---------------- | ------------- | ------------ |
+| task_parallel    | 10.57         | 1.76         |
+
 
 Macro peak RSS 21.1 → 8.3 MB. `TaskGroup` teardown waited for each worker in turn; a new
 `workerShutdown` host stops every member before `workerTerminate` waits on any (a no-op in
@@ -149,35 +159,39 @@ measured and is not shipped.
 ## Phase 3: regex JIT and wasm large blocks (2026-10-11, Windows x64)
 
 - **PCRE2 JIT was never on.** `regex.c` gated `pcre2_jit_compile` on `SUPPORT_JIT`, which only
-  the vendor `config.h` defines and `regex.c` never includes, so native regexes ran in the
-  interpreter. Now gated on `DREAM_NATIVE`. `regex_test` also matches directly with a reused
-  per-thread match block instead of building and dropping a capture array per call.
-  Native `regex_find` 0.35×; `log_processor` 2.13 → 1.32× C#.
+the vendor `config.h` defines and `regex.c` never includes, so native regexes ran in the
+interpreter. Now gated on `DREAM_NATIVE`. `regex_test` also matches directly with a reused
+per-thread match block instead of building and dropping a capture array per call.
+Native `regex_find` 0.35×; `log_processor` 2.13 → 1.32× C#.
 - **Wasm linear memory grew on every pass with no leak.** Private allocations past the 64 KB
-  classes were bump-allocated from the slab but freed onto the large list, so they were never
-  reused, and each large request also abandoned the rest of the 2 MB slab. They now come from
-  the large list first (or a claim of exactly their size), and a refill returns the old slab's
-  tail to that list. Linear memory after 1/3/6 passes: 233/449/774 MB → 68.7 MB flat. Peak RSS
-  under Node 490 → 143 MB. Wasm `string_builder` 0.36×, `list_push` 0.62×, `set_probe` 0.61×;
-  other rows within run-to-run drift.
+classes were bump-allocated from the slab but freed onto the large list, so they were never
+reused, and each large request also abandoned the rest of the 2 MB slab. They now come from
+the large list first (or a claim of exactly their size), and a refill returns the old slab's
+tail to that list. Linear memory after 1/3/6 passes: 233/449/774 MB → 68.7 MB flat. Peak RSS
+under Node 490 → 143 MB. Wasm `string_builder` 0.36×, `list_push` 0.62×, `set_probe` 0.61×;
+other rows within run-to-run drift.
 
-| macro (3 rounds) | Phase 3 start | now |
-|---|---|---|
-| task_parallel | 10.57 | 1.22 |
-| log_processor | 2.15 | 1.28 |
-| async_fanout | 1.13 | 0.90 (inconclusive) |
-| graph_paths | 0.66 | 0.67 |
-| json_service | 0.13 | 0.12 |
+
+| macro (3 rounds) | Phase 3 start | now                 |
+| ---------------- | ------------- | ------------------- |
+| task_parallel    | 10.57         | 1.22                |
+| log_processor    | 2.15          | 1.28                |
+| async_fanout     | 1.13          | 0.90 (inconclusive) |
+| graph_paths      | 0.66          | 0.67                |
+| json_service     | 0.13          | 0.12                |
+
 
 Measured and not pursued:
 
 - **Smaller object header:** memory is no longer the constraint. Native micro peaks at 88 MB and
-  stays flat across passes, the macro suite at 8 MB against C#'s 57 MB, and wasm linear memory
-  at 69 MB. A 16 → 8 byte header would touch the layout constant shared by codegen and every
-  runtime unit, for a few percent of footprint on allocation-heavy rows.
+stays flat across passes, the macro suite at 8 MB against C#'s 57 MB, and wasm linear memory
+at 69 MB. A 16 → 8 byte header would touch the layout constant shared by codegen and every
+runtime unit, for a few percent of footprint on allocation-heavy rows.
 - **Lock-free cross-thread frees:** no workload frees across threads in a measurable amount.
-  `task_parallel`'s remaining cost is worker wake-up and teardown, and the other macro losses
-  run on one thread.
+`task_parallel`'s remaining cost is worker wake-up and teardown, and the other macro losses
+run on one thread.
+
+
 
 ## Borrowed for-each and borrowed-param ARC elision (2026-10-11, Windows x64)
 
@@ -190,13 +204,15 @@ and LLVM vectorizes the latter.
 
 Current against HEAD compiled by the same runner (micro 8 rounds native / 6 wasm, macro 8):
 
-| bench | native cur/base | wasm cur/base |
-|---|---|---|
-| iface_dispatch | 0.30 | 0.37 |
-| parse_ints | 0.86 | 0.74 |
-| string_eq | 0.91 | 1.00 |
-| map_get_span | 0.93 | 1.00 |
-| binary_trees | 1.11 | 1.00 |
+
+| bench          | native cur/base | wasm cur/base |
+| -------------- | --------------- | ------------- |
+| iface_dispatch | 0.30            | 0.37          |
+| parse_ints     | 0.86            | 0.74          |
+| string_eq      | 0.91            | 1.00          |
+| map_get_span   | 0.93            | 1.00          |
+| binary_trees   | 1.11            | 1.00          |
+
 
 Only `bench_iface_dispatch` and `bench_parse_ints` differ in the optimized microbench IR, so
 `string_eq` and `map_get_span` were not changed by the pass. Native `binary_trees` repeats at
@@ -205,3 +221,28 @@ assembly too; the two functions that shrank moved these hot functions to new add
 wasm the row is flat. In the macro suite
 `make_graph` drops from 16 RC operations to 2 and `shortest_sum` from 115 to 99; `graph_paths`
 0.98, the other rows within drift. Peak RSS unchanged.
+## Immortal retains and the remaining C# losses (2026-10-11, Windows x64)
+
+`dream_retain`'s inline fast path only took live counts, so every retain of a string literal or
+pinned singleton (`DREAM_RC_IMMORTAL`) became an out-of-line `dream_retain_slow` call that just
+returned. A `ReadOnlySpan` over a literal retains its source on every slice: the `split_span`
+loop made up to five such calls per piece. The immortal test is now inline, as it already was
+in `dream_release`. Microbench module call sites 244 ? 92; `split_span` 81 ? 16.3 ns native
+(2.47 ? 0.42� C#) and 37.6 ? 17.8 ns wasm. Other rows are unchanged.
+
+Native micro and macro rows still behind C#, and why:
+
+- **`log_processor` 1.33�:** per iteration roughly 80 �s splitting lines, 165 �s splitting words
+  (about 12 ns per allocated piece), 70 �s concat + `Map`, 150 �s regex. `split` already finds
+  separators with the inlined `view_find_char` and copies once per piece, like .NET; the
+  remaining cost is allocation and copying, which needs a profile rather than a single fix.
+- **`scratch_arena` 1.41� (sub-timer row):** the loop has no RC and no calls; it is three bounds
+  checks and a signed `/ 2` that LLVM cannot drop because it does not know `used >= 0`.
+- **`linked_walk` 1.16�:** the hop is two loads and a null test. Walking 256-2048 node chains
+  costs 0.92 ns/hop, the same as C#, except at exactly 1024 nodes (1.00-1.02): 48-byte nodes
+  (32-byte native header + 16-byte payload) make that chain 48 KB, the P-core L1D size, while
+  .NET's 32-byte nodes fit. Only a smaller native header would move it.
+- **`task_parallel` 1.16� (wide CI):** spin-before-park on every worker wait (pool hand-off, job,
+  reply, terminate) was tried at 64/256/4096 `pause` iterations. 4096 made `Task.map` 3-4�
+  slower by competing with the working threads; 64-256 were within this machine's run-to-run
+  spread (map 90-146 �s unchanged). Not shipped.

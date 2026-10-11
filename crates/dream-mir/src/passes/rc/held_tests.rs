@@ -169,3 +169,69 @@ fn snapshot_handed_to_a_sink_keeps_the_pair() {
     run(&t, &mut s, false);
     assert_eq!(rc_ops(&s.func, s.x), 2);
 }
+
+#[test]
+fn snapshot_moved_into_the_loop_binding_drops_every_pair() {
+    let t = types();
+    let mut b = FunctionBuilder::new("f", t.i.void());
+    let base = b.new_param(t.boxed, Some("base".into()));
+    let x = b.new_local(t.i.string(), None);
+    let n = b.new_local(t.i.string(), Some("n".into()));
+    b.assign(
+        Place::Local(x),
+        Rvalue::Use(Operand::Copy(Place::Field { base, field: 0 })),
+    );
+    b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+    b.assign(Place::Local(n), Rvalue::Move { src: x, cast: None });
+    b.assign(Place::Local(x), Rvalue::Use(Operand::Const(Const::Null)));
+    b.push(peek_call(&t, n));
+    b.push(Statement::Release(Operand::Copy(Place::Local(n))));
+    b.terminate(Terminator::Return(None));
+    let mut s = Snap {
+        func: b.finish(),
+        x,
+    };
+    run(&t, &mut s, false);
+    assert_eq!(rc_ops(&s.func, x) + rc_ops(&s.func, n), 0);
+}
+
+/// `fun g(p: borrow string) { c = p; Retain(c); peek(c); <tail> }`.
+fn param_copy(t: &Types, return_param: bool) -> Snap {
+    let ret = if return_param {
+        t.i.string()
+    } else {
+        t.i.void()
+    };
+    let mut b = FunctionBuilder::new("g", ret);
+    let p = b.new_param(t.i.string(), Some("p".into()));
+    let c = b.new_local(t.i.string(), None);
+    b.assign(Place::Local(c), Rvalue::Use(Operand::Copy(Place::Local(p))));
+    b.push(Statement::Retain(Operand::Copy(Place::Local(c))));
+    b.push(peek_call(t, c));
+    if return_param {
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(p)))));
+    } else {
+        b.push(Statement::Release(Operand::Copy(Place::Local(c))));
+        b.terminate(Terminator::Return(None));
+    }
+    Snap {
+        func: b.finish(),
+        x: c,
+    }
+}
+
+#[test]
+fn copy_of_a_borrowed_param_drops_its_pair() {
+    let t = types();
+    let mut s = param_copy(&t, false);
+    run(&t, &mut s, false);
+    assert_eq!(rc_ops(&s.func, s.x), 0);
+}
+
+#[test]
+fn copy_retain_standing_in_for_a_returned_param_stays() {
+    let t = types();
+    let mut s = param_copy(&t, true);
+    run(&t, &mut s, false);
+    assert_eq!(rc_ops(&s.func, s.x), 1);
+}

@@ -178,3 +178,30 @@ Measured and not pursued:
 - **Lock-free cross-thread frees:** no workload frees across threads in a measurable amount.
   `task_parallel`'s remaining cost is worker wake-up and teardown, and the other macro losses
   run on one thread.
+
+## Borrowed for-each and borrowed-param ARC elision (2026-10-11, Windows x64)
+
+`rc-held-by-owner` (`passes/rc/held.rs`) now accepts two more snapshots. A snapshot moved into
+another local keeps its class, so the for-each binding no longer retains each element and
+releases it again. A copy of a borrowed parameter is held by the caller for the whole call,
+unless some copy of it is returned or handed to a sink, where the copy's retain is that +1.
+`iface_dispatch`'s loop body and `sum_nodes` over a `borrow List<Node>` now have no atomics,
+and LLVM vectorizes the latter.
+
+Current against HEAD compiled by the same runner (micro 8 rounds native / 6 wasm, macro 8):
+
+| bench | native cur/base | wasm cur/base |
+|---|---|---|
+| iface_dispatch | 0.30 | 0.37 |
+| parse_ints | 0.86 | 0.74 |
+| string_eq | 0.91 | 1.00 |
+| map_get_span | 0.93 | 1.00 |
+| binary_trees | 1.11 | 1.00 |
+
+Only `bench_iface_dispatch` and `bench_parse_ints` differ in the optimized microbench IR, so
+`string_eq` and `map_get_span` were not changed by the pass. Native `binary_trees` repeats at
+1.11, but `make_tree`, `destroy_TreeNode` and the release functions are identical in the
+assembly too; the two functions that shrank moved these hot functions to new addresses. On
+wasm the row is flat. In the macro suite
+`make_graph` drops from 16 RC operations to 2 and `shortest_sum` from 115 to 99; `graph_paths`
+0.98, the other rows within drift. Peak RSS unchanged.

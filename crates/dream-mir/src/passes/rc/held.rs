@@ -53,6 +53,8 @@ enum Slot {
     Elem(TypeId),
     /// An (immutable) union payload.
     Payload,
+    /// The parameter itself: no heap store can replace it, only rebinding or releasing it.
+    Param,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -158,6 +160,9 @@ fn candidates(
     let mut rc_ops: IndexMap<u32, (usize, usize)> = IndexMap::new();
     // Local-to-local copies `dest = src` not followed by a retain of `dest`.
     let mut alias_defs: IndexMap<u32, Vec<u32>> = IndexMap::new();
+    // `dest = move src` between locals: the count changes hands within the frame, so it only
+    // escapes when `dest` ends up outside the snapshot's class.
+    let mut local_moves: Vec<(u32, u32)> = Vec::new();
     let mut other_defs: IndexSet<u32> = IndexSet::new();
     for block in &f.blocks {
         for (si, stmt) in block.stmts.iter().enumerate() {
@@ -174,6 +179,10 @@ fn candidates(
                                 .entry(d.0)
                                 .or_default()
                                 .push(local_of(op).expect("some"));
+                        }
+                        Rvalue::Move { src, .. } if src.0 != d.0 && !retained => {
+                            alias_defs.entry(d.0).or_default().push(src.0);
+                            local_moves.push((d.0, src.0));
                         }
                         _ => {
                             other_defs.insert(d.0);
@@ -198,9 +207,13 @@ fn candidates(
                 }
                 _ => {}
             }
-            for_each_given_away(stmt, |l| {
-                given_away.insert(l);
-            });
+            let alias_move = matches!(stmt, Statement::Assign(Place::Local(d), Rvalue::Move { src, .. })
+                if local_moves.last() == Some(&(d.0, src.0)));
+            if !alias_move {
+                for_each_given_away(stmt, |l| {
+                    given_away.insert(l);
+                });
+            }
         }
         if let Some(l) = terminator_hands_on(&block.terminator) {
             given_away.insert(l);
@@ -209,6 +222,11 @@ fn candidates(
     let mut out = BTreeMap::new();
     for (x, snap) in snaps {
         if bad_snapshot.contains(&x) || rc_ops.get(&x).map(|r| r.0) != defs.get(&x).copied() {
+            continue;
+        }
+        // Copies of a parameter are interchangeable, so after copy propagation a retain of one
+        // copy can be the count another copy returns or sinks (`_c = p; retain _c; return p`).
+        if snap.slot == Slot::Param && param_handed_on(f, snap.base, &given_away) {
             continue;
         }
         let mut class: BTreeSet<u32> = BTreeSet::from([x]);
@@ -235,11 +253,39 @@ fn candidates(
                 grew = true;
             }
         }
-        if ok && !class.iter().any(|m| given_away.contains(m)) {
+        let moved_out = local_moves
+            .iter()
+            .any(|(d, s)| class.contains(s) && !class.contains(d));
+        if ok && !moved_out && !class.iter().any(|m| given_away.contains(m)) {
             out.insert(x, Candidate { snap, class });
         }
     }
     out
+}
+
+/// Whether `p` or any local copied from it (transitively) gives a count away.
+fn param_handed_on(f: &MirFunction, p: u32, given_away: &IndexSet<u32>) -> bool {
+    let mut copies: IndexSet<u32> = IndexSet::from([p]);
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for block in &f.blocks {
+            for stmt in &block.stmts {
+                let Statement::Assign(Place::Local(d), rv) = stmt else {
+                    continue;
+                };
+                let src = match rv {
+                    Rvalue::Use(op) | Rvalue::Cast(op, _, _) => local_of(op),
+                    Rvalue::Move { src, .. } => Some(src.0),
+                    _ => None,
+                };
+                if src.is_some_and(|s| copies.contains(&s)) && copies.insert(d.0) {
+                    grew = true;
+                }
+            }
+        }
+    }
+    copies.iter().any(|c| given_away.contains(c))
 }
 
 fn load_of(f: &MirFunction, rv: &Rvalue, layouts: &LayoutTable) -> Option<Snapshot> {
@@ -266,6 +312,16 @@ fn load_of(f: &MirFunction, rv: &Rvalue, layouts: &LayoutTable) -> Option<Snapsh
             base: b.0,
             slot: Slot::Payload,
         }),
+        Rvalue::Use(Operand::Copy(Place::Local(p)))
+            if f.params.contains(p)
+                && !f.locals[p.0 as usize].is_take
+                && !f.locals[p.0 as usize].is_ref =>
+        {
+            Some(Snapshot {
+                base: p.0,
+                slot: Slot::Param,
+            })
+        }
         _ => None,
     }
 }
@@ -588,7 +644,7 @@ impl Check<'_> {
         match self.snap.slot {
             Slot::Field(ty, field) => k.fields.contains(&(ty, field)),
             Slot::Elem(_) => k.any_slot || k.slots.iter().any(|&t| self.hits_elem(t)),
-            Slot::Payload => false,
+            Slot::Payload | Slot::Param => false,
         }
     }
 }

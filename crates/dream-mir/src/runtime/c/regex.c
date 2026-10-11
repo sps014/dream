@@ -1,4 +1,5 @@
-/* Shared PCRE2 wrapper for wasm32 (interpreter) and native (JIT via SUPPORT_JIT). */
+/* Shared PCRE2 wrapper for wasm32 (interpreter) and native (JIT). SUPPORT_JIT lives in the
+ * vendor config.h, which this file does not include, so the JIT gate is DREAM_NATIVE. */
 #define PCRE2_CODE_UNIT_WIDTH 16
 #define PCRE2_STATIC 1
 #include "pcre2.h"
@@ -51,7 +52,7 @@ uintptr_t regex_compile(dream_ptr pattern, int32_t flags) {
     if (code == NULL) {
         return 0;
     }
-#ifdef SUPPORT_JIT
+#ifdef DREAM_NATIVE
     (void)pcre2_jit_compile(code, PCRE2_JIT_COMPLETE);
 #endif
     (void)pcre2_pattern_info(code, PCRE2_INFO_CAPTURECOUNT, &ncap);
@@ -231,8 +232,15 @@ dream_ptr regex_find_all(uintptr_t h, dream_ptr input) {
 }
 
 int32_t regex_test(uintptr_t h, dream_ptr input) {
-    dream_ptr g = regex_find(h, input, 0);
-    int32_t n = dream_array_len(g);
-    dream_drop(g);
-    return n > 0;
+    /* One ovector pair answers "does it match"; the block is reused per thread, never freed. */
+    static _Thread_local pcre2_match_data *md;
+    DreamRe *re = as_re(h);
+    if (re == NULL || !input) {
+        return 0;
+    }
+    if (md == NULL && (md = pcre2_match_data_create(1, NULL)) == NULL) {
+        return 0;
+    }
+    return pcre2_match(re->code, (const PCRE2_UCHAR *)dream_str_units(input),
+                       (PCRE2_SIZE)dream_str_len(input), 0, 0, md, NULL) >= 0;
 }

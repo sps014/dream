@@ -2332,6 +2332,8 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
         if (s.replies.length > 0) resolve(s.replies.shift());
         else s.pending.push(resolve);
       }),
+    // JS termination never blocks the caller, so there is nothing to overlap.
+    workerShutdown: () => {},
     workerTerminate: (id) => {
       const s = reg.get(id);
       if (!s) return;
@@ -2506,6 +2508,7 @@ function moduleWantsSharedMemory(wasmModule, desc) {
         (i.name === "workerSpawn" ||
           i.name === "workerPost" ||
           i.name === "workerRecv" ||
+          i.name === "workerShutdown" ||
           i.name === "workerTerminate" ||
           i.name === "workerPoolSpawn" ||
           i.name === "workerPoolDispatch")),

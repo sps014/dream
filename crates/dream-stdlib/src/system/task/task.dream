@@ -31,6 +31,9 @@ public class Task {
     @runtime("workerRecv")
     static extern async fun recv_host(id: int): string;
 
+    @runtime("workerShutdown")
+    static extern fun shutdown_host(id: int): void;
+
     @runtime("workerTerminate")
     static extern fun terminate_host(id: int): void;
 
@@ -62,69 +65,45 @@ public class Task {
         return result;
     }
 
-    static async fun spawn_mapped<T : shared, TOut : shared>(
-        input: T,
-        body: fun(T): TOut,
-        token: Option<CancellationToken> = Option.None
-    ): TOut {
-        CancellationToken.throw_if_opt(token);
-        let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<T>(raw)));
-        let id = Task.spawn_host(Task.funcidx(wrapped), Task.env(wrapped));
-        let session = TaskSession(id, wrapped);
-        Task.post_host(id, Bytes.toWire<T>(input));
-        let wire = Task.recv_host(id).await;
-        CancellationToken.throw_if_opt(token);
-        let result = Bytes.fromWire<TOut>(wire);
-        session.hold();
-        return result;
-    }
-
-    static async fun spawn_mapped_async<T : shared, TOut : shared>(
-        input: T,
-        body: fun(T): Future<TOut>,
-        token: Option<CancellationToken> = Option.None
-    ): TOut {
-        CancellationToken.throw_if_opt(token);
-        let wrapped: fun(string): Future<string> = async (raw: string) => {
-            return Bytes.toWire<TOut>(body(Bytes.fromWire<T>(raw)).await);
-        };
-        let id = Task.spawn_host(Task.funcidx_async(wrapped), Task.env_async(wrapped));
-        let session = TaskSession(id, wrapped);
-        Task.post_host(id, Bytes.toWire<T>(input));
-        let wire = Task.recv_host(id).await;
-        CancellationToken.throw_if_opt(token);
-        let result = Bytes.fromWire<TOut>(wire);
-        session.hold();
-        return result;
-    }
-
+    // Every item is posted before the first await: async bodies start lazily, so awaiting
+    // per-item spawn futures in order would run the items one after another.
     public static async fun map<T : shared, TOut : shared>(borrow items: T[], body: fun(T): TOut, token: Option<CancellationToken> = Option.None): TOut[] {
         CancellationToken.throw_if_opt(token);
         let n = items.length;
-        let futures = Buffer.alloc<Future<TOut>>(n);
+        let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<T>(raw)));
+        let group = TaskGroup(n, wrapped);
         for (let i = 0; i < n; i = i + 1) {
-            futures[i] = Task.spawn_mapped(items[i], body, token);
+            group.ids[i] = Task.spawn_host(Task.funcidx(wrapped), Task.env(wrapped));
+            Task.post_host(group.ids[i], Bytes.toWire<T>(items[i]));
         }
         let results = Buffer.alloc<TOut>(n);
         for (let i = 0; i < n; i = i + 1) {
             CancellationToken.throw_if_opt(token);
-            results[i] = futures[i].await;
+            results[i] = Bytes.fromWire<TOut>(Task.recv_host(group.ids[i]).await);
         }
+        CancellationToken.throw_if_opt(token);
+        group.hold();
         return results;
     }
 
     public static async fun map_async<T : shared, TOut : shared>(borrow items: T[], body: fun(T): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut[] {
         CancellationToken.throw_if_opt(token);
         let n = items.length;
-        let futures = Buffer.alloc<Future<TOut>>(n);
+        let wrapped: fun(string): Future<string> = async (raw: string) => {
+            return Bytes.toWire<TOut>(body(Bytes.fromWire<T>(raw)).await);
+        };
+        let group = TaskGroup(n, wrapped);
         for (let i = 0; i < n; i = i + 1) {
-            futures[i] = Task.spawn_mapped_async(items[i], body, token);
+            group.ids[i] = Task.spawn_host(Task.funcidx_async(wrapped), Task.env_async(wrapped));
+            Task.post_host(group.ids[i], Bytes.toWire<T>(items[i]));
         }
         let results = Buffer.alloc<TOut>(n);
         for (let i = 0; i < n; i = i + 1) {
             CancellationToken.throw_if_opt(token);
-            results[i] = futures[i].await;
+            results[i] = Bytes.fromWire<TOut>(Task.recv_host(group.ids[i]).await);
         }
+        CancellationToken.throw_if_opt(token);
+        group.hold();
         return results;
     }
 }
@@ -153,5 +132,40 @@ class TaskSession {
     // After `recv_host(...).await`: last-use `del` (terminate) must not run in the pre-await poll block.
     public fun hold() {
         this.id = this.id;
+    }
+}
+
+// `TaskSession` for a `Task.map` fan-out: one funcbox shared by every worker in `ids`.
+@allow_cycle
+class TaskGroup {
+    public ids: int[];
+    sync_body: fun(string): string;
+    async_body: fun(string): Future<string>;
+
+    public constructor(n: int, sync_body: fun(string): string) {
+        this.ids = Buffer.alloc<int>(n);
+        this.sync_body = sync_body;
+    }
+
+    public constructor(n: int, async_body: fun(string): Future<string>) {
+        this.ids = Buffer.alloc<int>(n);
+        this.async_body = async_body;
+    }
+
+    del() {
+        for (let i = 0; i < this.ids.length; i = i + 1) {
+            if this.ids[i] != 0 {
+                Task.shutdown_host(this.ids[i]);
+            }
+        }
+        for (let i = 0; i < this.ids.length; i = i + 1) {
+            if this.ids[i] != 0 {
+                Task.terminate_host(this.ids[i]);
+            }
+        }
+    }
+
+    public fun hold() {
+        this.ids = this.ids;
     }
 }

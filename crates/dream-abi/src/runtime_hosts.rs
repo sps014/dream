@@ -3,6 +3,7 @@
 pub const WORKER_SPAWN: &str = "workerSpawn";
 pub const WORKER_POST: &str = "workerPost";
 pub const WORKER_RECV: &str = "workerRecv";
+pub const WORKER_SHUTDOWN: &str = "workerShutdown";
 pub const WORKER_TERMINATE: &str = "workerTerminate";
 pub const WORKER_POOL_SPAWN: &str = "workerPoolSpawn";
 pub const WORKER_POOL_DISPATCH: &str = "workerPoolDispatch";
@@ -12,6 +13,7 @@ pub const WORKER_IMPORT_FIELDS: &[&str] = &[
     WORKER_SPAWN,
     WORKER_POST,
     WORKER_RECV,
+    WORKER_SHUTDOWN,
     WORKER_TERMINATE,
     WORKER_POOL_SPAWN,
     WORKER_POOL_DISPATCH,

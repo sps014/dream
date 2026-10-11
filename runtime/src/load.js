@@ -121,6 +121,7 @@ function moduleWantsSharedMemory(wasmModule, desc) {
         (i.name === "workerSpawn" ||
           i.name === "workerPost" ||
           i.name === "workerRecv" ||
+          i.name === "workerShutdown" ||
           i.name === "workerTerminate" ||
           i.name === "workerPoolSpawn" ||
           i.name === "workerPoolDispatch")),

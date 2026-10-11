@@ -223,12 +223,35 @@ static dream_ptr finish_block(int32_t block, int32_t tag) {
     return finish_block_ex(block, tag, 1);
 }
 
-static void priv_refill(int32_t need) {
-    int32_t n = need > PRIV_SLAB ? need : PRIV_SLAB;
-    n = (n + 15) & -16;
-    dream_priv_slab_set(dream_wasm_heap_claim(n));
+static void free_large_locked(int32_t block, int32_t sz);
+
+/* The abandoned slab tail goes back to the large list instead of leaking until exit. */
+static void priv_refill(void) {
+    int32_t off = dream_priv_off_get();
+    int32_t rest = dream_priv_cap_get() - off;
+    if (rest >= MIN_SPLIT) {
+        int32_t tail = dream_priv_slab_get() + off;
+        i32_put(tail, rest);
+        dream_platform_current->lock(DREAM_LOCK_HEAP);
+        free_large_locked(tail, rest);
+        dream_platform_current->unlock(DREAM_LOCK_HEAP);
+    }
+    dream_priv_slab_set(dream_wasm_heap_claim(PRIV_SLAB));
     dream_priv_off_set(0);
-    dream_priv_cap_set(n);
+    dream_priv_cap_set(PRIV_SLAB);
+}
+
+/* Blocks past the private classes are freed onto the large list, so they must be taken from
+ * it too; carving them from the slab instead grew linear memory on every buffer doubling. */
+static int32_t priv_large_block(int32_t total) {
+    dream_platform_current->lock(DREAM_LOCK_HEAP);
+    int32_t block = take_from_large(total);
+    dream_platform_current->unlock(DREAM_LOCK_HEAP);
+    if (!block) {
+        block = dream_wasm_heap_claim(total);
+        i32_put(block, total);
+    }
+    return block;
 }
 
 static dream_ptr malloc_private_ex(int32_t size, int32_t tag, int32_t account) {
@@ -249,11 +272,13 @@ static dream_ptr malloc_private_ex(int32_t size, int32_t tag, int32_t account) {
             table[idx] = next;
             return finish_block_ex(block, tag, account);
         }
+    } else {
+        return finish_block_ex(priv_large_block(total), tag, account);
     }
     off = dream_priv_off_get();
     cap = dream_priv_cap_get();
     if (cap - off < total) {
-        priv_refill(total);
+        priv_refill();
         off = 0;
     }
     slab = dream_priv_slab_get();

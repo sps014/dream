@@ -121,3 +121,60 @@ Measured before building; only the feature-flag change shipped.
   into the output's `target_features` section (relaxed SIMD alone rules out Safari). It now
   reads features from wasm-ld's section. Microbench module 787,247 → 787,083 B, same compile
   time; C++ exception packages still detect EH (`wasm_interop` passes at all levels).
+
+## Phase 3: Task fan-out (2026-10-11, Windows x64)
+
+New runner, so these are fresh baselines and not comparable with the M3 rows above. Peak RSS
+before the change: native micro 88 MB, native macro 21 MB (C# 58 MB), wasm micro under Node 490 MB.
+
+`task_parallel` was 10.6× C#, and slower than doing the 16 chunks serially (736 vs ~88 µs/op).
+Two causes:
+
+- Every `Task` session started and joined its own OS thread: 16 empty tasks cost 759 µs. A
+  finished worker now parks its thread (up to 64) for the next `workerSpawn`; `workerTerminate`
+  waits for the session to finish instead of joining the thread. Empty fan-out: 759 → 47 µs.
+- `Task.map` awaited lazily-started per-item spawn futures in order, so items ran one at a time.
+  It now posts every item before the first await (`TaskGroup` owns the sessions).
+
+| macro (3 rounds) | before cur/C# | after cur/C# |
+|---|---|---|
+| task_parallel | 10.57 | 1.76 |
+
+Macro peak RSS 21.1 → 8.3 MB. `TaskGroup` teardown waited for each worker in turn; a new
+`workerShutdown` host stops every member before `workerTerminate` waits on any (a no-op in
+JS, whose terminate never blocks). Empty 16-way fan-out 78 → 69 µs; `task_parallel` 1.22× C#
+(5 rounds). The remainder is thread wake-up latency. A spin-before-park experiment was not
+measured and is not shipped.
+
+## Phase 3: regex JIT and wasm large blocks (2026-10-11, Windows x64)
+
+- **PCRE2 JIT was never on.** `regex.c` gated `pcre2_jit_compile` on `SUPPORT_JIT`, which only
+  the vendor `config.h` defines and `regex.c` never includes, so native regexes ran in the
+  interpreter. Now gated on `DREAM_NATIVE`. `regex_test` also matches directly with a reused
+  per-thread match block instead of building and dropping a capture array per call.
+  Native `regex_find` 0.35×; `log_processor` 2.13 → 1.32× C#.
+- **Wasm linear memory grew on every pass with no leak.** Private allocations past the 64 KB
+  classes were bump-allocated from the slab but freed onto the large list, so they were never
+  reused, and each large request also abandoned the rest of the 2 MB slab. They now come from
+  the large list first (or a claim of exactly their size), and a refill returns the old slab's
+  tail to that list. Linear memory after 1/3/6 passes: 233/449/774 MB → 68.7 MB flat. Peak RSS
+  under Node 490 → 143 MB. Wasm `string_builder` 0.36×, `list_push` 0.62×, `set_probe` 0.61×;
+  other rows within run-to-run drift.
+
+| macro (3 rounds) | Phase 3 start | now |
+|---|---|---|
+| task_parallel | 10.57 | 1.22 |
+| log_processor | 2.15 | 1.28 |
+| async_fanout | 1.13 | 0.90 (inconclusive) |
+| graph_paths | 0.66 | 0.67 |
+| json_service | 0.13 | 0.12 |
+
+Measured and not pursued:
+
+- **Smaller object header:** memory is no longer the constraint. Native micro peaks at 88 MB and
+  stays flat across passes, the macro suite at 8 MB against C#'s 57 MB, and wasm linear memory
+  at 69 MB. A 16 → 8 byte header would touch the layout constant shared by codegen and every
+  runtime unit, for a few percent of footprint on allocation-heavy rows.
+- **Lock-free cross-thread frees:** no workload frees across threads in a measurable amount.
+  `task_parallel`'s remaining cost is worker wake-up and teardown, and the other macro losses
+  run on one thread.

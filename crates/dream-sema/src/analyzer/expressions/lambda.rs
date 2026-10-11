@@ -727,8 +727,6 @@ impl<'a> Analyzer<'a> {
             Some(name) => match name.split_once('.') {
                 Some((recv, "spawn"))
                 | Some((recv, "spawn_async"))
-                | Some((recv, "spawn_mapped"))
-                | Some((recv, "spawn_mapped_async"))
                 | Some((recv, "map"))
                 | Some((recv, "map_async")) => recv == "Task" || recv.starts_with("Task_"),
                 Some((recv, "dispatch")) | Some((recv, "dispatch_async")) => recv == "TaskPool",

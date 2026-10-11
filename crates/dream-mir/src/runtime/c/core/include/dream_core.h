@@ -1630,6 +1630,7 @@ int32_t workerPoolSpawn(void);
 void workerPost(int32_t id, dream_ptr msg);
 dream_ptr workerRecv(int32_t id);
 dream_ptr workerPoolDispatch(int32_t id, int32_t fn, dream_ptr env, dream_ptr msg);
+void workerShutdown(int32_t id);
 void workerTerminate(int32_t id);
 
 #endif /* !DREAM_WASM32 */

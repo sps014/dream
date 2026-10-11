@@ -32,7 +32,6 @@ typedef struct Worker {
     int32_t fn;
     dream_ptr env;
     unsigned refs;
-    dream_thread th;
     dream_thread_id thread_id;
     dream_mutex mu;
     dream_cond cv;
@@ -42,11 +41,26 @@ typedef struct Worker {
     Job *reply_tail;
     int dead;
     int busy;
+    int detached;
+    int finished;
     UT_hash_handle hh;
 } Worker;
 
+/* A session's OS thread outlives it: thread creation dominated short Task fan-outs, so a finished
+ * worker parks its thread here for the next workerSpawn instead of exiting. */
+typedef struct PoolThread {
+    dream_cond cv;
+    struct Worker *assigned;
+    struct PoolThread *next;
+} PoolThread;
+
+#define POOL_IDLE_MAX 64u
+
 static Worker *workers;
 static int64_t next_id = 1;
+static dream_mutex pool_mu = DREAM_MUTEX_INIT;
+static PoolThread *idle_threads;
+static unsigned idle_count;
 static void destroy_worker(Worker *w);
 
 static void release_worker(Worker *w) {
@@ -98,8 +112,7 @@ static void callback_wake(void *context) {
     dream_mutex_unlock(&w->mu);
 }
 
-static DREAM_THREAD_PROC(worker_main) {
-    Worker *w = arg;
+static void run_worker(Worker *w) {
     dream_thread_attach();
     dream_mutex_lock(&w->mu);
     w->thread_id = dream_thread_self();
@@ -154,7 +167,69 @@ static DREAM_THREAD_PROC(worker_main) {
     }
     /* owner_finish waits for outstanding wake callbacks before the thread reference is dropped. */
     dream_callback_owner_finish();
-    release_worker(w);
+    /* Dropping the reference and publishing `finished` under one lock lets workerTerminate observe
+     * both at once; a non-last reference means someone else keeps w alive past the unlock. */
+    dream_mutex_lock(&w->mu);
+    int last = __atomic_fetch_sub(&w->refs, 1u, __ATOMIC_ACQ_REL) == 1u;
+    w->finished = 1;
+    dream_cond_broadcast(&w->cv);
+    dream_mutex_unlock(&w->mu);
+    if (last) {
+        destroy_worker(w);
+    }
+}
+
+static DREAM_THREAD_PROC(worker_main) {
+    PoolThread *pt = arg;
+    dream_mutex_lock(&pool_mu);
+    for (;;) {
+        Worker *w = pt->assigned;
+        dream_mutex_unlock(&pool_mu);
+        run_worker(w);
+        dream_mutex_lock(&pool_mu);
+        if (idle_count >= POOL_IDLE_MAX) {
+            break;
+        }
+        pt->assigned = NULL;
+        pt->next = idle_threads;
+        idle_threads = pt;
+        idle_count++;
+        while (!pt->assigned) {
+            dream_cond_wait(&pt->cv, &pool_mu);
+        }
+    }
+    dream_mutex_unlock(&pool_mu);
+    dream_cond_destroy(&pt->cv);
+    free(pt);
+    return 0;
+}
+
+/* Caller holds reg_mu so a failed start can unregister w before anyone else can find it. */
+static int assign_thread(Worker *w) {
+    dream_mutex_lock(&pool_mu);
+    PoolThread *pt = idle_threads;
+    if (pt) {
+        idle_threads = pt->next;
+        idle_count--;
+        pt->assigned = w;
+        dream_cond_signal(&pt->cv);
+        dream_mutex_unlock(&pool_mu);
+        return 0;
+    }
+    dream_mutex_unlock(&pool_mu);
+    pt = calloc(1, sizeof(*pt));
+    if (!pt) {
+        return -1;
+    }
+    dream_cond_init(&pt->cv);
+    pt->assigned = w;
+    dream_thread th;
+    if (dream_thread_start(&th, worker_main, pt) != 0) {
+        dream_cond_destroy(&pt->cv);
+        free(pt);
+        return -1;
+    }
+    dream_thread_release(th);
     return 0;
 }
 
@@ -179,7 +254,7 @@ int32_t workerSpawn(int32_t fn, dream_ptr env) {
     }
     int32_t id = w->id = (int32_t)next_id++;
     HASH_ADD(hh, workers, id, sizeof(w->id), w);
-    if (dream_thread_start(&w->th, worker_main, w) != 0) {
+    if (assign_thread(w) != 0) {
         HASH_DEL(workers, w);
         dream_mutex_unlock(&reg_mu);
         destroy_worker(w);
@@ -310,11 +385,9 @@ static void destroy_worker(Worker *w) {
     free(w);
 }
 
-void workerTerminate(int32_t id) {
-    Worker *w = take_worker(id);
-    if (!w) {
-        return;
-    }
+/* Marks w dead and cancels its queue. A worker stopped mid-job (or by its own thread) is never
+ * waited for, even when a later workerTerminate finds it idle. */
+static void stop_worker(Worker *w) {
     dream_mutex_lock(&w->mu);
     w->dead = 1;
     Job *cancelled = w->head;
@@ -322,14 +395,33 @@ void workerTerminate(int32_t id) {
     for (Job *j = cancelled; j; j = j->next) {
         j->done = 1;
     }
-    int detach = w->busy || dream_thread_id_eq(dream_thread_self(), w->thread_id);
+    w->detached |= w->busy || dream_thread_id_eq(dream_thread_self(), w->thread_id);
     dream_cond_broadcast(&w->cv);
     dream_mutex_unlock(&w->mu);
     release_jobs(cancelled);
-    if (detach) {
-        dream_thread_release(w->th);
-    } else {
-        dream_thread_join(w->th);
+}
+
+/* Stops a worker without waiting; workerTerminate still unregisters and waits for it. A group
+ * stops every member first so their shutdowns overlap instead of running one after another. */
+void workerShutdown(int32_t id) {
+    Worker *w = acquire_worker(id);
+    if (!w) {
+        return;
     }
+    stop_worker(w);
+    release_worker(w);
+}
+
+void workerTerminate(int32_t id) {
+    Worker *w = take_worker(id);
+    if (!w) {
+        return;
+    }
+    stop_worker(w);
+    dream_mutex_lock(&w->mu);
+    while (!w->detached && !w->finished) {
+        dream_cond_wait(&w->cv, &w->mu);
+    }
+    dream_mutex_unlock(&w->mu);
     release_worker(w);
 }

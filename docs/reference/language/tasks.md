@@ -153,7 +153,7 @@ The `body` argument follows the same capture rules as `spawn`.
 
 | Runtime | Notes |
 |---------|--------|
-| Native (`dream run`) | One OS thread per task; private memory per task plus shared objects for `shared`. |
+| Native (`dream run`) | One OS thread per running task, reused across tasks; private memory per task plus shared objects for `shared`. |
 | Browser | One `Worker` per task; private memory per task; `shared` needs `Cross-Origin-Opener-Policy` / `Cross-Origin-Embedder-Policy` (shared memory). |
 | Node | One `worker_threads.Worker` per task; same private-vs-shared memory model. |
 

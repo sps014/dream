@@ -61,8 +61,9 @@ STRING_SCALAR_LEN_OFFSET: u32 = 4 => "STRING_SCALAR_LEN_OFFSET";
 DREAM_STR_PAD_INLINE: i32 = 0 => "DREAM_STR_PAD_INLINE";
 /// Pad value marking a fat slice (parent + external units pointer).
 DREAM_STR_SLICE: i32 = 1 => "DREAM_STR_SLICE";
-/// Native malloc header `[size:usize][padding][magic:i32][tag:i32][rc:i32]`. WASM uses [`HEAP_HEADER_SIZE`].
-NATIVE_HEAP_HEADER_SIZE: u32 = 32 => "NATIVE_HEAP_HEADER_SIZE";
+/// Native malloc header `[info|class:usize][tag:i32][rc:i32]` (32-bit hosts keep the class in a
+/// separate word after `info`). WASM uses [`HEAP_HEADER_SIZE`].
+NATIVE_HEAP_HEADER_SIZE: u32 = 16 => "NATIVE_HEAP_HEADER_SIZE";
 /// `data_ptr - RC_FROM_DATA` is the refcount word ([`HEADER_REFCOUNT_OFFSET`] from block start).
 RC_FROM_DATA: u32 = HEAP_HEADER_SIZE - HEADER_REFCOUNT_OFFSET => "RC_FROM_DATA";
 /// `data_ptr - TAG_FROM_DATA` is the type-tag word ([`HEADER_TAG_OFFSET`] from block start).

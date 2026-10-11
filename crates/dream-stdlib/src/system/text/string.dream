@@ -332,16 +332,10 @@ extend string : Comparable<string>, Equatable<string> {
     public fun split(sep: char): string[] {
         let n = this.length;
         let c = (int)sep;
-        let parts = 1;
-        let at = string.view_find_char(this, 0, n, 0, c);
-        while at >= 0 {
-            parts = parts + 1;
-            at = string.view_find_char(this, 0, n, at + 1, c);
-        }
-        let result = Buffer.alloc<string>(parts);
+        let result = Buffer.alloc<string>(string.view_count_char(this, 0, n, c) + 1);
         let start = 0;
         let idx = 0;
-        at = string.view_find_char(this, 0, n, 0, c);
+        let at = string.view_find_char(this, 0, n, 0, c);
         while at >= 0 {
             result[idx] = this.substring(start, at);
             idx = idx + 1;

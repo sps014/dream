@@ -9,6 +9,45 @@ static const uint16_t *view_units(dream_ptr s, int32_t off) {
     return u ? u + off : NULL;
 }
 
+typedef uint16_t u16x8 __attribute__((vector_size(16)));
+typedef int16_t i16x8 __attribute__((vector_size(16)));
+typedef _Bool bool8 __attribute__((ext_vector_type(8)));
+
+/* Eight units per compare, lowered to SSE2/NEON/simd128 under the program's own CPU (the bitcode
+ * has no target features). Out of line so it does not bloat loops that inline `find_unit`. */
+__attribute__((noinline)) static int32_t find_unit_wide(const uint16_t *u, int32_t i, int32_t n,
+                                                        uint16_t c) {
+    u16x8 needle = (u16x8){0} + c;
+    for (; i + 8 <= n; i += 8) {
+        u16x8 v;
+        uint8_t bits;
+        memcpy(&v, u + i, sizeof(v));
+        bool8 hit = __builtin_convertvector((i16x8)(v == needle), bool8);
+        memcpy(&bits, &hit, sizeof(bits));
+        if (bits != 0) {
+            return i + __builtin_ctz(bits);
+        }
+    }
+    for (; i < n; i++) {
+        if (u[i] == c) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* First `i` in `[from, n)` with `u[i] == c`, or -1. Separators in split-heavy text are usually
+ * a few units apart, so the first eight are scanned one by one before going wide. */
+static int32_t find_unit(const uint16_t *u, int32_t from, int32_t n, uint16_t c) {
+    int32_t head = n - from < 8 ? n : from + 8;
+    for (int32_t i = from; i < head; i++) {
+        if (u[i] == c) {
+            return i;
+        }
+    }
+    return head < n ? find_unit_wide(u, head, n, c) : -1;
+}
+
 int32_t string_view_eq(dream_ptr a, int32_t ao, int32_t an, dream_ptr b, int32_t bo, int32_t bn) {
     if (an != bn) {
         return 0;
@@ -70,7 +109,11 @@ int32_t string_view_find(dream_ptr h, int32_t ho, int32_t hn, dream_ptr nd, int3
     hu = view_units(h, ho);
     nu = view_units(nd, no);
     for (i = from; i <= hn - nn; i++) {
-        if (hu[i] == nu[0] && dream_units_equal(hu + i, nu, (size_t)nn << 1)) {
+        i = find_unit(hu, i, hn - nn + 1, nu[0]);
+        if (i < 0) {
+            return -1;
+        }
+        if (dream_units_equal(hu + i, nu, (size_t)nn << 1)) {
             return i;
         }
     }
@@ -101,7 +144,6 @@ int32_t string_view_rfind(dream_ptr h, int32_t ho, int32_t hn, dream_ptr nd, int
 
 int32_t string_view_find_char(dream_ptr s, int32_t off, int32_t n, int32_t from, int32_t c) {
     const uint16_t *u;
-    int32_t i;
     if (from < 0) {
         from = 0;
     }
@@ -109,12 +151,35 @@ int32_t string_view_find_char(dream_ptr s, int32_t off, int32_t n, int32_t from,
         return -1;
     }
     u = view_units(s, off);
-    for (i = from; i < n; i++) {
-        if (u[i] == (uint16_t)c) {
-            return i;
-        }
+    return find_unit(u, from, n, (uint16_t)c);
+}
+
+typedef int32_t i32x8 __attribute__((vector_size(32)));
+
+/* Occurrences of `c` in the view, so `split` sizes its result without a find call per piece.
+ * Each 16-bit lane counts at most 4096 blocks before it is widened, far below overflow. */
+int32_t string_view_count_char(dream_ptr s, int32_t off, int32_t n, int32_t c) {
+    const uint16_t *u;
+    u16x8 needle = (u16x8){0} + (uint16_t)c;
+    int32_t total = 0;
+    int32_t i = 0;
+    if (n <= 0) {
+        return 0;
     }
-    return -1;
+    u = view_units(s, off);
+    while (i + 8 <= n) {
+        i16x8 lanes = {0};
+        for (int32_t blocks = 0; blocks < 4096 && i + 8 <= n; blocks++, i += 8) {
+            u16x8 v;
+            memcpy(&v, u + i, sizeof(v));
+            lanes -= (i16x8)(v == needle);
+        }
+        total += __builtin_reduce_add(__builtin_convertvector(lanes, i32x8));
+    }
+    for (; i < n; i++) {
+        total += u[i] == (uint16_t)c;
+    }
+    return total;
 }
 
 int32_t string_view_rfind_char(dream_ptr s, int32_t off, int32_t n, int32_t c) {

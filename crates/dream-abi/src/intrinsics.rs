@@ -141,6 +141,7 @@ pub const ATTR_STRING_VIEW_FIND: &str = "string_view_find";
 pub const ATTR_STRING_VIEW_RFIND: &str = "string_view_rfind";
 pub const ATTR_STRING_VIEW_FIND_CHAR: &str = "string_view_find_char";
 pub const ATTR_STRING_VIEW_RFIND_CHAR: &str = "string_view_rfind_char";
+pub const ATTR_STRING_VIEW_COUNT_CHAR: &str = "string_view_count_char";
 pub const ATTR_STRING_BUILDER_VIEW: &str = "string_builder_view";
 /// `Debug.free_list_head()` — allocator introspection for tests.
 pub const ATTR_DEBUG_FREE_LIST: &str = "debug_get_free_list_head";
@@ -233,6 +234,7 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_STRING_VIEW_RFIND,
     ATTR_STRING_VIEW_FIND_CHAR,
     ATTR_STRING_VIEW_RFIND_CHAR,
+    ATTR_STRING_VIEW_COUNT_CHAR,
     ATTR_STRING_BUILDER_VIEW,
     ATTR_DEBUG_FREE_LIST,
     ATTR_DEBUG_HEAP_PTR,
@@ -404,6 +406,7 @@ impl IntrinsicOp {
             | ATTR_STRING_VIEW_RFIND
             | ATTR_STRING_VIEW_FIND_CHAR
             | ATTR_STRING_VIEW_RFIND_CHAR
+            | ATTR_STRING_VIEW_COUNT_CHAR
             | ATTR_STRING_BUILDER_VIEW => IntrinsicOp::StringView,
             ATTR_DEBUG_FREE_LIST => IntrinsicOp::DebugFreeList,
             ATTR_DEBUG_HEAP_PTR => IntrinsicOp::DebugHeapPtr,

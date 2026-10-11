@@ -8,8 +8,6 @@
 
 #define NCLASS DREAM_NCLASS
 #define CHUNK (1u << 22)
-#define MAGIC_LIVE DREAM_MAGIC_LIVE
-#define MAGIC_FREE DREAM_MAGIC_FREE
 
 static dream_ptr freelist[NCLASS];
 /* First-fit list for blocks larger than the biggest size class (64KiB), matching
@@ -152,31 +150,26 @@ static int native_block_in_heap(char *block) {
 
 static void *map_chunk(size_t n) { return dream_platform_current->map(n); }
 
-static void *large_next(char *block) {
-    void *next = NULL;
-    memcpy(&next, block + 8, sizeof(next));
-    return next;
+static void *block_next(char *block) {
+    void *next = (void *)dream_block_word(block);
+    return next == (void *)block ? NULL : next;
 }
 
-static void large_set_next(char *block, void *next) {
-    memcpy(block + 8, &next, sizeof(next));
+static void block_set_next(char *block, void *next) {
+    *dream_block_tag(block) = DREAM_TAG_FREED;
+    dream_block_set_word(block, (uintptr_t)next);
 }
 
-static void *class_next(char *block) {
-    void *next = NULL;
-    memcpy(&next, block + 8, sizeof(next));
-    if (next == (void *)block) {
-        return NULL;
-    }
-    return next;
+/* Lays out a large block of `bytes`, prefix included, at `p`. */
+static char *carve_large(char *p, size_t bytes) {
+    dream_block_init(p, DREAM_CLASS_LARGE_PREFIX);
+    p += DREAM_LARGE_PREFIX;
+    *dream_large_size(p) = bytes - DREAM_LARGE_PREFIX;
+    return p;
 }
 
-static void class_set_next(char *block, void *next) {
-    memcpy(block + 8, &next, sizeof(next));
-}
-
-static void activate(char *block, int32_t tag) {
-    dream_block_activate(block, tag);
+static void activate(char *block, unsigned cls, int32_t tag) {
+    dream_block_activate(block, cls, tag);
     dream_heap_count(&thread_counters()->allocs, UINT64_C(1));
 }
 
@@ -193,12 +186,12 @@ static char *large_try_take(size_t need) {
     dream_ptr curr = large_freelist;
     while (curr != 0) {
         char *block = (char *)dream_p(curr);
-        void *next = large_next(block);
-        if (*dream_block_magic(block) == MAGIC_FREE && *dream_block_size(block) >= need) {
+        void *next = block_next(block);
+        if (*dream_large_size(block) >= need) {
             if (prev == 0) {
                 large_freelist = (dream_ptr)next;
             } else {
-                large_set_next((char *)dream_p(prev), next);
+                block_set_next((char *)dream_p(prev), next);
             }
             return block;
         }
@@ -247,8 +240,16 @@ static char *bump(size_t n) {
 }
 
 dream_ptr dream_region_activate(char *block, dream_size total, int32_t tag, const dream_type_info *info) {
-    *dream_block_size(block) = total;
-    dream_block_activate_info(block, tag, info);
+    unsigned cls;
+    if (DREAM_LIKELY((size_t)total <= 256u)) {
+        cls = (unsigned)(((size_t)total - 1u) >> 4);
+    } else if ((size_t)total > DREAM_MAX_CLASS_BYTES) {
+        cls = DREAM_CLASS_LARGE;
+        block = carve_large(block, (size_t)total);
+    } else {
+        cls = (unsigned)dream_size_class((uint32_t)total);
+    }
+    dream_block_activate_info(block, cls, tag, info);
     dream_heap_count(&thread_counters()->allocs, UINT64_C(1));
     return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
 }
@@ -279,17 +280,20 @@ static size_t allocation_total(size_t size) {
 static dream_ptr malloc_general(dream_size size, int32_t tag) {
     size_t total;
     int idx;
+    unsigned cls;
     char *block = NULL;
     size_t alloc_size;
+    size_t footprint;
     total = allocation_total(size);
     heap_refresh_fast();
     idx = size_class(total);
+    cls = idx < NCLASS ? (unsigned)idx : DREAM_CLASS_LARGE;
     alloc_size = idx < NCLASS ? class_bytes(idx) : total;
     if (idx < NCLASS) {
         block = dream_heap.free[idx];
         if (block != NULL) {
-            dream_heap.free[idx] = class_next(block);
-            activate(block, tag);
+            dream_heap.free[idx] = block_next(block);
+            activate(block, cls, tag);
             return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
         }
     } else {
@@ -299,13 +303,17 @@ static dream_ptr malloc_general(dream_size size, int32_t tag) {
         block = large_try_take(alloc_size);
         heap_unlock();
         if (block != NULL) {
-            activate(block, tag);
+            activate(block, cls, tag);
             return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
         }
     }
-    block = tls_bump((size_t)alloc_size);
-    *dream_block_size(block) = alloc_size;
-    activate(block, tag);
+    if (cls == DREAM_CLASS_LARGE) {
+        footprint = alloc_size + DREAM_LARGE_PREFIX;
+        block = carve_large(tls_bump(footprint), footprint);
+    } else {
+        block = tls_bump(alloc_size);
+    }
+    activate(block, cls, tag);
     return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
 }
 
@@ -321,10 +329,13 @@ dream_ptr dream_region_backing_malloc(dream_size size) {
 dream_ptr dream_malloc_shared(dream_size size, int32_t tag) {
     size_t total;
     int idx;
+    unsigned cls;
     char *block = NULL;
     size_t alloc_size;
+    size_t footprint;
     total = allocation_total(size);
     idx = size_class(total);
+    cls = idx < NCLASS ? (unsigned)idx : DREAM_CLASS_LARGE;
     alloc_size = idx < NCLASS ? class_bytes(idx) : total;
     if (tag != 0) {
         tag |= TAG_SHARED;
@@ -335,24 +346,25 @@ dream_ptr dream_malloc_shared(dream_size size, int32_t tag) {
     } else {
         while (freelist[idx] != 0) {
             block = (char *)dream_p(freelist[idx]);
-            if (*dream_block_magic(block) != MAGIC_FREE) {
+            if (*dream_block_tag(block) != DREAM_TAG_FREED) {
                 freelist[idx] = 0;
                 block = NULL;
                 break;
             }
-            {
-                void *next = class_next(block);
-                freelist[idx] = (dream_ptr)next;
-            }
+            freelist[idx] = (dream_ptr)block_next(block);
             break;
         }
     }
     if (block == NULL) {
-        block = bump((size_t)alloc_size);
-        *dream_block_size(block) = alloc_size;
+        if (cls == DREAM_CLASS_LARGE) {
+            footprint = alloc_size + DREAM_LARGE_PREFIX;
+            block = carve_large(bump(footprint), footprint);
+        } else {
+            block = bump(alloc_size);
+        }
     }
     heap_unlock();
-    activate(block, tag);
+    activate(block, cls, tag);
     return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
 }
 
@@ -365,7 +377,7 @@ int dream_heap_is_live(dream_ptr ptr) {
     if (!native_block_in_heap(block)) {
         return 0;
     }
-    return *dream_block_magic(block) == MAGIC_LIVE;
+    return *dream_block_tag(block) != DREAM_TAG_FREED;
 }
 
 int64_t debug_get_live_objects(void) {
@@ -395,11 +407,14 @@ int32_t debug_get_free_list_head(void) {
 void dream_recycle_slow(dream_ptr ptr) {
     char *block;
     size_t sz;
-    int idx;
+    unsigned idx;
     if (ptr == 0) {
         return;
     }
     heap_refresh_fast();
+    if (*dream_tag_word(ptr) == DREAM_TAG_FREED) {
+        return;
+    }
     if (*dream_tag_word(ptr) & DREAM_TAG_WEAK_TARGET) {
         dream_weak_clear_all(ptr);
     }
@@ -407,30 +422,27 @@ void dream_recycle_slow(dream_ptr ptr) {
     if (dream_region_owns(ptr)) {
         return;
     }
-    sz = *dream_block_size(block);
-    if (sz == 0 || *dream_block_magic(block) != MAGIC_LIVE) {
-        return;
-    }
-    if (dream_tag_shared(ptr)) {
+    idx = dream_block_class(block);
+    sz = dream_block_total(block);
+    int shared = dream_tag_shared(ptr);
+    if (shared) {
         dream_platform_current->object_drop(dream_p(ptr));
     }
-    idx = size_class(sz);
-    *dream_block_magic(block) = MAGIC_FREE;
     DREAM_POISON(block + NATIVE_HEAP_HEADER_SIZE, sz - NATIVE_HEAP_HEADER_SIZE);
     account_frees(1);
-    if (dream_tag_shared(ptr) || idx >= NCLASS) {
+    if (shared || idx >= NCLASS) {
         heap_lock();
         if (idx >= NCLASS) {
-            large_set_next(block, dream_p(large_freelist));
+            block_set_next(block, dream_p(large_freelist));
             large_freelist = (dream_ptr)block;
         } else {
-            class_set_next(block, dream_p(freelist[idx]));
+            block_set_next(block, dream_p(freelist[idx]));
             freelist[idx] = (dream_ptr)block;
         }
         heap_unlock();
         return;
     }
-    class_set_next(block, dream_heap.free[idx]);
+    block_set_next(block, dream_heap.free[idx]);
     dream_heap.free[idx] = block;
 }
 
@@ -462,7 +474,7 @@ dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag) {
         return dream_malloc(new_size, tag);
     }
     block = (char *)dream_p(ptr) - NATIVE_HEAP_HEADER_SIZE;
-    old_total = *dream_block_size(block);
+    old_total = dream_block_total(block);
     if (new_total <= old_total) {
         return ptr;
     }

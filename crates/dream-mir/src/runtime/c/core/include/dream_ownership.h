@@ -43,6 +43,7 @@ DREAM_ALWAYS_INLINE void dream_count(dream_counter k, uint64_t n) {
 }
 int64_t debug_get_runtime_counter(int32_t id);
 
+#ifdef DREAM_WASM32
 DREAM_ALWAYS_INLINE const dream_type_info *dream_object_info(dream_ptr p) {
     const dream_type_info *info;
     memcpy(&info, (char *)dream_p(p) - DREAM_BLOCK_HEADER + sizeof(dream_size), sizeof(info));
@@ -53,4 +54,15 @@ DREAM_ALWAYS_INLINE void dream_set_type(dream_ptr ptr, const dream_type_info *in
     uintptr_t header = (uintptr_t)dream_p(ptr) - DREAM_BLOCK_HEADER;
     memcpy((void *)(header + sizeof(dream_size)), &info, sizeof(info));
 }
+#else
+DREAM_ALWAYS_INLINE const dream_type_info *dream_object_info(dream_ptr p) {
+    uintptr_t word = *(const uintptr_t *)((char *)dream_p(p) - DREAM_BLOCK_HEADER);
+    return (const dream_type_info *)(word & DREAM_WORD_MASK);
+}
+
+DREAM_ALWAYS_INLINE void dream_set_type(dream_ptr ptr, const dream_type_info *info) {
+    uintptr_t *word = (uintptr_t *)((char *)dream_p(ptr) - DREAM_BLOCK_HEADER);
+    *word = (*word & ~DREAM_WORD_MASK) | (uintptr_t)info;
+}
+#endif
 #endif

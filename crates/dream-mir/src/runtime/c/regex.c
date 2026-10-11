@@ -14,8 +14,10 @@ typedef struct {
     uint32_t capture_count;
 } DreamRe;
 
+/* Dream strings may hold lone surrogates. With PCRE2_MATCH_INVALID_UTF they just never match,
+ * instead of failing the whole match, and the JIT skips validating the subject on every call. */
 static uint32_t compile_opts(int32_t flags) {
-    uint32_t opt = PCRE2_UTF;
+    uint32_t opt = PCRE2_UTF | PCRE2_MATCH_INVALID_UTF;
     if (flags & DREAM_REGEX_IGNORE_CASE) {
         opt |= PCRE2_CASELESS;
     }

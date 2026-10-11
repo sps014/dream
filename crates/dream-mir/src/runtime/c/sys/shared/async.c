@@ -248,7 +248,9 @@ __attribute__((export_name(DREAM_SYM_NEW_FUTURE)))
 #endif
 dream_ptr dream_new_future(dream_size size, int32_t poll, int32_t kind) {
     dream_size bytes = size < F_SLOTS ? F_SLOTS : size;
-    dream_ptr p = dream_malloc_shared(bytes, TAG_FUTURE);
+    /* Private: a frame lives on its scheduler's thread, and the one path that hands it to
+     * another thread (dream_complete_foreign) publishes it first. */
+    dream_ptr p = dream_malloc(bytes, TAG_FUTURE);
     memset(dream_p(p), 0, (size_t)bytes);
     i32_at(p, F_POLL)[0] = poll;
     i32_at(p, F_KIND)[0] = kind;
@@ -365,8 +367,9 @@ void dream_await(dream_ptr parent, dream_ptr child) {
     }
 #ifndef DREAM_WASM32
     /* Hold the wake lock across the waker handoff and the status recheck so a foreign
-     * completion cannot flip status between them (lost-wakeup guard). */
-    {
+     * completion cannot flip status between them (lost-wakeup guard). Only host futures are
+     * completed off-thread; every other kind completes on this scheduler. */
+    if (i32_at(child, F_KIND)[0] == KIND_HOST) {
         int32_t done;
         dream_mutex_lock(&wake_mu);
         ptr_at(child, F_WAKER)[0] = parent;
@@ -378,8 +381,9 @@ void dream_await(dream_ptr parent, dream_ptr child) {
             dream_start(child);
         }
         dream_mutex_unlock(&wake_mu);
+        return;
     }
-#else
+#endif
     ptr_at(child, F_WAKER)[0] = parent;
     if (i32_at(child, F_STATUS)[0]) {
         dream_enqueue(parent);
@@ -387,7 +391,6 @@ void dream_await(dream_ptr parent, dream_ptr child) {
     }
     /* Awaiting a lazy future is what launches it. */
     dream_start(child);
-#endif
 }
 
 #ifdef DREAM_WASM32

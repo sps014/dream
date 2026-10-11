@@ -74,7 +74,7 @@ static dream_ptr region_bump(region_state *s, dream_size size, int32_t tag, cons
         region_panic();
         return 0;
     }
-    size_t total = ((size_t)size + DREAM_BLOCK_HEADER + 15u) & ~(size_t)15u;
+    size_t total = dream_region_block_bytes(((size_t)size + DREAM_BLOCK_HEADER + 15u) & ~(size_t)15u);
     region_chunk *chunk = s->chunk;
     if (chunk == NULL || total > chunk->capacity - chunk->offset) {
         size_t prefix = (sizeof(region_chunk) + 15u) & ~(size_t)15u;

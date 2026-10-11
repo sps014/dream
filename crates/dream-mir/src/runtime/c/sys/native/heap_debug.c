@@ -76,19 +76,31 @@ static void dump_scan_map(char *base, size_t len, DumpHist *h, int *nh, DumpStr 
     char *p = base;
     char *end = base + len;
     while ((size_t)(end - p) >= NATIVE_HEAP_HEADER_SIZE) {
-        size_t sz = *dream_block_size(p);
-        uint32_t mag = *dream_block_magic(p);
-        if (sz < NATIVE_HEAP_HEADER_SIZE || (sz & 15) != 0 || (size_t)sz > (size_t)(end - p)) {
+        unsigned cls = dream_block_class(p);
+        char *block = p;
+        size_t sz;
+        if (cls == DREAM_CLASS_LARGE_PREFIX) {
+            block = p + DREAM_LARGE_PREFIX;
+            sz = DREAM_LARGE_PREFIX + *dream_large_size(block);
+        } else if (cls < DREAM_NCLASS) {
+            sz = (size_t)dream_class_bytes((int)cls);
+        } else {
             p += 16;
             continue;
         }
-        // Pinned singletons (`dream_pin_immortal`) are never freed by design and already left
-        // `live_objects`, so counting them here would report a leak the accounting denies.
-        if (mag == DREAM_MAGIC_LIVE && *(int32_t *)(p + NATIVE_HEAP_HEADER_SIZE - RC_FROM_DATA) != DREAM_RC_IMMORTAL) {
-            int32_t tag = *(int32_t *)(p + NATIVE_HEAP_HEADER_SIZE - TAG_FROM_DATA) & TAG_VALUE_MASK;
+        if (sz > (size_t)(end - p)) {
+            break;
+        }
+        // An untouched arena tail reads as zero-count class-0 blocks. Pinned singletons
+        // (`dream_pin_immortal`) are never freed by design and already left `live_objects`,
+        // so counting them here would report a leak the accounting denies.
+        int32_t rc = *(int32_t *)(block + NATIVE_HEAP_HEADER_SIZE - RC_FROM_DATA);
+        int32_t raw_tag = *dream_block_tag(block);
+        if (raw_tag != DREAM_TAG_FREED && rc != 0 && rc != DREAM_RC_IMMORTAL) {
+            int32_t tag = raw_tag & TAG_VALUE_MASK;
             dump_hist_add(h, nh, tag);
             if (tag == TAG_STRING) {
-                dump_string_save(p + NATIVE_HEAP_HEADER_SIZE, ss, str_n);
+                dump_string_save(block + NATIVE_HEAP_HEADER_SIZE, ss, str_n);
             }
         }
         p += sz;

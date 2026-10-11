@@ -188,7 +188,7 @@ enum { PRIV_CLASSES = 13, PRIV_SMALL_TOTAL = 1 << 16 };
 static int32_t *priv_table(void) {
     int32_t table = dream_priv_table_get();
     if (table == 0) {
-        table = dream_wasm_heap_claim((PRIV_CLASSES * 4 + 15) & -16);
+        table = dream_wasm_raw_malloc(PRIV_CLASSES * 4);
         memset((void *)(uintptr_t)(uint32_t)table, 0, PRIV_CLASSES * 4);
         dream_priv_table_set(table);
         if (!dream_region_active()) {
@@ -225,20 +225,45 @@ static dream_ptr finish_block(int32_t block, int32_t tag) {
 
 static void free_large_locked(int32_t block, int32_t sz);
 
+/* Adopts a free block of at least half a slab, so the tails that exiting workers hand back
+ * become the next instance's slab instead of every instance claiming fresh memory. */
+static int32_t take_slab_locked(void) {
+    int32_t curr = *large_head();
+    while (curr) {
+        int32_t bsize = i32_at(curr);
+        if (bsize >= PRIV_SLAB / 2) {
+            large_remove(curr);
+            if (bsize > PRIV_SLAB) {
+                large_split(curr, bsize, PRIV_SLAB);
+            }
+            return curr;
+        }
+        curr = blk_next(curr);
+    }
+    return 0;
+}
+
 /* The abandoned slab tail goes back to the large list instead of leaking until exit. */
 static void priv_refill(void) {
     int32_t off = dream_priv_off_get();
     int32_t rest = dream_priv_cap_get() - off;
+    dream_platform_current->lock(DREAM_LOCK_HEAP);
     if (rest >= MIN_SPLIT) {
         int32_t tail = dream_priv_slab_get() + off;
         i32_put(tail, rest);
-        dream_platform_current->lock(DREAM_LOCK_HEAP);
         free_large_locked(tail, rest);
-        dream_platform_current->unlock(DREAM_LOCK_HEAP);
     }
-    dream_priv_slab_set(dream_wasm_heap_claim(PRIV_SLAB));
+    int32_t slab = take_slab_locked();
+    dream_platform_current->unlock(DREAM_LOCK_HEAP);
+    int32_t cap = PRIV_SLAB;
+    if (slab) {
+        cap = i32_at(slab);
+    } else {
+        slab = dream_wasm_heap_claim(PRIV_SLAB);
+    }
+    dream_priv_slab_set(slab);
     dream_priv_off_set(0);
-    dream_priv_cap_set(PRIV_SLAB);
+    dream_priv_cap_set(cap);
 }
 
 /* Blocks past the private classes are freed onto the large list, so they must be taken from
@@ -465,6 +490,38 @@ void dream_wasm_raw_free(dream_ptr ptr) {
     if (!ptr) { return; }
     dream_platform_current->lock(DREAM_LOCK_HEAP);
     recycle_locked(ptr, 0);
+    dream_platform_current->unlock(DREAM_LOCK_HEAP);
+}
+
+/* The private slab and freelists are reachable only through this instance's globals, so a
+ * worker that discards its instance hands them back first; otherwise every Task leaked a slab. */
+__attribute__((export_name("dream_heap_thread_exit")))
+void dream_heap_thread_exit(void) {
+    int32_t table = dream_priv_table_get();
+    int32_t off = dream_priv_off_get();
+    int32_t rest = dream_priv_cap_get() - off;
+    int32_t slab = dream_priv_slab_get();
+    dream_priv_fast_set(0);
+    dream_priv_table_set(0);
+    dream_priv_slab_set(0);
+    dream_priv_off_set(0);
+    dream_priv_cap_set(0);
+    dream_platform_current->lock(DREAM_LOCK_HEAP);
+    if (rest >= MIN_SPLIT) {
+        i32_put(slab + off, rest);
+        free_large_locked(slab + off, rest);
+    }
+    if (table) {
+        int32_t *heads = (int32_t *)(uintptr_t)(uint32_t)table;
+        for (int32_t idx = 0; idx < PRIV_CLASSES; idx++) {
+            for (int32_t block = heads[idx]; block;) {
+                int32_t next = blk_next(block);
+                class_push(idx, block);
+                block = next;
+            }
+        }
+        recycle_locked(table, 0);
+    }
     dream_platform_current->unlock(DREAM_LOCK_HEAP);
 }
 

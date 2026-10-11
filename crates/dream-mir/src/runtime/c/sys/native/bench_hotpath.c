@@ -29,6 +29,7 @@ static uint64_t ns_now(void) {
 /* Standalone benchmarks have no generated function table or host executable. */
 void dream_callback_drain(void) {}
 int dream_callback_pending(void) { return 0; }
+int dream_callback_owned(void) { return 0; }
 void dream_callback_set_waker(void (*wake)(void *), void *context) {
     (void)wake;
     (void)context;

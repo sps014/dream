@@ -410,6 +410,16 @@ DREAM_ALWAYS_INLINE size_t dream_block_total(char *block) {
     return cls < DREAM_NCLASS ? (size_t)dream_class_bytes((int)cls) : *dream_large_size(block);
 }
 
+/* Class bytes grow with the index and large blocks sort above every class, so a block spans
+ * `need` bytes exactly when its class is at least the one `need` would be carved from. */
+DREAM_ALWAYS_INLINE int dream_block_fits(char *block, size_t need) {
+    unsigned cls = dream_block_class(block);
+    if (need <= DREAM_MAX_CLASS_BYTES) {
+        return cls >= (unsigned)dream_size_class((uint32_t)need);
+    }
+    return cls == DREAM_CLASS_LARGE && *dream_large_size(block) >= need;
+}
+
 /* Every allocation path knows the class it carved, so the first word is written whole. */
 DREAM_ALWAYS_INLINE void dream_block_activate_info(char *block, unsigned cls, int32_t tag,
                                                    const dream_type_info *info) {
@@ -618,13 +628,16 @@ DREAM_ALWAYS_INLINE dream_size dream_string_bytes(int32_t units) {
     return (dream_size)units * 2 + STRING_HEADER_SIZE;
 }
 
-DREAM_ALWAYS_INLINE char *dream_array_at(dream_ptr p, int64_t i, int32_t esize,
+/* Lengths are never negative, so a passed check also proves `i >= 0`; the optimizer uses
+ * that to drop sign extensions and signed-division fixups on the index downstream. */
+DREAM_ALWAYS_INLINE char *dream_array_at(dream_ptr p, int32_t i, int32_t esize,
                                          dream_ptr panic_msg, const char *location) {
     int32_t len = p ? dream_i32(p)[0] : 0;
-    if (DREAM_UNLIKELY((uint64_t)i >= (uint64_t)(uint32_t)len)) {
+    __builtin_assume(len >= 0);
+    if (DREAM_UNLIKELY((uint32_t)i >= (uint32_t)len)) {
         dream_panic_at(panic_msg, location);
     }
-    return (char *)dream_p(p) + 4 + i * esize;
+    return (char *)dream_p(p) + 4 + (size_t)(uint32_t)i * (size_t)esize;
 }
 
 /* Bounds-checked `char_at` / `byte_at`; the unchecked readers are only for indices the
@@ -697,30 +710,17 @@ DREAM_ALWAYS_INLINE int dream_str_unique_owned(dream_ptr p) {
     return 1;
 }
 
-DREAM_ALWAYS_INLINE int32_t dream_str_unit_cap(dream_ptr p) {
-    dream_size block;
-    dream_size payload;
-    if (p == 0) {
-        return 0;
-    }
-#ifdef DREAM_WASM32
-    block = *(dream_size *)((char *)dream_p(p) - DREAM_BLOCK_HEADER);
-#else
-    block = (dream_size)dream_block_total((char *)dream_p(p) - DREAM_BLOCK_HEADER);
-#endif
-    if (block <= DREAM_BLOCK_HEADER + STRING_HEADER_SIZE) {
-        return 0;
-    }
-    payload = block - DREAM_BLOCK_HEADER;
-    if (payload <= STRING_HEADER_SIZE) {
-        return 0;
-    }
-    dream_size units = (payload - STRING_HEADER_SIZE) / 2;
-    return units > INT32_MAX ? INT32_MAX : (int32_t)units;
-}
-
 DREAM_ALWAYS_INLINE int dream_str_can_hold(dream_ptr p, int32_t units) {
-    return dream_str_unique_owned(p) && units <= dream_str_unit_cap(p);
+    if (!dream_str_unique_owned(p)) {
+        return 0;
+    }
+    char *block = (char *)dream_p(p) - DREAM_BLOCK_HEADER;
+    size_t need = DREAM_BLOCK_HEADER + (size_t)dream_string_bytes(units);
+#ifdef DREAM_WASM32
+    return *(dream_size *)block >= need;
+#else
+    return dream_block_fits(block, need);
+#endif
 }
 
 DREAM_ALWAYS_INLINE void dream_concat_fill(dream_ptr p, dream_ptr a, dream_ptr b, int32_t sc1,
@@ -1006,7 +1006,8 @@ DREAM_ALWAYS_INLINE dream_ptr dream_concat_str_int_str_into(dream_ptr dest, drea
         dream_concat_str_int_str_fill(dest, pref, v, suf, plen, nd, slen);
         return dest;
     }
-    p = dream_concat_str_int_str(pref, v, suf);
+    p = dream_malloc(dream_string_bytes(total), TAG_STRING);
+    dream_concat_str_int_str_fill(p, pref, v, suf, plen, nd, slen);
     dream_release(dest);
     return p;
 }
@@ -1481,6 +1482,7 @@ void dream_callback_unregister(dream_ptr obj);
 void dream_callback_check(dream_ptr obj);
 void dream_callback_drain(void);
 int dream_callback_pending(void);
+int dream_callback_owned(void);
 void dream_callback_set_waker(void (*wake)(void *), void *context);
 void dream_callback_owner_finish(void);
 void dream_callback_retain(dream_ptr obj);

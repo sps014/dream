@@ -177,15 +177,12 @@ impl<'l, 'a> Fx<'l, 'a> {
                 );
             }
             FieldDrop::Unregister { offset } => {
-                self.call("dream_weak_enter", &[]);
-                let cur = self.field_word(p, offset);
-                let nz = self.truthy(&cur);
-                self.if_then(&nz, |fx| {
-                    let at = fx.addr(p, offset as i64);
-                    let at = fx.as_ref(&V::s(at));
-                    fx.call("dream_weak_unregister", &[cur.clone(), at]);
-                });
-                self.call("dream_weak_leave", &[]);
+                let at = self.addr(p, offset as i64);
+                let at = self.as_ref(&V::s(at));
+                self.call(
+                    "dream_weak_drop_field",
+                    &[at, V::i32(1), V::i32(0), V::i32(0)],
+                );
             }
             FieldDrop::Value { offset, ty } => {
                 let at = self.addr(p, offset as i64);

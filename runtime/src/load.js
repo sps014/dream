@@ -265,22 +265,18 @@ export async function load(source, options = {}) {
         };
   }
 
-  let workerStack = 0;
   await withBootstrapLock(stackGate, async () => {
     const inst = await WebAssembly.instantiate(wasmModule, importObject);
     instance = new DreamInstance(inst);
     if (stackGate || options.memory) {
-      workerStack = attachGuestStack(inst);
+      instance.__attachGuestStack(0);
     } else if (typeof inst.exports.__runtime_init === "function") {
       inst.exports.__runtime_init();
     }
     return inst;
   });
-  instance.workerStack = workerStack;
   return instance;
 }
-
-const WORKER_STACK_BYTES = 65536;
 
 async function withBootstrapLock(gate, fn) {
   if (!gate) {
@@ -302,32 +298,6 @@ async function withBootstrapLock(gate, fn) {
     Atomics.store(gate, 0, 0);
     Atomics.notify(gate, 0);
   }
-}
-
-function attachGuestStack(wasmInstance) {
-  const sp = wasmInstance.exports.__stack_pointer;
-  if (!sp) {
-    if (typeof wasmInstance.exports.__runtime_init === "function") {
-      wasmInstance.exports.__runtime_init();
-    }
-    return 0;
-  }
-  wasmInstance.exports.dream_heap_init();
-  const tlsSize = wasmInstance.exports.__tls_size?.value >>> 0;
-  const tlsAlign = wasmInstance.exports.__tls_align?.value >>> 0 || 1;
-  const ptr = wasmInstance.exports.dream_wasm_raw_malloc(WORKER_STACK_BYTES + tlsSize + tlsAlign - 1);
-  if (!ptr) {
-    throw new Error("failed to allocate a guest stack");
-  }
-  sp.value = ptr + WORKER_STACK_BYTES;
-  if (tlsSize) {
-    const base = Math.ceil((ptr + WORKER_STACK_BYTES) / tlsAlign) * tlsAlign;
-    wasmInstance.exports.__wasm_init_tls(base);
-  }
-  if (typeof wasmInstance.exports.__runtime_init === "function") {
-    wasmInstance.exports.__runtime_init();
-  }
-  return ptr;
 }
 
 /**

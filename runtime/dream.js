@@ -81,6 +81,8 @@ function wasmToJs(inst, t, raw) {
 }
 
 // ----- instance.js -----
+const WORKER_STACK_BYTES = 65536;
+
 class DreamInstance {
   constructor(instance) {
     this.instance = instance;
@@ -417,6 +419,45 @@ class DreamInstance {
       Number(ptr),
     );
     return this.__awaitWorkerResult(r);
+  }
+
+  /**
+   * Starts this instance as a thread on a worker stack+TLS block, allocating one when `stack` is 0.
+   * Re-running it on the same block gives the thread freshly initialized thread-locals.
+   */
+  __attachGuestStack(stack) {
+    const ex = this.exports;
+    const sp = ex.__stack_pointer;
+    if (!sp) {
+      if (typeof ex.__runtime_init === "function") {
+        ex.__runtime_init();
+      }
+      return;
+    }
+    ex.dream_heap_init();
+    const tlsSize = ex.__tls_size?.value >>> 0;
+    const tlsAlign = ex.__tls_align?.value >>> 0 || 1;
+    const ptr = stack || ex.dream_wasm_raw_malloc(WORKER_STACK_BYTES + tlsSize + tlsAlign - 1);
+    if (!ptr) {
+      throw new Error("failed to allocate a guest stack");
+    }
+    sp.value = ptr + WORKER_STACK_BYTES;
+    if (tlsSize) {
+      ex.__wasm_init_tls(Math.ceil((ptr + WORKER_STACK_BYTES) / tlsAlign) * tlsAlign);
+    }
+    if (typeof ex.__runtime_init === "function") {
+      ex.__runtime_init();
+    }
+    this.workerStack = ptr;
+  }
+
+  /**
+   * Readies a pooled worker for its next session as if it were a new thread: the private heap
+   * goes back to the shared one, and the stack and thread-locals restart on the same block.
+   */
+  __workerReset() {
+    this.exports.dream_heap_thread_exit?.();
+    this.__attachGuestStack(this.workerStack);
   }
 
   /** Heap type tag with `TAG_SHARED` stripped (`HEADER_TAG_OFFSET` is 8 bytes before the payload). */
@@ -2147,6 +2188,8 @@ parentPort.on('message', (m) => {
     if (m.t === 'init') {
       inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory, stackGate: m.stackGate });
       parentPort.postMessage({ t: 'ready', stack: inst.workerStack || 0 });
+    } else if (m.t === 'reset') {
+      inst.__workerReset();
     } else if (m.t === 'msg' || m.t === 'dispatch') {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
       parentPort.postMessage({ t: 'reply', data: packWire(reply) });
@@ -2167,6 +2210,8 @@ self.onmessage = (e) => {
     if (m.t === 'init') {
       inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory, stackGate: m.stackGate });
       self.postMessage({ t: 'ready', stack: inst.workerStack || 0 });
+    } else if (m.t === 'reset') {
+      inst.__workerReset();
     } else if (m.t === 'msg' || m.t === 'dispatch') {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
       self.postMessage({ t: 'reply', data: packWire(reply) });
@@ -2191,41 +2236,45 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
   let nextId = 1;
   /** Lazily resolved Node `worker_threads.Worker` constructor (null until first Node spawn). */
   let NodeWorkerCtor = null;
+  /**
+   * Idle workers kept for the next session. Instantiating the module per Task dominated short
+   * fan-outs, and each instance's stack stays carved out of shared memory until its worker has
+   * stopped, so churning workers could exhaust the heap. A reused worker restarts its stack,
+   * thread-locals, and private heap in place, so each session still starts as a fresh thread.
+   */
+  const idle = [];
+  const IDLE_MAX = 64;
 
+  // A slot is one worker; `slot.state` is the session it currently serves.
   const postJob = (state, job) => {
-    if (state.ready) state.worker.postMessage(job);
-    else state.queued.push(job);
+    const slot = state.slot;
+    state.inflight++;
+    if (slot.ready) slot.worker.postMessage(job);
+    else slot.queued.push(job);
   };
 
-  const attachHandlers = (worker, state) => {
+  const onWorkerMessage = (slot, m) => {
+    if (m.t === "ready") {
+      slot.ready = true;
+      slot.stack = Number(m.stack ?? 0);
+      for (const q of slot.queued) slot.worker.postMessage(q);
+      slot.queued = [];
+    } else if (m.t === "reply") {
+      const state = slot.state;
+      if (!state) return;
+      state.inflight--;
+      const text = unpackWire(m.data);
+      if (state.pending.length > 0) state.pending.shift()(text);
+      else state.replies.push(text);
+    }
+  };
+
+  const attachHandlers = (worker, slot) => {
     // Browser: `onmessage` event with `e.data`. Node worker_threads: `message` event with data directly.
     if (typeof worker.on === "function" && isNode) {
-      worker.on("message", (m) => {
-        if (m.t === "ready") {
-          state.ready = true;
-          state.stack = Number(m.stack ?? 0);
-          for (const q of state.queued) state.worker.postMessage(q);
-          state.queued = [];
-        } else if (m.t === "reply") {
-          const text = unpackWire(m.data);
-          if (state.pending.length > 0) state.pending.shift()(text);
-          else state.replies.push(text);
-        }
-      });
+      worker.on("message", (m) => onWorkerMessage(slot, m));
     } else {
-      worker.onmessage = (e) => {
-        const m = e.data;
-        if (m.t === "ready") {
-          state.ready = true;
-          state.stack = Number(m.stack ?? 0);
-          for (const q of state.queued) state.worker.postMessage(q);
-          state.queued = [];
-        } else if (m.t === "reply") {
-          const text = unpackWire(m.data);
-          if (state.pending.length > 0) state.pending.shift()(text);
-          else state.replies.push(text);
-        }
-      };
+      worker.onmessage = (e) => onWorkerMessage(slot, e.data);
     }
   };
 
@@ -2243,14 +2292,10 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     pub(n);
   };
 
-  const spawnWorker = (fnIndex, env) => {
-    publish(env);
-    const state = {
+  const startWorker = (state) => {
+    const slot = {
       worker: null,
-      fnIndex: Number(fnIndex ?? 0),
-      env: Number(env ?? 0),
-      pending: [],
-      replies: [],
+      state,
       ready: false,
       queued: [],
       blobUrl: null,
@@ -2258,8 +2303,8 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     };
 
     const finishSpawn = (worker) => {
-      state.worker = worker;
-      attachHandlers(worker, state);
+      slot.worker = worker;
+      attachHandlers(worker, slot);
       worker.postMessage({
         t: "init",
         bytes: wasmBytes,
@@ -2292,14 +2337,35 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       const url = URL.createObjectURL(
         new Blob([workerBootSource(import.meta.url)], { type: "text/javascript" }),
       );
-      state.blobUrl = url;
+      slot.blobUrl = url;
       finishSpawn(new Worker(url, { type: "module" }));
     } else {
       throw new Error(
         "Task needs a thread runtime (browser Worker or Node worker_threads); neither is available in this environment",
       );
     }
+    return slot;
+  };
 
+  const spawnWorker = (fnIndex, env) => {
+    publish(env);
+    const state = {
+      slot: null,
+      fnIndex: Number(fnIndex ?? 0),
+      env: Number(env ?? 0),
+      pending: [],
+      replies: [],
+      inflight: 0,
+    };
+    const reused = idle.pop();
+    if (reused) {
+      reused.state = state;
+      state.slot = reused;
+      if (typeof reused.worker.ref === "function") reused.worker.ref();
+      reused.worker.postMessage({ t: "reset" });
+    } else {
+      state.slot = startWorker(state);
+    }
     const id = nextId++;
     reg.set(id, state);
     return id;
@@ -2337,15 +2403,26 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     workerTerminate: (id) => {
       const s = reg.get(id);
       if (!s) return;
+      reg.delete(id);
+      for (const p of s.pending) p("");
+      const slot = s.slot;
+      // A worker mid-job cannot be handed on; it is stopped like before pooling.
+      if (slot.worker && slot.ready && s.inflight === 0 && idle.length < IDLE_MAX) {
+        slot.state = null;
+        // An idle Node worker must not keep the process alive.
+        if (typeof slot.worker.unref === "function") slot.worker.unref();
+        idle.push(slot);
+        return;
+      }
       const releaseStack = () => {
-        if (s.stack && typeof getInstance === "function") {
-          getInstance().exports.dream_wasm_raw_free(s.stack);
+        if (slot.stack && typeof getInstance === "function") {
+          getInstance().exports.dream_wasm_raw_free(slot.stack);
         }
       };
       try {
-        if (s.worker) {
-          s.worker.postMessage({ t: "term" });
-          const stopped = s.worker.terminate();
+        if (slot.worker) {
+          slot.worker.postMessage({ t: "term" });
+          const stopped = slot.worker.terminate();
           // Node termination is asynchronous; its TLS and stack remain live until it stops.
           if (stopped && typeof stopped.then === "function") {
             stopped.then(releaseStack, () => {});
@@ -2356,15 +2433,13 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       } catch (_) {
         /* already gone */
       }
-      if (s.blobUrl) {
+      if (slot.blobUrl) {
         try {
-          URL.revokeObjectURL(s.blobUrl);
+          URL.revokeObjectURL(slot.blobUrl);
         } catch (_) {
           /* ignore */
         }
       }
-      for (const p of s.pending) p("");
-      reg.delete(id);
     },
   };
 }
@@ -2652,22 +2727,18 @@ async function load(source, options = {}) {
         };
   }
 
-  let workerStack = 0;
   await withBootstrapLock(stackGate, async () => {
     const inst = await WebAssembly.instantiate(wasmModule, importObject);
     instance = new DreamInstance(inst);
     if (stackGate || options.memory) {
-      workerStack = attachGuestStack(inst);
+      instance.__attachGuestStack(0);
     } else if (typeof inst.exports.__runtime_init === "function") {
       inst.exports.__runtime_init();
     }
     return inst;
   });
-  instance.workerStack = workerStack;
   return instance;
 }
-
-const WORKER_STACK_BYTES = 65536;
 
 async function withBootstrapLock(gate, fn) {
   if (!gate) {
@@ -2689,32 +2760,6 @@ async function withBootstrapLock(gate, fn) {
     Atomics.store(gate, 0, 0);
     Atomics.notify(gate, 0);
   }
-}
-
-function attachGuestStack(wasmInstance) {
-  const sp = wasmInstance.exports.__stack_pointer;
-  if (!sp) {
-    if (typeof wasmInstance.exports.__runtime_init === "function") {
-      wasmInstance.exports.__runtime_init();
-    }
-    return 0;
-  }
-  wasmInstance.exports.dream_heap_init();
-  const tlsSize = wasmInstance.exports.__tls_size?.value >>> 0;
-  const tlsAlign = wasmInstance.exports.__tls_align?.value >>> 0 || 1;
-  const ptr = wasmInstance.exports.dream_wasm_raw_malloc(WORKER_STACK_BYTES + tlsSize + tlsAlign - 1);
-  if (!ptr) {
-    throw new Error("failed to allocate a guest stack");
-  }
-  sp.value = ptr + WORKER_STACK_BYTES;
-  if (tlsSize) {
-    const base = Math.ceil((ptr + WORKER_STACK_BYTES) / tlsAlign) * tlsAlign;
-    wasmInstance.exports.__wasm_init_tls(base);
-  }
-  if (typeof wasmInstance.exports.__runtime_init === "function") {
-    wasmInstance.exports.__runtime_init();
-  }
-  return ptr;
 }
 
 /**

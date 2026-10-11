@@ -293,7 +293,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         }
         let msg = self.str_v(panic_msgs::INDEX_OUT_OF_BOUNDS);
         let at = self.panic_location();
-        let i = V::s(self.conv(&idx, &Ty::I64));
+        let i = V::s(self.conv(&idx, &Ty::I32));
         self.call_v("dream_array_at", &[b, i, V::i32(es as i64), msg, at])
             .v
     }
@@ -560,6 +560,57 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.call("dream_weak_leave", &[]);
     }
 
+    /// Stores `Some(x)` / `None` into a niche weak field straight from the payload operand.
+    /// Niche construction would retain `x` only for the weak store to release it again; the
+    /// operand's owner keeps `x` alive across the registration either way.
+    pub(super) fn store_weak_niche_union(&mut self, place: &Place, rv: &Rvalue) -> bool {
+        let (Place::Field { base, field }, Rvalue::UnionNew { ty, args, .. }) = (place, rv) else {
+            return false;
+        };
+        if !self.interner.is_niche_union(*ty) {
+            return false;
+        }
+        let Some(fld) = self
+            .l
+            .cx
+            .nstruct(self.f.local_ty(*base))
+            .and_then(|layout| layout.fields.get(*field))
+            .filter(|fld| fld.is_weak)
+            .cloned()
+        else {
+            return false;
+        };
+        let payload = match args.as_slice() {
+            [arg] => self.operand(arg),
+            _ => V::s(Value::zero(self.h())),
+        };
+        let payload = self.as_ref(&payload);
+        let (slot, align) = self.field_addr(*base, fld.offset);
+        self.weak_niche_store(&slot, &payload, align);
+        true
+    }
+
+    /// The slot holds the raw payload pointer and is registered with kind 2, so the runtime
+    /// nulls it when the referent dies.
+    fn weak_niche_store(&mut self, slot: &Value, new: &V, align: u32) {
+        let slot_ref = self.ptr_value(slot);
+        self.call("dream_weak_enter", &[]);
+        let old = self.load_ty(self.h(), slot, align, true);
+        self.store_ty(&self.h(), slot, new, align);
+        let nz = self.truthy(&old);
+        self.if_then(&nz, |fx| {
+            fx.call("dream_weak_unregister", &[old.clone(), slot_ref.clone()]);
+        });
+        let nz = self.truthy(new);
+        self.if_then(&nz, |fx| {
+            fx.call(
+                "dream_weak_register",
+                &[new.clone(), slot_ref.clone(), V::i32(2), V::i32(0)],
+            );
+        });
+        self.call("dream_weak_leave", &[]);
+    }
+
     fn weak_option_store(
         &mut self,
         slot: &Value,
@@ -568,28 +619,10 @@ impl<'l, 'a> Fx<'l, 'a> {
         rhs: &V,
         align: u32,
     ) {
-        let slot_ref = self.ptr_value(slot);
-        // Niche-encoded weak field: the slot holds the raw payload pointer and is registered with
-        // kind 2, so the runtime nulls it when the referent dies.
         if self.interner.is_niche_union(fld.ty) {
-            let retain_copy = unique_move_src(rv).is_none();
             let new = self.as_ref(rhs);
-            self.call("dream_weak_enter", &[]);
-            let old = self.load_ty(self.h(), slot, align, true);
-            self.store_ty(&self.h(), slot, &new, align);
-            let nz = self.truthy(&old);
-            self.if_then(&nz, |fx| {
-                fx.call("dream_weak_unregister", &[old.clone(), slot_ref.clone()]);
-            });
-            let nz = self.truthy(&new);
-            self.if_then(&nz, |fx| {
-                fx.call(
-                    "dream_weak_register",
-                    &[new.clone(), slot_ref.clone(), V::i32(2), V::i32(0)],
-                );
-            });
-            self.call("dream_weak_leave", &[]);
-            if retain_copy {
+            self.weak_niche_store(slot, &new, align);
+            if unique_move_src(rv).is_none() {
                 self.call("dream_release", &[new]);
             }
             return;

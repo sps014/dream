@@ -44,17 +44,30 @@ void dream_weak_leave(void) {
 static int weak_lock(void) { dream_weak_enter(); return 1; }
 static void weak_unlock(int acquired) { if (acquired) { dream_weak_leave(); } }
 
-__attribute__((cold, noinline)) int dream_rc_last_observed(dream_ptr ptr) {
+/* Weak loaders only revive a nonzero count, so releases that leave an owner behind cannot
+ * race them; the registry lock serializes just the transition to zero. A zero count cannot
+ * be revived, so the claiming section also invalidates the slots and destruction finds the
+ * target already unregistered. */
+__attribute__((noinline)) int dream_rc_last_observed(dream_ptr ptr) {
+    int32_t *rc = dream_rc_word(ptr);
+    if (dream_release_nonlast_slow(rc, __atomic_load_n(rc, __ATOMIC_RELAXED))) {
+        return 0;
+    }
     dream_weak_enter();
     int last = dream_rc_last_raw(ptr);
+    if (last) { dream_weak_prepare_destroy(ptr); }
     dream_weak_leave();
     return last;
 }
-__attribute__((cold, noinline)) int dream_rc_claim_observed(dream_ptr ptr) {
+__attribute__((noinline)) int dream_rc_claim_observed(dream_ptr ptr) {
+    if ((__atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED) & INT32_MAX) != 1) {
+        return 0;
+    }
     dream_weak_enter();
     int32_t expected = __atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED);
     int last = (expected & INT32_MAX) == 1 && __atomic_compare_exchange_n(
         dream_rc_word(ptr), &expected, 0, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED);
+    if (last) { dream_weak_prepare_destroy(ptr); }
     dream_weak_leave();
     return last;
 }
@@ -160,16 +173,19 @@ void dream_weak_clear_all(dream_ptr obj) {
     while (*link) {
         dream_weak_node *node = *link;
         if (node->target == obj) {
+            /* Single-word slots are cleared atomically: `dream_weak_drop_field` peeks them
+             * without the lock. */
             if (node->kind == 2) {
                 /* Weak handle: target died — mark the slot dead (null payload). */
-                *(dream_ptr *)dream_p(node->slot) = 0;
+                __atomic_store_n((dream_ptr *)dream_p(node->slot), 0, __ATOMIC_RELEASE);
             } else if (node->kind == 0) {
                 *(int32_t *)dream_p(node->slot) = node->none_tag;
                 *(dream_ptr *)((char *)dream_p(node->slot) + sizeof(dream_ptr)) = 0;
             } else {
                 /* unowned: poison so a later load reports "target destroyed" rather
                  * than an ambiguous null deref. */
-                *(dream_ptr *)dream_p(node->slot) = (dream_ptr)(intptr_t)DREAM_UNOWNED_POISON;
+                __atomic_store_n((dream_ptr *)dream_p(node->slot),
+                                 (dream_ptr)(intptr_t)DREAM_UNOWNED_POISON, __ATOMIC_RELEASE);
             }
             *link = node->next;
             node->next = dead;
@@ -335,8 +351,14 @@ dream_ptr dream_weak_load_field(dream_ptr slot, int32_t kind, int32_t none_tag,
 }
 
 /* Invalidation may race holder teardown, so slot reads and deregistration share
- * the same claim lock. The non-owning Option box is freed after leaving it. */
+ * the same claim lock. The non-owning Option box is freed after leaving it. Only the
+ * holder stores into its slot and it is being torn down, so a slot already empty (never
+ * set, or cleared by invalidation) stays empty and needs no registry visit. */
 void dream_weak_drop_field(dream_ptr slot, int32_t kind, int32_t none_tag, int32_t payload_offset) {
+    dream_ptr peek = __atomic_load_n((dream_ptr *)dream_p(slot), __ATOMIC_ACQUIRE);
+    if (peek == 0 || (kind == 1 && peek == (dream_ptr)(intptr_t)DREAM_UNOWNED_POISON)) {
+        return;
+    }
     dream_weak_enter();
     dream_ptr stored;
     memcpy(&stored, dream_p(slot), sizeof(stored));

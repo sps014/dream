@@ -21,6 +21,7 @@ void dream_thread_attach(void) {}
 void dream_callback_drain(void) {}
 void dream_callback_owner_finish(void) {}
 int dream_callback_pending(void) { return 0; }
+int dream_callback_owned(void) { return 0; }
 void dream_callback_set_waker(void (*wake)(void *), void *context) {
     (void)wake;
     (void)context;
@@ -119,8 +120,9 @@ static void concurrent_operations(void) {
         ops[i].id = id;
         assert(dream_thread_start(&threads[i], receive_until_cancelled, &ops[i]) == 0);
     }
-    /* Each receiver acquires its reference before waiting; no timing-based race trigger. */
-    while (__atomic_load_n(&pin->refs, __ATOMIC_ACQUIRE) != 11) { dream_thread_yield(); }
+    /* Each receiver acquires its reference before waiting; no timing-based race trigger. The
+     * session never had work, so no thread holds a reference beside the registry and pin. */
+    while (__atomic_load_n(&pin->refs, __ATOMIC_ACQUIRE) != 10) { dream_thread_yield(); }
     workerTerminate(id);
     for (int i = 0; i < 8; ++i) { dream_thread_join(threads[i]); }
     release_worker(pin);
@@ -213,7 +215,10 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         if (strcmp(argv[1], "start-failure") == 0) { fail_start = 1; }
         else { next_id = (int64_t)INT32_MAX + 1; }
-        workerPoolSpawn();
+        /* Threads bind on the first job, so a start failure surfaces at the post. */
+        int32_t id = workerPoolSpawn();
+        dream_ptr msg = dream_utf8_to_string("start");
+        workerPost(id, msg);
         return 1;
     }
 

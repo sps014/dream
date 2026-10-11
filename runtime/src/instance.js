@@ -1,5 +1,7 @@
 import { TAGS, elementSize, stripSuffix, parseFunType, jsToWasm, wasmToJs } from "./core.js";
 
+const WORKER_STACK_BYTES = 65536;
+
 export class DreamInstance {
   constructor(instance) {
     this.instance = instance;
@@ -336,6 +338,45 @@ export class DreamInstance {
       Number(ptr),
     );
     return this.__awaitWorkerResult(r);
+  }
+
+  /**
+   * Starts this instance as a thread on a worker stack+TLS block, allocating one when `stack` is 0.
+   * Re-running it on the same block gives the thread freshly initialized thread-locals.
+   */
+  __attachGuestStack(stack) {
+    const ex = this.exports;
+    const sp = ex.__stack_pointer;
+    if (!sp) {
+      if (typeof ex.__runtime_init === "function") {
+        ex.__runtime_init();
+      }
+      return;
+    }
+    ex.dream_heap_init();
+    const tlsSize = ex.__tls_size?.value >>> 0;
+    const tlsAlign = ex.__tls_align?.value >>> 0 || 1;
+    const ptr = stack || ex.dream_wasm_raw_malloc(WORKER_STACK_BYTES + tlsSize + tlsAlign - 1);
+    if (!ptr) {
+      throw new Error("failed to allocate a guest stack");
+    }
+    sp.value = ptr + WORKER_STACK_BYTES;
+    if (tlsSize) {
+      ex.__wasm_init_tls(Math.ceil((ptr + WORKER_STACK_BYTES) / tlsAlign) * tlsAlign);
+    }
+    if (typeof ex.__runtime_init === "function") {
+      ex.__runtime_init();
+    }
+    this.workerStack = ptr;
+  }
+
+  /**
+   * Readies a pooled worker for its next session as if it were a new thread: the private heap
+   * goes back to the shared one, and the stack and thread-locals restart on the same block.
+   */
+  __workerReset() {
+    this.exports.dream_heap_thread_exit?.();
+    this.__attachGuestStack(this.workerStack);
   }
 
   /** Heap type tag with `TAG_SHARED` stripped (`HEADER_TAG_OFFSET` is 8 bytes before the payload). */

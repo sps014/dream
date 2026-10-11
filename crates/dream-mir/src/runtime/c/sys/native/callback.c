@@ -170,6 +170,19 @@ int dream_callback_pending(void) {
     return pending;
 }
 
+/* Registered callbacks must run on this thread, and a wake in flight still targets it. */
+int dream_callback_owned(void) {
+    int owned;
+    if (!current_owner) {
+        return 0;
+    }
+    dream_mutex_lock(&callback_mu);
+    owned = current_owner->head != NULL || current_owner->ready_head != NULL
+        || current_owner->waking != 0;
+    dream_mutex_unlock(&callback_mu);
+    return owned;
+}
+
 void dream_callback_set_waker(void (*wake)(void *), void *context) {
     dream_callback_enter();
     dream_mutex_lock(&callback_mu);

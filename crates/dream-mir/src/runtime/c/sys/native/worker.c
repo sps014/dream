@@ -42,12 +42,14 @@ typedef struct Worker {
     int dead;
     int busy;
     int detached;
-    int finished;
+    /* A session holds a pool thread only while it has work or thread-bound callbacks, so
+     * stopping an idle session never waits on a wake-up and join. */
+    int bound;
     UT_hash_handle hh;
 } Worker;
 
-/* A session's OS thread outlives it: thread creation dominated short Task fan-outs, so a finished
- * worker parks its thread here for the next workerSpawn instead of exiting. */
+/* Pool threads outlive sessions: thread creation dominated short Task fan-outs, so a thread
+ * whose session goes idle parks here for the next session with work instead of exiting. */
 typedef struct PoolThread {
     dream_cond cv;
     struct Worker *assigned;
@@ -112,12 +114,18 @@ static void callback_wake(void *context) {
     dream_mutex_unlock(&w->mu);
 }
 
-static void run_worker(Worker *w) {
+static void serve_on_this_thread(Worker *w) {
     dream_thread_attach();
     dream_mutex_lock(&w->mu);
     w->thread_id = dream_thread_self();
     dream_mutex_unlock(&w->mu);
     dream_callback_set_waker(callback_wake, w);
+}
+
+/* Serves w until it is dead, or idle with nothing tying it to this thread: native callbacks
+ * must run on the thread that registered them, so a session holding one keeps its thread. */
+static void run_worker(Worker *w) {
+    serve_on_this_thread(w);
     for (;;) {
         dream_callback_drain();
         dream_mutex_lock(&w->mu);
@@ -128,10 +136,22 @@ static void run_worker(Worker *w) {
                 dream_mutex_lock(&w->mu);
                 continue;
             }
+            if (!dream_callback_owned()) {
+                break;
+            }
             dream_cond_wait(&w->cv, &w->mu);
         }
-        if (w->dead) {
+        if (!w->head || w->dead) {
+            /* owner_finish waits for outstanding wake callbacks; posts arriving meanwhile
+             * still see the session bound, so this thread must pick them up. */
             dream_mutex_unlock(&w->mu);
+            dream_callback_owner_finish();
+            dream_mutex_lock(&w->mu);
+            if (w->head && !w->dead) {
+                dream_mutex_unlock(&w->mu);
+                serve_on_this_thread(w);
+                continue;
+            }
             break;
         }
         Job *j = w->head;
@@ -165,13 +185,10 @@ static void run_worker(Worker *w) {
             release_job(j);
         }
     }
-    /* owner_finish waits for outstanding wake callbacks before the thread reference is dropped. */
-    dream_callback_owner_finish();
-    /* Dropping the reference and publishing `finished` under one lock lets workerTerminate observe
+    /* Dropping the reference and clearing `bound` under one lock lets workerTerminate observe
      * both at once; a non-last reference means someone else keeps w alive past the unlock. */
-    dream_mutex_lock(&w->mu);
     int last = __atomic_fetch_sub(&w->refs, 1u, __ATOMIC_ACQ_REL) == 1u;
-    w->finished = 1;
+    w->bound = 0;
     dream_cond_broadcast(&w->cv);
     dream_mutex_unlock(&w->mu);
     if (last) {
@@ -204,7 +221,6 @@ static DREAM_THREAD_PROC(worker_main) {
     return 0;
 }
 
-/* Caller holds reg_mu so a failed start can unregister w before anyone else can find it. */
 static int assign_thread(Worker *w) {
     dream_mutex_lock(&pool_mu);
     PoolThread *pt = idle_threads;
@@ -241,7 +257,7 @@ int32_t workerSpawn(int32_t fn, dream_ptr env) {
     __atomic_store_n(&dream_rt_mt, 1, __ATOMIC_RELEASE);
     w->fn = fn;
     w->env = env;
-    w->refs = 2; /* Registry membership and the running thread each own a reference. */
+    w->refs = 1; /* Registry membership; a bound thread adds its own. */
     dream_publish(env);
     dream_retain(env);
     dream_mutex_init(&w->mu);
@@ -254,14 +270,22 @@ int32_t workerSpawn(int32_t fn, dream_ptr env) {
     }
     int32_t id = w->id = (int32_t)next_id++;
     HASH_ADD(hh, workers, id, sizeof(w->id), w);
-    if (assign_thread(w) != 0) {
-        HASH_DEL(workers, w);
-        dream_mutex_unlock(&reg_mu);
-        destroy_worker(w);
-        worker_failure("panic: could not start a worker thread");
-    }
     dream_mutex_unlock(&reg_mu);
     return id;
+}
+
+/* The caller claimed `bound` while enqueueing; the thread owns a reference until it unbinds.
+ * A failed start unregisters w first, so the panic leaves no session reachable by ID. */
+static void bind_thread(Worker *w) {
+    __atomic_fetch_add(&w->refs, 1u, __ATOMIC_RELAXED);
+    if (assign_thread(w) != 0) {
+        dream_mutex_lock(&reg_mu);
+        if (find_worker(w->id) == w) {
+            HASH_DEL(workers, w);
+        }
+        dream_mutex_unlock(&reg_mu);
+        worker_failure("panic: could not start a worker thread");
+    }
 }
 
 int32_t workerPoolSpawn(void) { return workerSpawn(0, 0); }
@@ -283,8 +307,10 @@ static Job *new_job(int32_t fn, dream_ptr env, dream_ptr msg, int synchronous) {
     return j;
 }
 
-/* Caller holds w->mu; termination and enqueue have one linearization point. */
-static int enqueue(Worker *w, Job *j) {
+/* Caller holds w->mu; termination and enqueue have one linearization point. `*bind` asks the
+ * caller to bind a pool thread once it has unlocked. */
+static int enqueue(Worker *w, Job *j, int *bind) {
+    *bind = 0;
     if (w->dead) {
         return 0;
     }
@@ -294,6 +320,8 @@ static int enqueue(Worker *w, Job *j) {
         w->head = j;
     }
     w->tail = j;
+    *bind = !w->bound;
+    w->bound = 1;
     dream_cond_broadcast(&w->cv);
     return 1;
 }
@@ -304,9 +332,13 @@ void workerPost(int32_t id, dream_ptr msg) {
         return;
     }
     Job *j = new_job(w->fn, w->env, msg, 0);
+    int bind;
     dream_mutex_lock(&w->mu);
-    int accepted = enqueue(w, j);
+    int accepted = enqueue(w, j, &bind);
     dream_mutex_unlock(&w->mu);
+    if (bind) {
+        bind_thread(w);
+    }
     if (!accepted) {
         release_job(j);
     }
@@ -319,8 +351,14 @@ dream_ptr workerPoolDispatch(int32_t id, int32_t fn, dream_ptr env, dream_ptr ms
         return 0;
     }
     Job *j = new_job(fn, env, msg, 1);
+    int bind;
     dream_mutex_lock(&w->mu);
-    int accepted = enqueue(w, j);
+    int accepted = enqueue(w, j, &bind);
+    if (bind) {
+        dream_mutex_unlock(&w->mu);
+        bind_thread(w);
+        dream_mutex_lock(&w->mu);
+    }
     while (accepted && !j->done && !w->dead) {
         dream_cond_wait(&w->cv, &w->mu);
     }
@@ -395,7 +433,7 @@ static void stop_worker(Worker *w) {
     for (Job *j = cancelled; j; j = j->next) {
         j->done = 1;
     }
-    w->detached |= w->busy || dream_thread_id_eq(dream_thread_self(), w->thread_id);
+    w->detached |= w->busy || (w->bound && dream_thread_id_eq(dream_thread_self(), w->thread_id));
     dream_cond_broadcast(&w->cv);
     dream_mutex_unlock(&w->mu);
     release_jobs(cancelled);
@@ -419,7 +457,7 @@ void workerTerminate(int32_t id) {
     }
     stop_worker(w);
     dream_mutex_lock(&w->mu);
-    while (!w->detached && !w->finished) {
+    while (!w->detached && w->bound) {
         dream_cond_wait(&w->cv, &w->mu);
     }
     dream_mutex_unlock(&w->mu);

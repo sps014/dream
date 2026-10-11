@@ -272,7 +272,10 @@ impl<'l, 'a> Fx<'l, 'a> {
                 return;
             }
         }
-        if self.store_from_bytes_value(place, rv) || self.store_js_to_value(place, rv) {
+        if self.store_from_bytes_value(place, rv)
+            || self.store_js_to_value(place, rv)
+            || self.store_weak_niche_union(place, rv)
+        {
             return;
         }
         let dest = self.operand_ty(&Operand::Copy(place.clone()));

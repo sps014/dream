@@ -70,6 +70,8 @@ parentPort.on('message', (m) => {
     if (m.t === 'init') {
       inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory, stackGate: m.stackGate });
       parentPort.postMessage({ t: 'ready', stack: inst.workerStack || 0 });
+    } else if (m.t === 'reset') {
+      inst.__workerReset();
     } else if (m.t === 'msg' || m.t === 'dispatch') {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
       parentPort.postMessage({ t: 'reply', data: packWire(reply) });
@@ -90,6 +92,8 @@ self.onmessage = (e) => {
     if (m.t === 'init') {
       inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory, stackGate: m.stackGate });
       self.postMessage({ t: 'ready', stack: inst.workerStack || 0 });
+    } else if (m.t === 'reset') {
+      inst.__workerReset();
     } else if (m.t === 'msg' || m.t === 'dispatch') {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
       self.postMessage({ t: 'reply', data: packWire(reply) });
@@ -114,41 +118,45 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
   let nextId = 1;
   /** Lazily resolved Node `worker_threads.Worker` constructor (null until first Node spawn). */
   let NodeWorkerCtor = null;
+  /**
+   * Idle workers kept for the next session. Instantiating the module per Task dominated short
+   * fan-outs, and each instance's stack stays carved out of shared memory until its worker has
+   * stopped, so churning workers could exhaust the heap. A reused worker restarts its stack,
+   * thread-locals, and private heap in place, so each session still starts as a fresh thread.
+   */
+  const idle = [];
+  const IDLE_MAX = 64;
 
+  // A slot is one worker; `slot.state` is the session it currently serves.
   const postJob = (state, job) => {
-    if (state.ready) state.worker.postMessage(job);
-    else state.queued.push(job);
+    const slot = state.slot;
+    state.inflight++;
+    if (slot.ready) slot.worker.postMessage(job);
+    else slot.queued.push(job);
   };
 
-  const attachHandlers = (worker, state) => {
+  const onWorkerMessage = (slot, m) => {
+    if (m.t === "ready") {
+      slot.ready = true;
+      slot.stack = Number(m.stack ?? 0);
+      for (const q of slot.queued) slot.worker.postMessage(q);
+      slot.queued = [];
+    } else if (m.t === "reply") {
+      const state = slot.state;
+      if (!state) return;
+      state.inflight--;
+      const text = unpackWire(m.data);
+      if (state.pending.length > 0) state.pending.shift()(text);
+      else state.replies.push(text);
+    }
+  };
+
+  const attachHandlers = (worker, slot) => {
     // Browser: `onmessage` event with `e.data`. Node worker_threads: `message` event with data directly.
     if (typeof worker.on === "function" && isNode) {
-      worker.on("message", (m) => {
-        if (m.t === "ready") {
-          state.ready = true;
-          state.stack = Number(m.stack ?? 0);
-          for (const q of state.queued) state.worker.postMessage(q);
-          state.queued = [];
-        } else if (m.t === "reply") {
-          const text = unpackWire(m.data);
-          if (state.pending.length > 0) state.pending.shift()(text);
-          else state.replies.push(text);
-        }
-      });
+      worker.on("message", (m) => onWorkerMessage(slot, m));
     } else {
-      worker.onmessage = (e) => {
-        const m = e.data;
-        if (m.t === "ready") {
-          state.ready = true;
-          state.stack = Number(m.stack ?? 0);
-          for (const q of state.queued) state.worker.postMessage(q);
-          state.queued = [];
-        } else if (m.t === "reply") {
-          const text = unpackWire(m.data);
-          if (state.pending.length > 0) state.pending.shift()(text);
-          else state.replies.push(text);
-        }
-      };
+      worker.onmessage = (e) => onWorkerMessage(slot, e.data);
     }
   };
 
@@ -166,14 +174,10 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     pub(n);
   };
 
-  const spawnWorker = (fnIndex, env) => {
-    publish(env);
-    const state = {
+  const startWorker = (state) => {
+    const slot = {
       worker: null,
-      fnIndex: Number(fnIndex ?? 0),
-      env: Number(env ?? 0),
-      pending: [],
-      replies: [],
+      state,
       ready: false,
       queued: [],
       blobUrl: null,
@@ -181,8 +185,8 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     };
 
     const finishSpawn = (worker) => {
-      state.worker = worker;
-      attachHandlers(worker, state);
+      slot.worker = worker;
+      attachHandlers(worker, slot);
       worker.postMessage({
         t: "init",
         bytes: wasmBytes,
@@ -215,14 +219,35 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       const url = URL.createObjectURL(
         new Blob([workerBootSource(import.meta.url)], { type: "text/javascript" }),
       );
-      state.blobUrl = url;
+      slot.blobUrl = url;
       finishSpawn(new Worker(url, { type: "module" }));
     } else {
       throw new Error(
         "Task needs a thread runtime (browser Worker or Node worker_threads); neither is available in this environment",
       );
     }
+    return slot;
+  };
 
+  const spawnWorker = (fnIndex, env) => {
+    publish(env);
+    const state = {
+      slot: null,
+      fnIndex: Number(fnIndex ?? 0),
+      env: Number(env ?? 0),
+      pending: [],
+      replies: [],
+      inflight: 0,
+    };
+    const reused = idle.pop();
+    if (reused) {
+      reused.state = state;
+      state.slot = reused;
+      if (typeof reused.worker.ref === "function") reused.worker.ref();
+      reused.worker.postMessage({ t: "reset" });
+    } else {
+      state.slot = startWorker(state);
+    }
     const id = nextId++;
     reg.set(id, state);
     return id;
@@ -260,15 +285,26 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     workerTerminate: (id) => {
       const s = reg.get(id);
       if (!s) return;
+      reg.delete(id);
+      for (const p of s.pending) p("");
+      const slot = s.slot;
+      // A worker mid-job cannot be handed on; it is stopped like before pooling.
+      if (slot.worker && slot.ready && s.inflight === 0 && idle.length < IDLE_MAX) {
+        slot.state = null;
+        // An idle Node worker must not keep the process alive.
+        if (typeof slot.worker.unref === "function") slot.worker.unref();
+        idle.push(slot);
+        return;
+      }
       const releaseStack = () => {
-        if (s.stack && typeof getInstance === "function") {
-          getInstance().exports.dream_wasm_raw_free(s.stack);
+        if (slot.stack && typeof getInstance === "function") {
+          getInstance().exports.dream_wasm_raw_free(slot.stack);
         }
       };
       try {
-        if (s.worker) {
-          s.worker.postMessage({ t: "term" });
-          const stopped = s.worker.terminate();
+        if (slot.worker) {
+          slot.worker.postMessage({ t: "term" });
+          const stopped = slot.worker.terminate();
           // Node termination is asynchronous; its TLS and stack remain live until it stops.
           if (stopped && typeof stopped.then === "function") {
             stopped.then(releaseStack, () => {});
@@ -279,15 +315,13 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       } catch (_) {
         /* already gone */
       }
-      if (s.blobUrl) {
+      if (slot.blobUrl) {
         try {
-          URL.revokeObjectURL(s.blobUrl);
+          URL.revokeObjectURL(slot.blobUrl);
         } catch (_) {
           /* ignore */
         }
       }
-      for (const p of s.pending) p("");
-      reg.delete(id);
     },
   };
 }

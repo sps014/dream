@@ -1,5 +1,19 @@
 # Benchmark measurement protocol
 
+## CI comparison with .NET 10
+
+The **Dream vs .NET 10** workflow runs on pull requests, pushes to `main`, and manual
+dispatches. Each micro/macro job builds Dream and its host libraries from the checked-out
+revision, installs the latest stable .NET 10 SDK, and uses `bench.py --arms current csharp`
+to compile both implementations and compare them on the same runner. It uses two warmups,
+20 measured process starts per arm, and ten passes per process.
+
+The job summary includes timings, confidence intervals, ratios, and peak RSS. Download the
+`dream-dotnet10-<suite>-<revision>` artifact for raw samples, `summary.json` (including
+tool/runtime fingerprints and comparability notes), build identities, and the commit SHA.
+These hosted comparisons report measurements; they do not replace the controlled reference
+gate below. Invalid results or failed benchmark commands still fail the job.
+
 ## Measurement protocol (read before comparing numbers)
 
 Use `scripts/bench.py` for regression decisions. Timing runs compile without runtime

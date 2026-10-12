@@ -1,0 +1,111 @@
+name: Dream vs .NET 10
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bench-dotnet-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: "0"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  compare:
+    name: Native ${{ matrix.suite }} vs .NET 10
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [micro, macro]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: bench-dotnet-release
+      - uses: actions/setup-dotnet@v5
+        id: dotnet
+        with:
+          dotnet-version: '10.0.x'
+      - name: Select the installed .NET 10 SDK
+        env:
+          DOTNET_SDK_VERSION: ${{ steps.dotnet.outputs.dotnet-version }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          Path("global.json").write_text(json.dumps({"sdk": {
+              "version": os.environ["DOTNET_SDK_VERSION"], "rollForward": "disable"
+          }}) + "\n")
+          PY
+      - uses: actions/cache@v4
+        with:
+          path: ~/.dream/toolchains/llvm-22.1.8
+          key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
+      - name: Install pinned LLVM
+        run: scripts/fetch-dev-llvm.sh
+      - name: Build this revision's release compiler and host libraries
+        run: cargo build --locked --release -p dream -p dream-host
+      - name: Compare freshly built Dream and .NET 10
+        env:
+          BENCH_SUITE: ${{ matrix.suite }}
+        shell: bash
+        run: |
+          output="target/bench-dotnet/$BENCH_SUITE"
+          mkdir -p "$output"
+          git rev-parse HEAD > "$output/revision.txt"
+          dotnet --info > "$output/dotnet-info.txt"
+          python3 scripts/bench.py --target native --suite "$BENCH_SUITE" \
+            --arms current csharp --current-dream target/release/dream \
+            --warmup 2 --rounds 20 --passes 10 --out "$output" \
+            2>&1 | tee "$output/comparison.txt"
+      - name: Publish comparison in the job summary
+        if: always()
+        env:
+          BENCH_SUITE: ${{ matrix.suite }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          output = Path("target/bench-dotnet") / os.environ["BENCH_SUITE"]
+          report = output / "comparison.txt"
+          if report.exists():
+              revision = (output / "revision.txt").read_text().strip()
+              with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
+                  summary.write(f"## Dream vs .NET 10: {os.environ['BENCH_SUITE']}\n\nRevision: `{revision}`\n\n")
+                  summary.write("Both arms were built and measured on this runner in this run. "
+                                "`cur/C#` below 1 means Dream took less time. "
+                                "Hosted measurements are informational; lifecycle/engine differences "
+                                "are recorded in summary.json.\n\n```text\n")
+                  summary.write(report.read_text())
+                  summary.write("\n```\n")
+          PY
+      - name: Preserve measurements and build identities
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dream-dotnet10-${{ matrix.suite }}-${{ github.sha }}
+          path: |
+            target/bench-dotnet/${{ matrix.suite }}/*.txt
+            target/bench-dotnet/${{ matrix.suite }}/*.json*
+            target/bench-dotnet/${{ matrix.suite }}/*/build.json
+          retention-days: 30
+          if-no-files-found: warn

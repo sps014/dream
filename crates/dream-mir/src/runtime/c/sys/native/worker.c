@@ -39,6 +39,7 @@ typedef struct Worker {
     Job *tail;
     Job *replies;
     Job *reply_tail;
+    Job *spare;
     int dead;
     int busy;
     int detached;
@@ -77,19 +78,25 @@ static void release_worker(Worker *w) {
     }
 }
 
-static void release_job(Job *j) {
+static void release_job(Worker *w, Job *j) {
     if (__atomic_fetch_sub(&j->refs, 1u, __ATOMIC_ACQ_REL) == 1u) {
         dream_release(j->msg);
         dream_release_closure_env(j->env);
         dream_release(j->reply);
-        free(j);
+        j->msg = j->env = j->reply = 0;
+        Job *empty = NULL;
+        /* A caller holds a session reference through payload destruction. Only the final job
+         * token can publish a cleared spare, and a session never lends it to another session. */
+        if (!__atomic_compare_exchange_n(&w->spare, &empty, j, 0, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
+            free(j);
+        }
     }
 }
 
-static void release_jobs(Job *j) {
+static void release_jobs(Worker *w, Job *j) {
     while (j) {
         Job *next = j->next;
-        release_job(j);
+        release_job(w, j);
         j = next;
     }
 }
@@ -196,7 +203,7 @@ static void run_worker(Worker *w) {
         dream_cond_broadcast(&w->cv);
         dream_mutex_unlock(&w->mu);
         if (!queued_reply) {
-            release_job(j);
+            release_job(w, j);
         }
     }
     /* Dropping the reference and clearing `bound` under one lock lets workerTerminate observe
@@ -305,8 +312,12 @@ static void bind_thread(Worker *w) {
 
 int32_t workerPoolSpawn(void) { return workerSpawn(0, 0); }
 
-static Job *new_job(int32_t fn, dream_ptr env, dream_ptr msg, int synchronous) {
-    Job *j = calloc(1, sizeof(*j));
+static Job *new_job(Worker *w, int32_t fn, dream_ptr env, dream_ptr msg, int synchronous) {
+    Job *j = __atomic_exchange_n(&w->spare, NULL, __ATOMIC_ACQUIRE);
+    if (!j) {
+        j = calloc(1, sizeof(*j));
+        if (j) { dream_count(DREAM_COUNT_WORKER_JOB_ALLOC, 1); }
+    }
     if (!j) {
         worker_failure("panic: out of memory posting a worker job");
     }
@@ -315,6 +326,9 @@ static Job *new_job(int32_t fn, dream_ptr env, dream_ptr msg, int synchronous) {
     j->msg = msg;
     j->refs = synchronous ? 2u : 1u;
     j->synchronous = synchronous;
+    j->reply = 0;
+    j->done = 0;
+    j->next = NULL;
     dream_publish(env);
     dream_publish(msg);
     dream_retain(env);
@@ -346,7 +360,7 @@ void workerPost(int32_t id, dream_ptr msg) {
     if (!w) {
         return;
     }
-    Job *j = new_job(w->fn, w->env, msg, 0);
+    Job *j = new_job(w, w->fn, w->env, msg, 0);
     int bind;
     dream_mutex_lock(&w->mu);
     int accepted = enqueue(w, j, &bind);
@@ -355,7 +369,7 @@ void workerPost(int32_t id, dream_ptr msg) {
         bind_thread(w);
     }
     if (!accepted) {
-        release_job(j);
+        release_job(w, j);
     }
     release_worker(w);
 }
@@ -365,7 +379,7 @@ dream_ptr workerPoolDispatch(int32_t id, int32_t fn, dream_ptr env, dream_ptr ms
     if (!w) {
         return 0;
     }
-    Job *j = new_job(fn, env, msg, 1);
+    Job *j = new_job(w, fn, env, msg, 1);
     int bind;
     dream_mutex_lock(&w->mu);
     int accepted = enqueue(w, j, &bind);
@@ -383,9 +397,9 @@ dream_ptr workerPoolDispatch(int32_t id, int32_t fn, dream_ptr env, dream_ptr ms
     }
     dream_mutex_unlock(&w->mu);
     if (!accepted) {
-        release_job(j);
+        release_job(w, j);
     }
-    release_job(j);
+    release_job(w, j);
     release_worker(w);
     return r;
 }
@@ -411,7 +425,7 @@ static dream_ptr worker_recv_blocking(int32_t id) {
     }
     dream_mutex_unlock(&w->mu);
     if (j) {
-        release_job(j);
+        release_job(w, j);
     }
     release_worker(w);
     return r;
@@ -430,8 +444,9 @@ static Worker *take_worker(int32_t id) {
 }
 
 static void destroy_worker(Worker *w) {
-    release_jobs(w->head);
-    release_jobs(w->replies);
+    release_jobs(w, w->head);
+    release_jobs(w, w->replies);
+    free(__atomic_exchange_n(&w->spare, NULL, __ATOMIC_ACQUIRE));
     dream_release_closure_env(w->env);
     dream_mutex_destroy(&w->mu);
     dream_cond_destroy(&w->cv);
@@ -451,7 +466,7 @@ static void stop_worker(Worker *w) {
     w->detached |= w->busy || (w->bound && dream_thread_id_eq(dream_thread_self(), w->thread_id));
     dream_cond_broadcast(&w->cv);
     dream_mutex_unlock(&w->mu);
-    release_jobs(cancelled);
+    release_jobs(w, cancelled);
 }
 
 /* Stops a worker without waiting; workerTerminate still unregisters and waits for it. A group

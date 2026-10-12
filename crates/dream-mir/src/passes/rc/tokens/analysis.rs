@@ -52,7 +52,7 @@ impl TokenAnalysis {
         interner: &TypeInterner,
         layouts: &dream_hir::LayoutTable,
         holds: &IndexSet<DefId>,
-        modref: &super::super::modref::ModRefTable,
+        modref: &crate::analysis::effects::ModRefTable,
         analyses: &mut crate::passes::FunctionAnalyses,
     ) -> TokenAnalysis {
         let n = func.blocks.len();

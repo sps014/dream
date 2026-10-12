@@ -1,9 +1,9 @@
 //! A local owner's existing lifetime can cover a view without extending either lifetime.
 
 use super::*;
+use crate::analysis::effects::{Effect, ModRefTable, stmt_effects};
 use crate::analysis::escape::{Escape, LocalEscape, ParamSummaries};
 use crate::passes::rc::liveness;
-use crate::passes::rc::modref::{Effect, ModRefTable, stmt_effects};
 
 pub(super) fn source_stays_alive(
     f: &MirFunction,
@@ -241,7 +241,7 @@ pub(super) fn source_stays_alive(
                 let mut quiet = true;
                 stmt_effects(s, f, interner, |e| {
                     quiet &= match e {
-                        Effect::Top => false,
+                        Effect::Top | Effect::ObserveOwnership => false,
                         // Panic hooks cannot access this fresh, unpublished string or its views.
                         // The normal owner remains alive, and panic never returns to cleanup.
                         Effect::Call(c) => panics.contains(&c.def) || modref.call(c).is_quiet(),

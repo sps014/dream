@@ -2,7 +2,7 @@
 //! while nothing in flight can overwrite `base.s` or drop `base`.
 
 use super::held::run_function;
-use super::modref::ModRefTable;
+use crate::analysis::effects::ModRefTable;
 use crate::build::FunctionBuilder;
 use crate::{
     Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator,

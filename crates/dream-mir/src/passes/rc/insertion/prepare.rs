@@ -1,11 +1,11 @@
 use super::super::{
     cursor,
     liveness::{self, live_after_stmt},
-    modref::ModRefTable,
     tokens::{
         TokenAnalysis, funcbox_env_rc_roots, is_owned_local, leftover_alias_parent, leftover_keep,
     },
 };
+use crate::analysis::effects::ModRefTable;
 use crate::{Global, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{DefId, TypeInterner};
 use indexmap::{IndexMap, IndexSet};

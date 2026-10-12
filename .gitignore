@@ -80,3 +80,10 @@ tests/bench/out/
 !tests/runtime_scheduler_nodes.c
 
 !tests/runtime_leak_reporting.c
+
+!tests/runtime_string_search.c
+
+!tests/runtime_foreign_queue.c
+
+# Machine-specific benchmark records stay in ignored output storage.
+tests/bench/results/

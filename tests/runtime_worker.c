@@ -232,6 +232,54 @@ static DREAM_THREAD_PROC(watchdog) {
     abort();
 }
 
+typedef struct {
+    Worker *worker;
+    int slot;
+} ReuseOperation;
+static DREAM_THREAD_PROC(reuse_jobs) {
+    ReuseOperation *operation = arg;
+    for (int i = 0; i < 10000; i++) {
+        Job *j = new_job(operation->worker, operation->slot, 0, 0, 0);
+        assert(j->fn == operation->slot && j->refs == 1);
+        assert(!j->env && !j->msg && !j->reply && !j->done && !j->next);
+        if ((i & 7) == 0) { dream_thread_yield(); }
+        assert(j->fn == operation->slot);
+        release_job(operation->worker, j);
+    }
+    return 0;
+}
+static void session_job_reuse(void) {
+    int32_t id = workerPoolSpawn();
+    Worker *w = acquire_worker(id);
+    dream_ptr payload = dream_utf8_to_string("reuse");
+    Job *original = NULL;
+    for (int i = 0; i < 1000; i++) {
+        Job *j = new_job(w, 7, payload, payload, 1);
+        if (!original) { original = j; }
+        assert(j == original && j->refs == 2 && !w->spare && !j->done && !j->next && !j->reply);
+        j->done = 1;
+        j->next = j;
+        j->reply = payload;
+        dream_retain(payload);
+        release_job(w, j);
+        assert(j->refs == 1 && !w->spare);
+        release_job(w, j);
+        assert(w->spare == original && !j->refs && !j->msg && !j->env && !j->reply);
+    }
+    dream_release(payload);
+    assert(debug_get_live_objects() == 0);
+    dream_thread threads[8];
+    ReuseOperation operations[8];
+    for (int i = 0; i < 8; i++) {
+        operations[i] = (ReuseOperation){w, i};
+        assert(dream_thread_start(&threads[i], reuse_jobs, &operations[i]) == 0);
+    }
+    for (int i = 0; i < 8; i++) { dream_thread_join(threads[i]); }
+    assert(w->spare && !w->spare->refs && !w->spare->msg && !w->spare->env);
+    workerTerminate(id);
+    release_worker(w);
+}
+
 int main(int argc, char **argv) {
     dream_thread guard;
     assert(dream_thread_start(&guard, watchdog, NULL) == 0);
@@ -298,6 +346,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 100; ++i) { workerTerminate(pool[i]); }
     assert(HASH_COUNT(workers) == 0);
     assert(debug_get_live_objects() == 0);
+    session_job_reuse();
     acquired_operation_survives_termination();
     concurrent_operations();
     termination_boundaries();

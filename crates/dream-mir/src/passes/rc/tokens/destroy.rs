@@ -87,7 +87,7 @@ pub(super) struct DestroySite<'a> {
     pub(super) interner: &'a TypeInterner,
     pub(super) layouts: &'a dream_hir::LayoutTable,
     pub(super) holds: &'a IndexSet<DefId>,
-    pub(super) modref: &'a super::super::modref::ModRefTable,
+    pub(super) modref: &'a crate::analysis::effects::ModRefTable,
 }
 
 impl DestroySite<'_> {

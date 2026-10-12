@@ -123,119 +123,8 @@ static int64_t vclock;
 #endif
 
 #ifndef DREAM_WASM32
-/* Foreign-thread completion for @async_host hosts. Each thread's scheduler owns the host work it
- * started: the frame records that scheduler in F_SCHEDULER, and the host thread only publishes
- * the result and hands the frame back. Waking, combinator progress and the scheduler retain stay
- * on the owning thread. A scheduler with work in flight never leaves dream_run_loop, so a frame
- * never names a scheduler whose thread has exited. */
-typedef struct Scheduler {
-    dream_cond cv;
-    Node *fq_head;
-    Node *fq_tail;
-    int32_t foreign_pending;
-} Scheduler;
+#include "../native/foreign_queue.h"
 
-static dream_mutex wake_mu = DREAM_MUTEX_INIT;
-static _Thread_local Scheduler sched = {DREAM_COND_INIT, NULL, NULL, 0};
-
-static Scheduler **scheduler_at(dream_ptr f) {
-    return (Scheduler **)ptr_at(f, F_SCHEDULER);
-}
-
-static void callback_wake(void *context) {
-    Scheduler *s = context;
-    dream_mutex_lock(&wake_mu);
-    dream_cond_broadcast(&s->cv);
-    dream_mutex_unlock(&wake_mu);
-}
-
-void dream_foreign_work_begin(dream_ptr f) {
-    dream_mutex_lock(&wake_mu);
-    *scheduler_at(f) = &sched;
-    sched.foreign_pending += 1;
-    dream_mutex_unlock(&wake_mu);
-}
-
-void dream_foreign_work_end(dream_ptr f) {
-    dream_mutex_lock(&wake_mu);
-    if (*scheduler_at(f)) {
-        *scheduler_at(f) = NULL;
-        sched.foreign_pending -= 1;
-    }
-    dream_mutex_unlock(&wake_mu);
-}
-
-/* Claiming F_SCHEDULER makes a second completion a no-op. A cancelled frame is still handed back
- * so its owner drops the scheduler retain the host was relying on. */
-void dream_complete_foreign(dream_ptr f, dream_result res) {
-    Node *n;
-    Scheduler *s;
-    if (!f) {
-        return;
-    }
-    n = foreign_node_take();
-    n->f = f;
-    dream_mutex_lock(&wake_mu);
-    s = *scheduler_at(f);
-    if (!s) {
-        dream_mutex_unlock(&wake_mu);
-        foreign_node_put(n);
-        return;
-    }
-    *scheduler_at(f) = NULL;
-    if (!i32_at(f, F_STATUS)[0]) {
-        *result_at(f) = res;
-        dream_publish(f);
-        __atomic_store_n(i32_at(f, F_STATUS), 1, __ATOMIC_RELEASE);
-    }
-    s->foreign_pending -= 1;
-    if (s->fq_tail) {
-        s->fq_tail->next = n;
-    } else {
-        s->fq_head = n;
-    }
-    s->fq_tail = n;
-    dream_cond_signal(&s->cv);
-    dream_mutex_unlock(&wake_mu);
-}
-
-static void foreign_drain(void) {
-    for (;;) {
-        Node *n;
-        dream_mutex_lock(&wake_mu);
-        n = sched.fq_head;
-        if (n) {
-            sched.fq_head = n->next;
-            if (!sched.fq_head) {
-                sched.fq_tail = NULL;
-            }
-        }
-        dream_mutex_unlock(&wake_mu);
-        if (!n) {
-            return;
-        }
-        dream_ptr f = n->f;
-        foreign_node_put(n);
-        dream_ptr w = ptr_at(f, F_WAKER)[0];
-        if (w) {
-            ptr_at(f, F_WAKER)[0] = 0;
-            int32_t wk = i32_at(w, F_KIND)[0];
-            if (wk == KIND_ALL || wk == KIND_ANY) {
-                combinator_progress(w, f);
-            } else {
-                dream_enqueue(w);
-            }
-        }
-        scheduler_drop_start_retain(f);
-    }
-}
-
-static int foreign_outstanding(void) {
-    dream_mutex_lock(&wake_mu);
-    int outstanding = sched.fq_head != NULL || sched.foreign_pending != 0;
-    dream_mutex_unlock(&wake_mu);
-    return outstanding;
-}
 #endif
 
 /* Off-thread completion flips F_STATUS after storing the result. */
@@ -313,14 +202,14 @@ void dream_cancel(dream_ptr f) {
     }
 #ifndef DREAM_WASM32
     /* The host still holds an in-flight frame; its completion hands it back to drop the retain. */
-    dream_mutex_lock(&wake_mu);
+    dream_mutex_lock(&foreign_claim_mu);
     if (i32_at(f, F_STATUS)[0]) {
-        dream_mutex_unlock(&wake_mu);
+        dream_mutex_unlock(&foreign_claim_mu);
         return;
     }
     i32_at(f, F_STATUS)[0] = 2;
     in_flight = *scheduler_at(f) != NULL;
-    dream_mutex_unlock(&wake_mu);
+    dream_mutex_unlock(&foreign_claim_mu);
 #else
     if (i32_at(f, F_STATUS)[0]) {
         return;
@@ -472,20 +361,20 @@ void dream_run_loop(void) {
             int64_t now = timeNowNanos();
             int64_t due = timer_head ? timer_head->due : 0;
             if (due > now) {
-                dream_mutex_lock(&wake_mu);
+                dream_mutex_lock(&sched.mu);
                 /* Re-check under the lock: a foreign completion between the drain above and
                  * this wait must not be slept through. */
                 if (!sched.fq_head && !dream_callback_pending()) {
-                    dream_cond_wait_ns(&sched.cv, &wake_mu, due - now);
+                    dream_cond_wait_ns(&sched.cv, &sched.mu, due - now);
                 }
-                dream_mutex_unlock(&wake_mu);
+                dream_mutex_unlock(&sched.mu);
             } else if (!timer_head) {
                 /* No timers: park until a foreign completion signals. */
-                dream_mutex_lock(&wake_mu);
+                dream_mutex_lock(&sched.mu);
                 if (!sched.fq_head && !dream_callback_pending()) {
-                    dream_cond_wait(&sched.cv, &wake_mu);
+                    dream_cond_wait(&sched.cv, &sched.mu);
                 }
-                dream_mutex_unlock(&wake_mu);
+                dream_mutex_unlock(&sched.mu);
             }
             now = timeNowNanos();
 #endif

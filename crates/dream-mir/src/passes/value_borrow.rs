@@ -41,7 +41,7 @@ type Signatures = BTreeMap<(DefId, Vec<TypeId>), Vec<bool>>;
 pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
     let sigs = signatures(mir, interner);
     let modref =
-        (!mir.profile.is_debug()).then(|| super::rc::modref::ModRefTable::compute(mir, interner));
+        (!mir.profile.is_debug()).then(|| crate::analysis::effects::ModRefTable::compute(mir, interner));
     let panics = panic_defs(mir);
     let mut changed = false;
     for f in &mut mir.functions {
@@ -231,7 +231,7 @@ fn borrow_families(
     interner: &TypeInterner,
     layouts: &LayoutTable,
     sigs: &Signatures,
-    modref: Option<&super::rc::modref::ModRefTable>,
+    modref: Option<&crate::analysis::effects::ModRefTable>,
     panics: &BTreeSet<DefId>,
 ) -> bool {
     let n = f.locals.len();

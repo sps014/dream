@@ -23,8 +23,8 @@
 //! backend retain `x` at any container store.
 
 use super::liveness::{self, add_terminator_reads, transfer_stmt};
-use super::modref::{Effect, ModRef, ModRefTable, stmt_effects};
 use super::tokens::{assigns_local, sink_call_args};
+use crate::analysis::effects::{Effect, ModRef, ModRefTable, stmt_effects};
 use crate::{Const, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_hir::LayoutTable;
 use dream_types::{TyKind, TypeId, TypeInterner};
@@ -514,7 +514,7 @@ impl Check<'_> {
         stmt_effects(stmt, self.f, self.interner, |e| {
             ok &= match e {
                 Effect::None | Effect::GlobalStore(_) => true,
-                Effect::Top => false,
+                Effect::Top | Effect::ObserveOwnership => false,
                 Effect::Store(b, field) => {
                     self.snap.slot != Slot::Field(self.f.local_ty(b), field)
                         && !self

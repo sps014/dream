@@ -43,8 +43,10 @@ SUITES = {
     "macro": (ROOT / "tests/bench/macro/macrobenches.dream", ROOT / "tests/bench/macro/csharp"),
     "collections": (ROOT / "tests/bench/collections.dream", None),
     "text": (ROOT / "tests/bench/text.dream", None),
+    "search": (ROOT / "tests/bench/search.dream", None),
     "scheduler": (ROOT / "tests/bench/scheduler.dream", None),
     "timers": (ROOT / "tests/bench/timers.dream", None),
+    "workers": (ROOT / "tests/bench/workers.dream", None),
 }
 # Rows below this are timer noise or a deleted loop and cannot substantiate a claim.
 MIN_NS_PER_OP = 0.25

@@ -11,6 +11,10 @@ import system.text;
 // Inputs come from fixed LCG streams (plus `DREAM_BENCH_SEED & 1`), matched by the C# twin.
 
 let measuring: bool = true;
+let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
+let last_allocations: long = 0;
+let last_retains: long = 0;
+let last_releases: long = 0;
 
 class Sink {
     public v: int;
@@ -27,6 +31,18 @@ fun sink_int(x: int): int {
 }
 
 fun report(name: string, nanos: long, iters: int, checksum: int): void {
+    let counters = "";
+    if counters_on {
+        let allocations = Debug.total_allocations;
+        let retains = Debug.runtime_counter(3);
+        let releases = Debug.runtime_counter(4);
+        counters = " counters=allocs:" + (allocations - last_allocations).to_string()
+            + ",retain:" + (retains - last_retains).to_string()
+            + ",release:" + (releases - last_releases).to_string();
+        last_allocations = allocations;
+        last_retains = retains;
+        last_releases = releases;
+    }
     if measuring == false {
         return;
     }
@@ -36,7 +52,7 @@ fun report(name: string, nanos: long, iters: int, checksum: int): void {
             + " ns_total=" + nanos.to_string()
             + " iters=" + iters.to_string()
             + " ns_per_op=" + per.to_string()
-            + " checksum=" + checksum.to_string()
+            + " checksum=" + checksum.to_string() + counters
     );
 }
 

@@ -1,0 +1,72 @@
+import system;
+import system.json;
+
+let sink: int = 0;
+let measuring: bool = true;
+let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
+let last_allocations: long = 0;
+let last_retains: long = 0;
+let last_releases: long = 0;
+
+fun report(name: string, nanos: long, iters: int, checksum: int): void {
+    let counters = "";
+    if counters_on {
+        let allocations = Debug.total_allocations;
+        let retains = Debug.runtime_counter(3);
+        let releases = Debug.runtime_counter(4);
+        counters = " counters=allocs:" + (allocations - last_allocations).to_string()
+            + ",retain:" + (retains - last_retains).to_string()
+            + ",release:" + (releases - last_releases).to_string();
+        last_allocations = allocations;
+        last_retains = retains;
+        last_releases = releases;
+    }
+    if measuring {
+        System.println("bench " + name + " ns_total=" + nanos.to_string()
+            + " iters=" + iters.to_string() + " ns_per_op=" + (nanos / (long)iters).to_string()
+            + " checksum=" + checksum.to_string() + counters);
+    }
+    sink = sink + checksum;
+}
+
+@noinline
+fun search(hn: int, nn: int, iters: int, mode: int): int {
+    let h = string.alloc(hn);
+    let n = string.alloc(nn);
+    for (let i = 0; i < hn; i = i + 1) {
+        string.set(h, i, mode == 2 ? (char)(97 + (i % 23)) : 'a');
+    }
+    for (let i = 0; i < nn; i = i + 1) {
+        string.set(n, i, mode == 2 ? (char)(97 + (i % 23)) : 'a');
+    }
+    if mode != 2 { string.set(n, nn - 1, 'b'); }
+    if mode == 1 { string.set(h, hn - 1, 'b'); }
+    let view = h.span();
+    let total = 0;
+    for (let i = 0; i < iters; i = i + 1) {
+        total = total + view.index_of(n, i & 7).unwrap_or(-1);
+    }
+    return total;
+}
+fun measure(name: string, hn: int, nn: int, iters: int, mode: int): void {
+    let sw = Stopwatch(); let result = search(hn, nn, iters, mode); sw.stop();
+    report(name, sw.elapsed_nanos, iters, result);
+}
+fun run_suite(): void {
+    measure("search_short_8", 4096, 8, 100, 1);
+    measure("search_short_31", 4096, 31, 100, 1);
+    measure("search_long_32", 4096, 32, 100, 1);
+    measure("search_long_64", 65536, 64, 20, 1);
+    measure("search_long_256", 65536, 256, 20, 1);
+    measure("search_long_4096", 1048576, 4096, 2, 1);
+    measure("search_missing_256", 65536, 256, 20, 0);
+    measure("search_periodic_256", 65536, 256, 2000, 2);
+}
+fun main(): void {
+    measuring = false;
+    run_suite();
+    measuring = true;
+    let passes = int.parse(System.env_or("DREAM_BENCH_PASSES", "5")).unwrap_or(5);
+    for (let p = 0; p < passes; p = p + 1) { run_suite(); }
+    System.println("sink " + sink.to_string());
+}

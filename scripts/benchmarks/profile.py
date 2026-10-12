@@ -21,8 +21,10 @@ SUITES = {
     "macro": ROOT / "tests/bench/macro/macrobenches.dream",
     "collections": ROOT / "tests/bench/collections.dream",
     "text": ROOT / "tests/bench/text.dream",
+    "search": ROOT / "tests/bench/search.dream",
     "scheduler": ROOT / "tests/bench/scheduler.dream",
     "timers": ROOT / "tests/bench/timers.dream",
+    "workers": ROOT / "tests/bench/workers.dream",
 }
 
 

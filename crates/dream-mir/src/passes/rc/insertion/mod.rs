@@ -4,13 +4,11 @@ mod blocks;
 mod exits;
 mod helpers;
 mod prepare;
-use super::{
-    modref::ModRefTable,
-    value::{
-        insert_early_value_drops, insert_value_struct_moves, mark_returned_value_locals_moved,
-    },
+use super::value::{
+    insert_early_value_drops, insert_value_struct_moves, mark_returned_value_locals_moved,
 };
 use crate::MirFunction;
+use crate::analysis::effects::ModRefTable;
 use crate::passes::MirPass;
 use dream_types::{DefId, TypeInterner};
 use indexmap::IndexSet;

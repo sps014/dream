@@ -1,7 +1,7 @@
 //! Cursor inference: mark non-escaping field/index loads as non-owning aliases.
 
 use super::liveness::{self, live_after_stmt, stmt_reads_local};
-use super::modref::ModRefTable;
+use crate::analysis::effects::ModRefTable;
 use crate::{Callee, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_hir::LayoutTable;
 use dream_types::TypeInterner;
@@ -136,7 +136,22 @@ pub(crate) fn infer_cursors(
     }
 
     let mut overwrite_escaped: IndexSet<u32> = IndexSet::new();
-    escape_slot_overwrite_readers(func, &mut candidates, &mut escaped, &mut overwrite_escaped);
+    let effects = super::cursor_effects::invalidations(
+        func,
+        interner,
+        layouts,
+        modref,
+        &candidates,
+        &forwarding,
+    );
+    escape_slot_overwrite_readers(
+        func,
+        &effects,
+        interner,
+        &mut candidates,
+        &mut escaped,
+        &mut overwrite_escaped,
+    );
     let mut outlive_escaped: IndexSet<u32> = IndexSet::new();
     escape_cursors_outliving_base(
         func,
@@ -362,11 +377,15 @@ fn cursor_source_slot(rvalue: &Rvalue) -> Option<SourceSlot> {
 /// never under-retain; missing an overwrite would leave the use-after-free this guards against.
 fn escape_slot_overwrite_readers(
     func: &MirFunction,
+    effects: &crate::analysis::effects::ModRef,
+    interner: &TypeInterner,
     candidates: &mut IndexSet<u32>,
     escaped: &mut IndexSet<u32>,
     overwrite_escaped: &mut IndexSet<u32>,
 ) {
-    let mut stored_fields: IndexSet<(u32, u32)> = IndexSet::new();
+    let external_values = super::cursor_aliases::external_value_references(func);
+    let mut stored_fields = std::collections::BTreeSet::new();
+    let mut stored_reference_fields = std::collections::BTreeSet::new();
     let mut stored_index_bases: IndexSet<u32> = IndexSet::new();
     let mut def_counts: Vec<u32> = vec![0; func.locals.len()];
     for block in &func.blocks {
@@ -374,6 +393,11 @@ fn escape_slot_overwrite_readers(
             match stmt {
                 Statement::Assign(Place::Field { base, field }, _) => {
                     stored_fields.insert((base.0, *field as u32));
+                    if interner.is_reference(func.local_ty(*base))
+                        || external_values.contains(&base.0)
+                    {
+                        stored_reference_fields.insert((func.local_ty(*base), *field as u32));
+                    }
                 }
                 Statement::Assign(Place::Index { base, .. }, _) => {
                     stored_index_bases.insert(base.0);
@@ -409,7 +433,11 @@ fn escape_slot_overwrite_readers(
     for (id, slot) in sources {
         let overwritten = match slot {
             SourceSlot::Field(base, field) => {
-                stored_fields.contains(&(base, field)) || overwritten_bases.contains(&base)
+                let field = (func.local_ty(crate::Local(base)), field);
+                stored_fields.contains(&(base, field.1))
+                    || stored_reference_fields.contains(&field)
+                    || effects.writes_field(field.0, field.1)
+                    || overwritten_bases.contains(&base)
             }
             SourceSlot::IndexBase(base) => {
                 // Loads and stores often materialize different temps for the same array
@@ -418,6 +446,7 @@ fn escape_slot_overwrite_readers(
                 stored_index_bases.contains(&base)
                     || overwritten_bases.contains(&base)
                     || !stored_index_bases.is_empty()
+                    || super::cursor_effects::changes_elements(effects)
             }
             // A union local's whole value is its slot: any rebind frees the old payload.
             SourceSlot::UnionBase(base) => overwritten_bases.contains(&base),

@@ -1,214 +1,208 @@
-# Performance implementation campaigns
+# Long-term performance implementation status
 
-This file tracks implementation of the long-term performance plan. It is an implementation
-record, not a claim that all five milestones have shipped. Dream syntax, sink-default ownership,
-UTF-16 strings, monomorphization keys, and the C guest runtime remain the architectural contracts.
+This is an implementation ledger, not a portable performance claim or a declaration that the
+whole plan has shipped. Dream keeps its syntax, sink-default ownership, UTF-16 strings,
+monomorphization keys and C guest runtime. Machine-specific samples and runner/tool identities
+stay under ignored `tests/bench/out/` directories; machine-specific result files are not committed.
 
-## First campaign: profiling fidelity and collection waste
+## Implemented mechanisms
 
-Targeted costs are debugger-oriented MIR inlining suppression during profiling, one-element
-zero-value buffers, repeated bulk-growth relocation, update-triggered hash-table growth,
-tombstone-driven expansion, repeated insertion hashing, and per-object publication bookkeeping.
+### Profiling and measurement
 
-Implemented:
+`--release --perf-symbols` emits source/function information while retaining ordinary Release
+MIR optimization. Debugger local preservation remains separate and ordinary `-g` keeps its
+policy. Compiler/link caches distinguish the settings; the profiling helper uses performance
+symbols. Dream-only comparisons are the default. Existing C# arms remain explicitly selectable.
 
-- `--release --perf-symbols` emits optimized source/function information without debugger local
-  preservation. Ordinary `-g` keeps its debugging policy. Compiler and CLI link caches distinguish
-  these settings. The profiling helper uses the new mode.
-- A typed, compiler-internal zero storage value uses actual scalar/reference/inline layouts.
-  `Buffer.zero` is internal to `system.core`; `CollectionStorage.zero` is internal to
-  `system.collections`. Neither is a source-language default constructor. The analyzer also
-  rejects user-defined uses of the storage intrinsic outside trusted stdlib implementations.
-- Intrinsics respect declared member visibility before specialized generic dispatch. Ordinary
-  intrinsic calls preserve visibility in the function table. Public stdlib intrinsics declare
-  `public` explicitly; the parser preserves visibility on extern declarations and permits public
-  intrinsic imports while retaining the host extern/export conflict.
-- List removal/clearing, queue/priority-queue removal, collection queries, and Map/Set/SortedMap
-  default storage no longer obtain zero values from one-element allocations.
-- List bulk append and reserve calculate capacity once. Span ownership preserves self-append and
-  overlapping sources across relocated backing storage.
-- Map/Set avoid growth for existing entries and reuse the hash computed by insertion.
-  Same-capacity compaction and tombstone-tail reclamation were rejected after the initial
-  20-round run showed a supported 23–25% churn regression. Threshold/probe work remains pending.
-- Publication uses stable blocks of traversal entries with uthash visitation. Storage is freed
-  at the end of each traversal; cycles, shared-root revisitation, heap validation, and nested
-  reentrant traversal remain intact. This batches allocations; cross-call reuse remains pending.
-- Frame allocation budgets include headers/alignment. Debug tracing records pass elapsed time,
-  statement/local/block counts, useful changes, and frame-placement acceptance/rejection reasons.
-  This is the beginning of optimization accounting, not a complete effect/rejection taxonomy.
+The harness preserves matching compiler/runtime snapshots, fixture bytes, checksums, tool and
+runner identities, raw samples and process RSS. Timing is separate from counters and sanitizers.
+Campaigns use alternating execution, discarded warmups and process-level confidence intervals.
+The initial regression budget is 10%; inconclusive results remain inconclusive. See
+`tests/bench/BASELINE.md` for the protocol. New suites cover collections, text, long-needle
+search, scheduler overflow, timers and repeated worker sessions. Startup and compiler-build
+measurements use their own entry points.
 
-Correctness investigation found two prerequisite bugs: inline unions could also be marked as
-pointer-niche unions, and managed value-array overwrites performed byte copies without releasing
-old nested references. Inline unions now retain their full layout. Value-element stores snapshot
-and retain borrowed sources before dropping the old occupant, so overlapping copies survive
-cleanup callbacks. Fresh producers transfer their owned nested references.
+### Collections and typed storage
 
-`tests/bench/collections.dream` covers bulk append at 8/256/8192/131072/1048576 elements, reserve, managed pop and
-clear, and update/deletion churn. The benchmark default selects Dream alone. Reference/current
-arms can each use a preserved matching C runtime via `--baseline-runtime`/`--current-runtime`.
-Optional existing external arms remain explicitly selectable. Reference format v5 records the
-selected fixture's actual rows and dependencies; the default regression threshold is 10%.
+Compiler-internal typed zero storage follows existing buffer initialization layouts without
+calling constructors or adding source-language default construction. `Buffer.zero` and
+`CollectionStorage.zero` have their declared internal visibility. Intrinsic specialization checks
+visibility before generic dispatch; public stdlib intrinsics declare `public` explicitly.
+Analyzer validation restricts the storage intrinsic to trusted stdlib implementations.
 
-## Evidence and acceptance
+Collection removal/clearing and container default storage avoid one-element temporary buffers.
+List reserve/bulk append calculates capacity once and preserves self-append and overlapping spans
+through relocation. Map/Set updates avoid insertion growth and reuse the computed hash.
+A rejected tombstone-compaction experiment is absent from the implementation; its evidence
+remains in local JSON. Inline unions keep their full layout. Managed value-array overwrite retains
+borrowed sources before dropping old occupants, preserving overlapping copies and cleanup callbacks.
 
-Keep timing independent of counters, correctness, sanitizers, and compilation. Preserve compiler,
-runtime, fixture, executable checksums, configuration, and raw samples. The initial local reference
-is under `target/perf-plan/baseline`; it is not a portable CI baseline. Local macOS arm64 evidence
-does not establish x86-64, Windows, Linux, or dedicated-runner performance acceptance.
+### Text
 
-Required gates are workspace build, Clippy with warnings denied, workspace tests, full native
-probe, deterministic emission, relevant wasm/Node parity, runtime layering, and affected
-sanitizer tests. Campaign timing requires 20 alternating rounds, 95% confidence intervals, and
-no supported execution regression above 10%. Inconclusive results stay inconclusive.
+Unescaped JSON strings construct owned payloads directly. Quote/backslash scanning uses the
+existing vector boundary scan; escaped strings reserve builder capacity. Builder floating-point
+formatting avoids a temporary guest string, and NaN/infinity formatting terminates correctly.
+Native output uses bounded conversion storage, one operation-wide stream lock and one flush,
+preserving existing embedded-zero, lone-surrogate and panic behavior.
 
-## Text campaign
+Forward UTF-16 long-needle search adapts musl's constant-space Two-Way implementation with its
+MIT notice. Short needles retain their path; first-unit scanning and immediate equality protect
+early/sparse matches. Tests cover explicit lengths, embedded zero units, surrogates, mutation,
+repetitive inputs and boundaries. Reverse search remains unchanged.
 
-Unescaped JSON strings allocate owned payloads directly, so later mutation of the input does not
-change the parsed value. Quote/backslash boundaries use the existing UTF-16 vector scanning
-pattern. Escaped and truncated payloads retain the parser's existing fallback behavior.
-`StringBuilder.append_double` writes the existing formatter's ASCII units into the builder;
-it no longer creates a temporary guest string. The formatter now terminates its NaN/infinity
-branches, which previously left their C string terminator unspecified.
+### Heap and publication
 
-Native string output converts through a bounded 1024-byte stack buffer. A stream lock spans the
-whole operation, and it flushes once. Existing C-string embedded-zero truncation and lone
-surrogate encoding remain intact; panic writes retain their separate replacement semantics.
-Native stream tests verify chunk boundaries, Unicode, stream selection, and allocation avoidance.
+Native thread exit and embedding detach return reusable class blocks to the process allocator.
+Private refill adopts them in batches; an atomic availability hint avoids empty-list locking.
+Unused current arena tails can be adopted by later threads. Counter records retire under the
+heap lock with totals aggregated; live published objects survive their allocating thread's exit.
+This does not reclaim OS mappings or recover every arena-rollover tail.
 
-The local 20-round text run passes all five regression gates. Separate counters show 20000 fewer
-builder allocations per pass and one fewer allocation per unescaped JSON parse. See
-`tests/bench/results/performance-2026-10-12-text.md` and JSON. The recorded version's escaped
-256-unit workload gained one allocation per parse. A subsequent capacity fix reserves for the
-remaining input to avoid that growth; the predefined follow-up passes the 10% gate on all five workloads and restores escaped-input allocation counts. See `tests/bench/results/performance-2026-10-12-text-reserve.md`.
+Publication uses uthash visitation and stable traversal blocks. Native scratch caches are bounded
+and process-owned; active recursive traversals own disjoint blocks. Shared roots are revisited
+because they can acquire private children. Heap validation, cycles and exact visitation remain.
+Wasm scratch returns to the guest heap; per-traversal uthash bookkeeping still allocates.
 
-## Native heap teardown campaign (validation in progress)
+### Scheduler and workers
 
-Worker thread exit and embedding thread detach retire native heap state. Reusable class blocks
-return to the process allocator and private slow allocation borrows them in batches. A separate
-atomic availability hint avoids locking when the process class list is empty. Unused current
-arena tails and their counter records can be adopted by a later thread. Retired counter totals
-are aggregated under the heap lock; concurrent diagnostics cannot observe removed records.
-Live published objects keep their mapping and survive the allocating thread's exit.
+Ready overflow, timers and foreign completions obtain entries in bounded reusable blocks.
+Native idle caches are bounded; wasm returns storage to its guest heap. Cancellation removes raw
+queue references before discharging scheduler ownership. Timer ordering still uses a linked list.
 
-The injected-platform harness covers 64 sequential thread exits with a live shared object and
-verifies bounded mapping/record growth for that workload. Native AddressSanitizer/UBSan and
-concurrent counter checks pass. This does not reclaim mappings, recover every abandoned tail on
-arena rollover, or establish an OS-retention budget. Those require slab metadata and the mapping
-release ABI. The initial collection timing had two inconclusive rows. The predefined 20-round
-follow-up passes the 10% hard gate on all rows, with a supported roughly 5% managed-pop slowdown.
-The tradeoff is recorded in `tests/bench/results/performance-2026-10-12-heap-thread.md`.
+Each native worker session retains at most one payload-free spare Job. Atomic adoption gives
+exclusive ownership; reply/completion/queue fields reset before reuse, and session destruction
+frees the spare. Reuse preserves callback ownership and thread-local/session isolation.
 
-## Publication and ready queue storage (validation in progress)
+Native scheduler completion queues, pending credits and wake/park predicates now share a
+scheduler-owned mutex. Draining and callback wake-up do not take the global completion-claim lock.
+Pending credit stays held through publication and enqueue, protecting the TLS scheduler lifetime.
+Only claim-to-scheduler nested locking is permitted; guest cleanup runs after queue unlock.
+Claiming, cancellation/status coordination and result publication still use the global claim lock.
 
-Native publication returns traversal blocks to a process cache bounded at 16 blocks of at most
-256 entries each. Reentrant traversals own disjoint active blocks. Uthash tables are still created
-per traversal; this removes entry-block allocation from recurring graphs within the cache bound,
-not all hash-table bookkeeping allocation. The native stress test covers repeated cycles,
-modified shared roots, nested traversal, diamonds and million-node graphs under sanitizers.
+Foreign work publishes its future and owned graph on the owner before host handoff. Publishing
+only during completion permitted private ARC updates to overlap the shared transition. The
+existing erased/interior-store publication gate is enabled before handoff. Owner-only intrinsic
+timers keep their private allocation path. Independent tests check concurrent schedulers,
+duplicate completion, cancellation, pending credits, owner-thread wake/resumption and balanced
+shared scheduler tokens; they fail on the old locking and private-handoff paths.
 
-Ready queues retain 64 TLS entries and obtain overflow entries in blocks of 64. Drained run loops
-return blocks to a process cache bounded at eight blocks; larger bursts release excess storage.
-The `ready_alloc` counter counts actual block allocations. The native harness covers FIFO order,
-64-entry boundaries, 513/1024/4096-entry bursts, repeated sessions and concurrent schedulers.
-An end-to-end cancellation case checks removal from an overflowing ready queue.
+### Compiler proofs and scheduling
 
-Wasm returns these blocks to its guest heap instead of retaining a cache in mutable C module
-globals: shared worker instantiation replays data segments. Portable batching remains enabled.
-Scheduler timing has three inconclusive small-burst rows in its initial run; a predefined
-follow-up waits for compiler processes to become idle and doubles measured passes. All rows pass the 10% gate; recurring 513/4096-entry bursts eliminate measured overflow block allocations. See `tests/bench/results/performance-2026-10-12-ready.md`.
+Heap effects are shared by ARC insertion, held-owner snapshots, value borrowing and cleanup
+proofs. Their monotone closure includes direct calls, fresh constructors and closed interface
+targets; erased slots join all concrete instances. Destructor aggregation follows closure, and
+unknown/missing bodies stay conservative. Owning cleanup and ownership observations are explicit
+proof boundaries. Cursor inference rejects summarized overwrites, relevant destruction and heap
+or externally aliased value-slot writes; fresh inline storage remains separate. Initial borrowed
+expressions do not gain an owning token solely because their count is observed.
 
-## Function pass scheduling
+A deterministic dependency worklist closes these effects. Only growing summaries schedule users.
+A full-rescan oracle checks generated graphs, recursion, unknown targets and generic instances;
+scaling fixtures verify bounded evaluations and identical optimized IR. Parameter-position
+read/write/escape/return-alias summaries and revisioned summary reuse remain pending.
 
-A pass that found no changes can skip its next invocation if its function input is identical.
-Any successful transformation increments the function revision and invalidates those decisions.
-Successful passes remain eligible for another round, because they need not be idempotent.
-Dumping still records every configured stage. An independent synthetic pipeline checks both
-skipping and revisiting a previously unsuccessful pass after a new opportunity appears.
-This is function-local scheduling; revisioned call-graph effect summaries remain pending.
+Function passes skip a previously unsuccessful invocation only while the function revision is
+unchanged. Successful transformations invalidate those decisions. This is function-local
+scheduling, not a complete changed-function/call-graph optimization pipeline. Borrowed function
+keys avoid temporary type-argument vector allocation without changing `(DefId, args)` identity.
+Frame budgets include headers/alignment; tracing records useful changes and selected rejection
+reasons. Full pass-cost and rejection accounting remains pending.
 
-## Runtime startup reachability
+### Runtime roots and correctness prerequisites
 
-A compiler-internal requirements record is derived after MIR pruning. It selects argument/path
-capture and callback-owner attachment/cleanup. Unused imports do not retain these startup calls.
-Reachable process argument/path APIs preserve capture. Reachable async code, callback registration intrinsics and foreign/host
-imports retain callback services conservatively. Closure allocation/accessors and callback
-registration are classified in the intrinsic registry; opaque intrinsic effects retain startup
-and cleanup services conservatively. Exported functions and C imports preserve the
-embedding contract, including process capture; native libraries preserve its export roots.
-Ordinary executables no longer preserve embedding exports unconditionally during internalization.
-Argument capture itself no longer attaches a callback owner. Final deferred cleanup is selected from actual `defer` use or opaque embedding needs, before the leak report; the report no longer roots an unconditional drain. Leak reporting remains reachable,
-including environment-controlled Release reporting. Debug tracing prints the requirement flags. Nine integration checks cover unused imports, arguments/path queries, deferred cleanup, C imports, local callbacks, opaque intrinsics and wasm manifests.
-The recorded 20-round follow-up passes the 10% gate on all four launch workloads, without a supported launch speedup. Empty-program symbols fall from 108 to 19 and its TLS sections disappear. See `tests/bench/results/performance-2026-10-12-runtime-reachability.md`. This is the first startup/root selection step, not full runtime-unit dependency selection.
+Reachability requirements after MIR pruning select argument/path capture, callback attachment,
+deferred cleanup and executable export roots. FFI, exports and libraries conservatively retain
+their embedding contract. A scalar-only proof permits known-zero exit diagnostics without heap
+readers; all reporting ABI implementations migrated together. Environment-controlled Release
+leak reporting and Debug output remain available. Full runtime-unit dependency selection remains.
 
-## Inline value observers (correctness prerequisite)
+Copied/relocated inline weak and unowned fields own stable observer boxes; class fields retain
+existing semantics. Cleanup, arrays, DWARF and LLDB views use that representation. Runtime cache
+identities include embedded header declarations to prevent stale signatures across revisions.
 
-Weak/unowned fields of inline value structs must survive copying and relocation. Registering a
-field address in a temporary constructor box left observer entries pointing into freed storage.
-Inline observed fields now own stable ARC observer boxes; copies retain them and overwrites drop
-old boxes only at their last owner. Class fields keep their existing observation protocol.
-Array clearing and nested value cleanup use the same observer ownership rules. DWARF views and
-LLDB formatting decode these boxes. Native and Node cases cover copied weak/unowned values,
-self-assignment, List relocation with a live view, target death and dead-unowned traps; native
-AddressSanitizer checks pass. Runtime bitcode/signature cache identities include the compiler's
-embedded header declaration inventory, preventing stale anchors across compiler revisions.
+## Validation status
 
-Borrowed function-instance keys also avoid allocating temporary type-argument vectors in escape,
-ARC summary and inlining lookups. Hash/equivalence tests preserve exact `(DefId, args)` identity.
-Compile-cost and full-platform acceptance remain pending. The copied-observer DAP check passes, together with the existing string/array/union and async debugger checks.
+The heap-effects/worklist checkpoint passes workspace build, strict workspace Clippy, workspace
+tests, the full native golden corpus and selected Node parity checks. Standalone text, worker,
+heap/publication and scheduler tests exercise applicable ASan/UBSan and TSan paths. The installed
+scheduler-local locking and foreign-handoff changes pass workspace build, strict Clippy, workspace
+tests, the full native probe (681 cases), five selected Node cases and the actual foreign-host
+ThreadSanitizer integration. An initial eight-job probe had one generator compile timeout; the
+focused case and full four-job rerun pass. Separate performance measurements remain local. Arm64 is the current hardware acceptance scope; Windows testing is deferred
+at the user's request. No local result establishes native x86-64 or other-platform performance.
 
-## Timer and foreign-completion blocks
+## Pending work, in delivery order
 
-Timer and foreign-completion entries use separate 64-node blocks. Native caches retain at most
-8 spare blocks per pool when idle. Wasm timer blocks return to the guest heap. Allocation cursors
-initialize entries lazily, so small bursts do not rebuild all 64 slots. The last active entry
-retires its pool's blocks; a current expiry/cancellation cannot invalidate another active node.
-Raw allocation, free and panic hooks run outside the heap lock. Foreign pool access uses the
-heap lock, while completion claiming and the existing scheduler queue state machine are unchanged.
+### Evidence and everyday allocation
 
-The first timer fixture awaited lazy futures sequentially. The final fixture starts every future
-before awaiting, spanning active bursts of 1/8/64/513/4096. All five 20-round rows improve with
-95% confidence and pass the 10% gate. Separate counters show 5000→0, 8000→0, 6400→0, 10260→20,
-and 12288→168 raw timer allocations per measured pass, with unchanged guest/ARC events.
-All five application rows also pass. Native/Node cancellation, foreign completion lifecycle,
-and concurrent pool sanitizer checks pass. See `tests/bench/results/performance-2026-10-12-scheduler-nodes.md`.
-Scheduler-owned foreign synchronization and indexed stable deadlines are still pending.
+- Expand feature-specific startup, working-set sweeps, publication graphs, foreign completions,
+  value/closure/interface calls, generic scaling and realistic application workloads. Reproduce
+  historical results with preserved fixtures and matching runtime/compiler artifacts in ignored output storage.
+- Complete requested/class bytes, mapped/committed storage, per-thread/class free storage,
+  large-block search, stranded storage and region-retention accounting. Separate object death,
+  reusable storage and memory actually returned to the OS.
+- Make rejection reasons stable across escape/publication, unknown effects, owner destruction,
+  weak/unowned observation, suspension, aliasing, growth/frame budgets and iteration limits.
+- Prove List backing-storage transfer for `take_array`, including live views and retained aliases;
+  retain the correct copy path when transfer cannot be proven. Isolate realloc costs and managed
+  element movement. Audit rehash ownership transfer before removing ARC traffic.
+- Measure Map/Set probes, equality calls, live load/tombstones and rehash frequency. Tune growth
+  and compaction with churn/working-set evidence before considering representation changes.
+- Complete reverse search and comparison work, allocation-free text paths and concatenation
+  fusion while preserving evaluation order, Unicode, mutation and snapshot semantics.
 
-## Heap-free diagnostic roots
+### Bounded, minimal runtime
 
-A conservative scalar-only MIR proof lets exit reporting emit known zero counts without retaining
-heap readers and enumeration. Managed or aggregate storage, entry arguments, async, opaque calls,
-FFI, exports and numeric formatting that allocates retain full reporting. The internal reporting
-ABI carries this requirement; all implementations and call sites migrate together. Debug and
-environment-enabled Release reports preserve their output. Empty-program symbols fall from 19
-to 11 and text from 1,628 to 104 bytes. Launch timing remains pending; see
-`tests/bench/results/performance-2026-10-12-empty-heap.md`.
+- Add side metadata for slab lifetime. Account for live objects, TLS/process free-list references,
+  cross-thread frees, published objects and arena tails before reclaiming a slab. Remove heap-map
+  and debug-enumeration entries before releasing storage.
+- Add mapping release to the platform ABI and migrate every native, wasm, injected-test and
+  embedding implementation together. Bound retained idle slabs without slowing private allocation;
+  wasm must return storage to its guest heap. Do not add a tracing collector.
+- Replace the linear timer list with an indexed deadline heap with stable equal-deadline ordering,
+  efficient cancellation, correct raw-frame lifetime and protected small-timer overhead.
+- Prove completion/cancellation lifetime so result publication can leave the global claim critical
+  section safely. Measure multiple schedulers and keep exactly-once claiming and owner resumption.
+- Extend publication scratch reuse to remaining hash bookkeeping, preserving reentrancy and bounded
+  retention. Remove heap validation only where provenance is actually proven.
+- Improve larger recurring worker bursts and batching within current APIs. Preserve callback/TLS
+  contracts; no default busy spin, automatic migration or unproven work stealing.
+- Complete service-level requirements and runtime-unit dependency selection, explain retained
+  services and implement affected Windows dead stripping. Keep opaque FFI and embedding conservative.
 
-## Progress checkpoint validation
+### Stronger compiler proofs
 
-The current checkpoint passes workspace build, workspace Clippy with `-D warnings`, workspace
-tests run serially, and the full native golden probe (679/679). Focused checks cover intrinsic
-visibility, profiling fidelity, runtime requirements, leak reporting, native/Node cancellation,
-observer copies, pool sanitizers and debugger views. Performance acceptance currently uses local
-Apple arm64 hardware. The user will test Windows later; native x86-64 hardware performance and
-complete affected-platform acceptance remain outstanding. Preserved local reference binaries and
-runtime snapshots live under ignored `target/perf-plan/`; checked-in campaign records retain
-measurement metadata and samples. The latest heap-free launch timing is pending at this checkpoint.
+- Add parameter-position reads/writes, capture/escape, return aliasing, publication, destruction,
+  observation, suspension, callbacks and raw exposure. Compute conservative component summaries
+  with explicit function/module revisions and invalidation after transformations.
+- Introduce allocation-generation identities so local reuse does not merge unrelated allocations;
+  start intraprocedurally, then propagate through direct calls and closed interface sets.
+- Broaden borrowing and held-owner snapshots with managed fields/returned aliases and observable
+  cleanup proofs. Add suspension-aware ownership obligations before further async ARC elimination;
+  cancellation must discharge each suspended owning slot exactly once.
+- Expand scalar replacement/frame/region placement through branches, aliases, nested managed fields
+  and proven non-retaining calls. Reuse frame slots only for verified disjoint lifetimes, budget
+  aligned headers and keep recursion, publication, weak observation and suspension conservative.
+- Generalize field caching to reducible multi-block loops, calls and early exits. Preserve zero-trip
+  traps, owner lifetime, shared visibility, alias writes and live-outs. Extend affine/nested/span
+  bounds proofs and guarded loops; emit no unproven alias, overflow or floating-point facts.
 
-## Remaining milestones
+### Scalable Release optimization
 
-1. Baseline: broaden application/startup/retention/compile workloads; complete runtime memory
-   accounting and stable optimization rejection reasons; reproduce previous controlled results.
-2. Everyday work: prove backing-storage transfer for `take_array`, isolate realloc behavior,
-   audit rehash ownership, extend text/search improvements, and finish publication-storage
-   acceptance across affected platforms.
-3. Runtime: reachable-service requirements, feature-driven initialization/export roots, complete
-   native heap-thread reclamation, slab reclamation and mapping-release ABI migration, scheduler-owned foreign synchronization, indexed stable timers and job reuse.
-4. Compiler proofs: revisioned effect summaries, allocation-generation precision, broader
-   borrowing/SROA/regions, suspension-aware ARC, reducible-loop field caching, and affine bounds
-   proofs with independent verifier coverage.
-5. Scaling: deterministic benefit/cost inlining, closure and receiver propagation, bounded
-   specialization/PGO, generic instance accounting, and change-driven optimization worklists.
+- Build deterministic inlining benefit/cost decisions around constants, loops, wrapper flattening
+  and allocation/ARC opportunities under function/module growth budgets. Keep address-taken and
+  entry-point safety restrictions until their contracts are established.
+- Resolve known closure/function/environment pairs, propagate exact receivers and add bounded
+  constant specialization/PGO dispatch promotion. Track generic instances and duplicate machine
+  code without changing monomorphization identity or introducing erased fallbacks.
+- Audit remaining value copies/internal ABI only where measured; preserve clang-owned C shims.
+- Measure pass time, allocations, IR growth and analysis rebuilds. Use changed-function/component
+  worklists, shape-based skips and dependency scheduling rather than broad repeated rescans.
+- Optimize runtime/tool signature-cache validation without weakening content correctness. Add only
+  arena-safe immutable front-end caching and deterministic parallelism with shared mutation removed.
 
-Do not enable storage transfer through shared buffers merely because one local owns a token.
-Do not add default busy spinning, automatic task migration, tracing GC, dynamic stack allocation,
-or unproven LLVM alias/overflow/floating-point metadata to close these milestones.
+Each proof family needs independent verifier coverage and the alias/cleanup/trap/FFI/async matrix.
+Each runtime phase needs thread exit, live published objects, cancellation, duplicate completion,
+queue overflow, equal deadlines, allocation failure and embedding coverage. Required completion
+checks remain workspace build, Clippy with warnings denied, workspace tests, full native probe,
+determinism, relevant Node parity, layering and affected sanitizer/DAP/toolchain tests.

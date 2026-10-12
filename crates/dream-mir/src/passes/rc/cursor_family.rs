@@ -19,7 +19,7 @@
 
 use super::cursor::{is_null_init, mark_stmt_escapes, mark_term_escapes};
 use super::liveness::{self, add_terminator_reads, transfer_stmt};
-use super::modref::{Effect, ModRef, ModRefTable, stmt_effects};
+use crate::analysis::effects::{Effect, ModRef, ModRefTable, stmt_effects};
 use crate::{MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_hir::LayoutTable;
 use dream_types::{TypeId, TypeInterner};
@@ -430,7 +430,7 @@ impl FamilyCx<'_> {
         fields: &BTreeSet<(TypeId, u32)>,
         unions: &BTreeSet<TypeId>,
     ) -> bool {
-        s.hits(fields, unions)
+        s.hits(fields, unions) || (s.may_destroy() && self.modref.del().hits(fields, unions))
     }
 
     fn stmt_ok(
@@ -448,11 +448,19 @@ impl FamilyCx<'_> {
             Statement::RegionLeave => return false,
             _ => {}
         }
+        if self
+            .modref
+            .statement_may_destroy(self.func, stmt, self.interner, self.layouts)
+            && self.stores_hit(self.modref.del(), fields, unions)
+        {
+            return false;
+        }
         let mut ok = true;
         stmt_effects(stmt, self.func, self.interner, |e| {
             let hit = match e {
                 Effect::None | Effect::SlotStore(_) | Effect::GlobalStore(_) => false,
                 Effect::Top => true,
+                Effect::ObserveOwnership => false,
                 Effect::Store(base, field) => {
                     let ty = self.func.locals[base.0 as usize].ty;
                     fields.contains(&(ty, field)) || unions.contains(&ty)

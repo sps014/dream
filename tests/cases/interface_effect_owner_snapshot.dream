@@ -1,0 +1,57 @@
+import system;
+
+class Holder {
+    public value: string;
+    public constructor(value: string) { this.value = value; }
+}
+interface Mutator {
+    fun change(borrow holder: Holder): void;
+}
+class Replace: Mutator {
+    @noinline
+    public fun change(borrow holder: Holder): void {
+        holder.value = "replacement";
+        let reuse = string.clone("trash");
+        System.println(reuse.length);
+    }
+}
+class Unchanged: Mutator {
+    public fun change(borrow holder: Holder): void {}
+}
+@noinline
+fun dispatch(borrow op: Mutator, borrow holder: Holder): void { op.change(holder); }
+@noinline
+fun wrapped(borrow op: Mutator, borrow holder: Holder): void { dispatch(op, holder); }
+@noinline
+fun snapshot(borrow op: Mutator, borrow holder: Holder): int {
+    let previous = holder.value;
+    wrapped(op, holder);
+    return previous.length;
+}
+@allow_cycle
+class OnDrop {
+    op: Mutator;
+    holder: Holder;
+    public constructor(borrow op: Mutator, borrow holder: Holder) {
+        this.op = op;
+        this.holder = holder;
+    }
+    del() { wrapped(this.op, this.holder); }
+}
+@noinline
+fun destructor_snapshot(borrow op: Mutator, borrow holder: Holder): int {
+    let previous = holder.value;
+    if true { let cleanup = OnDrop(op, holder); }
+    return previous.length;
+}
+fun main(): void {
+    let replace = Replace();
+    let unchanged = Unchanged();
+    let holder = Holder(string.clone("original"));
+    System.println(snapshot(replace, holder));
+    System.println(holder.value.length);
+    System.println(snapshot(unchanged, holder));
+    holder.value = string.clone("original");
+    System.println(destructor_snapshot(replace, holder));
+    System.println(holder.value.length);
+}

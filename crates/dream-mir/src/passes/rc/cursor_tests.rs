@@ -57,7 +57,7 @@ fn untouched_slot_stays_cursor() {
     let opt_ty = ctx.interner.struct_ty(def, vec![]);
     let list = ctx.interner.array(opt_ty);
     let mut b = FunctionBuilder::new("f", ctx.interner.void());
-    let this = b.new_local(opt_ty, Some("self".into()));
+    let this = b.new_param(opt_ty, Some("self".into()));
     let snap = b.new_local(list, Some("s".into()));
     b.assign(
         Place::Local(snap),
@@ -84,7 +84,7 @@ fn null_then_field_load_stays_cursor() {
     let opt_ty = ctx.interner.struct_ty(def, vec![]);
     let list = ctx.interner.array(opt_ty);
     let mut b = FunctionBuilder::new("f", ctx.interner.void());
-    let this = b.new_local(opt_ty, Some("self".into()));
+    let this = b.new_param(opt_ty, Some("self".into()));
     let snap = b.new_local(list, Some("s".into()));
     b.assign(Place::Local(snap), Rvalue::Use(Operand::Const(Const::Null)));
     b.assign(
@@ -681,4 +681,64 @@ fn union_hop_payload_is_not_cursor() {
         "hop payload must own or unique-destroy of curr frees it: {:?}",
         func.locals[n.0 as usize]
     );
+}
+
+#[test]
+fn stores_through_aliased_value_ref_parameters_keep_field_snapshots_owned() {
+    let mut ctx = TypeCtx::new();
+    let def = ctx.register(DefKind::Struct, "Value", vec![]);
+    ctx.interner.mark_value_def(def);
+    let value = ctx.interner.struct_ty(def, vec![]);
+    let string = ctx.interner.string();
+    let mut b = FunctionBuilder::new("read_then_write", ctx.interner.int());
+    let first = b.new_ref_param(value, None);
+    let second = b.new_ref_param(value, None);
+    let snapshot = b.new_local(string, None);
+    let length = b.new_local(ctx.interner.int(), None);
+    b.assign(
+        Place::Local(snapshot),
+        Rvalue::Use(Operand::Copy(Place::Field {
+            base: first,
+            field: 0,
+        })),
+    );
+    b.assign(
+        Place::Field {
+            base: second,
+            field: 0,
+        },
+        Rvalue::Use(Operand::Const(Const::Str("changed".into()))),
+    );
+    b.assign(
+        Place::Local(length),
+        Rvalue::StrLen(Operand::Copy(Place::Local(snapshot))),
+    );
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(
+        length,
+    )))));
+    let mut f = b.finish();
+    let mut layouts = dream_hir::LayoutTable::default();
+    layouts.insert(
+        value,
+        dream_hir::TypeLayout::from_fields(
+            &ctx.interner,
+            "Value",
+            [("text".into(), string, false, false)],
+        ),
+    );
+    let table = crate::analysis::effects::ModRefTable::compute(
+        &crate::Mir {
+            layouts: layouts.clone(),
+            ..crate::Mir::default()
+        },
+        &ctx.interner,
+    );
+    RcInsertion::run_with_layouts(
+        &mut f,
+        &ctx.interner,
+        &layouts,
+        &indexmap::IndexSet::new(),
+        &table,
+    );
+    assert!(!f.locals[snapshot.0 as usize].is_cursor);
 }

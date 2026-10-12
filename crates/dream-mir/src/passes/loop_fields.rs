@@ -14,7 +14,7 @@ pub(super) fn run(mir: &mut Mir, interner: &TypeInterner) {
     let math: BTreeSet<_> = mir
         .imports
         .iter()
-        .filter(|i| super::rc::modref::pure_math_import(i, interner))
+        .filter(|i| crate::analysis::effects::pure_math_import(i, interner))
         .map(|i| i.def)
         .collect();
     for f in &mut mir.functions {

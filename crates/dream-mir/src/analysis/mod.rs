@@ -1,5 +1,8 @@
 //! Whole-module analyses shared by several passes.
 
+pub(crate) mod effects;
+#[cfg(test)]
+mod effects_tests;
 pub(crate) mod escape;
 #[cfg(test)]
 mod escape_tests;

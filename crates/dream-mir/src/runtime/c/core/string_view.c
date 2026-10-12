@@ -3,6 +3,7 @@
 #include "dream_core.h"
 
 #include <string.h>
+#include "string_search.h"
 
 static const uint16_t *view_units(dream_ptr s, int32_t off) {
     const uint16_t *u = dream_str_units(s);
@@ -133,6 +134,13 @@ int32_t string_view_find(dream_ptr h, int32_t ho, int32_t hn, dream_ptr nd, int3
     }
     hu = view_units(h, ho);
     nu = view_units(nd, no);
+    if (nn >= 32) {
+        i = find_unit(hu, from, hn - nn + 1, nu[0]);
+        if (i < 0) { return -1; }
+        if (dream_units_equal(hu + i, nu, (size_t)nn << 1)) { return i; }
+        int32_t found = find_long_needle(hu + i, (size_t)(hn - i), nu, (size_t)nn);
+        return found < 0 ? -1 : i + found;
+    }
     for (i = from; i <= hn - nn; i++) {
         i = find_unit(hu, i, hn - nn + 1, nu[0]);
         if (i < 0) {

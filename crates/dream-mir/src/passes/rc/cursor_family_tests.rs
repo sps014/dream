@@ -2,7 +2,7 @@
 //! walks without RC only while nothing in flight can overwrite a traversed slot or drop the root.
 
 use super::RcInsertion;
-use super::modref::ModRefTable;
+use crate::analysis::effects::ModRefTable;
 use crate::build::FunctionBuilder;
 use crate::{
     Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
@@ -182,7 +182,14 @@ fn read_only_walk_is_a_cursor_family() {
     let t = types();
     for owned in [false, true] {
         let mut w = walk(&t, owned, |_, _, _| {});
-        insert(&t, &mut w, &ModRefTable::default());
+        let mir = Mir {
+            functions: vec![w.func],
+            layouts: t.layouts.clone(),
+            ..Mir::default()
+        };
+        let effects = ModRefTable::compute(&mir, &t.i);
+        w.func = mir.functions.into_iter().next().unwrap();
+        insert(&t, &mut w, &effects);
         assert!(
             w.func.locals[w.curr.0 as usize].is_cursor,
             "owned={}",

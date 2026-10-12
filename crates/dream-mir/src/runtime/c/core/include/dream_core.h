@@ -40,7 +40,7 @@ typedef uint64_t dream_result;
 #define DREAM_SIZE_MAX PTRDIFF_MAX
 #endif
 
-/* 0 until `workerSpawn`; leftover for non-RC MT paths. RC uses `TAG_SHARED`. */
+/* Foreign handoff enables publication through erased/interior owners. RC uses `TAG_SHARED`. */
 extern int dream_rt_mt;
 void dream_llvm_leak_report(int32_t always, int32_t heap_used);
 _Noreturn void dream_platform_abort(void);
@@ -661,8 +661,8 @@ DREAM_ALWAYS_INLINE uint8_t dream_byte_at_checked(dream_ptr str, int32_t i,
 void dream_publish(dream_ptr ptr);
 
 /* A zero owner denotes an interior/ref value whose containing heap object is not known.
- * Once workers exist, such stores conservatively publish the child; stack addresses must never
- * be read as headers. The first worker handoff publishes the whole pre-existing graph. */
+ * Once foreign handoff is possible, such stores conservatively publish the child; stack
+ * addresses must never be read as headers. Each handoff publishes its pre-existing graph. */
 DREAM_ALWAYS_INLINE void dream_publish_edge(dream_ptr owner, dream_ptr child) {
     if (child == 0) {
         return;

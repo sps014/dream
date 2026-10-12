@@ -140,8 +140,6 @@ public kind: TypeRefKind
 
 ## `name: string`
 
-`int`, `List`, `T`, or empty for arrays/tuples/functions.
-
 ```dream
 public name: string
 ```

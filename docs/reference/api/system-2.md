@@ -6,6 +6,22 @@ Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. Thi
 
 [All sections](system.md)
 
+## `set_cwd`
+
+Sets the current working directory.
+
+```dream
+public static fun set_cwd(borrow path: string): Result<bool, IoError>
+```
+
+## `clear`
+
+Clears the terminal screen.
+
+```dream
+public static fun clear(): void
+```
+
 ## `set_foreground`
 
 Sets the foreground color for subsequent output.

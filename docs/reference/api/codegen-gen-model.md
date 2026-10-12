@@ -9,4 +9,4 @@ Choose a short section to look up a member:
 - [Members 1–24](codegen-gen-model-1.md)
 - [Members 25–48](codegen-gen-model-2.md)
 - [Members 49–72](codegen-gen-model-3.md)
-- [Members 73–79](codegen-gen-model-4.md)
+- [Members 73–82](codegen-gen-model-4.md)

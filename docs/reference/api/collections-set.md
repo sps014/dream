@@ -84,6 +84,14 @@ Removes a value and returns true if it was removed.
 public fun remove(borrow value: T): bool
 ```
 
+## `remove`
+
+Removes `value` if present and returns whether an entry was removed. This overload handles unmanaged keys.
+
+```dream
+public fun remove(borrow value: T): bool where T : unmanaged
+```
+
 ## `is_empty`
 
 True if the set is empty.

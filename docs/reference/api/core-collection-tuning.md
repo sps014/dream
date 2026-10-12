@@ -41,3 +41,27 @@ public fun hash_load_factor_num(): int
 ```dream
 public fun hash_load_factor_denom(): int
 ```
+
+## `grow_capacity`
+
+Next capacity for a growable buffer of `old` slots that must hold at least `need`: doubles (floored at `sequence_min_capacity()`), saturates instead of wrapping, and panics when `need` itself is not representable.
+
+```dream
+public fun grow_capacity(old: int, need: int): int
+```
+
+## `hash_capacity_for`
+
+Smallest power-of-two hash-table capacity (at least `hash_min_capacity()`) that is `>= need`. The largest representable power of two is 2^30; asking for more panics instead of wrapping.
+
+```dream
+public fun hash_capacity_for(need: int): int
+```
+
+## `checked_size`
+
+`a * b` for non-negative sizes, panicking instead of wrapping.
+
+```dream
+public fun checked_size(a: int, b: int): int
+```

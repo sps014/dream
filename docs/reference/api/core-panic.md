@@ -11,3 +11,11 @@ Halt used by bootstrap (`Option.unwrap`, bounds checks). Full console I/O lives 
 ```dream
 public static class System
 ```
+
+## `panic`
+
+Ends the process with the supplied panic message.
+
+```dream
+public static extern fun panic(borrow message: string): void
+```

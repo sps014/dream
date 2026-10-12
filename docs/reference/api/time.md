@@ -12,6 +12,14 @@ Timing utilities.
 public static class Time
 ```
 
+## `sleep_host`
+
+Schedules a cooperative timer. Prefer `Time.sleep` for cancellation-token handling.
+
+```dream
+public static extern async fun sleep_host(ms: int): void
+```
+
 ## `sleep`
 
 Cooperative / virtual-clock sleep (scheduler timer queue). Prefer `Time.delay` for wall-clock animation pacing in the browser.

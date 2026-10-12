@@ -6,6 +6,22 @@ Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. Thi
 
 [All sections](system.md)
 
+## `print`
+
+Prints a value to standard output.
+
+```dream
+public static extern fun print<T>(borrow value: T): void
+```
+
+## `println`
+
+Prints a value to standard output followed by a newline.
+
+```dream
+public static extern fun println<T>(borrow value: T): void
+```
+
 ## `read_line`
 
 Reads a line of input from stdin.
@@ -180,20 +196,4 @@ Current working directory.
 
 ```dream
 public static get cwd(): Result<string, IoError>
-```
-
-## `set_cwd`
-
-Sets the current working directory.
-
-```dream
-public static fun set_cwd(borrow path: string): Result<bool, IoError>
-```
-
-## `clear`
-
-Clears the terminal screen.
-
-```dream
-public static fun clear(): void
 ```

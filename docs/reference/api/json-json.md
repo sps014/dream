@@ -12,6 +12,30 @@ The public JSON API: one pair of names for text <-> value.
 public static class Json
 ```
 
+## `serialize`
+
+Serializes a supported `@json` value to JSON text.
+
+```dream
+public static extern fun serialize<T>(borrow value: T): string
+```
+
+## `deserialize`
+
+Parses JSON text and reconstructs a supported `@json` value, returning a parse error on failure.
+
+```dream
+public static extern fun deserialize<T>(borrow text: string): Result<T, ParseError>
+```
+
+## `from_value`
+
+Reconstruct a `@json` value from an already-parsed `JsonValue` (no parse step).
+
+```dream
+public static extern fun from_value<T>(borrow value: JsonValue): T
+```
+
 ## `serialize_pretty`
 
 Pretty-prints a `JsonValue` with newlines and `indent` spaces per nesting level. Pass 0 to fall back to compact `_stringify`.

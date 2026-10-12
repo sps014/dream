@@ -12,6 +12,38 @@ This is the raw primitive the higher-level `List`/`Map`/`Set` collections build 
 public static class Buffer
 ```
 
+## `alloc`
+
+`Buffer.alloc<T>(n)` returns a fresh, zero-initialized `T[]` of length `n`.
+
+```dream
+public static extern fun alloc<T>(len: int): T[]
+```
+
+## `realloc`
+
+Resizes `arr`'s backing block via the allocator's `$realloc`, returning a `T[]` of `new_len` elements: the overlapping prefix is preserved and any newly grown tail is zero-initialized. `arr` must have exactly one owner: after this call the old value must never be read again (a surviving alias would observe a stale, possibly-freed block) — the same contract as C's `realloc`. `@unsafe` because the compiler cannot verify single ownership; callers (e.g. `List<T>`, `Pointer<T>`) must uphold it themselves.
+
+```dream
+public static extern fun realloc<T>(arr: T[], new_len: int): T[]
+```
+
+## `elems_copy`
+
+Bulk-copies `count` unmanaged elements from `src[src_off..]` into `dst[dst_off..]`. The emitter expands this to a single `memory.copy` of `count * sizeof(T)` bytes — correct only for blittable `T` (no ARC retain on the copied slots). `@unsafe` because the compiler does not check that the ranges fit inside either array's allocated length.
+
+```dream
+public static extern fun elems_copy<T : unmanaged>( borrow dst: T[], dst_off: int, borrow src: T[], src_off: int, count: int ): void
+```
+
+## `elems_fill`
+
+Zeroes `count` unmanaged elements of `dst` starting at `dst_off` via `memory.fill`. `@unsafe` because the compiler does not check that the range fits in `dst`.
+
+```dream
+public static extern fun elems_fill<T : unmanaged>( borrow dst: T[], dst_off: int, count: int ): void
+```
+
 ## `clear`
 
 Releases the element in every slot of `arr` by overwriting it with a zero value, so a container can rewind its length without stranding retained elements in dead slots. This is the sanctioned way to shrink a managed buffer: each store goes through normal ARC assignment semantics (release old occupant), unlike bitwise fills which must never touch reference-typed slots. O(length); unmanaged elements compile to plain stores.
@@ -26,4 +58,36 @@ Like `clear`, but releases only slots `[n, arr.length)` — the tail dropped by 
 
 ```dream
 public static fun truncate<T>(borrow arr: T[], n: int): void
+```
+
+## `get_unchecked`
+
+`arr[index]` without the bounds check. `@unsafe` because the caller must already have established `0 <= index < arr.length` (e.g. `List<T>` keeps `count <= items.length`).
+
+```dream
+public static extern fun get_unchecked<T>(borrow arr: T[], index: int): T
+```
+
+## `set_unchecked`
+
+`arr[index] = value` without the bounds check (ordinary element-store ARC semantics). `@unsafe` for the same reason as `get_unchecked`.
+
+```dream
+public static extern fun set_unchecked<T>(borrow arr: T[], index: int, value: T): void
+```
+
+## `store16`
+
+Writes a UTF-16 code unit as little-endian `i32.store16` at byte offset `off`.
+
+```dream
+public static extern fun store16(borrow arr: byte[], off: int, unit: int): void
+```
+
+## `free`
+
+Immediately returns `arr`'s backing block to the allocator via `$free`, bypassing reference counting entirely. Any other live reference to the same block (including `arr` itself, if read again) is left dangling. `@unsafe` for the same reason as `realloc`: the compiler cannot verify `arr` has no other owners.
+
+```dream
+public static extern fun free<T>(arr: T[]): void
 ```

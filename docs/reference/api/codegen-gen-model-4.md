@@ -46,6 +46,30 @@ Typed attribute access. `A` is an `@attribute` struct; the compiler gives every 
 public static class GenAttributes
 ```
 
+## `id`
+
+Returns the compiler-assigned attribute identifier for attribute type `A`.
+
+```dream
+public static extern fun id<A>(): string
+```
+
+## `decode`
+
+Decodes the first matching attribute as `A`, returning `Option.None` when absent.
+
+```dream
+public static extern fun decode<A>(borrow attrs: List<GenAttribute>): Option<A>
+```
+
+## `decode_all`
+
+Decodes all matching attributes as `A` in source order.
+
+```dream
+public static extern fun decode_all<A>(borrow attrs: List<GenAttribute>): List<A>
+```
+
 ## `has`
 
 ```dream

@@ -12,6 +12,54 @@ Allocator introspection for tests and diagnostics.
 public static class Debug
 ```
 
+## `host_free_list_head`
+
+Allocator free-event probe used by `Debug.free_list_head`.
+
+```dream
+public static extern fun host_free_list_head(): int
+```
+
+## `host_heap_ptr`
+
+Allocator position probe used by `Debug.heap_ptr`.
+
+```dream
+public static extern fun host_heap_ptr(): int
+```
+
+## `host_live_objects`
+
+Returns the diagnostic live-object count exposed by `Debug.live_objects`.
+
+```dream
+public static extern fun host_live_objects(): long
+```
+
+## `host_total_allocations`
+
+Returns the allocation count exposed by `Debug.total_allocations`.
+
+```dream
+public static extern fun host_total_allocations(): long
+```
+
+## `ref_count`
+
+Returns the diagnostic strong-reference count of an object.
+
+```dream
+public static extern fun ref_count(borrow o: object): int
+```
+
+## `runtime_counter`
+
+Opt-in attribution (DREAM_RUNTIME_COUNTERS=1); ids follow `dream_ownership.h`. Ordinary builds and unknown ids read as 0.
+
+```dream
+public static extern fun runtime_counter(id: int): long
+```
+
 ## `free_list_head`
 
 ```dream

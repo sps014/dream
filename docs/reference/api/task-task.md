@@ -12,6 +12,38 @@ Run a function on another thread. Await the result like any other Future.  async
 public class Task
 ```
 
+## `funcidx`
+
+Returns the worker invocation selector for a synchronous wire callback. Prefer `Task` APIs.
+
+```dream
+public static extern fun funcidx(borrow body: fun(string): string): int
+```
+
+## `funcidx_async`
+
+Returns the worker invocation selector for an async wire callback. Prefer `Task` APIs.
+
+```dream
+public static extern fun funcidx_async(borrow body: fun(string): Future<string>): int
+```
+
+## `env`
+
+Returns the closure-environment transport word for a synchronous worker callback. Prefer `Task` APIs.
+
+```dream
+public static extern fun env(borrow body: fun(string): string): long
+```
+
+## `env_async`
+
+Returns the closure-environment transport word for an async worker callback. Prefer `Task` APIs.
+
+```dream
+public static extern fun env_async(borrow body: fun(string): Future<string>): long
+```
+
 ## `spawn`
 
 ```dream

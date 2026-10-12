@@ -1306,6 +1306,24 @@
         "page": "reference/api/codegen-gen-model-4.md"
       },
       {
+        "signature": "public static extern fun id<A>(): string",
+        "description": "",
+        "line": 259,
+        "page": "reference/api/codegen-gen-model-4.md"
+      },
+      {
+        "signature": "public static extern fun decode<A>(borrow attrs: List<GenAttribute>): Option<A>",
+        "description": "",
+        "line": 262,
+        "page": "reference/api/codegen-gen-model-4.md"
+      },
+      {
+        "signature": "public static extern fun decode_all<A>(borrow attrs: List<GenAttribute>): List<A>",
+        "description": "",
+        "line": 265,
+        "page": "reference/api/codegen-gen-model-4.md"
+      },
+      {
         "signature": "public static fun has(borrow attrs: List<GenAttribute>, borrow id: string): bool",
         "description": "",
         "line": 267,
@@ -1437,217 +1455,217 @@
       {
         "signature": "public class List<T> : IndexedCollection<T>",
         "description": "Growable random-access sequence backed by a resizable buffer.  Invariant: `0 <= count <= items.length`. Every mutation of `items`/`count` preserves it, which is what makes the `Buffer.get_unchecked`/`set_unchecked` accesses on `[0, count)` sound.",
-        "line": 17,
+        "line": 22,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public constructor(capacity: int = 8)",
         "description": "Allocates an empty list with an initial backing buffer capacity (defaults to 8).",
-        "line": 23,
+        "line": 28,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public static fun with_capacity(capacity: int): List<T>",
         "description": "Allocates an empty list with backing capacity `capacity`.",
-        "line": 33,
+        "line": 38,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 39,
+        "line": 44,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True when the list has no elements.",
-        "line": 45,
+        "line": 50,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public get capacity(): int",
         "description": "Current capacity of the backing buffer.",
-        "line": 51,
+        "line": 56,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun push(value: T): void",
         "description": "Appends a value to the end, growing if necessary.",
-        "line": 68,
+        "line": 69,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun push_all(borrow items: T[]): void",
         "description": "Appends every element of `items`, ensuring capacity once then copying via `Span`.",
-        "line": 77,
+        "line": 78,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public static fun from_array(borrow items: T[]): List<T>",
         "description": "Builds a list containing exactly the elements of `items`, in order. The `[e1, e2, ...]` list-literal syntax (e.g. `let xs: List<int> = [1, 2, 3];`) desugars to this.",
-        "line": 91,
+        "line": 92,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun take_array(): T[]",
         "description": "Yields a `T[]` of exactly `length` and leaves this list empty. Shrinks via `realloc` when capacity is larger than `count` so the result's `.length` is the live element count.",
-        "line": 99,
+        "line": 100,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun this[index: int]: T",
         "description": "Element at `index`. Panics if `index` is out of range.",
-        "line": 113,
+        "line": 114,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun this[index: int] = value: T",
         "description": "Overwrites the element at `index`. Panics if `index` is out of range.",
-        "line": 121,
+        "line": 122,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun set(index: int, value: T): void",
         "description": "",
-        "line": 128,
+        "line": 129,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun pop(): Option<T>",
         "description": "Removes and returns the last element, or `None` if the list is empty.",
-        "line": 133,
+        "line": 134,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun contains(borrow value: T): bool",
         "description": "True if `value` is present (uses value equality, including string contents).",
-        "line": 148,
+        "line": 149,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun index_of(borrow value: T): Option<int>",
         "description": "Index of the first matching element (by value equality), or `None` if absent.",
-        "line": 160,
+        "line": 161,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun last_index_of(borrow value: T): Option<int>",
         "description": "Index of the last matching element (by value equality), or `None` if absent.",
-        "line": 172,
+        "line": 173,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun reserve(n: int): void",
         "description": "Grows the backing buffer until `capacity()` is at least `n`.",
-        "line": 184,
+        "line": 185,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun reverse(): void",
         "description": "Reverses the live prefix in place.",
-        "line": 191,
+        "line": 192,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun slice(start: int, end: int): List<T>",
         "description": "A new list of `this[start .. end)` (clamped; empty when the span is inverted).",
-        "line": 204,
+        "line": 205,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun concat(borrow other: List<T>): List<T>",
         "description": "A new list with this list's elements followed by `other`.",
-        "line": 226,
+        "line": 227,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clone(): List<T>",
         "description": "A shallow copy of the live elements.",
-        "line": 242,
+        "line": 243,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun join(sep: string): string",
         "description": "Joins stringifiable elements with `sep` (same conversion as `to_string` uses). Single pass into a StringBuilder — O(total output), never the quadratic accumulate-and-recopy shape.",
-        "line": 248,
+        "line": 249,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Empties the list while keeping the backing buffer. Live slots are overwritten with a zero value so reference fields inside value-struct elements (and class elements) release immediately; capacity is unchanged (no capacity-sized `Buffer.alloc`).",
-        "line": 265,
+        "line": 266,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clear(): void where T : unmanaged",
         "description": "Unmanaged: no RC to release — rewind the count only.",
-        "line": 279,
+        "line": 280,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun insert(index: int, value: T): bool",
         "description": "Inserts `value` at `index`, shifting later elements right. Returns false if `index` is out of range (index may equal `size()` to append).",
-        "line": 285,
+        "line": 286,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun insert(index: int, value: T): bool where T : unmanaged",
         "description": "Unmanaged: one `memory.copy` shift (no Span wrappers).",
-        "line": 302,
+        "line": 303,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun remove_at(index: int): bool",
         "description": "Removes the element at `index`, shifting later elements left. Returns true on success, or false if `index` is out of range (the list is left unchanged in that case).",
-        "line": 321,
+        "line": 322,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool",
         "description": "Removes the first occurrence of `value` (by equality). Returns true when something was removed.",
-        "line": 337,
+        "line": 338,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun iterator(): ListIterator<T>",
         "description": "Enumerator for `for (let x in list)`. Returns a fresh cursor over the current elements.",
-        "line": 345,
+        "line": 346,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun as_span(): Span<T>",
         "description": "A view of the current elements, writable in place. The span holds the backing array it was taken from: after the list grows (or shrinks and regrows) it keeps showing that old array, so take a fresh span after structural changes.",
-        "line": 352,
+        "line": 353,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun as_read_only_span(): ReadOnlySpan<T>",
         "description": "A read-only view of the current elements, with the same staleness rule as `as_span`.",
-        "line": 357,
+        "line": 358,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort_by(borrow cmp: fun(T, T): int): void",
         "description": "Sorts the list in place with the supplied comparator.",
-        "line": 369,
+        "line": 370,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort(): void where T : Comparable<T>",
         "description": "Sorts the list in place into ascending order using each element's `compare` method. Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 423,
+        "line": 424,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun binary_search(borrow value: T): Option<int> where T : Comparable<T>",
         "description": "Binary search over a list that is already sorted ascending (by `compare`). Returns the index of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n). Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 431,
+        "line": 432,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "",
-        "line": 449,
+        "line": 450,
         "page": "reference/api/collections-list-2.md"
       }
     ]
@@ -1685,151 +1703,151 @@
       {
         "signature": "public constructor(capacity: int = 8)",
         "description": "",
-        "line": 14,
+        "line": 12,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public get length(): int",
         "description": "",
-        "line": 41,
+        "line": 34,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public get capacity(): int",
         "description": "",
-        "line": 46,
+        "line": 39,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun this[key: K] = value: V",
         "description": "The first probe hits an empty or matching slot on the usual insert. That case stays in the caller; collisions fall through to the full probe.",
-        "line": 165,
+        "line": 158,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun set(key: K, value: V): void",
         "description": "",
-        "line": 186,
+        "line": 182,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun contains(borrow key: K): bool",
         "description": "",
-        "line": 190,
+        "line": 186,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun set_all(borrow keys: K[], borrow values: V[]): void",
         "description": "",
-        "line": 194,
+        "line": 190,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public static fun from_arrays(borrow keys: K[], borrow values: V[]): Map<K, V>",
         "description": "",
-        "line": 206,
+        "line": 202,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get(borrow key: K): Option<V>",
         "description": "Value for `key`, or `None` when absent.",
-        "line": 214,
+        "line": 210,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get(key: ReadOnlySpan<char>): Option<V> where K : StringKey",
         "description": "Value for the `string` key equal to `key`, without building a `string`.",
-        "line": 223,
+        "line": 219,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get_or(key: ReadOnlySpan<char>, fallback: V): V where K : StringKey",
         "description": "",
-        "line": 231,
+        "line": 227,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun contains(key: ReadOnlySpan<char>): bool where K : StringKey",
         "description": "",
-        "line": 239,
+        "line": 235,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun this[borrow key: K]: V",
         "description": "Value for `key`. Panics when the key is absent — this is what `m[k]` compiles to; use `get(k)` for absence-tolerant reads.",
-        "line": 245,
+        "line": 241,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get_or(borrow key: K, fallback: V): V",
         "description": "",
-        "line": 254,
+        "line": 250,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get_or_insert(key: K, borrow factory: fun(): V): V",
         "description": "",
-        "line": 262,
+        "line": 258,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun merge(borrow other: Map<K, V>): void",
         "description": "",
-        "line": 272,
+        "line": 268,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun entries(): List<KeyValuePair<K, V>>",
         "description": "",
-        "line": 278,
+        "line": 274,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun remove(borrow key: K): bool",
         "description": "",
-        "line": 290,
+        "line": 286,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "",
-        "line": 305,
+        "line": 301,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "",
-        "line": 310,
+        "line": 306,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun clear(): void where K : unmanaged, V : unmanaged",
         "description": "",
-        "line": 329,
+        "line": 325,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun keys(): K[]",
         "description": "",
-        "line": 335,
+        "line": 331,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun values(): V[]",
         "description": "",
-        "line": 349,
+        "line": 345,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun iterator(): MapIterator<K, V>",
         "description": "",
-        "line": 363,
+        "line": 359,
         "page": "reference/api/collections-map-2.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "",
-        "line": 379,
+        "line": 375,
         "page": "reference/api/collections-map-2.md"
       }
     ]
@@ -1903,25 +1921,25 @@
       {
         "signature": "public fun push(value: T): void",
         "description": "Inserts `value`, restoring the heap invariant. O(log n).",
-        "line": 114,
+        "line": 110,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun pop(): Option<T>",
         "description": "Removes and returns the smallest element, or `None` when empty. O(log n).",
-        "line": 124,
+        "line": 120,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun peek(): Option<T>",
         "description": "Returns the smallest element without removing it, or `None` when empty. O(1).",
-        "line": 141,
+        "line": 137,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun iterator(): PriorityQueueIterator<T>",
         "description": "Iterates elements in ascending order under the active comparator, over a snapshot taken now, so later pushes/pops do not affect the cursor.",
-        "line": 150,
+        "line": 146,
         "page": "reference/api/collections-priority-queue.md"
       }
     ]
@@ -1971,37 +1989,37 @@
       {
         "signature": "public fun enqueue(value: T): void",
         "description": "Appends `value` at the back of the queue.",
-        "line": 49,
+        "line": 46,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun dequeue(): Option<T>",
         "description": "Removes and returns the front element, or `None` when empty. The vacated slot is zeroed so managed elements release immediately instead of staying retained until overwritten.",
-        "line": 60,
+        "line": 57,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun peek(): Option<T>",
         "description": "Returns the front element without removing it, or `None` when empty.",
-        "line": 73,
+        "line": 70,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes every element. Live ring slots are overwritten with a zero value so managed elements release immediately instead of staying retained until later enqueues overwrite them; the ring is reset to front-aligned empty.",
-        "line": 83,
+        "line": 80,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun clear(): void where T : unmanaged",
         "description": "Unmanaged: no RC to release — rewind only.",
-        "line": 96,
+        "line": 93,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun iterator(): QueueIterator<T>",
         "description": "Iterates elements from front to back.",
-        "line": 102,
+        "line": 99,
         "page": "reference/api/collections-queue.md"
       }
     ]
@@ -2112,115 +2130,121 @@
       {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 37,
+        "line": 34,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public get capacity(): int",
         "description": "Current capacity of the backing buffer.",
-        "line": 42,
+        "line": 39,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun add(value: T): bool",
         "description": "Inserts a value into the set. Returns true if it was newly added, false if already present.",
-        "line": 156,
+        "line": 146,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun contains(borrow value: T): bool",
         "description": "True if the set contains the value.",
-        "line": 164,
+        "line": 158,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun contains(value: ReadOnlySpan<char>): bool where T : StringKey",
         "description": "True when the set holds the `string` equal to `value`, without building a `string`.",
-        "line": 169,
+        "line": 163,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun add_all(borrow items: T[]): void",
         "description": "Adds every element of `items` (duplicates are ignored, exactly like repeated `add` calls). Also what the `{e1, e2, ...}` set-literal syntax lowers to via `from_array`, so a literal with N elements costs one call, not N.",
-        "line": 194,
+        "line": 188,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public static fun from_array(borrow items: T[]): Set<T>",
         "description": "Builds a set containing exactly the (deduplicated) elements of `items`. The `{e1, e2, ...}` set-literal syntax (e.g. `let s: Set<int> = {1, 2, 3};`) desugars to this.",
-        "line": 204,
+        "line": 198,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool",
         "description": "Removes a value and returns true if it was removed.",
-        "line": 211,
+        "line": 205,
+        "page": "reference/api/collections-set.md"
+      },
+      {
+        "signature": "public fun remove(borrow value: T): bool where T : unmanaged",
+        "description": "",
+        "line": 217,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True if the set is empty.",
-        "line": 222,
+        "line": 228,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all elements, keeping the current capacity. Occupied key slots are zeroed so managed entries release; probe `states` are reset in place (no capacity realloc).",
-        "line": 228,
+        "line": 234,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun clear(): void where T : unmanaged",
         "description": "",
-        "line": 244,
+        "line": 250,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun to_array(): T[]",
         "description": "Gets all elements as an array.",
-        "line": 251,
+        "line": 257,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun union(borrow other: Set<T>): Set<T>",
         "description": "Elements present in this set or `other`.",
-        "line": 266,
+        "line": 272,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun intersection(borrow other: Set<T>): Set<T>",
         "description": "Elements present in both sets.",
-        "line": 282,
+        "line": 288,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun difference(borrow other: Set<T>): Set<T>",
         "description": "Elements in this set but not in `other`.",
-        "line": 297,
+        "line": 303,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_subset(borrow other: Set<T>): bool",
         "description": "True when every element of this set is in `other`.",
-        "line": 312,
+        "line": 318,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_disjoint(borrow other: Set<T>): bool",
         "description": "True when the sets share no elements.",
-        "line": 326,
+        "line": 332,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun iterator(): SetIterator<T>",
         "description": "Gets an iterator for the set.",
-        "line": 340,
+        "line": 346,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "",
-        "line": 353,
+        "line": 359,
         "page": "reference/api/collections-set.md"
       }
     ]
@@ -2258,103 +2282,103 @@
       {
         "signature": "public constructor(capacity: int = 8)",
         "description": "Allocates an empty sorted map with an initial capacity (defaults to 8).",
-        "line": 15,
+        "line": 13,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Number of key/value pairs currently stored.",
-        "line": 28,
+        "line": 24,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True when the map is empty.",
-        "line": 33,
+        "line": 29,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes every entry, keeping capacity. Live slots are overwritten with a zero value so reference keys/values release immediately.",
-        "line": 39,
+        "line": 35,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun this[key: K] = value: V",
         "description": "Inserts or updates the value for a key. O(log n) to locate, O(n) worst case to shift.",
-        "line": 83,
+        "line": 76,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun set(key: K, value: V): void",
         "description": "",
-        "line": 104,
+        "line": 97,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun get(borrow key: K): Option<V>",
         "description": "Value for `key`, or `None` when the key is absent.",
-        "line": 109,
+        "line": 102,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun this[borrow key: K]: V",
         "description": "Value for `key`. Panics when the key is absent — this is what `sm[k]` compiles to; use `get(k)` for absence-tolerant reads.",
-        "line": 119,
+        "line": 112,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun contains(borrow key: K): bool",
         "description": "True if the map contains the key.",
-        "line": 128,
+        "line": 121,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun remove(borrow key: K): bool",
         "description": "Removes a key and returns true if it was present.",
-        "line": 133,
+        "line": 126,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun first_key(): Option<K>",
         "description": "The smallest key, or `None` when empty.",
-        "line": 151,
+        "line": 144,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun last_key(): Option<K>",
         "description": "The largest key, or `None` when empty.",
-        "line": 159,
+        "line": 152,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun ceiling_key(borrow key: K): Option<K>",
         "description": "The smallest key `>= key`, or `None` if every key is smaller.",
-        "line": 167,
+        "line": 160,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun floor_key(borrow key: K): Option<K>",
         "description": "The largest key `<= key`, or `None` if every key is larger.",
-        "line": 180,
+        "line": 173,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun keys(): K[]",
         "description": "All keys in ascending order.",
-        "line": 193,
+        "line": 186,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun values(): V[]",
         "description": "All values, ordered by ascending key.",
-        "line": 204,
+        "line": 197,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun iterator(): SortedMapIterator<K, V>",
         "description": "Gets an iterator over entries in ascending key order.",
-        "line": 215,
+        "line": 208,
         "page": "reference/api/collections-sorted-map.md"
       }
     ]
@@ -2652,15 +2676,63 @@
         "page": "reference/api/core-buffer.md"
       },
       {
+        "signature": "public static extern fun alloc<T>(len: int): T[]",
+        "description": "`Buffer.alloc<T>(n)` returns a fresh, zero-initialized `T[]` of length `n`.",
+        "line": 13,
+        "page": "reference/api/core-buffer.md"
+      },
+      {
+        "signature": "public static extern fun realloc<T>(arr: T[], new_len: int): T[]",
+        "description": "Resizes `arr`'s backing block via the allocator's `$realloc`, returning a `T[]` of `new_len` elements: the overlapping prefix is preserved and any newly grown tail is zero-initialized. `arr` must have exactly one owner: after this call the old value must never be read again (a surviving alias would observe a stale, possibly-freed block) — the same contract as C's `realloc`. `@unsafe` because the compiler cannot verify single ownership; callers (e.g. `List<T>`, `Pointer<T>`) must uphold it themselves.",
+        "line": 24,
+        "page": "reference/api/core-buffer.md"
+      },
+      {
+        "signature": "public static extern fun elems_copy<T : unmanaged>( borrow dst: T[], dst_off: int, borrow src: T[], src_off: int, count: int ): void",
+        "description": "Bulk-copies `count` unmanaged elements from `src[src_off..]` into `dst[dst_off..]`. The emitter expands this to a single `memory.copy` of `count * sizeof(T)` bytes — correct only for blittable `T` (no ARC retain on the copied slots). `@unsafe` because the compiler does not check that the ranges fit inside either array's allocated length.",
+        "line": 32,
+        "page": "reference/api/core-buffer.md"
+      },
+      {
+        "signature": "public static extern fun elems_fill<T : unmanaged>( borrow dst: T[], dst_off: int, count: int ): void",
+        "description": "Zeroes `count` unmanaged elements of `dst` starting at `dst_off` via `memory.fill`. `@unsafe` because the compiler does not check that the range fits in `dst`.",
+        "line": 44,
+        "page": "reference/api/core-buffer.md"
+      },
+      {
         "signature": "public static fun clear<T>(borrow arr: T[]): void",
         "description": "Releases the element in every slot of `arr` by overwriting it with a zero value, so a container can rewind its length without stranding retained elements in dead slots. This is the sanctioned way to shrink a managed buffer: each store goes through normal ARC assignment semantics (release old occupant), unlike bitwise fills which must never touch reference-typed slots. O(length); unmanaged elements compile to plain stores.",
-        "line": 52,
+        "line": 55,
         "page": "reference/api/core-buffer.md"
       },
       {
         "signature": "public static fun truncate<T>(borrow arr: T[], n: int): void",
         "description": "Like `clear`, but releases only slots `[n, arr.length)` — the tail dropped by a shrink to `n`. Slots below `n` are left untouched.",
-        "line": 64,
+        "line": 67,
+        "page": "reference/api/core-buffer.md"
+      },
+      {
+        "signature": "public static extern fun get_unchecked<T>(borrow arr: T[], index: int): T",
+        "description": "`arr[index]` without the bounds check. `@unsafe` because the caller must already have established `0 <= index < arr.length` (e.g. `List<T>` keeps `count <= items.length`).",
+        "line": 86,
+        "page": "reference/api/core-buffer.md"
+      },
+      {
+        "signature": "public static extern fun set_unchecked<T>(borrow arr: T[], index: int, value: T): void",
+        "description": "`arr[index] = value` without the bounds check (ordinary element-store ARC semantics). `@unsafe` for the same reason as `get_unchecked`.",
+        "line": 92,
+        "page": "reference/api/core-buffer.md"
+      },
+      {
+        "signature": "public static extern fun store16(borrow arr: byte[], off: int, unit: int): void",
+        "description": "Writes a UTF-16 code unit as little-endian `i32.store16` at byte offset `off`.",
+        "line": 96,
+        "page": "reference/api/core-buffer.md"
+      },
+      {
+        "signature": "public static extern fun free<T>(arr: T[]): void",
+        "description": "Immediately returns `arr`'s backing block to the allocator via `$free`, bypassing reference counting entirely. Any other live reference to the same block (including `arr` itself, if read again) is left dangling. `@unsafe` for the same reason as `realloc`: the compiler cannot verify `arr` has no other owners.",
+        "line": 105,
         "page": "reference/api/core-buffer.md"
       }
     ]
@@ -2677,6 +2749,18 @@
         "page": "reference/api/core-bytes.md"
       },
       {
+        "signature": "public static extern fun of<T : unmanaged>(value: T): byte[]",
+        "description": "Copy the raw bytes of blittable `value` into a fresh `byte[]` (one element per byte).",
+        "line": 13,
+        "page": "reference/api/core-bytes.md"
+      },
+      {
+        "signature": "public static extern fun to<T : unmanaged>(borrow bytes: byte[]): T",
+        "description": "Reconstruct a blittable `T` from a `byte[]` buffer produced by `Bytes.of<T>`.",
+        "line": 17,
+        "page": "reference/api/core-bytes.md"
+      },
+      {
         "signature": "public static fun toWireString(borrow bytes: byte[]): string",
         "description": "Encodes `bytes` as a `string` with one codepoint (0-255) per byte - lossless, since every byte value is a valid standalone Unicode codepoint, and the inverse of `fromWireString`. Used to carry an arbitrary byte buffer over a channel that only understands `string`s (the `Task` wire), without needing a second, binary-native transport.",
         "line": 23,
@@ -2686,6 +2770,18 @@
         "signature": "public static fun fromWireString(borrow s: string): byte[]",
         "description": "The inverse of `toWireString`.",
         "line": 35,
+        "page": "reference/api/core-bytes.md"
+      },
+      {
+        "signature": "public static extern fun toWire<T>(borrow value: T): string",
+        "description": "Encodes a `Task`-safe value of type `T` as the `string` the worker wire carries: identity when `T` is `string` itself, otherwise a raw byte-blit (`T` must be `unmanaged`) re-encoded via `toWireString`. Used by `Task.spawn`/`Task.map`/ `TaskPool.dispatch` to marshal an arbitrary wire value without a second wire format.",
+        "line": 51,
+        "page": "reference/api/core-bytes.md"
+      },
+      {
+        "signature": "public static extern fun fromWire<T>(borrow text: string): T",
+        "description": "The inverse of `toWire`.",
+        "line": 55,
         "page": "reference/api/core-bytes.md"
       }
     ]
@@ -2902,6 +2998,24 @@
         "description": "",
         "line": 27,
         "page": "reference/api/core-collection-tuning.md"
+      },
+      {
+        "signature": "public fun grow_capacity(old: int, need: int): int",
+        "description": "Next capacity for a growable buffer of `old` slots that must hold at least `need`: doubles (floored at `sequence_min_capacity()`), saturates instead of wrapping, and panics when `need` itself is not representable.",
+        "line": 32,
+        "page": "reference/api/core-collection-tuning.md"
+      },
+      {
+        "signature": "public fun hash_capacity_for(need: int): int",
+        "description": "Smallest power-of-two hash-table capacity (at least `hash_min_capacity()`) that is `>= need`. The largest representable power of two is 2^30; asking for more panics instead of wrapping.",
+        "line": 52,
+        "page": "reference/api/core-collection-tuning.md"
+      },
+      {
+        "signature": "public fun checked_size(a: int, b: int): int",
+        "description": "`a * b` for non-negative sizes, panicking instead of wrapping.",
+        "line": 64,
+        "page": "reference/api/core-collection-tuning.md"
       }
     ]
   },
@@ -3078,6 +3192,30 @@
     "package": "system.core",
     "page": "reference/api/core-lock.md",
     "declarations": [
+      {
+        "signature": "public static extern fun host_acquire(borrow target: Lock): void",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/core-lock.md"
+      },
+      {
+        "signature": "public static extern fun host_release(borrow target: Lock): void",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/core-lock.md"
+      },
+      {
+        "signature": "public static extern fun host_try_acquire(borrow target: Lock): bool",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/core-lock.md"
+      },
+      {
+        "signature": "public static extern fun host_try_acquire_for(borrow target: Lock, timeout_ms: int): bool",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/core-lock.md"
+      },
       {
         "signature": "public fun acquire(): void",
         "description": "Reentrant: the same thread may call `acquire` again before releasing (matching `lock (obj) { ... }`'s own semantics), and must call `release` the same number of times to fully release it.",
@@ -3356,6 +3494,12 @@
         "description": "Halt used by bootstrap (`Option.unwrap`, bounds checks). Full console I/O lives on `extend System` in `system.dream` (`import system;`).",
         "line": 5,
         "page": "reference/api/core-panic.md"
+      },
+      {
+        "signature": "public static extern fun panic(borrow message: string): void",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/core-panic.md"
       }
     ]
   },
@@ -3475,6 +3619,24 @@
         "page": "reference/api/core-promise.md"
       },
       {
+        "signature": "public static extern async fun all_host<T>(borrow promises: T[]): T[]",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/core-promise.md"
+      },
+      {
+        "signature": "public static extern async fun any_host<T>(borrow promises: T[]): T",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/core-promise.md"
+      },
+      {
+        "signature": "public static extern async fun race_host<T>(borrow promises: T[]): T",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/core-promise.md"
+      },
+      {
         "signature": "public static async fun all<T>(borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None): T[]",
         "description": "Waits for all promises in the array to resolve.",
         "line": 15,
@@ -3490,6 +3652,18 @@
         "signature": "public static async fun race<T>(borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None): T",
         "description": "Returns the first promise to resolve or reject.",
         "line": 27,
+        "page": "reference/api/core-promise.md"
+      },
+      {
+        "signature": "public static extern fun cancel(borrow future: object): void",
+        "description": "Cancels a future (marks it cancelled and unlinks pending timers). Best-effort for in-flight native host HTTP; cooperative `CancellationToken` is preferred for app logic. Takes the future as `object` (futures are heap refs) so this can be a plain intrinsic.",
+        "line": 36,
+        "page": "reference/api/core-promise.md"
+      },
+      {
+        "signature": "public static extern fun start(borrow future: object): void",
+        "description": "Explicitly launches a lazy future without awaiting it (fire-and-forget). Futures only run when awaited, passed to `all`/`any`/`race`, or started here; a never-started future never executes. Takes the future as `object` (futures are heap refs) like `cancel`.",
+        "line": 42,
         "page": "reference/api/core-promise.md"
       }
     ]
@@ -3788,6 +3962,30 @@
         "signature": "public constructor(initial: int)",
         "description": "Creates a semaphore with `initial` available permits.",
         "line": 8,
+        "page": "reference/api/core-semaphore.md"
+      },
+      {
+        "signature": "public static extern fun host_acquire(borrow target: Semaphore): void",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/core-semaphore.md"
+      },
+      {
+        "signature": "public static extern fun host_release(borrow target: Semaphore): void",
+        "description": "",
+        "line": 16,
+        "page": "reference/api/core-semaphore.md"
+      },
+      {
+        "signature": "public static extern fun host_try_acquire(borrow target: Semaphore): bool",
+        "description": "",
+        "line": 19,
+        "page": "reference/api/core-semaphore.md"
+      },
+      {
+        "signature": "public static extern fun host_try_acquire_for(borrow target: Semaphore, timeout_ms: int): bool",
+        "description": "",
+        "line": 22,
         "page": "reference/api/core-semaphore.md"
       },
       {
@@ -4146,6 +4344,54 @@
         "description": "",
         "line": 128,
         "page": "reference/api/core-span-text-iterators.md"
+      },
+      {
+        "signature": "public static extern fun view_eq(borrow a: string, ao: int, an: int, borrow b: string, bo: int, bn: int): int",
+        "description": "",
+        "line": 133,
+        "page": "reference/api/core-span-text-iterators.md"
+      },
+      {
+        "signature": "public static extern fun view_compare(borrow a: string, ao: int, an: int, borrow b: string, bo: int, bn: int): int",
+        "description": "",
+        "line": 136,
+        "page": "reference/api/core-span-text-iterators.md"
+      },
+      {
+        "signature": "public static extern fun view_hash(borrow s: string, off: int, n: int): int",
+        "description": "",
+        "line": 139,
+        "page": "reference/api/core-span-text-iterators.md"
+      },
+      {
+        "signature": "public static extern fun view_find(borrow h: string, ho: int, hn: int, borrow nd: string, no: int, nn: int, from: int): int",
+        "description": "",
+        "line": 142,
+        "page": "reference/api/core-span-text-iterators.md"
+      },
+      {
+        "signature": "public static extern fun view_rfind(borrow h: string, ho: int, hn: int, borrow nd: string, no: int, nn: int): int",
+        "description": "",
+        "line": 145,
+        "page": "reference/api/core-span-text-iterators.md"
+      },
+      {
+        "signature": "public static extern fun view_find_char(borrow s: string, off: int, n: int, from: int, c: int): int",
+        "description": "",
+        "line": 148,
+        "page": "reference/api/core-span-text-iterators.md"
+      },
+      {
+        "signature": "public static extern fun view_rfind_char(borrow s: string, off: int, n: int, c: int): int",
+        "description": "",
+        "line": 151,
+        "page": "reference/api/core-span-text-iterators.md"
+      },
+      {
+        "signature": "public static extern fun view_count_char(borrow s: string, off: int, n: int, c: int): int",
+        "description": "",
+        "line": 154,
+        "page": "reference/api/core-span-text-iterators.md"
       }
     ]
   },
@@ -4198,6 +4444,78 @@
     "page": "reference/api/core-string-abi.md",
     "declarations": [
       {
+        "signature": "public static extern fun alloc(n: int): string",
+        "description": "Allocates an uninitialized string with capacity for `n` UTF-16 code units.",
+        "line": 8,
+        "page": "reference/api/core-string-abi.md"
+      },
+      {
+        "signature": "public static extern fun set(borrow s: string, i: int, c: char): void",
+        "description": "Writes code unit `c` at unit index `i` of string `s`.",
+        "line": 12,
+        "page": "reference/api/core-string-abi.md"
+      },
+      {
+        "signature": "public static extern fun from_utf8(borrow bytes: byte[]): string",
+        "description": "Builds a string from a full `byte[]` UTF-8 payload (transcodes to UTF-16).",
+        "line": 16,
+        "page": "reference/api/core-string-abi.md"
+      },
+      {
+        "signature": "public static extern fun from_utf8_prefix(borrow bytes: byte[], len: int): string",
+        "description": "Builds a string from the first `len` bytes of `bytes` (clamped to the array length).",
+        "line": 20,
+        "page": "reference/api/core-string-abi.md"
+      },
+      {
+        "signature": "public static extern fun from_utf8_prefix_n(borrow bytes: byte[], len: int, scalars: int): string",
+        "description": "Copies `len` UTF-16 LE payload bytes from `bytes`; `scalars` is the unit count.",
+        "line": 24,
+        "page": "reference/api/core-string-abi.md"
+      },
+      {
+        "signature": "public static extern fun from_builder(borrow bytes: byte[], len: int, scalars: int): string",
+        "description": "StringBuilder finish: unique buffers (`rc == 1`) are adopted; otherwise copied.",
+        "line": 28,
+        "page": "reference/api/core-string-abi.md"
+      },
+      {
+        "signature": "public static extern fun substring_raw(borrow s: string, start: int, end: int): string",
+        "description": "Unit-indexed substring: O(1) slice (header + payload pointer + retain parent).",
+        "line": 32,
+        "page": "reference/api/core-string-abi.md"
+      },
+      {
+        "signature": "public static extern fun clone(borrow s: string): string",
+        "description": "Fresh heap copy of `s` (isolation boundary for `@shared` string fields / worker captures).",
+        "line": 36,
+        "page": "reference/api/core-string-abi.md"
+      },
+      {
+        "signature": "public static extern fun copy_utf8(borrow dst: byte[], dst_off: int, borrow src: string, src_off: int, count: int): void",
+        "description": "Bulk-copies `count` payload bytes from `src` into `dst` at `dst_off`.",
+        "line": 40,
+        "page": "reference/api/core-string-abi.md"
+      },
+      {
+        "signature": "public static extern fun compare_raw(borrow a: string, borrow b: string): int",
+        "description": "UTF-16 lexicographic compare (code-unit order): negative / zero / positive.",
+        "line": 44,
+        "page": "reference/api/core-string-abi.md"
+      },
+      {
+        "signature": "public static extern fun utf8_decode_at(borrow s: string, byte_off: int): char",
+        "description": "Unchecked UTF-16 unit load at a payload byte offset (even offsets).",
+        "line": 48,
+        "page": "reference/api/core-string-abi.md"
+      },
+      {
+        "signature": "public static extern fun utf8_width_at(borrow s: string, byte_off: int): int",
+        "description": "Payload stride in bytes of the unit at `byte_off` (always 2).",
+        "line": 52,
+        "page": "reference/api/core-string-abi.md"
+      },
+      {
         "signature": "public static get empty(): string",
         "description": "The interned empty string. Prefer this over `\"\"` so empty results share one immortal pointer instead of a fresh heap block (substring/from_utf8/concat of empties also return this).",
         "line": 56,
@@ -4237,79 +4555,109 @@
       {
         "signature": "public fun append_char(c: char): void",
         "description": "Appends a Unicode scalar as one or two UTF-16 units.",
-        "line": 67,
+        "line": 64,
+        "page": "reference/api/core-string-builder.md"
+      },
+      {
+        "signature": "public static extern fun push_raw(borrow sb: StringBuilder, borrow text: string): void",
+        "description": "",
+        "line": 79,
+        "page": "reference/api/core-string-builder.md"
+      },
+      {
+        "signature": "public static extern fun new_buffer(capacity: int): byte[]",
+        "description": "Only initialized bytes below `count` can become a built string.",
+        "line": 83,
+        "page": "reference/api/core-string-builder.md"
+      },
+      {
+        "signature": "public static extern fun push_int(borrow sb: StringBuilder, n: int): void",
+        "description": "",
+        "line": 86,
+        "page": "reference/api/core-string-builder.md"
+      },
+      {
+        "signature": "public static extern fun push_long(borrow sb: StringBuilder, n: long): void",
+        "description": "",
+        "line": 89,
         "page": "reference/api/core-string-builder.md"
       },
       {
         "signature": "public fun append(borrow text: string): void",
         "description": "Appends every UTF-16 unit of `text`, growing at most once.",
-        "line": 96,
+        "line": 93,
         "page": "reference/api/core-string-builder.md"
       },
       {
         "signature": "public fun append(span: ReadOnlySpan<char>): void",
         "description": "Appends the units a `ReadOnlySpan<char>` views, with no intermediate string.",
-        "line": 101,
+        "line": 98,
         "page": "reference/api/core-string-builder.md"
       },
       {
         "signature": "public fun append_utf8_slice(borrow text: string, start: int, byte_len: int): void",
         "description": "Appends `byte_len` payload bytes starting at byte index `start` of `text`.",
-        "line": 114,
+        "line": 111,
         "page": "reference/api/core-string-builder.md"
       },
       {
         "signature": "public fun append_int(n: int): void",
         "description": "Appends a decimal integer without allocating an intermediate string.",
-        "line": 128,
+        "line": 125,
         "page": "reference/api/core-string-builder.md"
       },
       {
         "signature": "public fun append_bool(v: bool): void",
         "description": "Appends `\"true\"` or `\"false\"` without allocating an intermediate string.",
-        "line": 133,
+        "line": 130,
         "page": "reference/api/core-string-builder.md"
       },
       {
         "signature": "public fun append_long(n: long): void",
         "description": "Appends a decimal long without allocating an intermediate string.",
-        "line": 142,
+        "line": 139,
         "page": "reference/api/core-string-builder.md"
       },
       {
         "signature": "public fun append_double(n: double): void",
-        "description": "Appends a double via `to_string`.",
-        "line": 147,
+        "description": "",
+        "line": 146,
         "page": "reference/api/core-string-builder.md"
       },
       {
         "signature": "public fun append_line(borrow text: string): void",
         "description": "Appends `text` followed by a newline character.",
-        "line": 152,
+        "line": 151,
         "page": "reference/api/core-string-builder.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes every appended character, keeping the backing buffer for reuse.",
-        "line": 159,
+        "line": 158,
+        "page": "reference/api/core-string-builder.md"
+      },
+      {
+        "signature": "public static extern fun view_raw(borrow bytes: byte[], len: int): string",
+        "description": "",
+        "line": 167,
         "page": "reference/api/core-string-builder.md"
       },
       {
         "signature": "public fun as_span(): ReadOnlySpan<char>",
         "description": "A view of everything appended so far, without copying the units. Later appends and `clear` leave the view unchanged: it is a snapshot.",
-        "line": 172,
+        "line": 171,
         "page": "reference/api/core-string-builder.md"
       },
       {
         "signature": "public fun build(): string",
         "description": "Snapshot into a new string. `from_builder` copies once; do not stage through a second `byte[]` (that doubled the finish memcpy).",
-        "line": 183,
+        "line": 182,
         "page": "reference/api/core-string-builder.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "",
-        "line": 192,
+        "line": 191,
         "page": "reference/api/core-string-builder.md"
       }
     ]
@@ -4887,6 +5235,42 @@
         "page": "reference/api/debug.md"
       },
       {
+        "signature": "public static extern fun host_free_list_head(): int",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/debug.md"
+      },
+      {
+        "signature": "public static extern fun host_heap_ptr(): int",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/debug.md"
+      },
+      {
+        "signature": "public static extern fun host_live_objects(): long",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/debug.md"
+      },
+      {
+        "signature": "public static extern fun host_total_allocations(): long",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/debug.md"
+      },
+      {
+        "signature": "public static extern fun ref_count(borrow o: object): int",
+        "description": "",
+        "line": 18,
+        "page": "reference/api/debug.md"
+      },
+      {
+        "signature": "public static extern fun runtime_counter(id: int): long",
+        "description": "Opt-in attribution (DREAM_RUNTIME_COUNTERS=1); ids follow `dream_ownership.h`. Ordinary builds and unknown ids read as 0.",
+        "line": 23,
+        "page": "reference/api/debug.md"
+      },
+      {
         "signature": "public static get free_list_head(): int",
         "description": "",
         "line": 25,
@@ -4994,103 +5378,151 @@
         "signature": "public struct CPtr",
         "description": "An opaque C pointer (`void*`, `T*`). `@c` passes it by value; `ref p: CPtr` is a `T**` out-param and `Option<CPtr>` a nullable pointer.",
         "line": 5,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public constructor(raw: usize)",
         "description": "",
         "line": 8,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static fun null(): CPtr",
         "description": "The `NULL` pointer.",
         "line": 13,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public fun is_null(): bool",
         "description": "True when this is `NULL`.",
         "line": 18,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public fun address(): usize",
         "description": "The pointer as an integer address.",
         "line": 23,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public fun offset(bytes: isize): CPtr",
         "description": "The pointer `bytes` bytes past this one.",
         "line": 28,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public class OwnedCPtr",
         "description": "A C pointer returned by an `@owned(\"free_fn\")` `@c` extern: Dream owns it, and the destructor calls `free_fn(ptr)` unless `take()` handed ownership back first.",
         "line": 39,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
+      },
+      {
+        "signature": "public static extern fun free_with(free: usize, ptr: usize): void",
+        "description": "",
+        "line": 44,
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public fun get(): CPtr",
         "description": "The pointer, still owned (and later freed) by this object.",
         "line": 47,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public fun take(): CPtr",
         "description": "Gives up ownership: the caller now frees the returned pointer, and this object holds `NULL`.",
         "line": 52,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public class NativeCallback<F>",
         "description": "A Dream `fun` (capturing or not) handed to a `@c` extern as a `(fn, void* user_data)` pair. C may call it for as long as this object is alive: keep it in a field while C holds the pointer. Calls from threads Dream did not start trap.",
         "line": 67,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
+      },
+      {
+        "signature": "public static extern fun register(borrow callback: object): void",
+        "description": "",
+        "line": 71,
+        "page": "reference/api/ffi-1.md"
+      },
+      {
+        "signature": "public static extern fun unregister(borrow callback: object): void",
+        "description": "",
+        "line": 74,
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public constructor(f: F)",
         "description": "",
         "line": 76,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static class Ffi",
         "description": "Reads through C pointers from `@c` callbacks (`char**`, `char*`).",
         "line": 87,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
+      },
+      {
+        "signature": "public static extern fun host_read_ptr(base: usize, index: int): usize",
+        "description": "",
+        "line": 89,
+        "page": "reference/api/ffi-1.md"
+      },
+      {
+        "signature": "public static extern fun host_read_cstring(ptr: usize): string",
+        "description": "",
+        "line": 92,
+        "page": "reference/api/ffi-1.md"
+      },
+      {
+        "signature": "public static extern fun host_read_i32(base: usize, index: int): int",
+        "description": "",
+        "line": 95,
+        "page": "reference/api/ffi-1.md"
+      },
+      {
+        "signature": "public static extern fun host_read_i64(base: usize, index: int): long",
+        "description": "",
+        "line": 98,
+        "page": "reference/api/ffi-1.md"
+      },
+      {
+        "signature": "public static extern fun host_read_f64(base: usize, index: int): double",
+        "description": "",
+        "line": 101,
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static fun read_int(base: CPtr, index: int): int",
         "description": "`((int32_t*)base)[index]`.",
         "line": 104,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static fun read_long(base: CPtr, index: int): long",
         "description": "`((int64_t*)base)[index]`.",
         "line": 109,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static fun read_double(base: CPtr, index: int): double",
         "description": "`((double*)base)[index]`.",
         "line": 114,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static fun read_ptr(base: CPtr, index: int): CPtr",
         "description": "`((void**)base)[index]`. A `NULL` base reads `NULL`.",
         "line": 119,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static fun read_cstring(ptr: CPtr): Option<string>",
         "description": "Copies the NUL-terminated UTF-8 C string at `ptr` into a Dream `string`; `None` for `NULL`.",
         "line": 124,
-        "page": "reference/api/ffi.md"
+        "page": "reference/api/ffi-2.md"
       }
     ]
   },
@@ -6067,6 +6499,24 @@
         "page": "reference/api/json-json.md"
       },
       {
+        "signature": "public static extern fun serialize<T>(borrow value: T): string",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/json-json.md"
+      },
+      {
+        "signature": "public static extern fun deserialize<T>(borrow text: string): Result<T, ParseError>",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/json-json.md"
+      },
+      {
+        "signature": "public static extern fun from_value<T>(borrow value: JsonValue): T",
+        "description": "Reconstruct a `@json` value from an already-parsed `JsonValue` (no parse step).",
+        "line": 14,
+        "page": "reference/api/json-json.md"
+      },
+      {
         "signature": "public static fun serialize_pretty(borrow value: JsonValue, indent: int): string",
         "description": "Pretty-prints a `JsonValue` with newlines and `indent` spaces per nesting level. Pass 0 to fall back to compact `_stringify`.",
         "line": 18,
@@ -6161,121 +6611,121 @@
       {
         "signature": "public class JsonParser",
         "description": "Code-unit cursor recursive-descent JSON parser over the input string (`char_at` / `.length`) — no intermediate `byte[]` copy.",
-        "line": 5,
+        "line": 12,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public constructor(text: string, pos: int)",
         "description": "",
-        "line": 10,
+        "line": 17,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun skip_ws(): void",
         "description": "",
-        "line": 28,
+        "line": 35,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun at_end(): bool",
         "description": "",
-        "line": 44,
+        "line": 51,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun cursor(): int",
         "description": "",
-        "line": 49,
+        "line": 56,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun failed(): bool",
         "description": "",
-        "line": 51,
+        "line": 58,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun container_end(close: int, previous: int): bool",
         "description": "Generated loops must consume input or close their container; nested readers can return without consuming a token when its shape does not match the field type.",
-        "line": 55,
+        "line": 62,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun keyword(length: int, value: JsonValue): JsonValue",
         "description": "",
-        "line": 68,
+        "line": 75,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_string(): string",
         "description": "",
-        "line": 115,
+        "line": 122,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_number(): JsonValue",
         "description": "",
-        "line": 204,
+        "line": 209,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_array(): JsonValue",
         "description": "",
-        "line": 280,
+        "line": 285,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_object(): JsonValue",
         "description": "",
-        "line": 309,
+        "line": 314,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_value(): JsonValue",
         "description": "",
-        "line": 346,
+        "line": 351,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun try_consume(code: int): bool",
         "description": "",
-        "line": 373,
+        "line": 378,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun try_null(): bool",
         "description": "",
-        "line": 382,
+        "line": 387,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_bool(): bool",
         "description": "",
-        "line": 391,
+        "line": 396,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_int(): int",
         "description": "",
-        "line": 446,
+        "line": 451,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun parse_double(): double",
         "description": "",
-        "line": 469,
+        "line": 474,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun match_key(borrow key: string): bool",
         "description": "True when the next object key is `key` (no escapes). Consumes the key and the following colon.",
-        "line": 543,
+        "line": 548,
         "page": "reference/api/json-json-parser.md"
       },
       {
         "signature": "public fun skip_value(): void",
         "description": "",
-        "line": 570,
+        "line": 575,
         "page": "reference/api/json-json-parser.md"
       }
     ]
@@ -7613,6 +8063,12 @@
         "page": "reference/api/simd.md"
       },
       {
+        "signature": "public static extern fun lane_count(): int",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/simd.md"
+      },
+      {
         "signature": "public constructor(value: T)",
         "description": "Splats `value` into every lane.",
         "line": 15,
@@ -7625,15 +8081,33 @@
         "page": "reference/api/simd.md"
       },
       {
+        "signature": "public static extern fun splat_raw(value: T): Vector<T>",
+        "description": "",
+        "line": 29,
+        "page": "reference/api/simd.md"
+      },
+      {
         "signature": "public static fun load(borrow src: T[], offset: int): Vector<T>",
         "description": "Loads `Vector<T>.count` consecutive elements from `src` starting at `offset`.",
         "line": 33,
         "page": "reference/api/simd.md"
       },
       {
+        "signature": "public static extern fun load_raw(borrow src: T[], offset: int): Vector<T>",
+        "description": "",
+        "line": 38,
+        "page": "reference/api/simd.md"
+      },
+      {
         "signature": "public fun store(borrow dest: T[], offset: int): void",
         "description": "Writes this vector's lanes into `dest` starting at `offset`.",
         "line": 42,
+        "page": "reference/api/simd.md"
+      },
+      {
+        "signature": "public static extern fun store_raw(v: Vector<T>, borrow dest: T[], offset: int): void",
+        "description": "",
+        "line": 47,
         "page": "reference/api/simd.md"
       },
       {
@@ -7649,9 +8123,33 @@
         "page": "reference/api/simd.md"
       },
       {
+        "signature": "public static extern fun bin_add(a: Vector<T>, b: Vector<T>): Vector<T>",
+        "description": "",
+        "line": 73,
+        "page": "reference/api/simd.md"
+      },
+      {
+        "signature": "public static extern fun bin_sub(a: Vector<T>, b: Vector<T>): Vector<T>",
+        "description": "",
+        "line": 81,
+        "page": "reference/api/simd.md"
+      },
+      {
+        "signature": "public static extern fun bin_mul(a: Vector<T>, b: Vector<T>): Vector<T>",
+        "description": "",
+        "line": 89,
+        "page": "reference/api/simd.md"
+      },
+      {
         "signature": "public static fun min(a: Vector<T>, b: Vector<T>): Vector<T>",
         "description": "Lane-wise minimum of `a` and `b`.",
         "line": 92,
+        "page": "reference/api/simd.md"
+      },
+      {
+        "signature": "public static extern fun bin_min(a: Vector<T>, b: Vector<T>): Vector<T>",
+        "description": "",
+        "line": 97,
         "page": "reference/api/simd.md"
       },
       {
@@ -7661,9 +8159,21 @@
         "page": "reference/api/simd.md"
       },
       {
+        "signature": "public static extern fun bin_max(a: Vector<T>, b: Vector<T>): Vector<T>",
+        "description": "",
+        "line": 105,
+        "page": "reference/api/simd.md"
+      },
+      {
         "signature": "public fun sum(): T",
         "description": "Horizontal sum of every lane.",
         "line": 108,
+        "page": "reference/api/simd.md"
+      },
+      {
+        "signature": "public static extern fun reduce_sum(v: Vector<T>): T",
+        "description": "",
+        "line": 113,
         "page": "reference/api/simd.md"
       }
     ]
@@ -7814,6 +8324,18 @@
     "page": "reference/api/system.md",
     "declarations": [
       {
+        "signature": "public static extern fun print<T>(borrow value: T): void",
+        "description": "Prints a value to standard output.",
+        "line": 8,
+        "page": "reference/api/system-1.md"
+      },
+      {
+        "signature": "public static extern fun println<T>(borrow value: T): void",
+        "description": "Prints a value to standard output followed by a newline.",
+        "line": 12,
+        "page": "reference/api/system-1.md"
+      },
+      {
         "signature": "public static fun read_line(): string",
         "description": "Reads a line of input from stdin.",
         "line": 56,
@@ -7949,13 +8471,13 @@
         "signature": "public static fun set_cwd(borrow path: string): Result<bool, IoError>",
         "description": "Sets the current working directory.",
         "line": 235,
-        "page": "reference/api/system-1.md"
+        "page": "reference/api/system-2.md"
       },
       {
         "signature": "public static fun clear(): void",
         "description": "Clears the terminal screen.",
         "line": 243,
-        "page": "reference/api/system-1.md"
+        "page": "reference/api/system-2.md"
       },
       {
         "signature": "public static fun set_foreground(color: ConsoleColor): void",
@@ -7995,27 +8517,51 @@
         "page": "reference/api/task-task.md"
       },
       {
+        "signature": "public static extern fun funcidx(borrow body: fun(string): string): int",
+        "description": "",
+        "line": 17,
+        "page": "reference/api/task-task.md"
+      },
+      {
+        "signature": "public static extern fun funcidx_async(borrow body: fun(string): Future<string>): int",
+        "description": "",
+        "line": 20,
+        "page": "reference/api/task-task.md"
+      },
+      {
+        "signature": "public static extern fun env(borrow body: fun(string): string): long",
+        "description": "",
+        "line": 23,
+        "page": "reference/api/task-task.md"
+      },
+      {
+        "signature": "public static extern fun env_async(borrow body: fun(string): Future<string>): long",
+        "description": "",
+        "line": 26,
+        "page": "reference/api/task-task.md"
+      },
+      {
         "signature": "public static async fun spawn<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): TOut",
         "description": "",
-        "line": 37,
+        "line": 40,
         "page": "reference/api/task-task.md"
       },
       {
         "signature": "public static async fun spawn_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut",
         "description": "",
-        "line": 50,
+        "line": 53,
         "page": "reference/api/task-task.md"
       },
       {
         "signature": "public static async fun map<T : shared, TOut : shared>(borrow items: T[], body: fun(T): TOut, token: Option<CancellationToken> = Option.None): TOut[]",
-        "description": "",
-        "line": 101,
+        "description": "Every item is posted before the first await: async bodies start lazily, so awaiting per-item spawn futures in order would run the items one after another.",
+        "line": 70,
         "page": "reference/api/task-task.md"
       },
       {
         "signature": "public static async fun map_async<T : shared, TOut : shared>(borrow items: T[], body: fun(T): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut[]",
         "description": "",
-        "line": 116,
+        "line": 89,
         "page": "reference/api/task-task.md"
       }
     ]
@@ -8119,14 +8665,32 @@
     "declarations": [
       {
         "signature": "public static class Test",
-        "description": "Minimal test runner: prints PASS/FAIL per named case, everything else is `Assert.*`.",
-        "line": 4,
+        "description": "The runner `dream test` synthesizes calls one of these per `@test` function. Each case prints `RUN <name>` before its body and `PASS <name>` after it. An `Assert.*` failure, a panic or a trap ends the process, so the last `RUN` line names the case that was running.",
+        "line": 6,
         "page": "reference/api/testing-test.md"
       },
       {
         "signature": "public static fun run(name: string, body: fun(): void): void",
-        "description": "Runs `body`, printing `PASS <name>` on success. Assertion failures inside `body` already print their own message and exit the process (see `Assert.fail`), so a case reaching the print below never failed.",
-        "line": 8,
+        "description": "",
+        "line": 7,
+        "page": "reference/api/testing-test.md"
+      },
+      {
+        "signature": "public static fun run_with_timeout(name: string, timeout_ms: int, body: fun(): void): void",
+        "description": "The driver reads the limit back from the `RUN` line and stops a case that exceeds it.",
+        "line": 13,
+        "page": "reference/api/testing-test.md"
+      },
+      {
+        "signature": "public static async fun run_async(name: string, body: fun(): Future<void>): void",
+        "description": "",
+        "line": 18,
+        "page": "reference/api/testing-test.md"
+      },
+      {
+        "signature": "public static async fun run_async_with_timeout(name: string, timeout_ms: int, body: fun(): Future<void>): void",
+        "description": "",
+        "line": 23,
         "page": "reference/api/testing-test.md"
       }
     ]
@@ -8485,31 +9049,31 @@
       {
         "signature": "public fun split(borrow sep: string): string[]",
         "description": "Splits this string on every occurrence of substring `sep`.",
-        "line": 356,
+        "line": 350,
         "page": "reference/api/text-string-2.md"
       },
       {
         "signature": "public fun split(sep: char, limit: int): string[]",
         "description": "Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).",
-        "line": 385,
+        "line": 379,
         "page": "reference/api/text-string-2.md"
       },
       {
         "signature": "public fun split(borrow sep: string, limit: int): string[]",
         "description": "Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).",
-        "line": 417,
+        "line": 411,
         "page": "reference/api/text-string-2.md"
       },
       {
         "signature": "public fun replace(borrow old: string, borrow replacement: string): string",
         "description": "A new string with every occurrence of `old` replaced by `replacement`.",
-        "line": 449,
+        "line": 443,
         "page": "reference/api/text-string-2.md"
       },
       {
         "signature": "public fun join(sep: string): string",
         "description": "Joins elements with `sep` between them.",
-        "line": 479,
+        "line": 473,
         "page": "reference/api/text-string-2.md"
       }
     ]
@@ -8622,6 +9186,12 @@
         "signature": "public static class Time",
         "description": "Timing utilities.",
         "line": 4,
+        "page": "reference/api/time.md"
+      },
+      {
+        "signature": "public static extern async fun sleep_host(ms: int): void",
+        "description": "",
+        "line": 6,
         "page": "reference/api/time.md"
       },
       {

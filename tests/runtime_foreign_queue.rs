@@ -43,5 +43,10 @@ fn foreign_queues_resume_on_their_owner_without_an_unrelated_claim_lock() {
     );
     let output = Command::new(binary).output().unwrap();
     assert!(output.status.success(), "{output:?}");
-    assert_eq!(output.stdout, b"foreign queue scheduler isolation passed\n");
+    assert_eq!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .replace("\r\n", "\n"),
+        "foreign queue scheduler isolation passed\n"
+    );
 }

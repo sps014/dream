@@ -1,0 +1,37 @@
+import system.testing;
+// `Promise.start(f)` launches a lazy future without awaiting it (fire-and-forget). The body runs
+// at the next scheduler pass; here that is while `main` is suspended on the timer, so the worker
+// line prints before "done".
+import system;
+
+async fun c1bc_work(): void {
+    c1bc_verify_observation(("worker ran").to_string());
+}
+
+async fun c1bc_body(): void {
+    let f = c1bc_work();
+    c1bc_verify_observation(("created").to_string());
+    Promise.start(f);
+    Time.sleep(10).await;
+    c1bc_verify_observation(("done").to_string());
+}
+
+let c1bc_cursor: int = 0;
+
+fun c1bc_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "created\nworker ran\ndone\n";
+    let end = c1bc_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c1bc_cursor, end));
+    c1bc_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+async fun promise_start_fire_and_forget(): void {
+    c1bc_cursor = 0;
+    c1bc_body().await;
+    Assert.eq(c1bc_cursor, ("created\nworker ran\ndone\n").length);
+}

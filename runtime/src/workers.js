@@ -76,6 +76,8 @@ parentPort.on('message', (m) => {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
       parentPort.postMessage({ t: 'reply', data: packWire(reply), idle: inst._hostPending === 0 });
     } else if (m.t === 'term') {
+      await inst.__workerClose();
+      parentPort.postMessage({ t: 'closed' });
       parentPort.close();
     }
   });
@@ -98,6 +100,8 @@ self.onmessage = (e) => {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
       self.postMessage({ t: 'reply', data: packWire(reply), idle: inst._hostPending === 0 });
     } else if (m.t === 'term') {
+      await inst.__workerClose();
+      self.postMessage({ t: 'closed' });
       self.close();
     }
   });
@@ -115,6 +119,7 @@ self.onmessage = (e) => {
  */
 function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstance) {
   const reg = new Map();
+  const stopping = new Set();
   let nextId = 1;
   /** Lazily resolved Node `worker_threads.Worker` constructor (null until first Node spawn). */
   let NodeWorkerCtor = null;
@@ -141,6 +146,8 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       slot.stack = Number(m.stack ?? 0);
       for (const q of slot.queued) slot.worker.postMessage(q);
       slot.queued = [];
+    } else if (m.t === "closed") {
+      slot.closed?.();
     } else if (m.t === "reply") {
       const state = slot.state;
       slot.idle = m.idle;
@@ -283,6 +290,9 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
         else s.pending.push(resolve);
       }),
     // JS termination never blocks the caller, so there is nothing to overlap.
+    __drainWorkers: async () => {
+      while (stopping.size) await Promise.all([...stopping]);
+    },
     workerShutdown: () => {},
     workerTerminate: (id) => {
       const s = reg.get(id);
@@ -304,19 +314,22 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
           getInstance().exports.dream_wasm_raw_free(slot.stack);
         }
       };
-      try {
-        if (slot.worker) {
-          slot.worker.postMessage({ t: "term" });
-          const stopped = slot.worker.terminate();
-          // Node termination is asynchronous; its TLS and stack remain live until it stops.
-          if (stopped && typeof stopped.then === "function") {
-            stopped.then(releaseStack, () => {});
-          } else {
-            releaseStack();
-          }
-        }
-      } catch (_) {
-        /* already gone */
+      if (slot.worker) {
+        const stopped = new Promise((resolve) => {
+          const terminate = () => {
+            const result = slot.worker.terminate();
+            if (result && typeof result.then === "function") {
+              result.then(() => { releaseStack(); resolve(); }, resolve);
+            } else { releaseStack(); resolve(); }
+          };
+          // Finished bodies retire gracefully; a busy body still needs immediate termination.
+          if (slot.ready && s.inflight === 0) {
+            slot.closed = terminate;
+            slot.worker.postMessage({ t: "term" });
+          } else { terminate(); }
+        });
+        stopping.add(stopped);
+        stopped.then(() => stopping.delete(stopped));
       }
       if (slot.blobUrl) {
         try {

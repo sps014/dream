@@ -21,7 +21,7 @@ def main():
     args.binary = with_exe(args.binary)
     if not args.binary.is_file():
         parser.error("build the compiler first: cargo build --release --workspace")
-    small = (ROOT / "tests/cases/json_derive.dream").read_text()
+    small = (ROOT / "tests/fixtures/compiler/json_derive.dream").read_text()
     models = "\n".join(f"""@json
 class Model{i} {{
     public id: int;

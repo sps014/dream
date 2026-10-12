@@ -1,1 +1,0 @@
-an extern function cannot combine `@c`, `@js`, `@runtime`, or `@intrinsic`

@@ -24,8 +24,8 @@ fn assert_valid_wasm(bytes: &[u8]) {
 #[ignore = "Binaryen at every -O level; cargo test --workspace -- --ignored"]
 fn release_wasm_preserves_output_at_every_backend_level() {
     let temporary = tempfile::tempdir().unwrap();
-    let dream_file = "tests/cases/collection_literals.dream".to_string();
-    let expected = fs::read_to_string("tests/cases/collection_literals.expected").unwrap();
+    let dream_file = "tests/fixtures/compiler/collection_literals.dream".to_string();
+    let expected = "3\n1\n3\n3\n5\n3\ntrue\nfalse\n2\n1\n2\nfalse\n0\n0\n0\n4\n2\n2\n2\n1\n";
     let runtime = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/dream.js");
     for level in ALL_LEVELS {
         let wat = temporary.path().join(format!("{level:?}.wat"));

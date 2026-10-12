@@ -21,6 +21,8 @@ export class DreamInstance {
     this._callbackWrappers = new Map();
     // Unsettled `extern async` host calls; a worker that still has one cannot be reused.
     this._hostPending = 0;
+    this._hostSettlements = new Set();
+    this._drainWorkers = async () => {};
     this.workerStack = 0;
   }
 
@@ -381,6 +383,14 @@ export class DreamInstance {
     this.__attachGuestStack(this.workerStack);
   }
 
+  async __workerClose() {
+    // A returned task may leave an extern future alive; settle it on its original TLS/stack.
+    while (this._hostSettlements.size) {
+      await Promise.all([...this._hostSettlements]);
+    }
+    this.exports.dream_heap_thread_exit?.();
+  }
+
   /** Heap type tag with `TAG_SHARED` stripped (`HEADER_TAG_OFFSET` is 8 bytes before the payload). */
   __valueTag(ptr) {
     return this.i32(ptr - 8) & 0x3fffffff;
@@ -413,6 +423,8 @@ export class DreamInstance {
     if (!this.__isFutureFrame(r)) {
       const text = this.readString(r);
       this.__guestFree(r);
+      // Start detached futures before advertising this worker as reusable.
+      this.exports.__dream_run_loop?.();
       return Promise.resolve(text);
     }
     return this.__awaitFuture(r).then(() => {
@@ -469,11 +481,12 @@ export class DreamInstance {
       throw new Error("module has no exported `main`");
     }
     const r = this.exports.main();
-    const after = (fut) => {
+    const after = async (fut) => {
       const code = this.__mainStatus(fut);
       if (this.__isFutureFrame(r) && typeof this.exports.free === "function") {
         this.exports.free(r);
       }
+      await this._drainWorkers();
       this.__dropGlobals();
       this.exitCode = code;
       return code;

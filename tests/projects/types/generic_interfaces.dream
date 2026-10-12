@@ -1,0 +1,64 @@
+import system.testing;
+// Generic interfaces: a generic class implements a generic interface, and both are monomorphized
+// together. Dynamic dispatch works through the monomorphized interface type (`Container<int>`),
+// including an implicit upcast at a call site and an explicit interface cast.
+
+import system;
+interface ce7_Container<T> {
+    fun get(): T;
+    get length(): int;
+}
+
+class ce7_Box<T> : ce7_Container<T> {
+    public value: T;
+    public constructor(value: T) { this.value = value; }
+    public fun get(): T { return this.value; }
+    public get length(): int { return 1; }
+}
+
+class ce7_Pair<T> : ce7_Container<T> {
+    public first: T;
+    public second: T;
+    public constructor(first: T, second: T) { this.first = first; this.second = second; }
+    public fun get(): T { return this.first; }
+    public get length(): int { return 2; }
+}
+
+// Implicit upcast Box<int>/Pair<int> -> Container<int>; the call dispatches dynamically.
+fun ce7_describe(c: ce7_Container<int>): void {
+    ce7_verify_observation((c.get()).to_string());
+    ce7_verify_observation((c.length).to_string());
+}
+
+fun ce7_body(): void {
+    let b = ce7_Box<int>(7);
+    ce7_describe(b);
+
+    let p = ce7_Pair<int>(10, 20);
+    ce7_describe(p);
+
+    // Explicit cast to the monomorphized interface, then dynamic dispatch. The cast parser now
+    // accepts generic type arguments, so this direct `(Container<int>)b` form works.
+    let c = (ce7_Container<int>)b;
+    ce7_verify_observation((c.get()).to_string());
+}
+
+let ce7_cursor: int = 0;
+
+fun ce7_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "7\n1\n10\n2\n7\n";
+    let end = ce7_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(ce7_cursor, end));
+    ce7_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun generic_interfaces(): void {
+    ce7_cursor = 0;
+    ce7_body();
+    Assert.eq(ce7_cursor, ("7\n1\n10\n2\n7\n").length);
+}

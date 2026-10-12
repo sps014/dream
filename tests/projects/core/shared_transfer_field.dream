@@ -1,0 +1,76 @@
+import system.testing;
+// An `shared class` may hold non-shared managed heap values (`Option<Job>`, arrays,
+// classes). The object's whole reachable graph is treated as shared once inside, so all
+// fields are accessed under the same `lock` discipline — no per-field move rules.
+//
+// Non-`@shared` objects themselves move WHOLE into task bodies by pointer hand-off:
+// see `task_move_array.dream`.
+import system;
+import system.task;
+
+class c1f4_Job {
+    public name: string;
+
+    public constructor(name: string) {
+        this.name = name;
+    }
+}
+
+shared class c1f4_JobQueue {
+    public head: Option<c1f4_Job>;
+    public count: int;
+
+    public constructor() {
+        this.head = Option.None;
+        this.count = 0;
+    }
+}
+
+async fun c1f4_body(): void {
+    let q = c1f4_JobQueue();
+
+    let producer = Task.spawn(() => {
+        lock (q) {
+            q.head = Option.Some(c1f4_Job("build"));
+            q.count = q.count + 1;
+        }
+        return 0;
+    });
+    producer.await;
+
+    c1f4_verify_observation((q.count).to_string());
+
+    let consumer = Task.spawn(() => {
+        lock (q) {
+            if q.head.is_some() {
+                c1f4_verify_observation((q.head.unwrap().name).to_string());
+                q.count = q.count - 1;
+            } else {
+                c1f4_verify_observation(("empty").to_string());
+            }
+        }
+        return 0;
+    });
+    consumer.await;
+    c1f4_verify_observation((q.count).to_string());
+}
+
+let c1f4_cursor: int = 0;
+
+fun c1f4_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "1\nbuild\n0\n";
+    let end = c1f4_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c1f4_cursor, end));
+    c1f4_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+async fun shared_transfer_field(): void {
+    c1f4_cursor = 0;
+    c1f4_body().await;
+    Assert.eq(c1f4_cursor, ("1\nbuild\n0\n").length);
+}

@@ -1,0 +1,38 @@
+import system.testing;
+// Capturing plain unmanaged/value locals into a `Task` body is allowed.
+
+import system;
+import system.task;
+async fun c24b_body(): void {
+    let scale = 3;
+    let offset = 3;
+    let prefix = "result=";
+
+    c24b_verify_observation((Task.spawn(() => {
+        let result = scale + offset;
+        if result == 6 {
+            return prefix + "ok";
+        }
+        return prefix + "bad";
+    }).await).to_string());
+}
+
+let c24b_cursor: int = 0;
+
+fun c24b_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "result=ok\n";
+    let end = c24b_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c24b_cursor, end));
+    c24b_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+async fun task_capture_unmanaged(): void {
+    c24b_cursor = 0;
+    c24b_body().await;
+    Assert.eq(c24b_cursor, ("result=ok\n").length);
+}

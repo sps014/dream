@@ -71,12 +71,14 @@ fn wasi_libc_callbacks_and_pointer_marshalling() {
     for name in ["c_qsort_callback", "c_array_memchr"] {
         let dir = tempfile::tempdir().unwrap();
         let out = dir.path().join("main.wat");
-        compile(&repo(&format!("tests/cases/{name}.dream")), &out, None).unwrap();
+        compile(&crate::common::compiler_fixture(name), &out, None).unwrap();
         assert_eq!(
             run(&out).trim(),
-            std::fs::read_to_string(repo(&format!("tests/cases/{name}.expected")))
-                .unwrap()
-                .trim()
+            match name {
+                "c_qsort_callback" => "1 3 5 7 9 \n9 7 5 3 1",
+                "c_array_memchr" => "true\ntrue\ntrue",
+                _ => unreachable!(),
+            }
         );
     }
 }

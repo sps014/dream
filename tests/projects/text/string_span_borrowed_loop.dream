@@ -1,0 +1,49 @@
+import system.testing;
+import system;
+
+@noinline
+fun c225_scan(borrow suffix: string): int {
+    let source = "abcdefghijklmnopqrstuvwxyz" + suffix;
+    let other = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + suffix;
+    let sum = 0;
+    let i = 0;
+    while i < 100 {
+        let view = source.span(i & 7, 20);
+        sum = sum + (int)view.char_at(0);
+        let second = other.span(i & 7, 20);
+        sum = sum + (int)second.char_at(0);
+        i = i + 1;
+    }
+    let sliced = source.substring(2, 20);
+    i = 0;
+    while i < 100 {
+        let view = sliced.span(i & 3, 8);
+        sum = sum + (int)view.char_at(0);
+        i = i + 1;
+    }
+    return sum;
+}
+
+fun c225_body(): void {
+    c225_verify_observation((c225_scan(System.env_or("DREAM_SPAN_SUFFIX", "!"))).to_string());
+}
+
+let c225_cursor: int = 0;
+
+fun c225_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "26934\n";
+    let end = c225_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c225_cursor, end));
+    c225_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun string_span_borrowed_loop(): void {
+    c225_cursor = 0;
+    c225_body();
+    Assert.eq(c225_cursor, ("26934\n").length);
+}

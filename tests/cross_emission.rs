@@ -10,7 +10,7 @@ fn emits_verified_linux_aarch64_object_without_linking() {
     let result = Command::new(env!("CARGO_BIN_EXE_dream"))
         .args(["--object", "--target", "aarch64-unknown-linux-gnu", "-o"])
         .arg(&output)
-        .arg("tests/cases/arithmetic.dream")
+        .arg("tests/fixtures/compiler/arithmetic.dream")
         .output()
         .unwrap();
     assert!(
@@ -38,7 +38,7 @@ fn target_objects_cannot_be_run() {
                 "--target",
                 "aarch64-unknown-linux-gnu",
                 subcommand,
-                "tests/cases/arithmetic.dream",
+                "tests/fixtures/compiler/arithmetic.dream",
             ])
             .output()
             .unwrap();
@@ -57,7 +57,12 @@ fn foreign_tests_cannot_silently_run_for_the_host() {
         "aarch64-unknown-linux-gnu"
     };
     let output = Command::new(env!("CARGO_BIN_EXE_dream"))
-        .args(["--target", triple, "test", "tests/cases/arithmetic.dream"])
+        .args([
+            "--target",
+            triple,
+            "test",
+            "tests/fixtures/compiler/arithmetic.dream",
+        ])
         .output()
         .unwrap();
     assert!(!output.status.success());

@@ -1,0 +1,22 @@
+import system.testing;
+import system;
+
+async fun c65_sleeper(): int {
+    Time.sleep(10000).await;
+    return 1;
+}
+
+@test
+@timeout(180000)
+async fun cancellation_basic(): void {
+    let src = CancellationSource();
+    let tok = src.token;
+    Assert.eq_str((tok.is_cancelled).to_string(), "false");
+    src.cancel();
+    Assert.eq_str((tok.is_cancelled).to_string(), "true");
+    Assert.eq_str((tok.check().is_err()).to_string(), "true");
+
+    let f = c65_sleeper();
+    Promise.cancel(f);
+    Assert.eq_str(("cancelled").to_string(), "cancelled");
+}

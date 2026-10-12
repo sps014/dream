@@ -18,7 +18,8 @@ fn unique_temp_wat(name: &str) -> PathBuf {
 
 #[test]
 fn list_insert_inlines_span_copy_from() {
-    let src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/cases/list_insert.dream");
+    let src =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/compiler/list_insert.dream");
     let wat_path = unique_temp_wat("list_insert");
     let src_s = src.to_str().unwrap().to_string();
     let wat_s = wat_path.to_str().unwrap().to_string();

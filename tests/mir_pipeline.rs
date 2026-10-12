@@ -412,7 +412,7 @@ fn value_struct_constructors_and_borrow_parameters_elide_arc() {
 
 #[test]
 fn source_weak_forest_builder_batches_niche_null_initialization() {
-    let fixture = include_str!("cases/arc_weak_forest.dream");
+    let fixture = include_str!("fixtures/compiler/arc_weak_forest.dream");
     let (_, fixture) = fixture.split_once("class ForestNode").unwrap();
     let (fixture, _) = fixture.split_once("fun main()").unwrap();
     let source = format!(

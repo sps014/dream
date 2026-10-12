@@ -1,0 +1,41 @@
+import system.testing;
+// The standard `List<T>` is indexable (`get`/`set`) and iterable (`iterator()`), so `list[i]`,
+// `list[i] = v`, and `for (let x in list)` all work out of the box.
+
+import system;
+import system.collections;
+fun c134_body() {
+    let xs = List<int>();
+    xs.push(1);
+    xs.push(2);
+    xs.push(3);
+
+    xs[2] = 30;                 // List.set(2, 30)
+
+    let sum = 0;
+    for (let x in xs) {         // x is the unwrapped element (int)
+        sum = sum + x;
+    }
+    c134_verify_observation((sum).to_string());       // 1 + 2 + 30 = 33
+    c134_verify_observation((xs.length).to_string()); // 3
+}
+
+let c134_cursor: int = 0;
+
+fun c134_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "33\n3\n";
+    let end = c134_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c134_cursor, end));
+    c134_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun list_indexer_foreach(): void {
+    c134_cursor = 0;
+    c134_body();
+    Assert.eq(c134_cursor, ("33\n3\n").length);
+}

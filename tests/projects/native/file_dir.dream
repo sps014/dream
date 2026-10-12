@@ -1,0 +1,52 @@
+import system.testing;
+// Directory File.create_dir / create_dir_all / is_dir / list on native.
+import system;
+import system.io;
+
+async fun cd0_body(): void {
+    let root = "dream_file_dir_e2e";
+    switch (File.create_dir(root).await) {
+        Ok(_) => cd0_verify_observation((File.is_dir(root)).to_string()),
+        Err(e) => cd0_verify_observation((e.message()).to_string()),
+    }
+
+    switch (File.create_dir_all(root + "/nested/leaf").await) {
+        Ok(_) => cd0_verify_observation((File.is_dir(root + "/nested/leaf")).to_string()),
+        Err(e) => cd0_verify_observation((e.message()).to_string()),
+    }
+
+    let marker = Buffer.alloc<byte>(1);
+    marker[0] = (byte)1;
+    File.write_bytes(root + "/a.bin", marker).await;
+
+    let names = (File.list(root).await).unwrap_or(Buffer.alloc<string>(0));
+    cd0_verify_observation((names.length).to_string());
+    cd0_verify_observation((names.get(0)).to_string());
+    cd0_verify_observation((names.get(1)).to_string());
+
+    File.delete(root + "/a.bin").await;
+    File.delete(root + "/nested/leaf").await;
+    File.delete(root + "/nested").await;
+    cd0_verify_observation((File.delete(root).await.is_ok()).to_string());
+    cd0_verify_observation((!File.exists(root)).to_string());
+}
+
+let cd0_cursor: int = 0;
+
+fun cd0_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "true\ntrue\n2\na.bin\nnested\ntrue\ntrue\n";
+    let end = cd0_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(cd0_cursor, end));
+    cd0_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+async fun file_dir(): void {
+    cd0_cursor = 0;
+    cd0_body().await;
+    Assert.eq(cd0_cursor, ("true\ntrue\n2\na.bin\nnested\ntrue\ntrue\n").length);
+}

@@ -1,0 +1,41 @@
+import system.testing;
+// Static TypeScript-style property accessors: read/written through the type itself
+// (`Type.prop` / `Type.prop = v`) with no instance receiver. Distinct from instance accessors.
+import system;
+class c208_Settings {
+    // A static getter computes a value on read of `Settings.version`.
+    public static get version(): int {
+        return 7;
+    }
+
+    // A static setter runs on write of `Settings.level = v`; here it echoes the value.
+    public static set level(value: int) {
+        c208_verify_observation((value).to_string());
+    }
+}
+
+fun c208_body(): void {
+    c208_verify_observation((c208_Settings.version).to_string());   // 7
+    c208_Settings.level = 3;                 // 3
+    c208_Settings.level = c208_Settings.version;  // 7
+}
+
+let c208_cursor: int = 0;
+
+fun c208_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "7\n3\n7\n";
+    let end = c208_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c208_cursor, end));
+    c208_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun static_property(): void {
+    c208_cursor = 0;
+    c208_body();
+    Assert.eq(c208_cursor, ("7\n3\n7\n").length);
+}

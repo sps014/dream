@@ -1,0 +1,11 @@
+import system.testing;
+import system;
+@test
+@timeout(180000)
+fun empty_array(): void {
+    let xs: int[] = [];
+    Assert.eq_str((xs.length).to_string(), "0");
+
+    let ys: string[] = [];
+    Assert.eq_str((ys.length).to_string(), "0");
+}

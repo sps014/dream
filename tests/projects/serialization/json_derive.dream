@@ -1,0 +1,52 @@
+import system.testing;
+import system;
+import system.json;
+@json
+class c111_Address {
+    public city: string;
+    public zip: string;
+
+    public constructor(city: string, zip: string) {
+        this.city = city;
+        this.zip = zip;
+    }
+}
+
+@json
+class c111_User {
+    public name: string;
+    public age: int;
+    public active: bool;
+    public address: c111_Address;
+    public tags: string[];
+    public scores: int[];
+
+    public constructor(name: string, age: int, active: bool, address: c111_Address, tags: string[], scores: int[]) {
+        this.name = name;
+        this.age = age;
+        this.active = active;
+        this.address = address;
+        this.tags = tags;
+        this.scores = scores;
+    }
+}
+
+@test
+@timeout(180000)
+fun json_derive(): void {
+    let u = c111_User("Ada", 36, true, c111_Address("London", "NW1"), ["dev", "math"], [10, 20, 30]);
+
+    let text = Json.serialize(u);
+    Assert.eq_str((text).to_string(), "{\"name\":\"Ada\",\"age\":36,\"active\":true,\"address\":{\"city\":\"London\",\"zip\":\"NW1\"},\"tags\":[\"dev\",\"math\"],\"scores\":[10,20,30]}");
+
+    let back = Json.deserialize<c111_User>(text).unwrap_or(u);
+    Assert.eq_str((back.name).to_string(), "Ada");
+    Assert.eq_str((back.age).to_string(), "36");
+    Assert.eq_str((back.active).to_string(), "true");
+    Assert.eq_str((back.address.city).to_string(), "London");
+    Assert.eq_str((back.address.zip).to_string(), "NW1");
+    Assert.eq_str((back.tags[0]).to_string(), "dev");
+    Assert.eq_str((back.tags[1]).to_string(), "math");
+    Assert.eq_str((back.scores[2]).to_string(), "30");
+    Assert.eq_str((Json.serialize(back)).to_string(), "{\"name\":\"Ada\",\"age\":36,\"active\":true,\"address\":{\"city\":\"London\",\"zip\":\"NW1\"},\"tags\":[\"dev\",\"math\"],\"scores\":[10,20,30]}");
+}

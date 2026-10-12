@@ -1,0 +1,33 @@
+import system.testing;
+import system;
+import system.task;
+async fun c245_body(): void {
+    let urls = ["a", "b"];
+    let results = Task.map_async(urls, async (url) => {
+        Time.sleep(1).await;
+        return "resp:" + url;
+    }).await;
+    for (let r in results) {
+        c245_verify_observation((r).to_string());
+    }
+}
+
+let c245_cursor: int = 0;
+
+fun c245_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "resp:a\nresp:b\n";
+    let end = c245_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c245_cursor, end));
+    c245_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+async fun task_async_lambda_map(): void {
+    c245_cursor = 0;
+    c245_body().await;
+    Assert.eq(c245_cursor, ("resp:a\nresp:b\n").length);
+}

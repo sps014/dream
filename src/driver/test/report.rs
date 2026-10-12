@@ -213,6 +213,8 @@ mod tests {
         labels
             .iter()
             .map(|l| PlannedTest {
+                is_async: false,
+                is_unsafe: false,
                 label: l.to_string(),
                 function: l.to_string(),
                 timeout_ms: None,

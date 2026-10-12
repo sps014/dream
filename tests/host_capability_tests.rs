@@ -96,7 +96,7 @@ fn optional_services_select_exact_libraries_and_bind_core() {
         ("crypto_basic", HostCapability::Crypto),
         ("process_run_basic", HostCapability::Process),
     ] {
-        let source = std::fs::read_to_string(format!("tests/cases/{stem}.dream")).unwrap();
+        let source = std::fs::read_to_string(crate::common::compiler_fixture(stem)).unwrap();
         assert_eq!(inventory(&source), vec![HostCapability::Core, capability]);
     }
 }

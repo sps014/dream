@@ -102,6 +102,8 @@ class DreamInstance {
     this._callbackWrappers = new Map();
     // Unsettled `extern async` host calls; a worker that still has one cannot be reused.
     this._hostPending = 0;
+    this._hostSettlements = new Set();
+    this._drainWorkers = async () => {};
     this.workerStack = 0;
   }
 
@@ -462,6 +464,14 @@ class DreamInstance {
     this.__attachGuestStack(this.workerStack);
   }
 
+  async __workerClose() {
+    // A returned task may leave an extern future alive; settle it on its original TLS/stack.
+    while (this._hostSettlements.size) {
+      await Promise.all([...this._hostSettlements]);
+    }
+    this.exports.dream_heap_thread_exit?.();
+  }
+
   /** Heap type tag with `TAG_SHARED` stripped (`HEADER_TAG_OFFSET` is 8 bytes before the payload). */
   __valueTag(ptr) {
     return this.i32(ptr - 8) & 0x3fffffff;
@@ -494,6 +504,8 @@ class DreamInstance {
     if (!this.__isFutureFrame(r)) {
       const text = this.readString(r);
       this.__guestFree(r);
+      // Start detached futures before advertising this worker as reusable.
+      this.exports.__dream_run_loop?.();
       return Promise.resolve(text);
     }
     return this.__awaitFuture(r).then(() => {
@@ -550,11 +562,12 @@ class DreamInstance {
       throw new Error("module has no exported `main`");
     }
     const r = this.exports.main();
-    const after = (fut) => {
+    const after = async (fut) => {
       const code = this.__mainStatus(fut);
       if (this.__isFutureFrame(r) && typeof this.exports.free === "function") {
         this.exports.free(r);
       }
+      await this._drainWorkers();
       this.__dropGlobals();
       this.exitCode = code;
       return code;
@@ -742,7 +755,7 @@ function wrapAsyncImport(getInstance, fn, signature) {
       pumpRunLoop(inst);
     };
     inst._hostPending++;
-    Promise.resolve(fn(...args)).then(
+    const pending = Promise.resolve(fn(...args)).then(
       (value) => settle(value),
       (err) => {
         // A rejected Promise has no Dream-level error channel yet; settle the future with a
@@ -752,6 +765,8 @@ function wrapAsyncImport(getInstance, fn, signature) {
         settle(null);
       },
     );
+    inst._hostSettlements.add(pending);
+    pending.then(() => inst._hostSettlements.delete(pending));
   };
 }
 
@@ -2198,6 +2213,8 @@ parentPort.on('message', (m) => {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
       parentPort.postMessage({ t: 'reply', data: packWire(reply), idle: inst._hostPending === 0 });
     } else if (m.t === 'term') {
+      await inst.__workerClose();
+      parentPort.postMessage({ t: 'closed' });
       parentPort.close();
     }
   });
@@ -2220,6 +2237,8 @@ self.onmessage = (e) => {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
       self.postMessage({ t: 'reply', data: packWire(reply), idle: inst._hostPending === 0 });
     } else if (m.t === 'term') {
+      await inst.__workerClose();
+      self.postMessage({ t: 'closed' });
       self.close();
     }
   });
@@ -2237,6 +2256,7 @@ self.onmessage = (e) => {
  */
 function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstance) {
   const reg = new Map();
+  const stopping = new Set();
   let nextId = 1;
   /** Lazily resolved Node `worker_threads.Worker` constructor (null until first Node spawn). */
   let NodeWorkerCtor = null;
@@ -2263,6 +2283,8 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       slot.stack = Number(m.stack ?? 0);
       for (const q of slot.queued) slot.worker.postMessage(q);
       slot.queued = [];
+    } else if (m.t === "closed") {
+      slot.closed?.();
     } else if (m.t === "reply") {
       const state = slot.state;
       slot.idle = m.idle;
@@ -2405,6 +2427,9 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
         else s.pending.push(resolve);
       }),
     // JS termination never blocks the caller, so there is nothing to overlap.
+    __drainWorkers: async () => {
+      while (stopping.size) await Promise.all([...stopping]);
+    },
     workerShutdown: () => {},
     workerTerminate: (id) => {
       const s = reg.get(id);
@@ -2426,19 +2451,22 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
           getInstance().exports.dream_wasm_raw_free(slot.stack);
         }
       };
-      try {
-        if (slot.worker) {
-          slot.worker.postMessage({ t: "term" });
-          const stopped = slot.worker.terminate();
-          // Node termination is asynchronous; its TLS and stack remain live until it stops.
-          if (stopped && typeof stopped.then === "function") {
-            stopped.then(releaseStack, () => {});
-          } else {
-            releaseStack();
-          }
-        }
-      } catch (_) {
-        /* already gone */
+      if (slot.worker) {
+        const stopped = new Promise((resolve) => {
+          const terminate = () => {
+            const result = slot.worker.terminate();
+            if (result && typeof result.then === "function") {
+              result.then(() => { releaseStack(); resolve(); }, resolve);
+            } else { releaseStack(); resolve(); }
+          };
+          // Finished bodies retire gracefully; a busy body still needs immediate termination.
+          if (slot.ready && s.inflight === 0) {
+            slot.closed = terminate;
+            slot.worker.postMessage({ t: "term" });
+          } else { terminate(); }
+        });
+        stopping.add(stopped);
+        stopped.then(() => stopping.delete(stopped));
       }
       if (slot.blobUrl) {
         try {
@@ -2737,6 +2765,7 @@ async function load(source, options = {}) {
   await withBootstrapLock(stackGate, async () => {
     const inst = await WebAssembly.instantiate(wasmModule, importObject);
     instance = new DreamInstance(inst);
+    if (builtinDream.__drainWorkers) instance._drainWorkers = builtinDream.__drainWorkers;
     if (stackGate || options.memory) {
       instance.__attachGuestStack(0);
     } else if (typeof inst.exports.__runtime_init === "function") {

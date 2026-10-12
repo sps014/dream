@@ -1,0 +1,17 @@
+import system.testing;
+import system;
+import system.text;
+
+@test
+@timeout(180000)
+fun unicode_normalize(): void {
+    let s = "Straße";
+    Assert.eq_str((s.normalize(UnicodeNormForm.Nfc)).to_string(), "Straße");
+    Assert.eq_str((s.to_lower_unicode()).to_string(), "straße");
+    Assert.eq_str((s.to_upper_unicode()).to_string(), "STRASSE");
+    Assert.eq_str((("straße").to_upper_unicode()).to_string(), "STRASSE");
+    let gs = s.graphemes();
+    Assert.eq_str((gs.length).to_string(), "6");
+    Assert.eq_str((gs[0]).to_string(), "S");
+    Assert.eq_str((gs[gs.length - 1]).to_string(), "e");
+}

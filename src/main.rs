@@ -557,7 +557,9 @@ fn main() -> ExitCode {
                     tests
                 } else {
                     ui.error("no test project here: not a type = \"test\" package and no tests/");
-                    ui.help("pass a test package directory, a directory of .dream files, or a file");
+                    ui.help(
+                        "pass a test package directory, a directory of .dream files, or a file",
+                    );
                     return ExitCode::FAILURE;
                 }
             }
@@ -573,6 +575,8 @@ fn main() -> ExitCode {
             release: cli.release,
             optimize,
             filter: filter.clone(),
+            selected_tests: Vec::new(),
+            debug_info: cli.debug_info,
             verbose: cli.verbose,
             hosts,
         };

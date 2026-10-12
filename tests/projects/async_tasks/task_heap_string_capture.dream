@@ -1,0 +1,15 @@
+import system.testing;
+// Heap-allocated (non-interned) string captured by a worker: publish must mark TAG_SHARED
+// so owner + worker retain/release is atomic.
+
+import system;
+import system.task;
+
+@test
+@timeout(180000)
+async fun task_heap_string_capture(): void {
+    let s = 42.to_string();
+    let t = Task.spawn(() => s + "!").await;
+    Assert.eq_str((s).to_string(), "42");
+    Assert.eq_str((t).to_string(), "42!");
+}

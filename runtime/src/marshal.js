@@ -175,7 +175,7 @@ export function wrapAsyncImport(getInstance, fn, signature) {
       pumpRunLoop(inst);
     };
     inst._hostPending++;
-    Promise.resolve(fn(...args)).then(
+    const pending = Promise.resolve(fn(...args)).then(
       (value) => settle(value),
       (err) => {
         // A rejected Promise has no Dream-level error channel yet; settle the future with a
@@ -185,6 +185,8 @@ export function wrapAsyncImport(getInstance, fn, signature) {
         settle(null);
       },
     );
+    inst._hostSettlements.add(pending);
+    pending.then(() => inst._hostSettlements.delete(pending));
   };
 }
 

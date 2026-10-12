@@ -1,0 +1,84 @@
+import system.testing;
+// Switch-arm payload bindings and for-each elements are bound by lowering, not by a `let`, so a
+// capturing lambda must still receive them through a `CaptureCell` (here alongside a second
+// capture, so they travel in the multi-capture env array) and read them after the arm / iteration.
+
+import system;
+import system.collections;
+
+class c7c_Counter {
+    public count: int;
+    public constructor() {
+        this.count = 0;
+    }
+}
+
+class c7c_Named {
+    public name: string;
+    public constructor(name: string) {
+        this.name = name;
+    }
+}
+
+fun c7c_make(ok: bool): Result<c7c_Named, string> {
+    if ok {
+        return Result.Ok(c7c_Named("view"));
+    }
+    return Result.Err("nope");
+}
+
+fun c7c_body() {
+    let counter = c7c_Counter();
+    let fs: List<fun(): void> = List<fun(): void>();
+    switch (c7c_make(true)) {
+        Ok(named) => {
+            fs.push(() => {
+                counter.count = counter.count + 1;
+                c7c_verify_observation((named.name + " " + counter.count.to_string()).to_string());
+            });
+        },
+        Err(e) => c7c_verify_observation((e).to_string()),
+    }
+    switch (c7c_make(false)) {
+        Ok(named) => c7c_verify_observation((named.name).to_string()),
+        Err(e) => {
+            fs.push(() => c7c_verify_observation(("err " + e).to_string()));
+        },
+    }
+    let names: string[] = ["a", "b"];
+    for (let n in names) {
+        fs.push(() => c7c_verify_observation(("array " + n).to_string()));
+    }
+    let list = List<c7c_Named>();
+    list.push(c7c_Named("x"));
+    list.push(c7c_Named("y"));
+    for (let item in list) {
+        fs.push(() => {
+            counter.count = counter.count + 1;
+            c7c_verify_observation(("list " + item.name + " " + counter.count.to_string()).to_string());
+        });
+    }
+    for (let f in fs) {
+        f();
+    }
+}
+
+let c7c_cursor: int = 0;
+
+fun c7c_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "view 1\nerr nope\narray a\narray b\nlist x 2\nlist y 3\n";
+    let end = c7c_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c7c_cursor, end));
+    c7c_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun closure_capture_pattern_binding(): void {
+    c7c_cursor = 0;
+    c7c_body();
+    Assert.eq(c7c_cursor, ("view 1\nerr nope\narray a\narray b\nlist x 2\nlist y 3\n").length);
+}

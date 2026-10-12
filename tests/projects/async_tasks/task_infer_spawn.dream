@@ -1,0 +1,41 @@
+import system.testing;
+// Class/method type arguments on `Task.spawn` / `.map` are inferred.
+import system;
+import system.task;
+
+fun c24e_shout(msg: string): string {
+    return msg + "!";
+}
+
+async fun c24e_body(): void {
+    c24e_verify_observation((Task.spawn(() => c24e_shout("hello")).await).to_string());
+
+    let n = 6;
+    c24e_verify_observation(((Task.spawn(() => n * n).await).to_string()).to_string());
+
+    let items = ["1", "2"];
+    let results = Task.map(items, c24e_shout).await;
+    for (let r in results) {
+        c24e_verify_observation((r).to_string());
+    }
+}
+
+let c24e_cursor: int = 0;
+
+fun c24e_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "hello!\n36\n1!\n2!\n";
+    let end = c24e_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c24e_cursor, end));
+    c24e_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+async fun task_infer_spawn(): void {
+    c24e_cursor = 0;
+    c24e_body().await;
+    Assert.eq(c24e_cursor, ("hello!\n36\n1!\n2!\n").length);
+}

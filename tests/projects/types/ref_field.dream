@@ -1,0 +1,18 @@
+import system.testing;
+import system;
+struct c1cf_Counter {
+    public value: int;
+    public constructor() { this.value = 0; }
+}
+
+fun c1cf_increment(ref x: int): void {
+    x = x + 1;
+}
+
+@test
+@timeout(180000)
+fun ref_field(): void {
+    let c: c1cf_Counter = c1cf_Counter();
+    c1cf_increment(ref c.value);
+    Assert.eq_str((c.value).to_string(), "1");
+}

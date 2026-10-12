@@ -1,0 +1,19 @@
+import system.testing;
+import system;
+enum c275_Shape {
+    Circle(int),
+    Rect(width: int, height: int),
+    Empty,
+}
+
+@test
+@timeout(180000)
+fun union_hash_code(): void {
+    // Equal values hash equally.
+    Assert.eq_str((c275_Shape.Circle(5).hash_code() == c275_Shape.Circle(5).hash_code()).to_string(), "true");
+    // Different payloads differ.
+    Assert.eq_str((c275_Shape.Circle(5).hash_code() == c275_Shape.Circle(6).hash_code()).to_string(), "false");
+    // Different variants differ (no longer a constant).
+    Assert.eq_str((c275_Shape.Circle(5).hash_code() == c275_Shape.Empty.hash_code()).to_string(), "false");
+    Assert.eq_str((c275_Shape.Rect(3, 4).hash_code() == c275_Shape.Rect(4, 3).hash_code()).to_string(), "false");
+}

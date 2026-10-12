@@ -1,0 +1,52 @@
+import system.testing;
+// Regression: a capturing `fun(): void` closure called through its boxed value (either directly,
+// as here, or inlined from inside another function that just forwards the call) must not try to
+// materialize a "result" for the call — there is none. See `Statement::IndirectCall` in
+// `src/mir/mod.rs`.
+
+import system;
+class c80_Counter {
+    public value: int;
+
+    public constructor(start: int) {
+        this.value = start;
+    }
+}
+
+fun c80_run(f: fun(): void): void {
+    f();
+}
+
+fun c80_body(): void {
+    let counter = c80_Counter(10);
+    let inc: fun(): void = () => {
+        counter.value = counter.value + 1;
+    };
+
+    inc();
+    inc();
+    c80_verify_observation((counter.value.to_string()).to_string());
+
+    c80_run(inc);
+    c80_verify_observation((counter.value.to_string()).to_string());
+}
+
+let c80_cursor: int = 0;
+
+fun c80_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "12\n13\n";
+    let end = c80_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c80_cursor, end));
+    c80_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun closure_void_indirect_call(): void {
+    c80_cursor = 0;
+    c80_body();
+    Assert.eq(c80_cursor, ("12\n13\n").length);
+}

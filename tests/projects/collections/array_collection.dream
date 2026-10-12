@@ -1,0 +1,67 @@
+import system.testing;
+import system;
+import system.collections;
+
+fun c28_is_even(n: int): bool { return n % 2 == 0; }
+fun c28_times_two(n: int): int { return n * 2; }
+fun c28_add(a: int, b: int): int { return a + b; }
+fun c28_asc(a: int, b: int): int { return a.compare(b); }
+
+fun c28_sum(xs: IndexedCollection<int>): int {
+    let total = 0;
+    let i = 0;
+    while i < xs.length {
+        total = total + xs.get(i);
+        i = i + 1;
+    }
+    return total;
+}
+
+fun c28_sum_collection(xs: Collection<int>): int {
+    return xs.to_list().reduce(0, c28_add);
+}
+
+fun c28_body(): void {
+    let arr: int[] = [10, 20, 30];
+    c28_verify_observation((c28_sum(arr)).to_string());
+    c28_verify_observation((arr.is_empty()).to_string());
+    c28_verify_observation((arr.first().unwrap_or(-1)).to_string());
+    c28_verify_observation((arr.last().unwrap_or(-1)).to_string());
+
+    let c: Collection<int> = arr;
+    c28_verify_observation((c28_sum_collection(c)).to_string());
+    for (let x in c) {
+        c28_verify_observation((x).to_string());
+    }
+
+    c28_verify_observation((arr.filter(c28_is_even).length).to_string());
+    c28_verify_observation((arr.map(c28_times_two).reduce(0, c28_add)).to_string());
+
+    let xs = List<int>();
+    xs.push(3);
+    xs.push(1);
+    xs.push(2);
+    xs.push(1);
+    c28_verify_observation((xs.distinct().length).to_string());
+    c28_verify_observation((xs.order_by(c28_asc).get(0)).to_string());
+}
+
+let c28_cursor: int = 0;
+
+fun c28_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "60\nfalse\n10\n30\n60\n10\n20\n30\n3\n120\n3\n1\n";
+    let end = c28_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c28_cursor, end));
+    c28_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun array_collection(): void {
+    c28_cursor = 0;
+    c28_body();
+    Assert.eq(c28_cursor, ("60\nfalse\n10\n30\n60\n10\n20\n30\n3\n120\n3\n1\n").length);
+}

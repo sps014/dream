@@ -1,0 +1,24 @@
+import system.testing;
+// Real parallel threads. Capture-only spawn; then `.await` the Future.
+
+import system;
+import system.task;
+fun c249_shout(msg: string): string {
+    return msg + "!";
+}
+
+fun c249_twice(msg: string): string {
+    return msg + msg;
+}
+
+@test
+@timeout(180000)
+async fun task_basic(): void {
+    Assert.eq_str((Task.spawn(() => c249_shout("hello")).await).to_string(), "hello!");
+    Assert.eq_str((Task.spawn(() => c249_shout("world")).await).to_string(), "world!");
+
+    let a = Task.spawn(() => c249_shout("A"));
+    let b = Task.spawn(() => c249_twice("B"));
+    Assert.eq_str((a.await).to_string(), "A!");
+    Assert.eq_str((b.await).to_string(), "BB");
+}

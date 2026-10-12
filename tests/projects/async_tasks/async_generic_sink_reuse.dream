@@ -1,0 +1,25 @@
+import system.testing;
+import system;
+
+// A generic async callee must still advertise sink params at the call site so a live
+// class argument is retained across the suspend (otherwise the poll frame releases it).
+class c34_Handle {
+    public id: int;
+}
+
+async fun c34_id_of<T>(h: c34_Handle, _t: T): int {
+    Time.sleep(0).await;
+    return h.id;
+}
+
+@test
+@timeout(180000)
+async fun async_generic_sink_reuse(): void {
+    let h = c34_Handle();
+    h.id = 7;
+    let a = c34_id_of(h, 1).await;
+    let b = c34_id_of(h, 2).await;
+    Assert.eq_str((a).to_string(), "7");
+    Assert.eq_str((b).to_string(), "7");
+    Assert.eq_str((h.id).to_string(), "7");
+}

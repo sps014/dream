@@ -1,0 +1,12 @@
+import system.testing;
+import system;
+import system.io;
+@test
+@timeout(180000)
+fun path_join(): void {
+    Assert.eq_str((Path.join("a", "b")).to_string(), "a/b");
+    Assert.eq_str((Path.join("a/", "b")).to_string(), "a/b");
+    Assert.eq_str((Path.of(["usr", "local", "bin"])).to_string(), "usr/local/bin");
+    Assert.eq_str((Path.file_name("/tmp/x.txt").unwrap_or("")).to_string(), "x.txt");
+    Assert.eq_str((Path.extension("/tmp/x.txt").unwrap_or("")).to_string(), "txt");
+}

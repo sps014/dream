@@ -34,7 +34,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/check_hygiene.py
-      - run: python3 scripts/test_probe.py
       - run: python3 scripts/test_compile_budget.py
       - run: python3 scripts/test_bench_gate.py
 
@@ -164,7 +163,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          python scripts/probe_test.py 2>&1 | Tee-Object -FilePath target/probe-native.log
+          python scripts/test_corpus.py 2>&1 | Tee-Object -FilePath target/probe-native.log
           exit $LASTEXITCODE
       - name: Preserve Windows corpus results
         if: always() && runner.os == 'Windows'
@@ -256,22 +255,18 @@ jobs:
         with:
           path: ~/.dream/toolchains/llvm-22.1.8
           key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
-      - name: Full native corpus
+      - name: Full native and Node assertion corpus
         shell: bash
         run: |
           mkdir -p target
-          ./scripts/probe_test.sh 2>&1 | tee target/probe-native.log
-      - name: Full native/WASM stdout parity using the same build
-        shell: bash
-        run: python3 scripts/probe_test.py --parity 2>&1 | tee target/probe-parity.log
+          python3 scripts/test_corpus.py --both 2>&1 | tee target/corpus.log
       - name: Preserve corpus results and compilation timings
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: corpus-Linux
           path: |
-            target/probe-native.log
-            target/probe-parity.log
+            target/corpus.log
             target/cargo-timings/*.html
           retention-days: 7
           if-no-files-found: ignore
@@ -316,15 +311,13 @@ jobs:
         shell: bash
         run: |
           mkdir -p target
-          ./scripts/probe_test.sh 2>&1 | tee target/probe-sanitize.log
+          python3 scripts/test_corpus.py 2>&1 | tee target/probe-sanitize.log
       - name: Concurrency cases (runtime instrumented)
         if: matrix.sanitizer == 'thread'
         shell: bash
         run: |
           mkdir -p target
-          stems=$(ls tests/cases/*.dream | xargs -n1 basename | sed 's/\.dream$//' \
-            | grep -Ei 'worker|task|async|thread|channel|mutex|parallel|shared|atomic|lock|semaphore')
-          ./scripts/probe_test.sh $stems 2>&1 | tee target/probe-sanitize.log
+          python3 scripts/test_corpus.py --concurrency 2>&1 | tee target/probe-sanitize.log
       - name: Runtime fuzz harnesses (60 s each)
         if: matrix.sanitizer != 'thread'
         shell: bash

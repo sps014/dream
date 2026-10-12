@@ -1,0 +1,20 @@
+import system.testing;
+import system;
+import system.collections;
+@test
+@timeout(180000)
+fun queue_stack(): void {
+    let q = Queue<int>();
+    q.enqueue(1);
+    q.enqueue(2);
+    q.enqueue(3);
+    Assert.eq_str((q.dequeue().unwrap_or(0)).to_string(), "1");
+    Assert.eq_str((q.peek().unwrap_or(0)).to_string(), "2");
+    Assert.eq_str((q.length).to_string(), "2");
+
+    let s = Stack<int>();
+    s.push(10);
+    s.push(20);
+    Assert.eq_str((s.pop().unwrap_or(0)).to_string(), "20");
+    Assert.eq_str((s.peek().unwrap_or(0)).to_string(), "10");
+}

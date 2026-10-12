@@ -1,0 +1,89 @@
+import system.testing;
+// `expr?` propagates a `Result<T, E>`/`Option<T>` failure/absence immediately (an early `return`
+// of the same variant, re-boxed into the enclosing function's own `Result`/`Option` return type),
+// or yields the success payload as the expression's value.
+
+import system;
+fun c265_half(n: int): Result<int, string> {
+    if n % 2 != 0 {
+        return Result.Err("odd");
+    }
+    return Result.Ok(n / 2);
+}
+
+// Chains two fallible calls: each `?` either propagates the `Err` immediately or unwraps to `int`.
+fun c265_quarter(n: int): Result<int, string> {
+    let h = c265_half(n)?;
+    let q = c265_half(h)?;
+    return Result.Ok(q);
+}
+
+fun c265_first_positive(xs: int[]): Option<int> {
+    for (let x in xs) {
+        if x > 0 {
+            return Option.Some(x);
+        }
+    }
+    return Option.None;
+}
+
+// `?` on an `Option<int>` inside a function returning `Option<string>`.
+fun c265_describe_first_positive(xs: int[]): Option<string> {
+    let v = c265_first_positive(xs)?;
+    return Option.Some("first positive: " + v.to_string());
+}
+
+// `?` used directly inside a call argument (not just a `let` initializer), including before a
+// binary operator — try-propagation wins unless a matching ternary `:` follows.
+fun c265_quarter_plus_one(n: int): Result<int, string> {
+    return Result.Ok(c265_half(n)? + 1);
+}
+
+fun c265_body(): void {
+    switch (c265_quarter(20)) {
+        Ok(v)  => c265_verify_observation((v).to_string()),
+        Err(e) => c265_verify_observation(("err: " + e).to_string()),
+    }
+    switch (c265_quarter(21)) {
+        Ok(v)  => c265_verify_observation((v).to_string()),
+        Err(e) => c265_verify_observation(("err: " + e).to_string()),
+    }
+    switch (c265_quarter(22)) {
+        Ok(v)  => c265_verify_observation((v).to_string()),
+        Err(e) => c265_verify_observation(("err: " + e).to_string()),
+    }
+
+    switch (c265_describe_first_positive([-3, -1, 4, 5])) {
+        Some(s) => c265_verify_observation((s).to_string()),
+        None    => c265_verify_observation(("none").to_string()),
+    }
+    switch (c265_describe_first_positive([-3, -1])) {
+        Some(s) => c265_verify_observation((s).to_string()),
+        None    => c265_verify_observation(("none").to_string()),
+    }
+
+    switch (c265_quarter_plus_one(20)) {
+        Ok(v)  => c265_verify_observation((v).to_string()),
+        Err(e) => c265_verify_observation(("err: " + e).to_string()),
+    }
+}
+
+let c265_cursor: int = 0;
+
+fun c265_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "5\nerr: odd\nerr: odd\nfirst positive: 4\nnone\n11\n";
+    let end = c265_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c265_cursor, end));
+    c265_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun try_propagation(): void {
+    c265_cursor = 0;
+    c265_body();
+    Assert.eq(c265_cursor, ("5\nerr: odd\nerr: odd\nfirst positive: 4\nnone\n11\n").length);
+}

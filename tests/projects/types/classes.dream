@@ -1,0 +1,35 @@
+import system.testing;
+import system;
+class c79_Point {
+    public x: int;
+    public y: int;
+}
+
+class c79_Rect {
+    public p1: c79_Point;
+    public p2: c79_Point;
+}
+
+@test
+@timeout(180000)
+fun classes(): void {
+    let p1 = c79_Point();
+    p1.x = 10;
+    p1.y = 20;
+    let p2 = c79_Point();
+    p2.x = 30;
+    p2.y = 40;
+
+    let r = c79_Rect();
+    r.p1 = p1;
+    r.p2 = p2;
+
+    Assert.eq_str((r.p1.x).to_string(), "10");
+    Assert.eq_str((r.p1.y).to_string(), "20");
+    Assert.eq_str((r.p2.x).to_string(), "30");
+    Assert.eq_str((r.p2.y).to_string(), "40");
+
+    r.p1.x = 100;
+    Assert.eq_str((r.p1.x).to_string(), "100");
+    Assert.eq_str((p1.x).to_string(), "100"); // Should also be 100 since it's a reference
+}

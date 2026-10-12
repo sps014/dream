@@ -1,0 +1,25 @@
+import system.testing;
+// `Pointer<T>` - manual alloc/realloc/free via `Buffer.alloc`/`realloc`/`free`, bypassing ARC.
+
+import system;
+@unsafe
+@test
+@timeout(180000)
+fun pointer_basic(): void {
+    let p = Pointer<int>.alloc(3);
+    p.set(0, 10);
+    p.set(1, 20);
+    p.set(2, 30);
+    Assert.eq_str((p.length).to_string(), "3");   // 3
+    Assert.eq_str((p.get(0)).to_string(), "10");  // 10
+    Assert.eq_str((p.get(1)).to_string(), "20");  // 20
+    Assert.eq_str((p.get(2)).to_string(), "30");  // 30
+
+    p.realloc(5);
+    Assert.eq_str((p.length).to_string(), "5");   // 5
+    Assert.eq_str((p.get(0)).to_string(), "10");  // 10 (preserved)
+    Assert.eq_str((p.get(3)).to_string(), "0");  // 0 (zero-filled tail)
+
+    p.free();
+    Assert.eq_str(("done").to_string(), "done");
+}

@@ -1,0 +1,11 @@
+import system.testing;
+import system;
+
+@test
+@timeout(180000)
+fun literal_double_expected(): void {
+    let x: double = 3.14;
+    let y: double = 0;
+    Assert.eq_str((x).to_string(), "3.14");
+    Assert.eq_str((y).to_string(), "0");
+}

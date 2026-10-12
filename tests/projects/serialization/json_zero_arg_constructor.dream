@@ -1,0 +1,41 @@
+import system.testing;
+import system;
+import system.json;
+
+@json
+class c126_Reply {
+    public ok: bool;
+    public tags: List<string>;
+    public constructor() { this.ok = false; this.tags = List<string>(); }
+}
+
+fun c126_body(): void {
+    let r = c126_Reply();
+    r.ok = true;
+    r.tags.push("a");
+    c126_verify_observation((Json.serialize(r)).to_string());
+    switch (Json.deserialize<c126_Reply>("{\"ok\":true,\"tags\":[\"x\",\"y\"]}")) {
+        Ok(b) => c126_verify_observation((b.ok.to_string() + " " + b.tags.length.to_string()).to_string()),
+        Err(e) => c126_verify_observation(("err " + e.to_string()).to_string()),
+    }
+}
+
+let c126_cursor: int = 0;
+
+fun c126_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "{\"ok\":true,\"tags\":[\"a\"]}\ntrue 2\n";
+    let end = c126_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c126_cursor, end));
+    c126_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun json_zero_arg_constructor(): void {
+    c126_cursor = 0;
+    c126_body();
+    Assert.eq(c126_cursor, ("{\"ok\":true,\"tags\":[\"a\"]}\ntrue 2\n").length);
+}

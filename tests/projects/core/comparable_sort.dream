@@ -1,0 +1,104 @@
+import system.testing;
+// `Comparable`/`Equatable` in action: a reference `class` and a value `struct` both implement the
+// built-in interfaces. `==` routes to `equals`, `List.sort()` uses `compare` (dispatched statically,
+// no boxing), and `sort_by` takes an explicit comparator. The value-struct path allocates nothing.
+
+import system;
+import system.collections;
+class c94_Money : Comparable<c94_Money>, Equatable<c94_Money> {
+    public cents: int;
+
+    public constructor(cents: int) {
+        this.cents = cents;
+    }
+
+    public fun compare(other: c94_Money): int {
+        return this.cents - other.cents;
+    }
+
+    public fun equals(other: c94_Money): bool {
+        return this.cents == other.cents;
+    }
+}
+
+struct c94_Vec2 : Comparable<c94_Vec2>, Equatable<c94_Vec2> {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+
+    // Order by magnitude (x*x + y*y).
+    public fun compare(other: c94_Vec2): int {
+        return (this.x * this.x + this.y * this.y)
+             - (other.x * other.x + other.y * other.y);
+    }
+
+    public fun equals(other: c94_Vec2): bool {
+        return (this.x == other.x) && (this.y == other.y);
+    }
+}
+
+// Explicit comparator for `sort_by`: descending by cents.
+fun c94_by_cents_desc(a: c94_Money, b: c94_Money): int {
+    return b.cents - a.cents;
+}
+
+fun c94_body(): void {
+    // `==` on user types dispatches to `equals`.
+    c94_verify_observation((c94_Money(100) == c94_Money(100)).to_string());   // true
+    c94_verify_observation((c94_Money(100) != c94_Money(250)).to_string());   // true
+    c94_verify_observation((c94_Vec2(3, 4) == c94_Vec2(3, 4)).to_string());   // true
+    c94_verify_observation((c94_Vec2(1, 0) == c94_Vec2(0, 1)).to_string());   // false
+
+    // `List<Money>.sort()` uses `compare` (constrained extension).
+    let prices = List<c94_Money>();
+    prices.push(c94_Money(300));
+    prices.push(c94_Money(100));
+    prices.push(c94_Money(200));
+    prices.sort();
+    let i = 0;
+    while i < prices.length {
+        c94_verify_observation((prices.get(i).cents).to_string());
+        i = i + 1;
+    }
+
+    // A value struct satisfies `Comparable` and sorts via statically-dispatched `compare`.
+    let vs = List<c94_Vec2>();
+    vs.push(c94_Vec2(3, 4));   // magnitude 25
+    vs.push(c94_Vec2(1, 1));   // magnitude 2
+    vs.push(c94_Vec2(0, 2));   // magnitude 4
+    vs.sort();
+    let j = 0;
+    while j < vs.length {
+        let v = vs.get(j);
+        c94_verify_observation((v.x * v.x + v.y * v.y).to_string());
+        j = j + 1;
+    }
+
+    // `sort_by` with an explicit comparator (descending by cents).
+    prices.sort_by(c94_by_cents_desc);
+    c94_verify_observation((prices.get(0).cents).to_string());   // 300
+}
+
+let c94_cursor: int = 0;
+
+fun c94_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "true\ntrue\ntrue\nfalse\n100\n200\n300\n2\n4\n25\n300\n";
+    let end = c94_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c94_cursor, end));
+    c94_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun comparable_sort(): void {
+    c94_cursor = 0;
+    c94_body();
+    Assert.eq(c94_cursor, ("true\ntrue\ntrue\nfalse\n100\n200\n300\n2\n4\n25\n300\n").length);
+}

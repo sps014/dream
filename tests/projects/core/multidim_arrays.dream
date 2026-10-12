@@ -1,0 +1,14 @@
+import system.testing;
+import system;
+@test
+@timeout(180000)
+fun multidim_arrays() {
+    let grid: int[][] = [[1, 2, 3], [4, 5, 6]];
+    Assert.eq_str((grid.length).to_string(), "2");
+    Assert.eq_str((grid[0].length).to_string(), "3");
+    Assert.eq_str((grid[1][2]).to_string(), "6");
+
+    let words: string[][] = [["hello", "world"], ["foo"]];
+    Assert.eq_str((words[0][1]).to_string(), "world");
+    Assert.eq_str((words[1][0]).to_string(), "foo");
+}

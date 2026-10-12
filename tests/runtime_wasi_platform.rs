@@ -5,11 +5,14 @@ use std::process::Command;
 
 #[test]
 fn release_guest_resolves_synthesized_libc_calls_internally() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("weak.dream");
     let output = temporary.path().join("weak.wat");
-    fs::copy(root.join("tests/cases/weak_field_runtime.dream"), &source).unwrap();
+    fs::copy(
+        crate::common::compiler_fixture("weak_field_runtime"),
+        &source,
+    )
+    .unwrap();
     dream::driver::compiler::Compiler::new(dream_mir::backend::Target::wasm32())
         .with_release(true)
         .compile(

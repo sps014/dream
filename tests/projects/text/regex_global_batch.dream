@@ -1,0 +1,20 @@
+import system.testing;
+import system;
+import system.text;
+
+@test
+@timeout(180000)
+fun regex_global_batch(): void {
+    let digits = Regex("(?<digit>\\d)", RegexFlags.Global);
+    let matches = digits.match("123456789012345678901");
+    Assert.eq_str((matches.length).to_string(), "21");
+    Assert.eq_str((matches[0]).to_string(), "1");
+    Assert.eq_str((matches[20]).to_string(), "1");
+    Assert.eq_str((digits.match("none").length).to_string(), "0");
+    Assert.eq_str((Regex("(?:)", RegexFlags.Global).match("😀a").length).to_string(), "3");
+    Assert.eq_str((Regex("(?:)", RegexFlags.Global).match("").length).to_string(), "1");
+    let groups = Regex("(a)(b)").match("ab");
+    Assert.eq_str((groups.length).to_string(), "3");
+    Assert.eq_str((groups[1]).to_string(), "a");
+    Assert.eq_str((groups[2]).to_string(), "b");
+}

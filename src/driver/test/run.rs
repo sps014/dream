@@ -12,9 +12,12 @@ use std::path::Path;
 #[derive(Debug, Clone, Default)]
 pub struct TestOptions {
     pub release: bool,
+    pub debug_info: bool,
     pub optimize: Option<OptLevel>,
     /// Keep only tests whose `<file>::<name>` label contains this; pruned before compiling.
     pub filter: Option<String>,
+    /// Exact function names, for compiler integration suites; empty selects every matching test.
+    pub selected_tests: Vec<String>,
     pub verbose: bool,
     /// Hosts to run on instead of the project's `[test].targets`.
     pub hosts: Vec<TestHost>,
@@ -43,7 +46,7 @@ pub fn run_tests(
     if project.files.is_empty() {
         return Err(format!("no .dream test files under '{}'", path.display()));
     }
-    let plan = RunnerPlan::discover(&project, opts.filter.as_deref())?;
+    let plan = RunnerPlan::discover(&project, opts.filter.as_deref(), &opts.selected_tests)?;
     if plan.tests.is_empty() && !plan.unparsed {
         return Err(format!(
             "'{}': no @test functions{}",
@@ -65,6 +68,7 @@ pub fn run_tests(
         project: &project,
         plan: &plan,
         release: opts.release,
+        debug_info: opts.debug_info,
         optimize: opts.optimize,
     };
     let mut reports = Vec::new();
@@ -78,6 +82,11 @@ pub fn run_tests(
                 plan.tests.len()
             ),
         );
+        let lock_path = request.lock_path(host);
+        std::fs::create_dir_all(lock_path.parent().unwrap()).map_err(|error| error.to_string())?;
+        // Filtered runs share artifact names; keep a second build from replacing a running module.
+        let _lock =
+            crate::driver::output::acquire_lock(&lock_path).map_err(|error| error.to_string())?;
         let command = request.build(host)?;
         let report = run_and_report(command, host, &plan.tests)?;
         summarize(&ui, &report);

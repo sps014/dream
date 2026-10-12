@@ -1,0 +1,83 @@
+import system.testing;
+// Map<string, _> keys reached through every string representation must agree on the hash:
+// static literals (precomputed), heap concat/builder/interpolation results, substring slices,
+// in-place `_into` reuse, and strings mutated through `s[i] = c` after being hashed.
+
+import system;
+import system.collections;
+import system.text;
+
+fun c219_body() {
+    let m = Map<string, int>();
+    m.set("alpha", 1);
+    m.set("beta", 2);
+    m.set("", 3);
+
+    let a = "al" + "pha";
+    c219_verify_observation((m.get_or(a, -1)).to_string());
+
+    let text = "xx beta yy";
+    let slice = text.substring(3, 7);
+    c219_verify_observation((m.get_or(slice, -1)).to_string());
+    m.set(slice, 20);
+    c219_verify_observation((m.get_or("beta", -1)).to_string());
+
+    let parts = "alpha,beta,,gamma".split(',');
+    for (let p in parts) {
+        m.set(p, m.get_or(p, 0) + 100);
+    }
+    c219_verify_observation((m.get_or("alpha", -1)).to_string());
+    c219_verify_observation((m.get_or("beta", -1)).to_string());
+    c219_verify_observation((m.get_or("", -1)).to_string());
+    c219_verify_observation((m.get_or("gamma", -1)).to_string());
+
+    let sb = StringBuilder();
+    sb.append("gam");
+    sb.append("ma");
+    c219_verify_observation((m.get_or(sb.to_string(), -1)).to_string());
+
+    let n = 7;
+    c219_verify_observation((m.get_or($"key{n}", -1)).to_string());
+    m.set($"key{n}", 7);
+    c219_verify_observation((m.get_or("key" + n.to_string(), -1)).to_string());
+
+    let acc = "";
+    let i = 0;
+    while i < 3 {
+        acc = acc + "z";
+        m.set(acc, i);
+        i = i + 1;
+    }
+    c219_verify_observation((m.get_or("z", -1)).to_string());
+    c219_verify_observation((m.get_or("zz", -1)).to_string());
+    c219_verify_observation((m.get_or("zzz", -1)).to_string());
+
+    m.set("zzc", 9);
+    let s = "ab" + "c";
+    let before = m.get_or(s, -1);
+    s[0] = 'z';
+    s[1] = 'z';
+    c219_verify_observation((before).to_string());
+    c219_verify_observation((m.get_or(s, -1)).to_string());
+    c219_verify_observation((m.length).to_string());
+}
+
+let c219_cursor: int = 0;
+
+fun c219_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "1\n2\n20\n101\n120\n103\n100\n100\n-1\n7\n0\n1\n2\n-1\n9\n9\n";
+    let end = c219_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c219_cursor, end));
+    c219_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun string_hash_cache(): void {
+    c219_cursor = 0;
+    c219_body();
+    Assert.eq(c219_cursor, ("1\n2\n20\n101\n120\n103\n100\n100\n-1\n7\n0\n1\n2\n-1\n9\n9\n").length);
+}

@@ -1,1 +1,0 @@
-@json type 'Pair' needs a constructor taking every field in declaration order, or a zero-argument constructor

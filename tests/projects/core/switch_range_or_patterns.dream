@@ -1,0 +1,58 @@
+import system.testing;
+import system;
+enum c23c_Shape { Circle(float), Square, Triangle, Empty }
+
+fun c23c_grade(score: int): string {
+    return switch (score) {
+        90..100 => "A",
+        80..89 => "B",
+        70..79 => "C",
+        _ => "F",
+    };
+}
+
+fun c23c_is_vowel(c: char): bool {
+    return switch (c) {
+        'a' | 'e' | 'i' | 'o' | 'u' => true,
+        _ => false,
+    };
+}
+
+// A unit-variant or-pattern alongside a payload variant elsewhere in the same union.
+fun c23c_has_straight_edges(s: c23c_Shape): bool {
+    return switch (s) {
+        Square | Triangle => true,
+        Circle(_) | Empty => false,
+    };
+}
+
+fun c23c_body(): void {
+    c23c_verify_observation((c23c_grade(95)).to_string());
+    c23c_verify_observation((c23c_grade(82)).to_string());
+    c23c_verify_observation((c23c_grade(71)).to_string());
+    c23c_verify_observation((c23c_grade(10)).to_string());
+    c23c_verify_observation((c23c_is_vowel('e')).to_string());
+    c23c_verify_observation((c23c_is_vowel('z')).to_string());
+    c23c_verify_observation((c23c_has_straight_edges(c23c_Shape.Triangle)).to_string());
+    c23c_verify_observation((c23c_has_straight_edges(c23c_Shape.Circle(2.0))).to_string());
+}
+
+let c23c_cursor: int = 0;
+
+fun c23c_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "A\nB\nC\nF\ntrue\nfalse\ntrue\nfalse\n";
+    let end = c23c_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c23c_cursor, end));
+    c23c_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun switch_range_or_patterns(): void {
+    c23c_cursor = 0;
+    c23c_body();
+    Assert.eq(c23c_cursor, ("A\nB\nC\nF\ntrue\nfalse\ntrue\nfalse\n").length);
+}

@@ -1,0 +1,56 @@
+import system.testing;
+import system;
+import system.json;
+@json
+class c118_Address {
+    public city: string;
+    public zip: string;
+
+    public constructor(city: string, zip: string) {
+        this.city = city;
+        this.zip = zip;
+    }
+}
+
+@json
+class c118_Profile {
+    public name: string;
+    public nickname: Option<string>;
+    public address: Option<c118_Address>;
+    public age: int;
+
+    public constructor(name: string, nickname: Option<string>, address: Option<c118_Address>, age: int) {
+        this.name = name;
+        this.nickname = nickname;
+        this.address = address;
+        this.age = age;
+    }
+}
+
+@test
+@timeout(180000)
+fun json_nullable(): void {
+    // Present values round-trip.
+    let p1 = c118_Profile("Ada", Option.Some("Countess"), Option.Some(c118_Address("London", "NW1")), 36);
+    let t1 = Json.serialize(p1);
+    Assert.eq_str((t1).to_string(), "{\"name\":\"Ada\",\"nickname\":\"Countess\",\"address\":{\"city\":\"London\",\"zip\":\"NW1\"},\"age\":36}");
+    let b1 = Json.deserialize<c118_Profile>(t1).unwrap_or(p1);
+    Assert.eq_str((b1.nickname ?? "<none>").to_string(), "Countess");
+    let addr = b1.address;
+    Assert.eq_str((addr.is_none()).to_string(), "false");
+
+    // None values serialize to JSON null and round-trip back to None.
+    let no_name: Option<string> = Option.None;
+    let no_addr: Option<c118_Address> = Option.None;
+    let p2 = c118_Profile("Bob", no_name, no_addr, 20);
+    let t2 = Json.serialize(p2);
+    Assert.eq_str((t2).to_string(), "{\"name\":\"Bob\",\"nickname\":null,\"address\":null,\"age\":20}");
+    let b2 = Json.deserialize<c118_Profile>(t2).unwrap_or(p2);
+    Assert.eq_str((b2.nickname ?? "<none>").to_string(), "<none>");
+    Assert.eq_str((b2.address.is_none()).to_string(), "true");
+
+    // A missing key and an explicit null both deserialize to None.
+    let b3 = Json.deserialize<c118_Profile>("{\"name\":\"Cee\",\"nickname\":null,\"age\":7}").unwrap_or(p1);
+    Assert.eq_str((b3.nickname ?? "<none>").to_string(), "<none>");
+    Assert.eq_str((b3.address.is_none()).to_string(), "true");
+}

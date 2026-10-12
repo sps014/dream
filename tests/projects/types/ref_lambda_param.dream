@@ -1,0 +1,20 @@
+import system.testing;
+// Lambda `ref` parameters: surface type `fun(ref T): R`, call with `f(ref x)`.
+import system;
+@test
+@timeout(180000)
+fun ref_lambda_param(): void {
+    let inc: fun(ref int): void = (ref n: int) => {
+        n = n + 1;
+    };
+    let a: int = 5;
+    inc(ref a);
+    Assert.eq_str((a).to_string(), "6");
+
+    let bump: fun(ref int): int = (ref n) => {
+        n = n + 1;
+        return n;
+    };
+    Assert.eq_str((bump(ref a)).to_string(), "7");
+    Assert.eq_str((a).to_string(), "7");
+}

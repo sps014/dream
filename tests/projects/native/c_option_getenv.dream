@@ -1,0 +1,17 @@
+import system.testing;
+// `Option<string>` is a nullable `const char*`: a NULL result becomes `None`.
+import system;
+
+@c("c", "getenv")
+extern fun c5e_getenv(name: string): Option<string>;
+
+@c("c", "strlen")
+extern fun c5e_strlen(s: string): usize;
+
+@test
+@timeout(180000)
+fun c_option_getenv(): void {
+    Assert.eq_str((c5e_getenv("DREAM_SURELY_UNSET_VARIABLE").unwrap_or("(unset)")).to_string(), "(unset)");
+    Assert.eq_str((c5e_getenv("PATH").is_some()).to_string(), "true");
+    Assert.eq_str((c5e_strlen("dream")).to_string(), "5");
+}

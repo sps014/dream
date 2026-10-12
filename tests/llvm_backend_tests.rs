@@ -8,7 +8,6 @@ use dream::execution::llvm::{Toolchain, compile_llvm, resolve_llvm};
 use dream::execution::native::{Pgo, capture_native_bin};
 use dream_mir::backend::Target;
 use dream_mir::backend::llvm::RuntimeSigs;
-use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -73,7 +72,7 @@ fn llvm_available() -> bool {
 }
 
 fn case(stem: &str) -> PathBuf {
-    Path::new("tests/cases").join(format!("{stem}.dream"))
+    crate::common::compiler_fixture(stem)
 }
 
 #[test]
@@ -205,40 +204,6 @@ fn compile_ll(src: &Path, ll: &Path, opt: OptLevel) {
         .unwrap_or_else(|e| panic!("LLVM compile failed for {}: {}", src.display(), e));
 }
 
-fn run_llvm(src: &Path, opt: OptLevel) -> Result<String, String> {
-    let stem = src.file_stem().unwrap().to_str().unwrap();
-    let ll = out_dir(&format!("llvm-backend-{opt:?}")).join(format!("{stem}.ll"));
-    compile_ll(src, &ll, opt);
-    let bin = compile_llvm(
-        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
-        &ll,
-        dream::execution::llvm::NativeBuildOptions {
-            target: dream_abi::target::TargetSpec::host(),
-            opt_ll: None,
-            opt_remarks: None,
-            opt,
-            debug: false,
-            profile: dream_abi::profile::CompileProfile::Release,
-            pgo: &Pgo::Off,
-            icon: None,
-            relocatable: false,
-            output_kind: dream::driver::output::OutputKind::Executable,
-        },
-    )
-    .unwrap_or_else(|e| panic!("LLVM build failed for {}: {}", stem, e));
-    capture_native_bin(
-        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
-        &bin,
-        ll.to_str().unwrap(),
-        &[],
-        &[],
-        None,
-        60,
-    )
-    .map(common::normalize_stdout)
-    .map_err(|e| e.to_string())
-}
-
 #[test]
 fn llvm_relocatable_binary_runs_after_move() {
     if !llvm_available() {
@@ -290,36 +255,8 @@ fn llvm_relocatable_binary_runs_after_move() {
     );
     assert_eq!(
         common::normalize_stdout(String::from_utf8_lossy(&output.stdout).into_owned()).trim(),
-        fs::read_to_string(source.with_extension("expected"))
-            .unwrap()
-            .trim()
+        "13\n7\n30\n3\n1\n3.5\n3\n7\n9"
     );
-}
-
-fn check_case(stem: &str) -> Result<(), String> {
-    let src = case(stem);
-    let expected = fs::read_to_string(src.with_extension("expected")).ok();
-    let trap = fs::read_to_string(src.with_extension("expected_trap")).ok();
-    for opt in [OptLevel::O0, OptLevel::O3] {
-        match (run_llvm(&src, opt), &expected, &trap) {
-            (Ok(out), Some(want), None) => {
-                if out.trim() != want.trim() {
-                    return Err(format!("{stem} {opt:?}: stdout != .expected\n{out}"));
-                }
-            }
-            (Err(err), _, Some(needle)) => {
-                for line in needle.lines().map(str::trim).filter(|l| !l.is_empty()) {
-                    if !err.contains(line) {
-                        return Err(format!("{stem} {opt:?}: trap line `{line}` missing\n{err}"));
-                    }
-                }
-            }
-            (outcome, _, _) => {
-                return Err(format!("{stem} {opt:?}: unexpected outcome {outcome:?}"));
-            }
-        }
-    }
-    Ok(())
 }
 
 #[test]
@@ -327,11 +264,13 @@ fn llvm_runs_feature_cases_at_o0_and_o3() {
     if !llvm_available() {
         return;
     }
-    let failures: Vec<String> = CASES
-        .par_iter()
-        .filter_map(|s| check_case(s).err())
-        .collect();
-    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+    for release in [false, true] {
+        crate::corpus::run::run_selected_profile(
+            Some(CASES),
+            &[dream::driver::test::TestHost::Native],
+            release,
+        );
+    }
 }
 
 #[test]
@@ -497,7 +436,7 @@ fn llvm_pgo_round_trip() {
     let src = case("for_each");
     let ll = out_dir("llvm-backend-pgo").join("for_each.ll");
     compile_ll(&src, &ll, OptLevel::O2);
-    let expected = fs::read_to_string(src.with_extension("expected")).unwrap();
+    let expected = "60\nabc\n1\n9\n";
     let run = |bin: &Path| {
         capture_native_bin(
             &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),

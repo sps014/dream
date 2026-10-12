@@ -1,0 +1,42 @@
+import system.testing;
+// A Task body that starts a host timer and returns leaves the timer running after its reply.
+// Its worker must not serve a later Task, or the timer would settle into that Task's thread.
+import system;
+import system.task;
+
+fun c24c_leave_timer(n: int): int {
+    Promise.start(Time.delay(50));
+    return n;
+}
+
+async fun c24c_body(): void {
+    c24c_verify_observation((Task.spawn(() => c24c_leave_timer(1)).await).to_string());
+    let total = 0;
+    let i = 0;
+    while i < 20 {
+        total = total + Task.spawn(() => i * 2).await;
+        i = i + 1;
+    }
+    Time.delay(100).await;
+    c24c_verify_observation((total).to_string());
+}
+
+let c24c_cursor: int = 0;
+
+fun c24c_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "1\n380\n";
+    let end = c24c_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c24c_cursor, end));
+    c24c_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+async fun task_detached_host_call(): void {
+    c24c_cursor = 0;
+    c24c_body().await;
+    Assert.eq(c24c_cursor, ("1\n380\n").length);
+}

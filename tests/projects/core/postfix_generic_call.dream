@@ -1,0 +1,16 @@
+import system.testing;
+import system;
+
+fun c1b1_first<T>(xs: T[]): T {
+    return xs[0];
+}
+
+@test
+@timeout(180000)
+fun postfix_generic_call() {
+    let xs: int[] = [7, 8];
+    let n = (c1b1_first)<int>(xs);
+    Assert.eq_str((n).to_string(), "7");
+    let f = c1b1_first;
+    Assert.eq_str((f<int>(xs)).to_string(), "7");
+}

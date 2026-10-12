@@ -1,0 +1,56 @@
+import system.testing;
+import system;
+
+fun c227_text(): string {
+    c227_verify_observation(("left").to_string());
+    return "hello";
+}
+
+fun c227_other_text(): string {
+    c227_verify_observation(("right").to_string());
+    return "hello";
+}
+
+fun c227_body(): void {
+    let span = "xhelloy".span(1, 6);
+    c227_verify_observation((span == "hello").to_string());
+    c227_verify_observation(("hello" == span).to_string());
+    c227_verify_observation((span != "hello").to_string());
+    c227_verify_observation(("hello" != span).to_string());
+    c227_verify_observation((span == "world").to_string());
+    c227_verify_observation(("world" == span).to_string());
+    c227_verify_observation((span != "world").to_string());
+    c227_verify_observation(("world" != span).to_string());
+    c227_verify_observation((span == "hello".span()).to_string());
+    c227_verify_observation((span != "world".span()).to_string());
+    c227_verify_observation(("".span() == "").to_string());
+    c227_verify_observation(("" == "x".span(0, 0)).to_string());
+    c227_verify_observation(("🙂é".span() == "🙂é").to_string());
+    c227_verify_observation(("🙂é" == "x🙂éy".span(1, 4)).to_string());
+    c227_verify_observation(("🙂é".span() != "🙂e").to_string());
+    c227_verify_observation(("same" == "same").to_string());
+    c227_verify_observation(("same" != "different").to_string());
+    c227_verify_observation((span.equals("hello")).to_string());
+    c227_verify_observation((c227_text() == c227_other_text().span()).to_string());
+    c227_verify_observation((c227_text().span() != c227_other_text()).to_string());
+}
+
+let c227_cursor: int = 0;
+
+fun c227_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "true\ntrue\nfalse\nfalse\nfalse\nfalse\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nleft\nright\ntrue\nleft\nright\nfalse\n";
+    let end = c227_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c227_cursor, end));
+    c227_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun string_span_equality(): void {
+    c227_cursor = 0;
+    c227_body();
+    Assert.eq(c227_cursor, ("true\ntrue\nfalse\nfalse\nfalse\nfalse\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nleft\nright\ntrue\nleft\nright\nfalse\n").length);
+}

@@ -1,0 +1,61 @@
+import system.testing;
+import system;
+import system.collections;
+import system.encoding;
+import system.json;
+
+fun c20a_body(): void {
+    let xs: List<int> = [1, 2, 3];
+    xs.reverse();
+    c20a_verify_observation((xs.join(",")).to_string());
+    c20a_verify_observation((xs.slice(0, 2).join(",")).to_string());
+    c20a_verify_observation(("  hi ".trim_start() + "|").to_string());
+    c20a_verify_observation(("ab-cd".split_once('-')[1]).to_string());
+    c20a_verify_observation(("a,b,c".split(",", 2).join("|")).to_string());
+    c20a_verify_observation((Option.Some(3).unwrap()).to_string());
+    let s: Set<int> = {1, 2};
+    let t: Set<int> = {2, 3};
+    c20a_verify_observation((s.union(t).contains(3)).to_string());
+    let m: Map<string, int> = {"a": 1};
+    m.get_or_insert("b", () => 2);
+    c20a_verify_observation((m.get_or("b", 0)).to_string());
+    c20a_verify_observation((Math.log(Math.E) > 0.9d && Math.log(Math.E) < 1.1d).to_string());
+    c20a_verify_observation(((int)Math.clamp(5.0d, 0.0d, 3.0d)).to_string());
+    let rng = Random(1u);
+    let bytes = rng.next_bytes(4);
+    c20a_verify_observation((bytes.length).to_string());
+    let j = Json.deserialize<JsonValue>("{\"k\":[1]}").unwrap();
+    c20a_verify_observation((j.as_map().is_some()).to_string());
+    switch (j.get("k")) {
+        Some(arr) => c20a_verify_observation((arr.as_array().unwrap().length).to_string()),
+        None => c20a_verify_observation((0).to_string()),
+    }
+    j.remove("k");
+    c20a_verify_observation((j.has("k")).to_string());
+    c20a_verify_observation((Encoding.utf8_encode("é").length).to_string());
+    let d = Duration.from_seconds(2L);
+    c20a_verify_observation((d.as_millis()).to_string());
+    let dt = DateTime.from_epoch_millis(0L);
+    c20a_verify_observation((dt.epoch_seconds).to_string());
+    c20a_verify_observation((System.has_env("PATH") || System.temp_dir.is_empty() == false).to_string());
+}
+
+let c20a_cursor: int = 0;
+
+fun c20a_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "3,2,1\n3,2\nhi |\ncd\na|b,c\n3\ntrue\n2\ntrue\n3\n4\ntrue\n1\nfalse\n2\n2000\n0\ntrue\n";
+    let end = c20a_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c20a_cursor, end));
+    c20a_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun stdlib_helpers(): void {
+    c20a_cursor = 0;
+    c20a_body();
+    Assert.eq(c20a_cursor, ("3,2,1\n3,2\nhi |\ncd\na|b,c\n3\ntrue\n2\ntrue\n3\n4\ntrue\n1\nfalse\n2\n2000\n0\ntrue\n").length);
+}

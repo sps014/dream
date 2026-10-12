@@ -1,0 +1,59 @@
+import system.testing;
+// Exercises FileHandle streaming and FileStream over a live handle (no whole-file preload).
+import system;
+import system.io;
+
+async fun cd1_body(): void {
+    let path = "dream_file_handle_e2e.tmp";
+
+    File.write(path, "Dream\nrocks\n").await;
+
+    // FileStream via File.open (OS-backed; no whole-file preload).
+    let stream = File.open(path).unwrap();
+    cd1_verify_observation((stream.read(5)).to_string());
+    cd1_verify_observation((stream.position).to_string());
+    stream.seek(6);
+    cd1_verify_observation((stream.read_all()).to_string());
+    stream.close();
+
+    // FileHandle write mode (sync primary API).
+    let write_path = "dream_file_handle_write.tmp";
+    let writer = FileHandle.open(write_path, "w").unwrap();
+    let data = Buffer.alloc<byte>(3);
+    data[0] = (byte)65;
+    data[1] = (byte)66;
+    data[2] = (byte)67;
+    writer.write(data);
+    writer.close();
+    let echoed = File.read(write_path).await;
+    cd1_verify_observation((echoed.unwrap_or("")).to_string());
+
+    // Async variants still work.
+    let reader = (FileHandle.open_async(path, "r").await).unwrap();
+    let chunk = reader.read_async(5).await;
+    cd1_verify_observation((chunk.unwrap_or(Buffer.alloc<byte>(0)).length).to_string());
+    reader.close();
+
+    File.delete(path).await;
+    File.delete(write_path).await;
+}
+
+let cd1_cursor: int = 0;
+
+fun cd1_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "Dream\n5\nrocks\n\nABC\n5\n";
+    let end = cd1_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(cd1_cursor, end));
+    cd1_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+async fun file_handle_stream(): void {
+    cd1_cursor = 0;
+    cd1_body().await;
+    Assert.eq(cd1_cursor, ("Dream\n5\nrocks\n\nABC\n5\n").length);
+}

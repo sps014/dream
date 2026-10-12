@@ -1,1 +1,0 @@
-cannot capture 'v' of type 'ReadOnlySpan<char>' in a lambda expression: 'ReadOnlySpan<char>' is a 'ref struct'

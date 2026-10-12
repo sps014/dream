@@ -1,0 +1,40 @@
+import system.testing;
+import system;
+import system.text;
+
+fun c21e_body(): void {
+    let s = "aé🙂";
+    c21e_verify_observation((s.length).to_string());
+    c21e_verify_observation((s.byte_size()).to_string());
+    c21e_verify_observation((s.char_at(0).to_int()).to_string());
+    c21e_verify_observation((s.char_at(1).to_int()).to_string());
+    c21e_verify_observation((s.char_at(2).to_int()).to_string());
+    c21e_verify_observation((s.byte_at(0)).to_string());
+    c21e_verify_observation((s.byte_at(1)).to_string());
+    c21e_verify_observation((s.byte_at(2)).to_string());
+    let i = 0;
+    while i < s.length {
+        c21e_verify_observation((s.char_at(i).to_int()).to_string());
+        i = i + 1;
+    }
+}
+
+let c21e_cursor: int = 0;
+
+fun c21e_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "4\n8\n97\n233\n55357\n97\n0\n233\n97\n233\n55357\n56898\n";
+    let end = c21e_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c21e_cursor, end));
+    c21e_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun string_scalar_index(): void {
+    c21e_cursor = 0;
+    c21e_body();
+    Assert.eq(c21e_cursor, ("4\n8\n97\n233\n55357\n97\n0\n233\n97\n233\n55357\n56898\n").length);
+}

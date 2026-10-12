@@ -1,0 +1,16 @@
+import system.testing;
+import system;
+extend int {
+    public fun doubled(): int { return this * 2; }
+}
+
+@test
+@timeout(180000)
+fun extend_primitives(): void {
+    let n: int = -7;
+    Assert.eq_str((n.abs()).to_string(), "7");        // 7  (prelude extend)
+    Assert.eq_str((n.doubled()).to_string(), "-14");    // -14 (user extend)
+
+    let s: string = "hello";
+    Assert.eq_str((s.length).to_string(), "5");       // 5  (prelude extend)
+}

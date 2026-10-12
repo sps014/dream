@@ -1,0 +1,17 @@
+import system.testing;
+import system;
+import system.task;
+async fun c241_tick(): void {
+    Time.sleep(1).await;
+}
+
+async fun c241_work(): string {
+    c241_tick().await;
+    return "hi!";
+}
+
+@test
+@timeout(180000)
+async fun task_async_body(): void {
+    Assert.eq_str((Task.spawn_async(c241_work).await).to_string(), "hi!");
+}

@@ -1,0 +1,60 @@
+import system.testing;
+// Handing one managed value to several owning parameters of the same call.
+//
+// The caller holds a single reference but owes the callee one per parameter. Argument effects
+// used to be decided per occurrence, so a last-use move nulled the source once for each slot and
+// transferred that one reference twice; the callee then released it twice, corrupting the free
+// list and crashing whichever later allocation walked it.
+import system;
+
+fun c1e_sum_lengths(a: int[], b: int[], c: int[]): int {
+    return a.length + b.length + c.length;
+}
+
+// Constructor arguments are a separate branch of the same decision, so cover them too.
+class c1e_Holder {
+    public n: int;
+    public constructor(first: int[], second: int[]) {
+        this.n = first.length + second.length;
+    }
+}
+
+fun c1e_body(): void {
+    let xs = Buffer.alloc<int>(3);
+    c1e_verify_observation(("three=" + c1e_sum_lengths(xs, xs, xs).to_string()).to_string());
+    let ys = Buffer.alloc<int>(5);
+    c1e_verify_observation(("mixed=" + c1e_sum_lengths(ys, xs, ys).to_string()).to_string());
+
+    let h = c1e_Holder(xs, xs);
+    c1e_verify_observation(("ctor=" + h.n.to_string()).to_string());
+
+    // Allocations after the calls: these walk the free list, so a double release above shows up
+    // here rather than at the call itself.
+    let a = Buffer.alloc<int>(4);
+    a[0] = 7;
+    let b = Buffer.alloc<int>(8);
+    b[0] = 9;
+    let c = Buffer.alloc<int>(16);
+    c1e_verify_observation(("after=" + a[0].to_string() + "," + b[0].to_string() + "," + c.length.to_string()).to_string());
+    c1e_verify_observation(("still=" + xs.length.to_string() + "," + ys.length.to_string()).to_string());
+}
+
+let c1e_cursor: int = 0;
+
+fun c1e_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "three=9\nmixed=13\nctor=6\nafter=7,9,16\nstill=3,5\n";
+    let end = c1e_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c1e_cursor, end));
+    c1e_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun arc_same_arg_twice(): void {
+    c1e_cursor = 0;
+    c1e_body();
+    Assert.eq(c1e_cursor, ("three=9\nmixed=13\nctor=6\nafter=7,9,16\nstill=3,5\n").length);
+}

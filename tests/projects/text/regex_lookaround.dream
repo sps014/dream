@@ -1,0 +1,26 @@
+import system.testing;
+import system;
+import system.text;
+@test
+@timeout(180000)
+fun regex_lookaround(): void {
+    let ahead = Regex("foo(?=bar)");
+    Assert.eq_str((ahead.test("foobar")).to_string(), "true");
+    Assert.eq_str((ahead.test("foobaz")).to_string(), "false");
+    Assert.eq_str((ahead.match("foobar")[0]).to_string(), "foo");
+
+    let not_ahead = Regex("foo(?!bar)");
+    Assert.eq_str((not_ahead.test("foobar")).to_string(), "false");
+    Assert.eq_str((not_ahead.test("foobaz")).to_string(), "true");
+
+    let behind = Regex("(?<=\\$)\\d+");
+    let bm = behind.match("$100");
+    Assert.eq_str((bm[0]).to_string(), "100");
+    Assert.eq_str((behind.test("100")).to_string(), "false");
+
+    let not_behind = Regex("(?<!\\$)\\d+", RegexFlags.Global);
+    Assert.eq_str((not_behind.replace("$100 and 200", "#")).to_string(), "$1# and #");
+
+    let price = Regex("(?<=USD )\\d+(?=\\.\\d{2})");
+    Assert.eq_str((price.match("USD 42.50")[0]).to_string(), "42");
+}

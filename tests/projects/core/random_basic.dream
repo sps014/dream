@@ -1,0 +1,12 @@
+import system.testing;
+import system;
+@test
+@timeout(180000)
+fun random_basic(): void {
+    let a = Random((uint)42);
+    let b = Random((uint)42);
+    Assert.eq_str((a.next_int(100) == b.next_int(100)).to_string(), "true");
+    Assert.eq_str((a.next_bool() == b.next_bool()).to_string(), "true");
+    let c = Random((uint)7);
+    Assert.eq_str((c.next_int(10) >= 0).to_string(), "true");
+}

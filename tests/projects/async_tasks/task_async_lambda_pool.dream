@@ -1,0 +1,19 @@
+import system.testing;
+import system;
+import system.task;
+@test
+@timeout(180000)
+async fun task_async_lambda_pool(): void {
+    let pool = TaskPool(2);
+    let a = pool.dispatch_async(async () => {
+        Time.sleep(1).await;
+        return "resp:x";
+    });
+    let b = pool.dispatch_async(async () => {
+        Time.sleep(1).await;
+        return "resp:y";
+    });
+    Assert.eq_str((a.await).to_string(), "resp:x");
+    Assert.eq_str((b.await).to_string(), "resp:y");
+    pool.shutdown();
+}

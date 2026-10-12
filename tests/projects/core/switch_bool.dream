@@ -1,0 +1,37 @@
+import system.testing;
+import system;
+fun c23a_pick(b: bool): string {
+    return switch (b) {
+        true => "yes",
+        false => "no",
+    };
+}
+fun c23a_body() {
+    c23a_verify_observation((c23a_pick(true)).to_string());
+    c23a_verify_observation((c23a_pick(false)).to_string());
+    let flag = false;
+    switch (flag) {
+        case true: c23a_verify_observation(("t").to_string());
+        default: c23a_verify_observation(("d").to_string());
+    }
+}
+
+let c23a_cursor: int = 0;
+
+fun c23a_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "yes\nno\nd\n";
+    let end = c23a_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c23a_cursor, end));
+    c23a_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun switch_bool(): void {
+    c23a_cursor = 0;
+    c23a_body();
+    Assert.eq(c23a_cursor, ("yes\nno\nd\n").length);
+}

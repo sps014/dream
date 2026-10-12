@@ -1,0 +1,60 @@
+import system.testing;
+// Async interface methods: calling an `async` method through an interface-typed receiver
+// dispatches dynamically to the concrete async implementation, which returns a `Future<T>` the
+// caller `await`s.
+
+import system;
+interface cff_Fetcher {
+    async fun fetch(): int;
+}
+
+class cff_Remote : cff_Fetcher {
+    public base: int;
+    public constructor(base: int) { this.base = base; }
+    public async fun fetch(): int {
+        Time.sleep(10).await;
+        return this.base + 1;
+    }
+}
+
+class cff_Cached : cff_Fetcher {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+    public async fun fetch(): int {
+        return this.value;
+    }
+}
+
+// Interface-typed receiver: the concrete async implementation is chosen at runtime.
+async fun cff_run(f: cff_Fetcher): void {
+    let v = f.fetch().await;
+    cff_verify_observation((v).to_string());
+}
+
+async fun cff_body(): void {
+    let r = cff_Remote(41);
+    cff_run(r).await;
+
+    let c = cff_Cached(99);
+    cff_run(c).await;
+}
+
+let cff_cursor: int = 0;
+
+fun cff_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "42\n99\n";
+    let end = cff_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(cff_cursor, end));
+    cff_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+async fun interface_async(): void {
+    cff_cursor = 0;
+    cff_body().await;
+    Assert.eq(cff_cursor, ("42\n99\n").length);
+}

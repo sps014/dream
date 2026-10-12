@@ -1,0 +1,85 @@
+import system.testing;
+// Exercises operator/cast overloading: binary/unary arithmetic, user `==`/`!=`,
+// `Comparable`-backed ordering, and explicit/implicit user-defined casts.
+
+import system;
+class c17e_Vector2 {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+
+        fun operator +(other: c17e_Vector2): c17e_Vector2 {
+        return c17e_Vector2(this.x + other.x, this.y + other.y);
+    }
+
+        fun operator -(other: c17e_Vector2): c17e_Vector2 {
+        return c17e_Vector2(this.x - other.x, this.y - other.y);
+    }
+
+    // Same symbol as `sub` above; zero parameters selects the unary form instead.
+        fun operator -(): c17e_Vector2 {
+        return c17e_Vector2(-this.x, -this.y);
+    }
+
+        fun operator ==(other: c17e_Vector2): bool {
+        return this.x == other.x && this.y == other.y;
+    }
+
+        fun explicit(): string {
+        return "(" + this.x + ", " + this.y + ")";
+    }
+}
+
+class c17e_Money : Comparable<c17e_Money> {
+    public cents: int;
+
+    public constructor(cents: int) {
+        this.cents = cents;
+    }
+
+    fun compare(other: c17e_Money): int {
+        return this.cents - other.cents;
+    }
+
+        fun implicit(): int {
+        return this.cents;
+    }
+}
+
+@test
+@timeout(180000)
+fun operator_overloading(): void {
+    let a = c17e_Vector2(1, 2);
+    let b = c17e_Vector2(3, 4);
+
+    let sum = a + b;
+    Assert.eq_str((sum.x).to_string(), "4");
+    Assert.eq_str((sum.y).to_string(), "6");
+
+    let diff = a - b;
+    Assert.eq_str((diff.x).to_string(), "-2");
+    Assert.eq_str((diff.y).to_string(), "-2");
+
+    let neg = -a;
+    Assert.eq_str((neg.x).to_string(), "-1");
+    Assert.eq_str((neg.y).to_string(), "-2");
+
+    Assert.eq_str((a == b).to_string(), "false");
+    Assert.eq_str((a == c17e_Vector2(1, 2)).to_string(), "true");
+    Assert.eq_str((a != b).to_string(), "true");
+
+    Assert.eq_str(((string)a).to_string(), "(1, 2)");
+
+    let cheap = c17e_Money(10);
+    let pricey = c17e_Money(20);
+    Assert.eq_str((cheap < pricey).to_string(), "true");
+    Assert.eq_str((cheap > pricey).to_string(), "false");
+    Assert.eq_str((cheap <= c17e_Money(10)).to_string(), "true");
+
+    let cents: int = cheap;
+    Assert.eq_str((cents).to_string(), "10");
+}

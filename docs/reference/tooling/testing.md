@@ -50,6 +50,8 @@ A package that is not a test package can keep its tests in `tests/`. `dreamer te
 
 `dream test` compiles every `@test` in the project into one runner, so a project builds once no matter how many files it has. Builds are cached: when nothing changed, a rerun skips compilation. `--filter` removes tests before compiling, so a filtered run builds only what it runs.
 
+Tests may be synchronous or `async`, must return `void`, and run sequentially. An async test finishes before its pass report and before the next test begins.
+
 Test functions can be file-private; the runner can call them. Labels use the file's path from the test project root, so `math/vectors.dream` is labeled `math.vectors::<name>`.
 
 Each test prints one line:

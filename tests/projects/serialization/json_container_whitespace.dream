@@ -1,0 +1,52 @@
+import system.testing;
+import system;
+import system.json;
+import system.collections;
+
+@json
+class c10f_Record {
+    public values: int[];
+    public items: List<int>;
+    public constructor(values: int[], items: List<int>) {
+        this.values = values;
+        this.items = items;
+    }
+}
+
+fun c10f_check(text: string): void {
+    switch (Json.deserialize<c10f_Record>(text)) {
+        Ok(record) => {
+            c10f_verify_observation((record.values.length).to_string());
+            c10f_verify_observation((record.items.length).to_string());
+        },
+        Err(error) => c10f_verify_observation((error.message()).to_string()),
+    }
+}
+
+fun c10f_body(): void {
+    c10f_check(" { \n\t\"values\" : [ 1 , 2 ] , \"items\" : [ 3 , 4 ] \r\n } ");
+    c10f_check("{\"values\": [ ], \"items\": [ ] }");
+    c10f_check("{\"values\": [ 1 ");
+    c10f_check("{\"values\": [ true ] }");
+    c10f_check("{\"values\": [1], \"items\": [2] ");
+}
+
+let c10f_cursor: int = 0;
+
+fun c10f_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "2\n2\n0\n0\ninvalid JSON input\ninvalid JSON input\ninvalid JSON input\n";
+    let end = c10f_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c10f_cursor, end));
+    c10f_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun json_container_whitespace(): void {
+    c10f_cursor = 0;
+    c10f_body();
+    Assert.eq(c10f_cursor, ("2\n2\n0\n0\ninvalid JSON input\ninvalid JSON input\ninvalid JSON input\n").length);
+}

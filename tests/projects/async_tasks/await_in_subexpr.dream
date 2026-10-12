@@ -1,0 +1,26 @@
+import system.testing;
+// `await` may appear in unconditionally-evaluated sub-expressions: call arguments, operands, array
+// literals, etc. The compiler hoists each nested `.await` into a top-level temporary before the async
+// coroutine transform, preserving left-to-right evaluation order.
+import system;
+async fun c48_val(n: int): int {
+    Time.sleep(5).await;
+    return n;
+}
+
+fun c48_add(a: int, b: int): int { return a + b; }
+
+@test
+@timeout(180000)
+async fun await_in_subexpr(): void {
+    // `.await` in a call argument
+    Assert.eq_str((c48_add(c48_val(3).await, c48_val(4).await)).to_string(), "7");   // 7
+    // `.await` in an arithmetic operand
+    let s = (c48_val(10).await) + (c48_val(20).await);
+    Assert.eq_str((s).to_string(), "30");                                 // 30
+    // nested await: the future's own argument is itself awaited
+    Assert.eq_str((c48_val(c48_val(42).await).await).to_string(), "42");          // 42
+    // `.await` inside an array literal, then index it
+    let arr = [c48_val(1).await, c48_val(2).await, c48_val(3).await];
+    Assert.eq_str((arr[2]).to_string(), "3");                            // 3
+}

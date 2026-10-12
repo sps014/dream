@@ -1,0 +1,43 @@
+import system.testing;
+import system;
+
+fun c172_body(): void {
+    let x: float = 0.0;
+    x = 2;
+    c172_verify_observation((x).to_string());
+
+    let L: long = 1;
+    L = 2;
+    c172_verify_observation(((int)L).to_string());
+
+    let D: double = 1;
+    D = 2;
+    c172_verify_observation(((int)D).to_string());
+
+    let arr = Buffer.alloc<float>(4);
+    for (let i = 0; i < arr.length; i = i + 1) {
+        arr[i] = i;
+    }
+    c172_verify_observation((arr[0]).to_string());
+    c172_verify_observation((arr[3]).to_string());
+}
+
+let c172_cursor: int = 0;
+
+fun c172_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "2\n2\n2\n0\n3\n";
+    let end = c172_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c172_cursor, end));
+    c172_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun numeric_widen_assign(): void {
+    c172_cursor = 0;
+    c172_body();
+    Assert.eq(c172_cursor, ("2\n2\n2\n0\n3\n").length);
+}

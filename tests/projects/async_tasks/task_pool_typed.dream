@@ -1,0 +1,24 @@
+import system.testing;
+import system;
+import system.task;
+fun c254_square(n: int): int {
+    return n * n;
+}
+
+async fun c254_bump(n: int): int {
+    Time.sleep(1).await;
+    return n + 1;
+}
+
+@test
+@timeout(180000)
+async fun task_pool_typed(): void {
+    let pool = TaskPool(2);
+    let a = pool.dispatch(() => c254_square(3));
+    let b = pool.dispatch(() => c254_square(4));
+    let c = pool.dispatch_async(() => c254_bump(5));
+    Assert.eq_str(((a.await).to_string()).to_string(), "9");
+    Assert.eq_str(((b.await).to_string()).to_string(), "16");
+    Assert.eq_str(((c.await).to_string()).to_string(), "6");
+    pool.shutdown();
+}

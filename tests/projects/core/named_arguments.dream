@@ -1,0 +1,38 @@
+import system.testing;
+// Named arguments (`f(name: value)`) across a free function, a constructor, and a method: in
+// declaration order, out of order, mixed with leading positional args, and skipping a middle
+// optional parameter by naming a later one (the gap is filled from its own default).
+
+import system;
+fun c161_greet(name: string, greeting: string = "Hello", punctuation: string = "!"): string {
+    return greeting + ", " + name + punctuation;
+}
+
+class c161_Rect {
+    public width: int;
+    public height: int;
+
+    public constructor(width: int, height: int = 1) {
+        this.width = width;
+        this.height = height;
+    }
+
+    public fun area(scale: int = 1, offset: int = 0): int {
+        return (this.width * this.height * scale) + offset;
+    }
+}
+
+@test
+@timeout(180000)
+fun named_arguments(): void {
+    Assert.eq_str((c161_greet(name: "Ada")).to_string(), "Hello, Ada!");                          // Hello, Ada!
+    Assert.eq_str((c161_greet(name: "Lin", greeting: "Hi")).to_string(), "Hi, Lin!");          // Hi, Lin!
+    Assert.eq_str((c161_greet(greeting: "Hi", name: "Grace")).to_string(), "Hi, Grace!");        // Hi, Grace! (out of order)
+    Assert.eq_str((c161_greet("Bob", punctuation: "?")).to_string(), "Hello, Bob?");              // Hello, Bob? (positional + named)
+    Assert.eq_str((c161_greet(name: "Amy", punctuation: ".")).to_string(), "Hello, Amy.");        // Hello, Amy. (skips `greeting`)
+
+    let r = c161_Rect(width: 3, height: 4);
+    Assert.eq_str((r.area()).to_string(), "12");                                   // 3*4*1 + 0 = 12
+    Assert.eq_str((r.area(offset: 5)).to_string(), "17");                           // 3*4*1 + 5 = 17
+    Assert.eq_str((r.area(scale: 2)).to_string(), "24");                            // 3*4*2 + 0 = 24
+}

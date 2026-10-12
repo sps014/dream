@@ -1,0 +1,53 @@
+import system.testing;
+// `List.as_span()` views the backing array it was taken from: writes go through to the list,
+// and after the list grows the span keeps showing the old array.
+import system;
+import system.collections;
+
+class c200_Box {
+    public v: int;
+    public constructor(v: int) { this.v = v; }
+}
+
+fun c200_body(): void {
+    let names = List<string>();
+    names.push("a" + "1");
+    names.push("bb");
+    let view = names.as_read_only_span();
+    let i = 0;
+    while i < 20 {
+        names.push("n" + i.to_string());
+        i = i + 1;
+    }
+    for (let n in view) {
+        c200_verify_observation((n).to_string());
+    }
+    c200_verify_observation((view.length.to_string() + " " + names.length.to_string()).to_string());
+
+    let boxes = List<c200_Box>();
+    boxes.push(c200_Box(7));
+    boxes.push(c200_Box(8));
+    let bs = boxes.as_span();
+    bs[0] = c200_Box(70);
+    c200_verify_observation((boxes[0].v + bs[1].v).to_string());
+}
+
+let c200_cursor: int = 0;
+
+fun c200_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "a1\nbb\n2 22\n78\n";
+    let end = c200_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c200_cursor, end));
+    c200_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun span_list_stale(): void {
+    c200_cursor = 0;
+    c200_body();
+    Assert.eq(c200_cursor, ("a1\nbb\n2 22\n78\n").length);
+}

@@ -8,6 +8,8 @@ use dream_syntax::parser::Parser;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiscoveredTest {
     pub name: String,
+    pub is_async: bool,
+    pub is_unsafe: bool,
     /// `@timeout(ms)`; the analyzer rejects a malformed one when the runner compiles.
     pub timeout_ms: Option<u64>,
 }
@@ -47,6 +49,11 @@ pub fn discover_tests_in_source(path: &str, source: &str) -> Result<DiscoveredFi
         }
         out.tests.push(DiscoveredTest {
             name: f.name.text.clone(),
+            is_async: f.is_async,
+            is_unsafe: f
+                .attributes
+                .iter()
+                .any(|attribute| attribute.name.text == "unsafe"),
             timeout_ms: dream_abi::attributes::test_timeout_ms(&f.attributes).flatten(),
         });
     }
@@ -69,10 +76,14 @@ mod tests {
             vec![
                 DiscoveredTest {
                     name: "a".into(),
+                    is_async: false,
+                    is_unsafe: false,
                     timeout_ms: None
                 },
                 DiscoveredTest {
                     name: "b".into(),
+                    is_async: false,
+                    is_unsafe: false,
                     timeout_ms: Some(2500)
                 },
             ]

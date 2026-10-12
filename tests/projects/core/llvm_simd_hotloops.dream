@@ -1,0 +1,122 @@
+import system.testing;
+import system;
+
+@noinline
+fun c13c_fill(borrow dst: int[], borrow lhs: int[], borrow rhs: int[], n: int): void {
+    let i = 0;
+    while i < n {
+        dst[i] = lhs[i] + rhs[i];
+        i = i + 1;
+    }
+}
+
+@noinline
+fun c13c_fold(borrow values: double[]): double {
+    let result: double = 0;
+    let i = 0;
+    while i < values.length {
+        result = result + values[i];
+        i = i + 1;
+    }
+    return result;
+}
+
+@noinline
+fun c13c_shift(dst: Span<int>, src: Span<int>): void {
+    let i = 0;
+    while i < dst.length {
+        dst[i] = src[i] + 1;
+        i = i + 1;
+    }
+}
+
+@noinline
+fun c13c_fill_float(borrow dst: float[], borrow lhs: float[], borrow rhs: float[]): void {
+    let i = 0;
+    while i < dst.length {
+        dst[i] = lhs[i] + rhs[i];
+        i = i + 1;
+    }
+}
+
+fun c13c_body(): void {
+    let sizes = [0, 1, 3, 4, 7, 16, 17, 33];
+    let total = 0;
+    for (let n in sizes) {
+        let lhs = Buffer.alloc<int>(n);
+        let rhs = Buffer.alloc<int>(n);
+        let dst = Buffer.alloc<int>(n);
+        let i = 0;
+        while i < n {
+            lhs[i] = 2147483647;
+            rhs[i] = i + 1;
+            i = i + 1;
+        }
+        c13c_fill(dst, lhs, rhs, n);
+        i = 0;
+        while i < n {
+            if dst[i] != 2147483647 + (i + 1) { System.panic("sum mismatch"); }
+            total = total + 1;
+            i = i + 1;
+        }
+        c13c_fill(lhs, lhs, rhs, n);
+        i = 0;
+        while i < n {
+            if lhs[i] != dst[i] { System.panic("alias mismatch"); }
+            i = i + 1;
+        }
+    }
+    c13c_verify_observation((total).to_string());
+    c13c_verify_observation(("hé🙂z".length).to_string());
+    let values: double[] = [1e20, 1, -1e20, 3];
+    if c13c_fold(values) != 3 { System.panic("floating-point reassociation"); }
+    let overlap = Buffer.alloc<int>(34);
+    let i = 0;
+    while i < overlap.length { overlap[i] = 1; i = i + 1; }
+    c13c_shift(Span<int>(overlap, 1, 33), Span<int>(overlap, 0, 33));
+    i = 0;
+    while i < overlap.length {
+        if overlap[i] != i + 1 { System.panic("overlapping loop dependence"); }
+        i = i + 1;
+    }
+    let a = Buffer.alloc<float>(17);
+    let b = Buffer.alloc<float>(17);
+    let c = Buffer.alloc<float>(17);
+    let infinity: float = (float)1 / (float)0;
+    i = 0;
+    while i < a.length { a[i] = -(float)0; b[i] = -(float)0; i = i + 1; }
+    a[0] = infinity;
+    b[0] = -infinity;
+    a[1] = infinity;
+    b[1] = 1;
+    a[2] = -infinity;
+    b[2] = 1;
+    c13c_fill_float(c, a, b);
+    if c[0] == c[0] { System.panic("NaN propagation"); }
+    if (c[1] != infinity) || (c[2] != -infinity) { System.panic("infinity propagation"); }
+    i = 3;
+    while i < c.length {
+        if (float)1 / c[i] != -infinity { System.panic("signed zero propagation"); }
+        i = i + 1;
+    }
+}
+
+let c13c_cursor: int = 0;
+
+fun c13c_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "81\n5\n";
+    let end = c13c_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c13c_cursor, end));
+    c13c_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun llvm_simd_hotloops(): void {
+    c13c_cursor = 0;
+    c13c_body();
+    Assert.eq(c13c_cursor, ("81\n5\n").length);
+}

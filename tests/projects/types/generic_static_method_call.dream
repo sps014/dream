@@ -1,0 +1,19 @@
+import system.testing;
+import system;
+class cea_Util {
+    public static fun id<T>(x: T): T {
+        return x;
+    }
+
+    public static fun pair<A, B>(a: A, b: B): string {
+        return a.to_string() + "," + b.to_string();
+    }
+}
+
+@test
+@timeout(180000)
+fun generic_static_method_call(): void {
+    Assert.eq_str((cea_Util.id(42)).to_string(), "42");
+    Assert.eq_str((cea_Util.id("hi")).to_string(), "hi");
+    Assert.eq_str((cea_Util.pair(1, true)).to_string(), "1,true");
+}

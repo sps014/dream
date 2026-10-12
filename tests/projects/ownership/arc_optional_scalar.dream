@@ -1,0 +1,10 @@
+import system.testing;
+import system;
+class c19_OptionalScalar {
+    public number: Option<int>;
+    public text: Option<string>;
+    public constructor() { this.number = Option.None; this.text = Option.None; }
+}
+@test
+@timeout(180000)
+fun arc_optional_scalar() { let value = c19_OptionalScalar(); Assert.eq_str((value.text.is_none()).to_string(), "true"); }

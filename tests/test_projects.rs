@@ -56,7 +56,10 @@ fn passing_tests_across_files_build_one_runner() {
     let dir = project(
         "\"native\"",
         &[
-            ("math.dream", "@test\nfun adds(): void { Assert.eq(1 + 1, 2); }\n"),
+            (
+                "math.dream",
+                "@test\nfun adds(): void { Assert.eq(1 + 1, 2); }\n",
+            ),
             (
                 "nested/text.dream",
                 "@test\nfun joins(): void { Assert.eq(\"a\" + \"b\", \"ab\"); }\n",
@@ -154,7 +157,11 @@ fn assets_are_readable_from_the_runner_directory() {
     );
     let report = run(dir.path(), Vec::new());
     assert!(report.ok(), "{report:?}");
-    assert!(dir.path().join("target/test/debug/data/words.txt").is_file());
+    assert!(
+        dir.path()
+            .join("target/test/debug/data/words.txt")
+            .is_file()
+    );
 }
 
 #[test]
@@ -181,4 +188,91 @@ fn node_host_runs_the_wasm_runner_with_assets() {
         report.passed,
         labels(&["node_cases::sees_asset", "node_cases::counts"])
     );
+}
+
+#[test]
+fn async_tests_finish_before_the_next_test_on_both_hosts() {
+    for host in [TestHost::Native, TestHost::Node] {
+        let dir = project(
+            "\"native\", \"node\"",
+            &[(
+                "ordered.dream",
+                "let stage = 0;\n\
+                @test async fun first(): void { Time.sleep(5).await; stage = 1; }\n\
+                @test fun second(): void { Assert.eq(stage, 1); stage = 2; }\n\
+                @test async fun third(): void { Time.sleep(5).await; Assert.eq(stage, 2); }\n",
+            )],
+        );
+        let report = run(dir.path(), vec![host]);
+        assert!(report.ok(), "{report:?}");
+        assert_eq!(
+            report.passed,
+            labels(&["ordered::first", "ordered::second", "ordered::third"])
+        );
+    }
+}
+
+#[test]
+fn async_timeout_is_attributed_on_both_hosts() {
+    for host in [TestHost::Native, TestHost::Node] {
+        let dir = project(
+            "\"native\", \"node\"",
+            &[(
+                "slow.dream",
+                "@test @timeout(100) async fun slow(): void { Time.sleep(1).await; let n = 0; while n >= 0 { n = (n + 1) % 1000; } }\n\
+                @test fun after(): void { Assert.is_true(true); }\n",
+            )],
+        );
+        let report = run(dir.path(), vec![host]);
+        assert_eq!(report.failed.len(), 1, "{report:?}");
+        assert_eq!(report.failed[0].0, "slow::slow");
+        assert!(report.failed[0].1.contains("TIMEOUT"), "{report:?}");
+        assert_eq!(report.not_run, labels(&["slow::after"]));
+    }
+}
+
+#[test]
+fn concurrent_filtered_runs_keep_their_own_runner() {
+    for host in [TestHost::Native, TestHost::Node] {
+        let dir = project(
+            "\"native\", \"node\"",
+            &[(
+                "concurrent.dream",
+                "\
+            @test async fun passes(): void { Time.delay(100).await; Assert.eq(1, 1); }\n\
+            @test fun fails(): void { Assert.eq(1, 2); }\n",
+            )],
+        );
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = ["passes", "fails"]
+                .into_iter()
+                .map(|name| {
+                    let path = dir.path();
+                    scope.spawn(move || {
+                        let result = run_tests(
+                            &Arc::new(ToolchainConfig::default()),
+                            path,
+                            &TestOptions {
+                                selected_tests: vec![name.into()],
+                                hosts: vec![host],
+                                ..Default::default()
+                            },
+                        )
+                        .unwrap();
+                        assert_eq!(result.ok(), name == "passes", "{result:?}");
+                        let report = &result.reports[0];
+                        assert_eq!(report.passed.len() + report.failed.len(), 1);
+                        if name == "passes" {
+                            assert_eq!(report.passed, labels(&["concurrent::passes"]));
+                        } else {
+                            assert_eq!(report.failed[0].0, "concurrent::fails");
+                        }
+                    })
+                })
+                .collect();
+            for handle in handles {
+                handle.join().unwrap();
+            }
+        });
+    }
 }

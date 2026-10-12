@@ -1,0 +1,45 @@
+import system.testing;
+// `StringBuilder.as_span()` views the appended units without copying; the view is a snapshot
+// that later appends and `clear` do not change.
+import system;
+
+fun c213_body(): void {
+    let sb = StringBuilder();
+    sb.append("hello ");
+    sb.append("world");
+    let v = sb.as_span();
+    c213_verify_observation((v.slice(0, 5).to_string()).to_string());
+    let snap = v.to_string();
+    sb.clear();
+    sb.append("XXXXXXXXXXX");
+    c213_verify_observation((snap + "|" + v.to_string() + "|" + sb.to_string()).to_string());
+    c213_verify_observation((v.hash_code() == "hello world".hash_code()).to_string());
+    let i = 0;
+    while i < 40 {
+        sb.append_char('y');
+        i = i + 1;
+    }
+    let w = sb.as_span();
+    c213_verify_observation((w.length.to_string() + " " + v.length.to_string()).to_string());
+    c213_verify_observation((StringBuilder().as_span().is_empty()).to_string());
+}
+
+let c213_cursor: int = 0;
+
+fun c213_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "hello\nhello world|hello world|XXXXXXXXXXX\ntrue\n51 11\ntrue\n";
+    let end = c213_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c213_cursor, end));
+    c213_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun string_builder_span(): void {
+    c213_cursor = 0;
+    c213_body();
+    Assert.eq(c213_cursor, ("hello\nhello world|hello world|XXXXXXXXXXX\ntrue\n51 11\ntrue\n").length);
+}

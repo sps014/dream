@@ -1,0 +1,34 @@
+import system.testing;
+// Cancelling a future that has not been started yet means it never executes.
+import system;
+
+async fun c64_work(): void {
+    c64_verify_observation(("never printed").to_string());
+}
+
+async fun c64_body(): void {
+    let f = c64_work();
+    Promise.cancel(f);
+    Time.sleep(5).await;
+    c64_verify_observation(("cancelled before start").to_string());
+}
+
+let c64_cursor: int = 0;
+
+fun c64_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "cancelled before start\n";
+    let end = c64_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c64_cursor, end));
+    c64_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+async fun cancel_unstarted_future(): void {
+    c64_cursor = 0;
+    c64_body().await;
+    Assert.eq(c64_cursor, ("cancelled before start\n").length);
+}

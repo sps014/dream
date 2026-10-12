@@ -1,0 +1,18 @@
+import system.testing;
+import system;
+@test
+@timeout(180000)
+fun int_parse(): void {
+    Assert.eq_str((int.parse("123").unwrap_or(0)).to_string(), "123");
+    Assert.eq_str((int.parse("-45").unwrap_or(0)).to_string(), "-45");
+    Assert.eq_str((int.parse("7").unwrap_or(0)).to_string(), "7");
+    let n = 0 - 9;
+    Assert.eq_str((n.abs()).to_string(), "9");
+    let two = 2;
+    Assert.eq_str((two.pow(8)).to_string(), "256");
+    let a = 10;
+    Assert.eq_str((a.clamp(0, 5)).to_string(), "5");
+    let b = 3;
+    Assert.eq_str((b.min(7)).to_string(), "3");
+    Assert.eq_str((b.max(7)).to_string(), "7");
+}

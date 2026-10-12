@@ -20,6 +20,7 @@ pub struct BuildRequest<'a> {
     pub project: &'a TestProject,
     pub plan: &'a RunnerPlan,
     pub release: bool,
+    pub debug_info: bool,
     pub optimize: Option<OptLevel>,
 }
 
@@ -28,16 +29,19 @@ impl BuildRequest<'_> {
         let out_dir = self.out_dir(host);
         std::fs::create_dir_all(&out_dir)
             .map_err(|e| format!("creating {}: {e}", out_dir.display()))?;
-        crate::driver::assets::sync(
-            &self.project.asset_root,
-            &self.project.assets,
-            &out_dir,
-        )?;
+        crate::driver::assets::sync(&self.project.asset_root, &self.project.assets, &out_dir)?;
         let out_dir = std::path::absolute(&out_dir).map_err(|e| e.to_string())?;
         match host {
             TestHost::Native => self.build_native(&out_dir),
             TestHost::Node => self.build_node(&out_dir),
         }
+    }
+
+    pub(super) fn lock_path(&self, host: TestHost) -> PathBuf {
+        self.out_dir(host).join(match host {
+            TestHost::Native => "runner.ll",
+            TestHost::Node => "runner.wat",
+        })
     }
 
     fn out_dir(&self, host: TestHost) -> PathBuf {
@@ -55,6 +59,7 @@ impl BuildRequest<'_> {
             .with_virtual_entry(self.plan.source())
             .with_build_cache(Some(cache_key))
             .with_release(self.release)
+            .with_debug_info(self.debug_info)
             .with_crate_type(CrateType::Bin);
         if let Some(level) = self.optimize {
             compiler = compiler.with_optimize(Some(level));
@@ -76,11 +81,17 @@ impl BuildRequest<'_> {
 
     fn build_native(&self, out_dir: &Path) -> Result<Command, String> {
         let ll = out_dir.join("runner.ll");
-        let _lock = crate::driver::output::acquire_lock(&ll).map_err(|e| e.to_string())?;
         let opt = OptLevel::from_cli(self.release, self.optimize);
         let spec = dream_abi::target::TargetSpec::host();
         let compiler = self
-            .compiler(false, format!("test|native|{}", opt.as_cli_flag()))?
+            .compiler(
+                false,
+                format!(
+                    "test|native|{}|debug={}",
+                    opt.as_cli_flag(),
+                    self.debug_info
+                ),
+            )?
             .with_raw_ll_intermediate(true);
         let bin = OutputKind::Executable.artifact_path(&ll, &spec);
         if let BuildOutcome::Built(stamp) = self.compile(compiler, &ll)? {
@@ -92,7 +103,7 @@ impl BuildRequest<'_> {
                     opt_ll: None,
                     opt_remarks: None,
                     opt,
-                    debug: false,
+                    debug: self.debug_info,
                     profile: dream_abi::profile::CompileProfile::from_release(self.release),
                     pgo: &crate::execution::native::Pgo::Off,
                     icon: None,
@@ -118,7 +129,6 @@ impl BuildRequest<'_> {
 
     fn build_node(&self, out_dir: &Path) -> Result<Command, String> {
         let wat = out_dir.join("runner.wat");
-        let _lock = crate::driver::output::acquire_lock(&wat).map_err(|e| e.to_string())?;
         let compiler = self
             .compiler(true, "test|node".into())?
             .with_runtimes(vec![JsRuntimeTarget::Node])
@@ -129,7 +139,10 @@ impl BuildRequest<'_> {
             })
             .with_output_kind(OutputKind::Wasm);
         let wasm = wat.with_extension("wasm");
-        let js = out_dir.join(format!("runner.{}", JsRuntimeTarget::Node.runtime_extension()));
+        let js = out_dir.join(format!(
+            "runner.{}",
+            JsRuntimeTarget::Node.runtime_extension()
+        ));
         if let BuildOutcome::Built(Some(stamp)) = self.compile(compiler, &wat)? {
             stamp.store(&existing(&[
                 wasm.clone(),

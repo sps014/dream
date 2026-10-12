@@ -1,0 +1,35 @@
+import system.testing;
+import system;
+fun cc0_body(): void {
+    let i: int = 0;
+    do {
+        cc0_verify_observation((i).to_string());
+        i = i + 1;
+    } while (i < 3);
+
+    let j: int = 10;
+    do {
+        cc0_verify_observation((j).to_string());
+        j = j + 1;
+    } while (j < 5);
+}
+
+let cc0_cursor: int = 0;
+
+fun cc0_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "0\n1\n2\n10\n";
+    let end = cc0_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(cc0_cursor, end));
+    cc0_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun do_while(): void {
+    cc0_cursor = 0;
+    cc0_body();
+    Assert.eq(cc0_cursor, ("0\n1\n2\n10\n").length);
+}

@@ -1,0 +1,19 @@
+import system.testing;
+// Mutating after the cursor's final read is legal — the borrow has ended.
+
+import system;
+import system.collections;
+
+@test
+@timeout(180000)
+fun borrow_after_last_use(): void {
+    let xs = List<int>();
+    xs.push(1);
+    xs.push(2);
+    let cur = xs.iterator();
+    Assert.eq_str((cur.next().unwrap_or(-1)).to_string(), "1");
+    // Cursor not used again — safe to mutate.
+    xs.push(3);
+    xs.sort();
+    Assert.eq_str((xs.length.to_string()).to_string(), "3");
+}

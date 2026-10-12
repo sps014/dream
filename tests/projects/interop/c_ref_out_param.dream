@@ -1,0 +1,37 @@
+import system.testing;
+import system;
+@c("m", "frexp") extern fun c61_frexp(x: double, ref e: int): double;
+fun c61_direct(): void {
+    let e: int = 0;
+    let m = c61_frexp(8.0, ref e);
+    c61_verify_observation((m.to_string() + " " + e.to_string()).to_string());
+}
+fun c61_via(ref e: int): double {
+    return c61_frexp(8.0, ref e);
+}
+fun c61_body(): void {
+    c61_direct();
+    let e2: int = 0;
+    let m2 = c61_via(ref e2);
+    c61_verify_observation((m2.to_string() + " " + e2.to_string()).to_string());
+}
+
+let c61_cursor: int = 0;
+
+fun c61_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "0.5 4\n0.5 4\n";
+    let end = c61_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c61_cursor, end));
+    c61_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun c_ref_out_param(): void {
+    c61_cursor = 0;
+    c61_body();
+    Assert.eq(c61_cursor, ("0.5 4\n0.5 4\n").length);
+}

@@ -1,0 +1,170 @@
+import system.testing;
+// Devirtualization shapes: exact receiver types from `new` (direct, after a factory is inlined,
+// and across an if/else join), tag-guarded dispatch for slots with two implementors (including
+// generic instances), and plain itable dispatch for a slot with three implementors.
+
+import system;
+import system.collections;
+
+interface cbc_Shape {
+    fun area(): int;
+    fun name(): string;
+}
+
+class cbc_Circle : cbc_Shape {
+    public r: int;
+    public constructor(r: int) {
+        this.r = r;
+    }
+    public fun area(): int {
+        return 3 * this.r * this.r;
+    }
+    public fun name(): string {
+        return "circle";
+    }
+}
+
+class cbc_Square : cbc_Shape {
+    public s: int;
+    public constructor(s: int) {
+        this.s = s;
+    }
+    public fun area(): int {
+        return this.s * this.s;
+    }
+    public fun name(): string {
+        return "square";
+    }
+}
+
+interface cbc_Op {
+    fun apply(x: int): int;
+}
+
+class cbc_AddOp : cbc_Op {
+    public fun apply(x: int): int {
+        return x + 10;
+    }
+}
+
+class cbc_MulOp : cbc_Op {
+    public fun apply(x: int): int {
+        return x * 10;
+    }
+}
+
+class cbc_NegOp : cbc_Op {
+    public fun apply(x: int): int {
+        return 0 - x;
+    }
+}
+
+interface cbc_Sized {
+    fun size(): int;
+}
+
+@allow_cycle
+class cbc_Holder<T> : cbc_Sized {
+    public items: List<T>;
+    public constructor() {
+        this.items = List<T>();
+    }
+    public fun size(): int {
+        return this.items.length;
+    }
+}
+
+fun cbc_make_op(kind: int): cbc_Op {
+    if kind == 0 {
+        return cbc_AddOp();
+    }
+    if kind == 1 {
+        return cbc_MulOp();
+    }
+    return cbc_NegOp();
+}
+
+fun cbc_make_mul(): cbc_Op {
+    return cbc_MulOp();
+}
+
+fun cbc_total_area(shapes: List<cbc_Shape>): int {
+    let sum = 0;
+    let i = 0;
+    while i < shapes.length {
+        let s = shapes[i];
+        cbc_verify_observation((s.name() + " " + s.area().to_string()).to_string());
+        sum = sum + s.area();
+        i = i + 1;
+    }
+    return sum;
+}
+
+fun cbc_total_size(items: List<cbc_Sized>): int {
+    let sum = 0;
+    let i = 0;
+    while i < items.length {
+        sum = sum + items[i].size();
+        i = i + 1;
+    }
+    return sum;
+}
+
+fun cbc_exercise_ops(): void {
+    let direct: cbc_Op = cbc_AddOp();
+    cbc_verify_observation((direct.apply(1)).to_string());
+    cbc_verify_observation((cbc_make_mul().apply(2)).to_string());
+
+    let flag = System.env("DREAM_DEVIRT_CASE_UNSET").is_some();
+    let joined: cbc_Op = cbc_AddOp();
+    if flag {
+        joined = cbc_NegOp();
+    }
+    cbc_verify_observation((joined.apply(3)).to_string());
+
+    let k = 0;
+    while k < 3 {
+        cbc_verify_observation((cbc_make_op(k).apply(4)).to_string());
+        k = k + 1;
+    }
+}
+
+fun cbc_body(): void {
+    cbc_exercise_ops();
+
+    let shapes = List<cbc_Shape>();
+    shapes.push(cbc_Circle(2));
+    shapes.push(cbc_Square(3));
+    shapes.push(cbc_Circle(1));
+    cbc_verify_observation((cbc_total_area(shapes)).to_string());
+
+    let ints = cbc_Holder<int>();
+    ints.items.push(1);
+    ints.items.push(2);
+    let strs = cbc_Holder<string>();
+    strs.items.push("a");
+    let sized = List<cbc_Sized>();
+    sized.push(ints);
+    sized.push(strs);
+    cbc_verify_observation((cbc_total_size(sized)).to_string());
+}
+
+let cbc_cursor: int = 0;
+
+fun cbc_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "11\n20\n13\n14\n40\n-4\ncircle 12\nsquare 9\ncircle 3\n24\n3\n";
+    let end = cbc_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(cbc_cursor, end));
+    cbc_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun devirt_dispatch(): void {
+    cbc_cursor = 0;
+    cbc_body();
+    Assert.eq(cbc_cursor, ("11\n20\n13\n14\n40\n-4\ncircle 12\nsquare 9\ncircle 3\n24\n3\n").length);
+}

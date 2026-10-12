@@ -1,1 +1,0 @@
-cannot capture 'p' of type 'Pair' in a lambda expression: 'Pair' is a 'ref struct'

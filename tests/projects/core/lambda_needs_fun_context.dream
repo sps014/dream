@@ -1,0 +1,10 @@
+import system.testing;
+// With annotated parameters, a lambda's return type is inferred from its body — no fun(...) annotation needed.
+
+import system;
+@test
+@timeout(180000)
+fun lambda_needs_fun_context(): void {
+    let f = (x: int) => x * 2;
+    Assert.eq_str((f(21)).to_string(), "42");
+}

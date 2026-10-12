@@ -1,0 +1,25 @@
+import system.testing;
+// try_acquire / try_acquire_for on Lock and Semaphore (single-threaded).
+
+import system;
+
+@test
+@timeout(180000)
+fun lock_try_acquire(): void {
+    let lock1 = Lock();
+    Assert.eq_str((lock1.try_acquire()).to_string(), "true");
+    Assert.eq_str((lock1.try_acquire()).to_string(), "true"); // reentrant
+    lock1.release();
+    lock1.release();
+    Assert.eq_str((lock1.try_acquire_for(0)).to_string(), "true");
+    lock1.release();
+
+    let sem = Semaphore(1);
+    Assert.eq_str((sem.try_acquire()).to_string(), "true");
+    Assert.eq_str((sem.try_acquire()).to_string(), "false"); // no permits left
+    Assert.eq_str((sem.try_acquire_for(1)).to_string(), "false"); // still none; times out
+    sem.release();
+    Assert.eq_str((sem.try_acquire_for(100)).to_string(), "true");
+    sem.release();
+    Assert.eq_str(("ok").to_string(), "ok");
+}

@@ -1,0 +1,35 @@
+import system.testing;
+import system;
+import system.text;
+@test
+@timeout(180000)
+fun regex_classes(): void {
+    let vowels = Regex("[aeiou]+", RegexFlags.Global);
+    Assert.eq_str((vowels.replace("hello world", "_")).to_string(), "h_ll_ w_rld");
+
+    let range = Regex("[a-f]+");
+    Assert.eq_str((range.test("cafe")).to_string(), "true");
+    Assert.eq_str((range.test("xyz")).to_string(), "false");
+
+    let negated = Regex("[^aeiou\\s]+", RegexFlags.Global);
+    let m = negated.match("hi there");
+    Assert.eq_str((m.length).to_string(), "3");
+    Assert.eq_str((m[0]).to_string(), "h");
+    Assert.eq_str((m[1]).to_string(), "th");
+
+    let digit_class = Regex("[\\d]+");
+    Assert.eq_str((digit_class.test("42")).to_string(), "true");
+
+    let word_shorthand = Regex("\\w+");
+    Assert.eq_str((word_shorthand.match("hello_world!")[0]).to_string(), "hello_world");
+
+    let non_word = Regex("\\W+");
+    Assert.eq_str((non_word.match("a, b")[0]).to_string(), ", ");
+
+    let space_shorthand = Regex("\\s+");
+    Assert.eq_str((space_shorthand.test("a b")).to_string(), "true");
+    Assert.eq_str((space_shorthand.test("ab")).to_string(), "false");
+
+    let non_digit = Regex("\\D+");
+    Assert.eq_str((non_digit.match("abc123")[0]).to_string(), "abc");
+}

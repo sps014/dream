@@ -1,0 +1,46 @@
+import system.testing;
+import system;
+import system.collections;
+
+fun c1b6_body(): void {
+    let pq = PriorityQueue<int>();
+    pq.push(5);
+    pq.push(1);
+    pq.push(3);
+    pq.push(2);
+    pq.push(4);
+    c1b6_verify_observation((pq.length).to_string());
+    c1b6_verify_observation((pq.peek().unwrap_or(0 - 1)).to_string());
+    while pq.is_empty() == false {
+        c1b6_verify_observation((pq.pop().unwrap_or(0 - 1)).to_string());
+    }
+    c1b6_verify_observation((pq.pop().unwrap_or(0 - 1)).to_string());
+
+    let maxq = PriorityQueue<int>((a, b) => b - a);
+    maxq.push(5);
+    maxq.push(1);
+    maxq.push(3);
+    c1b6_verify_observation((maxq.pop().unwrap_or(0 - 1)).to_string());
+    c1b6_verify_observation((maxq.pop().unwrap_or(0 - 1)).to_string());
+    c1b6_verify_observation((maxq.pop().unwrap_or(0 - 1)).to_string());
+}
+
+let c1b6_cursor: int = 0;
+
+fun c1b6_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "5\n1\n1\n2\n3\n4\n5\n-1\n5\n3\n1\n";
+    let end = c1b6_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c1b6_cursor, end));
+    c1b6_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun priority_queue_basic(): void {
+    c1b6_cursor = 0;
+    c1b6_body();
+    Assert.eq(c1b6_cursor, ("5\n1\n1\n2\n3\n4\n5\n-1\n5\n3\n1\n").length);
+}

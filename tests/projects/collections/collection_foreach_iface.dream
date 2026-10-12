@@ -1,0 +1,57 @@
+import system.testing;
+import system;
+import system.collections;
+
+fun c82_sum_collection(xs: Collection<int>): int {
+    let total = 0;
+    for (let n in xs) {
+        total = total + n;
+    }
+    return total;
+}
+
+fun c82_sum_indexed(xs: IndexedCollection<int>): int {
+    let total = 0;
+    for (let n in xs) {
+        total = total + n;
+    }
+    return total;
+}
+
+fun c82_sum_iterator(it: Iterator<int>): int {
+    let total = 0;
+    for (let n in it) {
+        total = total + n;
+    }
+    return total;
+}
+
+fun c82_body(): void {
+    let xs = List<int>();
+    xs.push(10);
+    xs.push(20);
+    xs.push(30);
+    c82_verify_observation((c82_sum_collection(xs)).to_string());
+    c82_verify_observation((c82_sum_indexed(xs)).to_string());
+    c82_verify_observation((c82_sum_iterator(xs.iterator())).to_string());
+}
+
+let c82_cursor: int = 0;
+
+fun c82_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "60\n60\n60\n";
+    let end = c82_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c82_cursor, end));
+    c82_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun collection_foreach_iface(): void {
+    c82_cursor = 0;
+    c82_body();
+    Assert.eq(c82_cursor, ("60\n60\n60\n").length);
+}

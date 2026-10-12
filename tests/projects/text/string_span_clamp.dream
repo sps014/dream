@@ -1,0 +1,26 @@
+import system.testing;
+// `span(start, end)` clamps out-of-range bounds like `substring`; `slice` and `char_at` trap.
+
+import system;
+
+@test
+@timeout(180000)
+fun string_span_clamp(): void {
+    let s = "hello world";
+    let min: int = -2147483647 - 1;
+    Assert.eq_str((s.span(-5, 3).to_string() + "|").to_string(), "hel|");
+    Assert.eq_str((s.span(6, 100).to_string() + "|").to_string(), "world|");
+    Assert.eq_str((s.span(8, 2).length).to_string(), "0");
+    Assert.eq_str((s.span(min, 2147483647).length).to_string(), "11");
+    Assert.eq_str((s.span(min, -1).length).to_string(), "0");
+    Assert.eq_str((s.span(2147483647, min).length).to_string(), "0");
+    let w = s.span(6, 11);
+    Assert.eq_str((w.slice(1, 3).to_string()).to_string(), "orl");
+    Assert.eq_str((w.slice(3).to_string()).to_string(), "ld");
+    Assert.eq_str((w.slice(0, 5).equals("world")).to_string(), "true");
+    Assert.eq_str((w.is_empty()).to_string(), "false");
+    Assert.eq_str((s.span(3, 3).is_empty()).to_string(), "true");
+    Assert.eq_str(("".span().split_iter(',').move_next()).to_string(), "true");
+    Assert.eq_str(("   ".span().trim().length).to_string(), "0");
+    Assert.eq_str(("12x".span().parse_int().is_err()).to_string(), "true");
+}

@@ -1,0 +1,53 @@
+import system.testing;
+import system;
+fun cd5_twice(x: int): int {
+    return x * 2;
+}
+
+fun cd5_thrice(x: int): int {
+    return x * 3;
+}
+
+fun cd5_apply(f: fun(int): int, v: int): int {
+    return f(v);
+}
+
+fun cd5_map_sum(arr: int[], f: fun(int): int): int {
+    let sum: int = 0;
+    for (let x in arr) {
+        sum += f(x);
+    }
+    return sum;
+}
+
+fun cd5_body(): void {
+    cd5_verify_observation((cd5_apply(cd5_twice, 5)).to_string());
+    cd5_verify_observation((cd5_apply(cd5_thrice, 5)).to_string());
+
+    let arr: int[] = [1, 2, 3];
+    cd5_verify_observation((cd5_map_sum(arr, cd5_twice)).to_string());
+    cd5_verify_observation((cd5_map_sum(arr, cd5_thrice)).to_string());
+
+    let g: fun(int): int = cd5_twice;
+    cd5_verify_observation((g(7)).to_string());
+}
+
+let cd5_cursor: int = 0;
+
+fun cd5_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "10\n15\n12\n18\n14\n";
+    let end = cd5_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(cd5_cursor, end));
+    cd5_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun first_class_fn(): void {
+    cd5_cursor = 0;
+    cd5_body();
+    Assert.eq(cd5_cursor, ("10\n15\n12\n18\n14\n").length);
+}

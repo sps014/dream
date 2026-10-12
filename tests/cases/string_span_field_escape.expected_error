@@ -1,1 +1,0 @@
-field 'view' of 'Holder' cannot have type 'ReadOnlySpan<char>': a 'ref struct' cannot be stored as a field

@@ -1,0 +1,63 @@
+import system.testing;
+// Runtime semantics of `weak`: a `weak` field does not keep its referent alive, and is reset to
+// `None` once the referent's last strong reference is released — see `docs/language/memory.md`.
+import system;
+class c2a4_Node {
+    public value: int;
+    public weak parent: Option<c2a4_Node>;
+
+    public constructor(value: int) {
+        this.value = value;
+        this.parent = Option.None;
+    }
+}
+
+// `parent` is the only strong owner of the freshly-built `Node(99)`; it goes out of scope (and is
+// released) when this function returns, so `child.parent` — a `weak` reference to it — must observe
+// that and reset to `None`.
+fun c2a4_attach_weak_parent(child: c2a4_Node) {
+    let parent = c2a4_Node(99);
+    child.parent = Option.Some(parent);
+    switch (child.parent) {
+        Some(p) => { c2a4_verify_observation(("inside: parent.value=" + p.value.to_string()).to_string()); }
+        None => { c2a4_verify_observation(("inside: parent is None (unexpected)").to_string()); }
+    }
+}
+
+fun c2a4_body() {
+    let child = c2a4_Node(1);
+    c2a4_attach_weak_parent(child);
+    switch (child.parent) {
+        Some(p) => { c2a4_verify_observation(("after: parent.value=" + p.value.to_string()).to_string()); }
+        None => { c2a4_verify_observation(("after: parent is None").to_string()); }
+    }
+
+    // Reassigning a `weak` field to a *live* referent must still work like an ordinary read: it does
+    // not retain the new referent either.
+    let other = c2a4_Node(2);
+    child.parent = Option.Some(other);
+    switch (child.parent) {
+        Some(p) => { c2a4_verify_observation(("live: parent.value=" + p.value.to_string()).to_string()); }
+        None => { c2a4_verify_observation(("live: parent is None (unexpected)").to_string()); }
+    }
+}
+
+let c2a4_cursor: int = 0;
+
+fun c2a4_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "inside: parent.value=99\nafter: parent is None\nlive: parent.value=2\n";
+    let end = c2a4_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c2a4_cursor, end));
+    c2a4_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun weak_field_runtime(): void {
+    c2a4_cursor = 0;
+    c2a4_body();
+    Assert.eq(c2a4_cursor, ("inside: parent.value=99\nafter: parent is None\nlive: parent.value=2\n").length);
+}

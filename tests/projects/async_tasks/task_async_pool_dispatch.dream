@@ -1,0 +1,18 @@
+import system.testing;
+import system;
+import system.task;
+async fun c248_fetchLike(url: string): string {
+    Time.sleep(1).await;
+    return "resp:" + url;
+}
+
+@test
+@timeout(180000)
+async fun task_async_pool_dispatch(): void {
+    let pool = TaskPool(2);
+    let a = pool.dispatch_async(() => c248_fetchLike("x"));
+    let b = pool.dispatch_async(() => c248_fetchLike("y"));
+    Assert.eq_str((a.await).to_string(), "resp:x");
+    Assert.eq_str((b.await).to_string(), "resp:y");
+    pool.shutdown();
+}

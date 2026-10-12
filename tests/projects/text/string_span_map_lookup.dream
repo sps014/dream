@@ -1,0 +1,40 @@
+import system.testing;
+import system;
+import system.collections;
+
+fun c22c_body() {
+    let m = Map<string, int>();
+    m["apple"] = 1;
+    m["pear"] = 2;
+    let text = "apple,pear,plum";
+    let it = text.span().split_iter(',');
+    while it.move_next() {
+        let k = it.current;
+        c22c_verify_observation((k.to_string() + "=" + m.get(k).unwrap_or(-1).to_string() + " " + m.contains(k).to_string() + " " + m.get_or(k, 0).to_string()).to_string());
+    }
+    c22c_verify_observation((m.get("pear").unwrap_or(0)).to_string());
+    let s = Set<string>();
+    s.add("x");
+    c22c_verify_observation((s.contains("axb".span(1, 2))).to_string());
+    c22c_verify_observation((s.contains("ab".span(1, 2))).to_string());
+}
+
+let c22c_cursor: int = 0;
+
+fun c22c_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "apple=1 true 1\npear=2 true 2\nplum=-1 false 0\n2\ntrue\nfalse\n";
+    let end = c22c_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c22c_cursor, end));
+    c22c_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun string_span_map_lookup(): void {
+    c22c_cursor = 0;
+    c22c_body();
+    Assert.eq(c22c_cursor, ("apple=1 true 1\npear=2 true 2\nplum=-1 false 0\n2\ntrue\nfalse\n").length);
+}

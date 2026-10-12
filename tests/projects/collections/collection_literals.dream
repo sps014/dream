@@ -1,0 +1,61 @@
+import system.testing;
+// `[...]` (List<T>), `{...}` (Set<T>), and `{k: v, ...}` (Map<K, V>) literal syntax. Each desugars
+// to a single bulk static factory call (`from_array`/`from_arrays`), not per-element `push`/`add`/
+// `set` calls. Covers `let` bindings, function arguments, return positions, nested literals, and
+// empty literals (whose element type is inferred entirely from the target/context type).
+
+import system;
+import system.collections;
+import system.text;
+fun c88_take_list(xs: List<int>): int {
+    return xs.length;
+}
+
+fun c88_make_set(): Set<string> {
+    return {"x", "y", "x"};
+}
+
+@test
+@timeout(180000)
+fun collection_literals(): void {
+    let xs: List<int> = [1, 2, 3];
+    Assert.eq_str((xs.length).to_string(), "3");
+    Assert.eq_str((xs.get(0)).to_string(), "1");
+    Assert.eq_str((xs.get(2)).to_string(), "3");
+
+    // Plain `T[]` array literals are unaffected by the `List<T>` sugar.
+    let raw: int[] = [4, 5, 6];
+    Assert.eq_str((raw.length).to_string(), "3");
+    Assert.eq_str((raw[1]).to_string(), "5");
+
+    let ys: Set<string> = {"a", "b", "c", "a"};
+    Assert.eq_str((ys.length).to_string(), "3");
+    Assert.eq_str((ys.contains("b")).to_string(), "true");
+    Assert.eq_str((ys.contains("z")).to_string(), "false");
+
+    let m: Map<string, int> = {"a": 1, "b": 2};
+    Assert.eq_str((m.length).to_string(), "2");
+    Assert.eq_str((m.get("a").unwrap_or(-1)).to_string(), "1");
+    Assert.eq_str((m.get("b").unwrap_or(-1)).to_string(), "2");
+    Assert.eq_str((m.contains("c")).to_string(), "false");
+
+    // Empty literals: the element/key/value type comes entirely from context.
+    let empty_list: List<int> = [];
+    Assert.eq_str((empty_list.length).to_string(), "0");
+
+    let empty_set: Set<int> = {};
+    Assert.eq_str((empty_set.length).to_string(), "0");
+
+    let empty_map: Map<string, int> = {};
+    Assert.eq_str((empty_map.length).to_string(), "0");
+
+    // A literal used directly as a call argument or return value.
+    Assert.eq_str((c88_take_list([10, 20, 30, 40])).to_string(), "4");
+    Assert.eq_str((c88_make_set().length).to_string(), "2");
+
+    // Nested `List<List<int>>`.
+    let nested: List<List<int>> = [[1, 2], [3]];
+    Assert.eq_str((nested.length).to_string(), "2");
+    Assert.eq_str((nested.get(0).length).to_string(), "2");
+    Assert.eq_str((nested.get(1).length).to_string(), "1");
+}

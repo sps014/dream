@@ -1,0 +1,34 @@
+import system.testing;
+import system;
+
+struct c28c_Payload {
+    public data: string;
+    public constructor(borrow data: string) { this.data = data; }
+}
+
+interface c28c_Reader { fun read(value: c28c_Payload): string; }
+class c28c_Echo : c28c_Reader {
+    public fun read(value: c28c_Payload): string { return value.data; }
+fun identity(value: c28c_Payload): c28c_Payload { return value; }
+}
+
+@noinline
+fun c28c_call_reader(reader: c28c_Reader, value: c28c_Payload): string {
+    return reader.read(value);
+}
+fun c28c_read(value: c28c_Payload): string { return value.data; }
+fun c28c_identity(value: c28c_Payload): c28c_Payload { return value; }
+
+@test
+@timeout(180000)
+fun value_argument_indirect_ownership(): void {
+    let value = c28c_Payload("hello" + System.env_or("DREAM_VALUE_SUFFIX", " world"));
+    let callback: fun(c28c_Payload): string = c28c_read;
+    Assert.eq_str((callback(value)).to_string(), "hello world");
+    Assert.eq_str((callback(value)).to_string(), "hello world");
+    Assert.eq_str((c28c_call_reader(c28c_Echo(), value)).to_string(), "hello world");
+    let identity_callback: fun(c28c_Payload): c28c_Payload = c28c_identity;
+    let copy = identity_callback(value);
+    Assert.eq_str((copy.data).to_string(), "hello world");
+    Assert.eq_str((value.data).to_string(), "hello world");
+}

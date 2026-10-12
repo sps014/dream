@@ -1,0 +1,35 @@
+import system.testing;
+import system;
+class c177_Bits {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+    fun operator %(other: int): int { return this.value % other; }
+    fun operator %(other: c177_Bits): int { return this.value % other.value; }
+    fun operator &(other: int): int { return this.value & other; }
+    fun operator &(other: c177_Bits): int { return this.value & other.value; }
+    fun operator |(other: int): int { return this.value | other; }
+    fun operator |(other: c177_Bits): int { return this.value | other.value; }
+    fun operator ^(other: int): int { return this.value ^ other; }
+    fun operator ^(other: c177_Bits): int { return this.value ^ other.value; }
+    fun operator <<(other: int): int { return this.value << other; }
+    fun operator <<(other: c177_Bits): int { return this.value << other.value; }
+    fun operator >>(other: int): int { return this.value >> other; }
+    fun operator >>(other: c177_Bits): int { return this.value >> other.value; }
+}
+@test
+@timeout(180000)
+fun operator_all_symbols(): void {
+    let b = c177_Bits(10);
+    Assert.eq_str((b % 3).to_string(), "1");
+    Assert.eq_str((b % c177_Bits(3)).to_string(), "1");
+    Assert.eq_str((b & 3).to_string(), "2");
+    Assert.eq_str((b & c177_Bits(3)).to_string(), "2");
+    Assert.eq_str((b | 3).to_string(), "11");
+    Assert.eq_str((b | c177_Bits(3)).to_string(), "11");
+    Assert.eq_str((b ^ 3).to_string(), "9");
+    Assert.eq_str((b ^ c177_Bits(3)).to_string(), "9");
+    Assert.eq_str((b << 3).to_string(), "80");
+    Assert.eq_str((b << c177_Bits(3)).to_string(), "80");
+    Assert.eq_str((b >> 3).to_string(), "1");
+    Assert.eq_str((b >> c177_Bits(3)).to_string(), "1");
+}

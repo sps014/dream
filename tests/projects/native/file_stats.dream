@@ -1,0 +1,51 @@
+import system.testing;
+import system;
+import system.io;
+
+async fun cd4_body(): void {
+    let root = "dream_file_stats_e2e";
+    File.create_dir(root).await;
+    File.write(root + "/a.txt", "hi").await;
+
+    cd4_verify_observation((File.exists(root)).to_string());
+    cd4_verify_observation((File.is_dir(root)).to_string());
+    cd4_verify_observation((File.is_file(root + "/a.txt")).to_string());
+    cd4_verify_observation((File.is_file(root)).to_string());
+
+    switch (File.stat(root + "/a.txt")) {
+        Ok(st) => {
+            cd4_verify_observation((st.is_file).to_string());
+            cd4_verify_observation((st.size == 2L).to_string());
+            cd4_verify_observation((st.mtime_millis > 0L).to_string());
+        },
+        Err(e) => cd4_verify_observation((e.message()).to_string()),
+    }
+
+    switch (File.stat(root)) {
+        Ok(st) => cd4_verify_observation((st.is_dir).to_string()),
+        Err(e) => cd4_verify_observation((e.message()).to_string()),
+    }
+
+    File.delete(root + "/a.txt").await;
+    File.remove_dir(root).await;
+}
+
+let cd4_cursor: int = 0;
+
+fun cd4_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "true\ntrue\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\n";
+    let end = cd4_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(cd4_cursor, end));
+    cd4_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+async fun file_stats(): void {
+    cd4_cursor = 0;
+    cd4_body().await;
+    Assert.eq(cd4_cursor, ("true\ntrue\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\n").length);
+}

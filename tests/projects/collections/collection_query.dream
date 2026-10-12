@@ -1,0 +1,48 @@
+import system.testing;
+import system;
+import system.collections;
+
+fun c8b_is_positive(n: int): bool { return n > 0; }
+fun c8b_is_three(n: int): bool { return n == 3; }
+fun c8b_gt_two(n: int): bool { return n > 2; }
+fun c8b_is_even(n: int): bool { return n % 2 == 0; }
+fun c8b_times_two(n: int): int { return n * 2; }
+fun c8b_add(a: int, b: int): int { return a + b; }
+fun c8b_gt_one(n: int): bool { return n > 1; }
+fun c8b_plus_ten(n: int): int { return n + 10; }
+fun c8b_asc(a: int, b: int): int { return a.compare(b); }
+
+fun c8b_sum_evens(xs: Collection<int>): int {
+    let evens = xs.filter(c8b_is_even);
+    return evens.reduce(0, c8b_add);
+}
+
+@test
+@timeout(180000)
+fun collection_query(): void {
+    let xs = List<int>();
+    xs.push(1);
+    xs.push(2);
+    xs.push(3);
+    xs.push(4);
+
+    Assert.eq_str((xs.all(c8b_is_positive)).to_string(), "true");
+    Assert.eq_str((xs.any(c8b_is_three)).to_string(), "true");
+    Assert.eq_str((xs.count_where(c8b_gt_two)).to_string(), "2");
+    Assert.eq_str((xs.find_where(c8b_gt_two).unwrap_or(-1)).to_string(), "3");
+
+    let doubled = xs.map(c8b_times_two);
+    Assert.eq_str((doubled.length).to_string(), "4");
+    Assert.eq_str((doubled.get(0)).to_string(), "2");
+
+    Assert.eq_str((c8b_sum_evens(xs)).to_string(), "6");
+
+    let filtered = xs.seq().filter(c8b_gt_one).map(c8b_plus_ten).to_list();
+    Assert.eq_str((filtered.reduce(0, c8b_add)).to_string(), "39");
+
+    let from_iface: Collection<int> = xs;
+    Assert.eq_str((from_iface.to_list().length).to_string(), "4");
+
+    Assert.eq_str((xs.distinct().length).to_string(), "4");
+    Assert.eq_str((xs.order_by(c8b_asc).get(0)).to_string(), "1");
+}

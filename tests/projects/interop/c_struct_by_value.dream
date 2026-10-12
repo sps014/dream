@@ -1,0 +1,28 @@
+import system.testing;
+// Structs returned by value from libc: `div_t` (two ints) and `lldiv_t` (two long longs).
+import system;
+
+struct c62_DivT {
+    public quot: int;
+    public rem: int;
+}
+
+struct c62_LlDivT {
+    public quot: long;
+    public rem: long;
+}
+
+@c("c", "div")
+extern fun c62_div(n: int, d: int): c62_DivT;
+
+@c("c", "lldiv")
+extern fun c62_lldiv(n: long, d: long): c62_LlDivT;
+
+@test
+@timeout(180000)
+fun c_struct_by_value(): void {
+    let d = c62_div(17, 5);
+    Assert.eq_str((d.quot.to_string() + " r " + d.rem.to_string()).to_string(), "3 r 2");
+    let l = c62_lldiv(10000000007L, -3L);
+    Assert.eq_str((l.quot.to_string() + " r " + l.rem.to_string()).to_string(), "-3333333335 r 2");
+}

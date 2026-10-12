@@ -1,0 +1,56 @@
+import system.testing;
+// `StringBuilder`: incremental append, `append_char`/`append_line`, `clear`, `build`, growth past
+// the initial capacity, and the `override to_string()` that makes `print`/`+`/interpolation use
+// it automatically.
+
+import system;
+import system.text;
+fun c20f_body(): void {
+    let sb = StringBuilder();
+    c20f_verify_observation((sb.is_empty()).to_string());
+    sb.append("Hello, ");
+    sb.append("world");
+    sb.append_char('!');
+    c20f_verify_observation((sb.length).to_string());
+    c20f_verify_observation((sb.is_empty()).to_string());
+    c20f_verify_observation((sb.build()).to_string());
+
+    // `to_string()` override: `print` and `+` both use it without an explicit `.build()`.
+    c20f_verify_observation((sb).to_string());
+    c20f_verify_observation(("say: " + sb).to_string());
+
+    sb.clear();
+    c20f_verify_observation((sb.is_empty()).to_string());
+    sb.append_line("line1");
+    sb.append("line2");
+    c20f_verify_observation((sb.build()).to_string());
+
+    // Force multiple growths past a small initial capacity.
+    let sb2 = StringBuilder(2);
+    let i = 0;
+    while i < 50 {
+        sb2.append_char('x');
+        i = i + 1;
+    }
+    c20f_verify_observation((sb2.length).to_string());
+}
+
+let c20f_cursor: int = 0;
+
+fun c20f_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "true\n13\nfalse\nHello, world!\nHello, world!\nsay: Hello, world!\ntrue\nline1\nline2\n50\n";
+    let end = c20f_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c20f_cursor, end));
+    c20f_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun string_builder(): void {
+    c20f_cursor = 0;
+    c20f_body();
+    Assert.eq(c20f_cursor, ("true\n13\nfalse\nHello, world!\nHello, world!\nsay: Hello, world!\ntrue\nline1\nline2\n50\n").length);
+}

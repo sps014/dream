@@ -1,0 +1,52 @@
+import system.testing;
+import system;
+fun ca2_body(): void {
+    let x = 10;
+
+    if x > 5 {
+        ca2_verify_observation((1).to_string());
+    } else {
+        ca2_verify_observation((0).to_string());
+    }
+
+    if x < 5 {
+        ca2_verify_observation((0).to_string());
+    } else if (x == 10 ) {
+        ca2_verify_observation((2).to_string());
+    } else {
+        ca2_verify_observation((0).to_string());
+    }
+
+    let i = 0;
+    while i < 3 {
+        ca2_verify_observation((i).to_string());
+        i = i + 1;
+    }
+
+    for (let j = 0; j < 3; j = j + 1 ) {
+        if j == 1 {
+            continue;
+        }
+        ca2_verify_observation((j).to_string());
+    }
+}
+
+let ca2_cursor: int = 0;
+
+fun ca2_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "1\n2\n0\n1\n2\n0\n2\n";
+    let end = ca2_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(ca2_cursor, end));
+    ca2_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun control_flow(): void {
+    ca2_cursor = 0;
+    ca2_body();
+    Assert.eq(ca2_cursor, ("1\n2\n0\n1\n2\n0\n2\n").length);
+}

@@ -1,0 +1,53 @@
+import system.testing;
+// `typeof(x)` on an operand whose static type already pins the concrete type folds to a compile-
+// time string — no allocation, no runtime tag read.
+import system;
+
+struct c271_Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+enum c271_Color { Red, Green }
+
+@test
+@timeout(180000)
+fun typeof_static() {
+    let i: int = 7;
+    let l: long = 7;
+    let d: double = 1.5;
+    let b: bool = true;
+    let c: char = 'z';
+    let s: string = "hi";
+    Assert.eq_str((typeof(i)).to_string(), "int");
+    Assert.eq_str((typeof(l)).to_string(), "long");
+    Assert.eq_str((typeof(d)).to_string(), "double");
+    Assert.eq_str((typeof(b)).to_string(), "bool");
+    Assert.eq_str((typeof(c)).to_string(), "char");
+    Assert.eq_str((typeof(s)).to_string(), "string");
+
+    let nums: int[] = [1, 2, 3];
+    Assert.eq_str((typeof(nums)).to_string(), "int[]");
+
+    let p: c271_Point = c271_Point(1, 2);
+    Assert.eq_str((typeof(p)).to_string(), "c271_Point");
+
+    let col: c271_Color = c271_Color.Green;
+    Assert.eq_str((typeof(col)).to_string(), "c271_Color");
+
+    // Generic instantiations report their source spelling, not the mangled symbol name.
+    let m: Map<string, object> = { "ok": "ko" };
+    Assert.eq_str((typeof(m)).to_string(), "Map<string, object>");
+
+    let list: List<int> = [1, 2];
+    Assert.eq_str((typeof(list)).to_string(), "List<int>");
+
+    // Expressions, not just variables.
+    Assert.eq_str((typeof(i + 1)).to_string(), "int");
+    Assert.eq_str((typeof(s.length)).to_string(), "int");
+}

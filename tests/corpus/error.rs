@@ -1,0 +1,672 @@
+use super::Case;
+
+pub(super) const CASES: &[Case] = &[
+    Case::error(
+        "arc_cycle_annotation_invalid",
+        "'@allow_cycle' does not take any arguments\n'@allow_cycle' cannot be applied to a struct",
+        true,
+    ),
+    Case::error(
+        "arc_cycle_annotation_missing",
+        "class 'Node' can form a strong ownership cycle\nadd @allow_cycle to acknowledge possible leaks",
+        true,
+    ),
+    Case::error(
+        "arc_cycle_generic_missing",
+        "class 'Node' can form a strong ownership cycle",
+        true,
+    ),
+    Case::error(
+        "arc_object_annotation_missing",
+        "class 'ErasedOwner' can form a strong ownership cycle",
+        true,
+    ),
+    Case::error(
+        "async_accessor_error",
+        "property accessor 'value' cannot be 'async'",
+        true,
+    ),
+    Case::error(
+        "async_await_outside",
+        "'await' can only be used inside an 'async' function",
+        true,
+    ),
+    Case::error(
+        "async_lambda_needs_future_context",
+        "async lambda requires a `fun(...): Future<T>` context, but the expected type returns 'int'",
+        true,
+    ),
+    Case::error("attr_duplicate", "duplicate '@inline' attribute", true),
+    Case::error(
+        "attr_misapplied",
+        "'@json' cannot be applied to a top-level function",
+        true,
+    ),
+    Case::error(
+        "attr_runtime_conflict",
+        "an extern function cannot combine `@c`, `@js`, `@runtime`, or `@intrinsic`",
+        true,
+    ),
+    Case::error("attr_unknown", "unknown attribute '@bogus'", true),
+    Case::error(
+        "attr_wrong_arity",
+        "'@js' expects 2 argument(s), got 1",
+        true,
+    ),
+    Case::error(
+        "await_non_async_lambda",
+        "'await' can only be used inside an 'async' function",
+        true,
+    ),
+    Case::error(
+        "await_sync_map_literal",
+        "'await' can only be used inside an 'async' function",
+        true,
+    ),
+    Case::error(
+        "await_sync_tuple_destructure",
+        "'await' can only be used inside an 'async' function",
+        true,
+    ),
+    Case::error(
+        "bitwise_not_requires_integer",
+        "~ operator requires an integer operand (int/long/uint/ulong/byte), got bool",
+        true,
+    ),
+    Case::error(
+        "bitwise_operator_requires_integer",
+        "'&' requires an integer operand (int/long/uint/ulong/byte), got double",
+        true,
+    ),
+    Case::error(
+        "borrow_iterator_invalidation",
+        "cannot call 'push' here",
+        true,
+    ),
+    Case::error("borrow_span_mutation", "error:", true),
+    Case::error(
+        "buffer_realloc_unsafe_violation",
+        "call to '@unsafe' function 'Buffer.realloc' is only allowed from another '@unsafe' function or method",
+        true,
+    ),
+    Case::error("buffer_zero_internal", "not accessible", true),
+    Case::error(
+        "c_call_unknown_convention_rejected",
+        "unknown C calling convention 'fastcall': use \"cdecl\" or \"stdcall\"",
+        true,
+    ),
+    Case::error(
+        "c_fun_value_needs_wrapper",
+        "argument 4 of '@c' extern 'qsort' must be a named function or a lambda literal",
+        true,
+    ),
+    Case::error(
+        "c_owned_rejected",
+        "'@c' extern 'leaky' result: returning `OwnedCPtr` needs `@owned(\"free_fn\")` naming the C function that frees the pointer\n'@c' extern 'counted' result: `@owned(\"free_fn\")` applies only to a `@c` extern returning `OwnedCPtr`\n'@c' extern 'spaced' result: `@owned` names 'free me', which is not a C identifier\n'@c' extern 'reserved' binds 'dream_cs_x', which is not a C identifier",
+        true,
+    ),
+    Case::error(
+        "c_unsupported_type",
+        "'@c' extern 'puts' parameter 'lines': type 'List<string>' has no C representation here",
+        true,
+    ),
+    Case::error("case_duplicate", "duplicate case label", true),
+    Case::error(
+        "case_runtime_field",
+        "switch case labels must be constant literals or enum members",
+        true,
+    ),
+    Case::error(
+        "cast_no_return_type",
+        "cast method 'implicit' must declare a return type (the cast's target type)",
+        true,
+    ),
+    Case::error(
+        "char_literal_errors",
+        "empty character literal\ncharacter literal may only contain one character\nunknown character escape '\\q'",
+        true,
+    ),
+    Case::error(
+        "class_export",
+        "Public function 'get_internal' exposes private class 'InternalData'",
+        true,
+    ),
+    Case::error(
+        "class_export_enum",
+        "Public function 'leak' exposes private type 'Secret'",
+        true,
+    ),
+    Case::error(
+        "class_export_generic",
+        "Public function 'leak' exposes private class 'Hidden'",
+        true,
+    ),
+    Case::error(
+        "class_export_option",
+        "Public function 'leak' exposes private class 'Hidden'",
+        true,
+    ),
+    Case::error(
+        "collection_literal_map_needs_target_type",
+        "a Map literal requires a target type, e.g. `let m: Map<string, int> = {\"a\": 1};`",
+        true,
+    ),
+    Case::error(
+        "collection_literal_mixed_shape",
+        "Expected expression but found ColonToken",
+        true,
+    ),
+    Case::error(
+        "collection_literal_set_needs_target_type",
+        "a Set literal requires a target type, e.g. `let s: Set<int> = {1, 2};`",
+        true,
+    ),
+    Case::error(
+        "collection_literal_wrong_shape",
+        "cannot use a Set literal where a 'List<int>' is expected",
+        true,
+    ),
+    Case::error("comma_struct_fields", "Expected ';' but found ','", true),
+    Case::error(
+        "const_reassign",
+        "Cannot assign to 'x' because it is a const binding",
+        true,
+    ),
+    Case::error(
+        "constructor_overload_no_match",
+        "No overload of 'Point.constructor' matches argument types (Point, string)",
+        true,
+    ),
+    Case::error(
+        "constructor_private",
+        "constructor of 'Hidden' is not accessible here",
+        true,
+    ),
+    Case::error(
+        "cycle_interface_field",
+        "class 'Node' can form a strong ownership cycle\nclass 'HandlerImpl' can form a strong ownership cycle",
+        true,
+    ),
+    Case::error(
+        "cycle_tuple_field",
+        "class 'Data' can form a strong ownership cycle",
+        true,
+    ),
+    Case::error(
+        "cycle_via_value_struct",
+        "class 'Data' can form a strong ownership cycle\nclass 'C' can form a strong ownership cycle",
+        true,
+    ),
+    Case::error(
+        "declof_unresolved",
+        "declof: 'Json.serialise' does not name a type, function, field, method or variant",
+        true,
+    ),
+    Case::error("defer_await", "'await' cannot be used inside 'defer'", true),
+    Case::error(
+        "defer_break",
+        "'break' cannot be used inside 'defer'\n'continue' cannot be used inside 'defer'\n'return' cannot be used inside 'defer'",
+        true,
+    ),
+    Case::error("defer_int_budget", "cannot convert from int to uint", true),
+    Case::error("diagnostics", "", true),
+    Case::error(
+        "discard_binding_read",
+        "'_' is a discard and cannot be used as a value",
+        true,
+    ),
+    Case::error(
+        "drop_with_params",
+        "destructor 'del' must not declare parameters",
+        true,
+    ),
+    Case::error(
+        "export_invalid",
+        "@export functions must be synchronous, non-generic and non-variadic\n@export name 'dream_retain' is reserved or is not a C identifier\nduplicate @export symbol 'duplicated'",
+        true,
+    ),
+    Case::error(
+        "foreach_no_iterator",
+        "for-each can only iterate over arrays or types with an 'iterator' method, got NoIter",
+        true,
+    ),
+    Case::error(
+        "gen_bad_parse",
+        "Expected expression but found CloseParenthesisToken",
+        true,
+    ),
+    Case::error(
+        "gen_bad_replace",
+        "Type 'int' has no method 'missing'",
+        true,
+    ),
+    Case::error(
+        "generator_attribute_not_attribute",
+        "'NotAnAttribute' is not an @attribute type",
+        true,
+    ),
+    Case::error(
+        "generator_unknown_trigger",
+        "'jsn' is not a declared @attribute type",
+        true,
+    ),
+    Case::error(
+        "generator_with_args",
+        "'@generator' does not take any arguments",
+        true,
+    ),
+    Case::error(
+        "generic_constraints_bad",
+        "Type 'List<Widget>' has no method 'sort'",
+        true,
+    ),
+    Case::error(
+        "global_const_reassign",
+        "Cannot assign to 'LIMIT' because it is a const binding",
+        true,
+    ),
+    Case::error(
+        "global_static_modifier",
+        "'static' cannot modify a top-level variable; it declares class members. Top-level variables are file-private by default — use 'internal' or 'public' to widen",
+        true,
+    ),
+    Case::error(
+        "guarded_arm_nonreturn",
+        "variable undeclared does not exist\nfunction 'f': not all code paths return a value",
+        true,
+    ),
+    Case::error("import_error", "cannot convert from string to int", true),
+    Case::error(
+        "inline_enum_value_cycle",
+        "cannot contain itself by value",
+        true,
+    ),
+    Case::error(
+        "instance_method_as_static",
+        "'clear' is an instance method of 'Counter'; call it on a 'Counter' value, not on the type name",
+        true,
+    ),
+    Case::error(
+        "interface_inheritance_cycle",
+        "interface inheritance cycle",
+        true,
+    ),
+    Case::error(
+        "interface_instantiate",
+        "cannot instantiate interface 'Animal'",
+        true,
+    ),
+    Case::error(
+        "interface_missing_method",
+        "class 'Cat' does not implement method 'legs' required by interface 'Animal'",
+        true,
+    ),
+    Case::error(
+        "is_dead_branch_checked",
+        "Function does not exist (undefined_in_dead_branch)\ncannot convert from string to int",
+        true,
+    ),
+    Case::error(
+        "js_capturing_lambda_func",
+        "capturing lambdas cannot be passed to JS APIs (the closure environment would be lost); pass a non-capturing top-level function, or wrap only a captureless `fun(...)` via `js.func` / `js.func0`",
+        true,
+    ),
+    Case::error(
+        "js_capturing_lambda_slot",
+        "capturing lambdas cannot be passed to JS APIs (the closure environment would be lost); pass a non-capturing top-level function, or wrap only a captureless `fun(...)` via `js.func` / `js.func0`",
+        true,
+    ),
+    Case::error(
+        "json_constructor_mismatch",
+        "@json type 'Pair' needs a constructor taking every field in declaration order, or a zero-argument constructor",
+        true,
+    ),
+    Case::error(
+        "json_field_not_json",
+        "@json class 'Wrapper' field 'inner' has unsupported type 'Plain'; 'Plain' must itself be marked @json (add the @json attribute to it)",
+        true,
+    ),
+    Case::error(
+        "json_ignore_no_default",
+        "@json class 'Bad' field 'home' has @json_ignore but type 'Address' has no zero default (use `Option<Address>` or remove @json_ignore)",
+        true,
+    ),
+    Case::error(
+        "json_unsupported_value",
+        "'Map<string, object>' cannot be serialized to JSON: it has no compile-time JSON encoding. Use 'JsonValue' for mixed or unknown data, or mark a named type '@json'",
+        true,
+    ),
+    Case::error(
+        "lambda_untyped_needs_context",
+        "cannot infer the type of this lambda without a `fun(...)`-typed context (e.g. `let f: fun(int): int = (x: int) => x * x;`)",
+        true,
+    ),
+    Case::error(
+        "let_refutable_pattern",
+        "let/const destructure only allows names",
+        true,
+    ),
+    Case::error("let_void_value", "cannot bind 'r' to a void value", true),
+    Case::error(
+        "literal_overflow",
+        "integer literal '99999999999999999999' is out of range or malformed\nliteral 300 does not fit in byte",
+        true,
+    ),
+    Case::error(
+        "lock_await_rejected",
+        "'await' cannot be used inside a 'lock' block",
+        true,
+    ),
+    Case::error(
+        "main_option_return",
+        "'main' must return void, int, or Result<T, E>\nuse 'ok_or' to turn an Option into a Result",
+        true,
+    ),
+    Case::error("method_group_private", "'reveal' is private to 'Box'", true),
+    Case::error(
+        "module_alias_private_error",
+        "'private_only' in module 'priv.mod' is private; only 'public'/'internal' items can be imported with 'as'",
+        true,
+    ),
+    Case::error(
+        "module_internal_cross_module_error",
+        "Function 'h' is not 'public'; it is private to its file",
+        true,
+    ),
+    Case::error(
+        "module_internal_member_cross_module_error",
+        "'x' is private to 'Vector'",
+        true,
+    ),
+    Case::error(
+        "module_same_module_duplicate",
+        "Duplicate overload: 'add' with the same parameter types is already defined",
+        true,
+    ),
+    Case::error("named_arguments_unknown", "no parameter named 'nam'", true),
+    Case::error(
+        "named_arguments_variadic",
+        "variadic parameter 'nums' cannot be passed by name",
+        true,
+    ),
+    Case::error(
+        "numeric_narrow_assign",
+        "cannot convert from float to int\ncannot convert from double to float\ncannot convert from long to int",
+        true,
+    ),
+    Case::error(
+        "operator_ambiguous",
+        "Ambiguous operator '+' on 'Value' with right operand 'int'",
+        true,
+    ),
+    Case::error(
+        "operator_duplicate",
+        "'Vector2' already declares an operator overload for '+' on 'Vector2'",
+        true,
+    ),
+    Case::error(
+        "operator_duplicate_return",
+        "'Value' already declares an operator overload for '+' on 'Value' with the same parameter types",
+        true,
+    ),
+    Case::error(
+        "operator_equality_return",
+        "'operator ==' must return bool",
+        true,
+    ),
+    Case::error(
+        "operator_no_match",
+        "No overload of operator '+' on 'Value' matches right operand 'bool'\nNo overload of operator '+' on 'Value' matches right operand 'Value'",
+        true,
+    ),
+    Case::error("operator_poison", "missing", true),
+    Case::error(
+        "operator_unknown_symbol",
+        "'operator &&' is not a recognized operator for a method with 1 parameter(s)",
+        true,
+    ),
+    Case::error("overload_ambiguous", "Ambiguous call to 'g'", true),
+    Case::error(
+        "overload_function_value_ambiguous",
+        "'add' is overloaded; give it a fun(...) type to select an overload\nNo overload of 'add' takes parameters (bool, bool)",
+        true,
+    ),
+    Case::error("overload_no_match", "No overload of 'h'", true),
+    Case::error(
+        "override_missing",
+        "method 'to_string' overrides an object-protocol method; mark it with 'override'",
+        true,
+    ),
+    Case::error(
+        "pointer_unsafe_violation",
+        "call to '@unsafe' function 'Pointer_int_alloc' is only allowed from another '@unsafe' function or method",
+        true,
+    ),
+    Case::error(
+        "postfix_generic_nongeneric",
+        "type arguments are not valid",
+        true,
+    ),
+    Case::error("private_member", "'_secret' is private to 'Box'", true),
+    Case::error(
+        "read_only_span_text_index_write",
+        "type 'ReadOnlySpan<char>' is not index-assignable",
+        true,
+    ),
+    Case::error("read_only_span_text_write", "has no method 'set'", true),
+    Case::error(
+        "receiver_contract_violation",
+        "method 'Ledger.audit' is declared 'borrow' but its body mutates the instance",
+        true,
+    ),
+    Case::error("receiver_interface_mismatch", "error:", true),
+    Case::error(
+        "ref_class_rejected",
+        "'ref' may only precede 'struct', not 'class'",
+        true,
+    ),
+    Case::error(
+        "ref_default_conflict",
+        "'ref' parameter 'x' cannot have a default value",
+        true,
+    ),
+    Case::error(
+        "ref_missing_at_call_site",
+        "function 'takes_ref' expects parameter 1 to be passed with 'ref', but it was passed by value",
+        true,
+    ),
+    Case::error(
+        "ref_param_captured_by_lambda",
+        "cannot capture 'ref' parameter 'x' in a lambda expression (its storage is only valid for the call's duration)",
+        true,
+    ),
+    Case::error(
+        "ref_struct_async_escape",
+        "async function 'sum' cannot take 'ref struct' parameter 'p' of type 'Pair'",
+        true,
+    ),
+    Case::error(
+        "ref_struct_closure_escape",
+        "cannot capture 'p' of type 'Pair' in a lambda expression: 'Pair' is a 'ref struct'",
+        true,
+    ),
+    Case::error(
+        "ref_struct_field_escape",
+        "field 'pair' of 'Holder' cannot have type 'Pair': a 'ref struct' cannot be stored as a field",
+        true,
+    ),
+    Case::error(
+        "ref_struct_generic_escape",
+        "'Pair' is a 'ref struct' and cannot be used as a generic type argument",
+        true,
+    ),
+    Case::error(
+        "ref_unexpected_at_call_site",
+        "function 'takes_value' expects parameter 1 to be passed by value, but 'ref' was given",
+        true,
+    ),
+    Case::error(
+        "ref_variadic_conflict",
+        "parameter 'xs' cannot be both 'ref' and variadic",
+        true,
+    ),
+    Case::error(
+        "reserved_word",
+        "'string' is a reserved word and cannot be used as a variable name",
+        true,
+    ),
+    Case::error_targets(
+        "runtime_attr_web_only",
+        "'f' is not available on compile target 'native' (available on: web)",
+        "'f' is not available on compile target 'node' (available on: web)",
+    ),
+    Case::error("sizeof_case_duplicates", "duplicate case label '8'", true),
+    Case::error("sizeof_unknown", "sizeof: unknown type 'Banana'", true),
+    Case::error(
+        "span_array_escape",
+        "'ReadOnlySpan<char>' is a 'ref struct' and cannot be an array element type",
+        true,
+    ),
+    Case::error(
+        "span_foreach_await_escape",
+        "a hidden loop variable of 'ref struct' type 'Span<int>' is still in scope at this 'await'",
+        true,
+    ),
+    Case::error(
+        "span_generic_fn_escape",
+        "'ReadOnlySpan<char>' is a 'ref struct' and cannot be used as a generic type argument",
+        true,
+    ),
+    Case::error(
+        "static_class_errors",
+        "member 'n' of static class 'Util' must be static\n'Util' is a static class and cannot be used as a type\ncannot instantiate static class 'Util'",
+        true,
+    ),
+    Case::error(
+        "stdlib_internal_hidden",
+        "Class 'ProcessWireReader' is not 'public'\nClass 'MapSlot' is not 'public'\nconstructor of 'Stdout' is not accessible here",
+        true,
+    ),
+    Case::error(
+        "string_span_await_escape",
+        "'v' of 'ref struct' type 'ReadOnlySpan<char>' is still in scope at this 'await'",
+        true,
+    ),
+    Case::error(
+        "string_span_field_escape",
+        "field 'view' of 'Holder' cannot have type 'ReadOnlySpan<char>': a 'ref struct' cannot be stored as a field",
+        true,
+    ),
+    Case::error(
+        "string_span_generic_escape",
+        "'ReadOnlySpan<char>' is a 'ref struct' and cannot be used as a generic type argument",
+        true,
+    ),
+    Case::error(
+        "string_span_lambda_escape",
+        "cannot capture 'v' of type 'ReadOnlySpan<char>' in a lambda expression: 'ReadOnlySpan<char>' is a 'ref struct'",
+        true,
+    ),
+    Case::error(
+        "string_span_map_constraint",
+        "function Map<int, int>.get expects parameter 1 to be int, got ReadOnlySpan<char>",
+        true,
+    ),
+    Case::error("struct_recursion", "", true),
+    Case::error(
+        "sync_lambda_against_future",
+        "sync lambda cannot be used where `fun(...): Future<T>` is expected; write `async (params) => ...` for an async lambda",
+        true,
+    ),
+    Case::error(
+        "syntax_block_unregistered",
+        "unexpanded syntax block 'html'",
+        true,
+    ),
+    Case::error(
+        "task_value_struct_capture_violation",
+        "cannot capture 'wrap' of type 'Wrap' in a `Task.spawn` body: 'Wrap' is not shared — mark the class 'shared', capture a blittable value, string, or a struct of those, or pass a heap object by move (its binding cannot be used afterwards)",
+        true,
+    ),
+    Case::error(
+        "tuple_errors",
+        "Cannot index into non-array type (int, int)",
+        true,
+    ),
+    Case::error(
+        "type_display_nested_list",
+        "function 'take' expects parameter 1 to be List<List<int>>, got List<int>",
+        true,
+    ),
+    Case::error(
+        "union_nonexhaustive",
+        "Non-exhaustive switch on 'Light': missing variant(s) Blue. Add the missing arm(s) or a `_` arm",
+        true,
+    ),
+    Case::error(
+        "union_stack_self_ref",
+        "'enum struct List' cannot be stored inline: field 'tail' has type 'List', which is a self-referential payload that would make this value type infinite-size",
+        true,
+    ),
+    Case::error(
+        "union_unreachable",
+        "Unreachable switch arm: a previous arm already matches everything",
+        true,
+    ),
+    Case::error(
+        "user_attribute_bad_arg",
+        "argument 1 must be a string literal",
+        true,
+    ),
+    Case::error(
+        "user_attribute_on_class",
+        "'@route' cannot be applied to a class",
+        true,
+    ),
+    Case::error("user_attribute_unknown", "unknown attribute '@route'", true),
+    Case::error(
+        "user_attribute_wrong_arity",
+        "'@route' expects 1 argument(s), got 2",
+        true,
+    ),
+    Case::error(
+        "variadic_non_array",
+        "variadic parameter 'n' must have an array type, e.g. '...n: T[]'",
+        true,
+    ),
+    Case::error(
+        "variadic_not_last",
+        "parameter 'extra' cannot follow the variadic parameter; the variadic parameter must be last",
+        true,
+    ),
+    Case::error(
+        "visibility_generic_class",
+        "Type 'HiddenCache' is not 'public'; it is private to its file",
+        true,
+    ),
+    Case::error(
+        "visibility_generic_static_private",
+        "'locked' is private to 'OpenCache<int>'",
+        true,
+    ),
+    Case::error(
+        "visibility_private_class",
+        "Class 'PrivateBox' is not 'public'; it is private to its file",
+        true,
+    ),
+    Case::error(
+        "visibility_private_fn",
+        "Function 'private_secret' is not 'public'; it is private to its file",
+        true,
+    ),
+    Case::error(
+        "visibility_private_static",
+        "'hidden' is private to 'Gadget'",
+        true,
+    ),
+    Case::error(
+        "weak_unmanaged_rejected",
+        "does not satisfy the 'class' constraint",
+        true,
+    ),
+];

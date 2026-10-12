@@ -1,0 +1,47 @@
+import system.testing;
+import system;
+
+class c2a5_Session {
+    public id: int;
+    public constructor(id: int) { this.id = id; }
+}
+
+fun c2a5_make_dead(): Weak<c2a5_Session> {
+    return Weak<c2a5_Session>(c2a5_Session(7));
+}
+
+fun c2a5_body(): void {
+    let session = c2a5_Session(42);
+    let handle = Weak<c2a5_Session>(session);
+    switch (handle.get()) {
+        Some(value) => c2a5_verify_observation((value.id).to_string()),
+        None => c2a5_verify_observation((-1).to_string()),
+    }
+    session.id = 43;
+    handle.release();
+    handle.release();
+    c2a5_verify_observation((handle.is_dead()).to_string());
+    c2a5_verify_observation((handle.get().is_none()).to_string());
+    let dead = c2a5_make_dead();
+    c2a5_verify_observation((dead.get().is_none()).to_string());
+}
+
+let c2a5_cursor: int = 0;
+
+fun c2a5_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "42\ntrue\ntrue\ntrue\n";
+    let end = c2a5_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c2a5_cursor, end));
+    c2a5_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun weak_get_optional(): void {
+    c2a5_cursor = 0;
+    c2a5_body();
+    Assert.eq(c2a5_cursor, ("42\ntrue\ntrue\ntrue\n").length);
+}

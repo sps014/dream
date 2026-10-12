@@ -1,0 +1,7 @@
+[package]
+name = "corpus_ownership"
+version = "0.1.0"
+type = "test"
+
+[test]
+targets = ["native", "node"]

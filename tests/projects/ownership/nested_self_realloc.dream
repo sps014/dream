@@ -1,0 +1,33 @@
+import system.testing;
+import system;
+
+struct c16b_Nested {
+    public arr: int[];
+}
+class c16b_Holder {
+    public inner: c16b_Nested;
+    public constructor() {
+        this.inner = c16b_Nested();
+        this.inner.arr = Buffer.alloc<int>(2);
+        this.inner.arr[0] = 10;
+        this.inner.arr[1] = 20;
+    }
+}
+@unsafe
+@test
+@timeout(180000)
+fun nested_self_realloc() {
+    let h = c16b_Holder();
+    h.inner.arr = Buffer.realloc<int>(h.inner.arr, 4);
+    h.inner.arr[2] = 30;
+    h.inner.arr[3] = 40;
+    Assert.eq_str((h.inner.arr[0]).to_string(), "10");
+    Assert.eq_str((h.inner.arr[3]).to_string(), "40");
+
+    let outer = [Buffer.alloc<int>(1)];
+    outer[0][0] = 100;
+    outer[0] = Buffer.realloc<int>(outer[0], 2);
+    outer[0][1] = 200;
+    Assert.eq_str((outer[0][0]).to_string(), "100");
+    Assert.eq_str((outer[0][1]).to_string(), "200");
+}

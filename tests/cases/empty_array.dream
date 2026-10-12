@@ -1,8 +1,0 @@
-import system;
-fun main(): void {
-    let xs: int[] = [];
-    System.println(xs.length);
-
-    let ys: string[] = [];
-    System.println(ys.length);
-}

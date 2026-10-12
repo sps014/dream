@@ -1,0 +1,49 @@
+import system.testing;
+// A named function and a lambda literal as C comparators: `const void*` arrives as `CPtr`, so each
+// target gets its own C wrapper.
+import system;
+
+@c("c", "qsort")
+extern fun c60_qsort(base: int[], n: usize, size: usize, cmp: fun(CPtr, CPtr): int): void;
+
+fun c60_ascending(a: CPtr, b: CPtr): int {
+    return Ffi.read_int(a, 0) - Ffi.read_int(b, 0);
+}
+
+fun c60_show(xs: int[]): void {
+    let line = "";
+    for (let x in xs) {
+        line = line + x + " ";
+    }
+    c60_verify_observation((line).to_string());
+}
+
+fun c60_body(): void {
+    let xs: int[] = [5, 3, 9, 1, 7];
+    c60_qsort(xs, (usize)5, (usize)sizeof(int), c60_ascending);
+    c60_show(xs);
+    c60_qsort(xs, (usize)5, (usize)sizeof(int), (a: CPtr, b: CPtr) => {
+        return Ffi.read_int(b, 0) - Ffi.read_int(a, 0);
+    });
+    c60_show(xs);
+}
+
+let c60_cursor: int = 0;
+
+fun c60_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "1 3 5 7 9 \n9 7 5 3 1 \n";
+    let end = c60_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c60_cursor, end));
+    c60_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun c_qsort_callback(): void {
+    c60_cursor = 0;
+    c60_body();
+    Assert.eq(c60_cursor, ("1 3 5 7 9 \n9 7 5 3 1 \n").length);
+}

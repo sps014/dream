@@ -1,0 +1,97 @@
+import system.testing;
+// Loop shapes whose index accesses the bounds-check eliminator proves in range: they must
+// still compute exactly what the checked code does.
+import system;
+import system.collections;
+
+fun c0_sum_down(a: int[]): int {
+    let total = 0;
+    let i = a.length - 1;
+    while i >= 0 {
+        total = total + a[i];
+        i = i - 1;
+    }
+    return total;
+}
+
+fun c0_sum_inclusive(a: int[]): int {
+    let total = 0;
+    let last = a.length - 1;
+    let i = 0;
+    while i <= last {
+        total = total + a[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+fun c0_sum_prefix(a: int[], n: int): int {
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+        total = total + a[i];
+    }
+    return total;
+}
+
+fun c0_body(): void {
+    let a: int[] = [3, 1, 4, 1, 5, 9, 2, 6];
+    c0_verify_observation((c0_sum_down(a)).to_string());
+    c0_verify_observation((c0_sum_inclusive(a)).to_string());
+    c0_verify_observation((c0_sum_prefix(a, 5)).to_string());
+    c0_verify_observation((c0_sum_prefix(a, 0)).to_string());
+
+    let empty: int[] = [];
+    c0_verify_observation((c0_sum_down(empty)).to_string());
+    c0_verify_observation((c0_sum_inclusive(empty)).to_string());
+
+    let xs = List<int>();
+    for (let i = 0; i < 10; i++) {
+        xs.push(i * i);
+    }
+    c0_verify_observation((xs.length).to_string());
+    c0_verify_observation((xs[3]).to_string());
+    xs[3] = 100;
+    c0_verify_observation((xs[3]).to_string());
+    c0_verify_observation((xs.pop()).to_string());
+    c0_verify_observation((xs.contains(49)).to_string());
+    c0_verify_observation((xs.index_of(25)).to_string());
+    xs.reverse();
+    c0_verify_observation((xs.join(",")).to_string());
+    c0_verify_observation((xs.slice(1, 4).join(",")).to_string());
+    c0_verify_observation((xs.concat(xs.slice(0, 2)).length).to_string());
+    xs.remove_at(0);
+    c0_verify_observation((xs.to_string()).to_string());
+    xs.clear();
+    c0_verify_observation((xs.length).to_string());
+    xs.push(7);
+    c0_verify_observation((xs[0]).to_string());
+
+    let q = Queue<string>();
+    q.enqueue("a");
+    q.enqueue("b");
+    q.enqueue("c");
+    c0_verify_observation((q.dequeue()).to_string());
+    q.enqueue("d");
+    c0_verify_observation((q.peek()).to_string());
+    c0_verify_observation((q.length).to_string());
+}
+
+let c0_cursor: int = 0;
+
+fun c0_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "31\n31\n14\n0\n0\n0\n10\n9\n100\nSome(81)\ntrue\nSome(5)\n64,49,36,25,16,100,4,1,0\n49,36,25\n11\n[49, 36, 25, 16, 100, 4, 1, 0]\n0\n7\nSome(a)\nSome(b)\n3\n";
+    let end = c0_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c0_cursor, end));
+    c0_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun abc_loop_shapes(): void {
+    c0_cursor = 0;
+    c0_body();
+    Assert.eq(c0_cursor, ("31\n31\n14\n0\n0\n0\n10\n9\n100\nSome(81)\ntrue\nSome(5)\n64,49,36,25,16,100,4,1,0\n49,36,25\n11\n[49, 36, 25, 16, 100, 4, 1, 0]\n0\n7\nSome(a)\nSome(b)\n3\n").length);
+}

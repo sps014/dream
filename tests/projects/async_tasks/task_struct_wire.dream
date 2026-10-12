@@ -1,0 +1,24 @@
+import system.testing;
+import system;
+import system.task;
+struct c25a_Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+fun c25a_shift(p: c25a_Point): c25a_Point {
+    return c25a_Point(p.x + 1, p.y + 1);
+}
+
+@test
+@timeout(180000)
+async fun task_struct_wire(): void {
+    let p = c25a_Point(1, 2);
+    let r = Task.spawn(() => c25a_shift(p)).await;
+    Assert.eq_str(("" + r.x + "," + r.y).to_string(), "2,3");
+}

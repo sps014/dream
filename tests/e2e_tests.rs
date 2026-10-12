@@ -1,18 +1,12 @@
 //! Golden e2e: native builds (`Target::native()`). WAT determinism / JS runtime tests stay below.
 
 use dream::driver::compiler::Compiler;
-use dream::driver::wasm_opt::OptLevel;
-use dream::execution::native::compile_and_capture_ex;
 use dream_mir::backend::Target;
 
-use crate::common;
 use pretty_assertions::assert_eq;
-use rayon::prelude::*;
 use std::fs;
-use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
-use std::thread;
 
 const SMOKE_CASES: &[&str] = &[
     "arithmetic",
@@ -91,150 +85,8 @@ const SMOKE_CASES: &[&str] = &[
     "operator_overloading",
 ];
 
-fn assert_needles(haystack: &str, expected: &str, dream_file: &Path, kind: &str) {
-    let needles: Vec<&str> = expected
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .collect();
-    for needle in needles {
-        assert!(
-            haystack.contains(needle),
-            "{kind} for {:?} missing {:?}\n--- output ---\n{haystack}",
-            dream_file,
-            needle
-        );
-    }
-}
-
-fn collect_case_paths() -> Vec<PathBuf> {
-    let cases_dir = Path::new("tests/cases");
-    if !cases_dir.exists() {
-        return Vec::new();
-    }
-    fs::read_dir(cases_dir)
-        .unwrap()
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("dream"))
-        .collect()
-}
-
-fn run_native_case(dream_file: &Path) {
-    let native_expected = dream_file.with_extension("expected.native");
-    let expected_file = if Target::native().spec().ptr_size == 8 && native_expected.exists() {
-        native_expected
-    } else {
-        dream_file.with_extension("expected")
-    };
-    let expected_error_file = dream_file.with_extension("expected_error");
-    let expected_trap_file = dream_file.with_extension("expected_trap");
-    let stem = dream_file.file_stem().and_then(|s| s.to_str()).unwrap();
-    // Smoke and parity suites overlap and run concurrently, including binary cleanup.
-    let artifacts = tempfile::Builder::new().prefix(stem).tempdir().unwrap();
-    let ll_path = artifacts.path().join(format!("{stem}.ll"));
-    let compiler = Compiler::new(Target::native());
-    let src = dream_file.to_str().unwrap().to_string();
-    let dest = ll_path.to_str().unwrap().to_string();
-    let compile_result = compiler.compile(&src, &dest);
-
-    if expected_error_file.exists() {
-        let err = match compile_result {
-            Err(e) => e,
-            Ok(_) => panic!("Expected compilation to fail for {:?}", dream_file),
-        };
-        let rendered = err.diagnostic_text().unwrap_or("").to_string();
-        let expected = fs::read_to_string(&expected_error_file).unwrap_or_default();
-        assert_needles(&rendered, &expected, dream_file, "compile error");
-        let _ = fs::remove_file(&ll_path);
-        let _ = fs::remove_file(ll_path.with_extension("o"));
-        return;
-    }
-    compile_result.unwrap_or_else(|e| panic!("compile failed for {:?}: {}", dream_file, e));
-
-    let expects_trap = expected_trap_file.exists();
-    let expected_output = if expects_trap {
-        fs::read_to_string(&expected_trap_file).unwrap_or_default()
-    } else if expected_file.exists() {
-        fs::read_to_string(&expected_file).unwrap_or_default()
-    } else {
-        String::new()
-    };
-
-    let ll_str = ll_path.to_str().unwrap();
-    // Cold native launches can stall on loaded hosts; match the full golden probe deadline.
-    let timeout_secs = 180;
-    let extra_args: &[&str] = if stem == "process_args_basic" {
-        &["alpha", "beta"]
-    } else {
-        &[]
-    };
-    let stdin = if stem == "console_read_line" {
-        Some(&b"hello-line\n"[..])
-    } else {
-        None
-    };
-    let run = compile_and_capture_ex(
-        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
-        ll_str,
-        OptLevel::O0,
-        &[],
-        extra_args,
-        stdin,
-        timeout_secs,
-    );
-    let _ = fs::remove_file(&ll_path);
-    let _ = fs::remove_file(ll_path.with_extension("o"));
-    let _ = fs::remove_file(ll_path.with_extension("bin"));
-
-    if expects_trap {
-        let err = match run {
-            Err(e) => e.to_string(),
-            Ok(_) => panic!("expected trap for {:?}", dream_file),
-        };
-        assert_needles(&err, &expected_output, dream_file, "trap");
-        return;
-    }
-    let actual = run.unwrap_or_else(|e| panic!("run failed for {:?}: {}", dream_file, e));
-    let actual = common::normalize_stdout(actual);
-    assert_eq!(
-        actual.trim(),
-        expected_output.trim(),
-        "Output mismatch for {:?}",
-        dream_file
-    );
-}
-
 fn run_corpus(only: Option<&[&str]>) {
-    let mut paths = collect_case_paths();
-    if let Some(stems) = only {
-        paths.retain(|p| {
-            p.file_stem()
-                .and_then(|s| s.to_str())
-                .is_some_and(|s| stems.contains(&s))
-        });
-    }
-    let failures: Vec<String> = paths
-        .par_iter()
-        .filter_map(
-            |path| match catch_unwind(AssertUnwindSafe(|| run_native_case(path))) {
-                Ok(()) => None,
-                Err(payload) => {
-                    let msg = payload
-                        .downcast_ref::<String>()
-                        .cloned()
-                        .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
-                        .unwrap_or_else(|| "unknown panic".to_string());
-                    Some(format!("{:?}: {}", path, msg))
-                }
-            },
-        )
-        .collect();
-    assert!(
-        failures.is_empty(),
-        "{} native e2e case(s) failed:\n{}",
-        failures.len(),
-        failures.join("\n")
-    );
+    crate::corpus::run::run_selected(only, &[dream::driver::test::TestHost::Native]);
 }
 
 fn js_string(s: &str) -> String {
@@ -277,155 +129,30 @@ fn file_urls_round_trip_special_paths() {
     );
 }
 
-fn run_wasm_js_case(dream_file: &Path) {
-    let expected_file = dream_file.with_extension("expected");
-    if !expected_file.exists() {
-        return;
-    }
-    let stem = dream_file.file_stem().and_then(|s| s.to_str()).unwrap();
-    let dest_dir = Path::new("target").join("e2e-wasm32").join(stem);
-    fs::create_dir_all(&dest_dir).unwrap();
-    let wat_path = dest_dir.join(format!("{stem}.wat"));
-    let src = dream_file.to_str().unwrap().to_string();
-    let dest = wat_path.to_str().unwrap().to_string();
-    Compiler::new(Target::wasm32())
-        .compile(&src, &dest)
-        .unwrap_or_else(|e| panic!("wasm compile failed for {:?}: {}", dream_file, e));
-    let wasm_path = wat_path.with_extension("wasm");
-    let wasm_path = fs::canonicalize(&wasm_path).unwrap_or(wasm_path);
-    let dream_js = Path::new(env!("CARGO_MANIFEST_DIR")).join("runtime/dream.js");
-    let runner = dest_dir.join(format!("{stem}_run.mjs"));
-    fs::write(&runner, wasm_runner_script(&dream_js, &wasm_path)).unwrap();
-    let child = Command::new("node")
-        .arg(&runner)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .unwrap_or_else(|e| panic!("node failed for {:?}: {}", dream_file, e));
-    let pid = child.id();
-    let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let flag = done.clone();
-    thread::spawn(move || {
-        let start = std::time::Instant::now();
-        while start.elapsed() < std::time::Duration::from_secs(30) {
-            if flag.load(std::sync::atomic::Ordering::Relaxed) {
-                return;
-            }
-            thread::sleep(std::time::Duration::from_millis(50));
-        }
-        if !flag.load(std::sync::atomic::Ordering::Relaxed) {
-            if cfg!(windows) {
-                let _ = Command::new("taskkill")
-                    .args(["/F", "/T", "/PID", &pid.to_string()])
-                    .status();
-            } else {
-                let _ = Command::new("kill").arg("-9").arg(pid.to_string()).status();
-            }
-        }
-    });
-    let out = child
-        .wait_with_output()
-        .unwrap_or_else(|e| panic!("node failed for {:?}: {}", dream_file, e));
-    done.store(true, std::sync::atomic::Ordering::Relaxed);
-    assert!(
-        out.status.success(),
-        "node run failed for {:?}: {}\n{}",
-        dream_file,
-        String::from_utf8_lossy(&out.stderr),
-        String::from_utf8_lossy(&out.stdout)
-    );
-    let expected = fs::read_to_string(&expected_file).unwrap();
-    let actual = String::from_utf8_lossy(&out.stdout);
-    assert_eq!(
-        actual.trim(),
-        expected.trim(),
-        "wasm/js output mismatch for {:?}",
-        dream_file
-    );
-}
-
-fn wasm_js_success_stems() -> Vec<String> {
-    let mut stems = vec![
-        "println_basic".into(),
-        "arithmetic".into(),
-        "async_basic".into(),
-    ];
-    if let Ok(rd) = fs::read_dir("tests/cases") {
-        let mut extra: Vec<String> = rd
-            .flatten()
-            .filter_map(|e| {
-                let p = e.path();
-                let stem = p.file_stem()?.to_str()?.to_string();
-                if p.extension()?.to_str()? != "dream" {
-                    return None;
-                }
-                if !p.with_extension("expected").exists() {
-                    return None;
-                }
-                let jsonish =
-                    stem.contains("json") || stem == "struct_json" || stem == "tuple_json";
-                if stem.starts_with("task_") || jsonish {
-                    Some(stem)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        extra.sort();
-        extra.dedup();
-        stems.extend(extra);
-    }
-    stems
-}
-
 #[test]
 fn run_wasm_js_smoke_e2e() {
-    let stems = wasm_js_success_stems();
-    let failures: Vec<String> = stems
-        .par_iter()
-        .filter_map(|stem| {
-            let path = Path::new("tests/cases").join(format!("{stem}.dream"));
-            match catch_unwind(AssertUnwindSafe(|| run_wasm_js_case(&path))) {
-                Ok(()) => None,
-                Err(payload) => {
-                    let msg = payload
-                        .downcast_ref::<String>()
-                        .cloned()
-                        .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
-                        .unwrap_or_else(|| "unknown panic".to_string());
-                    Some(format!("{stem}: {msg}"))
-                }
-            }
-        })
-        .collect();
-    assert!(
-        failures.is_empty(),
-        "{} wasm/js e2e case(s) failed:\n{}",
-        failures.len(),
-        failures.join("\n")
+    crate::corpus::run::run_selected(
+        Some(&[
+            "println_basic",
+            "arithmetic",
+            "async_basic",
+            "task_basic",
+            "json_roundtrip",
+        ]),
+        &[dream::driver::test::TestHost::Node],
     );
 }
 
 #[test]
 fn wasm_js_compile_errors_match_native() {
-    for stem in [
-        "task_value_struct_capture_violation",
-        "js_capturing_lambda_func",
-        "js_capturing_lambda_slot",
-    ] {
-        let src = Path::new("tests/cases").join(format!("{stem}.dream"));
-        if !src.with_extension("expected_error").exists() {
-            continue;
-        }
-        let dest = std::env::temp_dir().join(format!("dream_wasm_err_{stem}.wat"));
-        let src_s = src.to_str().unwrap().to_string();
-        let dest_s = dest.to_str().unwrap().to_string();
-        let err = Compiler::new(Target::wasm32()).compile(&src_s, &dest_s);
-        assert!(err.is_err(), "{} should fail to compile for wasm", stem);
-        let _ = fs::remove_file(&dest);
-        let _ = fs::remove_file(dest.with_extension("ll"));
-        let _ = fs::remove_file(dest.with_extension("wasm"));
-    }
+    crate::corpus::run::run_selected(
+        Some(&[
+            "task_value_struct_capture_violation",
+            "js_capturing_lambda_func",
+            "js_capturing_lambda_slot",
+        ]),
+        &[dream::driver::test::TestHost::Node],
+    );
 }
 
 #[test]
@@ -533,10 +260,6 @@ fn native_asan_focused_goldens() {
 /// nondeterminism. Both runs write the same path: the output name is part of the module.
 #[test]
 fn codegen_is_deterministic() {
-    let cases_dir = Path::new("tests/cases");
-    if !cases_dir.exists() {
-        return;
-    }
     for name in [
         "classes",
         "async_basic",
@@ -544,71 +267,103 @@ fn codegen_is_deterministic() {
         "arc_cycles_dynamic",
         "arc_cycles_async_values",
     ] {
-        let src = cases_dir.join(format!("{}.dream", name));
+        let src = crate::common::compiler_fixture(name);
         if src.exists() {
-            assert_deterministic("dream_det", name, &src, true);
+            assert_deterministic("dream_det", name, &src, None);
         }
     }
 }
 
-/// [`codegen_is_deterministic`] over every golden that compiles for wasm32. Cases that fail to
-/// compile (native-only hosts, `.expected_error`) are skipped: this checks reproducibility only.
+/// Every Node-capable project and isolated program must produce reproducible artifacts.
 #[test]
-#[ignore = "full corpus, two compiles per case; cargo test --test integration e2e_tests::codegen_is_deterministic_full_corpus -- --ignored"]
+#[ignore = "full corpus determinism; two builds per project or isolated fixture"]
 fn codegen_is_deterministic_full_corpus() {
-    let mut names: Vec<String> = fs::read_dir("tests/cases")
-        .expect("tests/cases")
-        .filter_map(|e| {
-            let p = e.ok()?.path();
-            (p.extension()? == "dream" && p.with_extension("expected").exists())
-                .then(|| p.file_stem()?.to_str().map(str::to_string))?
-        })
-        .collect();
-    names.sort();
-    let next = std::sync::atomic::AtomicUsize::new(0);
-    let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
-    std::thread::scope(|s| {
-        for _ in 0..workers {
-            s.spawn(|| {
-                loop {
-                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    let Some(name) = names.get(i) else {
-                        break;
-                    };
-                    let src = Path::new("tests/cases").join(format!("{}.dream", name));
-                    assert_deterministic("dream_det_all", name, &src, false);
-                }
-            });
+    use crate::corpus::Expectation;
+    let mut projects = std::collections::BTreeMap::<&str, Vec<&crate::corpus::Case>>::new();
+    for case in crate::corpus::cases().filter(|case| case.node) {
+        match case.expectation {
+            Expectation::Error { .. } => {}
+            Expectation::Project(suite) => projects.entry(suite).or_default().push(case),
+            _ => assert_deterministic("dream_det_all", case.stem, &case.source(), None),
         }
-    });
+    }
+    for (suite, cases) in projects {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/projects")
+            .join(suite);
+        let mut source = String::from("import system;\nimport system.testing;\n");
+        let mut calls = Vec::new();
+        for case in cases {
+            source.push_str(&format!("import {};\n", case.stem));
+            let text = fs::read_to_string(case.source()).unwrap();
+            let file = dream::driver::test::discover_tests_in_source(
+                &case.source().to_string_lossy(),
+                &text,
+            )
+            .unwrap();
+            let test = file
+                .tests
+                .iter()
+                .find(|test| test.name == case.stem)
+                .unwrap();
+            calls.push(format!(
+                "Test.{}(\"{}\", {}){};\n",
+                if test.is_async { "run_async" } else { "run" },
+                case.stem,
+                case.stem,
+                if test.is_async { ".await" } else { "" }
+            ));
+        }
+        source.push_str("@unsafe\nasync fun main(): void {\n");
+        for call in calls {
+            source.push_str(&call);
+        }
+        source.push_str("}\n");
+        assert_deterministic(
+            "dream_det_all",
+            suite,
+            &root.join("__dream_test_runner__.dream"),
+            Some(&source),
+        );
+    }
 }
 
 /// Compiles `src` twice to the same path and asserts byte-identical `.ll`, `.wasm` and
-/// `*.web.runtime.js`. With `must_compile` false, a failing first compile skips the case.
+/// the corresponding selective runtime. Project runners use the Node target.
 /// `prefix` keeps concurrently running tests off each other's output files.
-fn assert_deterministic(prefix: &str, name: &str, src: &Path, must_compile: bool) {
+fn assert_deterministic(prefix: &str, name: &str, src: &Path, source: Option<&str>) {
     let src_str = src.to_str().unwrap().to_string();
     let out = std::env::temp_dir().join(format!("{}_{}.wat", prefix, name));
     let out_str = out.to_str().unwrap().to_string();
+    let runtime = if source.is_some() {
+        dream::driver::js_runtime::JsRuntimeTarget::Node
+    } else {
+        dream::driver::js_runtime::JsRuntimeTarget::Web
+    };
     let artifacts = [
         out.clone(),
         out.with_extension("abi.json"),
         out.with_extension("ll"),
         out.with_extension("wasm"),
-        out.with_extension("web.runtime.js"),
+        out.with_extension(runtime.runtime_extension()),
     ];
     let mut prev: Option<Vec<Vec<u8>>> = None;
     for run in 0..2 {
-        let result = Compiler::new(Target::wasm32())
+        let mut compiler = Compiler::new(Target::wasm32())
             .with_release(true)
-            .with_optimize(None)
-            .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Web])
-            .compile(&src_str, &out_str);
-        if result.is_err() {
-            assert!(!must_compile, "Compilation failed for {}", name);
-            assert!(prev.is_none(), "{} compiled once, then failed", name);
-            break;
+            .with_runtimes(vec![runtime]);
+        if let Some(source) = source {
+            compiler = compiler
+                .with_virtual_entry(source.to_string())
+                .with_compile_targets(dream_abi::attributes::CompileTargets {
+                    native: false,
+                    node: true,
+                    web: false,
+                });
         }
+        compiler
+            .compile(&src_str, &out_str)
+            .unwrap_or_else(|error| panic!("{name}: {error:?}"));
         let bytes: Vec<Vec<u8>> = artifacts
             .iter()
             .map(|p| fs::read(p).unwrap_or_else(|e| panic!("{}: {e}", p.display())))
@@ -662,7 +417,7 @@ fn dream_js_bundle_is_platform_independent() {
 /// runtime (js bridges may still appear when layouts exist for marshaler keepalive).
 #[test]
 fn selective_runtime_omits_unused_host_chunks() {
-    let src = Path::new("tests/cases/arithmetic.dream");
+    let src = &crate::common::compiler_fixture("arithmetic");
     if !src.exists() {
         return;
     }
@@ -688,7 +443,7 @@ fn selective_runtime_omits_unused_host_chunks() {
 
 #[test]
 fn release_arithmetic_omits_worker_publication() {
-    let src = Path::new("tests/cases/arithmetic.dream");
+    let src = &crate::common::compiler_fixture("arithmetic");
     if !src.exists() {
         return;
     }

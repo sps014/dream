@@ -268,6 +268,7 @@ export async function load(source, options = {}) {
   await withBootstrapLock(stackGate, async () => {
     const inst = await WebAssembly.instantiate(wasmModule, importObject);
     instance = new DreamInstance(inst);
+    if (builtinDream.__drainWorkers) instance._drainWorkers = builtinDream.__drainWorkers;
     if (stackGate || options.memory) {
       instance.__attachGuestStack(0);
     } else if (typeof inst.exports.__runtime_init === "function") {

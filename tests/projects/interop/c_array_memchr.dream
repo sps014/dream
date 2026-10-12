@@ -1,0 +1,17 @@
+import system.testing;
+// A `byte[]` passes its first element's address; `Option<CPtr>` maps NULL to `None`.
+import system;
+
+@c("c", "memchr")
+extern fun c5a_memchr(hay: byte[], needle: int, n: usize): Option<CPtr>;
+
+@test
+@timeout(180000)
+fun c_array_memchr(): void {
+    let data: byte[] = [104, 105, 33];
+    let hit = c5a_memchr(data, 33, (usize)3);
+    Assert.eq_str((hit.is_some()).to_string(), "true");
+    Assert.eq_str((c5a_memchr(data, 120, (usize)3).is_none()).to_string(), "true");
+    let empty: byte[] = [];
+    Assert.eq_str((c5a_memchr(empty, 104, (usize)0).is_none()).to_string(), "true");
+}

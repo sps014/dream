@@ -1,0 +1,78 @@
+import system.testing;
+// `List<T>` as a class-based collection, its `Comparable`-constrained `sort`/`binary_search`, the
+// `for (let x in xs)` enumerator, and polymorphism through the `IndexedCollection<T>` interface,
+// including the interface's default methods.
+
+// Sums any indexed collection through the interface: exercises dynamic dispatch of `size()` and the
+// value-returning `get()` (an sret `Option<int>`) through the itable trampoline.
+import system;
+import system.collections;
+import system.text;
+fun c132_sum(xs: IndexedCollection<int>): int {
+    let total = 0;
+    let i = 0;
+    while i < xs.length {
+        total = total + xs.get(i);
+        i = i + 1;
+    }
+    return total;
+}
+
+fun c132_body(): void {
+    let a = List<int>();
+    a.push(30);
+    a.push(10);
+    a.push(20);
+
+    c132_verify_observation((a.length).to_string());
+
+    a.sort();
+    for (let x in a) {
+        c132_verify_observation((x).to_string());
+    }
+
+    c132_verify_observation((a.binary_search(20).unwrap_or(-1)).to_string());
+    c132_verify_observation((a.contains(10)).to_string());
+    c132_verify_observation((a.index_of(30).unwrap_or(-1)).to_string());
+
+    // IndexedCollection<T> default methods dispatched on the concrete class.
+    c132_verify_observation((a.is_empty()).to_string());
+    c132_verify_observation((a.first().unwrap_or(-1)).to_string());
+    c132_verify_observation((a.last().unwrap_or(-1)).to_string());
+
+    let popped = a.pop();
+    c132_verify_observation((popped.unwrap_or(-1)).to_string());
+    c132_verify_observation((a.length).to_string());
+
+    // Polymorphism: two independent `List<int>` instances both flow through `IndexedCollection<int>`.
+    let b = List<int>();
+    b.push(1);
+    b.push(2);
+    b.push(3);
+    c132_verify_observation((c132_sum(b)).to_string());
+
+    let l = List<int>();
+    l.push(4);
+    l.push(5);
+    c132_verify_observation((c132_sum(l)).to_string());
+}
+
+let c132_cursor: int = 0;
+
+fun c132_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "3\n10\n20\n30\n1\ntrue\n2\nfalse\n10\n30\n30\n2\n6\n9\n";
+    let end = c132_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c132_cursor, end));
+    c132_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun list_collection(): void {
+    c132_cursor = 0;
+    c132_body();
+    Assert.eq(c132_cursor, ("3\n10\n20\n30\n1\ntrue\n2\nfalse\n10\n30\n30\n2\n6\n9\n").length);
+}

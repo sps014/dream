@@ -1,0 +1,40 @@
+import system.testing;
+// A struct copied by a last-use move and then only read in a loop header is still released at
+// function exit.
+import system;
+
+struct c290_P {
+    public a: int[];
+    public constructor(a: int[]) { this.a = a; }
+    public get n(): int { return this.a.length; }
+}
+
+fun c290_body(): void {
+    let p = c290_P([1, 2, 3]);
+    let q = p;
+    let i = 0;
+    while i < q.n {
+        i = i + 1;
+    }
+    c290_verify_observation((i).to_string());
+}
+
+let c290_cursor: int = 0;
+
+fun c290_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "3\n";
+    let end = c290_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c290_cursor, end));
+    c290_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun value_struct_copy_loop_drop(): void {
+    c290_cursor = 0;
+    c290_body();
+    Assert.eq(c290_cursor, ("3\n").length);
+}

@@ -1,0 +1,18 @@
+import system.testing;
+import system;
+async fun c31_work(id: int): int {
+    Time.sleep(50).await;
+    return id * id;
+}
+
+@test
+@timeout(180000)
+async fun async_combinators(): void {
+    let a = c31_work(2);
+    let b = c31_work(3);
+    let results = Promise.all([a, b]).await;
+    Assert.eq_str((results[0] + ", " + results[1]).to_string(), "4, 9");
+
+    let first = Promise.any([c31_work(10), c31_work(20)]).await;
+    Assert.eq_str(("first = " + first).to_string(), "first = 100");
+}

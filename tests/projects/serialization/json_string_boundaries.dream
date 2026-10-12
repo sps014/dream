@@ -1,0 +1,48 @@
+import system.testing;
+import system;
+import system.json;
+
+fun c121_body(): void {
+    let valid = true;
+    for (let n = 0; n < 130; n = n + 1) {
+        let content = StringBuilder(n * 2 + 8);
+        for (let i = 0; i < n; i = i + 1) {
+            content.append(i % 7 == 0 ? "😀" : "x");
+        }
+        let expected = content.build();
+        let wrapped = "prefix\"" + expected + "\"tail";
+        let input = wrapped.substring(6, wrapped.length - 4);
+        let decoded = Json.deserialize<JsonValue>(input).unwrap().as_string().unwrap();
+        valid = valid && decoded == expected;
+        if n > 0 {
+            string.set(input, 1, 'Z');
+            valid = valid && decoded == expected;
+        }
+        let escaped = "\"" + expected + "\\n" + expected + "\"";
+        let with_escape = Json.deserialize<JsonValue>(escaped).unwrap().as_string().unwrap();
+        valid = valid && with_escape == expected + "\n" + expected;
+        let truncated = JsonParser("\"" + expected, 0).parse_string();
+        valid = valid && truncated == expected;
+    }
+    c121_verify_observation((valid).to_string());
+}
+
+let c121_cursor: int = 0;
+
+fun c121_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "true\n";
+    let end = c121_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c121_cursor, end));
+    c121_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun json_string_boundaries(): void {
+    c121_cursor = 0;
+    c121_body();
+    Assert.eq(c121_cursor, ("true\n").length);
+}

@@ -1,0 +1,13 @@
+import system.testing;
+import system;
+@test
+@timeout(180000)
+fun string_split_replace(): void {
+    let s = "a,b,c";
+    let parts = s.split(',');
+    Assert.eq_str((parts.length).to_string(), "3");
+    Assert.eq_str((parts[0]).to_string(), "a");
+    Assert.eq_str((parts[2]).to_string(), "c");
+    let t = "hello world";
+    Assert.eq_str((t.replace("world", "dream")).to_string(), "hello dream");
+}

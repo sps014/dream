@@ -1,0 +1,78 @@
+import system.testing;
+import system;
+import system.json;
+
+@json
+class c112_Address {
+    public city: string;
+    public zip: string;
+    public constructor(city: string, zip: string) { this.city = city; this.zip = zip; }
+}
+
+@json
+class c112_User {
+    public name: string;
+    public age: int;
+    public address: c112_Address;
+    public scores: int[];
+    public constructor(name: string, age: int, address: c112_Address, scores: int[]) {
+        this.name = name; this.age = age; this.address = address; this.scores = scores;
+    }
+}
+
+fun c112_make_user(): c112_User {
+    return c112_User("Ada", 36, c112_Address("London", "NW1"), [10, 20, 30]);
+}
+
+fun c112_serialize_loop(iters: int): int {
+    let u = c112_make_user();
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while i < iters {
+        acc = acc + Json.serialize(u).byte_size();
+        i = i + 1;
+    }
+    sw.stop();
+    return acc;
+}
+
+fun c112_deserialize_loop(iters: int): int {
+    let text = Json.serialize(c112_make_user());
+    let fallback = c112_make_user();
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while i < iters {
+        let back = Json.deserialize<c112_User>(text).unwrap_or(fallback);
+        acc = acc + back.age + back.scores[2];
+        i = i + 1;
+    }
+    sw.stop();
+    c112_verify_observation((text).to_string());
+    return acc;
+}
+
+fun c112_body(): void {
+    c112_verify_observation((c112_serialize_loop(500) + c112_deserialize_loop(500) + c112_serialize_loop(500)).to_string());
+}
+
+let c112_cursor: int = 0;
+
+fun c112_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "{\"name\":\"Ada\",\"age\":36,\"address\":{\"city\":\"London\",\"zip\":\"NW1\"},\"scores\":[10,20,30]}\n199000\n";
+    let end = c112_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c112_cursor, end));
+    c112_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun json_deserialize_borrow_loop(): void {
+    c112_cursor = 0;
+    c112_body();
+    Assert.eq(c112_cursor, ("{\"name\":\"Ada\",\"age\":36,\"address\":{\"city\":\"London\",\"zip\":\"NW1\"},\"scores\":[10,20,30]}\n199000\n").length);
+}

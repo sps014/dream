@@ -155,7 +155,7 @@ jobs:
           mv "${HOME}/.dream/toolchains" "${HOME}/.dream/toolchains.off"
           trap 'mv "${HOME}/.dream/toolchains.off" "${HOME}/.dream/toolchains"' EXIT
           cd "$(mktemp -d)"
-          cp "${GITHUB_WORKSPACE}/tests/cases/arithmetic.dream" .
+          cp "${GITHUB_WORKSPACE}/tests/fixtures/compiler/arithmetic.dream" .
           env -u DREAM_LLVM DREAM_NO_AUTO_INSTALL=1 "$STAGE/dream" run arithmetic.dream
           env -u DREAM_LLVM DREAM_NO_AUTO_INSTALL=1 "$STAGE/dream" --release run arithmetic.dream
           env -u DREAM_LLVM "$STAGE/dream" --wasm arithmetic.dream

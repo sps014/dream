@@ -1,0 +1,36 @@
+import system.testing;
+import system;
+
+async fun c262_body(): void {
+    let total = 0;
+    for (let round = 0; round < 20; round = round + 1) {
+        let pending = Buffer.alloc<Future<void>>(128);
+        for (let i = 0; i < 128; i = i + 1) { pending[i] = Time.sleep(0); }
+        for (let i = 0; i < 128; i = i + 2) { Promise.cancel(pending[i]); }
+        for (let i = 1; i < 128; i = i + 2) {
+            pending[i].await;
+            total = total + 1;
+        }
+    }
+    c262_verify_observation((total).to_string());
+}
+
+let c262_cursor: int = 0;
+
+fun c262_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "1280\n";
+    let end = c262_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c262_cursor, end));
+    c262_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+async fun timer_pool_cancel_reuse(): void {
+    c262_cursor = 0;
+    c262_body().await;
+    Assert.eq(c262_cursor, ("1280\n").length);
+}

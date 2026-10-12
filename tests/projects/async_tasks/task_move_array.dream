@@ -1,0 +1,13 @@
+import system.testing;
+// Arrays are not `shared`, but a managed heap value can be *moved* into a worker body:
+// the pointer is handed off and the sender-side binding cannot be used afterwards.
+import system;
+import system.task;
+
+@test
+@timeout(180000)
+async fun task_move_array(): void {
+    let nums = [1, 2, 3];
+    let result = Task.spawn(() => nums.length);
+    Assert.eq_str((result.await).to_string(), "3");
+}

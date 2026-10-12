@@ -118,13 +118,13 @@ cargo test -p dream-mir backend::llvm::
 
 ### End-to-end tests — `tests/`
 
-The full golden corpus runs through `./scripts/probe_test.sh`: it compiles every `tests/cases/*.dream` with the real `dream` CLI and checks stdout against `.expected` exactly, every line of `.expected_error` against the compile diagnostics, and every line of `.expected_trap` against the failing run's output plus an `exit code N` line. It also fails any case whose leak check reports live objects. `--release` probes an optimized build and `--node` the wasm32 build.
+Run the full assertion corpus with `python3 scripts/test_corpus.py --both`. Successful behavior cases live in the Dream workspace `tests/projects/`, grouped by feature and host capabilities. Each project compiles once per target and uses `Assert.*` in `@test` functions. Unchanged runs reuse the build cache.
 
-`tests/e2e_tests.rs` compiles real `.dream` programs through the in-process driver. Default `cargo test --workspace` runs a smoke subset (`run_smoke_e2e_cases`) and a few host-parity subsets. DAP and Binaryen-every-level live behind `#[ignore]` — run them with `cargo test --workspace -- --ignored`.
+Invalid programs and tests requiring a real process boundary stay in `tests/cases/`. Their diagnostics, exit statuses and output are asserted directly in Rust under `tests/corpus/`; there are no expected-output sidecars. Compiler errors must be user-facing diagnostics, never I/O failures or ICEs. Traps and process-entrypoint tests retain isolated execution, bounded by the harness's 180-second deadline.
 
-The `--node` probe checks the same diagnostic fragments and panic goldens as native runs.
-Panic messages and source locations must match on both targets. `exit code N` is checked when
-specified; fatal panics use each host's abort status. A timeout never satisfies a panic golden.
+`python3 scripts/test_corpus.py arithmetic` filters by case-name substring; `--node` selects Node, `--release` enables optimized builds, and `--debug-info` includes guest debug information. `--both` runs both hosts and compares isolated guest stdout directly. Native-only cases are explicitly reported as skipped on Node.
+
+Default `cargo test --workspace` runs grouped smoke subsets. DAP and Binaryen-every-level remain behind `#[ignore]`. Add ordinary regression tests to a feature suite; add an isolated fixture only when its compiler/process boundary is part of the assertion, and record the reason in the Rust inventory.
 
 ### Source properties and target parity
 
@@ -144,20 +144,10 @@ The default suite runs 32 cases per property. Increase coverage or reproduce a r
 ```bash
 PROPTEST_CASES=512 cargo test --test integration compiler_properties::
 PROPTEST_RNG_SEED=123 cargo test --test integration compiler_properties::
-./scripts/probe_test.sh --parity
+python3 scripts/test_corpus.py --both
 ```
 
-The parity probe validates both targets against their goldens and directly compares
-actual guest stdout, including cases without an output golden. Only subprocess text-mode
-newline normalization applies to the parity comparison; leading/trailing whitespace and
-program ANSI sequences remain significant. Compile-error cases validate diagnostic
-fragments; expected traps also compare guest stdout and validate their diagnostic
-fragments and target exit statuses. Native-only services and cases with explicit
-`.expected.native` width-dependent output are reported as skips. Linux CI runs this
-paired corpus check in addition to the full native probe; new corpus cases are
-discovered automatically, without fixed corpus-count or output-size assertions.
-Release arithmetic checks worker-export isolation and the music-player sample checks
-compilation and WAT parsing; neither pins a code-section byte limit.
+Shared Dream assertions validate the same behavior independently on native and Node. Isolated output and trap cases also compare guest stdout after newline normalization; diagnostics and exit statuses are checked separately. Target-width expectations belong in the Dream assertions. The corpus inventory audit checks that sources are registered once and that expected-output sidecars are absent.
 
 ### Determinism test — `codegen_is_deterministic` (`tests/e2e_tests.rs`)
 
@@ -189,7 +179,7 @@ Before considering any change done, all four must pass:
 cargo build --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-./scripts/probe_test.sh    # golden corpus through native `dream run`
+python3 scripts/test_corpus.py    # shared native suites and isolated Rust assertions
 ```
 
 Clippy runs with `-D warnings`: the project's stance is **fix the root cause, do not `#[allow]`**. The only surviving `#[allow]`s annotate *external* API constraints (e.g. an `lsp-types` field deprecated upstream) and carry a comment explaining why.

@@ -14,6 +14,8 @@ pub struct PlannedTest {
     /// `<file import path>::<function>`, the name `RUN` / `PASS` lines carry.
     pub label: String,
     pub function: String,
+    pub is_async: bool,
+    pub is_unsafe: bool,
     pub timeout_ms: Option<u64>,
 }
 
@@ -27,7 +29,11 @@ pub struct RunnerPlan {
 
 impl RunnerPlan {
     /// Discovers every `@test` in the project and keeps those whose label contains `filter`.
-    pub fn discover(project: &TestProject, filter: Option<&str>) -> Result<Self, String> {
+    pub fn discover(
+        project: &TestProject,
+        filter: Option<&str>,
+        names: &[String],
+    ) -> Result<Self, String> {
         let mut imports = Vec::new();
         let mut tests = Vec::new();
         let mut unparsed = false;
@@ -47,17 +53,31 @@ impl RunnerPlan {
                     file.display()
                 ));
             }
-            for DiscoveredTest { name, timeout_ms } in found.tests {
+            let before = tests.len();
+            let has_tests = !found.tests.is_empty();
+            for DiscoveredTest {
+                name,
+                timeout_ms,
+                is_async,
+                is_unsafe,
+            } in found.tests
+            {
                 let label = format!("{import}::{name}");
-                if filter.is_none_or(|f| label.contains(f)) {
+                if filter.is_none_or(|f| label.contains(f))
+                    && (names.is_empty() || names.contains(&name))
+                {
                     tests.push(PlannedTest {
                         label,
                         function: name,
+                        is_async,
+                        is_unsafe,
                         timeout_ms,
                     });
                 }
             }
-            imports.push(import);
+            if (filter.is_none() && names.is_empty()) || tests.len() > before || !has_tests {
+                imports.push(import);
+            }
         }
         Ok(Self {
             imports,
@@ -71,16 +91,29 @@ impl RunnerPlan {
         for import in &self.imports {
             let _ = writeln!(out, "import {import};");
         }
-        out.push_str("\nfun main(): void {\n");
+        if self.tests.iter().any(|test| test.is_unsafe) {
+            out.push_str("\n@unsafe");
+        }
+        if self.tests.iter().any(|test| test.is_async) {
+            out.push_str("\nasync fun main(): void {\n");
+        } else {
+            out.push_str("\nfun main(): void {\n");
+        }
         for test in &self.tests {
             let label = test.label.replace('\\', "\\\\").replace('"', "\\\"");
+            let method = if test.is_async { "run_async" } else { "run" };
+            let await_suffix = if test.is_async { ".await" } else { "" };
             let _ = match test.timeout_ms {
                 Some(ms) => writeln!(
                     out,
-                    "    Test.run_with_timeout(\"{label}\", {ms}, {});",
+                    "    Test.{method}_with_timeout(\"{label}\", {ms}, {}){await_suffix};",
                     test.function
                 ),
-                None => writeln!(out, "    Test.run(\"{label}\", {});", test.function),
+                None => writeln!(
+                    out,
+                    "    Test.{method}(\"{label}\", {}){await_suffix};",
+                    test.function
+                ),
             };
         }
         out.push_str("}\n");
@@ -88,7 +121,10 @@ impl RunnerPlan {
     }
 
     pub fn entry_path(project_root: &Path) -> String {
-        project_root.join(RUNNER_FILE).to_string_lossy().into_owned()
+        project_root
+            .join(RUNNER_FILE)
+            .to_string_lossy()
+            .into_owned()
     }
 }
 
@@ -104,11 +140,15 @@ mod tests {
                 PlannedTest {
                     label: "math::adds".into(),
                     function: "adds".into(),
+                    is_async: false,
+                    is_unsafe: false,
                     timeout_ms: None,
                 },
                 PlannedTest {
                     label: "io.files::reads".into(),
                     function: "reads".into(),
+                    is_async: false,
+                    is_unsafe: false,
                     timeout_ms: Some(500),
                 },
             ],

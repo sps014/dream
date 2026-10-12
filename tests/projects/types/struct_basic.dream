@@ -1,0 +1,40 @@
+import system.testing;
+// A value `struct` has copy-on-assignment semantics: assigning one value struct to another (or
+// passing it as an argument) copies its bytes, so mutating the copy leaves the original untouched.
+
+import system;
+struct c231_Vec2 {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+
+    public fun sum(): int {
+        return this.x + this.y;
+    }
+}
+
+// Value params are passed by copy: mutating `v` here must not affect the caller's argument.
+fun c231_bump(v: c231_Vec2): int {
+    v.x = v.x + 1000;
+    return v.x;
+}
+
+@test
+@timeout(180000)
+fun struct_basic() {
+    let a = c231_Vec2(1, 2);
+    let b = a;        // copy
+    b.x = 100;        // mutates the copy only
+
+    Assert.eq_str((a.x).to_string(), "1");      // 1  (unchanged by the copy's mutation)
+    Assert.eq_str((b.x).to_string(), "100");      // 100
+    Assert.eq_str((a.sum()).to_string(), "3");  // 3
+    Assert.eq_str((b.sum()).to_string(), "102");  // 102
+
+    Assert.eq_str((c231_bump(a)).to_string(), "1001");  // 1001 (local copy inside bump)
+    Assert.eq_str((a.x).to_string(), "1");      // 1    (caller's value unchanged)
+}

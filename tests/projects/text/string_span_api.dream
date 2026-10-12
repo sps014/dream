@@ -1,0 +1,56 @@
+import system.testing;
+import system;
+import system.collections;
+
+fun c222_body() {
+    let s = "  hello, world ,a,,b  ";
+    let v = s.span();
+    c222_verify_observation((v.length).to_string());
+    let t = v.trim();
+    c222_verify_observation((t.to_string() + "|").to_string());
+    c222_verify_observation((t.starts_with("hello")).to_string());
+    c222_verify_observation((t.ends_with("b")).to_string());
+    c222_verify_observation((t.index_of(',').unwrap_or(-1)).to_string());
+    c222_verify_observation((t.index_of("world").unwrap_or(-1)).to_string());
+    c222_verify_observation((t.last_index_of(',').unwrap_or(-1)).to_string());
+    c222_verify_observation((t.slice(0, 5).equals("hello")).to_string());
+    c222_verify_observation((t.slice(0, 5) == "xhello".span(1, 6)).to_string());
+    c222_verify_observation((s.span(-3, 100).length).to_string());
+    let it = t.split_iter(',');
+    while it.move_next() {
+        c222_verify_observation(("[" + it.current.trim().to_string() + "]").to_string());
+    }
+    let it2 = "a--b--c".span().split_iter("--");
+    while it2.move_next() {
+        c222_verify_observation((it2.current.to_string()).to_string());
+    }
+    let ls = "one\r\ntwo\nthree\n".span().lines();
+    while ls.move_next() {
+        c222_verify_observation(("<" + ls.current.to_string() + ">").to_string());
+    }
+    c222_verify_observation(("-42".span().parse_int().unwrap_or(0)).to_string());
+    c222_verify_observation(("x12".span(1, 3).parse_int().unwrap_or(0)).to_string());
+    c222_verify_observation(("hello".span().hash_code() == "hello".hash_code()).to_string());
+    c222_verify_observation(("xhellox".span(1, 6).hash_code() == "hello".hash_code()).to_string());
+    c222_verify_observation(("abc".span().compare("abd") < 0).to_string());
+}
+
+let c222_cursor: int = 0;
+
+fun c222_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "22\nhello, world ,a,,b|\ntrue\ntrue\n5\n7\n16\ntrue\ntrue\n22\n[hello]\n[world]\n[a]\n[]\n[b]\na\nb\nc\n<one>\n<two>\n<three>\n-42\n12\ntrue\ntrue\ntrue\n";
+    let end = c222_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c222_cursor, end));
+    c222_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun string_span_api(): void {
+    c222_cursor = 0;
+    c222_body();
+    Assert.eq(c222_cursor, ("22\nhello, world ,a,,b|\ntrue\ntrue\n5\n7\n16\ntrue\ntrue\n22\n[hello]\n[world]\n[a]\n[]\n[b]\na\nb\nc\n<one>\n<two>\n<three>\n-42\n12\ntrue\ntrue\ntrue\n").length);
+}

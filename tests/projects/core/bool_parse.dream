@@ -1,0 +1,41 @@
+import system.testing;
+import system;
+
+fun c50_body(): void {
+    switch (bool.parse("true")) {
+        Ok(v) => c50_verify_observation((v).to_string()),
+        Err(e) => c50_verify_observation((e.message()).to_string()),
+    }
+    switch (bool.parse("false")) {
+        Ok(v) => c50_verify_observation((v).to_string()),
+        Err(e) => c50_verify_observation((e.message()).to_string()),
+    }
+    switch (bool.parse("True")) {
+        Ok(v) => c50_verify_observation((v).to_string()),
+        Err(e) => c50_verify_observation((e.code()).to_string()),
+    }
+    switch (bool.parse("")) {
+        Ok(v) => c50_verify_observation((v).to_string()),
+        Err(e) => c50_verify_observation((e.code()).to_string()),
+    }
+}
+
+let c50_cursor: int = 0;
+
+fun c50_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "true\nfalse\nEPARSE\nEPARSE\n";
+    let end = c50_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c50_cursor, end));
+    c50_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun bool_parse(): void {
+    c50_cursor = 0;
+    c50_body();
+    Assert.eq(c50_cursor, ("true\nfalse\nEPARSE\nEPARSE\n").length);
+}

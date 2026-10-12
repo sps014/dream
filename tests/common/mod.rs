@@ -451,3 +451,38 @@ pub const ASYNC_STUB: &str = "
         public static extern async fun sleep(ms: int): void;
     }
 ";
+
+/// Source files under the corpus, excluding generated artifacts.
+pub fn corpus_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            let name = path.file_name().unwrap();
+            if name != "target"
+                && name != "dream_packages"
+                && !name.to_string_lossy().starts_with('.')
+            {
+                files.extend(corpus_files(&path));
+            }
+        } else {
+            files.push(path);
+        }
+    }
+    files.sort();
+    files
+}
+
+/// Programs whose compilation or process entrypoint is itself under test.
+pub fn compiler_fixture(stem: &str) -> std::path::PathBuf {
+    let case = crate::corpus::cases()
+        .find(|case| case.stem == stem)
+        .unwrap_or_else(|| panic!("unregistered compiler fixture {stem}"));
+    if matches!(case.expectation, crate::corpus::Expectation::Project(_)) {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/compiler")
+            .join(format!("{stem}.dream"))
+    } else {
+        case.source()
+    }
+}

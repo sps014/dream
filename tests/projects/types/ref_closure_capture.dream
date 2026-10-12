@@ -1,0 +1,25 @@
+import system.testing;
+// A closure-captured local passed by `ref` to a helper shares the exact same heap box the closure
+// itself reads/writes through (rather than getting its own separate stack slot) — no double
+// boxing, and mutations through either path stay visible to both.
+
+import system;
+fun c1cd_increment(ref x: int): void {
+    x = x + 1;
+}
+
+@test
+@timeout(180000)
+fun ref_closure_capture(): void {
+    let counter: int = 0;
+    let inc: fun(): int = () => {
+        c1cd_increment(ref counter); // ref-passes the closure's own captured cell
+        return counter;
+    };
+    Assert.eq_str((inc()).to_string(), "1"); // 1
+    Assert.eq_str((inc()).to_string(), "2"); // 2
+    Assert.eq_str((counter).to_string(), "2"); // 2: visible to the enclosing scope too
+
+    c1cd_increment(ref counter); // and the enclosing scope's ref-passing is visible to the closure
+    Assert.eq_str((inc()).to_string(), "4"); // 4
+}

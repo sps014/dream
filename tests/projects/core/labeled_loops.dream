@@ -1,0 +1,35 @@
+import system.testing;
+import system;
+fun c127_body(): void {
+    outer: for (let i: int = 0; i < 3; i = i + 1) {
+        for (let j: int = 0; j < 3; j = j + 1) {
+            if j == 1 {
+                continue outer;
+            }
+            if i == 2 {
+                break outer;
+            }
+            c127_verify_observation((i * 10 + j).to_string());
+        }
+    }
+}
+
+let c127_cursor: int = 0;
+
+fun c127_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "0\n10\n";
+    let end = c127_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c127_cursor, end));
+    c127_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun labeled_loops(): void {
+    c127_cursor = 0;
+    c127_body();
+    Assert.eq(c127_cursor, ("0\n10\n").length);
+}

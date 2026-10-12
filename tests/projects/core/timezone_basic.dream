@@ -1,0 +1,51 @@
+import system.testing;
+import system;
+fun c263_body(): void {
+    switch (TimeZone.of("America/New_York")) {
+        Ok(ny) => {
+            c263_verify_observation((ny.name).to_string());
+            // 2024-01-15 12:00:00 UTC -> EST (UTC-5) in January (no DST).
+            let winter = DateTime.of(2024, 1, 15, 12, 0, 0, 0);
+            c263_verify_observation((winter.to_zone(ny).offset_minutes).to_string());
+            // 2024-07-15 12:00:00 UTC -> EDT (UTC-4) in July (DST).
+            let summer = DateTime.of(2024, 7, 15, 12, 0, 0, 0);
+            c263_verify_observation((summer.to_zone(ny).offset_minutes).to_string());
+
+            // 2024-07-15 09:00 wall-clock in New York (EDT, UTC-4) is 13:00 UTC.
+            let zoned = DateTime.of_zoned(2024, 7, 15, 9, 0, 0, 0, ny);
+            c263_verify_observation((zoned.to_utc().hour).to_string());
+        },
+        Err(e) => c263_verify_observation(("unexpected error: " + e.message()).to_string()),
+    }
+
+    switch (TimeZone.of("Not/AZone")) {
+        Ok(z) => c263_verify_observation(("unexpected ok").to_string()),
+        Err(e) => c263_verify_observation((e.code()).to_string()),
+    }
+
+    c263_verify_observation((TimeZone.utc.name).to_string());
+    c263_verify_observation((TimeZone.utc.offset_minutes_at(0L)).to_string());
+
+    let local = TimeZone.local;
+    c263_verify_observation((local.name.is_empty() == false).to_string());
+}
+
+let c263_cursor: int = 0;
+
+fun c263_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "America/New_York\n-300\n-240\n13\nEPARSE\nUTC\n0\ntrue\n";
+    let end = c263_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c263_cursor, end));
+    c263_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun timezone_basic(): void {
+    c263_cursor = 0;
+    c263_body();
+    Assert.eq(c263_cursor, ("America/New_York\n-300\n-240\n13\nEPARSE\nUTC\n0\ntrue\n").length);
+}

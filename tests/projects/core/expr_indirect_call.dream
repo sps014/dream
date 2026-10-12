@@ -1,0 +1,13 @@
+import system.testing;
+import system;
+fun ccb_make_adder(n: int): fun(int): int {
+    return (x: int) => x + n;
+}
+
+@test
+@timeout(180000)
+fun expr_indirect_call(): void {
+    Assert.eq_str((ccb_make_adder(5)(1)).to_string(), "6");
+    let f: fun(int): int = ccb_make_adder(10);
+    Assert.eq_str(((f)(2)).to_string(), "12");
+}

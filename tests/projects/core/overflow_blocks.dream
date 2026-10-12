@@ -1,0 +1,63 @@
+import system.testing;
+// Integer arithmetic wraps by default, `checked { }` makes it panic, and `unchecked { }` restores
+// wrapping inside it. The mode is lexical: it covers lambdas written in the block but not
+// functions called from it.
+import system;
+fun c184_bump(x: int): int { return x + 1; }
+fun c184_mul_long(a: long, b: long): long { return a * b; }
+fun c184_mul_ulong(a: ulong, b: ulong): ulong { return a * b; }
+fun c184_hash(data: byte[]): uint {
+    let h: uint = 2166136261u;
+    for (let b in data) {
+        h = (h ^ (uint)b) * 16777619u;
+    }
+    return h;
+}
+fun c184_body(): void {
+    let big: int = 2147483647;
+    c184_verify_observation((big + 1).to_string());
+    let b: byte = 250b;
+    b += 10b;
+    c184_verify_observation((b).to_string());
+    let times: fun(int): int = (v) => v * 1000000000;
+    c184_verify_observation((times(7)).to_string());
+    checked {
+        c184_verify_observation((c184_bump(big)).to_string());
+        unchecked {
+            let u: uint = 0u;
+            u--;
+            c184_verify_observation((u).to_string());
+        }
+        let double_it: fun(int): int = (v) => v * 2;
+        c184_verify_observation((double_it(21)).to_string());
+        c184_verify_observation((big - 1).to_string());
+    }
+    c184_verify_observation((c184_hash([100b, 114b, 101b, 97b, 109b])).to_string());
+    let sum = 0;
+    for (let i = 0; i < 10; i++) {
+        sum += i;
+    }
+    c184_verify_observation((sum).to_string());
+    c184_verify_observation((c184_mul_long(-3000000000L, 3000000000L)).to_string());
+    c184_verify_observation((c184_mul_ulong(4000000000uL, 4000000000uL)).to_string());
+}
+
+let c184_cursor: int = 0;
+
+fun c184_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "-2147483648\n4\n-1589934592\n-2147483648\n4294967295\n42\n2147483646\n2193733020\n45\n-9000000000000000000\n16000000000000000000\n";
+    let end = c184_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c184_cursor, end));
+    c184_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun overflow_blocks(): void {
+    c184_cursor = 0;
+    c184_body();
+    Assert.eq(c184_cursor, ("-2147483648\n4\n-1589934592\n-2147483648\n4294967295\n42\n2147483646\n2193733020\n45\n-9000000000000000000\n16000000000000000000\n").length);
+}

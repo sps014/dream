@@ -1,0 +1,40 @@
+import system.testing;
+import system;
+fun c1f5_side(): bool {
+    c1f5_verify_observation((99).to_string());
+    return true;
+}
+
+fun c1f5_body(): void {
+    let f: bool = false;
+    if f && c1f5_side() {
+        c1f5_verify_observation((1).to_string());
+    }
+
+    let t: bool = true;
+    if t || c1f5_side() {
+        c1f5_verify_observation((2).to_string());
+    }
+
+    c1f5_verify_observation((0).to_string());
+}
+
+let c1f5_cursor: int = 0;
+
+fun c1f5_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "2\n0\n";
+    let end = c1f5_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c1f5_cursor, end));
+    c1f5_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun short_circuit(): void {
+    c1f5_cursor = 0;
+    c1f5_body();
+    Assert.eq(c1f5_cursor, ("2\n0\n").length);
+}

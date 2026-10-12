@@ -1,0 +1,46 @@
+import system.testing;
+import system;
+import system.collections;
+
+fun c8d_body(): void {
+    let xs = List<int>(8);
+    for (let i = 0; i < 8; i = i + 1) { xs.push(i); }
+    let view = xs.as_span();
+    xs.push_all(view.to_array());
+    xs.reserve(4096);
+    c8d_verify_observation((xs.length).to_string());
+    c8d_verify_observation((xs.capacity >= 4096).to_string());
+    c8d_verify_observation((xs[15]).to_string());
+    c8d_verify_observation((view[7]).to_string());
+    view[0] = 99;
+    c8d_verify_observation((xs[0]).to_string());
+
+    let names = List<string>(8);
+    names.push("one");
+    names.push("two");
+    let old = names.as_read_only_span();
+    names.push_all(["three", "four", "five", "six", "seven", "eight", "nine"]);
+    names.clear();
+    c8d_verify_observation((old[0]).to_string());
+    c8d_verify_observation((old[1]).to_string());
+}
+
+let c8d_cursor: int = 0;
+
+fun c8d_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "16\ntrue\n7\n7\n0\none\ntwo\n";
+    let end = c8d_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c8d_cursor, end));
+    c8d_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun collections_bulk_alias(): void {
+    c8d_cursor = 0;
+    c8d_body();
+    Assert.eq(c8d_cursor, ("16\ntrue\n7\n7\n0\none\ntwo\n").length);
+}

@@ -1,6 +1,7 @@
 //! Every integration test, built as one binary so the `dream` library links once.
 
 mod common;
+mod corpus;
 mod dap;
 
 mod build_cache;
@@ -32,8 +33,9 @@ mod perf_symbols;
 mod publication_emission;
 mod rc_elision_goldens;
 mod runtime_callback;
-mod runtime_machine_size;
+mod runtime_foreign_queue;
 mod runtime_leak_reporting;
+mod runtime_machine_size;
 mod runtime_ownership;
 mod runtime_panic;
 mod runtime_platform;
@@ -41,10 +43,9 @@ mod runtime_publish;
 mod runtime_ready;
 mod runtime_region;
 mod runtime_requirements;
+mod runtime_scheduler_nodes;
 mod runtime_stdio;
 mod runtime_string_search;
-mod runtime_scheduler_nodes;
-mod runtime_foreign_queue;
 mod runtime_sync;
 mod runtime_wasi_platform;
 mod runtime_weak;

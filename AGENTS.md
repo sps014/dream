@@ -11,7 +11,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 - **Determinism is non-negotiable.** Two compiles of the same source to the same output path must produce byte-identical `.ll`/`.wasm`/`.wat`. Never iterate `std::collections::HashMap`/`HashSet` in anything that influences emitted output or its ordering — use `indexmap::IndexMap`/`IndexSet` (insertion order) or `BTreeMap` (sorted order) instead.
 - **No narrating comments.** Comments explain *why* (invariants, trade-offs, non-obvious constraints), never *what* the next line does. Don't add "explaining the diff" comments.
 - **Clippy is a hard gate at `-D warnings`.** Fix the root cause; don't `#[allow]` your way out except for genuine external-API constraints (with a comment saying why).
-- **Probe the golden corpus when implementing or fixing.** After language/runtime/codegen changes, run `./scripts/probe_test.sh` (filter by case stem while iterating; full probe before calling the work done). It rebuilds `dream` then parallel-runs `tests/cases`.
+- **Run the assertion corpus when implementing or fixing.** After language/runtime/codegen changes, run `python3 scripts/test_corpus.py` (filter by case-name substring while iterating; full native and Node runs before calling the work done). It rebuilds the workspace, compiles each Dream feature suite once, and runs isolated compiler/process fixtures through Rust assertions.
 - **The guest runtime is C only.** Portable units live under `runtime/c/core/`, native OS services under `runtime/c/sys/native/`, WASI/JS services under `runtime/c/sys/wasi/`, and shared scheduling under `runtime/c/sys/shared/`. The layered catalog in `runtime/modules.rs` supplies native and wasm32 inventories compiled by the pinned clang via `src/execution/llvm/runtime.rs` and `wasm.rs`. Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`. There is no WAT runtime — do not reintroduce one.
 
 ## What Dream is
@@ -50,7 +50,7 @@ Dream/
 │   └── vscode/                     VS Code extension
 ├── tests/                          Golden e2e, MIR pipeline, DAP tests
 ├── docs/                           learn/ + reference/ + cookbook/ + internals/
-├── scripts/dap_probe.py, probe_test.sh   # golden-corpus probe (agents: run on implement/fix)
+├── scripts/dap_probe.py, test_corpus.py  # assertion corpus (agents: run on implement/fix)
 ├── mkdocs.yml
 └── Cargo.toml
 ```
@@ -178,9 +178,9 @@ cargo test --workspace
 cargo test --workspace -- --ignored
 
 # Golden-corpus probe (agents: run when implementing or fixing — rebuilds + parallel cases)
-./scripts/probe_test.sh                 # native `dream run` over tests/cases
-./scripts/probe_test.sh arithmetic      # optional case-stem filter
-./scripts/probe_test.sh --node          # wasm32 + Node (skips native-only hosts)
+python3 scripts/test_corpus.py                 # native Dream suites + isolated Rust assertions
+python3 scripts/test_corpus.py arithmetic      # optional case-stem filter
+python3 scripts/test_corpus.py --node          # wasm32 + Node (reports native-only cases)
 
 # Focused unit tests
 cargo test -p dream-types
@@ -218,14 +218,14 @@ You can still set VS Code settings `dream.home` / `dreamer.home` explicitly if y
 cargo build --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-./scripts/probe_test.sh            # when implementing or fixing: full golden corpus via native run
+python3 scripts/test_corpus.py            # when implementing or fixing: full assertion corpus via native run
 ```
 
-When iterating on a feature or bugfix, prefer `./scripts/probe_test.sh <case-stem…>` first for a fast signal, then run the full probe before calling the work done. The default `cargo test --workspace` gate is the fast suite (unit tests + e2e smoke). The probe is the only full golden-corpus run. DAP, wasm-opt-every-level, and dreamer compiler/pack e2e: `cargo test --workspace -- --ignored`.
+When iterating on a feature or bugfix, prefer `python3 scripts/test_corpus.py <case-name-substring>` first for a fast signal, then run the full corpus on both targets before calling the work done. The default `cargo test --workspace` gate is the fast suite (unit tests + e2e smoke). The corpus command is the full assertion run. DAP, wasm-opt-every-level, and dreamer compiler/pack e2e: `cargo test --workspace -- --ignored`.
 
 ## Testing conventions
 
-- **Golden e2e tests** live in `tests/cases/`: add `<name>.dream`, plus one of `<name>.expected` (exact stdout for successful compile+run), `<name>.expected_error` (lines the compile diagnostics must contain), or `<name>.expected_trap` (lines a failing run's output must contain, plus `exit code N`). Default `cargo test --workspace` runs a smoke subset; the full corpus is `./scripts/probe_test.sh`. **Agents implementing or fixing behavior must run `./scripts/probe_test.sh`** (optionally filtered by case stem while iterating; full probe before done).
+- **Assertion e2e tests** live in `tests/projects/`, a Dream workspace of feature suites. Add `@test` functions using `Assert.*`; no expected-output files. Invalid programs, traps, and process-isolated tests stay in `tests/cases/`, registered with inline Rust expectations and isolation reasons in `tests/corpus/`. Artifact-specific uninstrumented programs live in `tests/fixtures/compiler/`. Default `cargo test --workspace` runs grouped smoke tests; `python3 scripts/test_corpus.py --both` runs the full native and Node corpus. Register every case once; the corpus audit checks source files and assertions.
 - **Unit tests** live next to the code they test (`dream-types`, `dream-hir`, `dream-mir` passes / `backend::llvm::ir`). Passes use `FunctionBuilder` (`dream-mir`) to build a tiny `MirFunction` and assert on the pass output.
 - **Integration test layout**: the root crate and `dream-lsp` build all of `tests/*.rs` as one `integration` binary (`autotests = false`), so the library links once instead of once per file. A new test file must be added as a `mod` in that crate's `tests/integration.rs` (an unlisted file is silently never built); shared helpers are `crate::common` / `crate::dap`, not per-file `mod common;`. Run one file with `cargo test --test integration <file>::`.
 - **Integration tests** `dream-mir`'s `hir_to_optimized_mir` (HIR→MIR→pass pipeline) and `tests/mir_pipeline.rs` (the same through LLVM IR emission) are the fastest signal when touching lowering/passes/emission. `tests/sema_emission_tests.rs` and `tests/rc_elision_goldens.rs` assert on emitted IR (`tests/common::emit_ll`, `ir_func_body`).
@@ -239,9 +239,9 @@ When iterating on a feature or bugfix, prefer `./scripts/probe_test.sh <case-ste
 4. `crates/dream-types/`: add/extend `TyKind` if a new type shape is needed.
 5. `crates/dream-mir/src/lower/`: lower the new HIR shape into MIR.
 6. `crates/dream-mir/src/backend/llvm/`: emit if new lowering is needed (IR text only through the `ir/` writers). New runtime helpers: portable units under `runtime/c/core/`; platform services under `runtime/c/sys/{native,wasi,shared}/`, registered by layer in `runtime/modules.rs`. Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`.
-7. `tests/cases/`: add a golden test (`.dream` + `.expected`/`.expected_error`).
+7. `tests/projects/`: add an assertion test; compiler failures and process-ending behavior use a `tests/cases/` fixture with inline Rust assertions.
 8. If it's a stdlib API: define the signature under `crates/dream-stdlib/system/…`, register the file in `STD_PACKAGES`, and wire native hosts in `crates/dream-host` if needed.
-9. Run `./scripts/probe_test.sh` (and the full pre-commit gate above). See `docs/internals/07-adding-a-language-feature.md` for a worked example.
+9. Run `python3 scripts/test_corpus.py` (and the full pre-commit gate above). See `docs/internals/07-adding-a-language-feature.md` for a worked example.
 
 ## Misc conventions
 

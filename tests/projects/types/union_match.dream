@@ -1,0 +1,68 @@
+import system.testing;
+// `Option<T>` comes from the standard library prelude.
+import system;
+enum c278_Shape {
+    Circle(int),
+    Rect(width: int, height: int),
+    Empty,
+}
+
+fun c278_area(s: c278_Shape): int {
+    return switch (s) {
+        Circle(r)  => r * r * 3,
+        Rect(w, h) => w * h,
+        Empty      => 0,
+    };
+}
+
+fun c278_describe(o: Option<int>): string {
+    return switch (o) {
+        Some(0)           => "zero",
+        Some(n) if n > 10 => "big",
+        Some(n)           => "small",
+        None              => "none",
+    };
+}
+
+fun c278_body(): void {
+    let c = c278_Shape.Circle(2);
+    let r = c278_Shape.Rect(3, 4);
+    let e = c278_Shape.Empty;
+    c278_verify_observation((c278_area(c)).to_string());
+    c278_verify_observation((c278_area(r)).to_string());
+    c278_verify_observation((c278_area(e)).to_string());
+
+    let a: Option<int> = Option.Some(0);
+    let b: Option<int> = Option.Some(42);
+    let d: Option<int> = Option.Some(5);
+    let n: Option<int> = Option.None;
+    c278_verify_observation((c278_describe(a)).to_string());
+    c278_verify_observation((c278_describe(b)).to_string());
+    c278_verify_observation((c278_describe(d)).to_string());
+    c278_verify_observation((c278_describe(n)).to_string());
+
+    switch (b) {
+        Some(x) => { c278_verify_observation((x).to_string()); }
+        None    => c278_verify_observation((0).to_string()),
+    }
+}
+
+let c278_cursor: int = 0;
+
+fun c278_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "12\n12\n0\nzero\nbig\nsmall\nnone\n42\n";
+    let end = c278_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c278_cursor, end));
+    c278_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun union_match(): void {
+    c278_cursor = 0;
+    c278_body();
+    Assert.eq(c278_cursor, ("12\n12\n0\nzero\nbig\nsmall\nnone\n42\n").length);
+}

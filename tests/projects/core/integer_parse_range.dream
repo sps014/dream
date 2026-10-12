@@ -1,0 +1,21 @@
+import system.testing;
+import system;
+@test
+@timeout(180000)
+fun integer_parse_range(): void {
+    Assert.eq_str((int.parse("2147483647").unwrap_or(0)).to_string(), "2147483647");
+    Assert.eq_str((int.parse("-2147483648").unwrap_or(0)).to_string(), "-2147483648");
+    Assert.eq_str((int.parse("2147483648").is_err()).to_string(), "true");
+    Assert.eq_str((int.parse("-2147483649").is_err()).to_string(), "true");
+    Assert.eq_str((int.parse("99999999999999999999999").is_err()).to_string(), "true");
+    Assert.eq_str((uint.parse("4294967295").unwrap_or(0u)).to_string(), "4294967295");
+    Assert.eq_str((uint.parse("4294967296").is_err()).to_string(), "true");
+    Assert.eq_str((long.parse("9223372036854775807").unwrap_or(0L)).to_string(), "9223372036854775807");
+    Assert.eq_str((long.parse("-9223372036854775808").unwrap_or(0L)).to_string(), "-9223372036854775808");
+    Assert.eq_str((long.parse("9223372036854775808").is_err()).to_string(), "true");
+    Assert.eq_str((long.parse("-9223372036854775809").is_err()).to_string(), "true");
+    Assert.eq_str((ulong.parse("18446744073709551615").unwrap_or(0uL)).to_string(), "18446744073709551615");
+    Assert.eq_str((ulong.parse("18446744073709551616").is_err()).to_string(), "true");
+    Assert.eq_str((byte.parse("256").is_err()).to_string(), "true");
+    Assert.eq_str((double.parse("1e99999999999").unwrap_or(0.0d) > 1.0d).to_string(), "true");
+}

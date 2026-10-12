@@ -1,0 +1,86 @@
+import system.testing;
+import system;
+
+class c142_Particle {
+    public x: double;
+    public velocity: double;
+    public constructor(x: double) {
+        this.x = x;
+        this.velocity = 0.0d;
+    }
+}
+
+@noinline
+fun c142_sum(borrow source: c142_Particle, borrow alias: c142_Particle, n: int): double {
+    let total = 0.0d;
+    let k = 0;
+    while k < n {
+        total = total + source.x;
+        alias.velocity = alias.velocity + 1.0d;
+        k = k + 1;
+    }
+    return total;
+}
+
+@noinline
+fun c142_changing(borrow source: c142_Particle, borrow alias: c142_Particle, n: int): double {
+    let total = 0.0d;
+    let k = 0;
+    while k < n {
+        total = total + source.x;
+        alias.x = alias.x + 1.0d;
+        k = k + 1;
+    }
+    return total;
+}
+
+@noinline
+fun c142_mutate(borrow p: c142_Particle): void {
+    p.x = p.x + 1.0d;
+}
+
+@noinline
+fun c142_calling(borrow p: c142_Particle, n: int): double {
+    let total = 0.0d;
+    let k = 0;
+    while k < n {
+        total = total + p.x;
+        c142_mutate(p);
+        k = k + 1;
+    }
+    return total;
+}
+
+fun c142_body(): void {
+    let p = c142_Particle(2.0d);
+    c142_verify_observation(((int)c142_sum(p, p, 10)).to_string());
+    c142_verify_observation(((int)p.velocity).to_string());
+    c142_verify_observation(((int)c142_sum(p, p, 0)).to_string());
+    c142_verify_observation(((int)c142_sum(p, p, -1)).to_string());
+    c142_verify_observation(((int)c142_changing(p, p, 3)).to_string());
+    c142_verify_observation(((int)c142_calling(p, 3)).to_string());
+    c142_verify_observation(((int)p.x).to_string());
+    let q = c142_Particle(20.0d);
+    c142_verify_observation(((int)c142_sum(p, q, 2)).to_string());
+    c142_verify_observation(((int)q.velocity).to_string());
+}
+
+let c142_cursor: int = 0;
+
+fun c142_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "20\n10\n0\n0\n9\n18\n8\n16\n2\n";
+    let end = c142_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c142_cursor, end));
+    c142_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun loop_field_cache(): void {
+    c142_cursor = 0;
+    c142_body();
+    Assert.eq(c142_cursor, ("20\n10\n0\n0\n9\n18\n8\n16\n2\n").length);
+}

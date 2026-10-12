@@ -1,0 +1,12 @@
+import system.testing;
+import system;
+
+@test
+@timeout(180000)
+fun tuple_value_semantics() {
+    let a = (1, 2);
+    let b = a;
+    b.0 = 99;
+    Assert.eq_str((a.0).to_string(), "1");
+    Assert.eq_str((b.0).to_string(), "99");
+}

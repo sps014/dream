@@ -1,0 +1,69 @@
+import system.testing;
+// Interfaces: multiple implementations, dynamic dispatch through an interface-typed value,
+// implicit class->interface upcasts at call sites, and `is`-with-binding for both a reference
+// (interface) value and a boxed primitive.
+
+import system;
+interface c106_Animal {
+    fun speak(): string;
+    fun legs(): int;
+}
+
+class c106_Cat : c106_Animal {
+    public fun speak(): string { return "meow"; }
+    public fun legs(): int { return 4; }
+}
+
+class c106_Dog : c106_Animal {
+    public fun speak(): string { return "woof"; }
+    public fun legs(): int { return 2; }
+}
+
+// Passing a concrete class where the interface is expected is an implicit upcast; the call
+// inside dispatches dynamically to the concrete method.
+fun c106_describe(a: c106_Animal): void {
+    c106_verify_observation((a.speak()).to_string());
+    c106_verify_observation((a.legs()).to_string());
+}
+
+fun c106_body(): void {
+    let c = c106_Cat();
+    let d = c106_Dog();
+    c106_describe(c);
+    c106_describe(d);
+
+    let a: c106_Animal = (c106_Animal)c;
+    // `is`-with-binding on a reference/interface value: `cc` aliases the same object as `Cat`.
+    if a is c106_Cat cc {
+        c106_verify_observation((cc.speak()).to_string());
+    }
+    if a is c106_Dog dd {
+        c106_verify_observation(("unexpected").to_string());
+    }
+
+    // `is`-with-binding on a boxed primitive: `n` unboxes the object to `int`.
+    let o: object = 42;
+    if o is int n {
+        c106_verify_observation((n + 1).to_string());
+    }
+}
+
+let c106_cursor: int = 0;
+
+fun c106_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "meow\n4\nwoof\n2\nmeow\n43\n";
+    let end = c106_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c106_cursor, end));
+    c106_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun interfaces(): void {
+    c106_cursor = 0;
+    c106_body();
+    Assert.eq(c106_cursor, ("meow\n4\nwoof\n2\nmeow\n43\n").length);
+}

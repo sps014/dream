@@ -159,12 +159,6 @@ impl<'a> Analyzer<'a> {
                 Some(function.name.position),
             );
         }
-        if function.is_async {
-            diagnostics.report_error(
-                format!("@test function '{}' cannot be async", function.name.text),
-                Some(function.name.position),
-            );
-        }
         if function.is_extern {
             diagnostics.report_error(
                 format!("@test function '{}' cannot be extern", function.name.text),

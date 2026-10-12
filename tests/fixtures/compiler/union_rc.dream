@@ -1,0 +1,35 @@
+// A discriminated union with a reference-typed payload: releasing the union must release only the
+// active variant's reference fields (so `Box.Full` frees its `Tracked`, `Box.Empty` frees nothing).
+
+import system;
+class Tracked {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.print("drop ");
+        System.println(this.id);
+    }
+}
+
+enum Box {
+    Full(Tracked),
+    Empty,
+}
+
+fun open(borrow b: Box): int {
+    return switch (b) {
+        Full(t) => t.id,
+        Empty   => 0 - 1,
+    };
+}
+
+fun main() {
+    let b = Box.Full(Tracked(7));
+    System.println(open(b));
+    let e = Box.Empty;
+    System.println(open(e));
+}

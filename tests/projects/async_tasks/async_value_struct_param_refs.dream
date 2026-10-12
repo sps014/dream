@@ -1,0 +1,30 @@
+import system.testing;
+// Regression: async value(`struct`) params that embed references must retain those fields when
+// copied into the Future frame. Otherwise the caller can drop the original before the first poll
+// and leave the frame holding dangling pointers.
+
+import system;
+struct c40_Named {
+    public name: string;
+    public n: int;
+
+    public constructor(name: string, n: int) {
+        this.name = name;
+        this.n = n;
+    }
+}
+
+async fun c40_use_named(p: c40_Named): string {
+    Time.sleep(1).await;
+    return p.name + ":" + p.n;
+}
+
+@test
+@timeout(180000)
+async fun async_value_struct_param_refs(): void {
+    let a = c40_Named("hello", 1);
+    let fut = c40_use_named(a);
+    a = c40_Named("gone", 2);
+    let r = fut.await;
+    Assert.eq_str((r).to_string(), "hello:1");
+}

@@ -1,0 +1,31 @@
+import system.testing;
+import system;
+
+@native
+fun c1ea_f(): void {
+    c1ea_verify_observation(("ok").to_string());
+}
+
+fun c1ea_body(): void {
+    c1ea_f();
+}
+
+let c1ea_cursor: int = 0;
+
+fun c1ea_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "ok\n";
+    let end = c1ea_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c1ea_cursor, end));
+    c1ea_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun runtime_attr_ok(): void {
+    c1ea_cursor = 0;
+    c1ea_body();
+    Assert.eq(c1ea_cursor, ("ok\n").length);
+}

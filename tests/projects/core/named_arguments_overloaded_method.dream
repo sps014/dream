@@ -1,0 +1,21 @@
+import system.testing;
+// Named arguments work on overloaded instance methods.
+
+import system;
+class c164_Calc {
+    public fun add(x: int): int {
+        return x;
+    }
+
+    public fun add(x: int, y: int): int {
+        return x + y;
+    }
+}
+
+@test
+@timeout(180000)
+fun named_arguments_overloaded_method(): void {
+    let c = c164_Calc();
+    Assert.eq_str((c.add(x: 5)).to_string(), "5");
+    Assert.eq_str((c.add(x: 2, y: 3)).to_string(), "5");
+}

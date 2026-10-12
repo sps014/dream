@@ -1,0 +1,13 @@
+import system.testing;
+// Compiler-emitted string last-ref inside `defer` must not crash (native may delay the free).
+import system;
+
+@test
+@timeout(180000)
+fun defer_string_last_use() {
+    defer {
+        let s = "ab" + "cd";
+        Assert.eq_str((s).to_string(), "abcd");
+        Assert.eq_str(("ok").to_string(), "ok");
+    }
+}

@@ -1,0 +1,30 @@
+import system.testing;
+// An `async fun` returning a `long`/`float`/`double` used to fail WASM validation because the
+// scheduler's `Future.result` slot is a single `i32`. Wide scalars are boxed on completion and
+// unboxed at the `await` resume site so any return type flows through the same slot.
+import system;
+async fun c41_bigNumber(): long {
+    Time.sleep(1).await;
+    return 9000000000;
+}
+
+async fun c41_ratio(): float {
+    Time.sleep(1).await;
+    return 3.5f;
+}
+
+async fun c41_precise(): double {
+    Time.sleep(1).await;
+    return 2.71828;
+}
+
+@test
+@timeout(180000)
+async fun async_wide_scalar_return(): void {
+    let l = c41_bigNumber().await;
+    let f = c41_ratio().await;
+    let d = c41_precise().await;
+    Assert.eq_str(("" + l).to_string(), "9000000000");
+    Assert.eq_str(("" + f).to_string(), "3.5");
+    Assert.eq_str(("" + d).to_string(), "2.71828");
+}

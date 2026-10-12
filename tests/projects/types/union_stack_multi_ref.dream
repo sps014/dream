@@ -1,0 +1,52 @@
+import system.testing;
+// `enum struct` allows any number of non-self-referential reference-typed payload fields inline:
+// refs across different variants (Either) and multiple refs in one variant (Pair).
+
+import system;
+enum struct c27f_Either {
+    Left(string),
+    Right(string),
+}
+
+enum struct c27f_Pair {
+    Both(a: string, b: string),
+}
+
+fun c27f_side(e: c27f_Either): string {
+    return switch (e) {
+        Left(v)  => "L:" + v,
+        Right(v) => "R:" + v,
+    };
+}
+
+fun c27f_join(p: c27f_Pair): string {
+    return switch (p) {
+        Both(a, b) => a + "|" + b,
+    };
+}
+
+fun c27f_body(): void {
+    c27f_verify_observation((c27f_side(c27f_Either.Left("hi"))).to_string());
+    c27f_verify_observation((c27f_side(c27f_Either.Right("bye"))).to_string());
+    c27f_verify_observation((c27f_join(c27f_Pair.Both("x", "y"))).to_string());
+}
+
+let c27f_cursor: int = 0;
+
+fun c27f_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "L:hi\nR:bye\nx|y\n";
+    let end = c27f_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c27f_cursor, end));
+    c27f_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun union_stack_multi_ref(): void {
+    c27f_cursor = 0;
+    c27f_body();
+    Assert.eq(c27f_cursor, ("L:hi\nR:bye\nx|y\n").length);
+}

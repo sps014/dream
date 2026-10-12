@@ -1,0 +1,23 @@
+import system.testing;
+import system;
+import system.json;
+
+class cae_User {
+    public name: string;
+    public constructor(name: string) { this.name = name; }
+    public fun greet(): string { return "hi " + this.name; }
+}
+
+fun cae_helper(): int {
+    return 1;
+}
+
+@test
+@timeout(180000)
+fun declof(): void {
+    Assert.eq_str((declof(cae_User)).to_string(), "::cae_User");
+    Assert.eq_str((declof(cae_User.greet)).to_string(), "::cae_User.greet");
+    Assert.eq_str((declof(cae_helper)).to_string(), "::cae_helper");
+    Assert.eq_str((declof(Json.serialize)).to_string(), "system.json::Json.serialize");
+    Assert.eq_str((declof(List)).to_string(), "system.collections::List");
+}

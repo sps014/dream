@@ -1,0 +1,16 @@
+import system.testing;
+import system;
+/**
+ * JSDoc-style multi-line comment.
+ * Describes the entry point.
+ * @returns nothing
+ */
+@test
+@timeout(180000)
+fun comments(): void {
+    /* a plain block
+       comment spanning
+       multiple lines */
+    let x: int = 42; // a trailing line comment
+    Assert.eq_str((x).to_string(), "42");
+}

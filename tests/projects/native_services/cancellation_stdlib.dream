@@ -1,0 +1,36 @@
+import system.testing;
+import system;
+import system.io;
+
+async fun c66_body(): void {
+    let src = CancellationSource();
+    src.cancel();
+    let tok = src.token;
+    let opt = Option.Some(tok);
+
+    switch (File.read("missing.txt", opt).await) {
+        Ok(t) => c66_verify_observation((t).to_string()),
+        Err(e) => c66_verify_observation((e.code()).to_string()),
+    }
+
+}
+
+let c66_cursor: int = 0;
+
+fun c66_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "ECANCELLED\n";
+    let end = c66_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c66_cursor, end));
+    c66_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+async fun cancellation_stdlib(): void {
+    c66_cursor = 0;
+    c66_body().await;
+    Assert.eq(c66_cursor, ("ECANCELLED\n").length);
+}

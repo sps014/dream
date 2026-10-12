@@ -1,0 +1,79 @@
+import system.testing;
+import system;
+fun c55_body(): void {
+    let x = 10;
+
+    // Nested ifs and complex branching
+    if x > 5 {
+        if x < 15 {
+            if x == 10 {
+                c55_verify_observation((1).to_string());
+            } else {
+                c55_verify_observation((0).to_string());
+            }
+        } else {
+            c55_verify_observation((0).to_string());
+        }
+    } else {
+        c55_verify_observation((0).to_string());
+    }
+
+    // Else if chains
+    if x < 5 {
+        c55_verify_observation((0).to_string());
+    } else if (x == 10 ) {
+        c55_verify_observation((2).to_string());
+    } else if (x > 10 ) {
+        c55_verify_observation((0).to_string());
+    } else {
+        c55_verify_observation((0).to_string());
+    }
+
+    // While loop with break
+    let i = 0;
+    while i < 10 {
+        if i == 3 {
+            break;
+        }
+        c55_verify_observation((i).to_string());
+        i = i + 1;
+    }
+
+    // For loop with continue
+    for (let j = 0; j < 5; j = j + 1 ) {
+        if j == 1 {
+            continue;
+        }
+        if j == 3 {
+            continue;
+        }
+        c55_verify_observation((j).to_string());
+    }
+
+    // Nested loops
+    for (let a = 0; a < 2; a = a + 1 ) {
+        for (let b = 0; b < 2; b = b + 1 ) {
+            c55_verify_observation((a * 10 + b).to_string());
+        }
+    }
+}
+
+let c55_cursor: int = 0;
+
+fun c55_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "1\n2\n0\n1\n2\n0\n2\n4\n0\n1\n10\n11\n";
+    let end = c55_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c55_cursor, end));
+    c55_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun branching(): void {
+    c55_cursor = 0;
+    c55_body();
+    Assert.eq(c55_cursor, ("1\n2\n0\n1\n2\n0\n2\n4\n0\n1\n10\n11\n").length);
+}

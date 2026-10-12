@@ -1,0 +1,38 @@
+import system.testing;
+import system;
+import system.io;
+
+fun c1a9_body(): void {
+    c1a9_verify_observation((Path.stem("a.tar.gz")).to_string());
+    c1a9_verify_observation((Path.with_extension("a/b.txt", "md")).to_string());
+    c1a9_verify_observation((Path.with_file_name("a/b.txt", "c.txt")).to_string());
+    c1a9_verify_observation((Path.is_relative("foo")).to_string());
+    c1a9_verify_observation((Path.has_extension("a.txt", "txt")).to_string());
+    let parts = Path.components("a/b\\c");
+    c1a9_verify_observation((parts.join(",")).to_string());
+    switch (Path.relative_to("a/b/c", "a/b")) {
+        Some(rel) => c1a9_verify_observation((rel).to_string()),
+        None => c1a9_verify_observation(("none").to_string()),
+    }
+    c1a9_verify_observation((Path.absolute("/x").starts_with("/")).to_string());
+}
+
+let c1a9_cursor: int = 0;
+
+fun c1a9_verify_observation(borrow value: string): void {
+    let actual = value + "\n";
+    let wanted = "a.tar\na/b.md\na/c.txt\ntrue\ntrue\na,b,c\nc\ntrue\n";
+    let end = c1a9_cursor + actual.length;
+    Assert.is_true(end <= wanted.length);
+    Assert.eq_str(actual, wanted.substring(c1a9_cursor, end));
+    c1a9_cursor = end;
+}
+
+@test
+@timeout(180000)
+
+fun path_helpers(): void {
+    c1a9_cursor = 0;
+    c1a9_body();
+    Assert.eq(c1a9_cursor, ("a.tar\na/b.md\na/c.txt\ntrue\ntrue\na,b,c\nc\ntrue\n").length);
+}

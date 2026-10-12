@@ -1,0 +1,12 @@
+import system.testing;
+import system;
+
+@test
+@timeout(180000)
+fun tuple_print() {
+    let t = (1, "x");
+    Assert.eq_str((t).to_string(), "(1, x)");
+    Assert.eq_str((t.to_string()).to_string(), "(1, x)");
+    let n = ((3, 4), false);
+    Assert.eq_str((n).to_string(), "((3, 4), false)");
+}

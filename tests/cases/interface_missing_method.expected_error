@@ -1,1 +1,0 @@
-class 'Cat' does not implement method 'legs' required by interface 'Animal'

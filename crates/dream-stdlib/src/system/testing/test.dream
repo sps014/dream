@@ -15,6 +15,26 @@ public static class Test {
         Test.measure(name, body);
     }
 
+    public static async fun run_async(name: string, body: fun(): Future<void>): void {
+        System.println("RUN " + name);
+        Test.measure_async(name, body).await;
+    }
+
+    public static async fun run_async_with_timeout(name: string, timeout_ms: int, body: fun(): Future<void>): void {
+        System.println("RUN " + name + " timeout=" + timeout_ms);
+        Test.measure_async(name, body).await;
+    }
+
+    static async fun measure_async(name: string, body: fun(): Future<void>): void {
+        let before = Debug.live_objects;
+        body().await;
+        let after = Debug.live_objects;
+        if after > before {
+            System.println("LEAK " + name + " live=+" + (after - before));
+        }
+        System.println("PASS " + name);
+    }
+
     // A positive live-object delta only points at a suspect: lazily initialized globals and
     // deferred cleanup move the counter too. The exit-time leak report is the pass/fail gate.
     static fun measure(name: string, body: fun(): void): void {

@@ -1,0 +1,32 @@
+import system.testing;
+// Regression test: passing a reference (class) into a function must not invalidate
+// the caller's binding. The callee now retains its parameter on entry so the matching
+// release at exit keeps the reference count balanced.
+import system;
+class c1a_Box {
+    public value: int;
+
+    public constructor(value: int) {
+        this.value = value;
+    }
+}
+
+fun c1a_read_value(b: c1a_Box): int {
+    return b.value;
+}
+
+fun c1a_read_twice(b: c1a_Box): int {
+    let first = c1a_read_value(b);
+    let second = c1a_read_value(b);
+    return first + second;
+}
+
+@test
+@timeout(180000)
+fun arc_param() {
+    let b = c1a_Box(21);
+    let total = c1a_read_twice(b);
+    // `b` must still be valid here after being passed through two function calls.
+    Assert.eq_str((b.value).to_string(), "21");
+    Assert.eq_str((total).to_string(), "42");
+}

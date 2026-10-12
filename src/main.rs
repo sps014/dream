@@ -219,13 +219,17 @@ enum Command {
         #[arg(last = true)]
         args: Vec<String>,
     },
-    /// Discover and run @test functions in a .dream file or directory
+    /// Build a test project's @test functions into one runner and run it (`--node` for Node)
     Test {
-        /// .dream file or directory of them (defaults to ./tests)
+        /// Test package directory, directory of .dream files, or one file (defaults to the
+        /// current test package, else ./tests)
         file: Option<String>,
-        /// Only run @test functions whose names contain this substring
+        /// Only run tests whose `<file>::<name>` contains this substring
         #[arg(long, value_name = "SUBSTR")]
         filter: Option<String>,
+        /// Run on the native host (with --node: on both) instead of the project's [test].targets
+        #[arg(long)]
+        native: bool,
     },
     /// Serve DAP over stdio via lldb-dap on the native .bin (implies -g)
     DebugAdapter {
@@ -398,8 +402,13 @@ fn main() -> ExitCode {
         ui.error("--emit-llvm stops after writing the .ll; drop it to run");
         return ExitCode::FAILURE;
     }
-    if !native && (run_after_compile || run_tests || debug_adapter) {
-        ui.error("`run`, `test`, and `debug-adapter` execute natively");
+    if run_tests && (cli.web || (cli.wasm && !cli.node)) {
+        ui.error("`test` runs on the native and node hosts");
+        ui.help("pass --node to run the tests under Node (with --native to run both)");
+        return ExitCode::FAILURE;
+    }
+    if !native && (run_after_compile || debug_adapter) {
+        ui.error("`run` and `debug-adapter` execute natively");
         ui.help(
             "drop --wasm/--web/--node here, or use `dream build --wasm <file>` for a wasm32 module",
         );
@@ -534,32 +543,42 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    if run_tests {
+    if let Some(Command::Test { filter, native, .. }) = &cli.command {
         let path = match file_name {
             Some(name) => PathBuf::from(name),
             None => {
                 let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                let is_test_package = dream::driver::project_manifest::ProjectManifest::load(&cwd)
+                    .is_ok_and(|m| m.package_type.as_deref() == Some("test"));
                 let tests = cwd.join("tests");
-                if tests.is_dir() {
+                if is_test_package {
+                    cwd
+                } else if tests.is_dir() {
                     tests
                 } else {
-                    ui.error("no test files given and no tests/ directory found");
-                    ui.help("pass a .dream file or a directory containing them");
+                    ui.error("no test project here: not a type = \"test\" package and no tests/");
+                    ui.help("pass a test package directory, a directory of .dream files, or a file");
                     return ExitCode::FAILURE;
                 }
             }
         };
+        let hosts = [
+            (*native, dream::driver::test::TestHost::Native),
+            (cli.node, dream::driver::test::TestHost::Node),
+        ]
+        .into_iter()
+        .filter_map(|(on, host)| on.then_some(host))
+        .collect();
         let opts = dream::driver::test::TestOptions {
             release: cli.release,
             optimize,
-            filter: match &cli.command {
-                Some(Command::Test { filter, .. }) => filter.clone(),
-                _ => None,
-            },
+            filter: filter.clone(),
             verbose: cli.verbose,
+            hosts,
         };
         return match dream::driver::test::run_tests(&config, &path, &opts) {
-            Ok(_) => ExitCode::SUCCESS,
+            Ok(result) if result.ok() => ExitCode::SUCCESS,
+            Ok(_) => ExitCode::FAILURE,
             Err(e) => {
                 ui.error(&e);
                 ExitCode::FAILURE
@@ -745,12 +764,24 @@ fn main() -> ExitCode {
         }
     };
     let unoptimized = !cli.release && optimize.is_none() && !debug_adapter;
+    let run_dir = if output_kind.is_library() || cli.object || cli.emit_llvm {
+        None
+    } else {
+        match sync_package_assets(&file_name, &out_path) {
+            Ok(dir) => dir,
+            Err(error) => {
+                ui.error(&error);
+                return ExitCode::FAILURE;
+            }
+        }
+    };
     let launch = Launch {
         config: &config,
         out_path: &out_path,
         program_args: &program_args,
         debug_adapter,
         run_after_compile,
+        run_dir: run_dir.as_deref(),
     };
     let stamp = match outcome {
         BuildOutcome::Built(stamp) => stamp,
@@ -920,6 +951,7 @@ struct Launch<'a> {
     program_args: &'a [String],
     debug_adapter: bool,
     run_after_compile: bool,
+    run_dir: Option<&'a Path>,
 }
 
 impl Launch<'_> {
@@ -943,7 +975,13 @@ impl Launch<'_> {
         ui.step("Running", &bin.display().to_string());
         // The guest's exit status is the program's own (`main(): int`, or a failing `Result`),
         // so forward it instead of reporting a tool failure.
-        match run_native_bin(self.config, bin, self.out_path, self.program_args) {
+        match run_native_bin(
+            self.config,
+            bin,
+            self.out_path,
+            self.program_args,
+            self.run_dir,
+        ) {
             Ok(0) => ExitCode::SUCCESS,
             Ok(code) => ExitCode::from(code.clamp(1, 255) as u8),
             // `dream_panic` / `abort()` already printed the crash on stderr.
@@ -954,6 +992,22 @@ impl Launch<'_> {
             }
         }
     }
+}
+
+/// Copies the enclosing package's `[package].assets` beside the build output, answering that
+/// directory as the one a run starts in (`None` when the package declares no assets).
+fn sync_package_assets(entry: &str, out_path: &str) -> Result<Option<PathBuf>, String> {
+    let Some((root, assets)) = dream::driver::assets::for_entry(Path::new(entry))? else {
+        return Ok(None);
+    };
+    let out_dir = Path::new(out_path)
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    dream::driver::assets::sync(&root, &assets, out_dir)?;
+    std::path::absolute(out_dir)
+        .map(Some)
+        .map_err(|e| format!("resolving {}: {e}", out_dir.display()))
 }
 
 fn report_compile_error(ui: &Ui, e: dream::driver::error::CompileError) {

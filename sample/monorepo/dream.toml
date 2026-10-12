@@ -1,2 +1,2 @@
 [workspace]
-members = ["packages/greeter", "apps/cli"]
+members = ["packages/greeter", "apps/cli", "tests/greeter", "tests/fixtures"]

@@ -117,6 +117,11 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 }
 
+/// Native debug builds with symbols keep every frame for the debugger.
+fn preserve_frames(l: &Lcx<'_>) -> bool {
+    l.cx.leak_checks && l.cx.debug_syms && l.cx.target.spec().capabilities.native_entry
+}
+
 fn inline_attr(f: &MirFunction, preserve_frames: bool) -> Option<FnAttr> {
     if preserve_frames {
         return Some(FnAttr::NoInline);
@@ -140,7 +145,7 @@ pub(super) fn build_sync<'a>(
     };
     let mut w = l.writer(&name);
     w.attrs
-        .extend(inline_attr(f, l.cx.leak_checks && l.cx.debug_syms));
+        .extend(inline_attr(f, preserve_frames(l)));
     let mut fx = Fx::new(l, f, w);
     fx.fresh_init = matches!(mode, super::construction::InitMode::Fresh);
     fx.debug_begin(f);
@@ -237,7 +242,7 @@ pub(super) fn build_async_stub<'a>(
     let name = l.user_fn(stub);
     let mut w = l.writer(&name);
     w.attrs
-        .extend(inline_attr(stub, l.cx.leak_checks && l.cx.debug_syms));
+        .extend(inline_attr(stub, preserve_frames(l)));
     let wide = crate::backend::shared::abi_types::ref_int_locals(&l.cx, body);
     let mut fx = Fx::new(l, stub, w);
     let first = fx.w.new_block("body");

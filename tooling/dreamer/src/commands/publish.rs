@@ -15,6 +15,12 @@ pub fn run(
     let workspace = Workspace::discover_package(start_dir, package)?;
     workspace.manifest.validate()?;
     let pkg = workspace.manifest.package()?;
+    if pkg.package_type == crate::manifest::PackageType::Test {
+        bail!(
+            "package '{}' is type = \"test\"; test packages are never published",
+            pkg.name
+        );
+    }
 
     for (dep_name, dep) in &workspace.manifest.dependencies {
         if dep.is_path_only() {

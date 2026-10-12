@@ -84,6 +84,7 @@
 #define DREAM_SYM_EXPORT_WORKER_INVOKE_RAW "__dream_worker_invoke_raw"
 #define DREAM_SYM_EXPORT_DROP_GLOBALS "__dream_drop_globals"
 #define DREAM_SYM_EXPORT_MAIN_REPORT "__dream_main_report"
+#define DREAM_SYM_EXPORT_LEAK_LIVE "__dream_leak_live"
 #define DREAM_SYM_EXPORT_FT_GET "dream_ft_get"
 #define DREAM_MODULE_HOST "Dream"
 #define DREAM_SYM_TIME_NOW_NANOS "timeNowNanos"

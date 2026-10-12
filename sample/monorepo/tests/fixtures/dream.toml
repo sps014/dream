@@ -1,0 +1,9 @@
+[package]
+name = "fixture_tests"
+version = "0.1.0"
+type = "test"
+description = "Tests that read files shipped as assets"
+assets = ["data"]
+
+[test]
+targets = ["native", "node"]

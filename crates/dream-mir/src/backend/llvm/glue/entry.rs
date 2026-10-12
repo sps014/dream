@@ -39,6 +39,10 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
                 crate::abi::EXPORT_MAIN_REPORT,
             );
         }
+        if l.cx.leak_checks {
+            register(l, crate::abi::EXPORT_LEAK_LIVE, Ty::I32, vec![]);
+            l.export(crate::abi::EXPORT_LEAK_LIVE, crate::abi::EXPORT_LEAK_LIVE);
+        }
     } else {
         register(l, "main", Ty::I32, vec![Ty::I32, Ty::Ptr]);
     }
@@ -74,6 +78,9 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
     guest_entry(l, main, exit);
     if !l.cx.target.spec().capabilities.native_entry {
         main_report(l, main, exit);
+        if l.cx.leak_checks {
+            leak_live(l);
+        }
     } else {
         native_main(l);
     }
@@ -223,6 +230,21 @@ fn main_report(l: &mut Lcx<'_>, main: &MirFunction, exit: EntryExit) {
     }
     let rc = fx.w.load(Ty::I32, &Value::global(RC_SLOT), 4, &[]);
     fx.w.ret(Some(&rc));
+    fx.finish();
+}
+
+fn leak_live(l: &mut Lcx<'_>) {
+    let mut fx = glue(l, crate::abi::EXPORT_LEAK_LIVE);
+    if fx.l.requirements.deferred_cleanup {
+        fx.call("dream_defer_drain_all", &[]);
+    }
+    let live = if fx.l.requirements.heap {
+        let live = fx.call_v("debug_get_live_objects", &[]);
+        fx.conv(&live, &Ty::I32)
+    } else {
+        Value::i32(0)
+    };
+    fx.w.ret(Some(&live));
     fx.finish();
 }
 

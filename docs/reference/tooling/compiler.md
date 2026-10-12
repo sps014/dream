@@ -16,7 +16,7 @@ The first command builds and runs the file. The second only builds it. The third
 | --- | --- |
 | `dream build file.dream` | Build without starting the program |
 | `dream run file.dream` | Build and run on your computer |
-| `dream test tests/` | Find and run test functions |
+| `dream test tests/` | Build a test project's `@test` functions into one runner and run it (`--node` for Node) |
 | `dream fmt src/` | Format source files in place |
 | `dream fmt --check src/` | Check formatting without changing source |
 | `dream debug-adapter` | Start the service used by an editor's debugger |

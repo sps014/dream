@@ -15,6 +15,7 @@ pub fn refresh_host_aliases(
     entry_stem: &str,
     web: bool,
     node: bool,
+    assets: &[String],
 ) -> Result<()> {
     if !web && !node {
         return Ok(());
@@ -35,11 +36,9 @@ pub fn refresh_host_aliases(
     let _ = copy_if_present(&web_dir, &web_dir, &format!("{entry_stem}.abi.json"));
 
     if node {
-        refresh_node(
-            &web_dir,
-            &project_root.join("target").join("node"),
-            entry_stem,
-        )?;
+        let node_dir = project_root.join("target").join("node");
+        refresh_node(&web_dir, &node_dir, entry_stem)?;
+        crate::assets::copy_into(project_root, assets, &node_dir)?;
     }
     Ok(())
 }
@@ -88,7 +87,9 @@ fn copy_if_present(src_dir: &Path, dest_dir: &Path, name: &str) -> Result<bool> 
 /// Contents of `run.mjs` for a given compile-root stem (`main` → `target/node/main.wasm`).
 pub fn node_runner_source(stem: &str) -> String {
     format!(
-        "import {{ run }} from \"./target/node/{stem}.node.runtime.js\";\nawait run(\"./target/node/{stem}.wasm\");\n"
+        "import {{ fileURLToPath }} from \"node:url\";\n\
+         import {{ run }} from \"./target/node/{stem}.node.runtime.js\";\n\
+         await run(fileURLToPath(new URL(\"./target/node/{stem}.wasm\", import.meta.url)));\n"
     )
 }
 
@@ -128,7 +129,9 @@ mod tests {
         fs::write(web.join("main.node.runtime.js"), b"node").unwrap();
         fs::write(web.join("main.abi.json"), b"{}").unwrap();
 
-        refresh_host_aliases(root, "main", true, true).unwrap();
+        fs::write(root.join("fixture.txt"), b"f").unwrap();
+        refresh_host_aliases(root, "main", true, true, &["fixture.txt".into()]).unwrap();
+        assert_eq!(fs::read(root.join("target/node/fixture.txt")).unwrap(), b"f");
 
         assert_eq!(
             fs::read(root.join("target/web/main.wasm")).unwrap(),
@@ -153,7 +156,7 @@ mod tests {
         fs::write(web.join("app.wasm"), b"r").unwrap();
         fs::write(web.join("app.web.runtime.js"), b"w").unwrap();
 
-        refresh_host_aliases(root, "app", true, false).unwrap();
+        refresh_host_aliases(root, "app", true, false, &[]).unwrap();
         assert!(root.join("target/web/app.wasm").is_file());
         assert!(!root.join("target/node").exists());
     }

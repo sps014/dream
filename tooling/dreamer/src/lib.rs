@@ -1,5 +1,6 @@
 pub mod app_icon;
 pub mod artifact_alias;
+pub mod assets;
 pub mod commands;
 pub mod compile_flags;
 pub mod dream_bin;

@@ -53,6 +53,7 @@ mod sema_emission_tests;
 mod structural_symbols;
 mod take_borrow_tests;
 mod target_spec;
+mod test_projects;
 mod wasm_interop;
 mod wasm_opt_test;
 mod weak_emission;

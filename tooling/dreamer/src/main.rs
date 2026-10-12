@@ -1,10 +1,16 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use dreamer::commands;
 use dreamer::compile_flags::CompileFlags;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use yansi::Paint;
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum LibOutput {
+    Staticlib,
+    Cdylib,
+}
 
 /// Same `--release` / `-O` / `--wasm` tokens as `dream`.
 #[derive(Args, Clone, Debug, Default)]
@@ -71,8 +77,17 @@ enum Cmd {
         #[arg(long, value_name = "TARGETS")]
         runtime: Option<String>,
         /// Scaffold a library package (`type = "lib"`, no entry / main).
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["test", "workspace"])]
         lib: bool,
+        /// Native library kind a `--lib` package builds as (`staticlib` or `cdylib`).
+        #[arg(long, value_name = "KIND", requires = "lib", default_value = "staticlib")]
+        output: LibOutput,
+        /// Scaffold a test project (`type = "test"`, an example @test and `fixtures/` assets).
+        #[arg(long, conflicts_with = "workspace")]
+        test: bool,
+        /// Scaffold a workspace: an `app/` program and a `tests/` test project that imports it.
+        #[arg(long)]
+        workspace: bool,
     },
     /// Add a dependency to dream.toml, then resolve and install it.
     Add {
@@ -132,15 +147,22 @@ enum Cmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-    /// Install dependencies (incl. dev), then run `@test` suites under `tests/`.
+    /// Install dependencies (incl. dev), then build and run test projects: every test project in
+    /// the workspace, the selected `-p` one, or this package's (`type = "test"` or `tests/`).
     Test {
         #[command(flatten)]
         opt: OptFlags,
-        /// Only run `@test` functions whose names contain this substring.
+        /// Only run tests whose `<file>::<name>` contains this substring.
         #[arg(long, value_name = "SUBSTR")]
         filter: Option<String>,
         #[arg(short = 'p', long = "package", value_name = "NAME")]
         package: Option<String>,
+        /// Run on the native host instead of each project's [test].targets (with --node: both).
+        #[arg(long)]
+        native: bool,
+        /// Run under Node instead of each project's [test].targets (with --native: both).
+        #[arg(long)]
+        node: bool,
     },
     /// Package the current project and publish it to a registry.
     Publish {
@@ -226,8 +248,26 @@ fn main() -> ExitCode {
             dir,
             runtime,
             lib,
+            output,
+            test,
+            workspace,
         } => match commands::init::prepare_project_dir(&cwd, name.as_deref(), dir.as_deref()) {
-            Ok(dest) => commands::init::run(&dest, name, runtime, lib),
+            Ok(dest) => {
+                use commands::init::Scaffold;
+                let scaffold = if lib {
+                    Scaffold::Lib(match output {
+                        LibOutput::Staticlib => dream_abi::library::LibraryKind::Staticlib,
+                        LibOutput::Cdylib => dream_abi::library::LibraryKind::Cdylib,
+                    })
+                } else if test {
+                    Scaffold::Test
+                } else if workspace {
+                    Scaffold::Workspace
+                } else {
+                    Scaffold::Bin
+                };
+                commands::init::run(&dest, name, runtime, scaffold)
+            }
             Err(e) => {
                 print_error(format!("{e:#}"));
                 return ExitCode::FAILURE;
@@ -284,8 +324,16 @@ fn main() -> ExitCode {
             opt,
             filter,
             package,
+            native,
+            node,
         } => match opt.into_compile_flags() {
-            Ok(flags) => commands::test::run_with(&cwd, flags, filter, package.as_deref()),
+            Ok(flags) => commands::test::run_with(
+                &cwd,
+                flags,
+                filter,
+                package.as_deref(),
+                commands::test::Hosts { native, node },
+            ),
             Err(e) => {
                 print_error(e);
                 return ExitCode::FAILURE;

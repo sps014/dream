@@ -9,13 +9,15 @@ use std::path::{Path, PathBuf};
 
 pub const MANIFEST_FILE_NAME: &str = "dream.toml";
 
-/// Whether this package is a runnable application (`bin`) or a library (`lib`).
+/// A runnable application (`bin`), a library (`lib`), or a test project (`test`) whose `@test`
+/// functions `dreamer test` builds into one runner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum PackageType {
     #[default]
     Bin,
     Lib,
+    Test,
 }
 
 impl PackageType {
@@ -23,8 +25,17 @@ impl PackageType {
         match self {
             PackageType::Bin => "bin",
             PackageType::Lib => "lib",
+            PackageType::Test => "test",
         }
     }
+}
+
+/// `[test]` table of a `type = "test"` package.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct TestConfig {
+    /// Hosts the whole suite runs on (`native`, `node`). Empty means native only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub targets: Vec<String>,
 }
 
 impl std::fmt::Display for PackageType {
@@ -165,6 +176,8 @@ pub struct Manifest {
     /// Present on a workspace root (virtual or root-package + members).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<WorkspaceMeta>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub test: Option<TestConfig>,
     #[serde(default)]
     pub dependencies: BTreeMap<String, Dependency>,
     #[serde(default, rename = "dev-dependencies")]
@@ -219,6 +232,10 @@ pub struct PackageMeta {
     /// - `dreamer pack`: PNG bytes are copied into the single-file exe (no sidecar assets folder).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// Files or directories (relative to the manifest directory) copied next to the program
+    /// output; the program runs with that output directory as its working directory.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assets: Vec<String>,
     /// Native library this package provides (`links = "sqlite3"`); at most one package in a
     /// dependency graph may claim a given name, like Cargo's `links`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -398,25 +415,12 @@ pub fn validate_relative_asset_path(path: &str, field: &str) -> Result<()> {
 }
 
 impl Manifest {
-    /// Create a `bin` package manifest with the given entry point.
-    pub fn new(name: String, version: String, entry: String) -> Self {
+    fn empty(package: Option<PackageMeta>) -> Self {
         Manifest {
             lib: None,
-            package: Some(PackageMeta {
-                name,
-                version,
-                package_type: PackageType::Bin,
-                edition: None,
-                authors: Vec::new(),
-                description: None,
-                entry: Some(entry),
-                license: None,
-                keywords: Vec::new(),
-                targets: Vec::new(),
-                icon: None,
-                links: None,
-            }),
+            package,
             workspace: None,
+            test: None,
             dependencies: BTreeMap::new(),
             dev_dependencies: BTreeMap::new(),
             scripts: BTreeMap::new(),
@@ -424,51 +428,79 @@ impl Manifest {
             generators: Vec::new(),
             native: BTreeMap::new(),
         }
+    }
+
+    fn package_meta(
+        name: String,
+        version: String,
+        package_type: PackageType,
+        entry: Option<String>,
+    ) -> PackageMeta {
+        PackageMeta {
+            name,
+            version,
+            package_type,
+            edition: None,
+            authors: Vec::new(),
+            description: None,
+            entry,
+            license: None,
+            keywords: Vec::new(),
+            targets: Vec::new(),
+            icon: None,
+            assets: Vec::new(),
+            links: None,
+        }
+    }
+
+    /// Create a `bin` package manifest with the given entry point.
+    pub fn new(name: String, version: String, entry: String) -> Self {
+        Self::empty(Some(Self::package_meta(
+            name,
+            version,
+            PackageType::Bin,
+            Some(entry),
+        )))
     }
 
     /// Create a `lib` package manifest (no entry).
     pub fn new_lib(name: String, version: String) -> Self {
-        Manifest {
-            lib: Some(dream_abi::library::LibraryConfig {
-                output_type: dream_abi::library::LibraryKind::Staticlib,
-            }),
-            package: Some(PackageMeta {
-                name,
-                version,
-                package_type: PackageType::Lib,
-                edition: None,
-                authors: Vec::new(),
-                description: None,
-                entry: None,
-                license: None,
-                keywords: Vec::new(),
-                targets: Vec::new(),
-                icon: None,
-                links: None,
-            }),
-            workspace: None,
-            dependencies: BTreeMap::new(),
-            dev_dependencies: BTreeMap::new(),
-            scripts: BTreeMap::new(),
-            registries: BTreeMap::new(),
-            generators: Vec::new(),
-            native: BTreeMap::new(),
-        }
+        let mut manifest = Self::empty(Some(Self::package_meta(
+            name,
+            version,
+            PackageType::Lib,
+            None,
+        )));
+        manifest.lib = Some(dream_abi::library::LibraryConfig {
+            output_type: dream_abi::library::LibraryKind::Staticlib,
+        });
+        manifest
+    }
+
+    /// Create a `test` package manifest (no entry; every `.dream` file joins the runner).
+    pub fn new_test(name: String, version: String) -> Self {
+        Self::empty(Some(Self::package_meta(
+            name,
+            version,
+            PackageType::Test,
+            None,
+        )))
     }
 
     /// Virtual workspace root (`[workspace]` only, no `[package]`).
     pub fn new_workspace(members: Vec<String>) -> Self {
-        Manifest {
-            lib: None,
-            package: None,
-            workspace: Some(WorkspaceMeta { members }),
-            dependencies: BTreeMap::new(),
-            dev_dependencies: BTreeMap::new(),
-            scripts: BTreeMap::new(),
-            registries: BTreeMap::new(),
-            generators: Vec::new(),
-            native: BTreeMap::new(),
+        let mut manifest = Self::empty(None);
+        manifest.workspace = Some(WorkspaceMeta { members });
+        manifest
+    }
+
+    /// Hosts a test package's suite runs on, in declaration order (native when none are listed).
+    pub fn test_targets(&self) -> Result<Vec<RunTarget>> {
+        let listed = self.test.as_ref().map(|t| t.targets.as_slice()).unwrap_or(&[]);
+        if listed.is_empty() {
+            return Ok(vec![RunTarget::Native]);
         }
+        listed.iter().map(|t| RunTarget::parse(t)).collect()
     }
 
     /// Package metadata; errors if this is a virtual workspace root.
@@ -556,6 +588,9 @@ impl Manifest {
             if self.lib.is_some() {
                 bail!("[lib] requires [package].type = \"lib\"");
             }
+            if self.test.is_some() {
+                bail!("[test] requires [package].type = \"test\"");
+            }
             return Ok(());
         };
         validate_package_name(&pkg.name)?;
@@ -586,6 +621,60 @@ impl Manifest {
                         pkg.name
                     );
                 }
+                if !pkg.assets.is_empty() {
+                    bail!(
+                        "package '{}' is type = \"lib\" and cannot declare assets \
+                         (assets belong to bin and test packages)",
+                        pkg.name
+                    );
+                }
+            }
+            PackageType::Test => {
+                if pkg.entry.as_deref().is_some_and(|e| !e.trim().is_empty()) {
+                    bail!(
+                        "package '{}' is type = \"test\" and must not set entry \
+                         (every .dream file in the package joins one test runner)",
+                        pkg.name
+                    );
+                }
+                if !pkg.targets.is_empty() {
+                    bail!(
+                        "package '{}' is type = \"test\": list its hosts in [test].targets, \
+                         not [package].targets",
+                        pkg.name
+                    );
+                }
+                if pkg.icon.is_some() {
+                    bail!(
+                        "package '{}' is type = \"test\" and cannot set package.icon",
+                        pkg.name
+                    );
+                }
+            }
+        }
+        if let Some(test) = &self.test {
+            if pkg.package_type != PackageType::Test {
+                bail!("[test] requires [package].type = \"test\"");
+            }
+            let mut seen = Vec::new();
+            for t in &test.targets {
+                let parsed = RunTarget::parse(t)?;
+                if parsed == RunTarget::Web {
+                    bail!("[test].targets supports native and node (web has no process to run tests in)");
+                }
+                if seen.contains(&parsed) {
+                    bail!("[test].targets lists '{}' more than once", parsed.as_str());
+                }
+                seen.push(parsed);
+            }
+        }
+        for asset in &pkg.assets {
+            validate_relative_asset_path(asset, "package.assets entry")?;
+            if Path::new(asset.trim())
+                .components()
+                .all(|c| matches!(c, std::path::Component::CurDir))
+            {
+                bail!("package.assets entry '{asset}' must name a file or directory, not the package root");
             }
         }
         if self.lib.is_some() {
@@ -899,6 +988,48 @@ frameworks = ["Security"]
         assert!(bin.validate().is_err());
         bin.package_mut().unwrap().entry = Some(String::new());
         assert!(bin.validate().is_err());
+    }
+
+    #[test]
+    fn test_packages_validate_targets_and_reject_bin_only_keys() {
+        let mut test = Manifest::new_test("suite".into(), "0.1.0".into());
+        assert!(test.validate().is_ok());
+        assert_eq!(test.test_targets().unwrap(), vec![RunTarget::Native]);
+        test.test = Some(TestConfig {
+            targets: vec!["node".into(), "native".into()],
+        });
+        assert!(test.validate().is_ok());
+        assert_eq!(
+            test.test_targets().unwrap(),
+            vec![RunTarget::Node, RunTarget::Native]
+        );
+        for bad in [vec!["web"], vec!["node", "node"], vec!["deno"]] {
+            test.test = Some(TestConfig {
+                targets: bad.iter().map(|s| s.to_string()).collect(),
+            });
+            assert!(test.validate().is_err(), "{bad:?}");
+        }
+        test.test = None;
+        test.package_mut().unwrap().entry = Some("src/main.dream".into());
+        assert!(test.validate().is_err());
+
+        let mut bin = Manifest::new("app".into(), "0.1.0".into(), "src/main.dream".into());
+        bin.test = Some(TestConfig::default());
+        assert!(bin.validate().is_err());
+    }
+
+    #[test]
+    fn assets_are_relative_and_not_allowed_on_libs() {
+        let mut bin = Manifest::new("app".into(), "0.1.0".into(), "src/main.dream".into());
+        bin.package_mut().unwrap().assets = vec!["fixtures".into(), "data/a.txt".into()];
+        assert!(bin.validate().is_ok());
+        for bad in ["../up", "/abs", ".", ""] {
+            bin.package_mut().unwrap().assets = vec![bad.into()];
+            assert!(bin.validate().is_err(), "{bad}");
+        }
+        let mut lib = Manifest::new_lib("lib".into(), "0.1.0".into());
+        lib.package_mut().unwrap().assets = vec!["fixtures".into()];
+        assert!(lib.validate().is_err());
     }
 
     #[test]

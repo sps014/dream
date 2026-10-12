@@ -24,9 +24,19 @@ dreamer test
 dream test --filter addition tests/
 ```
 
-`@test` is only for a top-level `fun name(): void` (not `async`, not `main`). Test files must not declare `main`. Prefer a project `tests/` folder.
+`@test` is only for a top-level `fun name(): void` (not `async`, not `main`). Test files must not declare `main`. Put tests in a test project (`type = "test"`) or a package's `tests/` folder; see [Test a project](../tooling/testing.md).
 
-Without discovery, call `Test.run` from `main`:
+`@timeout(ms)` sets a limit for one test. There is no default limit.
+
+```dream
+@test
+@timeout(500)
+fun parses_quickly(): void {
+    Assert.eq(parse("1 + 2"), 3);
+}
+```
+
+`dream test` builds one runner that calls `Test.run` for each test. You can also call it from your own `main`:
 
 ```dream
 fun main() {
@@ -35,6 +45,8 @@ fun main() {
     });
 }
 ```
+
+`Test.run(name, body)` prints `RUN <name>` before the body and `PASS <name>` after it. When the body leaves more live objects than it found, it prints `LEAK <name> live=+N` first. `Test.run_with_timeout(name, ms, body)` also prints the limit (`RUN <name> timeout=<ms>`); `dream test` enforces it.
 
 | Call | Meaning |
 | --- | --- |

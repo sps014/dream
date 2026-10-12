@@ -25,7 +25,8 @@ pub(crate) struct Cx<'a> {
     /// `Statement::DebugLine` markers then, so their presence is the backend's signal to add
     /// debugger-only views (async future-frame structs).
     pub debug_syms: bool,
-    /// Emit the exit-time leak report from native `main` unconditionally (debug builds).
+    /// Debug builds: native `main` always emits the exit-time leak report, and wasm32 exports
+    /// the live-object count for its JS host to report.
     pub leak_checks: bool,
     canon: OnceLock<CanonMaps>,
     iface_guards: OnceLock<GuardTable>,

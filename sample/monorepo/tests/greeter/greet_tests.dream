@@ -1,0 +1,17 @@
+import greeter;
+import system;
+import system.testing;
+
+@test
+fun greets_by_name(): void {
+    Assert.eq(greet("dream"), "hello, dream");
+}
+
+@test
+@timeout(2000)
+fun greets_many_names(): void {
+    let names = ["ada", "grace", "linus"];
+    for (let name in names) {
+        Assert.is_true(greet(name).starts_with("hello, "));
+    }
+}

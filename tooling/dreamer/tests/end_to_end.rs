@@ -4,7 +4,10 @@
 //! `dream_packages/` layout is actually importable.
 
 use dreamer::commands;
+use dreamer::commands::init::Scaffold;
 use dreamer::manifest::{Manifest, PackageType, import_segment};
+
+const STATICLIB: Scaffold = Scaffold::Lib(dream_abi::library::LibraryKind::Staticlib);
 use dreamer::registry::{IndexEntry, checksum, open_registry};
 use std::path::{Path, PathBuf};
 use std::sync::Once;
@@ -87,7 +90,7 @@ fn init_add_install_materializes_registry_and_path_dependencies() {
     .unwrap();
 
     let project_dir = tmp.path().join("myapp");
-    commands::init::run(&project_dir, Some("myapp".to_string()), None, false).unwrap();
+    commands::init::run(&project_dir, Some("myapp".to_string()), None, Scaffold::Bin).unwrap();
 
     {
         let mut workspace = dreamer::workspace::Workspace::discover(&project_dir).unwrap();
@@ -189,7 +192,7 @@ fn build_compiles_a_project_using_an_installed_dependency() {
     );
 
     let project_dir = tmp.path().join("myapp");
-    commands::init::run(&project_dir, Some("myapp".to_string()), None, false).unwrap();
+    commands::init::run(&project_dir, Some("myapp".to_string()), None, Scaffold::Bin).unwrap();
     {
         let mut workspace = dreamer::workspace::Workspace::discover(&project_dir).unwrap();
         workspace.manifest.registries.insert(
@@ -238,7 +241,7 @@ fn init_runtime_scaffolds_web_and_node_hosts() {
         &project_dir,
         Some("webapp".to_string()),
         Some("web,node".to_string()),
-        false,
+        Scaffold::Bin,
     )
     .unwrap();
 
@@ -265,7 +268,7 @@ fn init_runtime_web_only_skips_run_mjs() {
         &project_dir,
         Some("browser_only".to_string()),
         Some("web".to_string()),
-        false,
+        Scaffold::Bin,
     )
     .unwrap();
     assert!(project_dir.join("index.html").is_file());
@@ -280,7 +283,7 @@ fn node_runner_is_written_when_missing() {
         &project_dir,
         Some("browser_then_node".to_string()),
         Some("web".to_string()),
-        false,
+        Scaffold::Bin,
     )
     .unwrap();
     assert!(!project_dir.join("run.mjs").exists());
@@ -293,7 +296,7 @@ fn node_runner_is_written_when_missing() {
 fn init_lib_has_no_entry_and_run_rejects() {
     let tmp = tempfile::tempdir().unwrap();
     let project_dir = tmp.path().join("http-utils");
-    commands::init::run(&project_dir, Some("http-utils".to_string()), None, true).unwrap();
+    commands::init::run(&project_dir, Some("http-utils".to_string()), None, STATICLIB).unwrap();
 
     let manifest = Manifest::load(&project_dir.join("dream.toml")).unwrap();
     assert_eq!(manifest.package().unwrap().package_type, PackageType::Lib);
@@ -318,7 +321,7 @@ fn build_refreshes_web_and_node_aliases() {
         &project_dir,
         Some("webapp".to_string()),
         Some("web,node".to_string()),
-        false,
+        Scaffold::Bin,
     )
     .unwrap();
 
@@ -349,7 +352,7 @@ fn build_lib_writes_under_target_debug() {
     }
     let tmp = tempfile::tempdir().unwrap();
     let project_dir = tmp.path().join("mylib");
-    commands::init::run(&project_dir, Some("mylib".to_string()), None, true).unwrap();
+    commands::init::run(&project_dir, Some("mylib".to_string()), None, STATICLIB).unwrap();
     commands::build::run(&project_dir, false, None).unwrap();
     let output = project_dir.join("target/debug");
     let archive = if dream_abi::target::TargetSpec::host().is_msvc() {
@@ -378,12 +381,12 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
     }
     let tmp = tempfile::tempdir().unwrap();
     let lib_dir = tmp.path().join("libpack");
-    commands::init::run(&lib_dir, Some("libpack".to_string()), None, true).unwrap();
+    commands::init::run(&lib_dir, Some("libpack".to_string()), None, STATICLIB).unwrap();
     let pack_flags = dreamer::compile_flags::CompileFlags::for_pack(false, None, false).unwrap();
     assert!(commands::pack::run(&lib_dir, &[], None, pack_flags.clone()).is_err());
 
     let bin_dir = tmp.path().join("binpack");
-    commands::init::run(&bin_dir, Some("binpack".to_string()), None, false).unwrap();
+    commands::init::run(&bin_dir, Some("binpack".to_string()), None, Scaffold::Bin).unwrap();
     std::fs::create_dir_all(bin_dir.join("assets")).unwrap();
     image::RgbaImage::from_pixel(256, 256, image::Rgba([30, 120, 200, 255]))
         .save(bin_dir.join("assets/icon.png"))

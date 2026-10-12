@@ -17,6 +17,7 @@ pub const SYNTAX_BLOCK_ATTR: &str = "syntax_block";
 pub const ATTRIBUTE_ATTR: &str = "attribute";
 pub const REPEATABLE_ATTR: &str = "repeatable";
 pub const TEST_ATTR: &str = "test";
+pub const TIMEOUT_ATTR: &str = "timeout";
 
 pub(super) const SPECS: &[AttributeSpec] = &[
     // Source-generator framework (`system.codegen` / `driver/generate`).
@@ -63,6 +64,17 @@ pub(super) const SPECS: &[AttributeSpec] = &[
         doc: "Marks a top-level `fun name(): void` as a unit test discovered by `dream test` / `dreamer test`.",
     },
     AttributeSpec {
+        name: TIMEOUT_ATTR,
+        targets: &[AttributeTarget::Function],
+        args: ArgShape::Args {
+            kinds: &[ArgKind::Int],
+            min: 1,
+            max: 1,
+        },
+        repeatable: false,
+        doc: "Fails a `@test` function that runs longer than this many milliseconds. Tests have no timeout unless they declare one.",
+    },
+    AttributeSpec {
         name: ATTRIBUTE_ATTR,
         targets: &[AttributeTarget::Struct, AttributeTarget::ValueStruct],
         args: ArgShape::Args {
@@ -85,6 +97,19 @@ pub(super) const SPECS: &[AttributeSpec] = &[
 /// True when the declaration carries `@test`.
 pub fn has_test_attr(attributes: &[AttributeNode]) -> bool {
     has_named_attr(attributes, TEST_ATTR)
+}
+
+/// `@timeout(ms)`: `None` when absent, `Some(None)` when its argument is not a positive `int`.
+pub fn test_timeout_ms(attributes: &[AttributeNode]) -> Option<Option<u64>> {
+    let attr = attributes.iter().find(|a| a.name.text == TIMEOUT_ATTR)?;
+    Some(match attr.args.as_slice() {
+        [AttributeArg::Int(t)] => t
+            .text
+            .parse::<u64>()
+            .ok()
+            .filter(|&ms| ms > 0 && ms <= i32::MAX as u64),
+        _ => None,
+    })
 }
 
 /// True when the declaration carries `@generator`.

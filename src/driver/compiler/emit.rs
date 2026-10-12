@@ -78,7 +78,7 @@ impl Compiler {
             mir,
             interner,
             &sigs,
-            self.profile.is_debug() && self.target.spec().capabilities.native_entry,
+            self.profile.is_debug(),
             self.target.clone(),
             std_sources.as_deref(),
         )

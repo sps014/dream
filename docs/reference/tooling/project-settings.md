@@ -10,7 +10,7 @@ Use `dream.toml` to describe your app, its dependencies, and the environments it
 [package]
 name = "myapp"
 version = "0.1.0"
-type = "bin"                    # or "lib" (default: bin)
+type = "bin"                    # "bin", "lib" or "test" (default: bin)
 edition = "2026"
 authors = ["Jane Doe <jane@example.com>"]
 description = "My Dream app"
@@ -19,6 +19,7 @@ license = "MIT"
 keywords = ["http", "json"]         # optional; used by dreamer search / the registry site
 targets = ["native", "web"]     # optional hosts: native, web, node (omit = no preference)
 icon = "assets/icon.png"        # optional PNG app icon for windows, the Dock and packed apps
+assets = ["data", "config.json"] # optional files copied next to the build output (bin and test)
 
 [dependencies]
 http-utils = "1.2"                                    # semver requirement, resolved from a registry
@@ -36,11 +37,29 @@ start = "dreamer run"
 default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
 ```
 
-- `[package].type` is `bin` (default) or `lib`.
+- `[package].type` is `bin` (default), `lib` or `test`.
   - Libraries omit `entry`, are not runnable (`dreamer run` / `dreamer pack` error), and are
     typechecked via the conventional `src/<import_segment>.dream` root
     (`http-utils` → `src/http_utils.dream`, `foo.bar` → `src/foo_bar.dream`).
   - Binaries require `entry` and a top-level `main`.
+  - Test packages omit `entry`, `targets` and `icon`. Every `.dream` file in them is part of the
+    suite, run with `dreamer test` (they cannot be built, run, packed or published). An optional
+    `[test]` table sets the hosts the suite runs on:
+
+    ```toml
+    [test]
+    targets = ["native", "node"]  # default: ["native"]
+    ```
+
+    `[test]` accepts only `targets`, and only on test packages. See [Test a project](testing.md).
+- `[package].assets` lists files and folders, relative to the `dream.toml` directory, that the
+  program reads at run time. Allowed on `bin` and `test` packages (an error on `lib`).
+  - They are copied into the output folder: `target/debug` or `target/release` for native,
+    `target/web` and `target/node` for wasm, `target/test/<profile>` for test runners, and next
+    to the executable in `dreamer pack` output.
+  - A program with assets runs with its output folder as the working directory, so it opens them
+    with the same relative paths it uses in the project (`File.open("data/words.txt")`).
+  - Paths must stay inside the project: no absolute paths and no `..`.
 - `[package].entry` is the file `dreamer build` / `dreamer run` compile (**bin only**).
 - Package builds emit wasm under `target/web/` (debug and `--release` share that folder) and native
   binaries under `target/debug/` or `target/release/`.

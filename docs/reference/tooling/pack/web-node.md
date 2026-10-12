@@ -11,7 +11,7 @@ dreamer build --release --target node
 
 ## Browser
 
-Keep your page, assets, and the generated files under `target/web/` together. The page created by `dreamer init --runtime web` loads the generated program from that folder. Serve the files through an HTTP server; opening the page directly from disk can block loading.
+Keep your page, assets, and the generated files under `target/web/` together. Files listed in `[package].assets` are copied into `target/web/` and `target/node/` on every build. The page created by `dreamer init --runtime web` loads the generated program from that folder. Serve the files through an HTTP server; opening the page directly from disk can block loading.
 
 Use `dreamer run --target web` to check the page locally. Deploy its files through your chosen web host when you are ready.
 

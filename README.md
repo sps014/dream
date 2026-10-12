@@ -110,7 +110,7 @@ Run these from your project folder:
 | --- | --- |
 | `dreamer run` | Build and start your app |
 | `dreamer build --release` | Build an optimized version |
-| `dreamer test` | Run the tests in `tests/` |
+| `dreamer test` | Run the test projects (`type = "test"` packages or `tests/`) |
 | `dreamer add <package>` | Install a reusable package |
 | `dreamer pack` | Prepare a CLI program for sharing |
 | `dreamer toolchain doctor` | Check required build tools |

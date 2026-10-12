@@ -35,6 +35,17 @@ dreamer run --target web
 
 Choose a target explicitly when your project supports several environments. Check [environment availability](../../learn/environments.md) before adding file or process features.
 
+## Other project shapes
+
+```sh
+dreamer init mylib --lib                    # a library (static by default)
+dreamer init mylib --lib --output cdylib    # a library built as a shared library
+dreamer init mytests --test                 # a test project
+dreamer init myapp --workspace              # app/ + tests/ in one workspace
+```
+
+A test project holds `@test` functions and runs with `dreamer test`; see [Test a project](testing.md). A workspace keeps related packages together; see [Workspaces](workspaces.md).
+
 ## Add reusable code
 
 Read [dependencies](dependencies.md) to add a registry package or a local package. `dreamer install` prepares dependencies, and `dreamer tree` shows what is installed. Use [publishing](publishing.md) when your package is ready to share, or [packaging](pack/index.md) when you want to distribute an application.

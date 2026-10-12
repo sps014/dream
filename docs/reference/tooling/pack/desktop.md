@@ -14,6 +14,7 @@ dreamer pack --target all
 ```
 
 Keep the executable and its adjacent libraries together when sharing or moving
-the output folder. Target machines need a compatible OS but do not need the
+the output folder. Files listed in `[package].assets` are copied beside the
+executable too. Target machines need a compatible OS but do not need the
 Dream compiler or toolchain. Packaging requires a bin package. Browser and Node
 output uses WebAssembly; mobile library packaging has a separate workflow.

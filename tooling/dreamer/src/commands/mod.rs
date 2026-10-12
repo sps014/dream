@@ -1,6 +1,7 @@
 pub mod add;
 pub mod build;
 pub mod init;
+mod init_scaffold;
 pub mod install;
 pub mod pack;
 pub mod publish;

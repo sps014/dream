@@ -94,6 +94,25 @@ impl<'a> Analyzer<'a> {
             if dream_abi::attributes::has_test_attr(&function.attributes) {
                 self.validate_test_function(function, diagnostics);
             }
+            match dream_abi::attributes::test_timeout_ms(&function.attributes) {
+                Some(_) if !dream_abi::attributes::has_test_attr(&function.attributes) => {
+                    diagnostics.report_error(
+                        format!(
+                            "@timeout on '{}' requires @test (only tests have timeouts)",
+                            function.name.text
+                        ),
+                        Some(function.name.position),
+                    );
+                }
+                Some(None) => diagnostics.report_error(
+                    format!(
+                        "@timeout on '{}' must be a positive int number of milliseconds",
+                        function.name.text
+                    ),
+                    Some(function.name.position),
+                ),
+                _ => {}
+            }
             if function.is_extern && dream_abi::attributes::has_c_attr(&function.attributes) {
                 self.validate_c_extern_signature(function, info.identity.0, diagnostics);
             }

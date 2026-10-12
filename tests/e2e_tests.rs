@@ -753,6 +753,6 @@ fn dream_test_runs_attr_marked_functions() {
         },
     )
     .expect("dream test should succeed");
-    assert_eq!(result.files_run, 1);
-    assert_eq!(result.tests_run, 3);
+    assert!(result.ok());
+    assert_eq!(result.reports[0].passed.len(), 3);
 }

@@ -181,6 +181,10 @@ EXPORT_DROP_GLOBALS: &str = "__dream_drop_globals" => "DREAM_SYM_EXPORT_DROP_GLO
 /// error on stderr. Takes the settled Future of an async `main` (null for a sync one): the entry's
 /// own return slot already means "0, or a Future pointer", so the status needs its own channel.
 EXPORT_MAIN_REPORT: &str = "__dream_main_report" => "DREAM_SYM_EXPORT_MAIN_REPORT";
+/// Wasm32 debug-build export answering the live heap-object count after deferred cleanup drains.
+/// The JS host calls it after `__dream_drop_globals` to print the same `[dream] leak check` line
+/// native `main` prints at exit.
+EXPORT_LEAK_LIVE: &str = "__dream_leak_live" => "DREAM_SYM_EXPORT_LEAK_LIVE";
 /// C-backend wasm32 export mapping a `dream_ft[]` dispatch index to the function-pointer value.
 /// Clang assigns `__indirect_function_table` slots independently of `dream_ft[]` order, but on
 /// wasm32 a function pointer *is* its table index — so the JS host translates through this before

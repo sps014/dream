@@ -3,6 +3,7 @@ use crate::manifest::{
     validate_package_name,
 };
 use anyhow::{Context, Result, bail};
+use dream_abi::library::LibraryKind;
 use std::path::{Path, PathBuf};
 
 const GITIGNORE_ENTRIES: &[&str] = &["dream_packages/", "target/", ".dream/"];
@@ -52,16 +53,30 @@ pub fn prepare_project_dir(cwd: &Path, name: Option<&str>, dir: Option<&Path>) -
     Ok(dest)
 }
 
+/// What `dreamer init` creates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scaffold {
+    /// A runnable program (`type = "bin"`, `src/main.dream`).
+    Bin,
+    /// A library (`type = "lib"`, `src/<name>.dream`) built as this native library kind.
+    Lib(LibraryKind),
+    /// A test project (`type = "test"`): `@test` files plus a `fixtures/` asset directory.
+    Test,
+    /// A virtual workspace with an `app/` bin and a `tests/` test project.
+    Workspace,
+}
+
 pub fn run(
     dir: &Path,
     name: Option<String>,
     runtime_spec: Option<String>,
-    as_lib: bool,
+    scaffold: Scaffold,
 ) -> Result<()> {
     let manifest_path = dir.join(MANIFEST_FILE_NAME);
     if manifest_path.exists() {
         bail!("{} already exists", manifest_path.display());
     }
+    let as_lib = matches!(scaffold, Scaffold::Lib(_));
 
     let name = name.unwrap_or_else(|| {
         dir.file_name()
@@ -79,11 +94,24 @@ pub fn run(
     if as_lib && runtime_spec.is_some() {
         bail!("--lib cannot be combined with --runtime (libraries are not runnable hosts)");
     }
+    if scaffold == Scaffold::Workspace {
+        return super::init_scaffold::workspace(dir, &name, runtime_spec);
+    }
 
     let targets = match runtime_spec {
         Some(spec) => parse_target_list(&spec)?,
         None => Vec::new(),
     };
+    if scaffold == Scaffold::Test {
+        super::init_scaffold::test_package(dir, &name, &targets, None)?;
+        println!("Created Dream test project '{}' at {}", name, dir.display());
+        println!("  {}", manifest_path.display());
+        println!("  {}", dir.join("example.dream").display());
+        println!();
+        println!("Next steps:");
+        println!("  dreamer test            # build every @test into one runner and run it");
+        return Ok(());
+    }
 
     std::fs::create_dir_all(dir.join("src"))?;
 
@@ -107,10 +135,13 @@ pub fn run(
             .with_context(|| format!("writing {}", source_path.display()))?;
     }
 
-    let mut manifest = if as_lib {
-        Manifest::new_lib(name.clone(), "0.1.0".to_string())
-    } else {
-        Manifest::new(name.clone(), "0.1.0".to_string(), source_rel.clone())
+    let mut manifest = match scaffold {
+        Scaffold::Lib(output_type) => {
+            let mut lib = Manifest::new_lib(name.clone(), "0.1.0".to_string());
+            lib.lib = Some(dream_abi::library::LibraryConfig { output_type });
+            lib
+        }
+        _ => Manifest::new(name.clone(), "0.1.0".to_string(), source_rel.clone()),
     };
     manifest.package_mut()?.targets = targets.iter().map(|t| t.as_str().to_string()).collect();
     debug_assert_eq!(
@@ -173,7 +204,7 @@ pub fn run(
     Ok(())
 }
 
-fn write_gitignore(dir: &Path) -> Result<()> {
+pub(super) fn write_gitignore(dir: &Path) -> Result<()> {
     let gitignore_path = dir.join(".gitignore");
     let desired = GITIGNORE_ENTRIES.join("\n") + "\n";
     match std::fs::read_to_string(&gitignore_path) {
@@ -254,7 +285,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let dest = prepare_project_dir(tmp.path(), Some("hello"), None).unwrap();
         assert_eq!(dest, tmp.path().join("hello"));
-        run(&dest, Some("hello".into()), None, false).unwrap();
+        run(&dest, Some("hello".into()), None, Scaffold::Bin).unwrap();
         let main = fs::read_to_string(dest.join("src/main.dream")).unwrap();
         assert!(main.contains("Hello, world!"));
         assert!(dest.join("dream.toml").is_file());

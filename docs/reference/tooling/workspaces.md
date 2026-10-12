@@ -45,6 +45,37 @@ cd apps/cli && dreamer run          # same package, no -p
 dreamer publish -p greeter           # one package at a time
 ```
 
+### Test projects in a workspace
+
+Test packages (`type = "test"`) are ordinary members. Keep each suite next to the code it tests or
+under a shared `tests/` folder:
+
+```toml
+[workspace]
+members = ["packages/greeter", "apps/cli", "tests/greeter", "tests/fixtures"]
+```
+
+```toml
+# tests/greeter/dream.toml
+[package]
+name = "greeter_tests"
+version = "0.1.0"
+type = "test"
+
+[dependencies]
+greeter = { path = "../../packages/greeter" }
+
+[test]
+targets = ["native", "node"]
+```
+
+`dreamer test` at the workspace root runs every test project — test packages, plus members that
+keep tests in a `tests/` folder — in parallel and prints one summary. `dreamer test -p
+greeter_tests` runs one; inside a member, `dreamer test` runs that member's tests.
+
+`dreamer init myapp --workspace` scaffolds this layout: a root `[workspace]`, an `app/` program
+and a `tests/` test project that depends on it.
+
 **Runtime host** vs **pack triple** (unchanged naming):
 
 - `package.targets` / `dreamer run --target native|web|node` — which host runs the app

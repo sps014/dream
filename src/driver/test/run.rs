@@ -1,257 +1,121 @@
-//! Orchestrate `dream test`: discover `@test` fns, write a runner under `target/test/`, compile+run.
+//! Orchestrates `dream test`: locate the project, plan its runner, then build and run it on each
+//! selected host and summarize.
 
-use super::discovery::{DiscoveredTest, discover_tests_in_source};
-use crate::driver::compiler::Compiler;
+use super::build::BuildRequest;
+use super::project::{TestHost, TestProject};
+use super::report::{HostReport, run_and_report};
+use super::runner::RunnerPlan;
 use crate::driver::ui::Ui;
 use crate::driver::wasm_opt::OptLevel;
-use dream_mir::backend::Target;
-use dream_sema::analyzer::CrateType;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::time::Instant;
-use tracing::debug;
+use std::path::Path;
 
 #[derive(Debug, Clone, Default)]
 pub struct TestOptions {
     pub release: bool,
     pub optimize: Option<OptLevel>,
+    /// Keep only tests whose `<file>::<name>` label contains this; pruned before compiling.
     pub filter: Option<String>,
     pub verbose: bool,
+    /// Hosts to run on instead of the project's `[test].targets`.
+    pub hosts: Vec<TestHost>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct TestRunResult {
-    pub files_run: usize,
-    pub tests_run: usize,
-    pub files_failed: usize,
+    pub project: String,
+    pub reports: Vec<HostReport>,
 }
 
-/// Run tests for `path` (a `.dream` file or a directory of them). Returns `Ok` when every suite
-/// exited successfully; `Err` with a short summary otherwise.
+impl TestRunResult {
+    pub fn ok(&self) -> bool {
+        self.reports.iter().all(HostReport::ok)
+    }
+}
+
+/// Runs the test project at `path` (a test package, a directory of test files, or one file).
+/// `Err` carries a setup or compile failure; failing tests come back in the result.
 pub fn run_tests(
     config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     path: &Path,
     opts: &TestOptions,
 ) -> Result<TestRunResult, String> {
-    let files = collect_test_files(path)?;
-    if files.is_empty() {
+    let project = TestProject::locate(path)?;
+    if project.files.is_empty() {
         return Err(format!("no .dream test files under '{}'", path.display()));
     }
-
-    let ui = Ui::new();
-    let mut result = TestRunResult::default();
-    for file in &files {
-        ui.step("Testing", &file.display().to_string());
-        let start = Instant::now();
-        match run_one_file(config, file, opts) {
-            Ok(n) => {
-                result.files_run += 1;
-                result.tests_run += n;
-            }
-            Err(e) => {
-                result.files_run += 1;
-                result.files_failed += 1;
-                ui.error(&e);
-            }
-        }
-        debug!(
-            "{} finished in {:.2}s",
-            file.display(),
-            start.elapsed().as_secs_f64()
-        );
-    }
-
-    if result.files_failed > 0 {
-        return Err(format!(
-            "{} of {} test file(s) failed ({} test(s) started)",
-            result.files_failed, result.files_run, result.tests_run
-        ));
-    }
-    ui.success(&format!(
-        "test result: ok. {} passed in {} file(s)",
-        result.tests_run, result.files_run
-    ));
-    Ok(result)
-}
-
-fn collect_test_files(path: &Path) -> Result<Vec<PathBuf>, String> {
-    if path.is_file() {
-        if path.extension().and_then(|e| e.to_str()) != Some("dream") {
-            return Err(format!("expected a .dream file, got '{}'", path.display()));
-        }
-        return Ok(vec![path.to_path_buf()]);
-    }
-    if !path.is_dir() {
-        return Err(format!("path not found: '{}'", path.display()));
-    }
-    let mut out = Vec::new();
-    collect_dream_files_rec(path, &mut out)?;
-    out.sort();
-    Ok(out)
-}
-
-fn collect_dream_files_rec(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
-    let entries = fs::read_dir(dir).map_err(|e| format!("read {}: {}", dir.display(), e))?;
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("read {}: {}", dir.display(), e))?;
-        let p = entry.path();
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name == "target" || name.starts_with('.') {
-            continue;
-        }
-        if p.is_dir() {
-            collect_dream_files_rec(&p, out)?;
-        } else if p.extension().and_then(|e| e.to_str()) == Some("dream")
-            && !name.ends_with(".runner.dream")
-        {
-            out.push(p);
-        }
-    }
-    Ok(())
-}
-
-fn run_one_file(
-    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
-    path: &Path,
-    opts: &TestOptions,
-) -> Result<usize, String> {
-    let path_str = path.to_string_lossy().into_owned();
-    let source =
-        fs::read_to_string(path).map_err(|e| format!("read '{}': {}", path.display(), e))?;
-
-    let mut tests = discover_tests_in_source(&path_str, &source)?;
-    if let Some(filter) = &opts.filter {
-        tests.retain(|t| t.name.contains(filter.as_str()));
-    }
-    if tests.is_empty() {
+    let plan = RunnerPlan::discover(&project, opts.filter.as_deref())?;
+    if plan.tests.is_empty() && !plan.unparsed {
         return Err(format!(
             "'{}': no @test functions{}",
             path.display(),
             opts.filter
                 .as_ref()
-                .map(|f| format!(" matching filter '{}'", f))
+                .map(|f| format!(" matching filter '{f}'"))
                 .unwrap_or_default()
         ));
     }
+    let hosts = if opts.hosts.is_empty() {
+        project.hosts.clone()
+    } else {
+        opts.hosts.clone()
+    };
+    let ui = Ui::new();
+    let request = BuildRequest {
+        config,
+        project: &project,
+        plan: &plan,
+        release: opts.release,
+        optimize: opts.optimize,
+    };
+    let mut reports = Vec::new();
+    for host in hosts {
+        ui.step(
+            "Testing",
+            &format!(
+                "{} on {} ({} test(s))",
+                project.name,
+                host.as_str(),
+                plan.tests.len()
+            ),
+        );
+        let command = request.build(host)?;
+        let report = run_and_report(command, host, &plan.tests)?;
+        summarize(&ui, &report);
+        reports.push(report);
+    }
+    Ok(TestRunResult {
+        project: project.name,
+        reports,
+    })
+}
 
-    if source_has_main(&source) {
-        return Err(format!(
-            "'{}': test files must not declare 'main'; use @test functions instead",
-            path.display()
+fn summarize(ui: &Ui, report: &HostReport) {
+    let host = report.host.as_str();
+    for hint in &report.leak_hints {
+        ui.note(&format!("LEAK {hint}"));
+    }
+    for (label, reason) in &report.failed {
+        ui.error(&format!("{label} failed on {host}: {reason}"));
+    }
+    if !report.not_run.is_empty() {
+        ui.error(&format!(
+            "{} test(s) not run on {host}: {}",
+            report.not_run.len(),
+            report.not_run.join(", ")
         ));
     }
-
-    let runner_source = synthesize_runner(&source, &tests);
-    let out_dir = test_cache_dir(path, opts.release);
-    fs::create_dir_all(&out_dir).map_err(|e| format!("create {}: {}", out_dir.display(), e))?;
-    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("tests");
-    let runner_path = out_dir.join(format!("{stem}.runner.dream"));
-    fs::write(&runner_path, &runner_source)
-        .map_err(|e| format!("write {}: {}", runner_path.display(), e))?;
-
-    let mut compiler = Compiler::new_with_toolchain_config(Target::native(), config.clone())
-        .with_release(opts.release)
-        .with_crate_type(CrateType::Bin);
-    if let Some(level) = opts.optimize {
-        compiler = compiler.with_optimize(Some(level));
+    if let Some(problem) = &report.problem {
+        ui.error(&format!("{host}: {problem}"));
     }
-    let runner_str = runner_path.to_string_lossy().into_owned();
-    debug!("running {} ({} test(s))", path.display(), tests.len());
-    let ll_path = out_dir.join(format!("{stem}.ll"));
-    let ll_str = ll_path.to_string_lossy().into_owned();
-    compiler
-        .compile(&runner_str, &ll_str)
-        .map_err(|e| format!("compile '{}': {}", path.display(), e))?;
-    let opt = OptLevel::from_cli(opts.release, opts.optimize);
-    let bin = crate::execution::llvm::compile_llvm(
-        config,
-        &ll_path,
-        crate::execution::llvm::NativeBuildOptions {
-            target: dream_abi::target::TargetSpec::host(),
-            opt_ll: None,
-            opt_remarks: None,
-            opt,
-            debug: false,
-            profile: dream_abi::profile::CompileProfile::from_release(opts.release),
-            pgo: &crate::execution::native::Pgo::Off,
-            icon: None,
-            relocatable: false,
-            output_kind: crate::driver::output::OutputKind::Executable,
-        },
-    )
-    .map_err(|e| format!("link '{}': {}", path.display(), e))?;
-    // A failing assertion exits non-zero (`Assert.fail`), which is how a suite reports failure.
-    match crate::execution::native::run_native_bin(config, &bin, &ll_str, &[]) {
-        Ok(0) => {}
-        Ok(code) => return Err(format!("'{}' failed (exit code {code})", path.display())),
-        Err(e)
-            if e.downcast_ref::<crate::execution::native::GuestAborted>()
-                .is_some() =>
-        {
-            return Err(format!("'{}' aborted", path.display()));
-        }
-        Err(e) => return Err(format!("'{}' failed: {}", path.display(), e)),
+    let counts = format!(
+        "{} passed; {} failed; {} not run",
+        report.passed.len(),
+        report.failed.len(),
+        report.not_run.len()
+    );
+    if report.ok() {
+        ui.success(&format!("test result ({host}): ok. {counts}"));
+    } else {
+        ui.error(&format!("test result ({host}): FAILED. {counts}"));
     }
-    Ok(tests.len())
-}
-
-fn source_has_main(source: &str) -> bool {
-    for line in source.lines() {
-        let t = line.trim_start();
-        if t.starts_with("fun main(") || t.starts_with("async fun main(") {
-            return true;
-        }
-        if t.starts_with("public fun main(") || t.starts_with("public async fun main(") {
-            return true;
-        }
-    }
-    false
-}
-
-fn synthesize_runner(original: &str, tests: &[DiscoveredTest]) -> String {
-    let mut out = String::new();
-    if !original.contains("import system.testing") && !original.contains("import system.testing;") {
-        if !original.contains("import system;") && !original.contains("import system\n") {
-            out.push_str("import system;\n");
-        }
-        out.push_str("import system.testing;\n");
-    }
-    out.push_str(original);
-    if !out.ends_with('\n') {
-        out.push('\n');
-    }
-    out.push('\n');
-    out.push_str("fun main(): void {\n");
-    for t in tests {
-        out.push_str("    Test.run(\"");
-        out.push_str(&escape_string(&t.name));
-        out.push_str("\", ");
-        out.push_str(&t.name);
-        out.push_str(");\n");
-    }
-    out.push_str("}\n");
-    out
-}
-
-fn escape_string(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-fn test_cache_dir(test_file: &Path, release: bool) -> PathBuf {
-    let source_dir = test_file
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    let sub = if release { "release" } else { "debug" };
-    let mut dir = source_dir.to_path_buf();
-    loop {
-        if dir.join("dream.toml").is_file() {
-            return dir.join("target").join("test").join(sub);
-        }
-        if !dir.pop() {
-            break;
-        }
-    }
-    source_dir.join("target").join("test").join(sub)
 }

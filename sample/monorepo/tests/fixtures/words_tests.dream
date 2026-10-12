@@ -1,0 +1,17 @@
+import system;
+import system.io;
+import system.testing;
+
+@test
+fun asset_is_copied_next_to_the_runner(): void {
+    Assert.is_true(File.exists("data/words.txt"));
+}
+
+@test
+fun asset_lines_are_readable(): void {
+    let stream = File.open("data/words.txt").unwrap();
+    let text = stream.read_all();
+    stream.close();
+    Assert.eq(text.split("\n").length, 4);
+    Assert.is_true(text.starts_with("alpha"));
+}

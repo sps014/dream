@@ -1,0 +1,11 @@
+[package]
+name = "greeter_tests"
+version = "0.1.0"
+type = "test"
+description = "Tests for the greeter library"
+
+[dependencies]
+greeter = { path = "../../packages/greeter" }
+
+[test]
+targets = ["native", "node"]

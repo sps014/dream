@@ -171,20 +171,42 @@ impl std::error::Error for GuestAborted {}
 /// Runs the guest and answers its exit status. A non-zero status is a normal outcome — `main` may
 /// return `int` or a failing `Result` — so only a crash (killed by a signal, no status at all) is
 /// an error here; callers that treat any failure as their own decide that for themselves.
+/// `cwd` is the directory the guest starts in (the build output when the package has assets).
 pub fn run_native_bin(
     config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     bin: &Path,
     module: &str,
     extra_args: &[String],
+    cwd: Option<&Path>,
 ) -> Result<i32, Box<dyn std::error::Error>> {
-    let mut cmd = Command::new(bin);
-    apply_native_run_env(config, &mut cmd, module)?;
+    let mut cmd = native_command(config, bin, module, cwd)?;
     cmd.args(extra_args);
     let status = cmd.status()?;
     match status.code() {
         Some(code) => Ok(code),
         None => Err(Box::new(GuestAborted)),
     }
+}
+
+/// A guest command with its run environment. Paths are made absolute before a `cwd` change so the
+/// binary and its module sidecar still resolve from the new directory.
+pub fn native_command(
+    config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
+    bin: &Path,
+    module: &str,
+    cwd: Option<&Path>,
+) -> Result<Command, Box<dyn std::error::Error>> {
+    let Some(cwd) = cwd else {
+        let mut cmd = Command::new(bin);
+        apply_native_run_env(config, &mut cmd, module)?;
+        return Ok(cmd);
+    };
+    let bin = dunce::canonicalize(bin)?;
+    let module = std::path::absolute(module)?;
+    let mut cmd = Command::new(bin);
+    apply_native_run_env(config, &mut cmd, &module.to_string_lossy())?;
+    cmd.current_dir(cwd);
+    Ok(cmd)
 }
 
 pub(crate) fn apply_native_run_env(

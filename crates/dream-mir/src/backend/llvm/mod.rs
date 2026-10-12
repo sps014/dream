@@ -65,7 +65,8 @@ pub struct LlvmModule {
 }
 
 /// Lowers optimized MIR to one `.ll` module typed against the runtime's signature table.
-/// `leak_checks` makes native `main` always print the exit-time heap report. `std_sources` is a
+/// `leak_checks` (debug builds) makes native `main` always print the exit-time heap report and a
+/// wasm32 module export its live-object count. `std_sources` is a
 /// directory holding the embedded stdlib on disk: debug info names those files instead of the
 /// virtual `<std>/…` paths, so a debugger can show and break in stdlib code.
 pub fn emit_llvm_module(

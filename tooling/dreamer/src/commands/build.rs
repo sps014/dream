@@ -20,6 +20,12 @@ pub fn run(start_dir: &Path, release: bool, package: Option<&str>) -> Result<()>
 pub fn run_with(start_dir: &Path, flags: CompileFlags, package: Option<&str>) -> Result<()> {
     super::install::run(start_dir)?;
     let workspace = Workspace::discover_package(start_dir, package)?;
+    if workspace.is_test() {
+        bail!(
+            "package '{}' is type = \"test\"; `dreamer test` builds and runs it",
+            workspace.manifest.package()?.name
+        );
+    }
     compile_entry(&workspace, &flags, None)
 }
 
@@ -63,7 +69,7 @@ pub fn compile_target(
             cmd.arg("--crate-type");
             cmd.arg("lib");
         }
-        PackageType::Bin => {
+        PackageType::Bin | PackageType::Test => {
             cmd.arg("--crate-type");
             cmd.arg("bin");
         }
@@ -106,7 +112,13 @@ pub fn compile_target(
 
     if want_web || want_node {
         let stem = artifact_alias::entry_stem(&compile_root)?;
-        artifact_alias::refresh_host_aliases(&workspace.root, &stem, want_web, want_node)?;
+        artifact_alias::refresh_host_aliases(
+            &workspace.root,
+            &stem,
+            want_web,
+            want_node,
+            &pkg.assets,
+        )?;
     }
     Ok(())
 }

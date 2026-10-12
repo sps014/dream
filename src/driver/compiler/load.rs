@@ -37,13 +37,18 @@ impl Compiler {
     ) -> Result<FrontEnd<'a>, CompileError> {
         let mut acc = ProgramAccumulator::default();
         match &self.virtual_entry {
-            Some(source) => crate::driver::source_loader::parse_source_recursive(
-                main_file_path.clone(),
-                source.clone(),
-                &mut acc,
-                arena,
-                diagnostics,
-            )?,
+            Some(source) => {
+                // Compiler-made entries (test runners, generator harnesses) call into the files
+                // they import, including file-private `@test` functions.
+                acc.generated_files.insert(main_file_path.clone());
+                crate::driver::source_loader::parse_source_recursive(
+                    main_file_path.clone(),
+                    source.clone(),
+                    &mut acc,
+                    arena,
+                    diagnostics,
+                )?
+            }
             None => parse_file_recursive(main_file_path, &mut acc, arena, diagnostics)?,
         }
 

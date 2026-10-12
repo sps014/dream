@@ -30,11 +30,12 @@ pub fn run(
     super::install::run(start_dir)?;
     let workspace = Workspace::discover_package(start_dir, package)?;
     let pkg = workspace.manifest.package()?;
-    if pkg.package_type == PackageType::Lib {
+    if pkg.package_type != PackageType::Bin {
         bail!(
-            "package '{}' is type = \"lib\" and cannot be packed (only bin packages produce \
+            "package '{}' is type = \"{}\" and cannot be packed (only bin packages produce \
              native executables)",
-            pkg.name
+            pkg.name,
+            pkg.package_type
         );
     }
 
@@ -82,6 +83,11 @@ pub fn run(
         };
         let dest = writer.path(&out_name)?;
         products.push(PathBuf::from(&out_name));
+        products.extend(crate::assets::copy_into(
+            &workspace.root,
+            &pkg.assets,
+            writer.root(),
+        )?);
         std::fs::copy(&bin_path, &dest)
             .with_context(|| format!("copy {} → {}", bin_path.display(), dest.display()))?;
         app_icon::make_executable(&dest)?;

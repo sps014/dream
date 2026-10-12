@@ -37,11 +37,16 @@ pub fn run_with(
     super::install::run(start_dir)?;
     let workspace = Workspace::discover_package(start_dir, package)?;
     let pkg = workspace.manifest.package()?;
-    if pkg.package_type == PackageType::Lib {
-        bail!(
+    match pkg.package_type {
+        PackageType::Lib => bail!(
             "package '{}' is type = \"lib\" and is not runnable (use dreamer build to typecheck)",
             pkg.name
-        );
+        ),
+        PackageType::Test => bail!(
+            "package '{}' is type = \"test\"; run its tests with `dreamer test`",
+            pkg.name
+        ),
+        PackageType::Bin => {}
     }
     let host = resolve_run_target(&pkg.targets, target.as_deref())?;
     if !flags.native && host == RunTarget::Native {
@@ -87,10 +92,15 @@ fn run_node(workspace: &Workspace, flags: &CompileFlags, extra_args: &[String]) 
 
     super::build::compile_entry(workspace, flags, Some(RunTarget::Node))?;
 
+    let cwd = if workspace.manifest.package()?.assets.is_empty() {
+        workspace.root.clone()
+    } else {
+        workspace.root.join("target").join("node")
+    };
     let status = Command::new("node")
         .arg(&run_mjs)
         .args(extra_args)
-        .current_dir(&workspace.root)
+        .current_dir(cwd)
         .status()
         .map_err(|e| anyhow::anyhow!("running node: {}", e))?;
     if !status.success() {

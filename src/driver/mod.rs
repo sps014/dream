@@ -8,6 +8,7 @@
 //! [`error`] (the driver-level error type).
 
 pub mod abi;
+pub mod assets;
 pub mod attributes;
 pub mod compiler;
 pub mod compress;

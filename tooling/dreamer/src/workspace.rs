@@ -143,7 +143,19 @@ impl Workspace {
                 }
                 Ok(path)
             }
+            PackageType::Test => bail!(
+                "package '{}' is type = \"test\" and has no single compile root; run it with \
+                 `dreamer test`",
+                pkg.name
+            ),
         }
+    }
+
+    pub fn is_test(&self) -> bool {
+        self.manifest
+            .package
+            .as_ref()
+            .is_some_and(|p| p.package_type == PackageType::Test)
     }
 
     /// Deprecated name kept for call sites that mean the compile root.

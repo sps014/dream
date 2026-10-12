@@ -306,11 +306,17 @@ async function withBootstrapLock(gate, fn) {
  * A non-zero exit status (`main(): int`, or a failing `Result` main) is surfaced on Node as
  * `process.exitCode`, and always as `mod.exitCode`.
  *
+ * With `options.leakReport`, a debug build's live heap-object count is printed to stderr after
+ * globals drop, in the `[dream] leak check: live=N` form native debug builds print at exit.
+ *
  * @returns {Promise<DreamInstance>} the loaded instance (after `main` has run).
  */
 export async function run(source, options = {}) {
   const mod = await load(source, options);
   const code = await mod.run();
+  if (options.leakReport && typeof mod.exports.__dream_leak_live === "function") {
+    console.error(`[dream] leak check: live=${mod.exports.__dream_leak_live()}`);
+  }
   if (code && typeof process !== "undefined") {
     process.exitCode = code;
   }

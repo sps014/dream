@@ -54,7 +54,13 @@ impl NativeSetSpec {
 pub struct ProjectManifest {
     pub library: Option<dream_abi::library::LibraryConfig>,
     pub package_name: Option<String>,
+    /// `[package].type`: `bin`, `lib`, or `test`.
+    pub package_type: Option<String>,
     pub entry: Option<String>,
+    /// `[package].assets`, relative to the manifest directory.
+    pub assets: Vec<String>,
+    /// `[test].targets` of a test package (`native`, `node`).
+    pub test_targets: Vec<String>,
     pub links: Option<String>,
     pub generators: Vec<GeneratorEntry>,
     /// `[native.<set>]` tables in sorted set-name order.
@@ -101,8 +107,41 @@ impl ProjectManifest {
         if let Some(pkg) = root.get("package") {
             let pkg = pkg.as_table().ok_or("[package] must be a table")?;
             m.package_name = opt_string(pkg, "name", "package")?;
+            m.package_type = opt_string(pkg, "type", "package")?;
             m.entry = opt_string(pkg, "entry", "package")?;
             m.links = opt_string(pkg, "links", "package")?;
+            if let Some(assets) = pkg.get("assets") {
+                m.assets = string_list("package", "assets", assets)?;
+                for asset in &m.assets {
+                    validate_asset_path(asset)?;
+                }
+                if m.package_type.as_deref() == Some("lib") && !m.assets.is_empty() {
+                    return Err("[package].assets belongs to bin and test packages".into());
+                }
+            }
+        }
+        if let Some(test) = root.get("test") {
+            let test = test.as_table().ok_or("[test] must be a table")?;
+            if m.package_type.as_deref() != Some("test") {
+                return Err("[test] requires [package].type = \"test\"".into());
+            }
+            for key in test.keys() {
+                if key != "targets" {
+                    return Err(format!("[test]: unknown key '{key}' (expected targets)"));
+                }
+            }
+            if let Some(targets) = test.get("targets") {
+                m.test_targets = string_list("test", "targets", targets)?;
+                if let Some(bad) = m
+                    .test_targets
+                    .iter()
+                    .find(|t| !matches!(t.as_str(), "native" | "node"))
+                {
+                    return Err(format!(
+                        "[test].targets: unknown host '{bad}' (expected native or node)"
+                    ));
+                }
+            }
         }
         if let Some(gens) = root.get("generators") {
             let gens = gens
@@ -273,6 +312,20 @@ fn string_list(ctx: &str, key: &str, value: &toml::Value) -> Result<Vec<String>,
         .collect()
 }
 
+fn validate_asset_path(asset: &str) -> Result<(), String> {
+    let path = Path::new(asset.trim());
+    let named = path.components().any(|c| matches!(c, std::path::Component::Normal(_)));
+    let contained = path
+        .components()
+        .all(|c| matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir));
+    if !named || !contained {
+        return Err(format!(
+            "[package].assets entry '{asset}' must be a relative path inside the package (no '..')"
+        ));
+    }
+    Ok(())
+}
+
 fn opt_string(t: &toml::Table, key: &str, table: &str) -> Result<Option<String>, String> {
     match t.get(key) {
         None => Ok(None),
@@ -389,6 +442,29 @@ sources = ["third_party/x.c"]
         assert!(err.contains("unknown key 'freebsd'"), "{}", err);
         let err = ProjectManifest::parse("[native.a]\nlibs = \"dl\"\n").unwrap_err();
         assert!(err.contains("must be an array"), "{}", err);
+    }
+
+    #[test]
+    fn parses_test_packages_and_assets() {
+        let m = ProjectManifest::parse(
+            "[package]\nname = \"it\"\ntype = \"test\"\nassets = [\"fixtures\", \"data/a.json\"]\n\
+             [test]\ntargets = [\"native\", \"node\"]\n",
+        )
+        .unwrap();
+        assert_eq!(m.package_type.as_deref(), Some("test"));
+        assert_eq!(m.assets, vec!["fixtures", "data/a.json"]);
+        assert_eq!(m.test_targets, vec!["native", "node"]);
+        for bad in [
+            "[package]\ntype = \"bin\"\n[test]\ntargets = []\n",
+            "[package]\ntype = \"test\"\n[test]\ntimeout = 5\n",
+            "[package]\ntype = \"test\"\n[test]\ntargets = [\"web\"]\n",
+            "[package]\nassets = [\"../up\"]\n",
+            "[package]\nassets = [\"/abs\"]\n",
+            "[package]\nassets = [\".\"]\n",
+            "[package]\ntype = \"lib\"\nassets = [\"x\"]\n",
+        ] {
+            assert!(ProjectManifest::parse(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

@@ -314,10 +314,15 @@ fn string_list(ctx: &str, key: &str, value: &toml::Value) -> Result<Vec<String>,
 
 fn validate_asset_path(asset: &str) -> Result<(), String> {
     let path = Path::new(asset.trim());
-    let named = path.components().any(|c| matches!(c, std::path::Component::Normal(_)));
-    let contained = path
+    let named = path
         .components()
-        .all(|c| matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir));
+        .any(|c| matches!(c, std::path::Component::Normal(_)));
+    let contained = path.components().all(|c| {
+        matches!(
+            c,
+            std::path::Component::Normal(_) | std::path::Component::CurDir
+        )
+    });
     if !named || !contained {
         return Err(format!(
             "[package].assets entry '{asset}' must be a relative path inside the package (no '..')"

@@ -11,9 +11,9 @@
 //! [`MAX_OBJECT_BYTES`], functions on a call cycle (frame growth under recursion) or opening a
 //! unique region (its rewind frees what the deaths would release again), and async bodies.
 
+use crate::analysis::effects::strong_children;
 use crate::analysis::escape::{Escape, LocalEscape, ParamSummaries};
 use crate::analysis::object_life::{Lifetime, lifetime};
-use crate::analysis::effects::strong_children;
 use crate::{Local, LocalDecl, Mir, MirFunction, Operand, Place, Rvalue, Statement};
 use dream_hir::LayoutTable;
 use dream_types::{TyKind, TypeId, TypeInterner};

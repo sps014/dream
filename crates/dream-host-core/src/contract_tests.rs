@@ -137,6 +137,9 @@ const JS_HOST_SOURCES: &[&str] = &[
 // JS host or capability ABI table — so they are exempt from the prelude/host parity check.
 const RUNTIME_ARCHIVE_KEYS: &[&str] = &["weakBind", "weakDead", "weakLoad", "weakReleaseRaw"];
 const COMPILER_EMITTED_JS_RC: &[&str] = &["jsRetain", "jsRelease"];
+// The loader invokes this after guest execution to await worker shutdown; it is not a
+// guest import and therefore has no stdlib declaration.
+const LOADER_LIFECYCLE_KEYS: &[&str] = &["__drainWorkers"];
 
 fn js_host_export_keys(src: &str) -> HashSet<String> {
     let lines: Vec<&str> = src.lines().collect();
@@ -197,7 +200,7 @@ fn js_dream_host_keys_match_prelude_js_declarations() {
     for src in JS_HOST_SOURCES {
         js_keys.extend(js_host_export_keys(src));
     }
-    for emitted in COMPILER_EMITTED_JS_RC {
+    for emitted in COMPILER_EMITTED_JS_RC.iter().chain(LOADER_LIFECYCLE_KEYS) {
         js_keys.remove(*emitted);
     }
 

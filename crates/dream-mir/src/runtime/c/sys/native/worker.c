@@ -206,15 +206,12 @@ static void run_worker(Worker *w) {
             release_job(w, j);
         }
     }
-    /* Dropping the reference and clearing `bound` under one lock lets workerTerminate observe
-     * both at once; a non-last reference means someone else keeps w alive past the unlock. */
-    int last = __atomic_fetch_sub(&w->refs, 1u, __ATOMIC_ACQ_REL) == 1u;
+    /* The thread reference protects the mutex through unlock, even if a terminating caller
+     * observes bound cleared and immediately releases the registry reference. */
     w->bound = 0;
     dream_cond_broadcast(&w->cv);
     dream_mutex_unlock(&w->mu);
-    if (last) {
-        destroy_worker(w);
-    }
+    release_worker(w);
 }
 
 static DREAM_THREAD_PROC(worker_main) {

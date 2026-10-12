@@ -150,6 +150,7 @@ const NATIVE_SYS_C: &[&str] = &[
 const WASI_SYS_C: &[&str] = &[
     "callback.c",
     "heap.c",
+    "heap_ownership.c",
     "interop_libc.c",
     "heap_memory.c",
     "allocation.c",

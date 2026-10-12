@@ -314,11 +314,14 @@ jobs:
       - name: Full native corpus (runtime instrumented)
         if: matrix.sanitizer != 'thread'
         shell: bash
-        run: ./scripts/probe_test.sh 2>&1 | tee target/probe-sanitize.log
+        run: |
+          mkdir -p target
+          ./scripts/probe_test.sh 2>&1 | tee target/probe-sanitize.log
       - name: Concurrency cases (runtime instrumented)
         if: matrix.sanitizer == 'thread'
         shell: bash
         run: |
+          mkdir -p target
           stems=$(ls tests/cases/*.dream | xargs -n1 basename | sed 's/\.dream$//' \
             | grep -Ei 'worker|task|async|thread|channel|mutex|parallel|shared|atomic|lock|semaphore')
           ./scripts/probe_test.sh $stems 2>&1 | tee target/probe-sanitize.log

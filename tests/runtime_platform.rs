@@ -15,11 +15,17 @@ fn core_runs_and_reports_exhaustion_through_the_injected_platform() {
     });
     let config = std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default());
     let tools = dream::execution::llvm::resolve_llvm(&config).unwrap();
-    let mut command = Command::new(if cfg!(windows) {
-        tools.clang().unwrap().into_os_string()
-    } else {
-        std::env::var_os("CC").unwrap_or_else(|| "cc".into())
-    });
+    let mut command = Command::new(tools.clang().unwrap());
+    if cfg!(target_os = "macos") {
+        let sdk = Command::new("xcrun")
+            .args(["--sdk", "macosx", "--show-sdk-path"])
+            .output()
+            .unwrap();
+        assert!(sdk.status.success(), "macOS SDK lookup failed: {sdk:?}");
+        command
+            .arg("-isysroot")
+            .arg(String::from_utf8(sdk.stdout).unwrap().trim());
+    }
     command
         .args(["-std=gnu11", "-O1"])
         .arg("-I")

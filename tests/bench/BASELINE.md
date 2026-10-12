@@ -7,6 +7,8 @@ dispatches. Each micro/macro job builds Dream and its host libraries from the ch
 revision, installs the latest stable .NET 10 SDK, and uses `bench.py --arms current csharp`
 to compile both implementations and compare them on the same runner. It uses two warmups,
 20 measured process starts per arm, and ten passes per process.
+The micro and macro jobs run one at a time; within each job Dream and .NET processes also
+run sequentially, alternating order between rounds.
 
 The job summary includes timings, confidence intervals, ratios, and peak RSS. Download the
 `dream-dotnet10-<suite>-<revision>` artifact for raw samples, `summary.json` (including

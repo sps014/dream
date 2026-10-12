@@ -206,12 +206,15 @@ static void run_worker(Worker *w) {
             release_job(w, j);
         }
     }
-    /* The thread reference protects the mutex through unlock, even if a terminating caller
-     * observes bound cleared and immediately releases the registry reference. */
+    /* Publish the released thread reference with bound, so synchronous termination owns
+     * final cleanup. Destruction waits for this mutex's unlock before reclaiming w. */
+    int last = __atomic_fetch_sub(&w->refs, 1u, __ATOMIC_ACQ_REL) == 1u;
     w->bound = 0;
     dream_cond_broadcast(&w->cv);
     dream_mutex_unlock(&w->mu);
-    release_worker(w);
+    if (last) {
+        destroy_worker(w);
+    }
 }
 
 static DREAM_THREAD_PROC(worker_main) {
@@ -441,6 +444,10 @@ static Worker *take_worker(int32_t id) {
 }
 
 static void destroy_worker(Worker *w) {
+    /* The unbinding thread can still be completing pthread_mutex_unlock after releasing
+     * its reference. Acquiring the mutex closes that interval before destroying it. */
+    dream_mutex_lock(&w->mu);
+    dream_mutex_unlock(&w->mu);
     release_jobs(w, w->head);
     release_jobs(w, w->replies);
     free(__atomic_exchange_n(&w->spare, NULL, __ATOMIC_ACQUIRE));

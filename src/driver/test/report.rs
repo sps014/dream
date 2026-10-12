@@ -205,7 +205,7 @@ fn describe(status: ExitStatus) -> String {
     format!("{status}")
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

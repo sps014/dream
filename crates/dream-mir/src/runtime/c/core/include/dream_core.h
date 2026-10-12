@@ -633,7 +633,7 @@ DREAM_ALWAYS_INLINE dream_size dream_string_bytes(int32_t units) {
 DREAM_ALWAYS_INLINE char *dream_array_at(dream_ptr p, int32_t i, int32_t esize,
                                          dream_ptr panic_msg, const char *location) {
     int32_t len = p ? dream_i32(p)[0] : 0;
-    __builtin_assume(len >= 0);
+    if (len < 0) { __builtin_unreachable(); }
     if (DREAM_UNLIKELY((uint32_t)i >= (uint32_t)len)) {
         dream_panic_at(panic_msg, location);
     }

@@ -68,8 +68,7 @@ impl Compiler {
                 &Default::default(),
             ));
         }
-        let std_sources = self
-            .debug_info
+        let std_sources = (self.debug_info || self.perf_symbols)
             .then(|| {
                 crate::driver::std_sources::materialize(&self.toolchain_config().std_sources_root())
             })
@@ -94,6 +93,16 @@ impl Compiler {
                 .exports
                 .iter()
                 .map(|(_, name)| name.clone())
+                .chain(
+                    (!self.target.spec().capabilities.linear_memory
+                        && (self.output_kind.is_library()
+                            || dream_mir::backend::RuntimeRequirements::from_mir(mir, interner)
+                                .embedding))
+                        .then_some(dream_abi::c_abi::EMBED_EXPORTS)
+                        .into_iter()
+                        .flatten()
+                        .map(str::to_string),
+                )
                 .chain(
                     mir.functions
                         .iter()

@@ -64,6 +64,9 @@ pub struct Global(pub u32);
 #[derive(Debug, Default)]
 pub struct Mir {
     pub profile: dream_abi::profile::CompileProfile,
+    /// Emit source/function metadata from ordinary source markers, without preserving locals
+    /// or disabling production frame packing and optimization.
+    pub perf_symbols: bool,
     pub exports: Vec<(DefId, String)>,
     pub functions: Vec<MirFunction>,
     /// Pre-lowered async poll bodies corresponding to the async functions in `functions`
@@ -463,6 +466,8 @@ pub enum Const {
 /// The right-hand side of an assignment: any computation producing a single value.
 #[derive(Debug, Clone)]
 pub enum Rvalue {
+    /// Constructor-free zero initialization of storage at this concrete type.
+    Zero(TypeId),
     /// Acquire an owned snapshot of a weak/unowned field under the observer lock.
     ObservedLoad(Operand),
 

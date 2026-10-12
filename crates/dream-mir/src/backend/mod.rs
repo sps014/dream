@@ -1,6 +1,9 @@
 //! Codegen: textual LLVM IR (`llvm`) for native and wasm32 (see [`Target`]).
 
+mod heap_requirements;
 pub mod llvm;
+mod runtime_requirements;
+pub use runtime_requirements::RuntimeRequirements;
 pub(crate) mod shared;
 
 pub use shared::{Target, print_wasm};

@@ -465,7 +465,9 @@ fn emit_runtime_init(l: &mut Lcx<'_>) {
             fx.call("__wasm_call_ctors", &[]);
         }
     } else {
-        fx.call("dream_thread_attach", &[]);
+        if fx.l.requirements.callbacks {
+            fx.call("dream_thread_attach", &[]);
+        }
         if fx
             .l
             .mir

@@ -53,11 +53,7 @@ pub(super) fn shared_flags(
     spec: &dream_abi::target::TargetSpec,
     zig_driver: bool,
 ) -> Result<PathBuf, String> {
-    let mut public = EMBED_EXPORTS
-        .iter()
-        .map(|s| s.to_string())
-        .collect::<Vec<_>>();
-    public.extend(exports.iter().cloned());
+    let public = exports;
     let list = ll.with_extension(if spec.is_windows() { "def" } else { "exports" });
     let content = if spec.is_apple() {
         cmd.arg("-dynamiclib")

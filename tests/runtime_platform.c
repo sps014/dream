@@ -21,6 +21,7 @@ static DREAM_THREAD_PROC(increment_counter) {
         dream_recycle(object);
     }
     __atomic_fetch_add((int *)arg, 1, __ATOMIC_RELEASE);
+    dream_heap_thread_exit();
     return 0;
 }
 static void *allocate(size_t size) { __atomic_fetch_add(&allocations, 1, __ATOMIC_RELAXED); return fail_allocate ? NULL : malloc(size); }
@@ -45,6 +46,19 @@ static void unlock(unsigned domain) {
     dream_mutex_unlock(&locks[domain]);
 }
 static void object_drop(void *ptr) { (void)ptr; }
+static DREAM_THREAD_PROC(retire_heap) {
+    dream_ptr *result = arg;
+    dream_ptr live = dream_malloc_shared(16, 1);
+    dream_i32(live)[0] = 42;
+    for (int i = 0; i < 1000; i++) {
+        dream_ptr temporary = dream_malloc(16, 1);
+        dream_recycle(temporary);
+    }
+    *result = live;
+    dream_heap_thread_exit();
+    dream_heap_thread_exit();
+    return 0;
+}
 static void panic_hook(const char *text, const char *location) {
     assert(strcmp(text, "unicode: \xF0\x9F\x98\x80") == 0);
     assert(strcmp(location, "host/library.dream:17") == 0);
@@ -71,6 +85,23 @@ int main(int argc, char **argv) {
         return 0;
     }
     dream_ptr hello = dream_utf8_to_string("hello");
+    if (strcmp(argv[1], "thread-retention") == 0) {
+        int before_maps = mappings;
+        int before_records = allocations;
+        int64_t before_live = debug_get_live_objects();
+        for (int i = 0; i < 64; i++) {
+            dream_ptr result = 0;
+            dream_thread thread;
+            assert(dream_thread_start(&thread, retire_heap, &result) == 0);
+            dream_thread_join(thread);
+            assert(dream_heap_is_live(result));
+            assert(dream_i32(result)[0] == 42);
+            dream_release(result);
+            assert(debug_get_live_objects() == before_live);
+        }
+        assert(mappings - before_maps <= 2);
+        assert(allocations - before_records <= 2);
+    }
     if (strcmp(argv[1], "wide-counters") == 0) {
         dream_heap_counters *counters = dream_heap.fast;
         assert(counters != NULL);

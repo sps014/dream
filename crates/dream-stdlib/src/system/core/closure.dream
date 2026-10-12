@@ -10,11 +10,11 @@ module system.core;
 // `funcbox_funcidx`/`funcbox_env` read the box apart at an indirect-call site.
 internal static class Closure {
     @intrinsic("funcbox_new")
-    static extern fun funcbox_new(funcidx: int, env: int): int;
+    public static extern fun funcbox_new(funcidx: int, env: int): int;
 
     @intrinsic("funcbox_funcidx")
-    static extern fun funcbox_funcidx(box: int): int;
+    public static extern fun funcbox_funcidx(box: int): int;
 
     @intrinsic("funcbox_env")
-    static extern fun funcbox_env(box: int): int;
+    public static extern fun funcbox_env(box: int): int;
 }

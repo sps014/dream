@@ -320,12 +320,13 @@ pub(super) fn build_native_runtime(
         let mut all = inputs.clone();
         all.extend_from_slice(dependencies);
         format!(
-            "{}{}\n{}\n{}|{}\n",
+            "{}{}\n{}\n{}|{}|{:?}\n",
             rt_stamp::content_fingerprint(all),
             level.join(" "),
             native_target_arg(spec),
             sysroot_args(config, spec).join(" "),
-            config.fingerprint()
+            config.fingerprint(),
+            dream_mir::backend::llvm::native_header_function_names()
         )
     };
     let fingerprint = fingerprint_for(previous_dependencies.as_deref().unwrap_or_default());

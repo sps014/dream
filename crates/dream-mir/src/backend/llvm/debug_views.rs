@@ -111,7 +111,29 @@ impl<'a> Lcx<'a> {
                         (f.offset, f.ty, name)
                     })
                     .collect();
-                (self.members(r, &fields), size)
+                let observed: Vec<_> = layout
+                    .fields
+                    .iter()
+                    .map(|f| {
+                        interner.is_value_type(ty)
+                            && (f.is_unowned || (f.is_weak && interner.is_niche_union(f.ty)))
+                    })
+                    .collect();
+                let unowned: Vec<_> = layout.fields.iter().map(|f| f.is_unowned).collect();
+                let mut members = self.members(r, &fields);
+                for (i, (off, field_ty, field_name)) in fields.iter().enumerate() {
+                    if observed[i] {
+                        let base = self.di_observer_slot(*field_ty, unowned[i]);
+                        members[i] = self.member(
+                            r,
+                            field_name,
+                            base,
+                            self.cx.target.abi().ptr_size * 8,
+                            *off,
+                        );
+                    }
+                }
+                (members, size)
             }
             TyKind::Union(..) => self.union_members(r, ty)?,
             _ => return None,
@@ -126,6 +148,39 @@ impl<'a> Lcx<'a> {
             ),
         );
         Some(r)
+    }
+
+    fn di_observer_slot(&mut self, ty: TypeId, unowned: bool) -> MdRef {
+        let target = if unowned {
+            ty
+        } else {
+            self.cx
+                .nunion(ty)
+                .expect("weak Option layout")
+                .variant("Some")
+                .expect("Option Some")
+                .fields[0]
+                .ty
+        };
+        let name = format!(
+            "dream_Observer_{}_{}",
+            if unowned { "u" } else { "w" },
+            target.0
+        );
+        let view = if let Some(view) = self.dbg_views.get(&name) {
+            *view
+        } else {
+            let view = self.m.md.reserve();
+            self.dbg_views.insert(name.clone(), view);
+            let base = self.di_local_ty(target);
+            let member = self.member(view, "value", base, self.cx.target.abi().ptr_size * 8, 0);
+            let members = self.m.md.tuple(&[member]);
+            let align = self.cx.target.spec().ptr_align;
+            let bytes = (self.cx.target.abi().ptr_size + 4).div_ceil(align) * align;
+            self.m.md.fill(view, format!("!DICompositeType(tag: DW_TAG_structure_type, name: {}, size: {}, elements: {members})", quoted(&name), bytes * 8));
+            view
+        };
+        self.di_ptr(view)
     }
 
     /// Generic instances keep one view per instantiation: `Box_<arg ids>`.

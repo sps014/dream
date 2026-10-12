@@ -8,6 +8,7 @@
 //! interface / `js` calls, host imports, async entry, user `to_string` via the object protocol)
 //! is [`ModRef::Top`].
 
+use crate::analysis::function_key::FunctionKeyRef;
 use crate::{Callee, Global, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_abi::intrinsics::IntrinsicOp;
 use dream_hir::LayoutTable;
@@ -189,7 +190,10 @@ impl ModRefTable {
                     acc.join(&callee);
                     acc_fresh.join(&callee);
                 }
-                let key = (f.def, f.instance.clone());
+                let key = FunctionKeyRef {
+                    def: f.def,
+                    args: &f.instance,
+                };
                 changed |= table.fns.get_mut(&key).is_some_and(|cur| cur.join(&acc));
                 changed |= table
                     .ctors
@@ -259,7 +263,10 @@ impl ModRefTable {
                         extra.join(&self.iface(*id, *slot));
                     }
                 }
-                let key = (f.def, f.instance.clone());
+                let key = FunctionKeyRef {
+                    def: f.def,
+                    args: &f.instance,
+                };
                 if let Some(cur) = self.fns.get_mut(&key) {
                     grew |= cur.join(&extra);
                 }
@@ -283,7 +290,7 @@ impl ModRefTable {
     }
 
     pub(crate) fn call_def(&self, def: DefId, args: &[TypeId]) -> ModRef {
-        if let Some(s) = self.fns.get(&(def, args.to_vec())) {
+        if let Some(s) = self.fns.get(&FunctionKeyRef { def, args }) {
             return s.clone();
         }
         self.intrinsics.get(&def).cloned().unwrap_or(ModRef::Top)

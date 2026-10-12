@@ -32,7 +32,7 @@ pub(super) fn load(
     let dis_identity =
         rt_stamp::tool_identity(&tools.tool("llvm-dis")).ok_or("unreadable llvm-dis identity")?;
     let key = format!(
-        "abi-v3:{spec:?}:{}:{}:{}:{clang_identity}:{dis_identity}:{:?}:{:?}",
+        "abi-v4:{spec:?}:{}:{}:{}:{clang_identity}:{dis_identity}:{:?}:{:?}:{:?}",
         req.threads,
         tools.config.fingerprint(),
         rt_stamp::content_fingerprint(inputs),
@@ -40,7 +40,8 @@ pub(super) fn load(
         spec.capabilities.linear_memory.then_some((
             crate::driver::wasi::GUEST_FEATURES,
             dream_mir::runtime::WASM32_LIBC_UNITS
-        ))
+        )),
+        dream_mir::backend::llvm::native_header_function_names()
     );
     let dir = tools
         .config

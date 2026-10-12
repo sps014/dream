@@ -4,14 +4,14 @@ module system.json;
 
 public static class Json {
     @intrinsic("json_serialize")
-    static extern fun serialize<T>(borrow value: T): string;
+    public static extern fun serialize<T>(borrow value: T): string;
 
     @intrinsic("json_deserialize")
-    static extern fun deserialize<T>(borrow text: string): Result<T, ParseError>;
+    public static extern fun deserialize<T>(borrow text: string): Result<T, ParseError>;
 
     // Reconstruct a `@json` value from an already-parsed `JsonValue` (no parse step).
     @intrinsic("json_from_value")
-    static extern fun from_value<T>(borrow value: JsonValue): T;
+    public static extern fun from_value<T>(borrow value: JsonValue): T;
 
     // Pretty-prints a `JsonValue` with newlines and `indent` spaces per nesting level.
     // Pass 0 to fall back to compact `_stringify`.

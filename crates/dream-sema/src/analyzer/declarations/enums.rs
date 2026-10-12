@@ -245,7 +245,7 @@ impl<'a> Analyzer<'a> {
         // Restricted to exactly two variants — one empty, one carrying a single
         // reference-typed field — so a null/non-null test unambiguously recovers the
         // discriminant. Value unions are decided first and take precedence.
-        if variant_infos.len() == 2 {
+        if !self.type_ctx.interner.is_value_type(union_tid) && variant_infos.len() == 2 {
             let (payload_variants, _empty): (Vec<_>, Vec<_>) =
                 variant_infos.iter().partition(|v| !v.fields.is_empty());
             if payload_variants.len() == 1 && payload_variants[0].fields.len() == 1 {

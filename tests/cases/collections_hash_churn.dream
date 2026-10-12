@@ -1,0 +1,36 @@
+import system;
+import system.collections;
+
+fun main(): void {
+    let m = Map<int, string>(8);
+    let s = Set<int>(8);
+    for (let i = 0; i < 5; i = i + 1) {
+        m.set(i * 8, i.to_string());
+        s.add(i * 8);
+    }
+    m.set(32, "updated");
+    System.println(m.capacity);
+    System.println(s.add(32));
+    System.println(s.capacity);
+    for (let i = 0; i < 4; i = i + 1) {
+        m.remove(i * 8);
+        s.remove(i * 8);
+    }
+    m.set(40, "new");
+    s.add(40);
+    System.println(m.capacity);
+    System.println(s.capacity);
+    System.println(m[32]);
+    System.println(m[40]);
+    System.println(s.contains(32) && s.contains(40));
+    for (let i = 0; i < 100; i = i + 1) {
+        m.set(i + 100, "value");
+        s.add(i + 100);
+        m.remove(i + 100);
+        s.remove(i + 100);
+    }
+    System.println(m.capacity);
+    System.println(s.capacity);
+    System.println(m.length);
+    System.println(s.length);
+}

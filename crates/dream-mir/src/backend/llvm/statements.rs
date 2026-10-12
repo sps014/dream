@@ -34,7 +34,12 @@ impl<'l, 'a> Fx<'l, 'a> {
     pub fn stmt(&mut self, stmt: &Statement) {
         match stmt {
             Statement::Nop => {}
-            Statement::SourceLine(line) => self.source_line(*line),
+            Statement::SourceLine(line) => {
+                self.source_line(*line);
+                if self.l.cx.mir.perf_symbols {
+                    self.set_line(*line);
+                }
+            }
             Statement::DebugLine(line) => self.set_line(*line),
             Statement::Assign(place, rv) => self.assign(place, rv),
             Statement::Retain(o) => {

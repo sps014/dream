@@ -172,9 +172,9 @@ impl FunctionTableInfo {
         info.runtime_support =
             dream_abi::attributes::RuntimeSupport::from_attributes(&func.attributes);
         info.intrinsic_name = intrinsic_name;
-        // `extern` functions/methods are interop entry points (WASM imports): they cannot be
-        // host-exported and privacy is meaningless for them, so they are always call-visible.
-        info.visibility = if func.is_extern {
+        // Intrinsics are language operations, so their declared member visibility applies even
+        // though their implementation is external to Dream source.
+        info.visibility = if func.is_extern && info.intrinsic_name.is_none() {
             Visibility::Public
         } else {
             func.visibility

@@ -16,9 +16,9 @@ pub(crate) struct FunctionModifiers {
 
 impl<'a, 'b> Parser<'a, 'b> {
     /// Parses the flexible function-modifier prefix (`async`/`public`/`internal`/`static`/`extern`,
-    /// which may appear in several orders) and reports the `public`+`extern` conflict. Consumes
+    /// which may appear in several orders). Consumes
     /// exactly the modifier tokens, leaving the cursor on the `fun`/constructor/`del` token.
-    pub(crate) fn parse_function_modifiers(&mut self) -> FunctionModifiers {
+    pub(crate) fn parse_function_modifiers(&mut self, is_intrinsic: bool) -> FunctionModifiers {
         let mut m = FunctionModifiers::default();
         loop {
             if self.try_consume_visibility(&mut m.visibility) {
@@ -40,15 +40,15 @@ impl<'a, 'b> Parser<'a, 'b> {
                 TokenKind::ExternToken => {
                     self.match_token(TokenKind::ExternToken);
                     m.is_extern = true;
-                    if m.visibility.is_public() {
-                        self.diagnostics.report_error(
-                            "A function cannot be both 'public' and 'extern': 'extern' declares an imported host symbol, while 'public' exports a defined one".to_string(),
-                            Some(self.current_token().position),
-                        );
-                    }
                 }
                 _ => break,
             }
+        }
+        if m.is_extern && m.visibility.is_public() && !is_intrinsic {
+            self.diagnostics.report_error(
+                "A function cannot be both 'public' and 'extern': 'extern' declares an imported host symbol, while 'public' exports a defined one".to_string(),
+                Some(self.current_token().position),
+            );
         }
         m
     }
@@ -68,13 +68,14 @@ impl<'a, 'b> Parser<'a, 'b> {
         // empty `first_trivia` reliably means "nothing but the attribute came before us".)
         let first_trivia = Self::recover_doc_trivia(first_trivia, &attributes);
 
+        let is_intrinsic = attributes.iter().any(|a| a.name.text == "intrinsic");
         let FunctionModifiers {
             is_async,
             visibility,
             is_static,
             is_extern,
             is_override,
-        } = self.parse_function_modifiers();
+        } = self.parse_function_modifiers(is_intrinsic);
 
         // Optional receiver-mode qualifier immediately before `fun` (`[borrow | unique] fun ...`):
         // pins the method's mutation contract instead of letting the analyzer infer it from the
@@ -275,7 +276,6 @@ impl<'a, 'b> Parser<'a, 'b> {
             // Extern functions are lowered to WASM imports: no body, terminated by `;`.
             // An `@intrinsic` marker lets an extern function be generic. Checked inline so the
             // syntax crate stays free of any dependency on the `intrinsics` module.
-            let is_intrinsic = attributes.iter().any(|a| a.name.text == "intrinsic");
             if generic_parameters.is_some() && !is_intrinsic {
                 self.diagnostics.report_error(
                     "Extern functions cannot be generic unless they are marked @intrinsic"
@@ -293,7 +293,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 return_type,
                 params,
                 empty,
-                Visibility::Private,
+                visibility,
             );
             node.is_extern = true;
             node.is_static = is_static;

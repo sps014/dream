@@ -19,8 +19,10 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
   stay retain-free while their roots are live and no traversed `(type, field)` slot can be
   stored. Union-field snapshots own a retain at insertion; post-inline `rc-held-by-owner`
   (`rc/held.rs`) removes it when the owner provably outlives every read.
-- **Borrow inference** (`passes/param_modes.rs`): a sink parameter that is only read, with every
-  caller known, is flipped to `borrow` before `RcInsertion`, so neither side emits RC for it.
+- **Borrow inference** (`passes/param_modes.rs`): closed scalar-array kernels can flip read-only
+  sink parameters to `borrow` before `RcInsertion`. Managed fields, unknown calls, foreign or
+  exported functions, and suspension remain outside this proof; ordinary reference helpers
+  do not yet receive general borrow inference.
 - Value `struct` / plain `enum` off-heap (shadow stack); classes / arrays / strings / collections
   on the heap with a 16-byte header ending in `[tag][ref_count]` (wasm32 leads with `[size][type info]`;
   native leads with one word holding the type info and the size class, and blocks over 64 KiB keep

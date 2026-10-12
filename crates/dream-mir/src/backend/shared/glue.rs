@@ -178,7 +178,7 @@ pub(crate) fn canonical_maps(cx: &Cx<'_>) -> CanonMaps {
         if layout.has_destructor() {
             continue;
         }
-        let key = struct_profile_key(cx, layout);
+        let key = struct_profile_key(cx, *ty, layout);
         rel.push((
             format!("S|rel|{key}"),
             *ty,
@@ -259,9 +259,12 @@ fn field_flag(cx: &Cx<'_>, f: &dream_hir::FieldLayout) -> &'static str {
 
 /// Body key for a struct's glue: everything the emitted code can depend on
 /// (field offsets, types, ownership flags).
-fn struct_profile_key(cx: &Cx<'_>, layout: &TypeLayout) -> String {
+fn struct_profile_key(cx: &Cx<'_>, ty: TypeId, layout: &TypeLayout) -> String {
     let mut key = String::new();
     for f in &layout.fields {
+        if cx.interner.is_value_type(ty) && (f.is_weak || f.is_unowned) {
+            key.push('o');
+        }
         key.push_str(&format!("|{}:{}{}", f.offset, f.ty.0, field_flag(cx, f)));
     }
     key
@@ -282,6 +285,11 @@ fn union_profile_key(cx: &Cx<'_>, layout: &dream_hir::UnionLayout) -> String {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FieldDrop {
     None,
+    Observer {
+        offset: u32,
+        ty: TypeId,
+        unowned: bool,
+    },
     Weak {
         offset: u32,
         ty: TypeId,
@@ -331,11 +339,21 @@ pub(crate) fn field_drop(cx: &Cx<'_>, f: &dream_hir::FieldLayout, in_union: bool
     }
 }
 
-pub(crate) fn struct_field_drops(cx: &Cx<'_>, layout: &TypeLayout) -> Vec<FieldDrop> {
+pub(crate) fn struct_field_drops(cx: &Cx<'_>, ty: TypeId, layout: &TypeLayout) -> Vec<FieldDrop> {
     layout
         .fields
         .iter()
-        .map(|f| field_drop(cx, f, false))
+        .map(|f| {
+            if cx.interner.is_value_type(ty) && (f.is_weak || f.is_unowned) {
+                FieldDrop::Observer {
+                    offset: f.offset,
+                    ty: f.ty,
+                    unowned: f.is_unowned,
+                }
+            } else {
+                field_drop(cx, f, false)
+            }
+        })
         .collect()
 }
 
@@ -344,13 +362,13 @@ pub(crate) fn struct_field_drops(cx: &Cx<'_>, layout: &TypeLayout) -> Vec<FieldD
 pub(crate) fn value_walk_nonempty(cx: &Cx<'_>, ty: TypeId) -> bool {
     if let Some(layout) = cx.nstruct(ty) {
         return layout.fields.iter().any(|f| {
-            !f.is_weak
-                && !f.is_unowned
-                && if cx.interner.is_value_type(f.ty) {
-                    value_walk_nonempty(cx, f.ty)
-                } else {
-                    cx.interner.is_rc_tracked(f.ty)
-                }
+            (cx.interner.is_value_type(ty) && (f.is_weak || f.is_unowned))
+                || (!(f.is_weak || f.is_unowned)
+                    && if cx.interner.is_value_type(f.ty) {
+                        value_walk_nonempty(cx, f.ty)
+                    } else {
+                        cx.interner.is_rc_tracked(f.ty)
+                    })
         });
     }
     cx.nunion(ty).is_some()
@@ -361,7 +379,10 @@ pub(crate) fn drop_nonempty(cx: &Cx<'_>, d: FieldDrop) -> bool {
     match d {
         FieldDrop::None => false,
         FieldDrop::Value { ty, .. } => value_walk_nonempty(cx, ty),
-        FieldDrop::Weak { .. } | FieldDrop::Unregister { .. } | FieldDrop::Rc { .. } => true,
+        FieldDrop::Observer { .. }
+        | FieldDrop::Weak { .. }
+        | FieldDrop::Unregister { .. }
+        | FieldDrop::Rc { .. } => true,
     }
 }
 

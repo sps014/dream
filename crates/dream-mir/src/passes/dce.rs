@@ -120,6 +120,7 @@ pub(crate) fn is_pure(rvalue: &Rvalue) -> bool {
             | Rvalue::Discriminant { .. }
             | Rvalue::UnionField { .. }
             | Rvalue::FuncRef(_)
+            | Rvalue::Zero(_)
     )
 }
 
@@ -331,7 +332,7 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
             }
             args.iter().for_each(|(a, _)| read_operand(a, read));
         }
-        Rvalue::FuncRef(_) => {}
+        Rvalue::Zero(_) | Rvalue::FuncRef(_) => {}
     }
 }
 

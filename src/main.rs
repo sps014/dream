@@ -72,6 +72,15 @@ struct Cli {
     #[arg(short = 'g', long = "debug-info", global = true)]
     debug_info: bool,
 
+    /// Emit profiling symbols while retaining ordinary Release optimization
+    #[arg(
+        long,
+        global = true,
+        requires = "release",
+        conflicts_with = "debug_info"
+    )]
+    perf_symbols: bool,
+
     /// Backend optimization level within the selected profile (0-4, s, z); bare -O means Os
     #[arg(
         short = 'O',
@@ -325,6 +334,11 @@ fn main() -> ExitCode {
         })
     );
     let debug_info = cli.debug_info || debug_adapter;
+    if cli.perf_symbols && debug_adapter {
+        ui.error("--perf-symbols cannot be used with debug-adapter");
+        return ExitCode::FAILURE;
+    }
+    let emit_symbols = debug_info || cli.perf_symbols;
 
     // Resolve the source file and any forwarded program arguments.
     let file_name = match &cli.command {
@@ -693,7 +707,7 @@ fn main() -> ExitCode {
             .map(|icon| dream::driver::rt_stamp::fingerprint(vec![icon]))
             .unwrap_or_default();
         format!(
-            "{}|{debug_info}|{:?}|{:?}|{:?}|{native}|{icon}",
+            "{}|{debug_info}|{emit_symbols}|{:?}|{:?}|{:?}|{native}|{icon}",
             cc_opt.as_cli_flag(),
             cli.target,
             (cli.emit_llvm, cli.emit_opt_ir),
@@ -704,6 +718,7 @@ fn main() -> ExitCode {
         .with_build_cache(build_cache)
         .with_release(cli.release)
         .with_debug_info(debug_info)
+        .with_perf_symbols(cli.perf_symbols)
         .with_runtimes(runtimes)
         .with_compile_targets(compile_targets)
         .with_crate_type(crate_type)
@@ -799,7 +814,7 @@ fn main() -> ExitCode {
             target.spec(),
             raw_ll,
             cc_opt,
-            debug_info,
+            emit_symbols,
             cli.icon.as_deref(),
             (
                 dream_abi::profile::CompileProfile::from_release(cli.release),
@@ -841,7 +856,7 @@ fn main() -> ExitCode {
                 opt_ll: cli.emit_opt_ir.then_some(opt_ll.as_path()),
                 opt_remarks: remarks.as_deref(),
                 opt: cc_opt,
-                debug: debug_info,
+                debug: emit_symbols,
                 profile: dream_abi::profile::CompileProfile::from_release(cli.release),
                 pgo: &pgo,
                 icon: cli.icon.as_deref(),

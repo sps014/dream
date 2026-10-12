@@ -258,7 +258,7 @@ fn rvalue_local_reads(rv: &Rvalue, local: u32) -> u32 {
                     .map(|(a, _)| operand_local_reads(a, local))
                     .sum::<u32>()
         }
-        Rvalue::FuncRef(_) => 0,
+        Rvalue::Zero(_) | Rvalue::FuncRef(_) => 0,
     }
 }
 

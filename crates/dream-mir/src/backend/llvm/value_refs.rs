@@ -19,6 +19,47 @@ enum RefAction {
 }
 
 impl Fx<'_, '_> {
+    pub(super) fn release_value_observer(&mut self, ty: TypeId, box_: &V, unowned: bool) {
+        let (kind, none, payload) = if unowned {
+            (1, 0, 0)
+        } else if self.interner.is_niche_union(ty) {
+            (2, 0, 0)
+        } else {
+            let u = self.l.cx.nunion(ty).expect("validated weak Option layout");
+            (
+                0,
+                u.variant("None").expect("Option None").discriminant,
+                u.variant("Some").expect("Option Some").fields[0].offset,
+            )
+        };
+        self.call(
+            "dream_value_observer_release",
+            &[
+                box_.clone(),
+                V::i32(kind),
+                V::i32(none as i64),
+                V::i32(payload as i64),
+            ],
+        );
+    }
+    pub(super) fn store_value_element(&mut self, rv: &Rvalue, rhs: &V, ty: TypeId, dest: &Value) {
+        let size = elem_size(&self.l.cx, ty) as i64;
+        let snapshot = self.alloca_bytes(size.max(1) as u64, 8);
+        let source = self.ptr(rhs);
+        self.memcpy(&snapshot, &source, &Value::i64(size));
+        let value = self.ptr_value(&snapshot);
+        // An overlapping source must survive destruction of the old slot, including callbacks.
+        if !rvalue_allocates(rv) {
+            self.value_refs(ty, &value, true);
+        }
+        let old = self.ptr_value(dest);
+        self.value_refs(ty, &old, false);
+        self.memcpy(dest, &snapshot, &Value::i64(size));
+        if rvalue_allocates(rv) && !self.is_buffer_result(rv) {
+            self.call("dream_free", std::slice::from_ref(rhs));
+        }
+    }
+
     /// Copies a value struct into `dest`, dropping the old contents when asked and taking the
     /// nested references (a fresh heap box is freed instead: its references move with the bytes).
     pub fn memcpy_value(
@@ -75,7 +116,7 @@ impl Fx<'_, '_> {
     fn walk_value_refs(&mut self, ty: TypeId, base: &V, action: &RefAction) {
         if let Some(layout) = self.l.cx.nstruct(ty).cloned() {
             for field in &layout.fields {
-                self.value_field_ref(field, base, action);
+                self.value_field_ref(field, base, action, self.is_value(ty));
             }
             return;
         }
@@ -108,15 +149,34 @@ impl Fx<'_, '_> {
         for (b, variant) in bodies {
             self.w.switch_to(b);
             for field in &variant.fields {
-                self.value_field_ref(field, base, action);
+                self.value_field_ref(field, base, action, self.is_value(ty));
             }
             self.w.br(join);
         }
         self.w.switch_to(join);
     }
 
-    fn value_field_ref(&mut self, field: &dream_hir::FieldLayout, base: &V, action: &RefAction) {
+    fn value_field_ref(
+        &mut self,
+        field: &dream_hir::FieldLayout,
+        base: &V,
+        action: &RefAction,
+        owner_value: bool,
+    ) {
         if field.is_weak || field.is_unowned {
+            if owner_value {
+                let at = self.addr(base, field.offset as i64);
+                let box_ = self.load_ty(self.h(), &at, ELEM_ALIGN, true);
+                match action {
+                    RefAction::Release | RefAction::Clear => {
+                        if matches!(action, RefAction::Clear) {
+                            self.store_ty(&self.h(), &at, &V::s(Value::zero(self.h())), ELEM_ALIGN);
+                        }
+                        self.release_value_observer(field.ty, &box_, field.is_unowned);
+                    }
+                    _ => self.ref_action(self.interner.object(), &box_, action),
+                }
+            }
             return;
         }
         let off = field.offset as i64;

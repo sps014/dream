@@ -2,13 +2,18 @@
 #include "dream_platform_internal.h"
 
 /* Panics can fire on allocation failure or with allocator locks held, so the hook's UTF-8 copy
- * lives in a fixed buffer (truncated on a code-point boundary) rather than on the heap. */
-int32_t dream_utf8_chunk(const uint16_t *units, int32_t len, char *out, size_t cap, int32_t start, size_t *written) {
+ * lives in a fixed buffer (truncated on a code-point boundary) rather than on the heap.
+ * C-string writes retain their established NUL termination and lone-surrogate byte encoding. */
+int32_t dream_utf8_chunk(const uint16_t *units, int32_t len, char *out, size_t cap, int32_t start, size_t *written, int c_string) {
     size_t n = 0;
     int32_t i;
     for (i = start; i < len; i++) {
         int32_t first = i;
         uint32_t c = units[i];
+        if (c_string && c == 0) {
+            i = len;
+            break;
+        }
         if (c >= 0xD800 && c < 0xDC00 && i + 1 < len) {
             uint32_t lo = units[i + 1];
             if (lo >= 0xDC00 && lo < 0xE000) {
@@ -16,7 +21,7 @@ int32_t dream_utf8_chunk(const uint16_t *units, int32_t len, char *out, size_t c
                 i++;
             }
         }
-        if (c >= 0xD800 && c < 0xE000) {
+        if (!c_string && c >= 0xD800 && c < 0xE000) {
             c = 0xFFFD;
         }
         size_t w = c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
@@ -50,7 +55,7 @@ void dream_write_utf16(int stream, const uint16_t *units, int32_t len) {
     int32_t position = 0;
     do {
         size_t written;
-        position = dream_utf8_chunk(units, len, text, sizeof(text), position, &written);
+        position = dream_utf8_chunk(units, len, text, sizeof(text), position, &written, 0);
         dream_platform_current->write(stream, text, written, DREAM_TEXT_UTF8);
     } while (position < len);
 }

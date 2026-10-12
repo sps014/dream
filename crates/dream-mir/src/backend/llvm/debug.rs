@@ -14,12 +14,13 @@ fn di_str(s: &str) -> String {
     Metadata::string(s)[1..].to_string()
 }
 
-fn first_line(f: &MirFunction) -> Option<u32> {
+fn first_line(f: &MirFunction, perf_symbols: bool) -> Option<u32> {
     f.blocks
         .iter()
         .flat_map(|b| &b.stmts)
         .find_map(|s| match s {
             Statement::DebugLine(l) => Some(*l),
+            Statement::SourceLine(l) if perf_symbols => Some(*l),
             _ => None,
         })
 }
@@ -51,9 +52,10 @@ impl<'a> Lcx<'a> {
             return cu;
         }
         let md = &mut self.m.md;
+        let optimized = !self.cx.mir.profile.is_debug();
         let cu = md.distinct(format!(
             "!DICompileUnit(language: DW_LANG_C99, file: {file}, producer: \"dream\", \
-             isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)"
+             isOptimized: {optimized}, runtimeVersion: 0, emissionKind: FullDebug)"
         ));
         md.add_named("llvm.dbg.cu", cu);
         md.module_flag(7, "Dwarf Version", "i32 4");
@@ -71,7 +73,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         let Some(path) = f.file.as_deref().or(named.file.as_deref()) else {
             return;
         };
-        let Some(line) = first_line(f) else {
+        let Some(line) = first_line(f, self.l.cx.mir.perf_symbols) else {
             return;
         };
         let file = self.l.di_file(path);
@@ -107,6 +109,9 @@ impl<'l, 'a> Fx<'l, 'a> {
     /// `#dbg_declare` for every named local slot. `args` numbers the params as arguments, which
     /// only holds when the function's own parameters are the MIR params (not a poll's frame).
     pub fn debug_locals(&mut self, args: bool) {
+        if self.l.cx.mir.perf_symbols && !self.l.cx.debug_syms {
+            return;
+        }
         let (Some(sp), Some((file, line)), Some(loc)) = (self.w.subprogram, self.dbg, self.w.loc())
         else {
             return;

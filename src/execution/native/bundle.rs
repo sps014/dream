@@ -16,8 +16,7 @@ pub(crate) fn stage_runtime(
         let destination = output_dir.join(capability.library_name(spec));
         let canonical_source = dunce::canonicalize(&source)
             .map_err(|e| format!("locating {}: {e}", source.display()))?;
-        if dunce::canonicalize(&destination).is_ok_and(|p| p == canonical_source)
-        {
+        if dunce::canonicalize(&destination).is_ok_and(|p| p == canonical_source) {
             return Err("relocatable output must not overwrite the compiler's host runtime".into());
         }
     }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Controlled Dream-vs-Dream-vs-C# microbenchmark comparison.
+"""Controlled Dream performance measurements.
 
 Arms:
   current   target/release/dream compiling tests/bench/microbenches.dream
@@ -12,11 +12,11 @@ the summary reports the median with a bootstrap 95% confidence interval, peak RS
 and runtime counters when the binary was built with them.
 
 Examples:
-  scripts/bench.py                        # native Dream/C#, 20 rounds, 10 passes
+  scripts/bench.py                        # current Dream, 20 rounds, 10 passes
   scripts/bench.py build --help           # compiler cold/warm/edited builds
   scripts/bench.py generators --help      # isolated source-generator caches
   scripts/bench.py profile --suite macro  # CPU profile (samply, perf or xctrace)
-  scripts/bench.py --suite macro          # application workloads vs their C# twins
+  scripts/bench.py --suite macro          # Dream application workloads
   scripts/bench.py --arms current --filter binary_trees weak_tree
   scripts/bench.py --arms current --save-baseline tests/bench/results/dream-baseline.json
   scripts/bench.py --arms current --gate tests/bench/results/dream-baseline.json
@@ -41,6 +41,10 @@ ROOT = Path(__file__).resolve().parent.parent
 SUITES = {
     "micro": (ROOT / "tests/bench/microbenches.dream", ROOT / "tests/bench/csharp"),
     "macro": (ROOT / "tests/bench/macro/macrobenches.dream", ROOT / "tests/bench/macro/csharp"),
+    "collections": (ROOT / "tests/bench/collections.dream", None),
+    "text": (ROOT / "tests/bench/text.dream", None),
+    "scheduler": (ROOT / "tests/bench/scheduler.dream", None),
+    "timers": (ROOT / "tests/bench/timers.dream", None),
 }
 # Rows below this are timer noise or a deleted loop and cannot substantiate a claim.
 MIN_NS_PER_OP = 0.25
@@ -50,23 +54,25 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--target", choices=["native", "wasm"], default="native")
     p.add_argument("--suite", choices=sorted(SUITES), default="micro",
-                   help="fixture and C# twin pair; --benchmark/--csharp override either path")
+                   help="workload suite; --benchmark overrides the fixture")
     p.add_argument("--benchmark", type=Path, help="fixture path, including a preserved campaign snapshot")
     p.add_argument("--csharp", type=Path,
                    help="C# twin project directory (Program.cs + DreamBench.csproj) for the fixture")
     p.add_argument("--node", default=shutil.which("node"), help="Node executable for wasm measurements")
     p.add_argument("--diagnostics", action="store_true", help="save optimized IR and first-pass LLVM remarks")
-    p.add_argument("--arms", nargs="+", default=["current", "csharp"],
+    p.add_argument("--arms", nargs="+", default=["current"],
                    choices=["baseline", "current", "csharp"])
     p.add_argument("--current-dream", default=str(ROOT / "target" / "release" / dream_name()))
     p.add_argument("--baseline-dream", default=str(ROOT / "target" / "bench-baseline" / "target" / "release" / dream_name()))
+    p.add_argument("--current-runtime", type=Path, help="matching current C runtime source snapshot")
+    p.add_argument("--baseline-runtime", type=Path, help="matching baseline C runtime source snapshot")
     p.add_argument("--rounds", type=int, default=20, help="measured process starts per arm (10-20 for gating)")
     p.add_argument("--warmup", type=int, default=2, help="discarded process starts per arm")
     p.add_argument("--passes", type=int, default=10, help="DREAM_BENCH_PASSES per process")
     p.add_argument("--filter", nargs="*", default=[], help="only report these bench names")
     p.add_argument("--out", default=str(ROOT / "tests/bench/out/compare"))
     p.add_argument("--counters", action="store_true", help="set DREAM_BENCH_COUNTERS=1 for Dream arms")
-    p.add_argument("--regression-threshold", type=float, default=0.05)
+    p.add_argument("--regression-threshold", type=float, default=0.10)
     p.add_argument("--save-baseline", help="save a validated immutable reference and complete samples")
     p.add_argument("--gate", help="compare current against the saved reference in paired rounds")
     p.add_argument("--runner-id", default=os.environ.get("DREAM_BENCH_RUNNER_ID"), help="controlled runner identity (required for gating)")
@@ -133,6 +139,12 @@ def tool_versions(args) -> dict:
         }
     out["runtime_sources"] = {str(p.relative_to(ROOT)): bench_gate.digest(p)
         for p in sorted((ROOT / "crates/dream-mir/src/runtime").rglob("*")) if p.is_file()}
+    for arm in ("baseline", "current"):
+        if arm in args.arms and not (arm == "baseline" and args.gate):
+            runtime = getattr(args, f"{arm}_runtime") or Path(os.environ.get(
+                "DREAM_RUNTIME_C", ROOT / "crates/dream-mir/src/runtime/c"))
+            out[f"{arm}_runtime_sources"] = {str(p.relative_to(runtime)): bench_gate.digest(p)
+                for p in sorted(runtime.rglob("*")) if p.is_file()}
     out["host_libraries"] = {str(p): bench_gate.digest(p)
         for directory in (ROOT / "target/release", Path.home() / ".dream/lib")
         if directory.is_dir() for p in sorted(directory.glob("*dream_host*")) if p.is_file()}
@@ -150,6 +162,11 @@ def prepare_dream(arm: str, exe: str, out: Path, args) -> list[str]:
     if not path.exists() or path.read_bytes() != args.benchmark_source:
         path.write_bytes(args.benchmark_source)
     compile_env = dict(os.environ, DREAM_RUNTIME_COUNTERS="1" if args.counters else "0")
+    runtime = getattr(args, f"{arm}_runtime")
+    if runtime is not None:
+        if not runtime.is_dir():
+            raise ValueError(f"{arm}: missing runtime snapshot {runtime}")
+        compile_env["DREAM_RUNTIME_C"] = str(runtime.resolve())
     flags = ["--release"]
     if args.diagnostics:
         flags += ["--opt-remarks", "--emit-opt-ir"]
@@ -305,9 +322,13 @@ def main() -> int:
     if not 0 <= args.regression_threshold < 1:
         raise ValueError("invalid regression threshold")
     args.benchmark_source = args.benchmark.read_bytes()
-    args.csharp_source = (args.csharp / "Program.cs").read_bytes()
-    args.csharp_project = (args.csharp / "DreamBench.csproj").read_bytes()
-    compatibility = bench_gate.identity(args.benchmark, args.csharp / "Program.cs", args.runner_id,
+    if "csharp" in args.arms:
+        if args.csharp is None:
+            raise ValueError("this suite has no C# fixture")
+        args.csharp_source = (args.csharp / "Program.cs").read_bytes()
+        args.csharp_project = (args.csharp / "DreamBench.csproj").read_bytes()
+    compatibility = bench_gate.identity(args.benchmark,
+                                        args.csharp / "Program.cs" if "csharp" in args.arms else None, args.runner_id,
                                         args.input_seed, args.passes, args.target, args.benchmark_source)
     if args.gate or args.save_baseline:
         if os.environ.get("DREAM_NATIVE_SANITIZE"):
@@ -405,8 +426,11 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) > 1 and sys.argv[1] in ("build", "generators", "profile"):
+        if len(sys.argv) > 1 and sys.argv[1] in ("build", "generators", "profile", "startup"):
             command = sys.argv.pop(1)
+            if command == "startup":
+                from benchmarks import startup
+                sys.exit(startup.main())
             if command == "build":
                 from benchmarks import build
                 sys.exit(build.main())

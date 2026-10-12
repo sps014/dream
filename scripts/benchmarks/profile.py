@@ -19,6 +19,10 @@ ROOT = Path(__file__).resolve().parents[2]
 SUITES = {
     "micro": ROOT / "tests/bench/microbenches.dream",
     "macro": ROOT / "tests/bench/macro/macrobenches.dream",
+    "collections": ROOT / "tests/bench/collections.dream",
+    "text": ROOT / "tests/bench/text.dream",
+    "scheduler": ROOT / "tests/bench/scheduler.dream",
+    "timers": ROOT / "tests/bench/timers.dream",
 }
 
 
@@ -68,7 +72,7 @@ def main() -> int:
     work_src = out / fixture.name
     work_src.write_bytes(fixture.read_bytes())
     dream = str(with_exe(Path(args.dream)).resolve())
-    subprocess.run([dream, "--release", "-g", str(work_src)], cwd=out, check=True)
+    subprocess.run([dream, "--release", "--perf-symbols", str(work_src)], cwd=out, check=True)
     binary = out / "target" / "release" / f"{fixture.stem}.bin"
     if not binary.is_file():
         raise SystemExit(f"profile: missing compiled artifact {binary}")

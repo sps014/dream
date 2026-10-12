@@ -291,6 +291,14 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    pub(in crate::analyzer) fn hir_set_zero(&mut self, ty: &Type) {
+        self.hir.last = if self.active() {
+            Some(HExpr::new(self.type_ctx.lower(ty), HExprKind::Zero))
+        } else {
+            None
+        };
+    }
+
     /// Records `Bytes.of<T>(v)` — a raw byte-copy of blittable value `v` into a fresh `byte[]`.
     /// Drops out of coverage if the value is not representable.
     pub(in crate::analyzer) fn hir_set_to_bytes(&mut self, value: Option<HExpr>) {

@@ -278,6 +278,8 @@ pub enum HExprKind {
         len: Box<HExpr>,
         closure_env: bool,
     },
+    /// Internal storage initialization with the same layout semantics as a zeroed array slot.
+    Zero,
     ArrayLit {
         elem_ty: TypeId,
         elems: Vec<HExpr>,

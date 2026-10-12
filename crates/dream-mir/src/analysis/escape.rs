@@ -14,6 +14,7 @@
 //! components ([`tarjan_scc`]): optimistic inside a component, iterated to a fixpoint. A callee
 //! with no MIR body (intrinsic, import) keeps every argument.
 
+use super::function_key::FunctionKeyRef;
 use crate::passes::inline::graph::tarjan_scc;
 use crate::{Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{DefId, TypeId, TypeInterner};
@@ -88,7 +89,10 @@ impl ParamSummaries {
                         .collect();
                     let cur = sums
                         .params
-                        .get_mut(&(f.def, f.instance.clone()))
+                        .get_mut(&FunctionKeyRef {
+                            def: f.def,
+                            args: &f.instance,
+                        })
                         .expect("summary seeded for every SCC member");
                     if *cur != now {
                         *cur = now;
@@ -104,26 +108,30 @@ impl ParamSummaries {
     }
 
     pub(crate) fn is_recursive(&self, def: DefId, args: &[TypeId]) -> bool {
-        self.recursive.contains(&(def, args.to_vec()))
+        self.recursive.contains(&FunctionKeyRef { def, args })
     }
 
     pub(crate) fn param_escapes(&self, def: DefId, args: &[TypeId], i: usize) -> bool {
         self.params
-            .get(&(def, args.to_vec()))
+            .get(&FunctionKeyRef { def, args })
             .and_then(|p| p.get(i).copied())
             .unwrap_or(true)
     }
 }
 
-fn for_each_callee(f: &MirFunction, mut out: impl FnMut(FnKey)) {
+fn for_each_callee<'a>(f: &'a MirFunction, mut out: impl FnMut(FunctionKeyRef<'a>)) {
     for b in &f.blocks {
         for s in &b.stmts {
             match s {
                 Statement::Call { callee, .. }
-                | Statement::Assign(_, Rvalue::Call { callee, .. }) => {
-                    out((callee.def, callee.args.clone()))
-                }
-                Statement::Assign(_, Rvalue::New { ctor: Some(c), .. }) => out((c.def, vec![])),
+                | Statement::Assign(_, Rvalue::Call { callee, .. }) => out(FunctionKeyRef {
+                    def: callee.def,
+                    args: &callee.args,
+                }),
+                Statement::Assign(_, Rvalue::New { ctor: Some(c), .. }) => out(FunctionKeyRef {
+                    def: c.def,
+                    args: &[],
+                }),
                 _ => {}
             }
         }
@@ -395,6 +403,7 @@ fn rvalue_uses(
         | Rvalue::Concat(_)
         | Rvalue::ConcatInt { .. }
         | Rvalue::EnumName { .. }
+        | Rvalue::Zero(_)
         | Rvalue::FuncRef(_)
         | Rvalue::ArrayLen(_)
         | Rvalue::Discriminant { .. }

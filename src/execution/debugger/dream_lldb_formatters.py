@@ -10,6 +10,7 @@ import lldb
 MAX_ELEMS = 64
 MAX_DEPTH = 2
 _process = None
+UNOWNED_POISON = None
 
 
 def _pointee_struct(value):
@@ -45,6 +46,8 @@ def _read_str(process, addr):
 def _elem_text(child, process, depth=0):
     """Renders one array element child; falls back to its own summary/value."""
     tname = (child.GetType().GetName() or "").replace("const ", "").strip()
+    if "dream_Observer_" in tname and child.GetValueAsUnsigned() == 0:
+        return "<unset>" if "dream_Observer_u_" in tname else "None"
     if "dream_Str" in tname:
         addr = child.GetValueAsUnsigned()
         if addr == 0:
@@ -248,6 +251,15 @@ def _dispatch(valobj, depth=0):
             name = name[5:]
         if name == "dream_Str":
             return _string_summary(s)
+        if name.startswith("dream_Observer_"):
+            target = s.GetChildMemberWithName("value")
+            address = target.GetValueAsUnsigned()
+            if address == 0:
+                return "<unset>" if name.startswith("dream_Observer_u_") else "None"
+            mask = (1 << (s.GetProcess().GetAddressByteSize() * 8)) - 1
+            if UNOWNED_POISON is not None and address == (UNOWNED_POISON & mask):
+                return "<destroyed>"
+            return _elem_text(target, s.GetProcess(), depth + 1)
         if name.startswith("dream_Arr"):
             return _array_summary(s, depth)
         if name == "tag":
@@ -280,6 +292,7 @@ def arr_ptr_summary(valobj, internal_dict):
 
 
 def __lldb_init_module(debugger, _internal_dict):
+    global UNOWNED_POISON
     # Type names are program-specific, so the adapter writes them next to this file as
     # `<stem>_lldb_names.py` (`NAMES = [...]`). Registration happens here, in the import hook,
     # which is the one path that provably attaches summaries for the session.
@@ -292,6 +305,7 @@ def __lldb_init_module(debugger, _internal_dict):
         scope: dict = {}
         exec(compile(open(names_path).read(), names_path, "exec"), scope)
         names = scope.get("NAMES", [])
+        UNOWNED_POISON = scope["UNOWNED_POISON"]
     for name in names:
         for pattern in (
             "^const %s \\*\\*$" % name,

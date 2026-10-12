@@ -30,7 +30,8 @@ The first command builds and runs the file. The second only builds it. The third
 | `--release` | Build an optimized version |
 | `-O0` through `-O4`, `-Os`, `-Oz` | Choose an optimization setting; overrides `--release` |
 | `-O` | Use size optimization when no level follows |
-| `-g`, `--debug-info` | Include debugging information |
+| `-g`, `--debug-info` | Include debugger information and preserve debugger-oriented MIR behavior |
+| `--release --perf-symbols` | Include source/function symbols while retaining ordinary Release MIR optimization |
 | `-o path`, `--output path` | Choose an output path |
 | `-v`, `--verbose` | Show more build progress |
 | `--relocatable` | Put required native libraries beside the program for sharing |
@@ -38,6 +39,8 @@ The first command builds and runs the file. The second only builds it. The third
 | `--profile`, `--use-profile[=path]` | Record or use measurements to improve native builds |
 
 Native output normally goes under `target/debug/` or `target/release/`. Browser output goes under `target/web/`. [Build and run](build-run.md) explains profile-guided builds. [Library output](../language/library-outputs.md) explains exported libraries.
+
+Use `--perf-symbols` for sampling profiles. It requires `--release` and cannot be combined with `-g`; it emits optimized source/function information without debugger local preservation. Both settings participate in build-cache identity.
 
 ## Browser and Node
 

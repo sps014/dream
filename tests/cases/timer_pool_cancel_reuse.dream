@@ -1,0 +1,15 @@
+import system;
+
+async fun main(): void {
+    let total = 0;
+    for (let round = 0; round < 20; round = round + 1) {
+        let pending = Buffer.alloc<Future<void>>(128);
+        for (let i = 0; i < 128; i = i + 1) { pending[i] = Time.sleep(0); }
+        for (let i = 0; i < 128; i = i + 2) { Promise.cancel(pending[i]); }
+        for (let i = 1; i < 128; i = i + 2) {
+            pending[i].await;
+            total = total + 1;
+        }
+    }
+    System.println(total);
+}

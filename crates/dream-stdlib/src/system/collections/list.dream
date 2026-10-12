@@ -1,5 +1,10 @@
 module system.collections;
 
+internal static class CollectionStorage {
+    @intrinsic("buffer_zero")
+    internal static extern fun zero<T>(): T;
+}
+
 // Dream standard `List<T>` (`import system.collections;`).
 
 // Natural-order (ascending) comparator over any `Comparable` type. Kept as a free generic function
@@ -74,8 +79,8 @@ public class List<T> : IndexedCollection<T> {
         let src = Span<T>.of(items);
         let n = src.length;
         let need = this.count + n;
-        while need > this.items.length {
-            this.grow();
+        if need > this.items.length {
+            this.items = Buffer.realloc<T>(this.items, grow_capacity(this.items.length, need));
         }
         let dst = Span<T>(this.items, this.count, n);
         dst.copy_from(src);
@@ -135,7 +140,7 @@ public class List<T> : IndexedCollection<T> {
         // Zero the slot after copying out. Needed for value structs with reference fields: a bare
         // `count--` would leave a second owner in dead capacity and double-release on the next
         // overwrite or when the backing array is dropped.
-        Buffer.set_unchecked<T>(this.items, i, Buffer.alloc<T>(1)[0]);
+        Buffer.set_unchecked<T>(this.items, i, CollectionStorage.zero<T>());
         this.count = i;
         return Option.Some(last);
     }
@@ -178,8 +183,8 @@ public class List<T> : IndexedCollection<T> {
 
     // Grows the backing buffer until `capacity()` is at least `n`.
     public fun reserve(n: int): void {
-        while this.items.length < n {
-            this.grow();
+        if this.items.length < n {
+            this.items = Buffer.realloc<T>(this.items, grow_capacity(this.items.length, n));
         }
     }
 
@@ -260,10 +265,10 @@ public class List<T> : IndexedCollection<T> {
     @inline
     public fun clear(): void {
         if this.count > 0 {
-            let z = Buffer.alloc<T>(1);
+            let z = CollectionStorage.zero<T>();
             let i = 0;
             while i < this.count {
-                Buffer.set_unchecked<T>(this.items, i, z[0]);
+                Buffer.set_unchecked<T>(this.items, i, z);
                 i = i + 1;
             }
         }
@@ -325,7 +330,7 @@ public class List<T> : IndexedCollection<T> {
         this.count = this.count - 1;
         // Zero the vacated tail slot: it still holds a second reference to the last shifted
         // element and would retain it past the next overwrite.
-        Buffer.set_unchecked<T>(this.items, this.count, Buffer.alloc<T>(1)[0]);
+        Buffer.set_unchecked<T>(this.items, this.count, CollectionStorage.zero<T>());
         return true;
     }
 

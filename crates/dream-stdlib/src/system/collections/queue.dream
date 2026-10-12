@@ -62,7 +62,7 @@ public class Queue<T> : Collection<T> {
         let vacated = this.head;
         this.head = (this.head + 1) % this.items.length;
         this.count = this.count - 1;
-        Buffer.set_unchecked<T>(this.items, vacated, Buffer.alloc<T>(1)[0]);
+        Buffer.set_unchecked<T>(this.items, vacated, CollectionStorage.zero<T>());
         return Option.Some(v);
     }
 
@@ -79,10 +79,10 @@ public class Queue<T> : Collection<T> {
     // them; the ring is reset to front-aligned empty.
     public fun clear(): void {
         let cap = this.items.length;
-        let z = Buffer.alloc<T>(1);
+        let z = CollectionStorage.zero<T>();
         let i = 0;
         while i < this.count {
-            this.items[(this.head + i) % cap] = z[0];
+            this.items[(this.head + i) % cap] = z;
             i = i + 1;
         }
         this.head = 0;

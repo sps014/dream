@@ -180,6 +180,15 @@ impl<'l, 'a> Fx<'l, 'a> {
             .cloned()
             .unwrap_or_else(|| crate::internal_error!("missing observed field"));
         let (slot, _) = self.field_addr(*base, fld.offset);
+        if self.is_value(self.f.local_ty(*base))
+            && (fld.is_unowned || self.interner.is_niche_union(fld.ty))
+        {
+            let box_ = self.load_ty(self.h(), &slot, ELEM_ALIGN, true);
+            return self.call_v(
+                "dream_value_observer_load",
+                &[box_, V::i32(if fld.is_unowned { 1 } else { 2 })],
+            );
+        }
         let slot = self.ptr_value(&slot);
         let (kind, none, offset, size, tag, info) = if fld.is_unowned {
             (1, 0, 0, 0, 0, V::s(Value::zero(Ty::Ptr)))
@@ -406,12 +415,8 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let es = elem_size(&self.l.cx, ety);
                 let addr = self.index_addr(*base, index, es, *unchecked);
                 if self.is_value(ety) {
-                    let src = self.ptr(&rhs);
                     self.publish_store(place, ety, &rhs);
-                    self.memcpy(&addr, &src, &Value::i64(es as i64));
-                    if rvalue_allocates(rv) && !self.is_buffer_result(rv) {
-                        self.call("dream_free", &[rhs]);
-                    }
+                    self.store_value_element(rv, &rhs, ety, &addr);
                     return;
                 }
                 let m = mem_ty(&self.l.cx, ety);
@@ -427,9 +432,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let dst = self.ptr(&p);
                 self.publish_store(place, *elem_ty, &rhs);
                 if self.is_value(*elem_ty) {
-                    let size = elem_size(&self.l.cx, *elem_ty);
-                    let src = self.ptr(&rhs);
-                    self.memcpy(&dst, &src, &Value::i64(size as i64));
+                    self.store_value_element(rv, &rhs, *elem_ty, &dst);
                     return;
                 }
                 let m = mem_ty(&self.l.cx, *elem_ty);
@@ -489,11 +492,15 @@ impl<'l, 'a> Fx<'l, 'a> {
             return;
         }
         if fld.is_unowned {
-            self.unowned_store(&slot, &rhs, align);
+            if self.is_value(ty) {
+                self.value_observer_store(&slot, &rhs, &fld, align);
+            } else {
+                self.unowned_store(&slot, &rhs, align);
+            }
             return;
         }
         if fld.is_weak {
-            self.weak_option_store(&slot, &fld, rv, &rhs, align);
+            self.weak_option_store(&slot, &fld, rv, &rhs, align, self.is_value(ty));
             return;
         }
         if self.interner.is_reference(fld.ty) && !self.f.locals[base.0 as usize].borrows_refs {
@@ -560,6 +567,23 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.call("dream_weak_leave", &[]);
     }
 
+    fn value_observer_store(
+        &mut self,
+        slot: &Value,
+        rhs: &V,
+        fld: &dream_hir::FieldLayout,
+        align: u32,
+    ) {
+        let new = self.as_ref(rhs);
+        let box_ = self.call_v(
+            "dream_value_observer_new",
+            &[new, V::i32(if fld.is_unowned { 1 } else { 2 })],
+        );
+        let old = self.load_ty(self.h(), slot, align, true);
+        self.store_ty(&self.h(), slot, &box_, align);
+        self.release_value_observer(fld.ty, &old, fld.is_unowned);
+    }
+
     /// Stores `Some(x)` / `None` into a niche weak field straight from the payload operand.
     /// Niche construction would retain `x` only for the weak store to release it again; the
     /// operand's owner keeps `x` alive across the registration either way.
@@ -586,7 +610,11 @@ impl<'l, 'a> Fx<'l, 'a> {
         };
         let payload = self.as_ref(&payload);
         let (slot, align) = self.field_addr(*base, fld.offset);
-        self.weak_niche_store(&slot, &payload, align);
+        if self.is_value(self.f.local_ty(*base)) {
+            self.value_observer_store(&slot, &payload, &fld, align);
+        } else {
+            self.weak_niche_store(&slot, &payload, align);
+        }
         true
     }
 
@@ -618,10 +646,15 @@ impl<'l, 'a> Fx<'l, 'a> {
         rv: &Rvalue,
         rhs: &V,
         align: u32,
+        owner_value: bool,
     ) {
         if self.interner.is_niche_union(fld.ty) {
             let new = self.as_ref(rhs);
-            self.weak_niche_store(slot, &new, align);
+            if owner_value {
+                self.value_observer_store(slot, &new, fld, align);
+            } else {
+                self.weak_niche_store(slot, &new, align);
+            }
             if unique_move_src(rv).is_none() {
                 self.call("dream_release", &[new]);
             }
@@ -658,22 +691,28 @@ impl<'l, 'a> Fx<'l, 'a> {
         });
         self.store_ty(&self.h(), slot, &box_, align);
         let nz = self.truthy(&old);
-        self.if_then(&nz, |fx| {
-            let op = fx.ptr(&old);
-            let d = fx.load_ty(Ty::I32, &op, 4, false);
-            let was_some = fx.w.icmp("eq", &d.v, &Value::i32(some as i64));
-            fx.if_then(&was_some, |fx| {
-                let pa = fx.addr(&old, poff);
-                let payload = fx.load_ty(fx.h(), &pa, 8, true);
-                fx.call("dream_weak_unregister", &[payload, old.clone()]);
+        if !owner_value {
+            self.if_then(&nz, |fx| {
+                let op = fx.ptr(&old);
+                let d = fx.load_ty(Ty::I32, &op, 4, false);
+                let was_some = fx.w.icmp("eq", &d.v, &Value::i32(some as i64));
+                fx.if_then(&was_some, |fx| {
+                    let pa = fx.addr(&old, poff);
+                    let payload = fx.load_ty(fx.h(), &pa, 8, true);
+                    fx.call("dream_weak_unregister", &[payload, old.clone()]);
+                });
             });
-        });
+        }
         self.call("dream_weak_leave", &[]);
         if let Some(rel) = drop_src {
             self.call(&rel, &[src]);
         }
-        self.if_then(&nz, |fx| {
-            fx.call("dream_free", std::slice::from_ref(&old));
-        });
+        if owner_value {
+            self.release_value_observer(fld.ty, &old, false);
+        } else {
+            self.if_then(&nz, |fx| {
+                fx.call("dream_free", std::slice::from_ref(&old));
+            });
+        }
     }
 }

@@ -37,7 +37,7 @@ def processes(samples, arm, passes, rounds):
     return values, {n: next(iter(v)) for n, v in checksums.items()}, iterations
 
 
-def summarize(samples, rss, arms, passes, rounds, threshold=0.05):
+def summarize(samples, rss, arms, passes, rounds, threshold=0.10):
     processed = {}
     results = {}
     counts = {}

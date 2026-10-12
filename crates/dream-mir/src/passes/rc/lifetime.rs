@@ -147,6 +147,7 @@ fn rvalue_borrow(rv: &Rvalue, holds: &IndexSet<DefId>) -> StmtBorrow {
         | Rvalue::EnumName { .. }
         | Rvalue::IndirectCall { .. }
         | Rvalue::InterfaceCall { .. }
+        | Rvalue::Zero(_)
         | Rvalue::FuncRef(_)
         | Rvalue::New { .. }
         | Rvalue::Tuple { .. }

@@ -5,9 +5,12 @@ module system.core;
 // normally prefer `List<T>` and only reach for `Buffer.alloc` for tight, manual storage control.
 
 public static class Buffer {
+    // Storage initialization may contain internal null references; it is not a constructor API.
+    @intrinsic("buffer_zero")
+    internal static extern fun zero<T>(): T;
     // `Buffer.alloc<T>(n)` returns a fresh, zero-initialized `T[]` of length `n`.
     @intrinsic("array_new")
-    static extern fun alloc<T>(len: int): T[];
+    public static extern fun alloc<T>(len: int): T[];
 
     // Resizes `arr`'s backing block via the allocator's `$realloc`, returning a `T[]` of `new_len`
     // elements: the overlapping prefix is preserved and any newly grown tail is zero-initialized.
@@ -18,7 +21,7 @@ public static class Buffer {
     @intrinsic("array_realloc")
     @unsafe
     @consuming
-    static extern fun realloc<T>(arr: T[], new_len: int): T[];
+    public static extern fun realloc<T>(arr: T[], new_len: int): T[];
 
     // Bulk-copies `count` unmanaged elements from `src[src_off..]` into `dst[dst_off..]`. The
     // emitter expands this to a single `memory.copy` of `count * sizeof(T)` bytes — correct only
@@ -26,7 +29,7 @@ public static class Buffer {
     // not check that the ranges fit inside either array's allocated length.
     @intrinsic("array_elems_copy")
     @unsafe
-    static extern fun elems_copy<T : unmanaged>(
+    public static extern fun elems_copy<T : unmanaged>(
         borrow dst: T[],
         dst_off: int,
         borrow src: T[],
@@ -38,7 +41,7 @@ public static class Buffer {
     // `@unsafe` because the compiler does not check that the range fits in `dst`.
     @intrinsic("array_elems_fill")
     @unsafe
-    static extern fun elems_fill<T : unmanaged>(
+    public static extern fun elems_fill<T : unmanaged>(
         borrow dst: T[],
         dst_off: int,
         count: int
@@ -50,11 +53,11 @@ public static class Buffer {
     // assignment semantics (release old occupant), unlike bitwise fills which must never touch
     // reference-typed slots. O(length); unmanaged elements compile to plain stores.
     public static fun clear<T>(borrow arr: T[]): void {
-        let z = Buffer.alloc<T>(1);
+        let z = Buffer.zero<T>();
         let i = 0;
         let n = arr.length;
         while i < n {
-            arr[i] = z[0];
+            arr[i] = z;
             i = i + 1;
         }
     }
@@ -68,10 +71,10 @@ public static class Buffer {
         if n >= arr.length {
             return;
         }
-        let z = Buffer.alloc<T>(1);
+        let z = Buffer.zero<T>();
         let i = n;
         while i < arr.length {
-            arr[i] = z[0];
+            arr[i] = z;
             i = i + 1;
         }
     }
@@ -80,17 +83,17 @@ public static class Buffer {
     // established `0 <= index < arr.length` (e.g. `List<T>` keeps `count <= items.length`).
     @intrinsic("array_get_unchecked")
     @unsafe
-    static extern fun get_unchecked<T>(borrow arr: T[], index: int): T;
+    public static extern fun get_unchecked<T>(borrow arr: T[], index: int): T;
 
     // `arr[index] = value` without the bounds check (ordinary element-store ARC semantics).
     // `@unsafe` for the same reason as `get_unchecked`.
     @intrinsic("array_set_unchecked")
     @unsafe
-    static extern fun set_unchecked<T>(borrow arr: T[], index: int, value: T): void;
+    public static extern fun set_unchecked<T>(borrow arr: T[], index: int, value: T): void;
 
     // Writes a UTF-16 code unit as little-endian `i32.store16` at byte offset `off`.
     @intrinsic("array_store16")
-    static extern fun store16(borrow arr: byte[], off: int, unit: int): void;
+    public static extern fun store16(borrow arr: byte[], off: int, unit: int): void;
 
     // Immediately returns `arr`'s backing block to the allocator via `$free`, bypassing reference
     // counting entirely. Any other live reference to the same block (including `arr` itself, if
@@ -99,5 +102,5 @@ public static class Buffer {
     @intrinsic("force_free")
     @unsafe
     @consuming
-    static extern fun free<T>(arr: T[]): void;
+    public static extern fun free<T>(arr: T[]): void;
 }

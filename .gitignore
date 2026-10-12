@@ -25,6 +25,8 @@ tests/**/*.C
 !/tests/runtime_machine_size.c
 !/tests/runtime_callback.c
 !/tests/runtime_platform.c
+!/tests/runtime_stdio.c
+!/tests/runtime_ready.c
 tests/**/*.bin
 tests/**/*.o
 # Native C emit (`dream --native-c`) next to the entry file.
@@ -74,3 +76,7 @@ tests/bench/out/
 .dream/
 
 !tests/runtime_cycles.c
+
+!tests/runtime_scheduler_nodes.c
+
+!tests/runtime_leak_reporting.c

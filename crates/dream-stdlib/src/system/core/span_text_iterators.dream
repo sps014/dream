@@ -130,26 +130,26 @@ extend string : StringKey {
     }
 
     @intrinsic("string_view_eq")
-    static extern fun view_eq(borrow a: string, ao: int, an: int, borrow b: string, bo: int, bn: int): int;
+    public static extern fun view_eq(borrow a: string, ao: int, an: int, borrow b: string, bo: int, bn: int): int;
 
     @intrinsic("string_view_compare")
-    static extern fun view_compare(borrow a: string, ao: int, an: int, borrow b: string, bo: int, bn: int): int;
+    public static extern fun view_compare(borrow a: string, ao: int, an: int, borrow b: string, bo: int, bn: int): int;
 
     @intrinsic("string_view_hash")
-    static extern fun view_hash(borrow s: string, off: int, n: int): int;
+    public static extern fun view_hash(borrow s: string, off: int, n: int): int;
 
     @intrinsic("string_view_find")
-    static extern fun view_find(borrow h: string, ho: int, hn: int, borrow nd: string, no: int, nn: int, from: int): int;
+    public static extern fun view_find(borrow h: string, ho: int, hn: int, borrow nd: string, no: int, nn: int, from: int): int;
 
     @intrinsic("string_view_rfind")
-    static extern fun view_rfind(borrow h: string, ho: int, hn: int, borrow nd: string, no: int, nn: int): int;
+    public static extern fun view_rfind(borrow h: string, ho: int, hn: int, borrow nd: string, no: int, nn: int): int;
 
     @intrinsic("string_view_find_char")
-    static extern fun view_find_char(borrow s: string, off: int, n: int, from: int, c: int): int;
+    public static extern fun view_find_char(borrow s: string, off: int, n: int, from: int, c: int): int;
 
     @intrinsic("string_view_rfind_char")
-    static extern fun view_rfind_char(borrow s: string, off: int, n: int, c: int): int;
+    public static extern fun view_rfind_char(borrow s: string, off: int, n: int, c: int): int;
 
     @intrinsic("string_view_count_char")
-    static extern fun view_count_char(borrow s: string, off: int, n: int, c: int): int;
+    public static extern fun view_count_char(borrow s: string, off: int, n: int, c: int): int;
 }

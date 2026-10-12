@@ -16,7 +16,7 @@ void dream_panic_at(dream_ptr msg, const char *location) {
     if (hook && !in_panic_hook) {
         char message[PANIC_MESSAGE_MAX];
         size_t written;
-        dream_utf8_chunk(dream_str_units(msg), dream_str_len(msg), message, sizeof(message), 0, &written);
+        dream_utf8_chunk(dream_str_units(msg), dream_str_len(msg), message, sizeof(message), 0, &written, 0);
         in_panic_hook = 1;
         hook(message, location);
     } else {

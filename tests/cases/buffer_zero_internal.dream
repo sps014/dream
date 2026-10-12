@@ -1,0 +1,2 @@
+import system;
+fun main(): void { let x = Buffer.zero<string>(); System.println(x); }

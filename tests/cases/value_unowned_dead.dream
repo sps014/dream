@@ -1,0 +1,15 @@
+import system;
+class Note { public n: int; public constructor(n: int) { this.n = n; } }
+struct Borrowed {
+    public unowned note: Note;
+    public constructor(borrow note: Note) { this.note = note; }
+}
+@noinline
+fun make(): Borrowed {
+    let target = Note(42);
+    return Borrowed(target);
+}
+fun main(): void {
+    let value = make();
+    System.println(value.note.n);
+}

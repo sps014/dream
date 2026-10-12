@@ -110,12 +110,12 @@ static char *put_str(char *o, const char *s) {
 static void format_g(double v, char *out) {
     double a = v < 0.0 ? -v : v;
     if (a != a) {
-        put_str(out, "nan");
+        *put_str(out, "nan") = 0;
         return;
     }
     /* Anything above DBL_MAX is infinity. */
     if (a > 1.7976931348623157081e+308) {
-        put_str(out, v < 0 ? "-inf" : "inf");
+        *put_str(out, v < 0 ? "-inf" : "inf") = 0;
         return;
     }
     char *o = out;
@@ -225,4 +225,16 @@ dream_ptr dream_double_to_string(double v) {
     char buf[40];
     format_g(v, buf);
     return from_utf8(buf);
+}
+
+void dream_sb_push_double(dream_ptr sb, double v) {
+    char text[40];
+    uint16_t units[40];
+    int32_t n = 0;
+    format_g(v, text);
+    while (text[n]) {
+        units[n] = (uint16_t)(unsigned char)text[n];
+        n++;
+    }
+    dream_sb_push_units(sb, units, n);
 }

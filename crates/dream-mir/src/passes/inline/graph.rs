@@ -3,6 +3,7 @@
 //! on a call cycle, which are never inlined so the acyclic remainder terminates).
 
 use super::FnKey;
+use crate::analysis::function_key::FunctionKeyRef;
 use crate::{Rvalue, Statement};
 use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 
@@ -12,14 +13,19 @@ pub(super) fn count_call_sites(mir: &crate::Mir) -> HashMap<FnKey, usize> {
     for f in &mir.functions {
         for b in &f.blocks {
             for s in &b.stmts {
-                match s {
-                    Statement::Call { callee, .. } => {
-                        *counts.entry((callee.def, callee.args.clone())).or_default() += 1;
-                    }
-                    Statement::Assign(_, Rvalue::Call { callee, .. }) => {
-                        *counts.entry((callee.def, callee.args.clone())).or_default() += 1;
-                    }
-                    _ => {}
+                let callee = match s {
+                    Statement::Call { callee, .. }
+                    | Statement::Assign(_, Rvalue::Call { callee, .. }) => callee,
+                    _ => continue,
+                };
+                let key = FunctionKeyRef {
+                    def: callee.def,
+                    args: &callee.args,
+                };
+                if let Some(count) = counts.get_mut(&key) {
+                    *count += 1;
+                } else {
+                    counts.insert((callee.def, callee.args.clone()), 1);
                 }
             }
         }
@@ -34,7 +40,12 @@ pub(super) fn address_taken(mir: &crate::Mir) -> HashSet<FnKey> {
     for f in &mir.functions {
         for b in &f.blocks {
             for s in &b.stmts {
-                if let Statement::Assign(_, Rvalue::FuncRef(c)) = s {
+                if let Statement::Assign(_, Rvalue::FuncRef(c)) = s
+                    && !set.contains(&FunctionKeyRef {
+                        def: c.def,
+                        args: &c.args,
+                    })
+                {
                     set.insert((c.def, c.args.clone()));
                 }
             }
@@ -51,12 +62,33 @@ pub(super) fn recursive_set(mir: &crate::Mir, index: &HashMap<FnKey, usize>) -> 
     // any cyclic function is excluded even if the cycle runs through a non-inlined edge.
     let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
     for (i, f) in mir.functions.iter().enumerate() {
-        let mut keys: Vec<FnKey> = Vec::new();
+        let mut add = |key: FunctionKeyRef<'_>| {
+            if let Some(&j) = index.get(&key) {
+                adj[i].push(j);
+            }
+        };
         for b in &f.blocks {
             for s in &b.stmts {
                 match s {
-                    Statement::Call { callee, .. } => keys.push((callee.def, callee.args.clone())),
-                    Statement::Assign(_, rv) => stmt_rvalue_keys(rv, &mut keys),
+                    Statement::Call { callee, .. }
+                    | Statement::Assign(_, Rvalue::Call { callee, .. } | Rvalue::FuncRef(callee)) =>
+                    {
+                        add(FunctionKeyRef {
+                            def: callee.def,
+                            args: &callee.args,
+                        });
+                    }
+                    Statement::Assign(
+                        _,
+                        Rvalue::New {
+                            ctor: Some(ctor), ..
+                        },
+                    ) => {
+                        add(FunctionKeyRef {
+                            def: ctor.def,
+                            args: &[],
+                        });
+                    }
                     _ => {}
                 }
             }
@@ -66,11 +98,8 @@ pub(super) fn recursive_set(mir: &crate::Mir, index: &HashMap<FnKey, usize>) -> 
         {
             let mut edges = crate::HirEdges::default();
             crate::hir_body_edges(&hir_fn.body, &mut edges);
-            keys.extend(edges.callees);
-        }
-        for k in keys {
-            if let Some(&j) = index.get(&k) {
-                adj[i].push(j);
+            for (def, args) in edges.callees {
+                add(FunctionKeyRef { def, args: &args });
             }
         }
     }
@@ -86,18 +115,6 @@ pub(super) fn recursive_set(mir: &crate::Mir, index: &HashMap<FnKey, usize>) -> 
         }
     }
     recursive
-}
-
-fn stmt_rvalue_keys(rv: &Rvalue, out: &mut Vec<FnKey>) {
-    match rv {
-        Rvalue::Call { callee, .. } | Rvalue::FuncRef(callee) => {
-            out.push((callee.def, callee.args.clone()))
-        }
-        Rvalue::New {
-            ctor: Some(ctor), ..
-        } => out.push((ctor.def, vec![])),
-        _ => {}
-    }
 }
 
 /// Iterative Tarjan strongly-connected-components (iterative to avoid deep recursion on large call

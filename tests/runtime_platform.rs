@@ -50,6 +50,11 @@ fn core_runs_and_reports_exhaustion_through_the_injected_platform() {
     let output = Command::new(&binary).arg("normal").output().unwrap();
     assert!(output.status.success(), "{:?}", output);
     assert!(String::from_utf8_lossy(&output.stdout).contains("injected platform passed"));
+    let retired = Command::new(&binary)
+        .arg("thread-retention")
+        .output()
+        .unwrap();
+    assert!(retired.status.success(), "thread retention: {retired:?}");
     let wide = Command::new(&binary).arg("wide-counters").output().unwrap();
     assert!(wide.status.success(), "wide counters: {:?}", wide);
     let nul = Command::new(&binary).arg("nul").output().unwrap();

@@ -281,7 +281,7 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
             }
             c
         }
-        Rvalue::FuncRef(_) => false,
+        Rvalue::Zero(_) | Rvalue::FuncRef(_) => false,
     }
 }
 

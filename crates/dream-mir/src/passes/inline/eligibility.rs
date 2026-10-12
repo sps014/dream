@@ -6,6 +6,7 @@ use crate::Operand;
 use crate::Place;
 use crate::Rvalue;
 use crate::Statement;
+use crate::analysis::function_key::FunctionKeyRef;
 use dream_types::TypeInterner;
 use indexmap::IndexMap as HashMap;
 use indexmap::IndexSet as HashSet;
@@ -43,13 +44,21 @@ pub(super) fn find_site(
     for (bi, block) in f.blocks.iter().enumerate() {
         for (si, stmt) in block.stmts.iter().enumerate() {
             let (key, args, dest) = match stmt {
-                Statement::Call { callee, args } => {
-                    ((callee.def, callee.args.clone()), args.clone(), None)
-                }
+                Statement::Call { callee, args } => (
+                    FunctionKeyRef {
+                        def: callee.def,
+                        args: &callee.args,
+                    },
+                    args,
+                    None,
+                ),
                 Statement::Assign(place, Rvalue::Call { callee, args }) => (
-                    (callee.def, callee.args.clone()),
-                    args.clone(),
-                    Some(place.clone()),
+                    FunctionKeyRef {
+                        def: callee.def,
+                        args: &callee.args,
+                    },
+                    args,
+                    Some(place),
                 ),
                 _ => continue,
             };
@@ -67,7 +76,7 @@ pub(super) fn find_site(
                 recursive,
                 call_counts,
                 addr_taken,
-                &args,
+                args,
                 interner,
             ) {
                 continue;
@@ -76,8 +85,8 @@ pub(super) fn find_site(
                 block: bi,
                 stmt: si,
                 callee: ci,
-                args,
-                dest,
+                args: args.clone(),
+                dest: dest.cloned(),
             });
         }
     }
@@ -90,7 +99,7 @@ fn eligible(
     mir: &crate::Mir,
     fi: usize,
     ci: usize,
-    key: &FnKey,
+    key: &FunctionKeyRef<'_>,
     recursive: &HashSet<FnKey>,
     call_counts: &HashMap<FnKey, usize>,
     addr_taken: &HashSet<FnKey>,
@@ -154,7 +163,10 @@ fn eligible(
     // Keep small, multi-use wrappers thin (e.g. `Map.set` → `insert_no_grow`, `List.insert` →
     // `grow`). Inlining a large callee into the wrapper first would push it over the threshold and
     // prevent the wrapper from inlining into hot loops.
-    let caller_key: FnKey = (caller.def, caller.instance.clone());
+    let caller_key = FunctionKeyRef {
+        def: caller.def,
+        args: &caller.instance,
+    };
     let caller_sites = call_counts.get(&caller_key).copied().unwrap_or(0);
     if caller_sites > 1 {
         let caller_stmts: usize = caller.blocks.iter().map(|b| b.stmts.len()).sum();

@@ -12,7 +12,7 @@ import statistics
 import subprocess
 import tempfile
 
-VERSION = 4
+VERSION = 5
 
 
 def digest(path):
@@ -29,15 +29,16 @@ def identity(bench, csharp, runner, seed, passes, target="native", benchmark_sou
         model = next((line.split(':', 1)[1].strip() for line in Path('/proc/cpuinfo').read_text().splitlines()
                       if line.startswith('model name') or line.startswith('Hardware')), model)
     return {
-        "benchmark": hashlib.sha256(source).hexdigest(), "csharp": digest(csharp),
-        "csharp_project": digest(Path(csharp).with_name("DreamBench.csproj")) if Path(csharp).with_name("DreamBench.csproj").is_file() else None,
+        "benchmark": hashlib.sha256(source).hexdigest(), "csharp": digest(csharp) if csharp else None,
+        "csharp_project": digest(Path(csharp).with_name("DreamBench.csproj")) if csharp and Path(csharp).with_name("DreamBench.csproj").is_file() else None,
         "harness": {name: digest(Path(__file__).resolve().parents[1] / name)
                     for name in ('bench.py', 'benchmarks/gate.py', 'benchmarks/stats.py')},
         "hardware": {"platform": platform.platform(), "machine": platform.machine(),
                      "processor": model, "cpus": os.cpu_count(), "runner": runner},
         "target": target,
         "seed": seed, "passes": passes, "profile": "Release", "counters": False,
-        "names": sorted(set(re.findall(r'report\("([a-z0-9_]+)"', source.decode("utf-8"))) | {"binary_trees", "binary_trees_reclaim"}),
+        "names": sorted(set(re.findall(r'report\("([a-z0-9_]+)"', source.decode("utf-8")))
+                        | ({"binary_trees", "binary_trees_reclaim"} if b'fun bench_binary_trees(' in source else set())),
     }
 
 

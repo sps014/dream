@@ -7,8 +7,6 @@ module system.collections;
 public class SortedMap<K : Comparable<K>, V> {
     keys_arr: K[];
     values_arr: V[];
-    blank_k: K[];
-    blank_v: V[];
     count: int;
 
     // Allocates an empty sorted map with an initial capacity (defaults to 8).
@@ -19,8 +17,6 @@ public class SortedMap<K : Comparable<K>, V> {
         }
         this.keys_arr = Buffer.alloc<K>(c);
         this.values_arr = Buffer.alloc<V>(c);
-        this.blank_k = Buffer.alloc<K>(1);
-        this.blank_v = Buffer.alloc<V>(1);
         this.count = 0;
     }
 
@@ -40,8 +36,8 @@ public class SortedMap<K : Comparable<K>, V> {
         if this.count > 0 {
             let i = 0;
             while i < this.count {
-                this.keys_arr[i] = this.blank_k[0];
-                this.values_arr[i] = this.blank_v[0];
+                this.keys_arr[i] = CollectionStorage.zero<K>();
+                this.values_arr[i] = CollectionStorage.zero<V>();
                 i = i + 1;
             }
         }
@@ -139,8 +135,8 @@ public class SortedMap<K : Comparable<K>, V> {
             i = i + 1;
         }
         this.count = this.count - 1;
-        this.keys_arr[this.count] = this.blank_k[0];
-        this.values_arr[this.count] = this.blank_v[0];
+        this.keys_arr[this.count] = CollectionStorage.zero<K>();
+        this.values_arr[this.count] = CollectionStorage.zero<V>();
         return true;
     }
 

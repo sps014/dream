@@ -232,6 +232,7 @@ static DREAM_THREAD_PROC(worker_main) {
     dream_mutex_unlock(&pool_mu);
     dream_cond_destroy(&pt->cv);
     free(pt);
+    dream_heap_thread_exit();
     return 0;
 }
 

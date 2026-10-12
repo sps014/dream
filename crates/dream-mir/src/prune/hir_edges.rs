@@ -280,6 +280,7 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
         | K::BoolLit(_)
         | K::CharLit(_)
         | K::Var(_)
+        | K::Zero
         | K::EnumValue(_) => {}
     }
 }

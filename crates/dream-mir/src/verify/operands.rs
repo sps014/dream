@@ -90,7 +90,7 @@ pub(super) fn rvalue_local_operands(rv: &Rvalue) -> Vec<u32> {
             ops.extend(method.iter());
             ops.extend(args.iter().map(|(a, _)| a));
         }
-        Rvalue::FuncRef(_) => {}
+        Rvalue::Zero(_) | Rvalue::FuncRef(_) => {}
     }
     for o in ops {
         operand_locals(o, &mut out);

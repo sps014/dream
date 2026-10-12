@@ -1,0 +1,1 @@
+import system; fun main(): void { System.println(System.args.length); System.println(System.exe_path.is_some()); }

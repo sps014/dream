@@ -9,7 +9,7 @@ public struct Vector<T : unmanaged> {
     w3: int;
 
     @intrinsic("simd_lane_count")
-    static extern fun lane_count(): int;
+    public static extern fun lane_count(): int;
 
     // Splats `value` into every lane.
     public constructor(value: T) {
@@ -26,7 +26,7 @@ public struct Vector<T : unmanaged> {
     }
 
     @intrinsic("simd_v128_splat")
-    static extern fun splat_raw(value: T): Vector<T>;
+    public static extern fun splat_raw(value: T): Vector<T>;
 
     // Loads `Vector<T>.count` consecutive elements from `src` starting at `offset`.
     @inline
@@ -35,7 +35,7 @@ public struct Vector<T : unmanaged> {
     }
 
     @intrinsic("simd_v128_load")
-    static extern fun load_raw(borrow src: T[], offset: int): Vector<T>;
+    public static extern fun load_raw(borrow src: T[], offset: int): Vector<T>;
 
     // Writes this vector's lanes into `dest` starting at `offset`.
     @inline
@@ -44,7 +44,7 @@ public struct Vector<T : unmanaged> {
     }
 
     @intrinsic("simd_v128_store")
-    static extern fun store_raw(v: Vector<T>, borrow dest: T[], offset: int): void;
+    public static extern fun store_raw(v: Vector<T>, borrow dest: T[], offset: int): void;
 
     // Returns lane `i` (`0 .. count`).
     public fun lane(i: int): T {
@@ -70,7 +70,7 @@ public struct Vector<T : unmanaged> {
     }
 
     @intrinsic("simd_v128_add")
-    static extern fun bin_add(a: Vector<T>, b: Vector<T>): Vector<T>;
+    public static extern fun bin_add(a: Vector<T>, b: Vector<T>): Vector<T>;
 
     // Lane-wise subtraction.
         fun operator -(other: Vector<T>): Vector<T> {
@@ -78,7 +78,7 @@ public struct Vector<T : unmanaged> {
     }
 
     @intrinsic("simd_v128_sub")
-    static extern fun bin_sub(a: Vector<T>, b: Vector<T>): Vector<T>;
+    public static extern fun bin_sub(a: Vector<T>, b: Vector<T>): Vector<T>;
 
     // Lane-wise multiplication.
         fun operator *(other: Vector<T>): Vector<T> {
@@ -86,7 +86,7 @@ public struct Vector<T : unmanaged> {
     }
 
     @intrinsic("simd_v128_mul")
-    static extern fun bin_mul(a: Vector<T>, b: Vector<T>): Vector<T>;
+    public static extern fun bin_mul(a: Vector<T>, b: Vector<T>): Vector<T>;
 
     // Lane-wise minimum of `a` and `b`.
     public static fun min(a: Vector<T>, b: Vector<T>): Vector<T> {
@@ -94,7 +94,7 @@ public struct Vector<T : unmanaged> {
     }
 
     @intrinsic("simd_v128_min")
-    static extern fun bin_min(a: Vector<T>, b: Vector<T>): Vector<T>;
+    public static extern fun bin_min(a: Vector<T>, b: Vector<T>): Vector<T>;
 
     // Lane-wise maximum of `a` and `b`.
     public static fun max(a: Vector<T>, b: Vector<T>): Vector<T> {
@@ -102,7 +102,7 @@ public struct Vector<T : unmanaged> {
     }
 
     @intrinsic("simd_v128_max")
-    static extern fun bin_max(a: Vector<T>, b: Vector<T>): Vector<T>;
+    public static extern fun bin_max(a: Vector<T>, b: Vector<T>): Vector<T>;
 
     // Horizontal sum of every lane.
     public fun sum(): T {
@@ -110,5 +110,5 @@ public struct Vector<T : unmanaged> {
     }
 
     @intrinsic("simd_v128_sum")
-    static extern fun reduce_sum(v: Vector<T>): T;
+    public static extern fun reduce_sum(v: Vector<T>): T;
 }

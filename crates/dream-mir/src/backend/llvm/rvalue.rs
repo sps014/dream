@@ -16,6 +16,21 @@ impl<'l, 'a> Fx<'l, 'a> {
     /// `dest` is the destination's type when known; integer arithmetic is performed at it.
     pub fn rvalue(&mut self, rv: &Rvalue, dest: Option<TypeId>) -> V {
         match rv {
+            Rvalue::Zero(ty) => {
+                if self.is_value(*ty) {
+                    let size = elem_size(&self.l.cx, *ty);
+                    let buf = self.alloca_bytes(size.max(1) as u64, 8);
+                    self.memset0(&buf, &Value::i64(size as i64));
+                    self.as_ref(&V::s(buf))
+                } else {
+                    V::s(Value::zero(super::types::ll_ty(
+                        self.interner,
+                        *ty,
+                        &self.h(),
+                        &self.word(),
+                    )))
+                }
+            }
             Rvalue::ObservedLoad(place) => self.observed_load(place),
             Rvalue::Use(o) => self.operand(o),
             Rvalue::Move { src, cast } => {

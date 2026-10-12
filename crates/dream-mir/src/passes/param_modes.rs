@@ -2,6 +2,7 @@
 //! managed element. Their closed call graph can therefore borrow arrays, including on recursive
 //! edges, without moving an observable destructor or invalidating a caller-held reference.
 
+use crate::analysis::function_key::FunctionKeyRef;
 use crate::{Callee, Mir, MirFunction, Place, Rvalue, Statement, Terminator};
 use dream_types::{TyKind, TypeInterner};
 use indexmap::{IndexMap, IndexSet};
@@ -9,8 +10,11 @@ use indexmap::{IndexMap, IndexSet};
 pub(crate) const STAGE: &str = "param-modes";
 type Key = (dream_types::DefId, Vec<dream_types::TypeId>);
 
-fn key(callee: &Callee) -> Key {
-    (callee.def, callee.args.clone())
+fn key(callee: &Callee) -> FunctionKeyRef<'_> {
+    FunctionKeyRef {
+        def: callee.def,
+        args: &callee.args,
+    }
 }
 
 fn scalar(ty: dream_types::TypeId, interner: &TypeInterner) -> bool {
@@ -90,8 +94,10 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
             .functions
             .iter()
             .filter(|f| {
-                candidates.contains(&(f.def, f.instance.clone()))
-                    && callees(f).any(|c| !candidates.contains(&key(c)))
+                candidates.contains(&FunctionKeyRef {
+                    def: f.def,
+                    args: &f.instance,
+                }) && callees(f).any(|c| !candidates.contains(&key(c)))
             })
             .map(|f| (f.def, f.instance.clone()))
             .collect();
@@ -105,7 +111,10 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
     let mut modes: IndexMap<Key, Vec<bool>> = IndexMap::new();
     let mut changed = false;
     for f in &mut mir.functions {
-        if !candidates.contains(&(f.def, f.instance.clone())) {
+        if !candidates.contains(&FunctionKeyRef {
+            def: f.def,
+            args: &f.instance,
+        }) {
             continue;
         }
         for p in &f.params {

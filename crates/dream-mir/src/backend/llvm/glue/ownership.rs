@@ -89,7 +89,7 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
         fx.finish();
         let layout = l.cx.nstruct(*ty).cloned();
         let union = l.cx.nunion(*ty).cloned();
-        let drops = layout.as_ref().map(|s| struct_field_drops(&l.cx, s));
+        let drops = layout.as_ref().map(|s| struct_field_drops(&l.cx, *ty, s));
         let mut fx = glue(l, &symbol(*ty, "clear"));
         let p = fx.arg(0);
         if let Some(drops) = drops {

@@ -17,7 +17,6 @@ use crate::execution::native::pgo::{clear_raw_profiles, llvm_pgo};
 use crate::execution::native::{
     Pgo, cc, host_library_dir, native_bin_fresh, read_host_capabilities,
 };
-use dream_abi::c_abi::EMBED_EXPORTS;
 #[path = "library.rs"]
 mod library;
 #[path = "build_policy.rs"]
@@ -90,16 +89,9 @@ fn system_libs(spec: &dream_abi::target::TargetSpec) -> &'static [&'static str] 
     }
 }
 
-/// Explicit module exports, the embedding API, and native-source runtime anchors.
+/// Reachable module exports and native-source runtime anchors.
 fn public_api_list(exports: &[String]) -> String {
-    let mut list = EMBED_EXPORTS.to_vec();
-    list.extend(
-        exports
-            .iter()
-            .map(String::as_str)
-            .filter(|e| !EMBED_EXPORTS.contains(e)),
-    );
-    format!("-internalize-public-api-list={}", list.join(","))
+    format!("-internalize-public-api-list={}", exports.join(","))
 }
 
 /// Links `ll_path` with the extra bitcode/IR `modules` (runtime first), then optimizes.
@@ -363,7 +355,7 @@ pub fn compile_llvm(
     };
     let stamp_path = bin.with_extension("flags");
     let stamp = format!(
-        "native-c-shim-v4\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
+        "native-c-shim-v5\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
         pipeline(opt),
         debug,
         llc_level(opt),

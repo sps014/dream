@@ -1,0 +1,11 @@
+import system;
+
+fun exercise(): void {
+    let callback = NativeCallback<fun(int): int>((value: int) => value + 1);
+    System.println(Debug.ref_count(callback) > 0);
+}
+fun main(): void {
+    let before = Debug.live_objects;
+    exercise();
+    System.println(Debug.live_objects - before);
+}

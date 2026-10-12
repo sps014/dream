@@ -392,7 +392,7 @@ fn strings_in_rv(rv: &Rvalue, out: &mut Vec<String>) {
         }
         Rvalue::Cast(o, _, _) => strings_in_op(o, out),
         Rvalue::UnionField { base, .. } => strings_in_op(base, out),
-        Rvalue::FuncRef(_) => {}
+        Rvalue::Zero(_) | Rvalue::FuncRef(_) => {}
     }
 }
 

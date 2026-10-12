@@ -10,11 +10,11 @@ module system.core;
 public static class Bytes {
     // Copy the raw bytes of blittable `value` into a fresh `byte[]` (one element per byte).
     @intrinsic("to_bytes")
-    static extern fun of<T : unmanaged>(value: T): byte[];
+    public static extern fun of<T : unmanaged>(value: T): byte[];
 
     // Reconstruct a blittable `T` from a `byte[]` buffer produced by `Bytes.of<T>`.
     @intrinsic("from_bytes")
-    static extern fun to<T : unmanaged>(borrow bytes: byte[]): T;
+    public static extern fun to<T : unmanaged>(borrow bytes: byte[]): T;
 
     // Encodes `bytes` as a `string` with one codepoint (0-255) per byte - lossless, since every
     // byte value is a valid standalone Unicode codepoint, and the inverse of `fromWireString`.
@@ -48,9 +48,9 @@ public static class Bytes {
     // re-encoded via `toWireString`. Used by `Task.spawn`/`Task.map`/
     // `TaskPool.dispatch` to marshal an arbitrary wire value without a second wire format.
     @intrinsic("wire_encode")
-    static extern fun toWire<T>(borrow value: T): string;
+    public static extern fun toWire<T>(borrow value: T): string;
 
     // The inverse of `toWire`.
     @intrinsic("wire_decode")
-    static extern fun fromWire<T>(borrow text: string): T;
+    public static extern fun fromWire<T>(borrow text: string): T;
 }

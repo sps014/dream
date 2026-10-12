@@ -343,6 +343,7 @@ pub(super) fn rvalue_region_safe(cx: &mut SafeCx<'_>, rv: &Rvalue) -> bool {
         | Rvalue::IndirectCall { .. }
         | Rvalue::InterfaceCall { .. }
         | Rvalue::JsCall { .. }
+        | Rvalue::Zero(_)
         | Rvalue::FuncRef(_) => false,
     }
 }

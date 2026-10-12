@@ -55,6 +55,7 @@ void dream_thread_attach(void) {
 
 void dream_thread_detach(void) {
     dream_callback_owner_finish();
+    dream_heap_thread_exit();
 }
 
 void dream_callback_enter(void) {

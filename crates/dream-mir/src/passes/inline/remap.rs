@@ -203,7 +203,7 @@ fn remap_rvalue(rv: &mut Rvalue, base: LocalMap<'_>) {
                 remap_operand(a, base);
             }
         }
-        Rvalue::FuncRef(_) => {}
+        Rvalue::Zero(_) | Rvalue::FuncRef(_) => {}
     }
 }
 

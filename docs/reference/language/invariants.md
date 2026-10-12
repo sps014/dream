@@ -66,6 +66,11 @@ public fun to_string(): string { return "x"; }
 
 `public` exposes a symbol to other modules (and, for functions, to the host that runs the program). A function therefore cannot be both `public` and `extern` — an `extern` is an imported host symbol, not an exported one.
 
+Compiler intrinsics are the exception: `@intrinsic` operations use ordinary member visibility.
+A `public static extern` intrinsic is callable from other types; an `internal` one requires the
+same module; a default-private one is callable only by its declaring type. Intrinsics are
+implemented by the compiler/runtime and are not host exports.
+
 ```dream
 // bad — public and extern are exclusive
 public extern fun host_call(): void;

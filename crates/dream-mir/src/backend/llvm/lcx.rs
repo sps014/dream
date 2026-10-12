@@ -51,6 +51,7 @@ impl FnSig {
 pub(super) struct Lcx<'a> {
     pub cx: Cx<'a>,
     pub mir: &'a Mir,
+    pub requirements: crate::backend::RuntimeRequirements,
     pub interner: &'a TypeInterner,
     pub sigs: &'a RuntimeSigs,
     pub m: ModuleWriter,
@@ -90,6 +91,7 @@ impl<'a> Lcx<'a> {
         Self {
             cx,
             mir,
+            requirements: crate::backend::RuntimeRequirements::from_mir(mir, interner),
             interner,
             sigs,
             m,

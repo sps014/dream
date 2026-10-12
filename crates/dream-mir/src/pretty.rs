@@ -357,6 +357,7 @@ impl FnPrinter<'_> {
 
     fn rvalue(&self, r: &Rvalue) -> String {
         match r {
+            Rvalue::Zero(ty) => format!("zero {}", self.cx.ty(*ty)),
             Rvalue::ObservedLoad(o) => format!("observed_load {}", self.operand(o)),
             Rvalue::Use(o) => self.operand(o),
             Rvalue::Move { src, cast } => match cast {

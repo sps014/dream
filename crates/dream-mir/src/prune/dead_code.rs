@@ -274,6 +274,7 @@ fn collect_rvalue_types(rv: &Rvalue, seed: &mut impl FnMut(TypeId)) {
         Rvalue::New { ty, .. }
         | Rvalue::UnionNew { ty, .. }
         | Rvalue::Tuple { ty, .. }
+        | Rvalue::Zero(ty)
         | Rvalue::ToBytes { ty, .. }
         | Rvalue::FromBytes { ty, .. }
         | Rvalue::UnionField { ty, .. }
@@ -794,7 +795,7 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
             args.iter()
                 .for_each(|(a, _)| collect_global_reads_operand(a, out));
         }
-        Rvalue::FuncRef(_) => {}
+        Rvalue::Zero(_) | Rvalue::FuncRef(_) => {}
     }
 }
 

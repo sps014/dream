@@ -14,6 +14,35 @@ impl<'a> Analyzer<'a> {
             generic_args,
             ..
         } = *call;
+        if intrinsics::IntrinsicOp::from_attributes(&template.attributes)
+            == Some(intrinsics::IntrinsicOp::BufferZero)
+        {
+            if !self.current_function_is_trusted_prelude() {
+                diagnostics.report_error(
+                    "'Buffer.zero' is an internal storage operation".to_string(),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            }
+            let Some(element) = generic_args.as_ref().and_then(|g| g.first()) else {
+                diagnostics.report_error(
+                    "'Buffer.zero' requires a type argument".to_string(),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            };
+            if !params_types.is_empty() {
+                diagnostics.report_error(
+                    "'Buffer.zero' expects no arguments".to_string(),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            }
+            let element = Self::monomorphize_type(element, &self.current_generic_bindings);
+            self.reject_ref_struct_array_element(&element, Some(method.position), diagnostics);
+            self.hir_set_zero(&element);
+            return Ok(element);
+        }
         // `Buffer.alloc<T>(len)`: a generic intrinsic that allocates a zero-initialized
         // `T[]`. The element type comes from the explicit type argument (resolved
         // through the active monomorphization bindings so `Buffer.alloc<T>` inside a

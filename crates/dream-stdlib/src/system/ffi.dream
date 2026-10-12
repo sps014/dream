@@ -41,7 +41,7 @@ public class OwnedCPtr {
     free: usize;
 
     @intrinsic("dream_ffi_free_with")
-    static extern fun free_with(free: usize, ptr: usize): void;
+    public static extern fun free_with(free: usize, ptr: usize): void;
 
     // The pointer, still owned (and later freed) by this object.
     public fun get(): CPtr {
@@ -68,10 +68,10 @@ public class NativeCallback<F> {
     f: F;
 
     @intrinsic("dream_callback_register")
-    static extern fun register(borrow callback: object): void;
+    public static extern fun register(borrow callback: object): void;
 
     @intrinsic("dream_callback_unregister")
-    static extern fun unregister(borrow callback: object): void;
+    public static extern fun unregister(borrow callback: object): void;
 
     public constructor(f: F) {
         this.f = f;
@@ -86,19 +86,19 @@ public class NativeCallback<F> {
 // Reads through C pointers from `@c` callbacks (`char**`, `char*`).
 public static class Ffi {
     @intrinsic("dream_ffi_read_ptr")
-    static extern fun host_read_ptr(base: usize, index: int): usize;
+    public static extern fun host_read_ptr(base: usize, index: int): usize;
 
     @intrinsic("dream_ffi_read_cstring")
-    static extern fun host_read_cstring(ptr: usize): string;
+    public static extern fun host_read_cstring(ptr: usize): string;
 
     @intrinsic("dream_ffi_read_i32")
-    static extern fun host_read_i32(base: usize, index: int): int;
+    public static extern fun host_read_i32(base: usize, index: int): int;
 
     @intrinsic("dream_ffi_read_i64")
-    static extern fun host_read_i64(base: usize, index: int): long;
+    public static extern fun host_read_i64(base: usize, index: int): long;
 
     @intrinsic("dream_ffi_read_f64")
-    static extern fun host_read_f64(base: usize, index: int): double;
+    public static extern fun host_read_f64(base: usize, index: int): double;
 
     // `((int32_t*)base)[index]`.
     public static fun read_int(base: CPtr, index: int): int {

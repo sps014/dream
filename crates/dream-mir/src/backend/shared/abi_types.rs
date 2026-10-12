@@ -266,11 +266,18 @@ fn rvalue_is_wide(
             then_val, else_val, ..
         } => op(then_val) || op(else_val),
         crate::Rvalue::Cast(o, _, to) => ty_is_wide(cx, *to) || (is_narrow_int(cx, *to) && op(o)),
+        crate::Rvalue::Zero(ty) => ty_is_wide(cx, *ty),
         crate::Rvalue::Call { callee, .. } => {
             // `funcbox_env` is typed as `int` but returns a host pointer.
-            cx.intrinsic_key(callee.def)
-                .is_some_and(|key| key == "funcbox_env" || key == "funcbox_new")
-                || ty_is_wide(cx, callee.ret)
+            cx.intrinsic_key(callee.def).is_some_and(|key| {
+                matches!(
+                    dream_abi::intrinsics::IntrinsicOp::from_key(key),
+                    Some(
+                        dream_abi::intrinsics::IntrinsicOp::FuncboxEnv
+                            | dream_abi::intrinsics::IntrinsicOp::FuncboxNew
+                    )
+                )
+            }) || ty_is_wide(cx, callee.ret)
         }
         crate::Rvalue::IndirectCall { sig, .. } => match cx.interner.kind(*sig) {
             TyKind::Func(_, ret) => ty_is_wide(cx, *ret),
@@ -323,6 +330,7 @@ pub(crate) fn runtime_c_name(sym: &str) -> String {
         "string_builder_push" => "dream_sb_push".into(),
         "string_builder_push_int" => "dream_sb_push_int".into(),
         "string_builder_push_long" => "dream_sb_push_long".into(),
+        dream_abi::intrinsics::ATTR_STRING_BUILDER_PUSH_DOUBLE => "dream_sb_push_double".into(),
         "array_new" => "dream_array_new".into(),
         "array_realloc" => "dream_array_realloc".into(),
         "to_bytes" => "dream_to_bytes".into(),
@@ -343,9 +351,9 @@ pub(crate) fn runtime_c_name(sym: &str) -> String {
         "char_to_string" => "dream_char_to_string".into(),
         "float_to_string" => "dream_float_to_string".into(),
         "double_to_string" => "dream_double_to_string".into(),
-        "funcbox_new" => "dream_funcbox_new".into(),
-        "funcbox_funcidx" => "dream_funcbox_funcidx".into(),
-        "funcbox_env" => "dream_funcbox_env".into(),
+        dream_abi::intrinsics::ATTR_FUNCBOX_NEW => "dream_funcbox_new".into(),
+        dream_abi::intrinsics::ATTR_FUNCBOX_FUNCIDX => "dream_funcbox_funcidx".into(),
+        dream_abi::intrinsics::ATTR_FUNCBOX_ENV => "dream_funcbox_env".into(),
         "box_int" => "dream_box_int".into(),
         "box_float" => "dream_box_float".into(),
         "box_double" => "dream_box_double".into(),

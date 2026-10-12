@@ -52,6 +52,15 @@ class GateTests(unittest.TestCase):
                         self.samples, 'baseline', 5, 10, self.rss, tools)
         self.record, _ = bench_gate.load(self.path, self.identity)
 
+    def test_default_regression_budget_is_ten_percent(self):
+        samples = copy.deepcopy(self.samples)
+        for sample in samples:
+            if sample['arm'] == 'current':
+                sample['ns_per_op'] = 108
+                sample['ns_total'] = 1080
+        rows, _ = stats.summarize(samples, self.rss, ['baseline', 'current'], 5, 10)
+        self.assertEqual(rows['work']['comparisons']['baseline']['decision'], 'pass')
+
     def test_paired_decisions(self):
         for ratio, status in [(1.0, 0), (1.2, 1)]:
             samples = copy.deepcopy(self.samples)
@@ -85,6 +94,14 @@ class GateTests(unittest.TestCase):
         actual = bench_gate.identity(fixture, fixture, 'test', 1, 5, benchmark_source=source)
         self.assertEqual(actual['benchmark'], expected['benchmark'])
         self.assertEqual(actual['names'], expected['names'])
+
+    def test_dream_only_identity_has_no_unrelated_fixture_or_workloads(self):
+        fixture = self.root / 'collections.dream'
+        fixture.write_bytes(b'report("collection_churn", elapsed, iterations);')
+        identity = bench_gate.identity(fixture, None, 'test', 1, 5)
+        self.assertIsNone(identity['csharp'])
+        self.assertIsNone(identity['csharp_project'])
+        self.assertEqual(identity['names'], ['collection_churn'])
 
     def test_wasm_reference_preserves_and_checks_entire_bundle(self):
         node = self.root / 'node'

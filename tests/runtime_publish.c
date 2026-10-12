@@ -1,5 +1,6 @@
 #include "../crates/dream-mir/src/runtime/c/core/include/dream_core.h"
 #include "../crates/dream-mir/src/runtime/c/core/include/dream_heap_maps.h"
+#include "../crates/dream-mir/src/runtime/c/core/include/dream_platform_internal.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,6 +13,9 @@ void dream_thread_attach(void) {}
 void dream_callback_drain(void) {}
 void dream_callback_owner_finish(void) {}
 int dream_callback_pending(void) { return 0; }
+int dream_callback_owned(void) { return 0; }
+int dream_async_pending(void) { return 0; }
+void dream_run_loop(void) {}
 void dream_callback_set_waker(void (*wake)(void *), void *context) {
     (void)wake;
     (void)context;
@@ -30,8 +34,14 @@ typedef struct {
     dream_ptr left;
     dream_ptr right;
 } Node;
+static dream_ptr nested_publication;
 
 static void node_visit(dream_ptr p) {
+    if (nested_publication) {
+        dream_ptr nested = nested_publication;
+        nested_publication = 0;
+        dream_publish(nested);
+    }
     Node *n = (Node *)dream_p(p); dream_visit_edge(n->left); dream_visit_edge(n->right);
 }
 static void array_visit(dream_ptr p) {
@@ -50,6 +60,11 @@ const dream_type_info *dream_type_info_for_tag(int32_t tag) {
 
 static dream_ptr *nodes;
 static size_t node_count;
+static size_t raw_allocations;
+static void *counted_allocate(size_t bytes) {
+    __atomic_fetch_add(&raw_allocations, 1, __ATOMIC_RELAXED);
+    return dream_default_platform.allocate(bytes);
+}
 static pthread_mutex_t mutation_mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t mutation_cv = PTHREAD_COND_INITIALIZER;
 static int installed;
@@ -109,6 +124,17 @@ static void handoff_and_free(void) {
 }
 
 int main(void) {
+    dream_platform platform = dream_default_platform;
+    platform.allocate = counted_allocate;
+    dream_set_platform(&platform);
+    make_nodes(3);
+    ((Node *)dream_p(nodes[0]))->left = nodes[1];
+    ((Node *)dream_p(nodes[0]))->right = nodes[2];
+    nested_publication = nodes[2];
+    dream_publish(nodes[0]);
+    assert(nested_publication == 0);
+    assert(dream_tag_shared(nodes[1]) && dream_tag_shared(nodes[2]));
+    handoff_and_free();
     make_nodes(3);
     dream_publish_child(nodes[0], nodes[1]);
     assert(!dream_tag_shared(nodes[1]));
@@ -155,6 +181,11 @@ int main(void) {
     for (size_t i = 0; i < node_count; ++i) {
         ((Node *)dream_p(nodes[i]))->left = nodes[(i + 1) % node_count];
     }
+    dream_publish(nodes[0]);
+    size_t repeated_before = __atomic_load_n(&raw_allocations, __ATOMIC_RELAXED);
+    for (size_t i = 0; i < 20; i++) { dream_publish(nodes[0]); }
+    size_t repeated_after = __atomic_load_n(&raw_allocations, __ATOMIC_RELAXED);
+    assert(repeated_after - repeated_before <= 20 * 8);
     handoff_and_free();
 
     make_nodes(10000);
@@ -163,6 +194,10 @@ int main(void) {
         node->left = nodes[i + 1];
         node->right = nodes[i + 1];
     }
+    size_t before = __atomic_load_n(&raw_allocations, __ATOMIC_RELAXED);
+    dream_publish(nodes[0]);
+    size_t after = __atomic_load_n(&raw_allocations, __ATOMIC_RELAXED);
+    assert(after - before < node_count / 16);
     handoff_and_free();
 
     make_nodes(1000000);

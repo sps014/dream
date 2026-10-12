@@ -301,9 +301,9 @@ pub fn emit_hir_to_module_rc_only(code: &str) -> String {
 pub const SYSTEM_STUB: &str = "
     class System {
         @intrinsic(\"print\")
-        static extern fun print<T>(value: T): void;
+        public static extern fun print<T>(value: T): void;
         @intrinsic(\"println\")
-        static extern fun println<T>(value: T): void;
+        public static extern fun println<T>(value: T): void;
     }
 ";
 
@@ -422,13 +422,13 @@ pub const JS_STUB: &str = "
 pub const CLOSURE_STUB: &str = "
     class Closure {
         @intrinsic(\"funcbox_new\")
-        static extern fun funcbox_new(funcidx: int, env: int): int;
+        public static extern fun funcbox_new(funcidx: int, env: int): int;
         @intrinsic(\"funcbox_funcidx\")
-        static extern fun funcbox_funcidx(box: int): int;
+        public static extern fun funcbox_funcidx(box: int): int;
         @intrinsic(\"funcbox_env\")
-        static extern fun funcbox_env(box: int): int;
+        public static extern fun funcbox_env(box: int): int;
         @intrinsic(\"retain\")
-        static extern fun retain(v: object): void;
+        public static extern fun retain(v: object): void;
     }
     class CaptureCell<T> {
         public value: T;
@@ -442,12 +442,12 @@ pub const CLOSURE_STUB: &str = "
 pub const ASYNC_STUB: &str = "
     class System {
         @intrinsic(\"print\")
-        static extern fun print<T>(value: T): void;
+        public static extern fun print<T>(value: T): void;
         @intrinsic(\"println\")
-        static extern fun println<T>(value: T): void;
+        public static extern fun println<T>(value: T): void;
     }
     class Time {
         @intrinsic(\"sleep\")
-        static extern async fun sleep(ms: int): void;
+        public static extern async fun sleep(ms: int): void;
     }
 ";

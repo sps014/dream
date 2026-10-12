@@ -6,9 +6,12 @@
 
 /* The exit-time heap-counter report native `main` prints: always for debug builds, behind
  * `DREAM_DEBUG_LEAKS` otherwise. Lives here so generated IR never spells libc's `stderr`. */
-void dream_llvm_leak_report(int32_t always) {
-    dream_defer_drain_all();
+void dream_llvm_leak_report(int32_t always, int32_t heap_used) {
     if (!always && getenv("DREAM_DEBUG_LEAKS") == NULL) {
+        return;
+    }
+    if (!heap_used) {
+        fputs("[dream] leak check: live=0 total_allocations=0\n[dream] leak by type: (none)\n", stderr);
         return;
     }
     fprintf(stderr, "[dream] leak check: live=%" PRId64 " total_allocations=%" PRId64 "\n", debug_get_live_objects(),

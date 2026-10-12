@@ -1,0 +1,69 @@
+import system;
+import system.collections;
+
+let sink: int = 0;
+let measuring: bool = true;
+let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
+let last_allocations: long = 0;
+let last_retains: long = 0;
+let last_releases: long = 0;
+let last_ready: long = 0;
+let last_timers: long = 0;
+
+fun report(name: string, nanos: long, iters: int, checksum: int): void {
+    let counters = "";
+    if counters_on {
+        let allocations = Debug.total_allocations;
+        let retains = Debug.runtime_counter(3);
+        let releases = Debug.runtime_counter(4);
+        let ready = Debug.runtime_counter(6);
+        let timers = Debug.runtime_counter(7);
+        counters = " counters=allocs:" + (allocations - last_allocations).to_string()
+            + ",retain:" + (retains - last_retains).to_string()
+            + ",release:" + (releases - last_releases).to_string()
+            + ",ready_alloc:" + (ready - last_ready).to_string()
+            + ",timer_alloc:" + (timers - last_timers).to_string();
+        last_allocations = allocations;
+        last_retains = retains;
+        last_releases = releases;
+        last_ready = ready;
+        last_timers = timers;
+    }
+    if measuring {
+        System.println("bench " + name + " ns_total=" + nanos.to_string()
+            + " iters=" + iters.to_string() + " ns_per_op=" + (nanos / (long)iters).to_string()
+            + " checksum=" + checksum.to_string() + counters);
+    }
+    sink = sink + checksum;
+}
+
+@noinline
+async fun timer_burst(n: int, iters: int): int {
+    let total = 0;
+    for (let round = 0; round < iters; round = round + 1) {
+        let pending = Buffer.alloc<Future<void>>(n);
+        for (let i = 0; i < n; i = i + 1) { pending[i] = Time.sleep(0); Promise.start(pending[i]); }
+        for (let i = 0; i < n; i = i + 1) { pending[i].await; total = total + i; }
+    }
+    return total;
+}
+async fun run_suite(): void {
+    let sw1 = Stopwatch(); let v1 = timer_burst(1, 5000).await; sw1.stop();
+    report("timer_burst_1", sw1.elapsed_nanos, 5000, v1);
+    let sw8 = Stopwatch(); let v8 = timer_burst(8, 1000).await; sw8.stop();
+    report("timer_burst_8", sw8.elapsed_nanos, 1000, v8);
+    let sw64 = Stopwatch(); let v64 = timer_burst(64, 100).await; sw64.stop();
+    report("timer_burst_64", sw64.elapsed_nanos, 100, v64);
+    let sw513 = Stopwatch(); let v513 = timer_burst(513, 20).await; sw513.stop();
+    report("timer_burst_513", sw513.elapsed_nanos, 20, v513);
+    let sw4096 = Stopwatch(); let v4096 = timer_burst(4096, 3).await; sw4096.stop();
+    report("timer_burst_4096", sw4096.elapsed_nanos, 3, v4096);
+}
+async fun main(): void {
+    measuring = false;
+    run_suite().await;
+    measuring = true;
+    let passes = int.parse(System.env_or("DREAM_BENCH_PASSES", "5")).unwrap_or(5);
+    for (let p = 0; p < passes; p = p + 1) { run_suite().await; }
+    System.println("sink " + sink.to_string());
+}

@@ -1,0 +1,1 @@
+import system; import system.task; fun main(): void {}

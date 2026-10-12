@@ -1,5 +1,8 @@
 //! `@runtime("…")` host field names shared by stdlib, native libdream, and JS `Dream.*`.
 
+pub const PROCESS_ARGS: &str = "processArgs";
+pub const PROCESS_EXE_PATH: &str = "processExePath";
+
 pub const WORKER_SPAWN: &str = "workerSpawn";
 pub const WORKER_POST: &str = "workerPost";
 pub const WORKER_RECV: &str = "workerRecv";

@@ -318,3 +318,62 @@ fn dap_views_render_strings_arrays_unions() {
     drop(client);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+#[ignore = "spawns debug-adapter; cargo test --workspace -- --ignored"]
+fn dap_views_render_copied_value_observers() {
+    if !llvm_available() || !lldb_dap_available() {
+        eprintln!("skipping: needs the pinned LLVM and lldb-dap");
+        return;
+    }
+    let program = r#"import system;
+class Note { public n: int; public constructor(n: int) { this.n = n; } }
+struct View { public weak note: Option<Note>; public constructor(borrow n: Note) { this.note = Option.Some(n); } }
+struct Ref { public unowned note: Note; public constructor(borrow n: Note) { this.note = n; } }
+fun dead(): View { let n = Note(42); return View(n); }
+fun main(): void {
+    let view = dead();
+    let note = Note(7);
+    let observed = Ref(note);
+    let copy = observed;
+    System.println(note.n);
+    System.println(view.note.is_none());
+    System.println(copy.note.n);
+}
+"#;
+    let (dir, source_path) = write_temp_program("value_observers", program);
+    let mut client = run_to_breakpoint(&source_path, 11);
+    let stopped = client.wait_event("stopped");
+    client.request(
+        "stackTrace",
+        serde_json::json!({ "threadId": stopped["body"]["threadId"] }),
+    );
+    let stack = client.wait_response("stackTrace");
+    client.request(
+        "scopes",
+        serde_json::json!({ "frameId": stack["body"]["stackFrames"][0]["id"] }),
+    );
+    let scopes = client.wait_response("scopes");
+    client.request(
+        "variables",
+        serde_json::json!({ "variablesReference": scopes["body"]["scopes"][0]["variablesReference"] }),
+    );
+    let vars = client.wait_response("variables");
+    let shown = |name| {
+        vars["body"]["variables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["name"].as_str() == Some(name))
+            .and_then(|v| v["value"].as_str())
+            .unwrap_or_default()
+    };
+    assert!(shown("view").contains("note=None"), "{vars}");
+    assert!(shown("copy").contains("n=7"), "{vars}");
+    client.request(
+        "continue",
+        serde_json::json!({ "threadId": stopped["body"]["threadId"] }),
+    );
+    drop(client);
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -47,19 +47,31 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
                 continue;
             };
             if esc.of(*o) > Escape::Arg {
+                tracing::debug!(pass = STAGE, function = %f.name, local = o.0,
+                    decision = "rejected", reason = "possible-escape-or-publication");
                 continue;
             }
             let Some(fields) = releasable_fields(*ty, interner, layouts) else {
                 continue;
             };
-            let size = layouts.get(*ty).map_or(u32::MAX, |l| l.size);
+            let payload = layouts.get(*ty).map_or(u32::MAX, |l| l.size);
+            // Each backend buffer includes the immortal ARC header and is sixteen-aligned.
+            let size = payload
+                .checked_add(crate::abi::HEAP_HEADER_SIZE)
+                .and_then(|n| n.checked_add(15))
+                .map(|n| n & !15)
+                .unwrap_or(u32::MAX);
             if size > MAX_OBJECT_BYTES || size > budget {
+                tracing::debug!(pass = STAGE, function = %f.name, local = o.0,
+                    decision = "rejected", reason = "frame-budget-limit", size, budget);
                 continue;
             }
             let Some(life) = lifetime(f, &esc.class(*o), *o) else {
                 continue;
             };
             budget -= size;
+            tracing::debug!(pass = STAGE, function = %f.name, local = o.0,
+                decision = "eliminated", cost = "heap-allocation", frame_bytes = size);
             plans.push(Plan {
                 object: *o,
                 fields,

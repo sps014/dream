@@ -46,7 +46,7 @@ program linking. Cache keys include target, compiler identity, effective flags a
 
 Both profiles use ordinary ARC. There is no automatic cycle collector, collector
 registration, component metadata, candidate queue, or strong-edge barrier. Native object
-headers remain 32 bytes; the former collector index is padding. Private references use
+headers are 16 bytes, with packed type/size-class information. Private references use
 the local count fast path; published references use atomic counts.
 
 The compiler follows strong field ownership after concrete type discovery. Classes that

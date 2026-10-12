@@ -71,8 +71,8 @@ pub fn is_c_identifier(name: &str) -> bool {
         && !name.starts_with(shim::SHIM_PREFIX)
 }
 
-/// The embedding API declared by the public `include/dream_embed.h`; every native program keeps
-/// these exported so C linked into it can call them.
+/// The embedding API declared by `include/dream_embed.h`, preserved for native libraries and
+/// programs whose reachable foreign code or exports can invoke it.
 pub const EMBED_EXPORTS: [&str; 7] = [
     "dream_thread_attach",
     "dream_thread_detach",

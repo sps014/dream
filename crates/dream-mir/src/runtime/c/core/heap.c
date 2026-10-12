@@ -10,6 +10,7 @@
 #define CHUNK (1u << 22)
 
 static dream_ptr freelist[NCLASS];
+static int shared_available[NCLASS];
 /* First-fit list for blocks larger than the biggest size class (64KiB), matching
  * wasm `$malloc`'s huge list. Oversized HTTP bodies / `byte[]`s must not be stuffed
  * into the top class or bump-allocated past a 4MiB mmap. */
@@ -20,6 +21,8 @@ static size_t arena_len;
 /* Registry of every thread's counters (see `dream_heap_counters`); guarded by the platform heap lock.
  * `pinned` counts immortal singletons that left `Debug.live_objects` without being freed. */
 static dream_heap_counters *counters_head;
+static uint64_t retired_allocs;
+static uint64_t retired_frees;
 static uint64_t pinned;
 uint64_t dream_weak_allocations;
 uint64_t dream_weak_frees;
@@ -40,6 +43,14 @@ typedef struct {
     int region_active;
 } heap_thread;
 static _Thread_local heap_thread th;
+
+typedef struct HeapRecord {
+    dream_heap_counters counters;
+    struct HeapRecord *next;
+    char *tail;
+    size_t tail_size;
+} HeapRecord;
+static HeapRecord *retired_arenas;
 
 static void heap_lock(void) {
     dream_platform_current->lock(DREAM_LOCK_HEAP);
@@ -66,10 +77,21 @@ static dream_heap_counters *thread_counters(void) {
     if (c != NULL) {
         return c;
     }
-    c = (dream_heap_counters *)dream_raw_calloc(1, sizeof(*c));
-    if (c == NULL) {
-        DREAM_PANIC_LITERAL(u"panic: out of memory registering heap counters");
+    heap_lock();
+    HeapRecord *record = retired_arenas;
+    if (record) {
+        retired_arenas = record->next;
+        th.arena = record->tail;
+        th.arena_off = 0;
+        th.arena_len = record->tail_size;
     }
+    heap_unlock();
+    if (!record) {
+        record = dream_raw_calloc(1, sizeof(*record));
+        if (!record) { DREAM_PANIC_LITERAL(u"panic: out of memory registering heap counters"); }
+    }
+    c = &record->counters;
+    memset(c, 0, sizeof(*c));
     heap_lock();
     c->next = counters_head;
     counters_head = c;
@@ -80,9 +102,11 @@ static dream_heap_counters *thread_counters(void) {
 
 static void heap_sums(uint64_t *allocs, uint64_t *frees) {
     dream_heap_counters *c;
-    uint64_t a = 0;
-    uint64_t f = 0;
+    uint64_t a;
+    uint64_t f;
     heap_lock();
+    a = retired_allocs;
+    f = retired_frees;
     for (c = counters_head; c != NULL; c = c->next) {
         a += __atomic_load_n(&c->allocs, __ATOMIC_RELAXED);
         f += __atomic_load_n(&c->frees, __ATOMIC_RELAXED);
@@ -158,6 +182,40 @@ static void *block_next(char *block) {
 static void block_set_next(char *block, void *next) {
     *dream_block_tag(block) = DREAM_TAG_FREED;
     dream_block_set_word(block, (uintptr_t)next);
+}
+
+void dream_heap_thread_exit(void) {
+    HeapRecord *record = (HeapRecord *)th.counters;
+    if (!record) { return; }
+    if (th.region_active) { DREAM_PANIC_LITERAL(u"panic: thread exit with an active allocation region"); }
+    heap_lock();
+    for (unsigned cls = 0; cls < NCLASS; cls++) {
+        char *block = dream_heap.free[cls];
+        while (block) {
+            char *next = block_next(block);
+            block_set_next(block, dream_p(freelist[cls]));
+            freelist[cls] = (dream_ptr)block;
+            block = next;
+        }
+        __atomic_store_n(&shared_available[cls], freelist[cls] != 0, __ATOMIC_RELEASE);
+    }
+    dream_heap_counters **link = &counters_head;
+    while (*link != &record->counters) { link = &(*link)->next; }
+    *link = record->counters.next;
+    retired_allocs += record->counters.allocs;
+    retired_frees += record->counters.frees;
+    /* Live published objects belong to their mappings, not to this thread's counters or tail. */
+    record->tail_size = th.arena_len - th.arena_off;
+    if (record->tail_size >= NATIVE_HEAP_HEADER_SIZE) {
+        record->tail = th.arena + th.arena_off;
+        record->next = retired_arenas;
+        retired_arenas = record;
+        record = NULL;
+    }
+    heap_unlock();
+    if (record) { dream_platform_current->deallocate(record); }
+    memset(&dream_heap, 0, sizeof(dream_heap));
+    memset(&th, 0, sizeof(th));
 }
 
 /* Lays out a large block of `bytes`, prefix included, at `p`. */
@@ -296,6 +354,23 @@ static dream_ptr malloc_general(dream_size size, int32_t tag) {
             activate(block, cls, tag);
             return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
         }
+        if (__atomic_load_n(&shared_available[idx], __ATOMIC_ACQUIRE)) {
+            heap_lock();
+            for (unsigned count = 0; count < 32 && freelist[idx]; count++) {
+                char *cached = dream_p(freelist[idx]);
+                freelist[idx] = (dream_ptr)block_next(cached);
+                block_set_next(cached, dream_heap.free[idx]);
+                dream_heap.free[idx] = cached;
+            }
+            __atomic_store_n(&shared_available[idx], freelist[idx] != 0, __ATOMIC_RELEASE);
+            heap_unlock();
+        }
+        block = dream_heap.free[idx];
+        if (block) {
+            dream_heap.free[idx] = block_next(block);
+            activate(block, cls, tag);
+            return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
+        }
     } else {
         /* `dream_recycle_slow` returns every large block, private or shared, to the
          * process-wide list; bump-allocating past it would never reuse freed buffers. */
@@ -354,6 +429,7 @@ dream_ptr dream_malloc_shared(dream_size size, int32_t tag) {
             freelist[idx] = (dream_ptr)block_next(block);
             break;
         }
+        __atomic_store_n(&shared_available[idx], freelist[idx] != 0, __ATOMIC_RELEASE);
     }
     if (block == NULL) {
         if (cls == DREAM_CLASS_LARGE) {
@@ -438,6 +514,7 @@ void dream_recycle_slow(dream_ptr ptr) {
         } else {
             block_set_next(block, dream_p(freelist[idx]));
             freelist[idx] = (dream_ptr)block;
+            __atomic_store_n(&shared_available[idx], 1, __ATOMIC_RELEASE);
         }
         heap_unlock();
         return;

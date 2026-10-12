@@ -1,0 +1,134 @@
+import system;
+import system.collections;
+
+let sink: int = 0;
+let measuring: bool = true;
+let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
+let last_allocations: long = 0;
+let last_retains: long = 0;
+let last_releases: long = 0;
+
+fun report(name: string, nanos: long, iters: int, checksum: int): void {
+    let counters = "";
+    if counters_on {
+        let allocations = Debug.total_allocations;
+        let retains = Debug.runtime_counter(3);
+        let releases = Debug.runtime_counter(4);
+        counters = " counters=allocs:" + (allocations - last_allocations).to_string()
+            + ",retain:" + (retains - last_retains).to_string()
+            + ",release:" + (releases - last_releases).to_string();
+        last_allocations = allocations;
+        last_retains = retains;
+        last_releases = releases;
+    }
+    if measuring {
+        System.println("bench " + name + " ns_total=" + nanos.to_string()
+            + " iters=" + iters.to_string() + " ns_per_op=" + (nanos / (long)iters).to_string()
+            + " checksum=" + checksum.to_string() + counters);
+    }
+    sink = sink + checksum;
+}
+
+@noinline
+fun bulk(n: int, iters: int): int {
+    let input = Buffer.alloc<int>(n);
+    for (let i = 0; i < n; i = i + 1) { input[i] = i; }
+    let total = 0;
+    for (let r = 0; r < iters; r = r + 1) {
+        let xs = List<int>(8);
+        xs.push_all(input);
+        total = total + xs[n - 1];
+    }
+    return total;
+}
+
+@noinline
+fun reserve(n: int, iters: int): int {
+    let total = 0;
+    for (let r = 0; r < iters; r = r + 1) {
+        let xs = List<int>(8);
+        xs.reserve(n);
+        xs.push(r);
+        total = total + xs[0];
+    }
+    return total;
+}
+
+@noinline
+fun managed_remove(n: int, iters: int): int {
+    let xs = List<string>(n);
+    let total = 0;
+    for (let r = 0; r < iters; r = r + 1) {
+        for (let i = 0; i < n; i = i + 1) { xs.push("value"); }
+        for (let i = 0; i < n; i = i + 1) {
+            total = total + xs.pop().unwrap().length;
+        }
+    }
+    return total;
+}
+
+@noinline
+fun managed_clear(n: int, iters: int): int {
+    let xs = List<string>(n);
+    let total = 0;
+    for (let r = 0; r < iters; r = r + 1) {
+        for (let i = 0; i < n; i = i + 1) { xs.push("value"); }
+        total = total + xs.length;
+        xs.clear();
+    }
+    return total;
+}
+
+@noinline
+fun churn(iters: int): int {
+    let total = 0;
+    for (let r = 0; r < iters; r = r + 1) {
+        let m = Map<int, string>(8);
+        let s = Set<int>(8);
+        for (let i = 0; i < 5; i = i + 1) { m.set(i * 8, "old"); s.add(i * 8); }
+        m.set(32, "updated");
+        s.add(32);
+        for (let i = 0; i < 4; i = i + 1) { m.remove(i * 8); s.remove(i * 8); }
+        for (let i = 0; i < 256; i = i + 1) {
+            m.set(i + 100, "new"); s.add(i + 100);
+            m.remove(i + 100); s.remove(i + 100);
+        }
+        total = total + m[32].length + s.length;
+    }
+    return total;
+}
+
+fun run_suite(): void {
+    let sw = Stopwatch();
+    let value = bulk(8, 2000); sw.stop();
+    report("list_bulk_8", sw.elapsed_nanos, 2000, value);
+    sw = Stopwatch(); value = bulk(256, 2000); sw.stop();
+    report("list_bulk_256", sw.elapsed_nanos, 2000, value);
+    sw = Stopwatch(); value = bulk(8192, 500); sw.stop();
+    report("list_bulk_8192", sw.elapsed_nanos, 500, value);
+    sw = Stopwatch(); value = bulk(131072, 20); sw.stop();
+    report("list_bulk_131072", sw.elapsed_nanos, 20, value);
+    sw = Stopwatch(); value = bulk(1048576, 5); sw.stop();
+    report("list_bulk_1048576", sw.elapsed_nanos, 5, value);
+    sw = Stopwatch(); value = reserve(8192, 2000); sw.stop();
+    report("list_reserve_8192", sw.elapsed_nanos, 2000, value);
+    sw = Stopwatch(); value = managed_remove(8, 2000); sw.stop();
+    report("list_managed_pop_8", sw.elapsed_nanos, 2000, value);
+    sw = Stopwatch(); value = managed_remove(256, 200); sw.stop();
+    report("list_managed_pop_256", sw.elapsed_nanos, 200, value);
+    sw = Stopwatch(); value = managed_clear(8, 2000); sw.stop();
+    report("list_managed_clear_8", sw.elapsed_nanos, 2000, value);
+    sw = Stopwatch(); value = managed_clear(256, 200); sw.stop();
+    report("list_managed_clear_256", sw.elapsed_nanos, 200, value);
+    sw = Stopwatch(); value = churn(100); sw.stop();
+    report("map_set_churn", sw.elapsed_nanos, 100, value);
+}
+
+fun main(): void {
+    measuring = false;
+    run_suite();
+    measuring = true;
+    let passes = int.parse(System.env_or("DREAM_BENCH_PASSES", "5")).unwrap_or(5);
+    for (let p = 0; p < passes; p = p + 1) { run_suite(); }
+    System.println("sink " + sink.to_string());
+}

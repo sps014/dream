@@ -14,6 +14,13 @@
 /// `@intrinsic("print")`. The parser skips emitting a WASM import for it, the function table
 /// records its key, and codegen lowers calls to dedicated runtime helpers. Single source of
 /// truth for the attribute name across parser/semantics/codegen.
+pub const ATTR_FUNCBOX_NEW: &str = "funcbox_new";
+pub const ATTR_FUNCBOX_FUNCIDX: &str = "funcbox_funcidx";
+pub const ATTR_FUNCBOX_ENV: &str = "funcbox_env";
+
+pub const ATTR_CALLBACK_REGISTER: &str = "dream_callback_register";
+pub const ATTR_CALLBACK_UNREGISTER: &str = "dream_callback_unregister";
+
 pub const INTRINSIC_ATTR: &str = "intrinsic";
 
 /// Extracts the intrinsic key from a declaration's attribute list, i.e. the `"name"` in
@@ -113,11 +120,15 @@ pub const GEN_ATTRIBUTE_DECODE_MEMBER: &str = "__gen_decode";
 pub const GEN_ATTRIBUTE_DECODE_ALL_MEMBER: &str = "__gen_decode_all";
 /// `Buffer.alloc<T>(len)` — allocate a zero-initialized array.
 pub const ATTR_ARRAY_NEW: &str = "array_new";
+pub const ATTR_BUFFER_ZERO: &str = "buffer_zero";
 /// `Time.sleep(ms)` — the async timer (yields `Future<void>`).
 pub const ATTR_SLEEP: &str = "sleep";
 /// `String.alloc(n)` / `String.set(s, i, c)` — low-level string buffer primitives.
 pub const ATTR_STRING_ALLOC: &str = "string_alloc";
 pub const ATTR_STRING_BUILDER_BUFFER: &str = "string_builder_buffer";
+pub const ATTR_STRING_BUILDER_PUSH_DOUBLE: &str = "string_builder_push_double";
+pub const ATTR_STRING_CLONE_RANGE: &str = "string_clone_range";
+pub const ATTR_STRING_JSON_BOUNDARY: &str = "string_json_boundary";
 pub const ATTR_STRING_SET: &str = "string_set";
 /// `string.from_utf8(bytes)` — build a string from a full `byte[]` UTF-8 payload.
 pub const ATTR_STRING_FROM_UTF8: &str = "string_from_utf8";
@@ -217,9 +228,13 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_GEN_ATTRIBUTE_DECODE,
     ATTR_GEN_ATTRIBUTE_DECODE_ALL,
     ATTR_ARRAY_NEW,
+    ATTR_BUFFER_ZERO,
     ATTR_SLEEP,
     ATTR_STRING_ALLOC,
     ATTR_STRING_BUILDER_BUFFER,
+    ATTR_STRING_BUILDER_PUSH_DOUBLE,
+    ATTR_STRING_CLONE_RANGE,
+    ATTR_STRING_JSON_BOUNDARY,
     ATTR_STRING_SET,
     ATTR_STRING_FROM_UTF8,
     ATTR_STRING_FROM_UTF8_PREFIX,
@@ -302,6 +317,8 @@ pub enum IntrinsicOp {
     GenAttributeDecodeAll,
     /// `Buffer.alloc<T>(len)` — allocate a zero-initialized `T[]`.
     ArrayNew,
+    /// Internal zero-initialized storage value; never invokes a constructor.
+    BufferZero,
     /// `Time.sleep(ms)` — async timer yielding `Future<void>`.
     Sleep,
     /// `String.alloc(n)` — allocate an `n`-char string buffer.
@@ -324,6 +341,9 @@ pub enum IntrinsicOp {
     /// `StringBuilder` span views its buffer through (retains only that buffer).
     StringView,
     StringBuilderBuffer,
+    StringBuilderPushDouble,
+    StringCloneRange,
+    StringJsonBoundary,
     /// `Debug.free_list_head()` — head of the allocator free list.
     DebugFreeList,
     /// `Debug.heap_ptr()` — current bump-pointer value.
@@ -336,6 +356,11 @@ pub enum IntrinsicOp {
     DebugRefCount,
     /// `Debug.runtime_counter(id)` — ownership-runtime event count.
     DebugRuntimeCounter,
+    CallbackRegister,
+    CallbackUnregister,
+    FuncboxNew,
+    FuncboxFuncidx,
+    FuncboxEnv,
     /// `Bytes.of<T>(v)` — raw-copy a blittable value's bytes into a fresh `byte[]`.
     ToBytes,
     /// `Bytes.to<T>(bytes)` — reconstruct a blittable value of `T` from a `byte[]` buffer.
@@ -389,9 +414,13 @@ impl IntrinsicOp {
             ATTR_GEN_ATTRIBUTE_DECODE => IntrinsicOp::GenAttributeDecode,
             ATTR_GEN_ATTRIBUTE_DECODE_ALL => IntrinsicOp::GenAttributeDecodeAll,
             ATTR_ARRAY_NEW => IntrinsicOp::ArrayNew,
+            ATTR_BUFFER_ZERO => IntrinsicOp::BufferZero,
             ATTR_SLEEP => IntrinsicOp::Sleep,
             ATTR_STRING_ALLOC => IntrinsicOp::StringAlloc,
             ATTR_STRING_BUILDER_BUFFER => IntrinsicOp::StringBuilderBuffer,
+            ATTR_STRING_BUILDER_PUSH_DOUBLE => IntrinsicOp::StringBuilderPushDouble,
+            ATTR_STRING_CLONE_RANGE => IntrinsicOp::StringCloneRange,
+            ATTR_STRING_JSON_BOUNDARY => IntrinsicOp::StringJsonBoundary,
             ATTR_STRING_SET => IntrinsicOp::StringSet,
             ATTR_STRING_FROM_UTF8 => IntrinsicOp::StringFromUtf8,
             ATTR_STRING_FROM_UTF8_PREFIX => IntrinsicOp::StringFromUtf8Prefix,
@@ -414,6 +443,11 @@ impl IntrinsicOp {
             ATTR_DEBUG_TOTAL_ALLOCATIONS => IntrinsicOp::DebugTotalAllocations,
             ATTR_DEBUG_REF_COUNT => IntrinsicOp::DebugRefCount,
             ATTR_DEBUG_RUNTIME_COUNTER => IntrinsicOp::DebugRuntimeCounter,
+            ATTR_CALLBACK_REGISTER => IntrinsicOp::CallbackRegister,
+            ATTR_CALLBACK_UNREGISTER => IntrinsicOp::CallbackUnregister,
+            ATTR_FUNCBOX_NEW => IntrinsicOp::FuncboxNew,
+            ATTR_FUNCBOX_FUNCIDX => IntrinsicOp::FuncboxFuncidx,
+            ATTR_FUNCBOX_ENV => IntrinsicOp::FuncboxEnv,
             ATTR_TO_BYTES => IntrinsicOp::ToBytes,
             ATTR_FROM_BYTES => IntrinsicOp::FromBytes,
             ATTR_ARRAY_REALLOC => IntrinsicOp::ArrayRealloc,

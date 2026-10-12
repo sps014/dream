@@ -69,7 +69,11 @@ pub(super) fn host_library_dirs(config: &ToolchainConfig) -> Vec<PathBuf> {
         }
     };
     if let Some(exe) = &config.exe {
-        for exe in dunce::canonicalize(exe).ok().iter().chain(std::iter::once(exe)) {
+        for exe in dunce::canonicalize(exe)
+            .ok()
+            .iter()
+            .chain(std::iter::once(exe))
+        {
             if let Some(p) = exe.parent() {
                 push(p.to_path_buf());
                 if p.file_name().and_then(|s| s.to_str()) == Some("deps")

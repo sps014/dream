@@ -68,6 +68,8 @@ pub struct Compiler {
     /// source-line hooks / line directives for the interactive debugger. Off by default;
     /// enabled via the CLI `-g`/`--debug-info` flag or [`Compiler::with_debug_info`].
     debug_info: bool,
+    /// Source/function symbols without debugger-oriented optimization restrictions.
+    perf_symbols: bool,
     /// When set, the emitted `.wasm` is post-processed in place with Binaryen's `wasm-opt` at this
     /// level. [`Compiler::with_release`] enables [`OptLevel::RELEASE_DEFAULT`] when no level was
     /// set yet; an explicit [`Compiler::with_optimize`] (or CLI `-O`) overrides that default.
@@ -128,6 +130,7 @@ impl Compiler {
             toolchain_config,
             profile: dream_abi::profile::CompileProfile::Debug,
             debug_info: false,
+            perf_symbols: false,
             optimize: None,
             generator_stage: crate::driver::generate::GeneratorStage::All,
             virtual_entry: None,
@@ -177,7 +180,7 @@ impl Compiler {
             Some(Arc::new(crate::execution::llvm::Toolchain {
                 config: self.toolchain_config.clone(),
                 opt: self.native_opt(),
-                debug: self.debug_info,
+                debug: self.debug_info || self.perf_symbols,
             }))
         }
         #[cfg(not(feature = "native"))]
@@ -231,6 +234,12 @@ impl Compiler {
     /// interactive debugger.
     pub fn with_debug_info(mut self, on: bool) -> Self {
         self.debug_info = on;
+        self
+    }
+
+    /// Emit profiling symbols while preserving the selected profile's optimizations.
+    pub fn with_perf_symbols(mut self, on: bool) -> Self {
+        self.perf_symbols = on;
         self
     }
 

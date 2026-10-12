@@ -168,7 +168,9 @@ fn guest_entry(l: &mut Lcx<'_>, main: &MirFunction, exit: EntryExit) {
         fx.call("dream_release", std::slice::from_ref(mf));
     }
     fx.call("dream_drop_globals", &[]);
-    fx.call("dream_callback_owner_finish", &[]);
+    if fx.l.requirements.callbacks {
+        fx.call("dream_callback_owner_finish", &[]);
+    }
     if exit == EntryExit::Void {
         fx.w.ret(Some(&Value::i32(0)));
     } else {
@@ -228,9 +230,15 @@ fn native_main(l: &mut Lcx<'_>) {
     let always = l.cx.leak_checks as i64;
     let mut fx = glue(l, "main");
     let (argc, argv) = (fx.arg(0), fx.arg(1));
-    fx.call("dream_process_capture_args", &[argc, argv]);
+    if fx.l.requirements.process_arguments {
+        fx.call("dream_process_capture_args", &[argc, argv]);
+    }
     let rc = fx.call_v(crate::abi::GUEST_ENTRY_FN, &[]);
-    fx.call("dream_llvm_leak_report", &[V::i32(always)]);
+    if fx.l.requirements.deferred_cleanup {
+        fx.call("dream_defer_drain_all", &[]);
+    }
+    let heap = fx.l.requirements.heap as i64;
+    fx.call("dream_llvm_leak_report", &[V::i32(always), V::i32(heap)]);
     fx.w.ret(Some(&rc.v));
     fx.finish();
 }

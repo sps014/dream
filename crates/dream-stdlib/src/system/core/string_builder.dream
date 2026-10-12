@@ -76,17 +76,17 @@ public class StringBuilder {
     }
 
     @intrinsic("string_builder_push")
-    static extern fun push_raw(borrow sb: StringBuilder, borrow text: string): void;
+    public static extern fun push_raw(borrow sb: StringBuilder, borrow text: string): void;
 
     @intrinsic("string_builder_buffer")
     // Only initialized bytes below `count` can become a built string.
-    static extern fun new_buffer(capacity: int): byte[];
+    public static extern fun new_buffer(capacity: int): byte[];
 
     @intrinsic("string_builder_push_int")
-    static extern fun push_int(borrow sb: StringBuilder, n: int): void;
+    public static extern fun push_int(borrow sb: StringBuilder, n: int): void;
 
     @intrinsic("string_builder_push_long")
-    static extern fun push_long(borrow sb: StringBuilder, n: long): void;
+    public static extern fun push_long(borrow sb: StringBuilder, n: long): void;
 
     // Appends every UTF-16 unit of `text`, growing at most once.
     @inline
@@ -140,9 +140,11 @@ public class StringBuilder {
         StringBuilder.push_long(this, n);
     }
 
-    // Appends a double via `to_string`.
+    @intrinsic("string_builder_push_double")
+    static extern fun push_double(borrow sb: StringBuilder, n: double): void;
+
     public fun append_double(n: double): void {
-        this.append(n.to_string());
+        StringBuilder.push_double(this, n);
     }
 
     // Appends `text` followed by a newline character.
@@ -162,7 +164,7 @@ public class StringBuilder {
     }
 
     @intrinsic("string_builder_view")
-    static extern fun view_raw(borrow bytes: byte[], len: int): string;
+    public static extern fun view_raw(borrow bytes: byte[], len: int): string;
 
     // A view of everything appended so far, without copying the units. Later appends and
     // `clear` leave the view unchanged: it is a snapshot.

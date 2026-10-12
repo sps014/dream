@@ -48,6 +48,31 @@ static int32_t find_unit(const uint16_t *u, int32_t from, int32_t n, uint16_t c)
     return head < n ? find_unit_wide(u, head, n, c) : -1;
 }
 
+int32_t string_json_boundary(dream_ptr s, int32_t start) {
+    int32_t n = dream_str_len(s);
+    const uint16_t *u = dream_str_units(s);
+    if (start < 0) { start = 0; }
+    if (start >= n) { return n; }
+    int32_t head = n - start < 8 ? n : start + 8;
+    for (; start < head; start++) {
+        if (u[start] == '"' || u[start] == '\\') { return start; }
+    }
+    u16x8 quote = (u16x8){0} + '"';
+    u16x8 slash = (u16x8){0} + '\\';
+    for (; n - start >= 8; start += 8) {
+        u16x8 v;
+        uint8_t bits;
+        memcpy(&v, u + start, sizeof(v));
+        bool8 hit = __builtin_convertvector((i16x8)((v == quote) | (v == slash)), bool8);
+        memcpy(&bits, &hit, sizeof(bits));
+        if (bits) { return start + __builtin_ctz(bits); }
+    }
+    for (; start < n; start++) {
+        if (u[start] == '"' || u[start] == '\\') { return start; }
+    }
+    return n;
+}
+
 int32_t string_view_eq(dream_ptr a, int32_t ao, int32_t an, dream_ptr b, int32_t bo, int32_t bn) {
     if (an != bn) {
         return 0;

@@ -98,7 +98,11 @@ pub fn run_debug_adapter(
     let list: Vec<String> = names.iter().map(|n| format!("\"{n}\"")).collect();
     std::fs::write(
         module_p.with_file_name(format!("{stem}_lldb_names.py")),
-        format!("NAMES = [{}]\n", list.join(", ")),
+        format!(
+            "NAMES = [{}]\nUNOWNED_POISON = {}\n",
+            list.join(", "),
+            dream_mir::abi::UNOWNED_POISON
+        ),
     )?;
 
     let stdin = io::stdin();

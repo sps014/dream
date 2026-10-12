@@ -287,7 +287,7 @@ fn add_rvalue_reads(rv: &Rvalue, live: &mut IndexSet<u32>) {
             }
             args.iter().for_each(|(a, _)| add(a));
         }
-        Rvalue::FuncRef(_) => {}
+        Rvalue::Zero(_) | Rvalue::FuncRef(_) => {}
     }
 }
 

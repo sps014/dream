@@ -155,6 +155,14 @@ impl<'l, 'a> Fx<'l, 'a> {
     pub(super) fn field_drop_code(&mut self, p: &V, d: FieldDrop) {
         match d {
             FieldDrop::None => {}
+            FieldDrop::Observer {
+                offset,
+                ty,
+                unowned,
+            } => {
+                let box_ = self.field_word(p, offset);
+                self.release_value_observer(ty, &box_, unowned);
+            }
             FieldDrop::Weak { offset, ty } => {
                 let at = self.addr(p, offset as i64);
                 let at = self.as_ref(&V::s(at));
@@ -300,8 +308,8 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 }
 
-fn tail_of(l: &Lcx<'_>, layout: &TypeLayout, destroy: &str) -> Option<usize> {
-    let has: Vec<bool> = struct_field_drops(&l.cx, layout)
+fn tail_of(l: &Lcx<'_>, ty: TypeId, layout: &TypeLayout, destroy: &str) -> Option<usize> {
+    let has: Vec<bool> = struct_field_drops(&l.cx, ty, layout)
         .into_iter()
         .map(|d| drop_nonempty(&l.cx, d))
         .collect();
@@ -338,8 +346,8 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
         }
         let tail_name = c_ident(&format!("release_{}_into", layout.name));
         let destroy = destroy_sym(&l.cx, *ty);
-        let drops = struct_field_drops(&l.cx, layout);
-        let tail = tail_of(l, layout, &destroy);
+        let drops = struct_field_drops(&l.cx, *ty, layout);
+        let tail = tail_of(l, *ty, layout, &destroy);
         let mut fx = glue(l, &tail_name);
         let p = fx.arg(0);
         fx.maybe_defer(&p, &c_ident(&format!("destroy_{}", layout.name)));
@@ -416,8 +424,8 @@ fn emit_destroys(l: &mut Lcx<'_>, n: &Names) {
             continue;
         }
         let name = c_ident(&format!("destroy_{}", layout.name));
-        let drops = struct_field_drops(&l.cx, layout);
-        let tail = tail_of(l, layout, &name);
+        let drops = struct_field_drops(&l.cx, *ty, layout);
+        let tail = tail_of(l, *ty, layout, &name);
         let mut fx = glue(l, &name);
         let p0 = fx.arg(0);
         // A self-typed chain is torn down by looping instead of recursing, so dropping a long

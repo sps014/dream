@@ -140,16 +140,61 @@ impl PassManager {
     ) {
         let _function = tracing::info_span!("function_passes", function = %func.symbol).entered();
         let mut analyses = FunctionAnalyses::default();
+        let mut revision = 0;
+        // A successful pass may need another round. Only a no-change result is reusable, and
+        // any later transformation invalidates it through the function revision.
+        let mut unchanged_at = vec![None; self.passes.len()];
         for iteration in 0..self.max_iterations {
             let mut changed = false;
-            for pass in &self.passes {
+            for (index, pass) in self.passes.iter().enumerate() {
+                if unchanged_at[index] == Some(revision) {
+                    tracing::debug!(
+                        event = "mir-pass-skipped",
+                        pass = pass.name(),
+                        iteration,
+                        reason = "unchanged-input"
+                    );
+                    if dump.is_active() {
+                        dump.function_pass(pass.as_ref(), iteration, false, func, interner);
+                    }
+                    continue;
+                }
+                let metrics = tracing::enabled!(tracing::Level::DEBUG).then(|| {
+                    (
+                        std::time::Instant::now(),
+                        func.locals.len(),
+                        func.blocks.len(),
+                        func.blocks.iter().map(|b| b.stmts.len()).sum::<usize>(),
+                    )
+                });
                 let pass_changed = {
                     let _pass =
                         tracing::info_span!("mir_pass", pass = pass.name(), iteration).entered();
                     analyses.run_pass(pass.as_ref(), func, interner, layouts)
                 };
+                if let Some((start, locals_before, blocks_before, statements_before)) = metrics {
+                    tracing::debug!(
+                        event = "mir-pass-result",
+                        pass = pass.name(),
+                        iteration,
+                        elapsed_ns = start.elapsed().as_nanos() as u64,
+                        changed = pass_changed,
+                        locals_before,
+                        locals_after = func.locals.len(),
+                        blocks_before,
+                        blocks_after = func.blocks.len(),
+                        statements_before,
+                        statements_after = func.blocks.iter().map(|b| b.stmts.len()).sum::<usize>()
+                    );
+                }
                 if dump.is_active() {
                     dump.function_pass(pass.as_ref(), iteration, pass_changed, func, interner);
+                }
+                if pass_changed {
+                    revision += 1;
+                    unchanged_at[index] = None;
+                } else {
+                    unchanged_at[index] = Some(revision);
                 }
                 changed |= pass_changed;
             }

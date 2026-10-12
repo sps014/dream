@@ -215,7 +215,7 @@ typedef struct {
 
 /* Allocates the registered slot-box for a fresh weak handle holding `value`. The box holds a
  * single raw pointer; when `value` dies, clear_all writes 0 into it (kind 2). */
-uintptr_t weakBind(dream_ptr value) {
+static uintptr_t observer_bind(dream_ptr value, int32_t kind) {
     dream_ptr box;
     if (!value) {
         return 0;
@@ -226,23 +226,31 @@ uintptr_t weakBind(dream_ptr value) {
     WeakBox *data = (WeakBox *)dream_p(box);
     data->value = value;
     data->immortal = immortal;
-    dream_weak_register(value, box, 2, 0);
+    dream_weak_register(value, box, kind, 0);
     return (uintptr_t)box;
+}
+
+uintptr_t weakBind(dream_ptr value) { return observer_bind(value, 2); }
+
+dream_ptr dream_value_observer_new(dream_ptr value, int32_t kind) {
+    return (dream_ptr)observer_bind(value, kind);
 }
 
 /* Loads the tracked object: NULL when dead, otherwise the payload with its refcount bumped
  * so the caller owns a reference. */
-dream_ptr weakLoad(uintptr_t slot) {
+static dream_ptr observer_load(uintptr_t slot, int unowned) {
     dream_ptr box = (dream_ptr)slot;
     dream_ptr v;
     if (!box) {
+        if (unowned) { DREAM_PANIC_LITERAL(u"panic: read of unset 'unowned' field (referent not assigned, or already deallocated)"); }
         return 0;
     }
     int acquired = weak_lock();
     WeakBox *data = (WeakBox *)dream_p(box);
     v = data->value;
-    if (!v) {
+    if (!v || (unowned && v == (dream_ptr)(intptr_t)DREAM_UNOWNED_POISON)) {
         weak_unlock(acquired);
+        if (unowned) { DREAM_PANIC_LITERAL(u"panic: 'unowned' reference used after its target was destroyed"); }
         return 0;
     }
     if (data->immortal) {
@@ -270,7 +278,14 @@ dream_ptr weakLoad(uintptr_t slot) {
         }
     }
     weak_unlock(acquired);
+    if (unowned) { DREAM_PANIC_LITERAL(u"panic: 'unowned' reference used after its target was destroyed"); }
     return 0;
+}
+
+dream_ptr weakLoad(uintptr_t slot) { return observer_load(slot, 0); }
+
+dream_ptr dream_value_observer_load(dream_ptr box, int32_t kind) {
+    return observer_load((uintptr_t)box, kind == 1);
 }
 
 int32_t weakDead(uintptr_t slot) {
@@ -379,4 +394,15 @@ void dream_weak_drop_field(dream_ptr slot, int32_t kind, int32_t none_tag, int32
     memcpy(dream_p(slot), &zero, sizeof(zero));
     dream_weak_leave();
     if (kind == 0 && stored) { dream_free(stored); }
+}
+
+/* Value copies own an observer box, never a registry entry naming movable inline storage. */
+void dream_value_observer_release(dream_ptr box, int32_t kind, int32_t none_tag, int32_t payload_offset) {
+    if (!box || !dream_rc_last(box)) { return; }
+    if (kind == 0) {
+        dream_ptr slot = box;
+        dream_weak_drop_field((dream_ptr)(uintptr_t)&slot, kind, none_tag, payload_offset);
+    } else {
+        weakReleaseRaw((uintptr_t)box);
+    }
 }

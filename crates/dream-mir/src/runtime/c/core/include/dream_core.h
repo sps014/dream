@@ -42,7 +42,7 @@ typedef uint64_t dream_result;
 
 /* 0 until `workerSpawn`; leftover for non-RC MT paths. RC uses `TAG_SHARED`. */
 extern int dream_rt_mt;
-void dream_llvm_leak_report(int32_t always);
+void dream_llvm_leak_report(int32_t always, int32_t heap_used);
 _Noreturn void dream_platform_abort(void);
 
 /* `core/inlines.c` redefines this to give every helper one external definition, so LLVM-emitted
@@ -364,8 +364,8 @@ DREAM_ALWAYS_INLINE size_t *dream_large_size(char *block) {
     return (size_t *)(block - DREAM_LARGE_PREFIX + 8);
 }
 
-/* Per-thread alloc/free tallies behind `Debug.live_objects`. Heap-allocated and never freed so
- * the process-wide sum stays valid after a worker exits. Only the owning thread writes its tallies;
+/* Per-thread alloc/free tallies behind `Debug.live_objects`. Retirement folds totals into the
+ * process aggregate under the heap lock. Only the owning thread writes its active tallies;
  * atomic loads/stores permit concurrent diagnostic readers without a locked RMW on each allocation. */
 typedef struct dream_heap_counters {
     uint64_t allocs;
@@ -689,6 +689,7 @@ dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag);
 #ifdef DREAM_WASM32
 void dream_heap_init(void);
 #endif
+void dream_heap_thread_exit(void);
 
 DREAM_ALWAYS_INLINE int32_t dream_str_rc(dream_ptr p) {
     if (p == 0) {
@@ -1497,6 +1498,9 @@ dream_ptr dream_bool_to_string(int32_t v);
 dream_ptr dream_char_to_string(int32_t v);
 dream_ptr dream_float_to_string(float v);
 dream_ptr dream_double_to_string(double v);
+void dream_sb_push_double(dream_ptr sb, double v);
+dream_ptr string_clone_range(dream_ptr ptr, int32_t start, int32_t end);
+int32_t string_json_boundary(dream_ptr s, int32_t start);
 
 dream_ptr dream_box_int(int32_t v);
 dream_ptr dream_box_float(float v);
@@ -1564,6 +1568,9 @@ int32_t dream_js_call(int32_t target, int32_t via, dream_ptr method, int32_t arg
 void dream_weak_clear_all(dream_ptr obj);
 uintptr_t weakBind(dream_ptr value);
 dream_ptr weakLoad(uintptr_t slot);
+dream_ptr dream_value_observer_new(dream_ptr value, int32_t kind);
+dream_ptr dream_value_observer_load(dream_ptr box, int32_t kind);
+void dream_value_observer_release(dream_ptr box, int32_t kind, int32_t none_tag, int32_t payload_offset);
 int32_t weakDead(uintptr_t slot);
 void weakReleaseRaw(uintptr_t slot);
 void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, int32_t none_tag);

@@ -230,6 +230,13 @@ impl Lowerer<'_> {
                 field: *field,
             },
             HExprKind::ArrayLen(a) => Rvalue::ArrayLen(self.lower_operand(a)),
+            HExprKind::Zero
+                if !self.interner.is_value_type(e.ty)
+                    && (self.interner.is_reference(e.ty) || self.interner.is_niche_union(e.ty)) =>
+            {
+                Rvalue::Use(Operand::Const(Const::Null))
+            }
+            HExprKind::Zero => Rvalue::Zero(e.ty),
             HExprKind::StrLen(a) => Rvalue::StrLen(self.lower_operand(a)),
             HExprKind::StrByteSize(a) => Rvalue::StrByteSize(self.lower_operand(a)),
             HExprKind::CharAt(s, i) => {

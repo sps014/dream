@@ -1,0 +1,40 @@
+import system;
+import system.collections;
+
+class Note {
+    public n: int;
+    public constructor(n: int) { this.n = n; }
+    del() { System.println(this.n); }
+}
+
+struct Entry {
+    public text: string;
+    public constructor(borrow text: string) { this.text = text; }
+}
+
+enum struct Slot { Empty, Value(string) }
+
+fun exercise(): void {
+    let xs = List<Note>();
+    xs.push(Note(1));
+    xs.push(Note(2));
+    let popped = xs.pop().unwrap();
+    System.println(popped.n);
+    xs.clear();
+    let entries = Buffer.alloc<Entry>(2);
+    entries[0] = Entry("one");
+    entries[1] = Entry("two");
+    Buffer.truncate(entries, 1);
+    Buffer.clear(entries);
+    let slots = Buffer.alloc<Slot>(2);
+    slots[0] = Slot.Value("three");
+    slots[1] = Slot.Value("four");
+    Buffer.truncate(slots, 1);
+    Buffer.clear(slots);
+}
+
+fun main(): void {
+    let before = Debug.live_objects;
+    exercise();
+    System.println(Debug.live_objects - before);
+}

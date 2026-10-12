@@ -256,13 +256,13 @@ public class GenAttribute {
 // statics these forward to.
 public static class GenAttributes {
     @intrinsic("gen_attribute_id")
-    static extern fun id<A>(): string;
+    public static extern fun id<A>(): string;
 
     @intrinsic("gen_attribute_decode")
-    static extern fun decode<A>(borrow attrs: List<GenAttribute>): Option<A>;
+    public static extern fun decode<A>(borrow attrs: List<GenAttribute>): Option<A>;
 
     @intrinsic("gen_attribute_decode_all")
-    static extern fun decode_all<A>(borrow attrs: List<GenAttribute>): List<A>;
+    public static extern fun decode_all<A>(borrow attrs: List<GenAttribute>): List<A>;
 
     public static fun has(borrow attrs: List<GenAttribute>, borrow id: string): bool {
         for (let a in attrs) {

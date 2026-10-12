@@ -1,5 +1,12 @@
 module system.json;
 
+internal static class JsonStorage {
+    @intrinsic("string_json_boundary")
+    internal static extern fun boundary(borrow text: string, start: int): int;
+    @intrinsic("string_clone_range")
+    internal static extern fun clone_range(borrow text: string, start: int, end: int): string;
+}
+
 // Code-unit cursor recursive-descent JSON parser over the input string
 // (`char_at` / `.length`) — no intermediate `byte[]` copy.
 public class JsonParser {
@@ -114,14 +121,16 @@ public class JsonParser {
 
     public fun parse_string(): string {
         this.pos = this.pos + 1; // opening quote
-        // Most strings have no escapes: sizing the builder to the first run means it never
-        // grows, and a string that ends there is copied once.
+        // Parsed strings must own their payload; retaining a slice would expose input mutations.
         let first = this.pos;
         let n = this.len();
-        while (this.pos < n) && (this.b() != 34) && (this.b() != 92) {
+        this.pos = JsonStorage.boundary(this.text, this.pos);
+        if (this.pos < n) && (this.b() == 34) {
+            let end = this.pos;
             this.pos = this.pos + 1;
+            return JsonStorage.clone_range(this.text, first, end);
         }
-        let sb = StringBuilder((this.pos - first) * 2);
+        let sb = StringBuilder((n - first) * 2);
         sb.append_utf8_slice(this.text, first * 2, (this.pos - first) * 2);
         let going = true;
         while going == true {
@@ -189,19 +198,7 @@ public class JsonParser {
                 } else {
                     // Bulk-copy unescaped units until `"` or `\`.
                     let run_start = this.pos;
-                    let scanning = true;
-                    while scanning == true {
-                        if this.pos >= this.len() {
-                            scanning = false;
-                        } else {
-                            let b = this.b();
-                            if (b == 34) || (b == 92) {
-                                scanning = false;
-                            } else {
-                                this.pos = this.pos + 1;
-                            }
-                        }
-                    }
+                    this.pos = JsonStorage.boundary(this.text, this.pos);
                     sb.append_utf8_slice(this.text, run_start * 2, (this.pos - run_start) * 2);
                 }
             }

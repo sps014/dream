@@ -4,6 +4,48 @@ use dream_hir::TypeLayout;
 use dream_types::{DefKind, TypeCtx};
 
 #[test]
+fn frame_budget_includes_headers_and_alignment() {
+    let mut ctx = TypeCtx::new();
+    let def = ctx.register(DefKind::Struct, "Wide", vec![]);
+    let ty = ctx.interner.struct_ty(def, vec![]);
+    let mut mir = Mir::default();
+    mir.layouts.insert(
+        ty,
+        TypeLayout::from_fields(
+            &ctx.interner,
+            "Wide",
+            [("field".into(), ctx.interner.int(), false, false)],
+        ),
+    );
+    let mut b = FunctionBuilder::new("wide", ctx.interner.void());
+    let mut objects = Vec::new();
+    for _ in 0..40 {
+        let object = b.new_local(ty, None);
+        b.assign(
+            Place::Local(object),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None::<NewCtor>,
+                args: vec![],
+            },
+        );
+        objects.push(object);
+    }
+    for object in objects {
+        b.push(Statement::Release(Operand::Copy(Place::Local(object))));
+    }
+    b.terminate(Terminator::Return(None));
+    mir.functions.push(b.finish());
+    assert!(frame_alloc::run(&mut mir, &ctx.interner));
+    assert_eq!(
+        mir.frame_objects.len(),
+        32,
+        "forty 32-byte buffers exceed 1024 bytes"
+    );
+}
+
+#[test]
 fn cycle_capable_frame_objects_require_no_incoming_heap_edges() {
     for escapes in [false, true] {
         let mut ctx = TypeCtx::new();

@@ -219,10 +219,11 @@ impl Compiler {
             );
         }
         let options = format!(
-            "{:?}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{:?}|{}",
+            "{:?}|{}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{:?}|{}",
             self.target,
             self.profile.is_debug(),
             self.debug_info,
+            self.perf_symbols,
             self.optimize,
             self.generator_stage,
             self.runtimes,

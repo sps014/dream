@@ -74,6 +74,25 @@ impl<'a> Analyzer<'a> {
                     .find_map(|((owner, _), def)| (*def == key.0).then_some(*owner))
             })
             .unwrap_or_else(|| self.type_ctx.lower(&Self::type_from_name(type_name)));
+        if !self.member_accessible(
+            template.visibility,
+            &template.file_path,
+            ctx.parent_function.file_path.as_ref(),
+            self.in_methods_of(ctx.parent_function, owner),
+        ) {
+            let message = if template.visibility.is_at_least_internal() {
+                format!("'{}' is not accessible from this scope", method.text)
+            } else {
+                format!(
+                    "'{}' is private to '{}'",
+                    method.text,
+                    self.type_id_display(owner)
+                )
+            };
+            diagnostics.report_error(message, Some(method.position));
+            self.hir_none();
+            return Ok(Type::Unknown);
+        }
         let mut params_types = vec![];
         let mut arg_hirs = vec![];
         let call_target = format!("{}.{}", type_name, method.text);
@@ -183,6 +202,7 @@ impl<'a> Analyzer<'a> {
             intrinsics::IntrinsicOp::from_attributes(&template.attributes),
             Some(
                 intrinsics::IntrinsicOp::ArrayNew
+                    | intrinsics::IntrinsicOp::BufferZero
                     | intrinsics::IntrinsicOp::ArrayRealloc
                     | intrinsics::IntrinsicOp::ArrayElemsCopy
                     | intrinsics::IntrinsicOp::ArrayElemsFill
@@ -316,22 +336,6 @@ impl<'a> Analyzer<'a> {
                 op,
                 arg_hirs,
                 diagnostics,
-            );
-        }
-
-        if !self.member_accessible(
-            template.visibility,
-            &template.file_path,
-            ctx.parent_function.file_path.as_ref(),
-            self.in_methods_of(ctx.parent_function, owner),
-        ) {
-            diagnostics.report_error(
-                format!(
-                    "'{}' is private to '{}'",
-                    method.text,
-                    self.type_id_display(owner)
-                ),
-                Some(method.position),
             );
         }
 

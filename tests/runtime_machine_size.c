@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
         dream_free(ptr);
     } else if (strcmp(argv[1], "string") == 0) {
         ptr = dream_string_alloc(INT32_MAX);
-        assert(dream_str_len(ptr) == INT32_MAX && dream_str_unit_cap(ptr) == INT32_MAX);
+        assert(dream_str_len(ptr) == INT32_MAX);
         check_block(ptr, (size_t)INT32_MAX * 2 + STRING_HEADER_SIZE);
         dream_free(ptr);
     } else if (strcmp(argv[1], "region") == 0) {

@@ -1,0 +1,79 @@
+import system;
+import system.json;
+
+let sink: int = 0;
+let measuring: bool = true;
+let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
+let last_allocations: long = 0;
+let last_retains: long = 0;
+let last_releases: long = 0;
+
+fun report(name: string, nanos: long, iters: int, checksum: int): void {
+    let counters = "";
+    if counters_on {
+        let allocations = Debug.total_allocations;
+        let retains = Debug.runtime_counter(3);
+        let releases = Debug.runtime_counter(4);
+        counters = " counters=allocs:" + (allocations - last_allocations).to_string()
+            + ",retain:" + (retains - last_retains).to_string()
+            + ",release:" + (releases - last_releases).to_string();
+        last_allocations = allocations;
+        last_retains = retains;
+        last_releases = releases;
+    }
+    if measuring {
+        System.println("bench " + name + " ns_total=" + nanos.to_string()
+            + " iters=" + iters.to_string() + " ns_per_op=" + (nanos / (long)iters).to_string()
+            + " checksum=" + checksum.to_string() + counters);
+    }
+    sink = sink + checksum;
+}
+
+@noinline
+fun parse_strings(n: int, iters: int, escaped: bool): int {
+    let make = StringBuilder(n * 2 + 16);
+    make.append_char('"');
+    for (let i = 0; i < n; i = i + 1) { make.append_char('x'); }
+    if escaped { make.append("\\n"); }
+    make.append_char('"');
+    let input = make.build();
+    let total = 0;
+    for (let i = 0; i < iters; i = i + 1) {
+        total = total + Json.deserialize<JsonValue>(input).unwrap().as_string().unwrap().length;
+    }
+    return total;
+}
+
+@noinline
+fun numbers(iters: int): int {
+    let sb = StringBuilder(128);
+    let total = 0;
+    for (let i = 0; i < iters; i = i + 1) {
+        sb.clear();
+        sb.append_double((double)(i & 1023) / 10.0d);
+        total = total + sb.length;
+    }
+    return total;
+}
+
+fun run_suite(): void {
+    let sw = Stopwatch(); let value = parse_strings(8, 2000, false); sw.stop();
+    report("json_string_8", sw.elapsed_nanos, 2000, value);
+    sw = Stopwatch(); value = parse_strings(256, 1000, false); sw.stop();
+    report("json_string_256", sw.elapsed_nanos, 1000, value);
+    sw = Stopwatch(); value = parse_strings(8192, 100, false); sw.stop();
+    report("json_string_8192", sw.elapsed_nanos, 100, value);
+    sw = Stopwatch(); value = parse_strings(256, 1000, true); sw.stop();
+    report("json_escaped_256", sw.elapsed_nanos, 1000, value);
+    sw = Stopwatch(); value = numbers(20000); sw.stop();
+    report("builder_double", sw.elapsed_nanos, 20000, value);
+}
+
+fun main(): void {
+    measuring = false;
+    run_suite();
+    measuring = true;
+    let passes = int.parse(System.env_or("DREAM_BENCH_PASSES", "5")).unwrap_or(5);
+    for (let p = 0; p < passes; p = p + 1) { run_suite(); }
+    System.println("sink " + sink.to_string());
+}

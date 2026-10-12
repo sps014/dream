@@ -94,7 +94,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             is_static,
             is_extern: _,
             is_override: _,
-        } = self.parse_function_modifiers();
+        } = self.parse_function_modifiers(attributes.iter().any(|a| a.name.text == "intrinsic"));
 
         // Optional receiver-mode qualifier (`[borrow | unique] fun/get/set ...`) — same shape as
         // class methods. Required on signature-only methods (no body to infer from).

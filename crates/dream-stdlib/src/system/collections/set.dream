@@ -9,7 +9,6 @@ public class Set<T> : Collection<T> {
     used: int;
     cap: int;
     epoch: int;
-    empty_keys: T[];
 
     // Allocates an empty set with an initial capacity (defaults to 8, rounded up to power of 2).
     public constructor(capacity: int = 8) {
@@ -17,7 +16,6 @@ public class Set<T> : Collection<T> {
         this.cap = c;
         this.keys = Buffer.alloc<T>(c);
         this.states = Buffer.alloc<int>(c);
-        this.empty_keys = Buffer.alloc<T>(1);
         this.count = 0;
         this.used = 0;
         this.epoch = hash_epoch_initial();
@@ -42,20 +40,18 @@ public class Set<T> : Collection<T> {
         return this.cap;
     }
 
-    // Initial probe index for a value.
-    fun home(borrow value: T): int {
-        let h = value.hash_code();
-        return h & (this.cap - 1);
-    }
-
     // Index of an occupied slot holding a value, or -1.
     fun find(borrow value: T): int {
+        return this.find_hashed(value, value.hash_code());
+    }
+
+    fun find_hashed(borrow value: T, hash: int): int {
         let keys = this.keys;
         let states = this.states;
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = value.hash_code() & (cap - 1);
+        let idx = hash & (cap - 1);
         let result = -1;
         let done = false;
         while done == false {
@@ -82,13 +78,13 @@ public class Set<T> : Collection<T> {
 
     // Probe and insert without checking load factor. Used by `add` and `rehash` so those two are
     // not mutually recursive (a cycle would block the whole-module inliner).
-    fun insert_no_grow(value: T): bool {
+    fun insert_no_grow(value: T, hash: int): bool {
         let keys = this.keys;
         let states = this.states;
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = value.hash_code() & (cap - 1);
+        let idx = hash & (cap - 1);
         let first_tomb = -1;
         let added = false;
         let done = false;
@@ -128,12 +124,10 @@ public class Set<T> : Collection<T> {
         return added;
     }
 
-    // Grows and rehashes the set when it gets too full.
-    fun rehash(): void {
+    fun rehash(new_cap: int): void {
         let old_keys = this.keys;
         let old_states = this.states;
         let old_cap = this.cap;
-        let new_cap = hash_capacity_for(old_cap + 1);
         this.keys = Buffer.alloc<T>(new_cap);
         this.states = Buffer.alloc<int>(new_cap);
         this.cap = new_cap;
@@ -142,7 +136,7 @@ public class Set<T> : Collection<T> {
         let i = 0;
         while i < old_cap {
             if old_states[i] == this.epoch {
-                this.insert_no_grow(old_keys[i]);
+                this.insert_no_grow(old_keys[i], old_keys[i].hash_code());
             }
             i = i + 1;
         }
@@ -150,10 +144,14 @@ public class Set<T> : Collection<T> {
 
     // Inserts a value into the set. Returns true if it was newly added, false if already present.
     public fun add(value: T): bool {
+        let hash = value.hash_code();
         if (this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num() {
-            this.rehash();
+            if this.find_hashed(value, hash) >= 0 {
+                return false;
+            }
+            this.rehash(hash_capacity_for(this.cap + 1));
         }
-        return this.insert_no_grow(value);
+        return this.insert_no_grow(value, hash);
     }
 
     // True if the set contains the value.
@@ -209,7 +207,7 @@ public class Set<T> : Collection<T> {
         if i >= 0 {
             this.states[i] = 0 - this.epoch;
             // A tombstoned slot must not keep a managed key alive until it is reused.
-            this.keys[i] = this.empty_keys[0];
+            this.keys[i] = CollectionStorage.zero<T>();
             this.count = this.count - 1;
             return true;
         }
@@ -236,7 +234,7 @@ public class Set<T> : Collection<T> {
     public fun clear(): void {
         let c = this.cap;
         let e = this.epoch;
-        let z = this.empty_keys[0];
+        let z = CollectionStorage.zero<T>();
         let i = 0;
         while i < c {
             if this.states[i] == e {

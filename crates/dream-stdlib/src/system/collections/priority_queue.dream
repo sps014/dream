@@ -37,10 +37,10 @@ public class PriorityQueue<T> : Collection<T> {
     // Removes every element. Live slots are overwritten with a zero value so managed elements
     // release immediately instead of staying retained until later pushes overwrite them.
     public fun clear(): void {
-        let z = Buffer.alloc<T>(1);
+        let z = CollectionStorage.zero<T>();
         let i = 0;
         while i < this.count {
-            this.items[i] = z[0];
+            this.items[i] = z;
             i = i + 1;
         }
         this.count = 0;
@@ -126,7 +126,7 @@ public class PriorityQueue<T> : Collection<T> {
         this.items[0] = this.items[this.count];
         // Zero the vacated tail slot: it still holds a reference to the moved element and must
         // not keep it retained past the next overwrite.
-        this.items[this.count] = Buffer.alloc<T>(1)[0];
+        this.items[this.count] = CollectionStorage.zero<T>();
         if this.count > 0 {
             this.sift_down(0);
         }

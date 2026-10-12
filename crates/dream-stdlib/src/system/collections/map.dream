@@ -4,8 +4,6 @@ module system.collections;
 @allow_cycle
 public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     slots: MapSlot<K, V>[];
-    defaults: V[];
-    empty_keys: K[];
     count: int;
     used: int;
     cap: int;
@@ -15,8 +13,6 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         let c = hash_capacity_for(capacity);
         this.cap = c;
         this.slots = Buffer.alloc<MapSlot<K, V>>(c);
-        this.defaults = Buffer.alloc<V>(1);
-        this.empty_keys = Buffer.alloc<K>(1);
         this.count = 0;
         this.used = 0;
         this.epoch = hash_epoch_initial();
@@ -45,11 +41,15 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     fun find(borrow key: K): int {
+        return this.find_hashed(key, key.hash_code());
+    }
+
+    fun find_hashed(borrow key: K, hash: int): int {
         let slots = this.slots;
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = key.hash_code() & (cap - 1);
+        let idx = hash & (cap - 1);
         let result = -1;
         let done = false;
         while done == false {
@@ -96,12 +96,12 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         }
     }
 
-    fun insert_no_grow(key: K, value: V): void {
+    fun insert_no_grow(key: K, value: V, hash: int): void {
         let slots = this.slots;
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = key.hash_code() & (cap - 1);
+        let idx = hash & (cap - 1);
         let first_tomb = -1;
         let done = false;
         while done == false {
@@ -136,10 +136,9 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         }
     }
 
-    fun rehash(): void {
+    fun rehash(new_cap: int): void {
         let old = this.slots;
         let old_cap = this.cap;
-        let new_cap = hash_capacity_for(old_cap + 1);
         this.slots = Buffer.alloc<MapSlot<K, V>>(new_cap);
         this.cap = new_cap;
         this.count = 0;
@@ -147,7 +146,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         let i = 0;
         while i < old_cap {
             if old[i].state == this.epoch {
-                this.insert_no_grow(old[i].key, old[i].value);
+                this.insert_no_grow(old[i].key, old[i].value, old[i].key.hash_code());
             }
             i = i + 1;
         }
@@ -157,10 +156,13 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     // caller; collisions fall through to the full probe.
     @inline
     public fun this[key: K] = value: V {
+        let hash = key.hash_code();
         if (this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num() {
-            this.rehash();
+            if this.find_hashed(key, hash) < 0 {
+                this.rehash(hash_capacity_for(this.cap + 1));
+            }
         }
-        let idx = key.hash_code() & (this.cap - 1);
+        let idx = hash & (this.cap - 1);
         let slot_state = this.slots[idx].state;
         let epoch = this.epoch;
         if slot_state == epoch && this.slots[idx].key == key {
@@ -172,7 +174,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
             this.count = this.count + 1;
             this.used = this.used + 1;
         } else {
-            this.insert_no_grow(key, value);
+            this.insert_no_grow(key, value, hash);
         }
     }
 
@@ -287,8 +289,8 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
             this.slots[i].state = 0 - this.epoch;
             // Zero both halves of the tombstoned slot so managed keys release immediately,
             // not just on slot reuse.
-            this.slots[i].key = this.empty_keys[0];
-            this.slots[i].value = this.defaults[0];
+            this.slots[i].key = CollectionStorage.zero<K>();
+            this.slots[i].value = CollectionStorage.zero<V>();
             this.count = this.count - 1;
             return true;
         }
@@ -304,8 +306,8 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     public fun clear(): void {
         let c = this.cap;
         let e = this.epoch;
-        let zk = this.empty_keys[0];
-        let zv = this.defaults[0];
+        let zk = CollectionStorage.zero<K>();
+        let zv = CollectionStorage.zero<V>();
         let i = 0;
         while i < c {
             if this.slots[i].state == e {

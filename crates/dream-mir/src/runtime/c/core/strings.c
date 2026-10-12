@@ -225,6 +225,17 @@ dream_ptr string_substring_raw(dream_ptr ptr, int32_t start, int32_t end) {
     return dream_substring(ptr, start, end);
 }
 
+dream_ptr string_clone_range(dream_ptr ptr, int32_t start, int32_t end) {
+    int32_t n = dream_str_len(ptr);
+    if (start < 0) { start = 0; }
+    if (end > n) { end = n; }
+    if (start >= end) { return dream_string_alloc(0); }
+    dream_ptr result = dream_string_alloc(end - start);
+    memcpy((char *)dream_p(result) + STRING_UNITS_OFFSET,
+           dream_str_units(ptr) + start, (size_t)(uint32_t)(end - start) * 2);
+    return result;
+}
+
 dream_ptr string_clone(dream_ptr ptr) {
     int32_t n = dream_str_len(ptr);
     dream_ptr p;

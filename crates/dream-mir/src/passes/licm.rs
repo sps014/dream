@@ -463,7 +463,7 @@ fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
             }
             args.iter().for_each(|(a, _)| operand_reads(a, f));
         }
-        Rvalue::FuncRef(_) => {}
+        Rvalue::Zero(_) | Rvalue::FuncRef(_) => {}
     }
 }
 

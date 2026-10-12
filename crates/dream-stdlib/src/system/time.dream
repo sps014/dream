@@ -3,7 +3,7 @@ module system;
 // Timing utilities.
 public static class Time {
     @intrinsic("sleep")
-    static extern async fun sleep_host(ms: int): void;
+    public static extern async fun sleep_host(ms: int): void;
 
     @async_host
     @runtime("delayMs")

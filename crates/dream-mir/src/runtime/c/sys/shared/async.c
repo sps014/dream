@@ -11,11 +11,7 @@
 #define KIND_ALL FUTURE_KIND_ALL
 #define KIND_ANY FUTURE_KIND_ANY
 
-typedef struct Node {
-    dream_ptr f;
-    int64_t due;
-    struct Node *next;
-} Node;
+#include "node_pool.h"
 
 #include "ready_queue.h"
 
@@ -177,16 +173,13 @@ void dream_complete_foreign(dream_ptr f, dream_result res) {
     if (!f) {
         return;
     }
-    n = (Node *)calloc(1, sizeof(Node));
-    if (!n) {
-        DREAM_PANIC_LITERAL(u"panic: out of memory completing a host future");
-    }
+    n = foreign_node_take();
     n->f = f;
     dream_mutex_lock(&wake_mu);
     s = *scheduler_at(f);
     if (!s) {
         dream_mutex_unlock(&wake_mu);
-        free(n);
+        foreign_node_put(n);
         return;
     }
     *scheduler_at(f) = NULL;
@@ -222,7 +215,7 @@ static void foreign_drain(void) {
             return;
         }
         dream_ptr f = n->f;
-        free(n);
+        foreign_node_put(n);
         dream_ptr w = ptr_at(f, F_WAKER)[0];
         if (w) {
             ptr_at(f, F_WAKER)[0] = 0;
@@ -354,7 +347,7 @@ void dream_cancel(dream_ptr f) {
         Node *node = *link;
         if (node->f == f) {
             *link = node->next;
-            free(node);
+            timer_node_put(node);
         } else { link = &node->next; }
     }
     if (!in_flight) {
@@ -462,10 +455,12 @@ void dream_run_loop(void) {
             continue;
         }
         if (!timer_head && !foreign_outstanding()) {
+            ready_finish();
             return;
         }
 #else
         if (!timer_head) {
+            ready_finish();
             return;
         }
 #endif
@@ -498,7 +493,7 @@ void dream_run_loop(void) {
                 Node *n = timer_head;
                 timer_head = n->next;
                 dream_async_complete(n->f, 0);
-                free(n);
+                timer_node_put(n);
             }
         }
     }
@@ -506,7 +501,7 @@ void dream_run_loop(void) {
 
 /* The timer holds `f` raw: the awaiter owns it, and `dream_cancel` unlinks the node. */
 static void timer_arm(dream_ptr f, int32_t ms) {
-    Node *n = (Node *)calloc(1, sizeof(Node));
+    Node *n = timer_node_take();
     Node **pp;
     n->f = f;
 #ifdef DREAM_WASM32

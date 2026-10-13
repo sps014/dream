@@ -9,7 +9,7 @@
 //! destination's storage too.
 
 use super::MirPass;
-use crate::{Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use crate::{Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
 use indexmap::IndexMap as HashMap;
 
@@ -76,6 +76,34 @@ fn subst_operand(op: &mut Operand, known: &HashMap<Local, Operand>) -> bool {
         return true;
     }
     false
+}
+
+/// `Const::Int`/`Const::Long` do not record signedness (the backend reads them as `int`/`long`),
+/// so where the operand's type picks the operation, a `uint`/`ulong` local must stay a local:
+/// otherwise `(~12u).to_string()` prints `-13` and `ulong.max > 1uL` compares signed.
+fn subst_unless_const(
+    op: &mut Operand,
+    known: &HashMap<Local, Operand>,
+    keep_local: impl Fn(&Const) -> bool,
+) -> bool {
+    match resolve(op, known) {
+        Some(Operand::Const(c)) if keep_local(&c) => false,
+        None => false,
+        Some(v) => {
+            *op = v;
+            true
+        }
+    }
+}
+
+fn is_int_const(c: &Const) -> bool {
+    matches!(c, Const::Int(_) | Const::Long(_))
+}
+
+/// Canonical 32-bit payloads compare the same signed or unsigned; a negative 64-bit payload may be
+/// a `ulong` at or above 2^63, which [`super::const_fold`] also declines to fold.
+fn is_sign_ambiguous_const(c: &Const) -> bool {
+    matches!(c, Const::Long(v) if *v < 0)
 }
 
 fn subst_place_reads(place: &mut Place, known: &HashMap<Local, Operand>) -> bool {
@@ -198,6 +226,13 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
                 | subst_operand(then_val, known)
                 | subst_operand(else_val, known)
         }
+        Rvalue::TypeName(o) | Rvalue::HashCode(o) | Rvalue::ToString(o) => {
+            subst_unless_const(o, known, is_int_const)
+        }
+        Rvalue::Binary(op, a, b) if op.is_comparison() => {
+            subst_unless_const(a, known, is_sign_ambiguous_const)
+                | subst_unless_const(b, known, is_sign_ambiguous_const)
+        }
         Rvalue::ObservedLoad(o)
         | Rvalue::Use(o)
         | Rvalue::ArrayLen(o)
@@ -206,10 +241,7 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
         | Rvalue::StrBytes(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
-        | Rvalue::TypeName(o)
         | Rvalue::Discriminant { base: o, .. }
-        | Rvalue::HashCode(o)
-        | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => subst_operand(o, known),
         Rvalue::Binary(_, a, b)
         | Rvalue::CheckedBinary(_, a, b)
@@ -378,6 +410,58 @@ mod tests {
         match &func.blocks[0].terminator {
             Terminator::Return(Some(Operand::Const(Const::Int(v)))) => assert_eq!(*v, 7),
             other => panic!("expected propagated const, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn unsigned_const_stays_a_local_under_to_string() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.string());
+        let x = b.new_temp(i.uint());
+        let s = b.new_temp(i.string());
+        b.assign(
+            Place::Local(x),
+            Rvalue::Use(Operand::Const(Const::Int(4_294_967_283))),
+        );
+        b.assign(
+            Place::Local(s),
+            Rvalue::ToString(Operand::Copy(Place::Local(x))),
+        );
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(s)))));
+        let mut func = b.finish();
+        CopyConstProp.run(&mut func, &i);
+        match &func.blocks[0].stmts[1] {
+            Statement::Assign(_, Rvalue::ToString(Operand::Copy(Place::Local(l)))) => {
+                assert_eq!(l, &x)
+            }
+            other => panic!("expected to_string of the uint local, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn negative_long_const_stays_a_local_under_comparison() {
+        let mut i = TypeInterner::new();
+        let ulong = i.prim(dream_types::PrimTy::ULong);
+        let mut b = FunctionBuilder::new("f", i.bool());
+        let x = b.new_temp(ulong);
+        let c = b.new_temp(i.bool());
+        b.assign(Place::Local(x), Rvalue::Use(Operand::Const(Const::Long(-1))));
+        b.assign(
+            Place::Local(c),
+            Rvalue::Binary(
+                crate::BinOp::Gt,
+                Operand::Copy(Place::Local(x)),
+                Operand::Const(Const::Long(1)),
+            ),
+        );
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(c)))));
+        let mut func = b.finish();
+        CopyConstProp.run(&mut func, &i);
+        match &func.blocks[0].stmts[1] {
+            Statement::Assign(_, Rvalue::Binary(_, Operand::Copy(Place::Local(l)), _)) => {
+                assert_eq!(l, &x)
+            }
+            other => panic!("expected the ulong local in the comparison, got {:?}", other),
         }
     }
 }

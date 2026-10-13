@@ -490,11 +490,12 @@ impl Lowerer<'_> {
         }
     }
 
-    /// True when `to_string()` on this type lowers through `$int_to_string` (i32 decimal).
+    /// True when `to_string()` on this type matches signed i32 decimal formatting. `uint` does
+    /// not: values above `int.max` would print negative through `dream_concat_str_int_str`.
     fn is_i32_tostring_ty(&self, ty: TypeId) -> bool {
         matches!(
             self.interner.kind(ty),
-            TyKind::Prim(PrimTy::Int | PrimTy::UInt | PrimTy::Byte)
+            TyKind::Prim(PrimTy::Int | PrimTy::Byte)
         )
     }
 

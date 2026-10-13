@@ -66,6 +66,11 @@ fun bitwise_operators(): void {
     // dynamic (non-constant-foldable) byte value through a function call, to exercise the
     // runtime masking path rather than just the constant-folding path.
     Assert.eq_str((c4e_flip((byte)(5 + 0))).to_string(), "250");
+    Assert.eq_str("v=" + c4e_uflip(12u).to_string(), "v=4294967283");
+}
+
+fun c4e_uflip(x: uint): uint {
+    return ~x;
 }
 
 fun c4e_flip(x: byte): byte {

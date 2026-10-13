@@ -236,6 +236,8 @@ python -m mkdocs build --strict
 
 If the API inventory is stale, review the changed declarations and update the affected `docs/reference/api/` pages first, then run `python tooling/docs/api_inventory.py --write` and repeat the checks. Commit `tooling/docs/api-coverage.json` together with the reference updates. The inventory records signatures, descriptions, and source line numbers, so stdlib body edits can require a refresh even when the public signatures stay the same. Never refresh the inventory just to silence CI without reviewing the reference.
 
+When committing only part of a dirty working tree, generate and validate the inventory against the stdlib sources included in that commit. Uncommitted stdlib edits must not leak signatures or line offsets into a docs-only commit; validate a clean snapshot of the intended commit before finishing.
+
 ## Testing conventions
 
 - **Assertion e2e tests** live in `tests/projects/`, a Dream workspace of feature suites. Add `@test` functions using `Assert.*`; no expected-output files. Invalid programs, traps, and process-isolated tests stay in `tests/cases/`, registered with inline Rust expectations and isolation reasons in `tests/corpus/`. Artifact-specific uninstrumented programs live in `tests/fixtures/compiler/`. Default `cargo test --workspace` runs grouped smoke tests; `python3 scripts/test_corpus.py --both` runs the full native and Node corpus. Register every case once; the corpus audit checks source files and assertions.

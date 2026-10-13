@@ -10,8 +10,8 @@ use super::{glue, register};
 use crate::abi::{TAG_CLOSURE_ENV, TAG_FUNCBOX, TAG_STRING};
 use crate::backend::shared::abi_types::{c_ident, elem_size};
 use crate::backend::shared::glue::{
-    FieldDrop, del_symbol, destroy_sym, drop_nonempty, field_drop, glue_array_elems, release_sym,
-    self_tail_field, struct_field_drops,
+    FieldDrop, del_symbol, destroy_sym, drop_nonempty, field_drop, glue_array_elems,
+    inline_release_sym, release_sym, self_tail_field, struct_field_drops,
 };
 use dream_hir::TypeLayout;
 use dream_types::TypeId;
@@ -65,6 +65,9 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
         register(l, &name, Ty::Void, vec![h])
     };
     for e in &n.elems {
+        if l.interner.is_value_type(*e) {
+            add(l, inline_release_sym(*e));
+        }
         add(l, arr_rel(*e));
         add(l, format!("{}_into", arr_rel(*e)));
         add(l, arr_des(*e));
@@ -329,6 +332,16 @@ fn wrapper(l: &mut Lcx<'_>, name: &str, tail: &str) {
 
 pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
     let n = names(l);
+    for e in &n.elems {
+        if !l.interner.is_value_type(*e) {
+            continue;
+        }
+        let mut fx = glue(l, &inline_release_sym(*e));
+        let p = fx.arg(0);
+        fx.value_refs(*e, &p, false);
+        fx.w.ret(None);
+        fx.finish();
+    }
     for e in &n.elems {
         let tail = format!("{}_into", arr_rel(*e));
         let mut fx = glue(l, &tail);

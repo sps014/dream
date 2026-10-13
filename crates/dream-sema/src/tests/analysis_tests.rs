@@ -2467,3 +2467,21 @@ fn strong_cycle_permission_is_required() {
         );
     }
 }
+
+#[test]
+fn storage_type_predicate_cannot_be_forged() {
+    let diagnostics = analyze_code(
+        r#"
+        @intrinsic("buffer_is_string")
+        fun forged<T>(): bool { return false; }
+        fun main(): void { let ignored = forged<string>(); }
+    "#,
+    );
+    assert!(diagnostics.has_errors());
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("reserved for internal stdlib storage"))
+    );
+}

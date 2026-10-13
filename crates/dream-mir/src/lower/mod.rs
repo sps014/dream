@@ -663,15 +663,18 @@ impl Lowerer<'_> {
                     elem_ty,
                     array,
                     left,
+                    other_array,
                     right,
                 } => {
                     let array = self.lower_operand(array);
                     let left = self.lower_operand(left);
+                    let other_array = self.lower_operand(other_array);
                     let right = self.lower_operand(right);
                     self.b.push(Statement::ArraySlotSwap {
                         elem_ty: *elem_ty,
                         array,
                         left,
+                        other_array,
                         right,
                     });
                 }

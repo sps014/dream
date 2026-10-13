@@ -25,6 +25,7 @@ pub(super) fn check_rc_types(
             elem_ty,
             array,
             left,
+            other_array,
             right,
         } = s
         {
@@ -42,7 +43,12 @@ pub(super) fn check_rc_types(
                     .is_some_and(|decl| decl.ty == interner.int()),
                 _ => false,
             };
+            let other_ty = match other_array {
+                Operand::Copy(Place::Local(local)) => f.locals.get(local.0 as usize).map(|d| d.ty),
+                _ => None,
+            };
             if array_ty.and_then(|ty| interner.unwrap_array(ty)) != Some(*elem_ty)
+                || other_ty.and_then(|ty| interner.unwrap_array(ty)) != Some(*elem_ty)
                 || !valid_index(left)
                 || !valid_index(right)
             {

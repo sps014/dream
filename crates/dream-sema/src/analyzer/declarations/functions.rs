@@ -34,14 +34,18 @@ impl<'a> Analyzer<'a> {
         }
         if matches!(
             IntrinsicOp::from_attributes(&function.attributes),
-            Some(IntrinsicOp::ArraySlotSwap | IntrinsicOp::ArraySlotTake)
+            Some(
+                IntrinsicOp::ArraySlotSwap
+                    | IntrinsicOp::ArraySlotTake
+                    | IntrinsicOp::BufferIsString
+            )
         ) && !function
             .file_path
             .as_deref()
             .is_some_and(dream_stdlib::is_std_source)
         {
             diagnostics.report_error(
-                "slot transfer intrinsics are reserved for internal stdlib storage".into(),
+                "storage intrinsics are reserved for internal stdlib storage".into(),
                 Some(function.name.position),
             );
         }

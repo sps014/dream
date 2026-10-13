@@ -401,7 +401,14 @@ impl<'l, 'a> Fx<'l, 'a> {
                 // Producer results already own their references and are evaluated in separate
                 // storage, so rebinding can release the previous value before adopting them.
                 let drop_old = owns && crate::rc_store::rvalue_owns_result(rv);
-                self.memcpy_value(rv, &rhs, lty, &dest, retain_copy, drop_old);
+                self.memcpy_value(
+                    rv,
+                    &rhs,
+                    lty,
+                    &dest,
+                    retain_copy && !decl.borrows_refs,
+                    drop_old,
+                );
             }
             Place::Local(l) => self.write_local(*l, &rhs),
             Place::Global(g) => self.store_global(*g, place, rv, rhs),
@@ -483,7 +490,8 @@ impl<'l, 'a> Fx<'l, 'a> {
                     if *b == base && *f == field
             );
             let dest = self.ptr_value(&slot);
-            self.memcpy_value(rv, &rhs, fld.ty, &dest, true, !alias);
+            let owning = !self.f.locals[base.0 as usize].borrows_refs;
+            self.memcpy_value(rv, &rhs, fld.ty, &dest, owning, owning && !alias);
             return;
         }
         let m = mem_ty(&self.l.cx, fld.ty);

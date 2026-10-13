@@ -337,9 +337,14 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
             operand_reads(count, f);
         }
         Statement::ArraySlotSwap {
-            array, left, right, ..
+            array,
+            left,
+            other_array,
+            right,
+            ..
         } => {
             operand_reads(array, f);
+            operand_reads(other_array, f);
             operand_reads(left, f);
             operand_reads(right, f);
         }

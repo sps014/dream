@@ -203,6 +203,7 @@ impl<'a> Analyzer<'a> {
             Some(
                 intrinsics::IntrinsicOp::ArrayNew
                     | intrinsics::IntrinsicOp::BufferZero
+                    | intrinsics::IntrinsicOp::BufferIsString
                     | intrinsics::IntrinsicOp::ArrayRealloc
                     | intrinsics::IntrinsicOp::ArrayElemsCopy
                     | intrinsics::IntrinsicOp::ArrayElemsFill

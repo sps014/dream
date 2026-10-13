@@ -1,0 +1,91 @@
+import system;
+import system.testing;
+import system.collections;
+
+let arc_reader_drops = 0;
+class ArcReaderItem {
+    public value: string;
+    public constructor(value: string) { this.value = value; }
+    del() { arc_reader_drops = arc_reader_drops + 1; }
+}
+struct ArcReaderRecord {
+    public item: ArcReaderItem;
+    public constructor(item: ArcReaderItem) { this.item = item; }
+}
+
+@noinline
+fun arc_record_length(value: ArcReaderRecord): int { return value.item.value.length; }
+
+@noinline
+fun arc_make_tail(): ArcReaderRecord[] {
+    let tail = Buffer.alloc<ArcReaderRecord>(3);
+    tail[0] = ArcReaderRecord(ArcReaderItem("kept"));
+    tail[1] = ArcReaderRecord(ArcReaderItem("dropped1"));
+    tail[2] = ArcReaderRecord(ArcReaderItem("dropped2"));
+    return tail;
+}
+
+@test
+@unsafe
+fun arc_readers_and_storage(): void {
+    let list = List<string>();
+    list.push("first" + 1.to_string());
+    list.push("second" + 2.to_string());
+    let view = list.as_read_only_span();
+    let detached = list.take_array();
+    Assert.eq(list.length, 0);
+    Assert.eq(detached.length, 2);
+    detached[0] = "changed";
+    Assert.eq_str(view[0], "first1");
+    list.push("unique" + 3.to_string());
+    let allocations_before = Debug.total_allocations;
+    let transferred = list.take_array();
+    Assert.eq(Debug.total_allocations - allocations_before, (long)1);
+    Assert.eq(transferred.length, 1);
+    Assert.eq_str(transferred[0], "unique3");
+    Assert.eq(list.length, 0);
+    let records = List<ArcReaderRecord>();
+    records.push(ArcReaderRecord(ArcReaderItem("reader")));
+    Assert.eq(records[0].item.value.length, 6);
+    Assert.eq(arc_record_length(records[0]), 6);
+    let snapshot = records[0];
+    records.clear();
+    Assert.eq_str(snapshot.item.value, "reader");
+    records.push(ArcReaderRecord(ArcReaderItem("transferred record")));
+    let owned_records = records.take_array();
+    Assert.eq_str(owned_records[0].item.value, "transferred record");
+    list.push("unique3");
+    let iterator = list.iterator();
+    Assert.eq(iterator.next().unwrap().length, 7);
+    Assert.is_true(iterator.next().is_none());
+    let map = Map<string, ArcReaderRecord>();
+    let set = Set<string>();
+    let i = 0;
+    while i < 128 {
+        let key = "key" + i.to_string();
+        map[key] = ArcReaderRecord(ArcReaderItem(key));
+        set.add(key);
+        i = i + 1;
+    }
+    let total = 0;
+    for (let pair in map) { total = total + pair.key.length; }
+    Assert.is_true(total > 128);
+    i = 0;
+    while i < 128 {
+        let key = "key" + i.to_string();
+        Assert.eq_str(map[key].item.value, key);
+        Assert.is_true(set.contains(key));
+        i = i + 1;
+    }
+    let tail = arc_make_tail();
+    let before_drop = arc_reader_drops;
+    tail = Buffer.realloc<ArcReaderRecord>(tail, 1);
+    Assert.eq(arc_reader_drops - before_drop, 2);
+    Assert.eq_str(tail[0].item.value, "kept");
+    let values = List<string>();
+    values.push("a"); values.push("c"); values.push("b");
+    let direction = -1;
+    values.sort_by((a, b) => direction * a.compare(b));
+    Assert.eq_str(values[0], "c");
+    Assert.eq_str(values[2], "a");
+}

@@ -26,7 +26,6 @@ Read the chapters in order the first time; afterward, use this page as an index.
 
 Additional engineering records:
 
-- [ARC traffic audit and fixes](./16-arc-traffic-audit.md): collection borrowing, slot transfers and proven comparator targets.
 - [Native pointer migration](./12-native-pointer-migration.md): inventory and paired measurements.
 - [Build performance and minimal compiler plan](./14-build-performance-and-native-networking-plan.md): planned prerequisite to self-hosting.
 - [Self-hosting readiness](./13-self-hosting-readiness.md): resolved foundations and bootstrap acceptance gates.

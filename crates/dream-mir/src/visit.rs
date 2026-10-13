@@ -50,9 +50,13 @@ pub(crate) fn stmt_operands_mut(s: &mut Statement, f: &mut impl FnMut(&mut Opera
             }
         }
         Statement::ArraySlotSwap {
-            array, left, right, ..
+            array,
+            left,
+            other_array,
+            right,
+            ..
         } => {
-            for o in [array, left, right] {
+            for o in [array, left, other_array, right] {
                 operand_mut(o, f);
             }
         }

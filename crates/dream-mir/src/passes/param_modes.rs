@@ -26,16 +26,27 @@ fn scalar_array(ty: dream_types::TypeId, interner: &TypeInterner) -> bool {
     matches!(interner.kind(ty), TyKind::Array(elem) if scalar(*elem, interner))
 }
 
-fn kernel_type(ty: dream_types::TypeId, interner: &TypeInterner) -> bool {
-    scalar(ty, interner) || scalar_array(ty, interner) || ty == interner.string()
+fn kernel_type(
+    ty: dream_types::TypeId,
+    interner: &TypeInterner,
+    records: &IndexSet<dream_types::TypeId>,
+) -> bool {
+    scalar(ty, interner)
+        || scalar_array(ty, interner)
+        || ty == interner.string()
+        || records.contains(&ty)
 }
 
-fn kernel(f: &MirFunction, interner: &TypeInterner) -> bool {
+fn kernel(
+    f: &MirFunction,
+    interner: &TypeInterner,
+    records: &IndexSet<dream_types::TypeId>,
+) -> bool {
     if f.is_async
         || !scalar(f.ret, interner)
         || f.locals
             .iter()
-            .any(|d| d.is_ref || !kernel_type(d.ty, interner))
+            .any(|d| d.is_ref || !kernel_type(d.ty, interner, records))
     {
         return false;
     }
@@ -88,12 +99,34 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
     if mir.profile.is_debug() {
         return false;
     }
+    // No user cleanup can be delayed when these flat records lose a temporary ownership token.
+    let records: IndexSet<_> = mir
+        .functions
+        .iter()
+        .flat_map(|f| &f.locals)
+        .map(|d| d.ty)
+        .filter(|&ty| {
+            matches!(interner.kind(ty), TyKind::Struct(..))
+                && mir.layouts.get(ty).is_some_and(|layout| {
+                    !layout.has_destructor()
+                        && layout.fields.iter().all(|field| {
+                            !field.is_weak
+                                && !field.is_unowned
+                                && (scalar(field.ty, interner)
+                                    || scalar_array(field.ty, interner)
+                                    || field.ty == interner.string())
+                        })
+                })
+        })
+        .collect();
     // Starting optimistically admits a recursive component; removing unsafe callees propagates
     // back to every caller before any ownership mode is changed.
     let mut candidates: IndexSet<Key> = mir
         .functions
         .iter()
-        .filter(|f| kernel(f, interner) && !mir.exports.iter().any(|(def, _)| *def == f.def))
+        .filter(|f| {
+            kernel(f, interner, &records) && !mir.exports.iter().any(|(def, _)| *def == f.def)
+        })
         .map(|f| (f.def, f.instance.clone()))
         .collect();
     loop {
@@ -126,7 +159,11 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
         }
         for p in &f.params {
             let d = &mut f.locals[p.0 as usize];
-            if d.is_take && (scalar_array(d.ty, interner) || d.ty == interner.string()) {
+            if d.is_take
+                && (scalar_array(d.ty, interner)
+                    || d.ty == interner.string()
+                    || records.contains(&d.ty))
+            {
                 d.is_take = false;
                 changed = true;
             }

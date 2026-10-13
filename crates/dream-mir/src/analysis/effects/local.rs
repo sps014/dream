@@ -140,7 +140,11 @@ pub(crate) fn stmt_effects<'a>(
                 Place::Deref { .. } => out(Effect::Top),
                 Place::Field { base, field } => out(Effect::Store(*base, *field as u32)),
                 Place::Index { base, .. } => match interner.kind(f.local_ty(*base)) {
-                    TyKind::Array(e) if interner.is_rc_tracked(*e) => out(Effect::SlotStore(*e)),
+                    TyKind::Array(e)
+                        if interner.is_rc_tracked(*e) || interner.is_value_type(*e) =>
+                    {
+                        out(Effect::SlotStore(*e))
+                    }
                     TyKind::Array(_) => {}
                     _ => out(Effect::Top),
                 },
@@ -161,7 +165,7 @@ pub(crate) fn stmt_effects<'a>(
         Statement::ArrayElemsCopy { elem_ty, .. }
         | Statement::ArrayElemsFill { elem_ty, .. }
         | Statement::ArraySlotSwap { elem_ty, .. }
-            if interner.is_rc_tracked(*elem_ty) =>
+            if interner.is_rc_tracked(*elem_ty) || interner.is_value_type(*elem_ty) =>
         {
             out(Effect::SlotStore(*elem_ty))
         }
@@ -183,7 +187,7 @@ fn rvalue_effect<'a>(rv: &'a Rvalue, f: &MirFunction, interner: &TypeInterner) -
         } => Effect::Iface(*iface_id, *method_slot),
         Rvalue::IndirectCall { .. } | Rvalue::JsCall { .. } => Effect::Top,
         Rvalue::ArraySlotTake { elem_ty, .. } | Rvalue::ArrayRealloc { elem_ty, .. }
-            if interner.is_rc_tracked(*elem_ty) =>
+            if interner.is_rc_tracked(*elem_ty) || interner.is_value_type(*elem_ty) =>
         {
             Effect::SlotStore(*elem_ty)
         }

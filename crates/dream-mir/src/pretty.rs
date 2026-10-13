@@ -262,12 +262,14 @@ impl FnPrinter<'_> {
                 elem_ty,
                 array,
                 left,
+                other_array,
                 right,
             } => format!(
-                "array_slot_swap::<{}>({}, {}, {})",
+                "array_slot_swap::<{}>({}, {}, {}, {})",
                 self.cx.ty(*elem_ty),
                 self.operand(array),
                 self.operand(left),
+                self.operand(other_array),
                 self.operand(right)
             ),
             Statement::ArrayElemsFill {

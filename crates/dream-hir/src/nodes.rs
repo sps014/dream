@@ -337,6 +337,7 @@ pub enum HExprKind {
         elem_ty: TypeId,
         array: Box<HExpr>,
         left: Box<HExpr>,
+        other_array: Box<HExpr>,
         right: Box<HExpr>,
     },
     /// `Buffer.free<T>(arr)` (`@unsafe`) — immediately returns `array`'s backing block to the

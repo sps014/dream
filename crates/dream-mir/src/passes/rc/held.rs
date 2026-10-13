@@ -305,6 +305,15 @@ fn param_handed_on(f: &MirFunction, p: u32, given_away: &IndexSet<u32>) -> bool 
 }
 
 fn load_of(f: &MirFunction, rv: &Rvalue, layouts: &LayoutTable) -> Option<Snapshot> {
+    load_of_inner(f, rv, layouts, &mut IndexSet::new())
+}
+
+fn load_of_inner(
+    f: &MirFunction,
+    rv: &Rvalue,
+    layouts: &LayoutTable,
+    seen: &mut IndexSet<u32>,
+) -> Option<Snapshot> {
     match rv {
         Rvalue::Use(Operand::Copy(Place::Field { base, field })) => {
             let ty = f.local_ty(*base);
@@ -358,6 +367,29 @@ fn load_of(f: &MirFunction, rv: &Rvalue, layouts: &LayoutTable) -> Option<Snapsh
                 base: p.0,
                 slot: Slot::Param,
             })
+        }
+        Rvalue::Use(Operand::Copy(Place::Local(p)))
+            if f.locals[p.0 as usize].is_cursor && seen.insert(p.0) =>
+        {
+            let mut snapshot = None;
+            for stmt in f.blocks.iter().flat_map(|b| &b.stmts) {
+                if let Statement::Assign(Place::Local(d), rv) = stmt
+                    && d == p
+                    && !matches!(rv, Rvalue::Use(Operand::Const(Const::Null)))
+                {
+                    let next = load_of_inner(f, rv, layouts, &mut seen.clone())?;
+                    // Field and element snapshots can outlive the slot contents they loaded.
+                    // Only a caller-pinned parameter survives forwarding without a time proof.
+                    if next.slot != Slot::Param {
+                        return None;
+                    }
+                    if snapshot.is_some_and(|prior| prior != next) {
+                        return None;
+                    }
+                    snapshot = Some(next);
+                }
+            }
+            snapshot
         }
         _ => None,
     }
@@ -556,9 +588,7 @@ impl Check<'_> {
                     self.snap.slot != Slot::Field(self.f.local_ty(b), field)
                         && !matches!(self.snap.slot, Slot::ElemField(arr, f)
                             if self.interner.kind(arr) == &TyKind::Array(self.f.local_ty(b)) && f == field)
-                        && !self.field_pin().is_some_and(|(owner, f)| {
-                            self.f.local_ty(b) == self.f.locals[owner as usize].ty && field == f
-                        })
+                        && !self.pin_fields().contains(&(self.f.local_ty(b), field))
                 }
                 Effect::SlotStore(ty) => !self.hits_elem(ty),
                 // A callee may also release anything, running any `del`.
@@ -592,8 +622,8 @@ impl Check<'_> {
         };
         let mut out = vec![owner];
         let mut cur = owner;
-        for _ in 0..8 {
-            let Some(src) = self.copy_src(cur) else {
+        for _ in 0..self.f.locals.len() {
+            let Some((src, _)) = self.owner_source(cur) else {
                 break;
             };
             if out.contains(&src) {
@@ -627,6 +657,56 @@ impl Check<'_> {
             }
         }
         if saw { src } else { None }
+    }
+
+    fn owner_source(&self, local: u32) -> Option<(u32, Option<u32>)> {
+        if let Some(src) = self.copy_src(local) {
+            return Some((src, None));
+        }
+        if !self.f.locals[local as usize].is_cursor {
+            return None;
+        }
+        let mut source = None;
+        for stmt in self.f.blocks.iter().flat_map(|b| &b.stmts) {
+            if let Statement::Assign(Place::Local(d), rv) = stmt
+                && d.0 == local
+                && !matches!(rv, Rvalue::Use(Operand::Const(Const::Null)))
+            {
+                let Rvalue::Use(Operand::Copy(Place::Field { base, field })) = rv else {
+                    return None;
+                };
+                if !self.interner.is_reference(self.f.local_ty(*base)) {
+                    return None;
+                }
+                let layout = self
+                    .layouts
+                    .get(self.f.local_ty(*base))?
+                    .fields
+                    .get(*field)?;
+                if layout.is_weak || layout.is_unowned {
+                    return None;
+                }
+                let next = (base.0, Some(*field as u32));
+                if source.is_some_and(|prior| prior != next) {
+                    return None;
+                }
+                source = Some(next);
+            }
+        }
+        source
+    }
+
+    fn pin_fields(&self) -> Vec<(TypeId, u32)> {
+        let mut fields = Vec::new();
+        if let Some((owner, field)) = self.field_pin() {
+            fields.push((self.f.locals[owner as usize].ty, field));
+        }
+        for owner in self.owner_pins() {
+            if let Some((base, Some(field))) = self.owner_source(owner) {
+                fields.push((self.f.locals[base as usize].ty, field));
+            }
+        }
+        fields
     }
 
     /// Array pointer loaded only from one field of one object. The element stays alive while
@@ -680,10 +760,11 @@ impl Check<'_> {
         if k.observes_rc {
             return true;
         }
-        if self.field_pin().is_some_and(|(owner, field)| {
-            k.fields
-                .contains(&(self.f.locals[owner as usize].ty, field))
-        }) {
+        if self
+            .pin_fields()
+            .iter()
+            .any(|field| k.fields.contains(field))
+        {
             return true;
         }
         match self.snap.slot {

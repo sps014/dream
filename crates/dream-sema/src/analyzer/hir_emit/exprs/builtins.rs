@@ -467,6 +467,7 @@ impl<'a> Analyzer<'a> {
         elem_ty: dream_types::TypeId,
         array: HExpr,
         left: HExpr,
+        other_array: HExpr,
         right: HExpr,
     ) {
         if !self.active() {
@@ -479,6 +480,7 @@ impl<'a> Analyzer<'a> {
                 elem_ty,
                 array: Box::new(array),
                 left: Box::new(left),
+                other_array: Box::new(other_array),
                 right: Box::new(right),
             },
         ));

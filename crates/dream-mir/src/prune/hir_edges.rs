@@ -229,10 +229,15 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
             hir_expr_edges(count, out);
         }
         K::ArraySlotSwap {
-            array, left, right, ..
+            array,
+            left,
+            other_array,
+            right,
+            ..
         } => {
             hir_expr_edges(array, out);
             hir_expr_edges(left, out);
+            hir_expr_edges(other_array, out);
             hir_expr_edges(right, out);
         }
         K::ArrayElemsFill {

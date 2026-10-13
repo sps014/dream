@@ -131,9 +131,14 @@ pub(crate) fn transfer_stmt(stmt: &Statement, live: &mut IndexSet<u32>) {
             add_operand_reads(count, live);
         }
         Statement::ArraySlotSwap {
-            array, left, right, ..
+            array,
+            left,
+            other_array,
+            right,
+            ..
         } => {
             add_operand_reads(array, live);
+            add_operand_reads(other_array, live);
             add_operand_reads(left, live);
             add_operand_reads(right, live);
         }

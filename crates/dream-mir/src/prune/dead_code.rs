@@ -667,9 +667,14 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
             collect_global_reads_operand(count, out);
         }
         Statement::ArraySlotSwap {
-            array, left, right, ..
+            array,
+            left,
+            other_array,
+            right,
+            ..
         } => {
             collect_global_reads_operand(array, out);
+            collect_global_reads_operand(other_array, out);
             collect_global_reads_operand(left, out);
             collect_global_reads_operand(right, out);
         }

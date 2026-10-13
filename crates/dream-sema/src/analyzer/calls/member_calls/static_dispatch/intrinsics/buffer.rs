@@ -15,6 +15,28 @@ impl<'a> Analyzer<'a> {
             ..
         } = *call;
         if intrinsics::IntrinsicOp::from_attributes(&template.attributes)
+            == Some(intrinsics::IntrinsicOp::BufferIsString)
+        {
+            if !self.current_function_is_trusted_prelude() || !params_types.is_empty() {
+                diagnostics.report_error(
+                    "storage type predicate is internal and expects no arguments".into(),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            }
+            let Some(element) = generic_args.as_ref().and_then(|g| g.first()) else {
+                diagnostics.report_error(
+                    "storage type predicate requires a type argument".into(),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            };
+            let element = Self::monomorphize_type(element, &self.current_generic_bindings);
+            let ty = self.type_ctx.lower(&element);
+            self.hir_set_bool(ty == self.type_ctx.interner.string());
+            return Ok(self.type_ctx.syntax_type(self.type_ctx.interner.bool()));
+        }
+        if intrinsics::IntrinsicOp::from_attributes(&template.attributes)
             == Some(intrinsics::IntrinsicOp::BufferZero)
         {
             if !self.current_function_is_trusted_prelude() {
@@ -53,9 +75,9 @@ impl<'a> Analyzer<'a> {
                 );
                 return Ok(Type::Unknown);
             }
-            if params_types.len() != 3 {
+            if params_types.len() != 4 {
                 diagnostics.report_error(
-                    "slot permutation expects an array and two int indices".to_string(),
+                    "slot permutation expects two array/index pairs".to_string(),
                     Some(method.position),
                 );
                 return Ok(Type::Unknown);
@@ -67,7 +89,14 @@ impl<'a> Analyzer<'a> {
                 );
                 return Ok(Type::Unknown);
             };
-            if params_types[1..].iter().any(|ty| {
+            if self.type_ctx.interner.unwrap_array(params_types[2]) != Some(elem_ty) {
+                diagnostics.report_error(
+                    "slot permutation arrays must have the same element type".into(),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            }
+            if [params_types[1], params_types[3]].iter().any(|ty| {
                 *ty != self.type_ctx.interner.int() && *ty != self.type_ctx.interner.error()
             }) {
                 diagnostics.report_error(
@@ -77,12 +106,13 @@ impl<'a> Analyzer<'a> {
                 return Ok(Type::Unknown);
             }
             let mut args = arg_hirs.into_iter();
-            if let (Some(array), Some(left), Some(right)) = (
+            if let (Some(array), Some(left), Some(other_array), Some(right)) = (
+                args.next().flatten(),
                 args.next().flatten(),
                 args.next().flatten(),
                 args.next().flatten(),
             ) {
-                self.hir_set_array_slot_swap(elem_ty, array, left, right);
+                self.hir_set_array_slot_swap(elem_ty, array, left, other_array, right);
             }
             return Ok(Type::Void);
         }

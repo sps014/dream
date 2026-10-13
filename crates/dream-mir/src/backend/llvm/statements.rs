@@ -131,9 +131,10 @@ impl<'l, 'a> Fx<'l, 'a> {
                 elem_ty,
                 array,
                 left,
+                other_array,
                 right,
             } => {
-                self.array_slot_swap(*elem_ty, array, left, right);
+                self.array_slot_swap(*elem_ty, array, left, other_array, right);
             }
             Statement::ArrayElemsFill {
                 dst,
@@ -269,7 +270,13 @@ impl<'l, 'a> Fx<'l, 'a> {
             && !is_value_place_alias(self.f, *l, rv)
         {
             let dest = self.read_local(*l);
-            self.union_new_at(&dest, *ty, *variant, args);
+            self.union_new_at(
+                &dest,
+                *ty,
+                *variant,
+                args,
+                self.f.locals[l.0 as usize].borrows_refs,
+            );
             return;
         }
         if let (Place::Local(l), Rvalue::New { ty, ctor, args, .. }) = (place, rv) {

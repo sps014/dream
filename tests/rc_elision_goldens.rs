@@ -482,3 +482,39 @@ fn emit_arc_release(code: &str) -> String {
         emit_ll(&mir, interner)
     })
 }
+
+#[test]
+fn rc_golden_flat_record_readers_and_array_projection() {
+    let ir = emit_arc_release(
+        r#"
+        class TextBox {
+            public text: string;
+            public constructor(text: string) { this.text = text; }
+        }
+        struct TextRecord {
+            public text: string;
+            public constructor(text: string) { this.text = text; }
+        }
+        @noinline fun box_length(value: TextBox): int { return value.text.length; }
+        @noinline fun record_length(value: TextRecord): int { return value.text.length; }
+        @export fun box_read(borrow value: TextBox): int { return box_length(value); }
+        @export fun record_read(borrow value: TextRecord): int { return record_length(value); }
+        @export fun projection(borrow values: TextRecord[], index: int): int { return values[index].text.length; }
+        @export fun snapshot(borrow values: TextRecord[], index: int): TextRecord { return values[index]; }
+    "#,
+    );
+    for symbol in ["box_length", "record_length", "projection"] {
+        let body = ir_func_body(&ir, symbol);
+        assert_eq!(count_in(body, "@dream_retain("), 0, "{body}");
+        assert_eq!(count_in(body, "@dream_release("), 0, "{body}");
+    }
+    let body = ir_func_defs(&ir)
+        .into_iter()
+        .find(|f| f.name.contains("snapshot") && f.body.contains("dream_retain"))
+        .expect("owning snapshot implementation")
+        .body;
+    assert!(
+        body.contains("@dream_retain(") || body.contains("retain_"),
+        "{body}"
+    );
+}

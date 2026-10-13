@@ -9,6 +9,8 @@ static extern fun regex_compile(borrow pattern: string, flags: RegexFlags): usiz
 static extern fun regex_free(h: usize): void;
 @intrinsic("regex_find")
 static extern fun regex_find(h: usize, borrow input: string, pos: int): int[];
+@intrinsic("regex_test")
+static extern fun regex_test(h: usize, borrow input: string): int;
 @intrinsic("regex_find_all")
 static extern fun regex_find_all(h: usize, borrow input: string): int[];
 @intrinsic("regex_group_count")
@@ -47,7 +49,7 @@ public class Regex {
         this.engine = 0;
     }
 
-    fun find_at(input: string, pos: int): Option<RegexMatch> {
+    fun find_at(borrow input: string, pos: int): Option<RegexMatch> {
         let g = regex_find(this.engine, input, pos);
         if g.length == 0 {
             return Option.None;
@@ -55,8 +57,8 @@ public class Regex {
         return Option.Some(RegexMatch(g, this.ngroup));
     }
 
-    public fun test(input: string): bool {
-        return this.find_at(input, 0).is_some();
+    public fun test(borrow input: string): bool {
+        return regex_test(this.engine, input) != 0;
     }
 
     public fun replace(input: string, replacement: string): string {

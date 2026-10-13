@@ -123,16 +123,25 @@ __attribute__((cold, noinline)) dream_ptr dream_array_realloc(dream_ptr arr, int
  * dropped tail slots before `realloc` (the pointers go stale once the block moves), so truncated
  * elements do not stay retained until their slots happen to be overwritten. */
 __attribute__((cold, noinline)) dream_ptr dream_array_realloc_rc(dream_ptr arr, int32_t new_len,
-                                                                 int32_t esize, void (*release)(dream_ptr)) {
+                                                                 int32_t esize, void (*release)(dream_ptr),
+                                                                 int32_t inline_value) {
     int32_t old_len = arr ? dream_i32(arr)[0] : 0;
     (void)array_bytes(new_len, esize);
     if (arr && release && new_len < old_len) {
         for (int32_t i = new_len; i < old_len; i++) {
-            dream_ptr elem;
-            memcpy(&elem, (char *)dream_p(arr) + 4 + (size_t)i * (size_t)esize, sizeof(elem));
-            dream_ptr zero = 0;
-            memcpy((char *)dream_p(arr) + 4 + (size_t)i * (size_t)esize, &zero, sizeof(zero));
-            release(elem);
+            char *slot = (char *)dream_p(arr) + 4 + (size_t)i * (size_t)esize;
+            if (inline_value) {
+                /* Clear the owning slot before destructors can reenter its container. */
+                _Alignas(8) unsigned char removed[esize];
+                memcpy(removed, slot, (size_t)esize);
+                memset(slot, 0, (size_t)esize);
+                release((dream_ptr)(uintptr_t)removed);
+            } else {
+                dream_ptr elem;
+                memcpy(&elem, slot, sizeof(elem));
+                memset(slot, 0, sizeof(elem));
+                release(elem);
+            }
         }
         dream_i32(arr)[0] = new_len;
     }

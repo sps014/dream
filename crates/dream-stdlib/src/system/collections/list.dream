@@ -6,7 +6,13 @@ internal static class CollectionStorage {
 
     // Slot permutation has no ownership transition, including nested managed value fields.
     @intrinsic("array_slot_swap")
-    internal static extern fun swap<T>(borrow array: T[], left: int, right: int): void;
+    internal static extern fun exchange<T>(borrow array: T[], left: int, borrow other: T[], right: int): void;
+
+    @intrinsic("debug_get_ref_count")
+    internal static extern fun owners(borrow array: object): int;
+
+    @intrinsic("buffer_is_string")
+    internal static extern fun string_keys<T>(): bool;
 
     @intrinsic("buffer_zero")
     internal static extern fun zero<T>(): T;
@@ -106,6 +112,14 @@ public class List<T> : IndexedCollection<T> {
     // capacity is larger than `count` so the result's `.length` is the live element count.
     public fun take_array(): T[] {
         let n = this.count;
+        let storage = this.items;
+        // The list and this local each hold one token; additional tokens belong to views.
+        if CollectionStorage.owners(storage) == 2 {
+            this.items = Buffer.alloc<T>(0);
+            this.count = 0;
+            storage = Buffer.realloc<T>(storage, n);
+            return storage;
+        }
         let out = Buffer.alloc<T>(n);
         let i = 0;
         while i < n {
@@ -196,7 +210,7 @@ public class List<T> : IndexedCollection<T> {
         let lo = 0;
         let hi = this.count - 1;
         while lo < hi {
-            CollectionStorage.swap<T>(this.items, lo, hi);
+            CollectionStorage.exchange<T>(this.items, lo, this.items, hi);
             lo = lo + 1;
             hi = hi - 1;
         }

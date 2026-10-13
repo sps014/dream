@@ -35,6 +35,7 @@ const MODULE_STAGES: &[&str] = &[
     super::slice_measure::STAGE,
     STAGE_FIXPOINT,
     super::value_borrow::STAGE,
+    super::read_loans::STAGE,
     super::frame_alloc::STAGE,
     "construction",
     "borrowed-fields",

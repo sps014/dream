@@ -182,6 +182,7 @@ pub const ATTR_ARRAY_ELEMS_FILL: &str = "array_elems_fill";
 /// Checked extraction of a typed slot, transferring its token and zeroing the source.
 pub const ATTR_ARRAY_SLOT_TAKE: &str = "array_slot_take";
 /// Checked typed slot permutation, preserving the array's ownership tokens.
+pub const ATTR_BUFFER_IS_STRING: &str = "buffer_is_string";
 pub const ATTR_ARRAY_SLOT_SWAP: &str = "array_slot_swap";
 /// `Buffer.free<T>(arr)` — unconditional `$free` of an array's backing block, bypassing
 /// reference counting.
@@ -201,6 +202,7 @@ pub const ATTR_PANIC: &str = "dream_panic";
 pub const ATTR_REGEX_COMPILE: &str = "regex_compile";
 pub const ATTR_REGEX_FREE: &str = "regex_free";
 pub const ATTR_REGEX_FIND: &str = "regex_find";
+pub const ATTR_REGEX_TEST: &str = "regex_test";
 pub const ATTR_REGEX_FIND_ALL: &str = "regex_find_all";
 pub const ATTR_REGEX_GROUP_COUNT: &str = "regex_group_count";
 pub const ATTR_REGEX_NAME_COUNT: &str = "regex_name_count";
@@ -387,6 +389,8 @@ pub enum IntrinsicOp {
     ArrayElemsFill,
     /// Permutes two typed slots without changing their ownership.
     ArraySlotSwap,
+    /// Compile-time predicate used by internal storage specializations.
+    BufferIsString,
     /// Transfers one array slot into an owning result.
     ArraySlotTake,
     /// `Buffer.free<T>(arr)` (`@unsafe`) — unconditional `$free`, bypassing reference counting.
@@ -475,6 +479,7 @@ impl IntrinsicOp {
             ATTR_ARRAY_ELEMS_COPY => IntrinsicOp::ArrayElemsCopy,
             ATTR_ARRAY_ELEMS_FILL => IntrinsicOp::ArrayElemsFill,
             ATTR_ARRAY_SLOT_SWAP => IntrinsicOp::ArraySlotSwap,
+            ATTR_BUFFER_IS_STRING => IntrinsicOp::BufferIsString,
             ATTR_ARRAY_SLOT_TAKE => IntrinsicOp::ArraySlotTake,
             ATTR_FORCE_FREE => IntrinsicOp::ForceFree,
             ATTR_ARRAY_GET_UNCHECKED => IntrinsicOp::ArrayGetUnchecked,
@@ -486,6 +491,7 @@ impl IntrinsicOp {
             | ATTR_REGEX_FREE
             | ATTR_REGEX_FIND_ALL
             | ATTR_REGEX_FIND
+            | ATTR_REGEX_TEST
             | ATTR_REGEX_GROUP_COUNT
             | ATTR_REGEX_NAME_COUNT
             | ATTR_REGEX_NAME_AT

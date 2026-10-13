@@ -3,7 +3,9 @@
 use super::fx::{Fx, V};
 use super::ir::{Ty, Value};
 use crate::backend::shared::abi_types::{elem_size, mem_ty, runtime_c_name};
-use crate::backend::shared::glue::{release_sym, retain_sym};
+use crate::backend::shared::glue::{
+    inline_release_sym, release_sym, retain_sym, value_walk_nonempty,
+};
 use crate::backend::shared::panic_msgs;
 use crate::backend::shared::protocol_names::{HashFn, hash_fn, runtime_tag, to_string_fn};
 use crate::{Operand, Rvalue, UnOp};
@@ -287,10 +289,25 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let arr = self.operand(array);
                 let len = self.operand(new_len);
                 // RC-tracked elements must release dropped tail slots on shrink.
-                if self.is_rc(*elem_ty) {
-                    let rel = release_sym(&self.l.cx, *elem_ty);
+                if self.is_rc(*elem_ty)
+                    || (self.is_value(*elem_ty) && value_walk_nonempty(&self.l.cx, *elem_ty))
+                {
+                    let rel = if self.is_value(*elem_ty) {
+                        inline_release_sym(*elem_ty)
+                    } else {
+                        release_sym(&self.l.cx, *elem_ty)
+                    };
                     let f = V::s(self.l.fn_ref(&rel));
-                    return self.call_v("dream_array_realloc_rc", &[arr, len, V::i32(es), f]);
+                    return self.call_v(
+                        "dream_array_realloc_rc",
+                        &[
+                            arr,
+                            len,
+                            V::i32(es),
+                            f,
+                            V::i32(i64::from(self.is_value(*elem_ty))),
+                        ],
+                    );
                 }
                 self.call_v("dream_array_realloc", &[arr, len, V::i32(es)])
             }
@@ -532,7 +549,14 @@ impl<'l, 'a> Fx<'l, 'a> {
         }
     }
 
-    pub fn union_new_at(&mut self, dest: &V, ty: TypeId, variant: usize, args: &[Operand]) {
+    pub fn union_new_at(
+        &mut self,
+        dest: &V,
+        ty: TypeId,
+        variant: usize,
+        args: &[Operand],
+        borrow_refs: bool,
+    ) {
         let u = self
             .l
             .cx
@@ -556,7 +580,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let src = self.operand(arg);
                 let sp = self.ptr(&src);
                 self.memcpy(&at, &sp, &Value::i64(fsz));
-                if !matches!(arg, Operand::Copy(crate::Place::Local(_))) {
+                if !borrow_refs && !matches!(arg, Operand::Copy(crate::Place::Local(_))) {
                     let atv = self.as_ref(&V::s(at));
                     self.value_refs(fld.ty, &atv, true);
                 }
@@ -566,7 +590,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             let val = self.operand(arg);
             let align = super::fx::align_at(&self.h(), fld.offset as i64).min(PAYLOAD_ALIGN);
             self.store_mem(m, &at, &val, align);
-            if self.is_rc(fld.ty) {
+            if !borrow_refs && self.is_rc(fld.ty) {
                 let loaded = self.load_mem(m, &at, align);
                 let sym = retain_sym(&self.l.cx, fld.ty);
                 self.call(sym, &[loaded]);
@@ -605,7 +629,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             .size;
         let tag = self.l.cx.type_tag(ty);
         let o = self.call_v("dream_malloc", &[V::i64(size as i64), V::i32(tag as i64)]);
-        self.union_new_at(&o, ty, variant, args);
+        self.union_new_at(&o, ty, variant, args, false);
         o
     }
 

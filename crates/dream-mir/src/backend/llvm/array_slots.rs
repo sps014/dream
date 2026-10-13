@@ -40,10 +40,20 @@ impl Fx<'_, '_> {
         elem_ty: TypeId,
         array: &Operand,
         left: &Operand,
+        other_array: &Operand,
         right: &Operand,
     ) {
         let size = elem_size(&self.l.cx, elem_ty) as i64;
+        let (
+            Operand::Copy(crate::Place::Local(left_owner)),
+            Operand::Copy(crate::Place::Local(right_owner)),
+        ) = (array, other_array)
+        else {
+            crate::internal_error!("slot permutation requires normalized arrays");
+        };
+        let (left_index, right_index) = (left.clone(), right.clone());
         let array = self.operand(array);
+        let other = self.operand(other_array);
         let left = self.operand(left);
         let right = self.operand(right);
         let message = self.str_v(panic_msgs::INDEX_OUT_OF_BOUNDS);
@@ -60,7 +70,36 @@ impl Fx<'_, '_> {
                 at.clone(),
             ],
         );
-        let b = self.call_v("dream_array_at", &[array, right, V::i32(size), message, at]);
+        let b = self.call_v(
+            "dream_array_at",
+            &[other.clone(), right, V::i32(size), message, at],
+        );
+        let cross_array = self.w.icmp("ne", &array.v, &other.v);
+        self.if_then(&cross_array, |fx| {
+            let load = |fx: &mut Self, p: &Value| {
+                if fx.is_value(elem_ty) {
+                    fx.ptr_value(p)
+                } else {
+                    fx.load_mem(
+                        crate::backend::shared::abi_types::mem_ty(&fx.l.cx, elem_ty),
+                        p,
+                        4,
+                    )
+                }
+            };
+            let lhs = load(fx, &a.v);
+            let rhs = load(fx, &b.v);
+            fx.publish_store(
+                &crate::Place::index(*right_owner, right_index.clone()),
+                elem_ty,
+                &lhs,
+            );
+            fx.publish_store(
+                &crate::Place::index(*left_owner, left_index.clone()),
+                elem_ty,
+                &rhs,
+            );
+        });
         let different = self.w.icmp("ne", &a.v, &b.v);
         self.if_then(&different, |fx| {
             // No user code or ownership observation can run while the permutation is open.

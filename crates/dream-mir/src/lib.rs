@@ -282,6 +282,7 @@ pub enum Statement {
         elem_ty: TypeId,
         array: Operand,
         left: Operand,
+        other_array: Operand,
         right: Operand,
     },
     /// `Buffer.free<T>(arr)` (`@unsafe`) — unconditionally `$free`s `array`'s backing block via the

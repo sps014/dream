@@ -1,4 +1,5 @@
 use super::*;
+use crate::Const;
 use crate::build::FunctionBuilder;
 
 fn local(l: Local) -> Operand {
@@ -79,11 +80,35 @@ fn noncapturing_box_resolves_with_borrowed_abi() {
 }
 
 #[test]
-fn capture_and_reassignment_stay_indirect() {
-    for (capture, reassign) in [(true, false), (false, true)] {
+fn reassigned_boxes_stay_indirect() {
+    for (capture, reassign) in [(true, true), (false, true)] {
         let (mut mir, i) = module(capture, reassign);
         assert!(!run(&mut mir, &i));
     }
+}
+
+#[test]
+fn captured_box_keeps_its_environment_and_resolves_the_code() {
+    let (mut mir, i) = module(true, false);
+    mir.functions[0].blocks[0].stmts.insert(
+        3,
+        Statement::Assign(
+            Place::Global(crate::Global(0)),
+            Rvalue::Use(Operand::Const(Const::Long(123))),
+        ),
+    );
+    assert!(run(&mut mir, &i));
+    assert!(matches!(
+        mir.functions[0].blocks[0].stmts[3],
+        Statement::Assign(
+            Place::Global(crate::Global(0)),
+            Rvalue::Use(Operand::Const(Const::Long(123)))
+        )
+    ));
+    assert!(matches!(
+        mir.functions[0].blocks[0].stmts[4],
+        Statement::Assign(_, Rvalue::Call { .. })
+    ));
 }
 
 #[test]

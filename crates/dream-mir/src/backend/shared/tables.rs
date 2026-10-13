@@ -234,9 +234,14 @@ fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             strings_in_op(count, out);
         }
         Statement::ArraySlotSwap {
-            array, left, right, ..
+            array,
+            left,
+            other_array,
+            right,
+            ..
         } => {
             strings_in_op(array, out);
+            strings_in_op(other_array, out);
             strings_in_op(left, out);
             strings_in_op(right, out);
         }

@@ -272,9 +272,14 @@ fn remap_stmt(s: &mut Statement, base: LocalMap<'_>) {
             remap_operand(count, base);
         }
         Statement::ArraySlotSwap {
-            array, left, right, ..
+            array,
+            left,
+            other_array,
+            right,
+            ..
         } => {
             remap_operand(array, base);
+            remap_operand(other_array, base);
             remap_operand(left, base);
             remap_operand(right, base);
         }

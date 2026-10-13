@@ -187,9 +187,14 @@ fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
             read_operand(count, read);
         }
         Statement::ArraySlotSwap {
-            array, left, right, ..
+            array,
+            left,
+            other_array,
+            right,
+            ..
         } => {
             read_operand(array, read);
+            read_operand(other_array, read);
             read_operand(left, read);
             read_operand(right, read);
         }

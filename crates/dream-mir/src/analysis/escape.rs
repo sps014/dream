@@ -312,7 +312,9 @@ fn stmt_uses(
         }
         Statement::Print { arg, .. } => all_global([arg], mark),
         Statement::ArrayElemsCopy { dst, src, .. } => all_global([dst, src], mark),
-        Statement::ArraySlotSwap { array, .. } => all_global([array], mark),
+        Statement::ArraySlotSwap {
+            array, other_array, ..
+        } => all_global([array, other_array], mark),
         Statement::ArrayElemsFill { dst, .. } => all_global([dst], mark),
         Statement::ForceFree(op) => all_global([op], mark),
         Statement::SimdV128 {

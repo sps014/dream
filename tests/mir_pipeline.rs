@@ -507,10 +507,12 @@ fn typed_slot_swap_emits_checks_without_arc_transitions() {
     let arr = ctx.interner.array(string);
     let mut b = dream_mir::build::FunctionBuilder::new("swap_slots", ctx.interner.void());
     let a = b.new_param(arr, None);
+    let other = b.new_param(arr, None);
     b.push(Statement::ArraySlotSwap {
         elem_ty: string,
         array: Operand::Copy(Place::Local(a)),
         left: Operand::Const(dream_mir::Const::Int(0)),
+        other_array: Operand::Copy(Place::Local(other)),
         right: Operand::Const(dream_mir::Const::Int(1)),
     });
     b.terminate(Terminator::Return(None));

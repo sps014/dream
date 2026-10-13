@@ -1,9 +1,9 @@
-//! Resolve non-capturing function boxes and closed, constructor-initialized function fields.
+//! Resolve function boxes and closed, constructor-initialized function fields.
 //! A field invariant is usable only for types confined to typed, closed-world code.
 
 use super::FunctionAnalyses;
 use crate::{
-    BlockId, Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
+    BlockId, Callee, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
 };
 use dream_abi::intrinsics::IntrinsicOp;
 use dream_types::{DefId, TypeId, TypeInterner};
@@ -144,9 +144,7 @@ fn rv_target(
         }),
         Rvalue::Use(o) | Rvalue::Cast(o, _, _) => op_target(o, f, locals, fields),
         Rvalue::Call { callee, args } => match intrinsics.get(&callee.def) {
-            Some(IntrinsicOp::FuncboxNew)
-                if matches!(args.get(1), Some(Operand::Const(Const::Int(0)))) =>
-            {
+            Some(IntrinsicOp::FuncboxNew) => {
                 let mut target = op_target(args.first()?, f, locals, fields)?;
                 if target.boxed {
                     return None;

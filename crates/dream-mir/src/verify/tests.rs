@@ -411,6 +411,7 @@ fn typed_slot_operations_validate_types_and_read_live_owners() {
             elem_ty: if bad_element { i.string() } else { int },
             array: copy(a),
             left: Operand::Const(Const::Int(0)),
+            other_array: copy(a),
             right: Operand::Const(Const::Int(0)),
         });
         f.terminate(Terminator::Return(None));

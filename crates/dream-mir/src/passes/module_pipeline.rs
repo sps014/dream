@@ -138,6 +138,8 @@ pub fn run_function_pipelines(
 /// ([`frame_alloc`]). Invalid ownership or allocation regions are compiler bugs; final MIR is then
 /// checked by [`crate::verify`] in debug builds of the compiler, or when `DREAM_VERIFY_MIR=1`.
 pub fn run_late_module_passes(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirDump) {
+    let _ = read_loans::run(mir, interner);
+    dump.module(read_loans::STAGE, mir, interner);
     // Scalar replacement and CFG cleanup expose container owners that the earlier
     // post-inline analysis could not prove live across an interface call.
     let _ = rc::held::run(mir, interner);

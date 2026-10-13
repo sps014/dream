@@ -98,6 +98,18 @@ fn eligible(
     }
     let g = &mir.functions[ci];
     let caller = &mir.functions[fi];
+    // Program callbacks keep their own panic locations when called from stdlib code.
+    // SourceLine cannot carry a different file through an inlined body.
+    if caller
+        .file
+        .as_deref()
+        .is_some_and(dream_stdlib::is_std_source)
+        && g.file
+            .as_deref()
+            .is_some_and(|file| !dream_stdlib::is_std_source(file))
+    {
+        return false;
+    }
     if g.is_async {
         return false; // async bodies are stubs; real control flow lives in the HIR snapshot
     }

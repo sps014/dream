@@ -180,8 +180,17 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
                 | subst_operand(count, known)
         }
         Statement::ArraySlotSwap {
-            array, left, right, ..
-        } => subst_operand(array, known) | subst_operand(left, known) | subst_operand(right, known),
+            array,
+            left,
+            other_array,
+            right,
+            ..
+        } => {
+            subst_operand(array, known)
+                | subst_operand(left, known)
+                | subst_operand(other_array, known)
+                | subst_operand(right, known)
+        }
         Statement::ArrayElemsFill {
             dst,
             dst_off,

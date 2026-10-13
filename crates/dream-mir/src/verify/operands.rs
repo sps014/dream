@@ -157,8 +157,12 @@ pub(super) fn other_stmt_locals(s: &Statement) -> Vec<u32> {
             ..
         } => ops.extend([dst, dst_off, src, src_off, count]),
         Statement::ArraySlotSwap {
-            array, left, right, ..
-        } => ops.extend([array, left, right]),
+            array,
+            left,
+            other_array,
+            right,
+            ..
+        } => ops.extend([array, left, other_array, right]),
         Statement::ArrayElemsFill {
             dst,
             dst_off,

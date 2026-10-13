@@ -40,6 +40,7 @@ mod param_modes;
 mod param_modes_tests;
 mod prop;
 pub(crate) mod rc;
+mod read_loans;
 mod scalar_operands;
 mod sccp;
 mod simplify_cfg;

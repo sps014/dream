@@ -95,6 +95,10 @@ pub(crate) fn release_into_sym(cx: &Cx<'_>, ty: TypeId) -> Option<String> {
     Some(format!("{final_sym}_into"))
 }
 
+pub(crate) fn inline_release_sym(ty: TypeId) -> String {
+    format!("release_inline_t{}", ty.0)
+}
+
 pub(crate) fn release_sym(cx: &Cx<'_>, ty: TypeId) -> String {
     let interner = cx.interner;
     let mir = cx.mir;

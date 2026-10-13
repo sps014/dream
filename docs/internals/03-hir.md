@@ -68,7 +68,7 @@ lowering, after the complete target-specific table exists.
 
 `HFunction` carries `def` (its `DefId`), the source/table `name`, its resolved `symbol`, the `instance` args (empty unless this is a monomorphized copy), typed `params`, the `ret` type, a `locals` table, the structured `body`, and `is_async`.
 
-Each `HParam` records `ParamMode::{Borrow, Share, Sink, Ref}`. Sema determines the mode from the parameter contract and resolved type; MIR lowering applies it directly. There is no MIR pass that infers or rewrites parameter modes from a function body.
+Each `HParam` records `ParamMode::{Borrow, Share, Sink, Ref}`. Sema determines the mode from the parameter contract and resolved type; MIR lowering applies it directly. In release builds, the MIR `param-modes` pass can subsequently prove that an internal sink parameter does not escape and change its calling convention to borrowing before ownership insertion. It updates direct callers together with the callee; source-level contracts and exported signatures stay unchanged.
 
 `LocalId(u32)` indexes locals uniquely within a function; parameters are just the first locals. `HLocal`/`HParam` record the declared `ty` so MIR's `RcInsertion` knows which locals are references and the backend knows how to allocate slots.
 

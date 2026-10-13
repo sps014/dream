@@ -465,6 +465,50 @@ fn rc_golden_noninline_string_reader_has_no_rc() {
     }
 }
 
+#[test]
+fn rc_golden_parameter_borrowing_is_independent_of_returned_aliases() {
+    let code = r#"
+        @noinline fun select(read: string, kept: string): string {
+            if read.length == 0 { return kept; }
+            return kept;
+        }
+        @noinline fun length(values: string[]): int { return values[0].length; }
+        @export fun select_call(borrow read: string, borrow kept: string): string {
+            return select(read, kept);
+        }
+        @export fun array_call(borrow values: string[]): int { return length(values); }
+    "#;
+    compile_test_pipeline(code, |hir, interner| {
+        let mut mir = dream_mir::lower::lower_program(hir, interner);
+        mir.profile = dream_abi::profile::CompileProfile::Release;
+        dream_mir::passes::optimize_module_opts(
+            &mut mir,
+            interner,
+            false,
+            &mut dream_mir::passes::MirDump::disabled(),
+        );
+        let select = mir
+            .functions
+            .iter()
+            .find(|f| f.name == "select")
+            .expect("select body");
+        assert!(!select.locals[select.params[0].0 as usize].is_take);
+        assert!(select.locals[select.params[1].0 as usize].is_take);
+        let length = mir
+            .functions
+            .iter()
+            .find(|f| f.name == "length")
+            .expect("length body");
+        assert!(!length.locals[length.params[0].0 as usize].is_take);
+    });
+    let ir = emit_arc_release(code);
+    for name in ["length", "array_call"] {
+        let body = ir_func_body(&ir, name);
+        assert_eq!(count_in(body, "@dream_retain("), 0, "{body}");
+        assert_eq!(count_in(body, "@dream_release("), 0, "{body}");
+    }
+}
+
 fn emit_arc_release(code: &str) -> String {
     compile_test_pipeline(code, |hir, interner| {
         let mut mir = dream_mir::lower::lower_program(hir, interner);

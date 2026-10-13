@@ -43,6 +43,14 @@ Write nothing extra on a parameter and the callee **takes** the value (a **sink*
 
 Mark a parameter `borrow` when the function only **looks** — you keep the value.
 
+In release builds, the compiler can infer a borrowed calling convention for internal helpers
+without a `borrow` annotation. It proves each parameter independently through aliases and
+known direct calls, including recursion. Returning an alias keeps that parameter owning while
+unrelated parameters can still borrow. The proof is conservative around managed mutations,
+unknown calls, destructors and suspension; exported functions keep their declared ownership
+contract. Explicit `borrow` remains useful for interface contracts and cases inference cannot
+prove. This optimization does not change the source-level sink-default rules.
+
 | On the parameter | Meaning |
 |------------------|---------|
 | *(nothing)* | Sink — callee takes it. Move if this is the last use, otherwise copy. |

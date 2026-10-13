@@ -1,10 +1,12 @@
-//! Scalar-array and immutable-string kernels cannot release an argument's owner through a callback, global store or
-//! managed element. Their closed call graph can therefore borrow arrays, including on recursive
-//! edges, without moving an observable destructor or invalidating a caller-held reference.
+//! Parameter-specific borrowing proofs run before ownership insertion. A closed synchronous
+//! call graph without observable cleanup can pass a nonescaping parameter at +0; returned
+//! aliases and ownership transfers keep their +1 independently of other parameters.
+
+mod proof;
 
 use crate::analysis::function_key::FunctionKeyRef;
-use crate::{Callee, Mir, MirFunction, Place, Rvalue, Statement, Terminator};
-use dream_types::{TyKind, TypeInterner};
+use crate::{Callee, Mir, Rvalue, Statement};
+use dream_types::TypeInterner;
 use indexmap::{IndexMap, IndexSet};
 
 pub(crate) const STAGE: &str = "param-modes";
@@ -17,163 +19,113 @@ fn key(callee: &Callee) -> FunctionKeyRef<'_> {
     }
 }
 
-fn scalar(ty: dream_types::TypeId, interner: &TypeInterner) -> bool {
-    matches!(interner.kind(ty), TyKind::Void)
-        || (matches!(interner.kind(ty), TyKind::Prim(_)) && !interner.is_rc_tracked(ty))
-}
-
-fn scalar_array(ty: dream_types::TypeId, interner: &TypeInterner) -> bool {
-    matches!(interner.kind(ty), TyKind::Array(elem) if scalar(*elem, interner))
-}
-
-fn kernel_type(
-    ty: dream_types::TypeId,
-    interner: &TypeInterner,
-    records: &IndexSet<dream_types::TypeId>,
-) -> bool {
-    scalar(ty, interner)
-        || scalar_array(ty, interner)
-        || ty == interner.string()
-        || records.contains(&ty)
-}
-
-fn kernel(
-    f: &MirFunction,
-    interner: &TypeInterner,
-    records: &IndexSet<dream_types::TypeId>,
-) -> bool {
-    if f.is_async
-        || !scalar(f.ret, interner)
-        || f.locals
-            .iter()
-            .any(|d| d.is_ref || !kernel_type(d.ty, interner, records))
-    {
-        return false;
-    }
-    f.blocks.iter().all(|block| {
-        block.stmts.iter().all(|stmt| match stmt {
-            Statement::Assign(place, rv) => {
-                matches!(place, Place::Local(_) | Place::Index { .. })
-                    && matches!(
-                        rv,
-                        Rvalue::Use(_)
-                            | Rvalue::Binary(..)
-                            | Rvalue::CheckedBinary(..)
-                            | Rvalue::Unary(..)
-                            | Rvalue::CheckedNeg(_)
-                            | Rvalue::Cast(..)
-                            | Rvalue::ArrayLen(_)
-                            | Rvalue::StrLen(_)
-                            | Rvalue::CharAt(..)
-                            | Rvalue::ByteAt(..)
-                            | Rvalue::Select { .. }
-                            | Rvalue::Call { .. }
-                    )
-            }
-            Statement::Call { .. } | Statement::Nop | Statement::SourceLine(_) => true,
-            _ => false,
-        }) && matches!(
-            block.terminator,
-            Terminator::Goto(_)
-                | Terminator::If { .. }
-                | Terminator::Switch { .. }
-                | Terminator::Return(_)
-                | Terminator::Unreachable
-        )
-    })
-}
-
-fn callees(f: &MirFunction) -> impl Iterator<Item = &Callee> {
-    f.blocks
-        .iter()
-        .flat_map(|b| &b.stmts)
-        .filter_map(|s| match s {
-            Statement::Call { callee, .. } | Statement::Assign(_, Rvalue::Call { callee, .. }) => {
-                Some(callee)
-            }
-            _ => None,
-        })
-}
-
 pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
     if mir.profile.is_debug() {
         return false;
     }
-    // No user cleanup can be delayed when these flat records lose a temporary ownership token.
-    let records: IndexSet<_> = mir
+    let proofs: IndexMap<Key, _> = mir
         .functions
         .iter()
-        .flat_map(|f| &f.locals)
-        .map(|d| d.ty)
-        .filter(|&ty| {
-            matches!(interner.kind(ty), TyKind::Struct(..))
-                && mir.layouts.get(ty).is_some_and(|layout| {
-                    !layout.has_destructor()
-                        && layout.fields.iter().all(|field| {
-                            !field.is_weak
-                                && !field.is_unowned
-                                && (scalar(field.ty, interner)
-                                    || scalar_array(field.ty, interner)
-                                    || field.ty == interner.string())
-                        })
-                })
+        .map(|f| {
+            (
+                (f.def, f.instance.clone()),
+                proof::Proof::of(f, interner, &mir.layouts),
+            )
         })
         .collect();
-    // Starting optimistically admits a recursive component; removing unsafe callees propagates
-    // back to every caller before any ownership mode is changed.
-    let mut candidates: IndexSet<Key> = mir
+    // NewCtor has no concrete instance key and omits the receiver in its parameter flags.
+    // Its ABI cannot be changed by a proof keyed on a concrete function instance.
+    let constructors: IndexSet<_> = mir
         .functions
         .iter()
-        .filter(|f| {
-            kernel(f, interner, &records) && !mir.exports.iter().any(|(def, _)| *def == f.def)
+        .chain(&mir.polls)
+        .flat_map(|f| &f.blocks)
+        .flat_map(|b| &b.stmts)
+        .filter_map(|s| match s {
+            Statement::Assign(_, Rvalue::New { ctor: Some(c), .. }) => Some(c.def),
+            _ => None,
         })
-        .map(|f| (f.def, f.instance.clone()))
+        .collect();
+    // Reject unsafe components before changing any ABI, including recursive backedges.
+    let mut closed: IndexSet<_> = proofs
+        .iter()
+        .filter(|(_, p)| p.safe)
+        .map(|(k, _)| k.clone())
         .collect();
     loop {
-        let rejected: Vec<_> = mir
-            .functions
+        let rejected: Vec<_> = proofs
             .iter()
-            .filter(|f| {
-                candidates.contains(&FunctionKeyRef {
-                    def: f.def,
-                    args: &f.instance,
-                }) && callees(f).any(|c| !candidates.contains(&key(c)))
+            .filter(|(k, p)| {
+                closed.contains(*k) && p.calls.iter().any(|c| !closed.contains(&key(&c.callee)))
             })
-            .map(|f| (f.def, f.instance.clone()))
+            .map(|(k, _)| k.clone())
             .collect();
         if rejected.is_empty() {
             break;
         }
         for k in rejected {
-            candidates.shift_remove(&k);
+            closed.shift_remove(&k);
         }
     }
-    let mut modes: IndexMap<Key, Vec<bool>> = IndexMap::new();
+    let mut borrowed: IndexMap<Key, Vec<bool>> = proofs
+        .iter()
+        .map(|(k, p)| {
+            let fixed_abi =
+                constructors.contains(&k.0) || mir.exports.iter().any(|(def, _)| *def == k.0);
+            (
+                k.clone(),
+                p.parameters
+                    .iter()
+                    .map(|&yes| yes && closed.contains(k) && !fixed_abi)
+                    .collect(),
+            )
+        })
+        .collect();
+    loop {
+        let mut rejected = Vec::new();
+        for (k, p) in &proofs {
+            for (parameter, &yes) in borrowed[k].iter().enumerate() {
+                if yes
+                    && p.calls.iter().any(|call| {
+                        call.arguments.iter().enumerate().any(|(index, roots)| {
+                            roots.contains(&parameter)
+                                && call.callee.take_params.get(index).copied().unwrap_or(true)
+                                && !borrowed
+                                    .get(&key(&call.callee))
+                                    .and_then(|v| v.get(index))
+                                    .copied()
+                                    .unwrap_or(false)
+                        })
+                    })
+                {
+                    rejected.push((k.clone(), parameter));
+                }
+            }
+        }
+        if rejected.is_empty() {
+            break;
+        }
+        for (k, parameter) in rejected {
+            borrowed.get_mut(&k).expect("proof key")[parameter] = false;
+        }
+    }
+    let mut modes = IndexMap::new();
     let mut changed = false;
     for f in &mut mir.functions {
-        if !candidates.contains(&FunctionKeyRef {
-            def: f.def,
-            args: &f.instance,
-        }) {
-            continue;
-        }
-        for p in &f.params {
+        let k = (f.def, f.instance.clone());
+        for (index, p) in f.params.iter().enumerate() {
             let d = &mut f.locals[p.0 as usize];
-            if d.is_take
-                && (scalar_array(d.ty, interner)
-                    || d.ty == interner.string()
-                    || records.contains(&d.ty))
-            {
+            if d.is_take && borrowed[&k][index] {
                 d.is_take = false;
                 changed = true;
             }
         }
         modes.insert(
-            (f.def, f.instance.clone()),
+            k,
             f.params
                 .iter()
                 .map(|p| f.locals[p.0 as usize].is_take)
-                .collect(),
+                .collect::<Vec<_>>(),
         );
     }
     for f in mir.functions.iter_mut().chain(&mut mir.polls) {

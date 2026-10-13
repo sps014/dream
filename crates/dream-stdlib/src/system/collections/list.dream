@@ -143,11 +143,7 @@ public class List<T> : IndexedCollection<T> {
             return Option.None;
         }
         let i = this.count - 1;
-        let last = Buffer.get_unchecked<T>(this.items, i);
-        // Zero the slot after copying out. Needed for value structs with reference fields: a bare
-        // `count--` would leave a second owner in dead capacity and double-release on the next
-        // overwrite or when the backing array is dropped.
-        Buffer.set_unchecked<T>(this.items, i, CollectionStorage.zero<T>());
+        let last = CollectionStorage.take<T>(this.items, i);
         this.count = i;
         return Option.Some(last);
     }

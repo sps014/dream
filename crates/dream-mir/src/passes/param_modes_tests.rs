@@ -139,3 +139,44 @@ fn unsafe_callee_rejection_propagates_through_recursive_component() {
     assert!(!param_modes::run(&mut mir, &i));
     assert!(mir.functions.iter().all(|f| f.locals[0].is_take));
 }
+
+#[test]
+fn string_reader_borrows_but_escaping_and_opaque_helpers_do_not() {
+    let i = TypeInterner::new();
+    for unsafe_use in 0..4 {
+        let mut b = FunctionBuilder::new("length", i.int());
+        b.set_def(DefId::root(10), vec![]);
+        let s = b.new_take_param(i.string(), None);
+        let n = b.new_local(i.int(), None);
+        b.assign(
+            Place::Local(n),
+            Rvalue::StrLen(Operand::Copy(Place::Local(s))),
+        );
+        match unsafe_use {
+            1 => b.assign(
+                Place::Global(Global(0)),
+                Rvalue::Use(Operand::Copy(Place::Local(s))),
+            ),
+            2 => b.push(Statement::Call {
+                callee: Callee {
+                    def: DefId::root(999),
+                    args: vec![],
+                    ret: i.void(),
+                    take_params: vec![false],
+                },
+                args: vec![Operand::Copy(Place::Local(s))],
+            }),
+            _ => {}
+        }
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(n)))));
+        let mut mir = module(b.finish());
+        if unsafe_use == 3 {
+            mir.exports.push((DefId::root(10), "length".into()));
+        }
+        assert_eq!(param_modes::run(&mut mir, &i), unsafe_use == 0);
+        assert_eq!(
+            mir.functions[0].locals[s.0 as usize].is_take,
+            unsafe_use != 0
+        );
+    }
+}

@@ -86,6 +86,81 @@ fn capture_and_reassignment_stay_indirect() {
     }
 }
 
+#[test]
+fn callback_parameter_requires_every_direct_caller_to_agree() {
+    for unknown_caller in [false, true] {
+        let (mut mir, i) = module(false, false);
+        let caller = &mut mir.functions[0];
+        let boxed = Local(1);
+        let sig = caller.local_ty(boxed);
+        caller.blocks[0].stmts[3] = Statement::Assign(
+            Place::Local(Local(3)),
+            Rvalue::Call {
+                callee: callee(4, i.int()),
+                args: vec![local(boxed)],
+            },
+        );
+        let mut b = FunctionBuilder::new("dispatch", i.int());
+        b.set_def(DefId::root(4), vec![]);
+        let p = b.new_param(sig, None);
+        let target = b.new_temp(i.int());
+        b.assign(
+            Place::Local(target),
+            Rvalue::Call {
+                callee: callee(3, i.int()),
+                args: vec![local(p)],
+            },
+        );
+        let result = b.new_temp(i.int());
+        b.assign(
+            Place::Local(result),
+            Rvalue::IndirectCall {
+                target: local(target),
+                args: vec![Operand::Const(Const::Int(42))],
+                sig,
+            },
+        );
+        b.terminate(Terminator::Return(Some(local(result))));
+        mir.functions.push(b.finish());
+        if unknown_caller {
+            let mut b = FunctionBuilder::new("other", i.int());
+            let p = b.new_param(sig, None);
+            b.push(Statement::Call {
+                callee: callee(4, i.int()),
+                args: vec![local(p)],
+            });
+            b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(0)))));
+            mir.functions.push(b.finish());
+        }
+        run(&mut mir, &i);
+        let direct = matches!(
+            mir.functions[1].blocks[0].stmts[1],
+            Statement::Assign(_, Rvalue::Call { .. })
+        );
+        assert_eq!(direct, !unknown_caller);
+    }
+}
+
+#[test]
+fn passing_a_box_by_reference_invalidates_its_target() {
+    let (mut mir, i) = module(false, false);
+    let ty = mir.functions[0].local_ty(Local(1));
+    let mut b = FunctionBuilder::new("replace", i.void());
+    b.set_def(DefId::root(5), vec![]);
+    let p = b.new_ref_param(ty, None);
+    b.assign(Place::Local(p), Rvalue::Use(Operand::Const(Const::Null)));
+    b.terminate(Terminator::Return(None));
+    mir.functions.push(b.finish());
+    mir.functions[0].blocks[0].stmts.insert(
+        2,
+        Statement::Call {
+            callee: callee(5, i.void()),
+            args: vec![local(Local(1))],
+        },
+    );
+    assert!(!run(&mut mir, &i));
+}
+
 fn with_field() -> (Mir, TypeInterner) {
     let (mut mir, mut i) = module(false, false);
     let ty = i.struct_ty(DefId::root(10), vec![]);

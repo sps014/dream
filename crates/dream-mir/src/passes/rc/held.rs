@@ -51,6 +51,8 @@ enum Slot {
     Field(TypeId, u32),
     /// An element of this array type.
     Elem(TypeId),
+    /// A strong field reached through a by-reference array element.
+    ElemField(TypeId, u32),
     /// An (immutable) union payload.
     Payload,
     /// The parameter itself: no heap store can replace it, only rebinding or releasing it.
@@ -164,12 +166,14 @@ fn candidates(
     // escapes when `dest` ends up outside the snapshot's class.
     let mut local_moves: Vec<(u32, u32)> = Vec::new();
     let mut other_defs: IndexSet<u32> = IndexSet::new();
+    let mut nonnull_defs = params.clone();
     for block in &f.blocks {
         for (si, stmt) in block.stmts.iter().enumerate() {
             match stmt {
                 Statement::Assign(Place::Local(d), rv)
                     if !matches!(rv, Rvalue::Use(Operand::Const(Const::Null))) =>
                 {
+                    nonnull_defs.insert(d.0);
                     let retained = retained_after(&block.stmts[si + 1..], d.0);
                     match rv {
                         Rvalue::Use(op) | Rvalue::Cast(op, _, _)
@@ -183,6 +187,16 @@ fn candidates(
                         Rvalue::Move { src, .. } if src.0 != d.0 && !retained => {
                             alias_defs.entry(d.0).or_default().push(src.0);
                             local_moves.push((d.0, src.0));
+                        }
+                        Rvalue::UnionField { base, .. }
+                            if local_of(base).is_some_and(|s| {
+                                interner.is_niche_union(f.locals[s as usize].ty)
+                            }) && !retained =>
+                        {
+                            alias_defs
+                                .entry(d.0)
+                                .or_default()
+                                .push(local_of(base).expect("local"));
                         }
                         _ => {
                             other_defs.insert(d.0);
@@ -244,7 +258,9 @@ fn candidates(
                 if params.contains(&y)
                     || other_defs.contains(&y)
                     || own_retain
-                    || !srcs.iter().all(|s| class.contains(s))
+                    || !srcs
+                        .iter()
+                        .all(|s| class.contains(s) || !nonnull_defs.contains(s))
                 {
                     ok = false;
                     break;
@@ -295,6 +311,27 @@ fn load_of(f: &MirFunction, rv: &Rvalue, layouts: &LayoutTable) -> Option<Snapsh
             let fl = layouts.get(ty)?.fields.get(*field)?;
             if fl.is_weak || fl.is_unowned {
                 return None;
+            }
+            if f.locals[base.0 as usize].is_ref {
+                let mut array = None;
+                for s in f.blocks.iter().flat_map(|b| &b.stmts) {
+                    if let Statement::Assign(Place::Local(d), rv) = s
+                        && d == base
+                    {
+                        let Rvalue::Use(Operand::Copy(Place::Index { base: a, .. })) = rv else {
+                            return None;
+                        };
+                        if array.is_some_and(|old| old != a.0) {
+                            return None;
+                        }
+                        array = Some(a.0);
+                    }
+                }
+                let array = array?;
+                return Some(Snapshot {
+                    base: array,
+                    slot: Slot::ElemField(f.locals[array as usize].ty, *field as u32),
+                });
             }
             Some(Snapshot {
                 base: base.0,
@@ -517,9 +554,11 @@ impl Check<'_> {
                 Effect::Top | Effect::ObserveOwnership => false,
                 Effect::Store(b, field) => {
                     self.snap.slot != Slot::Field(self.f.local_ty(b), field)
-                        && !self
-                            .field_pin()
-                            .is_some_and(|(owner, f)| b.0 == owner && field == f)
+                        && !matches!(self.snap.slot, Slot::ElemField(arr, f)
+                            if self.interner.kind(arr) == &TyKind::Array(self.f.local_ty(b)) && f == field)
+                        && !self.field_pin().is_some_and(|(owner, f)| {
+                            self.f.local_ty(b) == self.f.locals[owner as usize].ty && field == f
+                        })
                 }
                 Effect::SlotStore(ty) => !self.hits_elem(ty),
                 // A callee may also release anything, running any `del`.
@@ -593,7 +632,7 @@ impl Check<'_> {
     /// Array pointer loaded only from one field of one object. The element stays alive while
     /// that object does, even when the pointer local itself is dead between reloads.
     fn field_pin(&self) -> Option<(u32, u32)> {
-        if !matches!(self.snap.slot, Slot::Elem(_)) {
+        if !matches!(self.snap.slot, Slot::Elem(_) | Slot::ElemField(..)) {
             return None;
         }
         let base = self.snap.base;
@@ -626,7 +665,7 @@ impl Check<'_> {
 
     fn hits_elem(&self, elem: TypeId) -> bool {
         match self.snap.slot {
-            Slot::Elem(arr) => match self.interner.kind(arr) {
+            Slot::Elem(arr) | Slot::ElemField(arr, _) => match self.interner.kind(arr) {
                 TyKind::Array(e) => *e == elem,
                 _ => true,
             },
@@ -641,9 +680,21 @@ impl Check<'_> {
         if k.observes_rc {
             return true;
         }
+        if self.field_pin().is_some_and(|(owner, field)| {
+            k.fields
+                .contains(&(self.f.locals[owner as usize].ty, field))
+        }) {
+            return true;
+        }
         match self.snap.slot {
             Slot::Field(ty, field) => k.fields.contains(&(ty, field)),
             Slot::Elem(_) => k.any_slot || k.slots.iter().any(|&t| self.hits_elem(t)),
+            Slot::ElemField(arr, field) => {
+                k.any_slot
+                    || k.slots.iter().any(|&t| self.hits_elem(t))
+                    || matches!(self.interner.kind(arr), TyKind::Array(elem)
+                        if k.fields.contains(&(*elem, field)))
+            }
             Slot::Payload | Slot::Param => false,
         }
     }

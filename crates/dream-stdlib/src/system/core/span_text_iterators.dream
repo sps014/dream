@@ -95,7 +95,7 @@ public ref struct StringLines {
 
 // A `Map`/`Set` key that can be found by a `ReadOnlySpan<char>` without building a `string`.
 public interface StringKey {
-    fun matches_span(other: ReadOnlySpan<char>): bool;
+    fun matches_span(borrow other: ReadOnlySpan<char>): bool;
 }
 
 extend string : StringKey {
@@ -125,7 +125,7 @@ extend string : StringKey {
         return this.matches_span(other);
     }
 
-    public fun matches_span(other: ReadOnlySpan<char>): bool {
+    public fun matches_span(borrow other: ReadOnlySpan<char>): bool {
         return other.equals(this);
     }
 

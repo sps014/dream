@@ -10,6 +10,7 @@ use dream_types::{DefId, TypeId, TypeInterner};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod escape;
+mod params;
 
 type Field = (TypeId, usize);
 type Key = (DefId, Vec<TypeId>);
@@ -46,6 +47,8 @@ pub(super) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
         })
         .collect();
     let empty = BTreeMap::new();
+    let empty_parameters = BTreeMap::new();
+    let parameters = params::infer(mir, interner, &fields, &intrinsics, &escaped, &ctors);
     let mut changed = false;
     for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
         if !f.blocks.iter().flat_map(|b| &b.stmts).any(|s| {
@@ -65,6 +68,9 @@ pub(super) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
             },
             &intrinsics,
             &escaped,
+            parameters
+                .get(&(f.def, f.instance.clone()))
+                .unwrap_or(&empty_parameters),
         );
         let dom = FunctionAnalyses::default().dominators(f);
         let mut definitions = BTreeMap::new();
@@ -167,6 +173,7 @@ fn local_targets(
     fields: &BTreeMap<Field, Target>,
     intrinsics: &BTreeMap<DefId, IntrinsicOp>,
     escaped: &BTreeSet<TypeId>,
+    parameters: &BTreeMap<Local, Target>,
 ) -> BTreeMap<Local, Target> {
     let mut defs: BTreeMap<Local, Vec<&Rvalue>> = BTreeMap::new();
     for stmt in f.blocks.iter().flat_map(|b| &b.stmts) {
@@ -174,7 +181,7 @@ fn local_targets(
             defs.entry(*l).or_default().push(rv);
         }
     }
-    let mut facts = BTreeMap::new();
+    let mut facts = parameters.clone();
     loop {
         let mut changed = false;
         for (&local, defs) in &defs {
@@ -321,7 +328,7 @@ fn field_targets(
                 common = None;
                 break;
             }
-            let locals = local_targets(f, &BTreeMap::new(), intrinsics, escaped);
+            let locals = local_targets(f, &BTreeMap::new(), intrinsics, escaped, &BTreeMap::new());
             let mut initialized = BTreeMap::new();
             for stmt in &f.blocks[0].stmts {
                 match stmt {
@@ -359,7 +366,7 @@ fn field_targets(
     }
     // Every live typed write must agree; setters and borrowed constructor arguments stay dynamic.
     for f in mir.functions.iter().chain(&mir.polls) {
-        let locals = local_targets(f, &BTreeMap::new(), intrinsics, escaped);
+        let locals = local_targets(f, &BTreeMap::new(), intrinsics, escaped, &BTreeMap::new());
         for stmt in f.blocks.iter().flat_map(|b| &b.stmts) {
             if let Statement::Assign(Place::Field { base, field }, rv) = stmt {
                 let key = (f.local_ty(*base), *field);

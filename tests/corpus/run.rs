@@ -256,10 +256,11 @@ fn run_fixture(case: Case, host: TestHost, release_build: bool) -> Option<String
     match case.expectation {
         Expectation::Trap(want) => {
             assert!(!result.status.success(), "{} should fail", case.stem);
-            // `dream run` reports a signal-aborted guest as exit 1.
+            // Unix signals have no code; Windows abnormal termination uses a negative NTSTATUS.
+            // Both represent a guest trap rather than an explicit process exit status.
             let text = format!(
                 "{stdout}\n{stderr}\nexit code {}",
-                result.status.code().unwrap_or(1)
+                result.status.code().filter(|&code| code >= 0).unwrap_or(1)
             );
             assert_fragments(&text, want, case.stem);
         }

@@ -417,3 +417,68 @@ fn rc_golden_span_over_borrowed_source_has_no_rc() {
         "a view over a borrow parameter should not touch RC:\n{body}"
     );
 }
+
+#[test]
+fn rc_golden_niche_peek_scalar_borrows_but_returned_payload_owns() {
+    let code = r#"
+        enum Option<T> { Some(T), None }
+        class Box {
+            public value: string[];
+            public constructor(value: string) { this.value = [value]; }
+            public fun peek(): Option<string> { return Option.Some(this.value[0]); }
+        }
+        @export fun peek_length(borrow b: Box): int {
+            return switch (b.peek()) { Some(s) => s.length, None => 0 };
+        }
+        @export fun peek_owned(borrow b: Box): string {
+            return switch (b.peek()) { Some(s) => s, None => "" };
+        }
+    "#;
+    let ir = emit_arc_release(code);
+    let funcs = ir_func_defs(&ir);
+    let scalar = &funcs
+        .iter()
+        .find(|f| f.name.contains("peek_5flength"))
+        .expect("scalar body")
+        .body;
+    assert_eq!(count_in(scalar, "@dream_retain("), 0, "{scalar}");
+    assert_eq!(count_in(scalar, "@dream_release("), 0, "{scalar}");
+    let owned = &funcs
+        .iter()
+        .find(|f| f.name.contains("peek_5fowned"))
+        .expect("owned body")
+        .body;
+    assert!(count_in(owned, "@dream_retain(") > 0, "{owned}");
+}
+
+#[test]
+fn rc_golden_noninline_string_reader_has_no_rc() {
+    let code = r#"
+        @noinline fun read_length(s: string): int { return s.length; }
+        @export fun read_twice(borrow s: string): int { return read_length(s) + read_length(s); }
+    "#;
+    let ir = emit_arc_release(code);
+    for name in ["read_length", "_Dx10_read_5ftwice"] {
+        let body = ir_func_body(&ir, name);
+        assert_eq!(count_in(body, "@dream_retain("), 0, "{body}");
+        assert_eq!(count_in(body, "@dream_release("), 0, "{body}");
+    }
+}
+
+fn emit_arc_release(code: &str) -> String {
+    compile_test_pipeline(code, |hir, interner| {
+        let mut mir = dream_mir::lower::lower_program(hir, interner);
+        mir.profile = dream_abi::profile::CompileProfile::Release;
+        dream_mir::passes::optimize_module(&mut mir, interner);
+        let pm = dream_mir::passes::PassManager::default_pipeline();
+        for f in &mut mir.functions {
+            pm.run(f, interner);
+        }
+        dream_mir::passes::run_late_module_passes(
+            &mut mir,
+            interner,
+            &mut dream_mir::passes::MirDump::disabled(),
+        );
+        emit_ll(&mir, interner)
+    })
+}

@@ -13,10 +13,10 @@ pub(super) fn box_types(mir: &Mir, interner: &TypeInterner) -> BTreeSet<TypeId> 
         .map(|l| l.ty)
         .filter(|ty| matches!(interner.kind(*ty), TyKind::Func(..)))
         .collect();
-    let bodies: BTreeSet<Key> = mir
+    let bodies: BTreeMap<Key, _> = mir
         .functions
         .iter()
-        .map(|f| (f.def, f.instance.clone()))
+        .map(|f| ((f.def, f.instance.clone()), f))
         .collect();
     let intrinsics: BTreeMap<_, _> = mir
         .intrinsics
@@ -34,7 +34,7 @@ pub(super) fn box_types(mir: &Mir, interner: &TypeInterner) -> BTreeSet<TypeId> 
                 }
                 Statement::Call { callee, args }
                 | Statement::Assign(_, Rvalue::Call { callee, args })
-                    if !bodies.contains(&(callee.def, callee.args.clone())) =>
+                    if !bodies.contains_key(&(callee.def, callee.args.clone())) =>
                 {
                     if let Some(op) = intrinsics.get(&callee.def) {
                         if matches!(op, IntrinsicOp::FuncboxEnv | IntrinsicOp::FuncboxFuncidx) {
@@ -61,6 +61,18 @@ pub(super) fn box_types(mir: &Mir, interner: &TypeInterner) -> BTreeSet<TypeId> 
                     foreign = true;
                     for (_, ty) in args {
                         collect(*ty, mir, interner, &all, true, &mut escaped);
+                    }
+                }
+                Statement::Call { callee, args }
+                | Statement::Assign(_, Rvalue::Call { callee, args }) => {
+                    if let Some(body) = bodies.get(&(callee.def, callee.args.clone())) {
+                        for (param, arg) in body.params.iter().zip(args) {
+                            if body.locals[param.0 as usize].is_ref
+                                && let Some(ty) = operand_type(f, arg)
+                            {
+                                collect(ty, mir, interner, &all, false, &mut escaped);
+                            }
+                        }
                     }
                 }
                 Statement::Assign(

@@ -58,11 +58,9 @@ public class Queue<T> : Collection<T> {
         if this.count == 0 {
             return Option.None;
         }
-        let v = Buffer.get_unchecked<T>(this.items, this.head);
-        let vacated = this.head;
+        let v = CollectionStorage.take<T>(this.items, this.head);
         this.head = (this.head + 1) % this.items.length;
         this.count = this.count - 1;
-        Buffer.set_unchecked<T>(this.items, vacated, CollectionStorage.zero<T>());
         return Option.Some(v);
     }
 

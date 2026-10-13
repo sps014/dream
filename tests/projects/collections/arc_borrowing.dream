@@ -1,0 +1,58 @@
+import system;
+import system.testing;
+import system.collections;
+
+let arc_borrowing_drops = 0;
+class ArcBorrowingItem {
+    public value: string;
+    public constructor(value: string) { this.value = value; }
+    del() { arc_borrowing_drops = arc_borrowing_drops + 1; }
+}
+struct ArcBorrowingRecord {
+    public item: ArcBorrowingItem;
+    public constructor(item: ArcBorrowingItem) { this.item = item; }
+}
+
+fun arc_removal_roundtrip(): void {
+    let list = List<ArcBorrowingRecord>();
+    list.push(ArcBorrowingRecord(ArcBorrowingItem("list")));
+    let popped = list.pop().unwrap();
+    Assert.eq(arc_borrowing_drops, 0);
+    list.push(ArcBorrowingRecord(ArcBorrowingItem("replacement")));
+    list.clear();
+    Assert.eq(arc_borrowing_drops, 1);
+    Assert.eq_str(popped.item.value, "list");
+    let queue = Queue<ArcBorrowingRecord>();
+    queue.enqueue(ArcBorrowingRecord(ArcBorrowingItem("queue")));
+    let removed = queue.dequeue().unwrap();
+    Assert.eq(arc_borrowing_drops, 1);
+    queue.enqueue(ArcBorrowingRecord(ArcBorrowingItem("replacement")));
+    queue.clear();
+    Assert.eq(arc_borrowing_drops, 2);
+    Assert.eq_str(removed.item.value, "queue");
+    Assert.is_true(list.pop().is_none());
+    Assert.is_true(queue.dequeue().is_none());
+    Assert.eq_str(popped.item.value, "list");
+}
+
+@test
+fun arc_borrowing(): void {
+    arc_borrowing_drops = 0;
+    arc_removal_roundtrip();
+    Assert.eq(arc_borrowing_drops, 4);
+    let queue = Queue<string>();
+    queue.enqueue("front" + 7.to_string());
+    Assert.eq(switch (queue.peek()) { Some(s) => s.length, None => 0 }, 6);
+    let snapshot = queue.peek().unwrap();
+    queue.clear();
+    Assert.eq_str(snapshot, "front7");
+    let map = Map<string, int>();
+    map["k1"] = 7;
+    let set = Set<string>();
+    set.add("k1");
+    let text = "xk1y";
+    Assert.eq(map.get_or(text.span(1, 3), 0), 7);
+    Assert.is_true(set.contains(text.span(1, 3)));
+    Assert.eq(map.get_or(text.span(0, 2), 0), 0);
+    Assert.is_false(set.contains(text.span(0, 2)));
+}

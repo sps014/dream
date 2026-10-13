@@ -235,3 +235,134 @@ fn copy_retain_standing_in_for_a_returned_param_stays() {
     run(&t, &mut s, false);
     assert_eq!(rc_ops(&s.func, s.x), 1);
 }
+
+#[test]
+fn array_record_field_borrows_only_while_the_array_slot_stays_intact() {
+    for mutation in 0..4 {
+        let mut t = types();
+        let array_ty = t.i.array(t.boxed);
+        let mut b = FunctionBuilder::new("probe", t.i.void());
+        let array = b.new_param(array_ty, None);
+        let slot = b.new_local(t.boxed, None);
+        let x = b.new_local(t.i.string(), None);
+        b.assign(
+            Place::Local(slot),
+            Rvalue::Use(Operand::Copy(Place::index(
+                array,
+                Operand::Const(Const::Int(0)),
+            ))),
+        );
+        b.assign(
+            Place::Local(x),
+            Rvalue::Use(Operand::Copy(Place::Field {
+                base: slot,
+                field: 0,
+            })),
+        );
+        b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+        match mutation {
+            1 => b.assign(
+                Place::Field {
+                    base: slot,
+                    field: 0,
+                },
+                Rvalue::Use(Operand::Const(Const::Null)),
+            ),
+            2 => b.assign(
+                Place::index(array, Operand::Const(Const::Int(0))),
+                Rvalue::Use(Operand::Const(Const::Null)),
+            ),
+            3 => b.push(Statement::Call {
+                callee: Callee {
+                    def: DefId::root(999),
+                    args: vec![],
+                    ret: t.i.void(),
+                    take_params: vec![],
+                },
+                args: vec![],
+            }),
+            _ => {}
+        }
+        b.push(peek_call(&t, x));
+        b.push(Statement::Release(Operand::Copy(Place::Local(x))));
+        b.terminate(Terminator::Return(None));
+        let mut s = Snap {
+            func: b.finish(),
+            x,
+        };
+        s.func.locals[slot.0 as usize].is_ref = true;
+        run(&t, &mut s, false);
+        assert_eq!(rc_ops(&s.func, x), if mutation == 0 { 0 } else { 2 });
+    }
+}
+
+#[test]
+fn call_replacing_the_owner_array_keeps_the_record_field_snapshot() {
+    let mut t = types();
+    let array_ty = t.i.array(t.boxed);
+    let owner_ty = t.i.struct_ty(DefId::root(9), vec![]);
+    t.layouts.insert(
+        owner_ty,
+        TypeLayout::from_fields(&t.i, "Owner", [("items".into(), array_ty, false, false)]),
+    );
+    let mut replace = FunctionBuilder::new("replace", t.i.void());
+    replace.set_def(DefId::root(41), vec![]);
+    let owner = replace.new_param(owner_ty, None);
+    replace.assign(
+        Place::Field {
+            base: owner,
+            field: 0,
+        },
+        Rvalue::Use(Operand::Const(Const::Null)),
+    );
+    replace.terminate(Terminator::Return(None));
+    let mir = Mir {
+        functions: vec![replace.finish(), peek_fn(&t, false)],
+        ..Mir::default()
+    };
+    let effects = ModRefTable::compute(&mir, &t.i);
+    let mut b = FunctionBuilder::new("read", t.i.void());
+    let owner = b.new_param(owner_ty, None);
+    let array = b.new_local(array_ty, None);
+    let slot = b.new_local(t.boxed, None);
+    let x = b.new_local(t.i.string(), None);
+    b.assign(
+        Place::Local(array),
+        Rvalue::Use(Operand::Copy(Place::Field {
+            base: owner,
+            field: 0,
+        })),
+    );
+    b.assign(
+        Place::Local(slot),
+        Rvalue::Use(Operand::Copy(Place::index(
+            array,
+            Operand::Const(Const::Int(0)),
+        ))),
+    );
+    b.assign(
+        Place::Local(x),
+        Rvalue::Use(Operand::Copy(Place::Field {
+            base: slot,
+            field: 0,
+        })),
+    );
+    b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+    b.push(Statement::Call {
+        callee: Callee {
+            def: DefId::root(41),
+            args: vec![],
+            ret: t.i.void(),
+            take_params: vec![false],
+        },
+        args: vec![Operand::Copy(Place::Local(owner))],
+    });
+    b.push(peek_call(&t, x));
+    b.push(Statement::Release(Operand::Copy(Place::Local(x))));
+    b.terminate(Terminator::Return(None));
+    let mut f = b.finish();
+    f.locals[slot.0 as usize].is_ref = true;
+    f.locals[array.0 as usize].is_cursor = true;
+    run_function(&mut f, &t.i, &t.layouts, &effects);
+    assert_eq!(rc_ops(&f, x), 2);
+}

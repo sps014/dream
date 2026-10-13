@@ -76,6 +76,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("collections_bulk_alias", "collections", true),
     Case::project("collections_capacity", "collections", true),
     Case::project("collections_hash_churn", "collections", true),
+    Case::project("arc_borrowing", "collections", true),
     Case::project("comments", "core", true),
     Case::project("comparable_sort", "core", true),
     Case::project("compound_assign", "core", true),

@@ -1,4 +1,4 @@
-//! Scalar-array kernels cannot release an argument's owner through a callback, global store or
+//! Scalar-array and immutable-string kernels cannot release an argument's owner through a callback, global store or
 //! managed element. Their closed call graph can therefore borrow arrays, including on recursive
 //! edges, without moving an observable destructor or invalidating a caller-held reference.
 
@@ -26,12 +26,16 @@ fn scalar_array(ty: dream_types::TypeId, interner: &TypeInterner) -> bool {
     matches!(interner.kind(ty), TyKind::Array(elem) if scalar(*elem, interner))
 }
 
+fn kernel_type(ty: dream_types::TypeId, interner: &TypeInterner) -> bool {
+    scalar(ty, interner) || scalar_array(ty, interner) || ty == interner.string()
+}
+
 fn kernel(f: &MirFunction, interner: &TypeInterner) -> bool {
     if f.is_async
         || !scalar(f.ret, interner)
         || f.locals
             .iter()
-            .any(|d| d.is_ref || !(scalar(d.ty, interner) || scalar_array(d.ty, interner)))
+            .any(|d| d.is_ref || !kernel_type(d.ty, interner))
     {
         return false;
     }
@@ -48,6 +52,9 @@ fn kernel(f: &MirFunction, interner: &TypeInterner) -> bool {
                             | Rvalue::CheckedNeg(_)
                             | Rvalue::Cast(..)
                             | Rvalue::ArrayLen(_)
+                            | Rvalue::StrLen(_)
+                            | Rvalue::CharAt(..)
+                            | Rvalue::ByteAt(..)
                             | Rvalue::Select { .. }
                             | Rvalue::Call { .. }
                     )
@@ -119,7 +126,7 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
         }
         for p in &f.params {
             let d = &mut f.locals[p.0 as usize];
-            if d.is_take && scalar_array(d.ty, interner) {
+            if d.is_take && (scalar_array(d.ty, interner) || d.ty == interner.string()) {
                 d.is_take = false;
                 changed = true;
             }

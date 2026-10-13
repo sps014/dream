@@ -2567,6 +2567,49 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/core/arena.dream",
+    "package": "system.core",
+    "page": "reference/api/core-arena.md",
+    "declarations": [
+      {
+        "signature": "public struct Arena",
+        "description": "Copies alias one manually owned state. Reset/free invalidates every allocation; dropping this value does not free anything, and individual allocations must never be freed.",
+        "line": 5,
+        "page": "reference/api/core-arena.md"
+      },
+      {
+        "signature": "public constructor(initial_capacity: usize = 4096)",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/core-arena.md"
+      },
+      {
+        "signature": "public fun alloc<T: unmanaged>(count: usize): RawPtr<T>",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/core-arena.md"
+      },
+      {
+        "signature": "public fun alloc_zeroed<T: unmanaged>(count: usize): RawPtr<T>",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/core-arena.md"
+      },
+      {
+        "signature": "public fun reset(): void",
+        "description": "",
+        "line": 19,
+        "page": "reference/api/core-arena.md"
+      },
+      {
+        "signature": "public fun free(): void",
+        "description": "",
+        "line": 21,
+        "page": "reference/api/core-arena.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/core/array_collection.dream",
     "package": "system.core",
     "page": "reference/api/core-array-collection.md",
@@ -2683,7 +2726,7 @@
       },
       {
         "signature": "public static extern fun realloc<T>(arr: T[], new_len: int): T[]",
-        "description": "Resizes `arr`'s backing block via the allocator's `$realloc`, returning a `T[]` of `new_len` elements: the overlapping prefix is preserved and any newly grown tail is zero-initialized. `arr` must have exactly one owner: after this call the old value must never be read again (a surviving alias would observe a stale, possibly-freed block) — the same contract as C's `realloc`. `@unsafe` because the compiler cannot verify single ownership; callers (e.g. `List<T>`, `Pointer<T>`) must uphold it themselves.",
+        "description": "Resizes `arr`'s backing block via the allocator's `$realloc`, returning a `T[]` of `new_len` elements: the overlapping prefix is preserved and any newly grown tail is zero-initialized. `arr` must have exactly one owner: after this call the old value must never be read again (a surviving alias would observe a stale, possibly-freed block) — the same contract as C's `realloc`. `@unsafe` because the compiler cannot verify single ownership; callers (e.g. `List<T>`) must uphold it themselves.",
         "line": 24,
         "page": "reference/api/core-buffer.md"
       },
@@ -3812,73 +3855,6 @@
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/core/pointer.dream",
-    "package": "system.core",
-    "page": "reference/api/core-pointer.md",
-    "declarations": [
-      {
-        "signature": "public struct Pointer<T>",
-        "description": "`Pointer<T>` - a manually-managed, non-owning handle to a `T[]` block allocated via `Buffer.alloc`, resized via `Buffer.realloc`, and released via `Buffer.free` - never through automatic reference counting. Every operation that touches the block's lifetime is `@unsafe`: the compiler cannot verify the block has exactly one owner, that `free()` runs at most once, or that no access happens after a `free()`.  Prefer `Span<T>` (ARC-backed, bounds-checked, a `ref struct`) unless the value specifically needs to outlive the callee's stack frame or you need C-style manual alloc/realloc/free (e.g. a long-lived off-heap buffer, or interop with `Buffer.realloc`'s in-place grow path).",
-        "line": 12,
-        "page": "reference/api/core-pointer.md"
-      },
-      {
-        "signature": "public constructor(buf: T[])",
-        "description": "Wraps an existing block; prefer `alloc` for a fresh pointer.",
-        "line": 19,
-        "page": "reference/api/core-pointer.md"
-      },
-      {
-        "signature": "public static fun alloc(count: int): Pointer<T>",
-        "description": "Allocates a fresh, zero-initialized block of `count` elements.",
-        "line": 25,
-        "page": "reference/api/core-pointer.md"
-      },
-      {
-        "signature": "public get length(): int",
-        "description": "Number of elements currently addressable through this pointer.",
-        "line": 30,
-        "page": "reference/api/core-pointer.md"
-      },
-      {
-        "signature": "public fun this[index: int]: T",
-        "description": "Bounds-checked read (traps if `index` is out of range, exactly like `T[]` indexing).",
-        "line": 35,
-        "page": "reference/api/core-pointer.md"
-      },
-      {
-        "signature": "public fun this[index: int] = value: T",
-        "description": "Bounds-checked write (traps if `index` is out of range).",
-        "line": 40,
-        "page": "reference/api/core-pointer.md"
-      },
-      {
-        "signature": "public fun get(index: int): T",
-        "description": "",
-        "line": 44,
-        "page": "reference/api/core-pointer.md"
-      },
-      {
-        "signature": "public fun set(index: int, value: T): void",
-        "description": "",
-        "line": 48,
-        "page": "reference/api/core-pointer.md"
-      },
-      {
-        "signature": "public fun realloc(new_count: int): void",
-        "description": "Resizes the block in place via `Buffer.realloc`: the overlapping prefix is preserved and any newly grown tail is zero-initialized. After this call, no other alias of the pointer's old block may be read again — the same single-owner contract as `Buffer.realloc` itself.",
-        "line": 56,
-        "page": "reference/api/core-pointer.md"
-      },
-      {
-        "signature": "public fun free(): void",
-        "description": "Immediately returns the block to the allocator, bypassing reference counting. Calling `get`/`set`/`realloc`/`free` again on this (or any copy of this) `Pointer<T>` after `free()` is undefined behavior - the compiler cannot check it, by design (`@unsafe`).",
-        "line": 64,
-        "page": "reference/api/core-pointer.md"
-      }
-    ]
-  },
-  {
     "source": "crates/dream-stdlib/src/system/core/promise.dream",
     "package": "system.core",
     "page": "reference/api/core-promise.md",
@@ -3936,6 +3912,139 @@
         "description": "Explicitly launches a lazy future without awaiting it (fire-and-forget). Futures only run when awaited, passed to `all`/`any`/`race`, or started here; a never-started future never executes. Takes the future as `object` (futures are heap refs) like `cancel`.",
         "line": 42,
         "page": "reference/api/core-promise.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/core/raw_ptr.dream",
+    "package": "system.core",
+    "page": "reference/api/core-raw-ptr.md",
+    "declarations": [
+      {
+        "signature": "public struct RawPtr<T: unmanaged>",
+        "description": "An address carries no owning token or length. Reads require initialized storage of T; copies remain valid only as long as the underlying allocation does.",
+        "line": 5,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public static fun null(): RawPtr<T>",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun is_null(): bool",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun address(): usize",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun operator ==(other: RawPtr<T>): bool",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public static fun from_address(address: usize): RawPtr<T>",
+        "description": "",
+        "line": 16,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun cast<U: unmanaged>(): RawPtr<U>",
+        "description": "",
+        "line": 18,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun offset(elements: isize): RawPtr<T>",
+        "description": "",
+        "line": 20,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun byte_offset(bytes: isize): RawPtr<T>",
+        "description": "",
+        "line": 24,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun read(): T",
+        "description": "",
+        "line": 27,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun write(value: T): void",
+        "description": "",
+        "line": 29,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun this[index: isize]: T",
+        "description": "",
+        "line": 31,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun this[index: isize] = value: T",
+        "description": "",
+        "line": 33,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public static fun alloc(count: usize): RawPtr<T>",
+        "description": "Only independently allocated base pointers can be resized or freed. Interior and arena pointers have no allocation metadata; using either here violates the unsafe contract.",
+        "line": 38,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public static fun alloc_zeroed(count: usize): RawPtr<T>",
+        "description": "",
+        "line": 42,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public static fun alloc_aligned(count: usize, alignment: usize): RawPtr<T>",
+        "description": "",
+        "line": 46,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun realloc(new_count: usize): RawPtr<T>",
+        "description": "",
+        "line": 50,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun free(): void",
+        "description": "",
+        "line": 54,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun copy_to(dst: RawPtr<T>, count: usize): void",
+        "description": "",
+        "line": 57,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun move_to(dst: RawPtr<T>, count: usize): void",
+        "description": "",
+        "line": 61,
+        "page": "reference/api/core-raw-ptr.md"
+      },
+      {
+        "signature": "public fun fill_bytes(value: byte, byte_count: usize): void",
+        "description": "",
+        "line": 65,
+        "page": "reference/api/core-raw-ptr.md"
       }
     ]
   },
@@ -4160,67 +4269,6 @@
         "description": "Chains into another `Result` when `Ok`, otherwise preserves the error.",
         "line": 101,
         "page": "reference/api/core-result.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/core/scratch_arena.dream",
-    "package": "system.core",
-    "page": "reference/api/core-scratch-arena.md",
-    "declarations": [
-      {
-        "signature": "public class ScratchArena<T : unmanaged>",
-        "description": "Bump-pointer scratch slab for short-lived unmanaged batches (parse/match/fill loops). `reset()` rewinds the cursor without returning memory to the OS — like a gen0 nursery for blittable scratch, not a replacement for long-lived ARC graphs.  Parameterized on `T : unmanaged` so the same arena shape works for `int`, `byte`, `char`, unmanaged structs, etc. Use one arena per element type (or several arenas) in a hot loop. Overflow traps; grow by constructing a larger arena.",
-        "line": 10,
-        "page": "reference/api/core-scratch-arena.md"
-      },
-      {
-        "signature": "public constructor(capacity: int)",
-        "description": "Allocates a zeroed slab of `capacity` elements (at least one).",
-        "line": 15,
-        "page": "reference/api/core-scratch-arena.md"
-      },
-      {
-        "signature": "public get remaining(): int",
-        "description": "Number of elements still available before the next `reset`.",
-        "line": 25,
-        "page": "reference/api/core-scratch-arena.md"
-      },
-      {
-        "signature": "public get capacity(): int",
-        "description": "Total element capacity of the slab.",
-        "line": 31,
-        "page": "reference/api/core-scratch-arena.md"
-      },
-      {
-        "signature": "public fun alloc(n: int): Span<T>",
-        "description": "Bump-allocates `n` elements and returns a `Span` over them. Does not zero the span (callers that need zeros should write them); prior contents after `reset` may be stale. Prefer `bump`/`set_at`/`at` in hot loops: a `Span` holds a strong ref to the slab, so each `alloc` pays retain/release on `items`.",
-        "line": 39,
-        "page": "reference/api/core-scratch-arena.md"
-      },
-      {
-        "signature": "public fun bump(n: int): int",
-        "description": "Bump-allocates `n` elements and returns the start index into the slab (no `Span`, no extra RC).",
-        "line": 46,
-        "page": "reference/api/core-scratch-arena.md"
-      },
-      {
-        "signature": "public fun set_at(index: int, value: T): void",
-        "description": "Absolute-index write into the slab (same addressing as `bump`'s return value).",
-        "line": 60,
-        "page": "reference/api/core-scratch-arena.md"
-      },
-      {
-        "signature": "public fun at(index: int): T",
-        "description": "Absolute-index read from the slab.",
-        "line": 66,
-        "page": "reference/api/core-scratch-arena.md"
-      },
-      {
-        "signature": "public fun reset(): void",
-        "description": "Rewinds the bump cursor; the slab stays allocated.",
-        "line": 72,
-        "page": "reference/api/core-scratch-arena.md"
       }
     ]
   },

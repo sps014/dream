@@ -204,6 +204,12 @@ impl FnPrinter<'_> {
 
     fn stmt(&self, s: &Statement) -> String {
         match s {
+            Statement::RawStore { address, value, ty } => format!(
+                "raw_store<{}>({}, {})",
+                self.cx.ty(*ty),
+                self.operand(address),
+                self.operand(value)
+            ),
             Statement::Assign(p, r) => format!("{} = {}", self.place(p), self.rvalue(r)),
             Statement::Retain(o) => format!("retain {}", self.operand(o)),
             Statement::Release(o) => format!("release {}", self.operand(o)),
@@ -371,6 +377,9 @@ impl FnPrinter<'_> {
 
     fn rvalue(&self, r: &Rvalue) -> String {
         match r {
+            Rvalue::RawLoad { address, ty } => {
+                format!("raw_load<{}>({})", self.cx.ty(*ty), self.operand(address))
+            }
             Rvalue::Zero(ty) => format!("zero {}", self.cx.ty(*ty)),
             Rvalue::ObservedLoad(o) => format!("observed_load {}", self.operand(o)),
             Rvalue::Use(o) => self.operand(o),

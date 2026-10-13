@@ -233,7 +233,8 @@ fn collect_stmt_types(s: &Statement, seed: &mut impl FnMut(TypeId)) {
         }
         Statement::InterfaceCall { sig, .. } => seed(*sig),
         Statement::IndirectCall { sig, .. } => seed(*sig),
-        Statement::Print { ty, .. }
+        Statement::RawStore { ty, .. }
+        | Statement::Print { ty, .. }
         | Statement::ArrayElemsCopy { elem_ty: ty, .. }
         | Statement::ArrayElemsFill { elem_ty: ty, .. }
         | Statement::ArraySlotSwap { elem_ty: ty, .. } => seed(*ty),
@@ -272,7 +273,8 @@ fn collect_rvalue_types(rv: &Rvalue, seed: &mut impl FnMut(TypeId)) {
                 seed(*to);
             }
         }
-        Rvalue::New { ty, .. }
+        Rvalue::RawLoad { ty, .. }
+        | Rvalue::New { ty, .. }
         | Rvalue::UnionNew { ty, .. }
         | Rvalue::Tuple { ty, .. }
         | Rvalue::Zero(ty)
@@ -419,13 +421,16 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
                                 iface_uses.push((*iface_id, *method_slot));
                             }
                             match rv {
-                                Rvalue::New { ty, .. }
+                                Rvalue::RawLoad { ty, .. }
+                                | Rvalue::New { ty, .. }
                                 | Rvalue::UnionNew { ty, .. }
                                 | Rvalue::Tuple { ty, .. } => type_worklist.push(*ty),
                                 _ => {}
                             }
                         }
-                        Statement::Print { ty, .. } => type_worklist.push(*ty),
+                        Statement::RawStore { ty, .. } | Statement::Print { ty, .. } => {
+                            type_worklist.push(*ty)
+                        }
                         _ => {}
                     }
                 }
@@ -610,6 +615,10 @@ fn prune_dead_globals(mir: &mut Mir, interner: &TypeInterner) {
 
 fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
     match s {
+        Statement::RawStore { address, value, .. } => {
+            collect_global_reads_operand(address, out);
+            collect_global_reads_operand(value, out);
+        }
         Statement::Assign(place, rv) => {
             if let Place::Index { index, .. } = place {
                 collect_global_reads_operand(index, out);
@@ -724,7 +733,8 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
             collect_global_reads_operand(then_val, out);
             collect_global_reads_operand(else_val, out);
         }
-        Rvalue::ObservedLoad(o)
+        Rvalue::RawLoad { address: o, .. }
+        | Rvalue::ObservedLoad(o)
         | Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::CheckedNeg(o)

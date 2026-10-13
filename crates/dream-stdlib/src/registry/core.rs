@@ -22,12 +22,16 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/read_only_span.dream"),
         ),
         (
-            "<std>/system/core/pointer.dream",
-            include_str!("../system/core/pointer.dream"),
+            "<std>/system/core/raw_ptr.dream",
+            include_str!("../system/core/raw_ptr.dream"),
         ),
         (
-            "<std>/system/core/scratch_arena.dream",
-            include_str!("../system/core/scratch_arena.dream"),
+            "<std>/system/core/arena.dream",
+            include_str!("../system/core/arena.dream"),
+        ),
+        (
+            "<std>/system/core/raw_memory.dream",
+            include_str!("../system/core/raw_memory.dream"),
         ),
         (
             "<std>/system/core/closure.dream",

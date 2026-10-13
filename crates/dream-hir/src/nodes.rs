@@ -172,6 +172,7 @@ pub enum HExprKind {
     IntLit(i64),
     /// Target-specific byte size of a resolved type, folded while lowering with the final layout.
     SizeOf(TypeId),
+    AlignOf(TypeId),
     FloatLit(f64),
     BoolLit(bool),
     CharLit(char),
@@ -300,6 +301,12 @@ pub enum HExprKind {
     /// `Bytes.to<T>(bytes)` — reconstruct a blittable value of the node's type from the `byte[]`
     /// buffer `.0`, copying its payload into a fresh block of `T`'s size.
     FromBytes(Box<HExpr>),
+    /// Unmanaged memory access; the address grants neither ownership nor a lifetime.
+    RawLoad(Box<HExpr>),
+    RawStore {
+        address: Box<HExpr>,
+        value: Box<HExpr>,
+    },
     /// `Buffer.realloc<T>(arr, new_len)` (`@unsafe`) — resizes `array`'s backing block in place via
     /// the allocator's `$realloc`, returning a `T[]` of `new_len` elements with the overlapping
     /// prefix preserved. `array` must have exactly one owner: the old value is never read again by

@@ -137,6 +137,10 @@ fn collect_read_locals(func: &MirFunction) -> HashSet<Local> {
 
 fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
     match stmt {
+        Statement::RawStore { address, value, .. } => {
+            read_operand(address, read);
+            read_operand(value, read);
+        }
         Statement::Assign(place, rvalue) => {
             read_place_base(place, read);
             read_rvalue(rvalue, read);
@@ -264,7 +268,8 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
             read_operand(then_val, read);
             read_operand(else_val, read);
         }
-        Rvalue::ObservedLoad(o)
+        Rvalue::RawLoad { address: o, .. }
+        | Rvalue::ObservedLoad(o)
         | Rvalue::Use(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)

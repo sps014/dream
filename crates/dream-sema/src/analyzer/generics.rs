@@ -346,6 +346,28 @@ impl<'a> Analyzer<'a> {
         matches!(self.type_ctx.interner.kind(id), dream_types::TyKind::Error)
     }
 
+    pub(super) fn is_abstract_generic_type(&mut self, ty: &Type) -> bool {
+        match ty {
+            Type::Generic(name) => {
+                self.current_generic_bindings.contains_key(name)
+                    && self.is_unresolved_generic_type(ty)
+            }
+            Type::Struct(token, None) => {
+                self.current_generic_bindings.contains_key(&token.text)
+                    && self.is_unresolved_generic_type(ty)
+            }
+            Type::Struct(_, Some(args)) | Type::Tuple(args) => {
+                args.iter().any(|arg| self.is_abstract_generic_type(arg))
+            }
+            Type::Array(elem) => self.is_abstract_generic_type(elem),
+            Type::Function(args, ret) => {
+                args.iter().any(|arg| self.is_abstract_generic_type(arg))
+                    || self.is_abstract_generic_type(ret)
+            }
+            _ => false,
+        }
+    }
+
     /// Reports an error unless `ty` satisfies the `unmanaged` (blittable) kind. Used by the raw
     /// byte-blit intrinsics (`Bytes.of`/`Bytes.to`), whose generic bound is verified here rather
     /// than through the normal call-site constraint path (which they bypass).

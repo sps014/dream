@@ -42,7 +42,7 @@ pub struct FunctionTableInfo {
     /// `[]`/`for..in` hooks. Always `false` for free functions and synthesized/stdlib entries.
     pub is_static: bool,
     /// True when the declaration carries `@unsafe`: it performs a manual-memory-management
-    /// operation (raw `Pointer<T>` alloc/free/realloc/read/write) with no compiler-enforced safety
+    /// operation (raw `RawPtr<T>` alloc/free/realloc/read/write) with no compiler-enforced safety
     /// net. Calling it is only permitted from another `@unsafe` function/method — checked at every
     /// call site (see `Analyzer::check_unsafe_call`, `src/semantics/analyzer/calls/mod.rs`).
     pub is_unsafe: bool,

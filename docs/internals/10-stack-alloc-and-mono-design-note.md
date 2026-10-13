@@ -1,7 +1,7 @@
 # Design note: rejected — SSO, `@stack` class instances, size-class mono
 
 Decision record for three optimizations that were scoped out of the value-unions /
-`ref struct` / `Span<T>` / `Pointer<T>` work as "design now, implement later." They are now
+`ref struct` / `Span<T>` / `RawPtr<T>` work as "design now, implement later." They are now
 **permanent non-goals**: do not implement them, and do not leave half-landed ABI or mono-key
 paths for them. See `09-nullable-purge-design-note.md` for the sibling record on `Option<T>`
 boxing. Backend non-goals are also summarized in `AGENTS.md`.
@@ -39,7 +39,7 @@ optimization for instances.
 **Problem (historical):** `T: unmanaged` generics get one WAT body per concrete `T`. Bodies that
 only differ by size could theoretically share codegen keyed by size class.
 
-**Why rejected:** Dream's `unmanaged`-shaped stdlib (`Pointer<T>`, `Span<T>`, buffers) already
+**Why rejected:** Dream's `unmanaged`-shaped stdlib (`RawPtr<T>`, `Span<T>`, buffers) already
 avoids bloat by computing offsets from a **runtime** element size (`scalar_size` / `esize` in
 `crates/dream-mir/src/emit/emitter/rvalue/mod.rs`), not monomorphization-time field offsets. Monomorphization
 stays nominal: `(DefId, Vec<TypeId>)` via `MonoInstance`. No compiler size-class key.

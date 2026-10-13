@@ -108,7 +108,7 @@ impl Builder {
                 }
             }
             ExpressionNode::Literal(_) => {}
-            ExpressionNode::SizeOf(_, ty) => {
+            ExpressionNode::SizeOf(_, ty) | ExpressionNode::AlignOf(_, ty) => {
                 self.add_type_ref(ty, scope);
             }
             ExpressionNode::NameOf(_, _) | ExpressionNode::DeclOf(_, _) => {}

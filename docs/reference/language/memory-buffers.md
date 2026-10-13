@@ -22,24 +22,23 @@ Two opt-ins exist for people writing performance-sensitive containers:
 - `Buffer.clear<T>(arr)` / `Buffer.truncate<T>(arr, n)` release elements eagerly (the same cleanup rules as replacing an array item). Use them when one long-lived container churns through many elements and peak memory matters more than microsecond-level cost.
 - Zeroing a vacated slot after moving an element out (`items[i] = Buffer.alloc<T>(1)[0]`, like [`List.pop`](../stdlib/collections.md)) reclaims immediately instead of at overwrite/drop.
 
-The genuinely unsafe tier stays behind [`@unsafe`](memory-buffers.md#unsafe-manual-memory-management): `Pointer<T>`, `Buffer.realloc`, and `Buffer.free` bypass ARC entirely.
+The genuinely unsafe tier stays behind [`@unsafe`](memory-buffers.md#unsafe-manual-memory-management): `RawPtr<T>` and `Arena` manage unmanaged raw storage; `Buffer.realloc` and `Buffer.free` manually control array lifetime.
 
 
 ## `@unsafe`: manual memory management
 
-A handful of low-level primitives step outside ARC: `Buffer.realloc` / `Buffer.free` and [`Pointer<T>`](arrays.md#pointert-manual-allocation-unsafe) manage a block's lifetime yourself.
+A handful of low-level primitives step outside ARC: `Buffer.realloc` / `Buffer.free` and [`RawPtr<T>`](arrays.md#rawptrt-raw-memory-unsafe) manage a block's lifetime yourself.
 Every function or method that touches one of these must be marked `@unsafe`:
 
 ```dream
 @unsafe
-fun grow(p: Pointer<int>): Pointer<int> {
-    p.realloc(p.length * 2);   // fine: this function is itself @unsafe
-    return p;
+fun grow(p: RawPtr<int>, new_count: usize): RawPtr<int> {
+    return p.realloc(new_count);
 }
 
 fun caller(): void {
-    let p = Pointer<int>.alloc(4);
-    grow(p);   // error: call to '@unsafe' function 'grow' is only allowed from
+    let p = RawPtr<int>.alloc(4);
+    grow(p, 8);   // error: call to '@unsafe' function 'grow' is only allowed from
                // another '@unsafe' function or method
 }
 ```
@@ -47,5 +46,5 @@ fun caller(): void {
 Calling an `@unsafe` function from ordinary code is a compile-time error.
 Marking your own function `@unsafe` means *its* callers must be `@unsafe` too — the attribute has to be threaded all the way up to wherever the unsafe operation is justified.
 
-`@unsafe` does **not** insert runtime checks, and it does not verify the contract of the operation you're calling (e.g. that a freed `Pointer<T>` is never read again).
+`@unsafe` does **not** insert runtime checks, and it does not verify the contract of the operation you're calling (e.g. that a freed `RawPtr<T>` is never read again).
 It is a documented promise from the author, not a proof.

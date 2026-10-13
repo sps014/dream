@@ -62,6 +62,7 @@ pub enum ExpressionNode<'a> {
     /// `sizeof(T)` — compile-time byte size of type `T` in Dream's ABI (refs/classes = 4).
     /// The `SyntaxToken` is the `sizeof` identifier. Not a reserved keyword.
     SizeOf(SyntaxToken, Type),
+    AlignOf(SyntaxToken, Type),
     /// `nameof(a.b.c)` — compile-time string of the last identifier in a simple name path.
     /// The `SyntaxToken` is the `nameof` identifier; the `Vec` is the dotted path (length ≥ 1).
     /// Not a reserved keyword; the operand is not evaluated.
@@ -225,6 +226,7 @@ impl<'a> ExpressionNode<'a> {
             | ExpressionNode::MapLiteral(open, _)
             | ExpressionNode::Cast(open, _, _)
             | ExpressionNode::SizeOf(open, _)
+            | ExpressionNode::AlignOf(open, _)
             | ExpressionNode::NameOf(open, _)
             | ExpressionNode::DeclOf(open, _)
             | ExpressionNode::TypeOf(open, _)

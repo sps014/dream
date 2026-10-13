@@ -134,6 +134,7 @@ pub(crate) fn stmt_effects<'a>(
     mut out: impl FnMut(Effect<'a>),
 ) {
     match stmt {
+        Statement::RawStore { .. } => out(Effect::Top),
         Statement::Assign(place, rv) => {
             out(rvalue_effect(rv, f, interner));
             match place {
@@ -175,6 +176,7 @@ pub(crate) fn stmt_effects<'a>(
 
 fn rvalue_effect<'a>(rv: &'a Rvalue, f: &MirFunction, interner: &TypeInterner) -> Effect<'a> {
     match rv {
+        Rvalue::RawLoad { .. } => Effect::Top,
         Rvalue::ObservedLoad(_) => Effect::ObserveOwnership,
         Rvalue::Call { callee, .. } => Effect::Call(callee),
         Rvalue::New {

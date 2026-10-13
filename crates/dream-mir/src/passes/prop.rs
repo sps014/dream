@@ -116,6 +116,9 @@ fn subst_place_reads(place: &mut Place, known: &HashMap<Local, Operand>) -> bool
 
 pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Operand>) -> bool {
     match stmt {
+        Statement::RawStore { address, value, .. } => {
+            subst_operand(address, known) | subst_operand(value, known)
+        }
         Statement::Assign(place, rvalue) => {
             let mut c = subst_place_reads(place, known);
             c |= subst_rvalue_reads(rvalue, known);
@@ -245,7 +248,8 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
             subst_unless_const(a, known, is_sign_ambiguous_const)
                 | subst_unless_const(b, known, is_sign_ambiguous_const)
         }
-        Rvalue::ObservedLoad(o)
+        Rvalue::RawLoad { address: o, .. }
+        | Rvalue::ObservedLoad(o)
         | Rvalue::Use(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)

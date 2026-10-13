@@ -42,6 +42,26 @@ impl<'l, 'a> Fx<'l, 'a> {
             }
             Statement::DebugLine(line) => self.set_line(*line),
             Statement::Assign(place, rv) => self.assign(place, rv),
+            Statement::RawStore { address, value, ty } => {
+                let address = self.operand(address);
+                let dst = self.ptr(&address);
+                let value = self.operand(value);
+                if self.is_value(*ty) {
+                    let src = self.ptr(&value);
+                    self.memcpy(
+                        &dst,
+                        &src,
+                        &Value::i64(native_scalar_size(&self.l.cx, *ty).0 as i64),
+                    );
+                } else {
+                    self.store_mem(
+                        crate::backend::shared::abi_types::mem_ty(&self.l.cx, *ty),
+                        &dst,
+                        &value,
+                        1,
+                    );
+                }
+            }
             Statement::Retain(o) => {
                 let ty = self.operand_ty(o);
                 let a = self.operand(o);

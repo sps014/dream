@@ -1,0 +1,66 @@
+module system.core;
+
+// An address carries no owning token or length. Reads require initialized storage of T;
+// copies remain valid only as long as the underlying allocation does.
+public struct RawPtr<T: unmanaged> {
+    raw: usize;
+
+    constructor(address: usize) { this.raw = address; }
+
+    public static fun null(): RawPtr<T> { return RawPtr<T>((usize)0); }
+    public fun is_null(): bool { return this.raw == (usize)0; }
+    public fun address(): usize { return this.raw; }
+    public fun operator ==(other: RawPtr<T>): bool { return this.raw == other.raw; }
+
+    @unsafe
+    public static fun from_address(address: usize): RawPtr<T> { return RawPtr<T>(address); }
+    @unsafe
+    public fun cast<U: unmanaged>(): RawPtr<U> { return RawPtr<U>.from_address(this.raw); }
+    @unsafe
+    public fun offset(elements: isize): RawPtr<T> {
+        return RawPtr<T>(this.raw + (usize)elements * (usize)sizeof(T));
+    }
+    @unsafe
+    public fun byte_offset(bytes: isize): RawPtr<T> { return RawPtr<T>(this.raw + (usize)bytes); }
+
+    @unsafe
+    public fun read(): T { return RawMemory.load<T>(this.raw); }
+    @unsafe
+    public fun write(value: T): void { RawMemory.store<T>(this.raw, value); }
+    @unsafe
+    public fun this[index: isize]: T { return this.offset(index).read(); }
+    @unsafe
+    public fun this[index: isize] = value: T { this.offset(index).write(value); }
+
+    // Only independently allocated base pointers can be resized or freed. Interior and arena
+    // pointers have no allocation metadata; using either here violates the unsafe contract.
+    @unsafe
+    public static fun alloc(count: usize): RawPtr<T> {
+        return RawPtr<T>(RawMemory.alloc(RawMemory.size(count, (usize)sizeof(T)), (usize)alignof(T), (usize)alignof(T), 0));
+    }
+    @unsafe
+    public static fun alloc_zeroed(count: usize): RawPtr<T> {
+        return RawPtr<T>(RawMemory.alloc(RawMemory.size(count, (usize)sizeof(T)), (usize)alignof(T), (usize)alignof(T), 1));
+    }
+    @unsafe
+    public static fun alloc_aligned(count: usize, alignment: usize): RawPtr<T> {
+        return RawPtr<T>(RawMemory.alloc(RawMemory.size(count, (usize)sizeof(T)), alignment, (usize)alignof(T), 0));
+    }
+    @unsafe
+    public fun realloc(new_count: usize): RawPtr<T> {
+        return RawPtr<T>(RawMemory.realloc(this.raw, RawMemory.size(new_count, (usize)sizeof(T)), (usize)alignof(T)));
+    }
+    @unsafe
+    public fun free(): void { RawMemory.free(this.raw); this.raw = (usize)0; }
+
+    @unsafe
+    public fun copy_to(dst: RawPtr<T>, count: usize): void {
+        RawMemory.copy(dst.raw, this.raw, RawMemory.size(count, (usize)sizeof(T)));
+    }
+    @unsafe
+    public fun move_to(dst: RawPtr<T>, count: usize): void {
+        RawMemory.move(dst.raw, this.raw, RawMemory.size(count, (usize)sizeof(T)));
+    }
+    @unsafe
+    public fun fill_bytes(value: byte, byte_count: usize): void { RawMemory.fill(this.raw, (int)value, byte_count); }
+}

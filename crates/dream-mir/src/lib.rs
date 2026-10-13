@@ -186,6 +186,11 @@ pub struct BasicBlock {
 /// A straight-line operation with no control-flow effect.
 #[derive(Debug, Clone)]
 pub enum Statement {
+    RawStore {
+        address: Operand,
+        value: Operand,
+        ty: TypeId,
+    },
     /// `place = rvalue`.
     Assign(Place, Rvalue),
     /// Increment the refcount of a reference operand.
@@ -474,6 +479,10 @@ pub enum Const {
 /// The right-hand side of an assignment: any computation producing a single value.
 #[derive(Debug, Clone)]
 pub enum Rvalue {
+    RawLoad {
+        address: Operand,
+        ty: TypeId,
+    },
     /// Constructor-free zero initialization of storage at this concrete type.
     Zero(TypeId),
     /// Acquire an owned snapshot of a weak/unowned field under the observer lock.

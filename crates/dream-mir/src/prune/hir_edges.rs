@@ -115,6 +115,11 @@ fn hir_stmt_edges(stmt: &dream_hir::HStmt, out: &mut HirEdges) {
 fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
     use dream_hir::HExprKind as K;
     match &e.kind {
+        K::RawLoad(address) => hir_expr_edges(address, out),
+        K::RawStore { address, value } => {
+            hir_expr_edges(address, out);
+            hir_expr_edges(value, out);
+        }
         K::Call { callee, args } => {
             out.callees.push((callee.def, callee.instance.clone()));
             for a in args {
@@ -296,6 +301,7 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
         }
         K::IntLit(_)
         | K::SizeOf(_)
+        | K::AlignOf(_)
         | K::FloatLit(_)
         | K::BoolLit(_)
         | K::CharLit(_)

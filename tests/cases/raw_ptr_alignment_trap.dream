@@ -1,0 +1,2 @@
+@unsafe
+fun main(): void { let p = RawPtr<int>.alloc_aligned(1, 3); }

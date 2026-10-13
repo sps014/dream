@@ -17,6 +17,19 @@
 pub const ATTR_FUNCBOX_NEW: &str = "funcbox_new";
 pub const ATTR_FUNCBOX_FUNCIDX: &str = "funcbox_funcidx";
 pub const ATTR_FUNCBOX_ENV: &str = "funcbox_env";
+pub const ATTR_RAW_LOAD: &str = "raw_load";
+pub const ATTR_RAW_STORE: &str = "raw_store";
+pub const RAW_SIZE: &str = "dream_raw_size";
+pub const RAW_ALLOC: &str = "dream_raw_alloc";
+pub const RAW_REALLOC: &str = "dream_raw_realloc";
+pub const RAW_FREE: &str = "dream_raw_free";
+pub const RAW_COPY: &str = "dream_raw_copy";
+pub const RAW_MOVE: &str = "dream_raw_move";
+pub const RAW_FILL: &str = "dream_raw_fill";
+pub const ARENA_NEW: &str = "dream_arena_new";
+pub const ARENA_ALLOC: &str = "dream_arena_alloc";
+pub const ARENA_RESET: &str = "dream_arena_reset";
+pub const ARENA_FREE: &str = "dream_arena_free";
 
 pub const ATTR_CALLBACK_REGISTER: &str = "dream_callback_register";
 pub const ATTR_CALLBACK_UNREGISTER: &str = "dream_callback_unregister";
@@ -226,6 +239,19 @@ pub const YIELD_SIGNAL_COMPLETE: &str = "dream_yield_signal_complete";
 pub const YIELD_RUN: &str = "dream_yield_run";
 
 pub const ATTR_KEYS: &[&str] = &[
+    ATTR_RAW_LOAD,
+    ATTR_RAW_STORE,
+    RAW_SIZE,
+    RAW_ALLOC,
+    RAW_REALLOC,
+    RAW_FREE,
+    RAW_COPY,
+    RAW_MOVE,
+    RAW_FILL,
+    ARENA_NEW,
+    ARENA_ALLOC,
+    ARENA_RESET,
+    ARENA_FREE,
     YIELD_SIGNAL,
     YIELD_SIGNAL_COMPLETE,
     YIELD_RUN,
@@ -306,6 +332,9 @@ pub const ATTR_KEYS: &[&str] = &[
 /// rather than re-matching raw strings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IntrinsicOp {
+    RawLoad,
+    RawStore,
+    RawMemory,
     YieldSignal,
     YieldSignalComplete,
     YieldRun,
@@ -424,6 +453,10 @@ impl IntrinsicOp {
     /// Classifies an `@intrinsic("key")` attribute value, or `None` if `key` is unknown.
     pub fn from_key(key: &str) -> Option<IntrinsicOp> {
         Some(match key {
+            ATTR_RAW_LOAD => IntrinsicOp::RawLoad,
+            ATTR_RAW_STORE => IntrinsicOp::RawStore,
+            RAW_SIZE | RAW_ALLOC | RAW_REALLOC | RAW_FREE | RAW_COPY | RAW_MOVE | RAW_FILL
+            | ARENA_NEW | ARENA_ALLOC | ARENA_RESET | ARENA_FREE => IntrinsicOp::RawMemory,
             YIELD_SIGNAL => IntrinsicOp::YieldSignal,
             YIELD_SIGNAL_COMPLETE => IntrinsicOp::YieldSignalComplete,
             YIELD_RUN => IntrinsicOp::YieldRun,

@@ -176,6 +176,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             if self.peek_token(1).kind == TokenKind::OpenParenthesisToken {
                 match self.current_token().text.as_str() {
                     "sizeof" => return self.parse_sizeof_expression(),
+                    "alignof" => return self.parse_alignof_expression(),
                     "nameof" => return self.parse_nameof_expression(),
                     "declof" => return self.parse_declof_expression(),
                     "typeof" => return self.parse_typeof_expression(),
@@ -272,6 +273,14 @@ impl<'a, 'b> Parser<'a, 'b> {
         let ty = self.parse_type()?;
         self.match_token(TokenKind::CloseParenthesisToken);
         Ok(ExpressionNode::SizeOf(kw, ty))
+    }
+
+    pub(crate) fn parse_alignof_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
+        let kw = self.match_token(TokenKind::IdentifierToken);
+        self.match_token(TokenKind::OpenParenthesisToken);
+        let ty = self.parse_type()?;
+        self.match_token(TokenKind::CloseParenthesisToken);
+        Ok(ExpressionNode::AlignOf(kw, ty))
     }
 
     /// `nameof(a.b.c)` — soft special (not a keyword). Dotted identifier path only; last segment

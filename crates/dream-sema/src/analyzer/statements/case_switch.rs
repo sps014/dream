@@ -14,6 +14,9 @@ impl<'a> Analyzer<'a> {
         layouts: Option<&dream_hir::LayoutTable>,
     ) -> Option<String> {
         match &e.kind {
+            dream_hir::HExprKind::AlignOf(ty) => {
+                layouts.map(|l| l.size_align(&self.type_ctx.interner, *ty).1.to_string())
+            }
             dream_hir::HExprKind::SizeOf(ty) => {
                 layouts.map(|l| l.size_align(&self.type_ctx.interner, *ty).0.to_string())
             }
@@ -190,7 +193,7 @@ impl<'a> Analyzer<'a> {
 
 fn case_needs_layout(e: &HExpr) -> bool {
     match &e.kind {
-        dream_hir::HExprKind::SizeOf(_) => true,
+        dream_hir::HExprKind::SizeOf(_) | dream_hir::HExprKind::AlignOf(_) => true,
         dream_hir::HExprKind::Unary {
             op: dream_hir::UnOp::Neg,
             operand,

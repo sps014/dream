@@ -235,7 +235,8 @@ impl<'a> Analyzer<'a> {
                 )?;
                 Ok(t)
             }
-            ExpressionNode::SizeOf(_, ty) => self.analyze_sizeof(ty, diagnostics),
+            ExpressionNode::SizeOf(_, ty) => self.analyze_layout_query(ty, false, diagnostics),
+            ExpressionNode::AlignOf(_, ty) => self.analyze_layout_query(ty, true, diagnostics),
             ExpressionNode::NameOf(_, parts) => self.analyze_nameof(parts, diagnostics),
             ExpressionNode::DeclOf(_, parts) => self.analyze_declof(parts, diagnostics),
             ExpressionNode::TypeOf(_, operand) => {

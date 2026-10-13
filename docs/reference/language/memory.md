@@ -34,7 +34,7 @@ Dream's type system and compiler enforce the following in safe code — no `unsa
 | Constructor side effects preserved | Constructor bodies always run at allocation sites |
 | Global/local scope separation | Top-level variables are file-scoped; function locals shadow them cleanly |
 
-When these guarantees are not enough, the `@unsafe` tier (`Pointer<T>`, `Buffer.realloc`, `Buffer.free`) provides manual control with explicit opt-in.
+When these guarantees are not enough, the `@unsafe` tier (`RawPtr<T>`, `Buffer.realloc`, `Buffer.free`) provides manual control with explicit opt-in.
 
 ## How it works
 
@@ -79,7 +79,7 @@ The following are documented limitations, not silent unsoundness — each degrad
 - Prefer `StringBuilder` (and `append` / `append_utf8_slice`) over repeated `string` `+` when building text in a loop.
 - Use `byte_size` / `byte_at` for the raw UTF-16 bytes; `char_at` / `substring` index UTF-16 code units. `substring` is a cheap slice of the parent; `string.clone` copies.
 - `List` / `Map` / `Set` `clear()` keeps capacity. Prefer `clear` + refill over allocating a new collection each batch.
-- `ScratchArena<T : unmanaged>` is for short-lived scratch (`reset()` rewinds without returning memory to the OS) — parse/match/fill, not long-lived graphs. [`sizeof`](type-queries.md#sizeof-nameof-and-typeof) gives the byte size of an unmanaged element type.
+- `Arena` manually owns raw blocks for mixed unmanaged scratch allocations. `reset()` invalidates allocations and retains blocks for reuse; `free()` releases all storage. [`sizeof` and `alignof`](type-queries.md#sizeof-nameof-and-typeof) report target storage size and alignment.
 - Unmarked parameters sink into the callee (see [Ownership](ownership.md)); mark readers `borrow`.
 - Prefer `struct` / scalars / `Span` / dense `int[]` on hot paths.
 

@@ -22,7 +22,7 @@ public static extern fun alloc<T>(len: int): T[]
 
 ## `realloc`
 
-Resizes `arr`'s backing block via the allocator's `$realloc`, returning a `T[]` of `new_len` elements: the overlapping prefix is preserved and any newly grown tail is zero-initialized. `arr` must have exactly one owner: after this call the old value must never be read again (a surviving alias would observe a stale, possibly-freed block) — the same contract as C's `realloc`. `@unsafe` because the compiler cannot verify single ownership; callers (e.g. `List<T>`, `Pointer<T>`) must uphold it themselves.
+Resizes `arr`'s backing block via the allocator's `$realloc`, returning a `T[]` of `new_len` elements: the overlapping prefix is preserved and any newly grown tail is zero-initialized. `arr` must have exactly one owner: after this call the old value must never be read again (a surviving alias would observe a stale, possibly-freed block) — the same contract as C's `realloc`. `@unsafe` because the compiler cannot verify single ownership; callers (e.g. `List<T>`, `RawPtr<T>`) must uphold it themselves.
 
 ```dream
 public static extern fun realloc<T>(arr: T[], new_len: int): T[]

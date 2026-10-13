@@ -479,7 +479,7 @@ impl Lowerer<'_> {
                 self.b.assign(Place::Local(dest), rv);
             }
             HStmt::Assign { place, value } => {
-                // `this.f = Buffer.realloc<T>(this.f, n)` (the `List<T>.grow`/`Pointer<T>.realloc`
+                // `this.f = Buffer.realloc<T>(this.f, n)` (the `List<T>.grow`
                 // idiom): lowering `array` through the ordinary `lower_operand` path would
                 // materialize the field read into a fresh temp, losing the fact that it reads the
                 // very place being overwritten. That matters because `$realloc` already consumes
@@ -694,6 +694,12 @@ impl Lowerer<'_> {
                         count,
                     });
                 }
+                HExprKind::RawStore { address, value } => {
+                    let ty = value.ty;
+                    let address = self.lower_operand(address);
+                    let value = self.lower_operand(value);
+                    self.b.push(Statement::RawStore { address, value, ty });
+                }
                 // `print`/`println` lower to a dedicated statement the backend maps to `print_*`.
                 HExprKind::Print { arg, newline } => {
                     let ty = arg.ty;
@@ -781,6 +787,7 @@ fn const_int_value(
 ) -> Option<i64> {
     match &e.kind {
         HExprKind::SizeOf(ty) => Some(layouts.size_align(interner, *ty).0 as i64),
+        HExprKind::AlignOf(ty) => Some(layouts.size_align(interner, *ty).1 as i64),
         HExprKind::IntLit(v) | HExprKind::EnumValue(v) => Some(*v),
         HExprKind::BoolLit(v) => Some(*v as i64),
         HExprKind::CharLit(c) => Some(*c as i64),

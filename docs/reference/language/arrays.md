@@ -97,7 +97,7 @@ while r < 5 {
 grid[0][0] = 32;
 ```
 
-`Buffer.realloc<T>(arr, new_len)` and `Buffer.free<T>(arr)` (both [`@unsafe`](memory-buffers.md#unsafe-manual-memory-management)) manage an array's backing block directly through the allocator instead of through ARC: `realloc` resizes it in place (preserving the overlapping prefix, zero-filling any grown tail) and `free` returns it immediately, bypassing reference counting. `arr` must have exactly one owner going into either call — the old value must never be read again afterward. Most code should reach for [`Pointer<T>`](arrays.md#pointert-manual-allocation-unsafe) instead of calling these directly.
+`Buffer.realloc<T>(arr, new_len)` and `Buffer.free<T>(arr)` (both [`@unsafe`](memory-buffers.md#unsafe-manual-memory-management)) manage an array's backing block directly through the allocator instead of through ARC: `realloc` resizes it in place (preserving the overlapping prefix, zero-filling any grown tail) and `free` returns it immediately, bypassing reference counting. `arr` must have exactly one owner going into either call — the old value must never be read again afterward. Use ordinary arrays for managed elements; [`RawPtr<T>`](arrays.md#rawptrt-raw-memory-unsafe) provides separate raw storage for unmanaged elements.
 
 !!! note "Arrays own their slots"
     Every slot of a `T[]` is released when the array is dropped, even if your own bookkeeping
@@ -120,29 +120,58 @@ System.println(xs[1]);                    // 20
 let owned = mid.to_array();        // copies into a fresh, independently-owned array
 ```
 
-`Span<T>` keeps its backing array strongly referenced (unlike `Pointer<T>` below), so the memory it views can never be freed out from under it. Prefer `Span<T>` over a raw index range whenever a function only needs to read/write a *slice* of an array without owning or resizing it.
+`Span<T>` keeps its backing array strongly referenced (unlike `RawPtr<T>` below), so the memory it views can never be freed out from under it. Prefer `Span<T>` over a raw index range whenever a function only needs to read/write a *slice* of an array without owning or resizing it.
 
 `ReadOnlySpan<T>` is the same view without writes (`span.as_read_only()`, or `ReadOnlySpan.of(xs)`), and `list.as_span()` / `list.as_read_only_span()` view a `List<T>`'s live elements. `for (let x in span)` iterates any of them without allocating an iterator. See [Spans](spans.md) for the full API, the string view `ReadOnlySpan<char>`, and what makes spans free at runtime.
 
-## `Pointer<T>`: manual allocation (`@unsafe`)
+## `RawPtr<T>`: raw memory (`@unsafe`)
 
-`Pointer<T>` is a manually-managed handle to a `T[]` block, allocated, resized, and released through the allocator directly (`Buffer.alloc` / `Buffer.realloc` / `Buffer.free`) rather than through [automatic reference counting](memory.md). Every operation that touches the block's lifetime is [`@unsafe`](memory-buffers.md#unsafe-manual-memory-management): the compiler cannot verify the block has exactly one owner, that `free()` runs at most once, or that no access happens after a `free()`.
+`RawPtr<T: unmanaged>` carries an address without a length, array header, or ARC ownership.
+Allocation is uninitialized by default. Reads, writes, indexing, casts and pointer arithmetic
+require `@unsafe` and do not check bounds. Initialize a value before reading it.
 
 ```dream
 @unsafe
 fun scratch(): void {
-    let p = Pointer<int>.alloc(4);   // zero-initialized, 4 elements
-    p.set(0, 10);
-    System.println(p.get(0));               // 10
-
-    p.realloc(8);                    // grow in place; [0..4) preserved, [4..8) zeroed
-    System.println(p.length);                // 8
-
-    p.free();                        // returns the block to the allocator immediately
+    let p = RawPtr<int>.alloc(4);
+    p.write(10);
+    p[1] = 20;
+    System.println(p.offset(1).read());
+    p = p.realloc(8);
+    p[7] = 70;
+    p.free();
 }
 ```
 
-Prefer `Span<T>` unless a value specifically needs to outlive the callee's stack frame, or the workload needs manual alloc / realloc / free (e.g. a long-lived off-heap buffer). See [Memory Management](memory.md) for the full `@unsafe` contract.
+Use `alloc_zeroed` when zeroed bytes are required, and `alloc_aligned` for an explicit
+power-of-two alignment at least `alignof(T)`. Reallocation preserves the overlapping prefix
+and leaves the new tail uninitialized. It invalidates every old alias. Only base pointers returned by RawPtr allocation methods may be freed or resized;
+foreign pointers require their originating deallocator.
+`copy_to` requires non-overlapping ranges; `move_to` permits overlap. Both count elements.
+`fill_bytes` counts bytes. Copies never keep storage alive.
+
+`Arena(initial_capacity)` owns manually freed blocks, measured in bytes. Its generic
+`alloc<T>(count)` methods support different unmanaged types in one arena. Growth adds blocks
+without moving existing allocations. Reset invalidates every allocation but keeps the blocks
+for reuse; free releases all blocks. Arena allocations cannot be individually freed or resized.
+
+```dream
+@unsafe
+fun batch(): void {
+    let arena = Arena(4096);
+    let numbers = arena.alloc<int>(100);
+    let bytes = arena.alloc_zeroed<byte>(256);
+    numbers[0] = 42;
+    bytes[0] = (byte)7;
+    arena.reset();
+    arena.free();
+}
+```
+
+Both types are value handles with manual lifetime contracts, and neither has automatic cleanup.
+Copying an arena aliases the same state; free that state once. Strings, arrays, classes and
+values containing managed references cannot be raw elements. Use ordinary arrays and spans
+when automatic ownership and bounds checking meet your needs.
 
 ## Advanced: growable arrays
 

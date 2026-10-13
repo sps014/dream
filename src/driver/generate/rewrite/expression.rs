@@ -221,6 +221,7 @@ impl<'a> Rewriter<'a, '_> {
             ExpressionNode::Literal(_)
             | ExpressionNode::Identifier(_)
             | ExpressionNode::SizeOf(_, _)
+            | ExpressionNode::AlignOf(_, _)
             | ExpressionNode::NameOf(_, _)
             | ExpressionNode::DeclOf(_, _)
             | ExpressionNode::SyntaxBlock(_) => expr.clone(),

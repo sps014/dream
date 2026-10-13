@@ -10,11 +10,24 @@ use dream_types::{TyKind, TypeId};
 
 impl<'a> Analyzer<'a> {
     /// Resolves `sizeof(T)` to a type identity; MIR folds it using the completed target layout.
-    pub(in crate::analyzer) fn analyze_sizeof(
+    pub(in crate::analyzer) fn analyze_layout_query(
         &mut self,
         ty: &Type,
+        alignment: bool,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
+        let resolved = Self::monomorphize_type(ty, &self.current_generic_bindings);
+        let ty = &resolved;
+        // Abstract generic method bodies are checked before their concrete instances. Their
+        // placeholder HIR is unreachable; only a concrete instance can query a target layout.
+        if self.is_abstract_generic_type(ty) {
+            let int_ty = Self::type_from_name("int");
+            self.hir_set_last(Some(HExpr::new(
+                self.type_ctx.interner.int(),
+                HExprKind::IntLit(0),
+            )));
+            return Ok(int_ty);
+        }
         // Instantiate generic targets so struct-table keys exist.
         let mut core = ty;
         while let Type::Array(inner) = core {
@@ -42,7 +55,10 @@ impl<'a> Analyzer<'a> {
             self.hir_none();
             report(
                 diagnostics,
-                "sizeof requires a complete type".to_string(),
+                format!(
+                    "{} requires a complete type",
+                    if alignment { "alignof" } else { "sizeof" }
+                ),
                 ty.get_span(),
             );
             return Ok(Type::Unknown);
@@ -52,7 +68,11 @@ impl<'a> Analyzer<'a> {
             self.hir_none();
             report(
                 diagnostics,
-                format!("sizeof: unknown type '{}'", ty.display_name()),
+                format!(
+                    "{}: unknown type '{}'",
+                    if alignment { "alignof" } else { "sizeof" },
+                    ty.display_name()
+                ),
                 ty.get_span(),
             );
             return Ok(Type::Unknown);
@@ -60,7 +80,12 @@ impl<'a> Analyzer<'a> {
 
         let int_ty = Self::type_from_name("int");
         let ty_id = self.type_ctx.interner.int();
-        self.hir_set_last(Some(HExpr::new(ty_id, HExprKind::SizeOf(sized_ty))));
+        let query = if alignment {
+            HExprKind::AlignOf(sized_ty)
+        } else {
+            HExprKind::SizeOf(sized_ty)
+        };
+        self.hir_set_last(Some(HExpr::new(ty_id, query)));
         Ok(int_ty)
     }
 

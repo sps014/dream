@@ -22,7 +22,8 @@ pub(super) fn rvalue_local_operands(rv: &Rvalue) -> Vec<u32> {
     let mut ops: Vec<&Operand> = Vec::new();
     match rv {
         Rvalue::Move { src, .. } => out.push(src.0),
-        Rvalue::ObservedLoad(o)
+        Rvalue::RawLoad { address: o, .. }
+        | Rvalue::ObservedLoad(o)
         | Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::CheckedNeg(o)
@@ -121,6 +122,7 @@ pub(super) fn other_stmt_locals(s: &Statement) -> Vec<u32> {
     let mut out = Vec::new();
     let mut ops: Vec<&Operand> = Vec::new();
     match s {
+        Statement::RawStore { address, value, .. } => ops.extend([address, value]),
         Statement::Panic(o)
         | Statement::ForceFree(o)
         | Statement::LockAcquire(o)

@@ -17,7 +17,7 @@ public static class Buffer {
     // `arr` must have exactly one owner: after this call the old value must
     // never be read again (a surviving alias would observe a stale, possibly-freed block) — the
     // same contract as C's `realloc`. `@unsafe` because the compiler cannot verify single
-    // ownership; callers (e.g. `List<T>`, `Pointer<T>`) must uphold it themselves.
+    // ownership; callers (e.g. `List<T>`) must uphold it themselves.
     @intrinsic("array_realloc")
     @unsafe
     @consuming

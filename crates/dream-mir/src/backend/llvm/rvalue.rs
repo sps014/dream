@@ -275,6 +275,15 @@ impl<'l, 'a> Fx<'l, 'a> {
                     _ => boxed,
                 }
             }
+            Rvalue::RawLoad { address, ty } => {
+                let address = self.operand(address);
+                let p = self.ptr(&address);
+                if self.is_value(*ty) {
+                    self.as_ref(&V::s(p))
+                } else {
+                    self.load_mem(mem_ty(&self.l.cx, *ty), &p, 1)
+                }
+            }
             Rvalue::ArraySlotTake {
                 elem_ty,
                 array,

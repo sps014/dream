@@ -1,0 +1,22 @@
+module system.core;
+
+// Copies alias one manually owned state. Reset/free invalidates every allocation; dropping
+// this value does not free anything, and individual allocations must never be freed.
+public struct Arena {
+    state: usize;
+
+    @unsafe
+    public constructor(initial_capacity: usize = 4096) { this.state = RawMemory.arena_new(initial_capacity); }
+    @unsafe
+    public fun alloc<T: unmanaged>(count: usize): RawPtr<T> {
+        return RawPtr<T>.from_address(RawMemory.arena_alloc(this.state, RawMemory.size(count, (usize)sizeof(T)), (usize)alignof(T), 0));
+    }
+    @unsafe
+    public fun alloc_zeroed<T: unmanaged>(count: usize): RawPtr<T> {
+        return RawPtr<T>.from_address(RawMemory.arena_alloc(this.state, RawMemory.size(count, (usize)sizeof(T)), (usize)alignof(T), 1));
+    }
+    @unsafe
+    public fun reset(): void { RawMemory.arena_reset(this.state); }
+    @unsafe
+    public fun free(): void { RawMemory.arena_free(this.state); this.state = (usize)0; }
+}

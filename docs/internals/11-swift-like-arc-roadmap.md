@@ -95,8 +95,8 @@ levers (no SSO / `@stack` class / value collections):
    locals or holding reference fields, using escape analysis (`analysis/escape.rs`).
 2. **Clear-and-reuse** — `List`/`Map`/`Set.clear` keep capacity and zero live slots in place
    (no capacity-sized realloc). Prefer `clear` + refill over `new` each batch.
-3. **ScratchArena** — bump `Span<T>` from one owned slab (`ScratchArena<T : unmanaged>`);
-   `reset()` rewinds (`system.core`).
+3. **Arena** — mixed unmanaged raw allocations in stable blocks; `reset()` retains blocks
+   for reuse and `free()` releases manually owned storage (`system.core`).
 4. **Contiguous / SOA hot paths** — regex is PCRE2; keep other stdlib hot loops on dense arrays.
    thread queues, reused mark/caps buffers, and `Buffer.elems_copy` for capture clones.
 5. **Ownership discipline** — sink-default + `borrow` + field-store use-after-move (see

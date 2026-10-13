@@ -51,7 +51,7 @@ pub(super) const SPECS: &[AttributeSpec] = &[
     },
     AttributeSpec {
         name: "unsafe",
-        // Gates manual-memory-management operations (raw `Pointer<T>`): calling an `@unsafe`
+        // Gates manual-memory-management operations (raw `RawPtr<T>`): calling an `@unsafe`
         // function/method is only permitted from another `@unsafe` function/method — checked at
         // every call site, not just here at the declaration (see
         // `FunctionTableInfo::is_unsafe`/`Analyzer::check_unsafe_call`).

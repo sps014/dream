@@ -98,7 +98,8 @@ pub(crate) fn stmt_borrow(stmt: &Statement, holds: &IndexSet<DefId>) -> StmtBorr
             callee_borrow(callee, holds)
         }
         Statement::IndirectCall { .. } | Statement::InterfaceCall { .. } => StmtBorrow::Ends,
-        Statement::Retain(_)
+        Statement::RawStore { .. }
+        | Statement::Retain(_)
         | Statement::Release(_)
         | Statement::Panic(_)
         | Statement::Print { .. }
@@ -125,7 +126,8 @@ pub(crate) fn stmt_borrow(stmt: &Statement, holds: &IndexSet<DefId>) -> StmtBorr
 fn rvalue_borrow(rv: &Rvalue, holds: &IndexSet<DefId>) -> StmtBorrow {
     match rv {
         Rvalue::Call { callee, .. } | Rvalue::JsCall { callee, .. } => callee_borrow(callee, holds),
-        Rvalue::ObservedLoad(_)
+        Rvalue::RawLoad { .. }
+        | Rvalue::ObservedLoad(_)
         | Rvalue::Use(_)
         | Rvalue::Move { .. }
         | Rvalue::Select { .. }

@@ -5,6 +5,10 @@ use crate::{Operand, Place, Rvalue, Statement, Terminator};
 
 pub(crate) fn stmt_operands_mut(s: &mut Statement, f: &mut impl FnMut(&mut Operand)) {
     match s {
+        Statement::RawStore { address, value, .. } => {
+            operand_mut(address, f);
+            operand_mut(value, f);
+        }
         Statement::Assign(place, rv) => {
             place_operands_mut(place, f);
             rvalue_operands_mut(rv, f);
@@ -101,6 +105,7 @@ pub(crate) fn rvalue_operands_mut(rv: &mut Rvalue, f: &mut impl FnMut(&mut Opera
     match rv {
         Rvalue::Zero(_) | Rvalue::Move { .. } | Rvalue::FuncRef(_) => {}
         Rvalue::Use(o)
+        | Rvalue::RawLoad { address: o, .. }
         | Rvalue::ObservedLoad(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)

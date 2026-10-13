@@ -112,7 +112,8 @@ fn remap_rvalue(rv: &mut Rvalue, base: LocalMap<'_>) {
             remap_operand(then_val, base);
             remap_operand(else_val, base);
         }
-        Rvalue::ObservedLoad(o)
+        Rvalue::RawLoad { address: o, .. }
+        | Rvalue::ObservedLoad(o)
         | Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::CheckedNeg(o)
@@ -213,6 +214,10 @@ fn remap_rvalue(rv: &mut Rvalue, base: LocalMap<'_>) {
 
 fn remap_stmt(s: &mut Statement, base: LocalMap<'_>) {
     match s {
+        Statement::RawStore { address, value, .. } => {
+            remap_operand(address, base);
+            remap_operand(value, base);
+        }
         Statement::Assign(place, rv) => {
             remap_place(place, base);
             remap_rvalue(rv, base);

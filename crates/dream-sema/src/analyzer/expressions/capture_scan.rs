@@ -207,6 +207,7 @@ fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
         }
         ExpressionNode::Cast(_, _, e) => walk_expr_for_ref_targets(e, out),
         ExpressionNode::SizeOf(_, _)
+        | ExpressionNode::AlignOf(_, _)
         | ExpressionNode::NameOf(_, _)
         | ExpressionNode::DeclOf(_, _) => {}
         ExpressionNode::TypeOf(_, e) => walk_expr_for_ref_targets(e, out),
@@ -403,6 +404,7 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
         }
         ExpressionNode::Cast(_, _, e) => walk_expr_for_lambdas(e, out),
         ExpressionNode::SizeOf(_, _)
+        | ExpressionNode::AlignOf(_, _)
         | ExpressionNode::NameOf(_, _)
         | ExpressionNode::DeclOf(_, _) => {}
         ExpressionNode::TypeOf(_, e) => walk_expr_for_lambdas(e, out),
@@ -697,6 +699,7 @@ fn collect_names_expr(
         }
         ExpressionNode::Cast(_, _, e) => collect_names_expr(e, scopes, referenced),
         ExpressionNode::SizeOf(_, _)
+        | ExpressionNode::AlignOf(_, _)
         | ExpressionNode::NameOf(_, _)
         | ExpressionNode::DeclOf(_, _) => {}
         ExpressionNode::TypeOf(_, e) => collect_names_expr(e, scopes, referenced),

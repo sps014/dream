@@ -69,6 +69,30 @@ int main(int argc, char **argv) {
     dream_platform platform = {allocate, resize, deallocate, map, terminal_abort, write_bytes,
                                lock, unlock, object_drop};
     dream_set_platform(&platform);
+    if (strcmp(argv[1], "raw-memory") == 0) {
+        int before_allocations = allocations, before_frees = frees;
+        uintptr_t p = dream_raw_alloc(16, 128, _Alignof(int32_t), 0);
+        assert(p % 128 == 0);
+        ((int32_t *)p)[0] = 42;
+        uintptr_t next = dream_raw_realloc(p, 32, _Alignof(int32_t));
+        assert(next % 128 == 0 && ((int32_t *)next)[0] == 42);
+        dream_raw_free(next);
+        assert(allocations - before_allocations == frees - before_frees);
+        uintptr_t arena = dream_arena_new(16);
+        uintptr_t first = dream_arena_alloc(arena, 8, _Alignof(int64_t), 0);
+        ((int64_t *)first)[0] = 99;
+        uintptr_t large = dream_arena_alloc(arena, 128, 64, 1);
+        assert(large % 64 == 0 && ((int64_t *)large)[0] == 0);
+        assert(((int64_t *)first)[0] == 99);
+        int grown_allocations = allocations;
+        dream_arena_reset(arena);
+        assert(dream_arena_alloc(arena, 8, _Alignof(int64_t), 0) == first);
+        assert(dream_arena_alloc(arena, 128, 64, 0) == large);
+        assert(allocations == grown_allocations);
+        dream_arena_free(arena);
+        assert(allocations - before_allocations == frees - before_frees);
+        return 0;
+    }
     if (strcmp(argv[1], "counters") == 0) { fail_allocate = 1; }
     if (strcmp(argv[1], "mapping") == 0) { fail_map = 1; }
     if (strcmp(argv[1], "index") == 0) { fail_resize = 1; }

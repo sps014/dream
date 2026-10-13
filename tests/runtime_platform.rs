@@ -56,6 +56,8 @@ fn core_runs_and_reports_exhaustion_through_the_injected_platform() {
     let output = Command::new(&binary).arg("normal").output().unwrap();
     assert!(output.status.success(), "{:?}", output);
     assert!(String::from_utf8_lossy(&output.stdout).contains("injected platform passed"));
+    let raw = Command::new(&binary).arg("raw-memory").output().unwrap();
+    assert!(raw.status.success(), "raw allocation platform: {raw:?}");
     let retired = Command::new(&binary)
         .arg("thread-retention")
         .output()

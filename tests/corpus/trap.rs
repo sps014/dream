@@ -1,6 +1,12 @@
 use super::Case;
 
 pub(super) const CASES: &[Case] = &[
+    Case::trap("raw_ptr_size_overflow", "raw memory: size overflow", true),
+    Case::trap(
+        "raw_ptr_alignment_trap",
+        "raw memory: alignment must be a nonzero power of two",
+        true,
+    ),
     Case::trap(
         "priority_queue_reentrant_comparator",
         "PriorityQueue cannot be mutated by its comparator",

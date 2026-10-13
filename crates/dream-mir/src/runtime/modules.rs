@@ -124,6 +124,7 @@ pub const CORE_C: &[&str] = &[
     "simd.c",
     "defer.c",
     "platform.c",
+    "raw_memory.c",
     "inlines.c",
     "memory.c",
     "utf8.c",

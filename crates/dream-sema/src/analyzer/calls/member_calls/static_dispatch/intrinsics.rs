@@ -43,6 +43,7 @@ mod buffer;
 mod bytes;
 mod gen_attribute;
 mod json;
+mod raw;
 
 impl<'a> Analyzer<'a> {
     /// Resolves a `Type.method(args)` call whose `{Type}_{method}` names a generic static method
@@ -198,6 +199,24 @@ impl<'a> Analyzer<'a> {
         // Generic static calls / intrinsics need an `InstanceId` (a later slice); stay out of
         // HIR coverage regardless of which sub-branch handles the call.
         self.hir_none();
+        if matches!(
+            intrinsics::IntrinsicOp::from_attributes(&template.attributes),
+            Some(intrinsics::IntrinsicOp::RawLoad | intrinsics::IntrinsicOp::RawStore)
+        ) {
+            return self.analyze_raw_intrinsic(
+                &GenericStaticMethodCall {
+                    template,
+                    base,
+                    type_name,
+                    method,
+                    generic_args,
+                    params,
+                },
+                params_types,
+                arg_hirs,
+                diagnostics,
+            );
+        }
         if matches!(
             intrinsics::IntrinsicOp::from_attributes(&template.attributes),
             Some(

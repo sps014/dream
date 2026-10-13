@@ -83,6 +83,7 @@ impl<'a> Analyzer<'a> {
         // declaring type's methods; `internal` from the same module; `public` everywhere the type
         // is reachable. An implicit zero-arg default (no registered `constructor`) is public.
         if let Some(sig) = &resolved_ctor {
+            self.check_unsafe_call(sig, name.position, diagnostics);
             let (base_name, _) =
                 Self::resolve_struct_parts(&Type::Struct(name.clone(), generic_args.clone()))
                     .unwrap_or_else(|| (struct_name.clone(), vec![]));

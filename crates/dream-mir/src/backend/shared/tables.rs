@@ -180,6 +180,10 @@ fn protocol_strings(mir: &Mir) -> Vec<String> {
 
 fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
     match s {
+        Statement::RawStore { address, value, .. } => {
+            strings_in_op(address, out);
+            strings_in_op(value, out);
+        }
         Statement::Assign(_, rv) => strings_in_rv(rv, out),
         Statement::Call { args, .. } | Statement::IndirectCall { args, .. } => {
             for a in args {
@@ -301,7 +305,8 @@ fn strings_in_term(t: &Terminator, out: &mut Vec<String>) {
 fn strings_in_rv(rv: &Rvalue, out: &mut Vec<String>) {
     match rv {
         Rvalue::Move { .. } => {}
-        Rvalue::ObservedLoad(o)
+        Rvalue::RawLoad { address: o, .. }
+        | Rvalue::ObservedLoad(o)
         | Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::CheckedNeg(o)

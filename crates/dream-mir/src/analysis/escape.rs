@@ -123,6 +123,7 @@ fn for_each_callee<'a>(f: &'a MirFunction, mut out: impl FnMut(FunctionKeyRef<'a
     for b in &f.blocks {
         for s in &b.stmts {
             match s {
+                Statement::RawStore { .. } => {}
                 Statement::Call { callee, .. }
                 | Statement::Assign(_, Rvalue::Call { callee, .. }) => out(FunctionKeyRef {
                     def: callee.def,
@@ -276,6 +277,7 @@ fn stmt_uses(
     mark: &mut impl FnMut(Local, Escape),
 ) {
     match s {
+        Statement::RawStore { address, value, .. } => all_global([address, value], mark),
         Statement::Assign(place, rv) => {
             // A reference cast to an integer (funcbox environments) is a pointer the class
             // can no longer see.
@@ -349,6 +351,7 @@ fn rvalue_uses(
     mark: &mut impl FnMut(Local, Escape),
 ) {
     match rv {
+        Rvalue::RawLoad { address, .. } => all_global([address], mark),
         Rvalue::Call { callee, args } => call_args(callee.def, &callee.args, args, 0, sums, mark),
         Rvalue::New {
             ctor: Some(c),

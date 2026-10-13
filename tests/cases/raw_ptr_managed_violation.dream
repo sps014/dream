@@ -1,0 +1,2 @@
+@unsafe
+fun main(): void { let p = RawPtr<string>.alloc(1); }

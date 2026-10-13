@@ -275,6 +275,17 @@ DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
 }
 
 void dream_free(dream_ptr ptr);
+size_t dream_raw_size(size_t count, size_t element_size);
+uintptr_t dream_raw_alloc(size_t size, size_t alignment, size_t minimum, int32_t zeroed);
+uintptr_t dream_raw_realloc(uintptr_t address, size_t size, size_t minimum);
+void dream_raw_free(uintptr_t address);
+void dream_raw_copy(uintptr_t dst, uintptr_t src, size_t size);
+void dream_raw_move(uintptr_t dst, uintptr_t src, size_t size);
+void dream_raw_fill(uintptr_t dst, int32_t value, size_t size);
+uintptr_t dream_arena_new(size_t initial);
+uintptr_t dream_arena_alloc(uintptr_t state, size_t size, size_t alignment, int32_t zeroed);
+void dream_arena_reset(uintptr_t state);
+void dream_arena_free(uintptr_t state);
 dream_ptr dream_malloc_shared(dream_size size, int32_t tag);
 /* Mark a singleton immortal: its rc word is never mutated again and it leaves
  * `Debug.live_objects` accounting (it will never be freed). */

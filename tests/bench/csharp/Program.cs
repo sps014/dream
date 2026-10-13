@@ -19,13 +19,13 @@ public static class Program
     static bool IsWarmup = true;
     static int Sink;
 
-    // Index-based scratch slab (mirrors Dream ScratchArena.bump / set_at / at).
-    sealed class ScratchArena<T>
+    // Index-based scratch slab (comparison implementation using a bounded typed slab).
+    sealed class Arena<T>
     {
         readonly T[] items;
         int used;
 
-        public ScratchArena(int capacity)
+        public Arena(int capacity)
         {
             items = new T[Math.Max(1, capacity)];
             used = 0;
@@ -34,7 +34,7 @@ public static class Program
         public int Bump(int n)
         {
             if (n < 0 || used + n > items.Length)
-                throw new InvalidOperationException("ScratchArena overflow");
+                throw new InvalidOperationException("Arena overflow");
             int start = used;
             used += n;
             return start;
@@ -303,9 +303,9 @@ public static class Program
         Sink = buf.Capacity;
     }
 
-    static void BenchScratchArena(int iters)
+    static void BenchArena(int iters)
     {
-        var arena = new ScratchArena<int>(1 << 14);
+        var arena = new Arena<int>(1 << 14);
         var sw = Stopwatch.StartNew();
         int acc = 0;
         for (int i = 0; i < iters; i++)
@@ -317,7 +317,7 @@ public static class Program
                 arena.Reset();
         }
         sw.Stop();
-        Report("scratch_arena", ElapsedNs(sw), iters, acc);
+        Report("arena", ElapsedNs(sw), iters, acc);
         Sink = acc;
     }
 
@@ -929,7 +929,7 @@ public static class Program
         BenchMapClearReuse(scale * 70);
         BenchListClearReuse(scale * 500);
         BenchAllocChurn(scale * 30);
-        BenchScratchArena(scale * 400);
+        BenchArena(scale * 400);
         BenchRegexFind(scale / 2);
         BenchStringBuilder(scale * 20);
         BenchJsonSerialize(scale * 2);

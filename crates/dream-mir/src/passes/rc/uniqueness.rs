@@ -165,7 +165,8 @@ fn operand_local_reads(op: &Operand, local: u32) -> u32 {
 fn rvalue_local_reads(rv: &Rvalue, local: u32) -> u32 {
     match rv {
         Rvalue::Move { src, .. } => u32::from(src.0 == local),
-        Rvalue::ObservedLoad(o)
+        Rvalue::RawLoad { address: o, .. }
+        | Rvalue::ObservedLoad(o)
         | Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::CheckedNeg(o)

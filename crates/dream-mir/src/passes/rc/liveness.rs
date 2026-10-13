@@ -75,6 +75,10 @@ fn transfer_block(stmts: &[Statement], term: &Terminator, live: &mut IndexSet<u3
 
 pub(crate) fn transfer_stmt(stmt: &Statement, live: &mut IndexSet<u32>) {
     match stmt {
+        Statement::RawStore { address, value, .. } => {
+            add_operand_reads(address, live);
+            add_operand_reads(value, live);
+        }
         Statement::Assign(Place::Local(d), rv) => {
             live.swap_remove(&d.0);
             add_rvalue_reads(rv, live);
@@ -185,6 +189,10 @@ pub(crate) fn stmt_reads_local(stmt: &Statement, local: u32) -> bool {
 
 fn transfer_stmt_reads_only(stmt: &Statement, live: &mut IndexSet<u32>) {
     match stmt {
+        Statement::RawStore { address, value, .. } => {
+            add_operand_reads(address, live);
+            add_operand_reads(value, live);
+        }
         Statement::Assign(Place::Local(_), rv) => add_rvalue_reads(rv, live),
         Statement::Assign(place, rv) => {
             add_place_base_reads(place, live);
@@ -220,7 +228,8 @@ fn add_rvalue_reads(rv: &Rvalue, live: &mut IndexSet<u32>) {
             add(then_val);
             add(else_val);
         }
-        Rvalue::ObservedLoad(o)
+        Rvalue::RawLoad { address: o, .. }
+        | Rvalue::ObservedLoad(o)
         | Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::CheckedNeg(o)

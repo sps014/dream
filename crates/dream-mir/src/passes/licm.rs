@@ -289,6 +289,10 @@ fn use_block_map(func: &MirFunction) -> HashMap<Local, BTreeSet<BlockId>> {
 
 pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
     match stmt {
+        Statement::RawStore { address, value, .. } => {
+            operand_reads(address, f);
+            operand_reads(value, f);
+        }
         Statement::Assign(place, rv) => {
             place_base_reads(place, f);
             rvalue_reads(rv, f);
@@ -406,7 +410,8 @@ fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
             operand_reads(then_val, f);
             operand_reads(else_val, f);
         }
-        Rvalue::ObservedLoad(o)
+        Rvalue::RawLoad { address: o, .. }
+        | Rvalue::ObservedLoad(o)
         | Rvalue::Use(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)

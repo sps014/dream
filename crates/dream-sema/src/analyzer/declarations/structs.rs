@@ -404,14 +404,6 @@ impl<'a> Analyzer<'a> {
             .map(|(parameter, &ty)| (parameter.text.clone(), ty))
             .collect();
 
-        // A constrained class/struct parameter (`class Sorted<T : Comparable<T>>`) must be satisfied
-        // by the concrete argument at this instantiation.
-        self.verify_generic_constraints(
-            &template.generic_constraints,
-            &bindings,
-            position,
-            diagnostics,
-        );
         if base_name == "Vector"
             && let Some(elem) = args.first()
             && !matches!(
@@ -478,6 +470,15 @@ impl<'a> Analyzer<'a> {
         {
             diagnostics.report_error(e, Some(*position));
         }
+
+        // Recursive unmanaged records may contain this instance through a phantom wrapper.
+        // Bound checking needs its resolved fields, not an absent or incomplete instance.
+        self.verify_generic_constraints(
+            &template.generic_constraints,
+            &bindings,
+            position,
+            diagnostics,
+        );
 
         // The closed-graph rule runs per monomorphization for generic `@shared class`es: whether a
         // field like `payload: T` is shared, transfer-only (`Option<T>`), or rejected is only

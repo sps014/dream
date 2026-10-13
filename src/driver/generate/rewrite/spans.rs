@@ -129,6 +129,7 @@ pub(super) fn shift_expr<'a>(
             arena.alloc(shift_expr(map, arena, x)),
         ),
         ExpressionNode::SizeOf(t, ty) => ExpressionNode::SizeOf(map.token(t), ty.clone()),
+        ExpressionNode::AlignOf(t, ty) => ExpressionNode::AlignOf(map.token(t), ty.clone()),
         ExpressionNode::NameOf(t, path) => {
             ExpressionNode::NameOf(map.token(t), path.iter().map(|p| map.token(p)).collect())
         }

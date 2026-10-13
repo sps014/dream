@@ -1,6 +1,13 @@
 use super::Case;
 
 pub(super) const CASES: &[Case] = &[
+    Case::error("raw_ptr_managed_violation", "unmanaged", true),
+    Case::error("raw_ptr_unknown_element", "unknown type", true),
+    Case::error("alignof_unknown_type", "alignof: unknown type", true),
+    Case::error("arena_unsafe_violation", "call to '@unsafe'", true),
+    Case::error("arena_alloc_unsafe_violation", "call to '@unsafe'", true),
+    Case::error("raw_ptr_index_unsafe_violation", "call to '@unsafe'", true),
+    Case::error("raw_ptr_cast_unsafe_violation", "call to '@unsafe'", true),
     Case::error(
         "yield_invalid",
         "'yield' requires an Iterable<T> or async AsyncIterable<T> function\nfunction YieldChannel<int>.emit expects parameter 1 to be int, got string\nuse 'yield break' to end an iterator\niterator parameters cannot be ref or borrow\n'await for' requires an async function\nan async iterator body must contain 'yield' or 'yield break'\n'yield' cannot suspend inside 'lock' or 'defer'\n'await for' requires AsyncIterable<T> or AsyncIterator<T>\niterator signal intrinsics are reserved for internal stdlib state",
@@ -449,8 +456,8 @@ pub(super) const CASES: &[Case] = &[
         true,
     ),
     Case::error(
-        "pointer_unsafe_violation",
-        "call to '@unsafe' function 'Pointer_int_alloc' is only allowed from another '@unsafe' function or method",
+        "raw_ptr_unsafe_violation",
+        "call to '@unsafe' function 'RawPtr_int_alloc' is only allowed from another '@unsafe' function or method",
         true,
     ),
     Case::error(

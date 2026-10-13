@@ -31,6 +31,7 @@ mod native_pointer_emission;
 mod noinline_attribute_tests;
 mod perf_symbols;
 mod publication_emission;
+mod raw_memory_emission;
 mod rc_elision_goldens;
 mod runtime_callback;
 mod runtime_foreign_queue;

@@ -47,6 +47,9 @@ impl Lowerer<'_> {
             HExprKind::SizeOf(ty) => Operand::Const(Const::Int(
                 self.layouts.size_align(self.interner, *ty).0 as i64,
             )),
+            HExprKind::AlignOf(ty) => Operand::Const(Const::Int(
+                self.layouts.size_align(self.interner, *ty).1 as i64,
+            )),
             HExprKind::FloatLit(v) => Operand::Const(self.float_const(e.ty, *v)),
             HExprKind::BoolLit(v) => Operand::Const(Const::Bool(*v)),
             HExprKind::CharLit(v) => Operand::Const(Const::Char(*v)),
@@ -262,6 +265,13 @@ impl Lowerer<'_> {
                 bytes: self.lower_operand(bytes),
                 ty: e.ty,
             },
+            HExprKind::RawLoad(address) => Rvalue::RawLoad {
+                address: self.lower_operand(address),
+                ty: e.ty,
+            },
+            HExprKind::RawStore { .. } => {
+                crate::internal_error!("raw store must lower as a statement")
+            }
             HExprKind::ArraySlotTake {
                 elem_ty,
                 array,

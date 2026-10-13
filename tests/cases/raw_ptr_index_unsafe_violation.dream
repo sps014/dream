@@ -1,0 +1,2 @@
+fun read(p: RawPtr<int>): int { return p[0]; }
+fun main(): void { }

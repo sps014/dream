@@ -151,7 +151,9 @@ impl Builder {
             ExpressionNode::Literal(ty) | ExpressionNode::Cast(_, ty, _) => {
                 Some(self.type_ctx.borrow_mut().lower(ty))
             }
-            ExpressionNode::SizeOf(..) => Some(self.type_ctx.borrow().interner.int()),
+            ExpressionNode::SizeOf(..) | ExpressionNode::AlignOf(..) => {
+                Some(self.type_ctx.borrow().interner.int())
+            }
             ExpressionNode::NameOf(..) | ExpressionNode::TypeOf(..) => {
                 Some(self.type_ctx.borrow().interner.string())
             }

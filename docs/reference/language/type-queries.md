@@ -6,6 +6,9 @@ Use these expressions when you need a name, type description, or storage size.
 
 ## `sizeof`, `nameof`, and `typeof`
 
+`alignof(T)` also reports the target alignment in bytes as an `int` compile-time constant.
+Like `sizeof`, it resolves generic types after instantiation.
+
 None of these names is a reserved keyword — each takes on its meaning only immediately before `(`,
 so you can still declare a variable or function called `typeof`. Written as a call, they are
 meta forms:

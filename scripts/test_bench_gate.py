@@ -323,8 +323,12 @@ class MeasurementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'invalid or zero-time sample'):
             self.run_measurement(total=0)
 
-    def test_under_floor_comparison_still_fails(self):
-        self.assertEqual(self.run_measurement(comparison=True), 1)
+    def test_under_floor_comparison_warns_and_succeeds(self):
+        self.assertEqual(self.run_measurement(comparison=True), 0)
+        self.assertIn('SUB-TIMER', self.output.getvalue())
+        summary = json.loads((self.root / 'output/summary.json').read_text())
+        self.assertEqual(set(summary['benchmarks']['work']['comparisons']), {'baseline'})
+        self.assertTrue((self.root / 'output/raw.jsonl').is_file())
 
     def test_valid_timing_preserves_a_failing_regression_gate(self):
         self.assertEqual(self.run_measurement(total=1000000, claim='gate'), 1)

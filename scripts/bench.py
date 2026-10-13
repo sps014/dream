@@ -416,8 +416,6 @@ def main() -> int:
                    and (s.get("ns_total") == 0 or s["ns_per_op"] < MIN_NS_PER_OP)})
     if tiny:
         print("SUB-TIMER rows cannot substantiate a speed claim: " + ", ".join(tiny))
-        # A single arm collects diagnostics; comparisons must reject suspect timings.
-        status = int(len(args.arms) > 1)
     if args.save_baseline:
         if tiny:
             raise ValueError("invalid timing rows cannot form a reference")

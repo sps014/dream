@@ -1,0 +1,148 @@
+name: Profile benches on x86
+
+on:
+  workflow_dispatch:
+    inputs:
+      revisions:
+        description: JSON array of git revisions to profile (bisect by listing several)
+        default: '["HEAD"]'
+        required: true
+      benches:
+        description: Space-separated micro bench names
+        default: string_eq split_span
+        required: true
+      symbols:
+        description: Regex of function names extracted from the optimized asm
+        default: bench_string_eq|bench_split_span|StringSplit|dream_string_eq|string_view_find_char
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_INCREMENTAL: "0"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  profile:
+    name: Profile ${{ matrix.revision }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        revision: ${{ fromJSON(inputs.revisions) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.revision }}
+          fetch-depth: 0
+      # The harness and this workflow come from the dispatching ref so older revisions
+      # are measured the same way as the current one.
+      - uses: actions/checkout@v4
+        with:
+          path: harness
+      - name: Install native build dependencies and perf
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils \
+            linux-tools-common "linux-tools-$(uname -r)" || \
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils
+          sudo sysctl -w kernel.perf_event_paranoid=-1 || true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: bench-dotnet-release
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.dream/toolchains/llvm-22.1.8
+          key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
+      - name: Install pinned LLVM
+        run: scripts/fetch-dev-llvm.sh
+      - name: Build the revision's release compiler and host libraries
+        run: cargo build --release -p dream -p dream-host
+      - name: Time, emit optimized IR and native asm
+        env:
+          BENCHES: ${{ inputs.benches }}
+        shell: bash
+        run: |
+          out="$PWD/target/bench-profile"
+          mkdir -p "$out"
+          git rev-parse HEAD > "$out/revision.txt"
+          lscpu > "$out/lscpu.txt"
+          cp harness/scripts/bench.py scripts/bench.py
+          rm -rf scripts/benchmarks && cp -r harness/scripts/benchmarks scripts/benchmarks
+          # shellcheck disable=SC2086
+          python3 scripts/bench.py --target native --suite micro --diagnostics \
+            --arms current csharp --current-dream target/release/dream \
+            --warmup 1 --rounds 8 --passes 5 --filter $BENCHES --out "$out" \
+            2>&1 | tee "$out/comparison.txt"
+      - name: Extract hot functions from the asm
+        env:
+          SYMBOLS: ${{ inputs.symbols }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+
+          out = Path("target/bench-profile")
+          pattern = re.compile(os.environ["SYMBOLS"])
+          for asm in out.glob("current/target/release/*.s"):
+              current, keep = None, []
+              for line in asm.read_text(errors="replace").splitlines():
+                  label = re.match(r"^([^\s.][^:]*):", line)
+                  if label:
+                      current = label.group(1) if pattern.search(label.group(1)) else None
+                  if current:
+                      keep.append(line)
+              (out / "hot.s").write_text("\n".join(keep) + "\n")
+              calls = sorted({l.split()[-1] for l in keep if re.search(r"\bcall", l)})
+              (out / "hot-calls.txt").write_text("\n".join(calls) + "\n")
+          PY
+      - name: perf stat and perf record
+        continue-on-error: true
+        shell: bash
+        run: |
+          out="$PWD/target/bench-profile"
+          bin="$out/current/target/release/microbenches.bin"
+          command -v perf || exit 0
+          DREAM_BENCH_PASSES=3 perf stat -d -o "$out/perf-stat.txt" "$bin" > /dev/null
+          DREAM_BENCH_PASSES=3 perf record -o "$out/perf.data" "$bin" > /dev/null
+          perf report -i "$out/perf.data" --stdio --no-children --percent-limit 0.5 \
+            > "$out/perf-report.txt" 2>/dev/null
+          for sym in $(grep -oE '[^ ]*(bench_string_eq|bench_split_span|move_next|memcmp|find_char)[^ ]*' \
+                         "$out/perf-report.txt" | sort -u | head -8); do
+            perf annotate -i "$out/perf.data" --stdio -s "$sym" \
+              > "$out/annotate-$(echo "$sym" | tr -c 'A-Za-z0-9_\n' '_').txt" 2>/dev/null || true
+          done
+      - name: Publish comparison in the job summary
+        if: always()
+        run: |
+          {
+            echo "## Profile: $(cat target/bench-profile/revision.txt 2>/dev/null)"
+            echo '```text'
+            tail -n 20 target/bench-profile/comparison.txt 2>/dev/null
+            echo '```'
+            echo '### Calls in hot functions'
+            echo '```text'
+            cat target/bench-profile/hot-calls.txt 2>/dev/null
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-profile-${{ strategy.job-index }}
+          path: |
+            target/bench-profile/*.txt
+            target/bench-profile/*.s
+            target/bench-profile/current/target/release/*.opt.ll
+            target/bench-profile/current/target/release/*.s
+          retention-days: 14
+          if-no-files-found: warn

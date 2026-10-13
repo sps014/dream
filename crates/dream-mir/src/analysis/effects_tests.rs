@@ -422,3 +422,32 @@ fn observed_loads_are_ownership_observations_in_function_summaries() {
     );
     assert!(!summary.is_quiet());
 }
+
+#[test]
+fn a_bounds_check_panic_keeps_its_caller_quiet() {
+    use crate::build::FunctionBuilder;
+    use crate::{Callee, Const, Operand, Statement, Terminator};
+    use dream_types::DefId;
+    let ctx = TypeCtx::new();
+    let panic = DefId::root(20);
+    let mut b = FunctionBuilder::new("checked", ctx.interner.void());
+    b.set_def(DefId::root(10), vec![]);
+    b.push(Statement::Call {
+        callee: Callee {
+            def: panic,
+            args: vec![],
+            ret: ctx.interner.void(),
+            take_params: vec![],
+        },
+        args: vec![Operand::Const(Const::Str("out of range".into()))],
+    });
+    b.terminate(Terminator::Return(None));
+    let mut mir = Mir {
+        functions: vec![b.finish()],
+        ..Mir::default()
+    };
+    mir.intrinsics
+        .push((panic, dream_abi::intrinsics::ATTR_PANIC.into()));
+    let effects = ModRefTable::compute(&mir, &ctx.interner);
+    assert!(effects.call_def(DefId::root(10), &[]).is_quiet());
+}

@@ -48,12 +48,15 @@ pub(super) fn intrinsic_summary(op: IntrinsicOp) -> Option<ModRef> {
             | I::ArrayGetUnchecked
             | I::Regex
     ) || op.is_simd();
+    // A panic aborts the process and never unwinds, so no later read can observe what its hook
+    // does; opaque here would taint every bounds-checked helper's callers.
+    let diverges = matches!(op, I::Panic);
     // Element stores of these may release an RC occupant; the element type is not known here.
     let elem_store = matches!(
         op,
         I::ArrayRealloc | I::ArrayElemsCopy | I::ArrayElemsFill | I::ArraySetUnchecked
     );
-    if !(observes || quiet || elem_store) {
+    if !(observes || quiet || diverges || elem_store) {
         return None;
     }
     Some(ModRef::Known(Known {

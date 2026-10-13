@@ -219,7 +219,14 @@ pub const ATTR_SIMD_V128_MAX: &str = "simd_v128_max";
 pub const ATTR_SIMD_V128_SUM: &str = "simd_v128_sum";
 
 /// Every `@intrinsic("…")` key the compiler recognizes, in stable order for IDE completion.
+pub const YIELD_SIGNAL: &str = "dream_yield_signal";
+pub const YIELD_SIGNAL_COMPLETE: &str = "dream_yield_signal_complete";
+pub const YIELD_RUN: &str = "dream_yield_run";
+
 pub const ATTR_KEYS: &[&str] = &[
+    YIELD_SIGNAL,
+    YIELD_SIGNAL_COMPLETE,
+    YIELD_RUN,
     ATTR_PRINT,
     ATTR_PRINTLN,
     ATTR_PROMISE_ALL,
@@ -297,6 +304,9 @@ pub const ATTR_KEYS: &[&str] = &[
 /// rather than re-matching raw strings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IntrinsicOp {
+    YieldSignal,
+    YieldSignalComplete,
+    YieldRun,
     /// `System.print(x)` — print without trailing newline.
     Print,
     /// `System.println(x)` — print with trailing newline.
@@ -410,6 +420,9 @@ impl IntrinsicOp {
     /// Classifies an `@intrinsic("key")` attribute value, or `None` if `key` is unknown.
     pub fn from_key(key: &str) -> Option<IntrinsicOp> {
         Some(match key {
+            YIELD_SIGNAL => IntrinsicOp::YieldSignal,
+            YIELD_SIGNAL_COMPLETE => IntrinsicOp::YieldSignalComplete,
+            YIELD_RUN => IntrinsicOp::YieldRun,
             ATTR_PRINT => IntrinsicOp::Print,
             ATTR_PRINTLN => IntrinsicOp::Println,
             ATTR_PROMISE_ALL => IntrinsicOp::PromiseAll,

@@ -117,6 +117,7 @@ pub(super) fn walk_stmt<'a, V: Visitor<'a>>(v: &mut V, stmt: &StatementNode<'a>)
         StatementNode::ExpressionStatement(e)
         | StatementNode::AwaitStmt(e)
         | StatementNode::Return(Some(e))
+        | StatementNode::Yield(_, Some(e))
         | StatementNode::Assignment(_, e)
         | StatementNode::Declaration(_, _, e, _)
         | StatementNode::TupleDeclaration { init: e, .. } => walk_expr(v, e),
@@ -194,8 +195,13 @@ pub(super) fn walk_stmt<'a, V: Visitor<'a>>(v: &mut V, stmt: &StatementNode<'a>)
                 walk_body(v, d);
             }
         }
-        StatementNode::Labeled(_, inner) => walk_stmt(v, inner),
-        StatementNode::Return(None) | StatementNode::Break(_) | StatementNode::Continue(_) => {}
+        StatementNode::Labeled(_, inner) | StatementNode::AwaitForEach(_, inner) => {
+            walk_stmt(v, inner)
+        }
+        StatementNode::Return(None)
+        | StatementNode::Yield(_, None)
+        | StatementNode::Break(_)
+        | StatementNode::Continue(_) => {}
     }
     v.after_stmt(stmt);
 }

@@ -190,7 +190,7 @@ pub(super) fn walk_statement(
                 );
             }
         }
-        StatementNode::Return(Some(e)) => walk_expression(
+        StatementNode::Return(Some(e)) | StatementNode::Yield(_, Some(e)) => walk_expression(
             e,
             field_names,
             aliases,
@@ -302,7 +302,7 @@ pub(super) fn walk_statement(
                 raw_calls,
             );
         }
-        StatementNode::Labeled(_, inner) => walk_statement(
+        StatementNode::Labeled(_, inner) | StatementNode::AwaitForEach(_, inner) => walk_statement(
             inner,
             field_names,
             aliases,

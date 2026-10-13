@@ -187,8 +187,8 @@ pub struct FunctionNode<'a> {
     /// True for `static fun` methods declared inside a `struct`/`extend` block: the method has no
     /// implicit `this` parameter and is dispatched via `Type.method(...)` instead of `value.method(...)`.
     pub is_static: bool,
-    /// True for `async fun` declarations: calling the function eagerly starts a task and yields a
-    /// `Future<T>` handle. The body is lowered to a resumable state machine driven by the scheduler.
+    /// True for `async fun` declarations: calling the function constructs a lazy
+    /// `Future<T>` handle (or a reusable sequence for an async iterator). The body is lowered to a resumable state machine driven by the scheduler.
     pub is_async: bool,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.

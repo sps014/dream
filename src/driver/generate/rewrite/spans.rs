@@ -267,6 +267,14 @@ pub(super) fn shift_stmt<'a>(
     st: &StatementNode<'a>,
 ) -> StatementNode<'a> {
     match st {
+        StatementNode::Yield(keyword, value) => StatementNode::Yield(
+            map.token(keyword),
+            value.as_ref().map(|e| shift_expr(map, arena, e)),
+        ),
+        StatementNode::AwaitForEach(keyword, inner) => StatementNode::AwaitForEach(
+            map.token(keyword),
+            arena.alloc(shift_stmt(map, arena, inner)),
+        ),
         StatementNode::Assignment(t, e) => {
             StatementNode::Assignment(map.token(t), shift_expr(map, arena, e))
         }

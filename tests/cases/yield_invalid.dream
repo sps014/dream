@@ -1,0 +1,19 @@
+fun wrong_context(): void { yield 1; }
+fun wrong_element(): Iterable<int> { yield "bad"; }
+fun wrong_return(): Iterable<int> { yield 1; return; }
+fun wrong_borrow(borrow value: string): Iterable<string> { yield value; }
+fun wrong_lambda(): void {
+    let f: fun(): void = () => { yield 1; };
+}
+fun wrong_async_loop(stream: AsyncIterable<int>): void {
+    await for (let value in stream) {}
+}
+async fun missing_yield(): AsyncIterable<int> { return; }
+fun main(): void {}
+fun wrong_defer(): Iterable<int> { defer { yield 1; } }
+extern async fun invalid_pause(): void;
+fun wrong_sync_await(): Iterable<int> { invalid_pause().await; yield 1; }
+async fun wrong_async_type(): void { await for (let value in [1, 2]) {} }
+
+@intrinsic("dream_yield_run")
+extern fun forged_iterator_signal(): int;

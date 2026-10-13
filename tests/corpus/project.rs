@@ -1,6 +1,8 @@
 use super::Case;
 
 pub(super) const CASES: &[Case] = &[
+    Case::project("yield_iterators", "collections", true),
+    Case::project("yield_async_iterators", "async_tasks", true),
     Case::project("abc_loop_shapes", "core", true),
     Case::project("aes_gcm_basic", "native_services", true),
     Case::project("arc_object_local", "ownership", true),

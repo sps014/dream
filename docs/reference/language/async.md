@@ -62,6 +62,8 @@ async fun load(url: string): Result<string, string> {
 
 Chaining works the same way — `.await` is an ordinary link in a postfix chain, so `parse(src).await.value` and `rows().await[0]` are both fine.
 
+An `async fun` containing `yield` declares `AsyncIterable<T>` and returns a reusable lazy sequence directly. Consume it with `await for`; see [Yield and iterators](iterators.md).
+
 ## Running work concurrently
 
 `.await` starts the future it awaits, so a plain `let x = work().await;` runs alone.

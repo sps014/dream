@@ -1,0 +1,96 @@
+import system;
+import system.testing;
+
+let ya_started: int = 0;
+let ya_dropped: int = 0;
+
+class YaResource {
+    public value: int;
+    public constructor() { this.value = 1; }
+    fun del() { ya_dropped++; }
+}
+
+async fun ya_numbers(count: int): AsyncIterable<int> {
+    ya_started++;
+    while count > 0 {
+        Time.sleep(1).await;
+        yield count;
+        count--;
+    }
+}
+
+async fun ya_resources(): AsyncIterable<int> {
+    let resource = YaResource();
+    yield 1;
+    Time.sleep(30).await;
+    yield resource.value + 1;
+}
+
+interface YaSource<T> {
+    async borrow fun values(): AsyncIterable<T>;
+}
+
+class YaValues<T> : YaSource<T> {
+    value: T;
+    public constructor(value: T) { this.value = value; }
+    public async fun values(): AsyncIterable<T> {
+        Time.sleep(1).await;
+        yield this.value;
+    }
+}
+
+async fun ya_empty(): AsyncIterable<string> { yield break; }
+
+async fun ya_consume(cursor: AsyncIterator<int>): void {
+    await for (let value in cursor) {}
+}
+
+fun ya_cancel<T>(future: Future<T>): void { Promise.cancel(future); }
+
+@test
+async fun yield_async_iterators(): void {
+    ya_started = 0;
+    let xs = ya_numbers(3);
+    Assert.eq(ya_started, 0);
+    let total = 0;
+    await for (let value in xs) { total += value; }
+    await for (let value in xs) { total += value; }
+    Assert.eq(total, 12);
+    Assert.eq(ya_started, 2);
+    let a = xs.iterator();
+    let b = xs.iterator();
+    Assert.eq(a.next().await.unwrap(), 3);
+    Assert.eq(b.next().await.unwrap(), 3);
+    Assert.eq(a.next().await.unwrap(), 2);
+    a.close();
+    a.close();
+    Assert.is_true(a.next().await.is_none());
+    b.close();
+    await for (let value in YaValues<string>("ok").values()) { Assert.eq_str(value, "ok"); }
+    let source: YaSource<string> = YaValues<string>("interface");
+    await for (let value in source.values()) { Assert.eq_str(value, "interface"); }
+    await for (let value in ya_empty()) { Assert.is_true(false); }
+    ya_dropped = 0;
+    let cursor = ya_resources().iterator();
+    await for (let value in cursor) { break; }
+    Assert.eq(ya_dropped, 1);
+    Assert.is_true(cursor.next().await.is_none());
+    let cursor2 = ya_resources().iterator();
+    let consumption = ya_consume(cursor2);
+    Promise.start(consumption);
+    Time.sleep(1).await;
+    ya_cancel(consumption);
+    Time.sleep(1).await;
+    Assert.eq(ya_dropped, 2);
+    Assert.is_true(cursor2.next().await.is_none());
+    let cursor3 = ya_resources().iterator();
+    Assert.eq(cursor3.next().await.unwrap(), 1);
+    let advancement = cursor3.next();
+    Promise.start(advancement);
+    Time.sleep(1).await;
+    ya_cancel(advancement);
+    Time.sleep(1).await;
+    Assert.eq(ya_dropped, 3);
+    Assert.is_true(cursor3.next().await.is_none());
+    Time.sleep(40).await;
+}

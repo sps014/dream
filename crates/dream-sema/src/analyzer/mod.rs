@@ -28,6 +28,7 @@ mod expressions;
 mod generics;
 mod hir_emit;
 pub mod ide;
+mod iterators;
 mod js_interop;
 mod ownership;
 mod receiver_modes;
@@ -56,6 +57,9 @@ pub(super) fn statement_line(statement: &dream_syntax::nodes::StatementNode) -> 
     use dream_syntax::nodes::StatementNode;
     let line = |span: Option<TextSpan>| span.map(|s| s.line_no);
     match statement {
+        StatementNode::Yield(keyword, _) | StatementNode::AwaitForEach(keyword, _) => {
+            Some(keyword.position.line_no)
+        }
         StatementNode::Assignment(tok, _)
         | StatementNode::Declaration(tok, _, _, _)
         | StatementNode::FunctionInvocation(tok, _, _)
@@ -233,6 +237,7 @@ pub struct Analyzer<'a> {
     /// captured name's reads/writes through `env.<field>.value` instead of a plain local (see
     /// `identifiers::resolve_identifier`/`bindings::analyze_assignment`), and by
     /// `expressions::lambda` to build the matching `Closure_env_<n>` class + construction site.
+    closure_parents: indexmap::IndexMap<dream_types::DefId, dream_types::DefId>,
     closure_captures: HashMap<dream_types::DefId, Vec<(String, Type)>>,
     /// Resolved receiver modes (concrete owner and method slot -> Borrow/Unique) from the receiver-
     /// exclusivity pass. Populated by `classify_receiver_modes` after body analysis on clean
@@ -439,6 +444,7 @@ impl<'a> Analyzer<'a> {
             boxed_locals: HashSet::new(),
             ref_boxed_locals: HashSet::new(),
             moved_locals: HashSet::new(),
+            closure_parents: indexmap::IndexMap::new(),
             closure_captures: HashMap::new(),
             receiver_modes: HashMap::new(),
             capturing_fun_locals: HashMap::new(),

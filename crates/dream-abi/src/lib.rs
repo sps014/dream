@@ -8,6 +8,7 @@ pub mod c_abi;
 pub mod exports;
 pub mod host_capability;
 pub mod intrinsics;
+pub mod iterators;
 pub mod js_abi;
 pub mod library;
 pub mod profile;

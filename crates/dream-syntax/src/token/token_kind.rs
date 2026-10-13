@@ -137,6 +137,8 @@ pub enum TokenKind {
     LockToken,
     #[token("defer")]
     DeferToken,
+    #[token("yield")]
+    YieldToken,
     #[token("return")]
     ReturnToken,
     #[token("break")]
@@ -291,6 +293,7 @@ impl TokenKind {
             TokenKind::DoToken => "'do'",
             TokenKind::LockToken => "'lock'",
             TokenKind::DeferToken => "'defer'",
+            TokenKind::YieldToken => "'yield'",
             TokenKind::ReturnToken => "'return'",
             TokenKind::BreakToken => "'break'",
             TokenKind::ContinueToken => "'continue'",

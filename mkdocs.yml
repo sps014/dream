@@ -92,6 +92,7 @@ nav:
       - Custom operators: reference/language/operator-overloading.md
       - Names, types, and sizes: reference/language/type-queries.md
       - Control Flow: reference/language/control-flow.md
+      - Yield and iterators: reference/language/iterators.md
       - Functions: reference/language/functions.md
       - Function parameters: reference/language/function-parameters.md
       - Function values: reference/language/function-values.md

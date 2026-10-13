@@ -279,6 +279,31 @@ impl<'a, 'b> Parser<'a, 'b> {
         match cur.kind {
             TokenKind::LetToken | TokenKind::ConstToken => Ok(self.parse_declaration()?),
             TokenKind::ReturnToken => Ok(self.parse_return()?),
+            TokenKind::YieldToken => {
+                let keyword = self.match_token(TokenKind::YieldToken);
+                let value = if self.current_token().kind == TokenKind::BreakToken {
+                    self.match_token(TokenKind::BreakToken);
+                    None
+                } else {
+                    Some(self.parse_expression(0)?)
+                };
+                self.match_token(TokenKind::SemicolonToken);
+                Ok(StatementNode::Yield(keyword, value))
+            }
+            TokenKind::AwaitToken if self.peek_token(1).kind == TokenKind::ForToken => {
+                let keyword = self.match_token(TokenKind::AwaitToken);
+                let loop_ = self.parse_for()?;
+                if !matches!(loop_, StatementNode::ForEach(..)) {
+                    self.diagnostics.report_error(
+                        "'await for' requires a for-in loop".into(),
+                        Some(keyword.position),
+                    );
+                }
+                Ok(StatementNode::AwaitForEach(
+                    keyword,
+                    self.arena.alloc(loop_),
+                ))
+            }
             TokenKind::IfToken => Ok(self.parse_if_else()?),
             TokenKind::WhileToken => Ok(self.parse_while()?),
             TokenKind::DoToken => Ok(self.parse_do_while()?),
@@ -337,6 +362,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             | TokenKind::DoToken
             | TokenKind::LockToken
             | TokenKind::DeferToken
+            | TokenKind::YieldToken
             | TokenKind::ReturnToken
             | TokenKind::SwitchToken
             | TokenKind::CurlyCloseBracketToken
@@ -367,6 +393,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 | TokenKind::DoToken
                 | TokenKind::LockToken
                 | TokenKind::DeferToken
+                | TokenKind::YieldToken
                 | TokenKind::ReturnToken
                 | TokenKind::SwitchToken
                 | TokenKind::CurlyCloseBracketToken => {

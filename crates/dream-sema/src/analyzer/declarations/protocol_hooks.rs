@@ -27,7 +27,9 @@ impl ProtocolRole {
             Some(dream_syntax::nodes::function::IndexerKind::Set) => Some(ProtocolRole::Set),
             None => match method.name.text.as_str() {
                 "iterator" if method.parameters.is_empty() => Some(ProtocolRole::Iterator),
-                "next" if method.parameters.is_empty() => Some(ProtocolRole::Next),
+                "next" if method.parameters.is_empty() && !method.is_async => {
+                    Some(ProtocolRole::Next)
+                }
                 _ => None,
             },
         }

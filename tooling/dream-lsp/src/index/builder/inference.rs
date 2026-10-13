@@ -273,7 +273,7 @@ pub(super) fn param_names_from_tokens(params: &Option<Vec<SyntaxToken>>) -> Vec<
 }
 
 pub(super) fn call_result(ctx: &mut TypeCtx, is_async: bool, ret: TypeId) -> Option<TypeId> {
-    if !is_async {
+    if !is_async || dream_abi::iterators::element(ctx, ret, true).is_some() {
         return Some(ret);
     }
     let future = ctx.resolve(DefKind::Struct, dream::syntax::nodes::types::FUTURE_TYPE)?;

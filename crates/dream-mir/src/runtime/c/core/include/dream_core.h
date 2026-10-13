@@ -1521,6 +1521,9 @@ dream_ptr dream_new_future(dream_size size, int32_t poll, int32_t kind);
 void dream_enqueue(dream_ptr f);
 void dream_start(dream_ptr f);
 void dream_run_loop(void);
+dream_ptr dream_yield_signal(void);
+void dream_yield_signal_complete(dream_ptr signal);
+void dream_yield_run(dream_ptr producer, dream_ptr ready);
 /* Whether this thread's scheduler still holds ready or timed work. */
 int dream_async_pending(void);
 dream_ptr dream_sleep(int32_t ms);

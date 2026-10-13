@@ -1,0 +1,29 @@
+import system;
+
+fun numbers(count: int): Iterable<int> {
+    for (let i = 0; i < count; i++) {
+        yield i;
+    }
+}
+
+fun before_zero(values: int[]): Iterable<int> {
+    for (let value in values) {
+        if value == 0 { yield break; }
+        yield value;
+    }
+}
+
+async fun delayed_numbers(count: int): AsyncIterable<int> {
+    for (let i = 0; i < count; i++) {
+        Time.sleep(100).await;
+        yield i;
+    }
+}
+
+async fun main(): void {
+    let values = numbers(3);
+    for (let value in values) { System.println(value); }
+    for (let value in values) { System.println(value); }
+    for (let value in before_zero([10, 20, 0, 30])) { System.println(value); }
+    await for (let value in delayed_numbers(3)) { System.println(value); }
+}

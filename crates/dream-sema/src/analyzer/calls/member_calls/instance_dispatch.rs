@@ -438,17 +438,21 @@ impl<'a> Analyzer<'a> {
         let Some(identity) = self.function_table.declaration_node(parent_function) else {
             return false;
         };
+        let mut lexical_def = identity.0;
+        while let Some(parent) = self.closure_parents.get(&lexical_def) {
+            lexical_def = *parent;
+        }
         self.function_table
             .methods
             .iter()
             .any(|((receiver, _), keys)| {
-                *receiver == owner && keys.iter().any(|key| key.0 == identity.0)
+                *receiver == owner && keys.iter().any(|key| key.0 == lexical_def)
             })
             || self
                 .function_table
                 .generic_methods
                 .iter()
-                .any(|((receiver, _), def)| *receiver == owner && *def == identity.0)
+                .any(|((receiver, _), def)| *receiver == owner && *def == lexical_def)
     }
 }
 

@@ -84,7 +84,7 @@
       "patterns": [
         {
           "name": "keyword.control.dream",
-          "match": "\\b(if|else|for|while|do|return|break|continue|switch|case|default|is|in|async|await|lock)\\b"
+          "match": "\\b(if|else|for|while|do|return|yield|break|continue|switch|case|default|is|in|async|await|lock)\\b"
         },
         {
           "name": "storage.type.dream",

@@ -5,10 +5,9 @@ module system.core;
 // `Collection` / `IndexedCollection` / `Iterator` (via `.iterator()` / `.next()` dispatch).
 // List-returning query helpers (`to_list`, `filter`, `map`, …) live in `system.collections`
 // as `extend Collection<T>` so bootstrap does not depend on `List`.
-public interface Collection<T> {
+public interface Collection<T> : Iterable<T> {
     get length(): int;
 
-    fun iterator(): Iterator<T>;
 
     // True when the collection has no elements.
     public fun is_empty(): bool {

@@ -146,3 +146,23 @@ Because HIR carries these facts, the backend never re-infers types or re-resolve
 - Implicit coercions are explicit `Cast` nodes.
 - `Field`/`Index` carry resolved **indices**, not names.
 - Generic uses are recorded in `instances`; `HFunction.instance` is set for monomorphized bodies.
+
+
+## Iterator bodies and cleanup
+
+Yield functions are analyzed through a synthesized sequence factory and an async producer
+closure. The source AST stays unchanged. The producer receives a typed `YieldChannel<T>`;
+`yield value` checks through `emit(T)` and emits an ordinary HIR await on the channel's resume
+signal. `yield break` calls `finish` and returns from the producer. Argument copies inside each
+producer preserve independent enumeration even when a body reassigns its parameters. Value
+receivers are copied per producer; reference receivers preserve object identity. Parameter seeds
+occupy a parent scope so source-body shadowing retains ordinary function semantics.
+
+`HStmt::Cleanup` pairs a body with a typed synchronous cleanup expression. Iterator loops use
+it to close their cursor on structured exits. MIR lowering tracks cleanup depth alongside loop
+labels and emits cleanup calls on return and on jumps crossing the scope. A loop also owns an
+ARC lease whose destructor closes the cursor if an async frame is abandoned during suspension.
+
+Synchronous producers use the same frame representation but only their own queued poll is
+advanced by `dream_yield_run`; unrelated scheduled work is untouched. Async producers use the
+existing scheduler. Yield signals are passive, payload-free futures with no scheduler token.

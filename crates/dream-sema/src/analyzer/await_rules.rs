@@ -90,6 +90,21 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) {
         match stmt {
+            StatementNode::AwaitForEach(keyword, inner) => {
+                diagnostics.report_error(message.into(), Some(keyword.position));
+                self.forbid_await_in_stmt(inner, message, diagnostics);
+            }
+            StatementNode::Yield(keyword, value) => {
+                if message != "'await' can only be used inside an 'async' function" {
+                    diagnostics.report_error(
+                        "'yield' cannot suspend inside 'lock' or 'defer'".into(),
+                        Some(keyword.position),
+                    );
+                }
+                if let Some(e) = value {
+                    self.scan_expr_await(e, message, diagnostics);
+                }
+            }
             StatementNode::AwaitStmt(inner) => {
                 diagnostics.report_error(message.to_string(), inner.position());
                 self.scan_expr_await(inner, message, diagnostics);

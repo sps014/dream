@@ -21,7 +21,7 @@ impl<'a> Analyzer<'a> {
         let info = self.type_ctx.defs.get(*def);
         matches!(
             info.name.as_str(),
-            "Iterator" | "Collection" | "IndexedCollection"
+            "Iterator" | "Iterable" | "Collection" | "IndexedCollection"
         ) && self.interface_decl(*def).is_some_and(|decl| {
             decl.file_path
                 .as_deref()
@@ -93,39 +93,45 @@ impl<'a> Analyzer<'a> {
             _ => return Ok(()),
         };
 
-        let (enumerator_type, it_recv_hir) = if base == "Iterator" {
-            (iterable_type.clone(), iter_hir)
-        } else {
-            // Collection / IndexedCollection: `$it = recv.iterator()`.
-            let Some((slot, method)) = self.iface_method_slot(iface_name, "iterator") else {
-                self.hir_fail();
-                diagnostics.report_error(
-                    format!(
-                        "interface '{}' has no 0-arg 'iterator' method for for-each",
-                        dream_types::display_name(
-                            &self.type_ctx.interner,
-                            &self.type_ctx.defs,
-                            iface_name
-                        )
-                    ),
-                    Some(element.position),
-                );
-                return Ok(());
+        let (enumerator_type, it_recv_hir) =
+            if matches!(base.as_str(), "Iterator" | "AsyncIterator") {
+                (iterable_type.clone(), iter_hir)
+            } else {
+                // Collection / IndexedCollection: `$it = recv.iterator()`.
+                let Some((slot, method)) = self.iface_method_slot(iface_name, "iterator") else {
+                    self.hir_fail();
+                    diagnostics.report_error(
+                        format!(
+                            "interface '{}' has no 0-arg 'iterator' method for for-each",
+                            dream_types::display_name(
+                                &self.type_ctx.interner,
+                                &self.type_ctx.defs,
+                                iface_name
+                            )
+                        ),
+                        Some(element.position),
+                    );
+                    return Ok(());
+                };
+                let enum_ty = method.return_type.clone().unwrap_or(Type::Unknown);
+                if let Some((ebase, eargs)) = Self::resolve_struct_parts(&enum_ty)
+                    && !eargs.is_empty()
+                    && self
+                        .type_ctx
+                        .resolve(DefKind::Interface, &ebase)
+                        .is_some_and(|def| self.is_generic_interface(def))
+                {
+                    self.ensure_interface_instantiated(
+                        &ebase,
+                        &eargs,
+                        &element.position,
+                        diagnostics,
+                    );
+                }
+                self.hir_iface_call0(iter_hir, iface_name, method, slot, &enum_ty);
+                let it_call = self.hir_take();
+                (enum_ty, it_call)
             };
-            let enum_ty = method.return_type.clone().unwrap_or(Type::Unknown);
-            if let Some((ebase, eargs)) = Self::resolve_struct_parts(&enum_ty)
-                && !eargs.is_empty()
-                && self
-                    .type_ctx
-                    .resolve(DefKind::Interface, &ebase)
-                    .is_some_and(|def| self.is_generic_interface(def))
-            {
-                self.ensure_interface_instantiated(&ebase, &eargs, &element.position, diagnostics);
-            }
-            self.hir_iface_call0(iter_hir, iface_name, method, slot, &enum_ty);
-            let it_call = self.hir_take();
-            (enum_ty, it_call)
-        };
 
         let enum_iface = self.type_ctx.lower(&enumerator_type);
         if let Some((ebase, eargs)) = Self::resolve_struct_parts(&enumerator_type)
@@ -216,6 +222,17 @@ impl<'a> Analyzer<'a> {
             self.hir_assign_local_id(it_l, it_recv_hir);
         }
 
+        let asynchronous = matches!(base.as_str(), "AsyncIterable" | "AsyncIterator");
+        let cleanup = self.iterator_cleanup(
+            &enumerator_type,
+            &element_type,
+            asynchronous,
+            &AnalyzerContext {
+                parent_function: ctx.parent_function,
+                symbol_table: &foreach_scope,
+            },
+            diagnostics,
+        )?;
         self.hir_open_block();
         if let (Some(it_l), Some(opt_l), Some(elem_l)) = (it_local, opt_local, elem_slot) {
             let enum_ty_id = self.type_ctx.lower(&enumerator_type);
@@ -223,8 +240,19 @@ impl<'a> Analyzer<'a> {
             let field_ty_id = self.type_ctx.lower(&element_type);
 
             let recv = self.hx_local(it_l, enum_ty_id);
-            self.hir_iface_call0(Some(recv), enum_iface, next_method, next_slot, &next_ret);
-            let next_call = self.hir_take();
+            let call_ret = if asynchronous {
+                Self::future_type(next_ret.clone())
+            } else {
+                next_ret.clone()
+            };
+            self.hir_iface_call0(Some(recv), enum_iface, next_method, next_slot, &call_ret);
+            let next_call = self.hir_take().map(|call| {
+                if asynchronous {
+                    HExpr::new(opt_ty_id, dream_hir::HExprKind::Await(Box::new(call)))
+                } else {
+                    call
+                }
+            });
             self.hir_assign_local_id(opt_l, next_call);
 
             let is_some = self.hx_bin(
@@ -261,7 +289,12 @@ impl<'a> Analyzer<'a> {
         )?;
         let body_hir = self.hir_close_block();
         let true_lit = self.hx_bool(true);
+        self.hir_open_block();
         self.hir_while(Some(true_lit), body_hir, label);
+        let body = self.hir_close_block();
+        if let Some(cleanup) = cleanup {
+            self.hir_push_stmt(HStmt::Cleanup { body, cleanup });
+        }
         Ok(())
     }
 

@@ -58,10 +58,12 @@ impl<'a> Analyzer<'a> {
             .iter()
             .map(|p| self.type_ctx.lower(&p.type_))
             .collect();
-        // Calling an `async` interface method is eager and yields a `Future<T>` handle (just like an
-        // async instance method); the concrete implementation dispatches to a `Future`-producing
-        // constructor. The caller must `await` the result.
-        let ret_type = Self::async_return_type(im.is_async, im.return_type.clone());
+        // Async iterator factories return their sequence directly; ordinary async methods
+        // dispatch to a Future constructor.
+        let ret_type = Self::async_return_type(
+            dream_abi::iterators::returns_future(&mut self.type_ctx, im),
+            im.return_type.clone(),
+        );
         if expected.len() != arg_types.len() {
             diagnostics.report_error(
                 format!(
@@ -115,7 +117,7 @@ impl<'a> Analyzer<'a> {
         // An `async` interface method dispatches to a concrete async constructor whose WASM result
         // is the `Future` frame pointer (an `i32`), so the `call_indirect` signature returns an
         // `object`-shaped pointer regardless of the method's declared return type.
-        let ret = if method.is_async {
+        let ret = if dream_abi::iterators::returns_future(&mut self.type_ctx, method) {
             self.type_ctx.interner.object()
         } else {
             match &method.return_type {

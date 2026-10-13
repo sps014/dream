@@ -86,8 +86,10 @@ fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut HashSet<String>) {
                 walk_expr_for_ref_targets(a, out);
             }
         }
-        StatementNode::Return(Some(e)) => walk_expr_for_ref_targets(e, out),
-        StatementNode::Return(None) => {}
+        StatementNode::Return(Some(e)) | StatementNode::Yield(_, Some(e)) => {
+            walk_expr_for_ref_targets(e, out)
+        }
+        StatementNode::Return(None) | StatementNode::Yield(_, None) => {}
         StatementNode::IfElse(cond, then_b, elifs, else_b) => {
             walk_expr_for_ref_targets(cond, out);
             walk_stmts_for_ref_targets(then_b, out);
@@ -130,7 +132,9 @@ fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut HashSet<String>) {
             }
             walk_stmts_for_ref_targets(body, out);
         }
-        StatementNode::Labeled(_, s) => walk_stmt_for_ref_targets(s, out),
+        StatementNode::Labeled(_, s) | StatementNode::AwaitForEach(_, s) => {
+            walk_stmt_for_ref_targets(s, out)
+        }
         StatementNode::Break(_) | StatementNode::Continue(_) => {}
         StatementNode::ExpressionStatement(e) => walk_expr_for_ref_targets(e, out),
         StatementNode::AwaitStmt(e) => walk_expr_for_ref_targets(e, out),
@@ -284,8 +288,10 @@ fn walk_stmt_for_lambdas(stmt: &StatementNode, out: &mut HashSet<String>) {
                 walk_expr_for_lambdas(a, out);
             }
         }
-        StatementNode::Return(Some(e)) => walk_expr_for_lambdas(e, out),
-        StatementNode::Return(None) => {}
+        StatementNode::Return(Some(e)) | StatementNode::Yield(_, Some(e)) => {
+            walk_expr_for_lambdas(e, out)
+        }
+        StatementNode::Return(None) | StatementNode::Yield(_, None) => {}
         StatementNode::IfElse(cond, then_b, elifs, else_b) => {
             walk_expr_for_lambdas(cond, out);
             walk_stmts_for_lambdas(then_b, out);
@@ -328,7 +334,9 @@ fn walk_stmt_for_lambdas(stmt: &StatementNode, out: &mut HashSet<String>) {
             }
             walk_stmts_for_lambdas(body, out);
         }
-        StatementNode::Labeled(_, s) => walk_stmt_for_lambdas(s, out),
+        StatementNode::Labeled(_, s) | StatementNode::AwaitForEach(_, s) => {
+            walk_stmt_for_lambdas(s, out)
+        }
         StatementNode::Break(_) | StatementNode::Continue(_) => {}
         StatementNode::ExpressionStatement(e) => walk_expr_for_lambdas(e, out),
         StatementNode::AwaitStmt(e) => walk_expr_for_lambdas(e, out),
@@ -555,8 +563,10 @@ fn collect_names_stmt(
                 collect_names_expr(a, scopes, referenced);
             }
         }
-        StatementNode::Return(Some(e)) => collect_names_expr(e, scopes, referenced),
-        StatementNode::Return(None) => {}
+        StatementNode::Return(Some(e)) | StatementNode::Yield(_, Some(e)) => {
+            collect_names_expr(e, scopes, referenced)
+        }
+        StatementNode::Return(None) | StatementNode::Yield(_, None) => {}
         StatementNode::IfElse(cond, then_b, elifs, else_b) => {
             collect_names_expr(cond, scopes, referenced);
             collect_names_block(then_b, scopes, referenced);
@@ -601,7 +611,9 @@ fn collect_names_stmt(
             collect_names_block(body, scopes, referenced);
             pop_scope(scopes);
         }
-        StatementNode::Labeled(_, s) => collect_names_stmt(s, scopes, referenced),
+        StatementNode::Labeled(_, s) | StatementNode::AwaitForEach(_, s) => {
+            collect_names_stmt(s, scopes, referenced)
+        }
         StatementNode::Break(_) | StatementNode::Continue(_) => {}
         StatementNode::ExpressionStatement(e) => collect_names_expr(e, scopes, referenced),
         StatementNode::AwaitStmt(e) => collect_names_expr(e, scopes, referenced),

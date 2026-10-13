@@ -11,6 +11,14 @@ use crate::backend::shared::place_policy::has_frame_buffer;
 use crate::{Local, MirFunction, Operand, Place, Statement, Terminator};
 use dream_types::{PrimTy, TyKind};
 
+// A discarded await must clear its non-owning child link before local tokens are released.
+#[derive(Clone, Copy)]
+enum AwaitResume {
+    None,
+    Discard,
+    Store(Local),
+}
+
 impl<'l, 'a> Fx<'l, 'a> {
     pub fn frame_buf(&self, l: Local) -> Value {
         self.frame_bufs
@@ -98,13 +106,19 @@ impl<'l, 'a> Fx<'l, 'a> {
         }
     }
 
-    fn body_blocks(&mut self, resume_dest: &[Option<u32>], spill: Option<&[i32]>) {
+    fn body_blocks(&mut self, resume_dest: &[AwaitResume], spill: Option<&[i32]>) {
         let f = self.f;
         for (bi, block) in f.blocks.iter().enumerate() {
             self.w.switch_to(self.blocks[bi]);
             self.source_block(bi);
-            if let Some(d) = resume_dest.get(bi).copied().flatten() {
-                self.await_handoff(Local(d));
+            match resume_dest.get(bi) {
+                Some(AwaitResume::Store(local)) => self.await_handoff(*local),
+                Some(AwaitResume::Discard) => {
+                    let owner = self.self_ref_v();
+                    let at = self.addr(&owner, self.l.cx.target.abi().future.awaiting as i64);
+                    self.store_ty(&self.h(), &at, &V::s(Value::zero(self.h())), 8);
+                }
+                _ => {}
             }
             self.stmts(&block.stmts);
             if let Some(offs) = spill {
@@ -144,8 +158,7 @@ pub(super) fn build_sync<'a>(
         super::construction::InitMode::Fresh => super::construction::fresh_name(&name),
     };
     let mut w = l.writer(&name);
-    w.attrs
-        .extend(inline_attr(f, preserve_frames(l)));
+    w.attrs.extend(inline_attr(f, preserve_frames(l)));
     let mut fx = Fx::new(l, f, w);
     fx.fresh_init = matches!(mode, super::construction::InitMode::Fresh);
     fx.debug_begin(f);
@@ -241,8 +254,7 @@ pub(super) fn build_async_stub<'a>(
 ) {
     let name = l.user_fn(stub);
     let mut w = l.writer(&name);
-    w.attrs
-        .extend(inline_attr(stub, preserve_frames(l)));
+    w.attrs.extend(inline_attr(stub, preserve_frames(l)));
     let wide = crate::backend::shared::abi_types::ref_int_locals(&l.cx, body);
     let mut fx = Fx::new(l, stub, w);
     let first = fx.w.new_block("body");
@@ -381,10 +393,11 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     /// Every poll reloads all locals from the frame, so a block only writes back what it modified.
-    fn spill_dirty(&mut self, bi: usize, resume_dest: &[Option<u32>], offs: &[i32]) {
+    fn spill_dirty(&mut self, bi: usize, resume_dest: &[AwaitResume], offs: &[i32]) {
         let f = self.f;
         let mut dirty: Vec<u32> = Vec::new();
-        if let Some(d) = resume_dest[bi] {
+        if let AwaitResume::Store(local) = resume_dest[bi] {
+            let d = local.0;
             let ty = f.locals[d as usize].ty;
             if !matches!(self.interner.kind(ty), TyKind::Void) && !self.is_value(ty) {
                 dirty.push(d);
@@ -439,16 +452,12 @@ pub(super) fn build_poll<'a>(
         .collect();
     let entry = fx.blocks[body.entry.0 as usize];
     fx.w.switch(&st.v, entry, &arms);
-    let mut resume_dest: Vec<Option<u32>> = vec![None; body.blocks.len()];
+    let mut resume_dest = vec![AwaitResume::None; body.blocks.len()];
     for block in &body.blocks {
-        if let Terminator::Await {
-            dest: Some(d),
-            resume,
-            ..
-        } = &block.terminator
+        if let Terminator::Await { dest, resume, .. } = &block.terminator
             && (resume.0 as usize) < resume_dest.len()
         {
-            resume_dest[resume.0 as usize] = Some(d.0);
+            resume_dest[resume.0 as usize] = dest.map_or(AwaitResume::Discard, AwaitResume::Store);
         }
     }
     fx.body_blocks(&resume_dest, Some(offs));

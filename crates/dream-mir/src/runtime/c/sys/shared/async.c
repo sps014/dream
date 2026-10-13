@@ -101,6 +101,12 @@ void dream_start(dream_ptr f) {
     if (!f || i32_at(f, F_QUEUED)[0] || i32_at(f, F_STATUS)[0] || i32_at(f, F_NEXT)[0]) {
         return;
     }
+    /* A yield signal is owned by its channel/awaiter, with no poll or queue entry.
+     * Giving it a scheduler token would keep abandoned cursors alive forever. */
+    if (i32_at(f, F_KIND)[0] == KIND_HOST && i32_at(f, F_POLL)[0] == 0) {
+        i32_at(f, F_NEXT)[0] = 2;
+        return;
+    }
     i32_at(f, F_NEXT)[0] = 1;
     dream_retain(f);
     kind = i32_at(f, F_KIND)[0];
@@ -152,7 +158,7 @@ dream_ptr dream_new_future(dream_size size, int32_t poll, int32_t kind) {
 
 void dream_enqueue(dream_ptr f) {
     ReadyNode *n;
-    if (!f || i32_at(f, F_QUEUED)[0]) {
+    if (!f || i32_at(f, F_QUEUED)[0] || i32_at(f, F_STATUS)[0]) {
         return;
     }
     dream_count(DREAM_COUNT_ENQUEUE, 1);
@@ -216,6 +222,10 @@ void dream_cancel(dream_ptr f) {
     }
     i32_at(f, F_STATUS)[0] = 2;
 #endif
+    dream_ptr child = ptr_at(f, F_AWAITING)[0];
+    if (child && ptr_at(child, F_WAKER)[0] == f) {
+        ptr_at(child, F_WAKER)[0] = 0;
+    }
     ptr_at(f, F_WAKER)[0] = 0;
     /* Queues borrow the scheduler token. Unlink before dropping it so cancelled
      * frames cannot leave a raw queue pointer into reclaimed storage. */
@@ -489,3 +499,44 @@ static dream_ptr combinator_new(dream_ptr arr, int32_t kind, int32_t esize, void
 dream_ptr dream_all(dream_ptr arr, int32_t esize, void (*copy)(dream_ptr, dream_ptr), const dream_type_info *info) { return combinator_new(arr, KIND_ALL, esize, copy, NULL, info); }
 
 dream_ptr dream_any(dream_ptr arr, dream_result (*clone)(dream_result)) { return combinator_new(arr, KIND_ANY, 8, NULL, clone, NULL); }
+
+/* Signals carry no payload and cannot run independently. The cursor owns them while the
+ * producer is suspended; completion wakes the producer without speculative advancement. */
+dream_ptr dream_yield_signal(void) {
+    return dream_new_future(F_SLOTS, 0, KIND_HOST);
+}
+
+void dream_yield_signal_complete(dream_ptr signal) {
+    dream_async_complete(signal, 0);
+}
+
+void dream_yield_run(dream_ptr producer, dream_ptr ready) {
+    dream_start(producer);
+    while (!status_of(ready)) {
+        ReadyNode *previous = NULL;
+        ReadyNode **link = &rq_head;
+        while (*link && (*link)->f != producer) {
+            previous = *link;
+            link = &(*link)->next;
+        }
+        if (!*link) {
+            DREAM_PANIC_LITERAL(u"synchronous iterator suspended without yielding");
+            return;
+        }
+        ReadyNode *node = *link;
+        *link = node->next;
+        if (rq_tail == node) { rq_tail = previous; }
+        ready_put(node);
+        i32_at(producer, F_QUEUED)[0] = 0;
+        dream_ptr outer_poll = poll_current;
+        int32_t outer_drop = poll_drop_start_retain;
+        poll_current = producer;
+        poll_drop_start_retain = 0;
+        int32_t poll = i32_at(producer, F_POLL)[0];
+        ((int32_t (*)(dream_ptr))dream_ft_get(poll))(producer);
+        int32_t drop = poll_drop_start_retain;
+        poll_current = outer_poll;
+        poll_drop_start_retain = outer_drop;
+        if (drop) { dream_release(producer); }
+    }
+}

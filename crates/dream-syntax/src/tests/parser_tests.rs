@@ -2121,3 +2121,38 @@ fn test_extern_del_is_rejected() {
     let (_, diagnostics) = parse_code(code, &arena);
     assert!(diagnostics.has_errors());
 }
+
+#[test]
+fn parse_yield_and_async_iteration() {
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(
+        "fun values(): Iterable<int> { yield 1; yield break; } async fun main() { await for (let x in values()) {} }",
+        &arena,
+    );
+    assert!(!diagnostics.has_errors());
+    assert!(matches!(
+        program.functions[0].body[0],
+        StatementNode::Yield(_, Some(_))
+    ));
+    assert!(matches!(
+        program.functions[0].body[1],
+        StatementNode::Yield(_, None)
+    ));
+    assert!(matches!(
+        program.functions[1].body[0],
+        StatementNode::AwaitForEach(_, StatementNode::ForEach(..))
+    ));
+}
+
+#[test]
+fn malformed_yield_recovers() {
+    for source in [
+        "fun f() { yield; }",
+        "fun f() { yield",
+        "async fun f() { await for (;;) {} }",
+    ] {
+        let arena = bumpalo::Bump::new();
+        let (_, diagnostics) = parse_code(source, &arena);
+        assert!(diagnostics.has_errors());
+    }
+}

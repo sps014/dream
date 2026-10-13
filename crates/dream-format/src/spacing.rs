@@ -114,6 +114,8 @@ pub(super) fn is_keyword_needing_space(kind: TokenKind) -> bool {
             | TokenKind::DoToken
             | TokenKind::LockToken
             | TokenKind::DeferToken
+            | TokenKind::AwaitToken
+            | TokenKind::YieldToken
             | TokenKind::ReturnToken
             | TokenKind::BreakToken
             | TokenKind::ContinueToken
@@ -165,8 +167,18 @@ fn is_word_like(kind: TokenKind) -> bool {
 fn ends_operand(kind: TokenKind) -> bool {
     matches!(
         kind,
-        TokenKind::CloseParenthesisToken | TokenKind::CloseBracketToken | TokenKind::AwaitToken
-    ) || is_word_like(kind)
+        TokenKind::IdentifierToken
+            | TokenKind::DataTypeToken
+            | TokenKind::BooleanToken
+            | TokenKind::NumberToken
+            | TokenKind::StringToken
+            | TokenKind::InterpolatedStringToken
+            | TokenKind::CharToken
+            | TokenKind::CloseParenthesisToken
+            | TokenKind::CloseBracketToken
+            | TokenKind::CurlyCloseBracketToken
+            | TokenKind::AwaitToken
+    )
 }
 
 /// Decides whether a single space belongs between `prev` and `cur`.

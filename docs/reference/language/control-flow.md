@@ -85,6 +85,8 @@ fun sum(xs: Collection<int>): int {
 }
 ```
 
+Lazy sequences can be written with [`yield`](iterators.md). Use `await for (let x in stream)` to consume an asynchronous sequence inside an async function.
+
 ## break and continue
 
 `break` leaves the nearest loop; `continue` skips to its next iteration:

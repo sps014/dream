@@ -183,7 +183,11 @@ impl<'a> Analyzer<'a> {
                     }
                 }
                 declared => {
-                    if declared.get_type() != exp_elem.get_type() {
+                    let declared_type =
+                        Self::monomorphize_type(declared, &self.current_generic_bindings);
+                    let expected_type =
+                        Self::monomorphize_type(&exp_elem, &self.current_generic_bindings);
+                    if self.type_ctx.lower(&declared_type) != self.type_ctx.lower(&expected_type) {
                         diagnostics.report_error(
                             format!(
                                 "lambda parameter type mismatch: expected {}, got {}",
@@ -591,8 +595,21 @@ impl<'a> Analyzer<'a> {
             body
         };
 
+        let producer = lambda
+            .parameters
+            .iter()
+            .any(|p| p.name.text == super::super::iterators::CHANNEL);
         let func_node = FunctionNode {
-            attributes: Vec::new(),
+            attributes: if producer {
+                parent_function
+                    .attributes
+                    .iter()
+                    .filter(|a| a.name.text == "unsafe")
+                    .cloned()
+                    .collect()
+            } else {
+                Vec::new()
+            },
             name: synthetic_token(TokenKind::IdentifierToken, &name),
             generic_parameters: lambda.generic_parameters.clone(),
             generic_constraints: lambda.generic_constraints.clone(),
@@ -632,6 +649,9 @@ impl<'a> Analyzer<'a> {
         self.function_table
             .record_declaration(func_ref, (def, Vec::new()));
 
+        if let Some(parent) = self.function_declaration(parent_function) {
+            self.closure_parents.insert(def, parent.0);
+        }
         if !captures.is_empty() {
             self.closure_captures.insert(def, captures.clone());
         }

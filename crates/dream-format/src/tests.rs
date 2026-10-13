@@ -284,3 +284,23 @@ fn try_question_mark_hugs_its_operand_but_ternary_does_not() {
     assert!(out.contains("let a = g()?;"), "got:\n{}", out);
     assert!(out.contains("let t = c ?"), "got:\n{}", out);
 }
+
+#[test]
+fn formats_yield_and_async_iteration_without_changing_tokens() {
+    let source = "async fun values():AsyncIterable<int>{yield -1;yield break;} async fun main(){await for(let x in values()){use(x);}}";
+    let formatted = format(source);
+    assert!(formatted.contains("yield -1;"));
+    assert!(formatted.contains("yield break;"));
+    assert!(formatted.contains("await for ("));
+    assert_idempotent(source);
+    let tokens = |text: &str| {
+        let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
+        let result = dream_syntax::lexer::Lexer::new(text.to_string()).lex_all(&mut diagnostics);
+        assert!(!diagnostics.has_errors());
+        result
+            .into_iter()
+            .map(|token| (token.kind, token.text))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(tokens(source), tokens(&formatted));
+}

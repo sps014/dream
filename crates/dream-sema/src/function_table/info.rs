@@ -166,7 +166,8 @@ impl FunctionTableInfo {
         info.is_ref = is_ref;
         info.is_take = is_take;
         info.defaults = defaults;
-        info.is_async = func.is_async;
+        info.is_async = func.is_async
+            && dream_abi::iterators::element(type_ctx, resolved_return, true).is_none();
         info.is_static = func.is_static;
         info.is_unsafe = func.attributes.iter().any(|a| a.name.text == "unsafe");
         info.runtime_support =

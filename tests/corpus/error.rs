@@ -2,6 +2,11 @@ use super::Case;
 
 pub(super) const CASES: &[Case] = &[
     Case::error(
+        "yield_invalid",
+        "'yield' requires an Iterable<T> or async AsyncIterable<T> function\nfunction YieldChannel<int>.emit expects parameter 1 to be int, got string\nuse 'yield break' to end an iterator\niterator parameters cannot be ref or borrow\n'await for' requires an async function\nan async iterator body must contain 'yield' or 'yield break'\n'yield' cannot suspend inside 'lock' or 'defer'\n'await for' requires AsyncIterable<T> or AsyncIterator<T>\niterator signal intrinsics are reserved for internal stdlib state",
+        true,
+    ),
+    Case::error(
         "arc_cycle_annotation_invalid",
         "'@allow_cycle' does not take any arguments\n'@allow_cycle' cannot be applied to a struct",
         true,

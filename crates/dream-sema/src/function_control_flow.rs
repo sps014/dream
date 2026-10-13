@@ -210,6 +210,9 @@ fn is_literal_true(expr: &ExpressionNode) -> bool {
 
 fn stmt_position(stmt: &StatementNode) -> Option<dream_text::text_span::TextSpan> {
     match stmt {
+        StatementNode::Yield(keyword, _) | StatementNode::AwaitForEach(keyword, _) => {
+            Some(keyword.position)
+        }
         StatementNode::Assignment(t, _) => Some(t.position),
         StatementNode::IndexAssignment(e, _, _) => e.position(),
         StatementNode::MemberAssignment(e, _, _) => e.position(),

@@ -4,4 +4,5 @@ module system.core;
 // `@next` lives on the implementing class (attributes are not required on the interface).
 public interface Iterator<T> {
     unique fun next(): Option<T>;
+    unique fun close(): void {}
 }

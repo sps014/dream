@@ -84,6 +84,11 @@ pub enum HStmt {
         target: HExpr,
         body: Vec<HStmt>,
     },
+    /// Cleanup must run on every structured exit, but not when a coroutine merely suspends.
+    Cleanup {
+        body: Vec<HStmt>,
+        cleanup: HExpr,
+    },
     /// `defer { body }` / `defer(q) { body }`. `budget` is the `uint` drain cap; `None` means the
     /// default (one queue chunk).
     Defer {

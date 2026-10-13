@@ -60,8 +60,10 @@ impl Builder {
                 self.add_ref_with_receiver(member, SymKind::Field, scope, receiver_ident(target));
                 self.walk_expr(value, scope);
             }
-            StatementNode::Return(Some(expr)) => self.walk_expr(expr, scope),
-            StatementNode::Return(None) => {}
+            StatementNode::Return(Some(expr)) | StatementNode::Yield(_, Some(expr)) => {
+                self.walk_expr(expr, scope)
+            }
+            StatementNode::Return(None) | StatementNode::Yield(_, None) => {}
             StatementNode::FunctionInvocation(name, _, args) => {
                 self.add_ref(name, SymKind::Function, scope);
                 let params = self
@@ -130,7 +132,9 @@ impl Builder {
                 self.walk_expr(iterable, scope);
                 self.walk_block(body, scope);
             }
-            StatementNode::Labeled(_, inner) => self.walk_stmt(inner, scope),
+            StatementNode::Labeled(_, inner) | StatementNode::AwaitForEach(_, inner) => {
+                self.walk_stmt(inner, scope)
+            }
             StatementNode::AwaitStmt(expr) => self.walk_expr(expr, scope),
             StatementNode::Break(_) | StatementNode::Continue(_) => {}
             StatementNode::Switch(subject, cases, default) => {

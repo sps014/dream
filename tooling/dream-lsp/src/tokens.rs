@@ -22,12 +22,12 @@ pub fn lex_category(kind: TokenKind) -> Option<LexCategory> {
         NumberToken => LexCategory::Number,
         StringToken | CharToken => LexCategory::String,
         BooleanToken => LexCategory::Keyword,
-        IfToken | ElseToken | ForToken | WhileToken | DoToken | ReturnToken | BreakToken
-        | ContinueToken | LetToken | ConstToken | FunToken | StaticToken | ImportToken
-        | PublicToken | ExternToken | ClassToken | StructToken | UnmanagedToken | ExtendToken
-        | IsToken | InToken | EnumToken | TypeToken | SwitchToken | CaseToken | DefaultToken
-        | SealedToken | InterfaceToken | AsyncToken | AwaitToken | InternalToken | ModuleToken
-        | AsToken | RefToken | BorrowToken | WeakToken | UnownedToken | LockToken => {
+        IfToken | ElseToken | ForToken | WhileToken | DoToken | YieldToken | ReturnToken
+        | BreakToken | ContinueToken | LetToken | ConstToken | FunToken | StaticToken
+        | ImportToken | PublicToken | ExternToken | ClassToken | StructToken | UnmanagedToken
+        | ExtendToken | IsToken | InToken | EnumToken | TypeToken | SwitchToken | CaseToken
+        | DefaultToken | SealedToken | InterfaceToken | AsyncToken | AwaitToken | InternalToken
+        | ModuleToken | AsToken | RefToken | BorrowToken | WeakToken | UnownedToken | LockToken => {
             LexCategory::Keyword
         }
         PlusToken

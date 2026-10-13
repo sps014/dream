@@ -16,6 +16,9 @@ impl<'a> Analyzer<'a> {
         self.current_file = function.file_path.clone();
         self.type_ctx
             .set_scope(self.graph.module_for_file(function.file_path.as_deref()));
+        let function = self
+            .iterator_factory(function, diagnostics)
+            .unwrap_or(function);
         let param_table = Rc::new(RefCell::new(
             self.add_function_param_table(function, diagnostics)?,
         ));
@@ -169,7 +172,19 @@ impl<'a> Analyzer<'a> {
             StatementNode::IfElse(..) => {
                 self.analyze_if_else(statement, &ctx, has_parent_while, diagnostics)?
             }
+            StatementNode::Yield(keyword, value) => {
+                self.analyze_yield(keyword, value, &ctx, diagnostics)?
+            }
+            StatementNode::AwaitForEach(keyword, inner) => {
+                self.analyze_async_foreach(keyword, inner, &ctx, diagnostics)?
+            }
             StatementNode::Return(expression) => {
+                if super::iterators::is_producer(parent_function) {
+                    diagnostics.report_error(
+                        "use 'yield break' to end an iterator".into(),
+                        expression.as_ref().and_then(ExpressionNode::position),
+                    );
+                }
                 self.analyze_return(expression, parent_function, symbol_table, diagnostics)?
             }
             StatementNode::While(condition, body) => {

@@ -244,9 +244,10 @@ fn stmt_has_defer(stmt: &HStmt) -> bool {
             else_branch,
             ..
         } => stmts_have_defer(then_branch) || stmts_have_defer(else_branch),
-        HStmt::While { body, .. } | HStmt::DoWhile { body, .. } | HStmt::Lock { body, .. } => {
-            stmts_have_defer(body)
-        }
+        HStmt::While { body, .. }
+        | HStmt::DoWhile { body, .. }
+        | HStmt::Lock { body, .. }
+        | HStmt::Cleanup { body, .. } => stmts_have_defer(body),
         HStmt::For {
             init, step, body, ..
         } => stmts_have_defer(init) || stmts_have_defer(step) || stmts_have_defer(body),
@@ -359,6 +360,7 @@ fn lower_sync_function(
         loops: Vec::new(),
         locks: Vec::new(),
         defers: Vec::new(),
+        cleanups: Vec::new(),
         async_coroutine: false,
     };
     lo.lower_block(&func.body);
@@ -401,6 +403,7 @@ fn lower_async_poll_body_with(
         loops: Vec::new(),
         locks: Vec::new(),
         defers: Vec::new(),
+        cleanups: Vec::new(),
         async_coroutine: true,
     };
     lo.lower_block(&func.body);
@@ -424,6 +427,7 @@ struct LoopCtx {
     /// lock already held when the loop started untouched.
     lock_depth: usize,
     defer_depth: usize,
+    cleanup_depth: usize,
 }
 
 struct Lowerer<'a> {
@@ -440,6 +444,7 @@ struct Lowerer<'a> {
     /// `lower_continue`/`HStmt::Return`.
     locks: Vec<Local>,
     defers: Vec<Local>,
+    cleanups: Vec<HExpr>,
     /// When set, this is an async coroutine body: `return` completes the async task (rather than
     /// returning from a WASM function), and each `await` lowers to a [`Terminator::Await`] suspend
     /// point that splits the current block (so awaits work in any control-flow position).
@@ -712,6 +717,7 @@ impl Lowerer<'_> {
                     Some(e) => Some(self.lower_operand(e)),
                     None => None,
                 };
+                self.release_cleanups_above(0);
                 self.release_all_locks();
                 self.release_all_defers();
                 if self.async_coroutine {
@@ -749,6 +755,14 @@ impl Lowerer<'_> {
             } => self.lower_switch(scrutinee, arms, default),
             HStmt::Break(label) => self.lower_break(label.as_deref()),
             HStmt::Continue(label) => self.lower_continue(label.as_deref()),
+            HStmt::Cleanup { body, cleanup } => {
+                self.cleanups.push(cleanup.clone());
+                self.lower_block(body);
+                self.cleanups.pop();
+                if !self.b.is_terminated() {
+                    self.lower_stmt(&HStmt::Expr(cleanup.clone()));
+                }
+            }
             HStmt::Lock { target, body } => self.lower_lock(target, body),
             HStmt::Defer { budget, body } => self.lower_defer(budget.as_ref(), body),
             HStmt::DebugLine(line) => self.b.push(Statement::DebugLine(*line)),

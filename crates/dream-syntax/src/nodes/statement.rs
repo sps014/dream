@@ -39,6 +39,8 @@ pub enum StatementNode<'a> {
         Vec<ExpressionNode<'a>>,
     ),
     Return(Option<ExpressionNode<'a>>),
+    Yield(SyntaxToken, Option<ExpressionNode<'a>>),
+    AwaitForEach(SyntaxToken, &'a StatementNode<'a>),
     /// If condition, then body, else if pairs, else body
     IfElse(
         ExpressionNode<'a>,
@@ -93,4 +95,35 @@ pub enum StatementNode<'a> {
     /// `checked { body }` / `unchecked { body }` — integer overflow behavior for arithmetic written
     /// lexically inside `body`. The token is the `checked`/`unchecked` keyword.
     Overflow(OverflowMode, SyntaxToken, &'a [StatementNode<'a>]),
+}
+
+impl StatementNode<'_> {
+    pub fn contains_yield(&self) -> bool {
+        let body = |statements: &[Self]| statements.iter().any(Self::contains_yield);
+        match self {
+            Self::Yield(..) => true,
+            Self::IfElse(_, then_, elifs, else_) => {
+                body(then_) || elifs.iter().any(|(_, b)| body(b)) || else_.is_some_and(body)
+            }
+            Self::While(_, b)
+            | Self::DoWhile(b, _)
+            | Self::ForEach(_, _, _, _, b)
+            | Self::Lock(_, b)
+            | Self::Defer(_, b)
+            | Self::Overflow(_, _, b) => body(b),
+            Self::For(init, _, step, b) => {
+                init.is_some_and(Self::contains_yield)
+                    || step.is_some_and(Self::contains_yield)
+                    || body(b)
+            }
+            Self::Labeled(_, inner) | Self::AwaitForEach(_, inner) => inner.contains_yield(),
+            Self::Switch(_, cases, default) => {
+                cases.iter().any(|(_, b)| body(b)) || default.is_some_and(body)
+            }
+            Self::ExpressionStatement(ExpressionNode::Switch(_, _, arms)) => arms.iter().any(
+                |arm| matches!(&arm.body, super::expression::SwitchArmBody::Block(b) if body(b)),
+            ),
+            _ => false,
+        }
+    }
 }

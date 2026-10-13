@@ -4,6 +4,12 @@
 use super::*;
 
 impl Lowerer<'_> {
+    pub(super) fn release_cleanups_above(&mut self, depth: usize) {
+        for expression in self.cleanups[depth..].to_vec().iter().rev() {
+            self.lower_stmt(&HStmt::Expr(expression.clone()));
+        }
+    }
+
     pub(super) fn lower_if(&mut self, cond: &HExpr, then_b: &[HStmt], else_b: &[HStmt]) {
         let c = self.lower_operand(cond);
         let then_blk = self.b.new_block();
@@ -50,6 +56,7 @@ impl Lowerer<'_> {
             label: label.map(str::to_string),
             lock_depth: self.locks.len(),
             defer_depth: self.defers.len(),
+            cleanup_depth: self.cleanups.len(),
         });
         self.b.switch_to(body_blk);
         self.lower_block(body);
@@ -75,6 +82,7 @@ impl Lowerer<'_> {
             label: label.map(str::to_string),
             lock_depth: self.locks.len(),
             defer_depth: self.defers.len(),
+            cleanup_depth: self.cleanups.len(),
         });
         self.b.switch_to(body_blk);
         self.lower_block(body);
@@ -123,6 +131,7 @@ impl Lowerer<'_> {
             label: label.map(str::to_string),
             lock_depth: self.locks.len(),
             defer_depth: self.defers.len(),
+            cleanup_depth: self.cleanups.len(),
         });
         self.b.switch_to(body_blk);
         self.lower_block(body);
@@ -189,6 +198,7 @@ impl Lowerer<'_> {
             label: label.map(str::to_string),
             lock_depth: self.locks.len(),
             defer_depth: self.defers.len(),
+            cleanup_depth: self.cleanups.len(),
         });
         self.b.switch_to(body_blk);
         let elem_local = self.mir_local(elem);
@@ -220,7 +230,10 @@ impl Lowerer<'_> {
     }
 
     pub(super) fn lower_break(&mut self, label: Option<&str>) {
-        if let Some((target, lock_depth, defer_depth)) = self.loop_target(label, true) {
+        if let Some((target, lock_depth, defer_depth, cleanup_depth)) =
+            self.loop_target(label, true)
+        {
+            self.release_cleanups_above(cleanup_depth);
             self.release_locks_above(lock_depth);
             self.release_defers_above(defer_depth);
             self.b.terminate(Terminator::Goto(target));
@@ -228,7 +241,10 @@ impl Lowerer<'_> {
     }
 
     pub(super) fn lower_continue(&mut self, label: Option<&str>) {
-        if let Some((target, lock_depth, defer_depth)) = self.loop_target(label, false) {
+        if let Some((target, lock_depth, defer_depth, cleanup_depth)) =
+            self.loop_target(label, false)
+        {
+            self.release_cleanups_above(cleanup_depth);
             self.release_locks_above(lock_depth);
             self.release_defers_above(defer_depth);
             self.b.terminate(Terminator::Goto(target));
@@ -239,7 +255,7 @@ impl Lowerer<'_> {
         &self,
         label: Option<&str>,
         is_break: bool,
-    ) -> Option<(super::super::BlockId, usize, usize)> {
+    ) -> Option<(super::super::BlockId, usize, usize, usize)> {
         let ctx = match label {
             Some(l) => self
                 .loops
@@ -253,7 +269,7 @@ impl Lowerer<'_> {
         } else {
             ctx.continue_blk
         };
-        Some((blk, ctx.lock_depth, ctx.defer_depth))
+        Some((blk, ctx.lock_depth, ctx.defer_depth, ctx.cleanup_depth))
     }
 
     /// `lock (target) { body }`: evaluates `target` exactly once into a fresh temp (so a

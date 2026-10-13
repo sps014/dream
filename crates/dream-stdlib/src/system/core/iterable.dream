@@ -1,0 +1,187 @@
+module system.core;
+
+public interface Iterable<T> {
+    borrow fun iterator(): Iterator<T>;
+}
+
+public interface AsyncIterator<T> {
+    async unique fun next(): Option<T>;
+    unique fun close(): void;
+}
+
+public interface AsyncIterable<T> {
+    borrow fun iterator(): AsyncIterator<T>;
+}
+
+public static class YieldSignals {
+    @intrinsic("dream_yield_signal")
+    public static extern fun pending(): Future<void>;
+    @intrinsic("dream_yield_signal_complete")
+    public static extern fun complete(borrow signal: Future<void>): void;
+    @intrinsic("dream_yield_run")
+    public static extern fun run(borrow producer: Future<void>, borrow ready: Future<void>): void;
+}
+
+@allow_cycle
+public class YieldChannel<T> {
+    public value: Option<T>;
+    public ended: bool;
+    public ready: Future<void>;
+    public resume: Future<void>;
+
+    public constructor() {
+        this.value = Option.None;
+        this.ended = false;
+        this.ready = YieldSignals.pending();
+        this.resume = YieldSignals.pending();
+    }
+
+    public fun emit(value: T): Future<void> {
+        this.value = Option.Some(value);
+        YieldSignals.complete(this.ready);
+        return this.resume;
+    }
+
+    public fun finish(): void {
+        this.ended = true;
+        YieldSignals.complete(this.ready);
+    }
+
+    public fun advance(): void {
+        this.value = Option.None;
+        this.ready = YieldSignals.pending();
+        let previous = this.resume;
+        this.resume = YieldSignals.pending();
+        YieldSignals.complete(previous);
+    }
+}
+
+@allow_cycle
+public class YieldCursor<T> : Iterator<T> {
+    channel: YieldChannel<T>;
+    producer: Option<Future<void>>;
+    started: bool;
+
+    public constructor(channel: YieldChannel<T>, producer: Future<void>) {
+        this.channel = channel;
+        this.producer = Option.Some(producer);
+        this.started = false;
+    }
+
+    public fun next(): Option<T> {
+        if this.channel.ended { return Option.None; }
+        if this.started { this.channel.advance(); }
+        this.started = true;
+        YieldSignals.run(this.producer.unwrap(), this.channel.ready);
+        return this.channel.value;
+    }
+
+    public fun close(): void {
+        this.channel.finish();
+        if this.producer.is_some() { Promise.cancel(this.producer.unwrap()); }
+        YieldSignals.complete(this.channel.resume);
+        this.producer = Option.None;
+        this.channel.value = Option.None;
+    }
+
+    fun del() { this.close(); }
+}
+
+@allow_cycle
+public class YieldIterable<T> : Iterable<T> {
+    factory: fun(YieldChannel<T>): Future<void>;
+
+    public constructor(factory: fun(YieldChannel<T>): Future<void>) {
+        this.factory = factory;
+    }
+
+    public fun iterator(): Iterator<T> {
+        let channel = YieldChannel<T>();
+        return YieldCursor<T>(channel, (this.factory)(channel));
+    }
+}
+
+@allow_cycle
+public class YieldAsyncCursor<T> : AsyncIterator<T> {
+    channel: YieldChannel<T>;
+    producer: Option<Future<void>>;
+    started: bool;
+    busy: bool;
+
+    public constructor(channel: YieldChannel<T>, producer: Future<void>) {
+        this.channel = channel;
+        this.producer = Option.Some(producer);
+        this.started = false;
+        this.busy = false;
+    }
+
+    public async fun next(): Option<T> {
+        if this.channel.ended { return Option.None; }
+        if this.busy { System.panic("async iterator advancement is already pending"); }
+        this.busy = true;
+        let advancement = YieldAdvanceLease<T>(this);
+        if this.started { this.channel.advance(); }
+        this.started = true;
+        Promise.start(this.producer.unwrap());
+        this.channel.ready.await;
+        this.busy = false;
+        advancement.complete();
+        return this.channel.value;
+    }
+
+    public fun close(): void {
+        this.channel.finish();
+        if this.producer.is_some() { Promise.cancel(this.producer.unwrap()); }
+        YieldSignals.complete(this.channel.resume);
+        this.producer = Option.None;
+        this.channel.value = Option.None;
+    }
+
+    fun del() { this.close(); }
+}
+
+@allow_cycle
+public class YieldAsyncIterable<T> : AsyncIterable<T> {
+    factory: fun(YieldChannel<T>): Future<void>;
+
+    public constructor(factory: fun(YieldChannel<T>): Future<void>) {
+        this.factory = factory;
+    }
+
+    public fun iterator(): AsyncIterator<T> {
+        let channel = YieldChannel<T>();
+        return YieldAsyncCursor<T>(channel, (this.factory)(channel));
+    }
+}
+
+
+// A loop owns a lease even when the caller retains the cursor. Dropping a cancelled
+// coroutine therefore closes the active cursor independently of its other aliases.
+@allow_cycle
+public class IteratorLease<T> {
+    cursor: Iterator<T>;
+    public constructor(cursor: Iterator<T>) { this.cursor = cursor; }
+    public fun close(): void { this.cursor.close(); }
+    fun del() { this.close(); }
+}
+
+@allow_cycle
+public class AsyncIteratorLease<T> {
+    cursor: AsyncIterator<T>;
+    public constructor(cursor: AsyncIterator<T>) { this.cursor = cursor; }
+    public fun close(): void { this.cursor.close(); }
+    fun del() { this.close(); }
+}
+
+
+@allow_cycle
+public class YieldAdvanceLease<T> {
+    cursor: YieldAsyncCursor<T>;
+    complete_: bool;
+    public constructor(cursor: YieldAsyncCursor<T>) {
+        this.cursor = cursor;
+        this.complete_ = false;
+    }
+    public fun complete(): void { this.complete_ = true; }
+    fun del() { if !this.complete_ { this.cursor.close(); } }
+}

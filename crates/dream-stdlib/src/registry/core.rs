@@ -106,6 +106,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/panic.dream"),
         ),
         (
+            "<std>/system/core/iterable.dream",
+            include_str!("../system/core/iterable.dream"),
+        ),
+        (
             "<std>/system/core/iterator.dream",
             include_str!("../system/core/iterator.dream"),
         ),

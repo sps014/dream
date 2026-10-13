@@ -10,6 +10,13 @@ impl<'a> Rewriter<'a, '_> {
     ) -> Result<StatementNode<'a>, Error> {
         let arena = self.arena;
         Ok(match stmt {
+            StatementNode::Yield(keyword, value) => StatementNode::Yield(
+                keyword.clone(),
+                value.as_ref().map(|e| self.expression(e)).transpose()?,
+            ),
+            StatementNode::AwaitForEach(keyword, inner) => {
+                StatementNode::AwaitForEach(keyword.clone(), arena.alloc(self.statement(inner)?))
+            }
             StatementNode::ExpressionStatement(e) => {
                 StatementNode::ExpressionStatement(self.expression(e)?)
             }

@@ -277,6 +277,13 @@ pub enum Statement {
         dst_off: Operand,
         count: Operand,
     },
+    /// A checked permutation; both slots retain their existing ownership tokens.
+    ArraySlotSwap {
+        elem_ty: TypeId,
+        array: Operand,
+        left: Operand,
+        right: Operand,
+    },
     /// `Buffer.free<T>(arr)` (`@unsafe`) — unconditionally `$free`s `array`'s backing block via the
     /// allocator, bypassing reference counting. Modeled as a statement (not an `Rvalue`) since it
     /// has no result — `Buffer.free` is typed `void`.
@@ -624,6 +631,12 @@ pub enum Rvalue {
         elem_ty: TypeId,
         array: Operand,
         new_len: Operand,
+    },
+    /// Transfers a checked array slot's token to the result and zeroes the source.
+    ArraySlotTake {
+        elem_ty: TypeId,
+        array: Operand,
+        index: Operand,
     },
     /// A numeric/object coercion. Carries `(value, from_ty, to_ty)`; the source type is captured at
     /// lowering time so later constant propagation (which can replace the value with a bare `Const`

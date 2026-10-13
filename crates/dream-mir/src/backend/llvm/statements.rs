@@ -127,6 +127,14 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let bytes = self.scaled(&n, es);
                 self.call("dream_mem_copy", &[V::s(da), V::s(sa), V::u(bytes)]);
             }
+            Statement::ArraySlotSwap {
+                elem_ty,
+                array,
+                left,
+                right,
+            } => {
+                self.array_slot_swap(*elem_ty, array, left, right);
+            }
             Statement::ArrayElemsFill {
                 dst,
                 dst_off,

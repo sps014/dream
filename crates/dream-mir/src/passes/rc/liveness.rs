@@ -130,6 +130,13 @@ pub(crate) fn transfer_stmt(stmt: &Statement, live: &mut IndexSet<u32>) {
             add_operand_reads(src_off, live);
             add_operand_reads(count, live);
         }
+        Statement::ArraySlotSwap {
+            array, left, right, ..
+        } => {
+            add_operand_reads(array, live);
+            add_operand_reads(left, live);
+            add_operand_reads(right, live);
+        }
         Statement::ArrayElemsFill {
             dst,
             dst_off,
@@ -254,6 +261,10 @@ fn add_rvalue_reads(rv: &Rvalue, live: &mut IndexSet<u32>) {
         Rvalue::EnumName { value, .. } => add(value),
         Rvalue::ArrayNew { len, .. } => add(len),
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => add(o),
+        Rvalue::ArraySlotTake { array, index, .. } => {
+            add(array);
+            add(index);
+        }
         Rvalue::ArrayRealloc { array, new_len, .. } => {
             add(array);
             add(new_len);

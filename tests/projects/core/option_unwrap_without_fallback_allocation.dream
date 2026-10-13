@@ -1,0 +1,18 @@
+import system.testing;
+import system;
+
+@test
+fun option_unwrap_without_fallback_allocation(): void {
+    let start = Debug.total_allocations;
+    let total = 0;
+    let i = 0;
+    while i < 100 {
+        total = total + Option.Some(i).unwrap();
+        let result: Result<int, int> = Result.Ok(i);
+        total = total + result.unwrap();
+        i = i + 1;
+    }
+    let allocations = Debug.total_allocations - start;
+    Assert.eq(total, 9900);
+    Assert.eq(allocations, (long)0);
+}

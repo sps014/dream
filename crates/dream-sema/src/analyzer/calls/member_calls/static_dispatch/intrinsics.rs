@@ -206,6 +206,8 @@ impl<'a> Analyzer<'a> {
                     | intrinsics::IntrinsicOp::ArrayRealloc
                     | intrinsics::IntrinsicOp::ArrayElemsCopy
                     | intrinsics::IntrinsicOp::ArrayElemsFill
+                    | intrinsics::IntrinsicOp::ArraySlotSwap
+                    | intrinsics::IntrinsicOp::ArraySlotTake
                     | intrinsics::IntrinsicOp::ForceFree
                     | intrinsics::IntrinsicOp::ArrayGetUnchecked
                     | intrinsics::IntrinsicOp::ArraySetUnchecked

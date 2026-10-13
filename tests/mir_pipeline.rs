@@ -498,3 +498,31 @@ fn recursive_builder_uses_plain_arc_without_collector_clones() {
         assert!(body.contains("@build_tree("));
     });
 }
+
+#[test]
+fn typed_slot_swap_emits_checks_without_arc_transitions() {
+    use dream_mir::{Operand, Place, Statement, Terminator};
+    let mut ctx = TypeCtx::new();
+    let string = ctx.interner.string();
+    let arr = ctx.interner.array(string);
+    let mut b = dream_mir::build::FunctionBuilder::new("swap_slots", ctx.interner.void());
+    let a = b.new_param(arr, None);
+    b.push(Statement::ArraySlotSwap {
+        elem_ty: string,
+        array: Operand::Copy(Place::Local(a)),
+        left: Operand::Const(dream_mir::Const::Int(0)),
+        right: Operand::Const(dream_mir::Const::Int(1)),
+    });
+    b.terminate(Terminator::Return(None));
+    let mir = dream_mir::Mir {
+        functions: vec![b.finish()],
+        ..Default::default()
+    };
+    assert!(dream_mir::verify::verify_module(&mir, &ctx.interner).is_empty());
+    let ir = common::emit_ll(&mir, &ctx.interner);
+    let body = common::ir_func_body(&ir, "swap_slots");
+    assert_eq!(body.matches("@dream_array_at(").count(), 2);
+    assert!(!body.contains("@dream_retain("));
+    assert!(!body.contains("@dream_release("));
+    assert_eq!(body.matches("@llvm.memcpy.p0.p0.i64(").count(), 3);
+}

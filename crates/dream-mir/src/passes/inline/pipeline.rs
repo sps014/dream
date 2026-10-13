@@ -1,7 +1,6 @@
 use super::super::ModulePass;
 use super::FnKey;
 use super::eligibility::find_site;
-use super::graph::address_taken;
 use super::graph::count_call_sites;
 use super::graph::recursive_set;
 use super::splice::perform_inline;
@@ -30,7 +29,6 @@ impl ModulePass for Inliner {
             .map(|(i, f)| ((f.def, f.instance.clone()), i))
             .collect();
         let call_counts = count_call_sites(mir);
-        let addr_taken = address_taken(mir);
         let recursive = recursive_set(mir, &index);
 
         let mut changed = false;
@@ -40,15 +38,8 @@ impl ModulePass for Inliner {
                 if mir.functions[fi].blocks.len() > CALLER_BLOCK_CAP {
                     break;
                 }
-                let Some(site) = find_site(
-                    mir,
-                    fi,
-                    &index,
-                    &recursive,
-                    &call_counts,
-                    &addr_taken,
-                    interner,
-                ) else {
+                let Some(site) = find_site(mir, fi, &index, &recursive, &call_counts, interner)
+                else {
                     break;
                 };
                 perform_inline(mir, fi, site, interner);

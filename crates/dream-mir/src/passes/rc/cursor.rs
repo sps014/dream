@@ -680,6 +680,7 @@ pub(super) fn mark_stmt_escapes(stmt: &Statement, escaped: &mut IndexSet<u32>) {
             escape_operand(dst, escaped);
             escape_operand(src, escaped);
         }
+        Statement::ArraySlotSwap { array, .. } => escape_operand(array, escaped),
         Statement::ArrayElemsFill { dst, .. } => escape_operand(dst, escaped),
         _ => {}
     }

@@ -4,9 +4,9 @@
 use crate::Rvalue;
 use dream_types::{TyKind, TypeInterner};
 
-/// A `Move`, a fresh allocation or a boxing cast: the slot takes the value's `+1`.
+/// A moved local, owning producer result or boxing cast transfers its token into the slot.
 pub(crate) fn store_adopts(interner: &TypeInterner, rv: &Rvalue) -> bool {
-    matches!(rv, Rvalue::Move { .. }) || rvalue_allocates(rv) || boxes_into_object(interner, rv)
+    matches!(rv, Rvalue::Move { .. }) || rvalue_owns_result(rv) || boxes_into_object(interner, rv)
 }
 
 /// `int` → `object` and friends allocate the box they yield (`dream_box_*`), so the slot they are
@@ -22,7 +22,8 @@ pub(crate) fn boxes_into_object(interner: &TypeInterner, rv: &Rvalue) -> bool {
         && !interner.is_rc_tracked(*from)
 }
 
-pub(crate) fn rvalue_allocates(rv: &Rvalue) -> bool {
+/// Producers yield an owning result; slot extraction transfers an existing token.
+pub(crate) fn rvalue_owns_result(rv: &Rvalue) -> bool {
     // Fewer than two parts never reaches `dream_concat_n`: one part lowers to the operand itself
     // and zero to an interned literal, neither of which is a reference this store may adopt.
     if let Rvalue::Concat(parts) = rv {
@@ -31,6 +32,7 @@ pub(crate) fn rvalue_allocates(rv: &Rvalue) -> bool {
     matches!(
         rv,
         Rvalue::ObservedLoad(_)
+            | Rvalue::ArraySlotTake { .. }
             | Rvalue::New { .. }
             | Rvalue::Tuple { .. }
             | Rvalue::UnionNew { .. }

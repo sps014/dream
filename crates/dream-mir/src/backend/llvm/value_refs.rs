@@ -6,7 +6,7 @@ use super::places::ELEM_ALIGN;
 use crate::Rvalue;
 use crate::backend::shared::abi_types::elem_size;
 use crate::backend::shared::glue::{release_sym, retain_sym};
-use crate::rc_store::rvalue_allocates;
+use crate::rc_store::rvalue_owns_result;
 use dream_types::TypeId;
 
 #[derive(Clone)]
@@ -49,13 +49,13 @@ impl Fx<'_, '_> {
         self.memcpy(&snapshot, &source, &Value::i64(size));
         let value = self.ptr_value(&snapshot);
         // An overlapping source must survive destruction of the old slot, including callbacks.
-        if !rvalue_allocates(rv) {
+        if !rvalue_owns_result(rv) {
             self.value_refs(ty, &value, true);
         }
         let old = self.ptr_value(dest);
         self.value_refs(ty, &old, false);
         self.memcpy(dest, &snapshot, &Value::i64(size));
-        if rvalue_allocates(rv) && !self.is_buffer_result(rv) {
+        if rvalue_owns_result(rv) && !self.is_buffer_result(rv) {
             self.call("dream_free", std::slice::from_ref(rhs));
         }
     }
@@ -77,7 +77,7 @@ impl Fx<'_, '_> {
         }
         let (d, s) = (self.ptr(dest), self.ptr(rhs));
         self.memcpy(&d, &s, &Value::i64(size));
-        if rvalue_allocates(rv) {
+        if rvalue_owns_result(rv) {
             if !self.is_buffer_result(rv) {
                 self.call("dream_free", std::slice::from_ref(rhs));
             }

@@ -33,7 +33,9 @@ pub(super) fn intrinsic_summary(op: IntrinsicOp) -> Option<ModRef> {
     );
     let quiet = matches!(
         op,
-        I::ArrayNew
+        I::FuncboxFuncidx
+            | I::FuncboxEnv
+            | I::ArrayNew
             | I::StringAlloc
             | I::StringSet
             | I::StringFromUtf8
@@ -54,7 +56,12 @@ pub(super) fn intrinsic_summary(op: IntrinsicOp) -> Option<ModRef> {
     // Element stores of these may release an RC occupant; the element type is not known here.
     let elem_store = matches!(
         op,
-        I::ArrayRealloc | I::ArrayElemsCopy | I::ArrayElemsFill | I::ArraySetUnchecked
+        I::ArraySlotTake
+            | I::ArraySlotSwap
+            | I::ArrayRealloc
+            | I::ArrayElemsCopy
+            | I::ArrayElemsFill
+            | I::ArraySetUnchecked
     );
     if !(observes || quiet || diverges || elem_store) {
         return None;
@@ -65,4 +72,17 @@ pub(super) fn intrinsic_summary(op: IntrinsicOp) -> Option<ModRef> {
         may_destroy: elem_store,
         ..Known::default()
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn function_box_reads_are_quiet_but_creation_stays_conservative() {
+        for op in [IntrinsicOp::FuncboxFuncidx, IntrinsicOp::FuncboxEnv] {
+            assert!(intrinsic_summary(op).is_some_and(|effects| effects.is_quiet()));
+        }
+        assert!(intrinsic_summary(IntrinsicOp::FuncboxNew).is_none());
+    }
 }

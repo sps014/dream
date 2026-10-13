@@ -252,6 +252,7 @@ pub(super) fn stmt_region_safe(
         | Statement::Call { .. }
         | Statement::ArrayElemsCopy { .. }
         | Statement::ArrayElemsFill { .. }
+        | Statement::ArraySlotSwap { .. }
         | Statement::SimdV128 { .. }
         | Statement::ValueDrop(_)
         | Statement::ValueRetain(_)
@@ -334,6 +335,7 @@ pub(super) fn rvalue_region_safe(cx: &mut SafeCx<'_>, rv: &Rvalue) -> bool {
         }
         Rvalue::ArrayNew { .. }
         | Rvalue::ArrayLit { .. }
+        | Rvalue::ArraySlotTake { .. }
         | Rvalue::ArrayRealloc { .. }
         | Rvalue::Concat(_)
         | Rvalue::ConcatInt { .. }

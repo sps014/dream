@@ -186,6 +186,13 @@ fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
             read_operand(src_off, read);
             read_operand(count, read);
         }
+        Statement::ArraySlotSwap {
+            array, left, right, ..
+        } => {
+            read_operand(array, read);
+            read_operand(left, read);
+            read_operand(right, read);
+        }
         Statement::ArrayElemsFill {
             dst,
             dst_off,
@@ -297,6 +304,10 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
         Rvalue::ArrayNew { len, .. } => read_operand(len, read),
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
             read_operand(o, read)
+        }
+        Rvalue::ArraySlotTake { array, index, .. } => {
+            read_operand(array, read);
+            read_operand(index, read);
         }
         Rvalue::ArrayRealloc { array, new_len, .. } => {
             read_operand(array, read);

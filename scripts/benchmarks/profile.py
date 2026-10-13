@@ -61,6 +61,7 @@ def main() -> int:
     p = argparse.ArgumentParser(prog="bench.py profile", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--suite", choices=sorted(SUITES), default="micro")
+    p.add_argument("--filter", nargs="+", default=[], help="macro workloads to execute")
     p.add_argument("--benchmark", type=Path, help="fixture path (overrides --suite)")
     p.add_argument("--dream", default=str(ROOT / "target" / "release" / dream_name()))
     p.add_argument("--tool", choices=["samply", "perf", "xctrace", "sample"])
@@ -80,6 +81,12 @@ def main() -> int:
         raise SystemExit(f"profile: missing compiled artifact {binary}")
 
     env = dict(os.environ, DREAM_BENCH_PASSES=str(args.passes), DREAM_BENCH_SEED="1")
+    if args.filter:
+        if args.suite != "macro":
+            raise SystemExit("profile: --filter is supported by the macro suite")
+        env["DREAM_BENCH_ONLY"] = ",".join(args.filter)
+    else:
+        env.pop("DREAM_BENCH_ONLY", None)
     tool = sampler(args.tool)
     if tool == "sample":
         report = out / "sample.txt"

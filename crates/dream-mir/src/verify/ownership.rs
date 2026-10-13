@@ -2,7 +2,7 @@
 
 use super::operands::{other_stmt_locals, rvalue_local_operands, terminator_reads};
 use super::{Violation, violation};
-use crate::{BasicBlock, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use crate::{BasicBlock, Const, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::TypeInterner;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -21,6 +21,78 @@ pub(super) fn check_rc_types(
     out: &mut Vec<Violation>,
 ) {
     for (si, s) in block.stmts.iter().enumerate() {
+        if let Statement::ArraySlotSwap {
+            elem_ty,
+            array,
+            left,
+            right,
+        } = s
+        {
+            let array_ty = match array {
+                Operand::Copy(Place::Local(local)) => {
+                    f.locals.get(local.0 as usize).map(|decl| decl.ty)
+                }
+                _ => None,
+            };
+            let valid_index = |op: &Operand| match op {
+                Operand::Const(Const::Int(_)) => true,
+                Operand::Copy(Place::Local(local)) => f
+                    .locals
+                    .get(local.0 as usize)
+                    .is_some_and(|decl| decl.ty == interner.int()),
+                _ => false,
+            };
+            if array_ty.and_then(|ty| interner.unwrap_array(ty)) != Some(*elem_ty)
+                || !valid_index(left)
+                || !valid_index(right)
+            {
+                out.push(violation(
+                    f,
+                    bi,
+                    si,
+                    "slot permutation requires a matching typed array and int indices".into(),
+                ));
+            }
+        }
+        if let Statement::Assign(
+            place,
+            Rvalue::ArraySlotTake {
+                elem_ty,
+                array,
+                index,
+            },
+        ) = s
+        {
+            let valid_array = match array {
+                Operand::Copy(Place::Local(l)) => {
+                    f.locals
+                        .get(l.0 as usize)
+                        .and_then(|d| interner.unwrap_array(d.ty))
+                        == Some(*elem_ty)
+                }
+                _ => false,
+            };
+            let valid_index = match index {
+                Operand::Const(Const::Int(_)) => true,
+                Operand::Copy(Place::Local(l)) => f
+                    .locals
+                    .get(l.0 as usize)
+                    .is_some_and(|d| d.ty == interner.int()),
+                _ => false,
+            };
+            let valid_result = match place {
+                Place::Local(l) => f.locals.get(l.0 as usize).is_some_and(|d| d.ty == *elem_ty),
+                _ => true,
+            };
+            if !valid_array || !valid_index || !valid_result {
+                out.push(violation(
+                    f,
+                    bi,
+                    si,
+                    "slot transfer requires a matching typed array, result and int index".into(),
+                ));
+            }
+        }
         let (op, what) = match s {
             Statement::Retain(o) => (o, "retain"),
             Statement::Release(o) => (o, "release"),

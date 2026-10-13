@@ -11,6 +11,27 @@ mod bodies;
 mod entry;
 mod visibility;
 impl<'a> Analyzer<'a> {
+    pub(in crate::analyzer) fn check_slot_intrinsic_declaration(
+        &self,
+        function: &dream_syntax::nodes::FunctionNode<'a>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        use dream_abi::intrinsics::IntrinsicOp;
+        if matches!(
+            IntrinsicOp::from_attributes(&function.attributes),
+            Some(IntrinsicOp::ArraySlotSwap | IntrinsicOp::ArraySlotTake)
+        ) && !function
+            .file_path
+            .as_deref()
+            .is_some_and(dream_stdlib::is_std_source)
+        {
+            diagnostics.report_error(
+                "slot transfer intrinsics are reserved for internal stdlib storage".into(),
+                Some(function.name.position),
+            );
+        }
+    }
+
     /// Pass 1: register every (non-generic) function signature; stash generic templates.
     pub(in crate::analyzer) fn register_functions(
         &mut self,
@@ -20,6 +41,7 @@ impl<'a> Analyzer<'a> {
         let mut exported = indexmap::IndexSet::new();
         for function in node.functions.iter() {
             diagnostics.file_path = file_path_string(&function.file_path);
+            self.check_slot_intrinsic_declaration(function, diagnostics);
             if dream_abi::attributes::has_export_attr(&function.attributes) {
                 let name = &function.name.text;
                 if !dream_abi::c_abi::is_c_identifier(name)

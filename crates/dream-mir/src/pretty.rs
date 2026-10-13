@@ -258,6 +258,18 @@ impl FnPrinter<'_> {
                 self.operand(src_off),
                 self.operand(count)
             ),
+            Statement::ArraySlotSwap {
+                elem_ty,
+                array,
+                left,
+                right,
+            } => format!(
+                "array_slot_swap::<{}>({}, {}, {})",
+                self.cx.ty(*elem_ty),
+                self.operand(array),
+                self.operand(left),
+                self.operand(right)
+            ),
             Statement::ArrayElemsFill {
                 elem_ty,
                 dst,
@@ -483,6 +495,16 @@ impl FnPrinter<'_> {
             Rvalue::FromBytes { bytes, ty } => {
                 format!("from_bytes::<{}>({})", self.cx.ty(*ty), self.operand(bytes))
             }
+            Rvalue::ArraySlotTake {
+                elem_ty,
+                array,
+                index,
+            } => format!(
+                "array_slot_take::<{}>({}, {})",
+                self.cx.ty(*elem_ty),
+                self.operand(array),
+                self.operand(index)
+            ),
             Rvalue::ArrayRealloc {
                 elem_ty,
                 array,

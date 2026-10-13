@@ -179,6 +179,10 @@ pub const ATTR_ARRAY_REALLOC: &str = "array_realloc";
 pub const ATTR_ARRAY_ELEMS_COPY: &str = "array_elems_copy";
 /// `Buffer.elems_fill<T>(dst, dst_off, count)` — zero `count` unmanaged elements (`memory.fill`).
 pub const ATTR_ARRAY_ELEMS_FILL: &str = "array_elems_fill";
+/// Checked extraction of a typed slot, transferring its token and zeroing the source.
+pub const ATTR_ARRAY_SLOT_TAKE: &str = "array_slot_take";
+/// Checked typed slot permutation, preserving the array's ownership tokens.
+pub const ATTR_ARRAY_SLOT_SWAP: &str = "array_slot_swap";
 /// `Buffer.free<T>(arr)` — unconditional `$free` of an array's backing block, bypassing
 /// reference counting.
 pub const ATTR_FORCE_FREE: &str = "force_free";
@@ -371,6 +375,10 @@ pub enum IntrinsicOp {
     ArrayElemsCopy,
     /// `Buffer.elems_fill<T>(…)` (`@unsafe`) — zero unmanaged array elements.
     ArrayElemsFill,
+    /// Permutes two typed slots without changing their ownership.
+    ArraySlotSwap,
+    /// Transfers one array slot into an owning result.
+    ArraySlotTake,
     /// `Buffer.free<T>(arr)` (`@unsafe`) — unconditional `$free`, bypassing reference counting.
     ForceFree,
     /// `Buffer.get_unchecked<T>(arr, i)` (`@unsafe`) — `arr[i]` without the bounds check.
@@ -453,6 +461,8 @@ impl IntrinsicOp {
             ATTR_ARRAY_REALLOC => IntrinsicOp::ArrayRealloc,
             ATTR_ARRAY_ELEMS_COPY => IntrinsicOp::ArrayElemsCopy,
             ATTR_ARRAY_ELEMS_FILL => IntrinsicOp::ArrayElemsFill,
+            ATTR_ARRAY_SLOT_SWAP => IntrinsicOp::ArraySlotSwap,
+            ATTR_ARRAY_SLOT_TAKE => IntrinsicOp::ArraySlotTake,
             ATTR_FORCE_FREE => IntrinsicOp::ForceFree,
             ATTR_ARRAY_GET_UNCHECKED => IntrinsicOp::ArrayGetUnchecked,
             ATTR_ARRAY_SET_UNCHECKED => IntrinsicOp::ArraySetUnchecked,

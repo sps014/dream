@@ -179,6 +179,9 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
                 | subst_operand(src_off, known)
                 | subst_operand(count, known)
         }
+        Statement::ArraySlotSwap {
+            array, left, right, ..
+        } => subst_operand(array, known) | subst_operand(left, known) | subst_operand(right, known),
         Statement::ArrayElemsFill {
             dst,
             dst_off,
@@ -268,6 +271,9 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
         Rvalue::ArrayNew { len, .. } => subst_operand(len, known),
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
             subst_operand(o, known)
+        }
+        Rvalue::ArraySlotTake { array, index, .. } => {
+            subst_operand(array, known) | subst_operand(index, known)
         }
         Rvalue::ArrayRealloc { array, new_len, .. } => {
             subst_operand(array, known) | subst_operand(new_len, known)
@@ -445,7 +451,10 @@ mod tests {
         let mut b = FunctionBuilder::new("f", i.bool());
         let x = b.new_temp(ulong);
         let c = b.new_temp(i.bool());
-        b.assign(Place::Local(x), Rvalue::Use(Operand::Const(Const::Long(-1))));
+        b.assign(
+            Place::Local(x),
+            Rvalue::Use(Operand::Const(Const::Long(-1))),
+        );
         b.assign(
             Place::Local(c),
             Rvalue::Binary(
@@ -461,7 +470,10 @@ mod tests {
             Statement::Assign(_, Rvalue::Binary(_, Operand::Copy(Place::Local(l)), _)) => {
                 assert_eq!(l, &x)
             }
-            other => panic!("expected the ulong local in the comparison, got {:?}", other),
+            other => panic!(
+                "expected the ulong local in the comparison, got {:?}",
+                other
+            ),
         }
     }
 }

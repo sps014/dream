@@ -18,9 +18,9 @@ mod frame_alloc;
 #[cfg(test)]
 mod frame_alloc_tests;
 pub(crate) mod funcbox_abi;
+mod function_targets;
 mod global_prop;
 mod gvn;
-mod scalar_operands;
 pub(crate) mod inline;
 mod iv;
 mod licm;
@@ -40,6 +40,7 @@ mod param_modes;
 mod param_modes_tests;
 mod prop;
 pub(crate) mod rc;
+mod scalar_operands;
 mod sccp;
 mod simplify_cfg;
 mod slice_measure;

@@ -213,6 +213,9 @@ fn rvalue_local_reads(rv: &Rvalue, local: u32) -> u32 {
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
             operand_local_reads(o, local)
         }
+        Rvalue::ArraySlotTake { array, index, .. } => {
+            operand_local_reads(array, local) + operand_local_reads(index, local)
+        }
         Rvalue::ArrayRealloc { array, new_len, .. } => {
             operand_local_reads(array, local) + operand_local_reads(new_len, local)
         }

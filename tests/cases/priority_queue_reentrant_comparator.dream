@@ -1,0 +1,7 @@
+import system;
+import system.collections;
+let queue = PriorityQueue<int>((a, b) => { queue.clear(); return a - b; });
+fun main(): void {
+    queue.push(1);
+    queue.push(2);
+}

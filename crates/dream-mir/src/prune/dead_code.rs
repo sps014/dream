@@ -235,7 +235,8 @@ fn collect_stmt_types(s: &Statement, seed: &mut impl FnMut(TypeId)) {
         Statement::IndirectCall { sig, .. } => seed(*sig),
         Statement::Print { ty, .. }
         | Statement::ArrayElemsCopy { elem_ty: ty, .. }
-        | Statement::ArrayElemsFill { elem_ty: ty, .. } => seed(*ty),
+        | Statement::ArrayElemsFill { elem_ty: ty, .. }
+        | Statement::ArraySlotSwap { elem_ty: ty, .. } => seed(*ty),
         Statement::Retain(_)
         | Statement::Release(_)
         | Statement::Panic(_)
@@ -284,6 +285,7 @@ fn collect_rvalue_types(rv: &Rvalue, seed: &mut impl FnMut(TypeId)) {
         Rvalue::TypeName(_) => {}
         Rvalue::ArrayNew { elem_ty, .. }
         | Rvalue::ArrayLit { elem_ty, .. }
+        | Rvalue::ArraySlotTake { elem_ty, .. }
         | Rvalue::ArrayRealloc { elem_ty, .. } => seed(*elem_ty),
         Rvalue::Cast(_, from, to) => {
             seed(*from);
@@ -664,6 +666,13 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
             collect_global_reads_operand(src_off, out);
             collect_global_reads_operand(count, out);
         }
+        Statement::ArraySlotSwap {
+            array, left, right, ..
+        } => {
+            collect_global_reads_operand(array, out);
+            collect_global_reads_operand(left, out);
+            collect_global_reads_operand(right, out);
+        }
         Statement::ArrayElemsFill {
             dst,
             dst_off,
@@ -729,6 +738,10 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
         | Rvalue::ToBytes { value: o, .. }
         | Rvalue::FromBytes { bytes: o, .. }
         | Rvalue::UnionField { base: o, .. } => collect_global_reads_operand(o, out),
+        Rvalue::ArraySlotTake { array, index, .. } => {
+            collect_global_reads_operand(array, out);
+            collect_global_reads_operand(index, out);
+        }
         Rvalue::ArrayRealloc { array, new_len, .. } => {
             collect_global_reads_operand(array, out);
             collect_global_reads_operand(new_len, out);

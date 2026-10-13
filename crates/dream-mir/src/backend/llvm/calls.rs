@@ -78,6 +78,9 @@ impl<'l, 'a> Fx<'l, 'a> {
 
     /// The call's value-struct result sits in a caller buffer, not a heap box to free.
     pub fn is_buffer_result(&self, rv: &crate::Rvalue) -> bool {
+        if matches!(rv, crate::Rvalue::ArraySlotTake { .. }) {
+            return true;
+        }
         let crate::Rvalue::Call { callee, .. } = rv else {
             return false;
         };

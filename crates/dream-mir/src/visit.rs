@@ -49,6 +49,13 @@ pub(crate) fn stmt_operands_mut(s: &mut Statement, f: &mut impl FnMut(&mut Opera
                 operand_mut(o, f);
             }
         }
+        Statement::ArraySlotSwap {
+            array, left, right, ..
+        } => {
+            for o in [array, left, right] {
+                operand_mut(o, f);
+            }
+        }
         Statement::ArrayElemsFill {
             dst,
             dst_off,
@@ -112,6 +119,9 @@ pub(crate) fn rvalue_operands_mut(rv: &mut Rvalue, f: &mut impl FnMut(&mut Opera
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
         | Rvalue::ByteAt(a, b, _)
+        | Rvalue::ArraySlotTake {
+            array: a, index: b, ..
+        }
         | Rvalue::ArrayRealloc {
             array: a,
             new_len: b,

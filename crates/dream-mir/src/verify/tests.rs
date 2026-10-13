@@ -398,3 +398,39 @@ fn flags_rc_op_on_scalar() {
     assert_eq!(v.len(), 1, "{:?}", v);
     assert!(v[0].msg.contains("non-RC"), "{:?}", v);
 }
+
+#[test]
+fn typed_slot_operations_validate_types_and_read_live_owners() {
+    for bad_element in [false, true] {
+        let mut i = TypeInterner::new();
+        let int = i.int();
+        let arr = i.array(int);
+        let mut f = FunctionBuilder::new("swap", i.void());
+        let a = f.new_param(arr, None);
+        f.push(Statement::ArraySlotSwap {
+            elem_ty: if bad_element { i.string() } else { int },
+            array: copy(a),
+            left: Operand::Const(Const::Int(0)),
+            right: Operand::Const(Const::Int(0)),
+        });
+        f.terminate(Terminator::Return(None));
+        let found = verify_function(&f.finish(), &i);
+        assert_eq!(found.is_empty(), !bad_element, "{found:?}");
+    }
+    let mut i = TypeInterner::new();
+    let string = i.string();
+    let arr = i.array(string);
+    let mut f = FunctionBuilder::new("take", string);
+    let a = f.new_param(arr, None);
+    let result = f.new_temp(string);
+    f.assign(
+        Place::Local(result),
+        Rvalue::ArraySlotTake {
+            elem_ty: string,
+            array: copy(a),
+            index: Operand::Const(Const::Int(0)),
+        },
+    );
+    f.terminate(Terminator::Return(Some(copy(result))));
+    assert!(verify_function(&f.finish(), &i).is_empty());
+}

@@ -654,6 +654,22 @@ impl Lowerer<'_> {
                         count,
                     });
                 }
+                HExprKind::ArraySlotSwap {
+                    elem_ty,
+                    array,
+                    left,
+                    right,
+                } => {
+                    let array = self.lower_operand(array);
+                    let left = self.lower_operand(left);
+                    let right = self.lower_operand(right);
+                    self.b.push(Statement::ArraySlotSwap {
+                        elem_ty: *elem_ty,
+                        array,
+                        left,
+                        right,
+                    });
+                }
                 HExprKind::ArrayElemsFill {
                     elem_ty,
                     dst,

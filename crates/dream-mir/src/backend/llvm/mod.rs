@@ -1,5 +1,6 @@
 //! MIR → textual LLVM IR for native and wasm32 targets. See `docs/internals/06-llvm-backend.md`.
 
+mod array_slots;
 mod body;
 mod calls;
 mod construction;

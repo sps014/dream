@@ -71,7 +71,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--rounds", type=int, default=20, help="measured process starts per arm (10-20 for gating)")
     p.add_argument("--warmup", type=int, default=2, help="discarded process starts per arm")
     p.add_argument("--passes", type=int, default=10, help="DREAM_BENCH_PASSES per process")
-    p.add_argument("--filter", nargs="*", default=[], help="only report these bench names")
+    p.add_argument("--filter", nargs="*", default=[], help="select these workloads (macro) or only report these names (other suites)")
     p.add_argument("--out", default=str(ROOT / "tests/bench/out/compare"))
     p.add_argument("--counters", action="store_true", help="set DREAM_BENCH_COUNTERS=1 for Dream arms")
     p.add_argument("--regression-threshold", type=float, default=0.10)
@@ -332,6 +332,10 @@ def main() -> int:
     compatibility = bench_gate.identity(args.benchmark,
                                         args.csharp / "Program.cs" if "csharp" in args.arms else None, args.runner_id,
                                         args.input_seed, args.passes, args.target, args.benchmark_source)
+    if args.suite == "macro" and args.filter:
+        unknown = sorted(set(args.filter) - set(compatibility["names"]))
+        if unknown:
+            raise ValueError("unknown macro workloads: " + ", ".join(unknown))
     if args.gate or args.save_baseline:
         if os.environ.get("DREAM_NATIVE_SANITIZE"):
             raise ValueError("sanitizer instrumentation cannot form a timing reference or gate")
@@ -370,6 +374,10 @@ def main() -> int:
         if args.target == "wasm":
             identities[f"{arm}_runtime_sha256"] = bench_gate.digest(artifact.with_suffix(".node.runtime.mjs"))
     env = dict(os.environ, DREAM_BENCH_PASSES=str(args.passes), DREAM_BENCH_SEED=str(args.input_seed))
+    if args.suite == "macro" and args.filter:
+        env["DREAM_BENCH_ONLY"] = ",".join(args.filter)
+    else:
+        env.pop("DREAM_BENCH_ONLY", None)
     dream_env = dict(env, DREAM_BENCH_COUNTERS="1" if args.counters else "0")
     samples: list[dict] = []
     rss = {arm: [] for arm in args.arms}
@@ -399,7 +407,7 @@ def main() -> int:
         summary = {n: r for n, r in summary.items() if n in args.filter}
     (out / "summary.json").write_text(json.dumps(
         {"tools": identities, "passes": args.passes, "rounds": args.rounds,
-         "target": args.target, "instrumented": args.counters, "identity": compatibility, "regression_threshold": args.regression_threshold,
+         "target": args.target, "selected_benchmarks": args.filter, "instrumented": args.counters, "identity": compatibility, "regression_threshold": args.regression_threshold,
          "peak_rss": peak, "benchmarks": summary}, indent=2))
     print_table(summary, peak, args.arms)
     print(f"\nraw samples: {raw_path}\nsummary: {out / 'summary.json'}")

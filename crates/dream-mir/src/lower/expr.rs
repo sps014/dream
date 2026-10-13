@@ -262,6 +262,19 @@ impl Lowerer<'_> {
                 bytes: self.lower_operand(bytes),
                 ty: e.ty,
             },
+            HExprKind::ArraySlotTake {
+                elem_ty,
+                array,
+                index,
+            } => {
+                let array = self.lower_operand(array);
+                let index = self.lower_operand(index);
+                Rvalue::ArraySlotTake {
+                    elem_ty: *elem_ty,
+                    array,
+                    index,
+                }
+            }
             HExprKind::ArrayRealloc {
                 elem_ty,
                 array,
@@ -289,6 +302,11 @@ impl Lowerer<'_> {
             HExprKind::ArrayElemsCopy { .. } => {
                 unreachable!(
                     "HExprKind::ArrayElemsCopy is void-typed and only ever lowered as a bare statement in lower_stmt"
+                )
+            }
+            HExprKind::ArraySlotSwap { .. } => {
+                unreachable!(
+                    "HExprKind::ArraySlotSwap is void-typed and only ever lowered as a bare statement in lower_stmt"
                 )
             }
             HExprKind::ArrayElemsFill { .. } => {

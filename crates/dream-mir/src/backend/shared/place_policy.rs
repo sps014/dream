@@ -2,7 +2,7 @@
 //! locals alias another place instead of owning a copy, which stores adopt their source's count,
 //! and which locals the frame-allocation pass placed in a stack buffer.
 
-use crate::rc_store::{boxes_into_object, rvalue_allocates};
+use crate::rc_store::{boxes_into_object, rvalue_owns_result};
 use crate::{Local, MirFunction, Operand, Place, Rvalue, Statement};
 use dream_types::TypeInterner;
 
@@ -68,7 +68,7 @@ pub(crate) fn realloc_self_store(place: &Place, rv: &Rvalue) -> bool {
 
 /// The stored value is borrowed (not a fresh `+1`), so the slot must take its own reference.
 pub(crate) fn borrowed_ref_store(interner: &TypeInterner, rv: &Rvalue) -> bool {
-    !rvalue_allocates(rv) && !boxes_into_object(interner, rv)
+    !rvalue_owns_result(rv) && !boxes_into_object(interner, rv)
 }
 
 /// The local whose reference-count token this store adopts, as recorded by `RcInsertion` or

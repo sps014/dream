@@ -1,6 +1,13 @@
 module system.collections;
 
 internal static class CollectionStorage {
+    @intrinsic("array_slot_take")
+    internal static extern fun take<T>(borrow array: T[], index: int): T;
+
+    // Slot permutation has no ownership transition, including nested managed value fields.
+    @intrinsic("array_slot_swap")
+    internal static extern fun swap<T>(borrow array: T[], left: int, right: int): void;
+
     @intrinsic("buffer_zero")
     internal static extern fun zero<T>(): T;
 }
@@ -193,9 +200,7 @@ public class List<T> : IndexedCollection<T> {
         let lo = 0;
         let hi = this.count - 1;
         while lo < hi {
-            let a = Buffer.get_unchecked<T>(this.items, lo);
-            Buffer.set_unchecked<T>(this.items, lo, Buffer.get_unchecked<T>(this.items, hi));
-            Buffer.set_unchecked<T>(this.items, hi, a);
+            CollectionStorage.swap<T>(this.items, lo, hi);
             lo = lo + 1;
             hi = hi - 1;
         }

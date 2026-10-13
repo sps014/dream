@@ -31,3 +31,6 @@ let largest_first = PriorityQueue<int>((a, b) => b.compare(a));
 This is a setup snippet for use inside a function. Prefer `compare` over subtraction, which can overflow for distant integer values.
 
 Read `.length`, use `is_empty()`, or call `clear()` to reset the queue. Iteration shows its stored items; repeated `pop()` calls produce priority order. See [all PriorityQueue signatures](../../api/collections-priority-queue.md).
+
+The queue uses a four-child heap. Equal-priority elements have no guaranteed order.
+A comparator may read the queue and update unrelated state, but calling `push`, `pop`, or `clear` on the same queue from its comparator panics before mutation.

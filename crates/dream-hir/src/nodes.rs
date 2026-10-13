@@ -304,6 +304,12 @@ pub enum HExprKind {
         array: Box<HExpr>,
         new_len: Box<HExpr>,
     },
+    /// Transfers a checked array slot's token to the result and zeroes the source.
+    ArraySlotTake {
+        elem_ty: TypeId,
+        array: Box<HExpr>,
+        index: Box<HExpr>,
+    },
     /// `Buffer.elems_copy<T>(dst, dst_off, src, src_off, count)` (`@unsafe`) — bulk blit of
     /// `count` unmanaged `T` elements. Node type is `void`.
     ArrayElemsCopy {
@@ -320,6 +326,13 @@ pub enum HExprKind {
         dst: Box<HExpr>,
         dst_off: Box<HExpr>,
         count: Box<HExpr>,
+    },
+    /// A checked permutation; both slots retain their existing ownership tokens.
+    ArraySlotSwap {
+        elem_ty: TypeId,
+        array: Box<HExpr>,
+        left: Box<HExpr>,
+        right: Box<HExpr>,
     },
     /// `Buffer.free<T>(arr)` (`@unsafe`) — immediately returns `array`'s backing block to the
     /// allocator via `$free`, bypassing reference counting. Any other live reference to the same

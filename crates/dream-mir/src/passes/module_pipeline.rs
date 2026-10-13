@@ -89,6 +89,8 @@ pub fn prepare_ownership(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirD
     let _ = FuncboxAbi.run(mir, interner);
     crate::prune_module(mir, interner);
     dump.module(FuncboxAbi.name(), mir, interner);
+    let _ = function_targets::run(mir, interner);
+    dump.module(function_targets::STAGE, mir, interner);
     let _ = param_modes::run(mir, interner);
     dump.module(param_modes::STAGE, mir, interner);
     ownership_args::run(mir, interner);

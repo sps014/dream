@@ -107,6 +107,7 @@ pub(crate) fn stmt_borrow(stmt: &Statement, holds: &IndexSet<DefId>) -> StmtBorr
         | Statement::SourceLine(_)
         | Statement::ArrayElemsCopy { .. }
         | Statement::ArrayElemsFill { .. }
+        | Statement::ArraySlotSwap { .. }
         | Statement::ForceFree(_)
         | Statement::LockAcquire(_)
         | Statement::LockRelease(_)
@@ -156,6 +157,7 @@ fn rvalue_borrow(rv: &Rvalue, holds: &IndexSet<DefId>) -> StmtBorrow {
         | Rvalue::ArrayLen(_)
         | Rvalue::ToBytes { .. }
         | Rvalue::FromBytes { .. }
+        | Rvalue::ArraySlotTake { .. }
         | Rvalue::ArrayRealloc { .. }
         | Rvalue::Cast(_, _, _)
         | Rvalue::Discriminant { .. }

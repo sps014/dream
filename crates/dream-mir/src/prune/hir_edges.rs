@@ -189,6 +189,10 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
             out.needs_format = true;
             hir_expr_edges(x, out);
         }
+        K::ArraySlotTake { array, index, .. } => {
+            hir_expr_edges(array, out);
+            hir_expr_edges(index, out);
+        }
         K::ArrayRealloc { array, new_len, .. } => {
             hir_expr_edges(array, out);
             hir_expr_edges(new_len, out);
@@ -219,6 +223,13 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
             hir_expr_edges(src, out);
             hir_expr_edges(src_off, out);
             hir_expr_edges(count, out);
+        }
+        K::ArraySlotSwap {
+            array, left, right, ..
+        } => {
+            hir_expr_edges(array, out);
+            hir_expr_edges(left, out);
+            hir_expr_edges(right, out);
         }
         K::ArrayElemsFill {
             dst,

@@ -1,17 +1,19 @@
 module system.collections;
 
-// Binary min-heap: `pop`/`peek` always return the smallest element by the active comparator
+// Four-child min-heap: `pop`/`peek` always return the smallest element by the active comparator
 // (natural ascending order via `Comparable<T>` by default, or a custom `fun(T, T): int`).
 @allow_cycle
 public class PriorityQueue<T> : Collection<T> {
     items: T[];
     count: int;
     cmp_fn: fun(T, T): int;
+    comparing: bool;
 
     // Empty queue ordered by `T`'s natural `Comparable` order.
     public constructor() {
         this.items = Buffer.alloc<T>(sequence_min_capacity());
         this.count = 0;
+        this.comparing = false;
         let natural: fun(T, T): int = (a, b) => a.compare(b);
         this.cmp_fn = natural;
     }
@@ -22,6 +24,7 @@ public class PriorityQueue<T> : Collection<T> {
         this.items = Buffer.alloc<T>(sequence_min_capacity());
         this.count = 0;
         this.cmp_fn = cmp;
+        this.comparing = false;
     }
 
     // Number of elements currently stored.
@@ -37,6 +40,7 @@ public class PriorityQueue<T> : Collection<T> {
     // Removes every element. Live slots are overwritten with a zero value so managed elements
     // release immediately instead of staying retained until later pushes overwrite them.
     public fun clear(): void {
+        this.check_mutation();
         let z = CollectionStorage.zero<T>();
         let i = 0;
         while i < this.count {
@@ -48,6 +52,7 @@ public class PriorityQueue<T> : Collection<T> {
 
     // Unmanaged: no RC to release — rewind only.
     public fun clear(): void where T : unmanaged {
+        this.check_mutation();
         this.count = 0;
     }
 
@@ -56,80 +61,96 @@ public class PriorityQueue<T> : Collection<T> {
         this.items = Buffer.realloc<T>(this.items, grow_capacity(old_cap, old_cap + 1));
     }
 
-    // True when `items[i]` sorts before `items[j]` under the active comparator.
+    fun check_mutation(): void {
+        if this.comparing {
+            System.panic("PriorityQueue cannot be mutated by its comparator");
+        }
+    }
+
     fun less(i: int, j: int): bool {
         let cmp = this.cmp_fn;
-        return cmp(this.items[i], this.items[j]) < 0;
+        this.comparing = true;
+        let result = cmp(this.items[i], this.items[j]);
+        this.comparing = false;
+        return result < 0;
     }
 
-    fun swap(i: int, j: int): void {
-        let tmp = this.items[i];
-        this.items[i] = this.items[j];
-        this.items[j] = tmp;
-    }
-
-    // Restores the heap invariant by bubbling `items[idx]` up toward the root.
-    fun sift_up(idx: int): void {
-        let i = idx;
-        let done = false;
-        while (i > 0) && (done == false) {
-            let parent = (i - 1) / 2;
-            if this.less(i, parent) {
-                this.swap(i, parent);
-                i = parent;
-            } else {
-                done = true;
-            }
-        }
-    }
-
-    // Restores the heap invariant by sinking `items[idx]` down toward the leaves.
-    fun sift_down(idx: int): void {
-        let i = idx;
-        let done = false;
-        while done == false {
-            let left = i * 2 + 1;
-            let right = i * 2 + 2;
-            let smallest = i;
-            if (left < this.count) && this.less(left, smallest) {
-                smallest = left;
-            }
-            if (right < this.count) && this.less(right, smallest) {
-                smallest = right;
-            }
-            if smallest == i {
-                done = true;
-            } else {
-                this.swap(i, smallest);
-                i = smallest;
-            }
-        }
-    }
-
-    // Inserts `value`, restoring the heap invariant. O(log n).
     public fun push(value: T): void {
+        this.check_mutation();
         if this.count == this.items.length {
             this.grow();
         }
-        this.items[this.count] = value;
-        this.count = this.count + 1;
-        this.sift_up(this.count - 1);
+        let tail = this.count;
+        this.items[tail] = value;
+        this.count = tail + 1;
+        let target = tail;
+        let done = false;
+        while target > 0 && done == false {
+            let parent = (target - 1) / 4;
+            if this.less(tail, parent) {
+                target = parent;
+            } else {
+                done = true;
+            }
+        }
+        // All callbacks finish before opening a hole; the live prefix is always initialized.
+        if target != tail {
+            let saved = CollectionStorage.take<T>(this.items, tail);
+            let hole = tail;
+            while hole > target {
+                let parent = (hole - 1) / 4;
+                this.items[hole] = CollectionStorage.take<T>(this.items, parent);
+                hole = parent;
+            }
+            this.items[target] = saved;
+        }
     }
 
-    // Removes and returns the smallest element, or `None` when empty. O(log n).
     public fun pop(): Option<T> {
+        this.check_mutation();
         if this.count == 0 {
             return Option.None;
         }
-        let top = this.items[0];
-        this.count = this.count - 1;
-        this.items[0] = this.items[this.count];
-        // Zero the vacated tail slot: it still holds a reference to the moved element and must
-        // not keep it retained past the next overwrite.
-        this.items[this.count] = CollectionStorage.zero<T>();
-        if this.count > 0 {
-            this.sift_down(0);
+        let tail = this.count - 1;
+        if tail == 0 {
+            this.count = 0;
+            return Option.Some(CollectionStorage.take<T>(this.items, 0));
         }
+        let target = 0;
+        let path = 0;
+        let depth = 0;
+        let done = false;
+        // The parent guard keeps `target * 4 + 1` in range, even at int-sized capacities.
+        while tail > 1 && target <= (tail - 2) / 4 && done == false {
+            let first = target * 4 + 1;
+            let best = first;
+            let offset = 1;
+            while offset < 4 && offset < tail - first {
+                let child = first + offset;
+                if this.less(child, best) {
+                    best = child;
+                }
+                offset = offset + 1;
+            }
+            if this.less(best, tail) {
+                path = (path << 2) | (best - first);
+                depth = depth + 1;
+                target = best;
+            } else {
+                done = true;
+            }
+        }
+        let top = CollectionStorage.take<T>(this.items, 0);
+        let saved = CollectionStorage.take<T>(this.items, tail);
+        this.count = tail;
+        let hole = 0;
+        while depth > 0 {
+            depth = depth - 1;
+            let child = hole * 4 + 1 + ((path >> (depth * 2)) & 3);
+            this.items[hole] = CollectionStorage.take<T>(this.items, child);
+            hole = child;
+        }
+        this.items[hole] = saved;
         return Option.Some(top);
     }
 

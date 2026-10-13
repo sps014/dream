@@ -262,12 +262,12 @@ class MeasurementTests(unittest.TestCase):
         self.fixture = self.root / 'fixture.dream'
         self.fixture.write_text('report("work", elapsed, iterations);')
 
-    def run_measurement(self, total=230000, claim=None, comparison=False):
+    def run_measurement(self, total=230000, claim=None, comparison=False, suite="micro", filters=()):
         args = argparse.Namespace(
-            counters=False, gate=None, save_baseline=None, arms=['current'],
+            suite=suite, counters=False, gate=None, save_baseline=None, arms=['current'],
             warmup=1, rounds=1, passes=1, input_seed=1, target='native',
             regression_threshold=.1, benchmark=self.fixture, csharp=bench.SUITES['micro'][1], runner_id='test',
-            filter=[], out=str(self.root / 'output'), current_dream='compiler',
+            filter=list(filters), out=str(self.root / 'output'), current_dream='compiler',
             baseline_dream='compiler',
         )
         if comparison:
@@ -277,6 +277,7 @@ class MeasurementTests(unittest.TestCase):
             args.rounds, args.passes = 10, 5
         stdout = ('bench work ns_total=' + str(total) + ' iters=1000000 checksum=42\n') * args.passes
         stdout += 'sink 123\n'
+        self.environments = []
         self.output = io.StringIO()
         with contextlib.ExitStack() as stack:
             stack.enter_context(contextlib.redirect_stdout(self.output))
@@ -284,7 +285,7 @@ class MeasurementTests(unittest.TestCase):
             stack.enter_context(patch.object(bench, 'parse_args', return_value=args))
             stack.enter_context(patch.object(bench, 'tool_versions', return_value={}))
             stack.enter_context(patch.object(bench, 'prepare_dream', return_value=[str(self.binary)]))
-            stack.enter_context(patch.object(bench, 'run_once', return_value=(stdout, 1000)))
+            stack.enter_context(patch.object(bench, 'run_once', side_effect=lambda command, env: (self.environments.append(dict(env)) or stdout, 1000)))
             stack.enter_context(patch.object(bench_gate, 'load', return_value=({'tools': {}}, [str(self.binary)])))
             save = stack.enter_context(patch.object(bench_gate, 'save'))
             evaluate = stack.enter_context(patch.object(bench_gate, 'evaluate', return_value=(1, {})))
@@ -292,6 +293,16 @@ class MeasurementTests(unittest.TestCase):
                 return bench.main()
             finally:
                 self.saved, self.evaluated = save.called, evaluate.called
+
+    def test_macro_selection_is_applied_to_every_arm(self):
+        self.run_measurement(total=1000000, comparison=True, suite="macro", filters=["work"])
+        self.assertTrue(self.environments)
+        self.assertTrue(all(env["DREAM_BENCH_ONLY"] == "work" for env in self.environments))
+
+    def test_unfiltered_run_clears_inherited_selection(self):
+        with patch.dict(os.environ, {"DREAM_BENCH_ONLY": "graph_paths_class"}):
+            self.run_measurement(total=1000000)
+        self.assertTrue(all("DREAM_BENCH_ONLY" not in env for env in self.environments))
 
     def test_under_floor_diagnostics_preserve_samples_and_succeed(self):
         self.assertEqual(self.run_measurement(), 0)

@@ -160,6 +160,10 @@ fn remap_rvalue(rv: &mut Rvalue, base: LocalMap<'_>) {
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
             remap_operand(o, base)
         }
+        Rvalue::ArraySlotTake { array, index, .. } => {
+            remap_operand(array, base);
+            remap_operand(index, base);
+        }
         Rvalue::ArrayRealloc { array, new_len, .. } => {
             remap_operand(array, base);
             remap_operand(new_len, base);
@@ -266,6 +270,13 @@ fn remap_stmt(s: &mut Statement, base: LocalMap<'_>) {
             remap_operand(src, base);
             remap_operand(src_off, base);
             remap_operand(count, base);
+        }
+        Statement::ArraySlotSwap {
+            array, left, right, ..
+        } => {
+            remap_operand(array, base);
+            remap_operand(left, base);
+            remap_operand(right, base);
         }
         Statement::ArrayElemsFill {
             dst,

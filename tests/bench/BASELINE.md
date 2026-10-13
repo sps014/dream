@@ -117,3 +117,9 @@ contracts are explicitly marked and excluded from suite-wide C# victory claims.
 Preserve machine-specific results as immutable JSON with raw samples and runner identities
 under ignored `tests/bench/out/` directories. Do not commit benchmark results or historical timing tables. Re-run comparisons on
 the deployment hardware; results from one runner are not acceptance for another.
+
+## Graph queue attribution
+
+The macro suite reports `graph_paths_class` and `graph_paths_value` separately. Both keep class-based graph vertices and edges; queue entries are classes in both class arms and inline values in both value arms. Graph construction is outside timing. Each query creates its own distance buffer and queue. Graph counters are sampled after setup, immediately before the query loop.
+
+Use `--suite macro --filter graph_paths_class graph_paths_value` to execute only the graph workloads in both arms. The same selection works with `bench.py profile --suite macro --filter graph_paths_class`; the fixture receives the comma-separated `DREAM_BENCH_ONLY` selection. Timing, counters, sampling and sanitizers must run separately and sequentially. Full-suite references and gates still reject filtered runs.

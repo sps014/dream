@@ -312,6 +312,7 @@ fn stmt_uses(
         }
         Statement::Print { arg, .. } => all_global([arg], mark),
         Statement::ArrayElemsCopy { dst, src, .. } => all_global([dst, src], mark),
+        Statement::ArraySlotSwap { array, .. } => all_global([array], mark),
         Statement::ArrayElemsFill { dst, .. } => all_global([dst], mark),
         Statement::ForceFree(op) => all_global([op], mark),
         Statement::SimdV128 {
@@ -379,6 +380,7 @@ fn rvalue_uses(
         | Rvalue::ToString(op)
         | Rvalue::ToBytes { value: op, .. }
         | Rvalue::FromBytes { bytes: op, .. }
+        | Rvalue::ArraySlotTake { array: op, .. }
         | Rvalue::ArrayRealloc { array: op, .. } => all_global([op], mark),
         Rvalue::Binary(op, a, b) | Rvalue::CheckedBinary(op, a, b) if !op.is_comparison() => {
             all_global([a, b], mark)

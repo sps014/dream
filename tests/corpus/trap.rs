@@ -2,6 +2,11 @@ use super::Case;
 
 pub(super) const CASES: &[Case] = &[
     Case::trap(
+        "priority_queue_reentrant_comparator",
+        "PriorityQueue cannot be mutated by its comparator",
+        true,
+    ),
+    Case::trap(
         "abc_post_loop_trap",
         "10\n20\n30\npanic: index out of bounds\nabc_post_loop_trap.dream:12",
         true,

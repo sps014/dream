@@ -273,6 +273,11 @@ impl<'l, 'a> Fx<'l, 'a> {
                     _ => boxed,
                 }
             }
+            Rvalue::ArraySlotTake {
+                elem_ty,
+                array,
+                index,
+            } => self.array_slot_take(*elem_ty, array, index),
             Rvalue::ArrayRealloc {
                 elem_ty,
                 array,

@@ -90,6 +90,12 @@ pub(super) const CASES: &[Case] = &[
         true,
     ),
     Case::error("buffer_zero_internal", "not accessible", true),
+    Case::error("array_slot_transfer_internal", "not accessible", true),
+    Case::error(
+        "array_slot_transfer_forged",
+        "reserved for internal stdlib storage",
+        true,
+    ),
     Case::error(
         "c_call_unknown_convention_rejected",
         "unknown C calling convention 'fastcall': use \"cdecl\" or \"stdcall\"",

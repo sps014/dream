@@ -336,6 +336,13 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
             operand_reads(src_off, f);
             operand_reads(count, f);
         }
+        Statement::ArraySlotSwap {
+            array, left, right, ..
+        } => {
+            operand_reads(array, f);
+            operand_reads(left, f);
+            operand_reads(right, f);
+        }
         Statement::ArrayElemsFill {
             dst,
             dst_off,
@@ -439,6 +446,10 @@ fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
         Rvalue::ArrayNew { len, .. } => operand_reads(len, f),
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
             operand_reads(o, f)
+        }
+        Rvalue::ArraySlotTake { array, index, .. } => {
+            operand_reads(array, f);
+            operand_reads(index, f);
         }
         Rvalue::ArrayRealloc { array, new_len, .. } => {
             operand_reads(array, f);

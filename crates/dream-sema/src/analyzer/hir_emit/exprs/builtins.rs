@@ -442,6 +442,48 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    pub(in crate::analyzer) fn hir_set_array_slot_take(
+        &mut self,
+        elem_ty: dream_types::TypeId,
+        array: HExpr,
+        index: HExpr,
+    ) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        self.hir.last = Some(HExpr::new(
+            elem_ty,
+            HExprKind::ArraySlotTake {
+                elem_ty,
+                array: Box::new(array),
+                index: Box::new(index),
+            },
+        ));
+    }
+
+    pub(in crate::analyzer) fn hir_set_array_slot_swap(
+        &mut self,
+        elem_ty: dream_types::TypeId,
+        array: HExpr,
+        left: HExpr,
+        right: HExpr,
+    ) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        self.hir.last = Some(HExpr::new(
+            self.type_ctx.interner.void(),
+            HExprKind::ArraySlotSwap {
+                elem_ty,
+                array: Box::new(array),
+                left: Box::new(left),
+                right: Box::new(right),
+            },
+        ));
+    }
+
     /// Records `Buffer.get_unchecked<T>(arr, i)`: an element read with no bounds check.
     pub(in crate::analyzer) fn hir_set_array_get_unchecked(
         &mut self,

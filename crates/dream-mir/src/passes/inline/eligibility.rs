@@ -30,14 +30,12 @@ pub(super) struct Site {
 }
 
 /// Finds the first inlinable call site in function `fi`, or `None`.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn find_site(
     mir: &crate::Mir,
     fi: usize,
     index: &HashMap<FnKey, usize>,
     recursive: &HashSet<FnKey>,
     call_counts: &HashMap<FnKey, usize>,
-    addr_taken: &HashSet<FnKey>,
     interner: &TypeInterner,
 ) -> Option<Site> {
     let f = &mir.functions[fi];
@@ -68,17 +66,7 @@ pub(super) fn find_site(
                 continue;
             }
             let Some(&ci) = index.get(&key) else { continue };
-            if !eligible(
-                mir,
-                fi,
-                ci,
-                &key,
-                recursive,
-                call_counts,
-                addr_taken,
-                args,
-                interner,
-            ) {
+            if !eligible(mir, fi, ci, &key, recursive, call_counts, args, interner) {
                 continue;
             }
             return Some(Site {
@@ -102,7 +90,6 @@ fn eligible(
     key: &FunctionKeyRef<'_>,
     recursive: &HashSet<FnKey>,
     call_counts: &HashMap<FnKey, usize>,
-    addr_taken: &HashSet<FnKey>,
     args: &[Operand],
     interner: &TypeInterner,
 ) -> bool {
@@ -145,9 +132,6 @@ fn eligible(
         {
             return false;
         }
-    }
-    if addr_taken.contains(key) {
-        return false;
     }
     let stmt_count: usize = g.blocks.iter().map(|b| b.stmts.len()).sum();
     let prefer = g.inline == dream_hir::InlineHint::Prefer;

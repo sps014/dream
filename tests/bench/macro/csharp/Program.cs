@@ -12,6 +12,8 @@ namespace DreamBench;
 /// </summary>
 public static partial class Program
 {
+    static readonly string SelectedBenches = Environment.GetEnvironmentVariable("DREAM_BENCH_ONLY") ?? "";
+    static bool Selected(string name) => SelectedBenches.Length == 0 || ("," + SelectedBenches + ",").Contains("," + name + ",", StringComparison.Ordinal);
     static bool IsWarmup = true;
     static int Sink;
 
@@ -198,7 +200,50 @@ public static partial class Program
         return g;
     }
 
-    static int ShortestSum(List<Vertex> g, int src)
+    sealed class Visit(int node, int dist)
+    {
+        public readonly int node = node, dist = dist;
+    }
+
+    static int ShortestSumClass(List<Vertex> g, int src)
+    {
+        int n = g.Count;
+        var dist = new int[n];
+        Array.Fill(dist, int.MaxValue);
+        var pq = new PriorityQueue<Visit, int>();
+        dist[src] = 0;
+        pq.Enqueue(new Visit(src, 0), 0);
+        while (pq.TryDequeue(out var v, out _))
+        {
+            if (v.dist > dist[v.node]) continue;
+            foreach (var edge in g[v.node].Out)
+            {
+                int nd = v.dist + edge.W;
+                if (nd < dist[edge.To])
+                {
+                    dist[edge.To] = nd;
+                    pq.Enqueue(new Visit(edge.To, nd), nd);
+                }
+            }
+        }
+        int total = 0;
+        foreach (int d in dist) if (d != int.MaxValue) total = unchecked(total + d);
+        return total;
+    }
+
+    static void BenchGraphPathsClass(int iters)
+    {
+        var rng = new Lcg(41 + SeedBit());
+        var g = MakeGraph(rng, 2000, 6);
+        var sw = Stopwatch.StartNew();
+        int acc = 0;
+        for (int i = 0; i < iters; i++) acc = unchecked(acc + ShortestSumClass(g, (i * 37) % 2000));
+        sw.Stop();
+        Sink += acc;
+        Report("graph_paths_class", ElapsedNs(sw), iters, acc);
+    }
+
+    static int ShortestSumValue(List<Vertex> g, int src)
     {
         int n = g.Count;
         var dist = new int[n];
@@ -224,16 +269,16 @@ public static partial class Program
         return total;
     }
 
-    static void BenchGraphPaths(int iters)
+    static void BenchGraphPathsValue(int iters)
     {
         var rng = new Lcg(41 + SeedBit());
         var g = MakeGraph(rng, 2000, 6);
         var sw = Stopwatch.StartNew();
         int acc = 0;
-        for (int i = 0; i < iters; i++) acc = unchecked(acc + ShortestSum(g, (i * 37) % 2000));
+        for (int i = 0; i < iters; i++) acc = unchecked(acc + ShortestSumValue(g, (i * 37) % 2000));
         sw.Stop();
         Sink += acc;
-        Report("graph_paths", ElapsedNs(sw), iters, acc);
+        Report("graph_paths_value", ElapsedNs(sw), iters, acc);
     }
 
     // ---- async_fanout ----------------------------------------------------------------------
@@ -304,11 +349,12 @@ public static partial class Program
 
     static async Task RunSuite(int scale)
     {
-        BenchJsonService(scale * 20);
-        BenchLogProcessor(scale / 10);
-        BenchGraphPaths(scale / 4);
-        await BenchAsyncFanout(scale * 2);
-        await BenchTaskParallel(scale / 2);
+        if (Selected("json_service")) BenchJsonService(scale * 20);
+        if (Selected("log_processor")) BenchLogProcessor(scale / 10);
+        if (Selected("graph_paths_class")) BenchGraphPathsClass(scale / 4);
+        if (Selected("graph_paths_value")) BenchGraphPathsValue(scale / 4);
+        if (Selected("async_fanout")) await BenchAsyncFanout(scale * 2);
+        if (Selected("task_parallel")) await BenchTaskParallel(scale / 2);
     }
 
     public static async Task Main()

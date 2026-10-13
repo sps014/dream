@@ -50,6 +50,9 @@ pub(super) fn rvalue_local_operands(rv: &Rvalue) -> Vec<u32> {
         | Rvalue::CheckedBinary(_, a, b)
         | Rvalue::CharAt(a, b, _)
         | Rvalue::ByteAt(a, b, _)
+        | Rvalue::ArraySlotTake {
+            array: a, index: b, ..
+        }
         | Rvalue::ArrayRealloc {
             array: a,
             new_len: b,
@@ -153,6 +156,9 @@ pub(super) fn other_stmt_locals(s: &Statement) -> Vec<u32> {
             count,
             ..
         } => ops.extend([dst, dst_off, src, src_off, count]),
+        Statement::ArraySlotSwap {
+            array, left, right, ..
+        } => ops.extend([array, left, right]),
         Statement::ArrayElemsFill {
             dst,
             dst_off,

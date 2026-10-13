@@ -22,6 +22,7 @@ const MODULE_STAGES: &[&str] = &[
     STAGE_LOWER,
     "expand-simple-ctors",
     "funcbox-abi",
+    super::function_targets::STAGE,
     "param-modes",
     super::ownership_args::STAGE,
     "rc-insertion",

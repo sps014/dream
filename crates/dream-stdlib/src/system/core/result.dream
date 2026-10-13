@@ -35,7 +35,7 @@ public enum Result<T, E> {
         if this.is_err() {
             System.panic("unwrap() called on Result.Err");
         }
-        return this.unwrap_or(Buffer.alloc<T>(1)[0]);
+        return this.unwrap_or(Buffer.zero<T>());
     }
 
     // The success value, or panics with `msg` if `Err`.
@@ -43,7 +43,7 @@ public enum Result<T, E> {
         if this.is_err() {
             System.panic(msg);
         }
-        return this.unwrap_or(Buffer.alloc<T>(1)[0]);
+        return this.unwrap_or(Buffer.zero<T>());
     }
 
     // The success value, or `f(error)` when `Err`.
@@ -60,7 +60,7 @@ public enum Result<T, E> {
             System.panic("unwrap_err() called on Result.Ok");
         }
         return switch (this) {
-            Ok(v)  => Buffer.alloc<E>(1)[0],
+            Ok(v)  => Buffer.zero<E>(),
             Err(e) => e,
         };
     }

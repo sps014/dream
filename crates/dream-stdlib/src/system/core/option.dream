@@ -34,7 +34,7 @@ public enum Option<T> {
         if this.is_none() {
             System.panic("unwrap() called on Option.None");
         }
-        return this.unwrap_or(Buffer.alloc<T>(1)[0]);
+        return this.unwrap_or(Buffer.zero<T>());
     }
 
     // The contained value, or panics with `msg` if `None`.
@@ -42,7 +42,7 @@ public enum Option<T> {
         if this.is_none() {
             System.panic(msg);
         }
-        return this.unwrap_or(Buffer.alloc<T>(1)[0]);
+        return this.unwrap_or(Buffer.zero<T>());
     }
 
     // The contained value, or `f()` when `None`.
@@ -58,7 +58,7 @@ public enum Option<T> {
         if this.is_none() {
             return Option.None;
         }
-        let v = this.unwrap_or(Buffer.alloc<T>(1)[0]);
+        let v = this.unwrap_or(Buffer.zero<T>());
         if pred(v) {
             return Option.Some(v);
         }

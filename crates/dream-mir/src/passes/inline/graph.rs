@@ -1,5 +1,5 @@
 //! Call-graph analysis backing the inliner's eligibility decisions: per-callee direct-call-site
-//! counts, the address-taken set (functions reachable indirectly), and the recursive set (functions
+//! counts and the recursive set (functions
 //! on a call cycle, which are never inlined so the acyclic remainder terminates).
 
 use super::FnKey;
@@ -31,27 +31,6 @@ pub(super) fn count_call_sites(mir: &crate::Mir) -> HashMap<FnKey, usize> {
         }
     }
     counts
-}
-
-/// Functions whose address is taken (`FuncRef`): they may be reached indirectly, so they must not be
-/// treated as single-use even if they have one direct call site.
-pub(super) fn address_taken(mir: &crate::Mir) -> HashSet<FnKey> {
-    let mut set = HashSet::new();
-    for f in &mir.functions {
-        for b in &f.blocks {
-            for s in &b.stmts {
-                if let Statement::Assign(_, Rvalue::FuncRef(c)) = s
-                    && !set.contains(&FunctionKeyRef {
-                        def: c.def,
-                        args: &c.args,
-                    })
-                {
-                    set.insert((c.def, c.args.clone()));
-                }
-            }
-        }
-    }
-    set
 }
 
 /// The set of functions that lie on a call cycle (an SCC of size > 1, or a self-loop). Inlining is

@@ -37,6 +37,20 @@ A rejected tombstone-compaction experiment is absent from the implementation; it
 remains in local JSON. Inline unions keep their full layout. Managed value-array overwrite retains
 borrowed sources before dropping old occupants, preserving overlapping copies and cleanup callbacks.
 
+PriorityQueue uses a four-child heap with comparisons completed before opening a hole. Typed
+`ArraySlotSwap` and `ArraySlotTake` MIR operations preserve or transfer slot ownership without
+transient reference counts; their LLVM lowering keeps index checks and supports managed value
+fields. `List.reverse` uses the permutation operation. Reentrant queue mutation from a comparator
+is rejected before mutation, while callbacks can read the queue and change unrelated state.
+Option/Result success extraction uses internal zero storage for unreachable fallback values,
+rather than allocating a one-element array on every unwrap.
+
+Before ARC insertion, `function-targets` resolves non-capturing boxes and constructor-initialized
+function fields whose live writes agree. Field inference rejects exports, opaque escapes, raw
+writes, conflicting constructors and casts across type identities; captured callbacks stay
+indirect. Resolved direct calls keep the function-value borrowed ABI and may inline even when
+the target remains address-taken. Dump this stage with `--emit-mir=after:function-targets`.
+
 ### Text
 
 Unescaped JSON strings construct owned payloads directly. Quote/backslash scanning uses the

@@ -282,7 +282,19 @@ fun make_graph(rng: Lcg, n: int, degree: int): List<Vertex> {
     return g;
 }
 
-fun shortest_sum(borrow g: List<Vertex>, src: int): int {
+struct ValueVisit : Comparable<ValueVisit> {
+    public node: int;
+    public dist: int;
+    public constructor(node: int, dist: int) {
+        this.node = node;
+        this.dist = dist;
+    }
+    public fun compare(other: ValueVisit): int {
+        return this.dist - other.dist;
+    }
+}
+
+fun shortest_sum_class(borrow g: List<Vertex>, src: int): int {
     let n = g.length;
     let dist = Buffer.alloc<int>(n);
     let i = 0;
@@ -320,19 +332,82 @@ fun shortest_sum(borrow g: List<Vertex>, src: int): int {
     return total;
 }
 
-fun bench_graph_paths(iters: int): void {
+fun bench_graph_paths_class(iters: int): void {
     let rng = Lcg(41 + seed_bit());
     let g = make_graph(rng, 2000, 6);
     let sw = Stopwatch();
+    if counters_on {
+        last_allocations = Debug.total_allocations;
+        last_retains = Debug.runtime_counter(3);
+        last_releases = Debug.runtime_counter(4);
+    }
     let acc = 0;
     let i = 0;
     while i < iters {
-        acc = acc + shortest_sum(g, (i * 37) % 2000);
+        acc = acc + shortest_sum_class(g, (i * 37) % 2000);
         i = i + 1;
     }
     sw.stop();
     sink_int(acc);
-    report("graph_paths", sw.elapsed_nanos, iters, acc);
+    report("graph_paths_class", sw.elapsed_nanos, iters, acc);
+}
+
+fun shortest_sum_value(borrow g: List<Vertex>, src: int): int {
+    let n = g.length;
+    let dist = Buffer.alloc<int>(n);
+    let i = 0;
+    while i < n {
+        dist[i] = 2147483647;
+        i = i + 1;
+    }
+    let pq = PriorityQueue<ValueVisit>();
+    dist[src] = 0;
+    pq.push(ValueVisit(src, 0));
+    while pq.is_empty() == false {
+        let v = pq.pop().unwrap();
+        if v.dist <= dist[v.node] {
+            let edges = g[v.node].out;
+            let e = 0;
+            while e < edges.length {
+                let edge = edges[e];
+                let nd = v.dist + edge.w;
+                if nd < dist[edge.to] {
+                    dist[edge.to] = nd;
+                    pq.push(ValueVisit(edge.to, nd));
+                }
+                e = e + 1;
+            }
+        }
+    }
+    let total = 0;
+    i = 0;
+    while i < n {
+        if dist[i] != 2147483647 {
+            total = total + dist[i];
+        }
+        i = i + 1;
+    }
+    return total;
+}
+
+fun bench_graph_paths_value(iters: int): void {
+    let rng = Lcg(41 + seed_bit());
+    let g = make_graph(rng, 2000, 6);
+    let sw = Stopwatch();
+    if counters_on {
+        last_allocations = Debug.total_allocations;
+        last_retains = Debug.runtime_counter(3);
+        last_releases = Debug.runtime_counter(4);
+    }
+    let acc = 0;
+    let i = 0;
+    while i < iters {
+        acc = acc + shortest_sum_value(g, (i * 37) % 2000);
+        i = i + 1;
+    }
+    sw.stop();
+    sink_int(acc);
+    report("graph_paths_value", sw.elapsed_nanos, iters, acc);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -417,12 +492,18 @@ async fun bench_task_parallel(iters: int): void {
 
 // ---------------------------------------------------------------------------------------------
 
+let selected_benches = System.env_or("DREAM_BENCH_ONLY", "");
+fun selected(borrow name: string): bool {
+    return selected_benches.length == 0 || ("," + selected_benches + ",").contains("," + name + ",");
+}
+
 async fun run_suite(scale: int): void {
-    bench_json_service(scale * 20);
-    bench_log_processor(scale / 10);
-    bench_graph_paths(scale / 4);
-    bench_async_fanout(scale * 2).await;
-    bench_task_parallel(scale / 2).await;
+    if selected("json_service") { bench_json_service(scale * 20); }
+    if selected("log_processor") { bench_log_processor(scale / 10); }
+    if selected("graph_paths_class") { bench_graph_paths_class(scale / 4); }
+    if selected("graph_paths_value") { bench_graph_paths_value(scale / 4); }
+    if selected("async_fanout") { bench_async_fanout(scale * 2).await; }
+    if selected("task_parallel") { bench_task_parallel(scale / 2).await; }
 }
 
 fun bench_passes(): int {

@@ -233,6 +233,13 @@ fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             strings_in_op(src_off, out);
             strings_in_op(count, out);
         }
+        Statement::ArraySlotSwap {
+            array, left, right, ..
+        } => {
+            strings_in_op(array, out);
+            strings_in_op(left, out);
+            strings_in_op(right, out);
+        }
         Statement::ArrayElemsFill {
             dst,
             dst_off,
@@ -385,6 +392,10 @@ fn strings_in_rv(rv: &Rvalue, out: &mut Vec<String>) {
         Rvalue::ArrayNew { len, .. } => strings_in_op(len, out),
         Rvalue::ToBytes { value, .. } | Rvalue::FromBytes { bytes: value, .. } => {
             strings_in_op(value, out)
+        }
+        Rvalue::ArraySlotTake { array, index, .. } => {
+            strings_in_op(array, out);
+            strings_in_op(index, out);
         }
         Rvalue::ArrayRealloc { array, new_len, .. } => {
             strings_in_op(array, out);

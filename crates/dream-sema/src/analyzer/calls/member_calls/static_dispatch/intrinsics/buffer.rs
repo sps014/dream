@@ -43,6 +43,81 @@ impl<'a> Analyzer<'a> {
             self.hir_set_zero(&element);
             return Ok(element);
         }
+        if intrinsics::IntrinsicOp::from_attributes(&template.attributes)
+            == Some(intrinsics::IntrinsicOp::ArraySlotSwap)
+        {
+            if !self.current_function_is_trusted_prelude() {
+                diagnostics.report_error(
+                    "slot permutation is an internal storage operation".to_string(),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            }
+            if params_types.len() != 3 {
+                diagnostics.report_error(
+                    "slot permutation expects an array and two int indices".to_string(),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            }
+            let Some(elem_ty) = self.type_ctx.interner.unwrap_array(params_types[0]) else {
+                diagnostics.report_error(
+                    "slot permutation requires an array".to_string(),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            };
+            if params_types[1..].iter().any(|ty| {
+                *ty != self.type_ctx.interner.int() && *ty != self.type_ctx.interner.error()
+            }) {
+                diagnostics.report_error(
+                    "slot indices must be int".to_string(),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            }
+            let mut args = arg_hirs.into_iter();
+            if let (Some(array), Some(left), Some(right)) = (
+                args.next().flatten(),
+                args.next().flatten(),
+                args.next().flatten(),
+            ) {
+                self.hir_set_array_slot_swap(elem_ty, array, left, right);
+            }
+            return Ok(Type::Void);
+        }
+        if intrinsics::IntrinsicOp::from_attributes(&template.attributes)
+            == Some(intrinsics::IntrinsicOp::ArraySlotTake)
+        {
+            if !self.current_function_is_trusted_prelude() || params_types.len() != 2 {
+                diagnostics.report_error(
+                    "slot transfer is internal and expects an array and an int index".into(),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            }
+            let Some(elem_ty) = self.type_ctx.interner.unwrap_array(params_types[0]) else {
+                diagnostics.report_error(
+                    "slot transfer requires an array".into(),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            };
+            if params_types[1] != self.type_ctx.interner.int()
+                && params_types[1] != self.type_ctx.interner.error()
+            {
+                diagnostics.report_error(
+                    "slot transfer index must be int".into(),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            }
+            let mut args = arg_hirs.into_iter();
+            if let (Some(array), Some(index)) = (args.next().flatten(), args.next().flatten()) {
+                self.hir_set_array_slot_take(elem_ty, array, index);
+            }
+            return Ok(self.type_ctx.syntax_type(elem_ty));
+        }
         // `Buffer.alloc<T>(len)`: a generic intrinsic that allocates a zero-initialized
         // `T[]`. The element type comes from the explicit type argument (resolved
         // through the active monomorphization bindings so `Buffer.alloc<T>` inside a

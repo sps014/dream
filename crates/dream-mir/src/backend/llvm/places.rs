@@ -11,7 +11,7 @@ use crate::backend::shared::panic_msgs;
 use crate::backend::shared::place_policy::{
     borrowed_ref_store, is_value_place_alias, realloc_self_store, unique_move_src,
 };
-use crate::rc_store::rvalue_allocates;
+use crate::rc_store::rvalue_owns_result;
 use crate::{Const, Global, Local, Operand, Place, Rvalue};
 use dream_types::{TyKind, TypeId};
 
@@ -400,7 +400,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     && (!self.f.params.contains(l) || decl.is_take);
                 // Producer results already own their references and are evaluated in separate
                 // storage, so rebinding can release the previous value before adopting them.
-                let drop_old = owns && crate::rc_store::rvalue_allocates(rv);
+                let drop_old = owns && crate::rc_store::rvalue_owns_result(rv);
                 self.memcpy_value(rv, &rhs, lty, &dest, retain_copy, drop_old);
             }
             Place::Local(l) => self.write_local(*l, &rhs),
@@ -672,7 +672,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             .map(|f| f.offset)
             .unwrap_or(8) as i64;
         let size = u.size.max(16) as i64;
-        let drop_src = rvalue_allocates(rv).then(|| release_sym(&self.l.cx, fld.ty));
+        let drop_src = rvalue_owns_result(rv).then(|| release_sym(&self.l.cx, fld.ty));
         let src = self.as_ref(rhs);
         let box_ = self.call_v("dream_malloc", &[V::i64(size), V::i32(0)]);
         let (bp, sp) = (self.ptr(&box_), self.ptr(&src));

@@ -55,7 +55,7 @@ impl MirPass for Gvn {
     fn transform(
         &self,
         func: &mut MirFunction,
-        _interner: &TypeInterner,
+        interner: &TypeInterner,
         _layouts: &dream_hir::LayoutTable,
         analyses: &mut crate::passes::FunctionAnalyses,
     ) -> bool {
@@ -63,6 +63,7 @@ impl MirPass for Gvn {
         if n == 0 {
             return false;
         }
+        let scalar = super::scalar_operands::local_flags(func, interner);
         let rpo = analyses.reverse_postorder(func);
         let preds = analyses.predecessors(func);
         let mut exit_avail: Vec<Option<Vec<(Key, u32)>>> = vec![None; n];
@@ -75,7 +76,7 @@ impl MirPass for Gvn {
                 let bi = bid.0 as usize;
                 let avail = meet_avail(&preds[bi], &exit_avail);
                 entry_avail[bi].clone_from(&avail);
-                let mut exit = transfer_avail(&func.blocks[bi].stmts, avail);
+                let mut exit = transfer_avail(&func.blocks[bi].stmts, avail, &scalar);
                 if let Terminator::Await {
                     dest: Some(dest), ..
                 } = func.blocks[bi].terminator
@@ -93,7 +94,7 @@ impl MirPass for Gvn {
         for &bid in rpo.iter() {
             let mut avail = entry_avail[bid.0 as usize].clone();
             for stmt in &mut func.blocks[bid.0 as usize].stmts {
-                changed |= rewrite_cse(stmt, &mut avail);
+                changed |= rewrite_cse(stmt, &mut avail, &scalar);
             }
         }
         changed
@@ -121,18 +122,22 @@ fn meet_avail(preds: &[BlockId], exit: &[Option<Vec<(Key, u32)>>]) -> Vec<(Key, 
     acc
 }
 
-fn transfer_avail(stmts: &[Statement], mut avail: Vec<(Key, u32)>) -> Vec<(Key, u32)> {
+fn transfer_avail(
+    stmts: &[Statement],
+    mut avail: Vec<(Key, u32)>,
+    scalar: &[bool],
+) -> Vec<(Key, u32)> {
     for stmt in stmts {
-        apply_avail(stmt, &mut avail);
+        apply_avail(stmt, &mut avail, scalar);
     }
     avail
 }
 
-fn rewrite_cse(stmt: &mut Statement, avail: &mut Vec<(Key, u32)>) -> bool {
+fn rewrite_cse(stmt: &mut Statement, avail: &mut Vec<(Key, u32)>, scalar: &[bool]) -> bool {
     let mut changed = false;
     if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
         let dest_id = dest.0;
-        let key = key_of(rvalue);
+        let key = key_of(rvalue, scalar);
         if let Some(ref k) = key
             && let Some(&(_, src)) = avail.iter().find(|(ak, l)| ak == k && *l != dest_id)
         {
@@ -147,10 +152,10 @@ fn rewrite_cse(stmt: &mut Statement, avail: &mut Vec<(Key, u32)>) -> bool {
     changed
 }
 
-fn apply_avail(stmt: &Statement, avail: &mut Vec<(Key, u32)>) {
+fn apply_avail(stmt: &Statement, avail: &mut Vec<(Key, u32)>, scalar: &[bool]) {
     if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
         let dest_id = dest.0;
-        let key = key_of(rvalue);
+        let key = key_of(rvalue, scalar);
         invalidate(avail, dest_id);
         if let Some(k) = key {
             avail.push((k, dest_id));
@@ -172,23 +177,25 @@ fn key_mentions(k: &Key, local: u32) -> bool {
     }
 }
 
-fn key_of(rvalue: &Rvalue) -> Option<Key> {
+fn key_of(rvalue: &Rvalue, scalar: &[bool]) -> Option<Key> {
     match rvalue {
-        Rvalue::Binary(op, a, b) => Some(Key::Binary(*op, op_key(a)?, op_key(b)?)),
-        Rvalue::Unary(op, a) => Some(Key::Unary(*op, op_key(a)?)),
-        Rvalue::CheckedBinary(op, a, b) => Some(Key::Checked(*op, op_key(a)?, op_key(b)?)),
-        Rvalue::CheckedNeg(a) => Some(Key::CheckedNeg(op_key(a)?)),
+        Rvalue::Binary(op, a, b) => Some(Key::Binary(*op, op_key(a, scalar)?, op_key(b, scalar)?)),
+        Rvalue::Unary(op, a) => Some(Key::Unary(*op, op_key(a, scalar)?)),
+        Rvalue::CheckedBinary(op, a, b) => {
+            Some(Key::Checked(*op, op_key(a, scalar)?, op_key(b, scalar)?))
+        }
+        Rvalue::CheckedNeg(a) => Some(Key::CheckedNeg(op_key(a, scalar)?)),
         _ => None,
     }
 }
 
 /// A hashable key for an operand, or `None` for shapes we refuse to number (field/index/global
-/// reads, strings, null). Returning `None` disables CSE for that expression: a shared
-/// `Opaque` key would make every `s == "int"` match every `s == "string"` (and every `a.x + 1`
-/// match `a.y + 1`), which is how `@json` treated `string` fields as unsupported.
-fn op_key(op: &Operand) -> Option<OpKey> {
+/// reads, non-scalar locals, strings, null). Returning `None` disables CSE for that expression: a
+/// shared `Opaque` key would make every `s == "int"` match every `s == "string"` (and every
+/// `a.x + 1` match `a.y + 1`), which is how `@json` treated `string` fields as unsupported.
+fn op_key(op: &Operand, scalar: &[bool]) -> Option<OpKey> {
     Some(match op {
-        Operand::Copy(Place::Local(l)) => OpKey::Local(l.0),
+        Operand::Copy(Place::Local(l)) if scalar[l.0 as usize] => OpKey::Local(l.0),
         Operand::Copy(_) => return None,
         Operand::Const(Const::Int(v)) => OpKey::Int(*v),
         Operand::Const(Const::Long(v)) => OpKey::Long(*v),
@@ -203,214 +210,5 @@ fn op_key(op: &Operand) -> Option<OpKey> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::build::FunctionBuilder;
-    use crate::{Operand, Place, Rvalue, Terminator};
-
-    #[test]
-    fn dedups_repeated_binary() {
-        let i = TypeInterner::new();
-        let mut b = FunctionBuilder::new("f", i.int());
-        let x = b.new_param(i.int(), Some("x".into()));
-        let a = b.new_temp(i.int());
-        let c = b.new_temp(i.int());
-        let mul = || {
-            Rvalue::Binary(
-                BinOp::Mul,
-                Operand::Copy(Place::Local(x)),
-                Operand::Const(Const::Int(4)),
-            )
-        };
-        b.assign(Place::Local(a), mul());
-        b.assign(Place::Local(c), mul());
-        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(c)))));
-        let mut func = b.finish();
-        assert!(Gvn.run(&mut func, &i));
-        // Second `x*4` becomes `Use(a)`.
-        match &func.blocks[0].stmts[1] {
-            Statement::Assign(_, Rvalue::Use(Operand::Copy(Place::Local(l)))) => assert_eq!(*l, a),
-            other => panic!("expected CSE copy, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn invalidates_on_operand_redef() {
-        let i = TypeInterner::new();
-        let mut b = FunctionBuilder::new("f", i.int());
-        let x = b.new_local(i.int(), Some("x".into()));
-        let a = b.new_temp(i.int());
-        let c = b.new_temp(i.int());
-        b.assign(
-            Place::Local(a),
-            Rvalue::Binary(
-                BinOp::Add,
-                Operand::Copy(Place::Local(x)),
-                Operand::Const(Const::Int(1)),
-            ),
-        );
-        // Redefine x between the two adds: the second must NOT be CSE'd.
-        b.assign(Place::Local(x), Rvalue::Use(Operand::Const(Const::Int(9))));
-        b.assign(
-            Place::Local(c),
-            Rvalue::Binary(
-                BinOp::Add,
-                Operand::Copy(Place::Local(x)),
-                Operand::Const(Const::Int(1)),
-            ),
-        );
-        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(c)))));
-        let mut func = b.finish();
-        Gvn.run(&mut func, &i);
-        assert!(matches!(
-            &func.blocks[0].stmts[2],
-            Statement::Assign(_, Rvalue::Binary(..))
-        ));
-    }
-
-    /// Two loops in one function (inlined `foreach` after IV): the first loop's bump pointer is
-    /// initialized to `x+4` then mutated on the latch. A later `x+4` must not CSE to that pointer.
-    #[test]
-    fn does_not_cse_add_across_loop_back_edge() {
-        let i = TypeInterner::new();
-        let mut b = FunctionBuilder::new("f", i.int());
-        let x = b.new_param(i.int(), Some("x".into()));
-        let c = b.new_param(i.bool(), Some("c".into()));
-        let p = b.new_temp(i.int());
-        let q = b.new_temp(i.int());
-        let header = b.new_block();
-        let latch = b.new_block();
-        let after = b.new_block();
-        let add4 = || {
-            Rvalue::Binary(
-                BinOp::Add,
-                Operand::Copy(Place::Local(x)),
-                Operand::Const(Const::Int(4)),
-            )
-        };
-        b.assign(Place::Local(p), add4());
-        b.terminate(Terminator::Goto(header));
-        b.switch_to(header);
-        b.terminate(Terminator::If {
-            cond: Operand::Copy(Place::Local(c)),
-            then_blk: latch,
-            else_blk: after,
-        });
-        b.switch_to(latch);
-        b.assign(
-            Place::Local(p),
-            Rvalue::Binary(
-                BinOp::Add,
-                Operand::Copy(Place::Local(p)),
-                Operand::Const(Const::Int(4)),
-            ),
-        );
-        b.terminate(Terminator::Goto(header));
-        b.switch_to(after);
-        b.assign(Place::Local(q), add4());
-        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(q)))));
-        let mut func = b.finish();
-        Gvn.run(&mut func, &i);
-        match &func.blocks[after.0 as usize].stmts[0] {
-            Statement::Assign(_, Rvalue::Binary(..)) => {}
-            other => panic!(
-                "post-loop x+4 must not CSE to the loop bump pointer, got {:?}",
-                other
-            ),
-        }
-    }
-
-    #[test]
-    fn does_not_cse_string_eq_with_different_literals() {
-        let i = TypeInterner::new();
-        let mut b = FunctionBuilder::new("f", i.bool());
-        let s = b.new_param(i.string(), Some("s".into()));
-        let a = b.new_temp(i.bool());
-        let c = b.new_temp(i.bool());
-        b.assign(
-            Place::Local(a),
-            Rvalue::Binary(
-                BinOp::Eq,
-                Operand::Copy(Place::Local(s)),
-                Operand::Const(Const::Str("int".into())),
-            ),
-        );
-        b.assign(
-            Place::Local(c),
-            Rvalue::Binary(
-                BinOp::Eq,
-                Operand::Copy(Place::Local(s)),
-                Operand::Const(Const::Str("string".into())),
-            ),
-        );
-        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(c)))));
-        let mut func = b.finish();
-        Gvn.run(&mut func, &i);
-        match &func.blocks[0].stmts[1] {
-            Statement::Assign(_, Rvalue::Binary(BinOp::Eq, _, _)) => {}
-            other => panic!(
-                "s == \"string\" must not CSE to s == \"int\", got {:?}",
-                other
-            ),
-        }
-    }
-
-    #[test]
-    fn dedups_repeated_float_binary() {
-        let i = TypeInterner::new();
-        let mut b = FunctionBuilder::new("f", i.double());
-        let x = b.new_param(i.double(), Some("x".into()));
-        let a = b.new_temp(i.double());
-        let c = b.new_temp(i.double());
-        let scale = || {
-            Rvalue::Binary(
-                BinOp::Mul,
-                Operand::Copy(Place::Local(x)),
-                Operand::Const(Const::Float(2.5)),
-            )
-        };
-        b.assign(Place::Local(a), scale());
-        b.assign(Place::Local(c), scale());
-        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(c)))));
-        let mut func = b.finish();
-        assert!(Gvn.run(&mut func, &i));
-        match &func.blocks[0].stmts[1] {
-            Statement::Assign(_, Rvalue::Use(Operand::Copy(Place::Local(l)))) => assert_eq!(*l, a),
-            other => panic!("expected float CSE copy, got {:?}", other),
-        }
-    }
-
-    /// `x / 0.0` (+inf) and `x / -0.0` (-inf) differ; the bit-keyed float constants must not
-    /// share a GVN entry.
-    #[test]
-    fn distinguishes_signed_zero_divisors() {
-        let i = TypeInterner::new();
-        let mut b = FunctionBuilder::new("f", i.double());
-        let x = b.new_param(i.double(), Some("x".into()));
-        let a = b.new_temp(i.double());
-        let c = b.new_temp(i.double());
-        b.assign(
-            Place::Local(a),
-            Rvalue::Binary(
-                BinOp::Div,
-                Operand::Copy(Place::Local(x)),
-                Operand::Const(Const::Float(0.0)),
-            ),
-        );
-        b.assign(
-            Place::Local(c),
-            Rvalue::Binary(
-                BinOp::Div,
-                Operand::Copy(Place::Local(x)),
-                Operand::Const(Const::Float(-0.0)),
-            ),
-        );
-        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(c)))));
-        let mut func = b.finish();
-        Gvn.run(&mut func, &i);
-        match &func.blocks[0].stmts[1] {
-            Statement::Assign(_, Rvalue::Binary(..)) => {}
-            other => panic!("1/0 must not CSE to 1/-0, got {:?}", other),
-        }
-    }
-}
+#[path = "gvn_tests.rs"]
+mod tests;

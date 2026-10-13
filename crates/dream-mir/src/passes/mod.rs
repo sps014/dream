@@ -20,6 +20,7 @@ mod frame_alloc_tests;
 pub(crate) mod funcbox_abi;
 mod global_prop;
 mod gvn;
+mod scalar_operands;
 pub(crate) mod inline;
 mod iv;
 mod licm;

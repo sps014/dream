@@ -37,15 +37,16 @@ impl MirPass for Licm {
     fn transform(
         &self,
         func: &mut MirFunction,
-        _interner: &TypeInterner,
+        interner: &TypeInterner,
         _layouts: &dream_hir::LayoutTable,
         analyses: &mut crate::passes::FunctionAnalyses,
     ) -> bool {
+        let scalar = super::scalar_operands::local_flags(func, interner);
         let mut changed = false;
         // Re-derive loops/dominators after each hoist (the CFG changes), processing one loop at a
         // time. Capped so a bug can never spin forever.
         for _ in 0..func.blocks.len() + 1 {
-            if hoist_one_loop(func, analyses) {
+            if hoist_one_loop(func, analyses, &scalar) {
                 analyses.invalidate();
                 changed = true;
             } else {
@@ -57,7 +58,11 @@ impl MirPass for Licm {
 }
 
 /// Hoists the invariant statements of the first loop that has any, returning whether it did.
-fn hoist_one_loop(func: &mut MirFunction, analyses: &mut crate::passes::FunctionAnalyses) -> bool {
+fn hoist_one_loop(
+    func: &mut MirFunction,
+    analyses: &mut crate::passes::FunctionAnalyses,
+    scalar: &[bool],
+) -> bool {
     let loops = analyses.natural_loops(func);
     if loops.is_empty() {
         return false;
@@ -77,7 +82,7 @@ fn hoist_one_loop(func: &mut MirFunction, analyses: &mut crate::passes::Function
                 let Statement::Assign(Place::Local(d), rv) = stmt else {
                     continue;
                 };
-                let Some(operands) = hoistable_operands(rv) else {
+                let Some(operands) = hoistable_operands(rv, scalar) else {
                     continue;
                 };
                 if def_counts.get(d).copied().unwrap_or(0) != 1 {
@@ -147,10 +152,16 @@ fn reads_before(block: &BasicBlock, d: Local, before: usize) -> bool {
 
 /// Rvalue operands eligible for hoisting, or `None` if the rvalue kind can trap / touch memory /
 /// have side effects and so must never be speculated before the loop.
-fn hoistable_operands(rv: &Rvalue) -> Option<Vec<&Operand>> {
+fn hoistable_operands<'a>(rv: &'a Rvalue, scalar: &[bool]) -> Option<Vec<&'a Operand>> {
+    let scalar = |op: &Operand| super::scalar_operands::operand_is_scalar(op, scalar);
     match rv {
-        Rvalue::Use(o) | Rvalue::Unary(_, o) => Some(vec![o]),
-        Rvalue::Binary(op, a, b) if !matches!(op, BinOp::Div | BinOp::Rem) => Some(vec![a, b]),
+        Rvalue::Use(o) => Some(vec![o]),
+        Rvalue::Unary(_, o) if scalar(o) => Some(vec![o]),
+        Rvalue::Binary(op, a, b)
+            if !matches!(op, BinOp::Div | BinOp::Rem) && scalar(a) && scalar(b) =>
+        {
+            Some(vec![a, b])
+        }
         _ => None,
     }
 }
@@ -494,93 +505,5 @@ fn operand_reads(op: &Operand, f: &mut impl FnMut(Local)) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::build::FunctionBuilder;
-    use crate::{Const, Rvalue};
-
-    /// entry -> cond -> (body: t = 2 + 3; goto cond | after: return 0). `t` is loop-invariant, used
-    /// nowhere, so LICM must hoist `t = 2 + 3` out of `body` into a preheader.
-    #[test]
-    fn hoists_invariant_out_of_loop() {
-        let i = TypeInterner::new();
-        let mut b = FunctionBuilder::new("f", i.int());
-        let t = b.new_temp(i.int());
-        let cond = b.new_block();
-        let body = b.new_block();
-        let after = b.new_block();
-        b.terminate(Terminator::Goto(cond));
-        b.switch_to(cond);
-        b.terminate(Terminator::If {
-            cond: Operand::Const(Const::Bool(true)),
-            then_blk: body,
-            else_blk: after,
-        });
-        b.switch_to(body);
-        b.assign(
-            Place::Local(t),
-            Rvalue::Binary(
-                BinOp::Add,
-                Operand::Const(Const::Int(2)),
-                Operand::Const(Const::Int(3)),
-            ),
-        );
-        b.terminate(Terminator::Goto(cond));
-        b.switch_to(after);
-        b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(0)))));
-        let mut func = b.finish();
-
-        assert!(Licm.run(&mut func, &i), "should hoist");
-        // The body block (index 2) must no longer contain the assignment.
-        let body_has_assign = func.blocks[2]
-            .stmts
-            .iter()
-            .any(|s| matches!(s, Statement::Assign(Place::Local(l), _) if *l == t));
-        assert!(!body_has_assign, "assignment left in loop body");
-        // A new preheader block holds it.
-        let hoisted_somewhere = func.blocks.iter().any(|bb| {
-            bb.stmts
-                .iter()
-                .any(|s| matches!(s, Statement::Assign(Place::Local(l), _) if *l == t))
-        });
-        assert!(hoisted_somewhere, "assignment vanished entirely");
-    }
-
-    /// A loop-carried accumulator (`s = s + 1`) reads its own destination, so it is *not* invariant
-    /// and must stay in the loop.
-    #[test]
-    fn does_not_hoist_loop_carried() {
-        let i = TypeInterner::new();
-        let mut b = FunctionBuilder::new("f", i.int());
-        let s = b.new_temp(i.int());
-        let cond = b.new_block();
-        let body = b.new_block();
-        let after = b.new_block();
-        b.assign(Place::Local(s), Rvalue::Use(Operand::Const(Const::Int(0))));
-        b.terminate(Terminator::Goto(cond));
-        b.switch_to(cond);
-        b.terminate(Terminator::If {
-            cond: Operand::Const(Const::Bool(true)),
-            then_blk: body,
-            else_blk: after,
-        });
-        b.switch_to(body);
-        b.assign(
-            Place::Local(s),
-            Rvalue::Binary(
-                BinOp::Add,
-                Operand::Copy(Place::Local(s)),
-                Operand::Const(Const::Int(1)),
-            ),
-        );
-        b.terminate(Terminator::Goto(cond));
-        b.switch_to(after);
-        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(s)))));
-        let mut func = b.finish();
-
-        assert!(
-            !Licm.run(&mut func, &i),
-            "must not hoist a loop-carried value"
-        );
-    }
-}
+#[path = "licm_tests.rs"]
+mod tests;

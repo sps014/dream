@@ -1254,31 +1254,7 @@ DREAM_ALWAYS_INLINE void dream_simd_binop(dream_ptr dest, dream_ptr lhs, dream_p
     dream_v128_f32_bin(dream_p(dest), dream_p(lhs), dream_p(rhs), op);
 }
 
-/* On wasm32 an inlined `memcmp(...) == 0` often reaches codegen behind a `freeze`, which hides
- * the equality-only use from memcmp expansion: it then emits the ordering form, built on byte
- * swaps wasm lacks. The guest `memcmp` is this same word loop, so comparing for equality here
- * costs nothing; native keeps libc's vectorized `memcmp`. */
-DREAM_ALWAYS_INLINE int dream_units_equal(const void *a, const void *b, size_t bytes) {
-#if defined(__wasm__)
-    const unsigned char *x = (const unsigned char *)a;
-    const unsigned char *y = (const unsigned char *)b;
-    uint64_t diff = 0;
-    for (; bytes >= 8; bytes -= 8, x += 8, y += 8) {
-        uint64_t xa, ya;
-        __builtin_memcpy(&xa, x, 8);
-        __builtin_memcpy(&ya, y, 8);
-        if (xa != ya) {
-            return 0;
-        }
-    }
-    for (; bytes; bytes--, x++, y++) {
-        diff |= (uint64_t)(*x ^ *y);
-    }
-    return diff == 0;
-#else
-    return memcmp(a, b, bytes) == 0;
-#endif
-}
+#include "dream_string_equal.h"
 
 DREAM_ALWAYS_INLINE int32_t dream_string_eq(dream_ptr a, dream_ptr b) {
     int32_t n;

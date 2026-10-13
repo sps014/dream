@@ -6,7 +6,7 @@ Read the [usage guide](../stdlib/collections/priority-queue.md) for examples and
 
 ## `class PriorityQueue<T> : Collection<T>`
 
-Binary min-heap: `pop`/`peek` always return the smallest element by the active comparator (natural ascending order via `Comparable<T>` by default, or a custom `fun(T, T): int`).
+Four-child min-heap: `pop`/`peek` always return the smallest element by the active comparator (natural ascending order via `Comparable<T>` by default, or a custom `fun(T, T): int`).
 
 ```dream
 public class PriorityQueue<T> : Collection<T>

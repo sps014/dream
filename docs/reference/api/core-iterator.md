@@ -11,3 +11,19 @@ Pull one element at a time. Concrete iterators (`ListIterator`, …) implement t
 ```dream
 public interface Iterator<T>
 ```
+
+## `next`
+
+Returns the next element, or `None` when exhausted.
+
+```dream
+unique fun next(): Option<T>
+```
+
+## `close`
+
+Ends iteration. The default implementation does nothing; yield cursors release suspended producer state.
+
+```dream
+unique fun close(): void
+```

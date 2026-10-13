@@ -26,6 +26,12 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual([entry["signature"] for entry in declarations(source)],
                          ["public enum Choice", "First", "Second(int)"])
 
+    def test_interface_requirement_modifiers(self):
+        source = "public interface Cursor<T> {\n    borrow fun iterator(): Iterator<T>;\n    async unique fun next(): Option<T>;\n    unique fun close(): void;\n}"
+        self.assertEqual([entry["signature"] for entry in declarations(source)],
+                         ["public interface Cursor<T>", "borrow fun iterator(): Iterator<T>",
+                          "async unique fun next(): Option<T>", "unique fun close(): void"])
+
 
 if __name__ == "__main__":
     unittest.main()

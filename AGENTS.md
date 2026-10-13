@@ -223,6 +223,19 @@ python3 scripts/test_corpus.py            # when implementing or fixing: full as
 
 When iterating on a feature or bugfix, prefer `python3 scripts/test_corpus.py <case-name-substring>` first for a fast signal, then run the full corpus on both targets before calling the work done. The default `cargo test --workspace` gate is the fast suite (unit tests + e2e smoke). The corpus command is the full assertion run. DAP, wasm-opt-every-level, and dreamer compiler/pack e2e: `cargo test --workspace -- --ignored`.
 
+### Documentation gate
+
+After changing documentation, docs tooling, `mkdocs.yml`, or embedded stdlib sources, run the same checks as `.github/workflows/docs.yml` before calling the work done:
+
+```bash
+python -m pip install -r docs/requirements-docs.txt
+python -m unittest discover -s tooling/docs -p 'test_*.py'
+python tooling/docs/api_inventory.py
+python -m mkdocs build --strict
+```
+
+If the API inventory is stale, review the changed declarations and update the affected `docs/reference/api/` pages first, then run `python tooling/docs/api_inventory.py --write` and repeat the checks. Commit `tooling/docs/api-coverage.json` together with the reference updates. The inventory records signatures, descriptions, and source line numbers, so stdlib body edits can require a refresh even when the public signatures stay the same. Never refresh the inventory just to silence CI without reviewing the reference.
+
 ## Testing conventions
 
 - **Assertion e2e tests** live in `tests/projects/`, a Dream workspace of feature suites. Add `@test` functions using `Assert.*`; no expected-output files. Invalid programs, traps, and process-isolated tests stay in `tests/cases/`, registered with inline Rust expectations and isolation reasons in `tests/corpus/`. Artifact-specific uninstrumented programs live in `tests/fixtures/compiler/`. Default `cargo test --workspace` runs grouped smoke tests; `python3 scripts/test_corpus.py --both` runs the full native and Node corpus. Register every case once; the corpus audit checks source files and assertions.

@@ -16,6 +16,7 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [Error](core-error.md)
 - [IndexedCollection](core-indexed-collection.md)
 - [Iterator](core-iterator.md)
+- [Iterable, async iterators, and yield helpers](core-iterable.md)
 - [Js](core-js.md)
 - [Lock](core-lock.md)
 - [Math](core-math.md)

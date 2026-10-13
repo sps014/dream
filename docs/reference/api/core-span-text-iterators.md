@@ -55,7 +55,7 @@ public interface StringKey
 ## `matches_span`
 
 ```dream
-fun matches_span(other: ReadOnlySpan<char>): bool
+fun matches_span(borrow other: ReadOnlySpan<char>): bool
 ```
 
 ## `span`
@@ -77,7 +77,7 @@ public fun span(start: int, end: int): ReadOnlySpan<char>
 ## `matches_span`
 
 ```dream
-public fun matches_span(other: ReadOnlySpan<char>): bool
+public fun matches_span(borrow other: ReadOnlySpan<char>): bool
 ```
 
 ## `view_eq`

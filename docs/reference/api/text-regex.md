@@ -19,7 +19,7 @@ public constructor(pattern: string, flags: RegexFlags = 0)
 ## `test`
 
 ```dream
-public fun test(input: string): bool
+public fun test(borrow input: string): bool
 ```
 
 ## `replace`

@@ -92,7 +92,7 @@ def declarations(source):
         while depth and end < len(masked):
             depth += (masked[end] == "{") - (masked[end] == "}")
             end += 1
-        for member in re.finditer(r"(?m)^    (?:fun|get|set)\s+[^\n]+", masked[start:end - 1]):
+        for member in re.finditer(r"(?m)^    (?:(?:borrow|unique|async|static)\s+)*(?:fun|get|set)\s+[^\n]+", masked[start:end - 1]):
             offset = start + member.start() + 4
             stop = signature_end(masked, offset)
             entries.append({"signature": " ".join(source[offset:stop].split()),

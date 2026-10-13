@@ -1455,217 +1455,217 @@
       {
         "signature": "public class List<T> : IndexedCollection<T>",
         "description": "Growable random-access sequence backed by a resizable buffer.  Invariant: `0 <= count <= items.length`. Every mutation of `items`/`count` preserves it, which is what makes the `Buffer.get_unchecked`/`set_unchecked` accesses on `[0, count)` sound.",
-        "line": 22,
+        "line": 35,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public constructor(capacity: int = 8)",
         "description": "Allocates an empty list with an initial backing buffer capacity (defaults to 8).",
-        "line": 28,
+        "line": 41,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public static fun with_capacity(capacity: int): List<T>",
         "description": "Allocates an empty list with backing capacity `capacity`.",
-        "line": 38,
+        "line": 51,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 44,
+        "line": 57,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True when the list has no elements.",
-        "line": 50,
+        "line": 63,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public get capacity(): int",
         "description": "Current capacity of the backing buffer.",
-        "line": 56,
+        "line": 69,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun push(value: T): void",
         "description": "Appends a value to the end, growing if necessary.",
-        "line": 69,
+        "line": 82,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun push_all(borrow items: T[]): void",
         "description": "Appends every element of `items`, ensuring capacity once then copying via `Span`.",
-        "line": 78,
+        "line": 91,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public static fun from_array(borrow items: T[]): List<T>",
         "description": "Builds a list containing exactly the elements of `items`, in order. The `[e1, e2, ...]` list-literal syntax (e.g. `let xs: List<int> = [1, 2, 3];`) desugars to this.",
-        "line": 92,
+        "line": 105,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun take_array(): T[]",
         "description": "Yields a `T[]` of exactly `length` and leaves this list empty. Shrinks via `realloc` when capacity is larger than `count` so the result's `.length` is the live element count.",
-        "line": 100,
+        "line": 113,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun this[index: int]: T",
         "description": "Element at `index`. Panics if `index` is out of range.",
-        "line": 114,
+        "line": 135,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun this[index: int] = value: T",
         "description": "Overwrites the element at `index`. Panics if `index` is out of range.",
-        "line": 122,
+        "line": 143,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun set(index: int, value: T): void",
         "description": "",
-        "line": 129,
+        "line": 150,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun pop(): Option<T>",
         "description": "Removes and returns the last element, or `None` if the list is empty.",
-        "line": 134,
+        "line": 155,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun contains(borrow value: T): bool",
         "description": "True if `value` is present (uses value equality, including string contents).",
-        "line": 149,
+        "line": 166,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun index_of(borrow value: T): Option<int>",
         "description": "Index of the first matching element (by value equality), or `None` if absent.",
-        "line": 161,
+        "line": 178,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun last_index_of(borrow value: T): Option<int>",
         "description": "Index of the last matching element (by value equality), or `None` if absent.",
-        "line": 173,
+        "line": 190,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun reserve(n: int): void",
         "description": "Grows the backing buffer until `capacity()` is at least `n`.",
-        "line": 185,
+        "line": 202,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun reverse(): void",
         "description": "Reverses the live prefix in place.",
-        "line": 192,
+        "line": 209,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun slice(start: int, end: int): List<T>",
         "description": "A new list of `this[start .. end)` (clamped; empty when the span is inverted).",
-        "line": 205,
+        "line": 220,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun concat(borrow other: List<T>): List<T>",
         "description": "A new list with this list's elements followed by `other`.",
-        "line": 227,
+        "line": 242,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clone(): List<T>",
         "description": "A shallow copy of the live elements.",
-        "line": 243,
+        "line": 258,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun join(sep: string): string",
         "description": "Joins stringifiable elements with `sep` (same conversion as `to_string` uses). Single pass into a StringBuilder — O(total output), never the quadratic accumulate-and-recopy shape.",
-        "line": 249,
+        "line": 264,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Empties the list while keeping the backing buffer. Live slots are overwritten with a zero value so reference fields inside value-struct elements (and class elements) release immediately; capacity is unchanged (no capacity-sized `Buffer.alloc`).",
-        "line": 266,
+        "line": 281,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clear(): void where T : unmanaged",
         "description": "Unmanaged: no RC to release — rewind the count only.",
-        "line": 280,
+        "line": 295,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun insert(index: int, value: T): bool",
         "description": "Inserts `value` at `index`, shifting later elements right. Returns false if `index` is out of range (index may equal `size()` to append).",
-        "line": 286,
+        "line": 301,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun insert(index: int, value: T): bool where T : unmanaged",
         "description": "Unmanaged: one `memory.copy` shift (no Span wrappers).",
-        "line": 303,
+        "line": 318,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun remove_at(index: int): bool",
         "description": "Removes the element at `index`, shifting later elements left. Returns true on success, or false if `index` is out of range (the list is left unchanged in that case).",
-        "line": 322,
+        "line": 337,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool",
         "description": "Removes the first occurrence of `value` (by equality). Returns true when something was removed.",
-        "line": 338,
+        "line": 353,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun iterator(): ListIterator<T>",
         "description": "Enumerator for `for (let x in list)`. Returns a fresh cursor over the current elements.",
-        "line": 346,
+        "line": 361,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun as_span(): Span<T>",
         "description": "A view of the current elements, writable in place. The span holds the backing array it was taken from: after the list grows (or shrinks and regrows) it keeps showing that old array, so take a fresh span after structural changes.",
-        "line": 353,
+        "line": 368,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun as_read_only_span(): ReadOnlySpan<T>",
         "description": "A read-only view of the current elements, with the same staleness rule as `as_span`.",
-        "line": 358,
+        "line": 373,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort_by(borrow cmp: fun(T, T): int): void",
         "description": "Sorts the list in place with the supplied comparator.",
-        "line": 370,
+        "line": 385,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort(): void where T : Comparable<T>",
         "description": "Sorts the list in place into ascending order using each element's `compare` method. Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 424,
+        "line": 439,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun binary_search(borrow value: T): Option<int> where T : Comparable<T>",
         "description": "Binary search over a list that is already sorted ascending (by `compare`). Returns the index of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n). Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 432,
+        "line": 447,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "",
-        "line": 450,
+        "line": 465,
         "page": "reference/api/collections-list-2.md"
       }
     ]
@@ -1721,133 +1721,133 @@
       {
         "signature": "public fun this[key: K] = value: V",
         "description": "The first probe hits an empty or matching slot on the usual insert. That case stays in the caller; collisions fall through to the full probe.",
-        "line": 158,
+        "line": 187,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun set(key: K, value: V): void",
         "description": "",
-        "line": 182,
+        "line": 211,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun contains(borrow key: K): bool",
         "description": "",
-        "line": 186,
+        "line": 215,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun set_all(borrow keys: K[], borrow values: V[]): void",
         "description": "",
-        "line": 190,
+        "line": 219,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public static fun from_arrays(borrow keys: K[], borrow values: V[]): Map<K, V>",
         "description": "",
-        "line": 202,
+        "line": 231,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get(borrow key: K): Option<V>",
         "description": "Value for `key`, or `None` when absent.",
-        "line": 210,
+        "line": 239,
         "page": "reference/api/collections-map-1.md"
       },
       {
-        "signature": "public fun get(key: ReadOnlySpan<char>): Option<V> where K : StringKey",
+        "signature": "public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K : StringKey",
         "description": "Value for the `string` key equal to `key`, without building a `string`.",
-        "line": 219,
+        "line": 248,
         "page": "reference/api/collections-map-1.md"
       },
       {
-        "signature": "public fun get_or(key: ReadOnlySpan<char>, fallback: V): V where K : StringKey",
+        "signature": "public fun get_or(borrow key: ReadOnlySpan<char>, fallback: V): V where K : StringKey",
         "description": "",
-        "line": 227,
+        "line": 256,
         "page": "reference/api/collections-map-1.md"
       },
       {
-        "signature": "public fun contains(key: ReadOnlySpan<char>): bool where K : StringKey",
+        "signature": "public fun contains(borrow key: ReadOnlySpan<char>): bool where K : StringKey",
         "description": "",
-        "line": 235,
+        "line": 264,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun this[borrow key: K]: V",
         "description": "Value for `key`. Panics when the key is absent — this is what `m[k]` compiles to; use `get(k)` for absence-tolerant reads.",
-        "line": 241,
+        "line": 270,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get_or(borrow key: K, fallback: V): V",
         "description": "",
-        "line": 250,
+        "line": 279,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get_or_insert(key: K, borrow factory: fun(): V): V",
         "description": "",
-        "line": 258,
+        "line": 287,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun merge(borrow other: Map<K, V>): void",
         "description": "",
-        "line": 268,
+        "line": 297,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun entries(): List<KeyValuePair<K, V>>",
         "description": "",
-        "line": 274,
+        "line": 303,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun remove(borrow key: K): bool",
         "description": "",
-        "line": 286,
+        "line": 315,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "",
-        "line": 301,
+        "line": 330,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "",
-        "line": 306,
+        "line": 335,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun clear(): void where K : unmanaged, V : unmanaged",
         "description": "",
-        "line": 325,
+        "line": 354,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun keys(): K[]",
         "description": "",
-        "line": 331,
+        "line": 360,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun values(): V[]",
         "description": "",
-        "line": 345,
+        "line": 374,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun iterator(): MapIterator<K, V>",
         "description": "",
-        "line": 359,
+        "line": 388,
         "page": "reference/api/collections-map-2.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "",
-        "line": 375,
+        "line": 404,
         "page": "reference/api/collections-map-2.md"
       }
     ]
@@ -1878,68 +1878,68 @@
     "declarations": [
       {
         "signature": "public class PriorityQueue<T> : Collection<T>",
-        "description": "Binary min-heap: `pop`/`peek` always return the smallest element by the active comparator (natural ascending order via `Comparable<T>` by default, or a custom `fun(T, T): int`).",
+        "description": "Four-child min-heap: `pop`/`peek` always return the smallest element by the active comparator (natural ascending order via `Comparable<T>` by default, or a custom `fun(T, T): int`).",
         "line": 6,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public constructor()",
         "description": "Empty queue ordered by `T`'s natural `Comparable` order.",
-        "line": 12,
+        "line": 13,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public constructor(cmp: fun(T, T): int)",
         "description": "Empty queue ordered by a custom comparator (same contract as `List.sort_by`: negative when `a` should come out first, positive when `b` should).",
-        "line": 21,
+        "line": 23,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 28,
+        "line": 31,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True when the queue has no elements.",
-        "line": 33,
+        "line": 36,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes every element. Live slots are overwritten with a zero value so managed elements release immediately instead of staying retained until later pushes overwrite them.",
-        "line": 39,
+        "line": 42,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun clear(): void where T : unmanaged",
         "description": "Unmanaged: no RC to release — rewind only.",
-        "line": 50,
+        "line": 54,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun push(value: T): void",
-        "description": "Inserts `value`, restoring the heap invariant. O(log n).",
-        "line": 110,
+        "description": "",
+        "line": 78,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun pop(): Option<T>",
-        "description": "Removes and returns the smallest element, or `None` when empty. O(log n).",
-        "line": 120,
+        "description": "",
+        "line": 109,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun peek(): Option<T>",
         "description": "Returns the smallest element without removing it, or `None` when empty. O(1).",
-        "line": 137,
+        "line": 158,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun iterator(): PriorityQueueIterator<T>",
         "description": "Iterates elements in ascending order under the active comparator, over a snapshot taken now, so later pushes/pops do not affect the cursor.",
-        "line": 146,
+        "line": 167,
         "page": "reference/api/collections-priority-queue.md"
       }
     ]
@@ -2001,25 +2001,25 @@
       {
         "signature": "public fun peek(): Option<T>",
         "description": "Returns the front element without removing it, or `None` when empty.",
-        "line": 70,
+        "line": 68,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes every element. Live ring slots are overwritten with a zero value so managed elements release immediately instead of staying retained until later enqueues overwrite them; the ring is reset to front-aligned empty.",
-        "line": 80,
+        "line": 78,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun clear(): void where T : unmanaged",
         "description": "Unmanaged: no RC to release — rewind only.",
-        "line": 93,
+        "line": 91,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun iterator(): QueueIterator<T>",
         "description": "Iterates elements from front to back.",
-        "line": 99,
+        "line": 97,
         "page": "reference/api/collections-queue.md"
       }
     ]
@@ -2142,109 +2142,109 @@
       {
         "signature": "public fun add(value: T): bool",
         "description": "Inserts a value into the set. Returns true if it was newly added, false if already present.",
-        "line": 146,
+        "line": 177,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun contains(borrow value: T): bool",
         "description": "True if the set contains the value.",
-        "line": 158,
+        "line": 189,
         "page": "reference/api/collections-set.md"
       },
       {
-        "signature": "public fun contains(value: ReadOnlySpan<char>): bool where T : StringKey",
+        "signature": "public fun contains(borrow value: ReadOnlySpan<char>): bool where T : StringKey",
         "description": "True when the set holds the `string` equal to `value`, without building a `string`.",
-        "line": 163,
+        "line": 195,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun add_all(borrow items: T[]): void",
         "description": "Adds every element of `items` (duplicates are ignored, exactly like repeated `add` calls). Also what the `{e1, e2, ...}` set-literal syntax lowers to via `from_array`, so a literal with N elements costs one call, not N.",
-        "line": 188,
+        "line": 220,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public static fun from_array(borrow items: T[]): Set<T>",
         "description": "Builds a set containing exactly the (deduplicated) elements of `items`. The `{e1, e2, ...}` set-literal syntax (e.g. `let s: Set<int> = {1, 2, 3};`) desugars to this.",
-        "line": 198,
+        "line": 230,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool",
         "description": "Removes a value and returns true if it was removed.",
-        "line": 205,
+        "line": 237,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool where T : unmanaged",
         "description": "",
-        "line": 217,
+        "line": 249,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True if the set is empty.",
-        "line": 228,
+        "line": 260,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all elements, keeping the current capacity. Occupied key slots are zeroed so managed entries release; probe `states` are reset in place (no capacity realloc).",
-        "line": 234,
+        "line": 266,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun clear(): void where T : unmanaged",
         "description": "",
-        "line": 250,
+        "line": 282,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun to_array(): T[]",
         "description": "Gets all elements as an array.",
-        "line": 257,
+        "line": 289,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun union(borrow other: Set<T>): Set<T>",
         "description": "Elements present in this set or `other`.",
-        "line": 272,
+        "line": 304,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun intersection(borrow other: Set<T>): Set<T>",
         "description": "Elements present in both sets.",
-        "line": 288,
+        "line": 320,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun difference(borrow other: Set<T>): Set<T>",
         "description": "Elements in this set but not in `other`.",
-        "line": 303,
+        "line": 335,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_subset(borrow other: Set<T>): bool",
         "description": "True when every element of this set is in `other`.",
-        "line": 318,
+        "line": 350,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_disjoint(borrow other: Set<T>): bool",
         "description": "True when the sets share no elements.",
-        "line": 332,
+        "line": 364,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun iterator(): SetIterator<T>",
         "description": "Gets an iterator for the set.",
-        "line": 346,
+        "line": 378,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "",
-        "line": 359,
+        "line": 391,
         "page": "reference/api/collections-set.md"
       }
     ]
@@ -2903,7 +2903,7 @@
     "page": "reference/api/core-collection.md",
     "declarations": [
       {
-        "signature": "public interface Collection<T>",
+        "signature": "public interface Collection<T> : Iterable<T>",
         "description": "Sized collection — the type users pass into APIs that need a count. `for (let x in xs)` works for concrete `@iterator` types and for interface-typed `Collection` / `IndexedCollection` / `Iterator` (via `.iterator()` / `.next()` dispatch). List-returning query helpers (`to_list`, `filter`, `map`, …) live in `system.collections` as `extend Collection<T>` so bootstrap does not depend on `List`.",
         "line": 8,
         "page": "reference/api/core-collection.md"
@@ -2915,51 +2915,45 @@
         "page": "reference/api/core-collection.md"
       },
       {
-        "signature": "fun iterator(): Iterator<T>",
-        "description": "",
-        "line": 11,
-        "page": "reference/api/core-collection.md"
-      },
-      {
         "signature": "public fun is_empty(): bool",
         "description": "True when the collection has no elements.",
-        "line": 14,
+        "line": 13,
         "page": "reference/api/core-collection.md"
       },
       {
         "signature": "public fun all(borrow pred: fun(T): bool): bool",
         "description": "True when every element satisfies `pred`.",
-        "line": 19,
+        "line": 18,
         "page": "reference/api/core-collection.md"
       },
       {
         "signature": "public fun any(borrow pred: fun(T): bool): bool",
         "description": "True when at least one element satisfies `pred`.",
-        "line": 29,
+        "line": 28,
         "page": "reference/api/core-collection.md"
       },
       {
         "signature": "public fun none(borrow pred: fun(T): bool): bool",
         "description": "True when no element satisfies `pred`.",
-        "line": 39,
+        "line": 38,
         "page": "reference/api/core-collection.md"
       },
       {
         "signature": "public fun count_where(borrow pred: fun(T): bool): int",
         "description": "Counts elements for which `pred` is true.",
-        "line": 44,
+        "line": 43,
         "page": "reference/api/core-collection.md"
       },
       {
         "signature": "public fun find_where(borrow pred: fun(T): bool): Option<T>",
         "description": "First element for which `pred` is true, or `None`.",
-        "line": 55,
+        "line": 54,
         "page": "reference/api/core-collection.md"
       },
       {
         "signature": "public fun for_each(borrow action: fun(T): void): void",
         "description": "Invokes `action` for each element in iteration order.",
-        "line": 65,
+        "line": 64,
         "page": "reference/api/core-collection.md"
       }
     ]
@@ -3126,6 +3120,271 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/core/iterable.dream",
+    "package": "system.core",
+    "page": "reference/api/core-iterable.md",
+    "declarations": [
+      {
+        "signature": "public interface Iterable<T>",
+        "description": "",
+        "line": 3,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "borrow fun iterator(): Iterator<T>",
+        "description": "",
+        "line": 4,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public interface AsyncIterator<T>",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "async unique fun next(): Option<T>",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "unique fun close(): void",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public interface AsyncIterable<T>",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "borrow fun iterator(): AsyncIterator<T>",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public static class YieldSignals",
+        "description": "",
+        "line": 16,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public static extern fun pending(): Future<void>",
+        "description": "",
+        "line": 18,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public static extern fun complete(borrow signal: Future<void>): void",
+        "description": "",
+        "line": 20,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public static extern fun run(borrow producer: Future<void>, borrow ready: Future<void>): void",
+        "description": "",
+        "line": 22,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public class YieldChannel<T>",
+        "description": "",
+        "line": 26,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public value: Option<T>",
+        "description": "",
+        "line": 27,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public ended: bool",
+        "description": "",
+        "line": 28,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public ready: Future<void>",
+        "description": "",
+        "line": 29,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public resume: Future<void>",
+        "description": "",
+        "line": 30,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "",
+        "line": 32,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public fun emit(value: T): Future<void>",
+        "description": "",
+        "line": 39,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public fun finish(): void",
+        "description": "",
+        "line": 45,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public fun advance(): void",
+        "description": "",
+        "line": 50,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public class YieldCursor<T> : Iterator<T>",
+        "description": "",
+        "line": 60,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public constructor(channel: YieldChannel<T>, producer: Future<void>)",
+        "description": "",
+        "line": 65,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public fun next(): Option<T>",
+        "description": "",
+        "line": 71,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public fun close(): void",
+        "description": "",
+        "line": 79,
+        "page": "reference/api/core-iterable-1.md"
+      },
+      {
+        "signature": "public class YieldIterable<T> : Iterable<T>",
+        "description": "",
+        "line": 91,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public constructor(factory: fun(YieldChannel<T>): Future<void>)",
+        "description": "",
+        "line": 94,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public fun iterator(): Iterator<T>",
+        "description": "",
+        "line": 98,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public class YieldAsyncCursor<T> : AsyncIterator<T>",
+        "description": "",
+        "line": 105,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public constructor(channel: YieldChannel<T>, producer: Future<void>)",
+        "description": "",
+        "line": 111,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public async fun next(): Option<T>",
+        "description": "",
+        "line": 118,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public fun close(): void",
+        "description": "",
+        "line": 132,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public class YieldAsyncIterable<T> : AsyncIterable<T>",
+        "description": "",
+        "line": 144,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public constructor(factory: fun(YieldChannel<T>): Future<void>)",
+        "description": "",
+        "line": 147,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public fun iterator(): AsyncIterator<T>",
+        "description": "",
+        "line": 151,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public class IteratorLease<T>",
+        "description": "A loop owns a lease even when the caller retains the cursor. Dropping a cancelled coroutine therefore closes the active cursor independently of its other aliases.",
+        "line": 161,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public constructor(cursor: Iterator<T>)",
+        "description": "",
+        "line": 163,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public fun close(): void",
+        "description": "",
+        "line": 164,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public class AsyncIteratorLease<T>",
+        "description": "",
+        "line": 169,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public constructor(cursor: AsyncIterator<T>)",
+        "description": "",
+        "line": 171,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public fun close(): void",
+        "description": "",
+        "line": 172,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public class YieldAdvanceLease<T>",
+        "description": "",
+        "line": 178,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public constructor(cursor: YieldAsyncCursor<T>)",
+        "description": "",
+        "line": 181,
+        "page": "reference/api/core-iterable-2.md"
+      },
+      {
+        "signature": "public fun complete(): void",
+        "description": "",
+        "line": 185,
+        "page": "reference/api/core-iterable-2.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/core/iterator.dream",
     "package": "system.core",
     "page": "reference/api/core-iterator.md",
@@ -3134,6 +3393,18 @@
         "signature": "public interface Iterator<T>",
         "description": "Pull one element at a time. Concrete iterators (`ListIterator`, …) implement this. `@next` lives on the implementing class (attributes are not required on the interface).",
         "line": 5,
+        "page": "reference/api/core-iterator.md"
+      },
+      {
+        "signature": "unique fun next(): Option<T>",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/core-iterator.md"
+      },
+      {
+        "signature": "unique fun close(): void",
+        "description": "",
+        "line": 7,
         "page": "reference/api/core-iterator.md"
       }
     ]
@@ -4322,7 +4593,7 @@
         "page": "reference/api/core-span-text-iterators.md"
       },
       {
-        "signature": "fun matches_span(other: ReadOnlySpan<char>): bool",
+        "signature": "fun matches_span(borrow other: ReadOnlySpan<char>): bool",
         "description": "",
         "line": 98,
         "page": "reference/api/core-span-text-iterators.md"
@@ -4340,7 +4611,7 @@
         "page": "reference/api/core-span-text-iterators.md"
       },
       {
-        "signature": "public fun matches_span(other: ReadOnlySpan<char>): bool",
+        "signature": "public fun matches_span(borrow other: ReadOnlySpan<char>): bool",
         "description": "",
         "line": 128,
         "page": "reference/api/core-span-text-iterators.md"
@@ -8722,37 +8993,37 @@
       {
         "signature": "public class Regex",
         "description": "",
-        "line": 23,
+        "line": 25,
         "page": "reference/api/text-regex.md"
       },
       {
         "signature": "public constructor(pattern: string, flags: RegexFlags = 0)",
         "description": "",
-        "line": 30,
+        "line": 32,
         "page": "reference/api/text-regex.md"
       },
       {
-        "signature": "public fun test(input: string): bool",
+        "signature": "public fun test(borrow input: string): bool",
         "description": "",
-        "line": 58,
+        "line": 60,
         "page": "reference/api/text-regex.md"
       },
       {
         "signature": "public fun replace(input: string, replacement: string): string",
         "description": "",
-        "line": 62,
+        "line": 64,
         "page": "reference/api/text-regex.md"
       },
       {
         "signature": "public fun match(input: string): string[]",
         "description": "",
-        "line": 178,
+        "line": 180,
         "page": "reference/api/text-regex.md"
       },
       {
         "signature": "public fun match_info(input: string): Option<RegexMatchInfo>",
         "description": "",
-        "line": 196,
+        "line": 198,
         "page": "reference/api/text-regex.md"
       }
     ]

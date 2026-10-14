@@ -168,6 +168,8 @@ nav:
     - I/O:
       - File I/O: reference/stdlib/file.md
       - Streams: reference/stdlib/file-streams.md
+      - URLs: reference/stdlib/url.md
+      - HTTP: reference/stdlib/http.md
       - Paths: reference/stdlib/paths.md
     - Serialization:
       - JSON: reference/stdlib/json.md
@@ -203,6 +205,7 @@ nav:
   - system.io: reference/api/system-io.md
   - system.json: reference/api/system-json.md
   - system.logging: reference/api/system-logging.md
+  - system.net: reference/api/system-net.md
   - system.primitives: reference/api/system-primitives.md
   - system.process: reference/api/system-process.md
   - system.simd: reference/api/system-simd.md

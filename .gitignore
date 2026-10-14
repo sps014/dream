@@ -27,6 +27,8 @@ tests/**/*.C
 !/tests/runtime_platform.c
 !/tests/runtime_stdio.c
 !/tests/runtime_ready.c
+!/tests/runtime_blocking.c
+!/tests/runtime_file_operation.c
 tests/**/*.bin
 tests/**/*.o
 # Native C emit (`dream --native-c`) next to the entry file.

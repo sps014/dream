@@ -29,6 +29,7 @@ These declaration snippets show the interface; they are not complete programs. T
 - [system.io](system-io.md)
 - [system.json](system-json.md)
 - [system.logging](system-logging.md)
+- [system.net](system-net.md)
 - [system.primitives](system-primitives.md)
 - [system.process](system-process.md)
 - [system.simd](system-simd.md)

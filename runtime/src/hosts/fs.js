@@ -1,3 +1,4 @@
+import { makeFileOperationHost } from "./file_operations.js";
 import { getNodeFs } from "../platform.js";
 
 /**
@@ -359,7 +360,10 @@ function fileHandleCloseHost(id) {
   if (!h) return -1;
   fileHandles.delete(id);
   try {
-    if (h.kind === "node") getNodeFs().closeSync(h.fd);
+    if (h.kind === "node") {
+      if (h.pending) h.closing = true;
+      else getNodeFs().closeSync(h.fd);
+    }
     return 0;
   } catch (_) { return -1; }
 }
@@ -406,6 +410,16 @@ export function makeFsHost() {
     dirCreateAll: (path) => {
       try { fsBackend().mkdirAll(path); return true; } catch (_) { return false; }
     },
+    ...makeFileOperationHost({
+      handles: fileHandles,
+      open: fileOpenHost, read: fileHandleReadHost, write: fileHandleWriteHost,
+      seek: fileHandleSeekHost, close: fileHandleCloseHost,
+      register: (fd, path, mode) => {
+        const id = nextFileHandleId++;
+        fileHandles.set(id, { kind: "node", fd, path, mode, pos: 0 });
+        return id;
+      },
+    }),
     fileOpen: (path, mode) => fileOpenHost(path, mode),
     fileHandleRead: (id, n) => fileHandleReadHost(id, n),
     fileHandleWrite: (id, data) => fileHandleWriteHost(id, data),

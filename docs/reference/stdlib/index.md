@@ -50,3 +50,6 @@ Dream includes a library for everyday tasks. Import the packages you need; some 
 The [API catalog](../api/index.md) lists exact public declarations by package, including properties, constructors, overloads, and enum choices. Begin with the guides on this page when you want examples; use the catalog when you need a particular argument or return type.
 
 Also see [Text formatting](formatting.md), [API errors](errors.md), and the individual [collection guides](collections.md).
+
+- [URLs and query parameters](url.md)
+- [HTTP clients and streaming](http.md)

@@ -166,16 +166,23 @@ export function wrapAsyncImport(getInstance, fn, signature) {
     const inst = getInstance();
     const exports = inst.exports;
     const args = marshalArgs(inst, params, rawArgs);
+    exports.__dream_host_pin(future);
     const settle = (rawResult) => {
       inst._hostPending--;
-      const marshaled = boxTag != null
-        ? boxLong64(inst, rawResult, boxTag)
-        : marshalResult(inst, result, rawResult);
-      exports.__dream_resolve(future, marshaled);
-      pumpRunLoop(inst);
+      try {
+        if (exports.__dream_host_status(future) === 0) {
+          const marshaled = boxTag != null
+            ? boxLong64(inst, rawResult, boxTag)
+            : marshalResult(inst, result, rawResult);
+          exports.__dream_resolve(future, marshaled);
+          pumpRunLoop(inst);
+        }
+      } finally {
+        exports.__dream_host_unpin(future);
+      }
     };
     inst._hostPending++;
-    const pending = Promise.resolve(fn(...args)).then(
+    const pending = Promise.resolve().then(() => fn(...args)).then(
       (value) => settle(value),
       (err) => {
         // A rejected Promise has no Dream-level error channel yet; settle the future with a
@@ -186,7 +193,13 @@ export function wrapAsyncImport(getInstance, fn, signature) {
       },
     );
     inst._hostSettlements.add(pending);
-    pending.then(() => inst._hostSettlements.delete(pending));
+    pending.then(
+      () => inst._hostSettlements.delete(pending),
+      (error) => {
+        inst._hostSettlements.delete(pending);
+        console.error("Dream: async host settlement failed:", error);
+      },
+    );
   };
 }
 

@@ -11,10 +11,13 @@ dream-host-crypto = { path = "../dream-host-crypto", optional = true }
 dream-host-process = { path = "../dream-host-process", optional = true }
 dream-host-timezone = { path = "../dream-host-timezone", optional = true }
 
+dream-host-net = { path = "../dream-host-net", optional = true }
+
 [features]
-default = ["core", "unicode", "crypto", "process", "timezone"]
+default = ["core", "unicode", "crypto", "process", "timezone", "net"]
 core = ["dep:dream-host-core"]
 unicode = ["core", "dep:dream-host-unicode"]
 crypto = ["core", "dep:dream-host-crypto"]
 process = ["core", "dep:dream-host-process"]
 timezone = ["core", "dep:dream-host-timezone"]
+net = ["core", "dep:dream-host-net"]

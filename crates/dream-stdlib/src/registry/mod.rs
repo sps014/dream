@@ -7,6 +7,7 @@ mod io;
 mod json;
 mod json_derive;
 mod logging;
+mod net;
 mod primitives;
 mod process;
 mod simd;
@@ -42,6 +43,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     encoding::PACKAGE,
     json::PACKAGE,
     io::PACKAGE,
+    net::PACKAGE,
     crypto::PACKAGE,
     process::PACKAGE,
     system::PACKAGE,

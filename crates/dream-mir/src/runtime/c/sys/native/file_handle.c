@@ -1,4 +1,5 @@
 #include "dream_host_support.h"
+#include "dream_file.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -29,33 +30,51 @@ typedef off_t dream_off_t;
 #define dream_close close
 #endif
 
-int32_t fileOpen(dream_ptr path, dream_ptr mode) {
-    char *text = dream_str_utf8(path);
-    char *open_mode = dream_str_utf8(mode);
-    FILE *file;
-    int32_t fd;
-    if (!text || !open_mode || !*open_mode) {
-        free(text);
-        free(open_mode);
-        return -3;
-    }
+int32_t dream_file_open(const char *text, const char *open_mode) {
+    if (!text || !open_mode || !*open_mode) { return -3; }
     if (strcmp(open_mode, "r") && strcmp(open_mode, "w") && strcmp(open_mode, "a") &&
         strcmp(open_mode, "r+") && strcmp(open_mode, "w+") && strcmp(open_mode, "a+")) {
-        free(text);
-        free(open_mode);
         return -3;
     }
     char binary_mode[4] = {open_mode[0], 'b', 0, 0};
-    if (open_mode[1] == '+') binary_mode[2] = '+';
-    file = fopen(text, binary_mode);
+    if (open_mode[1] == '+') { binary_mode[2] = '+'; }
+    FILE *file = fopen(text, binary_mode);
+    if (!file) { return errno == ENOENT ? -1 : errno == EACCES ? -2 : -4; }
+    int32_t fd = dream_dup(dream_fileno(file));
+    fclose(file);
+    return fd < 0 ? -4 : fd;
+}
+
+int32_t fileOpen(dream_ptr path, dream_ptr mode) {
+    char *text = dream_str_utf8(path);
+    char *open_mode = dream_str_utf8(mode);
+    int32_t fd = dream_file_open(text, open_mode);
     free(text);
     free(open_mode);
-    if (!file) {
-        return errno == ENOENT ? -1 : errno == EACCES ? -2 : -4;
-    }
-    fd = dream_dup(dream_fileno(file));
-    fclose(file);
-    return fd < 0 ? -3 : fd;
+    return fd;
+}
+
+int32_t dream_file_duplicate(int32_t fd) { return dream_dup(fd); }
+
+int64_t dream_file_read(int32_t fd, void *buffer, int32_t count) {
+    ssize_t n;
+    do { n = dream_read(fd, buffer, (size_t)count); } while (n < 0 && errno == EINTR);
+    return n < 0 ? -1 : (int64_t)n;
+}
+
+int64_t dream_file_write(int32_t fd, const void *buffer, int32_t count) {
+    ssize_t n;
+    do { n = dream_write(fd, buffer, (size_t)count); } while (n < 0 && errno == EINTR);
+    return n < 0 ? -1 : (int64_t)n;
+}
+
+int32_t dream_file_seek(int32_t fd, int64_t position) {
+    return dream_lseek(fd, (dream_off_t)position, SEEK_SET) < 0 ? -1 : 0;
+}
+
+int32_t dream_file_close(int32_t fd) {
+    /* Never retry close: an interrupted close may already have released the descriptor. */
+    return fd < 0 ? -1 : dream_close(fd);
 }
 
 /* A leading status byte keeps read errors distinct from successful EOF across the JS ABI. */
@@ -67,10 +86,7 @@ dream_ptr fileHandleRead(int32_t fd, int32_t count) {
     }
     dream_ptr bytes = dream_array_new(count + 1, 1);
     uint8_t *payload = (uint8_t *)dream_p(bytes) + 4;
-    ssize_t n;
-    do {
-        n = dream_read(fd, payload + 1, (size_t)count);
-    } while (n < 0 && errno == EINTR);
+    int64_t n = dream_file_read(fd, payload + 1, count);
     payload[0] = n < 0 ? 1 : 0;
     dream_i32(bytes)[0] = n < 0 ? 1 : (int32_t)n + 1;
     return bytes;
@@ -78,15 +94,12 @@ dream_ptr fileHandleRead(int32_t fd, int32_t count) {
 
 int64_t fileHandleWrite(int32_t fd, dream_ptr data) {
     int32_t n = data ? dream_i32(data)[0] : 0;
-    ssize_t written;
-    do {
-        written = dream_write(fd, data ? (char *)dream_p(data) + 4 : "", (size_t)n);
-    } while (written < 0 && errno == EINTR);
+    int64_t written = dream_file_write(fd, data ? (char *)dream_p(data) + 4 : "", n);
     return written < 0 ? -1 : (int64_t)written;
 }
 
 int32_t fileHandleSeek(int32_t fd, int64_t position) {
-    return dream_lseek(fd, (dream_off_t)position, SEEK_SET) < 0 ? -1 : 0;
+    return dream_file_seek(fd, position);
 }
 
 int64_t fileHandleTell(int32_t fd) {
@@ -109,6 +122,5 @@ int64_t fileHandleLength(int32_t fd) {
 }
 
 int32_t fileHandleClose(int32_t fd) {
-    /* Never retry close: an interrupted close may already have released the descriptor. */
-    return fd < 0 ? -1 : dream_close(fd);
+    return dream_file_close(fd);
 }

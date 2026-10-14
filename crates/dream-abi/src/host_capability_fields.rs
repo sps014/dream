@@ -29,6 +29,18 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "processWait",
             "processKill",
         ],
+        HostCapability::Net => &[
+            "netUrlParse",
+            "netCapabilities",
+            "netClientCreate",
+            "netClientClose",
+            "netHttpStart",
+            "netBodyRead",
+            "netBodyClose",
+            "netOperationPoll",
+            "netOperationRelease",
+            "netOperationClaim",
+        ],
         HostCapability::Timezone => &["dateZoneOffsetMinutes", "dateLocalZoneName"],
     }
 }

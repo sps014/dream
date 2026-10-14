@@ -746,16 +746,23 @@ function wrapAsyncImport(getInstance, fn, signature) {
     const inst = getInstance();
     const exports = inst.exports;
     const args = marshalArgs(inst, params, rawArgs);
+    exports.__dream_host_pin(future);
     const settle = (rawResult) => {
       inst._hostPending--;
-      const marshaled = boxTag != null
-        ? boxLong64(inst, rawResult, boxTag)
-        : marshalResult(inst, result, rawResult);
-      exports.__dream_resolve(future, marshaled);
-      pumpRunLoop(inst);
+      try {
+        if (exports.__dream_host_status(future) === 0) {
+          const marshaled = boxTag != null
+            ? boxLong64(inst, rawResult, boxTag)
+            : marshalResult(inst, result, rawResult);
+          exports.__dream_resolve(future, marshaled);
+          pumpRunLoop(inst);
+        }
+      } finally {
+        exports.__dream_host_unpin(future);
+      }
     };
     inst._hostPending++;
-    const pending = Promise.resolve(fn(...args)).then(
+    const pending = Promise.resolve().then(() => fn(...args)).then(
       (value) => settle(value),
       (err) => {
         // A rejected Promise has no Dream-level error channel yet; settle the future with a
@@ -766,7 +773,13 @@ function wrapAsyncImport(getInstance, fn, signature) {
       },
     );
     inst._hostSettlements.add(pending);
-    pending.then(() => inst._hostSettlements.delete(pending));
+    pending.then(
+      () => inst._hostSettlements.delete(pending),
+      (error) => {
+        inst._hostSettlements.delete(pending);
+        console.error("Dream: async host settlement failed:", error);
+      },
+    );
   };
 }
 
@@ -1089,6 +1102,332 @@ function makeJsHost(getInstance) {
       const n = arity > 0 ? arity : 0;
       const sig = `fun(${Array(n).fill("js").join(",")}):void`;
       return getInstance().callback(index, sig);
+    },
+  };
+}
+
+// ----- hosts/http.js -----
+const httpClients = new Map();
+const httpBodies = new Map();
+const httpOperations = new Map();
+let nextHttpHandle = 1;
+function httpError(code, message) { return { code, message }; }
+function httpWireError(error) { return [2, ...new TextEncoder().encode(JSON.stringify(error))]; }
+function httpNewOperation(work) {
+  if (httpOperations.size >= 1024 || nextHttpHandle >= 2147483647) return 0;
+  const id = nextHttpHandle++;
+  const op = { result: null, released: false, abort: null };
+  httpOperations.set(id, op);
+  Promise.resolve().then(() => work(op)).then(
+    result => {
+      if (op.released) { result?.dispose?.(); return; }
+      op.result = result;
+    },
+    error => {
+      if (!op.released) op.result = { error: error?.code ? error : httpError("ETRANSPORT", "HTTP transport failed") };
+    },
+  );
+  return id;
+}
+function httpClassify(error, controller, timedOut) {
+  if (timedOut()) return httpError("ETIMEOUT", "HTTP request deadline exceeded");
+  if (controller.signal.aborted) return httpError("ECLOSED", "HTTP request or body was closed");
+  if (error?.code && typeof error.code === "string") return error;
+  return httpError("ETRANSPORT", "HTTP transport failed");
+}
+function httpRestricted(name) {
+  return /^(proxy-|sec-)/i.test(name) || /^(accept-charset|accept-encoding|access-control-request-headers|access-control-request-method|connection|content-length|cookie|cookie2|date|dnt|expect|host|keep-alive|origin|permissions-policy|referer|te|trailer|transfer-encoding|upgrade|via|user-agent|x-http-method|x-http-method-override|x-method-override)$/i.test(name);
+}
+function makeHttpHost() {
+  return {
+    netCapabilities: () => isNode ? 6 : 0,
+    netClientCreate: () => {
+      if (httpClients.size >= 1024 || nextHttpHandle >= 2147483647) return 0;
+      const id = nextHttpHandle++;
+      httpClients.set(id, { controllers: new Set() });
+      return id;
+    },
+    netClientClose: id => {
+      const client = httpClients.get(id);
+      httpClients.delete(id);
+      for (const controller of client?.controllers || []) controller.abort();
+    },
+    netHttpStart: (id, request, data) => {
+      const bytes = Uint8Array.from(data);
+      const client = httpClients.get(id);
+      return httpNewOperation(async op => {
+        if (!client || !httpClients.has(id)) throw httpError("ECLOSED", "HTTP client is closed");
+        let config;
+        try { config = JSON.parse(request); } catch (_) { throw httpError("EINVAL", "invalid HTTP request"); }
+        const { method, url, headers, timeout_ms, connect_timeout_ms, max_redirects } = config;
+        if (!Number.isSafeInteger(timeout_ms) || timeout_ms < 0 || !Number.isSafeInteger(connect_timeout_ms) || connect_timeout_ms < 0 || !Number.isInteger(max_redirects) || max_redirects < -1) throw httpError("EINVAL", "invalid HTTP options");
+        if (connect_timeout_ms !== 0) throw httpError("ENOTSUP", "Fetch does not expose connection timeouts");
+        if (!isNode && max_redirects !== -1) throw httpError("ENOTSUP", "browser Fetch does not expose redirect limits");
+        let target;
+        try { target = new URL(url); } catch (_) { throw httpError("EINVAL", "invalid HTTP URL"); }
+        if (!["http:", "https:"].includes(target.protocol) || target.username || target.password) throw httpError("EINVAL", "HTTP URL must use http/https without credentials");
+        let requestMethod = method;
+        let requestBytes = bytes;
+        if (!["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].includes(method)) throw httpError("EINVAL", "unsupported HTTP method");
+        if (["GET", "HEAD"].includes(method) && bytes.length) throw httpError("EINVAL", "GET and HEAD bodies are unsupported");
+        let requestHeaders = new Headers();
+        try {
+          for (const [name, value] of headers) {
+            if (!isNode && httpRestricted(name)) throw httpError("ENOTSUP", "restricted browser request header");
+            requestHeaders.append(name, value);
+          }
+        } catch (error) { throw error?.code ? error : httpError("EINVAL", "invalid request header"); }
+        const controller = new AbortController();
+        let timeout = false;
+        let timer;
+        let disposed = false;
+        const dispose = () => {
+          if (disposed) return;
+          disposed = true;
+          clearTimeout(timer);
+          client.controllers.delete(controller);
+          controller.abort();
+        };
+        op.abort = dispose;
+        if (op.released) { dispose(); throw httpError("ECLOSED", "HTTP operation abandoned"); }
+        client.controllers.add(controller);
+        if (timeout_ms > 0) timer = setTimeout(() => { timeout = true; controller.abort(); }, timeout_ms);
+        try {
+          let response;
+          let redirects = 0;
+          while (true) {
+            response = await fetch(target, { method: requestMethod, headers: requestHeaders, body: requestBytes.length ? requestBytes : undefined, redirect: isNode ? "manual" : "follow", signal: controller.signal, credentials: "omit" });
+            if (!isNode || ![301, 302, 303, 307, 308].includes(response.status) || max_redirects === 0 || !response.headers.has("location")) break;
+            if (++redirects > (max_redirects < 0 ? 10 : max_redirects)) {
+              await response.body?.cancel();
+              throw httpError("EREDIRECT", "HTTP redirect limit exceeded");
+            }
+            const next = new URL(response.headers.get("location"), target);
+            if (!["http:", "https:"].includes(next.protocol) || next.username || next.password) throw httpError("EINVAL", "invalid redirect URL");
+            await response.body?.cancel();
+            if (target.origin !== next.origin) {
+              for (const name of ["authorization", "proxy-authorization", "cookie", "cookie2"]) requestHeaders.delete(name);
+            }
+            if (response.status === 303 && requestMethod !== "HEAD" || [301, 302].includes(response.status) && requestMethod === "POST") {
+              requestMethod = "GET";
+              requestBytes = new Uint8Array();
+              for (const name of ["content-type", "content-length", "content-encoding", "content-language", "content-location"]) requestHeaders.delete(name);
+            }
+            target = next;
+          }
+          if (response.type === "opaque" || response.type === "opaqueredirect" || response.status === 0) throw httpError("ENOTSUP", "Fetch response metadata is not visible");
+          client.controllers.delete(controller);
+          const body = { reader: response.body?.getReader(), remainder: new Uint8Array(), offset: 0, busy: false, closed: false, eof: !response.body, controller, dispose, timedOut: () => timeout };
+          const responseHeaders = Array.from(response.headers);
+          if (typeof response.headers.getSetCookie === "function") {
+            for (let i = responseHeaders.length - 1; i >= 0; i--) if (responseHeaders[i][0] === "set-cookie") responseHeaders.splice(i, 1);
+            for (const value of response.headers.getSetCookie()) responseHeaders.push(["set-cookie", value]);
+          }
+          return { response: { status: response.status, url: response.url, headers: responseHeaders }, body, dispose };
+        } catch (error) {
+          const result = httpClassify(error, controller, () => timeout);
+          dispose();
+          throw result;
+        }
+      });
+    },
+    netBodyRead: (id, count) => {
+      const body = httpBodies.get(id);
+      // Claim synchronously so two reads submitted before a microtask cannot overlap.
+      const busy = body?.busy;
+      if (body && !busy) body.busy = true;
+      const operationId = httpNewOperation(async op => {
+        if (!body || body.closed) throw httpError("ECLOSED", "response body is closed");
+        if (busy) throw httpError("EBUSY", "response body is busy");
+        op.abort = () => { body.closed = true; body.dispose(); body.busy = false; };
+        try {
+          if (op.released) { op.abort(); throw httpError("ECLOSED", "HTTP operation abandoned"); }
+          if (!Number.isInteger(count) || count < 0) throw httpError("EINVAL", "negative read size");
+          if (count === 0) return { bytes: [] };
+          while (body.offset === body.remainder.length && !body.eof) {
+            const chunk = await body.reader.read();
+            body.eof = chunk.done;
+            body.remainder = chunk.value || new Uint8Array();
+            body.offset = 0;
+          }
+          const end = Math.min(body.remainder.length, body.offset + count);
+          const bytes = Array.from(body.remainder.subarray(body.offset, end));
+          body.offset = end;
+          if (body.eof) body.dispose();
+          return { bytes };
+        } catch (error) { throw httpClassify(error, body.controller, body.timedOut); }
+        finally { body.busy = false; }
+      });
+      if (!operationId && body && !busy) body.busy = false;
+      return operationId;
+    },
+    netBodyClose: id => {
+      const body = httpBodies.get(id);
+      httpBodies.delete(id);
+      if (body) {
+        body.closed = true;
+        body.reader?.cancel().catch(() => {});
+        body.dispose();
+      }
+    },
+    netOperationPoll: id => {
+      const op = httpOperations.get(id);
+      if (!op) return httpWireError(httpError("ECLOSED", "HTTP operation is closed"));
+      const result = op.result;
+      if (!result) return [0];
+      op.result = null;
+      if (result.error) return httpWireError(result.error);
+      if (result.bytes) { op.abort = null; return [1, ...result.bytes]; }
+      if (httpBodies.size >= 1024 || nextHttpHandle >= 2147483647) { result.dispose(); return httpWireError(httpError("ELIMIT", "too many response bodies")); }
+      const bodyId = nextHttpHandle++;
+      httpBodies.set(bodyId, result.body);
+      op.responseBody = bodyId;
+      op.abort = result.dispose;
+      return [1, ...new TextEncoder().encode(JSON.stringify({ ...result.response, body: bodyId }))];
+    },
+    netOperationClaim: id => {
+      const op = httpOperations.get(id);
+      if (op) { op.responseBody = null; op.abort = null; }
+    },
+    netOperationRelease: id => {
+      const op = httpOperations.get(id);
+      httpOperations.delete(id);
+      if (!op) return;
+      op.released = true;
+      if (op.responseBody) httpBodies.delete(op.responseBody);
+      if (op.result?.bytes) { op.abort = null; }
+      if (op.result && !op.result.error) op.result.dispose?.();
+      if (!op.result) op.abort?.();
+    },
+  };
+}
+
+// ----- hosts/net.js -----
+function makeNetHost() {
+  return {
+    ...makeHttpHost(),
+    netUrlParse: (input, base) => {
+      try {
+        const url = base === "" ? new URL(input) : new URL(input, base);
+        // URL.search/hash hide empty delimiters; inspect canonical serialization before removing them.
+        const href = url.href;
+        const fragmentAt = href.indexOf("#");
+        const beforeFragment = fragmentAt < 0 ? href : href.slice(0, fragmentAt);
+        const queryAt = beforeFragment.indexOf("?");
+        const fragment = fragmentAt < 0 ? "" : href.slice(fragmentAt);
+        const query = queryAt < 0 ? "" : beforeFragment.slice(queryAt);
+        const pairs = Array.from(url.searchParams).flat();
+        const scheme = url.protocol.slice(0, -1);
+        const hostname = url.hostname;
+        const path = url.pathname;
+        const prefix = queryAt < 0 ? beforeFragment : beforeFragment.slice(0, queryAt);
+        return [prefix, scheme, hostname, path, fragment, query, ...pairs];
+      } catch (_) {
+        return [];
+      }
+    },
+  };
+}
+
+// ----- hosts/file_operations.js -----
+const operations = new Map();
+let nextOperation = 1;
+let pendingOperations = 0;
+
+function makeFileOperationHost(files) {
+  function releaseResult(op) {
+    if (op.kind === 0 && op.value >= 0 && !op.claimed) files.close(Number(op.value));
+  }
+  return {
+    fileOperationStart: (kind, id, path, mode, count, data, position) => {
+      if (kind < 0 || kind > 3 || count < 0 || count === 2147483647 || operations.size >= 132 || pendingOperations >= 132) return 0;
+      const number = nextOperation++;
+      const op = { kind, done: false, value: -1n, bytes: [1], claimed: false, released: false, waiters: [] };
+      operations.set(number, op);
+      pendingOperations++;
+      const finish = (value, bytes = [1]) => {
+        pendingOperations--;
+        op.value = BigInt(value);
+        op.bytes = bytes;
+        op.done = true;
+        if (op.released) releaseResult(op);
+        for (const resolve of op.waiters) resolve(0);
+        op.waiters = [];
+      };
+      const fs = getNodeFs();
+      if (!fs) {
+        try {
+          if (kind === 0) finish(files.open(path, mode));
+          else if (kind === 1) { const bytes = files.read(id, count); finish(bytes[0] ? -1 : bytes.length - 1, bytes); }
+          else if (kind === 2) finish(files.write(id, data));
+          else finish(files.seek(id, position));
+        } catch (_) { finish(-1); }
+        return number;
+      }
+      if (kind === 0) {
+        if (!["r", "w", "a", "r+", "w+", "a+"].includes(mode)) { finish(-3); return number; }
+        try {
+          fs.open(path, mode, (error, fd) => {
+            if (error) finish(error.code === "ENOENT" ? -1 : ["EACCES", "EPERM"].includes(error.code) ? -2 : -4);
+            else finish(files.register(fd, path, mode));
+          });
+        } catch (_) { finish(-4); }
+        return number;
+      }
+      const h = files.handles.get(id);
+      if (!h || kind === 1 && !h.mode.includes("r") && !h.mode.includes("+")) { finish(-1); return number; }
+      if (kind === 3) { finish(files.seek(id, position)); return number; }
+      if (kind === 2 && h.mode === "r") { finish(-1); return number; }
+      h.pending = (h.pending || 0) + 1;
+      const complete = (value, bytes) => {
+        h.pending--;
+        if (h.closing && !h.pending) { try { fs.closeSync(h.fd); } catch (_) { /* Abandoned handle cleanup cannot report errors. */ } }
+        finish(value, bytes);
+      };
+      try {
+        if (kind === 1) {
+          const buffer = Buffer.alloc(count);
+          fs.read(h.fd, buffer, 0, count, h.pos, (error, read) => {
+            if (error) { complete(-1); return; }
+            h.pos += read;
+            complete(read, [0, ...buffer.subarray(0, read)]);
+          });
+        } else {
+          const bytes = Uint8Array.from(data);
+          const append = h.mode.startsWith("a");
+          fs.write(h.fd, bytes, 0, bytes.length, append ? null : h.pos, (error, written) => {
+            if (error) { complete(-1); return; }
+            if (!append) { h.pos += written; complete(written); return; }
+            fs.fstat(h.fd, (statError, stat) => {
+              if (!statError) h.pos = Number(stat.size);
+              // A metadata failure must not erase already completed write progress.
+              else h.pos += written;
+              complete(written);
+            });
+          });
+        }
+      } catch (_) { complete(-1); }
+      return number;
+    },
+    fileOperationDone: (id) => operations.get(id)?.done ? 1 : 0,
+    fileOperationResult: (id) => {
+      const op = operations.get(id);
+      if (!op?.done) return -1n;
+      op.claimed = true;
+      return op.value;
+    },
+    fileOperationBytes: (id) => operations.get(id)?.bytes || [1],
+    fileOperationRelease: (id) => {
+      const op = operations.get(id);
+      if (!op) return;
+      op.released = true;
+      operations.delete(id);
+      if (op.done) releaseResult(op);
+    },
+    fileOperationWait: (id) => {
+      const op = operations.get(id);
+      if (!op || op.done) return Promise.resolve(0);
+      return new Promise((resolve) => op.waiters.push(resolve));
     },
   };
 }
@@ -1453,7 +1792,10 @@ function fileHandleCloseHost(id) {
   if (!h) return -1;
   fileHandles.delete(id);
   try {
-    if (h.kind === "node") getNodeFs().closeSync(h.fd);
+    if (h.kind === "node") {
+      if (h.pending) h.closing = true;
+      else getNodeFs().closeSync(h.fd);
+    }
     return 0;
   } catch (_) { return -1; }
 }
@@ -1500,6 +1842,16 @@ function makeFsHost() {
     dirCreateAll: (path) => {
       try { fsBackend().mkdirAll(path); return true; } catch (_) { return false; }
     },
+    ...makeFileOperationHost({
+      handles: fileHandles,
+      open: fileOpenHost, read: fileHandleReadHost, write: fileHandleWriteHost,
+      seek: fileHandleSeekHost, close: fileHandleCloseHost,
+      register: (fd, path, mode) => {
+        const id = nextFileHandleId++;
+        fileHandles.set(id, { kind: "node", fd, path, mode, pos: 0 });
+        return id;
+      },
+    }),
     fileOpen: (path, mode) => fileOpenHost(path, mode),
     fileHandleRead: (id, n) => fileHandleReadHost(id, n),
     fileHandleWrite: (id, data) => fileHandleWriteHost(id, data),
@@ -2186,6 +2538,7 @@ function defaultDreamModule(getInstance) {
   return {
     ...makeJsHost(getInstance),
     ...makeFsHost(),
+    ...makeNetHost(),
     ...makeCryptoHost(),
     ...makeDatetimeTextHost(),
     ...makeConsoleProcessHost(),

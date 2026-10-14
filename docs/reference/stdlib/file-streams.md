@@ -32,9 +32,22 @@ mixing line and byte reads preserves the logical position. Failed seeks preserve
 the position and any unread bytes. `FileStream.position` and `.length` return
 `Result<long, IoError>`; use `seek()` to change position.
 
-Async file methods currently execute synchronous host operations and check tokens
-before execution. They do not yet provide nonblocking file I/O or interrupt an
-operation already running.
+Async opens, reads, writes, and seeks use a bounded native executor or Node's
+callback-based filesystem APIs. Native execution uses four workers and a queue
+of at most 128 jobs; a saturated executor reports `EBUSY`. Browser memory-file
+operations remain immediately ready. No guest buffers are accessed by workers.
+
+A handle permits one pending operation at a time. Concurrent I/O or explicit
+closure returns `EBUSY`, leaving the handle open. After a cancelled operation,
+wait for underlying work to finish before reusing or closing that handle. Dropping
+the handle is safe while work continues: the host retains the necessary resources.
+
+Tokens are checked before submission and while pending. Pending token checks
+currently use a 1 ms wall-clock timer; waits without a token use completion
+wakeups. Cancellation does not undo completed writes or restore consumed input.
+A cancelled open closes its late result automatically. A submitted seek completes
+and updates read-ahead state before reporting cancellation; this prevents a
+cancelled seek from leaving the logical cursor inconsistent.
 
 ## Streaming copies
 
@@ -93,3 +106,22 @@ that exceeded the limit. Buffer sizes must be positive; invalid sizes return
 Memory streams support seeking, overwriting, and zero-filled gaps. Their
 `to_bytes()` method returns an independent copy. Memory stream async methods are
 immediately ready and do not block on host I/O.
+
+## Asynchronous file copies
+
+```dream
+import system.io;
+import system.encoding;
+
+async fun main(): Result<bool, IoError> {
+    let source = MemoryStream(Encoding.utf8_encode("hello"));
+    let destination = FileHandle.open_async("async-copy.txt", "w+").await?;
+    Streams.copy_async(source, destination).await?;
+    destination.seek_async(0L).await?;
+    let bytes = destination.read_async(5).await?;
+    destination.close()?;
+    source.close()?;
+    File.delete("async-copy.txt");
+    return Result.Ok(bytes.length == 5);
+}
+```

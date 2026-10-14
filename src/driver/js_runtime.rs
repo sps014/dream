@@ -42,8 +42,8 @@ impl JsRuntimeTarget {
 /// One optional host chunk from `chunks.manifest`.
 struct Chunk {
     id: String,
-    file: String,
-    /// Host-factory function defined by `file`; `None` when wired elsewhere (`workers`).
+    files: Vec<String>,
+    /// Host-factory function defined by the chunk; `None` when wired elsewhere (`workers`).
     factory: Option<String>,
     /// Import-field matchers: `(exact, name)` — prefix match unless `exact`.
     fields: Vec<(bool, String)>,
@@ -79,7 +79,7 @@ fn parse_manifest(text: &'static str) -> Manifest {
                 };
                 manifest.chunks.push(Chunk {
                     id: id.to_string(),
-                    file: file.to_string(),
+                    files: file.split(',').map(String::from).collect(),
                     factory: (factory != "-").then(|| factory.to_string()),
                     fields: tokens
                         .map(|f| {
@@ -192,10 +192,12 @@ pub(crate) fn assemble_selective_runtime(
         let Some(chunk) = manifest.chunks.iter().find(|c| &c.id == chunk_id) else {
             continue;
         };
-        let path = src.join(&chunk.file);
-        let text = fs::read_to_string(&path)?;
-        out.push_str(&transform_module(&text, &chunk.file)?);
-        out.push('\n');
+        for file in &chunk.files {
+            let path = src.join(file);
+            let text = fs::read_to_string(&path)?;
+            out.push_str(&transform_module(&text, file)?);
+            out.push('\n');
+        }
     }
 
     // Data-driven host composer over exactly the included chunks (the full-bundle

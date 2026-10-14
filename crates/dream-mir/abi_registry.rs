@@ -153,6 +153,9 @@ EXPORT_MEMORY: &str = "memory" => "DREAM_SYM_MEMORY";
 /// `runtime/dream.js`).
 EXPORT_RUN_LOOP: &str = "__dream_run_loop" => "DREAM_SYM_RUN_LOOP";
 EXPORT_RESOLVE: &str = "__dream_resolve" => "DREAM_SYM_RESOLVE";
+EXPORT_HOST_PIN: &str = "__dream_host_pin" => "DREAM_SYM_HOST_PIN";
+EXPORT_HOST_STATUS: &str = "__dream_host_status" => "DREAM_SYM_HOST_STATUS";
+EXPORT_HOST_UNPIN: &str = "__dream_host_unpin" => "DREAM_SYM_HOST_UNPIN";
 EXPORT_NEW_FUTURE: &str = "__dream_new_future" => "DREAM_SYM_NEW_FUTURE";
 /// Per-instance startup (function table, heap bump, `__dream_init`). WAT uses `(start)`; C wasm32
 /// exports this so `load()` and worker instances can run it without calling `main`.

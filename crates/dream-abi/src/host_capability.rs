@@ -11,15 +11,17 @@ pub enum HostCapability {
     Crypto,
     Process,
     Timezone,
+    Net,
 }
 
 impl HostCapability {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Core,
         Self::Unicode,
         Self::Crypto,
         Self::Process,
         Self::Timezone,
+        Self::Net,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -29,6 +31,7 @@ impl HostCapability {
             Self::Crypto => "crypto",
             Self::Process => "process",
             Self::Timezone => "timezone",
+            Self::Net => "net",
         }
     }
 
@@ -39,6 +42,7 @@ impl HostCapability {
             Self::Crypto => "dream_host_crypto",
             Self::Process => "dream_host_process",
             Self::Timezone => "dream_host_timezone",
+            Self::Net => "dream_host_net",
         }
     }
 

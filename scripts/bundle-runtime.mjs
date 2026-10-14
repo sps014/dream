@@ -143,8 +143,8 @@ function parseChunksManifest() {
     const tokens = line.split(/\s+/);
     if (tokens[0] === "chunk") {
       const [, id, file] = tokens;
-      files[id] = file;
-      for (const f of tokens.slice(3)) {
+      files[id] = file.split(",");
+      for (const f of tokens.slice(4)) {
         const exact = f.startsWith("=");
         fields.push([exact ? f.slice(1) : f, exact, id]);
       }

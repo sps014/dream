@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 
 
-MEASURED_CAPABILITIES = ("core", "unicode", "crypto", "process", "timezone")
+MEASURED_CAPABILITIES = ("core", "unicode", "crypto", "process", "timezone", "net")
 
 
 def measure(compiler, host_directory, llvm_directory):
@@ -68,7 +68,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--compiler", type=Path, required=True)
     parser.add_argument("--host-directory", type=Path, required=True,
-                        help="directory containing release core, unicode, crypto, process and timezone libraries")
+                        help="directory containing release core, unicode, crypto, process, timezone and net libraries")
     parser.add_argument("--llvm-directory", type=Path, required=True,
                         help="pinned LLVM bin directory available to the isolated compiler")
     parser.add_argument("--report", type=Path, required=True)

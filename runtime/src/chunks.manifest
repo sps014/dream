@@ -5,15 +5,17 @@
 # Format (one entry per line, `#` comments, blank lines ignored):
 #   always <file>...            modules concatenated into every runtime, in order
 #   order <chunk>...            emission/registration order for optional chunks
-#   chunk <id> <file> <factory> <field>...
+#   chunk <id> <file[,file...]> <factory> <field>...
+# Source files within a chunk are listed in dependency order.
 #
 # <factory> is the host-factory function defined by <file> (`-` when the chunk has
 # none; `workers` is wired inside load.js instead). Each <field> maps a WASM import
 # field to this chunk by prefix; a leading `=` marks an exact-match field.
 always abi.js platform.js urls.js core.js instance.js marshal.js hosts/env.js
-order js fs crypto console_process datetime_text workers
+order js fs net crypto console_process datetime_text workers
 chunk js hosts/js.js makeJsHost js
-chunk fs hosts/fs.js makeFsHost file dir
+chunk fs hosts/file_operations.js,hosts/fs.js makeFsHost file dir
+chunk net hosts/http.js,hosts/net.js makeNetHost net
 chunk crypto hosts/crypto.js makeCryptoHost crypto
 chunk console_process hosts/console_process.js makeConsoleProcessHost console process
 chunk datetime_text hosts/datetime_text.js makeDatetimeTextHost unicode date time =delayMs

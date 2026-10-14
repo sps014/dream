@@ -1,19 +1,21 @@
 module system.io;
 
 // FileHandle - an OS-backed read/write/seek stream over an open file.
-// Host calls are synchronous; `*_async` methods wrap the same operations in a `Future` for
-// await-style call sites. `close` is sync-only.
-public class FileHandle : Reader, Writer {
+// Async operations use bounded native workers or Node callbacks, keeping host buffers alive
+// through cancellation. Concurrent I/O on one handle returns `EBUSY`; closure is synchronous.
+public class FileHandle : Reader, Writer, AsyncReader, AsyncWriter {
     _id: int;
     _path: string;
     _buffer: byte[];
     _offset: int;
+    _pending: Option<FileOperation>;
 
     internal constructor(id: int, path: string) {
         this._id = id;
         this._path = path;
         this._buffer = [];
         this._offset = 0;
+        this._pending = Option.None;
     }
 
     del() {
@@ -30,6 +32,16 @@ public class FileHandle : Reader, Writer {
     fun check_open(): Result<bool, IoError> {
         if this.is_closed {
             return Result.Err(IoError.closed(this.path));
+        }
+        this.check_pending()?;
+        return Result.Ok(true);
+    }
+
+    fun check_pending(): Result<bool, IoError> {
+        if this._pending.is_some() {
+            if !this._pending.unwrap().done {
+                return Result.Err(IoError(this.path, "EBUSY", "file operation is still pending"));
+            }
         }
         return Result.Ok(true);
     }
@@ -64,7 +76,10 @@ public class FileHandle : Reader, Writer {
     static extern fun file_handle_length(id: int): long;
 
     static fun open_result(path: string, mode: string): Result<FileHandle, IoError> {
-        let id = FileHandle.file_open(path, mode);
+        return FileHandle.from_id(FileHandle.file_open(path, mode), path, mode);
+    }
+
+    static fun from_id(id: int, path: string, mode: string): Result<FileHandle, IoError> {
         if id < 0 {
             if id == (0 - 1) {
                 return Result.Err(IoError.not_found(path));
@@ -85,11 +100,13 @@ public class FileHandle : Reader, Writer {
         return FileHandle.open_result(path, mode);
     }
 
-    // Checks cancellation, then runs synchronous `open` inside an awaitable operation.
-    // Pending host work is not interruptible and may block the scheduler.
+    // Opens using host async facilities or the bounded filesystem executor.
+    // Cancellation abandons the result safely; a late open result is closed automatically.
     public static async fun open_async(path: string, mode: string, token: Option<CancellationToken> = Option.None): Result<FileHandle, IoError> {
         CancellationToken.rejected(token, IoError.cancelled())?;
-        return FileHandle.open(path, mode);
+        let operation = FileOperation.start(0, 0 - 1, path, mode, 0, [], 0L)?;
+        operation.wait(token).await?;
+        return FileHandle.from_id((int)operation.result(), path, mode);
     }
 
     // Reads up to `n` bytes from the current position, advancing the cursor.
@@ -116,11 +133,25 @@ public class FileHandle : Reader, Writer {
         return Result.Ok(bytes);
     }
 
-    // Checks cancellation, then runs synchronous `read` inside an awaitable operation.
-    // Pending host work is not interruptible and may block the scheduler.
-    public async fun read_async(n: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError> {
+    // Reads without blocking the scheduler, preserving partial reads and EOF.
+    // Cancellation may consume input; further I/O returns `EBUSY` until host work ends.
+    public async unique fun read_async(n: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError> {
         CancellationToken.rejected(token, IoError.cancelled())?;
-        return this.read(n);
+        this.check_open()?;
+        // A started child can outlive its awaiting parent; pin its receiver across suspension.
+        let lifetime = [this];
+        if n < 0 || n == 2147483647 { return Result.Err(IoError.invalid(lifetime[0].path, "invalid read size")); }
+        if n == 0 || lifetime[0]._offset < lifetime[0]._buffer.length { return lifetime[0].read(n); }
+        let operation = FileOperation.start(1, lifetime[0]._id, "", "", n, [], 0L)?;
+        lifetime[0]._pending = Option.Some(operation);
+        lifetime[0]._pending.unwrap().wait(token).await?;
+        let completed = lifetime[0]._pending.unwrap();
+        lifetime[0]._pending = Option.None;
+        let raw = completed.bytes();
+        if raw.length == 0 || raw[0] != (byte)0 {
+            return Result.Err(IoError.other(lifetime[0].path, "read failed"));
+        }
+        return Result.Ok(Streams.slice(raw, 1, raw.length - 1));
     }
 
     // Writes `data` at the current position, advancing the cursor; returns bytes written.
@@ -137,11 +168,26 @@ public class FileHandle : Reader, Writer {
         return Result.Ok((int)n);
     }
 
-    // Checks cancellation, then runs synchronous `write` inside an awaitable operation.
-    // Pending host work is not interruptible and may block the scheduler.
-    public async fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError> {
+    // Writes a host-owned copy without blocking the scheduler and returns partial progress.
+    // Cancellation does not roll back writes; further I/O is busy until host work ends.
+    public async unique fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError> {
         CancellationToken.rejected(token, IoError.cancelled())?;
-        return this.write(data);
+        this.check_open()?;
+        // A started child can outlive its awaiting parent; pin its receiver across suspension.
+        let lifetime = [this];
+        if data.length == 0 { return Result.Ok(0); }
+        if lifetime[0]._offset < lifetime[0]._buffer.length {
+            let position = lifetime[0].tell()?;
+            lifetime[0].seek_async(position, token).await?;
+        }
+        let operation = FileOperation.start(2, lifetime[0]._id, "", "", data.length, data, 0L)?;
+        lifetime[0]._pending = Option.Some(operation);
+        lifetime[0]._pending.unwrap().wait(token).await?;
+        let completed = lifetime[0]._pending.unwrap();
+        lifetime[0]._pending = Option.None;
+        let count = completed.result();
+        if count < 0L { return Result.Err(IoError.other(lifetime[0].path, "write failed")); }
+        return Result.Ok((int)count);
     }
 
     // Seeks to absolute byte offset `pos` from the start of the file.
@@ -155,11 +201,23 @@ public class FileHandle : Reader, Writer {
         return Result.Ok(true);
     }
 
-    // Checks cancellation, then runs synchronous `seek` inside an awaitable operation.
-    // Pending host work is not interruptible and may block the scheduler.
-    public async fun seek_async(pos: long, token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
+    // Seeks on the filesystem executor; successful completion discards read-ahead.
+    // Once submitted, cancellation is observed after completion so buffer state stays coherent.
+    public async unique fun seek_async(pos: long, token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
         CancellationToken.rejected(token, IoError.cancelled())?;
-        return this.seek(pos);
+        this.check_open()?;
+        // A started child can outlive its awaiting parent; pin its receiver across suspension.
+        let lifetime = [this];
+        let operation = FileOperation.start(3, lifetime[0]._id, "", "", 0, [], pos)?;
+        lifetime[0]._pending = Option.Some(operation);
+        lifetime[0]._pending.unwrap().wait(Option.None).await?;
+        let completed = lifetime[0]._pending.unwrap();
+        lifetime[0]._pending = Option.None;
+        if completed.result() < 0L { return Result.Err(IoError.other(lifetime[0].path, "seek failed")); }
+        lifetime[0]._buffer = [];
+        lifetime[0]._offset = 0;
+        CancellationToken.rejected(token, IoError.cancelled())?;
+        return Result.Ok(true);
     }
 
     // Current cursor offset from the start of the file.
@@ -241,17 +299,79 @@ public class FileHandle : Reader, Writer {
         return this.check_open();
     }
 
+    // Checks cancellation and validates the handle; this layer has no buffered output to flush.
+    public async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
+        CancellationToken.rejected(token, IoError.cancelled())?;
+        return this.check_open();
+    }
+
     // Closes idempotently and reports host failures. The handle stays closed even on failure
     // to prevent closing a reused descriptor; destruction performs nonthrowing cleanup.
     public fun close(): Result<bool, IoError> {
         if this.is_closed {
             return Result.Ok(true);
         }
+        this.check_pending()?;
+        this._pending = Option.None;
         let id = this._id;
         this._id = 0 - 1;
         if FileHandle.file_handle_close(id) < 0 {
             return Result.Err(IoError.other(this.path, "close failed"));
         }
         return Result.Ok(true);
+    }
+}
+
+// The host owns a second reference until blocking work ends; dropping this object never frees
+// buffers or descriptors still in use. No guest pointers cross into the blocking executor.
+class FileOperation {
+    id: usize;
+
+    constructor(id: usize) { this.id = id; }
+
+    del() { FileOperation.release_host(this.id); }
+
+    @runtime("fileOperationStart")
+    static extern fun start_host(kind: int, fd: int, borrow path: string, borrow mode: string, count: int, borrow data: byte[], position: long): usize;
+    @runtime("fileOperationDone")
+    static extern fun done_host(id: usize): int;
+    @runtime("fileOperationResult")
+    static extern fun result_host(id: usize): long;
+    @runtime("fileOperationBytes")
+    static extern fun bytes_host(id: usize): byte[];
+    @runtime("fileOperationRelease")
+    static extern fun release_host(id: usize): void;
+    @async_host
+    @runtime("delayMs")
+    static extern async fun delay_host(ms: int): void;
+
+    internal static fun start(kind: int, fd: int, path: string, mode: string, count: int, data: byte[], position: long): Result<FileOperation, IoError> {
+        let id = FileOperation.start_host(kind, fd, path, mode, count, data, position);
+        if id == (usize)0 {
+            return Result.Err(IoError(path, "EBUSY", "file executor unavailable or saturated"));
+        }
+        return Result.Ok(FileOperation(id));
+    }
+
+    @async_host
+    @runtime("fileOperationWait")
+    static extern async fun wait_host(id: usize): int;
+
+    internal get done(): bool { return FileOperation.done_host(this.id) != 0; }
+    internal fun result(): long { return FileOperation.result_host(this.id); }
+    internal fun bytes(): byte[] { return FileOperation.bytes_host(this.id); }
+
+    internal async fun wait(token: Option<CancellationToken>): Result<bool, IoError> {
+        // A started child can outlive its awaiting parent; pin its receiver across suspension.
+        let lifetime = [this];
+        if token.is_none() {
+            FileOperation.wait_host(lifetime[0].id).await;
+            return Result.Ok(true);
+        }
+        while true {
+            CancellationToken.rejected(token, IoError.cancelled())?;
+            if lifetime[0].done { return Result.Ok(true); }
+            FileOperation.delay_host(1).await;
+        }
     }
 }

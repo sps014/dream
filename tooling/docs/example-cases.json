@@ -112,5 +112,23 @@
     "page": "docs/reference/stdlib/encoding.md",
     "block": 1,
     "stdout": ""
+  },
+  {
+    "name": "urls",
+    "page": "docs/reference/stdlib/url.md",
+    "block": 0,
+    "stdout": "https://example.com/v1/users?role=admin&role=editor\n"
+  },
+  {
+    "name": "async-file-copy",
+    "page": "docs/reference/stdlib/file-streams.md",
+    "block": 3,
+    "stdout": ""
+  },
+  {
+    "name": "http-cancellation",
+    "page": "docs/reference/stdlib/http.md",
+    "block": 1,
+    "stdout": "2\nECANCELLED\n"
   }
 ]

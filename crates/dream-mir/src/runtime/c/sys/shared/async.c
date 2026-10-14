@@ -180,6 +180,19 @@ void dream_resolve(dream_ptr f, dream_ptr res) {
     dream_async_complete(f, (dream_result)(uintptr_t)res);
 }
 
+#ifdef DREAM_WASM32
+/* A JS Promise outlives a cancelled scheduler token. Its own pin also keeps cancelled frames
+ * readable so the adapter can skip allocating a result that the guest will never consume. */
+__attribute__((export_name(DREAM_SYM_HOST_PIN)))
+void dream_async_host_pin(dream_ptr f) { dream_retain(f); }
+
+__attribute__((export_name(DREAM_SYM_HOST_STATUS)))
+int32_t dream_async_host_status(dream_ptr f) { return status_of(f); }
+
+__attribute__((export_name(DREAM_SYM_HOST_UNPIN)))
+void dream_async_host_unpin(dream_ptr f) { dream_release(f); }
+#endif
+
 void dream_async_complete(dream_ptr f, dream_result res) {
     dream_ptr w;
     int32_t wk;

@@ -1,0 +1,52 @@
+import system;
+import system.net;
+import system.io;
+import system.testing;
+
+@test
+async fun http_client(): void {
+    let base = Url.parse("__BASE__/").unwrap();
+    let client = HttpClient();
+    let request = HttpRequest.post(base.resolve("echo").unwrap());
+    request.set_text("hello 日本語");
+    request.headers.append("X-Repeat", "a");
+    request.headers.append("X-Repeat", "b");
+    let response = client.send(request).await.unwrap();
+    Assert.eq(response.status, 404);
+    Assert.eq_str(response.headers.get("x-method").unwrap(), "POST");
+    Assert.eq_str(response.read_text().await.unwrap(), "hello 日本語");
+    response.close().unwrap();
+    response.close().unwrap();
+    Assert.is_true(response.body.read_async(1).await.is_err());
+    let stream = client.send(HttpRequest.get(base.resolve("redirect").unwrap())).await.unwrap();
+    Assert.eq(stream.status, 200);
+    Assert.is_true(stream.url.to_string().ends_with("/stream"));
+    let memory = MemoryStream();
+    Assert.eq(Streams.copy_async(stream.body, memory, 2).await.unwrap(), 11L);
+    Assert.eq_str(Encoding.utf8_decode(memory.to_bytes().unwrap()), "firstsecond");
+    stream.close().unwrap();
+    memory.close().unwrap();
+    let limited = client.send(HttpRequest.get(base.resolve("stream").unwrap())).await.unwrap();
+    let too_large = limited.read_text(max_bytes: 3).await;
+    Assert.eq_str(too_large.unwrap_err().code(), "ELIMIT");
+    limited.close().unwrap();
+    let invalid = client.send(HttpRequest.get(base.resolve("invalid-utf8").unwrap())).await.unwrap();
+    Assert.eq_str(invalid.read_text().await.unwrap_err().code(), "EENCODING");
+    invalid.close().unwrap();
+    let redirect = client.send(HttpRequest.get(base.resolve("redirect").unwrap()), options: HttpOptions(max_redirects: 0)).await.unwrap();
+    Assert.eq(redirect.status, 302);
+    redirect.close().unwrap();
+    let looped = client.send(HttpRequest.get(base.resolve("loop").unwrap()), options: HttpOptions(max_redirects: 1)).await;
+    Assert.eq_str(looped.unwrap_err().code(), "EREDIRECT");
+    let timeout = client.send(HttpRequest.get(base.resolve("slow").unwrap()), options: HttpOptions(timeout_ms: 20)).await;
+    Assert.eq_str(timeout.unwrap_err().code(), "ETIMEOUT");
+    let cancellation = CancellationSource();
+    let pending = client.send(HttpRequest.get(base.resolve("slow").unwrap()), token: Option.Some(cancellation.token));
+    Promise.start(pending);
+    Time.delay(10).await;
+    cancellation.cancel();
+    Assert.eq_str(pending.await.unwrap_err().code(), "ECANCELLED");
+    client.close().unwrap();
+    client.close().unwrap();
+    Assert.eq_str(client.send(HttpRequest.get(base)).await.unwrap_err().code(), "ECLOSED");
+}

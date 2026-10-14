@@ -1,0 +1,17 @@
+import system;
+import system.testing;
+
+@async_host
+@runtime("delayMs")
+extern async fun first_delay(ms: int): void;
+@async_host
+@runtime("delayMs")
+extern async fun second_delay(ms: int): void;
+
+@test
+async fun async_duplicate_host(): void {
+    first_delay(1).await;
+    second_delay(1).await;
+    Time.delay(1).await;
+    Assert.is_true(true);
+}

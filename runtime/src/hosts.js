@@ -1,4 +1,5 @@
 import { makeJsHost } from "./hosts/js.js";
+import { makeNetHost } from "./hosts/net.js";
 import { makeFsHost } from "./hosts/fs.js";
 import { makeCryptoHost } from "./hosts/crypto.js";
 import { makeConsoleProcessHost } from "./hosts/console_process.js";
@@ -12,6 +13,7 @@ export function defaultDreamModule(getInstance) {
   return {
     ...makeJsHost(getInstance),
     ...makeFsHost(),
+    ...makeNetHost(),
     ...makeCryptoHost(),
     ...makeDatetimeTextHost(),
     ...makeConsoleProcessHost(),
@@ -21,6 +23,7 @@ export function defaultDreamModule(getInstance) {
 export {
   makeJsHost,
   makeFsHost,
+  makeNetHost,
   makeCryptoHost,
   makeConsoleProcessHost,
   makeDatetimeTextHost,

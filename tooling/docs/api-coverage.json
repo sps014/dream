@@ -6100,117 +6100,123 @@
     "page": "reference/api/io-file-handle.md",
     "declarations": [
       {
-        "signature": "public class FileHandle : Reader, Writer",
-        "description": "FileHandle - an OS-backed read/write/seek stream over an open file. Host calls are synchronous; `*_async` methods wrap the same operations in a `Future` for await-style call sites. `close` is sync-only.",
+        "signature": "public class FileHandle : Reader, Writer, AsyncReader, AsyncWriter",
+        "description": "FileHandle - an OS-backed read/write/seek stream over an open file. Async operations use bounded native workers or Node callbacks, keeping host buffers alive through cancellation. Concurrent I/O on one handle returns `EBUSY`; closure is synchronous.",
         "line": 6,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public get is_closed(): bool",
         "description": "Whether this handle has been closed, including after an explicit close failure.",
-        "line": 26,
+        "line": 28,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public get path(): string",
         "description": "Path supplied when opening the file; remains available after closure.",
-        "line": 38,
+        "line": 50,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public static fun open(path: string, mode: string): Result<FileHandle, IoError>",
         "description": "Opens `path` with `mode` (\"r\", \"w\", \"a\", \"r+\", \"w+\", \"a+\").",
-        "line": 84,
+        "line": 99,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public static async fun open_async(path: string, mode: string, token: Option<CancellationToken> = Option.None): Result<FileHandle, IoError>",
-        "description": "Checks cancellation, then runs synchronous `open` inside an awaitable operation. Pending host work is not interruptible and may block the scheduler.",
-        "line": 90,
+        "description": "Opens using host async facilities or the bounded filesystem executor. Cancellation abandons the result safely; a late open result is closed automatically.",
+        "line": 105,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun read(n: int): Result<byte[], IoError>",
         "description": "Reads up to `n` bytes from the current position, advancing the cursor.",
-        "line": 96,
+        "line": 113,
         "page": "reference/api/io-file-handle.md"
       },
       {
-        "signature": "public async fun read_async(n: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>",
-        "description": "Checks cancellation, then runs synchronous `read` inside an awaitable operation. Pending host work is not interruptible and may block the scheduler.",
-        "line": 121,
+        "signature": "public async unique fun read_async(n: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>",
+        "description": "Reads without blocking the scheduler, preserving partial reads and EOF. Cancellation may consume input; further I/O returns `EBUSY` until host work ends.",
+        "line": 138,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun write(data: byte[]): Result<int, IoError>",
         "description": "Writes `data` at the current position, advancing the cursor; returns bytes written.",
-        "line": 127,
+        "line": 158,
         "page": "reference/api/io-file-handle.md"
       },
       {
-        "signature": "public async fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError>",
-        "description": "Checks cancellation, then runs synchronous `write` inside an awaitable operation. Pending host work is not interruptible and may block the scheduler.",
-        "line": 142,
+        "signature": "public async unique fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError>",
+        "description": "Writes a host-owned copy without blocking the scheduler and returns partial progress. Cancellation does not roll back writes; further I/O is busy until host work ends.",
+        "line": 173,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun seek(pos: long): Result<bool, IoError>",
         "description": "Seeks to absolute byte offset `pos` from the start of the file.",
-        "line": 148,
+        "line": 194,
         "page": "reference/api/io-file-handle.md"
       },
       {
-        "signature": "public async fun seek_async(pos: long, token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
-        "description": "Checks cancellation, then runs synchronous `seek` inside an awaitable operation. Pending host work is not interruptible and may block the scheduler.",
-        "line": 160,
+        "signature": "public async unique fun seek_async(pos: long, token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
+        "description": "Seeks on the filesystem executor; successful completion discards read-ahead. Once submitted, cancellation is observed after completion so buffer state stays coherent.",
+        "line": 206,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun tell(): Result<long, IoError>",
         "description": "Current cursor offset from the start of the file.",
-        "line": 166,
+        "line": 224,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun seek_from_end(offset: long): Result<bool, IoError>",
         "description": "Seeks to `offset` bytes from the end (`0` is the end; negative moves backward).",
-        "line": 176,
+        "line": 234,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun seek_end(): Result<bool, IoError>",
         "description": "Moves the cursor to the end of the file.",
-        "line": 187,
+        "line": 245,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun read_line(max_bytes: int = 1048576): Result<Option<string>, IoError>",
         "description": "Reads a line using buffered read-ahead, stripping LF or CRLF and preserving standalone CR. Returns the final unterminated line or `None` at EOF; `ELIMIT` consumes the prefix and exceeding byte beyond the pre-LF byte limit (default 1 MiB, including any CR).",
-        "line": 194,
+        "line": 252,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun write_text(text: string): Result<int, IoError>",
         "description": "Writes UTF-8 bytes of `text` at the current position.",
-        "line": 224,
+        "line": 282,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun length(): Result<long, IoError>",
         "description": "Returns the current byte length from the open handle; propagates metadata failures.",
-        "line": 229,
+        "line": 287,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public unique fun flush(): Result<bool, IoError>",
         "description": "Validates that the handle is open; writes are unbuffered at this layer. This does not synchronize data to durable storage.",
-        "line": 240,
+        "line": 298,
+        "page": "reference/api/io-file-handle.md"
+      },
+      {
+        "signature": "public async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
+        "description": "Checks cancellation and validates the handle; this layer has no buffered output to flush.",
+        "line": 303,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun close(): Result<bool, IoError>",
         "description": "Closes idempotently and reports host failures. The handle stays closed even on failure to prevent closing a reused descriptor; destruction performs nonthrowing cleanup.",
-        "line": 246,
+        "line": 310,
         "page": "reference/api/io-file-handle.md"
       }
     ]
@@ -7897,6 +7903,411 @@
         "description": "Logs at Error.",
         "line": 75,
         "page": "reference/api/logging-logger.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/net/http_client.dream",
+    "package": "system.net",
+    "page": "reference/api/net-http-client.md",
+    "declarations": [
+      {
+        "signature": "public class HttpClient",
+        "description": "Owns reusable HTTP connection pools. Close explicitly to cancel pending sends and release pools. Received responses own their bodies independently and must also be closed.",
+        "line": 5,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates a client; allocation failures are reported by `send`.",
+        "line": 8,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public async fun send(request: HttpRequest, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError>",
+        "description": "Sends with default options: a 30-second total deadline and the host redirect policy.",
+        "line": 18,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public async fun send(request: HttpRequest, options: HttpOptions, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError>",
+        "description": "Sends a snapshot and returns after response headers arrive. Statuses such as 404 remain `Ok`. Cancellation aborts pending transport work; response ownership transfers to the caller on success.",
+        "line": 25,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public fun close(): Result<bool, HttpError>",
+        "description": "Closes idempotently, cancelling pending sends. Previously received bodies remain usable.",
+        "line": 42,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public class HttpResponse",
+        "description": "Response metadata and a streamed body. Explicit closure releases unfinished bodies.",
+        "line": 88,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public get status(): int",
+        "description": "Numeric HTTP status; non-2xx responses are successful transport results.",
+        "line": 103,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public get url(): Url",
+        "description": "Final URL after any redirects visible to the host.",
+        "line": 105,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public get headers(): HttpHeaders",
+        "description": "Response headers visible to the host; browser CORS rules can hide some headers.",
+        "line": 107,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public get body(): HttpBody",
+        "description": "Byte stream owned by this response; a retained body can be read independently.",
+        "line": 109,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public async fun read_text(max_bytes: int = 1048576, token: Option<CancellationToken> = Option.None): Result<string, HttpError>",
+        "description": "Reads remaining body text up to `max_bytes` using strict incremental UTF-8 decoding. Limit or decoding failures consume input already read; close the response after any failure.",
+        "line": 112,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public fun close(): Result<bool, HttpError>",
+        "description": "Closes the body idempotently; subsequent reads return `ECLOSED`.",
+        "line": 137,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public class HttpBody : AsyncReader",
+        "description": "An HTTP response byte stream. One read may be pending; cancellation can consume bytes.",
+        "line": 141,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public async unique fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>",
+        "description": "Reads up to `max_bytes`; empty success for a positive request is EOF. Zero consumes nothing. Errors use `IoError` for compatibility with async streams; concurrent reads return `EBUSY`.",
+        "line": 151,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public fun close(): Result<bool, HttpError>",
+        "description": "Releases the response transport and cancels a pending read; safe to call repeatedly.",
+        "line": 163,
+        "page": "reference/api/net-http-client.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/net/http_types.dream",
+    "package": "system.net",
+    "page": "reference/api/net-http-types.md",
+    "declarations": [
+      {
+        "signature": "public class HttpError : Error",
+        "description": "A transport, validation, cancellation, deadline, or capability failure; HTTP statuses are not errors.",
+        "line": 4,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public constructor(code: string, message: string)",
+        "description": "Creates a failure with a stable machine code and a human-readable description.",
+        "line": 9,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public fun code(): string",
+        "description": "Stable category such as `EINVAL`, `ETIMEOUT`, `ECANCELLED`, `ECLOSED`, or `ENOTSUP`.",
+        "line": 11,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public fun message(): string",
+        "description": "Human-readable failure detail; transport adapters omit request URLs from error messages.",
+        "line": 13,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public class HttpOptions",
+        "description": "Request deadline and connection/redirect controls; unsupported host controls return `ENOTSUP`.",
+        "line": 17,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public timeout_ms: int",
+        "description": "Total request deadline including response-body consumption; zero disables the deadline.",
+        "line": 19,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public connect_timeout_ms: int",
+        "description": "Native connection establishment timeout; zero uses the host default. Fetch requires zero.",
+        "line": 21,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public max_redirects: int",
+        "description": "Maximum redirects; -1 uses the host default, zero exposes redirect responses on native/Node. Browsers require -1 because redirect counts and responses are not reliably observable.",
+        "line": 24,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public constructor(timeout_ms: int = 30000, max_redirects: int = -1, connect_timeout_ms: int = 0)",
+        "description": "Creates options; negative deadlines or redirect limits below -1 are invalid at send time.",
+        "line": 27,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public class HttpHeaders",
+        "description": "Case-insensitive header names with ordered repeated values. Validation occurs when sending.",
+        "line": 35,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates an empty header collection.",
+        "line": 39,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public get length(): int",
+        "description": "Number of stored header pairs, including repeated names.",
+        "line": 41,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public fun append(name: string, value: string): void",
+        "description": "Appends a value without replacing existing values for the same name.",
+        "line": 43,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public fun set(name: string, value: string): void",
+        "description": "Replaces all existing values for `name` with one value at the end of the collection.",
+        "line": 45,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public fun get(name: string): Option<string>",
+        "description": "Returns the first matching value, or `None` when absent.",
+        "line": 47,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public fun get_all(name: string): string[]",
+        "description": "Copies every matching value in stored order; JS Fetch may already have combined repeated headers.",
+        "line": 55,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public fun remove(name: string): void",
+        "description": "Removes all values with the given case-insensitive name.",
+        "line": 64,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public class HttpRequest",
+        "description": "Mutable request description; sending snapshots URL, headers, options, and body bytes.",
+        "line": 93,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public method: string",
+        "description": "HTTP method, restricted to GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS on all hosts.",
+        "line": 95,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public url: Url",
+        "description": "Absolute http/https destination; credentials in URLs are rejected.",
+        "line": 97,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public headers: HttpHeaders",
+        "description": "Request headers; browsers reject forbidden names instead of silently ignoring them.",
+        "line": 99,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public body: byte[]",
+        "description": "Byte body copied for each send; GET and HEAD require an empty body.",
+        "line": 101,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public constructor(method: string, url: Url)",
+        "description": "Creates a request with empty headers and body.",
+        "line": 103,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public static fun get(url: Url): HttpRequest",
+        "description": "Creates a GET request.",
+        "line": 105,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
+        "signature": "public static fun post(url: Url): HttpRequest",
+        "description": "Creates a POST request.",
+        "line": 107,
+        "page": "reference/api/net-http-types-2.md"
+      },
+      {
+        "signature": "public static fun put(url: Url): HttpRequest",
+        "description": "Creates a PUT request.",
+        "line": 109,
+        "page": "reference/api/net-http-types-2.md"
+      },
+      {
+        "signature": "public static fun patch(url: Url): HttpRequest",
+        "description": "Creates a PATCH request.",
+        "line": 111,
+        "page": "reference/api/net-http-types-2.md"
+      },
+      {
+        "signature": "public static fun delete(url: Url): HttpRequest",
+        "description": "Creates a DELETE request.",
+        "line": 113,
+        "page": "reference/api/net-http-types-2.md"
+      },
+      {
+        "signature": "public fun set_text(text: string): void",
+        "description": "Replaces the body with UTF-8 bytes; adds no content-type header implicitly.",
+        "line": 115,
+        "page": "reference/api/net-http-types-2.md"
+      },
+      {
+        "signature": "public static class HttpCapabilities",
+        "description": "Host-enforced HTTP controls; unsupported options still return `ENOTSUP` at send time.",
+        "line": 129,
+        "page": "reference/api/net-http-types-2.md"
+      },
+      {
+        "signature": "public static get connection_timeouts(): bool",
+        "description": "Whether a separate connection-establishment timeout can be configured (native hosts).",
+        "line": 133,
+        "page": "reference/api/net-http-types-2.md"
+      },
+      {
+        "signature": "public static get redirect_limits(): bool",
+        "description": "Whether explicit redirect limits and redirect responses are observable (native and Node).",
+        "line": 135,
+        "page": "reference/api/net-http-types-2.md"
+      },
+      {
+        "signature": "public static get unrestricted_headers(): bool",
+        "description": "Whether browser forbidden-header restrictions do not apply; HTTP syntax is always validated.",
+        "line": 137,
+        "page": "reference/api/net-http-types-2.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/net/url.dream",
+    "package": "system.net",
+    "page": "reference/api/net-url.md",
+    "declarations": [
+      {
+        "signature": "public class Url",
+        "description": "A normalized absolute URL parsed using the host URL Standard implementation. Query parameters preserve their original encoding until modified.",
+        "line": 5,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public static fun parse(input: string): Result<Url, ParseError>",
+        "description": "Parses and normalizes an absolute URL; relative or malformed input returns `ParseError`.",
+        "line": 18,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public fun resolve(reference: string): Result<Url, ParseError>",
+        "description": "Resolves a relative reference against this URL; an absolute reference replaces the base. A trailing slash in the base determines whether its last path component is a directory.",
+        "line": 31,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public get scheme(): string",
+        "description": "Lowercase scheme without the colon delimiter.",
+        "line": 36,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public get host(): string",
+        "description": "Canonical hostname, with IPv6 brackets when present; empty for URLs without a host.",
+        "line": 39,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public get path(): string",
+        "description": "Encoded path component; percent escapes remain encoded.",
+        "line": 42,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public get query(): UrlQuery",
+        "description": "Ordered, mutable query parameters shared with this URL; repeated keys remain distinct.",
+        "line": 45,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Serializes the normalized URL, including query edits and any fragment delimiter.",
+        "line": 48,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public class UrlQuery",
+        "description": "Ordered form-decoded URL query parameters. Mutations use form encoding (`+` for space).",
+        "line": 54,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public get length(): int",
+        "description": "Number of key/value pairs, including repeated keys and empty values.",
+        "line": 72,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public fun append(key: string, value: string): void",
+        "description": "Appends a decoded key/value pair after existing parameters.",
+        "line": 75,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public fun get(key: string): Option<string>",
+        "description": "Returns the first decoded value for `key`, or `None` if the key is absent.",
+        "line": 82,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public fun get_all(key: string): string[]",
+        "description": "Copies all decoded values for `key` in their original order.",
+        "line": 90,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public fun set(key: string, value: string): void",
+        "description": "Replaces the first occurrence in place and removes later duplicates; appends if absent.",
+        "line": 99,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public fun remove(key: string): void",
+        "description": "Removes every occurrence of `key`, preserving the order of remaining pairs.",
+        "line": 119,
+        "page": "reference/api/net-url.md"
+      },
+      {
+        "signature": "public fun clear(): void",
+        "description": "Removes all parameters and the query delimiter from the URL.",
+        "line": 131,
+        "page": "reference/api/net-url.md"
       }
     ]
   },

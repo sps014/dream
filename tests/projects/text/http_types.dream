@@ -1,0 +1,31 @@
+import system.net;
+import system.testing;
+
+@test
+async fun http_types(): void {
+    let headers = HttpHeaders();
+    headers.append("X-Role", "reader");
+    headers.append("x-role", "editor");
+    Assert.eq(headers.length, 2);
+    Assert.eq_str(headers.get("X-ROLE").unwrap(), "reader");
+    Assert.eq(headers.get_all("x-role").length, 2);
+    headers.set("X-ROLE", "admin");
+    Assert.eq(headers.length, 1);
+    headers.remove("x-role");
+    Assert.is_true(headers.get("x-role").is_none());
+    let request = HttpRequest.get(Url.parse("https://example.com/").unwrap());
+    let client = HttpClient();
+    let cancelled = CancellationSource();
+    cancelled.cancel();
+    Assert.eq_str(client.send(request, token: Option.Some(cancelled.token)).await.unwrap_err().code(), "ECANCELLED");
+    Assert.eq_str(client.send(request, options: HttpOptions(timeout_ms: 0 - 1)).await.unwrap_err().code(), "EINVAL");
+    let invalid = HttpRequest.get(Url.parse("file:///tmp/input").unwrap());
+    Assert.eq_str(client.send(invalid).await.unwrap_err().code(), "EINVAL");
+    request.set_text("not valid for GET");
+    Assert.eq_str(client.send(request).await.unwrap_err().code(), "EINVAL");
+    client.close().unwrap();
+    client.close().unwrap();
+    Assert.eq_str(client.send(request).await.unwrap_err().code(), "ECLOSED");
+    Assert.is_true(HttpCapabilities.redirect_limits);
+    Assert.is_true(HttpCapabilities.unrestricted_headers);
+}

@@ -154,6 +154,7 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
         c_reverse::emit_reverse(l);
     }
     let mut poll_i = 0usize;
+    let mut bridges = indexmap::IndexSet::new();
     for imp in &imports {
         if is_c_import(imp) {
             if l.cx.target.spec().capabilities.c_interop {
@@ -162,7 +163,11 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
         } else if imp.is_async {
             let idx = l.cx.import_poll_base() + poll_i;
             poll_i += 1;
-            async_bridge(l, imp, idx);
+            // Multiple stdlib modules can declare the same host. Its shared bridge still
+            // occupies each registered poll-table slot, but its body/metadata are emitted once.
+            if bridges.insert(import_call_name(imp)) {
+                async_bridge(l, imp, idx);
+            }
         }
     }
 }

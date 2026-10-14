@@ -1,10 +1,8 @@
-# IoError
+# Io Error
 
 **Import:** `import system.io;`
 
-Read the [usage guide](../stdlib/file.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
-
-## `class IoError : Error`
+## `public class IoError : Error`
 
 Filesystem / path failure implementing `Error`.
 
@@ -12,7 +10,7 @@ Filesystem / path failure implementing `Error`.
 public class IoError : Error
 ```
 
-## `path: string`
+## `public path: string`
 
 Path involved in the failure (may be empty for non-path errors).
 
@@ -20,7 +18,7 @@ Path involved in the failure (may be empty for non-path errors).
 public path: string
 ```
 
-## `constructor`
+## `public constructor`
 
 Creates an error with path, machine code, and message.
 
@@ -28,7 +26,7 @@ Creates an error with path, machine code, and message.
 public constructor(path: string, code: string, message: string)
 ```
 
-## `message`
+## `public fun message`
 
 Human-readable description.
 
@@ -36,7 +34,7 @@ Human-readable description.
 public fun message(): string
 ```
 
-## `code`
+## `public fun code`
 
 Stable machine code (`ENOENT`, `EACCES`, `EIO`, `EEXIST`, …).
 
@@ -44,7 +42,7 @@ Stable machine code (`ENOENT`, `EACCES`, `EIO`, `EEXIST`, …).
 public fun code(): string
 ```
 
-## `not_found`
+## `public static fun not_found`
 
 File or directory does not exist.
 
@@ -52,7 +50,7 @@ File or directory does not exist.
 public static fun not_found(path: string): IoError
 ```
 
-## `permission_denied`
+## `public static fun permission_denied`
 
 Permission was denied for the operation.
 
@@ -60,7 +58,7 @@ Permission was denied for the operation.
 public static fun permission_denied(path: string): IoError
 ```
 
-## `other`
+## `public static fun other`
 
 Generic I/O failure with a custom message.
 
@@ -68,7 +66,7 @@ Generic I/O failure with a custom message.
 public static fun other(path: string, message: string): IoError
 ```
 
-## `exists`
+## `public static fun exists`
 
 Path already exists when exclusive create was requested.
 
@@ -76,7 +74,23 @@ Path already exists when exclusive create was requested.
 public static fun exists(path: string): IoError
 ```
 
-## `cancelled`
+## `public static fun closed`
+
+Creates an `ECLOSED` error for an operation on a closed resource.
+
+```dream
+public static fun closed(path: string): IoError
+```
+
+## `public static fun invalid`
+
+Creates an `EINVAL` error for an invalid argument or operation.
+
+```dream
+public static fun invalid(path: string, message: string): IoError
+```
+
+## `public static fun cancelled`
 
 Cooperative cancellation (`CancellationToken`).
 

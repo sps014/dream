@@ -9,4 +9,8 @@ fun random_basic(): void {
     Assert.eq_str((a.next_bool() == b.next_bool()).to_string(), "true");
     let c = Random((uint)7);
     Assert.eq_str((c.next_int(10) >= 0).to_string(), "true");
+    let rejection = Random(1584200935u);
+    Assert.eq(rejection.next_int(2147483647), 253982);
+    Assert.eq(Random(1u).next_int(1), 0);
+    Assert.eq(Random(1u).next_int(0), 0);
 }

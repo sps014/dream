@@ -10,3 +10,5 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [StringIterator](text-string-iterator.md)
 - [Unicode](text-unicode.md)
 - [UnicodeNormForm](text-unicode-norm-form.md)
+
+- [Incremental UTF-8](text-utf8-decoder.md)

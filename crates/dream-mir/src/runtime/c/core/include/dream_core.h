@@ -1661,7 +1661,8 @@ int64_t fileHandleWrite(int32_t fd, dream_ptr data);
 int32_t fileHandleSeek(int32_t fd, int64_t position);
 int64_t fileHandleTell(int32_t fd);
 int32_t fileHandleSeekEnd(int32_t fd, int64_t offset);
-void fileHandleClose(int32_t fd);
+int64_t fileHandleLength(int32_t fd);
+int32_t fileHandleClose(int32_t fd);
 
 void dream_process_capture_args(int32_t argc, char **argv);
 int32_t processOsFamily(void);

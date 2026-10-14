@@ -1,0 +1,62 @@
+module system.io;
+
+// Buffers output to a borrowed writer without closing it. Call `finish()` explicitly
+// to report flush failures; destruction does not flush pending bytes.
+@allow_cycle
+public class BufferedWriter : Writer {
+    destination: Writer;
+    capacity: int;
+    buffer: byte[];
+    count: int;
+    finished: bool;
+
+    // Wraps `destination` with an 8 KiB default buffer; nonpositive sizes fail on use.
+    public constructor(destination: Writer, buffer_size: int = 8192) {
+        this.destination = destination;
+        this.capacity = buffer_size;
+        let size = buffer_size;
+        if size < 0 { size = 0; }
+        this.buffer = Buffer.alloc<byte>(size);
+        this.count = 0;
+        this.finished = false;
+    }
+
+    // Accepts as many bytes as fit, flushing a previously full buffer first.
+    // May return partial progress; operations after successful finish return `ECLOSED`.
+    public fun write(data: byte[]): Result<int, IoError> {
+        if this.finished { return Result.Err(IoError.closed("")); }
+        if this.capacity <= 0 { return Result.Err(IoError.invalid("", "buffer size must be positive")); }
+        if this.count == this.capacity { this.flush()?; }
+        let count = this.capacity - this.count;
+        if count > data.length { count = data.length; }
+        for (let i = 0; i < count; i = i + 1) { this.buffer[this.count + i] = data[i]; }
+        this.count = this.count + count;
+        return Result.Ok(count);
+    }
+
+    // Writes pending bytes and flushes the destination; retains any unwritten suffix on failure.
+    // Already completed writes persist, and a finished writer returns `ECLOSED`.
+    public fun flush(): Result<bool, IoError> {
+        if this.capacity <= 0 { return Result.Err(IoError.invalid("", "buffer size must be positive")); }
+        if this.finished { return Result.Err(IoError.closed("")); }
+        while this.count > 0 {
+            let bytes = Streams.slice(this.buffer, 0, this.count);
+            let count = this.destination.write(bytes)?;
+            if count <= 0 || count > this.count {
+                return Result.Err(IoError.other("", "writer made invalid progress"));
+            }
+            this.count = this.count - count;
+            for (let i = 0; i < this.count; i = i + 1) { this.buffer[i] = this.buffer[i + count]; }
+        }
+        return this.destination.flush();
+    }
+
+    // Flushes and marks the wrapper finished only on success; repeated success is idempotent.
+    // Leaves the underlying writer open and permits retry after a flush failure.
+    public fun finish(): Result<bool, IoError> {
+        if this.finished { return Result.Ok(true); }
+        this.flush()?;
+        this.finished = true;
+        return Result.Ok(true);
+    }
+}

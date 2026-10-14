@@ -1,0 +1,60 @@
+import system.io;
+import system.encoding;
+import system.testing;
+
+class StreamingShortWriter : Writer {
+    public memory: MemoryStream;
+    public fail: bool;
+    public constructor() { this.memory = MemoryStream(); this.fail = false; }
+    public fun write(bytes: byte[]): Result<int, IoError> {
+        if this.fail { return Result.Err(IoError.other("", "injected failure")); }
+        if bytes.length == 0 { return Result.Ok(0); }
+        this.memory.write([bytes[0]])?;
+        return Result.Ok(1);
+    }
+    public unique fun flush(): Result<bool, IoError> { return Result.Ok(true); }
+}
+
+@test
+fun streaming_io(): void {
+    let input = MemoryStream(Encoding.utf8_encode("a\r\nb\rc\nlast"));
+    let reader = BufferedReader(input, 2);
+    Assert.eq_str(reader.read_line().unwrap().unwrap(), "a");
+    Assert.eq_str(reader.read_line().unwrap().unwrap(), "b\rc");
+    Assert.eq_str(reader.read_line().unwrap().unwrap(), "last");
+    Assert.is_true(reader.read_line().unwrap().is_none());
+    Assert.eq(input.read(0).unwrap().length, 0);
+    Assert.is_true(input.read_exact(1).is_err());
+
+    let destination = StreamingShortWriter();
+    let buffered = BufferedWriter(destination, 3);
+    buffered.write_all(Encoding.utf8_encode("abcdefg")).unwrap();
+    destination.fail = true;
+    Assert.is_true(buffered.finish().is_err());
+    destination.fail = false;
+    buffered.finish().unwrap();
+    buffered.finish().unwrap();
+    Assert.eq_str(Encoding.utf8_decode(destination.memory.to_bytes().unwrap()), "abcdefg");
+    Assert.is_true(buffered.write([(byte)1]).is_err());
+
+    input.seek(0L).unwrap();
+    let output = MemoryStream();
+    Assert.eq(Streams.copy(input, output, 1).unwrap(), 11L);
+    Assert.eq_str(Encoding.utf8_decode(output.to_bytes().unwrap()), "a\r\nb\rc\nlast");
+    output.seek(15L).unwrap();
+    output.write([(byte)65]).unwrap();
+    let sparse = output.to_bytes().unwrap();
+    Assert.eq(sparse.length, 16);
+    Assert.eq((int)sparse[14], 0);
+    output.close().unwrap();
+    Assert.is_true(output.read(1).is_err());
+    Assert.is_true(BufferedReader(input, 0).read(1).is_err());
+    Assert.is_true(BufferedWriter(destination, 0).finish().is_err());
+    let seek_source = MemoryStream(Encoding.utf8_encode("first\nsecond\n"));
+    let seek_reader = BufferedReader(seek_source, 8192);
+    Assert.eq_str(seek_reader.read_line().unwrap().unwrap(), "first");
+    Assert.is_true(seek_reader.seek(0L - 1L).is_err());
+    Assert.eq_str(seek_reader.read_line().unwrap().unwrap(), "second");
+    seek_reader.seek(0L).unwrap();
+    Assert.eq_str(seek_reader.read_line().unwrap().unwrap(), "first");
+}

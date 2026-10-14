@@ -1,24 +1,32 @@
-# FileHandle
+# File Handle
 
 **Import:** `import system.io;`
 
-Read the [usage guide](../stdlib/file.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
-
-## `class FileHandle`
+## `public class FileHandle : Reader, Writer`
 
 FileHandle - an OS-backed read/write/seek stream over an open file. Host calls are synchronous; `*_async` methods wrap the same operations in a `Future` for await-style call sites. `close` is sync-only.
 
 ```dream
-public class FileHandle
+public class FileHandle : Reader, Writer
 ```
 
-## `path`
+## `public get is_closed`
+
+Whether this handle has been closed, including after an explicit close failure.
+
+```dream
+public get is_closed(): bool
+```
+
+## `public get path`
+
+Path supplied when opening the file; remains available after closure.
 
 ```dream
 public get path(): string
 ```
 
-## `open`
+## `public static fun open`
 
 Opens `path` with `mode` ("r", "w", "a", "r+", "w+", "a+").
 
@@ -26,15 +34,15 @@ Opens `path` with `mode` ("r", "w", "a", "r+", "w+", "a+").
 public static fun open(path: string, mode: string): Result<FileHandle, IoError>
 ```
 
-## `open_async`
+## `public static async fun open_async`
 
-Async wrapper around `open`.
+Checks cancellation, then runs synchronous `open` inside an awaitable operation. Pending host work is not interruptible and may block the scheduler.
 
 ```dream
 public static async fun open_async(path: string, mode: string, token: Option<CancellationToken> = Option.None): Result<FileHandle, IoError>
 ```
 
-## `read`
+## `public fun read`
 
 Reads up to `n` bytes from the current position, advancing the cursor.
 
@@ -42,15 +50,15 @@ Reads up to `n` bytes from the current position, advancing the cursor.
 public fun read(n: int): Result<byte[], IoError>
 ```
 
-## `read_async`
+## `public async fun read_async`
 
-Async wrapper around `read`.
+Checks cancellation, then runs synchronous `read` inside an awaitable operation. Pending host work is not interruptible and may block the scheduler.
 
 ```dream
 public async fun read_async(n: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>
 ```
 
-## `write`
+## `public fun write`
 
 Writes `data` at the current position, advancing the cursor; returns bytes written.
 
@@ -58,15 +66,15 @@ Writes `data` at the current position, advancing the cursor; returns bytes writt
 public fun write(data: byte[]): Result<int, IoError>
 ```
 
-## `write_async`
+## `public async fun write_async`
 
-Async wrapper around `write`.
+Checks cancellation, then runs synchronous `write` inside an awaitable operation. Pending host work is not interruptible and may block the scheduler.
 
 ```dream
 public async fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError>
 ```
 
-## `seek`
+## `public fun seek`
 
 Seeks to absolute byte offset `pos` from the start of the file.
 
@@ -74,15 +82,15 @@ Seeks to absolute byte offset `pos` from the start of the file.
 public fun seek(pos: long): Result<bool, IoError>
 ```
 
-## `seek_async`
+## `public async fun seek_async`
 
-Async wrapper around `seek`.
+Checks cancellation, then runs synchronous `seek` inside an awaitable operation. Pending host work is not interruptible and may block the scheduler.
 
 ```dream
 public async fun seek_async(pos: long, token: Option<CancellationToken> = Option.None): Result<bool, IoError>
 ```
 
-## `tell`
+## `public fun tell`
 
 Current cursor offset from the start of the file.
 
@@ -90,7 +98,7 @@ Current cursor offset from the start of the file.
 public fun tell(): Result<long, IoError>
 ```
 
-## `seek_from_end`
+## `public fun seek_from_end`
 
 Seeks to `offset` bytes from the end (`0` is the end; negative moves backward).
 
@@ -98,7 +106,7 @@ Seeks to `offset` bytes from the end (`0` is the end; negative moves backward).
 public fun seek_from_end(offset: long): Result<bool, IoError>
 ```
 
-## `seek_end`
+## `public fun seek_end`
 
 Moves the cursor to the end of the file.
 
@@ -106,15 +114,15 @@ Moves the cursor to the end of the file.
 public fun seek_end(): Result<bool, IoError>
 ```
 
-## `read_line`
+## `public fun read_line`
 
-Reads bytes until `\n` (not included) or EOF. `None` at EOF with no leftover bytes.
+Reads a line using buffered read-ahead, stripping LF or CRLF and preserving standalone CR. Returns the final unterminated line or `None` at EOF; `ELIMIT` consumes the prefix and exceeding byte beyond the pre-LF byte limit (default 1 MiB, including any CR).
 
 ```dream
-public fun read_line(): Result<Option<string>, IoError>
+public fun read_line(max_bytes: int = 1048576): Result<Option<string>, IoError>
 ```
 
-## `write_text`
+## `public fun write_text`
 
 Writes UTF-8 bytes of `text` at the current position.
 
@@ -122,10 +130,26 @@ Writes UTF-8 bytes of `text` at the current position.
 public fun write_text(text: string): Result<int, IoError>
 ```
 
-## `close`
+## `public fun length`
 
-Releases the OS handle (sync only).
+Returns the current byte length from the open handle; propagates metadata failures.
 
 ```dream
-public fun close(): void
+public fun length(): Result<long, IoError>
+```
+
+## `public unique fun flush`
+
+Validates that the handle is open; writes are unbuffered at this layer. This does not synchronize data to durable storage.
+
+```dream
+public unique fun flush(): Result<bool, IoError>
+```
+
+## `public fun close`
+
+Closes idempotently and reports host failures. The handle stays closed even on failure to prevent closing a reused descriptor; destruction performs nonthrowing cleanup.
+
+```dream
+public fun close(): Result<bool, IoError>
 ```

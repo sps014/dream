@@ -1,0 +1,36 @@
+import system.text;
+import system.encoding;
+import system.testing;
+
+@test
+fun incremental_utf8(): void {
+    let bytes = Encoding.utf8_encode("Aé😀日本語");
+    for (let split = 0; split <= bytes.length; split = split + 1) {
+        let first = Buffer.alloc<byte>(split);
+        let second = Buffer.alloc<byte>(bytes.length - split);
+        for (let i = 0; i < split; i = i + 1) { first[i] = bytes[i]; }
+        for (let i = split; i < bytes.length; i = i + 1) { second[i - split] = bytes[i]; }
+        let decoder = Utf8Decoder();
+        let decoded = decoder.decode_chunk(first).unwrap() + decoder.decode_chunk(second).unwrap() + decoder.finish().unwrap();
+        Assert.eq_str(decoded, "Aé😀日本語");
+        Assert.is_true(decoder.decode_chunk([]).is_err());
+    }
+    let strict = Utf8Decoder();
+    Assert.is_true(strict.decode_chunk([(byte)192, (byte)128]).is_err());
+    let truncated = Utf8Decoder();
+    truncated.decode_chunk([(byte)226]).unwrap();
+    Assert.is_true(truncated.finish().is_err());
+    let replacement = Utf8Decoder(InvalidEncoding.Replace);
+    Assert.eq_str(replacement.decode_chunk([(byte)226, (byte)65]).unwrap(), "�A");
+    Assert.eq_str(Encoding.uri_decode_component("a+b%20é").unwrap(), "a+b é");
+    Assert.eq_str(Encoding.form_decode_component("a+b%2b").unwrap(), "a b+");
+    Assert.eq_str(Encoding.form_encode_component("a b+"), "a+b%2b");
+    Assert.eq_str(Encoding.form_encode_component("~*"), "%7e*");
+    Assert.eq_str(Encoding.uri_encode_component("~*"), "~%2a");
+    Assert.eq_str(Encoding.uri_decode_component("日本語").unwrap(), "日本語");
+    Assert.is_true(Utf8Decoder().decode_chunk([(byte)224, (byte)128, (byte)128]).is_err());
+    Assert.is_true(Utf8Decoder().decode_chunk([(byte)237, (byte)160, (byte)128]).is_err());
+    Assert.is_true(Utf8Decoder().decode_chunk([(byte)244, (byte)144, (byte)128, (byte)128]).is_err());
+    Assert.is_true(Encoding.uri_decode_component("%ff").is_err());
+    Assert.is_true(Encoding.uri_decode_component("%a").is_err());
+}

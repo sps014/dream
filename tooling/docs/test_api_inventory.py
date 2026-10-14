@@ -17,6 +17,11 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(entries[-1]["signature"], "fun read(): int")
         self.assertEqual(entries[-1]["description"], "Reads one value.")
 
+    def test_interface_receiver_and_async_qualifiers(self):
+        source = "public interface Streams {\n    unique fun read(): int;\n    async unique fun write(): int;\n    borrow fun tell(): int;\n}"
+        signatures = [entry["signature"] for entry in declarations(source)]
+        self.assertEqual(signatures[1:], ["unique fun read(): int", "async unique fun write(): int", "borrow fun tell(): int"])
+
     def test_multiline_parameters_and_string_delimiters(self):
         source = 'public class Format {\n    public fun render(\n        pattern: string = "{x};",\n        action: fun(int): string\n    ): string { return pattern; }\n}'
         self.assertEqual(declarations(source)[-1]["signature"], 'public fun render( pattern: string = "{x};", action: fun(int): string ): string')

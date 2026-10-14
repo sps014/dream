@@ -25,25 +25,63 @@ fn lock_map() -> std::sync::MutexGuard<'static, IndexMap<u32, ChildIo>> {
     children().lock().unwrap_or_else(|e| e.into_inner())
 }
 
-fn split_args(joined: &str) -> Vec<&str> {
-    if joined.is_empty() {
-        Vec::new()
-    } else {
-        joined.split('\n').collect()
+fn split_args(mut wire: &[u8]) -> std::io::Result<Vec<String>> {
+    fn invalid() -> std::io::Error {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "invalid process argument encoding",
+        )
     }
+    fn length(wire: &mut &[u8]) -> std::io::Result<usize> {
+        let (head, tail) = wire.split_at_checked(4).ok_or_else(invalid)?;
+        let value = u32::from_le_bytes(head.try_into().map_err(|_| invalid())?) as usize;
+        *wire = tail;
+        Ok(value)
+    }
+    let count = length(&mut wire)?;
+    if count > wire.len() / 4 {
+        return Err(invalid());
+    }
+    let mut args = Vec::with_capacity(count);
+    for _ in 0..count {
+        let size = length(&mut wire)?;
+        let (argument, tail) = wire.split_at_checked(size).ok_or_else(invalid)?;
+        if argument.contains(&0) {
+            return Err(invalid());
+        }
+        args.push(
+            std::str::from_utf8(argument)
+                .map_err(|_| invalid())?
+                .to_owned(),
+        );
+        wire = tail;
+    }
+    if !wire.is_empty() {
+        return Err(invalid());
+    }
+    Ok(args)
 }
 
-fn command(cmd: &str, joined_args: &str, cwd: &str) -> Command {
+fn command(cmd: &str, args: &[u8], cwd: &str) -> std::io::Result<Command> {
     let mut c = Command::new(cmd);
-    c.args(split_args(joined_args));
+    c.args(split_args(args)?);
     if !cwd.is_empty() {
         c.current_dir(cwd);
     }
-    c
+    Ok(c)
 }
 
-pub(crate) fn process_run(cmd: &str, joined_args: &str, cwd: &str) -> Vec<u8> {
-    let mut c = command(cmd, joined_args, cwd);
+fn spawn_error(error: std::io::Error) -> Vec<u8> {
+    let mut wire = b"-1\n".to_vec();
+    wire.extend_from_slice(error.to_string().as_bytes());
+    wire
+}
+
+pub(crate) fn process_run(cmd: &str, args: &[u8], cwd: &str) -> Vec<u8> {
+    let mut c = match command(cmd, args, cwd) {
+        Ok(command) => command,
+        Err(error) => return spawn_error(error),
+    };
     c.stdout(Stdio::piped()).stderr(Stdio::piped());
     match c.output() {
         Err(e) => {
@@ -61,8 +99,11 @@ pub(crate) fn process_run(cmd: &str, joined_args: &str, cwd: &str) -> Vec<u8> {
     }
 }
 
-pub(crate) fn process_spawn(cmd: &str, joined_args: &str, cwd: &str) -> Vec<u8> {
-    let mut c = command(cmd, joined_args, cwd);
+pub(crate) fn process_spawn(cmd: &str, args: &[u8], cwd: &str) -> Vec<u8> {
+    let mut c = match command(cmd, args, cwd) {
+        Ok(command) => command,
+        Err(error) => return spawn_error(error),
+    };
     c.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -182,4 +223,47 @@ pub(crate) fn process_kill(handle: i32) -> i32 {
         return 0;
     };
     i32::from(child.child.kill().is_ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_args;
+
+    fn encode(args: &[&str]) -> Vec<u8> {
+        let mut wire = (args.len() as u32).to_le_bytes().to_vec();
+        for argument in args {
+            wire.extend_from_slice(&(argument.len() as u32).to_le_bytes());
+            wire.extend_from_slice(argument.as_bytes());
+        }
+        wire
+    }
+
+    #[test]
+    fn argument_boundaries_are_preserved() {
+        let args = [
+            "",
+            "two words",
+            "first\nsecond",
+            "こんにちは",
+            "\u{feff}leading",
+            "\"quoted\"\\tail",
+        ];
+        assert_eq!(split_args(&encode(&args)).unwrap(), args);
+        assert!(split_args(&encode(&[])).unwrap().is_empty());
+        assert_eq!(split_args(&encode(&[""])).unwrap(), [""]);
+    }
+
+    #[test]
+    fn malformed_arguments_are_rejected() {
+        let valid = encode(&["hello"]);
+        for size in 0..valid.len() {
+            assert!(split_args(&valid[..size]).is_err());
+        }
+        let mut trailing = valid;
+        trailing.push(0);
+        assert!(split_args(&trailing).is_err());
+        assert!(split_args(&[255; 4]).is_err());
+        assert!(split_args(&encode(&["embedded\0nul"])).is_err());
+        assert!(split_args(&[1, 0, 0, 0, 1, 0, 0, 0, 255]).is_err());
+    }
 }

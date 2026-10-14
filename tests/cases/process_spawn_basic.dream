@@ -1,5 +1,6 @@
 import system;
 import system.process;
+import system.testing;
 async fun main(): void {
     let args = System.args;
     if args.length > 0 && args[0] == "echo" {
@@ -7,6 +8,9 @@ async fun main(): void {
             System.println(System.read_line());
         }
     }
+    // A broken argv decoder must fail the child rather than recursively spawning this fixture.
+    Assert.is_false(System.has_env("DREAM_PROCESS_FIXTURE_CHILD"));
+    System.set_env("DREAM_PROCESS_FIXTURE_CHILD", "1").unwrap();
     let child_args = ["echo"];
     if System.platform == Platform.Node {
         child_args = ["-e", "process.stdin.on('data', data => process.stdout.write(data))"];

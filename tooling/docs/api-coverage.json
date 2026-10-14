@@ -5675,15 +5675,27 @@
         "page": "reference/api/encoding.md"
       },
       {
-        "signature": "public static fun url_encode(text: string): string",
+        "signature": "public static fun uri_encode_component(text: string): string",
         "description": "Percent-encodes `text` as UTF-8 bytes (RFC 3986 unreserved set left as-is).",
         "line": 332,
         "page": "reference/api/encoding.md"
       },
       {
-        "signature": "public static fun url_decode(text: string): Result<string, ParseError>",
-        "description": "Decodes a percent-encoded URL component.",
-        "line": 352,
+        "signature": "public static fun uri_decode_component(text: string): Result<string, ParseError>",
+        "description": "Decodes percent escapes as strict UTF-8, preserving literal `+`. Malformed escapes or invalid UTF-8 return a parse error.",
+        "line": 359,
+        "page": "reference/api/encoding.md"
+      },
+      {
+        "signature": "public static fun form_encode_component(text: string): string",
+        "description": "Encodes a form component as UTF-8, using `+` for spaces and percent escapes except for ASCII letters, digits, `*`, `-`, `.`, and `_`.",
+        "line": 365,
+        "page": "reference/api/encoding.md"
+      },
+      {
+        "signature": "public static fun form_decode_component(text: string): Result<string, ParseError>",
+        "description": "Decodes a form component, interpreting `+` as space and validating escaped UTF-8. Malformed escapes or invalid UTF-8 return a parse error.",
+        "line": 371,
         "page": "reference/api/encoding.md"
       }
     ]
@@ -5846,6 +5858,92 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/io/buffered_reader.dream",
+    "package": "system.io",
+    "page": "reference/api/io-buffered-reader.md",
+    "declarations": [
+      {
+        "signature": "public class BufferedReader : Reader",
+        "description": "Reads ahead from a borrowed reader without closing it; use this wrapper for positioning while buffered bytes remain, or recover them before accessing the source directly.",
+        "line": 6,
+        "page": "reference/api/io-buffered-reader.md"
+      },
+      {
+        "signature": "public constructor(source: Reader, buffer_size: int = 8192)",
+        "description": "Wraps `source` with an 8 KiB default buffer; nonpositive sizes fail on reads.",
+        "line": 13,
+        "page": "reference/api/io-buffered-reader.md"
+      },
+      {
+        "signature": "public fun read(max_bytes: int): Result<byte[], IoError>",
+        "description": "Returns up to `max_bytes` from buffered input, refilling as needed; may return fewer. Zero is a no-op, negative sizes are invalid, and empty success for positive sizes is EOF.",
+        "line": 34,
+        "page": "reference/api/io-buffered-reader.md"
+      },
+      {
+        "signature": "public fun read_line(max_bytes: int = 1048576): Result<Option<string>, IoError>",
+        "description": "Returns a line without LF or CRLF, preserving standalone CR and final unterminated lines. Returns `None` at EOF; `ELIMIT` consumes the prefix and exceeding byte when the pre-LF byte count exceeds `max_bytes` (default 1 MiB, including any CR).",
+        "line": 50,
+        "page": "reference/api/io-buffered-reader.md"
+      },
+      {
+        "signature": "public fun seek(position: long): Result<bool, IoError>",
+        "description": "Seeks the source and discards buffered input only after success. Unsupported or failed seeks preserve unread buffered bytes.",
+        "line": 76,
+        "page": "reference/api/io-buffered-reader.md"
+      },
+      {
+        "signature": "public fun tell(): Result<long, IoError>",
+        "description": "Returns the source position minus unread buffered bytes; propagates positioning errors.",
+        "line": 84,
+        "page": "reference/api/io-buffered-reader.md"
+      },
+      {
+        "signature": "public fun take_buffered(): byte[]",
+        "description": "Copies and removes unread buffered bytes without repositioning the source. Recover these bytes before bypassing this wrapper to access the source directly.",
+        "line": 90,
+        "page": "reference/api/io-buffered-reader.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/io/buffered_writer.dream",
+    "package": "system.io",
+    "page": "reference/api/io-buffered-writer.md",
+    "declarations": [
+      {
+        "signature": "public class BufferedWriter : Writer",
+        "description": "Buffers output to a borrowed writer without closing it. Call `finish()` explicitly to report flush failures; destruction does not flush pending bytes.",
+        "line": 6,
+        "page": "reference/api/io-buffered-writer.md"
+      },
+      {
+        "signature": "public constructor(destination: Writer, buffer_size: int = 8192)",
+        "description": "Wraps `destination` with an 8 KiB default buffer; nonpositive sizes fail on use.",
+        "line": 14,
+        "page": "reference/api/io-buffered-writer.md"
+      },
+      {
+        "signature": "public fun write(data: byte[]): Result<int, IoError>",
+        "description": "Accepts as many bytes as fit, flushing a previously full buffer first. May return partial progress; operations after successful finish return `ECLOSED`.",
+        "line": 26,
+        "page": "reference/api/io-buffered-writer.md"
+      },
+      {
+        "signature": "public fun flush(): Result<bool, IoError>",
+        "description": "Writes pending bytes and flushes the destination; retains any unwritten suffix on failure. Already completed writes persist, and a finished writer returns `ECLOSED`.",
+        "line": 39,
+        "page": "reference/api/io-buffered-writer.md"
+      },
+      {
+        "signature": "public fun finish(): Result<bool, IoError>",
+        "description": "Flushes and marks the wrapper finished only on success; repeated success is idempotent. Leaves the underlying writer open and permits retry after a flush failure.",
+        "line": 56,
+        "page": "reference/api/io-buffered-writer.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/io/file.dream",
     "package": "system.io",
     "page": "reference/api/io-file.md",
@@ -6002,99 +6100,117 @@
     "page": "reference/api/io-file-handle.md",
     "declarations": [
       {
-        "signature": "public class FileHandle",
+        "signature": "public class FileHandle : Reader, Writer",
         "description": "FileHandle - an OS-backed read/write/seek stream over an open file. Host calls are synchronous; `*_async` methods wrap the same operations in a `Future` for await-style call sites. `close` is sync-only.",
         "line": 6,
         "page": "reference/api/io-file-handle.md"
       },
       {
+        "signature": "public get is_closed(): bool",
+        "description": "Whether this handle has been closed, including after an explicit close failure.",
+        "line": 26,
+        "page": "reference/api/io-file-handle.md"
+      },
+      {
         "signature": "public get path(): string",
-        "description": "",
-        "line": 15,
+        "description": "Path supplied when opening the file; remains available after closure.",
+        "line": 38,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public static fun open(path: string, mode: string): Result<FileHandle, IoError>",
         "description": "Opens `path` with `mode` (\"r\", \"w\", \"a\", \"r+\", \"w+\", \"a+\").",
-        "line": 58,
+        "line": 84,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public static async fun open_async(path: string, mode: string, token: Option<CancellationToken> = Option.None): Result<FileHandle, IoError>",
-        "description": "Async wrapper around `open`.",
-        "line": 63,
+        "description": "Checks cancellation, then runs synchronous `open` inside an awaitable operation. Pending host work is not interruptible and may block the scheduler.",
+        "line": 90,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun read(n: int): Result<byte[], IoError>",
         "description": "Reads up to `n` bytes from the current position, advancing the cursor.",
-        "line": 69,
+        "line": 96,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public async fun read_async(n: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>",
-        "description": "Async wrapper around `read`.",
-        "line": 74,
+        "description": "Checks cancellation, then runs synchronous `read` inside an awaitable operation. Pending host work is not interruptible and may block the scheduler.",
+        "line": 121,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun write(data: byte[]): Result<int, IoError>",
         "description": "Writes `data` at the current position, advancing the cursor; returns bytes written.",
-        "line": 80,
+        "line": 127,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public async fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError>",
-        "description": "Async wrapper around `write`.",
-        "line": 89,
+        "description": "Checks cancellation, then runs synchronous `write` inside an awaitable operation. Pending host work is not interruptible and may block the scheduler.",
+        "line": 142,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun seek(pos: long): Result<bool, IoError>",
         "description": "Seeks to absolute byte offset `pos` from the start of the file.",
-        "line": 95,
+        "line": 148,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public async fun seek_async(pos: long, token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
-        "description": "Async wrapper around `seek`.",
-        "line": 103,
+        "description": "Checks cancellation, then runs synchronous `seek` inside an awaitable operation. Pending host work is not interruptible and may block the scheduler.",
+        "line": 160,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun tell(): Result<long, IoError>",
         "description": "Current cursor offset from the start of the file.",
-        "line": 109,
+        "line": 166,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun seek_from_end(offset: long): Result<bool, IoError>",
         "description": "Seeks to `offset` bytes from the end (`0` is the end; negative moves backward).",
-        "line": 118,
+        "line": 176,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun seek_end(): Result<bool, IoError>",
         "description": "Moves the cursor to the end of the file.",
-        "line": 126,
+        "line": 187,
         "page": "reference/api/io-file-handle.md"
       },
       {
-        "signature": "public fun read_line(): Result<Option<string>, IoError>",
-        "description": "Reads bytes until `\\n` (not included) or EOF. `None` at EOF with no leftover bytes.",
-        "line": 131,
+        "signature": "public fun read_line(max_bytes: int = 1048576): Result<Option<string>, IoError>",
+        "description": "Reads a line using buffered read-ahead, stripping LF or CRLF and preserving standalone CR. Returns the final unterminated line or `None` at EOF; `ELIMIT` consumes the prefix and exceeding byte beyond the pre-LF byte limit (default 1 MiB, including any CR).",
+        "line": 194,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun write_text(text: string): Result<int, IoError>",
         "description": "Writes UTF-8 bytes of `text` at the current position.",
-        "line": 153,
+        "line": 224,
         "page": "reference/api/io-file-handle.md"
       },
       {
-        "signature": "public fun close(): void",
-        "description": "Releases the OS handle (sync only).",
-        "line": 158,
+        "signature": "public fun length(): Result<long, IoError>",
+        "description": "Returns the current byte length from the open handle; propagates metadata failures.",
+        "line": 229,
+        "page": "reference/api/io-file-handle.md"
+      },
+      {
+        "signature": "public unique fun flush(): Result<bool, IoError>",
+        "description": "Validates that the handle is open; writes are unbuffered at this layer. This does not synchronize data to durable storage.",
+        "line": 240,
+        "page": "reference/api/io-file-handle.md"
+      },
+      {
+        "signature": "public fun close(): Result<bool, IoError>",
+        "description": "Closes idempotently and reports host failures. The handle stays closed even on failure to prevent closing a reused descriptor; destruction performs nonthrowing cleanup.",
+        "line": 246,
         "page": "reference/api/io-file-handle.md"
       }
     ]
@@ -6173,92 +6289,86 @@
     "declarations": [
       {
         "signature": "public class FileStream",
-        "description": "FileStream - a seekable cursor over an open `FileHandle` (no whole-file preload).",
+        "description": "Text and byte access over a file handle, with propagated I/O errors and byte positions.",
         "line": 4,
         "page": "reference/api/io-file-stream.md"
       },
       {
-        "signature": "public fun read_bytes(n: int): byte[]",
-        "description": "Reads up to `n` raw bytes from the current position, advancing the cursor.",
-        "line": 14,
+        "signature": "public fun read_bytes(n: int): Result<byte[], IoError>",
+        "description": "Reads up to `n` bytes, advancing the file position; empty success indicates EOF for positive sizes, and negative sizes return an error.",
+        "line": 13,
         "page": "reference/api/io-file-stream.md"
       },
       {
-        "signature": "public fun read(n: int): string",
-        "description": "Reads up to `n` bytes from the current position as UTF-8 text, advancing the cursor.",
-        "line": 21,
+        "signature": "public fun read(n: int): Result<string, IoError>",
+        "description": "Reads up to `n` bytes and decodes them as UTF-8; the limit and cursor are byte-based. A read can split a UTF-8 sequence; use an incremental decoder for streamed text.",
+        "line": 19,
         "page": "reference/api/io-file-stream.md"
       },
       {
-        "signature": "public fun read_all(): string",
-        "description": "Reads everything remaining from the current position as text.",
-        "line": 27,
+        "signature": "public fun read_all(): Result<string, IoError>",
+        "description": "Collects all remaining bytes through EOF and decodes them as UTF-8; propagates read errors. Memory use grows with the remaining file size.",
+        "line": 25,
         "page": "reference/api/io-file-stream.md"
       },
       {
-        "signature": "public fun read_line(): Option<string>",
-        "description": "Reads one line (without the trailing newline), or `None` at EOF.",
-        "line": 40,
+        "signature": "public fun read_line(): Result<Option<string>, IoError>",
+        "description": "Reads an LF or CRLF terminated line without its terminator, or a final unterminated line. Returns `None` at EOF; propagates I/O errors and the handle default line-size limit.",
+        "line": 39,
         "page": "reference/api/io-file-stream.md"
       },
       {
         "signature": "public fun write_text(text: string): Result<int, IoError>",
-        "description": "",
+        "description": "Writes UTF-8 bytes at the current position and returns the byte count; may write partially.",
+        "line": 44,
+        "page": "reference/api/io-file-stream.md"
+      },
+      {
+        "signature": "public fun has_more(): Result<bool, IoError>",
+        "description": "Compares the current position with the current file length, propagating errors. Concurrent file changes can invalidate the result before the next read.",
         "line": 50,
         "page": "reference/api/io-file-stream.md"
       },
       {
-        "signature": "public fun has_more(): bool",
-        "description": "True while the cursor has not reached the end of the file.",
-        "line": 59,
+        "signature": "public get position(): Result<long, IoError>",
+        "description": "Returns the current byte offset, or an I/O or closed-resource error.",
+        "line": 55,
         "page": "reference/api/io-file-stream.md"
       },
       {
-        "signature": "public get position(): int",
-        "description": "Current cursor offset (bytes from the start).",
-        "line": 68,
+        "signature": "public get length(): Result<long, IoError>",
+        "description": "Returns the current file length in bytes, or an I/O or closed-resource error.",
+        "line": 60,
         "page": "reference/api/io-file-stream.md"
       },
       {
-        "signature": "public set position(offset: int)",
-        "description": "",
-        "line": 72,
+        "signature": "public fun seek(offset: long): Result<bool, IoError>",
+        "description": "Seeks to an absolute byte offset; failure preserves the previous logical position.",
+        "line": 65,
         "page": "reference/api/io-file-stream.md"
       },
       {
-        "signature": "public get length(): int",
-        "description": "Total file size in bytes (`-1` when the path is missing).",
-        "line": 77,
+        "signature": "public fun seek_end(): Result<bool, IoError>",
+        "description": "Moves to the current end of the file; propagates positioning errors.",
+        "line": 70,
         "page": "reference/api/io-file-stream.md"
       },
       {
-        "signature": "public fun seek(offset: int): void",
-        "description": "Moves the cursor to an absolute offset from the start of the file.",
-        "line": 86,
+        "signature": "public fun tell(): Result<long, IoError>",
+        "description": "Returns the current byte offset, accounting for buffered read-ahead.",
+        "line": 75,
         "page": "reference/api/io-file-stream.md"
       },
       {
-        "signature": "public fun seek_end(): void",
-        "description": "Moves the cursor to the end of the file.",
-        "line": 92,
+        "signature": "public fun reset(): Result<bool, IoError>",
+        "description": "Seeks to byte zero; propagates positioning errors without changing position on failure.",
+        "line": 80,
         "page": "reference/api/io-file-stream.md"
       },
       {
-        "signature": "public fun tell(): long",
-        "description": "Current cursor as a `long` (same as `position`, for `FileHandle.tell` parity).",
-        "line": 101,
-        "page": "reference/api/io-file-stream.md"
-      },
-      {
-        "signature": "public fun reset(): void",
-        "description": "Rewinds the cursor to the start.",
-        "line": 106,
-        "page": "reference/api/io-file-stream.md"
-      },
-      {
-        "signature": "public fun close(): void",
-        "description": "Releases the underlying OS handle.",
-        "line": 111,
+        "signature": "public fun close(): Result<bool, IoError>",
+        "description": "Closes the underlying handle idempotently and reports explicit closure failures.",
+        "line": 85,
         "page": "reference/api/io-file-stream.md"
       }
     ]
@@ -6323,10 +6433,119 @@
         "page": "reference/api/io-io-error.md"
       },
       {
-        "signature": "public static fun cancelled(): IoError",
-        "description": "Cooperative cancellation (`CancellationToken`).",
+        "signature": "public static fun closed(path: string): IoError",
+        "description": "Creates an `ECLOSED` error for an operation on a closed resource.",
         "line": 48,
         "page": "reference/api/io-io-error.md"
+      },
+      {
+        "signature": "public static fun invalid(path: string, message: string): IoError",
+        "description": "Creates an `EINVAL` error for an invalid argument or operation.",
+        "line": 53,
+        "page": "reference/api/io-io-error.md"
+      },
+      {
+        "signature": "public static fun cancelled(): IoError",
+        "description": "Cooperative cancellation (`CancellationToken`).",
+        "line": 58,
+        "page": "reference/api/io-io-error.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/io/memory_stream.dream",
+    "package": "system.io",
+    "page": "reference/api/io-memory-stream.md",
+    "declarations": [
+      {
+        "signature": "public class MemoryStream : Reader, Writer, AsyncReader, AsyncWriter",
+        "description": "Seekable in-memory byte storage; closing rejects operations while retaining its data.",
+        "line": 4,
+        "page": "reference/api/io-memory-stream.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates an empty stream positioned at byte zero.",
+        "line": 10,
+        "page": "reference/api/io-memory-stream.md"
+      },
+      {
+        "signature": "public constructor(bytes: byte[])",
+        "description": "Copies `bytes` into independent storage and starts at byte zero.",
+        "line": 17,
+        "page": "reference/api/io-memory-stream.md"
+      },
+      {
+        "signature": "public get position(): long",
+        "description": "Last cursor position in bytes; remains readable after closure.",
+        "line": 25,
+        "page": "reference/api/io-memory-stream.md"
+      },
+      {
+        "signature": "public fun tell(): Result<long, IoError>",
+        "description": "Returns the current byte position, or a closed-resource error.",
+        "line": 27,
+        "page": "reference/api/io-memory-stream.md"
+      },
+      {
+        "signature": "public get length(): long",
+        "description": "Stored byte count; remains readable after closure.",
+        "line": 30,
+        "page": "reference/api/io-memory-stream.md"
+      },
+      {
+        "signature": "public fun read(max_bytes: int): Result<byte[], IoError>",
+        "description": "Reads up to the requested size and advances the cursor; empty success indicates EOF. Negative sizes and reads after closure return errors.",
+        "line": 34,
+        "page": "reference/api/io-memory-stream.md"
+      },
+      {
+        "signature": "public fun write(bytes: byte[]): Result<int, IoError>",
+        "description": "Overwrites or appends bytes at the cursor and returns their count. A nonempty write beyond EOF fills the gap with zeros; size is limited to `int` range.",
+        "line": 48,
+        "page": "reference/api/io-memory-stream.md"
+      },
+      {
+        "signature": "public fun seek(position: long): Result<bool, IoError>",
+        "description": "Sets a byte position from zero through the maximum `int`, including beyond EOF. Invalid positions or closure return errors without changing the cursor.",
+        "line": 65,
+        "page": "reference/api/io-memory-stream.md"
+      },
+      {
+        "signature": "public fun to_bytes(): Result<byte[], IoError>",
+        "description": "Copies all stored bytes independently of the cursor; returns an error after closure.",
+        "line": 75,
+        "page": "reference/api/io-memory-stream.md"
+      },
+      {
+        "signature": "public unique fun flush(): Result<bool, IoError>",
+        "description": "Validates that the stream is open; memory storage has no pending output.",
+        "line": 88,
+        "page": "reference/api/io-memory-stream.md"
+      },
+      {
+        "signature": "public fun close(): Result<bool, IoError>",
+        "description": "Closes the stream idempotently; subsequent I/O returns a closed-resource error.",
+        "line": 90,
+        "page": "reference/api/io-memory-stream.md"
+      },
+      {
+        "signature": "public async fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>",
+        "description": "Checks cancellation, then performs an immediately ready in-memory read.",
+        "line": 93,
+        "page": "reference/api/io-memory-stream.md"
+      },
+      {
+        "signature": "public async fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError>",
+        "description": "Checks cancellation, then performs an immediately ready in-memory write.",
+        "line": 99,
+        "page": "reference/api/io-memory-stream.md"
+      },
+      {
+        "signature": "public async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
+        "description": "Checks cancellation and validates that the stream is open.",
+        "line": 105,
+        "page": "reference/api/io-memory-stream.md"
       }
     ]
   },
@@ -6436,6 +6655,115 @@
         "description": "String-prefix relative path after normalize (not `realpath`). `None` when `path` is not under `base`.",
         "line": 286,
         "page": "reference/api/io-path.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/io/streams.dream",
+    "package": "system.io",
+    "page": "reference/api/io-streams.md",
+    "declarations": [
+      {
+        "signature": "public interface Reader",
+        "description": "Byte input with partial reads and optional positioning; operations report I/O failures.",
+        "line": 4,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "unique fun read(max_bytes: int): Result<byte[], IoError>",
+        "description": "Reads at most `max_bytes` bytes; empty success means EOF for a positive size. A zero size consumes nothing; negative sizes and closed resources return errors.",
+        "line": 7,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "public unique fun seek(position: long): Result<bool, IoError>",
+        "description": "Moves to an absolute byte position; unsupported readers return `ENOTSUP`. A failed seek preserves the previous logical position.",
+        "line": 11,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "public fun tell(): Result<long, IoError>",
+        "description": "Returns the logical byte position, or `ENOTSUP` when positioning is unavailable.",
+        "line": 16,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "public fun read_exact(count: int): Result<byte[], IoError>",
+        "description": "Collects exactly `count` bytes, retrying short reads; premature EOF returns `EEOF`. Errors may occur after input has already been consumed; negative counts are invalid.",
+        "line": 22,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "public interface Writer",
+        "description": "Byte output with partial writes and explicit flushing.",
+        "line": 49,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "unique fun write(data: byte[]): Result<int, IoError>",
+        "description": "Accepts up to the supplied bytes and returns the number accepted. Empty input makes no progress; failures do not undo bytes already written.",
+        "line": 52,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "unique fun flush(): Result<bool, IoError>",
+        "description": "Delivers buffered output to the underlying destination and reports failures. Flushing does not imply durable storage or close the destination.",
+        "line": 55,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "public fun write_all(data: byte[]): Result<bool, IoError>",
+        "description": "Retries partial writes until all bytes are accepted; rejects zero or invalid progress. A failure leaves any completed writes in effect; this does not flush.",
+        "line": 59,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "public interface AsyncReader",
+        "description": "Awaitable byte input with the same EOF and size rules as `Reader`.",
+        "line": 79,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "async unique fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>",
+        "description": "Reads up to `max_bytes` with cooperative cancellation. Cancellation does not restore bytes already consumed by the underlying operation.",
+        "line": 82,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "public interface AsyncWriter",
+        "description": "Awaitable byte output with explicit flushing and cooperative cancellation.",
+        "line": 86,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "async unique fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError>",
+        "description": "Returns the number of bytes accepted, which may be less than the input length. Cancellation or failure does not roll back completed writes.",
+        "line": 89,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
+        "description": "Flushes pending output with cancellation; does not close the destination or guarantee durable storage.",
+        "line": 92,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "public static class Streams",
+        "description": "Copy helpers that leave ownership and closure of both streams with the caller.",
+        "line": 96,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "public static fun copy(source: Reader, destination: Writer, buffer_size: int = 8192): Result<long, IoError>",
+        "description": "Copies to EOF using chunks bounded by positive `buffer_size` (default 8 KiB), then flushes the destination and returns the byte count; neither stream is closed.",
+        "line": 105,
+        "page": "reference/api/io-streams.md"
+      },
+      {
+        "signature": "public static async fun copy_async(source: AsyncReader, destination: AsyncWriter, buffer_size: int = 8192, token: Option<CancellationToken> = Option.None): Result<long, IoError>",
+        "description": "Copies to EOF with bounded chunks, partial-write retries, and cancellation checks, then flushes and returns the byte count. Neither stream is closed; completed writes persist.",
+        "line": 123,
+        "page": "reference/api/io-streams.md"
       }
     ]
   },
@@ -8170,37 +8498,37 @@
       {
         "signature": "public static async fun run(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Result<ProcessOutput, ProcessError>",
         "description": "Runs `cmd` with `args` in the current working directory, waits for it to exit, and captures stdout/stderr in full.",
-        "line": 31,
+        "line": 38,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static async fun run_in(cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None): Result<ProcessOutput, ProcessError>",
         "description": "Same as `run`, but launches the process with `cwd` as its working directory (an empty string keeps the caller's current working directory).",
-        "line": 38,
+        "line": 45,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static async fun spawn(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Result<ChildProcess, ProcessError>",
         "description": "Spawns `cmd` with `args` in the current working directory, returning a handle for interactive stdin/stdout/stderr access and lifecycle control.",
-        "line": 57,
+        "line": 64,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static async fun spawn_in(cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None): Result<ChildProcess, ProcessError>",
         "description": "Same as `spawn`, but launches the process with `cwd` as its working directory.",
-        "line": 63,
+        "line": 70,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static async fun run_checked(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Result<ProcessOutput, ProcessError>",
-        "description": "",
-        "line": 76,
+        "description": "Captures output like `run`, returning an error for a nonzero exit status.",
+        "line": 84,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static fun which(cmd: string): Option<string>",
-        "description": "",
-        "line": 89,
+        "description": "Finds an existing nondirectory command path, directly or by searching `PATH`. This does not validate execute permissions or expand platform-specific extensions.",
+        "line": 99,
         "page": "reference/api/process-process.md"
       }
     ]
@@ -8335,37 +8663,37 @@
       {
         "signature": "public fun next_double(): double",
         "description": "Uniform value in `[0.0, 1.0)` at full 32-bit resolution (no quantization or modulo bias).",
-        "line": 35,
+        "line": 42,
         "page": "reference/api/random.md"
       },
       {
         "signature": "public fun next_bool(): bool",
         "description": "True or false with equal probability.",
-        "line": 41,
+        "line": 48,
         "page": "reference/api/random.md"
       },
       {
         "signature": "public fun next_long(): long",
         "description": "Uniform 64-bit value from two independent 32-bit draws, composed exactly (may be negative when viewed as signed).",
-        "line": 47,
+        "line": 54,
         "page": "reference/api/random.md"
       },
       {
         "signature": "public fun next_bytes(n: int): byte[]",
-        "description": "",
-        "line": 53,
+        "description": "Generates `n` pseudorandom bytes; negative lengths produce an empty array.",
+        "line": 61,
         "page": "reference/api/random.md"
       },
       {
         "signature": "public fun choice<T>(list: List<T>): Option<T>",
-        "description": "",
-        "line": 67,
+        "description": "Selects a uniformly bounded index from `list`, or returns `None` for an empty list.",
+        "line": 76,
         "page": "reference/api/random.md"
       },
       {
         "signature": "public fun shuffle<T>(list: List<T>): void",
-        "description": "",
-        "line": 74,
+        "description": "Permutes `list` in place using Fisher-Yates swaps and unbiased bounded indices.",
+        "line": 84,
         "page": "reference/api/random.md"
       }
     ]
@@ -8722,104 +9050,104 @@
       },
       {
         "signature": "public static get args(): string[]",
-        "description": "Process arguments (excluding the executable name when the host provides one separately).",
-        "line": 129,
+        "description": "Process arguments exclude the executable and preserve empty strings and embedded newlines.",
+        "line": 139,
         "page": "reference/api/system-1.md"
       },
       {
         "signature": "public static get exe_path(): Option<string>",
         "description": "Absolute path of the running executable when known.",
-        "line": 138,
+        "line": 160,
         "page": "reference/api/system-1.md"
       },
       {
         "signature": "public static fun env(borrow name: string): Option<string>",
         "description": "Value of environment variable `name`, or `None` when unset.",
-        "line": 147,
+        "line": 169,
         "page": "reference/api/system-1.md"
       },
       {
         "signature": "public static fun env_or(borrow name: string, fallback: string): string",
         "description": "Value of environment variable `name`, or `fallback` when unset.",
-        "line": 159,
+        "line": 181,
         "page": "reference/api/system-1.md"
       },
       {
         "signature": "public static fun set_env(borrow name: string, borrow value: string): Result<bool, ArgError>",
         "description": "Sets environment variable `name` to `value`.",
-        "line": 164,
+        "line": 186,
         "page": "reference/api/system-1.md"
       },
       {
         "signature": "public static fun has_env(borrow name: string): bool",
         "description": "True when environment variable `name` is set.",
-        "line": 185,
+        "line": 207,
         "page": "reference/api/system-1.md"
       },
       {
         "signature": "public static fun unset_env(borrow name: string): Result<bool, ArgError>",
         "description": "Unsets environment variable `name`.",
-        "line": 190,
+        "line": 212,
         "page": "reference/api/system-1.md"
       },
       {
         "signature": "public static get env_keys(): string[]",
         "description": "Names of all environment variables (empty on hosts without an env block).",
-        "line": 199,
+        "line": 221,
         "page": "reference/api/system-1.md"
       },
       {
         "signature": "public static get temp_dir(): string",
         "description": "Process temp directory (`TMPDIR` / `GetTempPath` / `\"/tmp\"` in the browser).",
-        "line": 208,
+        "line": 230,
         "page": "reference/api/system-1.md"
       },
       {
         "signature": "public static get home_dir(): Option<string>",
         "description": "User home directory when the host provides one.",
-        "line": 217,
+        "line": 239,
         "page": "reference/api/system-1.md"
       },
       {
         "signature": "public static get cwd(): Result<string, IoError>",
         "description": "Current working directory.",
-        "line": 226,
+        "line": 248,
         "page": "reference/api/system-1.md"
       },
       {
         "signature": "public static fun set_cwd(borrow path: string): Result<bool, IoError>",
         "description": "Sets the current working directory.",
-        "line": 235,
+        "line": 257,
         "page": "reference/api/system-2.md"
       },
       {
         "signature": "public static fun clear(): void",
         "description": "Clears the terminal screen.",
-        "line": 243,
+        "line": 265,
         "page": "reference/api/system-2.md"
       },
       {
         "signature": "public static fun set_foreground(color: ConsoleColor): void",
         "description": "Sets the foreground color for subsequent output.",
-        "line": 288,
+        "line": 310,
         "page": "reference/api/system-2.md"
       },
       {
         "signature": "public static fun set_background(color: ConsoleColor): void",
         "description": "Sets the background color for subsequent output.",
-        "line": 296,
+        "line": 318,
         "page": "reference/api/system-2.md"
       },
       {
         "signature": "public static fun reset_color(): void",
         "description": "Resets console colors to the terminal default.",
-        "line": 304,
+        "line": 326,
         "page": "reference/api/system-2.md"
       },
       {
         "signature": "public static fun print_colored(borrow value: string, color: ConsoleColor): void",
         "description": "Prints a string in the specified color.",
-        "line": 310,
+        "line": 332,
         "page": "reference/api/system-2.md"
       }
     ]
@@ -9493,6 +9821,55 @@
         "description": "",
         "line": 9,
         "page": "reference/api/text-unicode-norm-form.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/text/utf8_decoder.dream",
+    "package": "system.text",
+    "page": "reference/api/text-utf8-decoder.md",
+    "declarations": [
+      {
+        "signature": "public enum InvalidEncoding",
+        "description": "Policy for malformed or truncated UTF-8 input.",
+        "line": 4,
+        "page": "reference/api/text-utf8-decoder.md"
+      },
+      {
+        "signature": "Strict",
+        "description": "Returns a parse error and permanently fails the decoder on invalid input.",
+        "line": 6,
+        "page": "reference/api/text-utf8-decoder.md"
+      },
+      {
+        "signature": "Replace",
+        "description": "Emits U+FFFD replacement characters for invalid input and continues decoding.",
+        "line": 8,
+        "page": "reference/api/text-utf8-decoder.md"
+      },
+      {
+        "signature": "public class Utf8Decoder",
+        "description": "Incremental UTF-8 decoding that retains incomplete sequences between chunks and preserves a leading byte-order mark as text.",
+        "line": 13,
+        "page": "reference/api/text-utf8-decoder.md"
+      },
+      {
+        "signature": "public constructor(policy: InvalidEncoding = InvalidEncoding.Strict)",
+        "description": "Creates an active decoder with strict validation by default.",
+        "line": 23,
+        "page": "reference/api/text-utf8-decoder.md"
+      },
+      {
+        "signature": "public fun decode_chunk(bytes: byte[]): Result<string, ParseError>",
+        "description": "Decodes complete scalars and retains a trailing incomplete sequence for the next chunk. Malformed input follows the selected policy; calls after failure or finish return errors.",
+        "line": 47,
+        "page": "reference/api/text-utf8-decoder.md"
+      },
+      {
+        "signature": "public fun finish(): Result<string, ParseError>",
+        "description": "Ends input, rejecting a truncated sequence in strict mode or replacing it with U+FFFD. Returns any trailing text; all subsequent calls return an inactive-decoder error.",
+        "line": 99,
+        "page": "reference/api/text-utf8-decoder.md"
       }
     ]
   },

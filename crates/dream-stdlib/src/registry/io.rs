@@ -12,6 +12,22 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/io/streams.dream",
+            include_str!("../system/io/streams.dream"),
+        ),
+        (
+            "<std>/system/io/memory_stream.dream",
+            include_str!("../system/io/memory_stream.dream"),
+        ),
+        (
+            "<std>/system/io/buffered_reader.dream",
+            include_str!("../system/io/buffered_reader.dream"),
+        ),
+        (
+            "<std>/system/io/buffered_writer.dream",
+            include_str!("../system/io/buffered_writer.dream"),
+        ),
+        (
             "<std>/system/io/io_error.dream",
             include_str!("../system/io/io_error.dream"),
         ),

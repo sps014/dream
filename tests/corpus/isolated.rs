@@ -561,8 +561,8 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::isolated(
         "process_args_basic",
-        "true\ntrue\n2\nalpha\nbeta",
-        false,
+        "true\ntrue\n6\nalpha\nbeta",
+        true,
         "process input, output, or environment",
     ),
     Case::isolated(

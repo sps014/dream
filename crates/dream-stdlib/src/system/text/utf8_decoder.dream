@@ -1,0 +1,110 @@
+module system.text;
+
+// Policy for malformed or truncated UTF-8 input.
+public enum InvalidEncoding {
+    // Returns a parse error and permanently fails the decoder on invalid input.
+    Strict,
+    // Emits U+FFFD replacement characters for invalid input and continues decoding.
+    Replace,
+}
+
+// Incremental UTF-8 decoding that retains incomplete sequences between chunks
+// and preserves a leading byte-order mark as text.
+public class Utf8Decoder {
+    policy: InvalidEncoding;
+    remaining: int;
+    scalar: int;
+    lower: int;
+    upper: int;
+    ended: bool;
+    failed: bool;
+
+    // Creates an active decoder with strict validation by default.
+    public constructor(policy: InvalidEncoding = InvalidEncoding.Strict) {
+        this.policy = policy;
+        this.remaining = 0;
+        this.scalar = 0;
+        this.lower = 128;
+        this.upper = 191;
+        this.ended = false;
+        this.failed = false;
+    }
+
+    fun invalid(): Result<bool, ParseError> {
+        this.remaining = 0;
+        this.scalar = 0;
+        this.lower = 128;
+        this.upper = 191;
+        if this.policy == InvalidEncoding.Strict {
+            this.failed = true;
+            return Result.Err(ParseError.invalid("invalid UTF-8 sequence"));
+        }
+        return Result.Ok(true);
+    }
+
+    // Decodes complete scalars and retains a trailing incomplete sequence for the next chunk.
+    // Malformed input follows the selected policy; calls after failure or finish return errors.
+    public fun decode_chunk(bytes: byte[]): Result<string, ParseError> {
+        if this.ended || this.failed {
+            return Result.Err(ParseError.invalid("UTF-8 decoder is no longer active"));
+        }
+        let output = StringBuilder();
+        let i = 0;
+        while i < bytes.length {
+            let next = (int)bytes[i];
+            if this.remaining > 0 {
+                if next < this.lower || next > this.upper {
+                    this.invalid()?;
+                    output.append_char((char)65533);
+                    continue;
+                }
+                this.scalar = this.scalar * 64 + next - 128;
+                this.remaining = this.remaining - 1;
+                this.lower = 128;
+                this.upper = 191;
+                if this.remaining == 0 {
+                    if this.scalar <= 65535 { output.append_char((char)this.scalar); }
+                    else {
+                        let value = this.scalar - 65536;
+                        output.append_char((char)(55296 + value / 1024));
+                        output.append_char((char)(56320 + value % 1024));
+                    }
+                }
+            } else if next < 128 {
+                output.append_char((char)next);
+            } else if next >= 194 && next <= 223 {
+                this.scalar = next - 192;
+                this.remaining = 1;
+            } else if next >= 224 && next <= 239 {
+                this.scalar = next - 224;
+                this.remaining = 2;
+                if next == 224 { this.lower = 160; }
+                if next == 237 { this.upper = 159; }
+            } else if next >= 240 && next <= 244 {
+                this.scalar = next - 240;
+                this.remaining = 3;
+                if next == 240 { this.lower = 144; }
+                if next == 244 { this.upper = 143; }
+            } else {
+                this.invalid()?;
+                output.append_char((char)65533);
+            }
+            i = i + 1;
+        }
+        return Result.Ok(output.to_string());
+    }
+
+    // Ends input, rejecting a truncated sequence in strict mode or replacing it with U+FFFD.
+    // Returns any trailing text; all subsequent calls return an inactive-decoder error.
+    public fun finish(): Result<string, ParseError> {
+        if this.ended || this.failed {
+            return Result.Err(ParseError.invalid("UTF-8 decoder is no longer active"));
+        }
+        this.ended = true;
+        if this.remaining > 0 {
+            this.invalid()?;
+            return Result.Ok("�");
+        }
+        return Result.Ok(string.empty);
+    }
+}

@@ -4,15 +4,11 @@
 use dream_host_abi::*;
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn processRun(
-    command: DreamPtr,
-    joined_args: DreamPtr,
-    cwd: DreamPtr,
-) -> DreamPtr {
+pub unsafe extern "C" fn processRun(command: DreamPtr, args: DreamPtr, cwd: DreamPtr) -> DreamPtr {
     unsafe {
         alloc_bytes(&crate::process_host::process_run(
             &read_string(command),
-            &read_string(joined_args),
+            &read_bytes(args),
             &read_string(cwd),
         ))
     }
@@ -21,13 +17,13 @@ pub unsafe extern "C" fn processRun(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn processSpawn(
     command: DreamPtr,
-    joined_args: DreamPtr,
+    args: DreamPtr,
     cwd: DreamPtr,
 ) -> DreamPtr {
     unsafe {
         alloc_bytes(&crate::process_host::process_spawn(
             &read_string(command),
-            &read_string(joined_args),
+            &read_bytes(args),
             &read_string(cwd),
         ))
     }

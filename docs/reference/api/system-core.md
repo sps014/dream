@@ -36,3 +36,6 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [Text iterators and string views](core-span-text-iterators.md)
 - [System](core-panic.md)
 - [Weak](core-weak.md)
+
+- [Iterable and yield interfaces](core-iterable-1.md)
+- [Yield cursors and leases](core-iterable-2.md)

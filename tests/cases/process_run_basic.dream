@@ -1,11 +1,22 @@
 import system;
 import system.process;
+import system.testing;
+import system.encoding;
 async fun main(): void {
     let args = System.args;
+    if args.length > 0 && args[0] == "echo-hex" {
+        for (let i = 1; i < args.length; i = i + 1) {
+            System.println(Encoding.hex_encode(Encoding.utf8_encode(args[i])));
+        }
+        return;
+    }
     if args.length > 0 && args[0] == "echo" {
         System.println(args[1] + " " + args[2]);
         return;
     }
+    // A broken argv decoder must fail the child rather than recursively spawning this fixture.
+    Assert.is_false(System.has_env("DREAM_PROCESS_FIXTURE_CHILD"));
+    System.set_env("DREAM_PROCESS_FIXTURE_CHILD", "1").unwrap();
     let child_args = ["echo", "hello", "world"];
     if System.platform == Platform.Node {
         child_args = ["-e", "console.log(process.argv.slice(1).join(' '))", "hello", "world"];
@@ -18,6 +29,23 @@ async fun main(): void {
         },
         Err(e) => System.println("unexpected error: " + e.message()),
     }
+
+    let exact = ["", "two words", "first\nsecond", "こんにちは", "\"quoted\"\\tail"];
+    let roundtrip_args = List<string>();
+    if System.platform == Platform.Node {
+        roundtrip_args.push("-e");
+        roundtrip_args.push("for (const arg of process.argv.slice(1)) console.log(Buffer.from(arg).toString('hex'))");
+    } else {
+        roundtrip_args.push("echo-hex");
+    }
+    let expected = StringBuilder();
+    for (let i = 0; i < exact.length; i = i + 1) {
+        roundtrip_args.push(exact[i]);
+        expected.append(Encoding.hex_encode(Encoding.utf8_encode(exact[i])));
+        expected.append("\n");
+    }
+    let roundtrip = Process.run(System.exe_path.unwrap(), roundtrip_args.take_array()).await.unwrap();
+    Assert.eq_str(roundtrip.stdout.replace("\r\n", "\n"), expected.to_string());
 
     let missing = Process.run("dream-process-run-basic-missing-binary", []).await;
     switch (missing) {

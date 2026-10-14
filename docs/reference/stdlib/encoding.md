@@ -27,6 +27,31 @@ fun main() {
 | `Encoding.base64_encode(bytes)` | Base64 |
 | `Encoding.base64_decode(text)` | `Result<byte[], ParseError>` |
 | `Encoding.base64url_encode` / `decode` | URL-safe Base64 |
-| `Encoding.url_encode` / `url_decode` | percent-encoding |
+| `Encoding.uri_encode_component` / `uri_decode_component` | URI-component percent-encoding |
+| `Encoding.form_encode_component` / `form_decode_component` | form encoding (`+` for spaces) |
 
 Use this before [crypto](crypto.md) hashes, which take `byte[]`.
+
+## Incremental UTF-8
+
+Import `system.text` for strict incremental decoding. The decoder carries partial
+sequences between chunks and rejects malformed, overlong, surrogate, and
+out-of-range encodings. Call `finish()` to detect a truncated final sequence.
+
+```dream
+import system.text;
+
+fun main(): Result<bool, ParseError> {
+    let decoder = Utf8Decoder();
+    let first = decoder.decode_chunk([(byte)195])?;
+    let second = decoder.decode_chunk([(byte)169])?;
+    let tail = decoder.finish()?;
+    return Result.Ok(first + second + tail == "é");
+}
+```
+
+Use `InvalidEncoding.Replace` to emit replacement characters for invalid input.
+A decoder cannot be reused after `finish()` or a strict decoding error.
+
+URI-component decoding preserves `+`. Form decoding converts `+` to a space;
+both validate percent escapes and decoded UTF-8, including raw Unicode input.

@@ -4,6 +4,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdio.h>
+#include <sys/stat.h>
 
 #ifdef _WIN32
 #include <io.h>
@@ -38,36 +39,49 @@ int32_t fileOpen(dream_ptr path, dream_ptr mode) {
         free(open_mode);
         return -3;
     }
-    file = fopen(text, open_mode);
+    if (strcmp(open_mode, "r") && strcmp(open_mode, "w") && strcmp(open_mode, "a") &&
+        strcmp(open_mode, "r+") && strcmp(open_mode, "w+") && strcmp(open_mode, "a+")) {
+        free(text);
+        free(open_mode);
+        return -3;
+    }
+    char binary_mode[4] = {open_mode[0], 'b', 0, 0};
+    if (open_mode[1] == '+') binary_mode[2] = '+';
+    file = fopen(text, binary_mode);
     free(text);
     free(open_mode);
     if (!file) {
-        return errno == ENOENT ? -1 : errno == EACCES ? -2 : -3;
+        return errno == ENOENT ? -1 : errno == EACCES ? -2 : -4;
     }
     fd = dream_dup(dream_fileno(file));
     fclose(file);
     return fd < 0 ? -3 : fd;
 }
 
+/* A leading status byte keeps read errors distinct from successful EOF across the JS ABI. */
 dream_ptr fileHandleRead(int32_t fd, int32_t count) {
-    dream_ptr bytes;
+    if (count < 0 || count == INT32_MAX) {
+        dream_ptr error = dream_array_new(1, 1);
+        ((uint8_t *)dream_p(error))[4] = 1;
+        return error;
+    }
+    dream_ptr bytes = dream_array_new(count + 1, 1);
+    uint8_t *payload = (uint8_t *)dream_p(bytes) + 4;
     ssize_t n;
-    if (count < 0) {
-        count = 0;
-    }
-    bytes = dream_array_new(count, 1);
-    n = dream_read(fd, (char *)dream_p(bytes) + 4, (size_t)count);
-    if (n < 0) {
-        dream_i32(bytes)[0] = 0;
-    } else {
-        dream_i32(bytes)[0] = (int32_t)n;
-    }
+    do {
+        n = dream_read(fd, payload + 1, (size_t)count);
+    } while (n < 0 && errno == EINTR);
+    payload[0] = n < 0 ? 1 : 0;
+    dream_i32(bytes)[0] = n < 0 ? 1 : (int32_t)n + 1;
     return bytes;
 }
 
 int64_t fileHandleWrite(int32_t fd, dream_ptr data) {
     int32_t n = data ? dream_i32(data)[0] : 0;
-    ssize_t written = dream_write(fd, data ? (char *)dream_p(data) + 4 : "", (size_t)n);
+    ssize_t written;
+    do {
+        written = dream_write(fd, data ? (char *)dream_p(data) + 4 : "", (size_t)n);
+    } while (written < 0 && errno == EINTR);
     return written < 0 ? -1 : (int64_t)written;
 }
 
@@ -84,8 +98,17 @@ int32_t fileHandleSeekEnd(int32_t fd, int64_t offset) {
     return dream_lseek(fd, (dream_off_t)offset, SEEK_END) < 0 ? -1 : 0;
 }
 
-void fileHandleClose(int32_t fd) {
-    if (fd >= 0) {
-        dream_close(fd);
-    }
+int64_t fileHandleLength(int32_t fd) {
+#ifdef _WIN32
+    struct _stat64 info;
+    return _fstat64(fd, &info) < 0 ? -1 : (int64_t)info.st_size;
+#else
+    struct stat info;
+    return fstat(fd, &info) < 0 ? -1 : (int64_t)info.st_size;
+#endif
+}
+
+int32_t fileHandleClose(int32_t fd) {
+    /* Never retry close: an interrupted close may already have released the descriptor. */
+    return fd < 0 ? -1 : dream_close(fd);
 }

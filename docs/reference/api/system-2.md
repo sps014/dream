@@ -2,11 +2,7 @@
 
 **Import:** `import system;`
 
-Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
-
-[All sections](system.md)
-
-## `set_cwd`
+## `public static fun set_cwd`
 
 Sets the current working directory.
 
@@ -14,7 +10,7 @@ Sets the current working directory.
 public static fun set_cwd(borrow path: string): Result<bool, IoError>
 ```
 
-## `clear`
+## `public static fun clear`
 
 Clears the terminal screen.
 
@@ -22,7 +18,7 @@ Clears the terminal screen.
 public static fun clear(): void
 ```
 
-## `set_foreground`
+## `public static fun set_foreground`
 
 Sets the foreground color for subsequent output.
 
@@ -30,7 +26,7 @@ Sets the foreground color for subsequent output.
 public static fun set_foreground(color: ConsoleColor): void
 ```
 
-## `set_background`
+## `public static fun set_background`
 
 Sets the background color for subsequent output.
 
@@ -38,7 +34,7 @@ Sets the background color for subsequent output.
 public static fun set_background(color: ConsoleColor): void
 ```
 
-## `reset_color`
+## `public static fun reset_color`
 
 Resets console colors to the terminal default.
 
@@ -46,7 +42,7 @@ Resets console colors to the terminal default.
 public static fun reset_color(): void
 ```
 
-## `print_colored`
+## `public static fun print_colored`
 
 Prints a string in the specified color.
 

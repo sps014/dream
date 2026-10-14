@@ -1344,7 +1344,7 @@ function fileOpenHost(path, mode) {
     try {
       const fd = getNodeFs().openSync(path, nodeMode);
       const id = nextFileHandleId++;
-      fileHandles.set(id, { kind: "node", fd, path, pos: 0 });
+      fileHandles.set(id, { kind: "node", fd, path, mode, pos: 0 });
       return id;
     } catch (e) {
       return mapOpenError(e);
@@ -1352,53 +1352,59 @@ function fileOpenHost(path, mode) {
   }
   // Browser VFS: open a cursor without copying file bytes into Dream memory up front.
   if (!memFiles.has(path) && !modeCreates(mode)) return OPEN_ENOENT;
-  if (!memFiles.has(path)) memFiles.set(path, new Uint8Array(0));
+  if (!memFiles.has(path) || mode === "w" || mode === "w+") memFiles.set(path, new Uint8Array(0));
   const id = nextFileHandleId++;
-  fileHandles.set(id, { kind: "mem", path, pos: 0 });
+  fileHandles.set(id, { kind: "mem", path, mode, pos: 0 });
   return id;
 }
 
 function fileHandleReadHost(id, n) {
   const h = fileHandles.get(id);
-  if (!h) return [];
-  const count = n > 0 ? n : 0;
-  if (h.kind === "node") {
-    const buf = Buffer.alloc(count);
-    const bytesRead = getNodeFs().readSync(h.fd, buf, 0, count, h.pos);
-    h.pos += bytesRead;
-    return Array.from(buf.subarray(0, bytesRead));
+  if (!h || n < 0 || n === 2147483647 || !h.mode.includes("r") && !h.mode.includes("+")) return [1];
+  try {
+    if (h.kind === "node") {
+      const buf = Buffer.alloc(n);
+      const count = getNodeFs().readSync(h.fd, buf, 0, n, h.pos);
+      h.pos += count;
+      return [0, ...buf.subarray(0, count)];
+    }
+    const bytes = memFiles.get(h.path);
+    if (!bytes) return [1];
+    const end = Math.min(h.pos + n, bytes.length);
+    const slice = bytes.subarray(h.pos, end);
+    h.pos += slice.length;
+    return [0, ...slice];
+  } catch (_) {
+    return [1];
   }
-  const bytes = memFiles.get(h.path);
-  if (!bytes) return [];
-  const end = Math.min(h.pos + count, bytes.length);
-  const slice = bytes.subarray(h.pos, end);
-  h.pos = end;
-  return Array.from(slice);
 }
 
 function fileHandleWriteHost(id, data) {
   const h = fileHandles.get(id);
-  if (!h) return BigInt(-1);
+  if (!h || h.mode === "r") return BigInt(-1);
   const bytes = Uint8Array.from(data || []);
+  if (bytes.length === 0) return 0n;
   if (h.kind === "node") {
     try {
-      const written = getNodeFs().writeSync(h.fd, bytes, 0, bytes.length, h.pos);
-      h.pos += written;
+      const append = h.mode.startsWith("a");
+      const written = getNodeFs().writeSync(h.fd, bytes, 0, bytes.length, append ? null : h.pos);
+      h.pos = append ? Number(getNodeFs().fstatSync(h.fd).size) : h.pos + written;
       return BigInt(written);
     } catch (_) {
       return BigInt(-1);
     }
   }
   const prev = memFiles.get(h.path) || new Uint8Array(0);
+  if (h.mode.startsWith("a")) h.pos = prev.length;
   const before = prev.subarray(0, Math.min(h.pos, prev.length));
   const afterStart = h.pos + bytes.length;
   const after = prev.length > afterStart ? prev.subarray(afterStart) : new Uint8Array(0);
-  const next = new Uint8Array(before.length + bytes.length + after.length);
+  const next = new Uint8Array(Math.max(prev.length, afterStart));
   next.set(before, 0);
-  next.set(bytes, before.length);
-  next.set(after, before.length + bytes.length);
+  next.set(bytes, h.pos);
+  next.set(after, afterStart);
   memFiles.set(h.path, next);
-  h.pos = before.length + bytes.length;
+  h.pos = afterStart;
   return BigInt(bytes.length);
 }
 
@@ -1406,7 +1412,7 @@ function fileHandleSeekHost(id, pos) {
   const h = fileHandles.get(id);
   if (!h) return -1;
   const target = Number(pos);
-  if (target < 0) return -1;
+  if (!Number.isSafeInteger(target) || target < 0) return -1;
   h.pos = target;
   return 0;
 }
@@ -1428,19 +1434,30 @@ function fileHandleSeekEndHost(id, offset) {
     size = bytes ? bytes.length : 0;
   }
   const target = size + Number(offset);
-  if (target < 0) return -1;
+  if (!Number.isSafeInteger(target) || target < 0) return -1;
   h.pos = target;
   return 0;
 }
 
+function fileHandleLengthHost(id) {
+  const h = fileHandles.get(id);
+  if (!h) return -1n;
+  try {
+    return h.kind === "node" ? getNodeFs().fstatSync(h.fd, { bigint: true }).size
+      : BigInt(memFiles.get(h.path).length);
+  } catch (_) { return -1n; }
+}
+
 function fileHandleCloseHost(id) {
   const h = fileHandles.get(id);
-  if (!h) return;
-  if (h.kind === "node") {
-    try { getNodeFs().closeSync(h.fd); } catch (_) { /* ignore */ }
-  }
+  if (!h) return -1;
   fileHandles.delete(id);
+  try {
+    if (h.kind === "node") getNodeFs().closeSync(h.fd);
+    return 0;
+  } catch (_) { return -1; }
 }
+
 function makeFsHost() {
   return {
     fileRead: (path) => new TextDecoder("utf-8").decode(fsBackend().readBytes(path)),
@@ -1489,7 +1506,8 @@ function makeFsHost() {
     fileHandleSeek: (id, pos) => fileHandleSeekHost(id, pos),
     fileHandleTell: (id) => fileHandleTellHost(id),
     fileHandleSeekEnd: (id, offset) => fileHandleSeekEndHost(id, offset),
-    fileHandleClose: (id) => { fileHandleCloseHost(id); },
+    fileHandleLength: (id) => fileHandleLengthHost(id),
+    fileHandleClose: (id) => fileHandleCloseHost(id),
   };
 }
 
@@ -1809,8 +1827,46 @@ function consoleReadKeySync() {
 let nextProcessHandle = 1;
 const childProcesses = new Map();
 
-function splitProcessArgs(joined) {
-  return joined ? joined.split("\n") : [];
+function encodeProcessArgs(args) {
+  const encoded = args.map(argument => new TextEncoder().encode(argument));
+  const size = encoded.reduce((total, bytes) => total + 4 + bytes.length, 4);
+  const wire = new Uint8Array(size);
+  const view = new DataView(wire.buffer);
+  view.setUint32(0, encoded.length, true);
+  let position = 4;
+  for (const bytes of encoded) {
+    view.setUint32(position, bytes.length, true);
+    position += 4;
+    wire.set(bytes, position);
+    position += bytes.length;
+  }
+  return wire;
+}
+
+function splitProcessArgs(input) {
+  const bytes = Uint8Array.from(input);
+  const view = new DataView(bytes.buffer);
+  const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+  let position = 0;
+  const length = () => {
+    if (bytes.length - position < 4) throw new Error("invalid process argument encoding");
+    const value = view.getUint32(position, true);
+    position += 4;
+    return value;
+  };
+  const count = length();
+  if (count > Math.floor((bytes.length - position) / 4)) throw new Error("invalid process argument count");
+  const args = [];
+  for (let i = 0; i < count; i++) {
+    const size = length();
+    if (size > bytes.length - position) throw new Error("truncated process argument");
+    const argument = decoder.decode(bytes.subarray(position, position + size));
+    if (argument.includes("\0")) throw new Error("NUL in process argument");
+    args.push(argument);
+    position += size;
+  }
+  if (position !== bytes.length) throw new Error("trailing process argument data");
+  return args;
 }
 
 function processWire(header, tail) {
@@ -1990,7 +2046,7 @@ function makeConsoleProcessHost() {
       if (!isNode) return 2;
       return process.platform === "win32" ? 1 : 0;
     },
-    processArgs: () => (isNode ? process.argv.slice(2).join("\n") : ""),
+    processArgs: () => encodeProcessArgs(isNode ? process.argv.slice(2) : []),
     processExePath: () => (isNode ? (process.execPath || "") : ""),
     processEnvGet: (name) => {
       if (!isNode) return "";

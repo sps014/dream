@@ -5,24 +5,31 @@ module system.process;
 public static class Process {
     @native @node
     @runtime("processRun")
-    static extern async fun host_run(borrow cmd: string, borrow args: string, borrow cwd: string): byte[];
+    static extern async fun host_run(borrow cmd: string, borrow args: byte[], borrow cwd: string): byte[];
 
     @native @node
     @runtime("processSpawn")
-    static extern async fun host_spawn(borrow cmd: string, borrow args: string, borrow cwd: string): byte[];
+    static extern async fun host_spawn(borrow cmd: string, borrow args: byte[], borrow cwd: string): byte[];
 
-    // Joins `args` with '\n', the wire format the host functions split on.
-    static fun join_args(args: string[]): string {
-        let sb = StringBuilder();
-        let i = 0;
-        while i < args.length {
-            if i > 0 {
-                sb.append_char('\n');
+    static fun encode_args(args: string[]): byte[] {
+        let bytes = List<byte>();
+        Process.append_length(bytes, args.length);
+        for (let i = 0; i < args.length; i = i + 1) {
+            let encoded = Encoding.utf8_encode(args[i]);
+            Process.append_length(bytes, encoded.length);
+            for (let j = 0; j < encoded.length; j = j + 1) {
+                bytes.push(encoded[j]);
             }
-            sb.append(args[i]);
-            i = i + 1;
         }
-        return sb.to_string();
+        return bytes.take_array();
+    }
+
+    static fun append_length(bytes: List<byte>, length: int): void {
+        let value = (uint)length;
+        for (let i = 0; i < 4; i = i + 1) {
+            bytes.push((byte)(value & 255u));
+            value = value >> 8u;
+        }
     }
 
     // Runs `cmd` with `args` in the current working directory, waits for it to exit, and
@@ -37,7 +44,7 @@ public static class Process {
     @native @node
     public static async fun run_in(cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None): Result<ProcessOutput, ProcessError> {
         CancellationToken.rejected(token, ProcessError.cancelled())?;
-        let raw = Process.host_run(cmd, Process.join_args(args), cwd).await;
+        let raw = Process.host_run(cmd, Process.encode_args(args), cwd).await;
         let reader = ProcessWireReader(raw);
         let exit_code = int.parse(reader.read_line()).unwrap_or(0 - 2);
         if exit_code == (0 - 1) {
@@ -62,7 +69,7 @@ public static class Process {
     @native @node
     public static async fun spawn_in(cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None): Result<ChildProcess, ProcessError> {
         CancellationToken.rejected(token, ProcessError.cancelled())?;
-        let raw = Process.host_spawn(cmd, Process.join_args(args), cwd).await;
+        let raw = Process.host_spawn(cmd, Process.encode_args(args), cwd).await;
         let reader = ProcessWireReader(raw);
         let handle = int.parse(reader.read_line()).unwrap_or(0 - 1);
         if handle < 0 {
@@ -72,6 +79,7 @@ public static class Process {
         return Result.Ok(ChildProcess(handle));
     }
 
+    // Captures output like `run`, returning an error for a nonzero exit status.
     @native @node
     public static async fun run_checked(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Result<ProcessOutput, ProcessError> {
         let ran = Process.run(cmd, args, token).await;
@@ -85,6 +93,8 @@ public static class Process {
         return Result.Err(ProcessError.failed("process exited with code " + out.exit_code.to_string()));
     }
 
+    // Finds an existing nondirectory command path, directly or by searching `PATH`.
+    // This does not validate execute permissions or expand platform-specific extensions.
     @native @node
     public static fun which(cmd: string): Option<string> {
         if cmd.is_empty() {

@@ -10,11 +10,11 @@ async fun cd1_body(): void {
 
     // FileStream via File.open (OS-backed; no whole-file preload).
     let stream = File.open(path).unwrap();
-    cd1_verify_observation((stream.read(5)).to_string());
-    cd1_verify_observation((stream.position).to_string());
-    stream.seek(6);
-    cd1_verify_observation((stream.read_all()).to_string());
-    stream.close();
+    cd1_verify_observation((stream.read(5).unwrap()).to_string());
+    cd1_verify_observation((stream.position.unwrap()).to_string());
+    stream.seek(6L).unwrap();
+    cd1_verify_observation((stream.read_all().unwrap()).to_string());
+    stream.close().unwrap();
 
     // FileHandle write mode (sync primary API).
     let write_path = "dream_file_handle_write.tmp";
@@ -23,8 +23,8 @@ async fun cd1_body(): void {
     data[0] = (byte)65;
     data[1] = (byte)66;
     data[2] = (byte)67;
-    writer.write(data);
-    writer.close();
+    writer.write(data).unwrap();
+    writer.close().unwrap();
     let echoed = File.read(write_path).await;
     cd1_verify_observation((echoed.unwrap_or("")).to_string());
 
@@ -32,7 +32,7 @@ async fun cd1_body(): void {
     let reader = (FileHandle.open_async(path, "r").await).unwrap();
     let chunk = reader.read_async(5).await;
     cd1_verify_observation((chunk.unwrap_or(Buffer.alloc<byte>(0)).length).to_string());
-    reader.close();
+    reader.close().unwrap();
 
     File.delete(path).await;
     File.delete(write_path).await;

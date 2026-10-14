@@ -28,13 +28,40 @@ int32_t processOsFamily(void) {
 #endif
 }
 
-static char *dream_captured_args;
+static uint8_t *dream_captured_args;
+static int32_t dream_captured_args_size;
 static char dream_exe_path_buf[4096];
+
+#ifdef _WIN32
+static char **utf8_process_args(int32_t *count) {
+    typedef LPWSTR *(WINAPI *args_function)(LPCWSTR, int *);
+    HMODULE shell = LoadLibraryW(L"shell32.dll");
+    args_function parse = shell ? (args_function)(void *)GetProcAddress(shell, "CommandLineToArgvW") : NULL;
+    int argc = 0;
+    LPWSTR *wide = parse ? parse(GetCommandLineW(), &argc) : NULL;
+    if (!wide || argc < 0) { DREAM_PANIC_LITERAL(u"cannot read Unicode process arguments"); }
+    char **args = calloc((size_t)argc, sizeof(char *));
+    if (!args) { DREAM_PANIC_LITERAL(u"out of memory reading process arguments"); }
+    for (int i = 0; i < argc; ++i) {
+        int size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide[i], -1, NULL, 0, NULL, NULL);
+        if (size <= 0) { DREAM_PANIC_LITERAL(u"invalid Unicode process argument"); }
+        args[i] = malloc((size_t)size);
+        if (!args[i]) { DREAM_PANIC_LITERAL(u"out of memory reading process arguments"); }
+        WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide[i], -1, args[i], size, NULL, NULL);
+    }
+    LocalFree(wide);
+    FreeLibrary(shell);
+    *count = argc;
+    return args;
+}
+#endif
 
 void dream_process_capture_args(int32_t argc, char **argv) {
     int32_t i;
     size_t total = 0;
-    char *join;
+#ifdef _WIN32
+    argv = utf8_process_args(&argc);
+#endif
     if (argc > 0 && argv && argv[0]) {
 #ifdef __APPLE__
         uint32_t n = sizeof(dream_exe_path_buf);
@@ -42,7 +69,11 @@ void dream_process_capture_args(int32_t argc, char **argv) {
             strncpy(dream_exe_path_buf, argv[0], sizeof(dream_exe_path_buf) - 1);
         }
 #elif defined(_WIN32)
-        if (!GetModuleFileNameA(NULL, dream_exe_path_buf, sizeof(dream_exe_path_buf))) {
+        wchar_t wide_path[4096];
+        DWORD path_size = GetModuleFileNameW(NULL, wide_path, 4096);
+        if (!path_size || path_size >= 4096 ||
+            !WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide_path, -1,
+                                 dream_exe_path_buf, sizeof(dream_exe_path_buf), NULL, NULL)) {
             strncpy(dream_exe_path_buf, argv[0], sizeof(dream_exe_path_buf) - 1);
         }
 #else
@@ -55,28 +86,38 @@ void dream_process_capture_args(int32_t argc, char **argv) {
 #endif
         dream_exe_path_buf[sizeof(dream_exe_path_buf) - 1] = 0;
     }
+    total = 4;
     for (i = 1; i < argc; i++) {
-        total += strlen(argv[i]);
-        if (i + 1 < argc) {
-            total += 1;
+        size_t size = strlen(argv[i]);
+        if (size > INT32_MAX - 4 || total > (size_t)INT32_MAX - 4 - size) {
+            DREAM_PANIC_LITERAL(u"process arguments exceed the guest array limit");
         }
+        total += 4 + size;
     }
     free(dream_captured_args);
-    dream_captured_args = (char *)malloc(total + 1);
-    if (!dream_captured_args) {
-        return;
-    }
-    dream_captured_args[0] = 0;
+    dream_captured_args = malloc(total);
+    if (!dream_captured_args) { DREAM_PANIC_LITERAL(u"out of memory capturing process arguments"); }
+    dream_captured_args_size = (int32_t)total;
+    uint8_t *cursor = dream_captured_args;
+    uint32_t count = argc > 0 ? (uint32_t)argc - 1 : 0;
+    for (int shift = 0; shift < 32; shift += 8) { *cursor++ = (uint8_t)(count >> shift); }
     for (i = 1; i < argc; i++) {
-        if (i > 1) {
-            strcat(dream_captured_args, "\n");
-        }
-        strcat(dream_captured_args, argv[i]);
+        uint32_t size = (uint32_t)strlen(argv[i]);
+        for (int shift = 0; shift < 32; shift += 8) { *cursor++ = (uint8_t)(size >> shift); }
+        memcpy(cursor, argv[i], size);
+        cursor += size;
     }
+#ifdef _WIN32
+    for (i = 0; i < argc; ++i) { free(argv[i]); }
+    free(argv);
+#endif
 }
 
 dream_ptr processArgs(void) {
-    return dream_str_from_utf8(dream_captured_args ? dream_captured_args : "");
+    int32_t size = dream_captured_args ? dream_captured_args_size : 4;
+    dream_ptr bytes = dream_array_new(size, 1);
+    if (dream_captured_args) { memcpy((char *)dream_p(bytes) + 4, dream_captured_args, (size_t)size); }
+    return bytes;
 }
 
 dream_ptr processExePath(void) {

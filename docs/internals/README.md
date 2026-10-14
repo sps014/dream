@@ -28,6 +28,7 @@ Additional engineering records:
 
 - [Native pointer migration](./12-native-pointer-migration.md): inventory and paired measurements.
 - [Build performance and minimal compiler plan](./14-build-performance-and-native-networking-plan.md): planned prerequisite to self-hosting.
+- [Stdlib v1 implementation status](./16-stdlib-v1-implementation.md): delivered foundations and remaining release phases.
 - [Self-hosting readiness](./13-self-hosting-readiness.md): resolved foundations and bootstrap acceptance gates.
 
 ## Why a multi-pass architecture

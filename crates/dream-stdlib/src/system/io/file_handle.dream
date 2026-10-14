@@ -3,15 +3,38 @@ module system.io;
 // FileHandle - an OS-backed read/write/seek stream over an open file.
 // Host calls are synchronous; `*_async` methods wrap the same operations in a `Future` for
 // await-style call sites. `close` is sync-only.
-public class FileHandle {
+public class FileHandle : Reader, Writer {
     _id: int;
     _path: string;
+    _buffer: byte[];
+    _offset: int;
 
     internal constructor(id: int, path: string) {
         this._id = id;
         this._path = path;
+        this._buffer = [];
+        this._offset = 0;
     }
 
+    del() {
+        if this._id >= 0 {
+            FileHandle.file_handle_close(this._id);
+        }
+    }
+
+    // Whether this handle has been closed, including after an explicit close failure.
+    public get is_closed(): bool {
+        return this._id < 0;
+    }
+
+    fun check_open(): Result<bool, IoError> {
+        if this.is_closed {
+            return Result.Err(IoError.closed(this.path));
+        }
+        return Result.Ok(true);
+    }
+
+    // Path supplied when opening the file; remains available after closure.
     public get path(): string {
         return this._path;
     }
@@ -35,7 +58,10 @@ public class FileHandle {
     static extern fun file_handle_seek_end(id: int, offset: long): int;
 
     @runtime("fileHandleClose")
-    static extern fun file_handle_close(id: int): void;
+    static extern fun file_handle_close(id: int): int;
+
+    @runtime("fileHandleLength")
+    static extern fun file_handle_length(id: int): long;
 
     static fun open_result(path: string, mode: string): Result<FileHandle, IoError> {
         let id = FileHandle.file_open(path, mode);
@@ -59,7 +85,8 @@ public class FileHandle {
         return FileHandle.open_result(path, mode);
     }
 
-    // Async wrapper around `open`.
+    // Checks cancellation, then runs synchronous `open` inside an awaitable operation.
+    // Pending host work is not interruptible and may block the scheduler.
     public static async fun open_async(path: string, mode: string, token: Option<CancellationToken> = Option.None): Result<FileHandle, IoError> {
         CancellationToken.rejected(token, IoError.cancelled())?;
         return FileHandle.open(path, mode);
@@ -67,10 +94,30 @@ public class FileHandle {
 
     // Reads up to `n` bytes from the current position, advancing the cursor.
     public fun read(n: int): Result<byte[], IoError> {
-        return Result.Ok(FileHandle.file_handle_read(this._id, n));
+        this.check_open()?;
+        if n < 0 || n == 2147483647 {
+            return Result.Err(IoError.invalid(this.path, "invalid read size"));
+        }
+        if this._offset < this._buffer.length {
+            let count = this._buffer.length - this._offset;
+            if count > n { count = n; }
+            let bytes = Streams.slice(this._buffer, this._offset, count);
+            this._offset = this._offset + count;
+            return Result.Ok(bytes);
+        }
+        let raw = FileHandle.file_handle_read(this._id, n);
+        if raw.length == 0 || raw[0] != (byte)0 {
+            return Result.Err(IoError.other(this.path, "read failed"));
+        }
+        let bytes = Buffer.alloc<byte>(raw.length - 1);
+        for (let i = 0; i < bytes.length; i = i + 1) {
+            bytes[i] = raw[i + 1];
+        }
+        return Result.Ok(bytes);
     }
 
-    // Async wrapper around `read`.
+    // Checks cancellation, then runs synchronous `read` inside an awaitable operation.
+    // Pending host work is not interruptible and may block the scheduler.
     public async fun read_async(n: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError> {
         CancellationToken.rejected(token, IoError.cancelled())?;
         return this.read(n);
@@ -78,6 +125,11 @@ public class FileHandle {
 
     // Writes `data` at the current position, advancing the cursor; returns bytes written.
     public fun write(data: byte[]): Result<int, IoError> {
+        this.check_open()?;
+        if this._offset < this._buffer.length {
+            let position = this.tell()?;
+            this.seek(position)?;
+        }
         let n = FileHandle.file_handle_write(this._id, data);
         if n < 0L {
             return Result.Err(IoError.other(this.path, "write failed"));
@@ -85,7 +137,8 @@ public class FileHandle {
         return Result.Ok((int)n);
     }
 
-    // Async wrapper around `write`.
+    // Checks cancellation, then runs synchronous `write` inside an awaitable operation.
+    // Pending host work is not interruptible and may block the scheduler.
     public async fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError> {
         CancellationToken.rejected(token, IoError.cancelled())?;
         return this.write(data);
@@ -93,13 +146,17 @@ public class FileHandle {
 
     // Seeks to absolute byte offset `pos` from the start of the file.
     public fun seek(pos: long): Result<bool, IoError> {
+        this.check_open()?;
         if FileHandle.file_handle_seek(this._id, pos) < 0 {
             return Result.Err(IoError.other(this.path, "seek failed"));
         }
+        this._buffer = [];
+        this._offset = 0;
         return Result.Ok(true);
     }
 
-    // Async wrapper around `seek`.
+    // Checks cancellation, then runs synchronous `seek` inside an awaitable operation.
+    // Pending host work is not interruptible and may block the scheduler.
     public async fun seek_async(pos: long, token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
         CancellationToken.rejected(token, IoError.cancelled())?;
         return this.seek(pos);
@@ -107,18 +164,22 @@ public class FileHandle {
 
     // Current cursor offset from the start of the file.
     public fun tell(): Result<long, IoError> {
+        this.check_open()?;
         let pos = FileHandle.file_handle_tell(this._id);
         if pos < 0L {
             return Result.Err(IoError.other(this.path, "tell failed"));
         }
-        return Result.Ok(pos);
+        return Result.Ok(pos - (long)(this._buffer.length - this._offset));
     }
 
     // Seeks to `offset` bytes from the end (`0` is the end; negative moves backward).
     public fun seek_from_end(offset: long): Result<bool, IoError> {
+        this.check_open()?;
         if FileHandle.file_handle_seek_end(this._id, offset) < 0 {
             return Result.Err(IoError.other(this.path, "seek failed"));
         }
+        this._buffer = [];
+        this._offset = 0;
         return Result.Ok(true);
     }
 
@@ -127,25 +188,35 @@ public class FileHandle {
         return this.seek_from_end(0L);
     }
 
-    // Reads bytes until `\n` (not included) or EOF. `None` at EOF with no leftover bytes.
-    public fun read_line(): Result<Option<string>, IoError> {
-        let acc = List<byte>();
+    // Reads a line using buffered read-ahead, stripping LF or CRLF and preserving standalone CR.
+    // Returns the final unterminated line or `None` at EOF; `ELIMIT` consumes the prefix
+    // and exceeding byte beyond the pre-LF byte limit (default 1 MiB, including any CR).
+    public fun read_line(max_bytes: int = 1048576): Result<Option<string>, IoError> {
+        this.check_open()?;
+        if max_bytes < 0 { return Result.Err(IoError.invalid(this.path, "negative line limit")); }
+        let bytes = List<byte>();
         while true {
-            let bytes = this.read(1).unwrap_or(Buffer.alloc<byte>(0));
-            if bytes.length == 0 {
-                if acc.length == 0 {
-                    let none: Option<string> = Option.None;
-                    return Result.Ok(none);
+            if this._offset == this._buffer.length {
+                this._buffer = this.read(8192)?;
+                this._offset = 0;
+                if this._buffer.length == 0 {
+                    if bytes.length == 0 {
+                        let none: Option<string> = Option.None;
+                        return Result.Ok(none);
+                    }
+                    return Result.Ok(Option.Some(Encoding.utf8_decode(bytes.take_array())));
                 }
-                return Result.Ok(Option.Some(Encoding.utf8_decode(acc.take_array())));
             }
-            let b = bytes[0];
-            if (int)b == 10 {
-                return Result.Ok(Option.Some(Encoding.utf8_decode(acc.take_array())));
+            let next = this._buffer[this._offset];
+            this._offset = this._offset + 1;
+            if next == (byte)10 {
+                if bytes.length > 0 && bytes.get(bytes.length - 1) == (byte)13 { bytes.pop(); }
+                return Result.Ok(Option.Some(Encoding.utf8_decode(bytes.take_array())));
             }
-            if (int)b != 13 {
-                acc.push(b);
+            if bytes.length >= max_bytes {
+                return Result.Err(IoError(this.path, "ELIMIT", "line exceeds configured byte limit"));
             }
+            bytes.push(next);
         }
     }
 
@@ -154,8 +225,33 @@ public class FileHandle {
         return this.write(Encoding.utf8_encode(text));
     }
 
-    // Releases the OS handle (sync only).
-    public fun close(): void {
-        FileHandle.file_handle_close(this._id);
+    // Returns the current byte length from the open handle; propagates metadata failures.
+    public fun length(): Result<long, IoError> {
+        this.check_open()?;
+        let size = FileHandle.file_handle_length(this._id);
+        if size < 0L {
+            return Result.Err(IoError.other(this.path, "file length failed"));
+        }
+        return Result.Ok(size);
+    }
+
+    // Validates that the handle is open; writes are unbuffered at this layer.
+    // This does not synchronize data to durable storage.
+    public unique fun flush(): Result<bool, IoError> {
+        return this.check_open();
+    }
+
+    // Closes idempotently and reports host failures. The handle stays closed even on failure
+    // to prevent closing a reused descriptor; destruction performs nonthrowing cleanup.
+    public fun close(): Result<bool, IoError> {
+        if this.is_closed {
+            return Result.Ok(true);
+        }
+        let id = this._id;
+        this._id = 0 - 1;
+        if FileHandle.file_handle_close(id) < 0 {
+            return Result.Err(IoError.other(this.path, "close failed"));
+        }
+        return Result.Ok(true);
     }
 }

@@ -100,5 +100,17 @@
     "page": "docs/reference/tooling/create-project.md",
     "block": 0,
     "stdout": "Hello from my project!\n"
+  },
+  {
+    "name": "buffered-memory-streams",
+    "page": "docs/reference/stdlib/file-streams.md",
+    "block": 2,
+    "stdout": ""
+  },
+  {
+    "name": "incremental-utf8",
+    "page": "docs/reference/stdlib/encoding.md",
+    "block": 1,
+    "stdout": ""
   }
 ]

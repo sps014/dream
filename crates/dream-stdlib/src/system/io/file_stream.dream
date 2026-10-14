@@ -1,114 +1,88 @@
 module system.io;
 
-// FileStream - a seekable cursor over an open `FileHandle` (no whole-file preload).
+// Text and byte access over a file handle, with propagated I/O errors and byte positions.
 public class FileStream {
     handle: FileHandle;
-    pos: int;
 
     internal constructor(handle: FileHandle) {
         this.handle = handle;
-        this.pos = 0;
     }
 
-    // Reads up to `n` raw bytes from the current position, advancing the cursor.
-    public fun read_bytes(n: int): byte[] {
-        let bytes = this.handle.read(n).unwrap_or(Buffer.alloc<byte>(0));
-        this.pos = this.pos + bytes.length;
-        return bytes;
+    // Reads up to `n` bytes, advancing the file position; empty success indicates EOF
+    // for positive sizes, and negative sizes return an error.
+    public fun read_bytes(n: int): Result<byte[], IoError> {
+        return this.handle.read(n);
     }
 
-    // Reads up to `n` bytes from the current position as UTF-8 text, advancing the cursor.
-    public fun read(n: int): string {
-        let bytes = this.read_bytes(n);
-        return Encoding.utf8_decode(bytes);
+    // Reads up to `n` bytes and decodes them as UTF-8; the limit and cursor are byte-based.
+    // A read can split a UTF-8 sequence; use an incremental decoder for streamed text.
+    public fun read(n: int): Result<string, IoError> {
+        return Result.Ok(Encoding.utf8_decode(this.read_bytes(n)?));
     }
 
-    // Reads everything remaining from the current position as text.
-    public fun read_all(): string {
-        let sz = File.size(this.handle.path);
-        if sz.is_none() {
-            return string.empty;
+    // Collects all remaining bytes through EOF and decodes them as UTF-8; propagates read errors.
+    // Memory use grows with the remaining file size.
+    public fun read_all(): Result<string, IoError> {
+        let bytes = List<byte>();
+        while true {
+            let chunk = this.read_bytes(8192)?;
+            if chunk.length == 0 { break; }
+            for (let i = 0; i < chunk.length; i = i + 1) {
+                bytes.push(chunk[i]);
+            }
         }
-        let remaining = (int)sz.unwrap_or(0L) - this.pos;
-        if remaining < 0 {
-            remaining = 0;
-        }
-        return this.read(remaining);
+        return Result.Ok(Encoding.utf8_decode(bytes.take_array()));
     }
 
-    // Reads one line (without the trailing newline), or `None` at EOF.
-    public fun read_line(): Option<string> {
-        let none: Option<string> = Option.None;
-        let line = this.handle.read_line().unwrap_or(none);
-        let told = this.handle.tell();
-        if told.is_ok() {
-            this.pos = (int)told.unwrap_or(0L);
-        }
-        return line;
+    // Reads an LF or CRLF terminated line without its terminator, or a final unterminated line.
+    // Returns `None` at EOF; propagates I/O errors and the handle default line-size limit.
+    public fun read_line(): Result<Option<string>, IoError> {
+        return this.handle.read_line();
     }
 
+    // Writes UTF-8 bytes at the current position and returns the byte count; may write partially.
     public fun write_text(text: string): Result<int, IoError> {
-        let n = this.handle.write_text(text);
-        if n.is_ok() {
-            this.pos = this.pos + n.unwrap_or(0);
-        }
-        return n;
+        return this.handle.write_text(text);
     }
 
-    // True while the cursor has not reached the end of the file.
-    public fun has_more(): bool {
-        let sz = File.size(this.handle.path);
-        if sz.is_none() {
-            return false;
-        }
-        return this.pos < (int)sz.unwrap_or(0L);
+    // Compares the current position with the current file length, propagating errors.
+    // Concurrent file changes can invalidate the result before the next read.
+    public fun has_more(): Result<bool, IoError> {
+        return Result.Ok(this.handle.tell()? < this.handle.length()?);
     }
 
-    // Current cursor offset (bytes from the start).
-    public get position(): int {
-        return this.pos;
+    // Returns the current byte offset, or an I/O or closed-resource error.
+    public get position(): Result<long, IoError> {
+        return this.handle.tell();
     }
 
-    public set position(offset: int) {
-        this.seek(offset);
+    // Returns the current file length in bytes, or an I/O or closed-resource error.
+    public get length(): Result<long, IoError> {
+        return this.handle.length();
     }
 
-    // Total file size in bytes (`-1` when the path is missing).
-    public get length(): int {
-        let sz = File.size(this.handle.path);
-        if sz.is_none() {
-            return (0 - 1);
-        }
-        return (int)sz.unwrap_or(0L);
+    // Seeks to an absolute byte offset; failure preserves the previous logical position.
+    public fun seek(offset: long): Result<bool, IoError> {
+        return this.handle.seek(offset);
     }
 
-    // Moves the cursor to an absolute offset from the start of the file.
-    public fun seek(offset: int): void {
-        this.handle.seek((long)offset);
-        this.pos = offset;
+    // Moves to the current end of the file; propagates positioning errors.
+    public fun seek_end(): Result<bool, IoError> {
+        return this.handle.seek_end();
     }
 
-    // Moves the cursor to the end of the file.
-    public fun seek_end(): void {
-        this.handle.seek_end();
-        let told = this.handle.tell();
-        if told.is_ok() {
-            this.pos = (int)told.unwrap_or(0L);
-        }
+    // Returns the current byte offset, accounting for buffered read-ahead.
+    public fun tell(): Result<long, IoError> {
+        return this.handle.tell();
     }
 
-    // Current cursor as a `long` (same as `position`, for `FileHandle.tell` parity).
-    public fun tell(): long {
-        return (long)this.pos;
+    // Seeks to byte zero; propagates positioning errors without changing position on failure.
+    public fun reset(): Result<bool, IoError> {
+        return this.seek(0L);
     }
 
-    // Rewinds the cursor to the start.
-    public fun reset(): void {
-        this.seek(0);
-    }
-
-    // Releases the underlying OS handle.
-    public fun close(): void {
-        this.handle.close();
+    // Closes the underlying handle idempotently and reports explicit closure failures.
+    public fun close(): Result<bool, IoError> {
+        return this.handle.close();
     }
 }

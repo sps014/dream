@@ -44,6 +44,16 @@ public class IoError : Error {
         return IoError(path, "EEXIST", "already exists: " + path);
     }
 
+    // Creates an `ECLOSED` error for an operation on a closed resource.
+    public static fun closed(path: string): IoError {
+        return IoError(path, "ECLOSED", "resource is closed");
+    }
+
+    // Creates an `EINVAL` error for an invalid argument or operation.
+    public static fun invalid(path: string, message: string): IoError {
+        return IoError(path, "EINVAL", message);
+    }
+
     // Cooperative cancellation (`CancellationToken`).
     public static fun cancelled(): IoError {
         return IoError("", "ECANCELLED", "operation cancelled");

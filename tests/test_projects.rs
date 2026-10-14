@@ -151,7 +151,7 @@ fn assets_are_readable_from_the_runner_directory() {
             ("data/words.txt", "alpha\nbeta\n"),
             (
                 "assets.dream",
-                "@test\nfun reads_asset(): void {\n    let stream = File.open(\"data/words.txt\").unwrap();\n    Assert.eq(stream.read_all(), \"alpha\\nbeta\\n\");\n    stream.close();\n}\n",
+                "@test\nfun reads_asset(): void {\n    let stream = File.open(\"data/words.txt\").unwrap();\n    Assert.eq(stream.read_all().unwrap(), \"alpha\\nbeta\\n\");\n    stream.close().unwrap();\n}\n",
             ),
         ],
     );

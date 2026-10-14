@@ -8,3 +8,8 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [FileStream](io-file-stream.md)
 - [IoError](io-io-error.md)
 - [Path](io-path.md)
+
+- [Stream interfaces and copying](io-streams.md)
+- [MemoryStream](io-memory-stream.md)
+- [BufferedReader](io-buffered-reader.md)
+- [BufferedWriter](io-buffered-writer.md)

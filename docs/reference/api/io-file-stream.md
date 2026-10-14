@@ -1,121 +1,115 @@
-# FileStream
+# File Stream
 
 **Import:** `import system.io;`
 
-Read the [usage guide](../stdlib/file.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+## `public class FileStream`
 
-## `class FileStream`
-
-FileStream - a seekable cursor over an open `FileHandle` (no whole-file preload).
+Text and byte access over a file handle, with propagated I/O errors and byte positions.
 
 ```dream
 public class FileStream
 ```
 
-## `read_bytes`
+## `public fun read_bytes`
 
-Reads up to `n` raw bytes from the current position, advancing the cursor.
-
-```dream
-public fun read_bytes(n: int): byte[]
-```
-
-## `read`
-
-Reads up to `n` bytes from the current position as UTF-8 text, advancing the cursor.
+Reads up to `n` bytes, advancing the file position; empty success indicates EOF for positive sizes, and negative sizes return an error.
 
 ```dream
-public fun read(n: int): string
+public fun read_bytes(n: int): Result<byte[], IoError>
 ```
 
-## `read_all`
+## `public fun read`
 
-Reads everything remaining from the current position as text.
+Reads up to `n` bytes and decodes them as UTF-8; the limit and cursor are byte-based. A read can split a UTF-8 sequence; use an incremental decoder for streamed text.
 
 ```dream
-public fun read_all(): string
+public fun read(n: int): Result<string, IoError>
 ```
 
-## `read_line`
+## `public fun read_all`
 
-Reads one line (without the trailing newline), or `None` at EOF.
+Collects all remaining bytes through EOF and decodes them as UTF-8; propagates read errors. Memory use grows with the remaining file size.
 
 ```dream
-public fun read_line(): Option<string>
+public fun read_all(): Result<string, IoError>
 ```
 
-## `write_text`
+## `public fun read_line`
+
+Reads an LF or CRLF terminated line without its terminator, or a final unterminated line. Returns `None` at EOF; propagates I/O errors and the handle default line-size limit.
+
+```dream
+public fun read_line(): Result<Option<string>, IoError>
+```
+
+## `public fun write_text`
+
+Writes UTF-8 bytes at the current position and returns the byte count; may write partially.
 
 ```dream
 public fun write_text(text: string): Result<int, IoError>
 ```
 
-## `has_more`
+## `public fun has_more`
 
-True while the cursor has not reached the end of the file.
+Compares the current position with the current file length, propagating errors. Concurrent file changes can invalidate the result before the next read.
 
 ```dream
-public fun has_more(): bool
+public fun has_more(): Result<bool, IoError>
 ```
 
-## `position`
+## `public get position`
 
-Current cursor offset (bytes from the start).
+Returns the current byte offset, or an I/O or closed-resource error.
 
 ```dream
-public get position(): int
+public get position(): Result<long, IoError>
 ```
 
-## `position`
+## `public get length`
+
+Returns the current file length in bytes, or an I/O or closed-resource error.
 
 ```dream
-public set position(offset: int)
+public get length(): Result<long, IoError>
 ```
 
-## `length`
+## `public fun seek`
 
-Total file size in bytes (`-1` when the path is missing).
+Seeks to an absolute byte offset; failure preserves the previous logical position.
 
 ```dream
-public get length(): int
+public fun seek(offset: long): Result<bool, IoError>
 ```
 
-## `seek`
+## `public fun seek_end`
 
-Moves the cursor to an absolute offset from the start of the file.
+Moves to the current end of the file; propagates positioning errors.
 
 ```dream
-public fun seek(offset: int): void
+public fun seek_end(): Result<bool, IoError>
 ```
 
-## `seek_end`
+## `public fun tell`
 
-Moves the cursor to the end of the file.
+Returns the current byte offset, accounting for buffered read-ahead.
 
 ```dream
-public fun seek_end(): void
+public fun tell(): Result<long, IoError>
 ```
 
-## `tell`
+## `public fun reset`
 
-Current cursor as a `long` (same as `position`, for `FileHandle.tell` parity).
+Seeks to byte zero; propagates positioning errors without changing position on failure.
 
 ```dream
-public fun tell(): long
+public fun reset(): Result<bool, IoError>
 ```
 
-## `reset`
+## `public fun close`
 
-Rewinds the cursor to the start.
-
-```dream
-public fun reset(): void
-```
-
-## `close`
-
-Releases the underlying OS handle.
+Closes the underlying handle idempotently and reports explicit closure failures.
 
 ```dream
-public fun close(): void
+public fun close(): Result<bool, IoError>
 ```

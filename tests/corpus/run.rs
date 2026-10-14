@@ -247,7 +247,14 @@ fn run_fixture(case: Case, host: TestHost, release_build: bool) -> Option<String
         command
     };
     if case.stem == "process_args_basic" {
-        command.args(["alpha", "beta"]);
+        command.args([
+            "alpha",
+            "beta",
+            "",
+            "first\nsecond",
+            "こんにちは",
+            "\u{feff}leading",
+        ]);
     }
     let stdin = (case.stem == "console_read_line").then_some(&b"hello-line\n"[..]);
     let result = capture(command, stdin);

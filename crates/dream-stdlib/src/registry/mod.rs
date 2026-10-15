@@ -1,8 +1,8 @@
 mod cli;
 mod codegen;
 mod collections;
-mod config;
 mod compress;
+mod config;
 mod core;
 mod crypto;
 mod csv;

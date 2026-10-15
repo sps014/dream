@@ -74,7 +74,7 @@ static void complete_foreign(dream_ptr f, dream_result res, int owned) {
         return;
     }
     *scheduler_at(f) = NULL;
-    int discarded = i32_at(f, F_STATUS)[0] != 0;
+    int discarded = __atomic_load_n(i32_at(f, F_STATUS), __ATOMIC_ACQUIRE) != 0;
     if (!discarded) {
         *result_at(f) = res;
         dream_publish(f);
@@ -119,7 +119,7 @@ static void foreign_drain(void) {
             ptr_at(f, F_WAKER)[0] = 0;
             int32_t wk = i32_at(w, F_KIND)[0];
             if (wk == FUTURE_KIND_ALL || wk == FUTURE_KIND_ANY) {
-                combinator_progress(w, f);
+                dream_combinator_progress(w, f);
             } else {
                 dream_enqueue(w);
             }

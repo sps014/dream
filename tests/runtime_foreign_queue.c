@@ -42,7 +42,7 @@ static void scheduler_drop_start_retain(dream_ptr f) {
     dream_rc_last_raw(f);
     __atomic_fetch_add(&dropped, 1, __ATOMIC_RELAXED);
 }
-static void combinator_progress(dream_ptr w, dream_ptr child) { (void)w; (void)child; abort(); }
+static void dream_combinator_progress(dream_ptr w, dream_ptr child) { (void)w; (void)child; abort(); }
 #include "../crates/dream-mir/src/runtime/c/sys/native/foreign_queue.h"
 
 static dream_ptr frame(void) {

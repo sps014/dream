@@ -3036,6 +3036,11 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     if (m.t === "ready") {
       slot.ready = true;
       slot.stack = Number(m.stack ?? 0);
+      if (slot.terminateWhenReady) {
+        slot.queued = [];
+        slot.terminateWhenReady();
+        return;
+      }
       for (const q of slot.queued) slot.worker.postMessage(q);
       slot.queued = [];
     } else if (m.t === "closed") {
@@ -3201,12 +3206,20 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
         idle.push(slot);
         return;
       }
+      const revokeBlob = () => {
+        if (!slot.blobUrl) return;
+        try {
+          URL.revokeObjectURL(slot.blobUrl);
+        } catch (_) {
+          /* ignore */
+        }
+      };
       const releaseStack = () => {
         if (slot.stack && typeof getInstance === "function") {
           getInstance().exports.dream_wasm_raw_free(slot.stack);
         }
       };
-      if (slot.worker) {
+      if (slot.worker || !slot.ready) {
         const stopped = new Promise((resolve) => {
           const terminate = () => {
             const result = slot.worker.terminate();
@@ -3214,8 +3227,13 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
               result.then(() => { releaseStack(); resolve(); }, resolve);
             } else { releaseStack(); resolve(); }
           };
+          // A booting worker may hold the shared bootstrap gate, and killing it there would leave
+          // every later worker waiting on that gate forever. It retires once it reports ready.
           // Finished bodies retire gracefully; a busy body still needs immediate termination.
-          if (slot.ready && s.inflight === 0) {
+          if (!slot.ready) {
+            // The browser may not have fetched the boot script from its blob URL yet.
+            slot.terminateWhenReady = () => { revokeBlob(); terminate(); };
+          } else if (s.inflight === 0) {
             slot.closed = terminate;
             slot.worker.postMessage({ t: "term" });
           } else { terminate(); }
@@ -3223,13 +3241,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
         stopping.add(stopped);
         stopped.then(() => stopping.delete(stopped));
       }
-      if (slot.blobUrl) {
-        try {
-          URL.revokeObjectURL(slot.blobUrl);
-        } catch (_) {
-          /* ignore */
-        }
-      }
+      if (slot.ready) revokeBlob();
     },
   };
 }

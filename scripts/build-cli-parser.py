@@ -3,18 +3,40 @@
 import argparse
 import base64
 import hashlib
+import json
 from pathlib import Path
+import re
 import subprocess
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "runtime/src/hosts/cli_parser.js"
 
 
+def build_inputs():
+    """Only what the wasm build consumes, so unrelated workspace dependency edits stay fresh."""
+    tree = subprocess.check_output(
+        ["cargo", "tree", "-p", "dream-host-cli", "--target", "wasm32-unknown-unknown", "-e", "normal,build",
+         "--prefix", "none", "--locked", "-f", "{p}"], cwd=ROOT, text=True)
+    # Local paths differ per checkout; registry names and versions identify the resolved graph.
+    packages = sorted({re.sub(r" \(.*\)$", "", line.strip()) for line in tree.splitlines() if line.strip()})
+    manifest = tomllib.loads((ROOT / "Cargo.toml").read_text())
+    profiles = manifest.get("profile", {})
+    settings = {
+        "edition": manifest["workspace"]["package"]["edition"],
+        "release": profiles.get("release", {}),
+        "cli-wasm": profiles.get("cli-wasm", {}),
+    }
+    return packages, json.dumps(settings, sort_keys=True)
+
+
 def fingerprint():
-    sources = [ROOT / "Cargo.lock", ROOT / "Cargo.toml", *sorted((ROOT / "crates/dream-host-cli").rglob("*.rs")),
-               ROOT / "crates/dream-host-cli/Cargo.toml"]
+    packages, settings = build_inputs()
     digest = hashlib.sha256()
-    for path in sources:
+    digest.update("\n".join(packages).encode())
+    digest.update(b"\0")
+    digest.update(settings.encode())
+    for path in [*sorted((ROOT / "crates/dream-host-cli").rglob("*.rs")), ROOT / "crates/dream-host-cli/Cargo.toml"]:
         digest.update(path.relative_to(ROOT).as_posix().encode())
         digest.update(b"\0")
         digest.update(path.read_bytes())

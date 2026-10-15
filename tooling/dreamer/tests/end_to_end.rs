@@ -296,7 +296,13 @@ fn node_runner_is_written_when_missing() {
 fn init_lib_has_no_entry_and_run_rejects() {
     let tmp = tempfile::tempdir().unwrap();
     let project_dir = tmp.path().join("http-utils");
-    commands::init::run(&project_dir, Some("http-utils".to_string()), None, STATICLIB).unwrap();
+    commands::init::run(
+        &project_dir,
+        Some("http-utils".to_string()),
+        None,
+        STATICLIB,
+    )
+    .unwrap();
 
     let manifest = Manifest::load(&project_dir.join("dream.toml")).unwrap();
     assert_eq!(manifest.package().unwrap().package_type, PackageType::Lib);

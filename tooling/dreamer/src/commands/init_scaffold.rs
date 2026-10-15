@@ -2,8 +2,8 @@
 
 use super::init::{Scaffold, write_gitignore};
 use crate::manifest::{
-    Dependency, DetailedDependency, MANIFEST_FILE_NAME, Manifest, RunTarget, TestConfig, import_segment,
-    parse_target_list,
+    Dependency, DetailedDependency, MANIFEST_FILE_NAME, Manifest, RunTarget, TestConfig,
+    import_segment, parse_target_list,
 };
 use anyhow::{Context, Result, bail};
 use std::path::Path;

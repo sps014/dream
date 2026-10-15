@@ -8,9 +8,11 @@ fn worker_registry_grows_and_cleans_up_failed_starts() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let native = root.join("crates/dream-mir/src/runtime/c/sys/native");
     let temp = tempfile::tempdir().expect("worker test directory");
-    let binary = temp
-        .path()
-        .join(if cfg!(windows) { "worker.exe" } else { "worker" });
+    let binary = temp.path().join(if cfg!(windows) {
+        "worker.exe"
+    } else {
+        "worker"
+    });
     let mut command = if cfg!(windows) {
         let config = std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default());
         let tools = dream::execution::llvm::resolve_llvm(&config).unwrap();

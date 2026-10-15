@@ -80,7 +80,12 @@ enum Cmd {
         #[arg(long, conflicts_with_all = ["test", "workspace"])]
         lib: bool,
         /// Native library kind a `--lib` package builds as (`staticlib` or `cdylib`).
-        #[arg(long, value_name = "KIND", requires = "lib", default_value = "staticlib")]
+        #[arg(
+            long,
+            value_name = "KIND",
+            requires = "lib",
+            default_value = "staticlib"
+        )]
         output: LibOutput,
         /// Scaffold a test project (`type = "test"`, an example @test and `fixtures/` assets).
         #[arg(long, conflicts_with = "workspace")]

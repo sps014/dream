@@ -411,10 +411,7 @@ async fun main(): void {
 }
 "#;
     let out = run_c("async_host", c, dream, OptLevel::O0).unwrap();
-    assert_eq!(
-        out.trim(),
-        "1\n42\n12\ntask 3 -> 12\ntask 4 -> 16\n7\n100"
-    );
+    assert_eq!(out.trim(), "1\n42\n12\ntask 3 -> 12\ntask 4 -> 16\n7\n100");
 }
 
 #[test]

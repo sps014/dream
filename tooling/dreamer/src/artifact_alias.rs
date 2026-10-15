@@ -131,7 +131,10 @@ mod tests {
 
         fs::write(root.join("fixture.txt"), b"f").unwrap();
         refresh_host_aliases(root, "main", true, true, &["fixture.txt".into()]).unwrap();
-        assert_eq!(fs::read(root.join("target/node/fixture.txt")).unwrap(), b"f");
+        assert_eq!(
+            fs::read(root.join("target/node/fixture.txt")).unwrap(),
+            b"f"
+        );
 
         assert_eq!(
             fs::read(root.join("target/web/main.wasm")).unwrap(),

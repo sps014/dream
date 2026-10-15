@@ -44,6 +44,32 @@ impl Index {
         // Inside `@name(...)` — closed-world arg suggestions when the registry knows them.
         // Always stay in attribute-arg mode (never dump keywords / globals into the arg list).
         if let Some(ctx) = attribute_arg_context(text, offset) {
+            if let Some(attr) = self.declared_attribute(&ctx.name) {
+                if ctx.in_string {
+                    return Vec::new();
+                }
+                let index = ctx.arg_index.min(attr.params.len().saturating_sub(1));
+                if let (Some(param), Some(choices)) =
+                    (attr.params.get(index), attr.enum_choices.get(index))
+                {
+                    return choices
+                        .iter()
+                        .map(|member| {
+                            let label = if ctx.qualified {
+                                member.clone()
+                            } else {
+                                format!("{}.{member}", param.ty)
+                            };
+                            (
+                                label,
+                                SymKind::Decorator,
+                                attr.signature.clone(),
+                                attr.doc.clone(),
+                            )
+                        })
+                        .collect();
+                }
+            }
             return attribute_arg_completions(&ctx)
                 .into_iter()
                 .map(|(label, _insert, detail, doc)| (label, SymKind::Decorator, detail, doc))

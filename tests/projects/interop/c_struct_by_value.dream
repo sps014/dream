@@ -1,3 +1,4 @@
+import system.interop;
 import system.testing;
 // Structs returned by value from libc: `div_t` (two ints) and `lldiv_t` (two long longs).
 import system;

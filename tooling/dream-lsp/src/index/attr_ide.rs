@@ -1,9 +1,9 @@
 //! Attribute-aware IDE helpers: `@name` / `@name(...)` context detection, builtin completions,
-//! hover text, and signature labels — all driven by [`dream_abi::attributes::all_specs`].
+//! hover text, and signature labels — all driven by [`dream_stdlib::attributes::all_specs`].
 
 use super::is_ident_byte;
-use dream_abi::attributes::{ArgKind, ArgShape, AttributeSpec, all_specs, find_spec};
-use dream_abi::intrinsics::ATTR_KEYS;
+use dream_abi::attributes::{ArgKind, UserAttribute};
+use dream_stdlib::attributes::{all_specs, attribute_catalog, find_spec};
 
 /// Cursor is after `@` / `@partial` writing an attribute name (not inside `(...)` args).
 pub fn attribute_name_partial(text: &str, offset: usize) -> Option<(usize, String)> {
@@ -31,6 +31,7 @@ pub struct AttrArgContext {
     pub arg_index: usize,
     /// True when the cursor sits inside a `"..."` string argument.
     pub in_string: bool,
+    pub qualified: bool,
 }
 
 pub fn attribute_arg_context(text: &str, offset: usize) -> Option<AttrArgContext> {
@@ -81,6 +82,10 @@ pub fn attribute_arg_context(text: &str, offset: usize) -> Option<AttrArgContext
         name,
         arg_index,
         in_string,
+        qualified: args_slice
+            .rsplit(',')
+            .next()
+            .is_some_and(|arg| arg.contains('.')),
     })
 }
 
@@ -146,16 +151,25 @@ pub fn attribute_name_completions(partial: &str) -> Vec<(String, String, String,
                 continue;
             }
         }
-        let insert = match spec.args {
-            ArgShape::None => spec.name.to_string(),
-            ArgShape::Args { min: 0, .. } => spec.name.to_string(),
-            ArgShape::Args { .. } => format!("{}($0)", spec.name),
+        let insert = if spec.required() == 0 {
+            spec.name.to_string()
+        } else {
+            format!("{}($0)", spec.name)
         };
         out.push((
             spec.name.to_string(),
             insert,
-            spec.args.signature_label(spec.name),
-            Some(spec.doc.to_string()),
+            spec.signature_label(),
+            Some(
+                if dream_stdlib::BOOTSTRAP_PACKAGES.contains(&spec.module.as_str()) {
+                    spec.doc.clone()
+                } else {
+                    format!(
+                        "{}\n\nDeclared in `{}`; add `import {};`.",
+                        spec.doc, spec.module, spec.module
+                    )
+                },
+            ),
         ));
     }
     out
@@ -169,60 +183,41 @@ pub fn attribute_arg_completions(
     let Some(spec) = find_spec(&ctx.name) else {
         return Vec::new();
     };
-    let kind = match spec.args {
-        ArgShape::None => return Vec::new(),
-        ArgShape::Args { kinds, max, .. } => {
-            if ctx.arg_index >= max && max > 0 {
-                return Vec::new();
-            }
-            kinds[ctx.arg_index.min(kinds.len() - 1)]
-        }
+    let Some(param) = spec
+        .params
+        .get(ctx.arg_index)
+        .or_else(|| spec.params.last().filter(|p| p.variadic))
+    else {
+        return Vec::new();
     };
-    if kind != ArgKind::String {
+    if param.kind != ArgKind::Enum || ctx.in_string {
         return Vec::new();
     }
-
-    let keys: &[&str] = match ctx.name.as_str() {
-        "intrinsic" => ATTR_KEYS,
-        _ => return Vec::new(),
+    let Some(enum_id) = &param.enum_type else {
+        return Vec::new();
     };
-
-    keys.iter()
-        .map(|k| {
-            let (label, insert) = if ctx.in_string {
-                (k.to_string(), k.to_string())
+    attribute_catalog()
+        .enum_members(enum_id)
+        .iter()
+        .map(|member| {
+            let value = if ctx.qualified {
+                member.to_string()
             } else {
-                let quoted = format!("\"{k}\"");
-                (quoted.clone(), quoted)
+                format!("{}.{member}", param.ty)
             };
-            (label, insert, format!("@{} argument", ctx.name), None)
+            (
+                value.clone(),
+                value,
+                format!("@{} argument", ctx.name),
+                None,
+            )
         })
         .collect()
 }
 
-/// Hover markdown for a builtin attribute name token.
-pub fn attribute_hover(spec: &AttributeSpec) -> String {
-    let mut targets = String::new();
-    for (i, t) in spec.targets.iter().enumerate() {
-        if i > 0 {
-            targets.push_str(", ");
-        }
-        targets.push_str(t.display_name());
-    }
-    let sig = spec.args.signature_label(spec.name);
-    format!(
-        "```dream\n{sig}\n```\n\n---\n\n{}\n\n*Allowed on:* {targets}",
-        spec.doc
-    )
-}
-
 /// Synthetic detail + docs for attribute signature help, or `None` when not in an attribute call.
-pub fn attribute_signature(text: &str, offset: usize) -> Option<(&'static AttributeSpec, u32)> {
+pub fn attribute_signature(text: &str, offset: usize) -> Option<(&'static UserAttribute, u32)> {
     let ctx = attribute_arg_context(text, offset)?;
     let spec = find_spec(&ctx.name)?;
-    match spec.args {
-        ArgShape::None => None,
-        ArgShape::Args { max: 0, .. } => None,
-        ArgShape::Args { .. } => Some((spec, ctx.arg_index as u32)),
-    }
+    (!spec.params.is_empty()).then_some((spec, ctx.arg_index as u32))
 }

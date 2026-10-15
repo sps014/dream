@@ -197,7 +197,7 @@ fn async_tests_finish_before_the_next_test_on_both_hosts() {
             "\"native\", \"node\"",
             &[(
                 "ordered.dream",
-                "let stage = 0;\n\
+                "import system.testing;\nlet stage = 0;\n\
                 @test async fun first(): void { Time.sleep(5).await; stage = 1; }\n\
                 @test fun second(): void { Assert.eq(stage, 1); stage = 2; }\n\
                 @test async fun third(): void { Time.sleep(5).await; Assert.eq(stage, 2); }\n",
@@ -219,7 +219,7 @@ fn async_timeout_is_attributed_on_both_hosts() {
             "\"native\", \"node\"",
             &[(
                 "slow.dream",
-                "@test @timeout(100) async fun slow(): void { Time.sleep(1).await; let n = 0; while n >= 0 { n = (n + 1) % 1000; } }\n\
+                "import system.testing;\n@test @timeout(100) async fun slow(): void { Time.sleep(1).await; let n = 0; while n >= 0 { n = (n + 1) % 1000; } }\n\
                 @test fun after(): void { Assert.is_true(true); }\n",
             )],
         );
@@ -238,7 +238,7 @@ fn concurrent_filtered_runs_keep_their_own_runner() {
             "\"native\", \"node\"",
             &[(
                 "concurrent.dream",
-                "\
+                "import system.testing;\n\
             @test async fun passes(): void { Time.delay(100).await; Assert.eq(1, 1); }\n\
             @test fun fails(): void { Assert.eq(1, 2); }\n",
             )],

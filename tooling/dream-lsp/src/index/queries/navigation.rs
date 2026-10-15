@@ -8,10 +8,7 @@ impl Index {
         } else {
             let reference = self.ref_at(offset)?;
             if reference.kind == SymKind::Decorator {
-                let contents = match find_spec(&reference.name) {
-                    Some(spec) => attribute_hover(spec),
-                    None => self.declared_attribute(&reference.name)?.hover(),
-                };
+                let contents = self.declared_attribute(&reference.name)?.hover();
                 return Some(Located {
                     start: reference.start,
                     end: reference.end,
@@ -70,6 +67,10 @@ impl Index {
         }
         let reference = self.ref_at(offset)?;
         match reference.kind {
+            SymKind::Decorator => {
+                let attribute = self.declared_attribute(&reference.name)?;
+                self.resolve(&attribute.type_name, reference.scope, reference.start)
+            }
             SymKind::EnumMember => {
                 self.resolve_enum_member(reference.receiver.as_deref(), &reference.name)
             }
@@ -163,12 +164,14 @@ impl Index {
     }
 
     pub fn signature_help(&self, text: &str, offset: usize) -> Option<Decl> {
-        if let Some((spec, _active)) = attribute_signature(text, offset) {
+        if let Some(ctx) = attribute_arg_context(text, offset)
+            && let Some(spec) = self.declared_attribute(&ctx.name)
+        {
             return Some(Decl {
                 name: spec.name.to_string(),
                 kind: SymKind::Decorator,
-                detail: spec.args.signature_label(spec.name),
-                doc_comment: Some(spec.doc.to_string()),
+                detail: spec.signature.clone(),
+                doc_comment: spec.doc.clone(),
                 start: 0,
                 end: 0,
                 scope: GLOBAL,

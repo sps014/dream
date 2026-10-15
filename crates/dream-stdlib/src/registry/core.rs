@@ -6,6 +6,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/core/intrinsic.dream",
+            include_str!("../system/core/intrinsic.dream"),
+        ),
+        (
+            "<std>/system/core/attributes.dream",
+            include_str!("../system/core/attributes.dream"),
+        ),
+        (
             "<std>/system/core/buffer.dream",
             include_str!("../system/core/buffer.dream"),
         ),

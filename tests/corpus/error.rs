@@ -115,7 +115,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "c_call_unknown_convention_rejected",
-        "unknown C calling convention 'fastcall': use \"cdecl\" or \"stdcall\"",
+        "'@c_call' argument 1 must be a member of 'CCallConv'",
         true,
     ),
     Case::error(

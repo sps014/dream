@@ -139,12 +139,12 @@ fn cpp_declaration_mismatch_is_reported_at_the_dream_line() {
             ("native/box.cpp", "#include \"box.hpp\"\n"),
             (
                 "src/main.dream",
-                "import system;\n\n@cpp(\"box.hpp\", \"m::Box\")\n@allow_cycle class Box {\n    extern constructor(v: int);\n    extern fun value(): int;\n}\n\nfun main(): void {\n    System.println(Box(3).value());\n}\n",
+                "import system.interop;\nimport system;\n\n@cpp(\"box.hpp\", \"m::Box\")\n@allow_cycle class Box {\n    extern constructor(v: int);\n    extern fun value(): int;\n}\n\nfun main(): void {\n    System.println(Box(3).value());\n}\n",
             ),
         ],
     );
     let err = run(&root.join("src/main.dream"), "mismatch").unwrap_err();
-    assert_contains(&err, "main.dream:6");
+    assert_contains(&err, "main.dream:7");
     assert_contains(&err, "value");
     let _ = fs::remove_dir_all(&root);
 }
@@ -162,7 +162,7 @@ fn cpp_struct_layout_mismatch_fails_the_static_assert() {
             ("native/p.cpp", "#include \"p.hpp\"\n"),
             (
                 "src/main.dream",
-                "import system;\n\n@cpp(\"p.hpp\", \"P\")\npublic struct P {\n    public x: float;\n    public y: float;\n}\n\n@cpp(\"p.hpp\", \"len2\")\nextern fun len2(p: P): double;\n\nfun main(): void {\n    System.println(len2(P()));\n}\n",
+                "import system.interop;\nimport system;\n\n@cpp(\"p.hpp\", \"P\")\npublic struct P {\n    public x: float;\n    public y: float;\n}\n\n@cpp(\"p.hpp\", \"len2\")\nextern fun len2(p: P): double;\n\nfun main(): void {\n    System.println(len2(P()));\n}\n",
             ),
         ],
     );
@@ -194,7 +194,7 @@ fn callback_from_an_unattached_foreign_thread_traps() {
             ),
             (
                 "src/main.dream",
-                "import system;\n\n@c extern fun call_from_thread(cb: NativeCallback<fun(int): int>): void;\n\nfun main(): void {\n    let cb = NativeCallback<fun(int): int>((x: int) => x + 1);\n    call_from_thread(cb);\n    System.println(\"unreachable\");\n}\n",
+                "import system.interop;\nimport system;\n\n@c extern fun call_from_thread(cb: NativeCallback<fun(int): int>): void;\n\nfun main(): void {\n    let cb = NativeCallback<fun(int): int>((x: int) => x + 1);\n    call_from_thread(cb);\n    System.println(\"unreachable\");\n}\n",
             ),
         ],
     );
@@ -234,7 +234,8 @@ Vec2 vec2_scale(Vec2 v, float k) { Vec2 r = { v.x * k, v.y * k }; return r; }
 Triple triple_rotate(Triple t) { Triple r = { t.b, t.c, t.a }; return r; }
 Wide wide_bump(Wide w, int32_t by) { w.w += 0.5; w.id += by; w.big *= 2; w.f -= 1.0f; return w; }
 "#;
-    let dream = r#"import system;
+    let dream = r#"import system.interop;
+import system;
 
 public struct Vec2 { public x: float; public y: float; }
 public struct Character { public before: byte; public value: char; public after: int; }
@@ -294,7 +295,8 @@ fn c_bool_return_ignores_garbage_upper_bits() {
 #endif
 uint32_t is_even_raw(int32_t x) { return GARBAGE | (uint32_t)(x % 2 == 0); }
 "#;
-    let dream = r#"import system;
+    let dream = r#"import system.interop;
+import system;
 
 @c("abi", "is_even_raw") extern fun is_even(x: int): bool;
 
@@ -334,7 +336,8 @@ int32_t call_on_thread(int_fn fn) {
     return j.out;
 }
 "#;
-    let dream = r#"import system;
+    let dream = r#"import system.interop;
+import system;
 
 @c extern fun call_on_thread(f: fun(int): int): int;
 
@@ -376,7 +379,8 @@ int32_t double_laterAsync(void* future, int32_t value, int32_t ms) {
     return 1;
 }
 "#;
-    let dream = r#"import system;
+    let dream = r#"import system.interop;
+import system;
 import system.task;
 
 @c extern fun host_ready(): int;
@@ -422,7 +426,8 @@ void set_error(int n) { errno = n; }
 int get_error(void) { return errno; }
 int value(void) { return ++counter; }
 "#;
-    let dream = r#"import system;
+    let dream = r#"import system.interop;
+import system;
 import system.task;
 
 @c extern fun value(): int;
@@ -457,7 +462,8 @@ void* res_new(int32_t v) { Res* r = malloc(sizeof *r); r->v = v; return r; }
 int32_t res_value(void* r) { return ((Res*)r)->v; }
 void res_free(void* r) { printf("[c] res_free(%d)\n", ((Res*)r)->v); fflush(stdout); free(r); }
 "#;
-    let dream = r#"import system;
+    let dream = r#"import system.interop;
+import system;
 
 @c @owned("res_free") extern fun res_new(v: int): OwnedCPtr;
 @c extern fun res_value(r: CPtr): int;
@@ -493,7 +499,8 @@ static void hook(const char* message, const char* location) {
 }
 void install_hook(void) { dream_set_panic_hook(hook); }
 "#;
-    let dream = r#"import system;
+    let dream = r#"import system.interop;
+import system;
 
 @c extern fun install_hook(): void;
 
@@ -507,7 +514,7 @@ fun main(): void {
     let err = run_c("panic_hook", c, dream, OptLevel::O0).unwrap_err();
     assert_contains(&err, "before");
     assert_contains(&err, "[hook] boom é (");
-    assert_contains(&err.replace('\\', "/"), "src/main.dream:8)");
+    assert_contains(&err.replace('\\', "/"), "src/main.dream:9)");
     assert!(!err.contains("unreachable"), "{}", err);
 }
 
@@ -524,7 +531,7 @@ fn cpp_callback_destroyed_on_a_foreign_thread_releases_on_its_owner() {
             ("native/drop.cpp", "#include \"drop.hpp\"\n"),
             (
                 "src/main.dream",
-                "import system;\n@cpp(\"drop.hpp\", \"drop_on_thread\") extern fun drop_on_thread(callback: fun(int): int): void;\nclass Capture { public constructor() {} public fun value(): int { return 7; } del() { System.println(\"capture destroyed\"); } }\nfun submit(): void { let capture = Capture(); drop_on_thread((x: int) => capture.value() + x); System.println(\"foreign release queued\"); }\nfun main(): void { submit(); }\n",
+                "import system.interop;\nimport system;\n@cpp(\"drop.hpp\", \"drop_on_thread\") extern fun drop_on_thread(callback: fun(int): int): void;\nclass Capture { public constructor() {} public fun value(): int { return 7; } del() { System.println(\"capture destroyed\"); } }\nfun submit(): void { let capture = Capture(); drop_on_thread((x: int) => capture.value() + x); System.println(\"foreign release queued\"); }\nfun main(): void { submit(); }\n",
             ),
         ],
     );
@@ -564,7 +571,7 @@ fn store_package(name: &str, class: &str) -> [(String, String); 4] {
         (
             format!("dream_packages/{name}/src/{name}.dream"),
             format!(
-                "module {name};\n\n@cpp(\"{name}.hpp\", \"{name}::Store\")\n@allow_cycle public class {class} {{\n    extern constructor();\n    extern fun name(): string;\n}}\n"
+                "module {name};\nimport system.interop;\n\n@cpp(\"{name}.hpp\", \"{name}::Store\")\n@allow_cycle public class {class} {{\n    extern constructor();\n    extern fun name(): string;\n}}\n"
             ),
         ),
     ]
@@ -653,7 +660,7 @@ fn wasm32_rejects_a_live_c_import_before_loading_the_toolchain() {
         "wasm-live-c",
         &[(
             "main.dream",
-            "@c(\"libc\", \"abs\") extern fun cAbs(x: int): int;\nfun main(): int { return cAbs(-7); }\n",
+            "import system.interop;\n@c(\"libc\", \"abs\") extern fun cAbs(x: int): int;\nfun main(): int { return cAbs(-7); }\n",
         )],
     );
     let err = compile(
@@ -663,7 +670,7 @@ fn wasm32_rejects_a_live_c_import_before_loading_the_toolchain() {
     )
     .unwrap_err();
     assert_contains(&err, "'cAbs' has no package C/C++ source set for wasm32");
-    assert_contains(&err, "main.dream:1");
+    assert_contains(&err, "main.dream:2");
     assert_contains(&err, "@js");
 }
 
@@ -673,7 +680,7 @@ fn wasm32_prunes_an_unused_c_import() {
         "wasm-dead-c",
         &[(
             "main.dream",
-            "@c(\"libc\", \"abs\") extern fun cAbs(x: int): int;\nfun unused(): int { return cAbs(-7); }\nfun main(): int { return 0; }\n",
+            "import system.interop;\n@c(\"libc\", \"abs\") extern fun cAbs(x: int): int;\nfun unused(): int { return cAbs(-7); }\nfun main(): int { return 0; }\n",
         )],
     );
     let out = out_dir("wasm-dead-c").join("main.wat");

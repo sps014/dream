@@ -94,6 +94,7 @@ fn scan_source(path: &str, source: &str, diagnostics: &mut DiagnosticBag) -> Par
         };
     };
     let program = ast.get_root();
+    dream_stdlib::attributes::resolve_source_attribute_ids(program);
     ParsedGeneratorFile {
         module: program
             .module
@@ -181,6 +182,9 @@ impl Registration<'_> {
             entry: entry.cloned(),
         };
         for attr in &decl.attributes {
+            if !dream_abi::attributes::is_compiler_attribute(attr, &attr.name.text) {
+                continue;
+            }
             match attr.name.text.as_str() {
                 SYNTAX_BLOCK_ATTR => registered.syntax_block = true,
                 INCREMENTAL_ATTR => registered.incremental = true,
@@ -189,12 +193,16 @@ impl Registration<'_> {
                         let Some(parts) = path_parts(arg) else {
                             continue;
                         };
-                        let resolved = parts
-                            .last()
-                            .and_then(|name| self.attributes.get(name))
-                            .filter(|a| {
-                                parts.len() == 1 || a.module == parts[..parts.len() - 1].join(".")
-                            });
+                        let resolved = parts.last().and_then(|name| {
+                            let key = if parts.len() == 1 {
+                                (*name).to_string()
+                            } else {
+                                decl_identity(&parts[..parts.len() - 1].join("."), name)
+                            };
+                            self.attributes
+                                .get(&key)
+                                .filter(|attribute| attribute.type_name == *name)
+                        });
                         match resolved {
                             Some(a) => {
                                 if !registered.attribute_triggers.contains(&a.id) {

@@ -7,6 +7,7 @@ mod core;
 mod crypto;
 mod csv;
 mod encoding;
+mod interop;
 mod io;
 mod json;
 mod json_derive;
@@ -48,6 +49,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     encoding::PACKAGE,
     json::PACKAGE,
     io::PACKAGE,
+    interop::PACKAGE,
     net::PACKAGE,
     cli::PACKAGE,
     config::PACKAGE,

@@ -2472,7 +2472,7 @@ fn strong_cycle_permission_is_required() {
 fn storage_type_predicate_cannot_be_forged() {
     let diagnostics = analyze_code(
         r#"
-        @intrinsic("buffer_is_string")
+        @intrinsic(Intrinsic.BufferIsString)
         fun forged<T>(): bool { return false; }
         fun main(): void { let ignored = forged<string>(); }
     "#,

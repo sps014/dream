@@ -1,3 +1,4 @@
+import system.interop;
 // Raw `@c` bindings to libsqlite3. Out-params use Dream `ref`.
 // `CPtr.address()` is `usize`; SQLite's status and row-count parameters remain C `int`.
 //

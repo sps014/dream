@@ -186,7 +186,10 @@ impl<'a> Analyzer<'a> {
         position: TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
-        let is_unsafe = template.attributes.iter().any(|a| a.name.text == "unsafe");
+        let is_unsafe = template
+            .attributes
+            .iter()
+            .any(|a| dream_abi::attributes::is_compiler_attribute(a, "unsafe"));
         if is_unsafe
             && !self.current_function_is_unsafe
             && !self.current_function_is_trusted_prelude()

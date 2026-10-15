@@ -1,3 +1,4 @@
+pub mod attributes;
 mod functions;
 mod packages;
 mod registry;

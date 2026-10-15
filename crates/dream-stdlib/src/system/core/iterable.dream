@@ -14,11 +14,11 @@ public interface AsyncIterable<T> {
 }
 
 public static class YieldSignals {
-    @intrinsic("dream_yield_signal")
+    @intrinsic(Intrinsic.DreamYieldSignal)
     public static extern fun pending(): Future<void>;
-    @intrinsic("dream_yield_signal_complete")
+    @intrinsic(Intrinsic.DreamYieldSignalComplete)
     public static extern fun complete(borrow signal: Future<void>): void;
-    @intrinsic("dream_yield_run")
+    @intrinsic(Intrinsic.DreamYieldRun)
     public static extern fun run(borrow producer: Future<void>, borrow ready: Future<void>): void;
 }
 

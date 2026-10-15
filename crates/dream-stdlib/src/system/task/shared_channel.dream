@@ -5,9 +5,9 @@ shared internal class SharedChannelState {
     internal handle: usize;
     internal constructor(capacity: int) { this.handle = SharedChannelState.create_host(capacity); }
     del() { SharedChannelState.free_host(this.handle); }
-    @intrinsic("dream_channel_new")
+    @intrinsic(Intrinsic.DreamChannelNew)
     static extern fun create_host(capacity: int): usize;
-    @intrinsic("dream_channel_free")
+    @intrinsic(Intrinsic.DreamChannelFree)
     static extern fun free_host(handle: usize): void;
 }
 
@@ -22,17 +22,17 @@ public class SharedChannelEndpoints<T : shared> {
 }
 
 internal static class SharedChannelHost {
-    @intrinsic("dream_channel_endpoint")
+    @intrinsic(Intrinsic.DreamChannelEndpoint)
     internal static extern fun endpoint(state: usize, sending: int): usize;
-    @intrinsic("dream_channel_close")
+    @intrinsic(Intrinsic.DreamChannelClose)
     internal static extern fun close(endpoint: usize): void;
-    @intrinsic("dream_channel_endpoint_free")
+    @intrinsic(Intrinsic.DreamChannelEndpointFree)
     internal static extern fun free(endpoint: usize): void;
-    @intrinsic("dream_channel_send")
+    @intrinsic(Intrinsic.DreamChannelSend)
     internal static extern fun send<T : shared>(endpoint: usize, borrow value: T[]): int;
-    @intrinsic("dream_channel_receive")
+    @intrinsic(Intrinsic.DreamChannelReceive)
     internal static extern fun receive<T : shared>(endpoint: usize): T[];
-    @intrinsic("dream_channel_status")
+    @intrinsic(Intrinsic.DreamChannelStatus)
     internal static extern fun status(endpoint: usize): int;
 }
 
@@ -44,11 +44,11 @@ class SharedChannelWait {
         if this.registration != (usize)0 { SharedChannelWait.unregister_host(this.registration); this.registration = (usize)0; }
     }
     del() { this.close(); }
-    @intrinsic("dream_channel_wait")
+    @intrinsic(Intrinsic.DreamChannelWait)
     static extern fun register_host(endpoint: usize): usize;
-    @intrinsic("dream_cancellation_signal")
+    @intrinsic(Intrinsic.DreamCancellationSignal)
     static extern fun signal_host(registration: usize): Future<int>;
-    @intrinsic("dream_cancellation_unregister")
+    @intrinsic(Intrinsic.DreamCancellationUnregister)
     static extern fun unregister_host(registration: usize): void;
 }
 

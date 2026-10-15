@@ -36,6 +36,7 @@ pub(super) fn analyze_code_with_crate_type(code: &str, crate_type: CrateType) ->
     let mut parser = Parser::new(lexer, &arena, &mut diagnostics);
 
     if let Ok(tree) = parser.parse() {
+        dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
         let arena = bumpalo::Bump::new();
         let graph = crate::module_graph::ModuleGraph::single(tree.get_root().clone());
         let mut analyzer = Analyzer::new(&graph, &arena).with_crate_type(crate_type);

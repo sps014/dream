@@ -69,13 +69,18 @@ impl Index {
         if let Ok(ast) = parser.parse() {
             let program = ast.get_root();
             for func in &program.functions {
-                if dream_abi::attributes::has_generator_attr(&func.attributes) {
+                if func.attributes.iter().any(|a| a.name.text == "generator") {
                     let span = func.name.position;
                     generators.push((func.name.text.clone(), span.start, span.end));
                 }
             }
 
-            attributes.extend(declared_attrs::collect(text, &program.structs, None));
+            attributes.extend(declared_attrs::collect(
+                text,
+                &program.structs,
+                &program.enums,
+                None,
+            ));
 
             // Pass 1: Declare all file-level symbols for the main program
             builder.walk_program_for_imports(program);
@@ -158,6 +163,7 @@ impl Index {
                     attributes.extend(declared_attrs::collect(
                         source,
                         std::slice::from_ref(s),
+                        &combined.enums,
                         None,
                     ));
                 }

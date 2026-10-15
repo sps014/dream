@@ -134,7 +134,7 @@ public class GenAttribute
 
 ## `id: string`
 
-`module::name` of the `@attribute` type (`system.json::json`), or `builtin::name`.
+`module::name` of the `@attribute` type (`system.json::JsonAttribute`), or `builtin::name`.
 
 ```dream
 public id: string

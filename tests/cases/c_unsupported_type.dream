@@ -1,3 +1,4 @@
+import system.interop;
 import system;
 
 @c("c", "puts")

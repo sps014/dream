@@ -419,6 +419,12 @@ impl<'a> Analyzer<'a> {
     ) {
         let scope = self.type_ctx.scope();
         let mut summaries = HashMap::new();
+        // Attribute decoder methods add many concrete collection instantiations. Repeated slot
+        // scans here make borrow checking quadratic in that expanded method table.
+        let receiver_owners: IndexMap<_, _> = self
+            .receiver_slot_entries()
+            .map(|((owner, _), _, identity)| (identity.clone(), owner))
+            .collect();
         let functions: Vec<_> = self
             .struct_methods
             .iter()
@@ -476,7 +482,7 @@ impl<'a> Analyzer<'a> {
                 )
                 .collect();
             let owner = if is_method {
-                self.receiver_function_key(&identity).map(|(key, _)| key.0)
+                receiver_owners.get(&identity).copied()
             } else {
                 None
             };

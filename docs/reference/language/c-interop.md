@@ -115,6 +115,8 @@ clang, its resource headers, and the wasm32 WASI headers/libraries needed by pac
 ## C: `@c`
 
 ```dream
+import system.interop;
+
 module ticker;
 
 import system;
@@ -167,6 +169,8 @@ Arrays pass only the pointer. When C needs the length, declare it as a separate 
 `xs.length`:
 
 ```dream
+import system.interop;
+
 @c extern fun checksum(data: byte[], len: long): int;
 
 public fun fingerprint(data: byte[]): int {
@@ -180,6 +184,8 @@ public fun fingerprint(data: byte[]): int {
 `address(): usize`, and `offset(bytes: isize)`. Its single address field is target-sized. Use it for handles, and use `ref` for C's out-parameters:
 
 ```dream
+import system.interop;
+
 @c("sqlite3") extern fun sqlite3_open(path: string, ref db: CPtr): int;
 
 let db = CPtr.null();
@@ -197,6 +203,8 @@ away. `get()` reads the pointer while the object keeps owning it; `take()` hands
 you and leaves the object holding `NULL`.
 
 ```dream
+import system.interop;
+
 @c @owned("ticker_free") extern fun ticker_new(name: string): OwnedCPtr;
 @c extern fun ticker_run(t: CPtr, ticks: int): int;
 
@@ -215,6 +223,8 @@ struct with the same fields in the same order. Pass it by value, return it by va
 `__attribute__((packed))`. Otherwise fields are naturally aligned, as in C.
 
 ```dream
+import system.interop;
+
 public struct Vec2 {
     public x: double;
     public y: double;
@@ -228,16 +238,18 @@ public struct Vec2 {
 ### Strings
 
 `string` parameters are copied into a NUL-terminated UTF-8 buffer that is freed after the call.
-`@marshal("lpwstr")` passes UTF-16 instead (Windows `LPWSTR`):
+`@marshal(MarshalKind.LpWStr)` passes UTF-16 instead (Windows `LPWSTR`):
 
 ```dream
+import system.interop;
+
 @c("user32", "MessageBoxW")
-@marshal("lpwstr")
+@marshal(MarshalKind.LpWStr)
 extern fun MessageBoxW(hwnd: CPtr, text: string, caption: string, flags: int): int;
 ```
 
-Externs use the platform C calling convention. `@c_call("cdecl")` spells that out explicitly.
-`@c_call("stdcall")` selects `__stdcall` on 32-bit x86 Windows and is the default convention
+Externs use the platform C calling convention. `@c_call(CCallConv.Cdecl)` spells that out explicitly.
+`@c_call(CCallConv.Stdcall)` selects `__stdcall` on 32-bit x86 Windows and is the default convention
 everywhere else. Any other convention is a compile error.
 
 ## Packages

@@ -1,3 +1,4 @@
+import system.interop;
 import system.testing;
 import system;
 @c("m", "frexp") extern fun c61_frexp(x: double, ref e: int): double;

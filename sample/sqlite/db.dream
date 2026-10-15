@@ -1,3 +1,4 @@
+import system.interop;
 // Create a local SQLite file, insert rows, then SELECT them back.
 //
 // Run from any cwd:

@@ -76,7 +76,7 @@ A generator runs only when the program contains something it declares interest i
 | `@incremental`     | (modifier)                                             | replays the cached result when the generator and its snapshot are unchanged |
 
 
-Triggers are paths, not strings. `@on_attribute(jsn)` is a compile error (`'jsn' is not a declared @attribute type`), and so is naming something that is not an `@attribute` struct. A generator may combine several triggers; `@json` uses `@on_attribute(json)` and `@on_call(Json.serialize, Json.deserialize, Json.from_value)`.
+Triggers are paths, not strings. `@on_attribute(jsn)` is a compile error (`'jsn' is not a declared @attribute type`), and so is naming something that is not an `@attribute` struct. A generator may combine several triggers; `@json` uses `@on_attribute(JsonAttribute)` and `@on_call(Json.serialize, Json.deserialize, Json.from_value)`.
 
 Without a matching `@syntax_block` generator, a `name { … }` site fails with “unexpanded syntax block”.
 
@@ -277,3 +277,45 @@ If a generator crashes, the build reports the generator name and writes a crash 
 - `[sample/generators/html/](https://github.com/sps014/dream/tree/main/sample/generators/html)`
 - `[sample/generators/dto/](https://github.com/sps014/dream/tree/main/sample/generators/dto)`
 
+
+## Attribute contracts and enum arguments
+
+Attributes are declared in Dream modules. Their fields define positional arguments, and
+`@attribute(AttributeTarget.X)` declares their allowed placements. Compiler effects such as
+inlining and C calling conventions are implemented by the compiler using the declaration's
+module identity.
+
+Core attributes need no import. Import `system.interop` for C/C++ attributes,
+`system.testing` for `@test` and `@timeout`, and `system.codegen` for generator attributes.
+JSON attributes remain in `system.json`.
+
+Finite choices use enums rather than strings:
+
+```dream
+import system.interop;
+
+@c("user32", "MessageBoxW")
+@c_call(CCallConv.Stdcall)
+@marshal(MarshalKind.LpWStr)
+extern fun message_box(window: CPtr, text: string, title: string, flags: int): int;
+```
+
+`MarshalKind.UserDataLast` applies to `NativeCallback` parameters. `LpStr` and `LpWStr`
+apply to C extern declarations. Compiler intrinsic declarations use
+`@intrinsic(Intrinsic.Print)` and the other members of `Intrinsic`. Library paths and
+external symbol names remain strings.
+
+A trailing `Option<T>` field makes an argument optional: omission decodes as `None`, and
+a supplied value as `Some(value)`. Required fields cannot follow optional fields. A trailing
+`List<T>` field collects remaining arguments; it cannot be combined with optional fields.
+A trailing array is also variadic, allowing the bootstrap `attribute` declaration to use
+`AttributeTarget[]` without depending on `system.collections`.
+
+Generator triggers use `DeclarationPath`, which stores the dotted declaration reference in
+its `text` field. For example, `@on_call(Json.serialize)` supplies a declaration path rather
+than an enum member. Unknown paths are diagnosed by the generator framework.
+
+An attribute type may use an `Attribute` suffix; its applied name removes the suffix and
+converts the remaining name to snake_case. For example, `JsAttribute` is applied as `@js` and remains
+available as `JsAttribute` for typed decoding. This avoids a collision with the primitive
+`js` type.

@@ -17,7 +17,7 @@ fn native_link_removes_unused_foreign_functions_but_keeps_called_symbols() {
     )
     .unwrap();
     let source = root.join("main.dream");
-    std::fs::write(&source, "import system;\n@c(\"size\", \"dream_size_used\") extern fun used(): int;\nfun main(): void { System.println(used()); }\n").unwrap();
+    std::fs::write(&source, "import system.interop;\nimport system;\n@c(\"size\", \"dream_size_used\") extern fun used(): int;\nfun main(): void { System.println(used()); }\n").unwrap();
     let module = root.join("main.ll");
     Compiler::new(Target::native())
         .compile(&source.display().to_string(), &module.display().to_string())

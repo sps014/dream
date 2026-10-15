@@ -37,6 +37,7 @@ pub fn analyze_code(code: &str) -> DiagnosticBag {
 
     if let Ok(tree) = parser.parse() {
         let arena = bumpalo::Bump::new();
+        dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
         let graph = dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone());
         let mut analyzer = Analyzer::new(&graph, &arena);
         let _ = analyzer.analyze(&mut diagnostics);
@@ -64,6 +65,7 @@ pub fn compile_test_pipeline_for<R>(
     let mut parser = Parser::new(lexer, &parse_arena, &mut diagnostics);
     let tree = parser.parse().expect("parse should succeed");
     let arena = bumpalo::Bump::new();
+    dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
     let graph = dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone());
     let mut analyzer = Analyzer::new(&graph, &arena).with_target_layout(dream_hir::TargetLayout {
         ptr_size: target.spec().ptr_size,
@@ -303,9 +305,9 @@ pub fn emit_hir_to_module_rc_only(code: &str) -> String {
 /// depend on the full prelude being merged by the unit-test harness.
 pub const SYSTEM_STUB: &str = "
     class System {
-        @intrinsic(\"print\")
+        @intrinsic(Intrinsic.Print)
         public static extern fun print<T>(value: T): void;
-        @intrinsic(\"println\")
+        @intrinsic(Intrinsic.Println)
         public static extern fun println<T>(value: T): void;
     }
 ";
@@ -424,11 +426,11 @@ pub const JS_STUB: &str = "
 /// indirect call needs this merged in alongside its own code.
 pub const CLOSURE_STUB: &str = "
     class Closure {
-        @intrinsic(\"funcbox_new\")
+        @intrinsic(Intrinsic.FuncboxNew)
         public static extern fun funcbox_new(funcidx: int, env: int): int;
-        @intrinsic(\"funcbox_funcidx\")
+        @intrinsic(Intrinsic.FuncboxFuncidx)
         public static extern fun funcbox_funcidx(box: int): int;
-        @intrinsic(\"funcbox_env\")
+        @intrinsic(Intrinsic.FuncboxEnv)
         public static extern fun funcbox_env(box: int): int;
         @intrinsic(\"retain\")
         public static extern fun retain(v: object): void;
@@ -444,13 +446,13 @@ pub const CLOSURE_STUB: &str = "
 /// `System` + `Time.sleep` for async tests (mirrors `stdlib/system/time.dream` + `system.dream`).
 pub const ASYNC_STUB: &str = "
     class System {
-        @intrinsic(\"print\")
+        @intrinsic(Intrinsic.Print)
         public static extern fun print<T>(value: T): void;
-        @intrinsic(\"println\")
+        @intrinsic(Intrinsic.Println)
         public static extern fun println<T>(value: T): void;
     }
     class Time {
-        @intrinsic(\"sleep\")
+        @intrinsic(Intrinsic.Sleep)
         public static extern async fun sleep(ms: int): void;
     }
 ";

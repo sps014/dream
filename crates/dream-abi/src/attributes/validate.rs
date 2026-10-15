@@ -5,7 +5,7 @@ use dream_syntax::nodes::function::FunctionNode;
 use dream_syntax::nodes::interface_node::InterfaceDeclarationNode;
 use dream_syntax::nodes::program::{EnumDeclarationNode, ExtendNode};
 use dream_syntax::nodes::struct_node::{StructDeclarationNode, StructFieldNode};
-use dream_syntax::nodes::types::is_special_member_name;
+use dream_syntax::nodes::types::{CONSTRUCTOR_NAME, DESTRUCTOR_NAME};
 use std::rc::Rc;
 
 pub(super) fn arg_matches_kind(arg: &AttributeArg, kind: ArgKind) -> bool {
@@ -17,7 +17,7 @@ pub(super) fn arg_matches_kind(arg: &AttributeArg, kind: ArgKind) -> bool {
         // expected-type retargeting for numeric literals).
         (ArgKind::Double, AttributeArg::Double(_) | AttributeArg::Float(_)) => true,
         (ArgKind::Bool, AttributeArg::Bool(_)) => true,
-        (ArgKind::Enum, AttributeArg::Enum(_)) => true,
+        (ArgKind::Enum | ArgKind::Path, AttributeArg::Enum(_)) => true,
         _ => false,
     }
 }
@@ -30,132 +30,50 @@ pub(super) fn kind_name(kind: ArgKind) -> &'static str {
         ArgKind::Double => "a double literal",
         ArgKind::Bool => "a boolean literal",
         ArgKind::Enum => "an enum member path",
+        ArgKind::Path => "a declaration path",
     }
 }
 
-fn validate_arg_list(
-    attr_name: &str,
-    attr: &AttributeNode,
-    kinds: &[ArgKind],
-    min: usize,
-    max: usize,
-    diagnostics: &mut DiagnosticBag,
-) {
-    if attr.args.len() < min || attr.args.len() > max {
-        let expected = if min == max {
-            format!("{}", min)
-        } else if max == usize::MAX {
-            format!("at least {}", min)
-        } else {
-            format!("{}-{}", min, max)
-        };
-        diagnostics.report_error(
-            format!(
-                "'@{}' expects {} argument(s), got {}",
-                attr_name,
-                expected,
-                attr.args.len()
-            ),
-            Some(attr.name.position),
-        );
-    }
-    if kinds.is_empty() {
-        return;
-    }
-    for (i, arg) in attr.args.iter().enumerate() {
-        let kind = kinds[i.min(kinds.len() - 1)];
-        if !arg_matches_kind(arg, kind) {
-            diagnostics.report_error(
-                format!(
-                    "'@{}' argument {} must be {}, got '{}'",
-                    attr_name,
-                    i + 1,
-                    kind_name(kind),
-                    arg.display()
-                ),
-                Some(arg.position()),
-            );
-        }
-    }
-}
-
-/// Validates one declaration's attribute list against `target`: every attribute must be a known
-/// builtin name or a declared `@attribute` type, allowed on `target`, carry the right argument shape,
-/// and (unless `repeatable`) appear at most once.
+/// Validates placement and arguments, resolving identity before any compiler handler runs.
 pub fn validate_attributes(
-    attrs: &[AttributeNode],
-    target: AttributeTarget,
-    diagnostics: &mut DiagnosticBag,
-) {
-    validate_attributes_with(attrs, target, &UserAttributes::default(), diagnostics);
-}
-
-fn validate_attributes_with(
     attrs: &[AttributeNode],
     target: AttributeTarget,
     user_attrs: &UserAttributes,
     diagnostics: &mut DiagnosticBag,
 ) {
-    let mut seen: Vec<&str> = Vec::new();
+    let mut seen = Vec::new();
     for attr in attrs {
         let name = attr.name.text.as_str();
-        if let Some(spec) = find_spec(name) {
-            if !spec.targets.contains(&target) {
-                diagnostics.report_error(
-                    format!("'@{}' cannot be applied to {}", name, target.display_name()),
-                    Some(attr.name.position),
-                );
-            }
-            match spec.args {
-                ArgShape::None => {
-                    if !attr.args.is_empty() {
-                        diagnostics.report_error(
-                            format!("'@{}' does not take any arguments", name),
-                            Some(attr.name.position),
-                        );
-                    }
-                }
-                ArgShape::Args { kinds, min, max } => {
-                    validate_arg_list(name, attr, kinds, min, max, diagnostics);
-                }
-            }
-            if !spec.repeatable && seen.contains(&name) {
-                diagnostics.report_error(
-                    format!("duplicate '@{}' attribute", name),
-                    Some(attr.name.position),
-                );
-            }
-            if (name == "inline" && seen.contains(&"noinline"))
-                || (name == "noinline" && seen.contains(&"inline"))
-            {
-                diagnostics.report_error(
-                    "'@inline' and '@noinline' cannot be combined".to_string(),
-                    Some(attr.name.position),
-                );
-            }
-            seen.push(name);
-            continue;
-        }
-
-        if let Some(decl) = user_attrs.get(name) {
+        let candidates = user_attrs.resolve(name, diagnostics.file_path.as_deref());
+        if let [decl] = candidates.as_slice() {
             user_attrs.validate_use(decl, attr, target, diagnostics);
-            if !decl.repeatable && seen.contains(&name) {
+            if !decl.repeatable && seen.contains(&decl.id.as_str()) {
                 diagnostics.report_error(
-                    format!("duplicate '@{}' attribute", name),
+                    format!("duplicate '@{name}' attribute"),
                     Some(attr.name.position),
                 );
             }
-            seen.push(name);
-            continue;
+            seen.push(decl.id.as_str());
+        } else if candidates.is_empty() {
+            let hint = user_attrs
+                .import_hint(name)
+                .map(|pkg| format!("; it is declared in '{pkg}', add 'import {pkg};'"))
+                .unwrap_or_default();
+            diagnostics.report_error(
+                format!("unknown attribute '@{name}'{hint}"),
+                Some(attr.name.position),
+            );
+        } else {
+            diagnostics.report_error(
+                format!("ambiguous attribute '@{name}'"),
+                Some(attr.name.position),
+            );
         }
-
-        let hint = user_attrs
-            .import_hint(name)
-            .map(|pkg| format!("; it is declared in '{pkg}', add 'import {pkg};'"))
-            .unwrap_or_default();
+    }
+    if has_named_attr(attrs, "inline") && has_named_attr(attrs, "noinline") {
         diagnostics.report_error(
-            format!("unknown attribute '@{}'{}", name, hint),
-            Some(attr.name.position),
+            "'@inline' and '@noinline' cannot be combined".to_string(),
+            attrs.first().map(|a| a.name.position),
         );
     }
 }
@@ -164,19 +82,18 @@ fn file_path_string(file_path: &Option<Rc<str>>) -> Option<String> {
     file_path.as_ref().map(|p| p.to_string())
 }
 
-/// The target kind for a function/method declaration, derived from its own modifiers. `None` for
-/// constructors/destructors, which cannot carry attributes today.
-fn function_target(f: &FunctionNode<'_>) -> Option<AttributeTarget> {
-    if is_special_member_name(&f.name.text) {
-        return None;
-    }
-    Some(if f.is_extern {
+fn function_target(f: &FunctionNode<'_>) -> AttributeTarget {
+    if f.is_extern {
         AttributeTarget::ExternFunction
+    } else if f.name.text == CONSTRUCTOR_NAME {
+        AttributeTarget::Constructor
+    } else if f.name.text == DESTRUCTOR_NAME {
+        AttributeTarget::Destructor
     } else if f.is_static {
         AttributeTarget::StaticMethod
     } else {
         AttributeTarget::Method
-    })
+    }
 }
 
 fn validate_function_list(
@@ -187,24 +104,34 @@ fn validate_function_list(
 ) {
     for f in functions {
         diagnostics.file_path = file_path_string(&f.file_path);
-        if let Some(target) = function_target(f) {
+        {
+            let target = function_target(f);
             let target = if matches!(target, AttributeTarget::Method) && top_level {
                 AttributeTarget::Function
             } else {
                 target
             };
-            validate_attributes_with(&f.attributes, target, user_attrs, diagnostics);
+            validate_attributes(&f.attributes, target, user_attrs, diagnostics);
             if matches!(target, AttributeTarget::ExternFunction) {
                 validate_c_extern_attrs(&f.attributes, diagnostics);
             }
         }
         for p in &f.parameters {
-            validate_attributes_with(
+            validate_attributes(
                 &p.attributes,
                 AttributeTarget::Parameter,
                 user_attrs,
                 diagnostics,
             );
+            validate_marshal_context(&p.attributes, true, diagnostics);
+            if has_named_attr(&p.attributes, "marshal")
+                && !(f.is_extern && has_c_attr(&f.attributes))
+            {
+                diagnostics.report_error(
+                    "'@marshal' requires a parameter of a '@c' extern".to_string(),
+                    Some(p.name.position),
+                );
+            }
         }
     }
 }
@@ -215,7 +142,7 @@ fn validate_fields(
     diagnostics: &mut DiagnosticBag,
 ) {
     for field in fields {
-        validate_attributes_with(
+        validate_attributes(
             &field.attributes,
             AttributeTarget::Field,
             user_attrs,
@@ -249,7 +176,7 @@ pub fn validate_program_attributes(
         } else {
             AttributeTarget::Struct
         };
-        validate_attributes_with(&s.attributes, target, user_attrs, diagnostics);
+        validate_attributes(&s.attributes, target, user_attrs, diagnostics);
         validate_fields(&s.fields, user_attrs, diagnostics);
         validate_function_list(&s.methods, false, user_attrs, diagnostics);
     }
@@ -259,14 +186,14 @@ pub fn validate_program_attributes(
             continue;
         }
         diagnostics.file_path = file_path_string(&i.file_path);
-        validate_attributes_with(
+        validate_attributes(
             &i.attributes,
             AttributeTarget::Interface,
             user_attrs,
             diagnostics,
         );
         for m in &i.methods {
-            validate_attributes_with(
+            validate_attributes(
                 &m.attributes,
                 AttributeTarget::InterfaceMethod,
                 user_attrs,
@@ -287,7 +214,7 @@ pub fn validate_program_attributes(
         } else {
             AttributeTarget::PlainEnum
         };
-        validate_attributes_with(&e.attributes, target, user_attrs, diagnostics);
+        validate_attributes(&e.attributes, target, user_attrs, diagnostics);
         for v in &e.variants {
             validate_fields(&v.fields, user_attrs, diagnostics);
         }

@@ -1,6 +1,8 @@
 // The thin Dream wrapper over native/include/kv.hpp. Every member is a declaration; the compiler
 // generates the C++ shim that implements it, and the C++ compiler checks it against the header.
 module kvstore;
+import system.interop;
+
 
 @cpp("kv.hpp", "geom::Point")
 public struct Point {

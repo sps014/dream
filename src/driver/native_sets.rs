@@ -279,7 +279,11 @@ pub fn resolve_bare_c_attrs(
 fn resolve_one(f: &mut FunctionNode<'_>, graph: &NativeGraph, diagnostics: &mut DiagnosticBag) {
     let file = f.file_path.clone();
     let name = f.name.text.clone();
-    let Some(attr) = f.attributes.iter_mut().find(|a| a.name.text == "c") else {
+    let Some(attr) = f
+        .attributes
+        .iter_mut()
+        .find(|a| dream_abi::attributes::is_compiler_attribute(a, "c"))
+    else {
         return;
     };
     if attr.args.len() >= 2 || attr.args.iter().any(|a| a.as_string().is_none()) {

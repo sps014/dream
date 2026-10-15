@@ -206,6 +206,7 @@ nav:
   - system.core: reference/api/system-core.md
   - system.crypto: reference/api/system-crypto.md
   - system.encoding: reference/api/system-encoding.md
+  - system.interop: reference/api/system-interop.md
   - system.io: reference/api/system-io.md
   - system.json: reference/api/system-json.md
   - system.logging: reference/api/system-logging.md

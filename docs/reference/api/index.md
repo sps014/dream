@@ -37,3 +37,5 @@ These declaration snippets show the interface; they are not complete programs. T
 - [system.task](system-task.md)
 - [system.testing](system-testing.md)
 - [system.text](system-text.md)
+
+- [C/C++ attribute declarations](system-interop.md)

@@ -39,6 +39,7 @@ pub fn discover_tests_in_source(path: &str, source: &str) -> Result<DiscoveredFi
         return Err(msg);
     }
     let root = program.get_root();
+    dream_stdlib::attributes::resolve_source_attribute_ids(root);
     let mut out = DiscoveredFile::default();
     for f in &root.functions {
         if f.name.text == "main" {
@@ -53,7 +54,7 @@ pub fn discover_tests_in_source(path: &str, source: &str) -> Result<DiscoveredFi
             is_unsafe: f
                 .attributes
                 .iter()
-                .any(|attribute| attribute.name.text == "unsafe"),
+                .any(|attribute| dream_abi::attributes::is_compiler_attribute(attribute, "unsafe")),
             timeout_ms: dream_abi::attributes::test_timeout_ms(&f.attributes).flatten(),
         });
     }
@@ -68,7 +69,7 @@ mod tests {
     fn finds_tests_timeouts_and_main() {
         let found = discover_tests_in_source(
             "t.dream",
-            "@test\nfun a(): void {}\n@test\n@timeout(2500)\nfun b(): void {}\nfun helper(): void {}\nfun main(): void {}\n",
+            "import system.testing;\n@test\nfun a(): void {}\n@test\n@timeout(2500)\nfun b(): void {}\nfun helper(): void {}\nfun main(): void {}\n",
         )
         .unwrap();
         assert_eq!(

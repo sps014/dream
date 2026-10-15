@@ -169,7 +169,10 @@ impl FunctionTableInfo {
         info.is_async = func.is_async
             && dream_abi::iterators::element(type_ctx, resolved_return, true).is_none();
         info.is_static = func.is_static;
-        info.is_unsafe = func.attributes.iter().any(|a| a.name.text == "unsafe");
+        info.is_unsafe = func
+            .attributes
+            .iter()
+            .any(|a| dream_abi::attributes::is_compiler_attribute(a, "unsafe"));
         info.runtime_support =
             dream_abi::attributes::RuntimeSupport::from_attributes(&func.attributes);
         info.intrinsic_name = intrinsic_name;

@@ -4,56 +4,56 @@ module system.core;
 // `alloc`/`set` use UTF-16 code-unit indices; the backing store is UTF-16 LE.
 extend string {
     // Span construction and its logical-range check already prove the backing unit exists.
-    @intrinsic("string_char_at_unchecked")
+    @intrinsic(Intrinsic.StringCharAtUnchecked)
     @unsafe
     internal static extern fun char_at_unchecked(borrow s: string, index: int): char;
 
     // Allocates an uninitialized string with capacity for `n` UTF-16 code units.
-    @intrinsic("string_alloc")
+    @intrinsic(Intrinsic.StringAlloc)
     public static extern fun alloc(n: int): string;
 
     // Writes code unit `c` at unit index `i` of string `s`.
-    @intrinsic("string_set")
+    @intrinsic(Intrinsic.StringSet)
     public static extern fun set(borrow s: string, i: int, c: char): void;
 
     // Builds a string from a full `byte[]` UTF-8 payload (transcodes to UTF-16).
-    @intrinsic("string_from_utf8")
+    @intrinsic(Intrinsic.StringFromUtf8)
     public static extern fun from_utf8(borrow bytes: byte[]): string;
 
     // Builds a string from the first `len` bytes of `bytes` (clamped to the array length).
-    @intrinsic("string_from_utf8_prefix")
+    @intrinsic(Intrinsic.StringFromUtf8Prefix)
     public static extern fun from_utf8_prefix(borrow bytes: byte[], len: int): string;
 
     // Copies `len` UTF-16 LE payload bytes from `bytes`; `scalars` is the unit count.
-    @intrinsic("string_from_utf8_prefix_n")
+    @intrinsic(Intrinsic.StringFromUtf8PrefixN)
     public static extern fun from_utf8_prefix_n(borrow bytes: byte[], len: int, scalars: int): string;
 
     // StringBuilder finish: unique buffers (`rc == 1`) are adopted; otherwise copied.
-    @intrinsic("string_from_builder")
+    @intrinsic(Intrinsic.StringFromBuilder)
     public static extern fun from_builder(borrow bytes: byte[], len: int, scalars: int): string;
 
     // Unit-indexed substring: O(1) slice (header + payload pointer + retain parent).
-    @intrinsic("string_substring_raw")
+    @intrinsic(Intrinsic.StringSubstringRaw)
     public static extern fun substring_raw(borrow s: string, start: int, end: int): string;
 
     // Fresh heap copy of `s` (isolation boundary for `@shared` string fields / worker captures).
-    @intrinsic("string_clone")
+    @intrinsic(Intrinsic.StringClone)
     public static extern fun clone(borrow s: string): string;
 
     // Bulk-copies `count` payload bytes from `src` into `dst` at `dst_off`.
-    @intrinsic("string_copy_utf8")
+    @intrinsic(Intrinsic.StringCopyUtf8)
     public static extern fun copy_utf8(borrow dst: byte[], dst_off: int, borrow src: string, src_off: int, count: int): void;
 
     // UTF-16 lexicographic compare (code-unit order): negative / zero / positive.
-    @intrinsic("string_compare")
+    @intrinsic(Intrinsic.StringCompare)
     public static extern fun compare_raw(borrow a: string, borrow b: string): int;
 
     // Unchecked UTF-16 unit load at a payload byte offset (even offsets).
-    @intrinsic("utf8_decode_at")
+    @intrinsic(Intrinsic.Utf8DecodeAt)
     public static extern fun utf8_decode_at(borrow s: string, byte_off: int): char;
 
     // Payload stride in bytes of the unit at `byte_off` (always 2).
-    @intrinsic("utf8_width_at")
+    @intrinsic(Intrinsic.Utf8WidthAt)
     public static extern fun utf8_width_at(borrow s: string, byte_off: int): int;
 
     // The interned empty string. Prefer this over `""` so empty results share one immortal pointer

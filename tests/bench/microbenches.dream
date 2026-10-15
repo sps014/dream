@@ -422,28 +422,6 @@ fun bench_list_clear_reuse(iters: int): void {
     sink_int(buf.capacity);
 }
 
-// Reuse a slab across batches; every read targets an earlier initialized allocation.
-@unsafe
-fun bench_arena(iters: int): void {
-    let arena = Arena((usize)(1 << 16));
-    let base = RawPtr<int>.null();
-    let sw = Stopwatch();
-    let acc = 0;
-    let i = 0;
-    while i < iters {
-        let index = i & 8191;
-        if index == 0 { arena.reset(); }
-        let slot = arena.alloc<int>(1);
-        if index == 0 { base = slot; }
-        slot.write(i);
-        acc = acc + base[(isize)(index / 2)];
-        i = i + 1;
-    }
-    sw.stop();
-    report("arena", sw.elapsed_nanos, iters, acc);
-    sink_int(acc);
-    arena.free();
-}
 // Public find-all API — pattern is intentionally NOT bare `\d+` (that hits a digit-run
 // fast path and would benchmax the score).
 fun bench_regex_find(iters: int): void {
@@ -1314,7 +1292,6 @@ fun run_suite(scale: int): void {
     bench_set_clear_reuse(scale * 70);
     bench_list_clear_reuse(scale * 500);
     bench_alloc_churn(scale * 30);
-    bench_arena(scale * 400);
     bench_regex_find(scale / 2);
     bench_string_builder(scale * 20);
     bench_json_serialize(scale * 2);

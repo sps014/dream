@@ -1,3 +1,4 @@
+import system.interop;
 // A named function and a lambda literal as C comparators: `const void*` arrives as `CPtr`, so each
 // target gets its own C wrapper.
 import system;

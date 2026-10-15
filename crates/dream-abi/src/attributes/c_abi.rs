@@ -2,52 +2,9 @@
 
 use super::*;
 
-pub(super) const SPECS: &[AttributeSpec] = &[
-    AttributeSpec {
-        name: "c",
-        targets: &[AttributeTarget::ExternFunction],
-        args: ArgShape::Args {
-            kinds: &[ArgKind::String, ArgKind::String],
-            min: 0,
-            max: 2,
-        },
-        repeatable: false,
-        doc: "Binds an extern function to a C ABI library/symbol: `@c(\"lib\", \"symbol\")`. `@c(\"lib\")` uses the Dream name as the symbol; bare `@c` also binds to the declaring package's `native/` sources. Native and portable WASM builds are supported; runtime annotations restrict availability.",
-    },
-    AttributeSpec {
-        name: "c_call",
-        targets: &[AttributeTarget::ExternFunction],
-        args: ArgShape::Args {
-            kinds: &[ArgKind::String],
-            min: 1,
-            max: 1,
-        },
-        repeatable: false,
-        doc: "C calling convention for `@c` externs: `@c_call(\"cdecl\")` (the platform default) or `@c_call(\"stdcall\")` (Win32 APIs; identical to cdecl on every target but 32-bit x86 Windows).",
-    },
-    AttributeSpec {
-        name: "marshal",
-        targets: &[AttributeTarget::ExternFunction, AttributeTarget::Parameter],
-        args: ArgShape::Args {
-            kinds: &[ArgKind::String],
-            min: 1,
-            max: 1,
-        },
-        repeatable: false,
-        doc: "`@c` marshaling: on the extern, string encoding (`@marshal(\"lpstr\")` / `@marshal(\"lpwstr\")`); on a `NativeCallback` parameter, `@marshal(\"user_data_last\")` passes `user_data` after the callback's own arguments.",
-    },
-    AttributeSpec {
-        name: "packed",
-        targets: &[AttributeTarget::ValueStruct],
-        args: ArgShape::None,
-        repeatable: false,
-        doc: "Packs a value struct with no padding for C ABI layout (`@packed`).",
-    },
-];
-
 /// Extracts the `(lib, symbol)` pair from `@c("lib", "symbol")`, or `None` when absent.
 pub fn c_import_target(attributes: &[AttributeNode]) -> Option<(String, String)> {
-    let c = attributes.iter().find(|a| a.name.text == "c")?;
+    let c = attributes.iter().find(|a| is_compiler_attribute(a, "c"))?;
     let lib = c.args.first()?.as_string()?.to_string();
     let symbol = c.args.get(1)?.as_string()?.to_string();
     Some((lib, symbol))
@@ -55,18 +12,40 @@ pub fn c_import_target(attributes: &[AttributeNode]) -> Option<(String, String)>
 
 /// True when the declaration carries `@c`.
 pub fn has_c_attr(attributes: &[AttributeNode]) -> bool {
-    attributes.iter().any(|a| a.name.text == "c")
+    attributes.iter().any(|a| is_compiler_attribute(a, "c"))
 }
 
 /// True when a value struct carries `@packed`.
 pub fn has_packed_attr(attributes: &[AttributeNode]) -> bool {
-    attributes.iter().any(|a| a.name.text == "packed")
+    attributes
+        .iter()
+        .any(|a| is_compiler_attribute(a, "packed"))
 }
 
-/// `@marshal("lpstr")` or `@marshal("lpwstr")`. `None` when absent (ANSI/`lpstr`).
-pub fn c_marshal_charset(attributes: &[AttributeNode]) -> Option<&str> {
-    let attr = attributes.iter().find(|a| a.name.text == "marshal")?;
-    attr.args.first()?.as_string()
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarshalKind {
+    LpStr,
+    LpWStr,
+    UserDataLast,
+}
+
+pub fn marshal_kind(attributes: &[AttributeNode]) -> Option<MarshalKind> {
+    let attr = attributes
+        .iter()
+        .find(|a| is_compiler_attribute(a, "marshal"))?;
+    match enum_member(attr)? {
+        "LpStr" => Some(MarshalKind::LpStr),
+        "LpWStr" => Some(MarshalKind::LpWStr),
+        "UserDataLast" => Some(MarshalKind::UserDataLast),
+        _ => None,
+    }
+}
+
+fn enum_member(attr: &AttributeNode) -> Option<&str> {
+    let AttributeArg::Enum(path) = attr.args.first()? else {
+        return None;
+    };
+    Some(&path.last()?.text)
 }
 
 /// A `@c_call` calling convention.
@@ -79,8 +58,8 @@ pub enum CCallConv {
 impl CCallConv {
     fn parse(name: &str) -> Option<Self> {
         match name {
-            "cdecl" => Some(CCallConv::Cdecl),
-            "stdcall" => Some(CCallConv::Stdcall),
+            "Cdecl" => Some(CCallConv::Cdecl),
+            "Stdcall" => Some(CCallConv::Stdcall),
             _ => None,
         }
     }
@@ -90,8 +69,8 @@ impl CCallConv {
 pub fn c_call_conv(attributes: &[AttributeNode]) -> CCallConv {
     attributes
         .iter()
-        .find(|a| a.name.text == "c_call")
-        .and_then(|a| a.args.first()?.as_string())
+        .find(|a| is_compiler_attribute(a, "c_call"))
+        .and_then(enum_member)
         .and_then(CCallConv::parse)
         .unwrap_or(CCallConv::Cdecl)
 }
@@ -105,6 +84,7 @@ pub fn c_call_conv(attributes: &[AttributeNode]) -> CCallConv {
 ///
 /// Call after generic attribute shape validation.
 pub fn validate_c_extern_attrs(attrs: &[AttributeNode], diagnostics: &mut DiagnosticBag) {
+    validate_marshal_context(attrs, false, diagnostics);
     if extern_binding_conflict(attrs) {
         let pos = attrs
             .iter()
@@ -118,7 +98,7 @@ pub fn validate_c_extern_attrs(attrs: &[AttributeNode], diagnostics: &mut Diagno
     }
     if !has_c_attr(attrs) {
         for name in ["marshal", "c_call"] {
-            if let Some(attr) = attrs.iter().find(|a| a.name.text == name) {
+            if let Some(attr) = attrs.iter().find(|a| is_compiler_attribute(a, name)) {
                 diagnostics.report_error(
                     format!("'@{name}' requires '@c' on the same extern (it only applies to C ABI imports)"),
                     Some(attr.name.position),
@@ -126,16 +106,21 @@ pub fn validate_c_extern_attrs(attrs: &[AttributeNode], diagnostics: &mut Diagno
             }
         }
     }
-    if let Some(attr) = attrs.iter().find(|a| a.name.text == "c_call") {
-        let conv = attr.args.first().and_then(|a| a.as_string());
-        if conv.is_some_and(|c| CCallConv::parse(c).is_none()) {
-            diagnostics.report_error(
-                format!(
-                    "unknown C calling convention '{}': use \"cdecl\" or \"stdcall\"",
-                    conv.unwrap_or_default()
-                ),
-                Some(attr.name.position),
-            );
+}
+
+pub fn validate_marshal_context(
+    attrs: &[AttributeNode],
+    parameter: bool,
+    diagnostics: &mut DiagnosticBag,
+) {
+    if let Some(attr) = attrs.iter().find(|a| is_compiler_attribute(a, "marshal")) {
+        let valid = match marshal_kind(attrs) {
+            Some(MarshalKind::UserDataLast) => parameter,
+            Some(MarshalKind::LpStr | MarshalKind::LpWStr) => !parameter,
+            None => true,
+        };
+        if !valid {
+            diagnostics.report_error("marshaling choice does not apply here: use LpStr/LpWStr on C externs or UserDataLast on NativeCallback parameters".to_string(), Some(attr.name.position));
         }
     }
 }

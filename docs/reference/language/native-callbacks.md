@@ -15,6 +15,8 @@ wrapper for that function. Passing a `fun` held in a variable where conversion i
 error that points at `NativeCallback`.
 
 ```dream
+import system.interop;
+
 @c("c") extern fun qsort(base: int[], n: usize, size: usize, cmp: fun(CPtr, CPtr): int): void;
 
 qsort(xs, (usize)5, (usize)sizeof(int), (a: CPtr, b: CPtr) => Ffi.read_int(a, 0) - Ffi.read_int(b, 0));
@@ -23,7 +25,7 @@ qsort(xs, (usize)5, (usize)sizeof(int), (a: CPtr, b: CPtr) => Ffi.read_int(a, 0)
 **`NativeCallback<F>`** (in `system`) wraps any `fun`, capturing or not. Use it for C APIs that
 take a function pointer plus a `void* user_data`. The parameter expands to both C arguments. By
 default the callback receives `user_data` as its first C parameter. Mark the parameter
-`@marshal("user_data_last")` for APIs that pass it last.
+`@marshal(MarshalKind.UserDataLast)` for APIs that pass it last.
 
 ```c
 typedef int (*ticker_fn)(void* user, int tick);
@@ -31,6 +33,8 @@ void ticker_on_tick(ticker* t, ticker_fn fn, void* user);
 ```
 
 ```dream
+import system.interop;
+
 @c extern fun ticker_on_tick(t: CPtr, cb: NativeCallback<fun(int): int>): void;
 
 public class Ticker {

@@ -30,7 +30,23 @@ fn expand(tag: &str, source: &str, with_native: bool) -> (Option<String>, String
     let path = main.to_str().unwrap().to_string();
     parse_file_recursive(&path, &mut acc, &arena, &mut diagnostics).unwrap();
     let graph = NativeGraph::load(&path, &acc, &dream_abi::target::TargetSpec::host()).unwrap();
-    let bridge = super::expand(&arena, &mut acc, &graph, &mut diagnostics).unwrap();
+    crate::driver::prelude::merge_prelude(
+        &arena,
+        &mut acc.all_functions,
+        &mut acc.all_structs,
+        &mut acc.all_interfaces,
+        &mut acc.all_enums,
+        &mut acc.all_extends,
+        &mut acc.all_globals,
+        &mut diagnostics,
+        &mut acc.file_contents,
+        &mut acc.file_modules,
+        &acc.requested_std_packages,
+    )
+    .unwrap();
+    let attributes =
+        crate::driver::attributes::prepare(&arena, &mut acc, &mut diagnostics).unwrap();
+    let bridge = super::expand(&arena, &mut acc, &graph, &attributes, &mut diagnostics).unwrap();
     let messages = diagnostics
         .errors()
         .map(|d| d.message.clone())
@@ -44,7 +60,7 @@ fn expand(tag: &str, source: &str, with_native: bool) -> (Option<String>, String
 fn shim_covers_each_member_shape() {
     let (shim, messages) = expand(
         "shapes",
-        "import system;\n\
+        "import system.interop;\nimport system;\n\
          @cpp(\"kv.hpp\", \"kv::Store\")\n\
          public class Store {\n\
              extern constructor(path: string);\n\
@@ -86,7 +102,7 @@ fn shim_covers_each_member_shape() {
 fn non_bridgeable_and_non_extern_members_are_rejected() {
     let (_, messages) = expand(
         "reject",
-        "@cpp(\"kv.hpp\")\n\
+        "import system.interop;\n@cpp(\"kv.hpp\")\n\
          class Store {\n\
              count: int;\n\
              extern fun keys(m: Map<string, int>): void;\n\
@@ -114,7 +130,7 @@ fn non_bridgeable_and_non_extern_members_are_rejected() {
 fn cpp_without_native_sources_is_reported() {
     let (shim, messages) = expand(
         "nosrc",
-        "@cpp(\"kv.hpp\", \"kv::greet\")\nextern fun greet(who: string): string;\n",
+        "import system.interop;\n@cpp(\"kv.hpp\", \"kv::greet\")\nextern fun greet(who: string): string;\n",
         false,
     );
     assert!(shim.is_none());

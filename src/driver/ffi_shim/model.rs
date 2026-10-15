@@ -141,6 +141,7 @@ fn report(diagnostics: &mut DiagnosticBag, file: Option<&Rc<str>>, msg: String, 
 pub(super) fn collect(
     acc: &ProgramAccumulator<'_>,
     graph: &NativeGraph,
+    attributes: &dream_abi::attributes::UserAttributes,
     diagnostics: &mut DiagnosticBag,
 ) -> Program {
     let mut cx = Ctx {
@@ -168,6 +169,7 @@ pub(super) fn collect(
             } else {
                 AttributeTarget::Struct
             },
+            attributes,
             diagnostics,
         );
         diagnostics.file_path = saved_file;

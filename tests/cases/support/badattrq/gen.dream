@@ -8,9 +8,9 @@ class NotAnAttribute {
 }
 
 @generator
-@on_attribute(json)
+@on_attribute(JsonAttribute)
 public fun derive_bad(ctx: GenContext): void {
-    for (let d in ctx.types_with<json>()) {
+    for (let d in ctx.types_with<JsonAttribute>()) {
         let a = d.attribute<NotAnAttribute>();
     }
 }

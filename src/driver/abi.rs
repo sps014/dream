@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::driver::ffi_shim::{CppBridge, SHIM_RUNTIME_EXPORTS, WrittenShim};
 use crate::driver::native_sets::{NativeGraph, NativeSet};
-use dream_abi::attributes::{c_import_target, c_marshal_charset, extern_import_target, has_c_attr};
+use dream_abi::attributes::{c_import_target, extern_import_target, has_c_attr, marshal_kind};
 use dream_sema::module_graph::ProgramView;
 use dream_syntax::nodes::function::ParameterNode;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
@@ -197,7 +197,7 @@ pub(crate) fn build_abi_json(
         let type_str = ty.get_type();
         match type_str.as_str() {
             "string" => {
-                if c_marshal_charset(extern_attrs) == Some("lpwstr") {
+                if marshal_kind(extern_attrs) == Some(dream_abi::attributes::MarshalKind::LpWStr) {
                     "string_utf16".to_string()
                 } else {
                     "string".to_string()
@@ -585,6 +585,7 @@ mod tests {
         let arena = Bump::new();
         let mut parser = Parser::new(lexer, &arena, &mut diagnostics);
         let tree = parser.parse().expect("parse should succeed");
+        dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
         let program = tree.get_root();
         let graph = dream_sema::module_graph::ModuleGraph::single(program.clone());
         let view = graph.view();
@@ -616,7 +617,8 @@ mod tests {
 
     #[test]
     fn pointer_integer_c_metadata_uses_target_width() {
-        let source = r#"@c("c", "sizes") extern fun sizes(bytes: usize, offset: isize, callback: fun(usize): isize, ref out: usize): usize;"#;
+        let source = r#"import system.interop;
+@c("c", "sizes") extern fun sizes(bytes: usize, offset: isize, callback: fun(usize): isize, ref out: usize): usize;"#;
         for (size, scalar, callback, output) in [
             (4, "int", "fn:i32:i32", "out_int"),
             (8, "long", "fn:i64:i64", "out_long"),
@@ -641,10 +643,11 @@ mod tests {
     #[test]
     fn live_native_sets_become_c_sources_not_c_libs() {
         let mut diagnostics = DiagnosticBag::new(None);
-        let source = "@c(\"kv\", \"kv_open\") extern fun kv_open(): int;\n@c(\"z\", \"inflate\") extern fun inflate(): int;\n";
+        let source = "import system.interop;\n@c(\"kv\", \"kv_open\") extern fun kv_open(): int;\n@c(\"z\", \"inflate\") extern fun inflate(): int;\n";
         let arena = Bump::new();
         let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics);
         let tree = parser.parse().expect("parse should succeed");
+        dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
         let live: Vec<LiveImport> = vec![
             ("c/kv".into(), "kv_open".into()),
             ("c/z".into(), "inflate".into()),
@@ -702,7 +705,8 @@ mod tests {
 
     #[test]
     fn abi_emits_kind_c_and_c_libs_for_c_extern() {
-        let source = r#"
+        let source = r#"import system.interop;
+
             @c("sqlite3", "sqlite3_close")
             extern fun sqlite3_close(db: long): int;
         "#;
@@ -727,7 +731,8 @@ mod tests {
 
     #[test]
     fn abi_ref_long_param_is_out_long() {
-        let source = r#"
+        let source = r#"import system.interop;
+
             @c("sqlite3", "sqlite3_open")
             extern fun sqlite3_open(path: string, ref db: long): int;
         "#;
@@ -742,7 +747,8 @@ mod tests {
 
     #[test]
     fn abi_emits_structs_section_for_c_struct_ptr() {
-        let source = r#"
+        let source = r#"import system.interop;
+
             struct Point {
                 x: int;
                 y: int;
@@ -766,7 +772,8 @@ mod tests {
 
     #[test]
     fn abi_packed_struct_is_size_1_packed() {
-        let source = r#"
+        let source = r#"import system.interop;
+
             @packed
             struct Header {
                 kind: byte;
@@ -792,7 +799,8 @@ mod tests {
 
     #[test]
     fn nested_struct_abi_uses_the_selected_target_layout() {
-        let source = r#"
+        let source = r#"import system.interop;
+
             struct Inner {
                 text: string;
                 count: int;
@@ -809,6 +817,7 @@ mod tests {
         let arena = Bump::new();
         let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics);
         let tree = parser.parse().expect("parse should succeed");
+        dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
         let program = tree.get_root();
         let graph = dream_sema::module_graph::ModuleGraph::single(program.clone());
         let view = graph.view();
@@ -861,6 +870,7 @@ mod tests {
         let arena = Bump::new();
         let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics);
         let tree = parser.parse().expect("parse should succeed");
+        dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
         for (ptr_size, expected) in [(4, 24), (8, 32)] {
             let graph = dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone());
             let mut analyzer = dream_sema::analyzer::Analyzer::new(&graph, &arena)

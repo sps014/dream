@@ -1,0 +1,49 @@
+import system.testing;
+import system.codegen;
+
+public enum DecodeProbeMode { First, Second }
+
+@attribute(AttributeTarget.Function)
+public struct DecodeProbeAttribute {
+    public name: string;
+    public mode: Option<DecodeProbeMode>;
+}
+
+@attribute(AttributeTarget.Function)
+public struct decode_modes {
+    public values: List<DecodeProbeMode>;
+}
+
+@decode_probe("omitted")
+@decode_modes(DecodeProbeMode.First, DecodeProbeMode.Second)
+fun decode_probe_target(): void {}
+
+@test
+fun typed_attribute_decode(): void {
+    let args = List<GenAttrArg>();
+    args.push(GenAttrArg("string", "example"));
+    let attrs = List<GenAttribute>();
+    attrs.push(GenAttribute(GenAttributes.id<DecodeProbeAttribute>(), "decode_probe", args));
+    let first = GenAttributes.decode<DecodeProbeAttribute>(attrs).unwrap();
+    Assert.eq_str(first.name, "example");
+    Assert.is_true(first.mode.is_none());
+    args.push(GenAttrArg("enum", "DecodeProbeMode.Second"));
+    let second = GenAttributes.decode<DecodeProbeAttribute>(attrs).unwrap();
+    Assert.is_true(second.mode.unwrap() == DecodeProbeMode.Second);
+
+    let paths = List<GenAttrArg>();
+    paths.push(GenAttrArg("enum", "Json.serialize"));
+    let triggers = List<GenAttribute>();
+    triggers.push(GenAttribute(GenAttributes.id<OnCallAttribute>(), "on_call", paths));
+    let trigger = GenAttributes.decode<OnCallAttribute>(triggers).unwrap();
+    Assert.eq_str(trigger.declaration.text, "Json.serialize");
+
+    let modes = List<GenAttrArg>();
+    modes.push(GenAttrArg("enum", "DecodeProbeMode.First"));
+    modes.push(GenAttrArg("enum", "DecodeProbeMode.Second"));
+    let repeated = List<GenAttribute>();
+    repeated.push(GenAttribute(GenAttributes.id<decode_modes>(), "decode_modes", modes));
+    let decoded = GenAttributes.decode<decode_modes>(repeated).unwrap();
+    Assert.eq(decoded.values.length, 2);
+    Assert.is_true(decoded.values.get(1) == DecodeProbeMode.Second);
+}

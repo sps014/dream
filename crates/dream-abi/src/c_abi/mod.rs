@@ -86,9 +86,6 @@ pub const EMBED_EXPORTS: [&str; 7] = [
 /// The stdlib callback class (`system.NativeCallback<F>`), passed to C as `(fn, void* user_data)`.
 pub const NATIVE_CALLBACK_TYPE: &str = "NativeCallback";
 
-/// `@marshal` value putting a `NativeCallback`'s `user_data` after the callback's own parameters.
-pub const MARSHAL_USER_DATA_LAST: &str = "user_data_last";
-
 /// The generated C++ shim's `extern "C"` symbol for one `@cpp` member:
 /// `dream__<set>__<Class>__<member>`, with `class` empty for free functions. `overload` is the
 /// member's index among same-named members (0 keeps the bare name), since C symbols cannot

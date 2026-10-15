@@ -121,13 +121,13 @@ pub struct HImport {
     /// `@async_host` extern: on native the host takes the future as its leading argument and
     /// completes it from a foreign thread, so its poll delegates instead of blocking inline.
     pub async_host: bool,
-    /// `@marshal("lpwstr")` on a `@c` extern: string args become UTF-16 rather than UTF-8.
+    /// `@marshal(MarshalKind.LpWStr)` on a `@c` extern: string args become UTF-16 rather than UTF-8.
     pub c_wide_strings: bool,
     /// `@c` only: how each parameter crosses the C boundary, parallel to `params`.
     pub c_params: Vec<CShape>,
     /// `@c` only: how the C result becomes the Dream result.
     pub c_ret: CShape,
-    /// `@c_call("stdcall")`: `x86_stdcallcc` on 32-bit x86 Windows, the C convention elsewhere.
+    /// `@c_call(CCallConv.Stdcall)`: `x86_stdcallcc` on 32-bit x86 Windows, the C convention elsewhere.
     pub c_stdcall: bool,
 }
 
@@ -139,7 +139,7 @@ pub enum CShape {
     Void,
     /// Numbers, `bool`, `char`, `byte`, as the C scalar of the same width and signedness.
     Scalar(CScalar),
-    /// `string` as `const char*` (UTF-16 under `@marshal("lpwstr")`); `optional` maps `None` to `NULL`.
+    /// `string` as `const char*` (UTF-16 under `@marshal(MarshalKind.LpWStr)`); `optional` maps `None` to `NULL`.
     Str { optional: bool },
     /// `CPtr` as `void*`; `optional` is `Option<CPtr>`.
     Ptr { optional: bool },

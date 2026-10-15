@@ -127,7 +127,8 @@ fn c_links_both_library_kinds_and_uses_plain_exports() {
     let root = temp.path().join("mylib");
     project(
         &root,
-        r#"
+        r#"import system.interop;
+
 import system;
 let base: int = 40;
 @export fun add(a: int, b: int): int { return base + a + b; }

@@ -43,7 +43,7 @@ fn reachable_arguments_keep_capture_without_callback_attachment() {
 #[test]
 fn reachable_c_imports_keep_embedding_and_startup_services() {
     let (_dir, ir, abi) = compile(
-        "@c(\"c\", \"abs\") extern fun absolute(x: int): int; fun main(): void { let n = absolute(-2); }",
+        "import system.interop; @c(\"c\", \"abs\") extern fun absolute(x: int): int; fun main(): void { let n = absolute(-2); }",
     );
     assert!(ir.contains("call void @dream_thread_attach"));
     assert!(ir.contains("call void @dream_process_capture_args"));
@@ -78,7 +78,7 @@ fn wasm_c_imports_do_not_add_native_embedding_exports_to_the_manifest() {
     let input = dir.path().join("main.dream");
     let output = dir.path().join("main.ll");
     std::fs::write(&input,
-        "@c(\"c\", \"abs\") extern fun absolute(x: int): int; fun main(): int { return absolute(-2); }",
+        "import system.interop; @c(\"c\", \"abs\") extern fun absolute(x: int): int; fun main(): int { return absolute(-2); }",
     ).unwrap();
     Compiler::new(Target::wasm32())
         .compile(&input.display().to_string(), output.to_str().unwrap())
@@ -102,7 +102,7 @@ fn local_native_callback_keeps_owner_without_c_imports_or_argument_capture() {
 #[test]
 fn opaque_runtime_intrinsics_keep_owner_and_cleanup_services() {
     let (_dir, ir, _) = compile(
-        "static class Runtime { @intrinsic(\"dream_callback_enter\") public static extern fun enter(): void; } fun main(): void { Runtime.enter(); }",
+        "static class Runtime { @intrinsic(Intrinsic.StringClone) public static extern fun clone(borrow s: string): string; } fun main(): void { let copy = Runtime.clone(\"x\"); }",
     );
     assert!(ir.contains("call void @dream_thread_attach"));
     assert!(ir.contains("call void @dream_process_capture_args"));

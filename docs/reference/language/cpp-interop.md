@@ -30,6 +30,8 @@ std::string greet(const std::string& who);
 ```
 
 ```dream
+import system.interop;
+
 // src/kvstore.dream
 module kvstore;
 
@@ -122,6 +124,8 @@ on `sizeof` and every `offsetof`. A mismatch fails the C++ compile, reported as:
 ```
 
 ```dream
+import system.interop;
+
 @cpp("kv.hpp", "geom::Point")
 public struct Point {
     public x: double;

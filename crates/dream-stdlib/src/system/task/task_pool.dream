@@ -131,13 +131,13 @@ public class TaskPool {
     }
     del() { this.terminate(); }
 
-    @intrinsic("dream_task_attach")
+    @intrinsic(Intrinsic.DreamTaskAttach)
     static extern fun attach_host(borrow pending: object, borrow token: CancellationToken): void;
 
-    @intrinsic("dream_task_keep_alive")
+    @intrinsic(Intrinsic.DreamTaskKeepAlive)
     static extern fun keep_alive(borrow callback: object): void;
 
-    @intrinsic("dream_task_protect")
+    @intrinsic(Intrinsic.DreamTaskProtect)
     static extern fun protect_host(borrow source: CancellationSource): void;
 
     @runtime("workerPoolSpawn")

@@ -1,42 +1,42 @@
 module system.core;
 
 internal static class RawMemory {
-    @intrinsic("raw_load")
+    @intrinsic(Intrinsic.RawLoad)
     @unsafe
     internal static extern fun load<T: unmanaged>(address: usize): T;
-    @intrinsic("raw_store")
+    @intrinsic(Intrinsic.RawStore)
     @unsafe
     internal static extern fun store<T: unmanaged>(address: usize, value: T): void;
-    @intrinsic("dream_raw_size")
+    @intrinsic(Intrinsic.DreamRawSize)
     internal static extern fun size(count: usize, element_size: usize): usize;
-    @intrinsic("dream_raw_alloc")
+    @intrinsic(Intrinsic.DreamRawAlloc)
     @unsafe
     internal static extern fun alloc(size: usize, alignment: usize, minimum: usize, zeroed: int): usize;
-    @intrinsic("dream_raw_realloc")
+    @intrinsic(Intrinsic.DreamRawRealloc)
     @unsafe
     internal static extern fun realloc(address: usize, size: usize, minimum: usize): usize;
-    @intrinsic("dream_raw_free")
+    @intrinsic(Intrinsic.DreamRawFree)
     @unsafe
     internal static extern fun free(address: usize): void;
-    @intrinsic("dream_raw_copy")
+    @intrinsic(Intrinsic.DreamRawCopy)
     @unsafe
     internal static extern fun copy(dst: usize, src: usize, size: usize): void;
-    @intrinsic("dream_raw_move")
+    @intrinsic(Intrinsic.DreamRawMove)
     @unsafe
     internal static extern fun move(dst: usize, src: usize, size: usize): void;
-    @intrinsic("dream_raw_fill")
+    @intrinsic(Intrinsic.DreamRawFill)
     @unsafe
     internal static extern fun fill(dst: usize, value: int, size: usize): void;
-    @intrinsic("dream_arena_new")
+    @intrinsic(Intrinsic.DreamArenaNew)
     @unsafe
     internal static extern fun arena_new(initial: usize): usize;
-    @intrinsic("dream_arena_alloc")
+    @intrinsic(Intrinsic.DreamArenaAlloc)
     @unsafe
     internal static extern fun arena_alloc(state: usize, size: usize, alignment: usize, zeroed: int): usize;
-    @intrinsic("dream_arena_reset")
+    @intrinsic(Intrinsic.DreamArenaReset)
     @unsafe
     internal static extern fun arena_reset(state: usize): void;
-    @intrinsic("dream_arena_free")
+    @intrinsic(Intrinsic.DreamArenaFree)
     @unsafe
     internal static extern fun arena_free(state: usize): void;
 }

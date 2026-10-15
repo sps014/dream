@@ -1,3 +1,4 @@
+import system.interop;
 import system.testing;
 // `Option<string>` is a nullable `const char*`: a NULL result becomes `None`.
 import system;

@@ -37,10 +37,17 @@ impl<'a> Analyzer<'a> {
             intrinsics::IntrinsicOp::GenAttributeDecode => intrinsics::GEN_ATTRIBUTE_DECODE_MEMBER,
             _ => intrinsics::GEN_ATTRIBUTE_DECODE_ALL_MEMBER,
         };
-        if self
+        let decoder = self
             .function_table
-            .method_candidates(attr_id, member)
-            .is_empty()
+            .generic_methods
+            .get(&(attr_id, member.to_string()))
+            .and_then(|def| self.generic_functions.get(def))
+            .copied();
+        if decoder.is_none()
+            && self
+                .function_table
+                .method_candidates(attr_id, member)
+                .is_empty()
         {
             diagnostics.report_error(
                 format!(
@@ -81,7 +88,19 @@ impl<'a> Analyzer<'a> {
                 wrap("List")
             }
         };
-        self.hir_set_type_method_call(attr_id, member, arg_hirs, &ret);
+        if let Some(template) = decoder {
+            // Instantiating only requested decoders avoids eagerly expanding List<A> for every
+            // compiler attribute whenever a program imports system.codegen.
+            let bindings = [(
+                intrinsics::GEN_ATTRIBUTE_DECODER_PARAM.to_string(),
+                Self::type_from_name("int"),
+            )]
+            .into();
+            let identity = self.register_generic_function_instance(template, &bindings);
+            self.hir_set_call_identity(&identity, arg_hirs, &ret);
+        } else {
+            self.hir_set_type_method_call(attr_id, member, arg_hirs, &ret);
+        }
         Ok(ret)
     }
 }

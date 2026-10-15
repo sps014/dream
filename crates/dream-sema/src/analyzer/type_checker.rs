@@ -24,7 +24,10 @@ impl<'a> Analyzer<'a> {
         ));
         let errors_before = diagnostics.errors().count();
         self.hir_begin_function(function);
-        let is_unsafe = function.attributes.iter().any(|a| a.name.text == "unsafe");
+        let is_unsafe = function
+            .attributes
+            .iter()
+            .any(|a| dream_abi::attributes::is_compiler_attribute(a, "unsafe"));
         let runtime_support =
             dream_abi::attributes::RuntimeSupport::from_attributes(&function.attributes);
         let saved_overflow = std::mem::replace(&mut self.overflow, dream_hir::Overflow::Wrapping);

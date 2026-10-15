@@ -2,12 +2,8 @@
 //! stdlib's, collected once, plus the ones the open document declares or imports. Completion,
 //! hover and signature help fall back to these when a name is not a builtin attribute.
 
-use bumpalo::Bump;
-use dream::diagnostics::DiagnosticBag;
-use dream::syntax::lexer::Lexer;
-use dream::syntax::nodes::StructDeclarationNode;
-use dream::syntax::parser::Parser;
-use dream_abi::attributes::has_attribute_decl_attr;
+use dream::syntax::nodes::{EnumDeclarationNode, StructDeclarationNode};
+use dream_abi::attributes::{UserAttributeParam, UserAttributes};
 use std::sync::OnceLock;
 
 use super::Index;
@@ -15,11 +11,14 @@ use super::Index;
 #[derive(Debug, Clone)]
 pub struct DeclaredAttribute {
     pub name: String,
+    pub type_name: String,
     /// The std package declaring it; `None` when the program itself declares it.
     pub package: Option<&'static str>,
     /// `@name(field: type, ...)`, or `@name` for a field-less attribute.
     pub signature: String,
     pub doc: Option<String>,
+    pub params: Vec<UserAttributeParam>,
+    pub enum_choices: Vec<Vec<String>>,
 }
 
 impl DeclaredAttribute {
@@ -57,24 +56,27 @@ fn doc_above(source: &str, at: usize) -> Option<String> {
 pub fn collect(
     source: &str,
     structs: &[StructDeclarationNode<'_>],
+    enums: &[EnumDeclarationNode<'_>],
     package: Option<&'static str>,
 ) -> Vec<DeclaredAttribute> {
+    let mut diagnostics = dream::diagnostics::DiagnosticBag::new(None);
+    let registry = UserAttributes::collect(
+        structs,
+        enums,
+        &|_| package.unwrap_or("").to_string(),
+        Default::default(),
+        &mut diagnostics,
+    );
     let mut out = Vec::new();
     for s in structs {
-        if !has_attribute_decl_attr(&s.attributes) {
+        if !s.attributes.iter().any(|a| a.name.text == "attribute") {
             continue;
         }
         let name = s.name.text.clone();
-        let fields: Vec<String> = s
-            .fields
-            .iter()
-            .map(|f| format!("{}: {}", f.name.text, f.field_type.display_name()))
-            .collect();
-        let signature = if fields.is_empty() {
-            format!("@{name}")
-        } else {
-            format!("@{name}({})", fields.join(", "))
+        let Some(contract) = registry.get(&name) else {
+            continue;
         };
+        let signature = contract.signature_label();
         let first = s
             .attributes
             .iter()
@@ -82,10 +84,22 @@ pub fn collect(
             .min()
             .unwrap_or(s.name.position.start);
         out.push(DeclaredAttribute {
-            name,
+            name: contract.name.clone(),
+            type_name: contract.type_name.clone(),
             package,
             signature,
             doc: doc_above(source, first),
+            params: contract.params.clone(),
+            enum_choices: contract
+                .params
+                .iter()
+                .map(|p| {
+                    p.enum_type
+                        .as_ref()
+                        .map(|id| registry.enum_members(id).to_vec())
+                        .unwrap_or_default()
+                })
+                .collect(),
         });
     }
     out
@@ -96,21 +110,30 @@ pub fn collect(
 pub fn std_attributes() -> &'static [DeclaredAttribute] {
     static ALL: OnceLock<Vec<DeclaredAttribute>> = OnceLock::new();
     ALL.get_or_init(|| {
-        let mut out = Vec::new();
-        for pkg in dream_stdlib::STD_PACKAGES {
-            for &(_, source) in pkg.files {
-                if !source.contains("@attribute") {
-                    continue;
-                }
-                let arena = Bump::new();
-                let mut scratch = DiagnosticBag::new(None);
-                let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut scratch);
-                if let Ok(ast) = parser.parse() {
-                    out.extend(collect(source, &ast.get_root().structs, Some(pkg.name)));
-                }
-            }
-        }
-        out
+        dream_stdlib::attributes::all_specs()
+            .map(|contract| DeclaredAttribute {
+                name: contract.name.clone(),
+                type_name: contract.type_name.clone(),
+                package: dream_stdlib::find_package(&contract.module).map(|p| p.name),
+                signature: contract.signature_label(),
+                doc: Some(contract.doc.clone()),
+                params: contract.params.clone(),
+                enum_choices: contract
+                    .params
+                    .iter()
+                    .map(|p| {
+                        p.enum_type
+                            .as_ref()
+                            .map(|id| {
+                                dream_stdlib::attributes::attribute_catalog()
+                                    .enum_members(id)
+                                    .to_vec()
+                            })
+                            .unwrap_or_default()
+                    })
+                    .collect(),
+            })
+            .collect()
     })
 }
 

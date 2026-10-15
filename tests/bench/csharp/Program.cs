@@ -19,32 +19,6 @@ public static class Program
     static bool IsWarmup = true;
     static int Sink;
 
-    // Index-based scratch slab (comparison implementation using a bounded typed slab).
-    sealed class Arena<T>
-    {
-        readonly T[] items;
-        int used;
-
-        public Arena(int capacity)
-        {
-            items = new T[Math.Max(1, capacity)];
-            used = 0;
-        }
-
-        public int Bump(int n)
-        {
-            if (n < 0 || used + n > items.Length)
-                throw new InvalidOperationException("Arena overflow");
-            int start = used;
-            used += n;
-            return start;
-        }
-
-        public void SetAt(int index, T value) => items[index] = value;
-        public T At(int index) => items[index];
-        public void Reset() => used = 0;
-    }
-
     static void Report(string name, long elapsedNanos, int iters, int checksum)
     {
         if (IsWarmup) return;
@@ -301,24 +275,6 @@ public static class Program
         sw.Stop();
         Report("list_clear_reuse", ElapsedNs(sw), rounds * per, buf.Count);
         Sink = buf.Capacity;
-    }
-
-    static void BenchArena(int iters)
-    {
-        var arena = new Arena<int>(1 << 14);
-        var sw = Stopwatch.StartNew();
-        int acc = 0;
-        for (int i = 0; i < iters; i++)
-        {
-            int start = arena.Bump(1);
-            arena.SetAt(start, i);
-            acc += arena.At(start / 2);
-            if ((i & 8191) == 8191)
-                arena.Reset();
-        }
-        sw.Stop();
-        Report("arena", ElapsedNs(sw), iters, acc);
-        Sink = acc;
     }
 
     // Interpreted .NET matcher versus Dream's native PCRE2 JIT; this row measures each public
@@ -929,7 +885,6 @@ public static class Program
         BenchMapClearReuse(scale * 70);
         BenchListClearReuse(scale * 500);
         BenchAllocChurn(scale * 30);
-        BenchArena(scale * 400);
         BenchRegexFind(scale / 2);
         BenchStringBuilder(scale * 20);
         BenchJsonSerialize(scale * 2);

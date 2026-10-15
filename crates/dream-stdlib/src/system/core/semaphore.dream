@@ -9,16 +9,16 @@ shared public class Semaphore {
         this.permits = initial;
     }
 
-    @intrinsic("shared_semaphore_acquire")
+    @intrinsic(Intrinsic.SharedSemaphoreAcquire)
     public static extern fun host_acquire(borrow target: Semaphore): void;
 
-    @intrinsic("shared_semaphore_release")
+    @intrinsic(Intrinsic.SharedSemaphoreRelease)
     public static extern fun host_release(borrow target: Semaphore): void;
 
-    @intrinsic("shared_semaphore_try_acquire")
+    @intrinsic(Intrinsic.SharedSemaphoreTryAcquire)
     public static extern fun host_try_acquire(borrow target: Semaphore): bool;
 
-    @intrinsic("shared_semaphore_try_acquire_for")
+    @intrinsic(Intrinsic.SharedSemaphoreTryAcquireFor)
     public static extern fun host_try_acquire_for(borrow target: Semaphore, timeout_ms: int): bool;
 
     // Blocks (busy-waiting) until a permit is available, then takes one.

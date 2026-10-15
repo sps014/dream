@@ -1,3 +1,4 @@
+import system.interop;
 // `OwnedCPtr` results need a C free function, and `@owned("…")` applies only to them.
 import system;
 

@@ -10,11 +10,11 @@ shared public class CancellationToken {
         this._source = source;
     }
 
-    @intrinsic("dream_task_is_protected")
+    @intrinsic(Intrinsic.DreamTaskIsProtected)
     static extern fun protected_host(borrow future: object): bool;
-    @intrinsic("dream_task_has_context")
+    @intrinsic(Intrinsic.DreamTaskHasContext)
     static extern fun has_context_host(): bool;
-    @intrinsic("dream_task_context")
+    @intrinsic(Intrinsic.DreamTaskContext)
     static extern fun context_host(): CancellationToken;
 
     // Returns the cancellation token inherited from the current structured task.
@@ -147,9 +147,9 @@ class CancellationRegistration {
     id: usize;
     internal constructor(id: usize) { this.id = id; }
     del() { this.close(); }
-    @intrinsic("dream_cancellation_signal")
+    @intrinsic(Intrinsic.DreamCancellationSignal)
     static extern fun signal_host(id: usize): Future<int>;
-    @intrinsic("dream_cancellation_unregister")
+    @intrinsic(Intrinsic.DreamCancellationUnregister)
     static extern fun release_host(id: usize): void;
     internal fun signal(): Future<int> { return CancellationRegistration.signal_host(this.id); }
     internal fun close(): void {

@@ -39,3 +39,11 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 
 - [Iterable and yield interfaces](core-iterable-1.md)
 - [Yield cursors and leases](core-iterable-2.md)
+- [Core Attributes 1](core-attributes-1.md)
+- [Core Attributes 2](core-attributes-2.md)
+- [Core Intrinsic 1](core-intrinsic-1.md)
+- [Core Intrinsic 2](core-intrinsic-2.md)
+- [Core Intrinsic 3](core-intrinsic-3.md)
+- [Core Intrinsic 4](core-intrinsic-4.md)
+- [Core Intrinsic 5](core-intrinsic-5.md)
+- [Core Intrinsic 6](core-intrinsic-6.md)

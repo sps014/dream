@@ -86,18 +86,11 @@ impl<'a> Analyzer<'a> {
             .map(move |(slot, (name, identity))| ((owner, offset + slot), name, identity))
     }
 
-    pub(super) fn receiver_function_key(
-        &self,
-        identity: &FunctionIdentity,
-    ) -> Option<(MethodKey, String)> {
-        self.receiver_slot_entries()
-            .find(|(_, _, candidate)| *candidate == identity)
-            .map(|(key, name, _)| (key, name.to_string()))
-    }
-
     /// Every concrete method slot, numbered per owner after that owner's interface slots, in one
     /// pass over the method table.
-    fn receiver_slot_entries(&self) -> impl Iterator<Item = (MethodKey, &str, &FunctionIdentity)> {
+    pub(super) fn receiver_slot_entries(
+        &self,
+    ) -> impl Iterator<Item = (MethodKey, &str, &FunctionIdentity)> {
         let mut next: IndexMap<TypeId, usize> = IndexMap::new();
         self.function_table
             .methods
@@ -287,15 +280,27 @@ mod tests {
         let second = add_method(&mut analyzer, owners[1], int);
         let overload = add_method(&mut analyzer, owners[0], string);
         assert_eq!(
-            analyzer.receiver_function_key(&first).unwrap().0,
+            analyzer
+                .receiver_slot_entries()
+                .find(|(_, _, id)| *id == &first)
+                .unwrap()
+                .0,
             (owners[0], 0)
         );
         assert_eq!(
-            analyzer.receiver_function_key(&second).unwrap().0,
+            analyzer
+                .receiver_slot_entries()
+                .find(|(_, _, id)| *id == &second)
+                .unwrap()
+                .0,
             (owners[1], 0)
         );
         assert_eq!(
-            analyzer.receiver_function_key(&overload).unwrap().0,
+            analyzer
+                .receiver_slot_entries()
+                .find(|(_, _, id)| *id == &overload)
+                .unwrap()
+                .0,
             (owners[0], 1)
         );
         assert_eq!(
@@ -340,7 +345,11 @@ mod tests {
         let int = analyzer.type_ctx.interner.int();
         let extension = add_method(&mut analyzer, owner, int);
         assert_eq!(
-            analyzer.receiver_function_key(&extension).unwrap().0,
+            analyzer
+                .receiver_slot_entries()
+                .find(|(_, _, id)| *id == &extension)
+                .unwrap()
+                .0,
             (owner, 1)
         );
         assert_eq!(

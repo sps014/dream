@@ -4,6 +4,7 @@ mod common;
 mod corpus;
 mod dap;
 
+mod attribute_resolution;
 mod build_cache;
 mod cli_download;
 mod compile_metrics;

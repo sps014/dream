@@ -2,8 +2,8 @@
 //! completion, and the scope/name-resolution helpers they share.
 
 use super::attr_ide::{
-    attribute_arg_completions, attribute_arg_context, attribute_hover, attribute_name_completions,
-    attribute_name_partial, attribute_signature,
+    attribute_arg_completions, attribute_arg_context, attribute_name_completions,
+    attribute_name_partial,
 };
 use super::detail_belongs_to;
 use super::detail_is_static_method;
@@ -14,7 +14,6 @@ use super::{
 use crate::code_actions::imported_packages;
 use dream::driver::source_loader::find_dream_packages_dir;
 use dream::syntax::nodes::types::CONSTRUCTOR_NAME;
-use dream_abi::attributes::find_spec;
 use dream_stdlib::{BOOTSTRAP_PACKAGES, STD_PACKAGES};
 
 /// True when `offset` is in a `receiver.` / `receiver.partial` member-access position.

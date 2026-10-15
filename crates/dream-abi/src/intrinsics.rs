@@ -11,7 +11,7 @@
 //! `async_support.rs`, and `stdlib/mod.rs`.
 
 /// The attribute that tags a stdlib declaration as a compiler intrinsic, e.g.
-/// `@intrinsic("print")`. The parser skips emitting a WASM import for it, the function table
+/// `@intrinsic(Intrinsic.Print)`. The parser skips emitting a WASM import for it, the function table
 /// records its key, and codegen lowers calls to dedicated runtime helpers. Single source of
 /// truth for the attribute name across parser/semantics/codegen.
 pub const ATTR_FUNCBOX_NEW: &str = "funcbox_new";
@@ -37,22 +37,23 @@ pub const ATTR_CALLBACK_UNREGISTER: &str = "dream_callback_unregister";
 pub const INTRINSIC_ATTR: &str = "intrinsic";
 
 /// Extracts the intrinsic key from a declaration's attribute list, i.e. the `"name"` in
-/// `@intrinsic("name")`, or `None` if the declaration is not an intrinsic. Centralizes the
+/// `@intrinsic(Intrinsic.Member)`, or `None` if the declaration is not an intrinsic. Centralizes the
 /// attribute lookup + quote-stripping that was previously duplicated across layers.
 pub fn intrinsic_key(attributes: &[dream_syntax::nodes::AttributeNode]) -> Option<String> {
-    attributes
+    let attr = attributes
         .iter()
-        .find(|a| a.name.text == INTRINSIC_ATTR)
-        .and_then(|a| {
-            a.args
-                .first()
-                .and_then(|arg| arg.as_string().map(|s| s.to_string()))
-        })
+        .find(|a| crate::attributes::is_compiler_attribute(a, INTRINSIC_ATTR))?;
+    let dream_syntax::nodes::AttributeArg::Enum(path) = attr.args.first()? else {
+        return None;
+    };
+    intrinsic_member_key(&path.last()?.text).map(str::to_owned)
 }
 
 /// True if `attributes` contains an `@intrinsic(...)` marker.
 pub fn has_intrinsic_attr(attributes: &[dream_syntax::nodes::AttributeNode]) -> bool {
-    attributes.iter().any(|a| a.name.text == INTRINSIC_ATTR)
+    attributes
+        .iter()
+        .any(|a| crate::attributes::is_compiler_attribute(a, INTRINSIC_ATTR))
 }
 
 // --- Object-protocol builtin free functions -------------------------------------------------
@@ -111,8 +112,8 @@ pub const PROMISE_ALL: &str = "__promise_all";
 pub const PROMISE_ANY: &str = "__promise_any";
 pub const PROMISE_RACE: &str = "__promise_race";
 
-// --- `@intrinsic("…")` static-method registry ----------------------------------------------
-// The string inside `@intrinsic("…")` on a stdlib static method. Both semantics (typing) and
+// --- `@intrinsic(Intrinsic.Member)` static-method registry ----------------------------------------------
+// The string inside `@intrinsic(Intrinsic.Member)` on a stdlib static method. Both semantics (typing) and
 // codegen (lowering) classify the attribute key through [`IntrinsicOp`] so the set of attributed
 // intrinsics lives in exactly one place instead of being duplicated as bare string `match`es.
 
@@ -130,6 +131,7 @@ pub const ATTR_GEN_ATTRIBUTE_ID: &str = "gen_attribute_id";
 pub const ATTR_GEN_ATTRIBUTE_DECODE: &str = "gen_attribute_decode";
 pub const ATTR_GEN_ATTRIBUTE_DECODE_ALL: &str = "gen_attribute_decode_all";
 /// Synthesized `@attribute` type members the `GenAttributes` intrinsics forward to.
+pub const GEN_ATTRIBUTE_DECODER_PARAM: &str = "__AttributeDecoder";
 pub const GEN_ATTRIBUTE_ID_MEMBER: &str = "__gen_id";
 pub const GEN_ATTRIBUTE_DECODE_MEMBER: &str = "__gen_decode";
 pub const GEN_ATTRIBUTE_DECODE_ALL_MEMBER: &str = "__gen_decode_all";
@@ -235,102 +237,12 @@ pub const ATTR_SIMD_V128_MIN: &str = "simd_v128_min";
 pub const ATTR_SIMD_V128_MAX: &str = "simd_v128_max";
 pub const ATTR_SIMD_V128_SUM: &str = "simd_v128_sum";
 
-/// Every `@intrinsic("…")` key the compiler recognizes, in stable order for IDE completion.
+/// Every `@intrinsic(Intrinsic.Member)` key the compiler recognizes, in stable order for IDE completion.
 pub const YIELD_SIGNAL: &str = "dream_yield_signal";
 pub const YIELD_SIGNAL_COMPLETE: &str = "dream_yield_signal_complete";
 pub const YIELD_RUN: &str = "dream_yield_run";
 
-pub const ATTR_KEYS: &[&str] = &[
-    ATTR_RAW_LOAD,
-    ATTR_RAW_STORE,
-    RAW_SIZE,
-    RAW_ALLOC,
-    RAW_REALLOC,
-    RAW_FREE,
-    RAW_COPY,
-    RAW_MOVE,
-    RAW_FILL,
-    ARENA_NEW,
-    ARENA_ALLOC,
-    ARENA_RESET,
-    ARENA_FREE,
-    YIELD_SIGNAL,
-    YIELD_SIGNAL_COMPLETE,
-    YIELD_RUN,
-    ATTR_PRINT,
-    ATTR_PRINTLN,
-    ATTR_PROMISE_ALL,
-    ATTR_PROMISE_ANY,
-    ATTR_PROMISE_RACE,
-    ATTR_JSON_SERIALIZE,
-    ATTR_JSON_DESERIALIZE,
-    ATTR_JSON_FROM_VALUE,
-    ATTR_GEN_ATTRIBUTE_ID,
-    ATTR_GEN_ATTRIBUTE_DECODE,
-    ATTR_GEN_ATTRIBUTE_DECODE_ALL,
-    ATTR_ARRAY_NEW,
-    ATTR_BUFFER_ZERO,
-    ATTR_SLEEP,
-    ATTR_STRING_ALLOC,
-    ATTR_STRING_CHAR_AT_UNCHECKED,
-    ATTR_STRING_BUILDER_BUFFER,
-    ATTR_STRING_BUILDER_PUSH_DOUBLE,
-    ATTR_STRING_CLONE_RANGE,
-    ATTR_STRING_JSON_BOUNDARY,
-    ATTR_STRING_SET,
-    ATTR_STRING_FROM_UTF8,
-    ATTR_STRING_FROM_UTF8_PREFIX,
-    ATTR_STRING_FROM_UTF8_PREFIX_N,
-    ATTR_STRING_SUBSTRING,
-    ATTR_STRING_COPY_UTF8,
-    ATTR_STRING_COMPARE,
-    ATTR_STRING_VIEW_EQ,
-    ATTR_STRING_VIEW_COMPARE,
-    ATTR_STRING_VIEW_HASH,
-    ATTR_STRING_VIEW_FIND,
-    ATTR_STRING_VIEW_RFIND,
-    ATTR_STRING_VIEW_FIND_CHAR,
-    ATTR_STRING_VIEW_RFIND_CHAR,
-    ATTR_STRING_VIEW_COUNT_CHAR,
-    ATTR_STRING_BUILDER_VIEW,
-    ATTR_DEBUG_FREE_LIST,
-    ATTR_DEBUG_HEAP_PTR,
-    ATTR_DEBUG_LIVE_OBJECTS,
-    ATTR_DEBUG_TOTAL_ALLOCATIONS,
-    ATTR_DEBUG_REF_COUNT,
-    ATTR_DEBUG_RUNTIME_COUNTER,
-    ATTR_TO_BYTES,
-    ATTR_FROM_BYTES,
-    ATTR_ARRAY_REALLOC,
-    ATTR_ARRAY_ELEMS_COPY,
-    ATTR_ARRAY_ELEMS_FILL,
-    ATTR_FORCE_FREE,
-    ATTR_ARRAY_GET_UNCHECKED,
-    ATTR_ARRAY_SET_UNCHECKED,
-    ATTR_WIRE_ENCODE,
-    ATTR_WIRE_DECODE,
-    ATTR_PANIC,
-    ATTR_REGEX_COMPILE,
-    ATTR_REGEX_FREE,
-    ATTR_REGEX_FIND,
-    ATTR_REGEX_FIND_ALL,
-    ATTR_REGEX_GROUP_COUNT,
-    ATTR_REGEX_NAME_COUNT,
-    ATTR_REGEX_NAME_AT,
-    ATTR_REGEX_NAME_NUMBER,
-    ATTR_SIMD_LANE_COUNT,
-    ATTR_SIMD_V128_SPLAT,
-    ATTR_SIMD_V128_LOAD,
-    ATTR_SIMD_V128_STORE,
-    ATTR_SIMD_V128_ADD,
-    ATTR_SIMD_V128_SUB,
-    ATTR_SIMD_V128_MUL,
-    ATTR_SIMD_V128_MIN,
-    ATTR_SIMD_V128_MAX,
-    ATTR_SIMD_V128_SUM,
-];
-
-/// The operation a `@intrinsic("…")`-tagged static method lowers to. Derived once from the
+/// The operation a `@intrinsic(Intrinsic.Member)`-tagged static method lowers to. Derived once from the
 /// attribute key via [`IntrinsicOp::from_key`], so every layer dispatches off the same enum
 /// rather than re-matching raw strings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -456,7 +368,7 @@ pub enum IntrinsicOp {
 }
 
 impl IntrinsicOp {
-    /// Classifies an `@intrinsic("key")` attribute value, or `None` if `key` is unknown.
+    /// Classifies an `@intrinsic(Intrinsic.Member)` attribute value, or `None` if `key` is unknown.
     pub fn from_key(key: &str) -> Option<IntrinsicOp> {
         Some(match key {
             ATTR_RAW_LOAD => IntrinsicOp::RawLoad,
@@ -621,3 +533,6 @@ impl IntrinsicOp {
 pub fn holds_raw_borrow(key: &str) -> bool {
     IntrinsicOp::from_key(key).is_some_and(IntrinsicOp::holds_raw_borrow)
 }
+
+mod members;
+pub use members::{INTRINSIC_MEMBERS, intrinsic_member_key};

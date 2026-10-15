@@ -68,10 +68,7 @@ impl Builder<'_, '_> {
     }
 
     fn attr(&self, a: &AttributeNode) -> Attr {
-        let id = match self.facts.attributes.get(&a.name.text) {
-            Some(decl) => decl.id.clone(),
-            None => format!("builtin::{}", a.name.text),
-        };
+        let id = a.resolved_id.get().cloned().unwrap_or_default();
         Attr {
             id,
             name: a.name.text.clone(),
@@ -160,12 +157,10 @@ impl Builder<'_, '_> {
     }
 }
 
-fn carries(attrs: &[AttributeNode], ids: &[String], registry: &UserAttributes) -> bool {
-    attrs.iter().any(|a| {
-        registry
-            .get(&a.name.text)
-            .is_some_and(|decl| ids.contains(&decl.id))
-    })
+fn carries(attrs: &[AttributeNode], ids: &[String], _registry: &UserAttributes) -> bool {
+    attrs
+        .iter()
+        .any(|a| a.resolved_id.get().is_some_and(|id| ids.contains(id)))
 }
 
 fn function_carries(f: &FunctionNode<'_>, ids: &[String], registry: &UserAttributes) -> bool {

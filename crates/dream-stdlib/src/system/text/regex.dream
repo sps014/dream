@@ -3,23 +3,23 @@ module system.text;
 // Compiled regular expressions. Native C uses PCRE2-16 JIT; WASM uses the in-module
 // PCRE2-compatible engine. Invalid patterns compile to a dead engine that never matches.
 
-@intrinsic("regex_compile")
+@intrinsic(Intrinsic.RegexCompile)
 static extern fun regex_compile(borrow pattern: string, flags: RegexFlags): usize;
-@intrinsic("regex_free")
+@intrinsic(Intrinsic.RegexFree)
 static extern fun regex_free(h: usize): void;
-@intrinsic("regex_find")
+@intrinsic(Intrinsic.RegexFind)
 static extern fun regex_find(h: usize, borrow input: string, pos: int): int[];
-@intrinsic("regex_test")
+@intrinsic(Intrinsic.RegexTest)
 static extern fun regex_test(h: usize, borrow input: string): int;
-@intrinsic("regex_find_all")
+@intrinsic(Intrinsic.RegexFindAll)
 static extern fun regex_find_all(h: usize, borrow input: string): int[];
-@intrinsic("regex_group_count")
+@intrinsic(Intrinsic.RegexGroupCount)
 static extern fun regex_group_count(h: usize): int;
-@intrinsic("regex_name_count")
+@intrinsic(Intrinsic.RegexNameCount)
 static extern fun regex_name_count(h: usize): int;
-@intrinsic("regex_name_at")
+@intrinsic(Intrinsic.RegexNameAt)
 static extern fun regex_name_at(h: usize, i: int): string;
-@intrinsic("regex_name_number")
+@intrinsic(Intrinsic.RegexNameNumber)
 static extern fun regex_name_number(h: usize, i: int): int;
 
 public class Regex {

@@ -3,14 +3,14 @@ module system.json;
 // The public JSON API: one pair of names for text <-> value.
 
 public static class Json {
-    @intrinsic("json_serialize")
+    @intrinsic(Intrinsic.JsonSerialize)
     public static extern fun serialize<T>(borrow value: T): string;
 
-    @intrinsic("json_deserialize")
+    @intrinsic(Intrinsic.JsonDeserialize)
     public static extern fun deserialize<T>(borrow text: string): Result<T, ParseError>;
 
     // Reconstruct a `@json` value from an already-parsed `JsonValue` (no parse step).
-    @intrinsic("json_from_value")
+    @intrinsic(Intrinsic.JsonFromValue)
     public static extern fun from_value<T>(borrow value: JsonValue): T;
 
     // Pretty-prints a `JsonValue` with newlines and `indent` spaces per nesting level.

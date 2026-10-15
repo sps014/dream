@@ -6,9 +6,7 @@
 
 use super::*;
 use dream_abi::attributes::{OwnedResult, c_import_target, owned_result};
-use dream_abi::c_abi::{
-    C_PTR_TYPE, MARSHAL_USER_DATA_LAST, NATIVE_CALLBACK_TYPE, OWNED_C_PTR_TYPE, is_c_identifier,
-};
+use dream_abi::c_abi::{C_PTR_TYPE, NATIVE_CALLBACK_TYPE, OWNED_C_PTR_TYPE, is_c_identifier};
 use dream_hir::CShape;
 use dream_syntax::nodes::{ConstraintKind, ExpressionNode, FunctionNode, ParameterNode, Type};
 use dream_types::CScalar;
@@ -134,8 +132,8 @@ impl<'a> Analyzer<'a> {
         if param.is_ref {
             return self.c_ref_shape(&param.type_);
         }
-        let user_data_last = dream_abi::attributes::c_marshal_charset(&param.attributes)
-            == Some(MARSHAL_USER_DATA_LAST);
+        let user_data_last = dream_abi::attributes::marshal_kind(&param.attributes)
+            == Some(dream_abi::attributes::MarshalKind::UserDataLast);
         let shape = self.c_shape(&param.type_, Pos::Param)?;
         match shape {
             CShape::Callback {
@@ -149,9 +147,10 @@ impl<'a> Analyzer<'a> {
                 optional,
                 user_data_last,
             }),
-            _ if user_data_last => Err(format!(
-                "`@marshal(\"{MARSHAL_USER_DATA_LAST}\")` applies only to a `NativeCallback` parameter"
-            )),
+            _ if user_data_last => Err(
+                "`@marshal(MarshalKind.UserDataLast)` applies only to a `NativeCallback` parameter"
+                    .to_string(),
+            ),
             other => Ok(other),
         }
     }

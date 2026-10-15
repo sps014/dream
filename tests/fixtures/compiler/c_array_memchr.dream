@@ -1,3 +1,4 @@
+import system.interop;
 // A `byte[]` passes its first element's address; `Option<CPtr>` maps NULL to `None`.
 import system;
 

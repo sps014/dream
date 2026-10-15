@@ -55,10 +55,6 @@ impl Compiler {
         let native_graph =
             crate::driver::native_sets::NativeGraph::load(main_file_path, &acc, self.target.spec())
                 .map_err(CompileError::Manifest)?;
-        crate::driver::native_sets::resolve_bare_c_attrs(&mut acc, &native_graph, diagnostics);
-        let cpp_bridge =
-            crate::driver::ffi_shim::expand(arena, &mut acc, &native_graph, diagnostics)?;
-
         // Opt-in stdlib packages (`import system.io;`, etc.) plus always-on bootstrap
         // (`system.core` / `system.primitives`).
         merge_prelude(
@@ -87,6 +83,15 @@ impl Compiler {
                 &acc.file_contents,
             ));
         }
+        crate::driver::native_sets::resolve_bare_c_attrs(&mut acc, &native_graph, diagnostics);
+        let cpp_bridge = crate::driver::ffi_shim::expand(
+            arena,
+            &mut acc,
+            &native_graph,
+            &attributes,
+            diagnostics,
+        )?;
+        let attributes = crate::driver::attributes::prepare(arena, &mut acc, diagnostics)?;
         Ok(FrontEnd {
             acc,
             attributes,
@@ -115,6 +120,8 @@ impl Compiler {
             &attributes,
             diagnostics,
         )?;
+
+        crate::driver::attributes::prepare(arena, &mut acc, diagnostics)?;
 
         // Inherit interface default-method bodies into implementing classes that omit them, by
         // appending synthesized `extend` blocks (must run after class collection so `implements`

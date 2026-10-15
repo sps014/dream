@@ -18,6 +18,7 @@ fn enum_payloads_know_forward_value_struct_identity() {
         let tree = Parser::new(Lexer::new(source), &arena, &mut diagnostics)
             .parse()
             .unwrap();
+        dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
         let graph = ModuleGraph::single(tree.get_root().clone());
         let mut analyzer = Analyzer::new(&graph, &arena);
         let info = analyzer.analyze(&mut diagnostics).unwrap();

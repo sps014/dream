@@ -7,6 +7,8 @@ use dream_syntax::nodes::AttributeNode;
 /// full declaration AST at validation time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AttributeTarget {
+    Constructor,
+    Destructor,
     /// A top-level, non-`extern` function.
     Function,
     /// A non-`static`, non-`extern` method on a `class`/`struct`/`extend` block.
@@ -38,6 +40,8 @@ pub enum AttributeTarget {
 impl AttributeTarget {
     pub fn display_name(self) -> &'static str {
         match self {
+            AttributeTarget::Constructor => "a constructor",
+            AttributeTarget::Destructor => "a destructor",
             AttributeTarget::Function => "a top-level function",
             AttributeTarget::Method => "an instance method",
             AttributeTarget::StaticMethod => "a static method",
@@ -56,7 +60,7 @@ impl AttributeTarget {
 }
 
 /// Kind of a single attribute argument — the attribute registry's analogue of a C# attribute
-/// constructor parameter type. Declared once on the [`AttributeSpec`]; instances don't invent shapes.
+/// constructor parameter type. Derived from the attribute declaration fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArgKind {
     /// A string literal (`"module"`, `"field"`, …).
@@ -71,82 +75,13 @@ pub enum ArgKind {
     Bool,
     /// A dotted enum-member path (`HttpMethod.Get`).
     Enum,
-}
-
-/// The expected shape of an attribute's argument list — the closed-world "constructor signature"
-/// for builtin attributes. Declared `@attribute` types supply their schema from their fields
-/// instead (see [`super::UserAttributes`]).
-#[derive(Debug, Clone, Copy)]
-pub enum ArgShape {
-    /// `@name` with no `(...)` at all, or empty parens.
-    None,
-    /// `@name(...)` with between `min` and `max` (inclusive) arguments.
-    /// Argument `i` must match `kinds[i.min(kinds.len() - 1)]` (so a single-kind slice covers
-    /// variadic arguments of the same type).
-    Args {
-        kinds: &'static [ArgKind],
-        min: usize,
-        max: usize,
-    },
-}
-
-/// One attribute's full contract: its name, the declaration kinds it may appear on, its argument
-/// shape, whether it may be repeated on the same declaration, and a short doc string for IDE
-/// hover/completion.
-pub struct AttributeSpec {
-    pub name: &'static str,
-    pub targets: &'static [AttributeTarget],
-    pub args: ArgShape,
-    pub repeatable: bool,
-    /// Markdown-friendly one-liner (or short paragraph) shown in LSP hover/completion docs.
-    pub doc: &'static str,
-}
-
-impl ArgShape {
-    /// Human-readable parameter labels for signature help (empty for [`ArgShape::None`]).
-    pub fn param_labels(self) -> Vec<&'static str> {
-        match self {
-            ArgShape::None => Vec::new(),
-            ArgShape::Args { kinds, min, max } => {
-                let variadic = max == usize::MAX;
-                let n = if variadic {
-                    min.max(kinds.len())
-                } else {
-                    max.max(min).max(kinds.len())
-                };
-                let mut labels: Vec<&'static str> = (0..n)
-                    .map(|i| match kinds[i.min(kinds.len() - 1)] {
-                        ArgKind::String => "string",
-                        ArgKind::Int => "int",
-                        ArgKind::Float => "float",
-                        ArgKind::Double => "double",
-                        ArgKind::Bool => "bool",
-                        ArgKind::Enum => "Enum.Member",
-                    })
-                    .collect();
-                if variadic {
-                    labels.push("...");
-                }
-                labels
-            }
-        }
-    }
-
-    /// Signature label like `@intrinsic(string)` or `@js(string, string)`.
-    pub fn signature_label(self, name: &str) -> String {
-        match self {
-            ArgShape::None => format!("@{name}"),
-            ArgShape::Args { .. } => {
-                let params = self.param_labels().join(", ");
-                format!("@{name}({params})")
-            }
-        }
-    }
+    /// A declaration reference, validated by its consuming generator framework.
+    Path,
 }
 
 /// True when an attribute named `name` is present (even if its argument failed to parse).
 pub fn has_named_attr(attributes: &[AttributeNode], name: &str) -> bool {
-    attributes.iter().any(|a| a.name.text == name)
+    attributes.iter().any(|a| is_compiler_attribute(a, name))
 }
 
 /// The `i`th string argument of `@name(...)`, or `None` when absent.
@@ -157,8 +92,36 @@ pub fn named_attr_string_arg<'a>(
 ) -> Option<&'a str> {
     attributes
         .iter()
-        .find(|a| a.name.text == name)?
+        .find(|a| is_compiler_attribute(a, name))?
         .args
         .get(i)?
         .as_string()
+}
+
+/// Only compiler-owned declarations activate compiler behavior.
+pub fn compiler_attribute_module(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "c" | "c_call" | "marshal" | "packed" | "cpp" | "cpp_name" => "system.interop",
+        "test" | "timeout" => "system.testing",
+        "generator" | "incremental" | "on_attribute" | "on_call" | "syntax_block" => {
+            "system.codegen"
+        }
+        "attribute" | "repeatable" | "export" | "intrinsic" | "inline" | "noinline" | "unsafe"
+        | "allow_cycle" | "consuming" | "owned" | "js" | "runtime" | "async_host" | "native"
+        | "node" | "web" => "system.core",
+        _ => return None,
+    })
+}
+
+pub fn is_compiler_attribute(attr: &AttributeNode, name: &str) -> bool {
+    compiler_attribute_module(name).is_some_and(|module| {
+        attr.resolved_id
+            .get()
+            .is_some_and(|id| id == &compiler_attribute_identity(module, name))
+    })
+}
+
+pub fn compiler_attribute_identity(module: &str, name: &str) -> String {
+    use heck::ToUpperCamelCase;
+    format!("{module}::{}Attribute", name.to_upper_camel_case())
 }

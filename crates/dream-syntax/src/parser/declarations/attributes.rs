@@ -32,7 +32,11 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
                 self.match_token(TokenKind::CloseParenthesisToken);
             }
-            attributes.push(crate::nodes::AttributeNode { name, args });
+            attributes.push(crate::nodes::AttributeNode {
+                name,
+                args,
+                resolved_id: Default::default(),
+            });
         }
         attributes
     }

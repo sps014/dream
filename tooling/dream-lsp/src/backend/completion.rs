@@ -59,28 +59,27 @@ impl Backend {
                     } else {
                         None
                     };
-                    let (insert_text, insert_text_format) = if kind == index::SymKind::Decorator
-                        && in_attr_name
-                    {
-                        if let Some(spec) = dream_abi::attributes::find_spec(&label) {
-                            match spec.args {
-                                dream_abi::attributes::ArgShape::Args { min, .. } if min > 0 => (
-                                    Some(format!("{label}($0)")),
-                                    Some(InsertTextFormat::SNIPPET),
-                                ),
-                                _ => (None, None),
+                    let (insert_text, insert_text_format) =
+                        if kind == index::SymKind::Decorator && in_attr_name {
+                            if let Some(spec) = dream_stdlib::attributes::find_spec(&label) {
+                                match spec.required() {
+                                    min if min > 0 => (
+                                        Some(format!("{label}($0)")),
+                                        Some(InsertTextFormat::SNIPPET),
+                                    ),
+                                    _ => (None, None),
+                                }
+                            } else {
+                                (None, None)
+                            }
+                        } else if kind == index::SymKind::EnumMember {
+                            match index::enum_member_snippet(&label, &detail) {
+                                Some(snippet) => (Some(snippet), Some(InsertTextFormat::SNIPPET)),
+                                None => (None, None),
                             }
                         } else {
                             (None, None)
-                        }
-                    } else if kind == index::SymKind::EnumMember {
-                        match index::enum_member_snippet(&label, &detail) {
-                            Some(snippet) => (Some(snippet), Some(InsertTextFormat::SNIPPET)),
-                            None => (None, None),
-                        }
-                    } else {
-                        (None, None)
-                    };
+                        };
                     CompletionItem {
                         label,
                         kind: Some(completion_kind(kind)),

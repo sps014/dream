@@ -196,7 +196,7 @@ public class GenAttrArg {
 // One attribute use. Prefer the typed `GenAttributes.decode<A>()` (via `attribute<A>()` on a
 // node); the positional readers below are what decoders are built from.
 public class GenAttribute {
-    // `module::name` of the `@attribute` type (`system.json::json`), or `builtin::name`.
+    // `module::name` of the `@attribute` type (`system.json::JsonAttribute`).
     public id: string;
     public name: string;
     public args: List<GenAttrArg>;
@@ -255,13 +255,13 @@ public class GenAttribute {
 // Typed attribute access. `A` is an `@attribute` struct; the compiler gives every such type the
 // statics these forward to.
 public static class GenAttributes {
-    @intrinsic("gen_attribute_id")
+    @intrinsic(Intrinsic.GenAttributeId)
     public static extern fun id<A>(): string;
 
-    @intrinsic("gen_attribute_decode")
+    @intrinsic(Intrinsic.GenAttributeDecode)
     public static extern fun decode<A>(borrow attrs: List<GenAttribute>): Option<A>;
 
-    @intrinsic("gen_attribute_decode_all")
+    @intrinsic(Intrinsic.GenAttributeDecodeAll)
     public static extern fun decode_all<A>(borrow attrs: List<GenAttribute>): List<A>;
 
     public static fun has(borrow attrs: List<GenAttribute>, borrow id: string): bool {

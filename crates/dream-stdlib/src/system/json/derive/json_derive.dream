@@ -10,7 +10,7 @@ import system.json;
 // types need. One generated file, `json.dream`.
 @generator
 @incremental
-@on_attribute(json)
+@on_attribute(JsonAttribute)
 @on_call(Json.serialize, Json.deserialize, Json.from_value)
 public fun json_derive(ctx: GenContext): void {
     let jsonable = List<string>();
@@ -21,8 +21,8 @@ public fun json_derive(ctx: GenContext): void {
     }
     let json_names = List<string>();
     let types = List<JsonTypeSpec>();
-    for (let d in ctx.types_with<json>()) {
-        if !d.has<json>() {
+    for (let d in ctx.types_with<JsonAttribute>()) {
+        if !d.has<JsonAttribute>() {
             continue;
         }
         json_names.push(d.name);
@@ -129,7 +129,7 @@ fun json_fields(borrow fields: List<GenField>, borrow generics: List<string>): L
     for (let f in fields) {
         let ty = f.ty;
         let property = "";
-        switch (f.attribute<property_name>()) {
+        switch (f.attribute<PropertyNameAttribute>()) {
             Some(p) => {
                 property = p.name;
             }
@@ -161,7 +161,7 @@ fun json_fields(borrow fields: List<GenField>, borrow generics: List<string>): L
         out.push(JsonFieldSpec(
             f.name,
             ty.display,
-            f.has<json_ignore>(),
+            f.has<JsonIgnoreAttribute>(),
             property,
             option_inner,
             is_type_param,

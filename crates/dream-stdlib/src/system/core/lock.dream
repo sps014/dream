@@ -2,16 +2,16 @@ module system.core;
 
 // Reentrant mutual-exclusion lock for `@shared` critical sections.
 shared public class Lock {
-    @intrinsic("shared_lock_acquire")
+    @intrinsic(Intrinsic.SharedLockAcquire)
     public static extern fun host_acquire(borrow target: Lock): void;
 
-    @intrinsic("shared_lock_release")
+    @intrinsic(Intrinsic.SharedLockRelease)
     public static extern fun host_release(borrow target: Lock): void;
 
-    @intrinsic("shared_lock_try_acquire")
+    @intrinsic(Intrinsic.SharedLockTryAcquire)
     public static extern fun host_try_acquire(borrow target: Lock): bool;
 
-    @intrinsic("shared_lock_try_acquire_for")
+    @intrinsic(Intrinsic.SharedLockTryAcquireFor)
     public static extern fun host_try_acquire_for(borrow target: Lock, timeout_ms: int): bool;
 
     // Reentrant: the same thread may

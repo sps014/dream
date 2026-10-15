@@ -8,34 +8,6 @@ pub const ALLOW_CYCLE: &str = "allow_cycle";
 
 pub const OWNED: &str = "owned";
 
-pub(super) const SPECS: &[AttributeSpec] = &[
-    AttributeSpec {
-        name: ALLOW_CYCLE,
-        targets: &[AttributeTarget::Struct],
-        args: ArgShape::None,
-        repeatable: false,
-        doc: "Acknowledges that this class can form strong ownership cycles. ARC does not collect cycles; use weak/unowned back-links or explicit teardown to avoid leaks.",
-    },
-    AttributeSpec {
-        name: CONSUMING,
-        targets: &[AttributeTarget::ExternFunction],
-        args: ArgShape::None,
-        repeatable: false,
-        doc: "Marks an extern whose reference parameters transfer ownership to the host, which must release them. Extern parameters are otherwise passed borrowed, since a host cannot release a Dream reference.",
-    },
-    AttributeSpec {
-        name: OWNED,
-        targets: &[AttributeTarget::ExternFunction],
-        args: ArgShape::Args {
-            kinds: &[ArgKind::String],
-            min: 0,
-            max: 1,
-        },
-        repeatable: false,
-        doc: "The extern's result transfers ownership to Dream. On a `@cpp` member returning `T*`, the Dream object deletes it. On a `@c` extern returning `OwnedCPtr`, `@owned(\"free_fn\")` names the C function that frees the pointer when the last reference is released.",
-    },
-];
-
 /// True when an extern's reference parameters transfer ownership to the host (`@consuming`).
 pub fn is_consuming(attributes: &[AttributeNode]) -> bool {
     has_named_attr(attributes, CONSUMING)

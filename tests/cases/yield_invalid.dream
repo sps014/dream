@@ -15,5 +15,5 @@ extern async fun invalid_pause(): void;
 fun wrong_sync_await(): Iterable<int> { invalid_pause().await; yield 1; }
 async fun wrong_async_type(): void { await for (let value in [1, 2]) {} }
 
-@intrinsic("dream_yield_run")
+@intrinsic(Intrinsic.DreamYieldRun)
 extern fun forged_iterator_signal(): int;

@@ -2,7 +2,7 @@ module system;
 
 // Timing utilities.
 public static class Time {
-    @intrinsic("sleep")
+    @intrinsic(Intrinsic.Sleep)
     public static extern async fun sleep_host(ms: int): void;
 
     @async_host

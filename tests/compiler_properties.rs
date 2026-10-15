@@ -23,6 +23,7 @@ fn verified_ir(source: &str, target: Target) -> Option<String> {
     if diagnostics.has_errors() {
         return None;
     }
+    dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
     let graph = ModuleGraph::single(tree.get_root().clone());
     let arena = Bump::new();
     let mut analyzer = Analyzer::new(&graph, &arena).with_target_layout(TargetLayout {

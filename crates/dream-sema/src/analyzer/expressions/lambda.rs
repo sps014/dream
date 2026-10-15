@@ -616,7 +616,7 @@ impl<'a> Analyzer<'a> {
                 parent_function
                     .attributes
                     .iter()
-                    .filter(|a| a.name.text == "unsafe")
+                    .filter(|a| dream_abi::attributes::is_compiler_attribute(a, "unsafe"))
                     .cloned()
                     .collect()
             } else {

@@ -44,6 +44,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
     let mut diagnostics = DiagnosticBag::new(None);
 
     let mut acc = dream::driver::source_loader::ProgramAccumulator::default();
+    let mut native_graph = None;
 
     // Parse the user's document. Parsing reports lexical/syntactic errors into `user_bag`.
     let mut user_bag = DiagnosticBag::new(Some(MAIN_FILE.to_string()));
@@ -131,12 +132,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                 graph
                     .aliases
                     .insert(MAIN_FILE.to_string(), path_str.to_string());
-                dream::driver::native_sets::resolve_bare_c_attrs(
-                    &mut acc,
-                    &graph,
-                    &mut diagnostics,
-                );
-                let _ = dream::driver::ffi_shim::expand(&arena, &mut acc, &graph, &mut diagnostics);
+                native_graph = Some(graph);
             }
         }
     }
@@ -158,6 +154,20 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
     // Skip compiled-in copies of prelude files the user is actively editing in the compiler repo.
     if let Some(path) = file_path {
         strip_edited_stdlib_duplicates(path, &mut acc);
+    }
+
+    if let Some(graph) = native_graph
+        && let Ok(attributes) =
+            dream::driver::attributes::prepare(&arena, &mut acc, &mut diagnostics)
+    {
+        dream::driver::native_sets::resolve_bare_c_attrs(&mut acc, &graph, &mut diagnostics);
+        let _ = dream::driver::ffi_shim::expand(
+            &arena,
+            &mut acc,
+            &graph,
+            &attributes,
+            &mut diagnostics,
+        );
     }
 
     // Generators cannot run here; the generate pass instead merges the files the last build

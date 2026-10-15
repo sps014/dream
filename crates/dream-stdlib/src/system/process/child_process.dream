@@ -71,6 +71,6 @@ public class ChildProcess {
     del() { if this.id > 0 { ChildProcess.close_host(this.id); } }
     @runtime("processClose")
     static extern fun close_host(id: int): void;
-    @intrinsic("dream_task_protect")
+    @intrinsic(Intrinsic.DreamTaskProtect)
     static extern fun protect_host(borrow source: CancellationSource): void;
 }

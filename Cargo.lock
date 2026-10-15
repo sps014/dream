@@ -870,10 +870,12 @@ dependencies = [
 name = "dream-abi"
 version = "0.1.0"
 dependencies = [
+ "bumpalo",
  "dream-diagnostics",
  "dream-syntax",
  "dream-text",
  "dream-types",
+ "heck",
  "serde",
  "serde_json",
  "target-lexicon",
@@ -1093,7 +1095,9 @@ dependencies = [
 name = "dream-stdlib"
 version = "0.1.0"
 dependencies = [
+ "bumpalo",
  "dream-abi",
+ "dream-diagnostics",
  "dream-syntax",
  "indexmap",
 ]

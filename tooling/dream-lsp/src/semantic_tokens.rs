@@ -320,8 +320,10 @@ fn compute_from(idx: &Index, tokens: Vec<SyntaxToken>, text: &str) -> Vec<Semant
                         DECORATOR
                     } else if token.text == "this" || soft_special {
                         KEYWORD
-                    } else if let Some(decl) =
-                        idx.decls.iter().find(|d| d.start == token.position.start)
+                    } else if let Some(decl) = idx
+                        .decls
+                        .iter()
+                        .find(|d| d.file_path.is_none() && d.start == token.position.start)
                     {
                         sym_kind_token_index(decl.kind)
                     } else if let Some(r) =

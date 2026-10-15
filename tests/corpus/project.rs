@@ -152,6 +152,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("interp_inner_string", "core", true),
     Case::project("is_binding_and_chain", "core", true),
     Case::project("is_dead_branch_generic", "core", true),
+    Case::project("typed_attribute_decode", "serialization", true),
     Case::project("json_collections", "serialization", true),
     Case::project("json_container_whitespace", "serialization", true),
     Case::project("json_deep_nesting", "serialization", true),

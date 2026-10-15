@@ -1,6 +1,8 @@
 // The thin Dream wrapper over native/include/ticker.h. Bare `@c` binds to this package's own
 // `native/` sources and uses the Dream name as the C symbol.
 module ticker;
+import system.interop;
+
 
 import system;
 

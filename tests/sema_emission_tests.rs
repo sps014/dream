@@ -594,6 +594,7 @@ fn test_hir_emission_global_initializer_runs_in_start() {
     let mut parser = Parser::new(lexer, &parse_arena, &mut diagnostics);
     let tree = parser.parse().expect("parse should succeed");
     let arena = bumpalo::Bump::new();
+    dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
     let graph = dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone());
     let mut analyzer = Analyzer::new(&graph, &arena);
     let hir = analyzer
@@ -1255,6 +1256,7 @@ fn func_value_argument_is_reference_counted() {
     let mut parser = Parser::new(lexer, &parse_arena, &mut diagnostics);
     let tree = parser.parse().expect("parse should succeed");
     let arena = bumpalo::Bump::new();
+    dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
     let graph = dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone());
     let mut analyzer = Analyzer::new(&graph, &arena);
     let hir = analyzer

@@ -108,7 +108,8 @@ fn c_bitcode_inlines_and_preserves_aggregate_and_allocator_abi() {
     write(
         root,
         "main.dream",
-        r#"
+        r#"import system.interop;
+
 import system;
 public struct Pair { public x: int; public y: int; }
 @c extern fun transform(p: Pair): Pair;
@@ -177,7 +178,7 @@ fn cpp_global_constructors_and_destructors_run_once() {
     write(
         root,
         "main.dream",
-        "@cpp(\"lifetime.hpp\", \"value\") extern fun value(): int;\nfun main(): int { System.println(value()); return 0; }\n",
+        "import system.interop;\n@cpp(\"lifetime.hpp\", \"value\") extern fun value(): int;\nfun main(): int { System.println(value()); return 0; }\n",
     );
     write(root, "native/include/lifetime.hpp", "int value();\n");
     write(
@@ -198,7 +199,7 @@ fn unsupported_package_function_is_a_link_diagnostic() {
     write(
         root,
         "main.dream",
-        "@c extern fun unavailable(): int;\nfun main(): int { return unavailable(); }\n",
+        "import system.interop;\n@c extern fun unavailable(): int;\nfun main(): int { return unavailable(); }\n",
     );
     write(
         root,
@@ -223,7 +224,8 @@ fn shared_memory_package_interop_initializes_tls() {
     write(
         root,
         "main.dream",
-        r#"
+        r#"import system.interop;
+
 import system;
 import system.task;
 @c extern fun value(): int;
@@ -302,7 +304,8 @@ int value() {
     write(
         root,
         "main.dream",
-        r#"
+        r#"import system.interop;
+
 import system;
 import system.task;
 @cpp("value.hpp", "value") extern fun value(): int;
@@ -330,7 +333,7 @@ fn wrong_pointer_width_is_diagnosed_before_llvm_can_turn_it_into_a_trap() {
     write(
         root,
         "main.dream",
-        "@c extern fun width(n: long): int;\nfun main(): int { return width(1); }\n",
+        "import system.interop;\n@c extern fun width(n: long): int;\nfun main(): int { return width(1); }\n",
     );
     write(
         root,

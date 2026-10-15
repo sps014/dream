@@ -237,6 +237,67 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/codegen/attributes.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-attributes.md",
+    "declarations": [
+      {
+        "signature": "public struct GeneratorAttribute",
+        "description": "Marks `fun name(ctx: GenContext)` as a source generator (`system.codegen`). The function name is the generator name.",
+        "line": 5,
+        "page": "reference/api/codegen-attributes.md"
+      },
+      {
+        "signature": "public struct IncrementalAttribute",
+        "description": "Declares a generator pure over its snapshot, so the compiler may replay a cached result instead of running it.",
+        "line": 9,
+        "page": "reference/api/codegen-attributes.md"
+      },
+      {
+        "signature": "public struct OnAttributeAttribute",
+        "description": "Runs the generator when a declaration carries one of the named `@attribute` types.",
+        "line": 14,
+        "page": "reference/api/codegen-attributes.md"
+      },
+      {
+        "signature": "public declaration: DeclarationPath",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/codegen-attributes.md"
+      },
+      {
+        "signature": "public additional_declarations: List<DeclarationPath>",
+        "description": "",
+        "line": 16,
+        "page": "reference/api/codegen-attributes.md"
+      },
+      {
+        "signature": "public struct OnCallAttribute",
+        "description": "Runs the generator for call sites of the named functions or methods (`Type.method`).",
+        "line": 22,
+        "page": "reference/api/codegen-attributes.md"
+      },
+      {
+        "signature": "public declaration: DeclarationPath",
+        "description": "",
+        "line": 23,
+        "page": "reference/api/codegen-attributes.md"
+      },
+      {
+        "signature": "public additional_declarations: List<DeclarationPath>",
+        "description": "",
+        "line": 24,
+        "page": "reference/api/codegen-attributes.md"
+      },
+      {
+        "signature": "public struct SyntaxBlockAttribute",
+        "description": "Makes the generator expand `name { ... }` syntax blocks, where `name` is the generator's own name.",
+        "line": 29,
+        "page": "reference/api/codegen-attributes.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/codegen/codegen.dream",
     "package": "system.codegen",
     "page": "reference/api/codegen-codegen.md",
@@ -1435,7 +1496,7 @@
       },
       {
         "signature": "public id: string",
-        "description": "`module::name` of the `@attribute` type (`system.json::json`), or `builtin::name`.",
+        "description": "`module::name` of the `@attribute` type (`system.json::JsonAttribute`).",
         "line": 200,
         "page": "reference/api/codegen-gen-model-3.md"
       },
@@ -3181,6 +3242,265 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/core/attributes.dream",
+    "package": "system.core",
+    "page": "reference/api/core-attributes.md",
+    "declarations": [
+      {
+        "signature": "public enum AttributeTarget",
+        "description": "Declaration kinds accepted by an attribute.",
+        "line": 5,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "Constructor",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "Destructor",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "Class",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "Struct",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "Union",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "Enum",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "Interface",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "Type",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "Field",
+        "description": "",
+        "line": 14,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "Function",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "Method",
+        "description": "",
+        "line": 16,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "StaticMethod",
+        "description": "",
+        "line": 17,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "ExternFunction",
+        "description": "",
+        "line": 18,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "InterfaceMethod",
+        "description": "",
+        "line": 19,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "Module",
+        "description": "",
+        "line": 20,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "Parameter",
+        "description": "",
+        "line": 21,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "public struct DeclarationPath",
+        "description": "A declaration reference supplied as an attribute argument.",
+        "line": 25,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "public text: string",
+        "description": "",
+        "line": 26,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "public constructor(text: string)",
+        "description": "",
+        "line": 27,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "public struct AttributeAttribute",
+        "description": "Declares a `@name(...)` attribute type. Arguments are `AttributeTarget.*` placements (none = anywhere); fields are the argument schema.",
+        "line": 32,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "public targets: AttributeTarget[]",
+        "description": "",
+        "line": 33,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "public struct RepeatableAttribute",
+        "description": "Allows an `@attribute` type to appear more than once on the same declaration.",
+        "line": 38,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "public struct ExportAttribute",
+        "description": "Exports a non-generic synchronous function through a plain C ABI wrapper.",
+        "line": 42,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "public struct IntrinsicAttribute",
+        "description": "Marks an extern function/method as a compiler intrinsic. The string argument is the intrinsic key (e.g. `\"print\"`).",
+        "line": 46,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public operation: Intrinsic",
+        "description": "",
+        "line": 47,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public struct InlineAttribute",
+        "description": "Raises the inliner's size budget for this function/method. A compiler hint, not a guarantee.",
+        "line": 52,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public struct NoinlineAttribute",
+        "description": "Never inline this function/method (neither the MIR inliner nor LLVM). Keeps benchmark sinks opaque.",
+        "line": 56,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public struct UnsafeAttribute",
+        "description": "Marks a function/method as unsafe. Calls are only allowed from other `@unsafe` contexts.",
+        "line": 60,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public struct AllowCycleAttribute",
+        "description": "Acknowledges that this class can form strong ownership cycles. ARC does not collect cycles; use weak/unowned back-links or explicit teardown to avoid leaks.",
+        "line": 64,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public struct ConsumingAttribute",
+        "description": "Marks an extern whose reference parameters transfer ownership to the host, which must release them. Extern parameters are otherwise passed borrowed, since a host cannot release a Dream reference.",
+        "line": 68,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public struct OwnedAttribute",
+        "description": "The extern's result transfers ownership to Dream. On a `@cpp` member returning `T*`, the Dream object deletes it. On a `@c` extern returning `OwnedCPtr`, `@owned(\"free_fn\")` names the C function that frees the pointer when the last reference is released.",
+        "line": 72,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public free_function: Option<string>",
+        "description": "",
+        "line": 73,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public struct JsAttribute",
+        "description": "Binds an extern function to a JavaScript host import: `@js(\"module\", \"export\")`. JS-only (user interop, `js` type, WASM `env`/libm). Dream runtime hosts that exist on native and WASM use `@runtime` instead.",
+        "line": 78,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public module_name: string",
+        "description": "",
+        "line": 79,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public export_name: string",
+        "description": "",
+        "line": 80,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public struct RuntimeAttribute",
+        "description": "Binds an extern to the Dream runtime host on WASM and native: `@runtime(\"fileRead\")` imports `Dream.fileRead` and calls the C symbol `fileRead`.",
+        "line": 85,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public export_name: string",
+        "description": "",
+        "line": 86,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public struct AsyncHostAttribute",
+        "description": "Deferred native host for an `extern async fun`: the `<host>Async` C symbol takes the future as its leading argument, performs the work off-thread, and completes it via the bound dream_complete_foreign. The run loop stays parked while the work is in flight.",
+        "line": 91,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public struct NativeAttribute",
+        "description": "Marks a function/method as available on the native (C) host. Combine with `@node`/`@web` to restrict; absent all three means every runtime.",
+        "line": 95,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public struct NodeAttribute",
+        "description": "Marks a function/method as available on the Node.js host. Combine with `@native`/`@web` to restrict; absent all three means every runtime.",
+        "line": 99,
+        "page": "reference/api/core-attributes-2.md"
+      },
+      {
+        "signature": "public struct WebAttribute",
+        "description": "Marks a function/method as available in the browser host. Combine with `@native`/`@node` to restrict; absent all three means every runtime.",
+        "line": 103,
+        "page": "reference/api/core-attributes-2.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/core/buffer.dream",
     "package": "system.core",
     "page": "reference/api/core-buffer.md",
@@ -3674,6 +3994,871 @@
         "description": "Index of the first element matching `pred`, or `None`.",
         "line": 30,
         "page": "reference/api/core-indexed-collection.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/core/intrinsic.dream",
+    "package": "system.core",
+    "page": "reference/api/core-intrinsic.md",
+    "declarations": [
+      {
+        "signature": "public enum Intrinsic",
+        "description": "Compiler operations available to intrinsic declarations.",
+        "line": 4,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "RawLoad",
+        "description": "",
+        "line": 5,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "RawStore",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "DreamRawSize",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "DreamRawAlloc",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "DreamRawRealloc",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "DreamRawFree",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "DreamRawCopy",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "DreamRawMove",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "DreamRawFill",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "DreamArenaNew",
+        "description": "",
+        "line": 14,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "DreamArenaAlloc",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "DreamArenaReset",
+        "description": "",
+        "line": 16,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "DreamArenaFree",
+        "description": "",
+        "line": 17,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "DreamYieldSignal",
+        "description": "",
+        "line": 18,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "DreamYieldSignalComplete",
+        "description": "",
+        "line": 19,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "DreamYieldRun",
+        "description": "",
+        "line": 20,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "Print",
+        "description": "",
+        "line": 21,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "Println",
+        "description": "",
+        "line": 22,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "PromiseAll",
+        "description": "",
+        "line": 23,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "PromiseAny",
+        "description": "",
+        "line": 24,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "PromiseRace",
+        "description": "",
+        "line": 25,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "JsonSerialize",
+        "description": "",
+        "line": 26,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "JsonDeserialize",
+        "description": "",
+        "line": 27,
+        "page": "reference/api/core-intrinsic-1.md"
+      },
+      {
+        "signature": "JsonFromValue",
+        "description": "",
+        "line": 28,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "GenAttributeId",
+        "description": "",
+        "line": 29,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "GenAttributeDecode",
+        "description": "",
+        "line": 30,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "GenAttributeDecodeAll",
+        "description": "",
+        "line": 31,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "ArrayNew",
+        "description": "",
+        "line": 32,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "BufferZero",
+        "description": "",
+        "line": 33,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "Sleep",
+        "description": "",
+        "line": 34,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringAlloc",
+        "description": "",
+        "line": 35,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringCharAtUnchecked",
+        "description": "",
+        "line": 36,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringBuilderBuffer",
+        "description": "",
+        "line": 37,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringBuilderPushDouble",
+        "description": "",
+        "line": 38,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringCloneRange",
+        "description": "",
+        "line": 39,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringJsonBoundary",
+        "description": "",
+        "line": 40,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringSet",
+        "description": "",
+        "line": 41,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringFromUtf8",
+        "description": "",
+        "line": 42,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringFromUtf8Prefix",
+        "description": "",
+        "line": 43,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringFromUtf8PrefixN",
+        "description": "",
+        "line": 44,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringSubstringRaw",
+        "description": "",
+        "line": 45,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringCopyUtf8",
+        "description": "",
+        "line": 46,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringCompare",
+        "description": "",
+        "line": 47,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringViewEq",
+        "description": "",
+        "line": 48,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringViewCompare",
+        "description": "",
+        "line": 49,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringViewHash",
+        "description": "",
+        "line": 50,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringViewFind",
+        "description": "",
+        "line": 51,
+        "page": "reference/api/core-intrinsic-2.md"
+      },
+      {
+        "signature": "StringViewRfind",
+        "description": "",
+        "line": 52,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "StringViewFindChar",
+        "description": "",
+        "line": 53,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "StringViewRfindChar",
+        "description": "",
+        "line": 54,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "StringViewCountChar",
+        "description": "",
+        "line": 55,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "StringBuilderView",
+        "description": "",
+        "line": 56,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "DebugGetFreeListHead",
+        "description": "",
+        "line": 57,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "DebugGetHeapPtr",
+        "description": "",
+        "line": 58,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "DebugGetLiveObjects",
+        "description": "",
+        "line": 59,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "DebugGetTotalAllocations",
+        "description": "",
+        "line": 60,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "DebugGetRefCount",
+        "description": "",
+        "line": 61,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "DebugGetRuntimeCounter",
+        "description": "",
+        "line": 62,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "ToBytes",
+        "description": "",
+        "line": 63,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "FromBytes",
+        "description": "",
+        "line": 64,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "ArrayRealloc",
+        "description": "",
+        "line": 65,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "ArrayElemsCopy",
+        "description": "",
+        "line": 66,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "ArrayElemsFill",
+        "description": "",
+        "line": 67,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "ForceFree",
+        "description": "",
+        "line": 68,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "ArrayGetUnchecked",
+        "description": "",
+        "line": 69,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "ArraySetUnchecked",
+        "description": "",
+        "line": 70,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "WireEncode",
+        "description": "",
+        "line": 71,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "WireDecode",
+        "description": "",
+        "line": 72,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "DreamPanic",
+        "description": "",
+        "line": 73,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "RegexCompile",
+        "description": "",
+        "line": 74,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "RegexFree",
+        "description": "",
+        "line": 75,
+        "page": "reference/api/core-intrinsic-3.md"
+      },
+      {
+        "signature": "RegexFind",
+        "description": "",
+        "line": 76,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "RegexFindAll",
+        "description": "",
+        "line": 77,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "RegexGroupCount",
+        "description": "",
+        "line": 78,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "RegexNameCount",
+        "description": "",
+        "line": 79,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "RegexNameAt",
+        "description": "",
+        "line": 80,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "RegexNameNumber",
+        "description": "",
+        "line": 81,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "SimdLaneCount",
+        "description": "",
+        "line": 82,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "SimdV128Splat",
+        "description": "",
+        "line": 83,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "SimdV128Load",
+        "description": "",
+        "line": 84,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "SimdV128Store",
+        "description": "",
+        "line": 85,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "SimdV128Add",
+        "description": "",
+        "line": 86,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "SimdV128Sub",
+        "description": "",
+        "line": 87,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "SimdV128Mul",
+        "description": "",
+        "line": 88,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "SimdV128Min",
+        "description": "",
+        "line": 89,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "SimdV128Max",
+        "description": "",
+        "line": 90,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "SimdV128Sum",
+        "description": "",
+        "line": 91,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "DreamCallbackRegister",
+        "description": "",
+        "line": 92,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "DreamCallbackUnregister",
+        "description": "",
+        "line": 93,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "FuncboxNew",
+        "description": "",
+        "line": 94,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "FuncboxFuncidx",
+        "description": "",
+        "line": 95,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "FuncboxEnv",
+        "description": "",
+        "line": 96,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "ArraySlotSwap",
+        "description": "",
+        "line": 97,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "BufferIsString",
+        "description": "",
+        "line": 98,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "ArraySlotTake",
+        "description": "",
+        "line": 99,
+        "page": "reference/api/core-intrinsic-4.md"
+      },
+      {
+        "signature": "RegexTest",
+        "description": "",
+        "line": 100,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamChannelNew",
+        "description": "",
+        "line": 101,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamChannelFree",
+        "description": "",
+        "line": 102,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamChannelEndpoint",
+        "description": "",
+        "line": 103,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamChannelClose",
+        "description": "",
+        "line": 104,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamChannelEndpointFree",
+        "description": "",
+        "line": 105,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamChannelSend",
+        "description": "",
+        "line": 106,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamChannelReceive",
+        "description": "",
+        "line": 107,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamChannelStatus",
+        "description": "",
+        "line": 108,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamChannelWait",
+        "description": "",
+        "line": 109,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamTaskKeepAlive",
+        "description": "",
+        "line": 110,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamTaskIsProtected",
+        "description": "",
+        "line": 111,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamTaskHasContext",
+        "description": "",
+        "line": 112,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamTaskContext",
+        "description": "",
+        "line": 113,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamTaskAttach",
+        "description": "",
+        "line": 114,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamTaskProtect",
+        "description": "",
+        "line": 115,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamCancellationNew",
+        "description": "",
+        "line": 116,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamCancellationRelease",
+        "description": "",
+        "line": 117,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamCancellationIsCancelled",
+        "description": "",
+        "line": 118,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamCancellationCancel",
+        "description": "",
+        "line": 119,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamCancellationRegister",
+        "description": "",
+        "line": 120,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamCancellationSignal",
+        "description": "",
+        "line": 121,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamCancellationUnregister",
+        "description": "",
+        "line": 122,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamFfiFreeWith",
+        "description": "",
+        "line": 123,
+        "page": "reference/api/core-intrinsic-5.md"
+      },
+      {
+        "signature": "DreamFfiReadPtr",
+        "description": "",
+        "line": 124,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "DreamFfiReadCstring",
+        "description": "",
+        "line": 125,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "DreamFfiReadI32",
+        "description": "",
+        "line": 126,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "DreamFfiReadI64",
+        "description": "",
+        "line": 127,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "DreamFfiReadF64",
+        "description": "",
+        "line": 128,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "SharedLockAcquire",
+        "description": "",
+        "line": 129,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "SharedLockRelease",
+        "description": "",
+        "line": 130,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "SharedLockTryAcquire",
+        "description": "",
+        "line": 131,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "SharedLockTryAcquireFor",
+        "description": "",
+        "line": 132,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "ArrayStore16",
+        "description": "",
+        "line": 133,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "StringFromBuilder",
+        "description": "",
+        "line": 134,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "StringClone",
+        "description": "",
+        "line": 135,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "Utf8DecodeAt",
+        "description": "",
+        "line": 136,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "Utf8WidthAt",
+        "description": "",
+        "line": 137,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "StringBuilderPush",
+        "description": "",
+        "line": 138,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "StringBuilderPushInt",
+        "description": "",
+        "line": 139,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "StringBuilderPushLong",
+        "description": "",
+        "line": 140,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "SharedSemaphoreAcquire",
+        "description": "",
+        "line": 141,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "SharedSemaphoreRelease",
+        "description": "",
+        "line": 142,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "SharedSemaphoreTryAcquire",
+        "description": "",
+        "line": 143,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "SharedSemaphoreTryAcquireFor",
+        "description": "",
+        "line": 144,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "DreamCancel",
+        "description": "",
+        "line": 145,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "DreamStart",
+        "description": "",
+        "line": 146,
+        "page": "reference/api/core-intrinsic-6.md"
       }
     ]
   },
@@ -6320,152 +7505,249 @@
       {
         "signature": "public struct CPtr",
         "description": "An opaque C pointer (`void*`, `T*`). `@c` passes it by value; `ref p: CPtr` is a `T**` out-param and `Option<CPtr>` a nullable pointer.",
-        "line": 5,
+        "line": 7,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public constructor(raw: usize)",
         "description": "",
-        "line": 8,
+        "line": 10,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static fun null(): CPtr",
         "description": "The `NULL` pointer.",
-        "line": 13,
+        "line": 15,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public fun is_null(): bool",
         "description": "True when this is `NULL`.",
-        "line": 18,
+        "line": 20,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public fun address(): usize",
         "description": "The pointer as an integer address.",
-        "line": 23,
+        "line": 25,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public fun offset(bytes: isize): CPtr",
         "description": "The pointer `bytes` bytes past this one.",
-        "line": 28,
+        "line": 30,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public class OwnedCPtr",
         "description": "A C pointer returned by an `@owned(\"free_fn\")` `@c` extern: Dream owns it, and the destructor calls `free_fn(ptr)` unless `take()` handed ownership back first.",
-        "line": 39,
+        "line": 41,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static extern fun free_with(free: usize, ptr: usize): void",
         "description": "",
-        "line": 44,
+        "line": 46,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public fun get(): CPtr",
         "description": "The pointer, still owned (and later freed) by this object.",
-        "line": 47,
+        "line": 49,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public fun take(): CPtr",
         "description": "Gives up ownership: the caller now frees the returned pointer, and this object holds `NULL`.",
-        "line": 52,
+        "line": 54,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public class NativeCallback<F>",
         "description": "A Dream `fun` (capturing or not) handed to a `@c` extern as a `(fn, void* user_data)` pair. C may call it for as long as this object is alive: keep it in a field while C holds the pointer. Calls from threads Dream did not start trap.",
-        "line": 67,
+        "line": 69,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static extern fun register(borrow callback: object): void",
         "description": "",
-        "line": 71,
+        "line": 73,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static extern fun unregister(borrow callback: object): void",
         "description": "",
-        "line": 74,
+        "line": 76,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public constructor(f: F)",
         "description": "",
-        "line": 76,
+        "line": 78,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static class Ffi",
         "description": "Reads through C pointers from `@c` callbacks (`char**`, `char*`).",
-        "line": 87,
+        "line": 89,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static extern fun host_read_ptr(base: usize, index: int): usize",
         "description": "",
-        "line": 89,
+        "line": 91,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static extern fun host_read_cstring(ptr: usize): string",
         "description": "",
-        "line": 92,
+        "line": 94,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static extern fun host_read_i32(base: usize, index: int): int",
         "description": "",
-        "line": 95,
+        "line": 97,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static extern fun host_read_i64(base: usize, index: int): long",
         "description": "",
-        "line": 98,
+        "line": 100,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static extern fun host_read_f64(base: usize, index: int): double",
         "description": "",
-        "line": 101,
+        "line": 103,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static fun read_int(base: CPtr, index: int): int",
         "description": "`((int32_t*)base)[index]`.",
-        "line": 104,
+        "line": 106,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static fun read_long(base: CPtr, index: int): long",
         "description": "`((int64_t*)base)[index]`.",
-        "line": 109,
+        "line": 111,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static fun read_double(base: CPtr, index: int): double",
         "description": "`((double*)base)[index]`.",
-        "line": 114,
+        "line": 116,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static fun read_ptr(base: CPtr, index: int): CPtr",
         "description": "`((void**)base)[index]`. A `NULL` base reads `NULL`.",
-        "line": 119,
+        "line": 121,
         "page": "reference/api/ffi-1.md"
       },
       {
         "signature": "public static fun read_cstring(ptr: CPtr): Option<string>",
         "description": "Copies the NUL-terminated UTF-8 C string at `ptr` into a Dream `string`; `None` for `NULL`.",
-        "line": 124,
+        "line": 126,
         "page": "reference/api/ffi-2.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/interop/attributes.dream",
+    "package": "system.interop",
+    "page": "reference/api/interop-attributes.md",
+    "declarations": [
+      {
+        "signature": "public enum CCallConv",
+        "description": "Calling convention for C imports.",
+        "line": 4,
+        "page": "reference/api/interop-attributes.md"
+      },
+      {
+        "signature": "public enum MarshalKind",
+        "description": "C string encoding or callback context placement.",
+        "line": 7,
+        "page": "reference/api/interop-attributes.md"
+      },
+      {
+        "signature": "public struct CAttribute",
+        "description": "Binds an extern function to a C ABI library/symbol: `@c(\"lib\", \"symbol\")`. `@c(\"lib\")` uses the Dream name as the symbol; bare `@c` also binds to the declaring package's `native/` sources. Native and portable WASM builds are supported; runtime annotations restrict availability.",
+        "line": 11,
+        "page": "reference/api/interop-attributes.md"
+      },
+      {
+        "signature": "public library: Option<string>",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/interop-attributes.md"
+      },
+      {
+        "signature": "public symbol: Option<string>",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/interop-attributes.md"
+      },
+      {
+        "signature": "public struct CCallAttribute",
+        "description": "C calling convention for `@c` externs: `@c_call(CCallConv.Cdecl)` (the platform default) or `@c_call(CCallConv.Stdcall)` (Win32 APIs; identical to cdecl on every target but 32-bit x86 Windows).",
+        "line": 18,
+        "page": "reference/api/interop-attributes.md"
+      },
+      {
+        "signature": "public convention: CCallConv",
+        "description": "",
+        "line": 19,
+        "page": "reference/api/interop-attributes.md"
+      },
+      {
+        "signature": "public struct MarshalAttribute",
+        "description": "`@c` marshaling: on the extern, string encoding (`@marshal(MarshalKind.LpStr)` / `@marshal(MarshalKind.LpWStr)`); on a `NativeCallback` parameter, `@marshal(MarshalKind.UserDataLast)` passes `user_data` after the callback's own arguments.",
+        "line": 24,
+        "page": "reference/api/interop-attributes.md"
+      },
+      {
+        "signature": "public kind: MarshalKind",
+        "description": "",
+        "line": 25,
+        "page": "reference/api/interop-attributes.md"
+      },
+      {
+        "signature": "public struct PackedAttribute",
+        "description": "Packs a value struct with no padding for C ABI layout (`@packed`).",
+        "line": 30,
+        "page": "reference/api/interop-attributes.md"
+      },
+      {
+        "signature": "public struct CppAttribute",
+        "description": "Binds a class, `@unmanaged` struct, or free extern function to C++: `@cpp(\"header.hpp\", \"ns::Name\")`. The header resolves against the declaring package's `native/include/`; the name defaults to the Dream name. The compiler generates the `extern \"C\"` shim for native or portable WASM builds.",
+        "line": 34,
+        "page": "reference/api/interop-attributes.md"
+      },
+      {
+        "signature": "public header: string",
+        "description": "",
+        "line": 35,
+        "page": "reference/api/interop-attributes.md"
+      },
+      {
+        "signature": "public name: Option<string>",
+        "description": "",
+        "line": 36,
+        "page": "reference/api/interop-attributes.md"
+      },
+      {
+        "signature": "public struct CppNameAttribute",
+        "description": "The C++ member (or expression) a `@cpp` extern calls, for renames and template instantiations: `@cpp_name(\"get_as<int>\")`.",
+        "line": 41,
+        "page": "reference/api/interop-attributes.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 42,
+        "page": "reference/api/interop-attributes.md"
       }
     ]
   },
@@ -7934,13 +9216,13 @@
     "page": "reference/api/json-json-attributes.md",
     "declarations": [
       {
-        "signature": "public struct json",
+        "signature": "public struct JsonAttribute",
         "description": "Derives JSON serialization for a class, struct or discriminated union: `to_json`, `write_json` and `from_json`, written by the `system.json.derive` generator.",
         "line": 6,
         "page": "reference/api/json-json-attributes.md"
       },
       {
-        "signature": "public struct property_name",
+        "signature": "public struct PropertyNameAttribute",
         "description": "Overrides the JSON property name of a field of a `@json` type.",
         "line": 10,
         "page": "reference/api/json-json-attributes.md"
@@ -7952,7 +9234,7 @@
         "page": "reference/api/json-json-attributes.md"
       },
       {
-        "signature": "public struct json_ignore",
+        "signature": "public struct JsonIgnoreAttribute",
         "description": "Leaves a field of a `@json` type out of JSON serialization and deserialization.",
         "line": 16,
         "page": "reference/api/json-json-attributes.md"
@@ -11090,6 +12372,31 @@
         "description": "Asserts that two strings have identical contents.",
         "line": 86,
         "page": "reference/api/testing-assert.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/testing/attributes.dream",
+    "package": "system.testing",
+    "page": "reference/api/testing-attributes.md",
+    "declarations": [
+      {
+        "signature": "public struct TestAttribute",
+        "description": "Marks a top-level `fun name(): void` as a unit test discovered by `dream test` / `dreamer test`.",
+        "line": 5,
+        "page": "reference/api/testing-attributes.md"
+      },
+      {
+        "signature": "public struct TimeoutAttribute",
+        "description": "Fails a `@test` function that runs longer than this many milliseconds. Tests have no timeout unless they declare one.",
+        "line": 9,
+        "page": "reference/api/testing-attributes.md"
+      },
+      {
+        "signature": "public milliseconds: int",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/testing-attributes.md"
       }
     ]
   },

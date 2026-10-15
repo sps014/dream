@@ -128,12 +128,13 @@ pub fn expand<'a>(
     arena: &'a Bump,
     acc: &mut ProgramAccumulator<'a>,
     graph: &NativeGraph,
+    attributes: &dream_abi::attributes::UserAttributes,
     diagnostics: &mut DiagnosticBag,
 ) -> Result<CppBridge, Error> {
     if !declares_cpp(acc) {
         return Ok(CppBridge::default());
     }
-    let program = model::collect(acc, graph, diagnostics);
+    let program = model::collect(acc, graph, attributes, diagnostics);
     acc.all_structs
         .retain(|s| s.is_value || cpp_attr(&s.attributes).is_none());
     acc.all_functions

@@ -43,16 +43,16 @@ public class Task {
     @runtime("workerSpawn")
     static extern fun spawn_host(funcidx: int, env: long): int;
 
-    @intrinsic("funcbox_funcidx")
+    @intrinsic(Intrinsic.FuncboxFuncidx)
     internal static extern fun funcidx(borrow body: fun(string): string): int;
 
-    @intrinsic("funcbox_funcidx")
+    @intrinsic(Intrinsic.FuncboxFuncidx)
     internal static extern fun funcidx_async(borrow body: fun(string): Future<string>): int;
 
-    @intrinsic("funcbox_env")
+    @intrinsic(Intrinsic.FuncboxEnv)
     internal static extern fun env(borrow body: fun(string): string): long;
 
-    @intrinsic("funcbox_env")
+    @intrinsic(Intrinsic.FuncboxEnv)
     internal static extern fun env_async(borrow body: fun(string): Future<string>): long;
 
     @runtime("workerPost")

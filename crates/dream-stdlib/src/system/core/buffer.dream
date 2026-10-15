@@ -6,10 +6,10 @@ module system.core;
 
 public static class Buffer {
     // Storage initialization may contain internal null references; it is not a constructor API.
-    @intrinsic("buffer_zero")
+    @intrinsic(Intrinsic.BufferZero)
     internal static extern fun zero<T>(): T;
     // `Buffer.alloc<T>(n)` returns a fresh, zero-initialized `T[]` of length `n`.
-    @intrinsic("array_new")
+    @intrinsic(Intrinsic.ArrayNew)
     public static extern fun alloc<T>(len: int): T[];
 
     // Resizes `arr`'s backing block via the allocator's `$realloc`, returning a `T[]` of `new_len`
@@ -18,7 +18,7 @@ public static class Buffer {
     // never be read again (a surviving alias would observe a stale, possibly-freed block) — the
     // same contract as C's `realloc`. `@unsafe` because the compiler cannot verify single
     // ownership; callers (e.g. `List<T>`) must uphold it themselves.
-    @intrinsic("array_realloc")
+    @intrinsic(Intrinsic.ArrayRealloc)
     @unsafe
     @consuming
     public static extern fun realloc<T>(arr: T[], new_len: int): T[];
@@ -27,7 +27,7 @@ public static class Buffer {
     // emitter expands this to a single `memory.copy` of `count * sizeof(T)` bytes — correct only
     // for blittable `T` (no ARC retain on the copied slots). `@unsafe` because the compiler does
     // not check that the ranges fit inside either array's allocated length.
-    @intrinsic("array_elems_copy")
+    @intrinsic(Intrinsic.ArrayElemsCopy)
     @unsafe
     public static extern fun elems_copy<T : unmanaged>(
         borrow dst: T[],
@@ -39,7 +39,7 @@ public static class Buffer {
 
     // Zeroes `count` unmanaged elements of `dst` starting at `dst_off` via `memory.fill`.
     // `@unsafe` because the compiler does not check that the range fits in `dst`.
-    @intrinsic("array_elems_fill")
+    @intrinsic(Intrinsic.ArrayElemsFill)
     @unsafe
     public static extern fun elems_fill<T : unmanaged>(
         borrow dst: T[],
@@ -81,25 +81,25 @@ public static class Buffer {
 
     // `arr[index]` without the bounds check. `@unsafe` because the caller must already have
     // established `0 <= index < arr.length` (e.g. `List<T>` keeps `count <= items.length`).
-    @intrinsic("array_get_unchecked")
+    @intrinsic(Intrinsic.ArrayGetUnchecked)
     @unsafe
     public static extern fun get_unchecked<T>(borrow arr: T[], index: int): T;
 
     // `arr[index] = value` without the bounds check (ordinary element-store ARC semantics).
     // `@unsafe` for the same reason as `get_unchecked`.
-    @intrinsic("array_set_unchecked")
+    @intrinsic(Intrinsic.ArraySetUnchecked)
     @unsafe
     public static extern fun set_unchecked<T>(borrow arr: T[], index: int, value: T): void;
 
     // Writes a UTF-16 code unit as little-endian `i32.store16` at byte offset `off`.
-    @intrinsic("array_store16")
+    @intrinsic(Intrinsic.ArrayStore16)
     public static extern fun store16(borrow arr: byte[], off: int, unit: int): void;
 
     // Immediately returns `arr`'s backing block to the allocator via `$free`, bypassing reference
     // counting entirely. Any other live reference to the same block (including `arr` itself, if
     // read again) is left dangling. `@unsafe` for the same reason as `realloc`: the compiler cannot
     // verify `arr` has no other owners.
-    @intrinsic("force_free")
+    @intrinsic(Intrinsic.ForceFree)
     @unsafe
     @consuming
     public static extern fun free<T>(arr: T[]): void;

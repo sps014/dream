@@ -171,10 +171,10 @@ public class TaskScope<E> {
         return true;
     }
 
-    @intrinsic("dream_task_attach")
+    @intrinsic(Intrinsic.DreamTaskAttach)
     internal static extern fun attach_host(borrow pending: object, borrow token: CancellationToken): void;
 
-    @intrinsic("dream_task_protect")
+    @intrinsic(Intrinsic.DreamTaskProtect)
     static extern fun protect_host(borrow source: CancellationSource): void;
 
     internal fun protect(): void { TaskScope<E>.protect_host(this.source); }

@@ -132,6 +132,8 @@ impl AttributeArg {
 
 #[derive(Debug, Clone)]
 pub struct AttributeNode {
+    /// Filled before compiler handlers run, so spelling alone cannot select compiler behavior.
+    pub resolved_id: std::sync::OnceLock<String>,
     pub name: SyntaxToken,
     pub args: Vec<AttributeArg>,
 }

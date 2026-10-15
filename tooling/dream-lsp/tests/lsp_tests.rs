@@ -1688,7 +1688,7 @@ fn hover_shows_doc_comment_above_attribute() {
     let src = "
 class System {
     /// Prints a value to standard output.
-    @intrinsic(\"print\")
+    @intrinsic(Intrinsic.Print)
     static extern fun print<T>(value: T): void;
 }
 fun main(): void {
@@ -2301,10 +2301,10 @@ static extern fun f(): void;
 }
 
 #[test]
-fn intrinsic_arg_completions_inside_string() {
+fn intrinsic_arg_completions_use_enum_members() {
     let harness = TestHarness::new(
         r#"
-@intrinsic("|")
+@intrinsic(|)
 static extern fun print(): void;
 "#,
     );
@@ -2312,7 +2312,9 @@ static extern fun print(): void;
         .index()
         .completions(None, &harness.src, harness.offset);
     assert!(
-        comps.iter().any(|(n, ..)| n == "print" || n == "println"),
+        comps
+            .iter()
+            .any(|(n, ..)| n == "Intrinsic.Print" || n == "Intrinsic.Println"),
         "expected intrinsic keys inside @intrinsic(\"\"), got {:?}",
         comps.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>()
     );

@@ -8,6 +8,8 @@ name = "dream_stdlib"
 path = "src/lib.rs"
 
 [dependencies]
+bumpalo = "3"
+dream-diagnostics = { path = "../dream-diagnostics" }
 dream-syntax = { path = "../dream-syntax" }
 dream-abi = { path = "../dream-abi" }
 indexmap = "2"

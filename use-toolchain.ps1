@@ -24,7 +24,7 @@ $UserDir = Join-Path $HOME ".dream"
 $BinDir = Join-Path $UserDir "bin"
 $EnvFile = Join-Path $UserDir "toolchain.env"
 $Names = @("dream.exe", "dreamer.exe", "dream-lsp.exe")
-$Capabilities = @("core", "unicode", "crypto", "process", "timezone")
+$Capabilities = @("core", "unicode", "crypto", "process", "timezone", "net", "cli")
 $Libs = @($Capabilities | ForEach-Object {
     "dream_host_$_.dll"
     "dream_host_$_.dll.lib"

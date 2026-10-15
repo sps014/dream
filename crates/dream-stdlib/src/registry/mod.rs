@@ -1,3 +1,4 @@
+mod cli;
 mod codegen;
 mod collections;
 mod core;
@@ -44,6 +45,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     json::PACKAGE,
     io::PACKAGE,
     net::PACKAGE,
+    cli::PACKAGE,
     crypto::PACKAGE,
     process::PACKAGE,
     system::PACKAGE,

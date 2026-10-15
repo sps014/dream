@@ -105,7 +105,7 @@ overflow-checks = true
 edition = "2024"
 
 [workspace]
-default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-unicode", "crates/dream-host-crypto", "crates/dream-host-process", "crates/dream-host-timezone", "crates/dream-host-net"]
+default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-unicode", "crates/dream-host-crypto", "crates/dream-host-process", "crates/dream-host-timezone", "crates/dream-host-net", "crates/dream-host-cli"]
 members = [
     ".",
     "crates/dream-text",
@@ -125,6 +125,7 @@ members = [
     "crates/dream-host-process",
     "crates/dream-host-timezone",
     "crates/dream-host-net",
+    "crates/dream-host-cli",
     "crates/dream-host-abi",
     "tooling/dream-lsp",
     "tooling/dreamer",
@@ -133,3 +134,12 @@ members = [
 # Resolver 2+ feature unification, so the wasm32 analyzer build does not inherit the root
 # crate's default `native` feature.
 resolver = "3"
+
+# The optional JavaScript CLI host embeds this parser, separately from the C guest runtime.
+[profile.cli-wasm]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

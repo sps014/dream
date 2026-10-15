@@ -57,6 +57,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("casting", "core", true),
     Case::project("char_parse", "text", true),
     Case::project("char_storage_unicode", "text", true),
+    Case::project("cli_arguments", "text", true),
     Case::project("class_arrays", "types", true),
     Case::project("class_foreach", "types", true),
     Case::project("class_indexer", "types", true),

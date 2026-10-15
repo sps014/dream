@@ -136,5 +136,17 @@
     "page": "docs/reference/stdlib/builtins.md",
     "block": 1,
     "stdout": "ready\ntrue\n"
+  },
+  {
+    "name": "cli-defaults",
+    "page": "docs/reference/stdlib/cli.md",
+    "block": 0,
+    "stdout": "download.bin\n10000\nfalse\n"
+  },
+  {
+    "name": "cli-subcommands",
+    "page": "docs/reference/stdlib/cli.md",
+    "block": 1,
+    "stdout": "check\nslow\n"
   }
 ]

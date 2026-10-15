@@ -99,7 +99,7 @@ try {
     Get-ChildItem -Path (Join-Path $Work "out") -Recurse -File |
         Where-Object {
             $_.Name -match '^(dream|dreamer|dream-lsp)(\.exe)?$' -or
-            $_.Name -match '^(lib)?dream_host_(core|unicode|crypto|process|timezone|net)\.(so|dylib|dll|dll\.lib)$'
+            $_.Name -match '^(lib)?dream_host_(core|unicode|crypto|process|timezone|net|cli)\.(so|dylib|dll|dll\.lib)$'
         } |
         ForEach-Object { Copy-Item $_.FullName -Destination $BinDir -Force }
     Get-ChildItem -Path (Join-Path $Work "out") -Recurse -Directory |
@@ -132,7 +132,7 @@ try {
     if (-not (Test-Path -LiteralPath $dreamBin) -or -not (Test-Path -LiteralPath $dreamerBin)) {
         throw "archive did not contain dream/dreamer binaries"
     }
-    foreach ($capability in @("core", "unicode", "crypto", "process", "timezone", "net")) {
+    foreach ($capability in @("core", "unicode", "crypto", "process", "timezone", "net", "cli")) {
         $libraries = @(
             (Join-Path $BinDir "libdream_host_$capability.so"),
             (Join-Path $BinDir "libdream_host_$capability.dylib"),

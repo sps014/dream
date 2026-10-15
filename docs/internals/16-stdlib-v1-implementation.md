@@ -87,20 +87,41 @@ drained per Dream client. These changes do not establish production v1 readiness
 The phase 3–4 qualification command (`scripts/qualify-io-net.py`) runs native and
 Node fixtures in debug/release modes, transport/TLS tests, and adapter/ownership
 checks. The dedicated platform workflow runs it on Linux, macOS, and Windows and
-publishes reports. Cross-platform execution results are pending for this increment.
+publishes reports. The [Linux/macOS/Windows run](https://github.com/sps014/dream/actions/runs/38684962085)
+passes all 13 checks on each platform at `e34ce58c`. Each archived report identifies
+the revision and confirms a clean source tree.
+
+## Phase 5 implementation
+
+`system.cli` provides declarative commands, boolean flags, typed string/integer
+options, required and repeated positionals, defaults, choices, subcommands, and
+structured help/version outcomes. Repeated options preserve occurrence order;
+typed single-value getters return the last occurrence. Explicit-value provenance
+is kept separately from defaults.
+
+The `cli` native capability and JavaScript adapter share one clap implementation.
+The adapter embeds a separately compiled Rust WebAssembly capability; it does not
+add Rust to the Dream guest runtime. It imports no host functions and is instantiated
+only when CLI parsing is used. `scripts/build-cli-parser.py` rebuilds it with the
+`wasm32-unknown-unknown` target; `--check` verifies its source/dependency fingerprint.
+The existing JS bundler includes this capability only for live CLI imports.
+
+Shared fixtures cover defaults, short clusters, negative numbers, overflow,
+repetition, `--`, empty/Unicode/multiline arguments, subcommands, generated help,
+version, and invalid definitions. The complete `sample/cli_download` application
+streams HTTP responses to files, reports exit statuses, and explicitly closes its
+resources. Native/Node integration checks downloads, help/version, bad arguments,
+timeouts, and preserving destinations on HTTP error statuses.
 
 ## Remaining implementation
 
-1. Phase 3–4: record the pending Linux/macOS/Windows qualification matrix.
-2. Phase 5: declarative CLI parser, shared host conformance, help/version outcomes,
-   and the downloadable-file CLI acceptance application.
-3. Phase 6: bounded/unbounded channels, worker transfer, structured concurrency,
+1. Phase 6: bounded/unbounded channels, worker transfer, structured concurrency,
    process options, asynchronous pipes, deadlines, termination, and reaping.
-4. Phase 7: CSV, UUID, temporary resources, atomic replacement, typed configuration,
+2. Phase 7: CSV, UUID, temporary resources, atomic replacement, typed configuration,
    testing fixtures, async assertions, and the HTTP-to-CSV acceptance application.
-5. Phase 8: cross-platform native and browser qualification, sanitizer/failure
+3. Phase 8: cross-platform native and browser qualification, sanitizer/failure
    injection coverage, executable documentation, packaging, and release gates.
-6. Phase 9: post-v1 TCP/UDP, streaming compression, application-driven cryptography,
+4. Phase 9: post-v1 TCP/UDP, streaming compression, application-driven cryptography,
    and collection refinements.
 
 Keep guest runtime code in C, native capability services in host crates, and JS
@@ -138,3 +159,17 @@ HTTP completion/release, and host selection.
 The platform workflow preserves `target/phase34-qualification/report.json` and
 per-step logs. The broader phase 8 release gate still includes the complete
 packaging, determinism, failure-injection, and supported-platform matrix.
+
+Phase 5 passes local workspace build, strict Clippy, workspace tests, the complete
+native/Node corpus, and the CLI corpus in guest release mode. Thirty-six JavaScript
+host/bundler tests, six documentation extractor tests, all 25 executable guide
+examples, and the strict documentation build pass. All 29 new public declarations
+have source comments and API reference entries. The download integration asserts
+zero live guest resources after success, help/version, validation errors, deadlines,
+and HTTP failures on both native and Node.
+
+The CLI browser fixture passes in debug and release modes with explicit arguments,
+Unicode values, short clusters, negative integers, `--`, help/version, and invalid
+definitions. Run `python scripts/serve-phase34-browser.py --case cli` to repeat it.
+The full native platform matrix for Phase 3–4 remains separately recorded above;
+Phase 8 still qualifies the completed v1 across platforms and packaging modes.

@@ -1,0 +1,7 @@
+[package]
+name = "download"
+version = "1.0.0"
+type = "bin"
+entry = "main.dream"
+targets = ["native", "node"]
+description = "Streaming HTTP download CLI using system.cli, system.net, and system.io"

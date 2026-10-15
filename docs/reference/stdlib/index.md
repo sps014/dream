@@ -33,6 +33,7 @@ Dream includes a library for everyday tasks. Import the packages you need; some 
 | [Logging](logging.md) | `import system.logging;` |
 | [Testing](testing.md) | `import system.testing;` |
 | [Process](process.md) | `import system.process;` |
+| [CLI arguments](cli.md) | `import system.cli;` |
 | [Crypto](crypto.md) | `import system.crypto;` |
 
 ## I/O

@@ -1,0 +1,58 @@
+import system.cli;
+import system.testing;
+
+@test
+fun cli_arguments(): void {
+    let command = Command("download")
+        .version("1.0.0")
+        .description("Download a file")
+        .positional("url", required: true)
+        .string_option("output", short: "o", default_value: "download.bin")
+        .int_option("timeout", default_value: 10000)
+        .flag("verbose", short: "v");
+    let parsed = command.parse(["-vv", "--timeout", "-42", "-o", "first", "--output=日本語", "--", "-url"]).unwrap();
+    Assert.eq_str(parsed.get_string("url").unwrap(), "-url");
+    Assert.eq_str(parsed.get_string("output").unwrap(), "日本語");
+    Assert.eq(parsed.get_strings("output").unwrap().length, 2);
+    Assert.eq(parsed.get_int("timeout").unwrap(), -42);
+    Assert.is_true(parsed.get_bool("verbose").unwrap());
+    Assert.is_true(parsed.is_present("output"));
+    Assert.is_true(parsed.get_string("timeout").is_err());
+    Assert.is_true(parsed.get_int("missing").is_err());
+    Assert.is_true(command.parse([]).is_err());
+    Assert.is_true(command.parse(["url", "--timeout", "overflow"]).is_err());
+    Assert.is_true(command.parse(["url", "--timeout", "2147483648"]).is_err());
+    let defaults = command.parse(["url"]).unwrap();
+    Assert.eq_str(defaults.get_string("output").unwrap(), "download.bin");
+    Assert.eq(defaults.get_int("timeout").unwrap(), 10000);
+    Assert.is_true(!defaults.get_bool("verbose").unwrap());
+    Assert.is_true(!defaults.is_present("output"));
+    let repeated = command.parse(["url", "--timeout=1", "--timeout=2"]).unwrap().get_ints("timeout").unwrap();
+    Assert.eq(repeated.length, 2);
+    Assert.eq(repeated[0], 1);
+    Assert.eq(repeated[1], 2);
+    Assert.eq(command.parse(["url", "--timeout=-2147483648"]).unwrap().get_int("timeout").unwrap(), (-2147483647 - 1));
+    let help = command.parse(["--help"]).unwrap();
+    Assert.is_true(help.is_help);
+    Assert.is_true(help.help_text.contains("Download a file"));
+    Assert.eq_str(command.parse(["--help"]).unwrap().help_text, help.help_text);
+    let version = command.parse(["--version"]).unwrap();
+    Assert.is_true(version.is_version);
+    Assert.eq_str(version.version_text, "download 1.0.0\n");
+    let child = Command("check").string_option("mode", default_value: "fast").choices("mode", ["fast", "slow"]);
+    let root = Command("tool").subcommand(child).require_subcommand();
+    let selected = root.parse(["check", "--mode", "slow"]).unwrap().subcommand.unwrap();
+    Assert.eq_str(selected.command_name, "check");
+    Assert.eq_str(selected.get_string("mode").unwrap(), "slow");
+    Assert.is_true(root.parse(["check", "--mode", "bad"]).is_err());
+    Assert.is_true(root.parse([]).is_err());
+    Assert.is_true(Command("bad").flag("help").parse([]).is_err());
+    Assert.is_true(Command("bad").flag("one", short: "x").flag("two", short: "x").parse([]).is_err());
+    Assert.is_true(Command("invalid name").parse([]).is_err());
+    let raw = Command("raw").positional("values", multiple: true).parse(["--", "", "two words", "first\nsecond", "こんにちは"]).unwrap();
+    let values = raw.get_strings("values").unwrap();
+    Assert.eq(values.length, 4);
+    Assert.eq_str(values[0], "");
+    Assert.eq_str(values[2], "first\nsecond");
+    Assert.eq_str(values[3], "こんにちは");
+}

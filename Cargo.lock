@@ -885,6 +885,7 @@ dependencies = [
 name = "dream-host"
 version = "0.1.0"
 dependencies = [
+ "dream-host-cli",
  "dream-host-core",
  "dream-host-crypto",
  "dream-host-net",
@@ -898,6 +899,17 @@ name = "dream-host-abi"
 version = "0.1.0"
 dependencies = [
  "dream-mir",
+]
+
+[[package]]
+name = "dream-host-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "dream-host-abi",
+ "dream-host-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

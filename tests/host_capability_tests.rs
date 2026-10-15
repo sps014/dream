@@ -30,7 +30,9 @@ fn unused_capability_imports_and_functions_do_not_link_hosts() {
             r#"
         import system;
         import system.crypto;
+        import system.cli;
         import system.text;
+        fun unused_cli(): Command { return Command("unused"); }
         fun unused(): byte[] { return SecureRandom.bytes(1); }
         fun main(): void { System.println("hello"); }
     "#
@@ -81,6 +83,10 @@ fn compiler_without_any_host_libraries_compiles_and_runs() {
 #[test]
 fn optional_services_select_exact_libraries_and_bind_core() {
     for (source, capability) in [
+        (
+            r#"import system.cli; fun main(): void { let parsed = Command("probe").parse([]); }"#,
+            HostCapability::Cli,
+        ),
         (
             r#"import system.text; fun main(): void { let x = Unicode.normalize("text", UnicodeNormForm.Nfc); }"#,
             HostCapability::Unicode,

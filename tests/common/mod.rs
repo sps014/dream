@@ -5,6 +5,9 @@
 
 #![allow(dead_code)]
 
+#[cfg(feature = "native")]
+pub mod http_fixture;
+
 use dream::driver::compiler::{Compiler, LlvmRuntimeRequest, LlvmToolchain};
 use dream::driver::wasm_opt::OptLevel;
 use dream::execution::llvm::Toolchain;

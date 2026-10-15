@@ -1,0 +1,84 @@
+module system.cli;
+
+// Invalid invocation, command definition, or typed lookup; help and version are successful outcomes.
+public class CliError : Error {
+    error_code: string;
+    error_message: string;
+    // Creates an error with a stable machine code and diagnostic text.
+    public constructor(code: string, message: string) { this.error_code = code; this.error_message = message; }
+    // EINVAL for definitions, EARGS for invocations, ENOENT for missing values, ETYPE for incorrect getters, or EIO for adapter failures.
+    public fun code(): string { return this.error_code; }
+    // Human-readable diagnostic; invocation failures include usage guidance.
+    public fun message(): string { return this.error_message; }
+}
+
+// Immutable parsing outcome for one command scope, including explicit-value provenance and child matches.
+public class ParsedArguments {
+    wire: JsonValue;
+    internal constructor(wire: JsonValue) { this.wire = wire; }
+    // True when --help or -h was requested, including for a subcommand.
+    public get is_help(): bool { return this.kind() == "help"; }
+    // True when --version or -V was requested.
+    public get is_version(): bool { return this.kind() == "version"; }
+    // Deterministic generated help when is_help is true; otherwise empty.
+    public get help_text(): string { return this.field("help_text").as_string().unwrap_or(""); }
+    // Generated version text when is_version is true; otherwise empty.
+    public get version_text(): string { return this.field("version_text").as_string().unwrap_or(""); }
+    // Command name for successful value outcomes; empty for help/version outcomes.
+    public get command_name(): string { return this.field("name").as_string().unwrap_or(""); }
+    // Selected child scope, or None when no subcommand was invoked.
+    public get subcommand(): Option<ParsedArguments> {
+        let child = this.field("subcommand");
+        if child.is_null() { return Option.None; }
+        return Option.Some(ParsedArguments(child));
+    }
+    // True only for arguments explicitly supplied on the command line, excluding defaults.
+    public fun is_present(name: string): bool { return this.field("values").get(name).unwrap_or(JsonValue.none()).get("provided").unwrap_or(JsonValue.none()).as_bool().unwrap_or(false); }
+    // Returns a string positional or the last occurrence of a string option; missing values and wrong getter types return errors.
+    public fun get_string(name: string): Result<string, CliError> {
+        let values = this.get_strings(name)?;
+        if values.length == 0 { return Result.Err(CliError("ENOENT", "argument has no value: " + name)); }
+        return Result.Ok(values[values.length - 1]);
+    }
+    // Copies all string values in order, including an optional default when no value was supplied.
+    public fun get_strings(name: string): Result<string[], CliError> { return this.values(name, "string"); }
+    // Returns the last parsed integer; every occurrence has already passed decimal 32-bit validation.
+    public fun get_int(name: string): Result<int, CliError> {
+        let values = this.values(name, "int")?;
+        if values.length == 0 { return Result.Err(CliError("ENOENT", "argument has no value: " + name)); }
+        let parsed = int.parse(values[values.length - 1]);
+        if parsed.is_err() { return Result.Err(CliError("EIO", "invalid parsed integer")); }
+        return Result.Ok(parsed.unwrap());
+    }
+    // Copies every parsed integer occurrence in order.
+    public fun get_ints(name: string): Result<int[], CliError> {
+        let values = this.values(name, "int")?;
+        let result = Buffer.alloc<int>(values.length);
+        for (let i = 0; i < values.length; i = i + 1) {
+            let parsed = int.parse(values[i]);
+            if parsed.is_err() { return Result.Err(CliError("EIO", "invalid parsed integer")); }
+            result[i] = parsed.unwrap();
+        }
+        return Result.Ok(result);
+    }
+    // Returns the declared boolean flag, false when omitted; wrong getter types return errors.
+    public fun get_bool(name: string): Result<bool, CliError> {
+        let values = this.values(name, "flag")?;
+        if values.length == 0 { return Result.Err(CliError("ENOENT", "argument has no value: " + name)); }
+        return Result.Ok(values[values.length - 1] == "true");
+    }
+    fun field(name: string): JsonValue { return this.wire.get(name).unwrap_or(JsonValue.none()); }
+    fun kind(): string { return this.field("kind").as_string().unwrap_or(""); }
+    fun values(name: string, expected: string): Result<string[], CliError> {
+        let entry = this.field("values").get(name);
+        if entry.is_none() { return Result.Err(CliError("ENOENT", "unknown argument: " + name)); }
+        let kind = entry.unwrap().at("kind").as_string().unwrap_or("");
+        if kind != expected && !(expected == "string" && kind == "positional") {
+            return Result.Err(CliError("ETYPE", "incorrect getter for argument: " + name));
+        }
+        let values = entry.unwrap().at("values");
+        let result = Buffer.alloc<string>(values.length);
+        for (let i = 0; i < values.length; i = i + 1) { result[i] = values.at(i).unwrap_or(JsonValue.none()).as_string().unwrap_or(""); }
+        return Result.Ok(result);
+    }
+}

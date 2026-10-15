@@ -12,16 +12,18 @@ pub enum HostCapability {
     Process,
     Timezone,
     Net,
+    Cli,
 }
 
 impl HostCapability {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Core,
         Self::Unicode,
         Self::Crypto,
         Self::Process,
         Self::Timezone,
         Self::Net,
+        Self::Cli,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -32,6 +34,7 @@ impl HostCapability {
             Self::Process => "process",
             Self::Timezone => "timezone",
             Self::Net => "net",
+            Self::Cli => "cli",
         }
     }
 
@@ -43,6 +46,7 @@ impl HostCapability {
             Self::Process => "dream_host_process",
             Self::Timezone => "dream_host_timezone",
             Self::Net => "dream_host_net",
+            Self::Cli => "dream_host_cli",
         }
     }
 

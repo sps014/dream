@@ -9,6 +9,7 @@ const HOST_SOURCES: &[&str] = &[
     include_str!("../../dream-host-process/src/exports.rs"),
     include_str!("../../dream-host-timezone/src/exports.rs"),
     include_str!("../../dream-host-net/src/exports.rs"),
+    include_str!("../../dream-host-cli/src/exports.rs"),
 ];
 
 fn names_after_module(src: &str, module: &str) -> Vec<String> {
@@ -106,6 +107,7 @@ fn capability_inventory_matches_each_library_exports() {
         (HostCapability::Process, vec![HOST_SOURCES[2]]),
         (HostCapability::Timezone, vec![HOST_SOURCES[3]]),
         (HostCapability::Net, vec![HOST_SOURCES[4]]),
+        (HostCapability::Cli, vec![HOST_SOURCES[5]]),
     ] {
         let exported: HashSet<_> = sources.iter().flat_map(|s| c_abi_fn_names(s)).collect();
         let registered: HashSet<_> = capability.fields().iter().map(|s| s.to_string()).collect();
@@ -130,6 +132,7 @@ const JS_HOST_SOURCES: &[&str] = &[
     include_str!("../../../runtime/src/hosts/file_operations.js"),
     include_str!("../../../runtime/src/hosts/cancellation.js"),
     include_str!("../../../runtime/src/hosts/net.js"),
+    include_str!("../../../runtime/src/hosts/cli.js"),
     include_str!("../../../runtime/src/hosts/http.js"),
     include_str!("../../../runtime/src/hosts/crypto.js"),
     include_str!("../../../runtime/src/hosts/console_process.js"),

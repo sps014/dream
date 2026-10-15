@@ -165,6 +165,7 @@ nav:
       - Testing: reference/stdlib/testing.md
       - Debug: reference/stdlib/debug.md
       - Process: reference/stdlib/process.md
+      - CLI arguments: reference/stdlib/cli.md
     - I/O:
       - File I/O: reference/stdlib/file.md
       - Streams: reference/stdlib/file-streams.md

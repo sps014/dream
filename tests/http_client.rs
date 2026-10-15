@@ -1,6 +1,5 @@
 #![cfg(feature = "native")]
-#[path = "common/http_fixture.rs"]
-mod fixture;
+use crate::common::http_fixture as fixture;
 use dream::driver::{
     test::{TestHost, TestOptions, run_tests},
     toolchain::ToolchainConfig,

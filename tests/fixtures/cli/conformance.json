@@ -1,0 +1,853 @@
+[
+  {
+    "name": "defaults",
+    "request": {
+      "command": {
+        "name": "probe",
+        "description": "Read a value",
+        "version": "1.2.3",
+        "args": [
+          {
+            "name": "name",
+            "kind": "string",
+            "short": "n",
+            "default_value": "world"
+          },
+          {
+            "name": "count",
+            "kind": "int",
+            "default_value": "7"
+          },
+          {
+            "name": "verbose",
+            "kind": "flag",
+            "short": "v"
+          },
+          {
+            "name": "files",
+            "kind": "positional",
+            "multiple": true
+          }
+        ]
+      },
+      "args": []
+    },
+    "expected": {
+      "kind": "values",
+      "values": {
+        "name": {
+          "values": [
+            "world"
+          ],
+          "provided": false
+        },
+        "count": {
+          "values": [
+            "7"
+          ]
+        },
+        "verbose": {
+          "values": [
+            "false"
+          ]
+        },
+        "files": {
+          "values": []
+        }
+      }
+    }
+  },
+  {
+    "name": "repeat-and-negative",
+    "request": {
+      "command": {
+        "name": "probe",
+        "description": "Read a value",
+        "version": "1.2.3",
+        "args": [
+          {
+            "name": "name",
+            "kind": "string",
+            "short": "n",
+            "default_value": "world"
+          },
+          {
+            "name": "count",
+            "kind": "int",
+            "default_value": "7"
+          },
+          {
+            "name": "verbose",
+            "kind": "flag",
+            "short": "v"
+          },
+          {
+            "name": "files",
+            "kind": "positional",
+            "multiple": true
+          }
+        ]
+      },
+      "args": [
+        "-vv",
+        "-n",
+        "first",
+        "--name=second",
+        "--count",
+        "-42"
+      ]
+    },
+    "expected": {
+      "kind": "values",
+      "values": {
+        "name": {
+          "values": [
+            "first",
+            "second"
+          ],
+          "provided": true
+        },
+        "count": {
+          "values": [
+            "-42"
+          ]
+        },
+        "verbose": {
+          "values": [
+            "true"
+          ],
+          "provided": true
+        }
+      }
+    }
+  },
+  {
+    "name": "separator-and-unicode",
+    "request": {
+      "command": {
+        "name": "probe",
+        "description": "Read a value",
+        "version": "1.2.3",
+        "args": [
+          {
+            "name": "name",
+            "kind": "string",
+            "short": "n",
+            "default_value": "world"
+          },
+          {
+            "name": "count",
+            "kind": "int",
+            "default_value": "7"
+          },
+          {
+            "name": "verbose",
+            "kind": "flag",
+            "short": "v"
+          },
+          {
+            "name": "files",
+            "kind": "positional",
+            "multiple": true
+          }
+        ]
+      },
+      "args": [
+        "--",
+        "",
+        "two words",
+        "first\nsecond",
+        "こんにちは",
+        "--not-an-option"
+      ]
+    },
+    "expected": {
+      "kind": "values",
+      "values": {
+        "files": {
+          "values": [
+            "",
+            "two words",
+            "first\nsecond",
+            "こんにちは",
+            "--not-an-option"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "int-min",
+    "request": {
+      "command": {
+        "name": "probe",
+        "description": "Read a value",
+        "version": "1.2.3",
+        "args": [
+          {
+            "name": "name",
+            "kind": "string",
+            "short": "n",
+            "default_value": "world"
+          },
+          {
+            "name": "count",
+            "kind": "int",
+            "default_value": "7"
+          },
+          {
+            "name": "verbose",
+            "kind": "flag",
+            "short": "v"
+          },
+          {
+            "name": "files",
+            "kind": "positional",
+            "multiple": true
+          }
+        ]
+      },
+      "args": [
+        "--count=-2147483648"
+      ]
+    },
+    "expected": {
+      "kind": "values",
+      "values": {
+        "count": {
+          "values": [
+            "-2147483648"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "int-overflow",
+    "request": {
+      "command": {
+        "name": "probe",
+        "description": "Read a value",
+        "version": "1.2.3",
+        "args": [
+          {
+            "name": "name",
+            "kind": "string",
+            "short": "n",
+            "default_value": "world"
+          },
+          {
+            "name": "count",
+            "kind": "int",
+            "default_value": "7"
+          },
+          {
+            "name": "verbose",
+            "kind": "flag",
+            "short": "v"
+          },
+          {
+            "name": "files",
+            "kind": "positional",
+            "multiple": true
+          }
+        ]
+      },
+      "args": [
+        "--count=2147483648"
+      ]
+    },
+    "expected": {
+      "kind": "error",
+      "code": "EARGS"
+    }
+  },
+  {
+    "name": "invalid-int",
+    "request": {
+      "command": {
+        "name": "probe",
+        "description": "Read a value",
+        "version": "1.2.3",
+        "args": [
+          {
+            "name": "name",
+            "kind": "string",
+            "short": "n",
+            "default_value": "world"
+          },
+          {
+            "name": "count",
+            "kind": "int",
+            "default_value": "7"
+          },
+          {
+            "name": "verbose",
+            "kind": "flag",
+            "short": "v"
+          },
+          {
+            "name": "files",
+            "kind": "positional",
+            "multiple": true
+          }
+        ]
+      },
+      "args": [
+        "--count",
+        "oops"
+      ]
+    },
+    "expected": {
+      "kind": "error",
+      "code": "EARGS"
+    }
+  },
+  {
+    "name": "unknown-option",
+    "request": {
+      "command": {
+        "name": "probe",
+        "description": "Read a value",
+        "version": "1.2.3",
+        "args": [
+          {
+            "name": "name",
+            "kind": "string",
+            "short": "n",
+            "default_value": "world"
+          },
+          {
+            "name": "count",
+            "kind": "int",
+            "default_value": "7"
+          },
+          {
+            "name": "verbose",
+            "kind": "flag",
+            "short": "v"
+          },
+          {
+            "name": "files",
+            "kind": "positional",
+            "multiple": true
+          }
+        ]
+      },
+      "args": [
+        "--unknown"
+      ]
+    },
+    "expected": {
+      "kind": "error",
+      "code": "EARGS"
+    }
+  },
+  {
+    "name": "missing-option-value",
+    "request": {
+      "command": {
+        "name": "probe",
+        "description": "Read a value",
+        "version": "1.2.3",
+        "args": [
+          {
+            "name": "name",
+            "kind": "string",
+            "short": "n",
+            "default_value": "world"
+          },
+          {
+            "name": "count",
+            "kind": "int",
+            "default_value": "7"
+          },
+          {
+            "name": "verbose",
+            "kind": "flag",
+            "short": "v"
+          },
+          {
+            "name": "files",
+            "kind": "positional",
+            "multiple": true
+          }
+        ]
+      },
+      "args": [
+        "--name"
+      ]
+    },
+    "expected": {
+      "kind": "error",
+      "code": "EARGS"
+    }
+  },
+  {
+    "name": "help",
+    "request": {
+      "command": {
+        "name": "probe",
+        "description": "Read a value",
+        "version": "1.2.3",
+        "args": [
+          {
+            "name": "name",
+            "kind": "string",
+            "short": "n",
+            "default_value": "world"
+          },
+          {
+            "name": "count",
+            "kind": "int",
+            "default_value": "7"
+          },
+          {
+            "name": "verbose",
+            "kind": "flag",
+            "short": "v"
+          },
+          {
+            "name": "files",
+            "kind": "positional",
+            "multiple": true
+          }
+        ]
+      },
+      "args": [
+        "--help"
+      ]
+    },
+    "expected": {
+      "kind": "help",
+      "help_text": "Read a value\n\nUsage: probe [OPTIONS] [files]...\n\nArguments:\n  [files]...  \n\nOptions:\n  -n, --name <name>    [default: world]\n      --count <count>  [default: 7]\n  -v, --verbose        \n  -h, --help           Print help\n  -V, --version        Print version\n"
+    }
+  },
+  {
+    "name": "short-help",
+    "request": {
+      "command": {
+        "name": "probe",
+        "description": "Read a value",
+        "version": "1.2.3",
+        "args": [
+          {
+            "name": "name",
+            "kind": "string",
+            "short": "n",
+            "default_value": "world"
+          },
+          {
+            "name": "count",
+            "kind": "int",
+            "default_value": "7"
+          },
+          {
+            "name": "verbose",
+            "kind": "flag",
+            "short": "v"
+          },
+          {
+            "name": "files",
+            "kind": "positional",
+            "multiple": true
+          }
+        ]
+      },
+      "args": [
+        "-h"
+      ]
+    },
+    "expected": {
+      "kind": "help",
+      "help_text": "Read a value\n\nUsage: probe [OPTIONS] [files]...\n\nArguments:\n  [files]...  \n\nOptions:\n  -n, --name <name>    [default: world]\n      --count <count>  [default: 7]\n  -v, --verbose        \n  -h, --help           Print help\n  -V, --version        Print version\n"
+    }
+  },
+  {
+    "name": "version",
+    "request": {
+      "command": {
+        "name": "probe",
+        "description": "Read a value",
+        "version": "1.2.3",
+        "args": [
+          {
+            "name": "name",
+            "kind": "string",
+            "short": "n",
+            "default_value": "world"
+          },
+          {
+            "name": "count",
+            "kind": "int",
+            "default_value": "7"
+          },
+          {
+            "name": "verbose",
+            "kind": "flag",
+            "short": "v"
+          },
+          {
+            "name": "files",
+            "kind": "positional",
+            "multiple": true
+          }
+        ]
+      },
+      "args": [
+        "--version"
+      ]
+    },
+    "expected": {
+      "kind": "version",
+      "version_text": "probe 1.2.3\n"
+    }
+  },
+  {
+    "name": "child",
+    "request": {
+      "command": {
+        "name": "tool",
+        "version": "2.0",
+        "require_subcommand": true,
+        "args": [
+          {
+            "name": "verbose",
+            "kind": "flag"
+          }
+        ],
+        "subcommands": [
+          {
+            "name": "check",
+            "args": [
+              {
+                "name": "mode",
+                "kind": "string",
+                "default_value": "fast",
+                "choices": [
+                  "fast",
+                  "slow"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "args": [
+        "--verbose",
+        "check",
+        "--mode",
+        "slow"
+      ]
+    },
+    "expected": {
+      "kind": "values",
+      "values": {
+        "verbose": {
+          "values": [
+            "true"
+          ]
+        }
+      },
+      "subcommand": {
+        "name": "check",
+        "values": {
+          "mode": {
+            "values": [
+              "slow"
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "child-version",
+    "request": {
+      "command": {
+        "name": "tool",
+        "version": "2.0",
+        "require_subcommand": true,
+        "args": [
+          {
+            "name": "verbose",
+            "kind": "flag"
+          }
+        ],
+        "subcommands": [
+          {
+            "name": "check",
+            "args": [
+              {
+                "name": "mode",
+                "kind": "string",
+                "default_value": "fast",
+                "choices": [
+                  "fast",
+                  "slow"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "args": [
+        "check",
+        "--version"
+      ]
+    },
+    "expected": {
+      "kind": "version",
+      "version_text": "tool-check 2.0\n"
+    }
+  },
+  {
+    "name": "required-child",
+    "request": {
+      "command": {
+        "name": "tool",
+        "version": "2.0",
+        "require_subcommand": true,
+        "args": [
+          {
+            "name": "verbose",
+            "kind": "flag"
+          }
+        ],
+        "subcommands": [
+          {
+            "name": "check",
+            "args": [
+              {
+                "name": "mode",
+                "kind": "string",
+                "default_value": "fast",
+                "choices": [
+                  "fast",
+                  "slow"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "args": []
+    },
+    "expected": {
+      "kind": "error",
+      "code": "EARGS"
+    }
+  },
+  {
+    "name": "invalid-choice",
+    "request": {
+      "command": {
+        "name": "tool",
+        "version": "2.0",
+        "require_subcommand": true,
+        "args": [
+          {
+            "name": "verbose",
+            "kind": "flag"
+          }
+        ],
+        "subcommands": [
+          {
+            "name": "check",
+            "args": [
+              {
+                "name": "mode",
+                "kind": "string",
+                "default_value": "fast",
+                "choices": [
+                  "fast",
+                  "slow"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "args": [
+        "check",
+        "--mode",
+        "wrong"
+      ]
+    },
+    "expected": {
+      "kind": "error",
+      "code": "EARGS"
+    }
+  },
+  {
+    "name": "required-positional",
+    "request": {
+      "command": {
+        "name": "required",
+        "args": [
+          {
+            "name": "input",
+            "kind": "positional",
+            "required": true
+          }
+        ]
+      },
+      "args": []
+    },
+    "expected": {
+      "kind": "error",
+      "code": "EARGS"
+    }
+  },
+  {
+    "name": "required-help",
+    "request": {
+      "command": {
+        "name": "required",
+        "args": [
+          {
+            "name": "input",
+            "kind": "positional",
+            "required": true
+          }
+        ]
+      },
+      "args": [
+        "--help"
+      ]
+    },
+    "expected": {
+      "kind": "help"
+    }
+  },
+  {
+    "name": "invalid-name",
+    "request": {
+      "command": {
+        "name": "invalid",
+        "args": [
+          {
+            "name": "bad name",
+            "kind": "string"
+          }
+        ]
+      },
+      "args": []
+    },
+    "expected": {
+      "kind": "error",
+      "code": "EINVAL"
+    }
+  },
+  {
+    "name": "reserved-name",
+    "request": {
+      "command": {
+        "name": "invalid",
+        "args": [
+          {
+            "name": "help",
+            "kind": "string"
+          }
+        ]
+      },
+      "args": []
+    },
+    "expected": {
+      "kind": "error",
+      "code": "EINVAL"
+    }
+  },
+  {
+    "name": "duplicate-short",
+    "request": {
+      "command": {
+        "name": "invalid",
+        "args": [
+          {
+            "name": "first",
+            "kind": "flag",
+            "short": "x"
+          },
+          {
+            "name": "second",
+            "kind": "flag",
+            "short": "x"
+          }
+        ]
+      },
+      "args": []
+    },
+    "expected": {
+      "kind": "error",
+      "code": "EINVAL"
+    }
+  },
+  {
+    "name": "duplicate-name",
+    "request": {
+      "command": {
+        "name": "invalid",
+        "args": [
+          {
+            "name": "first",
+            "kind": "string"
+          },
+          {
+            "name": "first",
+            "kind": "flag"
+          }
+        ]
+      },
+      "args": []
+    },
+    "expected": {
+      "kind": "error",
+      "code": "EINVAL"
+    }
+  },
+  {
+    "name": "bad-default",
+    "request": {
+      "command": {
+        "name": "invalid",
+        "args": [
+          {
+            "name": "value",
+            "kind": "int",
+            "default_value": "oops"
+          }
+        ]
+      },
+      "args": []
+    },
+    "expected": {
+      "kind": "error",
+      "code": "EINVAL"
+    }
+  },
+  {
+    "name": "required-after-optional",
+    "request": {
+      "command": {
+        "name": "invalid",
+        "args": [
+          {
+            "name": "first",
+            "kind": "positional"
+          },
+          {
+            "name": "second",
+            "kind": "positional",
+            "required": true
+          }
+        ]
+      },
+      "args": []
+    },
+    "expected": {
+      "kind": "error",
+      "code": "EINVAL"
+    }
+  }
+]

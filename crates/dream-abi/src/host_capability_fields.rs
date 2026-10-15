@@ -42,6 +42,7 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "netOperationRelease",
             "netOperationClaim",
         ],
+        HostCapability::Cli => &["cliParse"],
         HostCapability::Timezone => &["dateZoneOffsetMinutes", "dateLocalZoneName"],
     }
 }

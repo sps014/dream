@@ -115,6 +115,11 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
+      - name: Check shared CLI parser and adapter
+        run: |
+          python scripts/build-cli-parser.py --check
+          node --test scripts/test-cli-host.mjs
+          python scripts/test_corpus.py --both --release cli_arguments
       - name: Qualify async I/O and networking on native and Node
         run: python scripts/qualify-io-net.py
       - name: Preserve phase 3–4 qualification results
@@ -157,7 +162,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
       - name: Build release host capabilities
-        run: cargo build --locked --release -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net
+        run: cargo build --locked --release -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-cli
       - name: Native distribution measurements and isolation
         run: python scripts/check-binary-size.py --compiler "target/debug/dream${{ runner.os == 'Windows' && '.exe' || '' }}" --host-directory target/release --llvm-directory "$HOME/.dream/toolchains/llvm-22.1.8/bin" --report target/binary-size.json
       - name: Preserve native size measurements

@@ -248,6 +248,7 @@ pub(crate) fn emit_selective_runtimes(
     wasm_bytes: &[u8],
     targets: &[JsRuntimeTarget],
     minify: bool,
+    assets: &indexmap::IndexMap<String, Vec<u8>>,
 ) -> Result<Vec<std::path::PathBuf>, Error> {
     // WASI archives and runtime adapters can add host imports after MIR import pruning.
     let mut live_imports = Vec::new();
@@ -264,7 +265,10 @@ pub(crate) fn emit_selective_runtimes(
     let mut written = Vec::new();
     for &target in targets {
         let path = Path::new(wat_path).with_extension(target.runtime_extension());
-        let text = assemble_selective_runtime(&live_imports, target)?;
+        let mut text = assemble_selective_runtime(&live_imports, target)?;
+        let entries: Vec<_> = assets.iter().collect();
+        let entries = serde_json::to_string(&entries).map_err(Error::other)?;
+        text.push_str(&format!("\nexport const embeddedAssets = Object.freeze(Object.fromEntries({entries}.map(([name, bytes]) => [name, Uint8Array.from(bytes)])));\n"));
         let final_text = if minify {
             match minify_js_source(&text) {
                 Ok(m) => m,

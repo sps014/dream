@@ -1,0 +1,28 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+public class GenParam {
+    public name: string;
+    public ty: GenTypeRef;
+    public attributes: List<GenAttribute>;
+
+    // Creates the snapshot model from the supplied values.
+    public constructor(name: string, ty: GenTypeRef, attributes: List<GenAttribute>) {
+        this.name = name;
+        this.ty = ty;
+        this.attributes = attributes;
+    }
+
+    // Returns the requested model information.
+    public fun attribute<A>(): Option<A> {
+        return GenAttributes.decode<A>(this.attributes);
+    }
+
+    // Tests whether the requested attribute is attached to this model node.
+    public fun has<A>(): bool {
+        return GenAttributes.has(this.attributes, GenAttributes.id<A>());
+    }
+}

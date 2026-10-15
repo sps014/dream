@@ -352,6 +352,19 @@ impl Compiler {
         for module in &loaded.graph.modules {
             field("module", &module.cache_key());
         }
+        for (name, bytes) in &loaded.graph.embedded_assets {
+            field("embedded-asset-name", name.as_bytes());
+            field("embedded-asset-bytes", bytes);
+        }
+        for (id, by) in &loaded.graph.consumed {
+            field("consumed-function", id.as_bytes());
+            field("consumed-generator", by.generator.as_bytes());
+        }
+        for (path, contents) in &loaded.acc.published_artifacts {
+            field("published-artifact", path.as_bytes());
+            field("published-contents", contents.as_bytes());
+        }
+
         let mut inputs = loaded.acc.resolution_inputs.clone();
         for file in &loaded.graph.files {
             let path = PathBuf::from(&file.path);

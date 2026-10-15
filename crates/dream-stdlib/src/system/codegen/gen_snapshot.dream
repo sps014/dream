@@ -1,0 +1,69 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+// Decoded snapshot behind a `GenContext`.
+public class GenSnapshot {
+    public version: int;
+    public phase: int;
+    public symbols: List<GenSymbol>;
+    public compilation_errors: List<GenCompilationError>;
+    public tools: List<GenToolInfo>;
+    public tool_results: List<GenToolResult>;
+    public referenced: List<GenDecl>;
+    public referenced_functions: List<GenFunction>;
+    public generator: string;
+    public generator_id: string;
+    public target: string;
+    public options: JsonValue;
+    public files: List<GenFile>;
+    public index: List<GenIndexEntry>;
+    public decls: List<GenDecl>;
+    public functions: List<GenFunction>;
+    public blocks: List<GenSyntaxBlock>;
+    public calls: List<GenCallSite>;
+
+    // Creates the snapshot model from the supplied values.
+    public constructor(root: JsonValue) {
+        this.version = gen_int(root, "version");
+        this.phase = gen_int(root, "phase");
+        this.symbols = List<GenSymbol>();
+        for (let s in gen_items(root, "symbols")) { this.symbols.push(GenSymbol(s)); }
+        this.compilation_errors = List<GenCompilationError>();
+        for (let e in gen_items(root, "compilation_errors")) { this.compilation_errors.push(GenCompilationError(e)); }
+        this.tools = List<GenToolInfo>();
+        for (let t in gen_items(root, "tools")) { this.tools.push(GenToolInfo(t)); }
+        this.tool_results = List<GenToolResult>();
+        for (let t in gen_items(root, "tool_results")) { this.tool_results.push(GenToolResult(t)); }
+        this.referenced = List<GenDecl>();
+        for (let d in gen_items(root, "referenced")) { this.referenced.push(gen_decl(d)); }
+        this.referenced_functions = gen_functions(root, "referenced_functions");
+        this.generator = gen_str(root, "generator");
+        this.generator_id = gen_str(root, "generator_id");
+        this.target = gen_str(root, "target");
+        this.options = gen_obj(root, "options");
+        this.files = List<GenFile>();
+        for (let f in gen_items(root, "additional_files")) {
+            this.files.push(GenFile(gen_str(f, "path"), gen_str(f, "contents")));
+        }
+        this.index = List<GenIndexEntry>();
+        for (let e in gen_items(root, "index")) {
+            this.index.push(GenIndexEntry(gen_str(e, "id"), gen_str(e, "name"), gen_decl_kind(gen_str(e, "kind"))));
+        }
+        this.decls = List<GenDecl>();
+        for (let d in gen_items(root, "decls")) {
+            this.decls.push(gen_decl(d));
+        }
+        this.functions = gen_functions(root, "functions");
+        this.blocks = List<GenSyntaxBlock>();
+        for (let b in gen_items(root, "blocks")) {
+            this.blocks.push(GenSyntaxBlock(gen_str(b, "id"), gen_str(b, "name"), gen_str(b, "body"), gen_strings(b, "splices"), gen_location(b)));
+        }
+        this.calls = List<GenCallSite>();
+        for (let c in gen_items(root, "calls")) {
+            this.calls.push(GenCallSite(gen_str(c, "id"), gen_str(c, "callee"), gen_type_refs(c, "type_args"), gen_type_refs(c, "arg_types"), gen_location(c)));
+        }
+    }
+}

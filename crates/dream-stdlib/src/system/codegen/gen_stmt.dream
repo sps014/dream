@@ -1,0 +1,42 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+public class GenStmt {
+    public id: string;
+    public kind: StmtKind;
+    public span: GenSpan;
+    public constant: Option<GenConstant>;
+    public text: string;
+    public ty: GenTypeRef;
+    public symbol: string;
+    public overload: string;
+    public type_args: List<GenTypeRef>;
+    public types: List<GenTypeRef>;
+    nodes: List<GenExpr>;
+
+    // Creates this model from snapshot JSON.
+    public constructor(borrow v: JsonValue) {
+        this.id = gen_str(v, "id");
+        this.ty = gen_type_ref(gen_obj(v, "ty"));
+        this.symbol = gen_str(v, "symbol");
+        this.overload = gen_str(v, "overload");
+        this.type_args = gen_type_refs(v, "type_args");
+        this.constant = Option.None;
+        let constant = gen_obj(v, "constant");
+        if !constant.is_null() { this.constant = Option.Some(GenConstant(constant)); }
+        this.kind = gen_stmt_kind(gen_str(v, "kind"));
+        this.span = GenSpan(gen_obj(v, "span"));
+        this.text = gen_str(v, "text");
+        this.types = gen_type_refs(v, "types");
+        this.nodes = List<GenExpr>();
+        for (let child in gen_items(v, "children")) { this.nodes.push(GenExpr(child)); }
+    }
+
+    // Returns child nodes in source order.
+    public fun children(): List<GenExpr> { return this.nodes; }
+    // Tests the node kind.
+    public fun is_kind(kind: StmtKind): bool { return this.kind == kind; }
+}

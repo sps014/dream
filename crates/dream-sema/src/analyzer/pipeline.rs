@@ -6,99 +6,7 @@ impl<'a> Analyzer<'a> {
         node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<SemanticInfo<'_>, SemanticError> {
-        self.type_ctx.set_scope(dream_types::ModuleId::ROOT);
-        self.type_ctx
-            .register(DefKind::Struct, FUTURE_TYPE, vec!["T".to_string()]);
-        for file in &self.graph.files {
-            self.type_ctx.set_scope(file.module);
-            for declaration in &file.program.structs {
-                let def = self.type_ctx.register(
-                    DefKind::Struct,
-                    &declaration.name.text,
-                    generic_param_names(&declaration.generic_parameters),
-                );
-                // Enum payload representation is chosen before struct fields/methods are
-                // registered, so value identity must already be known for forward references.
-                if declaration.is_value {
-                    self.type_ctx.defs.mark_value(def);
-                    self.type_ctx.interner.mark_value_def(def);
-                }
-                if declaration.is_ref_struct {
-                    self.type_ctx.interner.mark_ref_struct_def(def);
-                }
-                if declaration.generic_parameters.is_some() {
-                    self.generic_structs.insert(def, declaration);
-                }
-                self.record_ide_definition(def, &declaration.name, Some(&file.path));
-                for field in &declaration.fields {
-                    self.record_ide_member_definition(def, &field.name, Some(&file.path));
-                }
-            }
-            for declaration in &file.program.enums {
-                let kind = if declaration.is_data_enum() {
-                    DefKind::Union
-                } else {
-                    DefKind::Enum
-                };
-                let def = self.type_ctx.register(
-                    kind,
-                    &declaration.name.text,
-                    generic_param_names(&declaration.generic_parameters),
-                );
-                self.record_ide_definition(def, &declaration.name, Some(&file.path));
-                for variant in &declaration.variants {
-                    self.record_ide_member_definition(def, &variant.name, Some(&file.path));
-                }
-            }
-            for declaration in &file.program.interfaces {
-                let def = self.type_ctx.register(
-                    DefKind::Interface,
-                    &declaration.name.text,
-                    generic_param_names(&declaration.generic_parameters),
-                );
-                self.record_ide_definition(def, &declaration.name, Some(&file.path));
-            }
-        }
-
-        // Stash generic `extend` templates before any type instantiation can occur (a concrete
-        // union/struct field may instantiate a generic union during `register_enums`), so the
-        // extension methods are always available to attach at the first instantiation.
-        self.stash_generic_extensions(node);
-        self.register_enums(node, diagnostics);
-        // Interfaces are registered before structs so a class's implements clause can be validated
-        // against the interface method signatures during struct registration.
-        self.register_interfaces(node, diagnostics);
-        self.register_structs(node, diagnostics);
-        self.register_extensions(node, diagnostics);
-        self.register_functions(node, diagnostics);
-        // `ref struct` params on an `async` function/method would need to survive a suspend point,
-        // which spills the function's live locals into a heap-allocated coroutine state object —
-        // exactly the escape a `ref struct` forbids. Checked once every function/method/`extend`
-        // signature above is registered.
-        self.check_ref_struct_async_boundary(node, diagnostics);
-        // Aliased `import a.b.c as x;` resolve against the now-fully-registered function table
-        // (cross-module collisions have already been promoted to their module-qualified keys), but
-        // must land before body analysis so every call site can see the alias.
-        self.register_import_aliases(diagnostics);
-        // Globals are analyzed after functions/types are known (so initializers can call them) but
-        // before function bodies, so those bodies can resolve global identifiers.
-        // HIR global slots are assigned incrementally inside `register_globals` (in declaration
-        // order) so both later initializers and function bodies can resolve global identifiers.
-        self.register_globals(node, diagnostics);
-        self.analyze_function_bodies(node, diagnostics)?;
-        self.analyze_pending_instantiations(diagnostics)?;
-
-        if !diagnostics.has_errors() {
-            self.validate_value_containment(diagnostics);
-        }
-
-        // Inferred receiver exclusivity: classify every method's `this` contract once bodies
-        // are fully analyzed and all types are registered. Runs only on otherwise-clean
-        // programs — a poisoned program fails before codegen anyway.
-        if !diagnostics.has_errors() {
-            self.classify_receiver_modes(node, diagnostics);
-            self.check_borrow_collisions(node, diagnostics);
-        }
+        self.analyze_frontend(node, diagnostics)?;
 
         // Per-statement/expression analysis recovers locally (reporting into the bag and poisoning
         // with `Type::Unknown`) so every independent error in the program is surfaced. The typed
@@ -202,5 +110,107 @@ impl<'a> Analyzer<'a> {
                 object_methods,
             },
         })
+    }
+    /// Shares registration and type analysis between normal compilation and generator facts.
+    pub(super) fn analyze_frontend(
+        &mut self,
+        node: &'a ProgramView<'a>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<(), SemanticError> {
+        self.type_ctx.set_scope(dream_types::ModuleId::ROOT);
+        self.type_ctx
+            .register(DefKind::Struct, FUTURE_TYPE, vec!["T".to_string()]);
+        for file in &self.graph.files {
+            self.type_ctx.set_scope(file.module);
+            for declaration in &file.program.structs {
+                let def = self.type_ctx.register(
+                    DefKind::Struct,
+                    &declaration.name.text,
+                    generic_param_names(&declaration.generic_parameters),
+                );
+                // Enum payload representation is chosen before struct fields/methods are
+                // registered, so value identity must already be known for forward references.
+                if declaration.is_value {
+                    self.type_ctx.defs.mark_value(def);
+                    self.type_ctx.interner.mark_value_def(def);
+                }
+                if declaration.is_ref_struct {
+                    self.type_ctx.interner.mark_ref_struct_def(def);
+                }
+                if declaration.generic_parameters.is_some() {
+                    self.generic_structs.insert(def, declaration);
+                }
+                self.record_ide_definition(def, &declaration.name, Some(&file.path));
+                for field in &declaration.fields {
+                    self.record_ide_member_definition(def, &field.name, Some(&file.path));
+                }
+            }
+            for declaration in &file.program.enums {
+                let kind = if declaration.is_data_enum() {
+                    DefKind::Union
+                } else {
+                    DefKind::Enum
+                };
+                let def = self.type_ctx.register(
+                    kind,
+                    &declaration.name.text,
+                    generic_param_names(&declaration.generic_parameters),
+                );
+                self.record_ide_definition(def, &declaration.name, Some(&file.path));
+                for variant in &declaration.variants {
+                    self.record_ide_member_definition(def, &variant.name, Some(&file.path));
+                }
+            }
+            for declaration in &file.program.interfaces {
+                let def = self.type_ctx.register(
+                    DefKind::Interface,
+                    &declaration.name.text,
+                    generic_param_names(&declaration.generic_parameters),
+                );
+                self.record_ide_definition(def, &declaration.name, Some(&file.path));
+            }
+        }
+
+        // Stash generic `extend` templates before any type instantiation can occur (a concrete
+        // union/struct field may instantiate a generic union during `register_enums`), so the
+        // extension methods are always available to attach at the first instantiation.
+        self.stash_generic_extensions(node);
+        self.register_enums(node, diagnostics);
+        // Interfaces are registered before structs so a class's implements clause can be validated
+        // against the interface method signatures during struct registration.
+        self.register_interfaces(node, diagnostics);
+        self.register_structs(node, diagnostics);
+        self.register_extensions(node, diagnostics);
+        self.register_functions(node, diagnostics);
+        // `ref struct` params on an `async` function/method would need to survive a suspend point,
+        // which spills the function's live locals into a heap-allocated coroutine state object —
+        // exactly the escape a `ref struct` forbids. Checked once every function/method/`extend`
+        // signature above is registered.
+        self.check_ref_struct_async_boundary(node, diagnostics);
+        // Aliased `import a.b.c as x;` resolve against the now-fully-registered function table
+        // (cross-module collisions have already been promoted to their module-qualified keys), but
+        // must land before body analysis so every call site can see the alias.
+        self.register_import_aliases(diagnostics);
+        // Globals are analyzed after functions/types are known (so initializers can call them) but
+        // before function bodies, so those bodies can resolve global identifiers.
+        // HIR global slots are assigned incrementally inside `register_globals` (in declaration
+        // order) so both later initializers and function bodies can resolve global identifiers.
+        self.register_globals(node, diagnostics);
+        self.analyze_function_bodies(node, diagnostics)?;
+        self.analyze_pending_instantiations(diagnostics)?;
+
+        if !diagnostics.has_errors() {
+            self.validate_value_containment(diagnostics);
+        }
+
+        // Inferred receiver exclusivity: classify every method's `this` contract once bodies
+        // are fully analyzed and all types are registered. Runs only on otherwise-clean
+        // programs — a poisoned program fails before codegen anyway.
+        if !diagnostics.has_errors() {
+            self.classify_receiver_modes(node, diagnostics);
+            self.check_borrow_collisions(node, diagnostics);
+        }
+
+        Ok(())
     }
 }

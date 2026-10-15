@@ -227,12 +227,63 @@ impl Compiler {
                 &wasm_bytes,
                 &self.runtimes,
                 self.effective_optimize().is_some(),
+                &loaded.graph.embedded_assets,
             )?;
             for p in runtime_paths {
                 self.reporter.artifact(&p);
             }
         }
 
+        Ok(())
+    }
+    /// Publishes validated generator artifacts beside the compiler output without overwriting inputs.
+    pub(super) fn publish_generated_artifacts(
+        &self,
+        out_path: &str,
+        acc: &crate::driver::source_loader::ProgramAccumulator<'_>,
+    ) -> Result<(), CompileError> {
+        let out = Path::new(out_path);
+        let root = out.parent().unwrap_or_else(|| Path::new("."));
+        let reserved: Vec<_> = [
+            "ll",
+            "opt.ll",
+            "s",
+            "wasm",
+            "wat",
+            "bin",
+            "abi.json",
+            "h",
+            "a",
+            "lib",
+            "so",
+            "dylib",
+            "node.runtime.js",
+            "web.runtime.js",
+        ]
+        .iter()
+        .map(|ext| out.with_extension(ext))
+        .chain(std::iter::once(out.to_path_buf()))
+        .collect();
+        let mut writes = Vec::new();
+        for (relative, contents) in &acc.published_artifacts {
+            let path = root.join(relative);
+            let existing = dunce::canonicalize(&path).ok();
+            if reserved.contains(&path)
+                || existing
+                    .as_ref()
+                    .is_some_and(|p| acc.resolution_inputs.contains(p))
+            {
+                return Err(std::io::Error::other(format!("published generator artifact '{relative}' collides with a compiler output or source input")).into());
+            }
+            writes.push((path, contents));
+        }
+        for (path, contents) in writes {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&path, contents)?;
+            self.reporter.artifact(&path);
+        }
         Ok(())
     }
 }

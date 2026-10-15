@@ -52,6 +52,8 @@ tracing-subscriber = "0.3.23"
 clap = { version = "4", features = ["derive", "env"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+base64 = "0.22"
+tempfile = { version = "3", optional = true }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico"], optional = true }
 oxc_minifier = "0.146"
 oxc_parser = "0.146"
@@ -71,7 +73,7 @@ dunce = "1"
 [features]
 default = ["native"]
 # Native compiler execution/linking tools; runtime hosts are built separately.
-native = ["dep:rayon", "dep:depfile", "dep:image", "dep:object", "dep:libc", "dep:windows-sys"]
+native = ["dep:tempfile", "dep:rayon", "dep:depfile", "dep:image", "dep:object", "dep:libc", "dep:windows-sys"]
 [target.'cfg(unix)'.dependencies]
 libc = { version = "0.2", optional = true }
 
@@ -79,9 +81,9 @@ libc = { version = "0.2", optional = true }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_ProcessStatus", "Win32_System_Threading"], optional = true }
 
 [dev-dependencies]
+tempfile = "3"
 proptest = "1"
 libloading = "0.8"
-tempfile = "3"
 pretty_assertions = "1.4.1"
 # Parses the emitted `.wat` text back into a module in wasm-opt / e2e assertions.
 wat = "1.252.0"

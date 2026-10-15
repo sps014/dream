@@ -19,6 +19,13 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
+        if symbol_table.borrow().get_symbol(name).is_err()
+            && self.function_info(&name.text).is_err()
+            && self.report_consumed(name, diagnostics)
+        {
+            self.hir_fail();
+            return Ok(Type::Unknown);
+        }
         let mut function_name = name.text.clone();
         let nominal_def = self
             .type_ctx

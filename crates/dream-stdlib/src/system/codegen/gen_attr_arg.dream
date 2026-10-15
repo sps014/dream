@@ -1,0 +1,18 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+// One attribute argument as written: `kind` is `string`, `int`, `float`, `double`, `bool` or
+// `enum`; `value` is the unquoted string, literal text, or dotted enum path.
+public class GenAttrArg {
+    public kind: string;
+    public value: string;
+
+    // Creates the snapshot model from the supplied values.
+    public constructor(kind: string, value: string) {
+        this.kind = kind;
+        this.value = value;
+    }
+}

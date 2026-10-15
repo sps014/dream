@@ -1,0 +1,24 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+public class GenLocation {
+    // Project-relative path (`src/models.dream`), or `<std>/...` for stdlib sources.
+    public file: string;
+    public line: int;
+    public column: int;
+
+    // Creates the snapshot model from the supplied values.
+    public constructor(file: string, line: int, column: int) {
+        this.file = file;
+        this.line = line;
+        this.column = column;
+    }
+
+    // Returns the requested model information.
+    public override fun to_string(): string {
+        return this.file + ":" + this.line.to_string() + ":" + this.column.to_string();
+    }
+}

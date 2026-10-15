@@ -5,6 +5,7 @@ use super::*;
 pub const GENERATOR_ATTR: &str = "generator";
 pub const INCREMENTAL_ATTR: &str = "incremental";
 pub const ON_ATTRIBUTE_ATTR: &str = "on_attribute";
+pub const USES_TOOL_ATTR: &str = "uses_tool";
 pub const ON_CALL_ATTR: &str = "on_call";
 pub const SYNTAX_BLOCK_ATTR: &str = "syntax_block";
 pub const ATTRIBUTE_ATTR: &str = "attribute";

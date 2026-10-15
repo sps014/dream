@@ -202,6 +202,7 @@ pub(super) enum MemberField {
 
 pub struct Analyzer<'a> {
     graph: &'a ModuleGraph<'a>,
+    generator_facts: Option<crate::gen_facts::GenFacts>,
     program: &'a ProgramView<'a>,
     function_table: FunctionTable,
     struct_table: StructTable,
@@ -424,7 +425,12 @@ pub enum CrateType {
 }
 
 mod access;
+mod assets;
+mod consumed;
 mod contexts;
+mod gen_constants;
+mod gen_facts;
+mod gen_symbols;
 mod pipeline;
 mod type_queries;
 impl<'a> Analyzer<'a> {
@@ -486,6 +492,7 @@ impl<'a> Analyzer<'a> {
             deferred_case_labels: Vec::new(),
             overflow: dream_hir::Overflow::Wrapping,
             current_file: None,
+            generator_facts: None,
             file_modules: graph
                 .files
                 .iter()

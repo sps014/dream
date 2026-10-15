@@ -71,6 +71,7 @@ pub(super) struct Lcx<'a> {
     /// Functions the C shim calls, so they must stay visible until the shim is linked in.
     shim_callees: IndexSet<String>,
     /// NUL-terminated constant strings by contents, each a private global.
+    byte_blobs: IndexMap<Vec<u8>, String>,
     cstrs: IndexMap<String, String>,
     pub dbg_cu: Option<MdRef>,
     /// Debugger view composites by name (`debug_views.rs`).
@@ -105,6 +106,7 @@ impl<'a> Lcx<'a> {
             exports: IndexMap::new(),
             shim_callees: IndexSet::new(),
             cstrs: IndexMap::new(),
+            byte_blobs: IndexMap::new(),
             dbg_cu: None,
             dbg_views: IndexMap::new(),
             std_sources: None,
@@ -320,6 +322,28 @@ impl<'a> Lcx<'a> {
             },
         );
         self.cstrs.insert(s.to_string(), name.clone());
+        Value::global(name)
+    }
+
+    /// Shares immutable byte payloads across array-literal uses in deterministic emission order.
+    pub fn byte_blob(&mut self, bytes: &[u8]) -> Value {
+        if let Some(name) = self.byte_blobs.get(bytes) {
+            return Value::global(name.clone());
+        }
+        let name = format!(".bytes{}", self.byte_blobs.len());
+        self.m.global(
+            &name,
+            GlobalDef {
+                linkage: Linkage::Private,
+                thread_local: false,
+                constant: true,
+                unnamed_addr: true,
+                ty: Ty::bytes(bytes.len() as u64),
+                init: Some(super::ir::fmt::c_string(bytes)),
+                align: 1,
+            },
+        );
+        self.byte_blobs.insert(bytes.to_vec(), name.clone());
         Value::global(name)
     }
 

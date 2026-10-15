@@ -95,6 +95,7 @@ impl Compiler {
             }
         };
         self.emit_artifacts(out_path, &loaded, emitted, layouts, llvm.as_deref())?;
+        self.publish_generated_artifacts(out_path, &loaded.acc)?;
         // A reused build would silently drop warnings this compile printed.
         Ok(BuildOutcome::Built(
             stamp.filter(|_| diagnostics.diagnostics.is_empty()),

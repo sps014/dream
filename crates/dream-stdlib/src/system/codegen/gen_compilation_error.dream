@@ -1,0 +1,14 @@
+module system.codegen;
+
+import system.json;
+
+public class GenCompilationError {
+    public target: string;
+    public message: string;
+
+    // Decodes a pre-generation error restricted to this generator's triggered declarations.
+    public constructor(borrow v: JsonValue) {
+        this.target = gen_str(v, "target");
+        this.message = gen_str(v, "message");
+    }
+}

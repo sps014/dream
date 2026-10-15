@@ -149,4 +149,3 @@ public fun next(): Option<T>
 ```dream
 public fun close(): void
 ```
-

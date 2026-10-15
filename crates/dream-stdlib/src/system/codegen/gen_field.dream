@@ -1,0 +1,40 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+// A field of a class, struct or union variant.
+public class GenField {
+    public id: string;
+    public name: string;
+    public ty: GenTypeRef;
+    public visibility: string;
+    public attributes: List<GenAttribute>;
+    public location: GenLocation;
+
+    // Creates the snapshot model from the supplied values.
+    public constructor(id: string, name: string, ty: GenTypeRef, visibility: string, attributes: List<GenAttribute>, location: GenLocation) {
+        this.id = id;
+        this.name = name;
+        this.ty = ty;
+        this.visibility = visibility;
+        this.attributes = attributes;
+        this.location = location;
+    }
+
+    // The first `@A` on this field, decoded into the attribute struct.
+    public fun attribute<A>(): Option<A> {
+        return GenAttributes.decode<A>(this.attributes);
+    }
+
+    // Decodes every attached attribute of the requested type.
+    public fun attributes_of<A>(): List<A> {
+        return GenAttributes.decode_all<A>(this.attributes);
+    }
+
+    // Tests whether the requested attribute is attached to this model node.
+    public fun has<A>(): bool {
+        return GenAttributes.has(this.attributes, GenAttributes.id<A>());
+    }
+}

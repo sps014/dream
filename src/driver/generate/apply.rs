@@ -33,21 +33,29 @@ pub struct GeneratedFile {
     pub source: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct GeneratedArtifact {
+    pub generator: String,
+    pub path: String,
+    pub contents: String,
+    pub publish: bool,
+}
+
 #[derive(Default)]
 pub struct Applied {
     pub replacements: IndexMap<SiteKey, String>,
     pub files: Vec<GeneratedFile>,
+    pub artifacts: Vec<GeneratedArtifact>,
+    pub assets: IndexMap<String, (Vec<u8>, Vec<String>)>,
+    pub consumed: IndexMap<String, dream_sema::module_graph::ConsumedBy>,
     /// Generators that reported an error; their unexpanded sites are not reported again.
     pub failed: Vec<String>,
 }
 
 fn valid_virtual_path(path: &str) -> bool {
-    let p = std::path::Path::new(path);
-    !path.is_empty()
+    super::artifacts::valid_relative_path(path)
         && path.ends_with(".dream")
-        && !path.contains('\\')
-        && p.components()
-            .all(|c| matches!(c, std::path::Component::Normal(_)))
+        && path.split('/').next() != Some("outputs.json")
 }
 
 fn report(
@@ -71,16 +79,85 @@ fn report(
     diagnostics.report(diagnostic.with_note(note));
 }
 
-pub fn apply(runs: &[GenRun<'_>], diagnostics: &mut DiagnosticBag) -> Applied {
+pub fn apply(
+    runs: &[GenRun<'_>],
+    root: &std::path::Path,
+    diagnostics: &mut DiagnosticBag,
+) -> Applied {
     let mut applied = Applied::default();
+    let mut publish_owner: IndexMap<String, String> = IndexMap::new();
     let mut file_owner: IndexMap<String, String> = IndexMap::new();
     for run in runs {
         let registered = run.registered;
         let mut failed = false;
+        if run.result.version != super::model::SNAPSHOT_VERSION
+            || run.result.generator != registered.name
+        {
+            report(
+                diagnostics,
+                run,
+                true,
+                "generator result has an invalid protocol identity".to_string(),
+                "",
+            );
+            applied.failed.push(registered.name.clone());
+            continue;
+        }
+        if let Err(message) = super::transcript::validate(&run.result, &registered.tools) {
+            report(diagnostics, run, true, message, "");
+            applied.failed.push(registered.name.clone());
+            continue;
+        }
         for d in &run.result.diagnostics {
             let error = d.severity != "warning";
             failed |= error;
-            report(diagnostics, run, error, d.message.clone(), &d.target);
+            if !d.artifact.is_empty() {
+                if let Some((contents, mappings)) =
+                    run.result.outputs.iter().find_map(|o| match o {
+                        Output::Artifact {
+                            path,
+                            contents,
+                            mappings,
+                            ..
+                        } if path == &d.artifact && super::artifacts::valid_artifact_path(path) => {
+                            Some((contents, mappings))
+                        }
+                        _ => None,
+                    })
+                {
+                    if let Some(mapping) = super::artifacts::mapping_at(mappings, d.line, d.column)
+                    {
+                        report(diagnostics, run, error, d.message.clone(), &mapping.target);
+                    } else {
+                        let path = root
+                            .join(&registered.name)
+                            .join(&d.artifact)
+                            .to_string_lossy()
+                            .into_owned();
+                        let position = super::artifacts::position(contents, d.line, d.column);
+                        let diagnostic = if error {
+                            Diagnostic::new(d.message.clone(), position, Some(path))
+                        } else {
+                            Diagnostic::warning(d.message.clone(), position, Some(path))
+                        };
+                        diagnostics.report(
+                            diagnostic
+                                .with_note(format!("reported by generator '{}'", registered.name)),
+                        );
+                    }
+                } else {
+                    report(
+                        diagnostics,
+                        run,
+                        true,
+                        format!("diagnostic names unknown artifact '{}'", d.artifact),
+                        "",
+                    );
+                    failed = true;
+                }
+            } else {
+                report(diagnostics, run, error, d.message.clone(), &d.target);
+            }
         }
         for output in &run.result.outputs {
             match output {
@@ -118,6 +195,152 @@ pub fn apply(runs: &[GenRun<'_>], diagnostics: &mut DiagnosticBag) -> Applied {
                         failed = true;
                     }
                 },
+                Output::Artifact {
+                    path,
+                    contents,
+                    mappings,
+                    publish,
+                } => {
+                    let key = format!("{}/{path}", registered.name);
+                    let valid = super::artifacts::valid_artifact_path(path)
+                        && mappings.iter().all(|m| {
+                            super::artifacts::valid_mapping(m, contents)
+                                && run.spans.get(&m.target).is_some()
+                        });
+                    if !valid
+                        || file_owner.insert(key, registered.name.clone()).is_some()
+                        || (*publish
+                            && publish_owner
+                                .insert(path.clone(), registered.name.clone())
+                                .is_some())
+                    {
+                        report(
+                            diagnostics,
+                            run,
+                            true,
+                            format!(
+                                "generator '{}' emitted invalid or duplicate artifact '{path}'",
+                                registered.name
+                            ),
+                            "",
+                        );
+                        failed = true;
+                        continue;
+                    }
+                    applied.artifacts.push(GeneratedArtifact {
+                        generator: registered.name.clone(),
+                        path: path.clone(),
+                        contents: contents.clone(),
+                        publish: *publish,
+                    });
+                }
+                Output::Consume { target } => {
+                    if let Some((file, span)) = run.spans.consumable.get(target) {
+                        if let Some(prior) = applied.consumed.get(target) {
+                            report(
+                                diagnostics,
+                                run,
+                                true,
+                                format!(
+                                    "function '{target}' was already consumed by generator '{}'",
+                                    prior.generator
+                                ),
+                                target,
+                            );
+                            failed = true;
+                        } else {
+                            applied.consumed.insert(
+                                target.clone(),
+                                dream_sema::module_graph::ConsumedBy {
+                                    generator: registered.name.clone(),
+                                    file: file.clone(),
+                                    span: *span,
+                                },
+                            );
+                        }
+                    } else {
+                        report(
+                            diagnostics,
+                            run,
+                            true,
+                            format!(
+                                "cannot consume '{target}': expected an unambiguous selected or referenced top-level user function"
+                            ),
+                            target,
+                        );
+                        failed = true;
+                    }
+                }
+                Output::ToolRun {
+                    id,
+                    tool,
+                    inputs,
+                    outputs,
+                    ..
+                } => {
+                    if id.is_empty()
+                        || !registered.tools.contains(tool)
+                        || !inputs
+                            .iter()
+                            .chain(outputs)
+                            .all(|p| super::artifacts::valid_relative_path(p))
+                    {
+                        report(
+                            diagnostics,
+                            run,
+                            true,
+                            "invalid request or undeclared generator tool".to_string(),
+                            "",
+                        );
+                        failed = true;
+                    }
+                }
+                Output::Asset {
+                    name,
+                    source,
+                    targets,
+                } => {
+                    let bytes = run
+                        .result
+                        .outputs
+                        .iter()
+                        .find_map(|o| match o {
+                            Output::Artifact { path, contents, .. }
+                                if path == source
+                                    && super::artifacts::valid_artifact_path(path) =>
+                            {
+                                Some(Ok(contents.as_bytes().to_vec()))
+                            }
+                            _ => None,
+                        })
+                        .or_else(|| {
+                            run.result
+                                .tool_results
+                                .iter()
+                                .flat_map(|r| &r.files)
+                                .find(|f| &f.path == source)
+                                .map(super::assets::file_bytes)
+                        });
+                    match bytes {
+                        Some(Ok(bytes))
+                            if !name.is_empty() && !applied.assets.contains_key(name) =>
+                        {
+                            applied
+                                .assets
+                                .insert(name.clone(), (bytes, targets.clone()));
+                        }
+                        _ => {
+                            report(
+                                diagnostics,
+                                run,
+                                true,
+                                format!("asset '{name}' has an invalid source or duplicate name"),
+                                "",
+                            );
+                            failed = true;
+                        }
+                    }
+                }
                 Output::File { path, source } => {
                     if !valid_virtual_path(path) {
                         report(
@@ -173,5 +396,146 @@ mod tests {
         assert!(!valid_virtual_path("a.txt"));
         assert!(!valid_virtual_path("a\\b.dream"));
         assert!(!valid_virtual_path(""));
+    }
+    fn generator(name: &str) -> super::RegisteredGenerator {
+        super::RegisteredGenerator {
+            name: name.to_string(),
+            id: format!("::{name}"),
+            module: String::new(),
+            file: "generator.dream".into(),
+            std_package: None,
+            span: None,
+            attribute_triggers: Vec::new(),
+            call_triggers: Vec::new(),
+            syntax_block: false,
+            incremental: true,
+            tools: Vec::new(),
+            entry: None,
+        }
+    }
+
+    fn run(
+        generator: &super::RegisteredGenerator,
+        outputs: Vec<super::Output>,
+    ) -> super::GenRun<'_> {
+        let mut spans = super::IdSpans::default();
+        let span = dream_text::text_span::TextSpan {
+            start: 10,
+            end: 18,
+            line_no: 2,
+            col_no: 5,
+        };
+        spans.insert("::selected", Some("main.dream"), span);
+        spans
+            .consumable
+            .insert("::selected".into(), ("main.dream".into(), span));
+        super::GenRun {
+            registered: generator,
+            spans,
+            sites: Default::default(),
+            result: super::GenResult {
+                version: super::super::model::SNAPSHOT_VERSION,
+                generator: generator.name.clone(),
+                outputs,
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn consume_rights_and_conflicts_are_validated_after_serialization() {
+        let first = generator("first");
+        let second = generator("second");
+        let a = run(
+            &first,
+            vec![super::Output::Consume {
+                target: "::selected".into(),
+            }],
+        );
+        let mut b = run(
+            &second,
+            vec![
+                super::Output::Consume {
+                    target: "::selected".into(),
+                },
+                super::Output::Consume {
+                    target: "system.core::other".into(),
+                },
+            ],
+        );
+        b.result = serde_json::from_str(&serde_json::to_string(&b.result).unwrap()).unwrap();
+        let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
+        let applied = super::apply(&[a, b], std::path::Path::new("generated"), &mut diagnostics);
+        assert_eq!(applied.consumed["::selected"].generator, "first");
+        assert_eq!(diagnostics.diagnostics.len(), 2);
+        assert!(
+            diagnostics
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("already consumed"))
+        );
+        assert!(
+            diagnostics
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("cannot consume"))
+        );
+    }
+
+    #[test]
+    fn cached_results_cannot_change_their_generator_identity() {
+        let generator = generator("selected");
+        let mut run = run(
+            &generator,
+            vec![super::Output::Consume {
+                target: "::selected".into(),
+            }],
+        );
+        run.result.generator = "forged".into();
+        let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
+        let applied = super::apply(&[run], std::path::Path::new("generated"), &mut diagnostics);
+        assert!(applied.consumed.is_empty());
+        assert!(
+            diagnostics.diagnostics[0]
+                .message
+                .contains("invalid protocol identity")
+        );
+    }
+
+    #[test]
+    fn artifact_errors_map_back_to_the_original_source_node() {
+        let generator = generator("mapper");
+        let mut run = run(
+            &generator,
+            vec![super::Output::Artifact {
+                path: "source.txt".into(),
+                contents: "abc".into(),
+                publish: false,
+                mappings: vec![super::super::model::SourceMapping {
+                    line: 1,
+                    column: 1,
+                    end_line: 1,
+                    end_column: 4,
+                    target: "::selected".into(),
+                }],
+            }],
+        );
+        run.result
+            .diagnostics
+            .push(super::super::model::GenDiagnostic {
+                severity: "error".into(),
+                message: "external error".into(),
+                artifact: "source.txt".into(),
+                line: 1,
+                column: 2,
+                ..Default::default()
+            });
+        let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
+        super::apply(&[run], std::path::Path::new("generated"), &mut diagnostics);
+        assert_eq!(
+            diagnostics.diagnostics[0].file_path.as_deref(),
+            Some("main.dream")
+        );
+        assert_eq!(diagnostics.diagnostics[0].span.unwrap().start, 10);
     }
 }

@@ -4,9 +4,14 @@
 //! and syntax-site replacements.
 
 mod apply;
+mod artifacts;
+mod assets;
+mod body;
 mod call_sites;
+mod collisions;
 #[cfg(feature = "native")]
 pub mod commands;
+mod consumption;
 mod decls;
 mod exe;
 #[cfg(feature = "native")]
@@ -22,14 +27,24 @@ mod model;
 mod parallel;
 mod pass;
 mod paths;
+#[cfg(feature = "native")]
+mod phases;
+mod references;
 mod registry;
 mod rewrite;
 #[cfg(feature = "native")]
 mod run;
 mod sites;
 mod snapshot;
+mod snapshot_expand;
 mod stage;
 mod stats;
+mod symbol_instances;
+#[cfg(feature = "native")]
+mod tool_sandbox;
+#[cfg(feature = "native")]
+mod tools;
+mod transcript;
 mod type_ref;
 mod walk;
 

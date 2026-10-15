@@ -247,6 +247,8 @@ pub const YIELD_RUN: &str = "dream_yield_run";
 /// rather than re-matching raw strings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IntrinsicOp {
+    /// A compiler-embedded resource copied into an owned byte array.
+    AssetBytes,
     RawLoad,
     RawStore,
     RawMemory,
@@ -447,6 +449,7 @@ impl IntrinsicOp {
             ATTR_FUNCBOX_NEW => IntrinsicOp::FuncboxNew,
             ATTR_FUNCBOX_FUNCIDX => IntrinsicOp::FuncboxFuncidx,
             ATTR_FUNCBOX_ENV => IntrinsicOp::FuncboxEnv,
+            "asset_bytes" => IntrinsicOp::AssetBytes,
             ATTR_TO_BYTES => IntrinsicOp::ToBytes,
             ATTR_FROM_BYTES => IntrinsicOp::FromBytes,
             ATTR_ARRAY_REALLOC => IntrinsicOp::ArrayRealloc,

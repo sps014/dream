@@ -1,0 +1,14 @@
+module system.codegen;
+
+import system.json;
+
+public class GenConstant {
+    public kind: string;
+    public value: string;
+
+    // Decodes an exact compile-time scalar value; absence means no safe constant was inferred.
+    public constructor(borrow v: JsonValue) {
+        this.kind = gen_str(v, "kind");
+        this.value = gen_str(v, "value");
+    }
+}

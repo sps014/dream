@@ -5,7 +5,7 @@
 use super::registry::CallTrigger;
 use super::walk::{Visitor, is_user_file, walk_program};
 use crate::driver::source_loader::ProgramAccumulator;
-use dream_syntax::nodes::{ExpressionNode, FunctionNode, StatementNode, Type};
+use dream_syntax::nodes::{ExpressionNode, StatementNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
 
 #[derive(Debug, Clone)]
@@ -20,28 +20,8 @@ pub struct FoundCall {
 struct CallCollector<'t> {
     triggers: &'t [CallTrigger],
     file: Option<String>,
-    scopes: Vec<usize>,
-    locals: Vec<(String, Type)>,
+    facts: Option<&'t dream_sema::gen_facts::GenFacts>,
     found: Vec<FoundCall>,
-}
-
-/// Reconstructs an argument's type from locals, casts and collection constructors.
-fn infer_expr_type(expr: &ExpressionNode<'_>, locals: &[(String, Type)]) -> Option<Type> {
-    match expr {
-        ExpressionNode::Identifier(tok) => locals
-            .iter()
-            .rev()
-            .find(|(n, _)| n == &tok.text)
-            .map(|(_, t)| t.clone()),
-        ExpressionNode::Parenthesized(_, inner)
-        | ExpressionNode::NamedArg(_, inner)
-        | ExpressionNode::RefArgument(_, inner) => infer_expr_type(inner, locals),
-        ExpressionNode::Cast(_, ty, _) => Some(ty.clone()),
-        ExpressionNode::FunctionCall(name, type_args, _) if type_args.is_some() => {
-            Some(Type::Struct(name.clone(), type_args.clone()))
-        }
-        _ => None,
-    }
 }
 
 impl CallCollector<'_> {
@@ -52,21 +32,41 @@ impl CallCollector<'_> {
         type_args: &Option<Vec<Type>>,
         args: &[ExpressionNode<'_>],
     ) {
-        let Some(trigger) = self
-            .triggers
-            .iter()
-            .position(|t| t.owner.as_deref() == owner && t.name == name.text)
-        else {
+        let fact = self.facts.and_then(|facts| {
+            facts
+                .expressions
+                .get(&(self.file.clone().unwrap_or_default(), name.position.start))
+        });
+        let Some(trigger) = self.triggers.iter().position(|t| {
+            if let Some(f) = fact.filter(|f| !f.symbol.is_empty()) {
+                f.symbol == t.id
+            } else {
+                t.owner.as_deref() == owner && t.name == name.text
+            }
+        }) else {
             return;
         };
         self.found.push(FoundCall {
             trigger,
             file: self.file.clone(),
             token: name.clone(),
-            type_args: type_args.clone().unwrap_or_default(),
+            type_args: fact
+                .map(|f| f.type_args.clone())
+                .filter(|a| !a.is_empty())
+                .unwrap_or_else(|| type_args.clone().unwrap_or_default()),
             arg_types: args
                 .iter()
-                .map(|a| infer_expr_type(a, &self.locals))
+                .map(|a| {
+                    a.position()
+                        .and_then(|p| {
+                            self.facts.and_then(|facts| {
+                                facts
+                                    .expressions
+                                    .get(&(self.file.clone().unwrap_or_default(), p.start))
+                            })
+                        })
+                        .map(|f| f.ty.clone())
+                })
                 .collect(),
         });
     }
@@ -82,26 +82,6 @@ fn static_receiver<'e>(expr: &'e ExpressionNode<'_>) -> Option<&'e str> {
 impl<'a> Visitor<'a> for CallCollector<'_> {
     fn enter_file(&mut self, file: Option<&str>) {
         self.file = file.map(str::to_string);
-        self.locals.clear();
-        self.scopes.clear();
-    }
-
-    fn enter_function(&mut self, f: &FunctionNode<'a>) {
-        for p in &f.parameters {
-            if p.name.text != "this" {
-                self.locals.push((p.name.text.clone(), p.type_.clone()));
-            }
-        }
-    }
-
-    fn enter_scope(&mut self) {
-        self.scopes.push(self.locals.len());
-    }
-
-    fn exit_scope(&mut self) {
-        if let Some(mark) = self.scopes.pop() {
-            self.locals.truncate(mark);
-        }
     }
 
     fn expr(&mut self, e: &ExpressionNode<'a>) -> bool {
@@ -132,27 +112,21 @@ impl<'a> Visitor<'a> for CallCollector<'_> {
             _ => {}
         }
     }
-
-    fn after_stmt(&mut self, s: &StatementNode<'a>) {
-        if let StatementNode::Declaration(name, ty, init, _) = s {
-            let ty = ty.clone().or_else(|| infer_expr_type(init, &self.locals));
-            if let Some(t) = ty {
-                self.locals.push((name.text.clone(), t));
-            }
-        }
-    }
 }
 
 /// Call sites of any trigger in user files, in source order.
-pub fn collect_calls(acc: &ProgramAccumulator<'_>, triggers: &[CallTrigger]) -> Vec<FoundCall> {
+pub fn collect_calls(
+    acc: &ProgramAccumulator<'_>,
+    triggers: &[CallTrigger],
+    facts: Option<&dream_sema::gen_facts::GenFacts>,
+) -> Vec<FoundCall> {
     if triggers.is_empty() {
         return Vec::new();
     }
     let mut c = CallCollector {
         triggers,
         file: None,
-        scopes: Vec::new(),
-        locals: Vec::new(),
+        facts,
         found: Vec::new(),
     };
     walk_program(&mut c, acc, &is_user_file);

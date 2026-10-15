@@ -14,24 +14,136 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/codegen/gen_symbol_instance.dream",
+            include_str!("../system/codegen/gen_symbol_instance.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_constant.dream",
+            include_str!("../system/codegen/gen_constant.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_symbol.dream",
+            include_str!("../system/codegen/gen_symbol.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_compilation_error.dream",
+            include_str!("../system/codegen/gen_compilation_error.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_tool_info.dream",
+            include_str!("../system/codegen/gen_tool_info.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_tool_file.dream",
+            include_str!("../system/codegen/gen_tool_file.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_tool_result.dream",
+            include_str!("../system/codegen/gen_tool_result.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_span.dream",
+            include_str!("../system/codegen/gen_span.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_expr.dream",
+            include_str!("../system/codegen/gen_expr.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_stmt.dream",
+            include_str!("../system/codegen/gen_stmt.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_body.dream",
+            include_str!("../system/codegen/gen_body.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_body_decode.dream",
+            include_str!("../system/codegen/gen_body_decode.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_source_map.dream",
+            include_str!("../system/codegen/gen_source_map.dream"),
+        ),
+        (
+            "<std>/system/codegen/artifact_builder.dream",
+            include_str!("../system/codegen/artifact_builder.dream"),
+        ),
+        (
             "<std>/system/codegen/attributes.dream",
             include_str!("../system/codegen/attributes.dream"),
         ),
         (
-            "<std>/system/codegen/codegen.dream",
-            include_str!("../system/codegen/codegen.dream"),
+            "<std>/system/codegen/code_builder.dream",
+            include_str!("../system/codegen/code_builder.dream"),
         ),
         (
             "<std>/system/codegen/gen_model.dream",
             include_str!("../system/codegen/gen_model.dream"),
         ),
         (
-            "<std>/system/codegen/gen_decls.dream",
-            include_str!("../system/codegen/gen_decls.dream"),
+            "<std>/system/codegen/gen_location.dream",
+            include_str!("../system/codegen/gen_location.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_type_ref.dream",
+            include_str!("../system/codegen/gen_type_ref.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_attr_arg.dream",
+            include_str!("../system/codegen/gen_attr_arg.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_attribute.dream",
+            include_str!("../system/codegen/gen_attribute.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_attributes.dream",
+            include_str!("../system/codegen/gen_attributes.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_field.dream",
+            include_str!("../system/codegen/gen_field.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_variant.dream",
+            include_str!("../system/codegen/gen_variant.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_param.dream",
+            include_str!("../system/codegen/gen_param.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_function.dream",
+            include_str!("../system/codegen/gen_function.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_decl.dream",
+            include_str!("../system/codegen/gen_decl.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_index_entry.dream",
+            include_str!("../system/codegen/gen_index_entry.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_syntax_block.dream",
+            include_str!("../system/codegen/gen_syntax_block.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_call_site.dream",
+            include_str!("../system/codegen/gen_call_site.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_file.dream",
+            include_str!("../system/codegen/gen_file.dream"),
         ),
         (
             "<std>/system/codegen/gen_decode.dream",
             include_str!("../system/codegen/gen_decode.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_snapshot.dream",
+            include_str!("../system/codegen/gen_snapshot.dream"),
         ),
         (
             "<std>/system/codegen/gen_context.dream",

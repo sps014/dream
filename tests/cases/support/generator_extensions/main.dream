@@ -1,0 +1,11 @@
+import system;
+import gen;
+
+@resource("ok")
+fun cpu_only(): int { let ignored = html { opaque }; let answer = 42; return answer; }
+
+fun main(): void {
+    let bytes = Assets.bytes("payload");
+    System.println(bytes.length);
+    System.println(bytes[0]);
+}

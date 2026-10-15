@@ -41,6 +41,7 @@ pub struct RegisteredGenerator {
     pub call_triggers: Vec<CallTrigger>,
     pub syntax_block: bool,
     pub incremental: bool,
+    pub tools: Vec<String>,
     pub entry: Option<GeneratorEntry>,
 }
 
@@ -179,6 +180,7 @@ impl Registration<'_> {
             call_triggers: Vec::new(),
             syntax_block: false,
             incremental: false,
+            tools: Vec::new(),
             entry: entry.cloned(),
         };
         for attr in &decl.attributes {
@@ -188,6 +190,15 @@ impl Registration<'_> {
             match attr.name.text.as_str() {
                 SYNTAX_BLOCK_ATTR => registered.syntax_block = true,
                 INCREMENTAL_ATTR => registered.incremental = true,
+                dream_abi::attributes::USES_TOOL_ATTR => {
+                    for arg in &attr.args {
+                        if let Some(name) = arg.as_string()
+                            && !registered.tools.iter().any(|n| n == name)
+                        {
+                            registered.tools.push(name.to_string());
+                        }
+                    }
+                }
                 ON_ATTRIBUTE_ATTR => {
                     for arg in &attr.args {
                         let Some(parts) = path_parts(arg) else {

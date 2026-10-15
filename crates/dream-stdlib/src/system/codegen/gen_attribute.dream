@@ -1,0 +1,71 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+// One attribute use. Prefer the typed `GenAttributes.decode<A>()` (via `attribute<A>()` on a
+// node); the positional readers below are what decoders are built from.
+public class GenAttribute {
+    // `module::name` of the `@attribute` type (`system.json::JsonAttribute`).
+    public id: string;
+    public name: string;
+    public args: List<GenAttrArg>;
+
+    // Creates the snapshot model from the supplied values.
+    public constructor(id: string, name: string, args: List<GenAttrArg>) {
+        this.id = id;
+        this.name = name;
+        this.args = args;
+    }
+
+    fun raw(i: int): string {
+        if i < 0 || i >= this.args.length {
+            return "";
+        }
+        return this.args.get(i).value;
+    }
+
+    // Returns the requested model information.
+    public fun string_arg(i: int): string {
+        return this.raw(i);
+    }
+
+    // Returns the requested model information.
+    public fun int_arg(i: int): int {
+        return int.parse(this.raw(i)).unwrap_or(0);
+    }
+
+    // Returns the requested model information.
+    public fun long_arg(i: int): long {
+        return long.parse(this.raw(i)).unwrap_or((long)0);
+    }
+
+    // Returns the requested model information.
+    public fun double_arg(i: int): double {
+        return double.parse(this.raw(i)).unwrap_or(0.0);
+    }
+
+    // Returns the requested model information.
+    public fun float_arg(i: int): float {
+        return float.parse(this.raw(i)).unwrap_or((float)0.0);
+    }
+
+    // Returns the requested model information.
+    public fun bool_arg(i: int): bool {
+        return this.raw(i) == "true";
+    }
+
+    // The member name of an enum argument (`Get` for `HttpMethod.Get`).
+    public fun enum_member(i: int): string {
+        let path = this.raw(i);
+        switch (path.last_index_of('.')) {
+            Some(dot) => {
+                return path.substring(dot + 1, path.length);
+            }
+            None => {
+                return path;
+            }
+        }
+    }
+}

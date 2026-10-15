@@ -203,6 +203,18 @@ pub fn summarize(result: &GenResult) -> String {
             Output::File { path, source } => {
                 let _ = writeln!(out, "file {path} ({} lines)", source.lines().count());
             }
+            Output::Consume { target } => {
+                let _ = writeln!(out, "consume {target}");
+            }
+            Output::Artifact { path, contents, .. } => {
+                let _ = writeln!(out, "artifact {path} ({} bytes)", contents.len());
+            }
+            Output::ToolRun { id, tool, .. } => {
+                let _ = writeln!(out, "tool {id}: {tool}");
+            }
+            Output::Asset { name, source, .. } => {
+                let _ = writeln!(out, "asset {name}: {source}");
+            }
             Output::Replace { site, source } => {
                 let _ = writeln!(out, "replace {site} ({} bytes)", source.len());
             }
@@ -249,8 +261,23 @@ pub fn capture(
     let g = find(insp, name)?;
     let snapshot = snapshot_of(g)?;
     let exe = executable(config, &g.plan)?;
-    write_capture(dir, &exe, name, snapshot, timeout_of(g))?;
-    let result = super::run::run(config, &exe, name, snapshot, timeout_of(g))?;
+    write_capture(
+        dir,
+        &exe,
+        name,
+        snapshot,
+        timeout_of(g),
+        &super::paths::ProjectPaths::for_entry(&insp.entry).root,
+    )?;
+    let result = super::phases::run(
+        config,
+        &exe,
+        &g.registered.name,
+        &g.registered.tools,
+        snapshot,
+        timeout_of(g),
+        &super::paths::ProjectPaths::for_entry(&insp.entry).root,
+    )?;
     let path = dir.join(RESULT_FILE);
     std::fs::write(
         &path,
@@ -296,7 +323,18 @@ pub fn replay(config: &Arc<ToolchainConfig>, dir: &Path) -> Result<String, Strin
         ll: meta.ll.clone(),
         bin: meta.bin.clone(),
     };
-    let result = super::run::run(config, &exe, &meta.generator, &snapshot, meta.timeout_secs)?;
+    let decoded: super::model::Snapshot =
+        serde_json::from_str(&snapshot).map_err(|e| e.to_string())?;
+    let declared: Vec<_> = decoded.tools.iter().map(|t| t.name.clone()).collect();
+    let result = super::phases::run(
+        config,
+        &exe,
+        &meta.generator,
+        &declared,
+        &snapshot,
+        meta.timeout_secs,
+        &meta.project_root,
+    )?;
     let captured: Option<GenResult> = std::fs::read_to_string(dir.join(RESULT_FILE))
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok());
@@ -336,7 +374,15 @@ pub fn verify_incremental(
             continue;
         };
         let exe = executable(config, &g.plan)?;
-        let fresh = super::run::run(config, &exe, &g.registered.name, snapshot, timeout_of(g))?;
+        let fresh = super::phases::run(
+            config,
+            &exe,
+            &g.registered.name,
+            &g.registered.tools,
+            snapshot,
+            timeout_of(g),
+            &super::paths::ProjectPaths::for_entry(&insp.entry).root,
+        )?;
         if fresh == cached {
             let _ = writeln!(
                 out,

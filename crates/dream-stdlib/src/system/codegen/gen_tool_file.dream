@@ -1,0 +1,20 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+public class GenToolFile {
+    public path: string;
+    public contents: string;
+    public binary: bool;
+    public hash: string;
+
+    // Decodes compiler-collected tool metadata from a snapshot.
+    public constructor(borrow v: JsonValue) {
+        this.path = gen_str(v, "path");
+        this.contents = gen_str(v, "contents");
+        this.binary = gen_bool(v, "binary");
+        this.hash = gen_str(v, "hash");
+    }
+}

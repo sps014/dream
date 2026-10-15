@@ -96,7 +96,15 @@ pub fn execute<'g>(
             .unwrap_or(super::run::DEFAULT_TIMEOUT_SECS);
         record(Event::Run);
         let started = std::time::Instant::now();
-        let outcome = match super::run::run(config, exe, &job.registered.name, &job.json, timeout) {
+        let outcome = match super::phases::run(
+            config,
+            exe,
+            &job.registered.name,
+            &job.registered.tools,
+            &job.json,
+            timeout,
+            &job.built.root,
+        ) {
             Ok(result) => Outcome::Done(result, false),
             Err(e) => Outcome::Failed(e),
         };

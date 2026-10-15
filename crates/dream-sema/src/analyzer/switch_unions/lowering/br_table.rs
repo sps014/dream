@@ -159,10 +159,11 @@ impl<'a> Analyzer<'a> {
             // Classify the pattern (allocating payload binding slots) before the body is lowered.
             let shape =
                 self.hir_switch_pattern(&arm.pattern, &union_info, union_def, &subject_type);
-            // `hir_alloc_local` returns `None` (Unsupported) when HIR is inactive after an earlier
-            // error in this function; don't ICE on that. A well-typed program must not hit this.
+            // Fact-only analysis and poisoned functions intentionally have no HIR locals.
             debug_assert!(
-                !matches!(shape, HirArmShape::Unsupported) || diagnostics.has_errors(),
+                !matches!(shape, HirArmShape::Unsupported)
+                    || diagnostics.has_errors()
+                    || self.generator_facts.is_some(),
                 "expand_switch_arms_for_fast_path + routing should keep Unsupported off the flat Switch path ({})",
                 parent_function.name.text
             );

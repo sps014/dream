@@ -1,0 +1,19 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+// Every type in the program (user and stdlib), names and kinds only.
+public class GenIndexEntry {
+    public id: string;
+    public name: string;
+    public kind: DeclKind;
+
+    // Creates the snapshot model from the supplied values.
+    public constructor(id: string, name: string, kind: DeclKind) {
+        this.id = id;
+        this.name = name;
+        this.kind = kind;
+    }
+}

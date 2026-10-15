@@ -60,12 +60,21 @@ pub struct SourceFile<'a> {
     pub program: ProgramNode<'a>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ConsumedBy {
+    pub generator: String,
+    pub file: String,
+    pub span: dream_text::text_span::TextSpan,
+}
+
 pub struct ModuleGraph<'a> {
     pub modules: Vec<SourceModule>,
     pub files: Vec<SourceFile<'a>>,
     /// Files written by source generators. Their code belongs to the declarations it was
     /// generated for, so it sees file-private declarations of every file.
     pub generated_files: IndexSet<String>,
+    pub embedded_assets: IndexMap<String, Vec<u8>>,
+    pub consumed: IndexMap<String, ConsumedBy>,
 }
 
 /// The analyzer borrows declarations from their owning source files; no merged AST is produced.
@@ -168,6 +177,8 @@ impl<'a> ModuleGraph<'a> {
             modules,
             files,
             generated_files: IndexSet::new(),
+            consumed: IndexMap::new(),
+            embedded_assets: IndexMap::new(),
         };
         graph.prepare_dependency_interfaces();
         graph

@@ -1,0 +1,25 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+public class GenSourceMap {
+    public mappings: JsonValue;
+
+    // Creates an empty builder.
+    public constructor() {
+        this.mappings = JsonValue.array();
+    }
+
+    // Maps a half-open artifact range to a snapshot node identity.
+    public fun add(line: int, column: int, end_line: int, end_column: int, target: string): void {
+        let m = JsonValue.dict();
+        m.set("line", JsonValue.from_int(line));
+        m.set("column", JsonValue.from_int(column));
+        m.set("end_line", JsonValue.from_int(end_line));
+        m.set("end_column", JsonValue.from_int(end_column));
+        m.set("target", JsonValue.from_string(target));
+        this.mappings.push(m);
+    }
+}

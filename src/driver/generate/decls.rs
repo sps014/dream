@@ -49,7 +49,14 @@ pub struct DeclIndex {
 }
 
 pub fn module_of(acc: &ProgramAccumulator<'_>, file: Option<&str>) -> String {
-    file.and_then(|f| acc.file_modules.get(f))
+    module_of_files(&acc.file_modules, file)
+}
+
+pub fn module_of_files(
+    files: &std::collections::HashMap<String, std::rc::Rc<str>>,
+    file: Option<&str>,
+) -> String {
+    file.and_then(|f| files.get(f))
         .map(|m| m.to_string())
         .unwrap_or_default()
 }
@@ -61,7 +68,7 @@ impl DeclIndex {
             let module = module_of(acc, file);
             index
                 .by_name
-                .entry(name.to_string())
+                .entry(decl_identity(&module, name))
                 .or_insert_with(|| DeclEntry {
                     id: decl_identity(&module, name),
                     name: name.to_string(),
@@ -101,7 +108,11 @@ impl DeclIndex {
             );
         }
         for ext in &acc.all_extends {
-            if let Some(entry) = index.by_name.get_mut(&ext.target.text) {
+            if let Some(entry) = index
+                .by_name
+                .values_mut()
+                .find(|e| e.name == ext.target.text)
+            {
                 entry
                     .members
                     .extend(ext.methods.iter().map(|m| m.name.text.clone()));
@@ -111,7 +122,7 @@ impl DeclIndex {
             let module = module_of(acc, f.file_path.as_deref());
             index
                 .functions
-                .entry(f.name.text.clone())
+                .entry(decl_identity(&module, &f.name.text))
                 .or_insert_with(|| DeclEntry {
                     id: decl_identity(&module, &f.name.text),
                     name: f.name.text.clone(),
@@ -125,7 +136,9 @@ impl DeclIndex {
     }
 
     pub fn type_decl(&self, name: &str) -> Option<&DeclEntry> {
-        self.by_name.get(name)
+        self.by_name
+            .get(name)
+            .or_else(|| self.by_name.values().find(|e| e.name == name))
     }
 
     pub fn types(&self) -> impl Iterator<Item = &DeclEntry> {
@@ -143,7 +156,11 @@ impl DeclIndex {
                 continue;
             }
             let module_ok = |e: &DeclEntry| split == 0 || e.module == module;
-            if let Some(e) = self.by_name.get(name).filter(|e| module_ok(e)) {
+            if let Some(e) = self
+                .by_name
+                .values()
+                .find(|e| e.name == name && module_ok(e))
+            {
                 return match rest.first() {
                     None => Some(e.id.clone()),
                     Some(m) if e.members.iter().any(|x| x == m) => Some(format!("{}.{m}", e.id)),
@@ -151,7 +168,10 @@ impl DeclIndex {
                 };
             }
             if rest.is_empty()
-                && let Some(e) = self.functions.get(name).filter(|e| module_ok(e))
+                && let Some(e) = self
+                    .functions
+                    .values()
+                    .find(|e| e.name == name && module_ok(e))
             {
                 return Some(e.id.clone());
             }
@@ -164,6 +184,7 @@ impl DeclIndex {
 #[derive(Debug, Default)]
 pub struct IdSpans {
     spans: IndexMap<String, (Option<String>, TextSpan)>,
+    pub consumable: IndexMap<String, (String, TextSpan)>,
 }
 
 impl IdSpans {
@@ -171,6 +192,24 @@ impl IdSpans {
         self.spans
             .entry(id.to_string())
             .or_insert((file.map(str::to_string), span));
+    }
+
+    /// Registers signature identities without granting consumption rights to unrelated functions.
+    pub fn extend_definitions(&mut self, other: Self) {
+        for (id, source) in other.spans {
+            self.spans.entry(id).or_insert(source);
+        }
+    }
+
+    /// Returns the smallest registered node containing a diagnostic's source range.
+    pub fn covering(&self, file: Option<&str>, span: TextSpan) -> Option<&str> {
+        self.spans
+            .iter()
+            .filter(|(_, (f, s))| {
+                f.as_deref() == file && s.start <= span.start && s.end >= span.end
+            })
+            .min_by_key(|(_, (_, s))| s.end - s.start)
+            .map(|(id, _)| id.as_str())
     }
 
     pub fn get(&self, id: &str) -> Option<(Option<&str>, TextSpan)> {

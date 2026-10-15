@@ -230,6 +230,18 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     /// Parses a for-loop increment clause (no trailing `;`): `i = …`, `i += …`, or `i++`/`++i`.
     fn parse_for_increment(&mut self) -> Result<StatementNode<'a>, Error> {
+        let start = self.current_token().position;
+        let node = self.parse_for_increment_inner()?;
+        self.record_node_span(
+            false,
+            node.syntax_kind(),
+            node.position().map(|s| s.start),
+            start,
+        );
+        Ok(node)
+    }
+
+    fn parse_for_increment_inner(&mut self) -> Result<StatementNode<'a>, Error> {
         let cur = self.current_token().clone();
         // Prefix ++/-- before the lvalue.
         if matches!(
@@ -275,6 +287,18 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     pub(super) fn parse_statement(&mut self) -> Result<StatementNode<'a>, Error> {
+        let start = self.current_token().position;
+        let node = self.parse_statement_inner()?;
+        self.record_node_span(
+            false,
+            node.syntax_kind(),
+            node.position().map(|s| s.start),
+            start,
+        );
+        Ok(node)
+    }
+
+    fn parse_statement_inner(&mut self) -> Result<StatementNode<'a>, Error> {
         let cur = self.current_token();
         match cur.kind {
             TokenKind::LetToken | TokenKind::ConstToken => Ok(self.parse_declaration()?),
@@ -409,6 +433,18 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// Parses a variable declaration (e.g., `let x = 5;` or `let x: int[] = [1];`)
     /// or a tuple destructure (`let (a, b) = t;`).
     pub(super) fn parse_declaration(&mut self) -> Result<StatementNode<'a>, Error> {
+        let start = self.current_token().position;
+        let node = self.parse_declaration_inner()?;
+        self.record_node_span(
+            false,
+            node.syntax_kind(),
+            node.position().map(|s| s.start),
+            start,
+        );
+        Ok(node)
+    }
+
+    fn parse_declaration_inner(&mut self) -> Result<StatementNode<'a>, Error> {
         // Consume `let` or `const`; `const` marks the binding immutable.
         let is_const = self.current_token().kind == TokenKind::ConstToken;
         if is_const {
@@ -538,6 +574,18 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     /// Parses a for loop statement
     pub(super) fn parse_for(&mut self) -> Result<StatementNode<'a>, Error> {
+        let start = self.current_token().position;
+        let node = self.parse_for_inner()?;
+        self.record_node_span(
+            false,
+            node.syntax_kind(),
+            node.position().map(|s| s.start),
+            start,
+        );
+        Ok(node)
+    }
+
+    fn parse_for_inner(&mut self) -> Result<StatementNode<'a>, Error> {
         self.match_token(TokenKind::ForToken);
         let paren = self.current_token().kind == TokenKind::OpenParenthesisToken;
         if paren {

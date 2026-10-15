@@ -1,0 +1,23 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+public class GenToolResult {
+    public id: string;
+    public exit: int;
+    public stdout: string;
+    public stderr: string;
+    public files: List<GenToolFile>;
+
+    // Decodes compiler-collected tool metadata from a snapshot.
+    public constructor(borrow v: JsonValue) {
+        this.id = gen_str(v, "id");
+        this.exit = gen_int(v, "exit");
+        this.stdout = gen_str(v, "stdout");
+        this.stderr = gen_str(v, "stderr");
+        this.files = List<GenToolFile>();
+        for (let f in gen_items(v, "files")) { this.files.push(GenToolFile(f)); }
+    }
+}

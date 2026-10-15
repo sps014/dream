@@ -1,0 +1,15 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+public class GenBody {
+    public statements: List<GenStmt>;
+
+    // Creates this model from snapshot JSON.
+    public constructor(borrow v: JsonValue) {
+        this.statements = List<GenStmt>();
+        for (let s in gen_items(v, "statements")) { this.statements.push(GenStmt(s)); }
+    }
+}

@@ -28,3 +28,9 @@ public struct OnCallAttribute {
 @attribute(AttributeTarget.Function)
 public struct SyntaxBlockAttribute {}
 
+/// Declares a pinned compiler-run tool that this generator may request.
+@repeatable
+@attribute(AttributeTarget.Function)
+public struct UsesToolAttribute {
+    public name: string;
+}

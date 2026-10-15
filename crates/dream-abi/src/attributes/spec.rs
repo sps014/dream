@@ -103,7 +103,7 @@ pub fn compiler_attribute_module(name: &str) -> Option<&'static str> {
     Some(match name {
         "c" | "c_call" | "marshal" | "packed" | "cpp" | "cpp_name" => "system.interop",
         "test" | "timeout" => "system.testing",
-        "generator" | "incremental" | "on_attribute" | "on_call" | "syntax_block" => {
+        "generator" | "incremental" | "on_attribute" | "on_call" | "syntax_block" | "uses_tool" => {
             "system.codegen"
         }
         "attribute" | "repeatable" | "export" | "intrinsic" | "inline" | "noinline" | "unsafe"

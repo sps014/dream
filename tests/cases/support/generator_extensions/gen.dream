@@ -1,0 +1,74 @@
+module gen;
+import system.codegen;
+import system.collections;
+
+@attribute(AttributeTarget.Function)
+public struct ResourceAttribute { public mode: string; }
+
+// Exercises generic body inspection, artifacts, tool feedback and resource embedding.
+@generator
+@on_attribute(ResourceAttribute)
+@uses_tool("copy")
+@incremental
+public fun resources(ctx: GenContext): void {
+    for (let f in ctx.functions_with<ResourceAttribute>()) {
+        let mode = "ok";
+        switch (f.attribute<ResourceAttribute>()) { Some(attribute) => { mode = attribute.mode; } None => {} }
+        switch (f.body) {
+            Some(body) => {
+                if body.statements.length == 0 { ctx.error_at(f.id, "missing body"); }
+                if mode == "body_error" { ctx.error_at(body.statements.get(0).id, "body marker"); return; }
+            }
+            None => { ctx.error_at(f.id, "missing body"); }
+        }
+        if mode == "round_cap" {
+            if ctx.phase() == 0 { ctx.emit_artifact("input.txt", "ABC", GenSourceMap()); }
+            let inputs = List<string>();
+            inputs.push("input.txt");
+            ctx.run_tool("round-" + ctx.phase().to_string(), "copy", List<string>(), inputs, List<string>());
+            return;
+        }
+        if ctx.phase() == 0 {
+            let builder = ArtifactBuilder();
+            builder.mapped("ABC", f.id);
+            ctx.emit_artifact("input.txt", builder.to_string(), builder.source_map);
+            if mode == "artifact_error" { ctx.error_in_artifact("input.txt", 1, 2, "artifact marker"); return; }
+            let unicode = ArtifactBuilder();
+            unicode.mapped("😀", f.id);
+            unicode.mapped("", f.id);
+            ctx.emit_artifact("unicode.txt", unicode.to_string(), unicode.source_map);
+            let args = List<string>();
+            if mode == "tool_failure" { args.push("fail"); }
+            let inputs = List<string>();
+            let outputs = List<string>();
+            inputs.push("input.txt");
+            outputs.push("output.bin");
+            ctx.run_tool("copy-resource", "copy", args, inputs, outputs);
+        } else {
+            for (let result in ctx.tool_results()) {
+                if result.exit != 0 { ctx.error_at(f.id, result.stderr); return; }
+            }
+            ctx.consume(f);
+            ctx.emit_asset("payload", "output.bin");
+        }
+    }
+}
+
+// Any surviving syntax-block input produces an error; consumption must remove these inputs.
+@generator
+@syntax_block
+public fun html(ctx: GenContext): void {
+    for (let block in ctx.syntax_blocks()) { ctx.error(block, "consumed syntax site leaked"); }
+}
+
+// Makes duplicate consumption observable without introducing generator-specific compiler logic.
+@generator
+@on_attribute(ResourceAttribute)
+public fun duplicate(ctx: GenContext): void {
+    for (let f in ctx.functions_with<ResourceAttribute>()) {
+        switch (f.attribute<ResourceAttribute>()) {
+            Some(attribute) => { if attribute.mode == "duplicate" { ctx.consume(f); } }
+            None => {}
+        }
+    }
+}

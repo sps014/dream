@@ -24,6 +24,14 @@ impl<'a> Analyzer<'a> {
             .iter()
             .any(|a| matches!(a, ExpressionNode::NamedArg(..)));
         let method_info = self.method_info(owner, &method.text).ok();
+        if method_info
+            .as_ref()
+            .and_then(|info| info.intrinsic_name.as_deref())
+            .and_then(dream_abi::intrinsics::IntrinsicOp::from_key)
+            == Some(dream_abi::intrinsics::IntrinsicOp::AssetBytes)
+        {
+            return self.analyze_asset_bytes(params, method, diagnostics);
+        }
         let is_variadic = method_info.as_ref().is_some_and(|info| info.is_variadic);
         let normalized_params: Vec<ExpressionNode<'a>>;
         let params: &[ExpressionNode<'a>] = if has_named_arg {

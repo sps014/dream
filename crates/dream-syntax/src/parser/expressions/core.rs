@@ -11,6 +11,21 @@ impl<'a, 'b> Parser<'a, 'b> {
         &mut self,
         parent_precedence: i32,
     ) -> Result<ExpressionNode<'a>, Error> {
+        let start = self.current_token().position;
+        let node = self.parse_expression_inner(parent_precedence)?;
+        self.record_node_span(
+            true,
+            node.syntax_kind(),
+            node.position().map(|s| s.start),
+            start,
+        );
+        Ok(node)
+    }
+
+    fn parse_expression_inner(
+        &mut self,
+        parent_precedence: i32,
+    ) -> Result<ExpressionNode<'a>, Error> {
         let mut left;
         let unary_precedence = self.current_token().kind.get_unary_precedence();
         if unary_precedence != 0 && unary_precedence >= parent_precedence {
@@ -77,6 +92,18 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
     /// Parses a primary expression (literal, identifier, parenthesized expression, or function call)
     pub(crate) fn parse_primary_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
+        let start = self.current_token().position;
+        let node = self.parse_primary_expression_inner()?;
+        self.record_node_span(
+            true,
+            node.syntax_kind(),
+            node.position().map(|s| s.start),
+            start,
+        );
+        Ok(node)
+    }
+
+    fn parse_primary_expression_inner(&mut self) -> Result<ExpressionNode<'a>, Error> {
         // `switch (subject) { pattern => body, ... }` in expression (pattern-matching) form.
         if self.current_token().kind == TokenKind::SwitchToken {
             return self.parse_switch_expr();
@@ -447,6 +474,14 @@ impl<'a, 'b> Parser<'a, 'b> {
     ) -> Result<ExpressionNode<'a>, Error> {
         let mut expr = base;
         loop {
+            if let Some(start) = expr.start_position() {
+                self.record_node_span(
+                    true,
+                    expr.syntax_kind(),
+                    expr.position().map(|s| s.start),
+                    start,
+                );
+            }
             if self.current_token().kind == TokenKind::OpenBracketToken {
                 self.match_token(TokenKind::OpenBracketToken);
                 let index = self.parse_expression(0)?;

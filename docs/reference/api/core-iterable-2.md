@@ -121,4 +121,3 @@ public constructor(cursor: YieldAsyncCursor<T>)
 ```dream
 public fun complete(): void
 ```
-

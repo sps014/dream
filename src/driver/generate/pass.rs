@@ -6,7 +6,8 @@ use super::decls::DeclIndex;
 use super::paths::ProjectPaths;
 use super::registry::{CallTrigger, RegisteredGenerator, Registration};
 use super::sites::{Site, collect_sites, report_unexpanded};
-use super::snapshot::{BuiltSnapshot, ProgramFacts, build_snapshot, has_inputs, program_carries};
+use super::snapshot::{BuiltSnapshot, ProgramFacts, has_inputs, program_carries};
+use super::snapshot_expand::build_snapshot;
 use super::stage::GeneratorStage;
 use super::stats::{Event, record};
 use crate::driver::source_loader::ProgramAccumulator;
@@ -31,6 +32,10 @@ pub struct GenerateRequest<'r> {
 pub struct PassInputs {
     pub gens: Vec<RegisteredGenerator>,
     pub index: DeclIndex,
+    #[cfg(feature = "native")]
+    pub config: Arc<ToolchainConfig>,
+    pub source_spans: indexmap::IndexMap<String, Vec<dream_syntax::nodes::program::SourceNodeSpan>>,
+    pub semantic: dream_sema::gen_facts::GenFacts,
     pub sites: Vec<Site>,
     pub call_triggers: Vec<CallTrigger>,
     pub calls: Vec<FoundCall>,
@@ -62,9 +67,44 @@ pub fn gather(
             call_triggers.push(t.clone());
         }
     }
+    let sites = collect_sites(acc);
+    let calls = collect_calls(acc, &call_triggers, None);
+    let applies = gens.iter().any(|g| {
+        (g.syntax_block && sites.iter().any(|s| s.name == g.name))
+            || g.call_triggers
+                .iter()
+                .any(|t| calls.iter().any(|c| call_triggers[c.trigger].id == t.id))
+            || program_carries(acc, &g.attribute_triggers, attributes)
+    });
+    let semantic = if applies {
+        let graph = acc.module_graph();
+        let arena = Bump::new();
+        dream_sema::analyzer::Analyzer::new(&graph, &arena)
+            .with_aliased_imports(acc.aliased_imports.clone())
+            .with_target_layout(dream_hir::TargetLayout {
+                ptr_size: req.target.ptr_size,
+                ptr_align: req.target.ptr_align,
+            })
+            .analyze_for_generators()
+    } else {
+        Default::default()
+    };
+    let calls = if applies {
+        collect_calls(acc, &call_triggers, Some(&semantic))
+    } else {
+        calls
+    };
     PassInputs {
-        sites: collect_sites(acc),
-        calls: collect_calls(acc, &call_triggers),
+        sites,
+        calls,
+        semantic,
+        source_spans: acc
+            .parsed_files
+            .iter()
+            .map(|(path, p)| (path.clone(), p.node_spans.clone()))
+            .collect(),
+        #[cfg(feature = "native")]
+        config: req.config.clone(),
         call_triggers,
         gens,
         index,
@@ -103,6 +143,11 @@ impl PassInputs {
             calls: &self.calls,
             paths: &self.paths,
             target: &self.target,
+            semantic: &self.semantic,
+            source_spans: &self.source_spans,
+            sources: &acc.file_contents,
+            #[cfg(feature = "native")]
+            config: &self.config,
         };
         build_snapshot(acc, &facts, registered)
     }
@@ -118,11 +163,24 @@ impl PassInputs {
         &self,
         done: &dyn Fn(&Site) -> bool,
         failed: &[String],
+        consumed: &[(String, String, dream_text::text_span::TextSpan)],
         diagnostics: &mut DiagnosticBag,
     ) {
         let claimed = |name: &str| self.gens.iter().any(|g| g.syntax_block && g.name == name);
-        report_unexpanded(&self.sites, &claimed, diagnostics);
-        for site in &self.sites {
+        let sites: Vec<_> = self
+            .sites
+            .iter()
+            .filter(|site| {
+                !consumed.iter().any(|(_, file, span)| {
+                    site.key.0 == *file
+                        && span.start <= site.name_span.start
+                        && site.name_span.start < span.end
+                })
+            })
+            .cloned()
+            .collect();
+        report_unexpanded(&sites, &claimed, diagnostics);
+        for site in &sites {
             if claimed(&site.name) && !done(site) && !failed.contains(&site.name) {
                 diagnostics.report(Diagnostic::new(
                     format!(
@@ -157,7 +215,7 @@ pub fn run_generators<'a>(
     }
     if applicable.is_empty() {
         record(Event::FastPathSkip);
-        inputs.report_sites(&|_| false, &[], diagnostics);
+        inputs.report_sites(&|_| false, &[], &[], diagnostics);
         return Ok(());
     }
     let mut jobs = Vec::new();
@@ -202,22 +260,84 @@ pub fn run_generators<'a>(
     } else {
         run_jobs(req.config, jobs, diagnostics)
     };
-    let applied = super::apply::apply(&runs, diagnostics);
+    #[cfg(feature = "native")]
+    let runs = if !req.replay_materialized {
+        super::consumption::stabilize(
+            req,
+            &inputs,
+            acc,
+            attributes,
+            runs,
+            &mut failed,
+            diagnostics,
+        )
+    } else {
+        runs
+    };
+    let consumed_ranges = super::consumption::ranges(&runs);
+    let applied = super::apply::apply(&runs, &root, diagnostics);
     failed.extend(applied.failed.iter().cloned());
+    for artifact in &applied.artifacts {
+        if artifact.publish {
+            acc.published_artifacts
+                .insert(artifact.path.clone(), artifact.contents.clone());
+        }
+        acc.file_contents.insert(
+            root.join(&artifact.generator)
+                .join(&artifact.path)
+                .to_string_lossy()
+                .into_owned(),
+            artifact.contents.clone(),
+        );
+    }
+    for (name, (bytes, targets)) in &applied.assets {
+        let family = if req.target.capabilities.linear_memory {
+            "wasm"
+        } else {
+            "native"
+        };
+        if targets.is_empty()
+            || targets
+                .iter()
+                .any(|t| t == family || t == &req.target.triple.to_string())
+        {
+            acc.embedded_assets.insert(name.clone(), bytes.clone());
+        }
+    }
+    acc.all_functions.retain(|f| {
+        let module = super::decls::module_of_files(&acc.file_modules, f.file_path.as_deref());
+        !applied
+            .consumed
+            .contains_key(&dream_abi::attributes::decl_identity(&module, &f.name.text))
+    });
+    acc.consumed.extend(
+        applied
+            .consumed
+            .iter()
+            .map(|(id, by)| (id.clone(), by.clone())),
+    );
     let ran: Vec<String> = runs.iter().map(|r| r.registered.name.clone()).collect();
-    let files = if req.replay_materialized {
+    let files = if req.replay_materialized || !cfg!(feature = "native") {
         super::materialize::located(&root, &applied.files)
     } else {
-        super::materialize::materialize(&root, &ran, &applied.files)
+        super::materialize::materialize(&root, &runs, &applied.files, &applied.artifacts)
     };
-    for (path, text) in files {
+    for ((path, text), generated) in files.into_iter().zip(&applied.files) {
         acc.resolution_inputs.insert(path.clone());
-        super::merge::merge_generated_file(arena, acc, &path.to_string_lossy(), text, diagnostics)?;
+        super::merge::merge_generated_file(
+            arena,
+            acc,
+            &path.to_string_lossy(),
+            &generated.generator,
+            text,
+            diagnostics,
+        )?;
     }
     super::merge::apply_replacements(arena, acc, &applied.replacements, diagnostics)?;
     inputs.report_sites(
         &|site| applied.replacements.contains_key(&site.key),
         &failed,
+        &consumed_ranges,
         diagnostics,
     );
     tracing::info!(
@@ -246,9 +366,7 @@ fn run_jobs<'g>(
     }
 }
 
-/// Results rebuilt from the files the last build materialized (the only option without the
-/// native toolchain). Syntax sites stay unexpanded,
-/// so every job also counts as failed (its sites are not reported again).
+/// Manifests retain every output kind for the language server and analyzer-only builds.
 fn replay_materialized<'g>(
     entry_root: &std::path::Path,
     jobs: Vec<super::apply::Job<'g>>,
@@ -256,35 +374,121 @@ fn replay_materialized<'g>(
     let mut failed = Vec::new();
     let mut runs = Vec::new();
     for job in jobs {
-        failed.push(job.registered.name.clone());
         let dir = entry_root.join(&job.registered.name);
-        let header = super::materialize::header(&job.registered.name);
-        let mut files: Vec<std::path::PathBuf> = crate::driver::rt_stamp::files_under(&dir);
-        files.sort();
-        let outputs = files
-            .into_iter()
-            .filter_map(|p| {
-                let text = std::fs::read_to_string(&p).ok()?;
-                let rel = p
-                    .strip_prefix(&dir)
-                    .ok()?
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                Some(super::model::Output::File {
-                    path: rel,
-                    source: text.strip_prefix(&header).unwrap_or(&text).to_string(),
-                })
-            })
-            .collect();
+        let Ok(text) = std::fs::read_to_string(dir.join("outputs.json")) else {
+            failed.push(job.registered.name.clone());
+            continue;
+        };
+        let Ok(result) = serde_json::from_str::<super::model::GenResult>(&text) else {
+            failed.push(job.registered.name.clone());
+            continue;
+        };
         runs.push(super::apply::GenRun {
             registered: job.registered,
             spans: job.built.spans,
             sites: job.built.sites,
-            result: super::model::GenResult {
-                outputs,
-                ..Default::default()
-            },
+            result,
         });
     }
     (runs, failed)
+}
+
+#[cfg(all(test, feature = "native"))]
+mod tests {
+    use super::*;
+    use crate::driver::generate::model::{GenResult, Output, SNAPSHOT_VERSION, Snapshot};
+
+    #[test]
+    fn materialized_manifests_replay_consumption_artifacts_and_assets() {
+        let root = tempfile::tempdir().unwrap();
+        let generator = RegisteredGenerator {
+            name: "toy".into(),
+            id: "::toy".into(),
+            module: String::new(),
+            file: "gen.dream".into(),
+            std_package: None,
+            span: None,
+            attribute_triggers: Vec::new(),
+            call_triggers: Vec::new(),
+            syntax_block: false,
+            incremental: true,
+            tools: Vec::new(),
+            entry: None,
+        };
+        let spans = || {
+            let mut spans = super::super::decls::IdSpans::default();
+            spans.consumable.insert(
+                "::selected".into(),
+                (
+                    "main.dream".into(),
+                    dream_text::text_span::TextSpan {
+                        start: 0,
+                        end: 8,
+                        line_no: 1,
+                        col_no: 1,
+                    },
+                ),
+            );
+            spans
+        };
+        let result = GenResult {
+            version: SNAPSHOT_VERSION,
+            generator: generator.name.clone(),
+            outputs: vec![
+                Output::Consume {
+                    target: "::selected".into(),
+                },
+                Output::Artifact {
+                    path: "resource.txt".into(),
+                    contents: "ABC".into(),
+                    mappings: Vec::new(),
+                    publish: false,
+                },
+                Output::Asset {
+                    name: "payload".into(),
+                    source: "resource.txt".into(),
+                    targets: Vec::new(),
+                },
+            ],
+            ..Default::default()
+        };
+        let fresh = vec![super::super::apply::GenRun {
+            registered: &generator,
+            spans: spans(),
+            sites: Default::default(),
+            result,
+        }];
+        let mut diagnostics = DiagnosticBag::new(None);
+        let applied = super::super::apply::apply(&fresh, root.path(), &mut diagnostics);
+        assert!(!diagnostics.has_errors());
+        super::super::materialize::materialize(
+            root.path(),
+            &fresh,
+            &applied.files,
+            &applied.artifacts,
+        );
+        let jobs = vec![super::super::apply::Job {
+            registered: &generator,
+            json: String::new(),
+            built: super::super::snapshot::BuiltSnapshot {
+                root: root.path().to_path_buf(),
+                snapshot: Snapshot::default(),
+                spans: spans(),
+                sites: Default::default(),
+            },
+        }];
+        let (replayed, failed) = replay_materialized(root.path(), jobs);
+        assert!(failed.is_empty());
+        let replayed = super::super::apply::apply(&replayed, root.path(), &mut diagnostics);
+        assert!(!diagnostics.has_errors());
+        assert_eq!(
+            applied.consumed.keys().collect::<Vec<_>>(),
+            replayed.consumed.keys().collect::<Vec<_>>()
+        );
+        assert_eq!(applied.assets, replayed.assets);
+        assert_eq!(
+            std::fs::read(root.path().join("toy/resource.txt")).unwrap(),
+            b"ABC"
+        );
+    }
 }

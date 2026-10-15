@@ -2,7 +2,7 @@
 //! the debugger and the language server point at real files. Files are rewritten only when
 //! their text changes, and files a generator stopped emitting are removed.
 
-use super::apply::GeneratedFile;
+use super::apply::{GenRun, GeneratedArtifact, GeneratedFile};
 use std::path::{Path, PathBuf};
 
 pub fn header(generator: &str) -> String {
@@ -21,11 +21,27 @@ pub fn materialized_text(file: &GeneratedFile) -> String {
 /// compile uses the in-memory text, only tooling loses the on-disk copy.
 pub fn materialize(
     entry_dir: &Path,
-    ran: &[String],
+    runs: &[GenRun<'_>],
     files: &[GeneratedFile],
+    artifacts: &[GeneratedArtifact],
 ) -> Vec<(PathBuf, String)> {
     let out = located(entry_dir, files);
-    for (path, text) in &out {
+    let mut persisted = out.clone();
+    for artifact in artifacts {
+        persisted.push((
+            entry_dir.join(&artifact.generator).join(&artifact.path),
+            artifact.contents.clone(),
+        ));
+    }
+    for run in runs {
+        if let Ok(json) = serde_json::to_string(&run.result) {
+            persisted.push((
+                entry_dir.join(&run.registered.name).join("outputs.json"),
+                json,
+            ));
+        }
+    }
+    for (path, text) in &persisted {
         let unchanged = std::fs::read_to_string(path).is_ok_and(|old| old == *text);
         if !unchanged {
             if let Some(parent) = path.parent() {
@@ -34,9 +50,9 @@ pub fn materialize(
             let _ = std::fs::write(path, text);
         }
     }
-    for generator in ran {
-        let dir = entry_dir.join(generator);
-        let keep: Vec<&PathBuf> = out
+    for run in runs {
+        let dir = entry_dir.join(&run.registered.name);
+        let keep: Vec<&PathBuf> = persisted
             .iter()
             .map(|(p, _)| p)
             .filter(|p| p.starts_with(&dir))

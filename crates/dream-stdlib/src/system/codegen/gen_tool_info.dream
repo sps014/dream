@@ -1,0 +1,18 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+public class GenToolInfo {
+    public name: string;
+    public version: string;
+    public fingerprint: string;
+
+    // Decodes compiler-collected tool metadata from a snapshot.
+    public constructor(borrow v: JsonValue) {
+        this.name = gen_str(v, "name");
+        this.version = gen_str(v, "version");
+        this.fingerprint = gen_str(v, "fingerprint");
+    }
+}

@@ -1,0 +1,47 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+// A method, or a top-level function.
+public class GenFunction {
+    public id: string;
+    public overload: string;
+    public name: string;
+    public is_static: bool;
+    public is_async: bool;
+    public visibility: string;
+    public generics: List<string>;
+    public params: List<GenParam>;
+    public ret: GenTypeRef;
+    public attributes: List<GenAttribute>;
+    public location: GenLocation;
+    public body: Option<GenBody>;
+
+    // Creates the snapshot model from the supplied values.
+    public constructor(id: string, name: string, is_static: bool, is_async: bool, visibility: string, generics: List<string>, params: List<GenParam>, ret: GenTypeRef, attributes: List<GenAttribute>, location: GenLocation, body: Option<GenBody>, overload: string) {
+        this.id = id;
+        this.overload = overload;
+        this.name = name;
+        this.is_static = is_static;
+        this.is_async = is_async;
+        this.visibility = visibility;
+        this.generics = generics;
+        this.params = params;
+        this.ret = ret;
+        this.attributes = attributes;
+        this.location = location;
+        this.body = body;
+    }
+
+    // Returns the requested model information.
+    public fun attribute<A>(): Option<A> {
+        return GenAttributes.decode<A>(this.attributes);
+    }
+
+    // Tests whether the requested attribute is attached to this model node.
+    public fun has<A>(): bool {
+        return GenAttributes.has(this.attributes, GenAttributes.id<A>());
+    }
+}

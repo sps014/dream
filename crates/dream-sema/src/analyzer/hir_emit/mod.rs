@@ -140,7 +140,7 @@ impl<'a> Analyzer<'a> {
         // `(import ...)` (see `hir_build_imports`) and `@intrinsic` ones lower straight to their
         // runtime helper (e.g. `String.alloc` → `$string_alloc`). Emitting an (empty) HIR body for
         // them would define a second `$string_alloc`, colliding with the runtime function.
-        if function.is_extern {
+        if function.is_extern || self.generator_facts.is_some() {
             self.hir.collecting = false;
             return;
         }
@@ -759,7 +759,7 @@ fn unescape_lit_body(body: &str) -> String {
 /// The runtime content of a string literal: the raw token text still carries its surrounding double
 /// quotes (it is the source slice), so strip them and expand escapes. Idempotent on already-unquoted
 /// input.
-fn string_lit_value(text: &str) -> String {
+pub(super) fn string_lit_value(text: &str) -> String {
     let body = text
         .strip_prefix('"')
         .and_then(|s| s.strip_suffix('"'))

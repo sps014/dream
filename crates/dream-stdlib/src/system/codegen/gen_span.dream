@@ -1,0 +1,20 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+public class GenSpan {
+    public file: string;
+    public line: int;
+    public column: int;
+    public length: int;
+
+    // Creates this model from snapshot JSON.
+    public constructor(borrow v: JsonValue) {
+        this.file = gen_str(v, "file");
+        this.line = gen_int(v, "line");
+        this.column = gen_int(v, "column");
+        this.length = gen_int(v, "length");
+    }
+}

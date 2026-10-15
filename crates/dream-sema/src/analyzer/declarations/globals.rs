@@ -38,6 +38,7 @@ impl<'a> Analyzer<'a> {
         self.hir_register_global("__closure_env", env_ty, false);
 
         for global in node.globals.iter() {
+            self.current_file = global.file_path.clone();
             self.type_ctx
                 .set_scope(self.graph.module_for_file(global.file_path.as_deref()));
             diagnostics.file_path = file_path_string(&global.file_path);

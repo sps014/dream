@@ -319,3 +319,99 @@ An attribute type may use an `Attribute` suffix; its applied name removes the su
 converts the remaining name to snake_case. For example, `JsAttribute` is applied as `@js` and remains
 available as `JsAttribute` for typed decoding. This avoids a collision with the primitive
 `js` type.
+
+## Inspecting the input compilation
+
+A generator receives syntax bodies for its selected user functions and their transitive
+referenced functions. Embedded standard-library functions expose signatures only.
+`GenFunction.body` is an `Option<GenBody>`; statements and expression children carry stable
+identities and source locations. `GenExpr.ty`, `symbol`, `overload`, `type_args`, and
+`constant` describe facts inferred before generation. Unresolved types are
+`TypeRefKind.Unknown`; an unresolved symbol is the empty string. A missing constant means
+that no exact scalar value was inferred.
+
+The compiler performs this analysis with scratch diagnostics and without HIR emission.
+It runs only when a generator applies. `ctx.compilation_errors()` exposes errors restricted
+to the generator's selected declarations. Normal analysis runs again after generated output
+has been merged, so references to generated code can succeed then.
+
+Use `ctx.referenced_decls()`, `ctx.referenced_functions()`, `ctx.find_decl(id)`, and
+`ctx.find_function(id)` to inspect dependencies. The closure is deterministic and limited
+to 512 declarations and 32 levels. `ctx.find_symbol(id)` searches program-wide signature
+views; `implementations_of(id)` and `subtypes_of(id)` traverse declared interface ancestry.
+
+`ctx.consume(function)` removes a selected or referenced top-level user function from the
+compiled program. Standard-library functions and methods cannot be consumed. A later use
+of a consumed function produces a diagnostic naming the generator that consumed it.
+Two generators cannot consume the same function.
+
+## Artifacts and source maps
+
+`ArtifactBuilder` collects text and source mappings independently of Dream source emission:
+
+```dream
+let artifact = ArtifactBuilder();
+artifact.mapped("external text", function.id);
+ctx.emit_artifact("input.txt", artifact.to_string(), artifact.source_map);
+```
+
+Artifact paths are relative to the generator directory, cannot contain `..`, and cannot
+end in `.dream`. `outputs.json` is reserved for the compiler. Artifacts are materialized
+under `.dream/generated/<entry>/<generator>/` without a generated-source header.
+Pass `publish: true` to `emit_artifact` to also copy an artifact beside the build output.
+Published artifacts cannot overwrite source inputs or compiler outputs.
+
+Source-map ranges use one-based lines and Unicode-character columns and exclude their end.
+`ctx.error_in_artifact(path, line, column, message)` selects the innermost covering mapping
+and reports the error at its originating Dream node. An uncovered point stays anchored to
+the artifact file. `ctx.error_at(node.id, message)` also accepts body-node identities.
+
+## Pinned tools and feedback phases
+
+A generator declares each external tool with `@uses_tool("name")`. Tools resolve from the
+pinned LLVM/Binaryen toolchain or from a project declaration:
+
+```toml
+[tools.schema]
+path = "tools/schema-checker"
+version = "1.0"
+hash = "<64 hexadecimal characters: BLAKE3 of the executable>"
+```
+
+Tool declarations are fingerprinted before cache lookup. An undeclared tool or an
+executable whose hash differs from its project pin is rejected.
+
+`ctx.run_tool(id, tool, args, inputs, outputs)` takes lists of arguments and artifact paths.
+The compiler copies declared inputs into a scratch directory, invokes the tool directly,
+and collects declared outputs. macOS uses `sandbox-exec`; Linux requires Bubblewrap
+(`bwrap`). Tool execution fails on hosts without a supported sandbox. Network access is
+disabled, the environment is minimal, and a tool has a 30-second timeout. Captured stdout
+and stderr are limited to 8 MiB each; individual output files are limited to 64 MiB.
+
+A generator starts at `ctx.phase() == 0`. After tool requests, the compiler invokes the
+same executable with the next phase number and `ctx.tool_results()`. Results include the
+request identity, exit code, stdout, stderr, and output files. Binary files use base64
+contents with `binary == true`; every file includes a BLAKE3 hash. The generator interprets
+the tool's diagnostics and emits the final Dream files or assets. There are at most three
+phases; the final phase cannot request another tool. Request identities and output paths
+must be unique across phases.
+
+Incremental results include the phase transcript and tool feedback. Cache replay and the
+materialized manifest validate the same paths, outputs, mappings, and consumption targets
+as fresh execution. Capture/replay and incremental verification retain phase data.
+
+## Embedded assets
+
+`ctx.emit_asset(name, source)` embeds an artifact or declared tool-output file.
+The overload taking `targets: List<string>` restricts an asset to target triples or the
+families `native` and `wasm`. Asset names must be unique across generators.
+
+At runtime, `Assets.bytes("name")` copies the named resource into an owned `byte[]`.
+The name must be a string literal; unknown names are compiler diagnostics. Constant byte
+payloads use private immutable LLVM globals, which become data segments on WebAssembly.
+Selective JS runtimes also export `embeddedAssets`, a map of names to `Uint8Array` values.
+Ordering follows generator name and output emission order.
+
+The compiler persists each generator's `outputs.json` manifest with the materialized
+sources. Replay-only builds and the language server read the manifest, including
+replacements, consumption, artifacts, source maps, and assets.

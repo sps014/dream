@@ -226,6 +226,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             arena: self.arena,
             diagnostics: &mut *self.diagnostics,
             foreach_counter: 0,
+            node_spans: std::collections::BTreeMap::new(),
             type_aliases: self.type_aliases.clone(),
             in_condition: false,
         };
@@ -240,6 +241,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Some(pos),
             );
         }
+        self.node_spans.extend(std::mem::take(&mut sub.node_spans));
         Ok(expr)
     }
 }

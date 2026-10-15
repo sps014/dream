@@ -81,6 +81,8 @@ impl<'a> ProgramAccumulator<'a> {
             .collect();
         let mut graph = ModuleGraph::new(inputs, &edges);
         graph.generated_files = self.generated_files.clone();
+        graph.embedded_assets = self.embedded_assets.clone();
+        graph.consumed = self.consumed.clone();
         graph
     }
 }

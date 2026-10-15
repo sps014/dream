@@ -12,6 +12,7 @@ use std::io::Error;
 
 mod declarations;
 mod expressions;
+mod spans;
 mod statements;
 
 /// The parser is responsible for converting a sequence of tokens into an Abstract Syntax Tree (AST).
@@ -24,6 +25,10 @@ pub struct Parser<'a, 'b> {
     diagnostics: &'b mut DiagnosticBag,
     /// Monotonic counter used to generate unique synthetic local names for `for-each` lowering.
     foreach_counter: usize,
+    node_spans: std::collections::BTreeMap<
+        (bool, &'static str, Option<usize>, usize),
+        crate::nodes::program::SourceNodeSpan,
+    >,
     /// Declared type aliases (`type Foo = Bar;`). Resolved (erased) at parse time so the rest of
     /// the compiler never sees the alias name.
     type_aliases: HashMap<String, Type>,
@@ -42,6 +47,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             arena,
             diagnostics,
             foreach_counter: 0,
+            node_spans: std::collections::BTreeMap::new(),
             type_aliases: HashMap::new(),
             in_condition: false,
         }
@@ -625,6 +631,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             imports, structs, interfaces, functions, enums, extends, globals,
         );
         program.module = module;
+        program.node_spans = std::mem::take(&mut self.node_spans).into_values().collect();
+        program
+            .node_spans
+            .sort_by_key(|s| (s.span.start, std::cmp::Reverse(s.span.end)));
         Ok(program)
     }
 

@@ -1,5 +1,6 @@
 /// The source enum and the compiler's binding table are checked for exact agreement.
 pub const INTRINSIC_MEMBERS: &[(&str, &str)] = &[
+    ("AssetBytes", "asset_bytes"),
     ("RawLoad", "raw_load"),
     ("RawStore", "raw_store"),
     ("DreamRawSize", "dream_raw_size"),

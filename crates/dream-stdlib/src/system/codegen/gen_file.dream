@@ -1,0 +1,17 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+// A `dream.toml` `additional_files` entry.
+public class GenFile {
+    public path: string;
+    public contents: string;
+
+    // Creates the snapshot model from the supplied values.
+    public constructor(path: string, contents: string) {
+        this.path = path;
+        this.contents = contents;
+    }
+}

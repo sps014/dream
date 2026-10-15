@@ -2,11 +2,9 @@
 
 **Import:** `import system.codegen;`
 
-Read the [usage guide](../stdlib/codegen.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
-
 [All sections](codegen-gen-context.md)
 
-## `class GenContext`
+## `public class GenContext`
 
 What a `@generator fun name(ctx: GenContext)` sees and produces. The compiler runs the generator's cached executable with `--generator <name> --snapshot <in> --result <out>`; the harness loads the context from the snapshot, calls the generator, and `finish()` writes the result the compiler validates and merges.
 
@@ -14,7 +12,7 @@ What a `@generator fun name(ctx: GenContext)` sees and produces. The compiler ru
 public class GenContext
 ```
 
-## `generator_name: string`
+## `public generator_name: string`
 
 The running generator's name and `module::name` identity.
 
@@ -22,13 +20,13 @@ The running generator's name and `module::name` identity.
 public generator_name: string
 ```
 
-## `generator_id: string`
+## `public generator_id: string`
 
 ```dream
 public generator_id: string
 ```
 
-## `target: string`
+## `public target: string`
 
 Target triple of the compile (`aarch64-apple-darwin`, `wasm32-unknown-wasi`, ...).
 
@@ -68,6 +66,102 @@ Every declaration selected by this generator's `@on_attribute` triggers.
 public fun decls(): List<GenDecl>
 ```
 
+## `phase`
+
+The compiler-tool feedback round, starting at zero.
+
+```dream
+public fun phase(): int
+```
+
+## `referenced_decls`
+
+Transitive dependencies of the declarations selected by this generator.
+
+```dream
+public fun referenced_decls(): List<GenDecl>
+```
+
+## `referenced_functions`
+
+Top-level functions referenced by selected declarations or their dependencies.
+
+```dream
+public fun referenced_functions(): List<GenFunction>
+```
+
+## `find_decl`
+
+Looks up a selected or referenced declaration by its compiler identity.
+
+```dream
+public fun find_decl(borrow id: string): Option<GenDecl>
+```
+
+## `find_function`
+
+Looks up a selected or referenced function, including methods.
+
+```dream
+public fun find_function(borrow id: string): Option<GenFunction>
+```
+
+## `type_of`
+
+The inferred type, or an explicit Unknown when pre-analysis could not resolve it.
+
+```dream
+public fun type_of(borrow expr: GenExpr): GenTypeRef
+```
+
+## `type_of`
+
+The inferred type attached to a statement, or Unknown when it has no value type.
+
+```dream
+public fun type_of(borrow stmt: GenStmt): GenTypeRef
+```
+
+## `symbol_of`
+
+The resolved symbol identity, or an empty string for an unresolved expression.
+
+```dream
+public fun symbol_of(borrow expr: GenExpr): string
+```
+
+## `find_symbol`
+
+Looks up a signature view anywhere in the pre-generation compilation.
+
+```dream
+public fun find_symbol(borrow id: string): Option<GenSymbol>
+```
+
+## `compilation_errors`
+
+Errors found before generation within declarations selected by this generator's triggers.
+
+```dream
+public fun compilation_errors(): List<GenCompilationError>
+```
+
+## `implementations_of`
+
+Classes and structs implementing an interface, including inherited interface relations.
+
+```dream
+public fun implementations_of(borrow id: string): List<GenSymbol>
+```
+
+## `subtypes_of`
+
+Signature views whose declared interface ancestry includes the given identity.
+
+```dream
+public fun subtypes_of(borrow id: string): List<GenSymbol>
+```
+
 ## `type_index`
 
 Every type in the program, by name and kind.
@@ -98,90 +192,4 @@ Calls of the functions named in this generator's `@on_call(...)`.
 
 ```dream
 public fun call_sites(): List<GenCallSite>
-```
-
-## `options`
-
-`dream.toml` `[[generators]].options`, decoded into the `@json` type `T`.
-
-```dream
-public fun options<T>(): Result<T, ParseError>
-```
-
-## `option_or`
-
-One option as text (`fallback` when unset).
-
-```dream
-public fun option_or(borrow key: string, fallback: string): string
-```
-
-## `additional_files`
-
-`dream.toml` `[[generators]].additional_files`, read by the compiler.
-
-```dream
-public fun additional_files(): List<GenFile>
-```
-
-## `replace`
-
-Rewrites `block`'s site to the Dream expression `source`.
-
-```dream
-public fun replace(borrow block: GenSyntaxBlock, source: string): void
-```
-
-## `emit_file`
-
-Adds a complete Dream source file at the generator-relative path `path` (`models.json.dream`). It is written under `.dream/generated/<entry>/<generator>/` and compiled with the program.
-
-```dream
-public fun emit_file(path: string, source: string): void
-```
-
-## `emit_extend`
-
-Adds `extend <decl> { <body> }` to this generator's `extends.dream` file.
-
-```dream
-public fun emit_extend(borrow decl: GenDecl, body: string): void
-```
-
-## `error_at`
-
-An error at the node with identity `target` (any model node's `id`), or at the generator itself for an empty `target`.
-
-```dream
-public fun error_at(borrow target: string, message: string): void
-```
-
-## `warning_at`
-
-```dream
-public fun warning_at(borrow target: string, message: string): void
-```
-
-## `error`
-
-```dream
-public fun error(message: string): void
-```
-
-## `error`
-
-```dream
-public fun error(borrow block: GenSyntaxBlock, message: string): void
-```
-
-## `error`
-
-```dream
-public fun error(borrow decl: GenDecl, message: string): void
-```
-
-## `error`
-
-```dream
-public fun error(borrow field: GenField, message: string): void
 ```

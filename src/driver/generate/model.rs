@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// Bump when the snapshot or result shape changes; `system.codegen` checks it.
+/// The single protocol contract; compiler identity invalidates caches when its shape changes.
 pub const SNAPSHOT_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -16,6 +16,13 @@ pub struct Snapshot {
     pub generator: String,
     pub generator_id: String,
     pub target: String,
+    pub phase: u32,
+    pub symbols: Vec<SymbolView>,
+    pub compilation_errors: Vec<GenDiagnostic>,
+    pub referenced: Vec<Decl>,
+    pub referenced_functions: Vec<Function>,
+    pub tool_results: Vec<ToolResult>,
+    pub tools: Vec<ToolInfo>,
     /// `dream.toml` `[[generators]].options`, decoded in Dream by `ctx.options<T>()`.
     pub options: BTreeMap<String, serde_json::Value>,
     pub additional_files: Vec<AdditionalFile>,
@@ -86,6 +93,7 @@ pub struct Variant {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Function {
     pub id: String,
+    pub overload: String,
     pub name: String,
     pub is_static: bool,
     pub is_async: bool,
@@ -93,6 +101,7 @@ pub struct Function {
     pub generics: Vec<String>,
     pub params: Vec<Param>,
     pub ret: TypeRef,
+    pub body: Option<Body>,
     pub attributes: Vec<Attr>,
     pub location: Location,
 }
@@ -160,15 +169,45 @@ pub struct GenResult {
     pub outputs: Vec<Output>,
     pub diagnostics: Vec<GenDiagnostic>,
     pub logs: Vec<String>,
+    pub phases: Vec<GenPhase>,
+    pub tool_results: Vec<ToolResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Output {
     /// Rewrites a syntax site to a Dream expression.
-    Replace { site: String, source: String },
+    Replace {
+        site: String,
+        source: String,
+    },
     /// A full Dream source file at a generator-relative virtual path.
-    File { path: String, source: String },
+    File {
+        path: String,
+        source: String,
+    },
+    Consume {
+        target: String,
+    },
+    Artifact {
+        path: String,
+        contents: String,
+        mappings: Vec<SourceMapping>,
+        #[serde(default)]
+        publish: bool,
+    },
+    ToolRun {
+        id: String,
+        tool: String,
+        args: Vec<String>,
+        inputs: Vec<String>,
+        outputs: Vec<String>,
+    },
+    Asset {
+        name: String,
+        source: String,
+        targets: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -179,4 +218,104 @@ pub struct GenDiagnostic {
     pub message: String,
     /// Snapshot identity the diagnostic is anchored to (decl, member, site or call), or empty.
     pub target: String,
+    pub artifact: String,
+    pub line: u32,
+    pub column: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct SourceMapping {
+    pub line: u32,
+    pub column: u32,
+    pub end_line: u32,
+    pub end_column: u32,
+    pub target: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ToolInfo {
+    pub name: String,
+    pub version: String,
+    pub fingerprint: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ToolResult {
+    pub id: String,
+    pub exit: i32,
+    pub stdout: String,
+    pub stderr: String,
+    pub files: Vec<ToolFile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ToolFile {
+    pub path: String,
+    pub contents: String,
+    pub binary: bool,
+    pub hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Body {
+    pub statements: Vec<BodyNode>,
+}
+
+/// Child roles preserve branch/operand boundaries without depending on compiler AST types.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct BodyNode {
+    pub id: String,
+    pub kind: String,
+    pub role: String,
+    pub span: GenSpan,
+    pub text: String,
+    pub operator: String,
+    pub literal: String,
+    pub literal_kind: String,
+    pub constant: Option<ConstantValue>,
+    pub ty: TypeRef,
+    pub symbol: String,
+    pub symbol_kind: String,
+    pub overload: String,
+    pub type_args: Vec<TypeRef>,
+    pub types: Vec<TypeRef>,
+    pub children: Vec<BodyNode>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct GenSpan {
+    pub file: String,
+    pub line: u32,
+    pub column: u32,
+    pub length: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GenPhase {
+    pub snapshot: Snapshot,
+    pub outputs: Vec<Output>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SymbolView {
+    pub id: String,
+    pub kind: String,
+    pub declaration: Option<Decl>,
+    pub instances: Vec<SymbolInstance>,
+    pub function: Option<Function>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ConstantValue {
+    pub kind: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SymbolInstance {
+    pub ty: TypeRef,
+    pub bases: Vec<TypeRef>,
+    pub fields: Vec<Field>,
+    pub methods: Vec<Function>,
+    pub variants: Vec<Variant>,
 }

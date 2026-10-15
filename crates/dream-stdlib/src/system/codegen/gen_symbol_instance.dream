@@ -1,0 +1,26 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+// Concrete semantic members, including inherited defaults and substituted generic arguments.
+public class GenSymbolInstance {
+    public ty: GenTypeRef;
+    public bases: List<GenTypeRef>;
+    public fields: List<GenField>;
+    public methods: List<GenFunction>;
+    public variants: List<GenVariant>;
+
+    // Decodes an instantiated type view exported by semantic analysis.
+    public constructor(borrow v: JsonValue) {
+        this.ty = gen_type_ref(gen_obj(v, "ty"));
+        this.bases = gen_type_refs(v, "bases");
+        this.fields = gen_fields(v);
+        this.methods = gen_functions(v, "methods");
+        this.variants = List<GenVariant>();
+        for (let variant in gen_items(v, "variants")) {
+            this.variants.push(GenVariant(gen_str(variant, "id"), gen_str(variant, "name"), gen_fields(variant), gen_location(variant)));
+        }
+    }
+}

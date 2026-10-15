@@ -1,12 +1,10 @@
-# Primitive, CollectionKind, TypeRefKind, DeclKind, GenLocation, GenTypeRef, GenAttrArg, GenAttribute, GenAttributes
+# Primitive, CollectionKind, TypeRefKind, DeclKind
 
 **Import:** `import system.codegen;`
 
-Read the [usage guide](../stdlib/codegen.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
-
 [All sections](codegen-gen-model.md)
 
-## `enum Primitive`
+## `public enum Primitive`
 
 Built-in scalar types.
 
@@ -98,7 +96,7 @@ String
 Object
 ```
 
-## `enum CollectionKind`
+## `public enum CollectionKind`
 
 Standard collection shapes a generator usually special-cases.
 
@@ -142,7 +140,7 @@ SortedMap
 Array
 ```
 
-## `enum TypeRefKind`
+## `public enum TypeRefKind`
 
 What a `GenTypeRef` refers to.
 

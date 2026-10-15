@@ -18,6 +18,7 @@ mod debugger_dap_generator;
 mod destructor_facts;
 mod e2e_tests;
 mod generator_cache;
+mod generator_extensions;
 mod host_capability_tests;
 mod host_library_tests;
 mod http_client;

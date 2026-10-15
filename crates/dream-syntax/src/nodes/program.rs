@@ -189,6 +189,7 @@ impl<'a> ExtendNode<'a> {
 /// Represents the root program node in the AST
 #[derive(Debug, Clone)]
 pub struct ProgramNode<'a> {
+    pub node_spans: Vec<SourceNodeSpan>,
     /// This file's own `module a.b.c;` declaration, if any. `None` places the file in the
     /// implicit, unnamed root module.
     pub module: Option<ModuleDeclNode>,
@@ -216,6 +217,7 @@ impl<'a> ProgramNode<'a> {
     ) -> ProgramNode<'a> {
         ProgramNode {
             module: None,
+            node_spans: Vec::new(),
             imports,
             structs,
             interfaces,
@@ -225,4 +227,13 @@ impl<'a> ProgramNode<'a> {
             globals,
         }
     }
+}
+
+/// Full parsed ranges supplement AST forms whose representative tokens omit punctuation or keywords.
+#[derive(Debug, Clone)]
+pub struct SourceNodeSpan {
+    pub expression: bool,
+    pub kind: &'static str,
+    pub anchor: Option<usize>,
+    pub span: dream_text::text_span::TextSpan,
 }

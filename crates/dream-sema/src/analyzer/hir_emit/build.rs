@@ -10,7 +10,7 @@ impl<'a> Analyzer<'a> {
     /// is analyzed. There is no enclosing function, so there are no locals/blocks — only the top
     /// expression's HIR is wanted. Paired with [`Self::hir_global_init_finish`].
     pub(in crate::analyzer) fn hir_global_init_begin(&mut self) {
-        self.hir.collecting = true;
+        self.hir.collecting = self.generator_facts.is_none();
         self.hir.ok = true;
         self.hir.last = None;
     }
@@ -38,6 +38,9 @@ impl<'a> Analyzer<'a> {
         ty: TypeId,
         is_const: bool,
     ) {
+        if self.generator_facts.is_some() {
+            return;
+        }
         let id = GlobalId(self.hir.globals.len() as u32);
         self.hir.globals.insert(name.to_string(), (id, ty));
         let init = self.hir.pending_global_inits.shift_remove(name);

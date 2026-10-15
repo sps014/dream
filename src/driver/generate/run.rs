@@ -146,6 +146,11 @@ pub fn run(
     })?;
     let mut result: GenResult = serde_json::from_str(&text)
         .map_err(|e| format!("generator '{generator}' wrote a malformed result: {e}"))?;
+    if result.version != super::model::SNAPSHOT_VERSION || result.generator != generator {
+        return Err(format!(
+            "generator '{generator}' returned an invalid protocol identity"
+        ));
+    }
     result
         .logs
         .extend(stdout.lines().filter(|l| !l.is_empty()).map(str::to_string));
@@ -160,6 +165,7 @@ pub struct Capture {
     pub bin: PathBuf,
     pub ll: PathBuf,
     pub timeout_secs: u64,
+    pub project_root: PathBuf,
 }
 
 pub const CAPTURE_FILE: &str = "capture.json";
@@ -172,6 +178,7 @@ pub fn write_capture(
     generator: &str,
     snapshot_json: &str,
     timeout_secs: u64,
+    project_root: &Path,
 ) -> Result<(), String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
     let meta = Capture {
@@ -179,6 +186,7 @@ pub fn write_capture(
         bin: exe.bin.clone(),
         ll: exe.ll.clone(),
         timeout_secs,
+        project_root: project_root.to_path_buf(),
     };
     let write = |file: &str, text: &str| {
         let path = dir.join(file);
@@ -201,7 +209,14 @@ fn keep_failed_run(
     timeout_secs: u64,
 ) -> PathBuf {
     let dir = cache_root.join("failed").join(generator);
-    let _ = write_capture(&dir, exe, generator, snapshot_json, timeout_secs);
+    let _ = write_capture(
+        &dir,
+        exe,
+        generator,
+        snapshot_json,
+        timeout_secs,
+        &std::env::current_dir().unwrap_or_default(),
+    );
     dir
 }
 

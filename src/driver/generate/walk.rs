@@ -3,7 +3,8 @@
 
 use crate::driver::source_loader::ProgramAccumulator;
 use dream_syntax::nodes::{
-    ExpressionNode, FunctionNode, LambdaBody, StatementNode, SwitchArmBody, SyntaxBlockPart,
+    ExpressionNode, FunctionNode, LambdaBody, PatternNode, StatementNode, SwitchArmBody,
+    SyntaxBlockPart,
 };
 
 pub(super) trait Visitor<'a> {
@@ -11,6 +12,9 @@ pub(super) trait Visitor<'a> {
     fn expr(&mut self, _e: &ExpressionNode<'a>) -> bool {
         true
     }
+    fn after_expr(&mut self, _e: &ExpressionNode<'a>) {}
+    fn pattern(&mut self, _p: &PatternNode) {}
+    fn after_pattern(&mut self, _p: &PatternNode) {}
     /// Called before a statement's children are walked (`MethodInvocation` statements are calls).
     fn stmt(&mut self, _s: &StatementNode<'a>) {}
     /// Called after a statement's children are walked (bind locals here).
@@ -90,6 +94,7 @@ pub(super) fn walk_expr<'a, V: Visitor<'a>>(v: &mut V, expr: &ExpressionNode<'a>
         ExpressionNode::Switch(_, subj, arms) => {
             walk_expr(v, subj);
             for arm in arms {
+                walk_pattern(v, &arm.pattern);
                 if let Some(g) = &arm.guard {
                     walk_expr(v, g);
                 }
@@ -110,6 +115,25 @@ pub(super) fn walk_expr<'a, V: Visitor<'a>>(v: &mut V, expr: &ExpressionNode<'a>
         | ExpressionNode::NameOf(_, _)
         | ExpressionNode::DeclOf(_, _) => {}
     }
+    v.after_expr(expr);
+}
+
+fn walk_pattern<'a, V: Visitor<'a>>(v: &mut V, pattern: &PatternNode) {
+    v.pattern(pattern);
+    match pattern {
+        PatternNode::Variant(_, _, children)
+        | PatternNode::Tuple(children)
+        | PatternNode::Or(children) => {
+            for child in children {
+                walk_pattern(v, child);
+            }
+        }
+        PatternNode::Wildcard(_)
+        | PatternNode::Binding(_)
+        | PatternNode::Literal(_)
+        | PatternNode::Range(_, _) => {}
+    }
+    v.after_pattern(pattern);
 }
 
 pub(super) fn walk_stmt<'a, V: Visitor<'a>>(v: &mut V, stmt: &StatementNode<'a>) {
@@ -120,8 +144,11 @@ pub(super) fn walk_stmt<'a, V: Visitor<'a>>(v: &mut V, stmt: &StatementNode<'a>)
         | StatementNode::Return(Some(e))
         | StatementNode::Yield(_, Some(e))
         | StatementNode::Assignment(_, e)
-        | StatementNode::Declaration(_, _, e, _)
-        | StatementNode::TupleDeclaration { init: e, .. } => walk_expr(v, e),
+        | StatementNode::Declaration(_, _, e, _) => walk_expr(v, e),
+        StatementNode::TupleDeclaration { pattern, init, .. } => {
+            walk_pattern(v, pattern);
+            walk_expr(v, init);
+        }
         StatementNode::IndexAssignment(a, i, x) => {
             walk_expr(v, a);
             walk_expr(v, i);

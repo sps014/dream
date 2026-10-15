@@ -98,6 +98,67 @@ pub enum StatementNode<'a> {
 }
 
 impl StatementNode<'_> {
+    /// Stable syntax-category spelling for source-span tables and compiler tooling.
+    pub fn syntax_kind(&self) -> &'static str {
+        match self {
+            Self::Assignment(..) => "Assignment",
+            Self::IndexAssignment(..) => "IndexAssignment",
+            Self::MemberAssignment(..) => "MemberAssignment",
+            Self::Declaration(..) => "Declaration",
+            Self::TupleDeclaration { .. } => "TupleDeclaration",
+            Self::FunctionInvocation(..) => "FunctionInvocation",
+            Self::MethodInvocation(..) => "MethodInvocation",
+            Self::Return(..) => "Return",
+            Self::Yield(..) => "Yield",
+            Self::AwaitForEach(..) => "AwaitForEach",
+            Self::IfElse(..) => "If",
+            Self::While(..) => "While",
+            Self::DoWhile(..) => "DoWhile",
+            Self::For(..) => "For",
+            Self::ForEach(..) => "ForEach",
+            Self::Labeled(..) => "Labeled",
+            Self::Break(..) => "Break",
+            Self::Continue(..) => "Continue",
+            Self::ExpressionStatement(..) => "Expression",
+            Self::AwaitStmt(..) => "Await",
+            Self::Switch(..) => "Switch",
+            Self::Lock(..) => "Lock",
+            Self::Defer(..) => "Defer",
+            Self::Overflow(..) => "Overflow",
+        }
+    }
+
+    /// A source anchor shared by clones; token-less control statements use their parse order.
+    pub fn position(&self) -> Option<dream_text::text_span::TextSpan> {
+        match self {
+            Self::Assignment(t, _)
+            | Self::Declaration(t, ..)
+            | Self::FunctionInvocation(t, ..)
+            | Self::Yield(t, _)
+            | Self::AwaitForEach(t, _)
+            | Self::ForEach(t, ..)
+            | Self::Overflow(_, t, _)
+            | Self::MemberAssignment(_, t, _)
+            | Self::MethodInvocation(_, t, ..) => Some(t.position),
+            Self::IndexAssignment(e, ..) => e.position(),
+            Self::ExpressionStatement(e)
+            | Self::AwaitStmt(e)
+            | Self::Return(Some(e))
+            | Self::TupleDeclaration { init: e, .. }
+            | Self::IfElse(e, ..)
+            | Self::While(e, _)
+            | Self::DoWhile(_, e)
+            | Self::Switch(e, ..)
+            | Self::Lock(e, _) => e.position(),
+            Self::Labeled(_, inner) => inner.position(),
+            Self::For(..)
+            | Self::Defer(..)
+            | Self::Return(None)
+            | Self::Break(_)
+            | Self::Continue(_) => None,
+        }
+    }
+
     pub fn contains_yield(&self) -> bool {
         let body = |statements: &[Self]| statements.iter().any(Self::contains_yield);
         match self {

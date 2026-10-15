@@ -201,6 +201,43 @@ pub enum SwitchArmBody<'a> {
 }
 
 impl<'a> ExpressionNode<'a> {
+    /// Stable syntax-category spelling for source-span tables and compiler tooling.
+    pub fn syntax_kind(&self) -> &'static str {
+        match self {
+            Self::Literal(_) => "Literal",
+            Self::Identifier(_) => "Identifier",
+            Self::ArrayLiteral(..) => "Array",
+            Self::ArrayRepeat(..) => "ArrayRepeat",
+            Self::TupleLiteral(..) => "Tuple",
+            Self::SetLiteral(..) => "Set",
+            Self::MapLiteral(..) => "Map",
+            Self::Binary(..) => "Binary",
+            Self::Unary(..) => "Unary",
+            Self::IncDec { .. } => "IncDec",
+            Self::Parenthesized(..) => "Parenthesized",
+            Self::FunctionCall(..) => "FunctionCall",
+            Self::Call(..) => "Call",
+            Self::IndexAccess(..) => "Index",
+            Self::Cast(..) => "Cast",
+            Self::SizeOf(..) => "SizeOf",
+            Self::AlignOf(..) => "AlignOf",
+            Self::NameOf(..) => "NameOf",
+            Self::DeclOf(..) => "DeclOf",
+            Self::TypeOf(..) => "TypeOf",
+            Self::MemberAccess(..) => "Member",
+            Self::IsExpression(..) => "Is",
+            Self::MethodCall(..) => "MethodCall",
+            Self::Ternary(..) => "Ternary",
+            Self::Await(..) => "Await",
+            Self::Switch(..) => "Switch",
+            Self::Try(..) => "Try",
+            Self::Lambda(..) => "Lambda",
+            Self::NamedArg(..) => "NamedArg",
+            Self::RefArgument(..) => "Ref",
+            Self::SyntaxBlock(..) => "SyntaxBlock",
+        }
+    }
+
     /// Returns a representative source span for this expression, derived from an existing
     /// token in the node (no positions are stored separately). Used to attach line/column
     /// information to semantic diagnostics. Returns `None` only when nothing positional is

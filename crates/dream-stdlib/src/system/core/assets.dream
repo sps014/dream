@@ -1,0 +1,7 @@
+module system.core;
+
+public static class Assets {
+    /// Copies an embedded asset into a new owned byte array; name must be a string literal.
+    @intrinsic(Intrinsic.AssetBytes)
+    public static extern fun bytes(name: string): byte[];
+}

@@ -17,6 +17,7 @@ pub fn merge_generated_file<'a>(
     arena: &'a Bump,
     acc: &mut ProgramAccumulator<'a>,
     path: &str,
+    generator: &str,
     text: String,
     diagnostics: &mut DiagnosticBag,
 ) -> Result<(), Error> {
@@ -29,6 +30,7 @@ pub fn merge_generated_file<'a>(
     diagnostics.extend(&local);
     let ast = parsed?;
     let program = ast.get_root();
+    super::collisions::check(acc, program, path, generator, diagnostics);
     let loaded = dream_stdlib::resolve_packages_to_load(&acc.requested_std_packages);
     for import in &program.imports {
         let name = import.module_name.text.as_str();

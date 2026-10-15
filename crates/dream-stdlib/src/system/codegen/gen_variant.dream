@@ -1,0 +1,20 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+public class GenVariant {
+    public id: string;
+    public name: string;
+    public fields: List<GenField>;
+    public location: GenLocation;
+
+    // Creates the snapshot model from the supplied values.
+    public constructor(id: string, name: string, fields: List<GenField>, location: GenLocation) {
+        this.id = id;
+        this.name = name;
+        this.fields = fields;
+        this.location = location;
+    }
+}

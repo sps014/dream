@@ -1,0 +1,31 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+// Typed attribute access. `A` is an `@attribute` struct; the compiler gives every such type the
+// statics these forward to.
+public static class GenAttributes {
+    @intrinsic(Intrinsic.GenAttributeId)
+    // Returns the compiler identity of an attribute type.
+    public static extern fun id<A>(): string;
+
+    @intrinsic(Intrinsic.GenAttributeDecode)
+    // Decodes the first matching attribute value.
+    public static extern fun decode<A>(borrow attrs: List<GenAttribute>): Option<A>;
+
+    @intrinsic(Intrinsic.GenAttributeDecodeAll)
+    // Decodes every matching attribute value in source order.
+    public static extern fun decode_all<A>(borrow attrs: List<GenAttribute>): List<A>;
+
+    // Tests whether an attribute with the given compiler identity is present.
+    public static fun has(borrow attrs: List<GenAttribute>, borrow id: string): bool {
+        for (let a in attrs) {
+            if a.id == id {
+                return true;
+            }
+        }
+        return false;
+    }
+}

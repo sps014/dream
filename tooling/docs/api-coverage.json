@@ -237,6 +237,55 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/codegen/artifact_builder.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-artifact-builder.md",
+    "declarations": [
+      {
+        "signature": "public class ArtifactBuilder",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/codegen-artifact-builder.md"
+      },
+      {
+        "signature": "public source_map: GenSourceMap",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/codegen-artifact-builder.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates an empty builder.",
+        "line": 14,
+        "page": "reference/api/codegen-artifact-builder.md"
+      },
+      {
+        "signature": "public fun append(text: string): void",
+        "description": "Appends text and advances the source-map position.",
+        "line": 22,
+        "page": "reference/api/codegen-artifact-builder.md"
+      },
+      {
+        "signature": "public fun mapped(text: string, target: string): void",
+        "description": "Appends text mapped to the given snapshot node identity.",
+        "line": 36,
+        "page": "reference/api/codegen-artifact-builder.md"
+      },
+      {
+        "signature": "public fun line(text: string): void",
+        "description": "Appends a complete line of artifact text.",
+        "line": 45,
+        "page": "reference/api/codegen-artifact-builder.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns the accumulated artifact text.",
+        "line": 50,
+        "page": "reference/api/codegen-artifact-builder.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/codegen/attributes.dream",
     "package": "system.codegen",
     "page": "reference/api/codegen-attributes.md",
@@ -294,61 +343,729 @@
         "description": "Makes the generator expand `name { ... }` syntax blocks, where `name` is the generator's own name.",
         "line": 29,
         "page": "reference/api/codegen-attributes.md"
+      },
+      {
+        "signature": "public struct UsesToolAttribute",
+        "description": "Declares a pinned compiler-run tool that this generator may request.",
+        "line": 34,
+        "page": "reference/api/codegen-attributes.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 35,
+        "page": "reference/api/codegen-attributes.md"
       }
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/codegen/codegen.dream",
+    "source": "crates/dream-stdlib/src/system/codegen/code_builder.dream",
     "package": "system.codegen",
-    "page": "reference/api/codegen-codegen.md",
+    "page": "reference/api/codegen-code-builder.md",
     "declarations": [
       {
         "signature": "public class CodeBuilder",
         "description": "Accumulates Dream source lines for generator `emit_extend` / `emit_file` bodies. Indentation mirrors C# / Rust `IndentedTextWriter`: `indent()` / `dedent()` adjust depth; `line` / `append` apply the current indent only at the start of a line.",
-        "line": 9,
-        "page": "reference/api/codegen-codegen.md"
+        "line": 10,
+        "page": "reference/api/codegen-code-builder.md"
       },
       {
         "signature": "public constructor()",
         "description": "Creates a builder that indents with four spaces.",
-        "line": 16,
-        "page": "reference/api/codegen-codegen.md"
+        "line": 17,
+        "page": "reference/api/codegen-code-builder.md"
       },
       {
         "signature": "public static fun with_spaces(spaces: int): CodeBuilder",
         "description": "Creates a builder whose indent unit is `spaces` ASCII spaces.",
-        "line": 32,
-        "page": "reference/api/codegen-codegen.md"
+        "line": 33,
+        "page": "reference/api/codegen-code-builder.md"
       },
       {
         "signature": "public fun indent(): void",
         "description": "Increases the indent depth by one unit.",
-        "line": 62,
-        "page": "reference/api/codegen-codegen.md"
+        "line": 63,
+        "page": "reference/api/codegen-code-builder.md"
       },
       {
         "signature": "public fun dedent(): void",
         "description": "Decreases the indent depth by one unit (no-op at zero).",
-        "line": 67,
-        "page": "reference/api/codegen-codegen.md"
+        "line": 68,
+        "page": "reference/api/codegen-code-builder.md"
       },
       {
         "signature": "public fun line(text: string): void",
         "description": "Writes `text` as a full line at the current indent, then starts a new line.",
-        "line": 74,
-        "page": "reference/api/codegen-codegen.md"
+        "line": 75,
+        "page": "reference/api/codegen-code-builder.md"
       },
       {
         "signature": "public fun append(text: string): void",
         "description": "Appends `text` without a trailing newline (indent applied only at line start).",
-        "line": 81,
-        "page": "reference/api/codegen-codegen.md"
+        "line": 82,
+        "page": "reference/api/codegen-code-builder.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns the accumulated source text.",
-        "line": 87,
-        "page": "reference/api/codegen-codegen.md"
+        "line": 88,
+        "page": "reference/api/codegen-code-builder.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_attr_arg.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-attr-arg.md",
+    "declarations": [
+      {
+        "signature": "public class GenAttrArg",
+        "description": "One attribute argument as written: `kind` is `string`, `int`, `float`, `double`, `bool` or `enum`; `value` is the unquoted string, literal text, or dotted enum path.",
+        "line": 9,
+        "page": "reference/api/codegen-gen-attr-arg.md"
+      },
+      {
+        "signature": "public kind: string",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-attr-arg.md"
+      },
+      {
+        "signature": "public value: string",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/codegen-gen-attr-arg.md"
+      },
+      {
+        "signature": "public constructor(kind: string, value: string)",
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 14,
+        "page": "reference/api/codegen-gen-attr-arg.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_attribute.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-attribute.md",
+    "declarations": [
+      {
+        "signature": "public class GenAttribute",
+        "description": "One attribute use. Prefer the typed `GenAttributes.decode<A>()` (via `attribute<A>()` on a node); the positional readers below are what decoders are built from.",
+        "line": 9,
+        "page": "reference/api/codegen-gen-attribute.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "`module::name` of the `@attribute` type (`system.json::JsonAttribute`).",
+        "line": 11,
+        "page": "reference/api/codegen-gen-attribute.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/codegen-gen-attribute.md"
+      },
+      {
+        "signature": "public args: List<GenAttrArg>",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/codegen-gen-attribute.md"
+      },
+      {
+        "signature": "public constructor(id: string, name: string, args: List<GenAttrArg>)",
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 16,
+        "page": "reference/api/codegen-gen-attribute.md"
+      },
+      {
+        "signature": "public fun string_arg(i: int): string",
+        "description": "Returns the requested model information.",
+        "line": 30,
+        "page": "reference/api/codegen-gen-attribute.md"
+      },
+      {
+        "signature": "public fun int_arg(i: int): int",
+        "description": "Returns the requested model information.",
+        "line": 35,
+        "page": "reference/api/codegen-gen-attribute.md"
+      },
+      {
+        "signature": "public fun long_arg(i: int): long",
+        "description": "Returns the requested model information.",
+        "line": 40,
+        "page": "reference/api/codegen-gen-attribute.md"
+      },
+      {
+        "signature": "public fun double_arg(i: int): double",
+        "description": "Returns the requested model information.",
+        "line": 45,
+        "page": "reference/api/codegen-gen-attribute.md"
+      },
+      {
+        "signature": "public fun float_arg(i: int): float",
+        "description": "Returns the requested model information.",
+        "line": 50,
+        "page": "reference/api/codegen-gen-attribute.md"
+      },
+      {
+        "signature": "public fun bool_arg(i: int): bool",
+        "description": "Returns the requested model information.",
+        "line": 55,
+        "page": "reference/api/codegen-gen-attribute.md"
+      },
+      {
+        "signature": "public fun enum_member(i: int): string",
+        "description": "The member name of an enum argument (`Get` for `HttpMethod.Get`).",
+        "line": 60,
+        "page": "reference/api/codegen-gen-attribute.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_attributes.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-attributes.md",
+    "declarations": [
+      {
+        "signature": "public static class GenAttributes",
+        "description": "Typed attribute access. `A` is an `@attribute` struct; the compiler gives every such type the statics these forward to.",
+        "line": 9,
+        "page": "reference/api/codegen-gen-attributes.md"
+      },
+      {
+        "signature": "public static extern fun id<A>(): string",
+        "description": "Returns the compiler identity of an attribute type.",
+        "line": 12,
+        "page": "reference/api/codegen-gen-attributes.md"
+      },
+      {
+        "signature": "public static extern fun decode<A>(borrow attrs: List<GenAttribute>): Option<A>",
+        "description": "Decodes the first matching attribute value.",
+        "line": 16,
+        "page": "reference/api/codegen-gen-attributes.md"
+      },
+      {
+        "signature": "public static extern fun decode_all<A>(borrow attrs: List<GenAttribute>): List<A>",
+        "description": "Decodes every matching attribute value in source order.",
+        "line": 20,
+        "page": "reference/api/codegen-gen-attributes.md"
+      },
+      {
+        "signature": "public static fun has(borrow attrs: List<GenAttribute>, borrow id: string): bool",
+        "description": "Tests whether an attribute with the given compiler identity is present.",
+        "line": 23,
+        "page": "reference/api/codegen-gen-attributes.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_body.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-body.md",
+    "declarations": [
+      {
+        "signature": "public class GenBody",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/codegen-gen-body.md"
+      },
+      {
+        "signature": "public statements: List<GenStmt>",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/codegen-gen-body.md"
+      },
+      {
+        "signature": "public constructor(borrow v: JsonValue)",
+        "description": "Creates this model from snapshot JSON.",
+        "line": 11,
+        "page": "reference/api/codegen-gen-body.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_body_decode.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-body-decode.md",
+    "declarations": [
+      {
+        "signature": "public enum ExprKind",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Pattern",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Unknown",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Literal",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Identifier",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Array",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "ArrayRepeat",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Tuple",
+        "description": "",
+        "line": 14,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Set",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Map",
+        "description": "",
+        "line": 16,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Binary",
+        "description": "",
+        "line": 17,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Unary",
+        "description": "",
+        "line": 18,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "IncDec",
+        "description": "",
+        "line": 19,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Parenthesized",
+        "description": "",
+        "line": 20,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "FunctionCall",
+        "description": "",
+        "line": 21,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Call",
+        "description": "",
+        "line": 22,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Index",
+        "description": "",
+        "line": 23,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Cast",
+        "description": "",
+        "line": 24,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "SizeOf",
+        "description": "",
+        "line": 25,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "AlignOf",
+        "description": "",
+        "line": 26,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "NameOf",
+        "description": "",
+        "line": 27,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "DeclOf",
+        "description": "",
+        "line": 28,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "TypeOf",
+        "description": "",
+        "line": 29,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Member",
+        "description": "",
+        "line": 30,
+        "page": "reference/api/codegen-gen-body-decode-1.md"
+      },
+      {
+        "signature": "Is",
+        "description": "",
+        "line": 31,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "MethodCall",
+        "description": "",
+        "line": 32,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "Ternary",
+        "description": "",
+        "line": 33,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "Await",
+        "description": "",
+        "line": 34,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "Switch",
+        "description": "",
+        "line": 35,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "Try",
+        "description": "",
+        "line": 36,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "Lambda",
+        "description": "",
+        "line": 37,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "NamedArg",
+        "description": "",
+        "line": 38,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "Ref",
+        "description": "",
+        "line": 39,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "SyntaxBlock",
+        "description": "",
+        "line": 40,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "public enum StmtKind",
+        "description": "",
+        "line": 43,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "Block",
+        "description": "",
+        "line": 44,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "Unknown",
+        "description": "",
+        "line": 45,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "Assignment",
+        "description": "",
+        "line": 46,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "IndexAssignment",
+        "description": "",
+        "line": 47,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "MemberAssignment",
+        "description": "",
+        "line": 48,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "Declaration",
+        "description": "",
+        "line": 49,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "TupleDeclaration",
+        "description": "",
+        "line": 50,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "FunctionInvocation",
+        "description": "",
+        "line": 51,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "MethodInvocation",
+        "description": "",
+        "line": 52,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "Return",
+        "description": "",
+        "line": 53,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "Yield",
+        "description": "",
+        "line": 54,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "AwaitForEach",
+        "description": "",
+        "line": 55,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "If",
+        "description": "",
+        "line": 56,
+        "page": "reference/api/codegen-gen-body-decode-2.md"
+      },
+      {
+        "signature": "While",
+        "description": "",
+        "line": 57,
+        "page": "reference/api/codegen-gen-body-decode-3.md"
+      },
+      {
+        "signature": "DoWhile",
+        "description": "",
+        "line": 58,
+        "page": "reference/api/codegen-gen-body-decode-3.md"
+      },
+      {
+        "signature": "For",
+        "description": "",
+        "line": 59,
+        "page": "reference/api/codegen-gen-body-decode-3.md"
+      },
+      {
+        "signature": "ForEach",
+        "description": "",
+        "line": 60,
+        "page": "reference/api/codegen-gen-body-decode-3.md"
+      },
+      {
+        "signature": "Labeled",
+        "description": "",
+        "line": 61,
+        "page": "reference/api/codegen-gen-body-decode-3.md"
+      },
+      {
+        "signature": "Break",
+        "description": "",
+        "line": 62,
+        "page": "reference/api/codegen-gen-body-decode-3.md"
+      },
+      {
+        "signature": "Continue",
+        "description": "",
+        "line": 63,
+        "page": "reference/api/codegen-gen-body-decode-3.md"
+      },
+      {
+        "signature": "Expression",
+        "description": "",
+        "line": 64,
+        "page": "reference/api/codegen-gen-body-decode-3.md"
+      },
+      {
+        "signature": "Await",
+        "description": "",
+        "line": 65,
+        "page": "reference/api/codegen-gen-body-decode-3.md"
+      },
+      {
+        "signature": "Switch",
+        "description": "",
+        "line": 66,
+        "page": "reference/api/codegen-gen-body-decode-3.md"
+      },
+      {
+        "signature": "Lock",
+        "description": "",
+        "line": 67,
+        "page": "reference/api/codegen-gen-body-decode-3.md"
+      },
+      {
+        "signature": "Defer",
+        "description": "",
+        "line": 68,
+        "page": "reference/api/codegen-gen-body-decode-3.md"
+      },
+      {
+        "signature": "Overflow",
+        "description": "",
+        "line": 69,
+        "page": "reference/api/codegen-gen-body-decode-3.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_call_site.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-call-site.md",
+    "declarations": [
+      {
+        "signature": "public class GenCallSite",
+        "description": "A call of one of the generator's `@on_call` functions.",
+        "line": 8,
+        "page": "reference/api/codegen-gen-call-site.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/codegen-gen-call-site.md"
+      },
+      {
+        "signature": "public callee: string",
+        "description": "Identity of the callee (compare with `declof(Json.serialize)`).",
+        "line": 11,
+        "page": "reference/api/codegen-gen-call-site.md"
+      },
+      {
+        "signature": "public type_args: List<GenTypeRef>",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/codegen-gen-call-site.md"
+      },
+      {
+        "signature": "public arg_types: List<GenTypeRef>",
+        "description": "Statically known argument types (`TypeRefKind.Unknown` when not inferable).",
+        "line": 14,
+        "page": "reference/api/codegen-gen-call-site.md"
+      },
+      {
+        "signature": "public location: GenLocation",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/codegen-gen-call-site.md"
+      },
+      {
+        "signature": "public constructor(id: string, callee: string, type_args: List<GenTypeRef>, arg_types: List<GenTypeRef>, location: GenLocation)",
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 18,
+        "page": "reference/api/codegen-gen-call-site.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_compilation_error.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-compilation-error.md",
+    "declarations": [
+      {
+        "signature": "public class GenCompilationError",
+        "description": "",
+        "line": 5,
+        "page": "reference/api/codegen-gen-compilation-error.md"
+      },
+      {
+        "signature": "public target: string",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/codegen-gen-compilation-error.md"
+      },
+      {
+        "signature": "public message: string",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/codegen-gen-compilation-error.md"
+      },
+      {
+        "signature": "public constructor(borrow v: JsonValue)",
+        "description": "Decodes a pre-generation error restricted to this generator's triggered declarations.",
+        "line": 10,
+        "page": "reference/api/codegen-gen-compilation-error.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_constant.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-constant.md",
+    "declarations": [
+      {
+        "signature": "public class GenConstant",
+        "description": "",
+        "line": 5,
+        "page": "reference/api/codegen-gen-constant.md"
+      },
+      {
+        "signature": "public kind: string",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/codegen-gen-constant.md"
+      },
+      {
+        "signature": "public value: string",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/codegen-gen-constant.md"
+      },
+      {
+        "signature": "public constructor(borrow v: JsonValue)",
+        "description": "Decodes an exact compile-time scalar value; absence means no safe constant was inferred.",
+        "line": 10,
+        "page": "reference/api/codegen-gen-constant.md"
       }
     ]
   },
@@ -406,690 +1123,767 @@
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
+        "signature": "public fun phase(): int",
+        "description": "The compiler-tool feedback round, starting at zero.",
+        "line": 112,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun referenced_decls(): List<GenDecl>",
+        "description": "Transitive dependencies of the declarations selected by this generator.",
+        "line": 115,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun referenced_functions(): List<GenFunction>",
+        "description": "Top-level functions referenced by selected declarations or their dependencies.",
+        "line": 118,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun find_decl(borrow id: string): Option<GenDecl>",
+        "description": "Looks up a selected or referenced declaration by its compiler identity.",
+        "line": 121,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun find_function(borrow id: string): Option<GenFunction>",
+        "description": "Looks up a selected or referenced function, including methods.",
+        "line": 128,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun type_of(borrow expr: GenExpr): GenTypeRef",
+        "description": "The inferred type, or an explicit Unknown when pre-analysis could not resolve it.",
+        "line": 141,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun type_of(borrow stmt: GenStmt): GenTypeRef",
+        "description": "The inferred type attached to a statement, or Unknown when it has no value type.",
+        "line": 144,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun symbol_of(borrow expr: GenExpr): string",
+        "description": "The resolved symbol identity, or an empty string for an unresolved expression.",
+        "line": 147,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun find_symbol(borrow id: string): Option<GenSymbol>",
+        "description": "Looks up a signature view anywhere in the pre-generation compilation.",
+        "line": 150,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun compilation_errors(): List<GenCompilationError>",
+        "description": "Errors found before generation within declarations selected by this generator's triggers.",
+        "line": 159,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun implementations_of(borrow id: string): List<GenSymbol>",
+        "description": "Classes and structs implementing an interface, including inherited interface relations.",
+        "line": 162,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
+        "signature": "public fun subtypes_of(borrow id: string): List<GenSymbol>",
+        "description": "Signature views whose declared interface ancestry includes the given identity.",
+        "line": 171,
+        "page": "reference/api/codegen-gen-context-1.md"
+      },
+      {
         "signature": "public fun type_index(): List<GenIndexEntry>",
         "description": "Every type in the program, by name and kind.",
-        "line": 112,
+        "line": 200,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun find_type(borrow name: string): Option<GenIndexEntry>",
         "description": "The index entry named `name`, if the program declares such a type.",
-        "line": 117,
+        "line": 205,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun syntax_blocks(): List<GenSyntaxBlock>",
         "description": "`name { ... }` sites introduced by this generator's name (`@syntax_block` generators).",
-        "line": 127,
+        "line": 215,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun call_sites(): List<GenCallSite>",
         "description": "Calls of the functions named in this generator's `@on_call(...)`.",
-        "line": 132,
+        "line": 220,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun options<T>(): Result<T, ParseError>",
         "description": "`dream.toml` `[[generators]].options`, decoded into the `@json` type `T`.",
-        "line": 137,
-        "page": "reference/api/codegen-gen-context-1.md"
+        "line": 225,
+        "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun option_or(borrow key: string, fallback: string): string",
         "description": "One option as text (`fallback` when unset).",
-        "line": 142,
-        "page": "reference/api/codegen-gen-context-1.md"
+        "line": 230,
+        "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun additional_files(): List<GenFile>",
         "description": "`dream.toml` `[[generators]].additional_files`, read by the compiler.",
-        "line": 161,
-        "page": "reference/api/codegen-gen-context-1.md"
+        "line": 249,
+        "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun replace(borrow block: GenSyntaxBlock, source: string): void",
         "description": "Rewrites `block`'s site to the Dream expression `source`.",
-        "line": 166,
-        "page": "reference/api/codegen-gen-context-1.md"
+        "line": 254,
+        "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun emit_file(path: string, source: string): void",
         "description": "Adds a complete Dream source file at the generator-relative path `path` (`models.json.dream`). It is written under `.dream/generated/<entry>/<generator>/` and compiled with the program.",
-        "line": 176,
-        "page": "reference/api/codegen-gen-context-1.md"
+        "line": 264,
+        "page": "reference/api/codegen-gen-context-2.md"
+      },
+      {
+        "signature": "public fun tools(): List<GenToolInfo>",
+        "description": "Declared tools with the versions and fingerprints used in this compilation.",
+        "line": 273,
+        "page": "reference/api/codegen-gen-context-2.md"
+      },
+      {
+        "signature": "public fun tool_results(): List<GenToolResult>",
+        "description": "Compiler-collected feedback from the previous phase.",
+        "line": 276,
+        "page": "reference/api/codegen-gen-context-2.md"
+      },
+      {
+        "signature": "public fun run_tool(id: string, tool: string, args: List<string>, inputs: List<string>, outputs: List<string>): void",
+        "description": "Requests a declared tool; the compiler reruns this generator with its results.",
+        "line": 279,
+        "page": "reference/api/codegen-gen-context-2.md"
+      },
+      {
+        "signature": "public fun emit_asset(name: string, source: string): void",
+        "description": "Embeds an artifact or tool output into every compilation target.",
+        "line": 291,
+        "page": "reference/api/codegen-gen-context-2.md"
+      },
+      {
+        "signature": "public fun emit_asset(name: string, source: string, targets: List<string>): void",
+        "description": "Embeds an artifact or tool output for the selected target triples or families.",
+        "line": 296,
+        "page": "reference/api/codegen-gen-context-2.md"
+      },
+      {
+        "signature": "public fun consume(borrow f: GenFunction): void",
+        "description": "Removes a selected or referenced user function from the compiled program.",
+        "line": 306,
+        "page": "reference/api/codegen-gen-context-2.md"
+      },
+      {
+        "signature": "public fun emit_artifact(path: string, contents: string, borrow map: GenSourceMap, publish: bool = false): void",
+        "description": "Emits a non-Dream file with source mappings under this generator's directory.",
+        "line": 314,
+        "page": "reference/api/codegen-gen-context-2.md"
+      },
+      {
+        "signature": "public fun error_in_artifact(path: string, line: int, column: int, message: string): void",
+        "description": "Reports an artifact location through its source map to the originating Dream node.",
+        "line": 325,
+        "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun emit_extend(borrow decl: GenDecl, body: string): void",
         "description": "Adds `extend <decl> { <body> }` to this generator's `extends.dream` file.",
-        "line": 185,
-        "page": "reference/api/codegen-gen-context-1.md"
+        "line": 337,
+        "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun error_at(borrow target: string, message: string): void",
         "description": "An error at the node with identity `target` (any model node's `id`), or at the generator itself for an empty `target`.",
-        "line": 207,
-        "page": "reference/api/codegen-gen-context-1.md"
+        "line": 359,
+        "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun warning_at(borrow target: string, message: string): void",
-        "description": "",
-        "line": 211,
-        "page": "reference/api/codegen-gen-context-1.md"
+        "description": "Reports a warning at this model node.",
+        "line": 364,
+        "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun error(message: string): void",
-        "description": "",
-        "line": 215,
-        "page": "reference/api/codegen-gen-context-1.md"
+        "description": "Reports an error at this model node or at the generator when no node is supplied.",
+        "line": 369,
+        "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun error(borrow block: GenSyntaxBlock, message: string): void",
-        "description": "",
-        "line": 219,
-        "page": "reference/api/codegen-gen-context-1.md"
+        "description": "Reports an error at this model node or at the generator when no node is supplied.",
+        "line": 374,
+        "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun error(borrow decl: GenDecl, message: string): void",
-        "description": "",
-        "line": 223,
-        "page": "reference/api/codegen-gen-context-1.md"
+        "description": "Reports an error at this model node or at the generator when no node is supplied.",
+        "line": 379,
+        "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun error(borrow field: GenField, message: string): void",
-        "description": "",
-        "line": 227,
-        "page": "reference/api/codegen-gen-context-1.md"
+        "description": "Reports an error at this model node or at the generator when no node is supplied.",
+        "line": 384,
+        "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun error(borrow call: GenCallSite, message: string): void",
-        "description": "",
-        "line": 231,
+        "description": "Reports an error at this model node or at the generator when no node is supplied.",
+        "line": 389,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun warning(borrow decl: GenDecl, message: string): void",
-        "description": "",
-        "line": 235,
+        "description": "Reports a warning at this model node.",
+        "line": 394,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun has_errors(): bool",
-        "description": "",
-        "line": 239,
+        "description": "Returns the requested model information.",
+        "line": 399,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun log(message: string): void",
         "description": "A line shown with `dream -v` / `dream generate --explain`.",
-        "line": 244,
+        "line": 404,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public async fun finish(): int",
         "description": "Writes the result for the compiler; the harness returns this as the exit code.",
-        "line": 249,
-        "page": "reference/api/codegen-gen-context-2.md"
+        "line": 409,
+        "page": "reference/api/codegen-gen-context-3.md"
       }
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/codegen/gen_decls.dream",
+    "source": "crates/dream-stdlib/src/system/codegen/gen_decl.dream",
     "package": "system.codegen",
-    "page": "reference/api/codegen-gen-decls.md",
+    "page": "reference/api/codegen-gen-decl.md",
     "declarations": [
-      {
-        "signature": "public class GenField",
-        "description": "A field of a class, struct or union variant.",
-        "line": 7,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public id: string",
-        "description": "",
-        "line": 8,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public name: string",
-        "description": "",
-        "line": 9,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public ty: GenTypeRef",
-        "description": "",
-        "line": 10,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public visibility: string",
-        "description": "",
-        "line": 11,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public attributes: List<GenAttribute>",
-        "description": "",
-        "line": 12,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public location: GenLocation",
-        "description": "",
-        "line": 13,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public constructor(id: string, name: string, ty: GenTypeRef, visibility: string, attributes: List<GenAttribute>, location: GenLocation)",
-        "description": "",
-        "line": 15,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public fun attribute<A>(): Option<A>",
-        "description": "The first `@A` on this field, decoded into the attribute struct.",
-        "line": 25,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public fun attributes_of<A>(): List<A>",
-        "description": "",
-        "line": 29,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public fun has<A>(): bool",
-        "description": "",
-        "line": 33,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public class GenVariant",
-        "description": "",
-        "line": 38,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public id: string",
-        "description": "",
-        "line": 39,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public name: string",
-        "description": "",
-        "line": 40,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public fields: List<GenField>",
-        "description": "",
-        "line": 41,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public location: GenLocation",
-        "description": "",
-        "line": 42,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public constructor(id: string, name: string, fields: List<GenField>, location: GenLocation)",
-        "description": "",
-        "line": 44,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public class GenParam",
-        "description": "",
-        "line": 52,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public name: string",
-        "description": "",
-        "line": 53,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public ty: GenTypeRef",
-        "description": "",
-        "line": 54,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public attributes: List<GenAttribute>",
-        "description": "",
-        "line": 55,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public constructor(name: string, ty: GenTypeRef, attributes: List<GenAttribute>)",
-        "description": "",
-        "line": 57,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public fun attribute<A>(): Option<A>",
-        "description": "",
-        "line": 63,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public fun has<A>(): bool",
-        "description": "",
-        "line": 67,
-        "page": "reference/api/codegen-gen-decls-1.md"
-      },
-      {
-        "signature": "public class GenFunction",
-        "description": "A method, or a top-level function.",
-        "line": 73,
-        "page": "reference/api/codegen-gen-decls-2.md"
-      },
-      {
-        "signature": "public id: string",
-        "description": "",
-        "line": 74,
-        "page": "reference/api/codegen-gen-decls-2.md"
-      },
-      {
-        "signature": "public name: string",
-        "description": "",
-        "line": 75,
-        "page": "reference/api/codegen-gen-decls-2.md"
-      },
-      {
-        "signature": "public is_static: bool",
-        "description": "",
-        "line": 76,
-        "page": "reference/api/codegen-gen-decls-2.md"
-      },
-      {
-        "signature": "public is_async: bool",
-        "description": "",
-        "line": 77,
-        "page": "reference/api/codegen-gen-decls-2.md"
-      },
-      {
-        "signature": "public visibility: string",
-        "description": "",
-        "line": 78,
-        "page": "reference/api/codegen-gen-decls-2.md"
-      },
-      {
-        "signature": "public generics: List<string>",
-        "description": "",
-        "line": 79,
-        "page": "reference/api/codegen-gen-decls-2.md"
-      },
-      {
-        "signature": "public params: List<GenParam>",
-        "description": "",
-        "line": 80,
-        "page": "reference/api/codegen-gen-decls-2.md"
-      },
-      {
-        "signature": "public ret: GenTypeRef",
-        "description": "",
-        "line": 81,
-        "page": "reference/api/codegen-gen-decls-2.md"
-      },
-      {
-        "signature": "public attributes: List<GenAttribute>",
-        "description": "",
-        "line": 82,
-        "page": "reference/api/codegen-gen-decls-2.md"
-      },
-      {
-        "signature": "public location: GenLocation",
-        "description": "",
-        "line": 83,
-        "page": "reference/api/codegen-gen-decls-2.md"
-      },
-      {
-        "signature": "public constructor(id: string, name: string, is_static: bool, is_async: bool, visibility: string, generics: List<string>, params: List<GenParam>, ret: GenTypeRef, attributes: List<GenAttribute>, location: GenLocation)",
-        "description": "",
-        "line": 85,
-        "page": "reference/api/codegen-gen-decls-2.md"
-      },
-      {
-        "signature": "public fun attribute<A>(): Option<A>",
-        "description": "",
-        "line": 98,
-        "page": "reference/api/codegen-gen-decls-2.md"
-      },
-      {
-        "signature": "public fun has<A>(): bool",
-        "description": "",
-        "line": 102,
-        "page": "reference/api/codegen-gen-decls-2.md"
-      },
       {
         "signature": "public class GenDecl",
         "description": "A class, struct, union, enum or interface the generator's triggers selected.",
-        "line": 108,
-        "page": "reference/api/codegen-gen-decls-2.md"
+        "line": 8,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public id: string",
         "description": "",
-        "line": 109,
-        "page": "reference/api/codegen-gen-decls-2.md"
+        "line": 9,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public name: string",
         "description": "",
-        "line": 110,
-        "page": "reference/api/codegen-gen-decls-2.md"
+        "line": 10,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public kind: DeclKind",
         "description": "",
-        "line": 111,
-        "page": "reference/api/codegen-gen-decls-2.md"
+        "line": 11,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public module_name: string",
         "description": "",
-        "line": 112,
-        "page": "reference/api/codegen-gen-decls-2.md"
+        "line": 12,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public visibility: string",
         "description": "",
-        "line": 113,
-        "page": "reference/api/codegen-gen-decls-2.md"
+        "line": 13,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public location: GenLocation",
         "description": "",
-        "line": 114,
-        "page": "reference/api/codegen-gen-decls-2.md"
+        "line": 14,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public generics: List<string>",
         "description": "",
-        "line": 115,
-        "page": "reference/api/codegen-gen-decls-2.md"
+        "line": 15,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public interfaces: List<GenTypeRef>",
         "description": "",
-        "line": 116,
-        "page": "reference/api/codegen-gen-decls-2.md"
+        "line": 16,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public attributes: List<GenAttribute>",
         "description": "",
-        "line": 117,
-        "page": "reference/api/codegen-gen-decls-2.md"
+        "line": 17,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public fields: List<GenField>",
         "description": "",
-        "line": 118,
-        "page": "reference/api/codegen-gen-decls-3.md"
+        "line": 18,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public methods: List<GenFunction>",
         "description": "",
-        "line": 119,
-        "page": "reference/api/codegen-gen-decls-3.md"
+        "line": 19,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public variants: List<GenVariant>",
         "description": "",
-        "line": 120,
-        "page": "reference/api/codegen-gen-decls-3.md"
+        "line": 20,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public constructor(id: string, name: string, kind: DeclKind, module_name: string, visibility: string, location: GenLocation, generics: List<string>, interfaces: List<GenTypeRef>, attributes: List<GenAttribute>, fields: List<GenField>, methods: List<GenFunction>, variants: List<GenVariant>)",
-        "description": "",
-        "line": 122,
-        "page": "reference/api/codegen-gen-decls-3.md"
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 23,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public fun attribute<A>(): Option<A>",
-        "description": "",
-        "line": 137,
-        "page": "reference/api/codegen-gen-decls-3.md"
+        "description": "Returns the requested model information.",
+        "line": 39,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public fun has<A>(): bool",
-        "description": "",
-        "line": 141,
-        "page": "reference/api/codegen-gen-decls-3.md"
+        "description": "Tests whether the requested attribute is attached to this model node.",
+        "line": 44,
+        "page": "reference/api/codegen-gen-decl.md"
       },
       {
         "signature": "public fun self_type(): string",
         "description": "`Name` or `Name<T, U>`: the spelling of this type inside its own generic scope.",
-        "line": 146,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public class GenIndexEntry",
-        "description": "Every type in the program (user and stdlib), names and kinds only.",
-        "line": 164,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public id: string",
-        "description": "",
-        "line": 165,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public name: string",
-        "description": "",
-        "line": 166,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public kind: DeclKind",
-        "description": "",
-        "line": 167,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public constructor(id: string, name: string, kind: DeclKind)",
-        "description": "",
-        "line": 169,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public class GenSyntaxBlock",
-        "description": "A `name { ... }` site of this generator (`@syntax_block` generators only).",
-        "line": 177,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public id: string",
-        "description": "",
-        "line": 178,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public name: string",
-        "description": "",
-        "line": 179,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public body: string",
-        "description": "Reconstructed body text; splices appear as `{expr}`.",
-        "line": 181,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public splices: List<string>",
-        "description": "Dream source of each `{ ... }` splice, in order.",
-        "line": 183,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public location: GenLocation",
-        "description": "",
-        "line": 184,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public constructor(id: string, name: string, body: string, splices: List<string>, location: GenLocation)",
-        "description": "",
-        "line": 186,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public class GenCallSite",
-        "description": "A call of one of the generator's `@on_call` functions.",
-        "line": 196,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public id: string",
-        "description": "",
-        "line": 197,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public callee: string",
-        "description": "Identity of the callee (compare with `declof(Json.serialize)`).",
-        "line": 199,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public type_args: List<GenTypeRef>",
-        "description": "",
-        "line": 200,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public arg_types: List<GenTypeRef>",
-        "description": "Statically known argument types (`TypeRefKind.Unknown` when not inferable).",
-        "line": 202,
-        "page": "reference/api/codegen-gen-decls-3.md"
-      },
-      {
-        "signature": "public location: GenLocation",
-        "description": "",
-        "line": 203,
-        "page": "reference/api/codegen-gen-decls-4.md"
-      },
-      {
-        "signature": "public constructor(id: string, callee: string, type_args: List<GenTypeRef>, arg_types: List<GenTypeRef>, location: GenLocation)",
-        "description": "",
-        "line": 205,
-        "page": "reference/api/codegen-gen-decls-4.md"
-      },
-      {
-        "signature": "public class GenFile",
-        "description": "A `dream.toml` `additional_files` entry.",
-        "line": 215,
-        "page": "reference/api/codegen-gen-decls-4.md"
-      },
-      {
-        "signature": "public path: string",
-        "description": "",
-        "line": 216,
-        "page": "reference/api/codegen-gen-decls-4.md"
-      },
-      {
-        "signature": "public contents: string",
-        "description": "",
-        "line": 217,
-        "page": "reference/api/codegen-gen-decls-4.md"
-      },
-      {
-        "signature": "public constructor(path: string, contents: string)",
-        "description": "",
-        "line": 219,
-        "page": "reference/api/codegen-gen-decls-4.md"
+        "line": 49,
+        "page": "reference/api/codegen-gen-decl.md"
       }
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/codegen/gen_decode.dream",
+    "source": "crates/dream-stdlib/src/system/codegen/gen_expr.dream",
     "package": "system.codegen",
-    "page": "reference/api/codegen-gen-decode.md",
+    "page": "reference/api/codegen-gen-expr.md",
     "declarations": [
       {
-        "signature": "public class GenSnapshot",
-        "description": "Decoded snapshot behind a `GenContext`.",
-        "line": 161,
-        "page": "reference/api/codegen-gen-decode.md"
+        "signature": "public class GenExpr",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/codegen-gen-expr.md"
       },
       {
-        "signature": "public version: int",
+        "signature": "public id: string",
         "description": "",
-        "line": 162,
-        "page": "reference/api/codegen-gen-decode.md"
+        "line": 9,
+        "page": "reference/api/codegen-gen-expr.md"
       },
       {
-        "signature": "public generator: string",
+        "signature": "public kind: ExprKind",
         "description": "",
-        "line": 163,
-        "page": "reference/api/codegen-gen-decode.md"
+        "line": 10,
+        "page": "reference/api/codegen-gen-expr.md"
       },
       {
-        "signature": "public generator_id: string",
+        "signature": "public statement_kind: StmtKind",
         "description": "",
-        "line": 164,
-        "page": "reference/api/codegen-gen-decode.md"
+        "line": 11,
+        "page": "reference/api/codegen-gen-expr.md"
       },
       {
-        "signature": "public target: string",
+        "signature": "public span: GenSpan",
         "description": "",
-        "line": 165,
-        "page": "reference/api/codegen-gen-decode.md"
+        "line": 12,
+        "page": "reference/api/codegen-gen-expr.md"
       },
       {
-        "signature": "public options: JsonValue",
+        "signature": "public constant: Option<GenConstant>",
         "description": "",
-        "line": 166,
-        "page": "reference/api/codegen-gen-decode.md"
+        "line": 13,
+        "page": "reference/api/codegen-gen-expr.md"
       },
       {
-        "signature": "public files: List<GenFile>",
+        "signature": "public text: string",
         "description": "",
-        "line": 167,
-        "page": "reference/api/codegen-gen-decode.md"
+        "line": 14,
+        "page": "reference/api/codegen-gen-expr.md"
       },
       {
-        "signature": "public index: List<GenIndexEntry>",
+        "signature": "public op: string",
         "description": "",
-        "line": 168,
-        "page": "reference/api/codegen-gen-decode.md"
+        "line": 15,
+        "page": "reference/api/codegen-gen-expr.md"
       },
       {
-        "signature": "public decls: List<GenDecl>",
+        "signature": "public literal: string",
         "description": "",
-        "line": 169,
-        "page": "reference/api/codegen-gen-decode.md"
+        "line": 16,
+        "page": "reference/api/codegen-gen-expr.md"
       },
       {
-        "signature": "public functions: List<GenFunction>",
+        "signature": "public literal_kind: string",
         "description": "",
-        "line": 170,
-        "page": "reference/api/codegen-gen-decode.md"
+        "line": 17,
+        "page": "reference/api/codegen-gen-expr.md"
       },
       {
-        "signature": "public blocks: List<GenSyntaxBlock>",
+        "signature": "public ty: GenTypeRef",
         "description": "",
-        "line": 171,
-        "page": "reference/api/codegen-gen-decode.md"
+        "line": 18,
+        "page": "reference/api/codegen-gen-expr.md"
       },
       {
-        "signature": "public calls: List<GenCallSite>",
+        "signature": "public symbol: string",
         "description": "",
-        "line": 172,
-        "page": "reference/api/codegen-gen-decode.md"
+        "line": 19,
+        "page": "reference/api/codegen-gen-expr.md"
       },
       {
-        "signature": "public constructor(root: JsonValue)",
+        "signature": "public symbol_kind: string",
         "description": "",
-        "line": 174,
-        "page": "reference/api/codegen-gen-decode.md"
+        "line": 20,
+        "page": "reference/api/codegen-gen-expr.md"
+      },
+      {
+        "signature": "public overload: string",
+        "description": "",
+        "line": 21,
+        "page": "reference/api/codegen-gen-expr.md"
+      },
+      {
+        "signature": "public type_args: List<GenTypeRef>",
+        "description": "",
+        "line": 22,
+        "page": "reference/api/codegen-gen-expr.md"
+      },
+      {
+        "signature": "public types: List<GenTypeRef>",
+        "description": "",
+        "line": 23,
+        "page": "reference/api/codegen-gen-expr.md"
+      },
+      {
+        "signature": "public constructor(borrow v: JsonValue)",
+        "description": "Creates this model from snapshot JSON.",
+        "line": 27,
+        "page": "reference/api/codegen-gen-expr.md"
+      },
+      {
+        "signature": "public fun children(): List<GenExpr>",
+        "description": "Returns child nodes in source order.",
+        "line": 54,
+        "page": "reference/api/codegen-gen-expr.md"
+      },
+      {
+        "signature": "public fun is_kind(kind: ExprKind): bool",
+        "description": "Tests the node kind.",
+        "line": 56,
+        "page": "reference/api/codegen-gen-expr.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_field.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-field.md",
+    "declarations": [
+      {
+        "signature": "public class GenField",
+        "description": "A field of a class, struct or union variant.",
+        "line": 8,
+        "page": "reference/api/codegen-gen-field.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/codegen-gen-field.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-field.md"
+      },
+      {
+        "signature": "public ty: GenTypeRef",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/codegen-gen-field.md"
+      },
+      {
+        "signature": "public visibility: string",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/codegen-gen-field.md"
+      },
+      {
+        "signature": "public attributes: List<GenAttribute>",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/codegen-gen-field.md"
+      },
+      {
+        "signature": "public location: GenLocation",
+        "description": "",
+        "line": 14,
+        "page": "reference/api/codegen-gen-field.md"
+      },
+      {
+        "signature": "public constructor(id: string, name: string, ty: GenTypeRef, visibility: string, attributes: List<GenAttribute>, location: GenLocation)",
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 17,
+        "page": "reference/api/codegen-gen-field.md"
+      },
+      {
+        "signature": "public fun attribute<A>(): Option<A>",
+        "description": "The first `@A` on this field, decoded into the attribute struct.",
+        "line": 27,
+        "page": "reference/api/codegen-gen-field.md"
+      },
+      {
+        "signature": "public fun attributes_of<A>(): List<A>",
+        "description": "Decodes every attached attribute of the requested type.",
+        "line": 32,
+        "page": "reference/api/codegen-gen-field.md"
+      },
+      {
+        "signature": "public fun has<A>(): bool",
+        "description": "Tests whether the requested attribute is attached to this model node.",
+        "line": 37,
+        "page": "reference/api/codegen-gen-field.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_file.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-file.md",
+    "declarations": [
+      {
+        "signature": "public class GenFile",
+        "description": "A `dream.toml` `additional_files` entry.",
+        "line": 8,
+        "page": "reference/api/codegen-gen-file.md"
+      },
+      {
+        "signature": "public path: string",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/codegen-gen-file.md"
+      },
+      {
+        "signature": "public contents: string",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-file.md"
+      },
+      {
+        "signature": "public constructor(path: string, contents: string)",
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 13,
+        "page": "reference/api/codegen-gen-file.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_function.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-function.md",
+    "declarations": [
+      {
+        "signature": "public class GenFunction",
+        "description": "A method, or a top-level function.",
+        "line": 8,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public overload: string",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public is_static: bool",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public is_async: bool",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public visibility: string",
+        "description": "",
+        "line": 14,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public generics: List<string>",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public params: List<GenParam>",
+        "description": "",
+        "line": 16,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public ret: GenTypeRef",
+        "description": "",
+        "line": 17,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public attributes: List<GenAttribute>",
+        "description": "",
+        "line": 18,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public location: GenLocation",
+        "description": "",
+        "line": 19,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public body: Option<GenBody>",
+        "description": "",
+        "line": 20,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public constructor(id: string, name: string, is_static: bool, is_async: bool, visibility: string, generics: List<string>, params: List<GenParam>, ret: GenTypeRef, attributes: List<GenAttribute>, location: GenLocation, body: Option<GenBody>, overload: string)",
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 23,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public fun attribute<A>(): Option<A>",
+        "description": "Returns the requested model information.",
+        "line": 39,
+        "page": "reference/api/codegen-gen-function.md"
+      },
+      {
+        "signature": "public fun has<A>(): bool",
+        "description": "Tests whether the requested attribute is attached to this model node.",
+        "line": 44,
+        "page": "reference/api/codegen-gen-function.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_index_entry.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-index-entry.md",
+    "declarations": [
+      {
+        "signature": "public class GenIndexEntry",
+        "description": "Every type in the program (user and stdlib), names and kinds only.",
+        "line": 8,
+        "page": "reference/api/codegen-gen-index-entry.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/codegen-gen-index-entry.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-index-entry.md"
+      },
+      {
+        "signature": "public kind: DeclKind",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/codegen-gen-index-entry.md"
+      },
+      {
+        "signature": "public constructor(id: string, name: string, kind: DeclKind)",
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 14,
+        "page": "reference/api/codegen-gen-index-entry.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_location.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-location.md",
+    "declarations": [
+      {
+        "signature": "public class GenLocation",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/codegen-gen-location.md"
+      },
+      {
+        "signature": "public file: string",
+        "description": "Project-relative path (`src/models.dream`), or `<std>/...` for stdlib sources.",
+        "line": 9,
+        "page": "reference/api/codegen-gen-location.md"
+      },
+      {
+        "signature": "public line: int",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-location.md"
+      },
+      {
+        "signature": "public column: int",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/codegen-gen-location.md"
+      },
+      {
+        "signature": "public constructor(file: string, line: int, column: int)",
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 14,
+        "page": "reference/api/codegen-gen-location.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns the requested model information.",
+        "line": 21,
+        "page": "reference/api/codegen-gen-location.md"
       }
     ]
   },
@@ -1321,274 +2115,779 @@
         "page": "reference/api/codegen-gen-model-2.md"
       },
       {
-        "signature": "public class GenLocation",
-        "description": "",
-        "line": 60,
+        "signature": "public fun primitive_named(name: string): Primitive",
+        "description": "`Primitive` for a Dream scalar type name (`int`, `string`, ...).",
+        "line": 61,
         "page": "reference/api/codegen-gen-model-2.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_param.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-param.md",
+    "declarations": [
+      {
+        "signature": "public class GenParam",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/codegen-gen-param.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/codegen-gen-param.md"
+      },
+      {
+        "signature": "public ty: GenTypeRef",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/codegen-gen-param.md"
+      },
+      {
+        "signature": "public attributes: List<GenAttribute>",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-param.md"
+      },
+      {
+        "signature": "public constructor(name: string, ty: GenTypeRef, attributes: List<GenAttribute>)",
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 13,
+        "page": "reference/api/codegen-gen-param.md"
+      },
+      {
+        "signature": "public fun attribute<A>(): Option<A>",
+        "description": "Returns the requested model information.",
+        "line": 20,
+        "page": "reference/api/codegen-gen-param.md"
+      },
+      {
+        "signature": "public fun has<A>(): bool",
+        "description": "Tests whether the requested attribute is attached to this model node.",
+        "line": 25,
+        "page": "reference/api/codegen-gen-param.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_snapshot.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-snapshot.md",
+    "declarations": [
+      {
+        "signature": "public class GenSnapshot",
+        "description": "Decoded snapshot behind a `GenContext`.",
+        "line": 8,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public version: int",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public phase: int",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public symbols: List<GenSymbol>",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public compilation_errors: List<GenCompilationError>",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public tools: List<GenToolInfo>",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public tool_results: List<GenToolResult>",
+        "description": "",
+        "line": 14,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public referenced: List<GenDecl>",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public referenced_functions: List<GenFunction>",
+        "description": "",
+        "line": 16,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public generator: string",
+        "description": "",
+        "line": 17,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public generator_id: string",
+        "description": "",
+        "line": 18,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public target: string",
+        "description": "",
+        "line": 19,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public options: JsonValue",
+        "description": "",
+        "line": 20,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public files: List<GenFile>",
+        "description": "",
+        "line": 21,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public index: List<GenIndexEntry>",
+        "description": "",
+        "line": 22,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public decls: List<GenDecl>",
+        "description": "",
+        "line": 23,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public functions: List<GenFunction>",
+        "description": "",
+        "line": 24,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public blocks: List<GenSyntaxBlock>",
+        "description": "",
+        "line": 25,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public calls: List<GenCallSite>",
+        "description": "",
+        "line": 26,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      },
+      {
+        "signature": "public constructor(root: JsonValue)",
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 29,
+        "page": "reference/api/codegen-gen-snapshot.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_source_map.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-source-map.md",
+    "declarations": [
+      {
+        "signature": "public class GenSourceMap",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/codegen-gen-source-map.md"
+      },
+      {
+        "signature": "public mappings: JsonValue",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/codegen-gen-source-map.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates an empty builder.",
+        "line": 11,
+        "page": "reference/api/codegen-gen-source-map.md"
+      },
+      {
+        "signature": "public fun add(line: int, column: int, end_line: int, end_column: int, target: string): void",
+        "description": "Maps a half-open artifact range to a snapshot node identity.",
+        "line": 16,
+        "page": "reference/api/codegen-gen-source-map.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_span.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-span.md",
+    "declarations": [
+      {
+        "signature": "public class GenSpan",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/codegen-gen-span.md"
       },
       {
         "signature": "public file: string",
-        "description": "Project-relative path (`src/models.dream`), or `<std>/...` for stdlib sources.",
-        "line": 62,
-        "page": "reference/api/codegen-gen-model-2.md"
+        "description": "",
+        "line": 8,
+        "page": "reference/api/codegen-gen-span.md"
       },
       {
         "signature": "public line: int",
         "description": "",
-        "line": 63,
-        "page": "reference/api/codegen-gen-model-2.md"
+        "line": 9,
+        "page": "reference/api/codegen-gen-span.md"
       },
       {
         "signature": "public column: int",
         "description": "",
-        "line": 64,
-        "page": "reference/api/codegen-gen-model-2.md"
+        "line": 10,
+        "page": "reference/api/codegen-gen-span.md"
       },
       {
-        "signature": "public constructor(file: string, line: int, column: int)",
+        "signature": "public length: int",
         "description": "",
-        "line": 66,
-        "page": "reference/api/codegen-gen-model-2.md"
+        "line": 11,
+        "page": "reference/api/codegen-gen-span.md"
       },
       {
-        "signature": "public override fun to_string(): string",
+        "signature": "public constructor(borrow v: JsonValue)",
+        "description": "Creates this model from snapshot JSON.",
+        "line": 14,
+        "page": "reference/api/codegen-gen-span.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_stmt.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-stmt.md",
+    "declarations": [
+      {
+        "signature": "public class GenStmt",
         "description": "",
-        "line": 72,
-        "page": "reference/api/codegen-gen-model-2.md"
+        "line": 7,
+        "page": "reference/api/codegen-gen-stmt.md"
       },
       {
-        "signature": "public class GenTypeRef",
-        "description": "A resolved type: `kind` + structured `args` instead of a type string to parse.",
-        "line": 79,
-        "page": "reference/api/codegen-gen-model-2.md"
-      },
-      {
-        "signature": "public kind: TypeRefKind",
+        "signature": "public id: string",
         "description": "",
-        "line": 80,
-        "page": "reference/api/codegen-gen-model-2.md"
+        "line": 8,
+        "page": "reference/api/codegen-gen-stmt.md"
       },
       {
-        "signature": "public name: string",
-        "description": "`int`, `List`, `T`, or empty for arrays/tuples/functions.",
-        "line": 82,
-        "page": "reference/api/codegen-gen-model-2.md"
-      },
-      {
-        "signature": "public display: string",
-        "description": "Dream spelling (`List<int>`, `User[]`), usable verbatim in generated code.",
-        "line": 84,
-        "page": "reference/api/codegen-gen-model-2.md"
-      },
-      {
-        "signature": "public mangled: string",
-        "description": "Compiler-mangled spelling (`List_int`), unique per instantiation; handy for helper names.",
-        "line": 86,
-        "page": "reference/api/codegen-gen-model-2.md"
-      },
-      {
-        "signature": "public decl: string",
-        "description": "Identity of the named declaration (`::User`, `system.collections::List`), or empty.",
-        "line": 88,
-        "page": "reference/api/codegen-gen-model-3.md"
-      },
-      {
-        "signature": "public args: List<GenTypeRef>",
-        "description": "Type arguments; the element of an array; tuple members; function params then return.",
-        "line": 90,
-        "page": "reference/api/codegen-gen-model-3.md"
-      },
-      {
-        "signature": "public constructor(kind: TypeRefKind, name: string, display: string, mangled: string, decl: string, args: List<GenTypeRef>)",
+        "signature": "public kind: StmtKind",
         "description": "",
-        "line": 92,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "line": 9,
+        "page": "reference/api/codegen-gen-stmt.md"
       },
       {
-        "signature": "public static fun unknown(): GenTypeRef",
+        "signature": "public span: GenSpan",
         "description": "",
-        "line": 101,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "line": 10,
+        "page": "reference/api/codegen-gen-stmt.md"
       },
       {
-        "signature": "public fun primitive(): Primitive",
-        "description": "The scalar this type is, or `Primitive.NotPrimitive`.",
-        "line": 106,
-        "page": "reference/api/codegen-gen-model-3.md"
-      },
-      {
-        "signature": "public fun is_primitive(p: Primitive): bool",
+        "signature": "public constant: Option<GenConstant>",
         "description": "",
-        "line": 113,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "line": 11,
+        "page": "reference/api/codegen-gen-stmt.md"
       },
       {
-        "signature": "public fun collection(): CollectionKind",
-        "description": "The standard collection this type is, or `CollectionKind.NotCollection`.",
-        "line": 118,
-        "page": "reference/api/codegen-gen-model-3.md"
-      },
-      {
-        "signature": "public fun is_option(): bool",
+        "signature": "public text: string",
         "description": "",
-        "line": 140,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "line": 12,
+        "page": "reference/api/codegen-gen-stmt.md"
       },
       {
-        "signature": "public fun is_param(): bool",
+        "signature": "public ty: GenTypeRef",
         "description": "",
-        "line": 144,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "line": 13,
+        "page": "reference/api/codegen-gen-stmt.md"
       },
       {
-        "signature": "public fun is_decl(decl_id: string): bool",
-        "description": "True when this names the declaration `decl_id` (see `declof`).",
-        "line": 149,
-        "page": "reference/api/codegen-gen-model-3.md"
-      },
-      {
-        "signature": "public fun arg(i: int): GenTypeRef",
-        "description": "Type argument `i`, or an unknown type when there is none.",
-        "line": 154,
-        "page": "reference/api/codegen-gen-model-3.md"
-      },
-      {
-        "signature": "public override fun to_string(): string",
+        "signature": "public symbol: string",
         "description": "",
-        "line": 161,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "line": 14,
+        "page": "reference/api/codegen-gen-stmt.md"
       },
       {
-        "signature": "public fun primitive_named(name: string): Primitive",
-        "description": "`Primitive` for a Dream scalar type name (`int`, `string`, ...).",
-        "line": 167,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "signature": "public overload: string",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/codegen-gen-stmt.md"
       },
       {
-        "signature": "public class GenAttrArg",
-        "description": "One attribute argument as written: `kind` is `string`, `int`, `float`, `double`, `bool` or `enum`; `value` is the unquoted string, literal text, or dotted enum path.",
-        "line": 186,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "signature": "public type_args: List<GenTypeRef>",
+        "description": "",
+        "line": 16,
+        "page": "reference/api/codegen-gen-stmt.md"
+      },
+      {
+        "signature": "public types: List<GenTypeRef>",
+        "description": "",
+        "line": 17,
+        "page": "reference/api/codegen-gen-stmt.md"
+      },
+      {
+        "signature": "public constructor(borrow v: JsonValue)",
+        "description": "Creates this model from snapshot JSON.",
+        "line": 21,
+        "page": "reference/api/codegen-gen-stmt.md"
+      },
+      {
+        "signature": "public fun children(): List<GenExpr>",
+        "description": "Returns child nodes in source order.",
+        "line": 39,
+        "page": "reference/api/codegen-gen-stmt.md"
+      },
+      {
+        "signature": "public fun is_kind(kind: StmtKind): bool",
+        "description": "Tests the node kind.",
+        "line": 41,
+        "page": "reference/api/codegen-gen-stmt.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_symbol.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-symbol.md",
+    "declarations": [
+      {
+        "signature": "public class GenSymbol",
+        "description": "Signature views allow program-wide queries without including unrelated function bodies.",
+        "line": 8,
+        "page": "reference/api/codegen-gen-symbol.md"
+      },
+      {
+        "signature": "public instances: List<GenSymbolInstance>",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/codegen-gen-symbol.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-symbol.md"
       },
       {
         "signature": "public kind: string",
         "description": "",
-        "line": 187,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "line": 11,
+        "page": "reference/api/codegen-gen-symbol.md"
       },
       {
-        "signature": "public value: string",
+        "signature": "public declaration: Option<GenDecl>",
         "description": "",
-        "line": 188,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "line": 12,
+        "page": "reference/api/codegen-gen-symbol.md"
       },
       {
-        "signature": "public constructor(kind: string, value: string)",
+        "signature": "public function: Option<GenFunction>",
         "description": "",
-        "line": 190,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "line": 13,
+        "page": "reference/api/codegen-gen-symbol.md"
       },
       {
-        "signature": "public class GenAttribute",
-        "description": "One attribute use. Prefer the typed `GenAttributes.decode<A>()` (via `attribute<A>()` on a node); the positional readers below are what decoders are built from.",
-        "line": 198,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "signature": "public constructor(borrow v: JsonValue)",
+        "description": "Decodes a declaration or function symbol from the compilation snapshot.",
+        "line": 16,
+        "page": "reference/api/codegen-gen-symbol.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_symbol_instance.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-symbol-instance.md",
+    "declarations": [
+      {
+        "signature": "public class GenSymbolInstance",
+        "description": "Concrete semantic members, including inherited defaults and substituted generic arguments.",
+        "line": 8,
+        "page": "reference/api/codegen-gen-symbol-instance.md"
+      },
+      {
+        "signature": "public ty: GenTypeRef",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/codegen-gen-symbol-instance.md"
+      },
+      {
+        "signature": "public bases: List<GenTypeRef>",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-symbol-instance.md"
+      },
+      {
+        "signature": "public fields: List<GenField>",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/codegen-gen-symbol-instance.md"
+      },
+      {
+        "signature": "public methods: List<GenFunction>",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/codegen-gen-symbol-instance.md"
+      },
+      {
+        "signature": "public variants: List<GenVariant>",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/codegen-gen-symbol-instance.md"
+      },
+      {
+        "signature": "public constructor(borrow v: JsonValue)",
+        "description": "Decodes an instantiated type view exported by semantic analysis.",
+        "line": 16,
+        "page": "reference/api/codegen-gen-symbol-instance.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_syntax_block.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-syntax-block.md",
+    "declarations": [
+      {
+        "signature": "public class GenSyntaxBlock",
+        "description": "A `name { ... }` site of this generator (`@syntax_block` generators only).",
+        "line": 8,
+        "page": "reference/api/codegen-gen-syntax-block.md"
       },
       {
         "signature": "public id: string",
-        "description": "`module::name` of the `@attribute` type (`system.json::JsonAttribute`).",
-        "line": 200,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "description": "",
+        "line": 9,
+        "page": "reference/api/codegen-gen-syntax-block.md"
       },
       {
         "signature": "public name: string",
         "description": "",
-        "line": 201,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "line": 10,
+        "page": "reference/api/codegen-gen-syntax-block.md"
       },
       {
-        "signature": "public args: List<GenAttrArg>",
+        "signature": "public body: string",
+        "description": "Reconstructed body text; splices appear as `{expr}`.",
+        "line": 12,
+        "page": "reference/api/codegen-gen-syntax-block.md"
+      },
+      {
+        "signature": "public splices: List<string>",
+        "description": "Dream source of each `{ ... }` splice, in order.",
+        "line": 14,
+        "page": "reference/api/codegen-gen-syntax-block.md"
+      },
+      {
+        "signature": "public location: GenLocation",
         "description": "",
-        "line": 202,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "line": 15,
+        "page": "reference/api/codegen-gen-syntax-block.md"
       },
       {
-        "signature": "public constructor(id: string, name: string, args: List<GenAttrArg>)",
+        "signature": "public constructor(id: string, name: string, body: string, splices: List<string>, location: GenLocation)",
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 18,
+        "page": "reference/api/codegen-gen-syntax-block.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_tool_file.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-tool-file.md",
+    "declarations": [
+      {
+        "signature": "public class GenToolFile",
         "description": "",
-        "line": 204,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "line": 7,
+        "page": "reference/api/codegen-gen-tool-file.md"
       },
       {
-        "signature": "public fun string_arg(i: int): string",
+        "signature": "public path: string",
         "description": "",
-        "line": 217,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "line": 8,
+        "page": "reference/api/codegen-gen-tool-file.md"
       },
       {
-        "signature": "public fun int_arg(i: int): int",
+        "signature": "public contents: string",
         "description": "",
-        "line": 221,
-        "page": "reference/api/codegen-gen-model-3.md"
+        "line": 9,
+        "page": "reference/api/codegen-gen-tool-file.md"
       },
       {
-        "signature": "public fun long_arg(i: int): long",
+        "signature": "public binary: bool",
         "description": "",
-        "line": 225,
-        "page": "reference/api/codegen-gen-model-4.md"
+        "line": 10,
+        "page": "reference/api/codegen-gen-tool-file.md"
       },
       {
-        "signature": "public fun double_arg(i: int): double",
+        "signature": "public hash: string",
         "description": "",
-        "line": 229,
-        "page": "reference/api/codegen-gen-model-4.md"
+        "line": 11,
+        "page": "reference/api/codegen-gen-tool-file.md"
       },
       {
-        "signature": "public fun float_arg(i: int): float",
+        "signature": "public constructor(borrow v: JsonValue)",
+        "description": "Decodes compiler-collected tool metadata from a snapshot.",
+        "line": 14,
+        "page": "reference/api/codegen-gen-tool-file.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_tool_info.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-tool-info.md",
+    "declarations": [
+      {
+        "signature": "public class GenToolInfo",
         "description": "",
-        "line": 233,
-        "page": "reference/api/codegen-gen-model-4.md"
+        "line": 7,
+        "page": "reference/api/codegen-gen-tool-info.md"
       },
       {
-        "signature": "public fun bool_arg(i: int): bool",
+        "signature": "public name: string",
         "description": "",
-        "line": 237,
-        "page": "reference/api/codegen-gen-model-4.md"
+        "line": 8,
+        "page": "reference/api/codegen-gen-tool-info.md"
       },
       {
-        "signature": "public fun enum_member(i: int): string",
-        "description": "The member name of an enum argument (`Get` for `HttpMethod.Get`).",
-        "line": 242,
-        "page": "reference/api/codegen-gen-model-4.md"
-      },
-      {
-        "signature": "public static class GenAttributes",
-        "description": "Typed attribute access. `A` is an `@attribute` struct; the compiler gives every such type the statics these forward to.",
-        "line": 257,
-        "page": "reference/api/codegen-gen-model-4.md"
-      },
-      {
-        "signature": "public static extern fun id<A>(): string",
+        "signature": "public version: string",
         "description": "",
-        "line": 259,
-        "page": "reference/api/codegen-gen-model-4.md"
+        "line": 9,
+        "page": "reference/api/codegen-gen-tool-info.md"
       },
       {
-        "signature": "public static extern fun decode<A>(borrow attrs: List<GenAttribute>): Option<A>",
+        "signature": "public fingerprint: string",
         "description": "",
-        "line": 262,
-        "page": "reference/api/codegen-gen-model-4.md"
+        "line": 10,
+        "page": "reference/api/codegen-gen-tool-info.md"
       },
       {
-        "signature": "public static extern fun decode_all<A>(borrow attrs: List<GenAttribute>): List<A>",
+        "signature": "public constructor(borrow v: JsonValue)",
+        "description": "Decodes compiler-collected tool metadata from a snapshot.",
+        "line": 13,
+        "page": "reference/api/codegen-gen-tool-info.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_tool_result.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-tool-result.md",
+    "declarations": [
+      {
+        "signature": "public class GenToolResult",
         "description": "",
-        "line": 265,
-        "page": "reference/api/codegen-gen-model-4.md"
+        "line": 7,
+        "page": "reference/api/codegen-gen-tool-result.md"
       },
       {
-        "signature": "public static fun has(borrow attrs: List<GenAttribute>, borrow id: string): bool",
+        "signature": "public id: string",
         "description": "",
-        "line": 267,
-        "page": "reference/api/codegen-gen-model-4.md"
+        "line": 8,
+        "page": "reference/api/codegen-gen-tool-result.md"
+      },
+      {
+        "signature": "public exit: int",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/codegen-gen-tool-result.md"
+      },
+      {
+        "signature": "public stdout: string",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-tool-result.md"
+      },
+      {
+        "signature": "public stderr: string",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/codegen-gen-tool-result.md"
+      },
+      {
+        "signature": "public files: List<GenToolFile>",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/codegen-gen-tool-result.md"
+      },
+      {
+        "signature": "public constructor(borrow v: JsonValue)",
+        "description": "Decodes compiler-collected tool metadata from a snapshot.",
+        "line": 15,
+        "page": "reference/api/codegen-gen-tool-result.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_type_ref.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-type-ref.md",
+    "declarations": [
+      {
+        "signature": "public class GenTypeRef",
+        "description": "A resolved type with structured arguments and declaration identity.",
+        "line": 9,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public kind: TypeRefKind",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "`int`, `List`, `T`, or empty for arrays/tuples/functions.",
+        "line": 12,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public display: string",
+        "description": "Dream spelling (`List<int>`, `User[]`), usable verbatim in generated code.",
+        "line": 14,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public mangled: string",
+        "description": "Compiler-mangled spelling (`List_int`), unique per instantiation; handy for helper names.",
+        "line": 16,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public decl: string",
+        "description": "Identity of the named declaration (`::User`, `system.collections::List`), or empty.",
+        "line": 18,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public args: List<GenTypeRef>",
+        "description": "Type arguments; the element of an array; tuple members; function params then return.",
+        "line": 20,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public constructor(kind: TypeRefKind, name: string, display: string, mangled: string, decl: string, args: List<GenTypeRef>)",
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 23,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public static fun unknown(): GenTypeRef",
+        "description": "Returns the requested model information.",
+        "line": 33,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public fun primitive(): Primitive",
+        "description": "The scalar this type is, or `Primitive.NotPrimitive`.",
+        "line": 38,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public fun is_primitive(p: Primitive): bool",
+        "description": "Returns the requested model information.",
+        "line": 46,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public fun collection(): CollectionKind",
+        "description": "The standard collection this type is, or `CollectionKind.NotCollection`.",
+        "line": 51,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public fun is_option(): bool",
+        "description": "Returns the requested model information.",
+        "line": 74,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public fun is_param(): bool",
+        "description": "Returns the requested model information.",
+        "line": 79,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public fun is_decl(decl_id: string): bool",
+        "description": "True when this names the declaration `decl_id` (see `declof`).",
+        "line": 84,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public fun arg(i: int): GenTypeRef",
+        "description": "Type argument `i`, or an unknown type when there is none.",
+        "line": 89,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns the requested model information.",
+        "line": 97,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_variant.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-variant.md",
+    "declarations": [
+      {
+        "signature": "public class GenVariant",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/codegen-gen-variant.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/codegen-gen-variant.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/codegen-gen-variant.md"
+      },
+      {
+        "signature": "public fields: List<GenField>",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/codegen-gen-variant.md"
+      },
+      {
+        "signature": "public location: GenLocation",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/codegen-gen-variant.md"
+      },
+      {
+        "signature": "public constructor(id: string, name: string, fields: List<GenField>, location: GenLocation)",
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 14,
+        "page": "reference/api/codegen-gen-variant.md"
       }
     ]
   },
@@ -3242,6 +4541,25 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/core/assets.dream",
+    "package": "system.core",
+    "page": "reference/api/core-assets.md",
+    "declarations": [
+      {
+        "signature": "public static class Assets",
+        "description": "",
+        "line": 3,
+        "page": "reference/api/core-assets.md"
+      },
+      {
+        "signature": "public static extern fun bytes(name: string): byte[]",
+        "description": "Copies an embedded asset into a new owned byte array; name must be a string literal.",
+        "line": 6,
+        "page": "reference/api/core-assets.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/core/attributes.dream",
     "package": "system.core",
     "page": "reference/api/core-attributes.md",
@@ -4009,855 +5327,861 @@
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "RawLoad",
+        "signature": "AssetBytes",
         "description": "",
         "line": 5,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "RawStore",
+        "signature": "RawLoad",
         "description": "",
         "line": 6,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "DreamRawSize",
+        "signature": "RawStore",
         "description": "",
         "line": 7,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "DreamRawAlloc",
+        "signature": "DreamRawSize",
         "description": "",
         "line": 8,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "DreamRawRealloc",
+        "signature": "DreamRawAlloc",
         "description": "",
         "line": 9,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "DreamRawFree",
+        "signature": "DreamRawRealloc",
         "description": "",
         "line": 10,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "DreamRawCopy",
+        "signature": "DreamRawFree",
         "description": "",
         "line": 11,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "DreamRawMove",
+        "signature": "DreamRawCopy",
         "description": "",
         "line": 12,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "DreamRawFill",
+        "signature": "DreamRawMove",
         "description": "",
         "line": 13,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "DreamArenaNew",
+        "signature": "DreamRawFill",
         "description": "",
         "line": 14,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "DreamArenaAlloc",
+        "signature": "DreamArenaNew",
         "description": "",
         "line": 15,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "DreamArenaReset",
+        "signature": "DreamArenaAlloc",
         "description": "",
         "line": 16,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "DreamArenaFree",
+        "signature": "DreamArenaReset",
         "description": "",
         "line": 17,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "DreamYieldSignal",
+        "signature": "DreamArenaFree",
         "description": "",
         "line": 18,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "DreamYieldSignalComplete",
+        "signature": "DreamYieldSignal",
         "description": "",
         "line": 19,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "DreamYieldRun",
+        "signature": "DreamYieldSignalComplete",
         "description": "",
         "line": 20,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "Print",
+        "signature": "DreamYieldRun",
         "description": "",
         "line": 21,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "Println",
+        "signature": "Print",
         "description": "",
         "line": 22,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "PromiseAll",
+        "signature": "Println",
         "description": "",
         "line": 23,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "PromiseAny",
+        "signature": "PromiseAll",
         "description": "",
         "line": 24,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "PromiseRace",
+        "signature": "PromiseAny",
         "description": "",
         "line": 25,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "JsonSerialize",
+        "signature": "PromiseRace",
         "description": "",
         "line": 26,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "JsonDeserialize",
+        "signature": "JsonSerialize",
         "description": "",
         "line": 27,
         "page": "reference/api/core-intrinsic-1.md"
       },
       {
-        "signature": "JsonFromValue",
+        "signature": "JsonDeserialize",
         "description": "",
         "line": 28,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "GenAttributeId",
+        "signature": "JsonFromValue",
         "description": "",
         "line": 29,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "GenAttributeDecode",
+        "signature": "GenAttributeId",
         "description": "",
         "line": 30,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "GenAttributeDecodeAll",
+        "signature": "GenAttributeDecode",
         "description": "",
         "line": 31,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "ArrayNew",
+        "signature": "GenAttributeDecodeAll",
         "description": "",
         "line": 32,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "BufferZero",
+        "signature": "ArrayNew",
         "description": "",
         "line": 33,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "Sleep",
+        "signature": "BufferZero",
         "description": "",
         "line": 34,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringAlloc",
+        "signature": "Sleep",
         "description": "",
         "line": 35,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringCharAtUnchecked",
+        "signature": "StringAlloc",
         "description": "",
         "line": 36,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringBuilderBuffer",
+        "signature": "StringCharAtUnchecked",
         "description": "",
         "line": 37,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringBuilderPushDouble",
+        "signature": "StringBuilderBuffer",
         "description": "",
         "line": 38,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringCloneRange",
+        "signature": "StringBuilderPushDouble",
         "description": "",
         "line": 39,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringJsonBoundary",
+        "signature": "StringCloneRange",
         "description": "",
         "line": 40,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringSet",
+        "signature": "StringJsonBoundary",
         "description": "",
         "line": 41,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringFromUtf8",
+        "signature": "StringSet",
         "description": "",
         "line": 42,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringFromUtf8Prefix",
+        "signature": "StringFromUtf8",
         "description": "",
         "line": 43,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringFromUtf8PrefixN",
+        "signature": "StringFromUtf8Prefix",
         "description": "",
         "line": 44,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringSubstringRaw",
+        "signature": "StringFromUtf8PrefixN",
         "description": "",
         "line": 45,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringCopyUtf8",
+        "signature": "StringSubstringRaw",
         "description": "",
         "line": 46,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringCompare",
+        "signature": "StringCopyUtf8",
         "description": "",
         "line": 47,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringViewEq",
+        "signature": "StringCompare",
         "description": "",
         "line": 48,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringViewCompare",
+        "signature": "StringViewEq",
         "description": "",
         "line": 49,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringViewHash",
+        "signature": "StringViewCompare",
         "description": "",
         "line": 50,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringViewFind",
+        "signature": "StringViewHash",
         "description": "",
         "line": 51,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringViewRfind",
+        "signature": "StringViewFind",
         "description": "",
         "line": 52,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "StringViewFindChar",
+        "signature": "StringViewRfind",
         "description": "",
         "line": 53,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "StringViewRfindChar",
+        "signature": "StringViewFindChar",
         "description": "",
         "line": 54,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "StringViewCountChar",
+        "signature": "StringViewRfindChar",
         "description": "",
         "line": 55,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "StringBuilderView",
+        "signature": "StringViewCountChar",
         "description": "",
         "line": 56,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "DebugGetFreeListHead",
+        "signature": "StringBuilderView",
         "description": "",
         "line": 57,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "DebugGetHeapPtr",
+        "signature": "DebugGetFreeListHead",
         "description": "",
         "line": 58,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "DebugGetLiveObjects",
+        "signature": "DebugGetHeapPtr",
         "description": "",
         "line": 59,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "DebugGetTotalAllocations",
+        "signature": "DebugGetLiveObjects",
         "description": "",
         "line": 60,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "DebugGetRefCount",
+        "signature": "DebugGetTotalAllocations",
         "description": "",
         "line": 61,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "DebugGetRuntimeCounter",
+        "signature": "DebugGetRefCount",
         "description": "",
         "line": 62,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "ToBytes",
+        "signature": "DebugGetRuntimeCounter",
         "description": "",
         "line": 63,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "FromBytes",
+        "signature": "ToBytes",
         "description": "",
         "line": 64,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "ArrayRealloc",
+        "signature": "FromBytes",
         "description": "",
         "line": 65,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "ArrayElemsCopy",
+        "signature": "ArrayRealloc",
         "description": "",
         "line": 66,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "ArrayElemsFill",
+        "signature": "ArrayElemsCopy",
         "description": "",
         "line": 67,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "ForceFree",
+        "signature": "ArrayElemsFill",
         "description": "",
         "line": 68,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "ArrayGetUnchecked",
+        "signature": "ForceFree",
         "description": "",
         "line": 69,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "ArraySetUnchecked",
+        "signature": "ArrayGetUnchecked",
         "description": "",
         "line": 70,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "WireEncode",
+        "signature": "ArraySetUnchecked",
         "description": "",
         "line": 71,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "WireDecode",
+        "signature": "WireEncode",
         "description": "",
         "line": 72,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "DreamPanic",
+        "signature": "WireDecode",
         "description": "",
         "line": 73,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "RegexCompile",
+        "signature": "DreamPanic",
         "description": "",
         "line": 74,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "RegexFree",
+        "signature": "RegexCompile",
         "description": "",
         "line": 75,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "RegexFind",
+        "signature": "RegexFree",
         "description": "",
         "line": 76,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "RegexFindAll",
+        "signature": "RegexFind",
         "description": "",
         "line": 77,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "RegexGroupCount",
+        "signature": "RegexFindAll",
         "description": "",
         "line": 78,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "RegexNameCount",
+        "signature": "RegexGroupCount",
         "description": "",
         "line": 79,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "RegexNameAt",
+        "signature": "RegexNameCount",
         "description": "",
         "line": 80,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "RegexNameNumber",
+        "signature": "RegexNameAt",
         "description": "",
         "line": 81,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdLaneCount",
+        "signature": "RegexNameNumber",
         "description": "",
         "line": 82,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Splat",
+        "signature": "SimdLaneCount",
         "description": "",
         "line": 83,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Load",
+        "signature": "SimdV128Splat",
         "description": "",
         "line": 84,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Store",
+        "signature": "SimdV128Load",
         "description": "",
         "line": 85,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Add",
+        "signature": "SimdV128Store",
         "description": "",
         "line": 86,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Sub",
+        "signature": "SimdV128Add",
         "description": "",
         "line": 87,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Mul",
+        "signature": "SimdV128Sub",
         "description": "",
         "line": 88,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Min",
+        "signature": "SimdV128Mul",
         "description": "",
         "line": 89,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Max",
+        "signature": "SimdV128Min",
         "description": "",
         "line": 90,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Sum",
+        "signature": "SimdV128Max",
         "description": "",
         "line": 91,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "DreamCallbackRegister",
+        "signature": "SimdV128Sum",
         "description": "",
         "line": 92,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "DreamCallbackUnregister",
+        "signature": "DreamCallbackRegister",
         "description": "",
         "line": 93,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "FuncboxNew",
+        "signature": "DreamCallbackUnregister",
         "description": "",
         "line": 94,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "FuncboxFuncidx",
+        "signature": "FuncboxNew",
         "description": "",
         "line": 95,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "FuncboxEnv",
+        "signature": "FuncboxFuncidx",
         "description": "",
         "line": 96,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "ArraySlotSwap",
+        "signature": "FuncboxEnv",
         "description": "",
         "line": 97,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "BufferIsString",
+        "signature": "ArraySlotSwap",
         "description": "",
         "line": 98,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "ArraySlotTake",
+        "signature": "BufferIsString",
         "description": "",
         "line": 99,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "RegexTest",
+        "signature": "ArraySlotTake",
         "description": "",
         "line": 100,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelNew",
+        "signature": "RegexTest",
         "description": "",
         "line": 101,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelFree",
+        "signature": "DreamChannelNew",
         "description": "",
         "line": 102,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelEndpoint",
+        "signature": "DreamChannelFree",
         "description": "",
         "line": 103,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelClose",
+        "signature": "DreamChannelEndpoint",
         "description": "",
         "line": 104,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelEndpointFree",
+        "signature": "DreamChannelClose",
         "description": "",
         "line": 105,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelSend",
+        "signature": "DreamChannelEndpointFree",
         "description": "",
         "line": 106,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelReceive",
+        "signature": "DreamChannelSend",
         "description": "",
         "line": 107,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelStatus",
+        "signature": "DreamChannelReceive",
         "description": "",
         "line": 108,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelWait",
+        "signature": "DreamChannelStatus",
         "description": "",
         "line": 109,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamTaskKeepAlive",
+        "signature": "DreamChannelWait",
         "description": "",
         "line": 110,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamTaskIsProtected",
+        "signature": "DreamTaskKeepAlive",
         "description": "",
         "line": 111,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamTaskHasContext",
+        "signature": "DreamTaskIsProtected",
         "description": "",
         "line": 112,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamTaskContext",
+        "signature": "DreamTaskHasContext",
         "description": "",
         "line": 113,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamTaskAttach",
+        "signature": "DreamTaskContext",
         "description": "",
         "line": 114,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamTaskProtect",
+        "signature": "DreamTaskAttach",
         "description": "",
         "line": 115,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamCancellationNew",
+        "signature": "DreamTaskProtect",
         "description": "",
         "line": 116,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamCancellationRelease",
+        "signature": "DreamCancellationNew",
         "description": "",
         "line": 117,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamCancellationIsCancelled",
+        "signature": "DreamCancellationRelease",
         "description": "",
         "line": 118,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamCancellationCancel",
+        "signature": "DreamCancellationIsCancelled",
         "description": "",
         "line": 119,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamCancellationRegister",
+        "signature": "DreamCancellationCancel",
         "description": "",
         "line": 120,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamCancellationSignal",
+        "signature": "DreamCancellationRegister",
         "description": "",
         "line": 121,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamCancellationUnregister",
+        "signature": "DreamCancellationSignal",
         "description": "",
         "line": 122,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamFfiFreeWith",
+        "signature": "DreamCancellationUnregister",
         "description": "",
         "line": 123,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamFfiReadPtr",
+        "signature": "DreamFfiFreeWith",
         "description": "",
         "line": 124,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "DreamFfiReadCstring",
+        "signature": "DreamFfiReadPtr",
         "description": "",
         "line": 125,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "DreamFfiReadI32",
+        "signature": "DreamFfiReadCstring",
         "description": "",
         "line": 126,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "DreamFfiReadI64",
+        "signature": "DreamFfiReadI32",
         "description": "",
         "line": 127,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "DreamFfiReadF64",
+        "signature": "DreamFfiReadI64",
         "description": "",
         "line": 128,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedLockAcquire",
+        "signature": "DreamFfiReadF64",
         "description": "",
         "line": 129,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedLockRelease",
+        "signature": "SharedLockAcquire",
         "description": "",
         "line": 130,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedLockTryAcquire",
+        "signature": "SharedLockRelease",
         "description": "",
         "line": 131,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedLockTryAcquireFor",
+        "signature": "SharedLockTryAcquire",
         "description": "",
         "line": 132,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "ArrayStore16",
+        "signature": "SharedLockTryAcquireFor",
         "description": "",
         "line": 133,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "StringFromBuilder",
+        "signature": "ArrayStore16",
         "description": "",
         "line": 134,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "StringClone",
+        "signature": "StringFromBuilder",
         "description": "",
         "line": 135,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "Utf8DecodeAt",
+        "signature": "StringClone",
         "description": "",
         "line": 136,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "Utf8WidthAt",
+        "signature": "Utf8DecodeAt",
         "description": "",
         "line": 137,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "StringBuilderPush",
+        "signature": "Utf8WidthAt",
         "description": "",
         "line": 138,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "StringBuilderPushInt",
+        "signature": "StringBuilderPush",
         "description": "",
         "line": 139,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "StringBuilderPushLong",
+        "signature": "StringBuilderPushInt",
         "description": "",
         "line": 140,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedSemaphoreAcquire",
+        "signature": "StringBuilderPushLong",
         "description": "",
         "line": 141,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedSemaphoreRelease",
+        "signature": "SharedSemaphoreAcquire",
         "description": "",
         "line": 142,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedSemaphoreTryAcquire",
+        "signature": "SharedSemaphoreRelease",
         "description": "",
         "line": 143,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedSemaphoreTryAcquireFor",
+        "signature": "SharedSemaphoreTryAcquire",
         "description": "",
         "line": 144,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "DreamCancel",
+        "signature": "SharedSemaphoreTryAcquireFor",
         "description": "",
         "line": 145,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "DreamStart",
+        "signature": "DreamCancel",
         "description": "",
         "line": 146,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "DreamStart",
+        "description": "",
+        "line": 147,
         "page": "reference/api/core-intrinsic-6.md"
       }
     ]

@@ -108,6 +108,94 @@ public class GenContext {
         return this.snapshot.decls;
     }
 
+    // The compiler-tool feedback round, starting at zero.
+    public fun phase(): int { return this.snapshot.phase; }
+
+    // Transitive dependencies of the declarations selected by this generator.
+    public fun referenced_decls(): List<GenDecl> { return this.snapshot.referenced; }
+
+    // Top-level functions referenced by selected declarations or their dependencies.
+    public fun referenced_functions(): List<GenFunction> { return this.snapshot.referenced_functions; }
+
+    // Looks up a selected or referenced declaration by its compiler identity.
+    public fun find_decl(borrow id: string): Option<GenDecl> {
+        for (let d in this.snapshot.decls) { if d.id == id { return Option.Some(d); } }
+        for (let d in this.snapshot.referenced) { if d.id == id { return Option.Some(d); } }
+        return Option.None;
+    }
+
+    // Looks up a selected or referenced function, including methods.
+    public fun find_function(borrow id: string): Option<GenFunction> {
+        for (let f in this.snapshot.functions) { if f.id == id || f.overload == id { return Option.Some(f); } }
+        for (let f in this.snapshot.referenced_functions) { if f.id == id || f.overload == id { return Option.Some(f); } }
+        for (let d in this.snapshot.decls) {
+            for (let f in d.methods) { if f.id == id || f.overload == id { return Option.Some(f); } }
+        }
+        for (let d in this.snapshot.referenced) {
+            for (let f in d.methods) { if f.id == id || f.overload == id { return Option.Some(f); } }
+        }
+        return Option.None;
+    }
+
+    // The inferred type, or an explicit Unknown when pre-analysis could not resolve it.
+    public fun type_of(borrow expr: GenExpr): GenTypeRef { return expr.ty; }
+
+    // The inferred type attached to a statement, or Unknown when it has no value type.
+    public fun type_of(borrow stmt: GenStmt): GenTypeRef { return stmt.ty; }
+
+    // The resolved symbol identity, or an empty string for an unresolved expression.
+    public fun symbol_of(borrow expr: GenExpr): string { return expr.symbol; }
+
+    // Looks up a signature view anywhere in the pre-generation compilation.
+    public fun find_symbol(borrow id: string): Option<GenSymbol> {
+        for (let s in this.snapshot.symbols) {
+            if s.id == id { return Option.Some(s); }
+            switch (s.function) { Some(f) => { if f.id == id || f.overload == id { return Option.Some(s); } } None => {} }
+        }
+        return Option.None;
+    }
+
+    // Errors found before generation within declarations selected by this generator's triggers.
+    public fun compilation_errors(): List<GenCompilationError> { return this.snapshot.compilation_errors; }
+
+    // Classes and structs implementing an interface, including inherited interface relations.
+    public fun implementations_of(borrow id: string): List<GenSymbol> {
+        let out = List<GenSymbol>();
+        for (let s in this.subtypes_of(id)) {
+            if s.kind == "class" || s.kind == "struct" { out.push(s); }
+        }
+        return out;
+    }
+
+    // Signature views whose declared interface ancestry includes the given identity.
+    public fun subtypes_of(borrow id: string): List<GenSymbol> {
+        let out = List<GenSymbol>();
+        let known = List<string>();
+        known.push(id);
+        let i = 0;
+        while i < known.length {
+            let base = known.get(i);
+            for (let s in this.snapshot.symbols) {
+                if !known.contains(s.id) {
+                    switch (s.declaration) {
+                        Some(d) => {
+                            for (let parent in d.interfaces) {
+                                if parent.decl == base {
+                                    known.push(s.id);
+                                    out.push(s);
+                                    break;
+                                }
+                            }
+                        }
+                        None => {}
+                    }
+                }
+            }
+            i = i + 1;
+        }
+        return out;
+    }
+
     // Every type in the program, by name and kind.
     public fun type_index(): List<GenIndexEntry> {
         return this.snapshot.index;
@@ -181,6 +269,70 @@ public class GenContext {
         this.outputs.push(out);
     }
 
+    // Declared tools with the versions and fingerprints used in this compilation.
+    public fun tools(): List<GenToolInfo> { return this.snapshot.tools; }
+
+    // Compiler-collected feedback from the previous phase.
+    public fun tool_results(): List<GenToolResult> { return this.snapshot.tool_results; }
+
+    // Requests a declared tool; the compiler reruns this generator with its results.
+    public fun run_tool(id: string, tool: string, args: List<string>, inputs: List<string>, outputs: List<string>): void {
+        let out = JsonValue.dict();
+        out.set("kind", JsonValue.from_string("tool_run"));
+        out.set("id", JsonValue.from_string(id));
+        out.set("tool", JsonValue.from_string(tool));
+        out.set("args", gen_json_strings(args));
+        out.set("inputs", gen_json_strings(inputs));
+        out.set("outputs", gen_json_strings(outputs));
+        this.outputs.push(out);
+    }
+
+    // Embeds an artifact or tool output into every compilation target.
+    public fun emit_asset(name: string, source: string): void {
+        this.emit_asset(name, source, List<string>());
+    }
+
+    // Embeds an artifact or tool output for the selected target triples or families.
+    public fun emit_asset(name: string, source: string, targets: List<string>): void {
+        let out = JsonValue.dict();
+        out.set("kind", JsonValue.from_string("asset"));
+        out.set("name", JsonValue.from_string(name));
+        out.set("source", JsonValue.from_string(source));
+        out.set("targets", gen_json_strings(targets));
+        this.outputs.push(out);
+    }
+
+    // Removes a selected or referenced user function from the compiled program.
+    public fun consume(borrow f: GenFunction): void {
+        let out = JsonValue.dict();
+        out.set("kind", JsonValue.from_string("consume"));
+        out.set("target", JsonValue.from_string(f.id));
+        this.outputs.push(out);
+    }
+
+    // Emits a non-Dream file with source mappings under this generator's directory.
+    public fun emit_artifact(path: string, contents: string, borrow map: GenSourceMap, publish: bool = false): void {
+        let out = JsonValue.dict();
+        out.set("kind", JsonValue.from_string("artifact"));
+        out.set("path", JsonValue.from_string(path));
+        out.set("contents", JsonValue.from_string(contents));
+        out.set("mappings", map.mappings);
+        out.set("publish", JsonValue.boolean(publish));
+        this.outputs.push(out);
+    }
+
+    // Reports an artifact location through its source map to the originating Dream node.
+    public fun error_in_artifact(path: string, line: int, column: int, message: string): void {
+        let d = JsonValue.dict();
+        d.set("severity", JsonValue.from_string("error"));
+        d.set("message", JsonValue.from_string(message));
+        d.set("artifact", JsonValue.from_string(path));
+        d.set("line", JsonValue.from_int(line));
+        d.set("column", JsonValue.from_int(column));
+        this.diagnostics.push(d);
+        this.error_count = this.error_count + 1;
+    }
+
     // Adds `extend <decl> { <body> }` to this generator's `extends.dream` file.
     public fun emit_extend(borrow decl: GenDecl, body: string): void {
         this.extends.append("extend " + decl.self_type() + " {\n");
@@ -208,34 +360,42 @@ public class GenContext {
         this.report("error", target, message);
     }
 
+    // Reports a warning at this model node.
     public fun warning_at(borrow target: string, message: string): void {
         this.report("warning", target, message);
     }
 
+    // Reports an error at this model node or at the generator when no node is supplied.
     public fun error(message: string): void {
         this.report("error", "", message);
     }
 
+    // Reports an error at this model node or at the generator when no node is supplied.
     public fun error(borrow block: GenSyntaxBlock, message: string): void {
         this.report("error", block.id, message);
     }
 
+    // Reports an error at this model node or at the generator when no node is supplied.
     public fun error(borrow decl: GenDecl, message: string): void {
         this.report("error", decl.id, message);
     }
 
+    // Reports an error at this model node or at the generator when no node is supplied.
     public fun error(borrow field: GenField, message: string): void {
         this.report("error", field.id, message);
     }
 
+    // Reports an error at this model node or at the generator when no node is supplied.
     public fun error(borrow call: GenCallSite, message: string): void {
         this.report("error", call.id, message);
     }
 
+    // Reports a warning at this model node.
     public fun warning(borrow decl: GenDecl, message: string): void {
         this.report("warning", decl.id, message);
     }
 
+    // Returns the requested model information.
     public fun has_errors(): bool {
         return this.error_count > 0;
     }
@@ -304,4 +464,10 @@ fun gen_decl_carries(borrow d: GenDecl, borrow id: string): bool {
         }
     }
     return false;
+}
+
+fun gen_json_strings(borrow strings: List<string>): JsonValue {
+    let out = JsonValue.array();
+    for (let s in strings) { out.push(JsonValue.from_string(s)); }
+    return out;
 }

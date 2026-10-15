@@ -97,10 +97,20 @@ fn generated_members_resolve_from_materialized_files() {
 
     let generated = dir.join(".dream/generated/main/dto_derive");
     fs::create_dir_all(&generated).unwrap();
+    let source = "extend Point {\npublic fun describe(): string {\n    return \"dto\";\n}\n}\n";
     fs::write(
         generated.join("extends.dream"),
-        dream::driver::generate::generated_header("dto_derive")
-            + "extend Point {\npublic fun describe(): string {\n    return \"dto\";\n}\n}\n",
+        dream::driver::generate::generated_header("dto_derive") + source,
+    )
+    .unwrap();
+    fs::write(
+        generated.join("outputs.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "generator": "dto_derive",
+            "outputs": [{"kind": "file", "path": "extends.dream", "source": source}]
+        }))
+        .unwrap(),
     )
     .unwrap();
     let diags = analyze_document(Some(&main), src).diagnostics;

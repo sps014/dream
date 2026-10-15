@@ -21,6 +21,22 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
+        let result =
+            self.analyze_expression_inner(expression, parent_function, symbol_table, diagnostics);
+        self.record_generator_type(
+            expression,
+            result.as_ref().cloned().unwrap_or(Type::Unknown),
+        );
+        result
+    }
+
+    fn analyze_expression_inner(
+        &mut self,
+        expression: &ExpressionNode<'a>,
+        parent_function: &FunctionNode<'a>,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<Type, SemanticError> {
         match expression {
             ExpressionNode::Literal(..) => self.analyze_literals_expression(
                 expression,

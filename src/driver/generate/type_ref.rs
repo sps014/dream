@@ -43,6 +43,11 @@ pub(super) fn type_ref(ty: &Type, index: &DeclIndex, generics: &[String]) -> Typ
                 let decl = index
                     .type_decl(&tok.text)
                     .map(|e| e.id.clone())
+                    .or_else(|| {
+                        index.resolve_path(
+                            &tok.text.replace("::", ".").split('.').collect::<Vec<_>>(),
+                        )
+                    })
                     .unwrap_or_default();
                 ("named", tok.text.clone(), decl, args)
             }

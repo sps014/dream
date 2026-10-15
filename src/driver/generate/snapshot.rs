@@ -24,15 +24,24 @@ pub struct ProgramFacts<'f> {
     pub calls: &'f [FoundCall],
     pub paths: &'f ProjectPaths,
     pub target: &'f str,
+    #[cfg(feature = "native")]
+    pub config: &'f std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
+    pub sources: &'f std::collections::HashMap<String, String>,
+    pub source_spans:
+        &'f indexmap::IndexMap<String, Vec<dream_syntax::nodes::program::SourceNodeSpan>>,
+    pub semantic: &'f dream_sema::gen_facts::GenFacts,
 }
 
-struct Builder<'f, 'p> {
-    facts: &'p ProgramFacts<'f>,
-    spans: IdSpans,
+pub(super) struct Builder<'f, 'p> {
+    pub(super) facts: &'p ProgramFacts<'f>,
+    pub(super) spans: IdSpans,
+    pub(super) include_bodies: bool,
 }
 
 /// A generator's snapshot plus what maps its result back onto the program.
 pub struct BuiltSnapshot {
+    #[cfg(feature = "native")]
+    pub root: std::path::PathBuf,
     pub snapshot: Snapshot,
     pub spans: IdSpans,
     /// Syntax-site identity → rewrite key.
@@ -63,7 +72,8 @@ impl Builder<'_, '_> {
         }
     }
 
-    fn mark(&mut self, id: &str, file: Option<&str>, span: TextSpan) {
+    /// Keeps generator identities anchored to the original source rather than generated text.
+    pub(super) fn mark(&mut self, id: &str, file: Option<&str>, span: TextSpan) {
         self.spans.insert(id, file, span);
     }
 
@@ -108,13 +118,29 @@ impl Builder<'_, '_> {
             location: self.location(file, f.name.position),
             id,
             name: f.name.text.clone(),
-            ty: type_ref(&f.field_type, self.facts.index, generics),
+            ty: type_ref(
+                if generics.is_empty() {
+                    self.facts
+                        .semantic
+                        .symbols
+                        .iter()
+                        .find(|v| v.id == owner)
+                        .and_then(|v| v.fields.iter().find(|(name, _)| name == &f.name.text))
+                        .map(|(_, ty)| ty)
+                        .unwrap_or(&f.field_type)
+                } else {
+                    &f.field_type
+                },
+                self.facts.index,
+                generics,
+            ),
             visibility: visibility(f.visibility),
             attributes: self.attrs(&f.attributes),
         }
     }
 
-    fn function(
+    /// Preserves source signatures and expands bodies only for selected dependencies.
+    pub(super) fn function(
         &mut self,
         owner: Option<&str>,
         module: &str,
@@ -127,11 +153,51 @@ impl Builder<'_, '_> {
             None => dream_abi::attributes::decl_identity(module, &f.name.text),
         };
         self.mark(&id, file, f.name.position);
+        if owner.is_none() && super::walk::is_user_file(file) {
+            self.spans.consumable.insert(
+                id.clone(),
+                (file.unwrap_or_default().to_string(), f.name.position),
+            );
+        }
         let generics = generic_names(&f.generic_parameters);
         let mut scope: Vec<String> = outer_generics.to_vec();
         scope.extend(generics.iter().cloned());
+        let declaration_fact = self
+            .facts
+            .semantic
+            .declarations
+            .get(&(file.unwrap_or_default().to_string(), f.name.position.start));
+        let overload = declaration_fact
+            .map(|f| f.overload.clone())
+            .unwrap_or_default();
+        if !overload.is_empty() {
+            self.mark(&overload, file, f.name.position);
+        }
+        let body_owner = if declaration_fact.is_some_and(|f| f.overloaded) {
+            overload.as_str()
+        } else {
+            id.as_str()
+        };
+        let body = (self.include_bodies && super::walk::is_user_file(file))
+            .then(|| super::body::lower(f, body_owner, file, self.facts, &scope, &mut self.spans));
+        let mut declaration_span = f.name.position;
+        for p in &f.parameters {
+            declaration_span.end = declaration_span.end.max(p.name.position.end);
+            if let Some(span) = p.type_.get_span() {
+                declaration_span.end = declaration_span.end.max(span.end);
+            }
+        }
+        if let Some(span) = f.return_type.as_ref().and_then(|t| t.get_span()) {
+            declaration_span.end = declaration_span.end.max(span.end);
+        }
+        if let Some((_, span)) = self.spans.get(&format!("{body_owner}#b.0")) {
+            declaration_span.end = declaration_span.end.max(span.end);
+        }
+        self.mark(&format!("{body_owner}#declaration"), file, declaration_span);
         Function {
             location: self.location(file, f.name.position),
+            body,
+            overload,
             id,
             name: f.name.text.clone(),
             is_static: f.is_static,
@@ -144,11 +210,28 @@ impl Builder<'_, '_> {
                 .filter(|p| p.name.text != "this")
                 .map(|p| Param {
                     name: p.name.text.clone(),
-                    ty: type_ref(&p.type_, self.facts.index, &scope),
+                    ty: type_ref(
+                        if scope.is_empty() {
+                            declaration_fact
+                                .and_then(|f| {
+                                    f.params.iter().find(|(name, _)| name == &p.name.text)
+                                })
+                                .map(|(_, ty)| ty)
+                                .unwrap_or(&p.type_)
+                        } else {
+                            &p.type_
+                        },
+                        self.facts.index,
+                        &scope,
+                    ),
                     attributes: self.attrs(&p.attributes),
                 })
                 .collect(),
-            ret: match &f.return_type {
+            ret: match declaration_fact
+                .filter(|_| scope.is_empty())
+                .map(|f| &f.ret)
+                .or(f.return_type.as_ref())
+            {
                 Some(t) => type_ref(t, self.facts.index, &scope),
                 None => type_ref(&dream_syntax::nodes::Type::Void, self.facts.index, &scope),
             },
@@ -225,14 +308,16 @@ fn read_additional_files(
         .collect()
 }
 
-pub fn build_snapshot(
+pub(super) fn build_selected(
     acc: &ProgramAccumulator<'_>,
     facts: &ProgramFacts<'_>,
     registered: &RegisteredGenerator,
+    all: bool,
 ) -> Result<BuiltSnapshot, String> {
     let mut b = Builder {
         facts,
         spans: IdSpans::default(),
+        include_bodies: !all,
     };
     let registry = facts.attributes;
     let ids = &registered.attribute_triggers;
@@ -247,6 +332,8 @@ pub fn build_snapshot(
             .map(|e| e.options.clone())
             .unwrap_or_default(),
         additional_files: read_additional_files(registered, facts.paths)?,
+        #[cfg(feature = "native")]
+        tools: super::tools::describe(facts.config, &facts.paths.root, &registered.tools)?,
         index: facts
             .index
             .types()
@@ -258,14 +345,14 @@ pub fn build_snapshot(
             .collect(),
         ..Snapshot::default()
     };
-    if !ids.is_empty() {
+    if all || !ids.is_empty() {
         for s in &acc.all_structs {
             let selected = carries(&s.attributes, ids, registry)
                 || s.fields
                     .iter()
                     .any(|f| carries(&f.attributes, ids, registry))
                 || s.methods.iter().any(|m| function_carries(m, ids, registry));
-            if !selected {
+            if !all && !selected {
                 continue;
             }
             let file = s.file_path.as_deref();
@@ -310,7 +397,7 @@ pub fn build_snapshot(
                         .any(|f| carries(&f.attributes, ids, registry))
                 })
                 || e.methods.iter().any(|m| function_carries(m, ids, registry));
-            if !selected {
+            if !all && !selected {
                 continue;
             }
             let file = e.file_path.as_deref();
@@ -359,7 +446,7 @@ pub fn build_snapshot(
         for i in &acc.all_interfaces {
             let selected = carries(&i.attributes, ids, registry)
                 || i.methods.iter().any(|m| function_carries(m, ids, registry));
-            if !selected {
+            if !all && !selected {
                 continue;
             }
             let file = i.file_path.as_deref();
@@ -378,7 +465,11 @@ pub fn build_snapshot(
                 kind: "interface".to_string(),
                 module,
                 visibility: "public".to_string(),
-                implements: Vec::new(),
+                implements: i
+                    .parents
+                    .iter()
+                    .map(|t| type_ref(t, facts.index, &generics))
+                    .collect(),
                 attributes: b.attrs(&i.attributes),
                 generics,
                 fields: Vec::new(),
@@ -388,7 +479,7 @@ pub fn build_snapshot(
             });
         }
         for f in &acc.all_functions {
-            if function_carries(f, ids, registry) {
+            if all || function_carries(f, ids, registry) {
                 let file = f.file_path.as_deref();
                 let module = super::decls::module_of(acc, file);
                 let func = b.function(None, &module, f, file, &[]);
@@ -448,6 +539,8 @@ pub fn build_snapshot(
         });
     }
     Ok(BuiltSnapshot {
+        #[cfg(feature = "native")]
+        root: facts.paths.root.clone(),
         snapshot,
         spans: b.spans,
         sites: site_ids,

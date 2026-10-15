@@ -15,7 +15,11 @@ export function makeCancellationHost(getInstance) {
         const wait = Atomics.waitAsync(word, 0, 0);
         if (wait.async) {
           waiters.set(registration, record);
+          // Node does not count an Atomics.waitAsync waiter as event-loop work, so a wake posted
+          // by another thread can arrive after the loop has drained and exited.
+          const keepAlive = setInterval(() => {}, 0x7fffffff);
           pending = wait.value.then(() => {
+            clearInterval(keepAlive);
             if (waiters.get(registration) === record) waiters.delete(registration);
             return 0;
           });

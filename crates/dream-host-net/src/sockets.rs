@@ -15,6 +15,9 @@ use tokio::{
     sync::{Mutex as AsyncMutex, watch},
 };
 
+/// Holds the largest UDP payload over IPv4 or IPv6 without jumbograms.
+const MAX_DATAGRAM: usize = 65_536;
+
 enum Socket {
     Tcp {
         read: AsyncMutex<OwnedReadHalf>,
@@ -243,7 +246,9 @@ async fn operate(socket: &Socket, value: &Value, bytes: Vec<u8>) -> Result<Outpu
             let _receiving = receiving
                 .try_lock()
                 .map_err(|_| error("EBUSY", "datagram receive is already pending"))?;
-            let mut bytes = vec![0; count + 1];
+            // Windows fails recv_from with WSAEMSGSIZE instead of truncating, so receive into a
+            // buffer that fits any datagram and truncate to the requested size here.
+            let mut bytes = vec![0; MAX_DATAGRAM];
             let (received, peer) = socket.recv_from(&mut bytes).await.map_err(io)?;
             bytes.truncate(received.min(count));
             Ok(Output::bytes(json!({"host":peer.ip().to_string(),"port":peer.port(),"bytes":hex::encode(bytes),"truncated":received > count}).to_string().into_bytes()))

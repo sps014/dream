@@ -60,3 +60,28 @@ Example: `Math.sqrt(9.0)` → `3.0`. A negative input is NaN.
 - `.length` on strings, arrays, and collections.
 - `Buffer.alloc<T>(n)` — a zeroed fixed array. Prefer [List](collections.md) when the size grows.
 - Override `public override fun to_string()` so `print` and `+` show your type. See [object](../language/objects.md).
+
+## Waiting for cancellation
+
+Cancellation tokens can suspend until cancellation, or wait for another future while
+observing cancellation. Waits use scheduler notifications rather than periodic checks.
+`wait` returns `Err(CancelledError)` and cancels the supplied future when cancellation
+wins; completed side effects remain observable. A wait detaches its subscription on completion or when its cancelled future is
+released. Tokens retain their existing cross-worker sharing behavior.
+Use `wait_void` for a `Future<void>`; it returns `Ok(true)` when the operation completes.
+
+```dream
+import system;
+
+async fun cancellation_value(): string {
+    Time.delay(0).await;
+    return "ready";
+}
+
+async fun main(): void {
+    let source = CancellationSource();
+    System.println(source.token.wait(cancellation_value()).await.unwrap());
+    source.cancel();
+    System.println(source.token.wait_cancelled().await);
+}
+```

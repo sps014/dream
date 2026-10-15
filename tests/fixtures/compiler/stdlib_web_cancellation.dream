@@ -1,0 +1,30 @@
+import system;
+
+async fun browser_value(): string {
+    Time.delay(0).await;
+    return "ready 日本語";
+}
+
+fun browser_detached_wait(): Future<Result<string, CancelledError>> {
+    let source = CancellationSource();
+    return source.token.wait(browser_value());
+}
+
+async fun main(): void {
+    if browser_detached_wait().await.unwrap() != "ready 日本語" { System.panic("escaped wait mismatch"); }
+    let source = CancellationSource();
+    for (let i = 0; i < 100; i = i + 1) {
+        if source.token.wait(browser_value()).await.unwrap() != "ready 日本語" { System.panic("completion mismatch"); }
+    }
+    let never = CancellationSource();
+    let first = source.token.wait(never.token.wait_cancelled());
+    let second = source.token.wait(never.token.wait_cancelled());
+    Promise.start(first);
+    Promise.start(second);
+    Time.delay(1).await;
+    source.cancel();
+    if !first.await.is_err() || !second.await.is_err() { System.panic("broadcast cancellation mismatch"); }
+    if !source.token.wait_cancelled().await { System.panic("late cancellation mismatch"); }
+    if !source.token.wait(browser_value()).await.is_err() { System.panic("pre-cancellation mismatch"); }
+    System.println("browser cancellation fixture passed");
+}

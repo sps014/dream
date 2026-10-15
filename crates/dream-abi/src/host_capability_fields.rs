@@ -38,6 +38,7 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "netBodyRead",
             "netBodyClose",
             "netOperationPoll",
+            "netOperationWait",
             "netOperationRelease",
             "netOperationClaim",
         ],

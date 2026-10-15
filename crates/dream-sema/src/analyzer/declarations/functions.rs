@@ -17,6 +17,18 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) {
         use dream_abi::intrinsics::IntrinsicOp;
+        if IntrinsicOp::from_attributes(&function.attributes)
+            == Some(IntrinsicOp::CancellationRuntime)
+            && !function
+                .file_path
+                .as_deref()
+                .is_some_and(dream_stdlib::is_std_source)
+        {
+            diagnostics.report_error(
+                "cancellation state intrinsics are reserved for internal stdlib state".into(),
+                Some(function.name.position),
+            );
+        }
         if matches!(
             IntrinsicOp::from_attributes(&function.attributes),
             Some(

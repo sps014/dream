@@ -1,0 +1,15 @@
+import system;
+import system.task;
+
+async fun main(): void {
+    let source = CancellationSource();
+    let never = CancellationSource();
+    let pending = source.token.wait(never.token.wait_cancelled());
+    Promise.start(pending);
+    Time.delay(1).await;
+    let worker = Task.spawn(() => { source.cancel(); return 0; });
+    Promise.start(worker);
+    if !pending.await.is_err() { System.panic("worker cancellation mismatch"); }
+    worker.await;
+    System.println("browser worker cancellation fixture passed");
+}

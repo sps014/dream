@@ -3,6 +3,9 @@ import system.testing;
 
 @test
 fun url_basics(): void {
+    Assert.eq_str(Url.parse("data:text/plain,hello ?#").unwrap().to_string(), "data:text/plain,hello%20?#");
+    Assert.eq_str(Url.parse("data:text/plain,hello  ?x").unwrap().to_string(), "data:text/plain,hello %20?x");
+
     let base = Url.parse("HTTPS://ExAmPle.COM:443/a/../v1/?role=reader&role=editor#fragment").unwrap();
     Assert.eq_str(base.scheme, "https");
     Assert.eq_str(base.host, "example.com");

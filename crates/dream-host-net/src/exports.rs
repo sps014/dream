@@ -49,3 +49,11 @@ pub extern "C" fn netOperationClaim(id: i32) {
 pub extern "C" fn netCapabilities() -> i32 {
     7
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn netOperationWaitAsync(future: DreamPtr, id: i32) -> i32 {
+    if !crate::http::wait(id, dream_host_abi::ForeignFuture::new(future)) {
+        dream_host_abi::complete_foreign_future(dream_host_abi::ForeignFuture::new(future), 0);
+    }
+    1
+}

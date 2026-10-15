@@ -59,6 +59,10 @@ fn completed_unit(
 }
 
 fn tracked_include(path: &Path) -> bool {
+    // Apple Clang records SDK metadata alongside headers in dependency files.
+    if path.file_name().is_some_and(|name| name == "SDKSettings.json") {
+        return true;
+    }
     path.extension().is_none_or(|extension| {
         matches!(
             extension.to_str(),

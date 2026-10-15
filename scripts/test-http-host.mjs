@@ -4,12 +4,18 @@ import test from "node:test";
 import { makeHttpHost } from "../runtime/src/hosts/http.js";
 
 async function awaitWire(host, id) {
-  for (let i = 0; i < 5000; i++) {
+  let timer;
+  try {
+    await Promise.race([
+      host.netOperationWait(id),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("HTTP operation did not complete")), 5000); }),
+    ]);
     const wire = host.netOperationPoll(id);
-    if (wire[0]) { if (wire[0] === 1) host.netOperationClaim(id); host.netOperationRelease(id); return wire; }
-    await new Promise(resolve => setTimeout(resolve, 1));
-  }
-  throw new Error("HTTP operation did not complete");
+    assert.notEqual(wire[0], 0, "completion notification must precede readiness");
+    if (wire[0] === 1) host.netOperationClaim(id);
+    host.netOperationRelease(id);
+    return wire;
+  } finally { clearTimeout(timer); }
 }
 function decode(wire) { return JSON.parse(new TextDecoder().decode(Uint8Array.from(wire.slice(1)))); }
 
@@ -71,7 +77,9 @@ test("Fetch streams, redirects, deadlines, repeated headers and operation dispos
     assert.equal(decode(await awaitWire(host, request("/echo", { connect_timeout_ms: 10 }))).code, "ENOTSUP");
     assert.equal(decode(await awaitWire(host, request("/echo", { headers: [["bad\nname", "value"]] }))).code, "EINVAL");
     const cancelled = request("/slow");
+    const abandonedWait = host.netOperationWait(cancelled);
     host.netOperationRelease(cancelled);
+    await abandonedWait;
     assert.equal(decode(host.netOperationPoll(cancelled)).code, "ECLOSED");
     const orphaned = request("/stream");
     let orphanWire;

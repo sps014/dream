@@ -15,6 +15,64 @@ shared public class CancellationToken {
         return this._source.is_cancelled;
     }
 
+    // Suspends until cancellation and returns true. Completion or releasing a cancelled future detaches its subscription.
+    public fun wait_cancelled(): Future<bool> {
+        return CancellationToken.wait_cancelled_owned(this);
+    }
+
+    static async fun wait_cancelled_owned(token: CancellationToken): bool {
+        let registration = CancellationRegistration(token._source.register());
+        registration.signal().await;
+        registration.close();
+        return true;
+    }
+
+    // Awaits a future or cancellation using scheduler notifications. Cancellation cancels
+    // the supplied future; already performed side effects are preserved.
+    public fun wait<T>(future: Future<T>): Future<Result<T, CancelledError>> {
+        // A lazy async receiver borrows `this`; an owned argument survives the creating scope.
+        return CancellationToken.wait_owned(this, future);
+    }
+
+    // Awaits a void future or cancellation, returning true when the operation completes.
+    public fun wait_void(future: Future<void>): Future<Result<bool, CancelledError>> {
+        return CancellationToken.wait_void_owned(this, future);
+    }
+
+    static async fun wait_owned<T>(token: CancellationToken, future: Future<T>): Result<T, CancelledError> {
+        if !CancellationToken.wait_completion(token, future).await { return Result.Err(CancelledError.cancelled()); }
+        return Result.Ok(future.await);
+    }
+
+    static async fun wait_void_owned(token: CancellationToken, future: Future<void>): Result<bool, CancelledError> {
+        if !CancellationToken.wait_completion(token, future).await { return Result.Err(CancelledError.cancelled()); }
+        return Result.Ok(true);
+    }
+
+    static async fun wait_completion<T>(token: CancellationToken, future: Future<T>): bool {
+        if token.is_cancelled { Promise.cancel(future); return false; }
+        let registration = CancellationRegistration(token._source.register());
+        let signal = registration.signal();
+        let completed = CancellationToken.completed(future);
+        let cancelled = CancellationToken.cancelled(signal);
+        let result = Promise.race([completed, cancelled]).await;
+        registration.close();
+        Promise.cancel(completed);
+        Promise.cancel(cancelled);
+        if result != 0 { Promise.cancel(future); }
+        return result == 0;
+    }
+
+    static async fun completed<T>(future: Future<T>): int {
+        future.await;
+        return 0;
+    }
+
+    static async fun cancelled(signal: Future<int>): int {
+        signal.await;
+        return 1;
+    }
+
     // Panics with `CancelledError` when already cancelled.
     public fun throw_if_cancelled(): void {
         if this.is_cancelled {
@@ -52,5 +110,24 @@ shared public class CancellationToken {
             return Result.Err(err);
         }
         return Result.Ok(true);
+    }
+}
+
+// Registration ownership is independent of either race branch; dropping the owner detaches
+// the subscription and settles its signal even if its awaiting frame was cancelled.
+class CancellationRegistration {
+    id: usize;
+    internal constructor(id: usize) { this.id = id; }
+    del() { this.close(); }
+    @intrinsic("dream_cancellation_signal")
+    static extern fun signal_host(id: usize): Future<int>;
+    @intrinsic("dream_cancellation_unregister")
+    static extern fun release_host(id: usize): void;
+    internal fun signal(): Future<int> { return CancellationRegistration.signal_host(this.id); }
+    internal fun close(): void {
+        if this.id != (usize)0 {
+            CancellationRegistration.release_host(this.id);
+            this.id = (usize)0;
+        }
     }
 }

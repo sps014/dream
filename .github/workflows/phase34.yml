@@ -1,0 +1,71 @@
+name: Phase 3–4 platform qualification
+
+on:
+  push:
+    branches: ["feat/phase34-*"]
+    paths-ignore: ["docs/**", "tooling/docs/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    name: I/O and networking (${{ matrix.os }})
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO_PROFILE_DEV_OPT_LEVEL: "1"
+      CARGO_INCREMENTAL: "0"
+      CARGO_TERM_COLOR: always
+      DREAM_VERIFY_MIR: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Linux native dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-o1-${{ runner.os }}-${{ runner.arch }}
+          cache-on-failure: true
+      - uses: actions/cache@v6
+        with:
+          path: ~/.dream/toolchains/llvm-22.1.8
+          key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
+      - name: Install pinned LLVM and WASI support
+        shell: bash
+        run: scripts/fetch-dev-llvm.sh
+      - name: Select the MSVC-compatible C driver
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "DREAM_CC=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang.exe" >> $env:GITHUB_ENV
+          "DREAM_CXX=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang++.exe" >> $env:GITHUB_ENV
+      - run: cargo build --workspace
+      - run: python scripts/qualify-io-net.py
+      - name: Check cancellation under sanitizers
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          DREAM_WORKER_SANITIZER: address,undefined
+        run: cargo test --test integration runtime_cancellation::
+      - name: Preserve qualification reports and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase34-${{ runner.os }}-${{ runner.arch }}
+          path: target/phase34-qualification/
+          retention-days: 14

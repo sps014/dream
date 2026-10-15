@@ -130,5 +130,11 @@
     "page": "docs/reference/stdlib/http.md",
     "block": 1,
     "stdout": "2\nECANCELLED\n"
+  },
+  {
+    "name": "cancellation-events",
+    "page": "docs/reference/stdlib/builtins.md",
+    "block": 1,
+    "stdout": "ready\ntrue\n"
   }
 ]

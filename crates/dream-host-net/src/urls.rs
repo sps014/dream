@@ -1,11 +1,18 @@
 use url::{Position, Url};
 
 pub(crate) fn parse(input: &str, base: &str) -> Result<Vec<String>, url::ParseError> {
-    let url = if base.is_empty() {
+    let mut url = if base.is_empty() {
         Url::parse(input)?
     } else {
         Url::parse(base)?.join(input)?
     };
+    // Preserve the final opaque-path space through query/fragment edits on every host.
+    if url.cannot_be_a_base()
+        && (url.query().is_some() || url.fragment().is_some())
+        && let Some(path) = url.path().strip_suffix(' ')
+    {
+        url.set_path(&format!("{path}%20"));
+    }
     // Prefixes distinguish absent delimiters from present but empty query/fragment components.
     let mut parts = vec![
         url[..Position::AfterPath].to_string(),
@@ -56,7 +63,7 @@ mod tests {
     fn preserves_empty_components_and_unicode() {
         assert_eq!(
             parse("data:text/plain,hello ?#", "").unwrap()[0],
-            "data:text/plain,hello "
+            "data:text/plain,hello%20"
         );
         let p = parse("https://bücher.example/こんにちは?empty=&=value#", "").unwrap();
         assert_eq!(p[2], "xn--bcher-kva.example");

@@ -12,6 +12,31 @@ True when the owning source has been cancelled.
 public get is_cancelled(): bool
 ```
 
+## `wait_cancelled`
+
+Suspends until cancellation and returns true. Completion or releasing a cancelled future detaches its subscription.
+
+```dream
+public fun wait_cancelled(): Future<bool>
+```
+
+## `wait`
+
+Awaits a future or cancellation using scheduler notifications. Cancellation cancels the
+supplied future; completed side effects remain observable.
+
+```dream
+public fun wait<T>(future: Future<T>): Future<Result<T, CancelledError>>
+```
+
+## `wait_void`
+
+Awaits a void future or cancellation, returning true when the operation completes.
+
+```dream
+public fun wait_void(future: Future<void>): Future<Result<bool, CancelledError>>
+```
+
 ## `throw_if_cancelled`
 
 Panics with `CancelledError` when already cancelled.

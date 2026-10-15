@@ -1,3 +1,4 @@
+import { makeCancellationHost } from "./hosts/cancellation.js";
 import { makeJsHost } from "./hosts/js.js";
 import { makeNetHost } from "./hosts/net.js";
 import { makeFsHost } from "./hosts/fs.js";
@@ -12,6 +13,7 @@ import { makeDatetimeTextHost } from "./hosts/datetime_text.js";
 export function defaultDreamModule(getInstance) {
   return {
     ...makeJsHost(getInstance),
+    ...makeCancellationHost(getInstance),
     ...makeFsHost(),
     ...makeNetHost(),
     ...makeCryptoHost(),
@@ -22,6 +24,7 @@ export function defaultDreamModule(getInstance) {
 
 export {
   makeJsHost,
+  makeCancellationHost,
   makeFsHost,
   makeNetHost,
   makeCryptoHost,

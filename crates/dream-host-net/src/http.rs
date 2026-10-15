@@ -42,6 +42,7 @@ struct Operation {
     result: Option<Result<Output, Failure>>,
     task: Option<AbortHandle>,
     response_body: Option<i32>,
+    waiter: Option<dream_host_abi::ForeignFuture>,
 }
 #[derive(Default)]
 struct Registry {
@@ -167,10 +168,19 @@ fn start(future: impl Future<Output = Result<Output, Failure>> + Send + 'static)
         result: None,
         task: None,
         response_body: None,
+        waiter: None,
     }));
     let task_operation = operation.clone();
     let task = rt.spawn(async move {
-        lock(&task_operation).result = Some(future.await);
+        let result = future.await;
+        let waiter = {
+            let mut operation = lock(&task_operation);
+            operation.result = Some(result);
+            operation.waiter.take()
+        };
+        if let Some(waiter) = waiter {
+            dream_host_abi::complete_foreign_future(waiter, 0);
+        }
     });
     lock(&operation).task = Some(task.abort_handle());
     state.operations.insert(id, operation);
@@ -285,19 +295,35 @@ pub(crate) fn claim(id: i32) {
 pub(crate) fn release(id: i32) {
     let operation = lock(registry()).operations.remove(&id);
     if let Some(operation) = operation {
-        let body = {
+        let (body, waiter) = {
             let mut operation = lock(&operation);
             if let Some(task) = &operation.task {
                 task.abort();
             }
-            operation.response_body.take()
+            (operation.response_body.take(), operation.waiter.take())
         };
+        if let Some(waiter) = waiter {
+            dream_host_abi::complete_foreign_future(waiter, 0);
+        }
         // Poll/claim acquire registry before operation; never reacquire registry while holding it.
         if let Some(body) = body {
             body_close(body);
         }
     }
 }
+pub(crate) fn wait(id: i32, waiter: dream_host_abi::ForeignFuture) -> bool {
+    let operation = lock(registry()).operations.get(&id).cloned();
+    let Some(operation) = operation else {
+        return false;
+    };
+    let mut operation = lock(&operation);
+    if operation.result.is_some() || operation.waiter.is_some() {
+        return false;
+    }
+    operation.waiter = Some(waiter);
+    true
+}
+
 pub(crate) fn poll(id: i32) -> Vec<u8> {
     let mut state = lock(registry());
     let Some(operation) = state.operations.get(&id).cloned() else {

@@ -68,8 +68,8 @@ a limit and return `EREDIRECT` when exceeded.
 `CancellationToken` is accepted by `send`, `read_text`, and body reads. Cancellation
 returns `ECANCELLED`, abandons pending transport work, and does not roll back
 request side effects or consumed input. Overlapping body reads report `EBUSY`.
-HTTP completion and cancellation currently use 1 ms timer checks at the Dream
-boundary; transport execution itself is asynchronous.
+HTTP completion and cancellation wake the scheduler through notifications. No
+periodic timer checks are needed while a request or body read is pending.
 
 `HttpError.code()` distinguishes validation (`EINVAL`), deadline (`ETIMEOUT`),
 redirect (`EREDIRECT`), transport/TLS (`ETRANSPORT`), cancellation (`ECANCELLED`),

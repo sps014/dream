@@ -222,4 +222,8 @@ fn pooled_http_transport_cancellation_streaming_deadlines_and_tls_rejection() {
     http::body_close(body);
     tls.join().unwrap();
     http::client_close(client);
+    let resources = http::lock(http::registry());
+    assert!(resources.clients.is_empty());
+    assert!(resources.bodies.is_empty());
+    assert!(resources.operations.is_empty());
 }

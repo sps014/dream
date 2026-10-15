@@ -67,11 +67,9 @@ fn c_abi_fn_names(src: &str) -> Vec<String> {
         let Some(t) = t else { continue };
         if let Some(end) = t.find('(') {
             let name = t[..end].trim();
-            // `<Host>Async` fns are the deferred variants of an existing `@runtime`
-            // host (same wire format, plus a leading future arg), not standalone
-            // entry points — they share their base name's prelude declaration.
-            if !name.is_empty() && name != "dream_host_bind_v2" && !name.ends_with("Async") {
-                out.push(name.to_string());
+            // Deferred-only hosts have no synchronous export; both forms share one import key.
+            if !name.is_empty() && name != "dream_host_bind_v2" {
+                out.push(name.strip_suffix("Async").unwrap_or(name).to_string());
             }
         }
     }
@@ -130,6 +128,7 @@ const JS_HOST_SOURCES: &[&str] = &[
     include_str!("../../../runtime/src/hosts/js.js"),
     include_str!("../../../runtime/src/hosts/fs.js"),
     include_str!("../../../runtime/src/hosts/file_operations.js"),
+    include_str!("../../../runtime/src/hosts/cancellation.js"),
     include_str!("../../../runtime/src/hosts/net.js"),
     include_str!("../../../runtime/src/hosts/http.js"),
     include_str!("../../../runtime/src/hosts/crypto.js"),
@@ -141,6 +140,8 @@ const JS_HOST_SOURCES: &[&str] = &[
 // Satisfied by the runtime C archive (runtime/c/core/weak.c), not by any
 // JS host or capability ABI table — so they are exempt from the prelude/host parity check.
 const RUNTIME_ARCHIVE_KEYS: &[&str] = &["weakBind", "weakDead", "weakLoad", "weakReleaseRaw"];
+// These bridges are imported by shared/cancellation.c rather than a stdlib extern.
+const RUNTIME_C_JS_IMPORTS: &[&str] = &["cancellationSubscribe", "cancellationNotify"];
 const COMPILER_EMITTED_JS_RC: &[&str] = &["jsRetain", "jsRelease"];
 // The loader invokes this after guest execution to await worker shutdown; it is not a
 // guest import and therefore has no stdlib declaration.
@@ -205,7 +206,11 @@ fn js_dream_host_keys_match_prelude_js_declarations() {
     for src in JS_HOST_SOURCES {
         js_keys.extend(js_host_export_keys(src));
     }
-    for emitted in COMPILER_EMITTED_JS_RC.iter().chain(LOADER_LIFECYCLE_KEYS) {
+    for emitted in COMPILER_EMITTED_JS_RC
+        .iter()
+        .chain(LOADER_LIFECYCLE_KEYS)
+        .chain(RUNTIME_C_JS_IMPORTS)
+    {
         js_keys.remove(*emitted);
     }
 
@@ -226,4 +231,15 @@ fn js_dream_host_keys_match_prelude_js_declarations() {
         js_only,
         prelude_only
     );
+}
+
+#[test]
+fn runtime_c_imports_have_matching_javascript_bridges() {
+    let source = include_str!("../../dream-mir/src/runtime/c/sys/shared/cancellation.c");
+    let javascript =
+        js_host_export_keys(include_str!("../../../runtime/src/hosts/cancellation.js"));
+    for name in RUNTIME_C_JS_IMPORTS {
+        assert!(source.contains(&format!("import_name(\"{name}\")")));
+        assert!(javascript.contains(*name));
+    }
 }

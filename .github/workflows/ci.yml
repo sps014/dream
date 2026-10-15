@@ -112,6 +112,18 @@ jobs:
       - name: Check runnable documentation examples
         run: python tooling/docs/check_examples.py
       - run: cargo test --workspace --no-fail-fast --timings
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Qualify async I/O and networking on native and Node
+        run: python scripts/qualify-io-net.py
+      - name: Preserve phase 3–4 qualification results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase34-${{ runner.os }}-${{ runner.arch }}
+          path: target/phase34-qualification/
+          retention-days: 7
       - name: Compile-time and memory regression budget
         if: runner.os == 'Linux'
         shell: bash
@@ -357,3 +369,4 @@ jobs:
       - run: "cargo test --test integration runtime_ownership:: -- --nocapture"
       - run: "cargo test --test integration runtime_weak:: -- --nocapture"
       - run: "cargo test --test integration runtime_callback:: -- --nocapture"
+      - run: "cargo test --test integration runtime_cancellation:: -- --nocapture"

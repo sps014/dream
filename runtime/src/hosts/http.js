@@ -9,15 +9,19 @@ function httpWireError(error) { return [2, ...new TextEncoder().encode(JSON.stri
 function httpNewOperation(work) {
   if (httpOperations.size >= 1024 || nextHttpHandle >= 2147483647) return 0;
   const id = nextHttpHandle++;
-  const op = { result: null, released: false, abort: null };
+  const op = { result: null, released: false, abort: null, waiters: [] };
   httpOperations.set(id, op);
   Promise.resolve().then(() => work(op)).then(
     result => {
       if (op.released) { result?.dispose?.(); return; }
       op.result = result;
+      for (const resolve of op.waiters.splice(0)) resolve(0);
     },
     error => {
-      if (!op.released) op.result = { error: error?.code ? error : httpError("ETRANSPORT", "HTTP transport failed") };
+      if (!op.released) {
+        op.result = { error: error?.code ? error : httpError("ETRANSPORT", "HTTP transport failed") };
+        for (const resolve of op.waiters.splice(0)) resolve(0);
+      }
     },
   );
   return id;
@@ -163,6 +167,11 @@ export function makeHttpHost() {
         body.dispose();
       }
     },
+    netOperationWait: id => {
+      const op = httpOperations.get(id);
+      if (!op || op.result || op.released) return Promise.resolve(0);
+      return new Promise(resolve => op.waiters.push(resolve));
+    },
     netOperationPoll: id => {
       const op = httpOperations.get(id);
       if (!op) return httpWireError(httpError("ECLOSED", "HTTP operation is closed"));
@@ -187,6 +196,7 @@ export function makeHttpHost() {
       httpOperations.delete(id);
       if (!op) return;
       op.released = true;
+      for (const resolve of op.waiters.splice(0)) resolve(0);
       if (op.responseBody) httpBodies.delete(op.responseBody);
       if (op.result?.bytes) { op.abort = null; }
       if (op.result && !op.result.error) op.result.dispose?.();

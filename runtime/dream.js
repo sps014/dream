@@ -975,6 +975,37 @@ function defaultEnv(getInstance, options) {
   };
 }
 
+// ----- hosts/cancellation.js -----
+function makeCancellationHost(getInstance) {
+  const waiters = new Map();
+  const shared = buffer => typeof SharedArrayBuffer !== "undefined" && buffer instanceof SharedArrayBuffer;
+  return {
+    cancellationSubscribe: (future, registration) => {
+      const inst = getInstance();
+      // Attach synchronously: the C owner can unregister and recycle this word before a microtask.
+      const word = new Int32Array(inst.memory.buffer, registration, 1);
+      let pending;
+      if (shared(word.buffer)) {
+        const wait = Atomics.waitAsync(word, 0, 0);
+        pending = wait.async ? wait.value.then(() => 0) : Promise.resolve(0);
+      } else if (word[0] !== 0) pending = Promise.resolve(0);
+      else pending = new Promise(resolve => waiters.set(registration, resolve));
+      // Notification is final; no callback reads the registration after its C owner frees it.
+      wrapAsyncImport(getInstance, () => pending, { params: [], result: "int" })(future);
+    },
+    cancellationNotify: registration => {
+      const inst = getInstance();
+      const word = new Int32Array(inst.memory.buffer, registration, 1);
+      if (shared(word.buffer)) Atomics.notify(word, 0);
+      else {
+        const resolve = waiters.get(registration);
+        waiters.delete(registration);
+        resolve?.(0);
+      }
+    },
+  };
+}
+
 // ----- hosts/js.js -----
 /** Dynamic `js` type bridges (@js Dream hosts). */
 function makeJsHost(getInstance) {
@@ -1116,15 +1147,19 @@ function httpWireError(error) { return [2, ...new TextEncoder().encode(JSON.stri
 function httpNewOperation(work) {
   if (httpOperations.size >= 1024 || nextHttpHandle >= 2147483647) return 0;
   const id = nextHttpHandle++;
-  const op = { result: null, released: false, abort: null };
+  const op = { result: null, released: false, abort: null, waiters: [] };
   httpOperations.set(id, op);
   Promise.resolve().then(() => work(op)).then(
     result => {
       if (op.released) { result?.dispose?.(); return; }
       op.result = result;
+      for (const resolve of op.waiters.splice(0)) resolve(0);
     },
     error => {
-      if (!op.released) op.result = { error: error?.code ? error : httpError("ETRANSPORT", "HTTP transport failed") };
+      if (!op.released) {
+        op.result = { error: error?.code ? error : httpError("ETRANSPORT", "HTTP transport failed") };
+        for (const resolve of op.waiters.splice(0)) resolve(0);
+      }
     },
   );
   return id;
@@ -1270,6 +1305,11 @@ function makeHttpHost() {
         body.dispose();
       }
     },
+    netOperationWait: id => {
+      const op = httpOperations.get(id);
+      if (!op || op.result || op.released) return Promise.resolve(0);
+      return new Promise(resolve => op.waiters.push(resolve));
+    },
     netOperationPoll: id => {
       const op = httpOperations.get(id);
       if (!op) return httpWireError(httpError("ECLOSED", "HTTP operation is closed"));
@@ -1294,6 +1334,7 @@ function makeHttpHost() {
       httpOperations.delete(id);
       if (!op) return;
       op.released = true;
+      for (const resolve of op.waiters.splice(0)) resolve(0);
       if (op.responseBody) httpBodies.delete(op.responseBody);
       if (op.result?.bytes) { op.abort = null; }
       if (op.result && !op.result.error) op.result.dispose?.();
@@ -1308,7 +1349,11 @@ function makeNetHost() {
     ...makeHttpHost(),
     netUrlParse: (input, base) => {
       try {
-        const url = base === "" ? new URL(input) : new URL(input, base);
+        let url = base === "" ? new URL(input) : new URL(input, base);
+        if (!url.host && !url.pathname.startsWith("/") && url.pathname.endsWith(" ")) {
+          const end = url.href.search(/[?#]/);
+          if (end >= 0) url = new URL(url.href.slice(0, end - 1) + "%20" + url.href.slice(end));
+        }
         // URL.search/hash hide empty delimiters; inspect canonical serialization before removing them.
         const href = url.href;
         const fragmentAt = href.indexOf("#");
@@ -2537,6 +2582,7 @@ function makeDatetimeTextHost() {
 function defaultDreamModule(getInstance) {
   return {
     ...makeJsHost(getInstance),
+    ...makeCancellationHost(getInstance),
     ...makeFsHost(),
     ...makeNetHost(),
     ...makeCryptoHost(),

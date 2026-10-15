@@ -41,8 +41,5 @@ and empty values retain `=`. URI-component codecs in `system.encoding` have
 different plus-sign rules. URL parsing follows the host URL Standard's recovery
 rules; it does not impose strict UTF-8 decoding on query values.
 
-Opaque-scheme URLs with unescaped spaces currently serialize differently between
-the native parser and some JS hosts. Encode those spaces as `%20` when identical
-serialization across targets is required.
-
-For network requests, see [HTTP clients](http.md). Parsing a URL performs no network I/O.
+Opaque paths preserve spaces inside the path. A final path space before a query
+or fragment is serialized as `%20` consistently across native and JavaScript hosts.

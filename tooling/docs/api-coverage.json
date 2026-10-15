@@ -2849,13 +2849,13 @@
       {
         "signature": "public fun cancel(): void",
         "description": "Marks this source (and all of its tokens) as cancelled.",
-        "line": 24,
+        "line": 20,
         "page": "reference/api/core-cancellation-source.md"
       },
       {
         "signature": "public get token(): CancellationToken",
         "description": "Returns a token that observes this source's cancelled state.",
-        "line": 31,
+        "line": 40,
         "page": "reference/api/core-cancellation-source.md"
       }
     ]
@@ -2872,33 +2872,51 @@
         "page": "reference/api/core-cancellation-token.md"
       },
       {
+        "signature": "public fun wait_cancelled(): Future<bool>",
+        "description": "Suspends until cancellation and returns true. Completion or releasing a cancelled future detaches its subscription.",
+        "line": 19,
+        "page": "reference/api/core-cancellation-token.md"
+      },
+      {
+        "signature": "public fun wait<T>(future: Future<T>): Future<Result<T, CancelledError>>",
+        "description": "Awaits a future or cancellation using scheduler notifications. Cancellation cancels the supplied future; already performed side effects are preserved.",
+        "line": 32,
+        "page": "reference/api/core-cancellation-token.md"
+      },
+      {
+        "signature": "public fun wait_void(future: Future<void>): Future<Result<bool, CancelledError>>",
+        "description": "Awaits a void future or cancellation, returning true when the operation completes.",
+        "line": 38,
+        "page": "reference/api/core-cancellation-token.md"
+      },
+      {
         "signature": "public fun throw_if_cancelled(): void",
         "description": "Panics with `CancelledError` when already cancelled.",
-        "line": 19,
+        "line": 77,
         "page": "reference/api/core-cancellation-token.md"
       },
       {
         "signature": "public fun check(): Result<bool, CancelledError>",
         "description": "`Ok(true)` when still running; `Err(CancelledError)` when cancelled.",
-        "line": 26,
+        "line": 84,
         "page": "reference/api/core-cancellation-token.md"
       },
       {
         "signature": "public static fun is_cancelled_opt(token: Option<CancellationToken>): bool",
         "description": "True when `token` is `Some` and already cancelled.",
-        "line": 34,
+        "line": 92,
         "page": "reference/api/core-cancellation-token.md"
       },
       {
         "signature": "public static fun throw_if_opt(token: Option<CancellationToken>): void",
         "description": "Panics when `token` is `Some` and already cancelled.",
-        "line": 42,
+        "line": 100,
         "page": "reference/api/core-cancellation-token.md"
       },
       {
         "signature": "public static fun rejected<E>(token: Option<CancellationToken>, err: E): Result<bool, E>",
         "description": "`Err(err)` when `token` is cancelled; otherwise `Ok(true)`.",
-        "line": 50,
+        "line": 108,
         "page": "reference/api/core-cancellation-token.md"
       }
     ]
@@ -7938,67 +7956,67 @@
       {
         "signature": "public fun close(): Result<bool, HttpError>",
         "description": "Closes idempotently, cancelling pending sends. Previously received bodies remain usable.",
-        "line": 42,
+        "line": 46,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public class HttpResponse",
         "description": "Response metadata and a streamed body. Explicit closure releases unfinished bodies.",
-        "line": 88,
+        "line": 97,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public get status(): int",
         "description": "Numeric HTTP status; non-2xx responses are successful transport results.",
-        "line": 103,
+        "line": 112,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public get url(): Url",
         "description": "Final URL after any redirects visible to the host.",
-        "line": 105,
+        "line": 114,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public get headers(): HttpHeaders",
         "description": "Response headers visible to the host; browser CORS rules can hide some headers.",
-        "line": 107,
+        "line": 116,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public get body(): HttpBody",
         "description": "Byte stream owned by this response; a retained body can be read independently.",
-        "line": 109,
+        "line": 118,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public async fun read_text(max_bytes: int = 1048576, token: Option<CancellationToken> = Option.None): Result<string, HttpError>",
         "description": "Reads remaining body text up to `max_bytes` using strict incremental UTF-8 decoding. Limit or decoding failures consume input already read; close the response after any failure.",
-        "line": 112,
+        "line": 121,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public fun close(): Result<bool, HttpError>",
         "description": "Closes the body idempotently; subsequent reads return `ECLOSED`.",
-        "line": 137,
+        "line": 146,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public class HttpBody : AsyncReader",
         "description": "An HTTP response byte stream. One read may be pending; cancellation can consume bytes.",
-        "line": 141,
+        "line": 150,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public async unique fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>",
         "description": "Reads up to `max_bytes`; empty success for a positive request is EOF. Zero consumes nothing. Errors use `IoError` for compatibility with async streams; concurrent reads return `EBUSY`.",
-        "line": 151,
+        "line": 160,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public fun close(): Result<bool, HttpError>",
         "description": "Releases the response transport and cancels a pending read; safe to call repeatedly.",
-        "line": 163,
+        "line": 173,
         "page": "reference/api/net-http-client.md"
       }
     ]

@@ -1698,4 +1698,15 @@ void workerTerminate(int32_t id);
 
 #endif /* !DREAM_WASM32 */
 
+/* Cancellation registrations own passive futures until notification or detachment. */
+dream_ptr dream_event_new(void);
+void dream_event_complete(dream_ptr future);
+uintptr_t dream_cancellation_new(void);
+void dream_cancellation_release(uintptr_t handle);
+int32_t dream_cancellation_is_cancelled(uintptr_t handle);
+void dream_cancellation_cancel(uintptr_t handle);
+uintptr_t dream_cancellation_register(uintptr_t handle);
+dream_ptr dream_cancellation_signal(uintptr_t handle);
+void dream_cancellation_unregister(uintptr_t handle);
+
 #endif

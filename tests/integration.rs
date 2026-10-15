@@ -36,6 +36,7 @@ mod raw_memory_emission;
 mod rc_elision_goldens;
 mod runtime_blocking;
 mod runtime_callback;
+mod runtime_cancellation;
 mod runtime_file_operation;
 mod runtime_foreign_queue;
 mod runtime_leak_reporting;

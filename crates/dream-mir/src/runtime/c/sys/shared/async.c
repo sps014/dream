@@ -156,6 +156,29 @@ dream_ptr dream_new_future(dream_size size, int32_t poll, int32_t kind) {
     return p;
 }
 
+/* An event is registered synchronously, before a caller can abandon its wait. */
+dream_ptr dream_event_new(void) {
+    dream_ptr f = dream_new_future(F_SLOTS, 0, KIND_HOST);
+    i32_at(f, F_NEXT)[0] = 1;
+    dream_retain(f);
+#ifndef DREAM_WASM32
+    dream_foreign_work_begin(f);
+#endif
+    return f;
+}
+
+void dream_event_complete(dream_ptr f) {
+#ifndef DREAM_WASM32
+    dream_mutex_lock(&foreign_claim_mu);
+    int local = *scheduler_at(f) == &sched;
+    dream_mutex_unlock(&foreign_claim_mu);
+    if (!local) { dream_complete_foreign(f, 0); return; }
+    dream_foreign_work_end(f);
+    if (status_of(f) == 2) { scheduler_drop_start_retain(f); return; }
+#endif
+    dream_async_complete(f, 0);
+}
+
 void dream_enqueue(dream_ptr f) {
     ReadyNode *n;
     if (!f || i32_at(f, F_QUEUED)[0] || i32_at(f, F_STATUS)[0]) {

@@ -335,6 +335,7 @@ pub enum IntrinsicOp {
     RawLoad,
     RawStore,
     RawMemory,
+    CancellationRuntime,
     YieldSignal,
     YieldSignalComplete,
     YieldRun,
@@ -457,6 +458,13 @@ impl IntrinsicOp {
             ATTR_RAW_STORE => IntrinsicOp::RawStore,
             RAW_SIZE | RAW_ALLOC | RAW_REALLOC | RAW_FREE | RAW_COPY | RAW_MOVE | RAW_FILL
             | ARENA_NEW | ARENA_ALLOC | ARENA_RESET | ARENA_FREE => IntrinsicOp::RawMemory,
+            "dream_cancellation_new"
+            | "dream_cancellation_release"
+            | "dream_cancellation_is_cancelled"
+            | "dream_cancellation_cancel"
+            | "dream_cancellation_register"
+            | "dream_cancellation_signal"
+            | "dream_cancellation_unregister" => IntrinsicOp::CancellationRuntime,
             YIELD_SIGNAL => IntrinsicOp::YieldSignal,
             YIELD_SIGNAL_COMPLETE => IntrinsicOp::YieldSignalComplete,
             YIELD_RUN => IntrinsicOp::YieldRun,

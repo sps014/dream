@@ -341,9 +341,6 @@ class FileOperation {
     static extern fun bytes_host(id: usize): byte[];
     @runtime("fileOperationRelease")
     static extern fun release_host(id: usize): void;
-    @async_host
-    @runtime("delayMs")
-    static extern async fun delay_host(ms: int): void;
 
     internal static fun start(kind: int, fd: int, path: string, mode: string, count: int, data: byte[], position: long): Result<FileOperation, IoError> {
         let id = FileOperation.start_host(kind, fd, path, mode, count, data, position);
@@ -364,14 +361,11 @@ class FileOperation {
     internal async fun wait(token: Option<CancellationToken>): Result<bool, IoError> {
         // A started child can outlive its awaiting parent; pin its receiver across suspension.
         let lifetime = [this];
-        if token.is_none() {
-            FileOperation.wait_host(lifetime[0].id).await;
-            return Result.Ok(true);
-        }
-        while true {
-            CancellationToken.rejected(token, IoError.cancelled())?;
-            if lifetime[0].done { return Result.Ok(true); }
-            FileOperation.delay_host(1).await;
-        }
+        let pending = FileOperation.wait_host(lifetime[0].id);
+        if token.is_some() {
+            let result = token.unwrap().wait(pending).await;
+            if result.is_err() { return Result.Err(IoError.cancelled()); }
+        } else { pending.await; }
+        return Result.Ok(true);
     }
 }

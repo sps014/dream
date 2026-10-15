@@ -110,3 +110,20 @@ fun main(): void { let values = Visible.alloc<int>(1); }
     );
     assert!(!diagnostics.has_errors());
 }
+
+#[test]
+fn cancellation_state_intrinsics_are_reserved_for_stdlib_ownership() {
+    let diagnostics = analyze_code(
+        r#"
+static class Hidden {
+    @intrinsic("dream_cancellation_unregister")
+    static extern fun release(state: usize): void;
+}
+fun main(): void { Hidden.release((usize)0); }
+"#,
+    );
+    assert!(diagnostics.errors().any(|d| {
+        d.message
+            .contains("cancellation state intrinsics are reserved")
+    }));
+}

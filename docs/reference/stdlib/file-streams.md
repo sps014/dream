@@ -42,9 +42,8 @@ closure returns `EBUSY`, leaving the handle open. After a cancelled operation,
 wait for underlying work to finish before reusing or closing that handle. Dropping
 the handle is safe while work continues: the host retains the necessary resources.
 
-Tokens are checked before submission and while pending. Pending token checks
-currently use a 1 ms wall-clock timer; waits without a token use completion
-wakeups. Cancellation does not undo completed writes or restore consumed input.
+Tokens are checked before submission and register event subscriptions while
+pending. Completion and cancellation wake the scheduler without periodic checks. Cancellation does not undo completed writes or restore consumed input.
 A cancelled open closes its late result automatically. A submitted seek completes
 and updates read-ahead state before reporting cancellation; this prevents a
 cancelled seek from leaving the logical cursor inconsistent.

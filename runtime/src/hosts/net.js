@@ -4,7 +4,11 @@ export function makeNetHost() {
     ...makeHttpHost(),
     netUrlParse: (input, base) => {
       try {
-        const url = base === "" ? new URL(input) : new URL(input, base);
+        let url = base === "" ? new URL(input) : new URL(input, base);
+        if (!url.host && !url.pathname.startsWith("/") && url.pathname.endsWith(" ")) {
+          const end = url.href.search(/[?#]/);
+          if (end >= 0) url = new URL(url.href.slice(0, end - 1) + "%20" + url.href.slice(end));
+        }
         // URL.search/hash hide empty delimiters; inspect canonical serialization before removing them.
         const href = url.href;
         const fragmentAt = href.indexOf("#");

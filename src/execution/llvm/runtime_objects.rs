@@ -17,16 +17,24 @@ fn compile_objects<T: Sync>(
         .num_threads(workers)
         .build()
         .map_err(|error| format!("runtime compilation pool: {error}"))?;
-    // Indexed collection preserves link order and selects errors in source order.
-    pool.install(|| {
-        units
-            .par_iter()
-            .enumerate()
-            .map(|(index, unit)| compile(index, unit))
-            .collect::<Vec<_>>()
+    // Blocking outside Rayon prevents a caller holding a project lock from stealing
+    // another project build while waiting for this pool (and inverting output locks).
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                pool.install(|| {
+                    units
+                        .par_iter()
+                        .enumerate()
+                        .map(|(index, unit)| compile(index, unit))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .join()
+            .map_err(|_| "runtime compilation worker panicked".to_string())?
+            .into_iter()
+            .collect()
     })
-    .into_iter()
-    .collect()
 }
 
 pub(super) fn store_prebuilt(dir: &Path, objects: &[PathBuf]) -> Result<(), String> {
@@ -186,6 +194,36 @@ pub(super) fn native(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn waiting_for_runtime_objects_does_not_reenter_the_callers_pool() {
+        use std::sync::{
+            Mutex,
+            atomic::{AtomicBool, Ordering},
+        };
+        let outer = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap();
+        let project = Mutex::new(());
+        let reentered = AtomicBool::new(false);
+        outer.scope(|scope| {
+            let guard = project.lock().unwrap();
+            scope.spawn(|_| {
+                if project.try_lock().is_err() {
+                    reentered.store(true, Ordering::Relaxed);
+                }
+            });
+            let objects = compile_objects(&[0], |_, _| {
+                std::thread::sleep(std::time::Duration::from_millis(30));
+                Ok(PathBuf::from("runtime.o"))
+            })
+            .unwrap();
+            assert_eq!(objects, [PathBuf::from("runtime.o")]);
+            drop(guard);
+        });
+        assert!(!reentered.load(Ordering::Relaxed));
+    }
 
     #[test]
     fn prebuilt_objects_require_valid_contents_and_contained_paths() {

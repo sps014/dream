@@ -44,8 +44,9 @@ completion. Abandoned open results are closed. Files implement the async stream
 interfaces; overlapping operations and closure while pending return `EBUSY`.
 Read-ahead remains coherent across async reads and seeks.
 
-Waits without tokens use scheduler completion wakeups. Pending token checks
-currently use 1 ms timers; a submitted seek finishes before reporting cancellation.
+Completion and cancellation use scheduler wakeups through detachable event
+registrations. No periodic checks are needed; a submitted seek finishes before
+reporting cancellation.
 Native filesystem calls already executing are not interrupted. The JS async bridge
 pins host futures until Promise settlement and skips result allocation for
 cancelled frames, preventing stale callbacks and discarded-result leaks.
@@ -56,10 +57,8 @@ normalization, relative resolution, repeated keys, query mutation, and serializa
 are implemented. The runtime chunk catalog supports multiple source files per
 chunk so file-operation helpers are included only with filesystem imports.
 
-Opaque-path space recovery differs between the current `url` crate and Node URL
-implementation; shared fixtures use explicitly encoded spaces. Resolve this
-conformance difference before claiming byte-identical serialization for arbitrary
-non-HTTP schemes.
+Opaque paths now encode a final space before query/fragment delimiters uniformly
+in native and JavaScript adapters. Shared fixtures cover literal and encoded spaces.
 
 HTTP transport now uses reqwest/Tokio in the native `net` capability and Fetch
 in the shared Node/browser adapter. Clients, requests, case-insensitive repeated
@@ -74,77 +73,68 @@ Browser capability queries expose unavailable controls, and requests reject
 restricted headers or unsupported options. HTTP status errors remain transport
 successes. Native TLS uses normal certificate validation; no bypass is exposed.
 
-Token-triggered wakeups and full cross-platform/browser qualification remain
-outstanding. HTTP operation completion currently uses 1 ms timer checks. Node
-Fetch pools belong to the Node host and cannot be explicitly drained per Dream
-client. These changes do not establish production v1 readiness.
+Cancellation registrations live in the shared C runtime and own synchronously
+registered signal futures. Native cancellation publishes a foreign completion to
+the owning scheduler; same-owner detachment completes inline. JavaScript uses
+local notifications or `Atomics.waitAsync` for cross-worker shared memory. Closing
+a subscription settles abandoned callbacks before its storage can be reused.
+`CancellationToken.wait`, `wait_void`, and `wait_cancelled` expose these waits publicly.
+
+HTTP completion now has its own notification from Tokio/Fetch instead of a timer
+loop. Node Fetch pools still belong to the Node host and cannot be explicitly
+drained per Dream client. These changes do not establish production v1 readiness.
+
+The phase 3–4 qualification command (`scripts/qualify-io-net.py`) runs native and
+Node fixtures in debug/release modes, transport/TLS tests, and adapter/ownership
+checks. The dedicated platform workflow runs it on Linux, macOS, and Windows and
+publishes reports. Cross-platform execution results are pending for this increment.
 
 ## Remaining implementation
 
-1. Phase 3: replace timer-based token checks with cancellation registrations and
-   wakeups, qualify cancellation/closure races on all targets, and add platform
-   nonblocking readiness where supported.
-2. Phase 4: complete HTTPS success/redirect qualification across native platforms,
-   broaden browser CORS/disconnect/cancellation automation, and qualify connection
-   reuse/resource baselines under failure injection and stress.
-3. Phase 5: declarative CLI parser, shared host conformance, help/version outcomes,
+1. Phase 3–4: record the pending Linux/macOS/Windows qualification matrix.
+2. Phase 5: declarative CLI parser, shared host conformance, help/version outcomes,
    and the downloadable-file CLI acceptance application.
-4. Phase 6: bounded/unbounded channels, worker transfer, structured concurrency,
+3. Phase 6: bounded/unbounded channels, worker transfer, structured concurrency,
    process options, asynchronous pipes, deadlines, termination, and reaping.
-5. Phase 7: CSV, UUID, temporary resources, atomic replacement, typed configuration,
+4. Phase 7: CSV, UUID, temporary resources, atomic replacement, typed configuration,
    testing fixtures, async assertions, and the HTTP-to-CSV acceptance application.
-6. Phase 8: cross-platform native and browser qualification, sanitizer/failure
+5. Phase 8: cross-platform native and browser qualification, sanitizer/failure
    injection coverage, executable documentation, packaging, and release gates.
-7. Phase 9: post-v1 TCP/UDP, streaming compression, application-driven cryptography,
+6. Phase 9: post-v1 TCP/UDP, streaming compression, application-driven cryptography,
    and collection refinements.
 
 Keep guest runtime code in C, native capability services in host crates, and JS
 adapters in the existing runtime source and bundling system. Follow the runtime
 catalog, ABI registry, stdlib package registry, and strict workspace/corpus gates.
 
-## Local verification
+## Verification
 
-The foundation changes passed workspace build, strict workspace Clippy, workspace
-tests, the full native/Node assertion corpus, and a final full Node rerun after the
-BOM-preservation regression. The argument fixture also checks `System.args` on
-both targets with empty, multiline, Japanese, and BOM-prefixed arguments.
+The event-driven increment passes local macOS workspace build, strict workspace
+Clippy, the complete workspace test suite, and the full native and Node assertion
+corpus. Qualification also exposed a nested Rayon/output-lock deadlock and Apple
+Clang SDK metadata being excluded from cache dependencies; both have fixes and
+passing regression coverage.
 
-The runtime layering check linked all 19 portable core units using the pinned
-LLVM tools. API inventory checks, five inventory extractor tests, five JS host and
-bundle tests, and all 19 executable documentation examples passed.
+The cancellation C harness races 120,000 registrations against cancellation and
+checks one completion per signal and safe detachment. It passes address/undefined
+and thread sanitizers on macOS, plus plain and address/undefined builds on Linux
+ARM64. Native Dream ownership probes cover waits returned from local token scopes,
+heap-backed results, and void futures without leaked resources.
 
-These results cover local macOS native execution and Node WebAssembly execution.
-Browser automation and native Windows/Linux qualification remain release work.
+Browser automation passes four fixtures in debug and release modes: asynchronous
+file/URL operations, HTTP, local cancellation, and cross-worker cancellation. The
+HTTP fixture checks bounded text reads, pending cancellation, deadlines, truncated
+responses, CORS rejection, and unsupported connection/redirect/header controls.
+Run `python scripts/serve-phase34-browser.py` (or add `--release`) to compile and
+serve these fixtures again.
 
-## Phase 3–4 increment verification
+Native/Node HTTP fixtures cover streaming, short reads, repeated headers, error
+statuses, text limits, strict UTF-8, redirects, deadlines, cancellation, and closure.
+Native transport fixtures additionally cover trusted HTTPS, certificate rejection,
+connection reuse, disconnects, and unclaimed-response cleanup. Direct JavaScript
+adapter/bundler checks cover cancellation subscriptions, shared-memory growth,
+HTTP completion/release, and host selection.
 
-The increment passes workspace build, strict workspace Clippy, workspace tests,
-and the focused async-file/URL corpus on native and Node. Address/undefined-behavior
-sanitizers pass both the native file-operation ownership harness and the native
-Dream async-file fixture. Nine JS host/bundler tests, six API extractor tests,
-and 22 executable documentation examples pass.
-
-The browser smoke fixture at `tests/fixtures/compiler/stdlib_web_io_url.dream`
-was compiled with `--runtime --web` and executed through browser automation. Its
-URL normalization/query edits and async memory-filesystem reads/writes passed.
-This is a local browser smoke check, not full browser or Windows/Linux qualification.
-
-HTTP integration fixtures pass on native and Node, including streamed copies,
-partial reads, repeated headers, HTTP error statuses, text limits, invalid UTF-8,
-redirects, deadlines, pending cancellation, and closure. The native transport
-fixture also checks trusted HTTPS, rejection of an untrusted certificate,
-connection reuse, disconnects, and unclaimed-response cleanup. The native Dream
-HTTP fixture passes address/undefined-behavior sanitizers.
-
-The browser HTTP fixture at `tests/fixtures/compiler/stdlib_web_http.dream`
-checks text reads, limits, pending cancellation, deadlines, truncated responses,
-CORS rejection, and unsupported connection/redirect/header controls. Both browser
-fixtures were compiled with `--runtime --web` and passed browser automation.
-
-The complete native and Node assertion corpus passes with the HTTP increment,
-including the regression for duplicate async-host declarations across stdlib modules.
-
-The HTTP increment also passes workspace build, strict Clippy, and the complete
-workspace test suite, including packaging checks. The TLS fixture selects its
-Rustls provider explicitly because workspace feature unification enables multiple
-providers. This verification remains local to macOS, Node, and the browser smoke fixtures.
+The platform workflow preserves `target/phase34-qualification/report.json` and
+per-step logs. The broader phase 8 release gate still includes the complete
+packaging, determinism, failure-injection, and supported-platform matrix.

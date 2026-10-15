@@ -4,28 +4,37 @@ module system.core;
 // `@shared` so a token/source can be captured into a `Task.spawn` body and polled cross-thread.
 
 shared public class CancellationSource {
-    _cancelled: bool;
+    _state: usize;
 
     // Creates a source that is not yet cancelled.
     public constructor() {
-        this._cancelled = false;
+        this._state = CancellationSource.create_host();
     }
 
     // True after `cancel` has been called.
     public get is_cancelled(): bool {
-        let cancelled = false;
-        lock (this) {
-            cancelled = this._cancelled;
-        }
-        return cancelled;
+        return CancellationSource.cancelled_host(this._state) != 0;
     }
 
     // Marks this source (and all of its tokens) as cancelled.
     public fun cancel(): void {
-        lock (this) {
-            this._cancelled = true;
-        }
+        CancellationSource.cancel_host(this._state);
     }
+
+    del() { CancellationSource.release_host(this._state); }
+
+    @intrinsic("dream_cancellation_new")
+    static extern fun create_host(): usize;
+    @intrinsic("dream_cancellation_release")
+    static extern fun release_host(state: usize): void;
+    @intrinsic("dream_cancellation_cancel")
+    static extern fun cancel_host(state: usize): void;
+    @intrinsic("dream_cancellation_is_cancelled")
+    static extern fun cancelled_host(state: usize): int;
+    @intrinsic("dream_cancellation_register")
+    static extern fun register_host(state: usize): usize;
+
+    internal fun register(): usize { return CancellationSource.register_host(this._state); }
 
     // Returns a token that observes this source's cancelled state.
     public get token(): CancellationToken {

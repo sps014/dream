@@ -130,7 +130,7 @@ pub const CORE_C: &[&str] = &[
     "utf8.c",
 ];
 const NATIVE_HEAP_C: &[&str] = &["heap.c", "heap_maps.c"];
-const SHARED_SYS_C: &[&str] = &["async.c"];
+const SHARED_SYS_C: &[&str] = &["async.c", "cancellation.c"];
 const NATIVE_SYS_C: &[&str] = &[
     "platform.c",
     "heap_debug.c",

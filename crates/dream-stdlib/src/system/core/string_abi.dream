@@ -3,6 +3,11 @@ module system.core;
 // Low-level string construction used by core/primitives (and `extend string` in system.text).
 // `alloc`/`set` use UTF-16 code-unit indices; the backing store is UTF-16 LE.
 extend string {
+    // Span construction and its logical-range check already prove the backing unit exists.
+    @intrinsic("string_char_at_unchecked")
+    @unsafe
+    internal static extern fun char_at_unchecked(borrow s: string, index: int): char;
+
     // Allocates an uninitialized string with capacity for `n` UTF-16 code units.
     @intrinsic("string_alloc")
     public static extern fun alloc(n: int): string;

@@ -762,6 +762,9 @@ impl<'a> Analyzer<'a> {
                 | Some((recv, "map"))
                 | Some((recv, "map_async")) => recv == "Task" || recv.starts_with("Task_"),
                 Some((recv, "dispatch")) | Some((recv, "dispatch_async")) => recv == "TaskPool",
+                Some((recv, "spawn_parallel")) | Some((recv, "spawn_on")) => {
+                    recv == "TaskScope" || recv.starts_with("TaskScope_")
+                }
                 _ => false,
             },
             None => false,

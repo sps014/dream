@@ -11,7 +11,7 @@
 //!   happens while the walk is in flight), and no root is rebound while a member is in flight;
 //! - nothing in flight may overwrite a traversed `(type, field)` slot: no direct store, no
 //!   callee or constructor whose [`ModRefTable`] summary includes it, no opaque call, and no
-//!   `del` anywhere in the module that may store it (any release may run a `del`);
+//!   destructor-bearing cleanup that may store it;
 //! - no member escapes (stored, returned, moved, passed to a sink parameter, captured).
 //!
 //! Decrements from unrelated releases cannot free a member: each object on the path is held
@@ -294,7 +294,14 @@ impl FamilyCx<'_> {
         let Some((fields, unions)) = self.traversed() else {
             return false;
         };
-        if self.modref.del().hits(&fields, &unions) {
+        // Before RC insertion, implicit local cleanup is not a statement yet. Unrelated
+        // destructors only matter if a local graph can run one; calls are checked in flight.
+        if self.modref.del().hits(&fields, &unions)
+            && self.func.locals.iter().any(|local| {
+                self.modref
+                    .may_run_del(local.ty, self.interner, self.layouts)
+            })
+        {
             return false;
         }
         // The caller holds a borrowed parameter for the whole call, dead or not.

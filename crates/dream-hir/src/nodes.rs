@@ -257,8 +257,8 @@ pub enum HExprKind {
     StrLen(Box<HExpr>),
     /// `string.byte_size()` — a runtime `$str_byte_size` call (`unit_len * 2`).
     StrByteSize(Box<HExpr>),
-    /// `string.char_at(i)` — a runtime `$char_at` read: `.0` is the string, `.1` the code-unit index.
-    CharAt(Box<HExpr>, Box<HExpr>),
+    /// UTF-16 unit read; the final flag is true only for trusted, prevalidated ranges.
+    CharAt(Box<HExpr>, Box<HExpr>, bool),
     /// `string.byte_at(i)` — a runtime `$byte_at` read: `.0` is the string, `.1` the byte index.
     ByteAt(Box<HExpr>, Box<HExpr>),
     /// The object-protocol `x.hash_code()` (typed `int`) with no user override: dispatches on the

@@ -477,12 +477,19 @@ async fun bench_task_parallel(iters: int): void {
             seeds[k] = i * 16 + k + seed_bit();
             k = k + 1;
         }
-        let parts = TaskPool(4).map(seeds, (s) => chunk_work(s)).await.unwrap();
-        k = 0;
-        while k < parts.length {
-            acc = acc + parts[k];
-            k = k + 1;
-        }
+        let batch = Task.scope<int, string>(async (scope) => {
+            let jobs = List<TaskHandle<int, string>>(16);
+            for (let index = 0; index < seeds.length; index = index + 1) {
+                let seed = seeds[index];
+                jobs.push(scope.spawn_parallel<int>(() => chunk_work(seed)));
+            }
+            let sum = 0;
+            for (let index = 0; index < jobs.length; index = index + 1) {
+                sum = sum + jobs[index].join().await?;
+            }
+            return Result.Ok(sum);
+        }).await.unwrap();
+        acc = acc + batch;
         i = i + 1;
     }
     sw.stop();

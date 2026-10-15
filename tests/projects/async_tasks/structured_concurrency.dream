@@ -1,4 +1,5 @@
 import system;
+import system.collections;
 import system.task;
 import system.testing;
 
@@ -7,6 +8,46 @@ class StructuredCounter {
     public active: int;
     public maximum: int;
     public constructor() { this.count = 0; this.active = 0; this.maximum = 0; }
+}
+
+shared class StructuredParallelGate {
+    count: int;
+    public constructor() { this.count = 0; }
+    public fun meet(): int {
+        lock (this) { this.count = this.count + 1; }
+        let ready = false;
+        while !ready {
+            lock (this) { ready = this.count == 2; }
+        }
+        return 21;
+    }
+}
+
+async fun structured_shared_workers(): void {
+    for (let batch = 0; batch < 3; batch = batch + 1) {
+        let gate = StructuredParallelGate();
+        let result = Task.scope<int, string>(async (scope) => {
+            let first = scope.spawn_parallel<int>(() => gate.meet());
+            let second = scope.spawn_parallel<int>(() => gate.meet());
+            return Result.Ok(first.join().await? + second.join().await?);
+        }).await;
+        Assert.eq(result.unwrap(), 42);
+    }
+    let gate = StructuredParallelGate();
+    let settled = Task.scope<int, string>(async (scope) => {
+        scope.spawn_parallel<int>(() => gate.meet());
+        scope.spawn_parallel<int>(() => gate.meet());
+        scope.cancel();
+        return Result.Ok(0);
+    }).await;
+    Assert.is_true(settled.is_err());
+    let cancelled = Task.scope<int, string>(async (scope) => {
+        scope.cancel();
+        let child = scope.spawn_parallel<int>(() => 42);
+        Assert.is_true(child.join().await.is_err());
+        return Result.Ok(0);
+    }).await;
+    Assert.is_true(cancelled.is_err());
 }
 
 async fun structured_value(value: int): Result<int, string> {
@@ -33,6 +74,7 @@ async fun structured_wait(scope: TaskScope<string>, counter: StructuredCounter):
 
 @test
 async fun structured_concurrency(): void {
+    structured_shared_workers().await;
     let success = Task.scope<int, string>(async (scope) => {
         let first = scope.spawn<int>(async () => structured_value(20).await);
         let second = scope.spawn<int>(async () => structured_value(22).await);
@@ -113,6 +155,22 @@ async fun structured_concurrency(): void {
         return first.join().await;
     }).await;
     Assert.eq(pooled.unwrap(), 42);
+    for (let batch = 0; batch < 3; batch = batch + 1) {
+        let start = batch * 8;
+        let sum = Task.scope<int, string>(async (scope) => {
+            let jobs = List<TaskHandle<int, string>>();
+            for (let index = 0; index < 8; index = index + 1) {
+                let value = start + index;
+                jobs.push(scope.spawn_on<int>(worker_pool, () => value));
+            }
+            let total = 0;
+            for (let index = 0; index < jobs.length; index = index + 1) {
+                total = total + jobs[index].join().await?;
+            }
+            return Result.Ok(total);
+        }).await.unwrap();
+        Assert.eq(sum, start * 8 + 28);
+    }
     pool.close().await.unwrap();
     pool.close().await.unwrap();
     Assert.is_true(pool.dispatch(() => 1).await.is_err());

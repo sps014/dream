@@ -22,7 +22,7 @@ public fun join(): Future<Result<T, TaskFailure<E>>>
 
 ## `TaskScope`
 
-Owns local async children; its enclosing Task.scope call joins every child before returning.
+Owns async and parallel children; its enclosing Task.scope joins every child before returning.
 
 ```dream
 public class TaskScope<E>
@@ -50,6 +50,14 @@ Schedules a child immediately and retains it even if its result handle is discar
 
 ```dream
 public fun spawn<T>(body: fun(): Future<Result<T, E>>): TaskHandle<T, E>
+```
+
+## `spawn_parallel`
+
+Schedules CPU work on the runtime's shared worker threads and retains structured ownership.
+
+```dream
+public fun spawn_parallel<T : shared>(body: fun(): T): TaskHandle<T, E>
 ```
 
 ## `spawn_on`

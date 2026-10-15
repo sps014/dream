@@ -37,6 +37,7 @@ pub(super) fn intrinsic_summary(op: IntrinsicOp) -> Option<ModRef> {
             | I::FuncboxEnv
             | I::ArrayNew
             | I::StringAlloc
+            | I::StringCharAtUnchecked
             | I::StringSet
             | I::StringFromUtf8
             | I::StringFromUtf8Prefix

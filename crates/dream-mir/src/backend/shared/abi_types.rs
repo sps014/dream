@@ -336,6 +336,7 @@ pub(crate) fn runtime_c_name(sym: &str) -> String {
         "to_bytes" => "dream_to_bytes".into(),
         "from_bytes" => "dream_from_bytes".into(),
         "char_at" => "dream_char_at".into(),
+        dream_abi::intrinsics::ATTR_STRING_CHAR_AT_UNCHECKED => "dream_char_at".into(),
         "byte_at" => "dream_byte_at".into(),
         "dream_panic" => "dream_panic".into(),
         "print_object" => "dream_print_object".into(),

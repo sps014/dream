@@ -242,8 +242,8 @@ impl Lowerer<'_> {
             HExprKind::Zero => Rvalue::Zero(e.ty),
             HExprKind::StrLen(a) => Rvalue::StrLen(self.lower_operand(a)),
             HExprKind::StrByteSize(a) => Rvalue::StrByteSize(self.lower_operand(a)),
-            HExprKind::CharAt(s, i) => {
-                Rvalue::CharAt(self.lower_operand(s), self.lower_operand(i), false)
+            HExprKind::CharAt(s, i, unchecked) => {
+                Rvalue::CharAt(self.lower_operand(s), self.lower_operand(i), *unchecked)
             }
             HExprKind::ByteAt(s, i) => {
                 Rvalue::ByteAt(self.lower_operand(s), self.lower_operand(i), false)

@@ -588,7 +588,7 @@ impl<'a> Analyzer<'a> {
                 let char_ty = self.type_ctx.interner.prim(PrimTy::Char);
                 self.hir.last = Some(HExpr::new(
                     char_ty,
-                    HExprKind::CharAt(Box::new(r), Box::new(i)),
+                    HExprKind::CharAt(Box::new(r), Box::new(i), false),
                 ));
             }
             _ => self.hir.last = None,

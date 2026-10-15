@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 
 #ifdef _WIN32
+#include "dream_host_windows.h"
 #include <io.h>
 typedef intptr_t ssize_t;
 /* MSVC's off_t/lseek are 32-bit; use the 64-bit variants for file handles. */
@@ -38,8 +39,25 @@ int32_t dream_file_open(const char *text, const char *open_mode) {
     }
     char binary_mode[4] = {open_mode[0], 'b', 0, 0};
     if (open_mode[1] == '+') { binary_mode[2] = '+'; }
+#ifdef _WIN32
+    /* Guest paths are UTF-8; the narrow CRT API uses the process code page. */
+    int units = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, NULL, 0);
+    if (units <= 0) { return -4; }
+    wchar_t *path = malloc((size_t)units * sizeof(wchar_t));
+    if (!path) { return -4; }
+    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, path, units)) {
+        free(path);
+        return -4;
+    }
+    wchar_t mode[4] = {binary_mode[0], binary_mode[1], binary_mode[2], 0};
+    FILE *file = _wfopen(path, mode);
+    int open_error = errno;
+    free(path);
+#else
     FILE *file = fopen(text, binary_mode);
-    if (!file) { return errno == ENOENT ? -1 : errno == EACCES ? -2 : -4; }
+    int open_error = errno;
+#endif
+    if (!file) { return open_error == ENOENT ? -1 : open_error == EACCES ? -2 : -4; }
     int32_t fd = dream_dup(dream_fileno(file));
     fclose(file);
     return fd < 0 ? -4 : fd;

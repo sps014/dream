@@ -1,0 +1,4 @@
+@intrinsic("string_char_at_unchecked")
+extern fun read_unit(borrow text: string, index: int): char;
+
+fun main(): void {}

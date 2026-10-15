@@ -76,6 +76,23 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let ret_ty = self.type_ctx.lower(ret);
+        if self
+            .function_table
+            .functions
+            .get(identity)
+            .and_then(|info| info.intrinsic_name.as_deref())
+            .and_then(dream_abi::intrinsics::IntrinsicOp::from_key)
+            == Some(dream_abi::intrinsics::IntrinsicOp::StringCharAtUnchecked)
+        {
+            self.hir.last = match <[HExpr; 2]>::try_from(collected) {
+                Ok([source, index]) => Some(HExpr::new(
+                    ret_ty,
+                    HExprKind::CharAt(Box::new(source), Box::new(index), true),
+                )),
+                Err(_) => None,
+            };
+            return;
+        }
         let take_params = self
             .function_table
             .functions

@@ -48,6 +48,7 @@ impl<'a> Analyzer<'a> {
             IntrinsicOp::from_attributes(&function.attributes),
             Some(
                 IntrinsicOp::ArraySlotSwap
+                    | IntrinsicOp::StringCharAtUnchecked
                     | IntrinsicOp::ArraySlotTake
                     | IntrinsicOp::BufferIsString
             )

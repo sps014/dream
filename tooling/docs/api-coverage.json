@@ -5292,79 +5292,79 @@
       {
         "signature": "public static extern fun alloc(n: int): string",
         "description": "Allocates an uninitialized string with capacity for `n` UTF-16 code units.",
-        "line": 8,
+        "line": 13,
         "page": "reference/api/core-string-abi.md"
       },
       {
         "signature": "public static extern fun set(borrow s: string, i: int, c: char): void",
         "description": "Writes code unit `c` at unit index `i` of string `s`.",
-        "line": 12,
+        "line": 17,
         "page": "reference/api/core-string-abi.md"
       },
       {
         "signature": "public static extern fun from_utf8(borrow bytes: byte[]): string",
         "description": "Builds a string from a full `byte[]` UTF-8 payload (transcodes to UTF-16).",
-        "line": 16,
+        "line": 21,
         "page": "reference/api/core-string-abi.md"
       },
       {
         "signature": "public static extern fun from_utf8_prefix(borrow bytes: byte[], len: int): string",
         "description": "Builds a string from the first `len` bytes of `bytes` (clamped to the array length).",
-        "line": 20,
+        "line": 25,
         "page": "reference/api/core-string-abi.md"
       },
       {
         "signature": "public static extern fun from_utf8_prefix_n(borrow bytes: byte[], len: int, scalars: int): string",
         "description": "Copies `len` UTF-16 LE payload bytes from `bytes`; `scalars` is the unit count.",
-        "line": 24,
+        "line": 29,
         "page": "reference/api/core-string-abi.md"
       },
       {
         "signature": "public static extern fun from_builder(borrow bytes: byte[], len: int, scalars: int): string",
         "description": "StringBuilder finish: unique buffers (`rc == 1`) are adopted; otherwise copied.",
-        "line": 28,
+        "line": 33,
         "page": "reference/api/core-string-abi.md"
       },
       {
         "signature": "public static extern fun substring_raw(borrow s: string, start: int, end: int): string",
         "description": "Unit-indexed substring: O(1) slice (header + payload pointer + retain parent).",
-        "line": 32,
+        "line": 37,
         "page": "reference/api/core-string-abi.md"
       },
       {
         "signature": "public static extern fun clone(borrow s: string): string",
         "description": "Fresh heap copy of `s` (isolation boundary for `@shared` string fields / worker captures).",
-        "line": 36,
+        "line": 41,
         "page": "reference/api/core-string-abi.md"
       },
       {
         "signature": "public static extern fun copy_utf8(borrow dst: byte[], dst_off: int, borrow src: string, src_off: int, count: int): void",
         "description": "Bulk-copies `count` payload bytes from `src` into `dst` at `dst_off`.",
-        "line": 40,
+        "line": 45,
         "page": "reference/api/core-string-abi.md"
       },
       {
         "signature": "public static extern fun compare_raw(borrow a: string, borrow b: string): int",
         "description": "UTF-16 lexicographic compare (code-unit order): negative / zero / positive.",
-        "line": 44,
+        "line": 49,
         "page": "reference/api/core-string-abi.md"
       },
       {
         "signature": "public static extern fun utf8_decode_at(borrow s: string, byte_off: int): char",
         "description": "Unchecked UTF-16 unit load at a payload byte offset (even offsets).",
-        "line": 48,
+        "line": 53,
         "page": "reference/api/core-string-abi.md"
       },
       {
         "signature": "public static extern fun utf8_width_at(borrow s: string, byte_off: int): int",
         "description": "Payload stride in bytes of the unit at `byte_off` (always 2).",
-        "line": 52,
+        "line": 57,
         "page": "reference/api/core-string-abi.md"
       },
       {
         "signature": "public static get empty(): string",
         "description": "The interned empty string. Prefer this over `\"\"` so empty results share one immortal pointer instead of a fresh heap block (substring/from_utf8/concat of empties also return this).",
-        "line": 56,
+        "line": 61,
         "page": "reference/api/core-string-abi.md"
       }
     ]
@@ -10990,32 +10990,38 @@
       },
       {
         "signature": "public class TaskScope<E>",
-        "description": "Owns local async children; its enclosing Task.scope call joins every child before returning.",
-        "line": 71,
+        "description": "Owns async and parallel children; its enclosing Task.scope joins every child before returning.",
+        "line": 88,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public get token(): CancellationToken",
         "description": "The inherited cancellation token for this scope and its children.",
-        "line": 89,
+        "line": 106,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public fun cancel(): void",
         "description": "Requests cooperative cancellation; completion still waits for child cleanup.",
-        "line": 92,
+        "line": 109,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public fun spawn<T>(body: fun(): Future<Result<T, E>>): TaskHandle<T, E>",
         "description": "Schedules a child immediately and retains it even if its result handle is discarded.",
-        "line": 95,
+        "line": 112,
+        "page": "reference/api/task-task-scope.md"
+      },
+      {
+        "signature": "public fun spawn_parallel<T : shared>(body: fun(): T): TaskHandle<T, E>",
+        "description": "Schedules CPU work on the runtime's shared worker threads and retains structured ownership.",
+        "line": 128,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public fun spawn_on<T : shared>(pool: TaskPool, body: fun(): T): TaskHandle<T, E>",
         "description": "Schedules CPU work on an explicit reusable pool while retaining structured ownership.",
-        "line": 111,
+        "line": 144,
         "page": "reference/api/task-task-scope.md"
       }
     ]

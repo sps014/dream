@@ -78,6 +78,8 @@ pub fn is_object_builtin(name: &str) -> bool {
 /// The low-level character accessor `s.char_at(i)`, a builtin pseudo-method on `string` (like
 /// [`LENGTH`]); lowered directly to the `$char_at` runtime helper (scalar index).
 pub const CHAR_AT: &str = "char_at";
+/// UTF-16 unit load after the caller has established the string range.
+pub const ATTR_STRING_CHAR_AT_UNCHECKED: &str = "string_char_at_unchecked";
 
 /// `s.byte_size()` — UTF-8 byte length of the payload (O(1)).
 pub const BYTE_SIZE: &str = "byte_size";
@@ -270,6 +272,7 @@ pub const ATTR_KEYS: &[&str] = &[
     ATTR_BUFFER_ZERO,
     ATTR_SLEEP,
     ATTR_STRING_ALLOC,
+    ATTR_STRING_CHAR_AT_UNCHECKED,
     ATTR_STRING_BUILDER_BUFFER,
     ATTR_STRING_BUILDER_PUSH_DOUBLE,
     ATTR_STRING_CLONE_RANGE,
@@ -369,6 +372,8 @@ pub enum IntrinsicOp {
     Sleep,
     /// `String.alloc(n)` — allocate an `n`-char string buffer.
     StringAlloc,
+    /// Trusted stdlib access within an already validated string view.
+    StringCharAtUnchecked,
     /// `String.set(s, i, c)` — write char `c` at index `i` of buffer `s`.
     StringSet,
     /// `string.from_utf8(bytes)` — build a string from a full `byte[]` UTF-8 payload.
@@ -498,6 +503,7 @@ impl IntrinsicOp {
             ATTR_BUFFER_ZERO => IntrinsicOp::BufferZero,
             ATTR_SLEEP => IntrinsicOp::Sleep,
             ATTR_STRING_ALLOC => IntrinsicOp::StringAlloc,
+            ATTR_STRING_CHAR_AT_UNCHECKED => IntrinsicOp::StringCharAtUnchecked,
             ATTR_STRING_BUILDER_BUFFER => IntrinsicOp::StringBuilderBuffer,
             ATTR_STRING_BUILDER_PUSH_DOUBLE => IntrinsicOp::StringBuilderPushDouble,
             ATTR_STRING_CLONE_RANGE => IntrinsicOp::StringCloneRange,

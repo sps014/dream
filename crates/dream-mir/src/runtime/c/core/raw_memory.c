@@ -10,13 +10,14 @@ typedef struct {
 typedef struct ArenaChunk {
     struct ArenaChunk *next;
     size_t capacity;
-    size_t used;
 } ArenaChunk;
 
 typedef struct {
     ArenaChunk *first;
     ArenaChunk *current;
     ArenaChunk *last;
+    uintptr_t cursor;
+    uintptr_t end;
 } ArenaState;
 
 static size_t add_size(size_t a, size_t b) {
@@ -90,7 +91,7 @@ void dream_raw_fill(uintptr_t dst, int32_t value, size_t size) {
 
 static ArenaChunk *new_chunk(size_t capacity) {
     ArenaChunk *chunk = allocate(add_size(sizeof(ArenaChunk), capacity));
-    *chunk = (ArenaChunk){NULL, capacity, 0};
+    *chunk = (ArenaChunk){NULL, capacity};
     return chunk;
 }
 
@@ -98,7 +99,8 @@ uintptr_t dream_arena_new(size_t initial) {
     ArenaState *state = allocate(sizeof(ArenaState));
     if (!initial) { initial = 1; }
     ArenaChunk *chunk = new_chunk(initial);
-    *state = (ArenaState){chunk, chunk, chunk};
+    uintptr_t start = (uintptr_t)(chunk + 1);
+    *state = (ArenaState){chunk, chunk, chunk, start, start + initial};
     return (uintptr_t)state;
 }
 
@@ -107,39 +109,51 @@ static ArenaState *arena_state(uintptr_t address) {
     return (ArenaState *)address;
 }
 
-static uintptr_t chunk_alloc(ArenaChunk *chunk, size_t size, size_t alignment) {
-    uintptr_t base = (uintptr_t)(chunk + 1);
-    uintptr_t at = base + chunk->used;
+static uintptr_t arena_try_alloc(ArenaState *state, size_t size, size_t alignment) {
+    uintptr_t at = state->cursor;
     size_t padding = (alignment - (at & (alignment - 1))) & (alignment - 1);
-    size_t available = chunk->capacity - chunk->used;
+    size_t available = state->end - at;
     if (padding > available || size > available - padding) { return 0; }
-    chunk->used += padding + size;
+    state->cursor = at + padding + size;
     return at + padding;
+}
+
+/* Chunks are visited only forwards between resets; their cursors need not be saved or cleared. */
+__attribute__((noinline)) static uintptr_t arena_grow(ArenaState *state, size_t size, size_t alignment) {
+    ArenaChunk *chunk = state->current;
+    uintptr_t result;
+    do {
+        if (chunk->next) { chunk = chunk->next; }
+        else {
+            size_t doubled = add_size(state->last->capacity, state->last->capacity);
+            size_t required = add_size(size, alignment - 1);
+            chunk = new_chunk(doubled > required ? doubled : required);
+            state->last->next = chunk;
+            state->last = chunk;
+        }
+        state->current = chunk;
+        state->cursor = (uintptr_t)(chunk + 1);
+        state->end = state->cursor + chunk->capacity;
+        result = arena_try_alloc(state, size, alignment);
+    } while (!result);
+    return result;
 }
 
 uintptr_t dream_arena_alloc(uintptr_t address, size_t size, size_t alignment, int32_t zeroed) {
     ArenaState *state = arena_state(address);
     check_alignment(alignment);
     if (!size) { return 0; }
-    ArenaChunk *chunk = state->current;
-    uintptr_t result;
-    while ((result = chunk_alloc(chunk, size, alignment)) == 0) {
-        if (chunk->next) { chunk = chunk->next; continue; }
-        size_t doubled = add_size(state->last->capacity, state->last->capacity);
-        size_t required = add_size(size, alignment - 1);
-        chunk = new_chunk(doubled > required ? doubled : required);
-        state->last->next = chunk;
-        state->last = chunk;
-    }
-    state->current = chunk;
+    uintptr_t result = arena_try_alloc(state, size, alignment);
+    if (!result) { result = arena_grow(state, size, alignment); }
     if (zeroed) { memset((void *)result, 0, size); }
     return result;
 }
 
 void dream_arena_reset(uintptr_t address) {
     ArenaState *state = arena_state(address);
-    for (ArenaChunk *chunk = state->first; chunk; chunk = chunk->next) { chunk->used = 0; }
     state->current = state->first;
+    state->cursor = (uintptr_t)(state->first + 1);
+    state->end = state->cursor + state->first->capacity;
 }
 
 void dream_arena_free(uintptr_t address) {

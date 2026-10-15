@@ -1,6 +1,6 @@
 # Tasks
 
-Use [structured concurrency](structured-concurrency.md) for concurrent I/O and owned task lifetimes. Use [TaskPool](task-pool.md) for CPU work that should run in parallel.
+Use [structured concurrency](structured-concurrency.md) for concurrent I/O and owned task lifetimes. Use `scope.spawn_parallel` for CPU work on shared runtime workers, or [TaskPool](task-pool.md) to bound parallelism explicitly.
 
 **Import:** `import system.task;`
 
@@ -21,7 +21,7 @@ async fun main(): void {
 
 `Task.scope` automatically joins children on success, failure, cancellation, and early error return. `scope.spawn` schedules a local async child immediately, without allocating a thread or worker. Local children share ordinary memory and take turns at suspension points. A CPU loop can starve this scheduler unless it yields or checks cancellation.
 
-For CPU parallelism, a fixed `TaskPool` reuses native threads or Node/browser workers. `scope.spawn_on(pool, body)` retains structured ownership of a CPU job. Worker captures must satisfy Dream's [shared/move constraints](tasks-sharing.md); local async children do not cross that boundary.
+For CPU parallelism, `scope.spawn_parallel(body)` uses the shared runtime workers. A fixed `TaskPool` bounds concurrency, and `scope.spawn_on(pool, body)` retains structured ownership of its CPU jobs. Worker captures must satisfy Dream's [shared/move constraints](tasks-sharing.md); local async children do not cross that boundary.
 
 ## Low-level workers
 

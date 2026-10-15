@@ -118,6 +118,21 @@ Preserve machine-specific results as immutable JSON with raw samples and runner 
 under ignored `tests/bench/out/` directories. Do not commit benchmark results or historical timing tables. Re-run comparisons on
 the deployment hardware; results from one runner are not acceptance for another.
 
+## Parallel task attribution
+
+`task_parallel` submits sixteen CPU jobs per batch. Dream uses `Task.scope` and
+`scope.spawn_parallel` on the runtime's shared worker threads; C# uses
+`Task.Run` and `Task.WhenAll` on its process-wide thread pool. Both time submission,
+completion and reduction, including Dream's per-job session ownership. Both runtimes
+reuse threads between jobs. Dream may run a worker per active job; C# controls its
+worker count dynamically, so the row does not establish equal worker utilization.
+Each job executes the same integer kernel and both arms validate
+the same final checksum.
+
+`arena` exercises mixed-type, aligned, growable Dream storage against a bounded typed
+C# slab. It measures their respective integer-allocation paths, not identical general
+allocator contracts.
+
 ## Graph queue attribution
 
 The macro suite reports `graph_paths_class` and `graph_paths_value` separately. Both keep class-based graph vertices and edges; queue entries are classes in both class arms and inline values in both value arms. Graph construction is outside timing. Each query creates its own distance buffer and queue. Graph counters are sampled after setup, immediately before the query loop.

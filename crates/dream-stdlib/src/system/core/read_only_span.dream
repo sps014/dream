@@ -83,7 +83,7 @@ public ref struct ReadOnlySpan<T> {
     @inline
     internal fun at_unchecked(index: int): char where T: SpanCharacter {
         if this._text {
-            return this.src.char_at(this.offset + index);
+            return string.char_at_unchecked(this.src, this.offset + index);
         }
         return Buffer.get_unchecked<T>(this.array, this.offset + index);
     }

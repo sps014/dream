@@ -7,7 +7,7 @@ use crate::build::FunctionBuilder;
 use crate::{
     Callee, Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
 };
-use dream_hir::{LayoutTable, TypeLayout};
+use dream_hir::{FieldLayout, LayoutTable, TypeLayout, UnionLayout, UnionVariant};
 use dream_types::{DefId, TypeId, TypeInterner};
 use indexmap::IndexSet;
 
@@ -202,6 +202,56 @@ fn read_only_walk_is_a_cursor_family() {
         );
         assert_eq!(rc_ops_on(&w.func, w.curr), 0);
         assert_eq!(rc_ops_on(&w.func, w.node), 0);
+    }
+}
+
+#[test]
+fn unrelated_destructor_only_blocks_walks_that_can_run_cleanup() {
+    for owns_destructor in [false, true] {
+        let mut t = types();
+        t.layouts.unions.insert(
+            t.opt,
+            UnionLayout {
+                variants: vec![UnionVariant {
+                    name: "Some".into(),
+                    discriminant: 0,
+                    fields: vec![FieldLayout {
+                        name: "value".into(),
+                        ty: t.node,
+                        offset: 0,
+                        is_weak: false,
+                        is_unowned: false,
+                    }],
+                }],
+                ..Default::default()
+            },
+        );
+        let unrelated = t.i.struct_ty(DefId::root(92), vec![]);
+        t.layouts.insert(
+            unrelated,
+            TypeLayout {
+                destructor: Some(DefId::root(93)),
+                ..Default::default()
+            },
+        );
+        let mut w = walk(&t, false, |b, _, _| {
+            if owns_destructor {
+                b.new_local(unrelated, Some("cleanup".into()));
+            }
+        });
+        let mir = Mir {
+            functions: vec![w.func],
+            layouts: t.layouts.clone(),
+            ..Mir::default()
+        };
+        let effects = ModRefTable::compute(&mir, &t.i);
+        w.func = mir.functions.into_iter().next().unwrap();
+        insert(&t, &mut w, &effects);
+        assert_eq!(w.func.locals[w.curr.0 as usize].is_cursor, !owns_destructor);
+        if !owns_destructor {
+            assert_eq!(rc_ops_on(&w.func, w.curr), 0);
+            assert_eq!(rc_ops_on(&w.func, w.node), 0);
+        }
     }
 }
 

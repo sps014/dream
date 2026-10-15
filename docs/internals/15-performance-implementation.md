@@ -66,6 +66,11 @@ repetitive inputs and boundaries. Reverse search remains unchanged.
 
 ### Heap and publication
 
+Raw arenas cache the active cursor and end address, with chunk growth out of line.
+Reset rewinds the first chunk in constant time; later chunks are reset when revisited.
+String-backed span reads use an internal unchecked unit accessor after the logical span
+check, avoiding a duplicate backing-string check without changing public bounds behavior.
+
 Native thread exit and embedding detach return reusable class blocks to the process allocator.
 Private refill adopts them in batches; an atomic availability hint avoids empty-list locking.
 Unused current arena tails can be adopted by later threads. Counter records retire under the
@@ -101,6 +106,15 @@ duplicate completion, cancellation, pending credits, owner-thread wake/resumptio
 shared scheduler tokens; they fail on the old locking and private-handoff paths.
 
 ### Compiler proofs and scheduling
+
+`TaskScope.spawn_parallel` starts a structured CPU child through `Task.spawn`, using
+the runtime's shared native thread or JS worker reuse. It joins submitted work on
+cancellation. Explicit `spawn_on` pools additionally bound parallelism. Both CPU
+entry points enforce the worker shared/move capture rules; local async `spawn` does not.
+
+Loop-carried cursor proofs account for implicit cleanup through local value graphs, so
+an unrelated module destructor alone does not disable a read-only traversal. Explicit
+calls, mutation and destructor-bearing local cleanup retain their conservative checks.
 
 Heap effects are shared by ARC insertion, held-owner snapshots, value borrowing and cleanup
 proofs. Their monotone closure includes direct calls, fresh constructors and closed interface

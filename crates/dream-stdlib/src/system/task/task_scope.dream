@@ -21,6 +21,23 @@ public class TaskHandle<T, E> {
         return handle.value.unwrap();
     }
 
+    internal fun execute_parallel(body: fun(): T, scope: TaskScope<E>): Future<bool> where T : shared {
+        return TaskHandle<T, E>.parallel_owned(this, body, scope);
+    }
+
+    static async fun parallel_owned(handle: TaskHandle<T, E>, body: fun(): T, scope: TaskScope<E>): bool where T : shared {
+        // The scope owns this wait: cancellation must settle the worker before exposing results.
+        let value = Task.spawn<T>(body).await;
+        let outcome: Result<T, TaskFailure<E>> = Result.Ok(value);
+        if scope.token.is_cancelled {
+            let failure: TaskFailure<E> = TaskFailure.Cancelled;
+            outcome = Result.Err(failure);
+        }
+        handle.value = Option.Some(outcome);
+        handle.completed.cancel();
+        return true;
+    }
+
     internal fun execute_pool(body: fun(): T, pool: TaskPool, scope: TaskScope<E>): Future<bool> where T : shared {
         return TaskHandle<T, E>.pool_owned(this, body, pool, scope);
     }
@@ -66,7 +83,7 @@ public class TaskHandle<T, E> {
     }
 }
 
-// Owns local async children; its enclosing Task.scope call joins every child before returning.
+// Owns async and parallel children; its enclosing Task.scope joins every child before returning.
 @allow_cycle
 public class TaskScope<E> {
     source: CancellationSource;
@@ -102,6 +119,22 @@ public class TaskScope<E> {
             return handle;
         }
         let pending = handle.execute(body, this);
+        this.jobs.push(pending);
+        Promise.start(pending);
+        return handle;
+    }
+
+    // Schedules CPU work on the runtime's shared worker threads and retains structured ownership.
+    public fun spawn_parallel<T : shared>(body: fun(): T): TaskHandle<T, E> {
+        let handle: TaskHandle<T, E> = TaskHandle<T, E>();
+        if !this.accepting || this.source.is_cancelled {
+            let failure: TaskFailure<E> = TaskFailure.Cancelled;
+            let outcome: Result<T, TaskFailure<E>> = Result.Err(failure);
+            handle.value = Option.Some(outcome);
+            handle.completed.cancel();
+            return handle;
+        }
+        let pending = handle.execute_parallel(body, this);
         this.jobs.push(pending);
         Promise.start(pending);
         return handle;

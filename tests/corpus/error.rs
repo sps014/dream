@@ -1,6 +1,11 @@
 use super::Case;
 
 pub(super) const CASES: &[Case] = &[
+    Case::error(
+        "string_unchecked_intrinsic_reserved",
+        "reserved for internal stdlib storage",
+        true,
+    ),
     Case::error("raw_ptr_managed_violation", "unmanaged", true),
     Case::error("raw_ptr_unknown_element", "unknown type", true),
     Case::error("alignof_unknown_type", "alignof: unknown type", true),
@@ -601,6 +606,7 @@ pub(super) const CASES: &[Case] = &[
         "unexpanded syntax block 'html'",
         true,
     ),
+    Case::error("task_scope_capture_violation", "not shared", true),
     Case::error(
         "task_value_struct_capture_violation",
         "cannot capture 'wrap' of type 'Wrap' in a `Task.spawn` body: 'Wrap' is not shared — mark the class 'shared', capture a blittable value, string, or a struct of those, or pass a heap object by move (its binding cannot be used afterwards)",

@@ -58,7 +58,19 @@ The input array remains held during execution. Bounds on active operations do no
 
 ## CPU parallelism
 
-Use a reusable `TaskPool` explicitly:
+CPU work uses the runtime's shared workers by default:
+
+```dream
+let result = Task.scope<int, string>(async (scope) => {
+    let first = scope.spawn_parallel<int>(() => 6 * 7);
+    return Result.Ok(first.join().await?);
+}).await;
+```
+
+`spawn_parallel` starts immediately and retains the job until the scope drains, even
+if its handle is discarded. Cancellation waits for submitted work to settle. Native
+threads and Node/browser workers are reused across completed jobs; the shared runtime
+may create a worker for each active job. Use an explicit `TaskPool` to bound CPU concurrency:
 
 ```dream
 let pool = TaskPool(4);

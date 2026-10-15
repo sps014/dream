@@ -195,6 +195,11 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::trap("panic_invalid_cast", "before\npanic: invalid cast", true),
     Case::trap(
+        "read_only_span_text_index_trap",
+        "Span index out of range",
+        true,
+    ),
+    Case::trap(
         "read_only_span_text_slice_trap",
         "Span slice out of range\nexit code 1",
         true,

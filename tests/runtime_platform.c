@@ -89,6 +89,26 @@ int main(int argc, char **argv) {
         assert(dream_arena_alloc(arena, 8, _Alignof(int64_t), 0) == first);
         assert(dream_arena_alloc(arena, 128, 64, 0) == large);
         assert(allocations == grown_allocations);
+        uintptr_t largest = dream_arena_alloc(arena, 1024, 256, 0);
+        assert(largest % 256 == 0);
+        grown_allocations = allocations;
+        for (int pass = 0; pass < 4; pass++) {
+            dream_arena_reset(arena);
+            assert(dream_arena_alloc(arena, 0, 8, 0) == 0);
+            uintptr_t reused = dream_arena_alloc(arena, 8, _Alignof(int64_t), 0);
+            assert(reused == first);
+            ((int64_t *)reused)[0] = 99 + pass;
+            if (pass & 1) {
+                assert(dream_arena_alloc(arena, 1024, 256, 1) == largest);
+                for (int index = 0; index < 1024; index++) { assert(((unsigned char *)largest)[index] == 0); }
+                memset((void *)largest, 0xff, 1024);
+            } else {
+                assert(dream_arena_alloc(arena, 128, 64, 0) == large);
+                memset((void *)large, 0xff, 128);
+            }
+            assert(((int64_t *)reused)[0] == 99 + pass);
+            assert(allocations == grown_allocations);
+        }
         dream_arena_free(arena);
         assert(allocations - before_allocations == frees - before_frees);
         return 0;

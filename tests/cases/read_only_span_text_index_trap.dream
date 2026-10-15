@@ -1,0 +1,6 @@
+import system;
+
+fun main(): void {
+    let view = "xabcx".span(1, 4);
+    System.println(view.char_at(3));
+}

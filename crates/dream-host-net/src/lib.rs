@@ -2,9 +2,9 @@
 
 mod exports;
 mod http;
-mod urls;
-mod sockets;
 mod socket_operations;
+mod sockets;
+mod urls;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn dream_host_net_abi_v2() {}

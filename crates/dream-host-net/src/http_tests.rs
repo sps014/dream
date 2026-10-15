@@ -204,16 +204,26 @@ fn pooled_http_transport_cancellation_streaming_deadlines_and_tls_rejection() {
         }
     });
     let url = format!("https://localhost:{}", address.port());
-    assert_eq!(take(request(client, &url, "GET", 2000, 5, vec![]))[0], 2);
-    // Trust only the ephemeral fixture certificate in this unit-test client's pool.
-    let trusted = {
+    // Controlled trust stores avoid OS certificate lookup/network activity in this local fixture.
+    let resource = http::lock(http::registry()).clients[&client].clone();
+    let untrusted = {
         let _guard = http::runtime().unwrap().enter();
         reqwest::Client::builder()
-            .add_root_certificate(reqwest::Certificate::from_der(&certificate).unwrap())
+            .tls_certs_only([])
             .build()
             .unwrap()
     };
-    let resource = http::lock(http::registry()).clients[&client].clone();
+    http::lock(&resource.pools).insert((1000, 5), untrusted);
+    let rejected = take(request(client, &url, "GET", 2000, 5, vec![]));
+    assert_eq!(rejected[0], 2);
+    assert_eq!(json(&rejected)["code"], "ETRANSPORT");
+    let trusted = {
+        let _guard = http::runtime().unwrap().enter();
+        reqwest::Client::builder()
+            .tls_certs_only([reqwest::Certificate::from_der(&certificate).unwrap()])
+            .build()
+            .unwrap()
+    };
     http::lock(&resource.pools).insert((1000, 5), trusted);
     let wire = take(request(client, &url, "GET", 2000, 5, vec![]));
     assert_eq!(wire[0], 1, "{}", String::from_utf8_lossy(&wire));

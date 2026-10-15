@@ -7,9 +7,6 @@
 #include "dream_thread.h"
 #endif
 
-#ifdef DREAM_WASM32
-#endif
-
 #define KIND_HOST FUTURE_KIND_HOST
 #define KIND_ALL FUTURE_KIND_ALL
 #define KIND_ANY FUTURE_KIND_ANY
@@ -22,24 +19,7 @@ static _Thread_local Node *timer_head;
 static _Thread_local dream_ptr poll_current;
 static _Thread_local int32_t poll_drop_start_retain;
 
-static int32_t *i32_at(dream_ptr p, int32_t off) {
-    return (int32_t *)((char *)dream_p(p) + off);
-}
-
-static dream_ptr *ptr_at(dream_ptr p, int32_t off) {
-    return (dream_ptr *)((char *)dream_p(p) + off);
-}
-
-static dream_result *result_at(dream_ptr p) {
-    return (dream_result *)((char *)dream_p(p) + F_RESULT);
-}
-
-/* The 4-byte length prefix leaves native 8-byte elements only 4-aligned. */
-static dream_ptr arr_get(dream_ptr arr, int32_t i) {
-    dream_ptr element;
-    memcpy(&element, (char *)dream_p(arr) + LEN_PREFIX_SIZE + (size_t)i * sizeof(dream_ptr), sizeof(element));
-    return element;
-}
+#include "async_frame.h"
 
 void *dream_ft_get(int32_t i);
 
@@ -84,7 +64,6 @@ void dream_future_fini(dream_ptr f) {
         drop(f);
     }
 }
-static void combinator_progress(dream_ptr w, dream_ptr child);
 
 /* F_NEXT: 0 = lazy, 1 = started and the scheduler holds a retain, 2 = started retain dropped.
  * The scheduler retain is what makes Promise.start(borrow) and last-use of an awaited child
@@ -108,7 +87,7 @@ static void scheduler_drop_start_retain(dream_ptr f) {
  * running-but-suspended would re-enqueue it mid-execution and resume into garbage. */
 void dream_start(dream_ptr f) {
     int32_t kind;
-    if (!f || i32_at(f, F_QUEUED)[0] || i32_at(f, F_STATUS)[0] || i32_at(f, F_NEXT)[0]) {
+    if (!f || i32_at(f, F_QUEUED)[0] || status_of(f) || i32_at(f, F_NEXT)[0]) {
         return;
     }
     /* A yield signal is owned by its channel/awaiter, with no poll or queue entry.
@@ -140,17 +119,7 @@ static int64_t vclock;
 
 #ifndef DREAM_WASM32
 #include "../native/foreign_queue.h"
-
 #endif
-
-/* Off-thread completion flips F_STATUS after storing the result. */
-static int32_t status_of(dream_ptr f) {
-#ifdef DREAM_WASM32
-    return i32_at(f, F_STATUS)[0];
-#else
-    return __atomic_load_n(i32_at(f, F_STATUS), __ATOMIC_ACQUIRE);
-#endif
-}
 
 #ifdef DREAM_WASM32
 __attribute__((export_name(DREAM_SYM_NEW_FUTURE)))
@@ -226,7 +195,7 @@ void dream_event_complete(dream_ptr f) {
 
 void dream_enqueue(dream_ptr f) {
     ReadyNode *n;
-    if (!f || i32_at(f, F_QUEUED)[0] || i32_at(f, F_STATUS)[0]) {
+    if (!f || i32_at(f, F_QUEUED)[0] || status_of(f)) {
         return;
     }
     dream_count(DREAM_COUNT_ENQUEUE, 1);
@@ -265,15 +234,15 @@ void dream_async_complete(dream_ptr f, dream_result res) {
     dream_ptr w;
     int32_t wk;
     if (!f) { return; }
-    if (i32_at(f, F_STATUS)[0]) { return; }
+    if (status_of(f)) { return; }
     *result_at(f) = res;
-    i32_at(f, F_STATUS)[0] = 1;
+    status_store(f, 1);
     w = ptr_at(f, F_WAKER)[0];
     if (w) {
         ptr_at(f, F_WAKER)[0] = 0;
         wk = i32_at(w, F_KIND)[0];
         if (wk == KIND_ALL || wk == KIND_ANY) {
-            combinator_progress(w, f);
+            dream_combinator_progress(w, f);
         } else {
             dream_enqueue(w);
         }
@@ -285,7 +254,7 @@ void dream_cancel(dream_ptr f) {
     Node **link;
     int in_flight = 0;
     /* Scoped futures remain schedulable until every owned child has settled. */
-    if (f && !i32_at(f, F_STATUS)[0] && i32_at(f, F_KIND)[0] == 0 && ptr_at(f, F_CHILDREN)[0]) {
+    if (f && !status_of(f) && i32_at(f, F_KIND)[0] == 0 && ptr_at(f, F_CHILDREN)[0]) {
         dream_cancellation_cancel((uintptr_t)ptr_at(f, F_CHILDREN)[0]);
         return;
     }
@@ -295,18 +264,18 @@ void dream_cancel(dream_ptr f) {
 #ifndef DREAM_WASM32
     /* The host still holds an in-flight frame; its completion hands it back to drop the retain. */
     dream_mutex_lock(&foreign_claim_mu);
-    if (i32_at(f, F_STATUS)[0]) {
+    if (status_of(f)) {
         dream_mutex_unlock(&foreign_claim_mu);
         return;
     }
-    i32_at(f, F_STATUS)[0] = 2;
+    status_store(f, 2);
     in_flight = *scheduler_at(f) != NULL;
     dream_mutex_unlock(&foreign_claim_mu);
 #else
-    if (i32_at(f, F_STATUS)[0]) {
+    if (status_of(f)) {
         return;
     }
-    i32_at(f, F_STATUS)[0] = 2;
+    status_store(f, 2);
 #endif
 #ifdef DREAM_WASM32
     async_host_cancel(f);
@@ -416,7 +385,7 @@ void dream_run_loop(void) {
             }
             ready_put(n);
             i32_at(f, F_QUEUED)[0] = 0;
-            if (i32_at(f, F_STATUS)[0]) {
+            if (status_of(f)) {
                 continue;
             }
             {
@@ -521,73 +490,6 @@ int32_t delayMsAsync(dream_ptr future, int32_t ms) {
     return 0;
 }
 #endif
-
-typedef struct {
-    void (*copy)(dream_ptr, dream_ptr);
-    dream_result (*clone)(dream_result);
-    const dream_type_info *array_info;
-} CombinatorState;
-static CombinatorState *combinator_state(dream_ptr f) {
-    return (CombinatorState *)((char *)dream_p(f) + F_SLOTS);
-}
-static void combinator_progress(dream_ptr w, dream_ptr child) {
-    int32_t kind = i32_at(w, F_KIND)[0];
-    if (i32_at(w, F_STATUS)[0]) { return; }
-    if (kind != KIND_ANY && --i32_at(w, F_REMAINING)[0] > 0) { return; }
-    int32_t n = i32_at(w, F_COUNT)[0];
-    dream_ptr kids = ptr_at(w, F_CHILDREN)[0];
-    for (int32_t i = 0; i < n; ++i) {
-        dream_ptr c = arr_get(kids, i);
-        if (c && ptr_at(c, F_WAKER)[0] == w) { ptr_at(c, F_WAKER)[0] = 0; }
-    }
-    CombinatorState *state = combinator_state(w);
-    if (kind == KIND_ANY) {
-        memcpy((char *)dream_p(w) + F_WIDE, (char *)dream_p(child) + F_WIDE, 8);
-        dream_async_complete(w, state->clone(*result_at(child)));
-    } else {
-        int32_t es = i32_at(w, F_ESIZE)[0];
-        dream_ptr out = dream_array_new(n, es);
-        dream_set_type(out, state->array_info);
-        for (int32_t i = 0; i < n; ++i) {
-            dream_ptr c = arr_get(kids, i);
-            if (c) { state->copy((dream_ptr)((char *)dream_p(out) + LEN_PREFIX_SIZE + (size_t)i * (size_t)es), c); }
-        }
-        dream_async_complete(w, (dream_result)(uintptr_t)out);
-    }
-}
-
-static dream_ptr combinator_new(dream_ptr arr, int32_t kind, int32_t esize, void (*copy)(dream_ptr, dream_ptr), dream_result (*clone)(dream_result), const dream_type_info *array_info) {
-    int32_t n = arr ? dream_i32(arr)[0] : 0;
-    int32_t i;
-    dream_ptr w = dream_new_future(F_SLOTS + sizeof(CombinatorState), HOST_POLL_INDEX, kind);
-    *combinator_state(w) = (CombinatorState){copy, clone, array_info};
-    dream_retain(arr);
-    ptr_at(w, F_CHILDREN)[0] = arr;
-    i32_at(w, F_COUNT)[0] = n;
-    i32_at(w, F_REMAINING)[0] = n;
-    i32_at(w, F_ESIZE)[0] = esize > 0 ? esize : 4;
-    if (n == 0 && kind == KIND_ALL) {
-        dream_ptr out = dream_array_new(0, esize);
-        dream_set_type(out, array_info);
-        dream_async_complete(w, (dream_result)(uintptr_t)out);
-        return w;
-    }
-    for (i = 0; i < n; i++) {
-        dream_ptr c = arr_get(arr, i);
-        if (!c) {
-            continue;
-        }
-        ptr_at(c, F_WAKER)[0] = w;
-        if (i32_at(c, F_STATUS)[0]) {
-            combinator_progress(w, c);
-        }
-    }
-    return w;
-}
-
-dream_ptr dream_all(dream_ptr arr, int32_t esize, void (*copy)(dream_ptr, dream_ptr), const dream_type_info *info) { return combinator_new(arr, KIND_ALL, esize, copy, NULL, info); }
-
-dream_ptr dream_any(dream_ptr arr, dream_result (*clone)(dream_result)) { return combinator_new(arr, KIND_ANY, 8, NULL, clone, NULL); }
 
 /* Signals carry no payload and cannot run independently. The cursor owns them while the
  * producer is suspended; completion wakes the producer without speculative advancement. */

@@ -4,8 +4,8 @@ mod common;
 mod corpus;
 mod dap;
 
-mod cli_download;
 mod build_cache;
+mod cli_download;
 mod compile_metrics;
 mod compiler_dependencies;
 mod compiler_properties;

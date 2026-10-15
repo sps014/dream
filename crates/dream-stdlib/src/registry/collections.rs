@@ -4,7 +4,11 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.collections",
     deps: &["system.core", "system.primitives"],
     generators: &[],
-    files: &[("<std>/system/collections/capacity_error.dream", include_str!("../system/collections/capacity_error.dream")),
+    files: &[
+        (
+            "<std>/system/collections/capacity_error.dream",
+            include_str!("../system/collections/capacity_error.dream"),
+        ),
         (
             "<std>/system/collections/list.dream",
             include_str!("../system/collections/list.dream"),

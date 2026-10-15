@@ -15,6 +15,7 @@ static void *sparse_memset(void *ptr, int value, size_t size) {
 #define memset sparse_memset
 #include "../crates/dream-mir/src/runtime/c/core/strings.c"
 #include "../crates/dream-mir/src/runtime/c/sys/shared/async.c"
+#include "../crates/dream-mir/src/runtime/c/sys/shared/async_combinators.c"
 #include "../crates/dream-mir/src/runtime/c/sys/shared/cancellation.c"
 #undef memset
 
@@ -43,12 +44,33 @@ static void check_block(dream_ptr ptr, size_t payload) {
     assert(bytes[8] == 17 && bytes[payload - 1] == 29);
 }
 
+static DREAM_THREAD_PROC(complete_event) {
+    dream_complete_foreign((dream_ptr)arg, 0);
+    return 0;
+}
+
+static void check_foreign_start(void) {
+    for (int round = 0; round < 1000; ++round) {
+        dream_ptr event = dream_event_new();
+        dream_thread worker;
+        assert(dream_thread_start(&worker, complete_event, (void *)event) == 0);
+        for (int attempt = 0; attempt < 32; ++attempt) { dream_start(event); }
+        dream_thread_join(worker);
+        dream_run_loop();
+        assert(status_of(event) == 1 && i32_at(event, F_NEXT)[0] == 2);
+        dream_release(event);
+    }
+    assert(debug_get_live_objects() == 0);
+}
+
 int main(int argc, char **argv) {
     alarm(20);
     assert(argc == 2 && sizeof(dream_size) == sizeof(size_t));
     size_t bytes = (size_t)400000000 * 8;
     dream_ptr ptr;
-    if (strcmp(argv[1], "private") == 0) {
+    if (strcmp(argv[1], "foreign-start") == 0) {
+        check_foreign_start();
+    } else if (strcmp(argv[1], "private") == 0) {
         ptr = dream_malloc(bytes, TAG_ARRAY);
         check_block(ptr, bytes);
         dream_free(ptr);

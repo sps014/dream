@@ -39,7 +39,10 @@ mod tests {
             (narrow.abi().future.waker, narrow.abi().future.slots),
             (16, 72)
         );
-        assert_eq!((wide.abi().future.waker, wide.abi().future.slots), (24, 104));
+        assert_eq!(
+            (wide.abi().future.waker, wide.abi().future.slots),
+            (24, 104)
+        );
         assert_eq!(Target::wasm32().abi(), TargetAbi::WASM32);
     }
 }

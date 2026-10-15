@@ -217,13 +217,14 @@ pub struct FutureLayout {
     /// Combinator element size.
     pub esize: u32,
     pub wide: u32,
+    /// Inherited cancellation token, retained independently of saved locals.
+    pub context: u32,
     /// Start of saved locals. Host-allocated futures are exactly this many bytes.
     pub slots: u32,
 }
 
 impl FutureLayout {
-    /// Historical wasm32 packing: every header field is an `i32`, `F_WIDE` is 8 bytes at 56,
-    /// locals start at 64. Kept as a `const` so WAT/JS/host stay byte-stable.
+    /// Portable header layout shared by generated C and JS bindings.
     pub const WASM32: Self = Self::compute(4, 4, false);
 
     pub const fn compute(ptr_size: u32, ptr_align: u32, native: bool) -> Self {
@@ -243,6 +244,7 @@ impl FutureLayout {
         let queued = place(&mut c, 4, 4);
         let esize = if native { place(&mut c, 4, 4) } else { 0 };
         let wide = place(&mut c, 8, 8);
+        let context = place(&mut c, ptr_size, ptr_align);
         let slots = align_up(c, 8);
         Self {
             state,
@@ -260,6 +262,7 @@ impl FutureLayout {
             queued,
             esize,
             wide,
+            context,
             slots,
         }
     }

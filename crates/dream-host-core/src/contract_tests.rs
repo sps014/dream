@@ -136,6 +136,7 @@ const JS_HOST_SOURCES: &[&str] = &[
     include_str!("../../../runtime/src/hosts/http.js"),
     include_str!("../../../runtime/src/hosts/crypto.js"),
     include_str!("../../../runtime/src/hosts/console_process.js"),
+    include_str!("../../../runtime/src/hosts/process_service.js"),
     include_str!("../../../runtime/src/hosts/datetime_text.js"),
     include_str!("../../../runtime/src/workers.js"),
 ];
@@ -143,8 +144,12 @@ const JS_HOST_SOURCES: &[&str] = &[
 // Satisfied by the runtime C archive (runtime/c/core/weak.c), not by any
 // JS host or capability ABI table — so they are exempt from the prelude/host parity check.
 const RUNTIME_ARCHIVE_KEYS: &[&str] = &["weakBind", "weakDead", "weakLoad", "weakReleaseRaw"];
-// These bridges are imported by shared/cancellation.c rather than a stdlib extern.
-const RUNTIME_C_JS_IMPORTS: &[&str] = &["cancellationSubscribe", "cancellationNotify"];
+// Shared scheduling imports these bridges directly rather than through a stdlib extern.
+const RUNTIME_C_JS_IMPORTS: &[&str] = &[
+    "cancellationSubscribe",
+    "cancellationNotify",
+    "asyncHostCancel",
+];
 const COMPILER_EMITTED_JS_RC: &[&str] = &["jsRetain", "jsRelease"];
 // The loader invokes this after guest execution to await worker shutdown; it is not a
 // guest import and therefore has no stdlib declaration.
@@ -238,11 +243,11 @@ fn js_dream_host_keys_match_prelude_js_declarations() {
 
 #[test]
 fn runtime_c_imports_have_matching_javascript_bridges() {
-    let source = include_str!("../../dream-mir/src/runtime/c/sys/shared/cancellation.c");
+    let source = include_str!("../../dream-mir/src/runtime/c/core/include/dream_core.h");
     let javascript =
         js_host_export_keys(include_str!("../../../runtime/src/hosts/cancellation.js"));
     for name in RUNTIME_C_JS_IMPORTS {
-        assert!(source.contains(&format!("import_name(\"{name}\")")));
+        assert!(source.contains(&format!("DREAM_WASM_IMPORT(DREAM_MODULE_HOST, \"{name}\")")));
         assert!(javascript.contains(*name));
     }
 }

@@ -1,33 +1,64 @@
 module system.task;
 
-// Run a function on another thread. Await the result like any other Future.
-//
-//   async fun main(): void {
-//       let square = Task.spawn(() => 6 * 6).await;
-//       System.println(square.to_string());
-//   }
-//
-// `spawn` is itself `async`, so awaiting it *is* the join. Hold the Future to overlap work.
-// What a body may capture is covered in `docs/reference/language/tasks.md`.
+// Structured local async scopes and bounded maps, with explicit low-level worker spawning.
 public class Task {
+    // Runs a structured async region and joins all children on success, failure, or cancellation.
+    public static async fun scope<T, E>(body: fun(TaskScope<E>): Future<Result<T, TaskFailure<E>>>, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<T, TaskFailure<E>> {
+        let effective_token = CancellationToken.resolve(token);
+        if timeout_ms < 0 { let failure: TaskFailure<E> = TaskFailure.InvalidOperation; return Result.Err(failure); }
+        let scope = TaskScope<E>();
+        scope.protect();
+        let parent: Option<Future<bool>> = Option.None;
+        if effective_token.is_some() {
+            if effective_token.unwrap().is_cancelled { let failure: TaskFailure<E> = TaskFailure.Cancelled; return Result.Err(failure); }
+            let watcher = scope.follow(effective_token.unwrap());
+            parent = Option.Some(watcher);
+            Promise.start(watcher);
+        }
+        let timer: Option<Future<bool>> = Option.None;
+        if timeout_ms > 0 {
+            let watcher = scope.deadline(timeout_ms);
+            timer = Option.Some(watcher);
+            Promise.start(watcher);
+        }
+        let pending = body(scope);
+        TaskScope<E>.attach_host(pending, scope.token);
+        let result = pending.await;
+        if result.is_err() { scope.cancel(); }
+        scope.drain().await;
+        if parent.is_some() { Promise.cancel(parent.unwrap()); }
+        if timer.is_some() { Promise.cancel(timer.unwrap()); }
+        if scope.failure.is_some() {
+            let error = scope.failure.unwrap();
+            scope.failure = Option.None;
+            return Result.Err(TaskFailure.Failed(error));
+        }
+        if scope.worker_failure.is_some() { let failure: TaskFailure<E> = TaskFailure.WorkerFailed(scope.worker_failure.unwrap()); return Result.Err(failure); }
+        if scope.timed_out { let failure: TaskFailure<E> = TaskFailure.TimedOut; return Result.Err(failure); }
+        if result.is_err() { return result; }
+        if scope.token.is_cancelled { let failure: TaskFailure<E> = TaskFailure.Cancelled; return Result.Err(failure); }
+        return result;
+    }
+
     @runtime("workerSpawn")
     static extern fun spawn_host(funcidx: int, env: long): int;
 
     @intrinsic("funcbox_funcidx")
-    public static extern fun funcidx(borrow body: fun(string): string): int;
+    internal static extern fun funcidx(borrow body: fun(string): string): int;
 
     @intrinsic("funcbox_funcidx")
-    public static extern fun funcidx_async(borrow body: fun(string): Future<string>): int;
+    internal static extern fun funcidx_async(borrow body: fun(string): Future<string>): int;
 
     @intrinsic("funcbox_env")
-    public static extern fun env(borrow body: fun(string): string): long;
+    internal static extern fun env(borrow body: fun(string): string): long;
 
     @intrinsic("funcbox_env")
-    public static extern fun env_async(borrow body: fun(string): Future<string>): long;
+    internal static extern fun env_async(borrow body: fun(string): Future<string>): long;
 
     @runtime("workerPost")
     static extern fun post_host(id: int, borrow msg: string): void;
 
+    @async_host
     @runtime("workerRecv")
     static extern async fun recv_host(id: int): string;
 
@@ -37,6 +68,7 @@ public class Task {
     @runtime("workerTerminate")
     static extern fun terminate_host(id: int): void;
 
+    // Runs one synchronous function on a separate worker; use scope.spawn_on for structured CPU jobs.
     public static async fun spawn<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): TOut {
         CancellationToken.throw_if_opt(token);
         let wrapped: fun(string): string = (_raw: string) => Bytes.toWire<TOut>(body());
@@ -50,6 +82,7 @@ public class Task {
         return result;
     }
 
+    // Runs an async function on a separate worker; local async scope children need no worker.
     public static async fun spawn_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut {
         CancellationToken.throw_if_opt(token);
         let wrapped: fun(string): Future<string> = async (_raw: string) => {
@@ -65,47 +98,23 @@ public class Task {
         return result;
     }
 
-    // Every item is posted before the first await: async bodies start lazily, so awaiting
-    // per-item spawn futures in order would run the items one after another.
-    public static async fun map<T : shared, TOut : shared>(borrow items: T[], body: fun(T): TOut, token: Option<CancellationToken> = Option.None): TOut[] {
-        CancellationToken.throw_if_opt(token);
-        let n = items.length;
-        let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<T>(raw)));
-        let group = TaskGroup(n, wrapped);
-        for (let i = 0; i < n; i = i + 1) {
-            group.ids[i] = Task.spawn_host(Task.funcidx(wrapped), Task.env(wrapped));
-            Task.post_host(group.ids[i], Bytes.toWire<T>(items[i]));
-        }
-        let results = Buffer.alloc<TOut>(n);
-        for (let i = 0; i < n; i = i + 1) {
-            CancellationToken.throw_if_opt(token);
-            results[i] = Bytes.fromWire<TOut>(Task.recv_host(group.ids[i]).await);
-        }
-        CancellationToken.throw_if_opt(token);
-        group.hold();
-        return results;
+    // Maps with bounded local async concurrency and returns values in input order.
+    public static async fun map<T, U, E>(items: T[], body: fun(T): Future<Result<U, E>>, concurrency: int, token: Option<CancellationToken> = Option.None): Result<U[], TaskFailure<E>> {
+        let effective_token = CancellationToken.resolve(token);
+        if concurrency <= 0 { let error: TaskFailure<E> = TaskFailure.InvalidOperation; return Result.Err(error); }
+        let state = TaskMapState<T, U, E>(items, body, true);
+        return Task.scope<U[], E>(async (scope: TaskScope<E>) => TaskMapState<T, U, E>.scoped(scope, state, concurrency).await, token: effective_token).await;
     }
 
-    public static async fun map_async<T : shared, TOut : shared>(borrow items: T[], body: fun(T): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut[] {
-        CancellationToken.throw_if_opt(token);
-        let n = items.length;
-        let wrapped: fun(string): Future<string> = async (raw: string) => {
-            return Bytes.toWire<TOut>(body(Bytes.fromWire<T>(raw)).await);
-        };
-        let group = TaskGroup(n, wrapped);
-        for (let i = 0; i < n; i = i + 1) {
-            group.ids[i] = Task.spawn_host(Task.funcidx_async(wrapped), Task.env_async(wrapped));
-            Task.post_host(group.ids[i], Bytes.toWire<T>(items[i]));
-        }
-        let results = Buffer.alloc<TOut>(n);
-        for (let i = 0; i < n; i = i + 1) {
-            CancellationToken.throw_if_opt(token);
-            results[i] = Bytes.fromWire<TOut>(Task.recv_host(group.ids[i]).await);
-        }
-        CancellationToken.throw_if_opt(token);
-        group.hold();
-        return results;
+    // Applies an async operation with bounded concurrency; successful child values are discarded.
+    public static async fun for_each<T, U, E>(items: T[], body: fun(T): Future<Result<U, E>>, concurrency: int, token: Option<CancellationToken> = Option.None): Result<bool, TaskFailure<E>> {
+        if concurrency <= 0 { let error: TaskFailure<E> = TaskFailure.InvalidOperation; return Result.Err(error); }
+        let state = TaskMapState<T, U, E>(items, body, false);
+        let results = Task.scope<U[], E>(async (scope: TaskScope<E>) => TaskMapState<T, U, E>.scoped(scope, state, concurrency).await, token: token).await;
+        if results.is_err() { return Result.Err(results.unwrap_err()); }
+        return Result.Ok(true);
     }
+
 }
 
 // Owns the spawn-time funcbox and terminates the thread when dropped (after `.await` or Future cancel).
@@ -132,40 +141,5 @@ class TaskSession {
     // After `recv_host(...).await`: last-use `del` (terminate) must not run in the pre-await poll block.
     public fun hold() {
         this.id = this.id;
-    }
-}
-
-// `TaskSession` for a `Task.map` fan-out: one funcbox shared by every worker in `ids`.
-@allow_cycle
-class TaskGroup {
-    public ids: int[];
-    sync_body: fun(string): string;
-    async_body: fun(string): Future<string>;
-
-    public constructor(n: int, sync_body: fun(string): string) {
-        this.ids = Buffer.alloc<int>(n);
-        this.sync_body = sync_body;
-    }
-
-    public constructor(n: int, async_body: fun(string): Future<string>) {
-        this.ids = Buffer.alloc<int>(n);
-        this.async_body = async_body;
-    }
-
-    del() {
-        for (let i = 0; i < this.ids.length; i = i + 1) {
-            if this.ids[i] != 0 {
-                Task.shutdown_host(this.ids[i]);
-            }
-        }
-        for (let i = 0; i < this.ids.length; i = i + 1) {
-            if this.ids[i] != 0 {
-                Task.terminate_host(this.ids[i]);
-            }
-        }
-    }
-
-    public fun hold() {
-        this.ids = this.ids;
     }
 }

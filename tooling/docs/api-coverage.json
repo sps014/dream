@@ -3005,7 +3005,7 @@
       },
       {
         "signature": "public static extern fun toWire<T>(borrow value: T): string",
-        "description": "Encodes a `Task`-safe value of type `T` as the `string` the worker wire carries: identity when `T` is `string` itself, otherwise a raw byte-blit (`T` must be `unmanaged`) re-encoded via `toWireString`. Used by `Task.spawn`/`Task.map`/ `TaskPool.dispatch` to marshal an arbitrary wire value without a second wire format.",
+        "description": "Encodes a `Task`-safe value of type `T` as the `string` the worker wire carries: identity when `T` is `string` itself, otherwise a raw byte-blit (`T` must be `unmanaged`) re-encoded via `toWireString`. Used by `Task.spawn`/`TaskPool.map`/ `TaskPool.dispatch` to marshal an arbitrary wire value without a second wire format.",
         "line": 51,
         "page": "reference/api/core-bytes.md"
       },
@@ -3022,6 +3022,12 @@
     "package": "system.core",
     "page": "reference/api/core-cancellation-source.md",
     "declarations": [
+      {
+        "signature": "shared public class CancellationSource",
+        "description": "Cooperative cancellation flag shared with tokens from a `CancellationSource`. `@shared` so a token/source can be captured into a `Task.spawn` body and polled cross-thread.",
+        "line": 6,
+        "page": "reference/api/core-cancellation-source.md"
+      },
       {
         "signature": "public constructor()",
         "description": "Creates a source that is not yet cancelled.",
@@ -3054,57 +3060,75 @@
     "page": "reference/api/core-cancellation-token.md",
     "declarations": [
       {
+        "signature": "shared public class CancellationToken",
+        "description": "Read-only view of a `CancellationSource` for cooperative checks at await boundaries. `@shared` (closed-graph over `@shared` `CancellationSource`) so tokens can cross into workers.",
+        "line": 6,
+        "page": "reference/api/core-cancellation-token.md"
+      },
+      {
+        "signature": "public static get current(): Option<CancellationToken>",
+        "description": "Returns the cancellation token inherited from the current structured task.",
+        "line": 21,
+        "page": "reference/api/core-cancellation-token.md"
+      },
+      {
+        "signature": "public static fun resolve(token: Option<CancellationToken>): Option<CancellationToken>",
+        "description": "Explicit tokens override the current structured task; None inherits its token.",
+        "line": 27,
+        "page": "reference/api/core-cancellation-token.md"
+      },
+      {
         "signature": "public get is_cancelled(): bool",
         "description": "True when the owning source has been cancelled.",
-        "line": 14,
+        "line": 33,
         "page": "reference/api/core-cancellation-token.md"
       },
       {
         "signature": "public fun wait_cancelled(): Future<bool>",
         "description": "Suspends until cancellation and returns true. Completion or releasing a cancelled future detaches its subscription.",
-        "line": 19,
+        "line": 38,
         "page": "reference/api/core-cancellation-token.md"
       },
       {
         "signature": "public fun wait<T>(future: Future<T>): Future<Result<T, CancelledError>>",
         "description": "Awaits a future or cancellation using scheduler notifications. Cancellation cancels the supplied future; already performed side effects are preserved.",
-        "line": 32,
+        "line": 51,
         "page": "reference/api/core-cancellation-token.md"
       },
       {
         "signature": "public fun wait_void(future: Future<void>): Future<Result<bool, CancelledError>>",
         "description": "Awaits a void future or cancellation, returning true when the operation completes.",
-        "line": 38,
+        "line": 57,
         "page": "reference/api/core-cancellation-token.md"
       },
       {
         "signature": "public fun throw_if_cancelled(): void",
         "description": "Panics with `CancelledError` when already cancelled.",
-        "line": 77,
+        "line": 103,
         "page": "reference/api/core-cancellation-token.md"
       },
       {
         "signature": "public fun check(): Result<bool, CancelledError>",
         "description": "`Ok(true)` when still running; `Err(CancelledError)` when cancelled.",
-        "line": 84,
+        "line": 110,
         "page": "reference/api/core-cancellation-token.md"
       },
       {
         "signature": "public static fun is_cancelled_opt(token: Option<CancellationToken>): bool",
         "description": "True when `token` is `Some` and already cancelled.",
-        "line": 92,
+        "line": 118,
         "page": "reference/api/core-cancellation-token.md"
       },
       {
         "signature": "public static fun throw_if_opt(token: Option<CancellationToken>): void",
         "description": "Panics when `token` is `Some` and already cancelled.",
-        "line": 100,
+        "line": 127,
         "page": "reference/api/core-cancellation-token.md"
       },
       {
         "signature": "public static fun rejected<E>(token: Option<CancellationToken>, err: E): Result<bool, E>",
-        "description": "`Err(err)` when `token` is cancelled; otherwise `Ok(true)`.",
-        "line": 108,
+        "description": "Returns err when the explicit or inherited token is cancelled; otherwise Ok(true).",
+        "line": 135,
         "page": "reference/api/core-cancellation-token.md"
       }
     ]
@@ -3712,6 +3736,12 @@
     "package": "system.core",
     "page": "reference/api/core-lock.md",
     "declarations": [
+      {
+        "signature": "shared public class Lock",
+        "description": "Reentrant mutual-exclusion lock for `@shared` critical sections.",
+        "line": 4,
+        "page": "reference/api/core-lock.md"
+      },
       {
         "signature": "public static extern fun host_acquire(borrow target: Lock): void",
         "description": "",
@@ -4483,6 +4513,12 @@
     "package": "system.core",
     "page": "reference/api/core-semaphore.md",
     "declarations": [
+      {
+        "signature": "shared public class Semaphore",
+        "description": "Counting semaphore for limiting concurrent access to a shared resource.",
+        "line": 4,
+        "page": "reference/api/core-semaphore.md"
+      },
       {
         "signature": "public constructor(initial: int)",
         "description": "Creates a semaphore with `initial` available permits.",
@@ -6169,133 +6205,133 @@
       {
         "signature": "public static async fun write(borrow path: string, borrow content: string, token: Option<CancellationToken> = Option.None): Result<long, IoError>",
         "description": "Overwrites `path` with `content`; resolves with `Ok(bytes_written)` or `Err` on failure.",
-        "line": 76,
+        "line": 77,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun append(borrow path: string, borrow content: string, token: Option<CancellationToken> = Option.None): Result<long, IoError>",
         "description": "Appends `content` to the end of `path`; resolves with `Ok(bytes_written)` or `Err`.",
-        "line": 86,
+        "line": 88,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun read_bytes(borrow path: string, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>",
         "description": "Reads the whole file at `path` as raw bytes.",
-        "line": 96,
+        "line": 99,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun write_bytes(borrow path: string, borrow data: byte[], token: Option<CancellationToken> = Option.None): Result<long, IoError>",
         "description": "Writes raw bytes to `path`, replacing any existing contents.",
-        "line": 105,
+        "line": 109,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun delete(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
         "description": "Deletes `path`; resolves `Ok(true)` on success.",
-        "line": 115,
+        "line": 120,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun copy(borrow from: string, borrow to: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
         "description": "Copies a file from `from` to `to`, overwriting `to` when it already exists.",
-        "line": 127,
+        "line": 133,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun rename(borrow from: string, borrow to: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
         "description": "Renames or moves `from` to `to` (same-volume when the OS requires it).",
-        "line": 142,
+        "line": 149,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun remove_dir(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
         "description": "Removes an empty directory at `path`.",
-        "line": 154,
+        "line": 162,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun remove_dir_all(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
         "description": "Recursively deletes `path` (file or directory tree).",
-        "line": 169,
+        "line": 178,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun create_dir(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
         "description": "Creates a single directory at `path`; resolves `Ok(true)` on success.",
-        "line": 181,
+        "line": 191,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun create_dir_all(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
         "description": "Creates `path` and any missing parents; resolves `Ok(true)` on success.",
-        "line": 193,
+        "line": 204,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun list(borrow path: string, token: Option<CancellationToken> = Option.None): Result<string[], IoError>",
         "description": "Lists the entries of directory `path`, or `Err(IoError)` when the path is missing or not a directory (an existing empty directory yields `Ok([])`).",
-        "line": 203,
+        "line": 215,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun list_paths(borrow path: string, token: Option<CancellationToken> = Option.None): Result<string[], IoError>",
         "description": "Like `list`, but each name is joined onto `path`. Fails with the same `IoError` cases.",
-        "line": 216,
+        "line": 229,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun read_lines(borrow path: string, token: Option<CancellationToken> = Option.None): Result<string[], IoError>",
         "description": "Reads the whole file and splits on `\\n`, dropping a trailing empty part from a final newline.",
-        "line": 232,
+        "line": 246,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun write_lines(borrow path: string, borrow lines: string[], token: Option<CancellationToken> = Option.None): Result<long, IoError>",
         "description": "Writes `lines` joined by newlines, including a trailing newline when `lines` is non-empty.",
-        "line": 256,
+        "line": 271,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static fun exists(borrow path: string): bool",
         "description": "Cheap synchronous predicates (no async overhead).",
-        "line": 268,
+        "line": 284,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static fun size(borrow path: string): Option<long>",
         "description": "Size of `path` in bytes, or `None` if it does not exist.",
-        "line": 272,
+        "line": 288,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static fun is_dir(borrow path: string): bool",
         "description": "",
-        "line": 279,
+        "line": 295,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static fun is_file(borrow path: string): bool",
         "description": "True when `path` exists and is a regular file.",
-        "line": 284,
+        "line": 300,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static fun stat(borrow path: string): Result<FileStats, IoError>",
         "description": "One `stat` of `path`. Follows symlinks. Missing paths are `Err`.",
-        "line": 292,
+        "line": 308,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static fun open(borrow path: string): Result<FileStream, IoError>",
         "description": "Opens a seekable read stream over `path` (OS-backed; no whole-file preload).",
-        "line": 311,
+        "line": 327,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun open_async(borrow path: string, token: Option<CancellationToken> = Option.None): Result<FileStream, IoError>",
         "description": "Async wrapper around `open`.",
-        "line": 319,
+        "line": 335,
         "page": "reference/api/io-file.md"
       }
     ]
@@ -6338,91 +6374,91 @@
       {
         "signature": "public fun read(n: int): Result<byte[], IoError>",
         "description": "Reads up to `n` bytes from the current position, advancing the cursor.",
-        "line": 113,
+        "line": 114,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public async unique fun read_async(n: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>",
         "description": "Reads without blocking the scheduler, preserving partial reads and EOF. Cancellation may consume input; further I/O returns `EBUSY` until host work ends.",
-        "line": 138,
+        "line": 139,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun write(data: byte[]): Result<int, IoError>",
         "description": "Writes `data` at the current position, advancing the cursor; returns bytes written.",
-        "line": 158,
+        "line": 160,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public async unique fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError>",
         "description": "Writes a host-owned copy without blocking the scheduler and returns partial progress. Cancellation does not roll back writes; further I/O is busy until host work ends.",
-        "line": 173,
+        "line": 175,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun seek(pos: long): Result<bool, IoError>",
         "description": "Seeks to absolute byte offset `pos` from the start of the file.",
-        "line": 194,
+        "line": 197,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public async unique fun seek_async(pos: long, token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
         "description": "Seeks on the filesystem executor; successful completion discards read-ahead. Once submitted, cancellation is observed after completion so buffer state stays coherent.",
-        "line": 206,
+        "line": 209,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun tell(): Result<long, IoError>",
         "description": "Current cursor offset from the start of the file.",
-        "line": 224,
+        "line": 228,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun seek_from_end(offset: long): Result<bool, IoError>",
         "description": "Seeks to `offset` bytes from the end (`0` is the end; negative moves backward).",
-        "line": 234,
+        "line": 238,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun seek_end(): Result<bool, IoError>",
         "description": "Moves the cursor to the end of the file.",
-        "line": 245,
+        "line": 249,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun read_line(max_bytes: int = 1048576): Result<Option<string>, IoError>",
         "description": "Reads a line using buffered read-ahead, stripping LF or CRLF and preserving standalone CR. Returns the final unterminated line or `None` at EOF; `ELIMIT` consumes the prefix and exceeding byte beyond the pre-LF byte limit (default 1 MiB, including any CR).",
-        "line": 252,
+        "line": 256,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun write_text(text: string): Result<int, IoError>",
         "description": "Writes UTF-8 bytes of `text` at the current position.",
-        "line": 282,
+        "line": 286,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun length(): Result<long, IoError>",
         "description": "Returns the current byte length from the open handle; propagates metadata failures.",
-        "line": 287,
+        "line": 291,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public unique fun flush(): Result<bool, IoError>",
         "description": "Validates that the handle is open; writes are unbuffered at this layer. This does not synchronize data to durable storage.",
-        "line": 298,
+        "line": 302,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
         "description": "Checks cancellation and validates the handle; this layer has no buffered output to flush.",
-        "line": 303,
+        "line": 307,
         "page": "reference/api/io-file-handle.md"
       },
       {
         "signature": "public fun close(): Result<bool, IoError>",
         "description": "Closes idempotently and reports host failures. The handle stays closed even on failure to prevent closing a reused descriptor; destruction performs nonthrowing cleanup.",
-        "line": 310,
+        "line": 315,
         "page": "reference/api/io-file-handle.md"
       }
     ]
@@ -6750,13 +6786,13 @@
       {
         "signature": "public async fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError>",
         "description": "Checks cancellation, then performs an immediately ready in-memory write.",
-        "line": 99,
+        "line": 100,
         "page": "reference/api/io-memory-stream.md"
       },
       {
         "signature": "public async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
         "description": "Checks cancellation and validates that the stream is open.",
-        "line": 105,
+        "line": 107,
         "page": "reference/api/io-memory-stream.md"
       }
     ]
@@ -8138,73 +8174,73 @@
       {
         "signature": "public async fun send(request: HttpRequest, options: HttpOptions, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError>",
         "description": "Sends a snapshot and returns after response headers arrive. Statuses such as 404 remain `Ok`. Cancellation aborts pending transport work; response ownership transfers to the caller on success.",
-        "line": 25,
+        "line": 26,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public fun close(): Result<bool, HttpError>",
         "description": "Closes idempotently, cancelling pending sends. Previously received bodies remain usable.",
-        "line": 46,
+        "line": 48,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public class HttpResponse",
         "description": "Response metadata and a streamed body. Explicit closure releases unfinished bodies.",
-        "line": 97,
+        "line": 100,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public get status(): int",
         "description": "Numeric HTTP status; non-2xx responses are successful transport results.",
-        "line": 112,
+        "line": 115,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public get url(): Url",
         "description": "Final URL after any redirects visible to the host.",
-        "line": 114,
+        "line": 117,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public get headers(): HttpHeaders",
         "description": "Response headers visible to the host; browser CORS rules can hide some headers.",
-        "line": 116,
+        "line": 119,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public get body(): HttpBody",
         "description": "Byte stream owned by this response; a retained body can be read independently.",
-        "line": 118,
+        "line": 121,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public async fun read_text(max_bytes: int = 1048576, token: Option<CancellationToken> = Option.None): Result<string, HttpError>",
         "description": "Reads remaining body text up to `max_bytes` using strict incremental UTF-8 decoding. Limit or decoding failures consume input already read; close the response after any failure.",
-        "line": 121,
+        "line": 124,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public fun close(): Result<bool, HttpError>",
         "description": "Closes the body idempotently; subsequent reads return `ECLOSED`.",
-        "line": 146,
+        "line": 150,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public class HttpBody : AsyncReader",
         "description": "An HTTP response byte stream. One read may be pending; cancellation can consume bytes.",
-        "line": 150,
+        "line": 154,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public async unique fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>",
         "description": "Reads up to `max_bytes`; empty success for a positive request is EOF. Zero consumes nothing. Errors use `IoError` for compatibility with async streams; concurrent reads return `EBUSY`.",
-        "line": 160,
+        "line": 164,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public fun close(): Result<bool, HttpError>",
         "description": "Releases the response transport and cancels a pending read; safe to call repeatedly.",
-        "line": 173,
+        "line": 178,
         "page": "reference/api/net-http-client.md"
       }
     ]
@@ -9035,68 +9071,44 @@
     "declarations": [
       {
         "signature": "public class ChildProcess",
-        "description": "Handle to a spawned child process with piped stdin/stdout/stderr (`Process.spawn`).",
+        "description": "Owns a child and its pipes; explicit close terminates and reaps unfinished work.",
         "line": 4,
         "page": "reference/api/process-child-process.md"
       },
       {
-        "signature": "public fun write_stdin(data: byte[]): bool",
-        "description": "Writes `data` to the child's stdin. Returns `false` if the pipe is closed or the write fails.",
-        "line": 60,
+        "signature": "public get stdout(): ProcessReader",
+        "description": "Borrows stdout through an AsyncReader; retain this reader when using read_line buffering.",
+        "line": 19,
         "page": "reference/api/process-child-process.md"
       },
       {
-        "signature": "public fun write_stdin_text(text: string): bool",
-        "description": "Writes UTF-8 text to the child's stdin.",
-        "line": 66,
+        "signature": "public get stderr(): ProcessReader",
+        "description": "Borrows stderr through an AsyncReader; drain it concurrently with stdout.",
+        "line": 21,
         "page": "reference/api/process-child-process.md"
       },
       {
-        "signature": "public async fun read_stdout(max_bytes: int, token: Option<CancellationToken> = Option.None): byte[]",
-        "description": "Reads up to `max_bytes` currently buffered from stdout, blocking until at least one byte has arrived or the stream has reached end-of-file (in which case the result is empty).",
-        "line": 73,
+        "signature": "public get stdin(): ProcessWriter",
+        "description": "Borrows stdin through an AsyncWriter; call close_stdin to deliver EOF to the child.",
+        "line": 23,
         "page": "reference/api/process-child-process.md"
       },
       {
-        "signature": "public async fun read_stdout_all(token: Option<CancellationToken> = Option.None): byte[]",
-        "description": "",
-        "line": 80,
+        "signature": "public fun close_stdin(token: Option<CancellationToken> = Option.None): Future<Result<bool, ProcessError>>",
+        "description": "Closes stdin after pending writes, allowing commands waiting for input EOF to finish.",
+        "line": 26,
         "page": "reference/api/process-child-process.md"
       },
       {
-        "signature": "public async fun read_stdout_line(token: Option<CancellationToken> = Option.None): Option<string>",
-        "description": "Reads one line from stdout (without the trailing newline), or `None` at end-of-file.",
-        "line": 86,
+        "signature": "public fun wait(token: Option<CancellationToken> = Option.None): Future<Result<int, ProcessError>>",
+        "description": "Waits for process exit without discarding unread output or closing the child handle.",
+        "line": 39,
         "page": "reference/api/process-child-process.md"
       },
       {
-        "signature": "public async fun read_stderr(max_bytes: int, token: Option<CancellationToken> = Option.None): byte[]",
-        "description": "Reads up to `max_bytes` currently buffered from stderr.",
-        "line": 92,
-        "page": "reference/api/process-child-process.md"
-      },
-      {
-        "signature": "public async fun read_stderr_all(token: Option<CancellationToken> = Option.None): byte[]",
-        "description": "",
-        "line": 99,
-        "page": "reference/api/process-child-process.md"
-      },
-      {
-        "signature": "public async fun read_stderr_line(token: Option<CancellationToken> = Option.None): Option<string>",
-        "description": "Reads one line from stderr (without the trailing newline), or `None` at end-of-file.",
-        "line": 105,
-        "page": "reference/api/process-child-process.md"
-      },
-      {
-        "signature": "public async fun wait(token: Option<CancellationToken> = Option.None): int",
-        "description": "Waits for the process to exit, returning its exit code (or a negative sentinel: `-1` if it could not be waited on, `-2` if it was terminated by a signal with no exit code).",
-        "line": 112,
-        "page": "reference/api/process-child-process.md"
-      },
-      {
-        "signature": "public fun kill(): bool",
-        "description": "Forcibly terminates the process. Returns `false` if it had already exited or could not be killed.",
-        "line": 121,
+        "signature": "public fun close(): Future<Result<bool, ProcessError>>",
+        "description": "Terminates and reaps the owned child; repeated or concurrent closes share the outcome.",
+        "line": 52,
         "page": "reference/api/process-child-process.md"
       }
     ]
@@ -9108,44 +9120,56 @@
     "declarations": [
       {
         "signature": "public static class Process",
-        "description": "Runs and controls child processes (native only — the browser host reports `ProcessError.unsupported` for every operation; Node supports both `run` and `spawn`).",
-        "line": 5,
+        "description": "Launches processes asynchronously on native and Node; browser operations return EUNSUPPORTED.",
+        "line": 4,
         "page": "reference/api/process-process.md"
       },
       {
-        "signature": "public static async fun run(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Result<ProcessOutput, ProcessError>",
-        "description": "Runs `cmd` with `args` in the current working directory, waits for it to exit, and captures stdout/stderr in full.",
-        "line": 38,
+        "signature": "public static fun run(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Future<Result<ProcessOutput, ProcessError>>",
+        "description": "Runs a command, concurrently drains both outputs, and closes stdin after sending input.",
+        "line": 27,
         "page": "reference/api/process-process.md"
       },
       {
-        "signature": "public static async fun run_in(cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None): Result<ProcessOutput, ProcessError>",
-        "description": "Same as `run`, but launches the process with `cwd` as its working directory (an empty string keeps the caller's current working directory).",
-        "line": 45,
+        "signature": "public static fun run(cmd: string, args: string[], options: ProcessOptions, token: Option<CancellationToken> = Option.None): Future<Result<ProcessOutput, ProcessError>>",
+        "description": "Runs with explicit environment, input, output limits, and an optional deadline.",
+        "line": 32,
         "page": "reference/api/process-process.md"
       },
       {
-        "signature": "public static async fun spawn(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Result<ChildProcess, ProcessError>",
-        "description": "Spawns `cmd` with `args` in the current working directory, returning a handle for interactive stdin/stdout/stderr access and lifecycle control.",
-        "line": 64,
+        "signature": "public static fun run_in(cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None): Future<Result<ProcessOutput, ProcessError>>",
+        "description": "Runs a command in a specific working directory with otherwise default options.",
+        "line": 55,
         "page": "reference/api/process-process.md"
       },
       {
-        "signature": "public static async fun spawn_in(cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None): Result<ChildProcess, ProcessError>",
-        "description": "Same as `spawn`, but launches the process with `cwd` as its working directory.",
-        "line": 70,
+        "signature": "public static fun spawn(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Future<Result<ChildProcess, ProcessError>>",
+        "description": "Spawns an owned child exposing streaming stdin, stdout, and stderr pipes.",
+        "line": 61,
+        "page": "reference/api/process-process.md"
+      },
+      {
+        "signature": "public static fun spawn(cmd: string, args: string[], options: ProcessOptions, token: Option<CancellationToken> = Option.None): Future<Result<ChildProcess, ProcessError>>",
+        "description": "Spawns with explicit launch settings; child closure terminates and reaps unfinished work.",
+        "line": 66,
+        "page": "reference/api/process-process.md"
+      },
+      {
+        "signature": "public static fun spawn_in(cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None): Future<Result<ChildProcess, ProcessError>>",
+        "description": "Spawns a child in a specific directory with otherwise default options.",
+        "line": 88,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static async fun run_checked(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Result<ProcessOutput, ProcessError>",
-        "description": "Captures output like `run`, returning an error for a nonzero exit status.",
-        "line": 84,
+        "description": "Captures output and additionally treats nonzero exit statuses as EEXIT errors.",
+        "line": 94,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static fun which(cmd: string): Option<string>",
         "description": "Finds an existing nondirectory command path, directly or by searching `PATH`. This does not validate execute permissions or expand platform-specific extensions.",
-        "line": 99,
+        "line": 103,
         "page": "reference/api/process-process.md"
       }
     ]
@@ -9199,15 +9223,70 @@
       },
       {
         "signature": "public static fun failed(message: string): ProcessError",
-        "description": "",
-        "line": 39,
+        "description": "Reports a nonzero exit status from run_checked.",
+        "line": 40,
         "page": "reference/api/process-process-error.md"
       },
       {
         "signature": "public static fun cancelled(): ProcessError",
         "description": "Cooperative cancellation (`CancellationToken`).",
-        "line": 44,
+        "line": 45,
         "page": "reference/api/process-process-error.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/process/process_options.dream",
+    "package": "system.process",
+    "page": "reference/api/process-process-options.md",
+    "declarations": [
+      {
+        "signature": "public class ProcessOptions",
+        "description": "Process launch settings, snapshotted before the launch operation is submitted.",
+        "line": 4,
+        "page": "reference/api/process-process-options.md"
+      },
+      {
+        "signature": "public cwd: string",
+        "description": "Working directory; empty inherits the parent directory.",
+        "line": 6,
+        "page": "reference/api/process-process-options.md"
+      },
+      {
+        "signature": "public env: Map<string, string>",
+        "description": "Environment overrides applied after the inherited environment.",
+        "line": 8,
+        "page": "reference/api/process-process-options.md"
+      },
+      {
+        "signature": "public clear_env: bool",
+        "description": "Starts with an empty environment when true.",
+        "line": 10,
+        "page": "reference/api/process-process-options.md"
+      },
+      {
+        "signature": "public timeout_ms: int",
+        "description": "Wall-clock deadline in milliseconds; zero disables the deadline.",
+        "line": 12,
+        "page": "reference/api/process-process-options.md"
+      },
+      {
+        "signature": "public max_output_bytes: int",
+        "description": "Maximum captured bytes per output stream for run; defaults to 8 MiB.",
+        "line": 14,
+        "page": "reference/api/process-process-options.md"
+      },
+      {
+        "signature": "public input: byte[]",
+        "description": "Bytes written to stdin by run before closing the input pipe.",
+        "line": 16,
+        "page": "reference/api/process-process-options.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates options that inherit the environment and directory with empty stdin.",
+        "line": 19,
+        "page": "reference/api/process-process-options.md"
       }
     ]
   },
@@ -9224,27 +9303,70 @@
       },
       {
         "signature": "public get exit_code(): int",
-        "description": "",
-        "line": 15,
+        "description": "Process exit status; negative values represent signal termination.",
+        "line": 16,
         "page": "reference/api/process-process-output.md"
       },
       {
         "signature": "public get stdout(): string",
-        "description": "",
-        "line": 19,
+        "description": "Captured standard output decoded as UTF-8 text.",
+        "line": 21,
         "page": "reference/api/process-process-output.md"
       },
       {
         "signature": "public get stderr(): string",
-        "description": "",
-        "line": 23,
+        "description": "Captured standard error decoded as UTF-8 text.",
+        "line": 26,
         "page": "reference/api/process-process-output.md"
       },
       {
         "signature": "public get success(): bool",
-        "description": "",
-        "line": 27,
+        "description": "True when the process exited with status zero.",
+        "line": 31,
         "page": "reference/api/process-process-output.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/process/process_pipe.dream",
+    "package": "system.process",
+    "page": "reference/api/process-process-pipe.md",
+    "declarations": [
+      {
+        "signature": "public class ProcessReader : AsyncReader",
+        "description": "A borrowed child output pipe; cancellation preserves bytes already consumed by the host.",
+        "line": 4,
+        "page": "reference/api/process-process-pipe.md"
+      },
+      {
+        "signature": "public async unique fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>",
+        "description": "Reads at most max_bytes; a successful empty read for a positive size means EOF.",
+        "line": 15,
+        "page": "reference/api/process-process-pipe.md"
+      },
+      {
+        "signature": "public unique fun read_line(max_bytes: int = 1048576, token: Option<CancellationToken> = Option.None): Future<Result<Option<string>, IoError>>",
+        "description": "Reads a buffered UTF-8 line, removing LF or CRLF and preserving a final unterminated line.",
+        "line": 47,
+        "page": "reference/api/process-process-pipe.md"
+      },
+      {
+        "signature": "public class ProcessWriter : AsyncWriter",
+        "description": "A borrowed child input pipe implementing partial async writes.",
+        "line": 75,
+        "page": "reference/api/process-process-pipe.md"
+      },
+      {
+        "signature": "public async unique fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError>",
+        "description": "Writes bytes with partial progress; closing stdin delivers EOF to the child.",
+        "line": 79,
+        "page": "reference/api/process-process-pipe.md"
+      },
+      {
+        "signature": "public async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
+        "description": "Confirms cancellation and ownership; the process pipe has no guest-side output buffer.",
+        "line": 94,
+        "page": "reference/api/process-process-pipe.md"
       }
     ]
   },
@@ -9770,63 +9892,312 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/task/channel.dream",
+    "package": "system.task",
+    "page": "reference/api/task-channel.md",
+    "declarations": [
+      {
+        "signature": "public enum ChannelError",
+        "description": "Distinguishes backpressure, exhausted inputs, closed endpoints, and cancellation.",
+        "line": 4,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "Full",
+        "description": "The queue has reached its configured capacity.",
+        "line": 6,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "Empty",
+        "description": "No item is available yet.",
+        "line": 8,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "Closed",
+        "description": "The relevant endpoint has closed.",
+        "line": 10,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "Cancelled",
+        "description": "The pending operation was cancelled.",
+        "line": 12,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "InvalidCapacity",
+        "description": "A bounded channel requires a positive capacity.",
+        "line": 14,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public static class Channel",
+        "description": "Factories for channels with explicit bounded capacity or explicitly unbounded buffering.",
+        "line": 18,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public static fun shared_bounded<T : shared>(capacity: int): Result<SharedChannelEndpoints<T>, ChannelError>",
+        "description": "Creates a bounded cross-worker queue, enforcing the shared transfer constraint.",
+        "line": 20,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public static fun shared_unbounded<T : shared>(): SharedChannelEndpoints<T>",
+        "description": "Creates an explicitly unbounded cross-worker queue of shared values.",
+        "line": 26,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public static fun bounded<T>(capacity: int): Result<ChannelEndpoints<T>, ChannelError>",
+        "description": "Creates a bounded queue; producers suspend when its explicit capacity is reached.",
+        "line": 29,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public static fun unbounded<T>(): ChannelEndpoints<T>",
+        "description": "Creates a queue without backpressure; callers must independently bound production.",
+        "line": 35,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public class ChannelEndpoints<T>",
+        "description": "A local async queue with independently owned sending and receiving endpoints.",
+        "line": 39,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public get sender(): Sender<T>",
+        "description": "Creates another sending endpoint; dropping the last sender closes sends.",
+        "line": 44,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public get receiver(): Receiver<T>",
+        "description": "Creates another receiving endpoint; dropping the last receiver wakes blocked sends.",
+        "line": 47,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public class Sender<T>",
+        "description": "An independently closable producer endpoint for a local async channel.",
+        "line": 120,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public fun try_send(value: T): Result<bool, ChannelError>",
+        "description": "Attempts a send without suspension; Full and Closed are distinct errors.",
+        "line": 130,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public fun send(value: T, token: Option<CancellationToken> = Option.None): Future<Result<bool, ChannelError>>",
+        "description": "Suspends for capacity and observes the inherited scope token unless explicitly overridden.",
+        "line": 139,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public fun close(): void",
+        "description": "Closes this endpoint idempotently; the last sender lets receivers drain then finish.",
+        "line": 160,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public class Receiver<T>",
+        "description": "An independently closable consumer endpoint for a local async channel.",
+        "line": 171,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public fun try_receive(): Result<Option<T>, ChannelError>",
+        "description": "Returns a queued item, drained EOF, or an explicit Empty/Closed error without suspension.",
+        "line": 181,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public fun receive(token: Option<CancellationToken> = Option.None): Future<Result<Option<T>, ChannelError>>",
+        "description": "Waits for an item; None means that all senders closed and the queue has drained.",
+        "line": 190,
+        "page": "reference/api/task-channel.md"
+      },
+      {
+        "signature": "public fun close(): void",
+        "description": "Closes this endpoint; dropping the last receiver rejects and wakes pending sends.",
+        "line": 211,
+        "page": "reference/api/task-channel.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/task/shared_channel.dream",
+    "package": "system.task",
+    "page": "reference/api/task-shared-channel.md",
+    "declarations": [
+      {
+        "signature": "public class SharedChannelEndpoints<T : shared>",
+        "description": "Endpoint factories for a queue that can transfer shared values across workers.",
+        "line": 15,
+        "page": "reference/api/task-shared-channel.md"
+      },
+      {
+        "signature": "public get sender(): SharedSender<T>",
+        "description": "Creates an independently closable shared producer endpoint.",
+        "line": 19,
+        "page": "reference/api/task-shared-channel.md"
+      },
+      {
+        "signature": "public get receiver(): SharedReceiver<T>",
+        "description": "Creates an independently closable shared consumer endpoint.",
+        "line": 21,
+        "page": "reference/api/task-shared-channel.md"
+      },
+      {
+        "signature": "shared public class SharedSender<T : shared>",
+        "description": "A shared producer; clone creates an independent endpoint and ordinary aliases share closure.",
+        "line": 56,
+        "page": "reference/api/task-shared-channel.md"
+      },
+      {
+        "signature": "public fun clone(): SharedSender<T>",
+        "description": "Creates another producer; the queue closes after the last producer closes or drops.",
+        "line": 64,
+        "page": "reference/api/task-shared-channel.md"
+      },
+      {
+        "signature": "public fun try_send(value: T): Result<bool, ChannelError>",
+        "description": "Attempts one send atomically without blocking the scheduler.",
+        "line": 66,
+        "page": "reference/api/task-shared-channel.md"
+      },
+      {
+        "signature": "public fun send(value: T, token: Option<CancellationToken> = Option.None): Future<Result<bool, ChannelError>>",
+        "description": "Waits for capacity using cross-worker notifications and inherited cancellation.",
+        "line": 74,
+        "page": "reference/api/task-shared-channel.md"
+      },
+      {
+        "signature": "public fun close(): void",
+        "description": "Closes this endpoint atomically and wakes affected producers and consumers.",
+        "line": 91,
+        "page": "reference/api/task-shared-channel.md"
+      },
+      {
+        "signature": "shared public class SharedReceiver<T : shared>",
+        "description": "A shared consumer; queued values remain available after the last producer closes.",
+        "line": 96,
+        "page": "reference/api/task-shared-channel.md"
+      },
+      {
+        "signature": "public fun clone(): SharedReceiver<T>",
+        "description": "Creates an independently closable consumer on the same queue.",
+        "line": 104,
+        "page": "reference/api/task-shared-channel.md"
+      },
+      {
+        "signature": "public fun try_receive(): Result<Option<T>, ChannelError>",
+        "description": "Attempts one receive, distinguishing Empty, closed endpoints, and drained EOF.",
+        "line": 106,
+        "page": "reference/api/task-shared-channel.md"
+      },
+      {
+        "signature": "public fun receive(token: Option<CancellationToken> = Option.None): Future<Result<Option<T>, ChannelError>>",
+        "description": "Waits for a value or drained EOF using cross-worker notifications.",
+        "line": 115,
+        "page": "reference/api/task-shared-channel.md"
+      },
+      {
+        "signature": "public fun close(): void",
+        "description": "Closes this endpoint; the last consumer releases queued values and wakes blocked sends.",
+        "line": 132,
+        "page": "reference/api/task-shared-channel.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/task/task.dream",
     "package": "system.task",
     "page": "reference/api/task-task.md",
     "declarations": [
       {
         "signature": "public class Task",
-        "description": "Run a function on another thread. Await the result like any other Future.  async fun main(): void { let square = Task.spawn(() => 6 * 6).await; System.println(square.to_string()); }  `spawn` is itself `async`, so awaiting it *is* the join. Hold the Future to overlap work. What a body may capture is covered in `docs/reference/language/tasks.md`.",
-        "line": 12,
+        "description": "Structured local async scopes and bounded maps, with explicit low-level worker spawning.",
+        "line": 4,
         "page": "reference/api/task-task.md"
       },
       {
-        "signature": "public static extern fun funcidx(borrow body: fun(string): string): int",
-        "description": "",
-        "line": 17,
-        "page": "reference/api/task-task.md"
-      },
-      {
-        "signature": "public static extern fun funcidx_async(borrow body: fun(string): Future<string>): int",
-        "description": "",
-        "line": 20,
-        "page": "reference/api/task-task.md"
-      },
-      {
-        "signature": "public static extern fun env(borrow body: fun(string): string): long",
-        "description": "",
-        "line": 23,
-        "page": "reference/api/task-task.md"
-      },
-      {
-        "signature": "public static extern fun env_async(borrow body: fun(string): Future<string>): long",
-        "description": "",
-        "line": 26,
+        "signature": "public static async fun scope<T, E>(body: fun(TaskScope<E>): Future<Result<T, TaskFailure<E>>>, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<T, TaskFailure<E>>",
+        "description": "Runs a structured async region and joins all children on success, failure, or cancellation.",
+        "line": 6,
         "page": "reference/api/task-task.md"
       },
       {
         "signature": "public static async fun spawn<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): TOut",
-        "description": "",
-        "line": 40,
+        "description": "Runs one synchronous function on a separate worker; use scope.spawn_on for structured CPU jobs.",
+        "line": 72,
         "page": "reference/api/task-task.md"
       },
       {
         "signature": "public static async fun spawn_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut",
-        "description": "",
-        "line": 53,
+        "description": "Runs an async function on a separate worker; local async scope children need no worker.",
+        "line": 86,
         "page": "reference/api/task-task.md"
       },
       {
-        "signature": "public static async fun map<T : shared, TOut : shared>(borrow items: T[], body: fun(T): TOut, token: Option<CancellationToken> = Option.None): TOut[]",
-        "description": "Every item is posted before the first await: async bodies start lazily, so awaiting per-item spawn futures in order would run the items one after another.",
-        "line": 70,
+        "signature": "public static async fun map<T, U, E>(items: T[], body: fun(T): Future<Result<U, E>>, concurrency: int, token: Option<CancellationToken> = Option.None): Result<U[], TaskFailure<E>>",
+        "description": "Maps with bounded local async concurrency and returns values in input order.",
+        "line": 102,
         "page": "reference/api/task-task.md"
       },
       {
-        "signature": "public static async fun map_async<T : shared, TOut : shared>(borrow items: T[], body: fun(T): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut[]",
-        "description": "",
-        "line": 89,
+        "signature": "public static async fun for_each<T, U, E>(items: T[], body: fun(T): Future<Result<U, E>>, concurrency: int, token: Option<CancellationToken> = Option.None): Result<bool, TaskFailure<E>>",
+        "description": "Applies an async operation with bounded concurrency; successful child values are discarded.",
+        "line": 110,
         "page": "reference/api/task-task.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/task/task_failure.dream",
+    "package": "system.task",
+    "page": "reference/api/task-task-failure.md",
+    "declarations": [
+      {
+        "signature": "public enum TaskFailure<E>",
+        "description": "Preserves application errors while distinguishing structured cancellation and deadlines.",
+        "line": 4,
+        "page": "reference/api/task-task-failure.md"
+      },
+      {
+        "signature": "Failed(E)",
+        "description": "A child or the scope body returned an application error.",
+        "line": 6,
+        "page": "reference/api/task-task-failure.md"
+      },
+      {
+        "signature": "Cancelled",
+        "description": "The parent or caller requested cancellation.",
+        "line": 8,
+        "page": "reference/api/task-task-failure.md"
+      },
+      {
+        "signature": "TimedOut",
+        "description": "The scope deadline expired before all work completed.",
+        "line": 10,
+        "page": "reference/api/task-task-failure.md"
+      },
+      {
+        "signature": "WorkerFailed(TaskPoolError)",
+        "description": "A worker pool rejected a submitted job.",
+        "line": 12,
+        "page": "reference/api/task-task-failure.md"
+      },
+      {
+        "signature": "InvalidOperation",
+        "description": "A concurrency limit or scope operation was invalid.",
+        "line": 14,
+        "page": "reference/api/task-task-failure.md"
       }
     ]
   },
@@ -9836,34 +10207,125 @@
     "page": "reference/api/task-task-pool.md",
     "declarations": [
       {
-        "signature": "public class TaskPool",
-        "description": "Reuse a fixed set of threads when you dispatch many short jobs. Work goes out round-robin.",
+        "signature": "public enum TaskPoolError",
+        "description": "Failures scheduling or closing a reusable worker pool.",
         "line": 4,
         "page": "reference/api/task-task-pool.md"
       },
       {
-        "signature": "public constructor(size: int)",
-        "description": "",
+        "signature": "InvalidSize",
+        "description": "Pool sizes must be positive.",
+        "line": 6,
+        "page": "reference/api/task-task-pool.md"
+      },
+      {
+        "signature": "Closed",
+        "description": "The pool no longer accepts work.",
         "line": 8,
         "page": "reference/api/task-task-pool.md"
       },
       {
-        "signature": "public async fun dispatch<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): TOut",
-        "description": "Run `body` on the next pool member. Capture rules match `Task.spawn`.",
-        "line": 17,
+        "signature": "Cancelled",
+        "description": "Cancellation was requested; any submitted work has settled before this is returned.",
+        "line": 10,
         "page": "reference/api/task-task-pool.md"
       },
       {
-        "signature": "public async fun dispatch_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut",
-        "description": "",
-        "line": 29,
+        "signature": "public class TaskPool",
+        "description": "Reuses a fixed number of parallel workers; local async tasks do not consume pool workers.",
+        "line": 15,
         "page": "reference/api/task-task-pool.md"
       },
       {
-        "signature": "public fun shutdown(): void",
-        "description": "",
-        "line": 43,
+        "signature": "public constructor(size: int)",
+        "description": "Creates a fixed worker set; nonpositive sizes produce InvalidSize on operations.",
+        "line": 23,
         "page": "reference/api/task-task-pool.md"
+      },
+      {
+        "signature": "public get size(): int",
+        "description": "Number of reusable parallel workers in this pool.",
+        "line": 35,
+        "page": "reference/api/task-task-pool.md"
+      },
+      {
+        "signature": "public fun dispatch<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): Future<Result<TOut, TaskPoolError>>",
+        "description": "Dispatches a CPU job; capture and return values follow the shared/move worker rules.",
+        "line": 38,
+        "page": "reference/api/task-task-pool.md"
+      },
+      {
+        "signature": "public fun dispatch_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): Future<Result<TOut, TaskPoolError>>",
+        "description": "Dispatches an async job on a pool worker and waits for its operation to settle.",
+        "line": 61,
+        "page": "reference/api/task-task-pool.md"
+      },
+      {
+        "signature": "public fun map<T : shared, U : shared>(items: T[], body: fun(T): U, token: Option<CancellationToken> = Option.None): Future<Result<U[], TaskFailure<TaskPoolError>>>",
+        "description": "Maps CPU work with at most size active dispatches and preserves input order.",
+        "line": 94,
+        "page": "reference/api/task-task-pool.md"
+      },
+      {
+        "signature": "public fun map_async<T : shared, U : shared>(items: T[], body: fun(T): Future<U>, token: Option<CancellationToken> = Option.None): Future<Result<U[], TaskFailure<TaskPoolError>>>",
+        "description": "Maps async worker jobs with bounded dispatch rather than creating one worker per input.",
+        "line": 105,
+        "page": "reference/api/task-task-pool.md"
+      },
+      {
+        "signature": "public fun close(): Future<Result<bool, TaskPoolError>>",
+        "description": "Stops accepting work, waits for submitted jobs, then closes workers idempotently.",
+        "line": 116,
+        "page": "reference/api/task-task-pool.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/task/task_scope.dream",
+    "package": "system.task",
+    "page": "reference/api/task-task-scope.md",
+    "declarations": [
+      {
+        "signature": "public class TaskHandle<T, E>",
+        "description": "A child result whose execution is owned by a scope, independent of this handle's lifetime.",
+        "line": 5,
+        "page": "reference/api/task-task-scope.md"
+      },
+      {
+        "signature": "public fun join(): Future<Result<T, TaskFailure<E>>>",
+        "description": "Waits for completion without cancelling or transferring ownership of the child.",
+        "line": 15,
+        "page": "reference/api/task-task-scope.md"
+      },
+      {
+        "signature": "public class TaskScope<E>",
+        "description": "Owns local async children; its enclosing Task.scope call joins every child before returning.",
+        "line": 71,
+        "page": "reference/api/task-task-scope.md"
+      },
+      {
+        "signature": "public get token(): CancellationToken",
+        "description": "The inherited cancellation token for this scope and its children.",
+        "line": 89,
+        "page": "reference/api/task-task-scope.md"
+      },
+      {
+        "signature": "public fun cancel(): void",
+        "description": "Requests cooperative cancellation; completion still waits for child cleanup.",
+        "line": 92,
+        "page": "reference/api/task-task-scope.md"
+      },
+      {
+        "signature": "public fun spawn<T>(body: fun(): Future<Result<T, E>>): TaskHandle<T, E>",
+        "description": "Schedules a child immediately and retains it even if its result handle is discarded.",
+        "line": 95,
+        "page": "reference/api/task-task-scope.md"
+      },
+      {
+        "signature": "public fun spawn_on<T : shared>(pool: TaskPool, body: fun(): T): TaskHandle<T, E>",
+        "description": "Schedules CPU work on an explicit reusable pool while retaining structured ownership.",
+        "line": 111,
+        "page": "reference/api/task-task-scope.md"
       }
     ]
   },
@@ -10508,15 +10970,15 @@
         "page": "reference/api/time.md"
       },
       {
-        "signature": "public static async fun sleep(ms: int, token: Option<CancellationToken> = Option.None): void",
-        "description": "Cooperative / virtual-clock sleep (scheduler timer queue). Prefer `Time.delay` for wall-clock animation pacing in the browser.",
-        "line": 14,
+        "signature": "public static fun sleep(ms: int, token: Option<CancellationToken> = Option.None): Future<Result<bool, CancelledError>>",
+        "description": "Suspends on the scheduler timer and returns cancellation instead of panicking.",
+        "line": 13,
         "page": "reference/api/time.md"
       },
       {
-        "signature": "public static async fun delay(ms: int, token: Option<CancellationToken> = Option.None): void",
-        "description": "Wall-clock delay (`setTimeout` in the browser; real sleep natively).",
-        "line": 19,
+        "signature": "public static fun delay(ms: int, token: Option<CancellationToken> = Option.None): Future<Result<bool, CancelledError>>",
+        "description": "Suspends until the wall-clock timer expires or inherited cancellation is requested.",
+        "line": 18,
         "page": "reference/api/time.md"
       }
     ]

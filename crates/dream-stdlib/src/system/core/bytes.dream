@@ -45,7 +45,7 @@ public static class Bytes {
 
     // Encodes a `Task`-safe value of type `T` as the `string` the worker wire carries:
     // identity when `T` is `string` itself, otherwise a raw byte-blit (`T` must be `unmanaged`)
-    // re-encoded via `toWireString`. Used by `Task.spawn`/`Task.map`/
+    // re-encoded via `toWireString`. Used by `Task.spawn`/`TaskPool.map`/
     // `TaskPool.dispatch` to marshal an arbitrary wire value without a second wire format.
     @intrinsic("wire_encode")
     public static extern fun toWire<T>(borrow value: T): string;

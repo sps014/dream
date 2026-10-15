@@ -1,89 +1,61 @@
-# ChildProcess
+# Child Process
 
 **Import:** `import system.process;`
 
-Read the [usage guide](../stdlib/process.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+Read the [process guide](../stdlib/process.md) for launch settings, cancellation, and streaming ownership.
 
-## `class ChildProcess`
+## `ChildProcess`
 
-Handle to a spawned child process with piped stdin/stdout/stderr (`Process.spawn`).
+Owns a child and its pipes; explicit close terminates and reaps unfinished work.
 
 ```dream
 public class ChildProcess
 ```
 
-## `write_stdin`
+## `stdout`
 
-Writes `data` to the child's stdin. Returns `false` if the pipe is closed or the write fails.
+Borrows stdout through an AsyncReader; retain this reader when using read_line buffering.
 
 ```dream
-public fun write_stdin(data: byte[]): bool
+public get stdout(): ProcessReader
 ```
 
-## `write_stdin_text`
+## `stderr`
 
-Writes UTF-8 text to the child's stdin.
+Borrows stderr through an AsyncReader; drain it concurrently with stdout.
 
 ```dream
-public fun write_stdin_text(text: string): bool
+public get stderr(): ProcessReader
 ```
 
-## `read_stdout`
+## `stdin`
 
-Reads up to `max_bytes` currently buffered from stdout, blocking until at least one byte has arrived or the stream has reached end-of-file (in which case the result is empty).
+Borrows stdin through an AsyncWriter; call close_stdin to deliver EOF to the child.
 
 ```dream
-public async fun read_stdout(max_bytes: int, token: Option<CancellationToken> = Option.None): byte[]
+public get stdin(): ProcessWriter
 ```
 
-## `read_stdout_all`
+## `close_stdin`
+
+Closes stdin after pending writes, allowing commands waiting for input EOF to finish.
 
 ```dream
-public async fun read_stdout_all(token: Option<CancellationToken> = Option.None): byte[]
-```
-
-## `read_stdout_line`
-
-Reads one line from stdout (without the trailing newline), or `None` at end-of-file.
-
-```dream
-public async fun read_stdout_line(token: Option<CancellationToken> = Option.None): Option<string>
-```
-
-## `read_stderr`
-
-Reads up to `max_bytes` currently buffered from stderr.
-
-```dream
-public async fun read_stderr(max_bytes: int, token: Option<CancellationToken> = Option.None): byte[]
-```
-
-## `read_stderr_all`
-
-```dream
-public async fun read_stderr_all(token: Option<CancellationToken> = Option.None): byte[]
-```
-
-## `read_stderr_line`
-
-Reads one line from stderr (without the trailing newline), or `None` at end-of-file.
-
-```dream
-public async fun read_stderr_line(token: Option<CancellationToken> = Option.None): Option<string>
+public fun close_stdin(token: Option<CancellationToken> = Option.None): Future<Result<bool, ProcessError>>
 ```
 
 ## `wait`
 
-Waits for the process to exit, returning its exit code (or a negative sentinel: `-1` if it could not be waited on, `-2` if it was terminated by a signal with no exit code).
+Waits for process exit without discarding unread output or closing the child handle.
 
 ```dream
-public async fun wait(token: Option<CancellationToken> = Option.None): int
+public fun wait(token: Option<CancellationToken> = Option.None): Future<Result<int, ProcessError>>
 ```
 
-## `kill`
+## `close`
 
-Forcibly terminates the process. Returns `false` if it had already exited or could not be killed.
+Terminates and reaps the owned child; repeated or concurrent closes share the outcome.
 
 ```dream
-public fun kill(): bool
+public fun close(): Future<Result<bool, ProcessError>>
 ```

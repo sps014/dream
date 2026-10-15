@@ -277,6 +277,7 @@ pub struct Analyzer<'a> {
     /// each generic monomorphization. [`hir_build_intrinsics`] merges this with free-function
     /// scan so codegen can dispatch by DefId.
     intrinsic_defs: Vec<(dream_types::DefId, String)>,
+    generic_method_bindings: indexmap::IndexMap<dream_types::DefId, GenericBindings>,
     struct_methods: Vec<(&'a FunctionNode<'a>, GenericBindings)>,
     /// Registered enums: name -> (member -> value). Enum values are plain `i32`s at runtime.
     enum_table: EnumTable,
@@ -453,6 +454,7 @@ impl<'a> Analyzer<'a> {
             generic_struct_instances: indexmap::IndexSet::new(),
             c_wrapped_fun_params: HashMap::new(),
             intrinsic_defs: Vec::new(),
+            generic_method_bindings: indexmap::IndexMap::new(),
             struct_methods: Vec::new(),
             enum_table: IndexMap::new(),
             union_table: IndexMap::new(),

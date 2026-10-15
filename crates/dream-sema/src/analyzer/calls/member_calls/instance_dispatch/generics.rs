@@ -17,6 +17,34 @@ impl<'a> Analyzer<'a> {
         receiver: Option<dream_hir::HExpr>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
+        let normalized = if params
+            .iter()
+            .any(|arg| matches!(arg, ExpressionNode::NamedArg(..)))
+        {
+            Some(
+                self.normalize_named_arguments(
+                    &template
+                        .parameters
+                        .iter()
+                        .skip(1)
+                        .map(|p| p.name.text.clone())
+                        .collect::<Vec<_>>(),
+                    &template
+                        .parameters
+                        .iter()
+                        .skip(1)
+                        .map(|p| p.default.clone())
+                        .collect::<Vec<_>>(),
+                    params,
+                    method.position,
+                    diagnostics,
+                    template.parameters.last().is_some_and(|p| p.is_variadic),
+                )?,
+            )
+        } else {
+            None
+        };
+        let params = normalized.as_ref().unwrap_or(params);
         // Explicit type args let us publish monomorphized parameter types as expected types for
         // argument lambdas (`pool.dispatch<int,int>(5, (n) => n + 1)`).
         let early_bindings = if generic_args.as_ref().is_some_and(|g| !g.is_empty()) {
@@ -31,14 +59,65 @@ impl<'a> Analyzer<'a> {
             None
         };
 
-        let expected_params: Option<Vec<Type>> = early_bindings.as_ref().map(|bindings| {
-            template
-                .parameters
-                .iter()
-                .skip(1) // implicit `this`
-                .map(|p| Self::monomorphize_type(&p.type_, bindings))
-                .collect()
-        });
+        let expected_bindings = if let Some(bindings) = &early_bindings {
+            bindings.clone()
+        } else {
+            let (collecting, ok) = self.hir_pause_collection();
+            let mut probe = vec![self.type_ctx.interner.error(); template.parameters.len()];
+            probe[0] = receiver
+                .as_ref()
+                .map(|hir| hir.ty)
+                .unwrap_or_else(|| self.type_ctx.lower(&template.parameters[0].type_));
+            for (index, argument) in params.iter().enumerate() {
+                if Self::is_async_lambda_expr(argument)
+                    || matches!(argument, ExpressionNode::Lambda(_))
+                {
+                    continue;
+                }
+                if let Ok(ty) = self.analyze_expression(
+                    argument,
+                    ctx.parent_function,
+                    ctx.symbol_table,
+                    diagnostics,
+                ) && let Some(slot) = probe.get_mut(index + 1)
+                {
+                    *slot = self.type_ctx.lower(&ty);
+                }
+                let _ = self.hir_take();
+            }
+            self.hir_resume_collection(collecting, ok);
+            let mut bindings = GenericBindings::new();
+            for parameter in template.generic_parameters.as_deref().unwrap_or(&[]) {
+                let concrete =
+                    template
+                        .parameters
+                        .iter()
+                        .zip(&probe)
+                        .find_map(|(formal, &actual)| {
+                            (actual != self.type_ctx.interner.error())
+                                .then(|| {
+                                    self.match_generic_type(&formal.type_, actual, &parameter.text)
+                                })
+                                .flatten()
+                        });
+                if let Some(concrete) = concrete {
+                    bindings.insert(parameter.text.clone(), self.type_ctx.syntax_type(concrete));
+                }
+            }
+            bindings
+        };
+        let expected_params: Vec<Type> = template
+            .parameters
+            .iter()
+            .skip(1)
+            .map(|parameter| {
+                Self::erase_unbound_generics(
+                    &Self::monomorphize_type(&parameter.type_, &expected_bindings),
+                    &expected_bindings,
+                    template.generic_parameters.as_deref().unwrap_or(&[]),
+                )
+            })
+            .collect();
 
         let call_target = format!("{}.{}", struct_name, method.text);
         let saved_call_target = self.current_call_target_name.take();
@@ -47,7 +126,7 @@ impl<'a> Analyzer<'a> {
         let (mut arg_types, mut arg_hirs, mut arg_is_ref) = self
             .analyze_call_arguments_expecting_ref(
                 params,
-                expected_params.as_deref(),
+                Some(&expected_params),
                 ctx.parent_function,
                 ctx.symbol_table,
                 diagnostics,

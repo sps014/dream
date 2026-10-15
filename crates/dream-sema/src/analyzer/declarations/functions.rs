@@ -250,33 +250,60 @@ impl<'a> Analyzer<'a> {
     }
 }
 
-/// Healthy programs monomorphize a few thousand methods with short mangled names. A generic
-/// whose field types amplify under substitution (e.g. a `List<fun(T): bool>` field on
-/// `class C<T>` while something derives `C<fun(T): bool>`) diverges: every expansion round
-/// wraps the type again, so mangled names grow without limit while breadth explodes. Either
-/// signature trips these bounds and turns an infinite loop into an immediate diagnostic.
-const MAX_MANGLED_NAME_LEN: usize = 512;
+// Rendered callback signatures can be long without recursive generic expansion.
+const MAX_INSTANTIATION_DEPTH: usize = 32;
 const MAX_INSTANTIATION_ITEMS: usize = 50_000;
 
+fn excessive_type_depth(ty: &Type) -> bool {
+    let mut pending = vec![(ty, 0usize)];
+    while let Some((ty, depth)) = pending.pop() {
+        if depth > MAX_INSTANTIATION_DEPTH {
+            return true;
+        }
+        match ty {
+            Type::Array(inner) => pending.push((inner, depth + 1)),
+            Type::Struct(_, Some(args)) | Type::Tuple(args) => {
+                pending.extend(args.iter().map(|ty| (ty, depth + 1)))
+            }
+            Type::Function(params, result) => {
+                pending.extend(params.iter().map(|ty| (ty, depth + 1)));
+                pending.push((result, depth + 1));
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
 fn check_instantiation_bounds(
-    max_len: &mut usize,
-    items: &mut usize,
+    items: usize,
+    bindings: &GenericBindings,
     name: &str,
     diagnostics: &mut DiagnosticBag,
 ) -> Result<(), SemanticError> {
-    let diverging = *items > MAX_INSTANTIATION_ITEMS;
-    if name.len() > *max_len {
-        *max_len = name.len();
-    }
-    if !diverging && *max_len <= MAX_MANGLED_NAME_LEN {
+    if items <= MAX_INSTANTIATION_ITEMS && !bindings.values().any(excessive_type_depth) {
         return Ok(());
     }
+    let name: String = name.chars().take(120).collect();
     diagnostics.report_error(
-        format!(
-            "generic instantiation grew too deep while expanding '{}...': monomorphization is diverging, usually because a generic class has a field that wraps its own type parameter (e.g. `ps: List<fun(T): bool>` on `class C<T>`) while something also derives `C<fun(T): bool>` from it; restructure the class so its field types do not nest the parameter deeper",
-            &name[..name.len().min(120)]
-        ),
+        format!("generic instantiation grew too deep while expanding '{name}...': limit is {MAX_INSTANTIATION_DEPTH} nested type levels or {MAX_INSTANTIATION_ITEMS} expansions"),
         None,
     );
     Err(SemanticError::AnalysisFailed)
+}
+
+#[cfg(test)]
+mod instantiation_limit_tests {
+    use super::*;
+    #[test]
+    fn nesting_limit_uses_types_instead_of_symbol_length() {
+        assert!(!excessive_type_depth(&Type::Generic(
+            "qualified".repeat(200)
+        )));
+        let mut nested = Type::Unknown;
+        for _ in 0..=MAX_INSTANTIATION_DEPTH {
+            nested = Type::Array(Box::new(nested));
+        }
+        assert!(excessive_type_depth(&nested));
+    }
 }

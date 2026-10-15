@@ -566,6 +566,12 @@ pub(super) const CASES: &[Case] = &[
         "process input, output, or environment",
     ),
     Case::isolated(
+        "process_options_basic",
+        "process options ok",
+        true,
+        "process input, output, environment and child termination",
+    ),
+    Case::isolated(
         "process_run_basic",
         "true\nhello world\nESPAWN",
         true,

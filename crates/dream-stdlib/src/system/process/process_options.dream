@@ -1,0 +1,42 @@
+module system.process;
+
+// Process launch settings, snapshotted before the launch operation is submitted.
+public class ProcessOptions {
+    // Working directory; empty inherits the parent directory.
+    public cwd: string;
+    // Environment overrides applied after the inherited environment.
+    public env: Map<string, string>;
+    // Starts with an empty environment when true.
+    public clear_env: bool;
+    // Wall-clock deadline in milliseconds; zero disables the deadline.
+    public timeout_ms: int;
+    // Maximum captured bytes per output stream for run; defaults to 8 MiB.
+    public max_output_bytes: int;
+    // Bytes written to stdin by run before closing the input pipe.
+    public input: byte[];
+
+    // Creates options that inherit the environment and directory with empty stdin.
+    public constructor() {
+        this.cwd = "";
+        this.env = Map<string, string>();
+        this.clear_env = false;
+        this.timeout_ms = 0;
+        this.max_output_bytes = 8388608;
+        this.input = Buffer.alloc<byte>(0);
+    }
+
+    internal fun wire(): JsonValue {
+        let value = JsonValue.dict();
+        value.set("cwd", JsonValue.from_string(this.cwd));
+        value.set("timeout_ms", JsonValue.number((double)this.timeout_ms));
+        value.set("max_output_bytes", JsonValue.number((double)this.max_output_bytes));
+        value.set("clear_env", JsonValue.boolean(this.clear_env));
+        let environment = JsonValue.dict();
+        for (let entry in this.env) { environment.set(entry.key, JsonValue.from_string(entry.value)); }
+        value.set("env", environment);
+        let input = JsonValue.array();
+        for (let i = 0; i < this.input.length; i = i + 1) { input.push(JsonValue.number((double)this.input[i])); }
+        value.set("input", input);
+        return value;
+    }
+}

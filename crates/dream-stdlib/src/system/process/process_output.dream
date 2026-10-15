@@ -12,18 +12,22 @@ public class ProcessOutput {
         this._stderr = stderr;
     }
 
+    // Process exit status; negative values represent signal termination.
     public get exit_code(): int {
         return this._exit_code;
     }
 
+    // Captured standard output decoded as UTF-8 text.
     public get stdout(): string {
         return this._stdout;
     }
 
+    // Captured standard error decoded as UTF-8 text.
     public get stderr(): string {
         return this._stderr;
     }
 
+    // True when the process exited with status zero.
     public get success(): bool {
         return this._exit_code == 0;
     }

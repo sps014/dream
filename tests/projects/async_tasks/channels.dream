@@ -1,0 +1,71 @@
+import system;
+import system.task;
+import system.testing;
+
+@test
+async fun channels(): void {
+    Assert.is_true(Channel.bounded<int>(0).is_err());
+    let channel = Channel.bounded<string>(1).unwrap();
+    let sender = channel.sender;
+    let receiver = channel.receiver;
+    Assert.is_true(receiver.try_receive().is_err());
+    Assert.is_true(sender.try_send("first").is_ok());
+    Assert.is_true(sender.try_send("full").unwrap_err() == ChannelError.Full);
+    let source = CancellationSource();
+    let blocked = sender.send("cancelled", Option.Some(source.token));
+    Promise.start(blocked);
+    Time.delay(1).await;
+    source.cancel();
+    Assert.is_true(blocked.await.unwrap_err() == ChannelError.Cancelled);
+    Assert.eq_str(receiver.receive().await.unwrap().unwrap(), "first");
+    sender.close();
+    sender.close();
+    Assert.is_true(receiver.receive().await.unwrap().is_none());
+    Assert.is_true(sender.send("closed").await.is_err());
+
+    let other = Channel.bounded<int>(1).unwrap();
+    let producer = other.sender;
+    let consumer = other.receiver;
+    producer.send(1).await.unwrap();
+    let stalled = producer.send(2);
+    Promise.start(stalled);
+    Time.delay(1).await;
+    consumer.close();
+    Assert.is_true(stalled.await.is_err());
+
+    let unbounded = Channel.unbounded<int>();
+    let unbounded_sender = unbounded.sender;
+    let unbounded_receiver = unbounded.receiver;
+    for (let i = 0; i < 100; i = i + 1) { unbounded_sender.try_send(i).unwrap(); }
+    unbounded_sender.close();
+    for (let i = 0; i < 100; i = i + 1) { Assert.eq(unbounded_receiver.receive().await.unwrap().unwrap(), i); }
+    Assert.is_true(unbounded_receiver.receive().await.unwrap().is_none());
+
+    let shared_queue = Channel.shared_bounded<string>(2).unwrap();
+    let owner_receiver = shared_queue.receiver;
+    let workers = Buffer.alloc<Future<int>>(4);
+    for (let producer_id = 0; producer_id < 4; producer_id = producer_id + 1) {
+        let worker_sender = shared_queue.sender;
+        let base = producer_id * 50;
+        let worker = Task.spawn_async(async () => {
+            for (let i = 0; i < 50; i = i + 1) { worker_sender.send((base + i).to_string()).await.unwrap(); }
+            worker_sender.close();
+            return 50;
+        });
+        workers[producer_id] = worker;
+        Promise.start(worker);
+    }
+    let seen = Buffer.alloc<bool>(200);
+    let count = 0;
+    while true {
+        let item = owner_receiver.receive().await.unwrap();
+        if item.is_none() { break; }
+        let value = int.parse(item.unwrap()).unwrap();
+        Assert.is_true(value >= 0 && value < 200);
+        Assert.is_false(seen[value]);
+        seen[value] = true;
+        count = count + 1;
+    }
+    Assert.eq(count, 200);
+    for (let i = 0; i < workers.length; i = i + 1) { Assert.eq(workers[i].await, 50); }
+}

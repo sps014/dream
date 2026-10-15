@@ -148,6 +148,7 @@ impl<'a> Analyzer<'a> {
                     .defs
                     .set_generic_params(def, generic_param_names(&method.generic_parameters));
                 self.generic_functions.insert(def, renamed_template);
+                self.generic_method_bindings.insert(def, bindings.clone());
                 self.function_table
                     .generic_methods
                     .insert((target_type, member_name), def);

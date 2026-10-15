@@ -13,7 +13,7 @@ async fun task_async_lambda_pool(): void {
         Time.sleep(1).await;
         return "resp:y";
     });
-    Assert.eq_str((a.await).to_string(), "resp:x");
-    Assert.eq_str((b.await).to_string(), "resp:y");
-    pool.shutdown();
+    Assert.eq_str((a.await.unwrap()).to_string(), "resp:x");
+    Assert.eq_str((b.await.unwrap()).to_string(), "resp:y");
+    pool.close().await.unwrap();
 }

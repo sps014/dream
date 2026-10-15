@@ -8,7 +8,7 @@ async fun c247_fetchLike(url: string): string {
 
 async fun c247_body(): void {
     let urls = ["a", "b", "c"];
-    let results = Task.map_async(urls, c247_fetchLike).await;
+    let results = TaskPool(4).map_async(urls, c247_fetchLike).await.unwrap();
     for (let r in results) {
         c247_verify_observation((r).to_string());
     }

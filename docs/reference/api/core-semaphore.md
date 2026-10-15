@@ -1,8 +1,14 @@
 # Semaphore
 
-No import is needed.
+**Import:** `import system.core;`
 
-Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+## `Semaphore`
+
+Counting semaphore for limiting concurrent access to a shared resource.
+
+```dream
+shared public class Semaphore
+```
 
 ## `constructor`
 
@@ -14,15 +20,11 @@ public constructor(initial: int)
 
 ## `host_acquire`
 
-Acquires the supplied synchronization object. Prefer its instance `acquire()` method.
-
 ```dream
 public static extern fun host_acquire(borrow target: Semaphore): void
 ```
 
 ## `host_release`
-
-Releases the supplied synchronization object. Prefer its instance `release()` method.
 
 ```dream
 public static extern fun host_release(borrow target: Semaphore): void
@@ -30,15 +32,11 @@ public static extern fun host_release(borrow target: Semaphore): void
 
 ## `host_try_acquire`
 
-Attempts acquisition once and returns whether it succeeded.
-
 ```dream
 public static extern fun host_try_acquire(borrow target: Semaphore): bool
 ```
 
 ## `host_try_acquire_for`
-
-Attempts acquisition for up to `timeout_ms` milliseconds; non-positive limits perform a single attempt.
 
 ```dream
 public static extern fun host_try_acquire_for(borrow target: Semaphore, timeout_ms: int): bool

@@ -1,0 +1,218 @@
+module system.task;
+
+// Distinguishes backpressure, exhausted inputs, closed endpoints, and cancellation.
+public enum ChannelError {
+    // The queue has reached its configured capacity.
+    Full,
+    // No item is available yet.
+    Empty,
+    // The relevant endpoint has closed.
+    Closed,
+    // The pending operation was cancelled.
+    Cancelled,
+    // A bounded channel requires a positive capacity.
+    InvalidCapacity,
+}
+
+// Factories for channels with explicit bounded capacity or explicitly unbounded buffering.
+public static class Channel {
+    // Creates a bounded cross-worker queue, enforcing the shared transfer constraint.
+    public static fun shared_bounded<T : shared>(capacity: int): Result<SharedChannelEndpoints<T>, ChannelError> {
+        if capacity <= 0 { return Result.Err(ChannelError.InvalidCapacity); }
+        return Result.Ok(SharedChannelEndpoints<T>(capacity));
+    }
+
+    // Creates an explicitly unbounded cross-worker queue of shared values.
+    public static fun shared_unbounded<T : shared>(): SharedChannelEndpoints<T> { return SharedChannelEndpoints<T>(0); }
+
+    // Creates a bounded queue; producers suspend when its explicit capacity is reached.
+    public static fun bounded<T>(capacity: int): Result<ChannelEndpoints<T>, ChannelError> {
+        if capacity <= 0 { return Result.Err(ChannelError.InvalidCapacity); }
+        return Result.Ok(ChannelEndpoints<T>(capacity));
+    }
+
+    // Creates a queue without backpressure; callers must independently bound production.
+    public static fun unbounded<T>(): ChannelEndpoints<T> { return ChannelEndpoints<T>(0); }
+}
+
+// A local async queue with independently owned sending and receiving endpoints.
+public class ChannelEndpoints<T> {
+    state: ChannelState<T>;
+    internal constructor(capacity: int) { this.state = ChannelState<T>(capacity); }
+
+    // Creates another sending endpoint; dropping the last sender closes sends.
+    public get sender(): Sender<T> { return Sender<T>(this.state); }
+
+    // Creates another receiving endpoint; dropping the last receiver wakes blocked sends.
+    public get receiver(): Receiver<T> { return Receiver<T>(this.state); }
+}
+
+@allow_cycle
+class ChannelState<T> {
+    internal queue: Queue<T>;
+    internal capacity: int;
+    internal senders: int;
+    internal receivers: int;
+    internal send_closed: bool;
+    internal receive_closed: bool;
+    internal readable: List<CancellationSource>;
+    internal writable: List<CancellationSource>;
+
+    internal constructor(capacity: int) {
+        this.queue = Queue<T>();
+        this.capacity = capacity;
+        this.senders = 0;
+        this.receivers = 0;
+        this.send_closed = false;
+        this.receive_closed = false;
+        this.readable = List<CancellationSource>();
+        this.writable = List<CancellationSource>();
+    }
+
+    internal fun wake(waiters: List<CancellationSource>): void {
+        for (let i = 0; i < waiters.length; i = i + 1) { waiters[i].cancel(); }
+        waiters.clear();
+    }
+
+    internal fun wake_one(waiters: List<CancellationSource>): void {
+        if waiters.length == 0 { return; }
+        let first = waiters[0];
+        waiters.remove_at(0);
+        first.cancel();
+    }
+
+    internal fun close_sends(): void {
+        this.send_closed = true;
+        this.wake(this.readable);
+        this.wake(this.writable);
+    }
+
+    internal fun close_receives(): void {
+        this.receive_closed = true;
+        this.queue.clear();
+        this.wake(this.readable);
+        this.wake(this.writable);
+    }
+}
+
+// Removes an abandoned wait registration even when its async frame is dropped.
+class ChannelWait {
+    waiters: List<CancellationSource>;
+    internal source: CancellationSource;
+    closed: bool;
+    internal constructor(waiters: List<CancellationSource>) {
+        this.waiters = waiters;
+        this.source = CancellationSource();
+        this.closed = false;
+        this.waiters.push(this.source);
+    }
+    internal fun close(): void {
+        if !this.closed {
+            this.closed = true;
+            if !this.source.is_cancelled { this.waiters.remove(this.source); }
+        }
+    }
+    del() { this.close(); }
+}
+
+// An independently closable producer endpoint for a local async channel.
+@allow_cycle
+public class Sender<T> {
+    state: ChannelState<T>;
+    closed: bool;
+    internal constructor(state: ChannelState<T>) {
+        this.state = state;
+        this.closed = false;
+        this.state.senders = this.state.senders + 1;
+    }
+
+    // Attempts a send without suspension; Full and Closed are distinct errors.
+    public fun try_send(value: T): Result<bool, ChannelError> {
+        if this.closed || this.state.send_closed || this.state.receive_closed { return Result.Err(ChannelError.Closed); }
+        if this.state.capacity > 0 && this.state.queue.length >= this.state.capacity { return Result.Err(ChannelError.Full); }
+        this.state.queue.enqueue(value);
+        this.state.wake_one(this.state.readable);
+        return Result.Ok(true);
+    }
+
+    // Suspends for capacity and observes the inherited scope token unless explicitly overridden.
+    public fun send(value: T, token: Option<CancellationToken> = Option.None): Future<Result<bool, ChannelError>> {
+        let effective_token = CancellationToken.resolve(token);
+        return Sender<T>.send_owned(this, value, effective_token);
+    }
+
+    static async fun send_owned(sender: Sender<T>, value: T, token: Option<CancellationToken>): Result<bool, ChannelError> {
+        let effective_token = CancellationToken.resolve(token);
+        while true {
+            if CancellationToken.is_cancelled_opt(effective_token) { return Result.Err(ChannelError.Cancelled); }
+            let result = sender.try_send(value);
+            if result.is_ok() || result.unwrap_err() != ChannelError.Full { return result; }
+            let waiting = ChannelWait(sender.state.writable);
+            if effective_token.is_some() {
+                let finished = effective_token.unwrap().wait(waiting.source.token.wait_cancelled()).await;
+                waiting.close();
+                if finished.is_err() { return Result.Err(ChannelError.Cancelled); }
+            } else { waiting.source.token.wait_cancelled().await; waiting.close(); }
+        }
+    }
+
+    // Closes this endpoint idempotently; the last sender lets receivers drain then finish.
+    public fun close(): void {
+        if this.closed { return; }
+        this.closed = true;
+        this.state.senders = this.state.senders - 1;
+        if this.state.senders == 0 { this.state.close_sends(); }
+    }
+    del() { this.close(); }
+}
+
+// An independently closable consumer endpoint for a local async channel.
+@allow_cycle
+public class Receiver<T> {
+    state: ChannelState<T>;
+    closed: bool;
+    internal constructor(state: ChannelState<T>) {
+        this.state = state;
+        this.closed = false;
+        this.state.receivers = this.state.receivers + 1;
+    }
+
+    // Returns a queued item, drained EOF, or an explicit Empty/Closed error without suspension.
+    public fun try_receive(): Result<Option<T>, ChannelError> {
+        if this.closed || this.state.receive_closed { return Result.Err(ChannelError.Closed); }
+        let item = this.state.queue.dequeue();
+        if item.is_some() { this.state.wake_one(this.state.writable); return Result.Ok(item); }
+        if this.state.send_closed { let end: Option<T> = Option.None; return Result.Ok(end); }
+        return Result.Err(ChannelError.Empty);
+    }
+
+    // Waits for an item; None means that all senders closed and the queue has drained.
+    public fun receive(token: Option<CancellationToken> = Option.None): Future<Result<Option<T>, ChannelError>> {
+        let effective_token = CancellationToken.resolve(token);
+        return Receiver<T>.receive_owned(this, effective_token);
+    }
+
+    static async fun receive_owned(receiver: Receiver<T>, token: Option<CancellationToken>): Result<Option<T>, ChannelError> {
+        let effective_token = CancellationToken.resolve(token);
+        while true {
+            if CancellationToken.is_cancelled_opt(effective_token) { return Result.Err(ChannelError.Cancelled); }
+            let result = receiver.try_receive();
+            if result.is_ok() || result.unwrap_err() != ChannelError.Empty { return result; }
+            let waiting = ChannelWait(receiver.state.readable);
+            if effective_token.is_some() {
+                let finished = effective_token.unwrap().wait(waiting.source.token.wait_cancelled()).await;
+                waiting.close();
+                if finished.is_err() { return Result.Err(ChannelError.Cancelled); }
+            } else { waiting.source.token.wait_cancelled().await; waiting.close(); }
+        }
+    }
+
+    // Closes this endpoint; dropping the last receiver rejects and wakes pending sends.
+    public fun close(): void {
+        if this.closed { return; }
+        this.closed = true;
+        this.state.receivers = this.state.receivers - 1;
+        if this.state.receivers == 0 { this.state.close_receives(); }
+    }
+    del() { this.close(); }
+}

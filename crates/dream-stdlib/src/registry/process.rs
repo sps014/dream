@@ -4,6 +4,7 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.process",
     deps: &[
         "system.core",
+        "system.json",
         "system.primitives",
         "system.text",
         "system.encoding",
@@ -13,6 +14,18 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     ],
     generators: &[],
     files: &[
+        (
+            "<std>/system/process/process_options.dream",
+            include_str!("../system/process/process_options.dream"),
+        ),
+        (
+            "<std>/system/process/process_operation.dream",
+            include_str!("../system/process/process_operation.dream"),
+        ),
+        (
+            "<std>/system/process/process_pipe.dream",
+            include_str!("../system/process/process_pipe.dream"),
+        ),
         (
             "<std>/system/process/process_error.dream",
             include_str!("../system/process/process_error.dream"),

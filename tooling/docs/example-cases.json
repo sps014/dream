@@ -148,5 +148,23 @@
     "page": "docs/reference/stdlib/cli.md",
     "block": 1,
     "stdout": "check\nslow\n"
+  },
+  {
+    "name": "structured-scope",
+    "page": "docs/reference/language/structured-concurrency.md",
+    "block": 0,
+    "stdout": "42\n"
+  },
+  {
+    "name": "bounded-async-map",
+    "page": "docs/reference/language/tasks.md",
+    "block": 0,
+    "stdout": "1\n4\n9\n"
+  },
+  {
+    "name": "worker-pool",
+    "page": "docs/reference/language/task-pool.md",
+    "block": 0,
+    "stdout": "9\n"
   }
 ]

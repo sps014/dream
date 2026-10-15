@@ -36,6 +36,7 @@ public class ProcessError : Error {
         return ProcessError("EUNSUPPORTED", message);
     }
 
+    // Reports a nonzero exit status from run_checked.
     public static fun failed(message: string): ProcessError {
         return ProcessError("EEXIT", message);
     }

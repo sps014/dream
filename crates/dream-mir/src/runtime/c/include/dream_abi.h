@@ -107,7 +107,8 @@
 #define F_QUEUED_WASM 48
 #define F_ESIZE_WASM 56
 #define F_WIDE_WASM 56
-#define F_SLOTS_WASM 64
+#define F_CONTEXT_WASM 64
+#define F_SLOTS_WASM 72
 #if UINTPTR_MAX == UINT64_MAX
 #define F_STATE_NATIVE 0
 #define F_STATUS_NATIVE 4
@@ -124,7 +125,8 @@
 #define F_QUEUED_NATIVE 80
 #define F_ESIZE_NATIVE 84
 #define F_WIDE_NATIVE 88
-#define F_SLOTS_NATIVE 96
+#define F_CONTEXT_NATIVE 96
+#define F_SLOTS_NATIVE 104
 #elif UINTPTR_MAX == UINT32_MAX
 #define F_STATE_NATIVE 0
 #define F_STATUS_NATIVE 4
@@ -141,7 +143,8 @@
 #define F_QUEUED_NATIVE 48
 #define F_ESIZE_NATIVE 52
 #define F_WIDE_NATIVE 56
-#define F_SLOTS_NATIVE 64
+#define F_CONTEXT_NATIVE 64
+#define F_SLOTS_NATIVE 72
 #else
 #error Unsupported Dream pointer width
 #endif
@@ -161,6 +164,7 @@
 #define F_QUEUED F_QUEUED_NATIVE
 #define F_ESIZE F_ESIZE_NATIVE
 #define F_WIDE F_WIDE_NATIVE
+#define F_CONTEXT F_CONTEXT_NATIVE
 #define F_SLOTS F_SLOTS_NATIVE
 #else
 #define F_STATE F_STATE_WASM
@@ -178,6 +182,7 @@
 #define F_QUEUED F_QUEUED_WASM
 #define F_ESIZE F_ESIZE_WASM
 #define F_WIDE F_WIDE_WASM
+#define F_CONTEXT F_CONTEXT_WASM
 #define F_SLOTS F_SLOTS_WASM
 #endif
 #endif

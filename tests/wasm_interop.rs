@@ -237,9 +237,9 @@ async fun main(): void {
     System.println(second.await);
     System.println(value());
     let pool = TaskPool(1);
-    System.println(pool.dispatch(() => value().to_string()).await);
-    System.println(pool.dispatch(() => value().to_string()).await);
-    pool.shutdown();
+    System.println(pool.dispatch(() => value().to_string()).await.unwrap());
+    System.println(pool.dispatch(() => value().to_string()).await.unwrap());
+    pool.close().await.unwrap();
     set_error(1234);
     System.println(Task.spawn(() => get_error()).await);
     System.println(get_error());

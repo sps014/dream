@@ -7,6 +7,9 @@
 #include "dream_thread.h"
 #endif
 
+#ifdef DREAM_WASM32
+#endif
+
 #define KIND_HOST FUTURE_KIND_HOST
 #define KIND_ALL FUTURE_KIND_ALL
 #define KIND_ANY FUTURE_KIND_ANY
@@ -50,6 +53,13 @@ void dream_future_fini(dream_ptr f) {
     void (*drop)(dream_ptr);
     if (!f) {
         return;
+    }
+    dream_ptr context = ptr_at(f, F_CONTEXT)[0];
+    ptr_at(f, F_CONTEXT)[0] = 0;
+    dream_release(context);
+    if (i32_at(f, F_KIND)[0] == 0 && ptr_at(f, F_CHILDREN)[0]) {
+        dream_cancellation_release((uintptr_t)ptr_at(f, F_CHILDREN)[0]);
+        ptr_at(f, F_CHILDREN)[0] = 0;
     }
     int32_t kind = i32_at(f, F_KIND)[0];
     if (kind == KIND_ALL || kind == KIND_ANY) {
@@ -153,7 +163,42 @@ dream_ptr dream_new_future(dream_size size, int32_t poll, int32_t kind) {
     memset(dream_p(p), 0, (size_t)bytes);
     i32_at(p, F_POLL)[0] = poll;
     i32_at(p, F_KIND)[0] = kind;
+    if (poll_current) {
+        dream_ptr context = ptr_at(poll_current, F_CONTEXT)[0];
+        dream_retain(context);
+        ptr_at(p, F_CONTEXT)[0] = context;
+    }
     return p;
+}
+
+/* Pool callbacks must stay retained through the matching host completion. */
+void dream_task_keep_alive(dream_ptr callback) { (void)callback; }
+
+int32_t dream_task_has_context(void) {
+    return poll_current && ptr_at(poll_current, F_CONTEXT)[0] != 0;
+}
+
+dream_ptr dream_task_context(void) {
+    dream_ptr context = poll_current ? ptr_at(poll_current, F_CONTEXT)[0] : 0;
+    dream_retain(context);
+    return context;
+}
+
+void dream_task_attach(dream_ptr future, dream_ptr token) {
+    dream_retain(token);
+    dream_release(ptr_at(future, F_CONTEXT)[0]);
+    ptr_at(future, F_CONTEXT)[0] = token;
+}
+
+int32_t dream_task_is_protected(dream_ptr future) {
+    return future && i32_at(future, F_KIND)[0] == 0 && ptr_at(future, F_CHILDREN)[0] != 0;
+}
+
+void dream_task_protect(dream_ptr owner) {
+    uintptr_t source = *(uintptr_t *)dream_p(owner);
+    if (!poll_current || ptr_at(poll_current, F_CHILDREN)[0]) { return; }
+    dream_cancellation_retain(source);
+    ptr_at(poll_current, F_CHILDREN)[0] = (dream_ptr)source;
 }
 
 /* An event is registered synchronously, before a caller can abandon its wait. */
@@ -239,6 +284,11 @@ void dream_async_complete(dream_ptr f, dream_result res) {
 void dream_cancel(dream_ptr f) {
     Node **link;
     int in_flight = 0;
+    /* Scoped futures remain schedulable until every owned child has settled. */
+    if (f && !i32_at(f, F_STATUS)[0] && i32_at(f, F_KIND)[0] == 0 && ptr_at(f, F_CHILDREN)[0]) {
+        dream_cancellation_cancel((uintptr_t)ptr_at(f, F_CHILDREN)[0]);
+        return;
+    }
     if (!f) {
         return;
     }
@@ -257,6 +307,9 @@ void dream_cancel(dream_ptr f) {
         return;
     }
     i32_at(f, F_STATUS)[0] = 2;
+#endif
+#ifdef DREAM_WASM32
+    async_host_cancel(f);
 #endif
     dream_ptr child = ptr_at(f, F_AWAITING)[0];
     if (child && ptr_at(child, F_WAKER)[0] == f) {

@@ -7,6 +7,8 @@ async fun event_value(ms: int): string {
     return "completed 日本語";
 }
 
+async fun event_void(): void { Time.delay(0).await; }
+
 fun detached_token_wait(): Future<Result<string, CancelledError>> {
     let source = CancellationSource();
     return source.token.wait(event_value(0));
@@ -19,9 +21,9 @@ async fun event_cancellation(): void {
     for (let i = 0; i < 100; i = i + 1) {
         Assert.eq_str(source.token.wait(event_value(0)).await.unwrap(), "completed 日本語");
     }
-    Assert.is_true(source.token.wait_void(Time.delay(0)).await.unwrap());
+    Assert.is_true(source.token.wait_void(event_void()).await.unwrap());
     source.cancel();
-    Assert.is_true(source.token.wait_void(Time.delay(0)).await.is_err());
+    Assert.is_true(source.token.wait_void(event_void()).await.is_err());
     Assert.is_true(source.token.wait(event_value(0)).await.is_err());
     source.cancel();
     Assert.is_true(source.token.wait_cancelled().await);

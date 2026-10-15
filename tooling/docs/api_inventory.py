@@ -66,14 +66,14 @@ def declarations(source):
     masked = mask(source)
     entries = []
     private_ranges = []
-    for owner in re.finditer(r"(?m)^(?!(?:public|extend)\b)(?:(?:internal|static|ref|unmanaged|sealed|abstract)\s+)*(?:class|struct|interface|enum)\s+\w+[^\{;]*\{", masked):
+    for owner in re.finditer(r"(?m)^(?!(?:public|extend|shared\s+public)\b)(?:(?:shared|internal|static|ref|unmanaged|sealed|abstract)\s+)*(?:class|struct|interface|enum)\s+\w+[^\{;]*\{", masked):
         end = owner.end()
         depth = 1
         while depth and end < len(masked):
             depth += (masked[end] == "{") - (masked[end] == "}")
             end += 1
         private_ranges.append((owner.start(), end))
-    pattern = r"(?m)^[ \t]*public\s+[^\n]+"
+    pattern = r"(?m)^[ \t]*(?:shared\s+)?public\s+[^\n]+"
     for match in re.finditer(pattern, masked):
         if any(start <= match.start() < end for start, end in private_ranges):
             continue

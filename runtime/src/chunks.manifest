@@ -17,10 +17,10 @@ chunk js hosts/js.js makeJsHost js
 chunk fs hosts/file_operations.js,hosts/fs.js makeFsHost file dir
 chunk net hosts/http.js,hosts/net.js makeNetHost net
 chunk crypto hosts/crypto.js makeCryptoHost crypto
-chunk console_process hosts/console_process.js makeConsoleProcessHost console process
+chunk console_process hosts/process_wire.js,hosts/process_service.js,hosts/console_process.js makeConsoleProcessHost console process
 chunk datetime_text hosts/datetime_text.js makeDatetimeTextHost unicode date time =delayMs
 chunk workers workers.js - worker
 
-chunk cancellation hosts/cancellation.js makeCancellationHost cancellation
+chunk cancellation hosts/cancellation.js makeCancellationHost cancellation =asyncHostCancel
 
 chunk cli hosts/cli_parser.js,hosts/cli.js makeCliHost cli

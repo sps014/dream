@@ -43,9 +43,9 @@ async fun pool_jobs(size: int, iters: int): int {
     let total = 0;
     for (let i = 0; i < iters; i = i + 1) {
         let value = i & 15;
-        total = total + pool.dispatch(() => value * value).await;
+        total = total + pool.dispatch(() => value * value).await.unwrap();
     }
-    pool.shutdown();
+    pool.close().await.unwrap();
     return total;
 }
 @noinline
@@ -53,8 +53,8 @@ async fun sessions(iters: int): int {
     let total = 0;
     for (let i = 0; i < iters; i = i + 1) {
         let pool = TaskPool(1);
-        total = total + pool.dispatch(() => 7).await;
-        pool.shutdown();
+        total = total + pool.dispatch(() => 7).await.unwrap();
+        pool.close().await.unwrap();
     }
     return total;
 }

@@ -15,7 +15,7 @@ struct c240_Point {
 
 async fun c240_body(): void {
     let nums = [1, 2, 3, 4, 5];
-    let doubled = Task.map(nums, (n) => n * 2).await;
+    let doubled = TaskPool(4).map(nums, (n) => n * 2).await.unwrap();
     let s1 = "";
     for (let i = 0; i < doubled.length; i = i + 1) {
         s1 = s1 + doubled[i] + " ";
@@ -23,7 +23,7 @@ async fun c240_body(): void {
     c240_verify_observation((s1.trim()).to_string());
 
     let points = [c240_Point(1, 2), c240_Point(3, 4)];
-    let shifted = Task.map(points, (p) => c240_Point(p.x + 1, p.y + 1)).await;
+    let shifted = TaskPool(4).map(points, (p) => c240_Point(p.x + 1, p.y + 1)).await.unwrap();
     let s2 = "";
     for (let i = 0; i < shifted.length; i = i + 1) {
         s2 = s2 + shifted[i].x + "," + shifted[i].y + " ";

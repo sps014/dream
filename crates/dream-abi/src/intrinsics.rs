@@ -458,7 +458,22 @@ impl IntrinsicOp {
             ATTR_RAW_STORE => IntrinsicOp::RawStore,
             RAW_SIZE | RAW_ALLOC | RAW_REALLOC | RAW_FREE | RAW_COPY | RAW_MOVE | RAW_FILL
             | ARENA_NEW | ARENA_ALLOC | ARENA_RESET | ARENA_FREE => IntrinsicOp::RawMemory,
-            "dream_cancellation_new"
+            "dream_channel_new"
+            | "dream_channel_free"
+            | "dream_channel_endpoint"
+            | "dream_channel_close"
+            | "dream_channel_endpoint_free"
+            | "dream_channel_send"
+            | "dream_channel_receive"
+            | "dream_channel_status"
+            | "dream_channel_wait"
+            | "dream_task_keep_alive"
+            | "dream_task_is_protected"
+            | "dream_task_has_context"
+            | "dream_task_context"
+            | "dream_task_attach"
+            | "dream_task_protect"
+            | "dream_cancellation_new"
             | "dream_cancellation_release"
             | "dream_cancellation_is_cancelled"
             | "dream_cancellation_cancel"

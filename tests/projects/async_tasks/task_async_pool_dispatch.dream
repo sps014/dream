@@ -10,9 +10,9 @@ async fun c248_fetchLike(url: string): string {
 @timeout(180000)
 async fun task_async_pool_dispatch(): void {
     let pool = TaskPool(2);
-    let a = pool.dispatch_async(() => c248_fetchLike("x"));
-    let b = pool.dispatch_async(() => c248_fetchLike("y"));
-    Assert.eq_str((a.await).to_string(), "resp:x");
-    Assert.eq_str((b.await).to_string(), "resp:y");
-    pool.shutdown();
+    let a = pool.dispatch_async(async () => c248_fetchLike("x").await);
+    let b = pool.dispatch_async(async () => c248_fetchLike("y").await);
+    Assert.eq_str((a.await.unwrap()).to_string(), "resp:x");
+    Assert.eq_str((b.await.unwrap()).to_string(), "resp:y");
+    pool.close().await.unwrap();
 }

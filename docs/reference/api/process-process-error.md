@@ -1,10 +1,10 @@
-# ProcessError
+# Process Error
 
 **Import:** `import system.process;`
 
-Read the [usage guide](../stdlib/process.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+Read the [process guide](../stdlib/process.md) for launch settings, cancellation, and streaming ownership.
 
-## `class ProcessError : Error`
+## `ProcessError`
 
 Failure launching or communicating with a child process, implementing `Error`.
 
@@ -61,6 +61,8 @@ public static fun unsupported(message: string): ProcessError
 ```
 
 ## `failed`
+
+Reports a nonzero exit status from run_checked.
 
 ```dream
 public static fun failed(message: string): ProcessError

@@ -1,8 +1,14 @@
 # Cancellation Source
 
-No import is needed.
+**Import:** `import system.core;`
 
-Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+## `CancellationSource`
+
+Cooperative cancellation flag shared with tokens from a `CancellationSource`. `@shared` so a token/source can be captured into a `Task.spawn` body and polled cross-thread.
+
+```dream
+shared public class CancellationSource
+```
 
 ## `constructor`
 

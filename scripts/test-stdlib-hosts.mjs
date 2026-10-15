@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { makeFsHost } from "../runtime/src/hosts/fs.js";
 import { makeConsoleProcessHost } from "../runtime/src/hosts/console_process.js";
+import { splitProcessArgs } from "../runtime/src/hosts/process_wire.js";
 import { setNodeFs, setNodeChildProcess } from "../runtime/src/platform.js";
 
 for (const backend of ["memory", "node"]) {
@@ -52,24 +53,11 @@ function argumentWire(args) {
 }
 
 test("process arguments preserve byte boundaries and reject malformed input", () => {
-  const args = ["", "two words", "first\nsecond", "こんにちは", "\uFEFFleading", '"quoted"\\tail'];
-  let called = 0;
-  setNodeChildProcess({ spawnSync(command, actual) {
-    called++;
-    assert.equal(command, "example");
-    assert.deepEqual(actual, args);
-    return { status: 0, stdout: Buffer.from("ok"), stderr: Buffer.alloc(0) };
-  }});
-  try {
-    const host = makeConsoleProcessHost();
-    assert.equal(host.processRun("example", argumentWire(args), "").toString(), "0\n2\nok");
-    const valid = argumentWire(args);
-    for (let length = 0; length < valid.length; length++) {
-      assert.ok(host.processRun("example", valid.subarray(0, length), "").toString().startsWith("-1\n"));
-    }
-    assert.ok(host.processRun("example", argumentWire(["a\0b"]), "").toString().startsWith("-1\n"));
-    assert.equal(called, 1);
-  } finally { setNodeChildProcess(null); }
+  const args = ["", "two words", "first\nsecond", "こんにちは", "\uFEFFleading", '\"quoted\"\\tail'];
+  assert.deepEqual(splitProcessArgs(argumentWire(args)), args);
+  const valid = argumentWire(args);
+  for (let length = 0; length < valid.length; length++) assert.throws(() => splitProcessArgs(valid.subarray(0, length)));
+  assert.throws(() => splitProcessArgs(argumentWire(["a\0b"])));
 });
 
 

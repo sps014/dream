@@ -6,3 +6,5 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [Process](process-process.md)
 - [ProcessError](process-process-error.md)
 - [ProcessOutput](process-process-output.md)
+- [Process Options](process-process-options.md)
+- [Process Pipe](process-process-pipe.md)

@@ -1,0 +1,178 @@
+module system.task;
+
+// A child result whose execution is owned by a scope, independent of this handle's lifetime.
+@allow_cycle
+public class TaskHandle<T, E> {
+    internal value: Option<Result<T, TaskFailure<E>>>;
+    internal completed: CancellationSource;
+
+    internal constructor() {
+        this.value = Option.None;
+        this.completed = CancellationSource();
+    }
+
+    // Waits for completion without cancelling or transferring ownership of the child.
+    public fun join(): Future<Result<T, TaskFailure<E>>> {
+        return TaskHandle<T, E>.join_owned(this);
+    }
+
+    static async fun join_owned(handle: TaskHandle<T, E>): Result<T, TaskFailure<E>> {
+        if handle.value.is_none() { handle.completed.token.wait_cancelled().await; }
+        return handle.value.unwrap();
+    }
+
+    internal fun execute_pool(body: fun(): T, pool: TaskPool, scope: TaskScope<E>): Future<bool> where T : shared {
+        return TaskHandle<T, E>.pool_owned(this, body, pool, scope);
+    }
+
+    static async fun pool_owned(handle: TaskHandle<T, E>, body: fun(): T, pool: TaskPool, scope: TaskScope<E>): bool where T : shared {
+        let result = pool.dispatch<T>(body, Option.Some(scope.token)).await;
+        let initial: TaskFailure<E> = TaskFailure.Cancelled;
+        let outcome: Result<T, TaskFailure<E>> = Result.Err(initial);
+        if result.is_err() {
+            let error = result.unwrap_err();
+            if !scope.token.is_cancelled { scope.worker_failure = Option.Some(error); scope.cancel(); }
+            let failure: TaskFailure<E> = TaskFailure.WorkerFailed(error);
+            if error == TaskPoolError.Cancelled && scope.token.is_cancelled { failure = TaskFailure.Cancelled; }
+            outcome = Result.Err(failure);
+        } else { outcome = Result.Ok(result.unwrap()); }
+        handle.value = Option.Some(outcome);
+        handle.completed.cancel();
+        return true;
+    }
+
+    internal fun execute(body: fun(): Future<Result<T, E>>, scope: TaskScope<E>): Future<bool> {
+        return TaskHandle<T, E>.execute_owned(this, body, scope);
+    }
+
+    static async fun execute_owned(handle: TaskHandle<T, E>, body: fun(): Future<Result<T, E>>, scope: TaskScope<E>): bool {
+        let pending = body();
+        TaskScope<E>.attach_host(pending, scope.token);
+        let result = pending.await;
+        if result.is_err() {
+            let error = result.unwrap_err();
+            let cancelled = scope.token.is_cancelled;
+            scope.fail(error);
+            let failure: TaskFailure<E> = TaskFailure.Failed(error);
+            if cancelled { failure = TaskFailure.Cancelled; }
+            let outcome: Result<T, TaskFailure<E>> = Result.Err(failure);
+            handle.value = Option.Some(outcome);
+        } else {
+            let outcome: Result<T, TaskFailure<E>> = Result.Ok(result.unwrap());
+            handle.value = Option.Some(outcome);
+        }
+        handle.completed.cancel();
+        return true;
+    }
+}
+
+// Owns local async children; its enclosing Task.scope call joins every child before returning.
+@allow_cycle
+public class TaskScope<E> {
+    source: CancellationSource;
+    jobs: List<Future<bool>>;
+    internal failure: Option<E>;
+    internal worker_failure: Option<TaskPoolError>;
+    accepting: bool;
+    internal timed_out: bool;
+
+    internal constructor() {
+        this.source = CancellationSource();
+        this.jobs = List<Future<bool>>();
+        this.failure = Option.None;
+        this.worker_failure = Option.None;
+        this.accepting = true;
+        this.timed_out = false;
+    }
+
+    // The inherited cancellation token for this scope and its children.
+    public get token(): CancellationToken { return this.source.token; }
+
+    // Requests cooperative cancellation; completion still waits for child cleanup.
+    public fun cancel(): void { this.source.cancel(); }
+
+    // Schedules a child immediately and retains it even if its result handle is discarded.
+    public fun spawn<T>(body: fun(): Future<Result<T, E>>): TaskHandle<T, E> {
+        let handle: TaskHandle<T, E> = TaskHandle<T, E>();
+        if !this.accepting || this.source.is_cancelled {
+            let failure: TaskFailure<E> = TaskFailure.Cancelled;
+            let outcome: Result<T, TaskFailure<E>> = Result.Err(failure);
+            handle.value = Option.Some(outcome);
+            handle.completed.cancel();
+            return handle;
+        }
+        let pending = handle.execute(body, this);
+        this.jobs.push(pending);
+        Promise.start(pending);
+        return handle;
+    }
+
+    // Schedules CPU work on an explicit reusable pool while retaining structured ownership.
+    public fun spawn_on<T : shared>(pool: TaskPool, body: fun(): T): TaskHandle<T, E> {
+        let handle: TaskHandle<T, E> = TaskHandle<T, E>();
+        if !this.accepting || this.source.is_cancelled {
+            let failure: TaskFailure<E> = TaskFailure.Cancelled;
+            let outcome: Result<T, TaskFailure<E>> = Result.Err(failure);
+            handle.value = Option.Some(outcome);
+            handle.completed.cancel();
+            return handle;
+        }
+        let pending = handle.execute_pool(body, pool, this);
+        this.jobs.push(pending);
+        Promise.start(pending);
+        return handle;
+    }
+
+    internal fun fail(error: E): void {
+        if !this.source.is_cancelled && this.failure.is_none() { this.failure = Option.Some(error); }
+        this.cancel();
+    }
+
+    internal async fun drain(): bool {
+        // Children may spawn siblings until the body has returned; the list is then sealed.
+        this.accepting = false;
+        for (let i = 0; i < this.jobs.length; i = i + 1) {
+            this.jobs[i].await;
+        }
+        this.jobs.clear();
+        return true;
+    }
+
+    @intrinsic("dream_task_attach")
+    internal static extern fun attach_host(borrow pending: object, borrow token: CancellationToken): void;
+
+    @intrinsic("dream_task_protect")
+    static extern fun protect_host(borrow source: CancellationSource): void;
+
+    internal fun protect(): void { TaskScope<E>.protect_host(this.source); }
+
+    internal async fun follow(parent: CancellationToken): bool {
+        let pending = parent.wait_cancelled();
+        let guard = TaskWaitGuard<bool>(pending);
+        pending.await;
+        guard.close();
+        this.cancel();
+        return true;
+    }
+
+    internal async fun deadline(milliseconds: int): bool {
+        let pending = Time.delay(milliseconds);
+        let guard = TaskWaitGuard<Result<bool, CancelledError>>(pending);
+        let elapsed = pending.await;
+        guard.close();
+        if elapsed.is_ok() && !this.source.is_cancelled {
+            this.timed_out = true;
+            this.cancel();
+        }
+        return true;
+    }
+}
+
+// Scope watchers own their awaited helpers, which must be cancelled when the watcher drops.
+@allow_cycle
+class TaskWaitGuard<T> {
+    pending: Future<T>;
+    internal constructor(pending: Future<T>) { this.pending = pending; }
+    internal fun close(): void { Promise.cancel(this.pending); }
+    del() { this.close(); }
+}

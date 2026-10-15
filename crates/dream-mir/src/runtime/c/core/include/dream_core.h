@@ -1617,6 +1617,9 @@ int32_t dream_byte_at(dream_ptr ptr, int32_t i);
 
 #ifdef DREAM_WASM32
 #define DREAM_WASM_IMPORT(mod, name) __attribute__((import_module(mod), import_name(name)))
+void cancellation_subscribe(dream_ptr future, uintptr_t registration) DREAM_WASM_IMPORT(DREAM_MODULE_HOST, "cancellationSubscribe");
+void cancellation_notify(uintptr_t registration) DREAM_WASM_IMPORT(DREAM_MODULE_HOST, "cancellationNotify");
+void async_host_cancel(dream_ptr future) DREAM_WASM_IMPORT(DREAM_MODULE_HOST, "asyncHostCancel");
 void platform_write(int stream, const void *bytes, size_t size, int encoding) DREAM_WASM_IMPORT("env", "write_text");
 DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_INT) void print_int(int32_t v);
 DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_STRING) void print_string(dream_ptr s);
@@ -1679,6 +1682,7 @@ void consoleWriteStderr(dream_ptr text);
 void dream_host_bind_v2(dream_ptr (*string_alloc)(int32_t), dream_ptr (*array_new)(int32_t, int32_t),
                      void (*complete_foreign)(dream_ptr, dream_result));
 /* Complete an @async_host future from a foreign thread and wake the parked loop. */
+void dream_complete_foreign_owned(dream_ptr f, dream_ptr res);
 void dream_complete_foreign(dream_ptr f, dream_result res);
 /* Called by a delegate-shape poll thunk before handing `future` to a deferred host: binds it to
  * this thread's scheduler, which stays in dream_run_loop while the work is in flight. */
@@ -1691,8 +1695,8 @@ void dream_worker_isolate_threads(void);
 int32_t workerSpawn(int32_t fn, dream_ptr env);
 int32_t workerPoolSpawn(void);
 void workerPost(int32_t id, dream_ptr msg);
-dream_ptr workerRecv(int32_t id);
-dream_ptr workerPoolDispatch(int32_t id, int32_t fn, dream_ptr env, dream_ptr msg);
+int32_t workerRecvAsync(dream_ptr future, int32_t id);
+int32_t workerPoolDispatchAsync(dream_ptr future, int32_t id, int32_t fn, dream_ptr env, dream_ptr msg);
 void workerShutdown(int32_t id);
 void workerTerminate(int32_t id);
 
@@ -1708,5 +1712,26 @@ void dream_cancellation_cancel(uintptr_t handle);
 uintptr_t dream_cancellation_register(uintptr_t handle);
 dream_ptr dream_cancellation_signal(uintptr_t handle);
 void dream_cancellation_unregister(uintptr_t handle);
+
+void dream_cancellation_retain(uintptr_t handle);
+void dream_cancellation_notify_one(uintptr_t handle);
+void dream_cancellation_notify_registration(uintptr_t handle);
+dream_ptr dream_task_context(void);
+void dream_task_attach(dream_ptr future, dream_ptr token);
+void dream_task_protect(dream_ptr owner);
+
+void dream_task_keep_alive(dream_ptr callback);
+int32_t dream_task_has_context(void);
+int32_t dream_task_is_protected(dream_ptr future);
+
+uintptr_t dream_channel_new(int32_t capacity);
+void dream_channel_free(uintptr_t handle);
+uintptr_t dream_channel_endpoint(uintptr_t handle, int32_t sending);
+void dream_channel_close(uintptr_t handle);
+void dream_channel_endpoint_free(uintptr_t handle);
+int32_t dream_channel_send(uintptr_t handle, dream_ptr value);
+dream_ptr dream_channel_receive(uintptr_t handle);
+int32_t dream_channel_status(uintptr_t handle);
+uintptr_t dream_channel_wait(uintptr_t handle);
 
 #endif

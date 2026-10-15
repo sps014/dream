@@ -6,9 +6,9 @@ async fun c253_body(): void {
     let pool = TaskPool(100);
     let total = 0;
     for (let i = 0; i < 100; i = i + 1) {
-        total = total + pool.dispatch(() => i).await;
+        total = total + pool.dispatch(() => i).await.unwrap();
     }
-    pool.shutdown();
+    pool.close().await.unwrap();
     c253_verify_observation((total.to_string()).to_string());
 }
 

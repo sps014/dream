@@ -1,12 +1,44 @@
-# TaskPool
+# Task Pool
 
 **Import:** `import system.task;`
 
-Read the [usage guide](../language/tasks.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+Read the [structured concurrency guide](../language/structured-concurrency.md) for lifetimes, cancellation, backpressure, and worker execution.
 
-## `class TaskPool`
+## `TaskPoolError`
 
-Reuse a fixed set of threads when you dispatch many short jobs. Work goes out round-robin.
+Failures scheduling or closing a reusable worker pool.
+
+```dream
+public enum TaskPoolError
+```
+
+## `InvalidSize`
+
+Pool sizes must be positive.
+
+```dream
+InvalidSize
+```
+
+## `Closed`
+
+The pool no longer accepts work.
+
+```dream
+Closed
+```
+
+## `Cancelled`
+
+Cancellation was requested; any submitted work has settled before this is returned.
+
+```dream
+Cancelled
+```
+
+## `TaskPool`
+
+Reuses a fixed number of parallel workers; local async tasks do not consume pool workers.
 
 ```dream
 public class TaskPool
@@ -14,26 +46,56 @@ public class TaskPool
 
 ## `constructor`
 
+Creates a fixed worker set; nonpositive sizes produce InvalidSize on operations.
+
 ```dream
 public constructor(size: int)
 ```
 
-## `dispatch`
+## `size`
 
-Run `body` on the next pool member. Capture rules match `Task.spawn`.
+Number of reusable parallel workers in this pool.
 
 ```dream
-public async fun dispatch<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): TOut
+public get size(): int
+```
+
+## `dispatch`
+
+Dispatches a CPU job; capture and return values follow the shared/move worker rules.
+
+```dream
+public fun dispatch<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): Future<Result<TOut, TaskPoolError>>
 ```
 
 ## `dispatch_async`
 
+Dispatches an async job on a pool worker and waits for its operation to settle.
+
 ```dream
-public async fun dispatch_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut
+public fun dispatch_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): Future<Result<TOut, TaskPoolError>>
 ```
 
-## `shutdown`
+## `map`
+
+Maps CPU work with at most size active dispatches and preserves input order.
 
 ```dream
-public fun shutdown(): void
+public fun map<T : shared, U : shared>(items: T[], body: fun(T): U, token: Option<CancellationToken> = Option.None): Future<Result<U[], TaskFailure<TaskPoolError>>>
+```
+
+## `map_async`
+
+Maps async worker jobs with bounded dispatch rather than creating one worker per input.
+
+```dream
+public fun map_async<T : shared, U : shared>(items: T[], body: fun(T): Future<U>, token: Option<CancellationToken> = Option.None): Future<Result<U[], TaskFailure<TaskPoolError>>>
+```
+
+## `close`
+
+Stops accepting work, waits for submitted jobs, then closes workers idempotently.
+
+```dream
+public fun close(): Future<Result<bool, TaskPoolError>>
 ```

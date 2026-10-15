@@ -121,20 +121,21 @@ public static class Streams {
     // Copies to EOF with bounded chunks, partial-write retries, and cancellation checks,
     // then flushes and returns the byte count. Neither stream is closed; completed writes persist.
     public static async fun copy_async(source: AsyncReader, destination: AsyncWriter, buffer_size: int = 8192, token: Option<CancellationToken> = Option.None): Result<long, IoError> {
+        let effective_token = CancellationToken.resolve(token);
         if buffer_size <= 0 { return Result.Err(IoError.invalid("", "buffer size must be positive")); }
         let total = 0L;
         while true {
-            CancellationToken.rejected(token, IoError.cancelled())?;
-            let bytes = source.read_async(buffer_size, token).await?;
+            CancellationToken.rejected(effective_token, IoError.cancelled())?;
+            let bytes = source.read_async(buffer_size, effective_token).await?;
             if bytes.length == 0 { break; }
             if bytes.length > buffer_size {
                 return Result.Err(IoError.other("", "reader exceeded requested size"));
             }
             let offset = 0;
             while offset < bytes.length {
-                CancellationToken.rejected(token, IoError.cancelled())?;
+                CancellationToken.rejected(effective_token, IoError.cancelled())?;
                 let remaining = Streams.slice(bytes, offset, bytes.length - offset);
-                let count = destination.write_async(remaining, token).await?;
+                let count = destination.write_async(remaining, effective_token).await?;
                 if count <= 0 || count > remaining.length {
                     return Result.Err(IoError.other("", "writer made invalid progress"));
                 }
@@ -142,7 +143,7 @@ public static class Streams {
             }
             total = total + (long)bytes.length;
         }
-        destination.flush_async(token).await?;
+        destination.flush_async(effective_token).await?;
         return Result.Ok(total);
     }
 }

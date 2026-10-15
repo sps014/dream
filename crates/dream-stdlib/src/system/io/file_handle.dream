@@ -103,9 +103,10 @@ public class FileHandle : Reader, Writer, AsyncReader, AsyncWriter {
     // Opens using host async facilities or the bounded filesystem executor.
     // Cancellation abandons the result safely; a late open result is closed automatically.
     public static async fun open_async(path: string, mode: string, token: Option<CancellationToken> = Option.None): Result<FileHandle, IoError> {
-        CancellationToken.rejected(token, IoError.cancelled())?;
+        let effective_token = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective_token, IoError.cancelled())?;
         let operation = FileOperation.start(0, 0 - 1, path, mode, 0, [], 0L)?;
-        operation.wait(token).await?;
+        operation.wait(effective_token).await?;
         return FileHandle.from_id((int)operation.result(), path, mode);
     }
 
@@ -136,7 +137,8 @@ public class FileHandle : Reader, Writer, AsyncReader, AsyncWriter {
     // Reads without blocking the scheduler, preserving partial reads and EOF.
     // Cancellation may consume input; further I/O returns `EBUSY` until host work ends.
     public async unique fun read_async(n: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError> {
-        CancellationToken.rejected(token, IoError.cancelled())?;
+        let effective_token = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective_token, IoError.cancelled())?;
         this.check_open()?;
         // A started child can outlive its awaiting parent; pin its receiver across suspension.
         let lifetime = [this];
@@ -144,7 +146,7 @@ public class FileHandle : Reader, Writer, AsyncReader, AsyncWriter {
         if n == 0 || lifetime[0]._offset < lifetime[0]._buffer.length { return lifetime[0].read(n); }
         let operation = FileOperation.start(1, lifetime[0]._id, "", "", n, [], 0L)?;
         lifetime[0]._pending = Option.Some(operation);
-        lifetime[0]._pending.unwrap().wait(token).await?;
+        lifetime[0]._pending.unwrap().wait(effective_token).await?;
         let completed = lifetime[0]._pending.unwrap();
         lifetime[0]._pending = Option.None;
         let raw = completed.bytes();
@@ -171,18 +173,19 @@ public class FileHandle : Reader, Writer, AsyncReader, AsyncWriter {
     // Writes a host-owned copy without blocking the scheduler and returns partial progress.
     // Cancellation does not roll back writes; further I/O is busy until host work ends.
     public async unique fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError> {
-        CancellationToken.rejected(token, IoError.cancelled())?;
+        let effective_token = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective_token, IoError.cancelled())?;
         this.check_open()?;
         // A started child can outlive its awaiting parent; pin its receiver across suspension.
         let lifetime = [this];
         if data.length == 0 { return Result.Ok(0); }
         if lifetime[0]._offset < lifetime[0]._buffer.length {
             let position = lifetime[0].tell()?;
-            lifetime[0].seek_async(position, token).await?;
+            lifetime[0].seek_async(position, effective_token).await?;
         }
         let operation = FileOperation.start(2, lifetime[0]._id, "", "", data.length, data, 0L)?;
         lifetime[0]._pending = Option.Some(operation);
-        lifetime[0]._pending.unwrap().wait(token).await?;
+        lifetime[0]._pending.unwrap().wait(effective_token).await?;
         let completed = lifetime[0]._pending.unwrap();
         lifetime[0]._pending = Option.None;
         let count = completed.result();
@@ -204,7 +207,8 @@ public class FileHandle : Reader, Writer, AsyncReader, AsyncWriter {
     // Seeks on the filesystem executor; successful completion discards read-ahead.
     // Once submitted, cancellation is observed after completion so buffer state stays coherent.
     public async unique fun seek_async(pos: long, token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
-        CancellationToken.rejected(token, IoError.cancelled())?;
+        let effective_token = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective_token, IoError.cancelled())?;
         this.check_open()?;
         // A started child can outlive its awaiting parent; pin its receiver across suspension.
         let lifetime = [this];
@@ -216,7 +220,7 @@ public class FileHandle : Reader, Writer, AsyncReader, AsyncWriter {
         if completed.result() < 0L { return Result.Err(IoError.other(lifetime[0].path, "seek failed")); }
         lifetime[0]._buffer = [];
         lifetime[0]._offset = 0;
-        CancellationToken.rejected(token, IoError.cancelled())?;
+        CancellationToken.rejected(effective_token, IoError.cancelled())?;
         return Result.Ok(true);
     }
 
@@ -301,7 +305,8 @@ public class FileHandle : Reader, Writer, AsyncReader, AsyncWriter {
 
     // Checks cancellation and validates the handle; this layer has no buffered output to flush.
     public async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
-        CancellationToken.rejected(token, IoError.cancelled())?;
+        let effective_token = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective_token, IoError.cancelled())?;
         return this.check_open();
     }
 
@@ -359,11 +364,12 @@ class FileOperation {
     internal fun bytes(): byte[] { return FileOperation.bytes_host(this.id); }
 
     internal async fun wait(token: Option<CancellationToken>): Result<bool, IoError> {
+        let effective_token = CancellationToken.resolve(token);
         // A started child can outlive its awaiting parent; pin its receiver across suspension.
         let lifetime = [this];
         let pending = FileOperation.wait_host(lifetime[0].id);
-        if token.is_some() {
-            let result = token.unwrap().wait(pending).await;
+        if effective_token.is_some() {
+            let result = effective_token.unwrap().wait(pending).await;
             if result.is_err() { return Result.Err(IoError.cancelled()); }
         } else { pending.await; }
         return Result.Ok(true);

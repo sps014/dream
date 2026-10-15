@@ -5,7 +5,6 @@
 #include <stdlib.h>
 
 extern dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg);
-static dream_ptr worker_recv_blocking(int32_t id);
 static dream_mutex reg_mu = DREAM_MUTEX_INIT;
 
 #define worker_failure(message) DREAM_PANIC_LITERAL(u##message)
@@ -21,9 +20,7 @@ typedef struct Job {
     dream_ptr env;
     dream_ptr msg;
     dream_ptr reply;
-    unsigned refs;
-    int synchronous;
-    int done;
+    dream_ptr future;
     struct Job *next;
 } Job;
 
@@ -40,6 +37,7 @@ typedef struct Worker {
     Job *replies;
     Job *reply_tail;
     Job *spare;
+    dream_ptr receiver;
     int dead;
     int busy;
     int detached;
@@ -79,17 +77,16 @@ static void release_worker(Worker *w) {
 }
 
 static void release_job(Worker *w, Job *j) {
-    if (__atomic_fetch_sub(&j->refs, 1u, __ATOMIC_ACQ_REL) == 1u) {
-        dream_release(j->msg);
-        dream_release_closure_env(j->env);
-        dream_release(j->reply);
-        j->msg = j->env = j->reply = 0;
-        Job *empty = NULL;
-        /* A caller holds a session reference through payload destruction. Only the final job
-         * token can publish a cleared spare, and a session never lends it to another session. */
-        if (!__atomic_compare_exchange_n(&w->spare, &empty, j, 0, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
-            free(j);
-        }
+    if (j->future) { dream_complete_foreign_owned(j->future, 0); j->future = 0; }
+    dream_release(j->msg);
+    dream_release_closure_env(j->env);
+    dream_release(j->reply);
+    j->msg = j->env = j->reply = 0;
+    Job *empty = NULL;
+    /* Payload finalizers run before the cleared job becomes reusable. The caller or worker
+     * thread holds a session reference, so the spare never crosses session lifetimes. */
+    if (!__atomic_compare_exchange_n(&w->spare, &empty, j, 0, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
+        free(j);
     }
 }
 
@@ -189,9 +186,12 @@ static void run_worker(Worker *w) {
         dream_publish(r);
         dream_mutex_lock(&w->mu);
         j->reply = r;
-        j->done = 1;
         w->busy = 0;
-        int queued_reply = !j->synchronous && !w->dead;
+        dream_ptr future = j->future;
+        j->future = 0;
+        if (!future && w->receiver) { future = w->receiver; w->receiver = 0; }
+        if (future) { j->reply = 0; }
+        int queued_reply = !future && !w->dead;
         if (queued_reply) {
             if (w->reply_tail) {
                 w->reply_tail->next = j;
@@ -202,6 +202,7 @@ static void run_worker(Worker *w) {
         }
         dream_cond_broadcast(&w->cv);
         dream_mutex_unlock(&w->mu);
+        if (future) { dream_complete_foreign_owned(future, r); }
         if (!queued_reply) {
             release_job(w, j);
         }
@@ -312,7 +313,7 @@ static void bind_thread(Worker *w) {
 
 int32_t workerPoolSpawn(void) { return workerSpawn(0, 0); }
 
-static Job *new_job(Worker *w, int32_t fn, dream_ptr env, dream_ptr msg, int synchronous) {
+static Job *new_job(Worker *w, int32_t fn, dream_ptr env, dream_ptr msg) {
     Job *j = __atomic_exchange_n(&w->spare, NULL, __ATOMIC_ACQUIRE);
     if (!j) {
         j = calloc(1, sizeof(*j));
@@ -324,10 +325,8 @@ static Job *new_job(Worker *w, int32_t fn, dream_ptr env, dream_ptr msg, int syn
     j->fn = fn;
     j->env = env;
     j->msg = msg;
-    j->refs = synchronous ? 2u : 1u;
-    j->synchronous = synchronous;
+    j->future = 0;
     j->reply = 0;
-    j->done = 0;
     j->next = NULL;
     dream_publish(env);
     dream_publish(msg);
@@ -360,7 +359,7 @@ void workerPost(int32_t id, dream_ptr msg) {
     if (!w) {
         return;
     }
-    Job *j = new_job(w, w->fn, w->env, msg, 0);
+    Job *j = new_job(w, w->fn, w->env, msg);
     int bind;
     dream_mutex_lock(&w->mu);
     int accepted = enqueue(w, j, &bind);
@@ -374,64 +373,40 @@ void workerPost(int32_t id, dream_ptr msg) {
     release_worker(w);
 }
 
-dream_ptr workerPoolDispatch(int32_t id, int32_t fn, dream_ptr env, dream_ptr msg) {
+int32_t workerPoolDispatchAsync(dream_ptr future, int32_t id, int32_t fn, dream_ptr env, dream_ptr msg) {
     Worker *w = acquire_worker(id);
-    if (!w) {
-        return 0;
-    }
-    Job *j = new_job(w, fn, env, msg, 1);
+    if (!w) { dream_complete_foreign_owned(future, 0); return 1; }
+    Job *j = new_job(w, fn, env, msg);
+    j->future = future;
     int bind;
     dream_mutex_lock(&w->mu);
     int accepted = enqueue(w, j, &bind);
-    if (bind) {
-        dream_mutex_unlock(&w->mu);
-        bind_thread(w);
-        dream_mutex_lock(&w->mu);
-    }
-    while (accepted && !j->done && !w->dead) {
-        dream_cond_wait(&w->cv, &w->mu);
-    }
-    dream_ptr r = j->done ? j->reply : 0;
-    if (j->done) {
-        j->reply = 0;
-    }
     dream_mutex_unlock(&w->mu);
-    if (!accepted) {
-        release_job(w, j);
-    }
-    release_job(w, j);
+    if (bind) { bind_thread(w); }
+    if (!accepted) { release_job(w, j); }
     release_worker(w);
-    return r;
+    return 1;
 }
 
-static dream_ptr worker_recv_blocking(int32_t id) {
+int32_t workerRecvAsync(dream_ptr future, int32_t id) {
     Worker *w = acquire_worker(id);
-    if (!w) {
-        return 0;
-    }
+    if (!w) { dream_complete_foreign_owned(future, 0); return 1; }
     dream_mutex_lock(&w->mu);
-    while (!w->replies && !w->dead) {
-        dream_cond_wait(&w->cv, &w->mu);
-    }
     Job *j = w->replies;
-    dream_ptr r = 0;
+    dream_ptr reply = 0;
+    int completed = j != NULL || w->dead || w->receiver != 0;
     if (j) {
         w->replies = j->next;
-        if (!w->replies) {
-            w->reply_tail = NULL;
-        }
-        r = j->reply;
+        if (!w->replies) { w->reply_tail = NULL; }
+        reply = j->reply;
         j->reply = 0;
-    }
+    } else if (!completed) { w->receiver = future; }
     dream_mutex_unlock(&w->mu);
-    if (j) {
-        release_job(w, j);
-    }
+    if (completed) { dream_complete_foreign_owned(future, reply); }
+    if (j) { release_job(w, j); }
     release_worker(w);
-    return r;
+    return 1;
 }
-
-dream_ptr workerRecv(int32_t id) { return worker_recv_blocking(id); }
 
 static Worker *take_worker(int32_t id) {
     dream_mutex_lock(&reg_mu);
@@ -462,14 +437,14 @@ static void destroy_worker(Worker *w) {
 static void stop_worker(Worker *w) {
     dream_mutex_lock(&w->mu);
     w->dead = 1;
+    dream_ptr receiver = w->receiver;
+    w->receiver = 0;
     Job *cancelled = w->head;
     w->head = w->tail = NULL;
-    for (Job *j = cancelled; j; j = j->next) {
-        j->done = 1;
-    }
     w->detached |= w->busy || (w->bound && dream_thread_id_eq(dream_thread_self(), w->thread_id));
     dream_cond_broadcast(&w->cv);
     dream_mutex_unlock(&w->mu);
+    if (receiver) { dream_complete_foreign_owned(receiver, 0); }
     release_jobs(w, cancelled);
 }
 

@@ -65,6 +65,32 @@ impl<'a> Analyzer<'a> {
             generic_args,
             params,
         } = call;
+        let normalized = if params
+            .iter()
+            .any(|arg| matches!(arg, ExpressionNode::NamedArg(..)))
+        {
+            Some(
+                self.normalize_named_arguments(
+                    &template
+                        .parameters
+                        .iter()
+                        .map(|p| p.name.text.clone())
+                        .collect::<Vec<_>>(),
+                    &template
+                        .parameters
+                        .iter()
+                        .map(|p| p.default.clone())
+                        .collect::<Vec<_>>(),
+                    params,
+                    method.position,
+                    diagnostics,
+                    template.parameters.last().is_some_and(|p| p.is_variadic),
+                )?,
+            )
+        } else {
+            None
+        };
+        let params = normalized.as_ref().unwrap_or(params);
         let owner = self
             .function_table
             .declaration_node(template)
@@ -100,7 +126,25 @@ impl<'a> Analyzer<'a> {
         let saved_call_target = self.current_call_target_name.take();
         self.current_call_target_name = Some(call_target);
 
-        let expected_params: Option<Vec<Type>> = {
+        let expected_params: Option<Vec<Type>> = if generic_args
+            .as_ref()
+            .is_some_and(|args| !args.is_empty())
+        {
+            let bindings = self.infer_generic_bindings(
+                template,
+                generic_args,
+                &[],
+                &method.position,
+                diagnostics,
+            );
+            Some(
+                template
+                    .parameters
+                    .iter()
+                    .map(|p| Self::monomorphize_type(&p.type_, &bindings))
+                    .collect(),
+            )
+        } else {
             let has_lambda = params
                 .iter()
                 .any(|p| matches!(p, ExpressionNode::Lambda(_)));

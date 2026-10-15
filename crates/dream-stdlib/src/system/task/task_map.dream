@@ -1,0 +1,47 @@
+module system.task;
+
+// The owner scheduler advances next only between await points, so workers need no lock.
+@allow_cycle
+internal class TaskMapState<T, U, E> {
+    items: T[];
+    body: fun(T): Future<Result<U, E>>;
+    internal results: U[];
+    next: int;
+    collect: bool;
+
+    internal constructor(items: T[], body: fun(T): Future<Result<U, E>>, collect: bool) {
+        this.items = items;
+        this.body = body;
+        let size = 0;
+        if collect { size = this.items.length; }
+        this.results = Buffer.alloc<U>(size);
+        this.collect = collect;
+        this.next = 0;
+    }
+
+    internal fun run(): Future<Result<bool, E>> {
+        return TaskMapState<T, U, E>.run_owned(this);
+    }
+
+    static async fun run_owned(state: TaskMapState<T, U, E>): Result<bool, E> {
+        while state.next < state.items.length {
+            if CancellationToken.is_cancelled_opt(CancellationToken.current) { break; }
+            let index = state.next;
+            state.next = index + 1;
+            let body = state.body;
+            let result = body(state.items[index]).await?;
+            if state.collect { state.results[index] = result; }
+        }
+        return Result.Ok(true);
+    }
+
+    internal static async fun scoped(scope: TaskScope<E>, state: TaskMapState<T, U, E>, concurrency: int): Result<U[], TaskFailure<E>> {
+        let count = concurrency;
+        if count > state.items.length { count = state.items.length; }
+        for (let i = 0; i < count; i = i + 1) {
+            scope.spawn<bool>(async () => state.run().await);
+        }
+        // The scope joins these children before exposing the shared output array.
+        return Result.Ok(state.results);
+    }
+}

@@ -113,15 +113,48 @@ streams HTTP responses to files, reports exit statuses, and explicitly closes it
 resources. Native/Node integration checks downloads, help/version, bad arguments,
 timeouts, and preserving destinations on HTTP error statuses.
 
+## Phase 6 implementation
+
+`Task.scope` owns eager local async children, joins discarded handles, propagates
+cancellation, and retains typed application errors. Deadlines request cancellation;
+CPU work remains cooperative. Scope futures stay schedulable through cleanup even
+when explicitly cancelled. Child completion signals support independent joiners.
+Async I/O, timers, channels, processes, and pool jobs inherit the current scope token.
+Explicit low-level promise/worker operations retain their explicit token contracts.
+
+`Task.map` and `Task.for_each` use bounded local worker loops, preserve input order,
+and stop taking inputs on failure. Reusable `TaskPool` jobs provide explicit CPU
+parallelism, and `scope.spawn_on` joins pool work inside a region. Native worker
+receives and pooled replies now use foreign completion wakeups instead of blocking
+an async poll. Submitted callback environments stay retained through completion.
+
+Local and shared channels provide bounded/unbounded factories, separate endpoints,
+partial closure, drained EOF, and cancellation of blocked operations. Readiness
+wakes one FIFO waiter; closure wakes all. Shared channels enforce shared payload
+constraints, publish typed carriers, and synchronize their C queues across workers.
+Cancellation state reads and reference counts use atomics where threads are enabled.
+
+Process options snapshot environment overrides, working directories, input bytes,
+output limits, and deadlines. Native services use a bounded Tokio runtime; Node
+uses asynchronous child-process streams. Both drain stdout/stderr concurrently,
+propagate pipe failures, and terminate/reap owned run children before returning
+cancellation or timeout. Borrowed process pipes implement the async stream APIs.
+Browser launch requests return EUNSUPPORTED. Unix process I/O workers block SIGPIPE
+to report broken pipes as errors; child exec resets that mask.
+
+Public fields and methods have source comments and API reference coverage. The
+source inventory now recognizes shared public classes. Generic method bodies keep
+owner substitutions, generic calls support contextual lambdas/named arguments,
+and monomorphization bounds use semantic nesting rather than rendered symbol length.
+A runnable bounded pipeline and concurrency benchmark accompany the APIs.
+
 ## Remaining implementation
 
-1. Phase 6: bounded/unbounded channels, worker transfer, structured concurrency,
-   process options, asynchronous pipes, deadlines, termination, and reaping.
-2. Phase 7: CSV, UUID, temporary resources, atomic replacement, typed configuration,
+1. Phase 7: CSV, UUID, temporary resources, atomic replacement, typed configuration,
    testing fixtures, async assertions, and the HTTP-to-CSV acceptance application.
-3. Phase 8: cross-platform native and browser qualification, sanitizer/failure
+2. Phase 8: cross-platform native and browser qualification, sanitizer/failure
    injection coverage, executable documentation, packaging, and release gates.
-4. Phase 9: post-v1 TCP/UDP, streaming compression, application-driven cryptography,
+3. Phase 9: post-v1 TCP/UDP, streaming compression, application-driven cryptography,
    and collection refinements.
 
 Keep guest runtime code in C, native capability services in host crates, and JS
@@ -173,3 +206,15 @@ Unicode values, short clusters, negative integers, `--`, help/version, and inval
 definitions. Run `python scripts/serve-phase34-browser.py --case cli` to repeat it.
 The full native platform matrix for Phase 3–4 remains separately recorded above;
 Phase 8 still qualifies the completed v1 across platforms and packaging modes.
+
+Phase 6 passes the full native and Node assertion corpus, plus optimized native
+and Node checks for structured scopes, channels, and process operations. Browser
+automation passes structured concurrency and shared-worker channels in debug and
+release builds, checking that no guest resources remain live after completion.
+The bounded pipeline sample returns 5050 without guest leaks on native and Node.
+
+The phase also passes strict workspace Clippy, 44 JavaScript adapter/bundler tests,
+seven documentation extractor tests, all 28 executable documentation examples,
+and the strict documentation build. Cancellation registration stress passes
+address/undefined and thread sanitizers on macOS. These Phase 6 results qualify
+the local macOS host; Linux and Windows qualification remains part of Phase 8.

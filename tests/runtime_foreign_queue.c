@@ -13,6 +13,8 @@ static dream_ptr *ptr_at(dream_ptr f, int32_t off) { return (dream_ptr *)((char 
 static dream_result *result_at(dream_ptr f) { return (dream_result *)((char *)dream_p(f) + F_RESULT); }
 static Node *foreign_node_take(void) { Node *n = calloc(1, sizeof(*n)); assert(n); __atomic_fetch_add(&node_live, 1, __ATOMIC_RELAXED); return n; }
 static void foreign_node_put(Node *n) { __atomic_fetch_sub(&node_live, 1, __ATOMIC_RELAXED); free(n); }
+void dream_free(dream_ptr ptr) { (void)ptr; abort(); }
+int dream_rc_last_observed(dream_ptr ptr) { (void)ptr; abort(); }
 void dream_panic(dream_ptr message) { (void)message; abort(); }
 void dream_publish(dream_ptr f) {
     assert(f);

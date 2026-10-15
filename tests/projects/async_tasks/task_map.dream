@@ -10,7 +10,7 @@ fun c250_square(x: string): string {
 
 async fun c250_body(): void {
     let items = ["1", "2", "3", "4", "5"];
-    let results = Task.map(items, c250_square).await;
+    let results = TaskPool(4).map(items, c250_square).await.unwrap();
     for (let r in results) {
         c250_verify_observation((r).to_string());
     }

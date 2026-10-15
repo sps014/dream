@@ -16,21 +16,23 @@ public class HttpClient {
 
     // Sends with default options: a 30-second total deadline and the host redirect policy.
     public async fun send(request: HttpRequest, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        let effective_token = CancellationToken.resolve(token);
         let lifetime = [this];
-        return lifetime[0].send(request, HttpOptions(), token).await;
+        return lifetime[0].send(request, HttpOptions(), effective_token).await;
     }
 
     // Sends a snapshot and returns after response headers arrive. Statuses such as 404 remain `Ok`.
     // Cancellation aborts pending transport work; response ownership transfers to the caller on success.
     public async fun send(request: HttpRequest, options: HttpOptions, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+        let effective_token = CancellationToken.resolve(token);
         let lifetime = [this];
-        if CancellationToken.is_cancelled_opt(token) { return Result.Err(HttpError("ECANCELLED", "HTTP operation cancelled")); }
+        if CancellationToken.is_cancelled_opt(effective_token) { return Result.Err(HttpError("ECANCELLED", "HTTP operation cancelled")); }
         if lifetime[0].id <= 0 { return Result.Err(HttpError("ECLOSED", "HTTP client is closed or unavailable")); }
         if options.timeout_ms < 0 || options.connect_timeout_ms < 0 || options.max_redirects < (0 - 1) {
             return Result.Err(HttpError("EINVAL", "invalid HTTP options"));
         }
         let operation = HttpOperation(HttpClient.send_host(lifetime[0].id, request.wire(options), request.body));
-        let completed = operation.wait(token).await;
+        let completed = operation.wait(effective_token).await;
         if completed.is_err() { operation.close(); return Result.Err(completed.unwrap_err()); }
         let bytes = completed.unwrap();
         let json = Json.deserialize<JsonValue>(Encoding.utf8_decode(bytes));
@@ -74,11 +76,12 @@ class HttpOperation {
     }
 
     internal async fun wait(token: Option<CancellationToken>): Result<byte[], HttpError> {
+        let effective_token = CancellationToken.resolve(token);
         let lifetime = [this];
         if lifetime[0].id <= 0 { return Result.Err(HttpError("EBUSY", "HTTP operation capacity exhausted")); }
         let pending = HttpOperation.wait_host(lifetime[0].id);
-        if token.is_some() {
-            let result = token.unwrap().wait(pending).await;
+        if effective_token.is_some() {
+            let result = effective_token.unwrap().wait(pending).await;
             if result.is_err() { return Result.Err(HttpError("ECANCELLED", "HTTP operation cancelled")); }
         } else { pending.await; }
         let wire = HttpOperation.poll_host(lifetime[0].id);
@@ -119,6 +122,7 @@ public class HttpResponse {
     // Reads remaining body text up to `max_bytes` using strict incremental UTF-8 decoding.
     // Limit or decoding failures consume input already read; close the response after any failure.
     public async fun read_text(max_bytes: int = 1048576, token: Option<CancellationToken> = Option.None): Result<string, HttpError> {
+        let effective_token = CancellationToken.resolve(token);
         let lifetime = [this];
         if max_bytes < 0 { return Result.Err(HttpError("EINVAL", "negative response limit")); }
         let decoder = Utf8Decoder();
@@ -127,7 +131,7 @@ public class HttpResponse {
         while true {
             let size = max_bytes - count;
             if size >= 8192 { size = 8192; } else { size = size + 1; }
-            let read = lifetime[0].body_value.read_async(size, token).await;
+            let read = lifetime[0].body_value.read_async(size, effective_token).await;
             if read.is_err() { return Result.Err(HttpError(read.unwrap_err().code(), read.unwrap_err().message())); }
             let bytes = read.unwrap();
             if bytes.length == 0 { break; }
@@ -158,13 +162,14 @@ public class HttpBody : AsyncReader {
     // Reads up to `max_bytes`; empty success for a positive request is EOF. Zero consumes nothing.
     // Errors use `IoError` for compatibility with async streams; concurrent reads return `EBUSY`.
     public async unique fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError> {
+        let effective_token = CancellationToken.resolve(token);
         let lifetime = [this];
-        if CancellationToken.is_cancelled_opt(token) { return Result.Err(IoError.cancelled()); }
+        if CancellationToken.is_cancelled_opt(effective_token) { return Result.Err(IoError.cancelled()); }
         if lifetime[0].id <= 0 { return Result.Err(IoError.closed("")); }
         if max_bytes < 0 { return Result.Err(IoError.invalid("", "negative read size")); }
         if max_bytes == 0 { return Result.Ok(Buffer.alloc<byte>(0)); }
         let operation = HttpOperation(HttpBody.read_host(lifetime[0].id, max_bytes));
-        let result = operation.wait(token).await;
+        let result = operation.wait(effective_token).await;
         operation.close();
         if result.is_err() { return Result.Err(IoError("", result.unwrap_err().code(), result.unwrap_err().message())); }
         return Result.Ok(result.unwrap());

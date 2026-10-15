@@ -47,7 +47,7 @@ pub extern "C" fn netOperationClaim(id: i32) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn netCapabilities() -> i32 {
-    7
+    15
 }
 
 #[unsafe(no_mangle)]
@@ -56,4 +56,48 @@ pub extern "C" fn netOperationWaitAsync(future: DreamPtr, id: i32) -> i32 {
         dream_host_abi::complete_foreign_future(dream_host_abi::ForeignFuture::new(future), 0);
     }
     1
+}
+
+/// # Safety
+/// Request and bytes must identify readable guest string and byte-array payloads.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn netSocketStart(request: DreamPtr, bytes: DreamPtr) -> i32 {
+    crate::sockets::start(unsafe { read_string(request) }, unsafe {
+        dream_host_abi::read_bytes(bytes)
+    })
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn netSocketWaitAsync(future: DreamPtr, id: i32) -> i32 {
+    if !crate::socket_operations::wait(id, dream_host_abi::ForeignFuture::new(future)) {
+        dream_host_abi::complete_foreign_future(dream_host_abi::ForeignFuture::new(future), 0);
+    }
+    1
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn netSocketResult(id: i32) -> DreamPtr {
+    dream_host_abi::alloc_bytes(&crate::socket_operations::result(id))
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn netSocketCancel(id: i32) {
+    crate::socket_operations::cancel(id);
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn netSocketRelease(id: i32) {
+    crate::socket_operations::release(id);
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn netSocketClaim(id: i32) {
+    crate::socket_operations::claim(id);
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn netSocketClose(id: i32) {
+    crate::sockets::close(id);
+}
+/// # Safety
+/// Request must identify a readable guest string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn netSocketControl(id: i32, request: DreamPtr) -> DreamPtr {
+    dream_host_abi::alloc_string(&crate::sockets::control(id, &unsafe {
+        read_string(request)
+    }))
 }

@@ -1,6 +1,6 @@
-# Parsed arguments and errors
+# Parsed Arguments
 
-Import `system.cli`. See the [CLI guide](../stdlib/cli.md) for examples.
+**Import:** `import system.cli;`
 
 ## `CliError`
 
@@ -10,7 +10,7 @@ Invalid invocation, command definition, or typed lookup; help and version are su
 public class CliError : Error
 ```
 
-## `CliError constructor`
+## `constructor`
 
 Creates an error with a stable machine code and diagnostic text.
 
@@ -18,7 +18,7 @@ Creates an error with a stable machine code and diagnostic text.
 public constructor(code: string, message: string)
 ```
 
-## `CliError.code`
+## `code`
 
 EINVAL for definitions, EARGS for invocations, ENOENT for missing values, ETYPE for incorrect getters, or EIO for adapter failures.
 
@@ -26,7 +26,7 @@ EINVAL for definitions, EARGS for invocations, ENOENT for missing values, ETYPE 
 public fun code(): string
 ```
 
-## `CliError.message`
+## `message`
 
 Human-readable diagnostic; invocation failures include usage guidance.
 
@@ -42,7 +42,7 @@ Immutable parsing outcome for one command scope, including explicit-value proven
 public class ParsedArguments
 ```
 
-## `ParsedArguments.is_help`
+## `is_help`
 
 True when --help or -h was requested, including for a subcommand.
 
@@ -50,7 +50,7 @@ True when --help or -h was requested, including for a subcommand.
 public get is_help(): bool
 ```
 
-## `ParsedArguments.is_version`
+## `is_version`
 
 True when --version or -V was requested.
 
@@ -58,7 +58,7 @@ True when --version or -V was requested.
 public get is_version(): bool
 ```
 
-## `ParsedArguments.help_text`
+## `help_text`
 
 Deterministic generated help when is_help is true; otherwise empty.
 
@@ -66,7 +66,7 @@ Deterministic generated help when is_help is true; otherwise empty.
 public get help_text(): string
 ```
 
-## `ParsedArguments.version_text`
+## `version_text`
 
 Generated version text when is_version is true; otherwise empty.
 
@@ -74,7 +74,7 @@ Generated version text when is_version is true; otherwise empty.
 public get version_text(): string
 ```
 
-## `ParsedArguments.command_name`
+## `command_name`
 
 Command name for successful value outcomes; empty for help/version outcomes.
 
@@ -82,7 +82,7 @@ Command name for successful value outcomes; empty for help/version outcomes.
 public get command_name(): string
 ```
 
-## `ParsedArguments.subcommand`
+## `subcommand`
 
 Selected child scope, or None when no subcommand was invoked.
 
@@ -90,7 +90,7 @@ Selected child scope, or None when no subcommand was invoked.
 public get subcommand(): Option<ParsedArguments>
 ```
 
-## `ParsedArguments.is_present`
+## `is_present`
 
 True only for arguments explicitly supplied on the command line, excluding defaults.
 
@@ -98,7 +98,7 @@ True only for arguments explicitly supplied on the command line, excluding defau
 public fun is_present(name: string): bool
 ```
 
-## `ParsedArguments.get_string`
+## `get_string`
 
 Returns a string positional or the last occurrence of a string option; missing values and wrong getter types return errors.
 
@@ -106,7 +106,7 @@ Returns a string positional or the last occurrence of a string option; missing v
 public fun get_string(name: string): Result<string, CliError>
 ```
 
-## `ParsedArguments.get_strings`
+## `get_strings`
 
 Copies all string values in order, including an optional default when no value was supplied.
 
@@ -114,7 +114,7 @@ Copies all string values in order, including an optional default when no value w
 public fun get_strings(name: string): Result<string[], CliError>
 ```
 
-## `ParsedArguments.get_int`
+## `get_int`
 
 Returns the last parsed integer; every occurrence has already passed decimal 32-bit validation.
 
@@ -122,7 +122,7 @@ Returns the last parsed integer; every occurrence has already passed decimal 32-
 public fun get_int(name: string): Result<int, CliError>
 ```
 
-## `ParsedArguments.get_ints`
+## `get_ints`
 
 Copies every parsed integer occurrence in order.
 
@@ -130,10 +130,26 @@ Copies every parsed integer occurrence in order.
 public fun get_ints(name: string): Result<int[], CliError>
 ```
 
-## `ParsedArguments.get_bool`
+## `get_bool`
 
 Returns the declared boolean flag, false when omitted; wrong getter types return errors.
 
 ```dream
 public fun get_bool(name: string): Result<bool, CliError>
+```
+
+## `config_keys`
+
+Copies declared names for typed configuration merging; is_present distinguishes explicit values.
+
+```dream
+public fun config_keys(): string[]
+```
+
+## `config_value`
+
+Returns the final explicit scalar value for configuration merging, including typed options.
+
+```dream
+public fun config_value(name: string): Result<string, CliError>
 ```

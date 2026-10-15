@@ -167,6 +167,8 @@ nav:
       - Debug: reference/stdlib/debug.md
       - Process: reference/stdlib/process.md
       - CLI arguments: reference/stdlib/cli.md
+      - Application utilities: reference/stdlib/application-utilities.md
+      - Raw sockets and compression: reference/stdlib/raw-sockets-compression.md
     - I/O:
       - File I/O: reference/stdlib/file.md
       - Streams: reference/stdlib/file-streams.md

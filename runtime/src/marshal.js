@@ -93,21 +93,6 @@ export function wrapImport(getInstance, fn, signature) {
   };
 }
 
-/**
- * In-place `byte[]` fill imports receive a data pointer, not a marshaled copy. Writes random bytes
- * directly into linear memory at `destPtr` (layout: `[count:i32][bytes...]`).
- */
-export function wrapInPlaceByteArrayFill(getInstance, fillBytes) {
-  return (destPtr) => {
-    const inst = getInstance();
-    const count = inst.i32(destPtr);
-    if (count > 0) {
-      inst.bytes.set(fillBytes(count), destPtr + 4);
-    }
-    return 0;
-  };
-}
-
 const runLoopPumps = new WeakMap();
 
 /**

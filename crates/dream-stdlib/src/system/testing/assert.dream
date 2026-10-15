@@ -14,6 +14,18 @@ public static class Assert {
         System.exit(1);
     }
 
+    // Awaits actual and compares its value using the normal assertion diagnostics.
+    @native @node
+    public static async fun eq_async<T>(actual: Future<T>, expected: T): void { Assert.eq(actual.await, expected); }
+
+    // Awaits a fallible operation and returns its success value, reporting the error on failure.
+    @native @node
+    public static async fun ok_async<T, E>(actual: Future<Result<T, E>>): T {
+        let result = actual.await;
+        if result.is_err() { Assert.fail("expected async success: " + result.unwrap_err()); }
+        return result.unwrap();
+    }
+
     // Asserts that `actual == expected`.
     @native
     @node

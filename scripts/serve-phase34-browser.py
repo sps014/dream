@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile and serve repeatable browser qualification fixtures for stdlib I/O, networking, cancellation, CLI, structured concurrency, and channel APIs."""
+"""Compile and serve repeatable browser qualification fixtures for stdlib I/O, networking, cancellation, CLI, structured concurrency, channel, application utility, and compression APIs."""
 import argparse
 import functools
 import http.server
@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", action="store_true")
-    parser.add_argument("--case", choices=["http", "io-url", "cancellation", "cancellation-worker", "cli", "structured", "channels-worker"])
+    parser.add_argument("--case", choices=["http", "io-url", "cancellation", "cancellation-worker", "cli", "structured", "channels-worker", "utilities"])
     parser.add_argument("--port", type=int, default=60022)
     parser.add_argument("--dream", type=Path, default=ROOT / "target/debug/dream")
     args = parser.parse_args()
@@ -21,7 +21,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     base = f"http://127.0.0.1:{args.port}"
     for name, fixture in [("http", "http"), ("io-url", "io_url"),
-                          ("cancellation", "cancellation"), ("cancellation-worker", "cancellation_worker"), ("cli", "cli"), ("structured", "structured"), ("channels-worker", "channels_worker")]:
+                          ("cancellation", "cancellation"), ("cancellation-worker", "cancellation_worker"), ("cli", "cli"), ("structured", "structured"), ("channels-worker", "channels_worker"), ("utilities", "utilities")]:
         if args.case and args.case != name:
             continue
         source = ROOT / f"tests/fixtures/compiler/stdlib_web_{fixture}.dream"
@@ -34,7 +34,7 @@ def main():
 import {{ run }} from "./target/web/{name}.web.runtime.js";
 try {{
   const instance = await run(new URL("./target/web/{name}.wasm", location.href));
-  if (["structured", "channels-worker"].includes("{name}") && instance.exports.__dream_leak_live?.()) throw new Error("live guest resources after completion");
+  if (["structured", "channels-worker", "utilities"].includes("{name}") && instance.exports.__dream_leak_live?.()) throw new Error("live guest resources after completion");
   document.querySelector("#result").textContent = instance.exitCode ? `FAIL: ${{instance.exitCode}}` : "PASS: {name}";
 }} catch (error) {{ document.querySelector("#result").textContent = `FAIL: ${{error.stack || error}}`; }}
 </script>''', encoding="utf-8")

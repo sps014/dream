@@ -18,6 +18,17 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         this.epoch = hash_epoch_initial();
     }
 
+    // Reserves additional live entries, accounting for load factor and reclaiming tombstones.
+    public fun reserve(additional: int): Result<bool, CapacityError> {
+        let need = (long)this.count + (long)additional;
+        let required = ((need + 1L) * (long)hash_load_factor_denom() + (long)hash_load_factor_num() - 1L) / (long)hash_load_factor_num();
+        if additional < 0 || required > 268435456L { return Result.Err(CapacityError()); }
+        let capacity = hash_capacity_for((int)required);
+        if capacity < this.cap { capacity = this.cap; }
+        if capacity > this.cap || ((long)this.used + (long)additional) * (long)hash_load_factor_denom() >= (long)this.cap * (long)hash_load_factor_num() { this.rehash(capacity); }
+        return Result.Ok(true);
+    }
+
     fun bump_epoch(): void {
         let e = this.epoch + 1;
         if e <= 0 {

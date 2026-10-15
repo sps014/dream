@@ -2,9 +2,13 @@ use super::StdPackage;
 
 pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.testing",
-    deps: &["system.core", "system.primitives", "system"],
+    deps: &["system.core", "system.primitives", "system", "system.io"],
     generators: &[],
     files: &[
+        (
+            "<std>/system/testing/fixture.dream",
+            include_str!("../system/testing/fixture.dream"),
+        ),
         (
             "<std>/system/testing/assert.dream",
             include_str!("../system/testing/assert.dream"),

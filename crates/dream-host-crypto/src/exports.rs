@@ -100,18 +100,3 @@ pub unsafe extern "C" fn cryptoHmacSha256(key: DreamPtr, input: DreamPtr) -> Dre
 pub extern "C" fn cryptoSecureRandomBytes(len: i32) -> DreamPtr {
     alloc_bytes(&crate::crypto::secure_random(len))
 }
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cryptoSecureRandomFill(bytes: DreamPtr) {
-    unsafe {
-        if bytes.is_null() {
-            return;
-        }
-        let n = *(bytes as *const i32);
-        if n <= 0 {
-            return;
-        }
-        let dest = std::slice::from_raw_parts_mut(bytes.add(4), n as usize);
-        crate::crypto::secure_random_fill(dest);
-    }
-}

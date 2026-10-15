@@ -70,6 +70,14 @@ public class List<T> : IndexedCollection<T> {
         return this.items.length;
     }
 
+    // Reserves room for additional elements without changing length or existing values.
+    public fun reserve(additional: int): Result<bool, CapacityError> {
+        let need = (long)this.count + (long)additional;
+        if additional < 0 || need > 2147483647L { return Result.Err(CapacityError()); }
+        if need > (long)this.items.length { this.items = Buffer.realloc<T>(this.items, (int)need); }
+        return Result.Ok(true);
+    }
+
     // Doubles the backing buffer, resizing in place via `Buffer.realloc` when possible.
     @inline
     fun grow(): void {
@@ -196,13 +204,6 @@ public class List<T> : IndexedCollection<T> {
             i = i - 1;
         }
         return Option.None;
-    }
-
-    // Grows the backing buffer until `capacity()` is at least `n`.
-    public fun reserve(n: int): void {
-        if this.items.length < n {
-            this.items = Buffer.realloc<T>(this.items, grow_capacity(this.items.length, n));
-        }
     }
 
     // Reverses the live prefix in place.

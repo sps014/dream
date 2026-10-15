@@ -6,7 +6,7 @@ export function csprngBytes(count) {
   const out = new Uint8Array(n);
   if (n === 0) return out;
   if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === "function") {
-    globalThis.crypto.getRandomValues(out);
+    for (let offset = 0; offset < n; offset += 65536) globalThis.crypto.getRandomValues(out.subarray(offset, Math.min(n, offset + 65536)));
     return out;
   }
   if (isNode && getNodeCrypto()) {
@@ -251,8 +251,10 @@ export function makeCryptoHost() {
     cryptoSha256: (data) => cryptoSha256Bytes(data),
     cryptoSha512: (data) => cryptoSha512Bytes(data),
     cryptoHmacSha256: (key, data) => cryptoHmacSha256Bytes(key, data),
-    cryptoSecureRandomBytes: (n) => Array.from(csprngBytes(n > 0 ? n : 0)),
-    cryptoSecureRandomFill: null,
+    cryptoSecureRandomBytes: (n) => {
+      if (!Number.isInteger(n) || n < 0 || n > 16777216) return [];
+      try { return Array.from(csprngBytes(n)); } catch (_) { return []; }
+    },
     cryptoAesGcmEncrypt: (key, nonce, plaintext, aad) =>
       cryptoAesGcmEncryptBytes(key, nonce, plaintext, aad),
     cryptoAesGcmDecrypt: (key, nonce, ciphertext, aad) =>

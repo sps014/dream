@@ -1,0 +1,42 @@
+import system;
+import system.csv;
+import system.io;
+import system.uuid;
+import system.config;
+import system.cli;
+import system.compress;
+import system.net;
+
+async fun main(): int {
+    if sizeof(Uuid) != 16 { return 1; }
+    let original = Uuid.v4().unwrap();
+    let restored = Uuid.parse(original.to_string()).unwrap();
+    if original != restored || original.hash_code() != restored.hash_code() { return 2; }
+    let memory = MemoryStream();
+    let writer = CsvWriter(memory);
+    writer.write_record(["a,b", "line\nnext", "こんにちは"]).unwrap();
+    memory.seek(0L).unwrap();
+    let reader = CsvReader(memory);
+    let row = reader.read_record().unwrap().unwrap();
+    if row[0] != "a,b" || row[1] != "line\nnext" || row[2] != "こんにちは" { return 3; }
+    if !reader.read_record().unwrap().is_none() { return 4; }
+    let command = Command("browser").int_option("port", default_value: 80);
+    let parsed = command.parse(["--port", "8080"]).unwrap();
+    let config = ConfigBuilder().default_value("port", "80").cli(parsed).build().unwrap();
+    if config.get_int("port").unwrap() != 8080 { return 5; }
+    let compressed = MemoryStream();
+    let encoder = Compression.writer(compressed).unwrap();
+    encoder.write_all(Encoding.utf8_encode("hello browser compression")).unwrap();
+    encoder.finish().unwrap();
+    compressed.seek(0L).unwrap();
+    let decoder = Compression.reader(compressed).unwrap();
+    let decoded = MemoryStream();
+    Streams.copy(decoder, decoded).unwrap();
+    decoded.seek(0L).unwrap();
+    if Encoding.utf8_decode(decoded.read(100).unwrap()) != "hello browser compression" { return 6; }
+    decoder.close();
+    if TempCapabilities.supported || TempFile.create().unwrap_err().code() != "EUNSUPPORTED" { return 7; }
+    if SocketCapabilities.supported || TcpStream.connect("127.0.0.1", 9000).await.unwrap_err().code() != "EUNSUPPORTED" { return 8; }
+    if UdpSocket.bind("127.0.0.1", 0).await.unwrap_err().code() != "EUNSUPPORTED" { return 9; }
+    return 0;
+}

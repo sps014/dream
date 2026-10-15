@@ -49,7 +49,7 @@ impl Compiler {
             None => dream_mir::passes::MirDump::disabled(),
         };
         let llvm = self.toolchain();
-        let _quiet = crate::driver::quiet_panic::QuietPanics::new();
+        let quiet = crate::driver::quiet_panic::QuietPanics::new();
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let analyzed = self.analyze_graph(&mut analyzer, &loaded, &mut diagnostics)?;
             let interner = analyzer.interner();
@@ -82,6 +82,7 @@ impl Compiler {
             let emitted = self.emit_module(&mir, interner, live_imports, llvm.as_deref())?;
             Ok((emitted, mir.layouts))
         }));
+        drop(quiet);
         if self.emit_mir.is_some() {
             self.write_mir_dump(out_path, dump)?;
         }

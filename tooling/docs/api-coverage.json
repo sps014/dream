@@ -221,6 +221,18 @@
         "description": "Returns the declared boolean flag, false when omitted; wrong getter types return errors.",
         "line": 65,
         "page": "reference/api/cli-parsed-arguments.md"
+      },
+      {
+        "signature": "public fun config_keys(): string[]",
+        "description": "Copies declared names for typed configuration merging; is_present distinguishes explicit values.",
+        "line": 71,
+        "page": "reference/api/cli-parsed-arguments.md"
+      },
+      {
+        "signature": "public fun config_value(name: string): Result<string, CliError>",
+        "description": "Returns the final explicit scalar value for configuration merging, including typed options.",
+        "line": 73,
+        "page": "reference/api/cli-parsed-arguments.md"
       }
     ]
   },
@@ -1520,6 +1532,37 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/collections/capacity_error.dream",
+    "package": "system.collections",
+    "page": "reference/api/collections-capacity-error.md",
+    "declarations": [
+      {
+        "signature": "public class CapacityError : Error",
+        "description": "Invalid reserve request; existing contents and capacity are preserved.",
+        "line": 4,
+        "page": "reference/api/collections-capacity-error.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates a capacity diagnostic without performing an allocation.",
+        "line": 6,
+        "page": "reference/api/collections-capacity-error.md"
+      },
+      {
+        "signature": "public fun code(): string",
+        "description": "Stable code for negative or unsupported capacity requests.",
+        "line": 8,
+        "page": "reference/api/collections-capacity-error.md"
+      },
+      {
+        "signature": "public fun message(): string",
+        "description": "Describes the accepted reserve domain.",
+        "line": 10,
+        "page": "reference/api/collections-capacity-error.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/collections/collection_query.dream",
     "package": "system.collections",
     "page": "reference/api/collections-collection-query.md",
@@ -1677,183 +1720,183 @@
         "page": "reference/api/collections-list-1.md"
       },
       {
+        "signature": "public fun reserve(additional: int): Result<bool, CapacityError>",
+        "description": "Reserves room for additional elements without changing length or existing values.",
+        "line": 74,
+        "page": "reference/api/collections-list-1.md"
+      },
+      {
         "signature": "public fun push(value: T): void",
         "description": "Appends a value to the end, growing if necessary.",
-        "line": 82,
+        "line": 90,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun push_all(borrow items: T[]): void",
         "description": "Appends every element of `items`, ensuring capacity once then copying via `Span`.",
-        "line": 91,
+        "line": 99,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public static fun from_array(borrow items: T[]): List<T>",
         "description": "Builds a list containing exactly the elements of `items`, in order. The `[e1, e2, ...]` list-literal syntax (e.g. `let xs: List<int> = [1, 2, 3];`) desugars to this.",
-        "line": 105,
+        "line": 113,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun take_array(): T[]",
         "description": "Yields a `T[]` of exactly `length` and leaves this list empty. Shrinks via `realloc` when capacity is larger than `count` so the result's `.length` is the live element count.",
-        "line": 113,
+        "line": 121,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun this[index: int]: T",
         "description": "Element at `index`. Panics if `index` is out of range.",
-        "line": 135,
+        "line": 143,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun this[index: int] = value: T",
         "description": "Overwrites the element at `index`. Panics if `index` is out of range.",
-        "line": 143,
+        "line": 151,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun set(index: int, value: T): void",
         "description": "",
-        "line": 150,
+        "line": 158,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun pop(): Option<T>",
         "description": "Removes and returns the last element, or `None` if the list is empty.",
-        "line": 155,
+        "line": 163,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun contains(borrow value: T): bool",
         "description": "True if `value` is present (uses value equality, including string contents).",
-        "line": 166,
+        "line": 174,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun index_of(borrow value: T): Option<int>",
         "description": "Index of the first matching element (by value equality), or `None` if absent.",
-        "line": 178,
+        "line": 186,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun last_index_of(borrow value: T): Option<int>",
         "description": "Index of the last matching element (by value equality), or `None` if absent.",
-        "line": 190,
-        "page": "reference/api/collections-list-1.md"
-      },
-      {
-        "signature": "public fun reserve(n: int): void",
-        "description": "Grows the backing buffer until `capacity()` is at least `n`.",
-        "line": 202,
+        "line": 198,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun reverse(): void",
         "description": "Reverses the live prefix in place.",
-        "line": 209,
+        "line": 210,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun slice(start: int, end: int): List<T>",
         "description": "A new list of `this[start .. end)` (clamped; empty when the span is inverted).",
-        "line": 220,
+        "line": 221,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun concat(borrow other: List<T>): List<T>",
         "description": "A new list with this list's elements followed by `other`.",
-        "line": 242,
+        "line": 243,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clone(): List<T>",
         "description": "A shallow copy of the live elements.",
-        "line": 258,
+        "line": 259,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun join(sep: string): string",
         "description": "Joins stringifiable elements with `sep` (same conversion as `to_string` uses). Single pass into a StringBuilder — O(total output), never the quadratic accumulate-and-recopy shape.",
-        "line": 264,
+        "line": 265,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Empties the list while keeping the backing buffer. Live slots are overwritten with a zero value so reference fields inside value-struct elements (and class elements) release immediately; capacity is unchanged (no capacity-sized `Buffer.alloc`).",
-        "line": 281,
+        "line": 282,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clear(): void where T : unmanaged",
         "description": "Unmanaged: no RC to release — rewind the count only.",
-        "line": 295,
+        "line": 296,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun insert(index: int, value: T): bool",
         "description": "Inserts `value` at `index`, shifting later elements right. Returns false if `index` is out of range (index may equal `size()` to append).",
-        "line": 301,
+        "line": 302,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun insert(index: int, value: T): bool where T : unmanaged",
         "description": "Unmanaged: one `memory.copy` shift (no Span wrappers).",
-        "line": 318,
+        "line": 319,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun remove_at(index: int): bool",
         "description": "Removes the element at `index`, shifting later elements left. Returns true on success, or false if `index` is out of range (the list is left unchanged in that case).",
-        "line": 337,
+        "line": 338,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool",
         "description": "Removes the first occurrence of `value` (by equality). Returns true when something was removed.",
-        "line": 353,
+        "line": 354,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun iterator(): ListIterator<T>",
         "description": "Enumerator for `for (let x in list)`. Returns a fresh cursor over the current elements.",
-        "line": 361,
+        "line": 362,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun as_span(): Span<T>",
         "description": "A view of the current elements, writable in place. The span holds the backing array it was taken from: after the list grows (or shrinks and regrows) it keeps showing that old array, so take a fresh span after structural changes.",
-        "line": 368,
+        "line": 369,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun as_read_only_span(): ReadOnlySpan<T>",
         "description": "A read-only view of the current elements, with the same staleness rule as `as_span`.",
-        "line": 373,
+        "line": 374,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort_by(borrow cmp: fun(T, T): int): void",
         "description": "Sorts the list in place with the supplied comparator.",
-        "line": 385,
+        "line": 386,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort(): void where T : Comparable<T>",
         "description": "Sorts the list in place into ascending order using each element's `compare` method. Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 439,
+        "line": 440,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun binary_search(borrow value: T): Option<int> where T : Comparable<T>",
         "description": "Binary search over a list that is already sorted ascending (by `compare`). Returns the index of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n). Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 447,
+        "line": 448,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "",
-        "line": 465,
+        "line": 466,
         "page": "reference/api/collections-list-2.md"
       }
     ]
@@ -1895,147 +1938,153 @@
         "page": "reference/api/collections-map-1.md"
       },
       {
+        "signature": "public fun reserve(additional: int): Result<bool, CapacityError>",
+        "description": "Reserves additional live entries, accounting for load factor and reclaiming tombstones.",
+        "line": 22,
+        "page": "reference/api/collections-map-1.md"
+      },
+      {
         "signature": "public get length(): int",
         "description": "",
-        "line": 34,
+        "line": 45,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public get capacity(): int",
         "description": "",
-        "line": 39,
+        "line": 50,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun this[key: K] = value: V",
         "description": "The first probe hits an empty or matching slot on the usual insert. That case stays in the caller; collisions fall through to the full probe.",
-        "line": 187,
+        "line": 198,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun set(key: K, value: V): void",
         "description": "",
-        "line": 211,
+        "line": 222,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun contains(borrow key: K): bool",
         "description": "",
-        "line": 215,
+        "line": 226,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun set_all(borrow keys: K[], borrow values: V[]): void",
         "description": "",
-        "line": 219,
+        "line": 230,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public static fun from_arrays(borrow keys: K[], borrow values: V[]): Map<K, V>",
         "description": "",
-        "line": 231,
+        "line": 242,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get(borrow key: K): Option<V>",
         "description": "Value for `key`, or `None` when absent.",
-        "line": 239,
+        "line": 250,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K : StringKey",
         "description": "Value for the `string` key equal to `key`, without building a `string`.",
-        "line": 248,
+        "line": 259,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get_or(borrow key: ReadOnlySpan<char>, fallback: V): V where K : StringKey",
         "description": "",
-        "line": 256,
+        "line": 267,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun contains(borrow key: ReadOnlySpan<char>): bool where K : StringKey",
         "description": "",
-        "line": 264,
+        "line": 275,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun this[borrow key: K]: V",
         "description": "Value for `key`. Panics when the key is absent — this is what `m[k]` compiles to; use `get(k)` for absence-tolerant reads.",
-        "line": 270,
+        "line": 281,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get_or(borrow key: K, fallback: V): V",
         "description": "",
-        "line": 279,
+        "line": 290,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get_or_insert(key: K, borrow factory: fun(): V): V",
         "description": "",
-        "line": 287,
+        "line": 298,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun merge(borrow other: Map<K, V>): void",
         "description": "",
-        "line": 297,
+        "line": 308,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun entries(): List<KeyValuePair<K, V>>",
         "description": "",
-        "line": 303,
+        "line": 314,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun remove(borrow key: K): bool",
         "description": "",
-        "line": 315,
+        "line": 326,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "",
-        "line": 330,
+        "line": 341,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "",
-        "line": 335,
+        "line": 346,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun clear(): void where K : unmanaged, V : unmanaged",
         "description": "",
-        "line": 354,
+        "line": 365,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun keys(): K[]",
         "description": "",
-        "line": 360,
+        "line": 371,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun values(): V[]",
         "description": "",
-        "line": 374,
-        "page": "reference/api/collections-map-1.md"
+        "line": 385,
+        "page": "reference/api/collections-map-2.md"
       },
       {
         "signature": "public fun iterator(): MapIterator<K, V>",
         "description": "",
-        "line": 388,
+        "line": 399,
         "page": "reference/api/collections-map-2.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "",
-        "line": 404,
+        "line": 415,
         "page": "reference/api/collections-map-2.md"
       }
     ]
@@ -2175,39 +2224,51 @@
         "page": "reference/api/collections-queue.md"
       },
       {
+        "signature": "public get capacity(): int",
+        "description": "Current element capacity of the ring buffer.",
+        "line": 26,
+        "page": "reference/api/collections-queue.md"
+      },
+      {
+        "signature": "public fun reserve(additional: int): Result<bool, CapacityError>",
+        "description": "Reserves room for additional elements while preserving FIFO order and length.",
+        "line": 29,
+        "page": "reference/api/collections-queue.md"
+      },
+      {
         "signature": "public fun enqueue(value: T): void",
         "description": "Appends `value` at the back of the queue.",
-        "line": 46,
+        "line": 58,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun dequeue(): Option<T>",
         "description": "Removes and returns the front element, or `None` when empty. The vacated slot is zeroed so managed elements release immediately instead of staying retained until overwritten.",
-        "line": 57,
+        "line": 69,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun peek(): Option<T>",
         "description": "Returns the front element without removing it, or `None` when empty.",
-        "line": 68,
+        "line": 80,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes every element. Live ring slots are overwritten with a zero value so managed elements release immediately instead of staying retained until later enqueues overwrite them; the ring is reset to front-aligned empty.",
-        "line": 78,
+        "line": 90,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun clear(): void where T : unmanaged",
         "description": "Unmanaged: no RC to release — rewind only.",
-        "line": 91,
+        "line": 103,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun iterator(): QueueIterator<T>",
         "description": "Iterates elements from front to back.",
-        "line": 97,
+        "line": 109,
         "page": "reference/api/collections-queue.md"
       }
     ]
@@ -2316,123 +2377,129 @@
         "page": "reference/api/collections-set.md"
       },
       {
+        "signature": "public fun reserve(additional: int): Result<bool, CapacityError>",
+        "description": "Reserves additional live entries, accounting for load factor and reclaiming tombstones.",
+        "line": 25,
+        "page": "reference/api/collections-set.md"
+      },
+      {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 34,
+        "line": 45,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public get capacity(): int",
         "description": "Current capacity of the backing buffer.",
-        "line": 39,
+        "line": 50,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun add(value: T): bool",
         "description": "Inserts a value into the set. Returns true if it was newly added, false if already present.",
-        "line": 177,
+        "line": 188,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun contains(borrow value: T): bool",
         "description": "True if the set contains the value.",
-        "line": 189,
+        "line": 200,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun contains(borrow value: ReadOnlySpan<char>): bool where T : StringKey",
         "description": "True when the set holds the `string` equal to `value`, without building a `string`.",
-        "line": 195,
+        "line": 206,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun add_all(borrow items: T[]): void",
         "description": "Adds every element of `items` (duplicates are ignored, exactly like repeated `add` calls). Also what the `{e1, e2, ...}` set-literal syntax lowers to via `from_array`, so a literal with N elements costs one call, not N.",
-        "line": 220,
+        "line": 231,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public static fun from_array(borrow items: T[]): Set<T>",
         "description": "Builds a set containing exactly the (deduplicated) elements of `items`. The `{e1, e2, ...}` set-literal syntax (e.g. `let s: Set<int> = {1, 2, 3};`) desugars to this.",
-        "line": 230,
+        "line": 241,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool",
         "description": "Removes a value and returns true if it was removed.",
-        "line": 237,
+        "line": 248,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool where T : unmanaged",
         "description": "",
-        "line": 249,
+        "line": 260,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True if the set is empty.",
-        "line": 260,
+        "line": 271,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all elements, keeping the current capacity. Occupied key slots are zeroed so managed entries release; probe `states` are reset in place (no capacity realloc).",
-        "line": 266,
+        "line": 277,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun clear(): void where T : unmanaged",
         "description": "",
-        "line": 282,
+        "line": 293,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun to_array(): T[]",
         "description": "Gets all elements as an array.",
-        "line": 289,
+        "line": 300,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun union(borrow other: Set<T>): Set<T>",
         "description": "Elements present in this set or `other`.",
-        "line": 304,
+        "line": 315,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun intersection(borrow other: Set<T>): Set<T>",
         "description": "Elements present in both sets.",
-        "line": 320,
+        "line": 331,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun difference(borrow other: Set<T>): Set<T>",
         "description": "Elements in this set but not in `other`.",
-        "line": 335,
+        "line": 346,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_subset(borrow other: Set<T>): bool",
         "description": "True when every element of this set is in `other`.",
-        "line": 350,
+        "line": 361,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_disjoint(borrow other: Set<T>): bool",
         "description": "True when the sets share no elements.",
-        "line": 364,
+        "line": 375,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun iterator(): SetIterator<T>",
         "description": "Gets an iterator for the set.",
-        "line": 378,
+        "line": 389,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "",
-        "line": 391,
+        "line": 402,
         "page": "reference/api/collections-set.md"
       }
     ]
@@ -2642,6 +2709,224 @@
         "description": "Iterates elements from bottom to top.",
         "line": 42,
         "page": "reference/api/collections-stack.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/compress/compression.dream",
+    "package": "system.compress",
+    "page": "reference/api/compress-compression.md",
+    "declarations": [
+      {
+        "signature": "public enum CompressionFormat",
+        "description": "Standard wrapper format for a single compressed stream.",
+        "line": 4,
+        "page": "reference/api/compress-compression.md"
+      },
+      {
+        "signature": "Gzip",
+        "description": "Gzip framing with CRC and uncompressed-size validation.",
+        "line": 6,
+        "page": "reference/api/compress-compression.md"
+      },
+      {
+        "signature": "Zlib",
+        "description": "Zlib framing with Adler-32 validation.",
+        "line": 8,
+        "page": "reference/api/compress-compression.md"
+      },
+      {
+        "signature": "public static class Compression",
+        "description": "Streaming gzip/zlib factories; wrappers borrow their underlying stream.",
+        "line": 59,
+        "page": "reference/api/compress-compression.md"
+      },
+      {
+        "signature": "public static fun writer(destination: Writer, format: CompressionFormat = CompressionFormat.Gzip, max_output_bytes: long = 67108864L): Result<CompressionWriter, IoError>",
+        "description": "Creates an encoder; max_output_bytes bounds compressed output across every write and finish.",
+        "line": 61,
+        "page": "reference/api/compress-compression.md"
+      },
+      {
+        "signature": "public static fun reader(source: Reader, format: CompressionFormat = CompressionFormat.Gzip, max_output_bytes: long = 67108864L): Result<CompressionReader, IoError>",
+        "description": "Creates a strict single-stream decoder; the output limit prevents unbounded expansion.",
+        "line": 65,
+        "page": "reference/api/compress-compression.md"
+      },
+      {
+        "signature": "public class CompressionWriter : Writer",
+        "description": "Incremental compressor over a borrowed Writer; finish explicitly to write and validate the trailer.",
+        "line": 72,
+        "page": "reference/api/compress-compression.md"
+      },
+      {
+        "signature": "public fun write(bytes: byte[]): Result<int, IoError>",
+        "description": "Accepts up to 64 KiB; completed compressed writes remain visible if a later operation fails.",
+        "line": 78,
+        "page": "reference/api/compress-compression.md"
+      },
+      {
+        "signature": "public fun flush(): Result<bool, IoError>",
+        "description": "Emits a synchronization boundary and flushes the borrowed destination without ending the stream.",
+        "line": 94,
+        "page": "reference/api/compress-compression.md"
+      },
+      {
+        "signature": "public fun finish(): Result<bool, IoError>",
+        "description": "Finishes the trailer, releases encoder state, and flushes the borrowed destination.",
+        "line": 106,
+        "page": "reference/api/compress-compression.md"
+      },
+      {
+        "signature": "public fun close(): void",
+        "description": "Abandons codec state without finishing or closing the borrowed destination.",
+        "line": 120,
+        "page": "reference/api/compress-compression.md"
+      },
+      {
+        "signature": "public class CompressionReader : Reader",
+        "description": "Incremental decompressor with bounded chunks, checksum validation, and strict trailing-byte rejection.",
+        "line": 126,
+        "page": "reference/api/compress-compression.md"
+      },
+      {
+        "signature": "public fun read(max_bytes: int): Result<byte[], IoError>",
+        "description": "Returns partial decoded bytes; malformed, truncated, oversized, or concatenated input returns an error.",
+        "line": 136,
+        "page": "reference/api/compress-compression.md"
+      },
+      {
+        "signature": "public fun close(): void",
+        "description": "Releases codec state without closing the borrowed source.",
+        "line": 163,
+        "page": "reference/api/compress-compression.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/config/config.dream",
+    "package": "system.config",
+    "page": "reference/api/config-config.md",
+    "declarations": [
+      {
+        "signature": "public class ConfigError : Error",
+        "description": "Invalid or missing configuration, including the originating source and key.",
+        "line": 4,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public key: string",
+        "description": "Logical setting name associated with the failure.",
+        "line": 6,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public source: string",
+        "description": "The default, JSON filename, environment variable, or CLI argument that supplied it.",
+        "line": 8,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public constructor(key: string, source: string, message: string)",
+        "description": "Creates a diagnostic with setting provenance.",
+        "line": 11,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public fun code(): string",
+        "description": "Machine-readable configuration failure code.",
+        "line": 13,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public fun message(): string",
+        "description": "Describes the invalid setting without disclosing its value.",
+        "line": 15,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public class Config",
+        "description": "Validated snapshot with typed lookups and per-setting provenance.",
+        "line": 19,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public fun source(key: string): Option<string>",
+        "description": "Returns the source that supplied the setting, or None if absent.",
+        "line": 25,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public fun get_string(key: string): Result<string, ConfigError>",
+        "description": "Returns a setting or a source-aware missing-setting error.",
+        "line": 27,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public fun get_int(key: string): Result<int, ConfigError>",
+        "description": "Parses a signed 32-bit decimal integer, rejecting invalid or overflowing values.",
+        "line": 33,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public fun get_bool(key: string): Result<bool, ConfigError>",
+        "description": "Accepts the exact boolean spellings true and false.",
+        "line": 39,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public class ConfigBuilder",
+        "description": "Merges defaults, JSON files, environment variables, and explicit CLI values in that order.",
+        "line": 49,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates an empty builder; source precedence is independent of method call order.",
+        "line": 57,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public fun default_value(key: string, value: string): ConfigBuilder",
+        "description": "Registers a known setting and its lowest-precedence default.",
+        "line": 59,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public fun require(key: string): ConfigBuilder",
+        "description": "Adds a required known setting with no default.",
+        "line": 61,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public fun json_file(path: string): ConfigBuilder",
+        "description": "Adds a JSON object file; later files override earlier files.",
+        "line": 63,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public fun environment(prefix: string = \"\"): ConfigBuilder",
+        "description": "Reads known settings from prefix plus the uppercase key, with hyphens replaced by underscores.",
+        "line": 65,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public fun cli(arguments: ParsedArguments): ConfigBuilder",
+        "description": "Uses explicitly supplied command-line arguments, excluding parser defaults.",
+        "line": 67,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public fun validate(key: string, predicate: fun(string): bool): ConfigBuilder",
+        "description": "Adds a value predicate; false returns a provenance-aware validation error.",
+        "line": 69,
+        "page": "reference/api/config-config.md"
+      },
+      {
+        "signature": "public fun build(): Result<Config, ConfigError>",
+        "description": "Loads and validates a snapshot; failures never change a previously built configuration.",
+        "line": 71,
+        "page": "reference/api/config-config.md"
       }
     ]
   },
@@ -5284,7 +5569,7 @@
         "page": "reference/api/crypto-aes-gcm.md"
       },
       {
-        "signature": "public static fun generate_nonce(): byte[]",
+        "signature": "public static fun generate_nonce(): Result<byte[], CryptoError>",
         "description": "Generates a fresh random 12-byte nonce. Never reuse a nonce with the same key.",
         "line": 17,
         "page": "reference/api/crypto-aes-gcm.md"
@@ -5315,7 +5600,7 @@
         "page": "reference/api/crypto-aes-gcm-key.md"
       },
       {
-        "signature": "public static fun generate(): AesGcmKey",
+        "signature": "public static fun generate(): Result<AesGcmKey, CryptoError>",
         "description": "Generates a fresh random 256-bit key from the OS CSPRNG.",
         "line": 13,
         "page": "reference/api/crypto-aes-gcm-key.md"
@@ -5409,19 +5694,19 @@
     "declarations": [
       {
         "signature": "public static class SecureRandom",
-        "description": "Cryptographically secure random bytes from the OS CSPRNG.",
+        "description": "Cryptographically secure bytes with explicit entropy-source failures.",
         "line": 4,
         "page": "reference/api/crypto-secure-random.md"
       },
       {
-        "signature": "public static fun bytes(n: int): byte[]",
-        "description": "Allocates `n` random bytes (`n <= 0` yields an empty array).",
-        "line": 12,
+        "signature": "public static fun bytes(n: int): Result<byte[], CryptoError>",
+        "description": "Returns exactly n secure bytes, or EINVAL/EENTROPY without exposing partial output.",
+        "line": 9,
         "page": "reference/api/crypto-secure-random.md"
       },
       {
-        "signature": "public static fun fill(dest: byte[]): void",
-        "description": "Fills `dest` in place with random bytes (length unchanged).",
+        "signature": "public static fun fill(dest: byte[]): Result<bool, CryptoError>",
+        "description": "Fills the destination only after obtaining all requested entropy; failure preserves it.",
         "line": 17,
         "page": "reference/api/crypto-secure-random.md"
       }
@@ -5462,6 +5747,91 @@
         "description": "Digests `data` and returns the 64-byte hash.",
         "line": 9,
         "page": "reference/api/crypto-sha512.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/csv/csv.dream",
+    "package": "system.csv",
+    "page": "reference/api/csv-csv.md",
+    "declarations": [
+      {
+        "signature": "public class CsvError : Error",
+        "description": "CSV syntax, encoding, size-limit, or underlying I/O failure with byte-oriented provenance.",
+        "line": 4,
+        "page": "reference/api/csv-csv.md"
+      },
+      {
+        "signature": "public record: long",
+        "description": "One-based logical record number associated with the error.",
+        "line": 6,
+        "page": "reference/api/csv-csv.md"
+      },
+      {
+        "signature": "public offset: long",
+        "description": "Zero-based absolute byte offset reached before the failure.",
+        "line": 8,
+        "page": "reference/api/csv-csv.md"
+      },
+      {
+        "signature": "public constructor(record: long, offset: long, message: string)",
+        "description": "Creates a CSV diagnostic; offsets count bytes rather than UTF-16 code units.",
+        "line": 11,
+        "page": "reference/api/csv-csv.md"
+      },
+      {
+        "signature": "public fun code(): string",
+        "description": "Stable CSV failure code.",
+        "line": 13,
+        "page": "reference/api/csv-csv.md"
+      },
+      {
+        "signature": "public fun message(): string",
+        "description": "Human-readable syntax, limit, adapter, or I/O failure.",
+        "line": 15,
+        "page": "reference/api/csv-csv.md"
+      },
+      {
+        "signature": "public class CsvReader",
+        "description": "Bounded-memory CSV reader over a borrowed byte stream, with strict quoting and UTF-8 validation.",
+        "line": 33,
+        "page": "reference/api/csv-csv.md"
+      },
+      {
+        "signature": "public constructor(source: Reader, delimiter: char = ',', max_record_bytes: int = 1048576)",
+        "description": "Borrows source; record limits count encoded bytes including embedded newlines.",
+        "line": 44,
+        "page": "reference/api/csv-csv.md"
+      },
+      {
+        "signature": "public fun read_record(): Result<Option<string[]>, CsvError>",
+        "description": "Returns a record or None at EOF; malformed input permanently fails this reader.",
+        "line": 61,
+        "page": "reference/api/csv-csv.md"
+      },
+      {
+        "signature": "public class CsvWriter",
+        "description": "CSV writer over a borrowed byte stream; records use CRLF and standard doubled-quote escaping.",
+        "line": 117,
+        "page": "reference/api/csv-csv.md"
+      },
+      {
+        "signature": "public constructor(destination: Writer, delimiter: char = ',', max_record_bytes: int = 1048576)",
+        "description": "Borrows destination; callers retain responsibility for closure and explicit flushing.",
+        "line": 122,
+        "page": "reference/api/csv-csv.md"
+      },
+      {
+        "signature": "public fun write_record(fields: string[]): Result<bool, CsvError>",
+        "description": "Writes exactly one record, retrying partial writes and reporting quoting/size/I/O failures.",
+        "line": 124,
+        "page": "reference/api/csv-csv.md"
+      },
+      {
+        "signature": "public fun flush(): Result<bool, CsvError>",
+        "description": "Flushes the borrowed destination and reports underlying failures.",
+        "line": 143,
+        "page": "reference/api/csv-csv.md"
       }
     ]
   },
@@ -7016,6 +7386,97 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/io/temporary.dream",
+    "package": "system.io",
+    "page": "reference/api/io-temporary.md",
+    "declarations": [
+      {
+        "signature": "public static class TempCapabilities",
+        "description": "Availability of secure OS temporary resources on this target.",
+        "line": 4,
+        "page": "reference/api/io-temporary.md"
+      },
+      {
+        "signature": "public static get supported(): bool",
+        "description": "True on native and Node; browser virtual filesystems do not provide OS-private resources.",
+        "line": 8,
+        "page": "reference/api/io-temporary.md"
+      },
+      {
+        "signature": "public class TempDirectory",
+        "description": "Owns a securely created private directory; destruction performs best-effort recursive cleanup.",
+        "line": 12,
+        "page": "reference/api/io-temporary.md"
+      },
+      {
+        "signature": "public get path(): string",
+        "description": "Host path of this resource; remains available after cleanup.",
+        "line": 17,
+        "page": "reference/api/io-temporary.md"
+      },
+      {
+        "signature": "public static fun create(): Result<TempDirectory, IoError>",
+        "description": "Creates a private directory under the OS temporary directory; unsupported browser hosts return an error.",
+        "line": 23,
+        "page": "reference/api/io-temporary.md"
+      },
+      {
+        "signature": "public static fun create_in(directory: string): Result<TempDirectory, IoError>",
+        "description": "Creates a private directory on the parent's filesystem for safe same-filesystem replacement.",
+        "line": 25,
+        "page": "reference/api/io-temporary.md"
+      },
+      {
+        "signature": "public fun close(): Result<bool, IoError>",
+        "description": "Removes the directory and its contents; repeated successful cleanup is a no-op.",
+        "line": 32,
+        "page": "reference/api/io-temporary.md"
+      },
+      {
+        "signature": "public class TempFile",
+        "description": "Owns a read/write file inside a private temporary directory and cleans both deterministically.",
+        "line": 42,
+        "page": "reference/api/io-temporary.md"
+      },
+      {
+        "signature": "public get file(): FileHandle",
+        "description": "Borrowed access to the owned temporary file.",
+        "line": 46,
+        "page": "reference/api/io-temporary.md"
+      },
+      {
+        "signature": "public get path(): string",
+        "description": "Path of the temporary file before persistence; its containing directory is private.",
+        "line": 50,
+        "page": "reference/api/io-temporary.md"
+      },
+      {
+        "signature": "public static fun create(): Result<TempFile, IoError>",
+        "description": "Creates a temporary read/write file under the OS temporary directory.",
+        "line": 52,
+        "page": "reference/api/io-temporary.md"
+      },
+      {
+        "signature": "public static fun create_in(directory: string): Result<TempFile, IoError>",
+        "description": "Creates a private file on the selected directory's filesystem.",
+        "line": 54,
+        "page": "reference/api/io-temporary.md"
+      },
+      {
+        "signature": "public fun persist_replace(destination: string): Result<bool, IoError>",
+        "description": "Flushes and closes the file, then atomically replaces a destination on the same filesystem. Failed replacement leaves the destination and temporary file intact; durability is not implied.",
+        "line": 64,
+        "page": "reference/api/io-temporary.md"
+      },
+      {
+        "signature": "public fun close(): Result<bool, IoError>",
+        "description": "Closes the file and removes its private directory, reporting either cleanup failure.",
+        "line": 70,
+        "page": "reference/api/io-temporary.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/json/derive/gen_collection.dream",
     "package": "system.json.derive",
     "page": "reference/api/json-derive-gen-collection.md",
@@ -8447,6 +8908,236 @@
         "description": "Whether browser forbidden-header restrictions do not apply; HTTP syntax is always validated.",
         "line": 137,
         "page": "reference/api/net-http-types-2.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/net/tcp.dream",
+    "package": "system.net",
+    "page": "reference/api/net-tcp.md",
+    "declarations": [
+      {
+        "signature": "public static class SocketCapabilities",
+        "description": "Availability of raw sockets independently of the host's HTTP support.",
+        "line": 4,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public static get supported(): bool",
+        "description": "True on native and Node; browsers return EUNSUPPORTED for raw socket requests.",
+        "line": 8,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public class TcpStream : AsyncReader, AsyncWriter",
+        "description": "An owned TCP byte stream supporting one simultaneous read and one simultaneous write.",
+        "line": 13,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public static async fun connect(host: string, port: int, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<TcpStream, IoError>",
+        "description": "Connects with a deadline in milliseconds; zero disables the deadline.",
+        "line": 17,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public get local_host(): string",
+        "description": "Numeric local interface address selected for this connection.",
+        "line": 21,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public get local_port(): int",
+        "description": "Actual bound local port.",
+        "line": 23,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public get peer_host(): string",
+        "description": "Numeric remote address of the peer.",
+        "line": 25,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public get peer_port(): int",
+        "description": "Remote TCP port of the peer.",
+        "line": 27,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public async unique fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>",
+        "description": "Reads up to 16 MiB; positive-size empty success denotes peer EOF.",
+        "line": 29,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public fun read_with_timeout(max_bytes: int, timeout_ms: int, token: Option<CancellationToken> = Option.None): Future<Result<byte[], IoError>>",
+        "description": "Reads with a per-operation deadline; a concurrent read returns EBUSY.",
+        "line": 33,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public async unique fun write_async(bytes: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError>",
+        "description": "Writes a partial byte count; cancellation preserves completed side effects.",
+        "line": 38,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public async fun write_all_async(bytes: byte[], token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
+        "description": "Retries partial writes until every byte has been accepted; does not roll back failures.",
+        "line": 46,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError>",
+        "description": "TCP writes are unbuffered by this wrapper; validates openness and cancellation.",
+        "line": 59,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public fun shutdown_write(): Result<bool, IoError>",
+        "description": "Sends FIN after accepted writes while retaining the read side; pending writes return EBUSY.",
+        "line": 65,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public fun set_nodelay(enabled: bool): Result<bool, IoError>",
+        "description": "Enables or disables TCP_NODELAY; pending native reads may return EBUSY.",
+        "line": 67,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public fun close(): Result<bool, IoError>",
+        "description": "Closes the owned socket and wakes pending operations; repeated closure succeeds.",
+        "line": 69,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public class TcpListener",
+        "description": "An owned TCP listener; accepted connections retain independent ownership.",
+        "line": 73,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public static async fun bind(host: string, port: int, token: Option<CancellationToken> = Option.None): Result<TcpListener, IoError>",
+        "description": "Binds a listener; port zero selects an ephemeral port reported by local_port.",
+        "line": 77,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public get local_host(): string",
+        "description": "Numeric interface address selected by the host.",
+        "line": 79,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public get local_port(): int",
+        "description": "Actual bound port, including an automatically selected ephemeral port.",
+        "line": 81,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public async fun accept(timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<TcpStream, IoError>",
+        "description": "Accepts a connection with optional deadline and inherited cancellation.",
+        "line": 83,
+        "page": "reference/api/net-tcp.md"
+      },
+      {
+        "signature": "public fun close(): Result<bool, IoError>",
+        "description": "Closes this listener and cancels pending accepts, preserving accepted streams.",
+        "line": 94,
+        "page": "reference/api/net-tcp.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/net/udp.dream",
+    "package": "system.net",
+    "page": "reference/api/net-udp.md",
+    "declarations": [
+      {
+        "signature": "public class UdpDatagram",
+        "description": "One UDP datagram; empty data is a valid message and never denotes EOF.",
+        "line": 4,
+        "page": "reference/api/net-udp.md"
+      },
+      {
+        "signature": "public data: byte[]",
+        "description": "Received bytes, limited to the requested receive size.",
+        "line": 6,
+        "page": "reference/api/net-udp.md"
+      },
+      {
+        "signature": "public host: string",
+        "description": "Numeric address of the sender.",
+        "line": 8,
+        "page": "reference/api/net-udp.md"
+      },
+      {
+        "signature": "public port: int",
+        "description": "UDP port of the sender.",
+        "line": 10,
+        "page": "reference/api/net-udp.md"
+      },
+      {
+        "signature": "public truncated: bool",
+        "description": "True when the message contained more bytes than the receive buffer could retain.",
+        "line": 12,
+        "page": "reference/api/net-udp.md"
+      },
+      {
+        "signature": "public class UdpSocket",
+        "description": "An owned UDP socket with explicit message boundaries and bounded receive buffers.",
+        "line": 17,
+        "page": "reference/api/net-udp.md"
+      },
+      {
+        "signature": "public static async fun bind(host: string, port: int, token: Option<CancellationToken> = Option.None): Result<UdpSocket, IoError>",
+        "description": "Binds an endpoint; port zero selects an ephemeral port.",
+        "line": 21,
+        "page": "reference/api/net-udp.md"
+      },
+      {
+        "signature": "public get local_host(): string",
+        "description": "Numeric bound interface address.",
+        "line": 23,
+        "page": "reference/api/net-udp.md"
+      },
+      {
+        "signature": "public get local_port(): int",
+        "description": "Actual bound UDP port.",
+        "line": 25,
+        "page": "reference/api/net-udp.md"
+      },
+      {
+        "signature": "public async fun send(host: string, port: int, data: byte[], timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<int, IoError>",
+        "description": "Sends one datagram of at most 65507 bytes with optional deadline and cancellation.",
+        "line": 27,
+        "page": "reference/api/net-udp.md"
+      },
+      {
+        "signature": "public async fun receive(max_bytes: int = 65535, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<UdpDatagram, IoError>",
+        "description": "Receives one message, reporting truncation explicitly; a concurrent receive returns EBUSY.",
+        "line": 35,
+        "page": "reference/api/net-udp.md"
+      },
+      {
+        "signature": "public fun set_broadcast(enabled: bool): Result<bool, IoError>",
+        "description": "Enables or disables sending to broadcast endpoints.",
+        "line": 43,
+        "page": "reference/api/net-udp.md"
+      },
+      {
+        "signature": "public fun set_ttl(ttl: int): Result<bool, IoError>",
+        "description": "Sets outgoing IP time-to-live to a value between 1 and 255.",
+        "line": 45,
+        "page": "reference/api/net-udp.md"
+      },
+      {
+        "signature": "public fun close(): Result<bool, IoError>",
+        "description": "Closes the owned socket and wakes pending receives; repeated closure succeeds.",
+        "line": 47,
+        "page": "reference/api/net-udp.md"
       }
     ]
   },
@@ -10347,40 +11038,107 @@
         "page": "reference/api/testing-assert.md"
       },
       {
+        "signature": "public static async fun eq_async<T>(actual: Future<T>, expected: T): void",
+        "description": "Awaits actual and compares its value using the normal assertion diagnostics.",
+        "line": 19,
+        "page": "reference/api/testing-assert.md"
+      },
+      {
+        "signature": "public static async fun ok_async<T, E>(actual: Future<Result<T, E>>): T",
+        "description": "Awaits a fallible operation and returns its success value, reporting the error on failure.",
+        "line": 23,
+        "page": "reference/api/testing-assert.md"
+      },
+      {
         "signature": "public static fun eq<T>(actual: T, expected: T): void",
         "description": "Asserts that `actual == expected`.",
-        "line": 20,
+        "line": 32,
         "page": "reference/api/testing-assert.md"
       },
       {
         "signature": "public static fun ne<T>(actual: T, expected: T): void",
         "description": "Asserts that `actual != expected`.",
-        "line": 30,
+        "line": 42,
         "page": "reference/api/testing-assert.md"
       },
       {
         "signature": "public static fun is_true(value: bool): void",
         "description": "Asserts that `value` is `true`.",
-        "line": 40,
+        "line": 52,
         "page": "reference/api/testing-assert.md"
       },
       {
         "signature": "public static fun is_false(value: bool): void",
         "description": "Asserts that `value` is `false`.",
-        "line": 50,
+        "line": 62,
         "page": "reference/api/testing-assert.md"
       },
       {
         "signature": "public static fun approx(actual: double, expected: double, epsilon: double): void",
         "description": "Asserts that two doubles are within `epsilon` of each other.",
-        "line": 60,
+        "line": 72,
         "page": "reference/api/testing-assert.md"
       },
       {
         "signature": "public static fun eq_str(actual: string, expected: string): void",
         "description": "Asserts that two strings have identical contents.",
-        "line": 74,
+        "line": 86,
         "page": "reference/api/testing-assert.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/testing/fixture.dream",
+    "package": "system.testing",
+    "page": "reference/api/testing-fixture.md",
+    "declarations": [
+      {
+        "signature": "public class TestFixture<T, E>",
+        "description": "Owns one fixture and runs its cleanup on explicit close, scope exit, or async-frame cancellation.",
+        "line": 5,
+        "page": "reference/api/testing-fixture.md"
+      },
+      {
+        "signature": "public constructor(value: T, cleanup: fun(T): Result<bool, E>)",
+        "description": "Registers deterministic cleanup before the fixture is exposed to test code.",
+        "line": 10,
+        "page": "reference/api/testing-fixture.md"
+      },
+      {
+        "signature": "public get resource(): T",
+        "description": "Borrows the fixture value while this owner remains alive.",
+        "line": 12,
+        "page": "reference/api/testing-fixture.md"
+      },
+      {
+        "signature": "public fun close(): Result<bool, E>",
+        "description": "Executes cleanup once and returns the same outcome to repeated callers.",
+        "line": 14,
+        "page": "reference/api/testing-fixture.md"
+      },
+      {
+        "signature": "public static class Fixtures",
+        "description": "Helpers for async test bodies that need deterministic temporary-resource ownership.",
+        "line": 26,
+        "page": "reference/api/testing-fixture.md"
+      },
+      {
+        "signature": "public static fun temporary_file(): Result<TempFile, IoError>",
+        "description": "Creates an owned temporary file whose destructor cleans up after a failed or cancelled body.",
+        "line": 28,
+        "page": "reference/api/testing-fixture.md"
+      },
+      {
+        "signature": "public static fun temporary_directory(): Result<TempDirectory, IoError>",
+        "description": "Creates an owned private directory for a test's temporary resources.",
+        "line": 30,
+        "page": "reference/api/testing-fixture.md"
+      },
+      {
+        "signature": "public static async fun run<T, E>(fixture: TestFixture<T, E>, body: fun(T): Future<Result<bool, E>>): Result<bool, E>",
+        "description": "Runs an async body and cleanup, preserving a body error and otherwise reporting cleanup errors.",
+        "line": 32,
+        "page": "reference/api/testing-fixture.md"
       }
     ]
   },
@@ -11023,6 +11781,97 @@
         "description": "This zone's UTC offset in minutes at `epoch_millis` (accounting for DST rules in effect at that instant). Falls back to `0` if the zone is no longer recognized by the host.",
         "line": 56,
         "page": "reference/api/timezone.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/uuid/uuid.dream",
+    "package": "system.uuid",
+    "page": "reference/api/uuid-uuid.md",
+    "declarations": [
+      {
+        "signature": "public class UuidError : Error",
+        "description": "Invalid UUID text or an unavailable secure entropy source.",
+        "line": 4,
+        "page": "reference/api/uuid-uuid.md"
+      },
+      {
+        "signature": "public constructor(message: string)",
+        "description": "Creates a UUID error without including secret input.",
+        "line": 7,
+        "page": "reference/api/uuid-uuid.md"
+      },
+      {
+        "signature": "public fun code(): string",
+        "description": "Stable UUID error code.",
+        "line": 9,
+        "page": "reference/api/uuid-uuid.md"
+      },
+      {
+        "signature": "public fun message(): string",
+        "description": "Human-readable validation or entropy failure.",
+        "line": 11,
+        "page": "reference/api/uuid-uuid.md"
+      },
+      {
+        "signature": "public struct Uuid : Equatable<Uuid>, Comparable<Uuid>",
+        "description": "A 16-byte UUID value; assignment copies bits without allocation or reference counting.",
+        "line": 15,
+        "page": "reference/api/uuid-uuid.md"
+      },
+      {
+        "signature": "public static fun v4(): Result<Uuid, UuidError>",
+        "description": "Generates a version-4 UUID from the secure random source, preserving entropy failures.",
+        "line": 20,
+        "page": "reference/api/uuid-uuid.md"
+      },
+      {
+        "signature": "public static fun from_bytes(bytes: byte[]): Result<Uuid, UuidError>",
+        "description": "Copies exactly 16 bytes in network order into a UUID value.",
+        "line": 29,
+        "page": "reference/api/uuid-uuid.md"
+      },
+      {
+        "signature": "public fun to_bytes(): byte[]",
+        "description": "Returns an independent 16-byte array in network order.",
+        "line": 37,
+        "page": "reference/api/uuid-uuid.md"
+      },
+      {
+        "signature": "public static fun parse(text: string): Result<Uuid, UuidError>",
+        "description": "Accepts exactly 36 ASCII hexadecimal characters with canonical hyphen positions.",
+        "line": 43,
+        "page": "reference/api/uuid-uuid.md"
+      },
+      {
+        "signature": "public static fun is_valid(text: string): bool",
+        "description": "Tests canonical UUID syntax without generating entropy.",
+        "line": 58,
+        "page": "reference/api/uuid-uuid.md"
+      },
+      {
+        "signature": "public fun equals(borrow other: Uuid): bool",
+        "description": "Compares all 128 bits, independent of storage identity.",
+        "line": 60,
+        "page": "reference/api/uuid-uuid.md"
+      },
+      {
+        "signature": "public fun compare(other: Uuid): int",
+        "description": "Orders UUIDs lexicographically by their unsigned network-order bytes.",
+        "line": 62,
+        "page": "reference/api/uuid-uuid.md"
+      },
+      {
+        "signature": "public override fun hash_code(): int",
+        "description": "Folds all bits into a stable hash for maps and sets without formatting text.",
+        "line": 70,
+        "page": "reference/api/uuid-uuid.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns canonical lowercase text; formatting is the only string allocation.",
+        "line": 72,
+        "page": "reference/api/uuid-uuid.md"
       }
     ]
   }

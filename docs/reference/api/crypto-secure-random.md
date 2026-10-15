@@ -1,12 +1,10 @@
-# SecureRandom
+# Secure Random
 
 **Import:** `import system.crypto;`
 
-Read the [usage guide](../stdlib/crypto.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+## `SecureRandom`
 
-## `static class SecureRandom`
-
-Cryptographically secure random bytes from the OS CSPRNG.
+Cryptographically secure bytes with explicit entropy-source failures.
 
 ```dream
 public static class SecureRandom
@@ -14,16 +12,16 @@ public static class SecureRandom
 
 ## `bytes`
 
-Allocates `n` random bytes (`n <= 0` yields an empty array).
+Returns exactly n secure bytes, or EINVAL/EENTROPY without exposing partial output.
 
 ```dream
-public static fun bytes(n: int): byte[]
+public static fun bytes(n: int): Result<byte[], CryptoError>
 ```
 
 ## `fill`
 
-Fills `dest` in place with random bytes (length unchanged).
+Fills the destination only after obtaining all requested entropy; failure preserves it.
 
 ```dream
-public static fun fill(dest: byte[]): void
+public static fun fill(dest: byte[]): Result<bool, CryptoError>
 ```

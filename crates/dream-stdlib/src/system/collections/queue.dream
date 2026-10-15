@@ -22,9 +22,21 @@ public class Queue<T> : Collection<T> {
         return this.count;
     }
 
-    fun grow(): void {
+    // Current element capacity of the ring buffer.
+    public get capacity(): int { return this.items.length; }
+
+    // Reserves room for additional elements while preserving FIFO order and length.
+    public fun reserve(additional: int): Result<bool, CapacityError> {
+        let need = (long)this.count + (long)additional;
+        if additional < 0 || need > 2147483647L { return Result.Err(CapacityError()); }
+        if need > (long)this.items.length { this.reallocate((int)need); }
+        return Result.Ok(true);
+    }
+
+    fun grow(): void { this.reallocate(grow_capacity(this.items.length, this.items.length + 1)); }
+
+    fun reallocate(new_cap: int): void {
         let old_cap = this.items.length;
-        let new_cap = grow_capacity(old_cap, old_cap + 1);
         let next = Buffer.alloc<T>(new_cap);
         // Linearize the ring into `[0, count)` with at most two contiguous Span copies (handles
         // wrap-around without an element loop).

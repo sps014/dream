@@ -132,7 +132,7 @@ try {
     if (-not (Test-Path -LiteralPath $dreamBin) -or -not (Test-Path -LiteralPath $dreamerBin)) {
         throw "archive did not contain dream/dreamer binaries"
     }
-    foreach ($capability in @("core", "unicode", "crypto", "process", "timezone", "net", "cli")) {
+    foreach ($capability in @("core", "unicode", "crypto", "process", "timezone", "net", "cli", "data", "io")) {
         $libraries = @(
             (Join-Path $BinDir "libdream_host_$capability.so"),
             (Join-Path $BinDir "libdream_host_$capability.dylib"),

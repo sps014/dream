@@ -1,7 +1,9 @@
 import { makeHttpHost } from "./http.js";
+import { makeSocketHost } from "./sockets.js";
 export function makeNetHost() {
   return {
     ...makeHttpHost(),
+    ...makeSocketHost(),
     netUrlParse: (input, base) => {
       try {
         let url = base === "" ? new URL(input) : new URL(input, base);

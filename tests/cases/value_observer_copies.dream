@@ -33,7 +33,7 @@ fun exercise(): void {
     let list = List<View>();
     list.push_all(entries);
     let alias = list.as_read_only_span();
-    list.reserve(32);
+    list.reserve(32).unwrap();
     let other = Note(7);
     list[0] = View(other);
     System.println(list[0].note.unwrap().n);

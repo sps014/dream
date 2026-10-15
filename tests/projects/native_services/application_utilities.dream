@@ -1,0 +1,104 @@
+import system;
+import system.io;
+import system.csv;
+import system.uuid;
+import system.crypto;
+import system.config;
+import system.cli;
+import system.testing;
+
+class FixtureCounter {
+    public count: int;
+    public constructor() { this.count = 0; }
+}
+
+@test
+async fun application_utilities(): void {
+    Assert.eq(sizeof(Uuid), 16);
+    let id = Uuid.v4().unwrap().to_string();
+    Assert.eq(id.length, 36);
+    Assert.is_true(id.char_at(14) == '4');
+    Assert.is_true("89ab".index_of(id.char_at(19)).is_some());
+    Assert.eq_str(Uuid.parse(id.to_upper()).unwrap().to_string(), id);
+    Assert.is_false(Uuid.is_valid("wrong"));
+    let original = Uuid.parse(id).unwrap();
+    let copied = original;
+    Assert.is_true(original == copied);
+    Assert.eq(original.hash_code(), copied.hash_code());
+    let ids = Map<Uuid, int>();
+    ids.set(original, 42);
+    Assert.eq(ids.get(Uuid.parse(id).unwrap()).unwrap(), 42);
+    Assert.is_true(Uuid.from_bytes([(byte)1]).is_err());
+    let raw = original.to_bytes();
+    raw[0] = (byte)((int)raw[0] ^ 1);
+    Assert.is_true(original != Uuid.from_bytes(raw).unwrap());
+    Assert.is_true(SecureRandom.bytes(0 - 1).is_err());
+
+    let memory = MemoryStream();
+    let csv = CsvWriter(memory, delimiter: ';');
+    csv.write_record(["a;b", "line\r\nnext", "say \"hi\"", "こんにちは", ""]).unwrap();
+    csv.flush().unwrap();
+    memory.seek(0L).unwrap();
+    let reader = CsvReader(memory, delimiter: ';');
+    let fields = reader.read_record().unwrap().unwrap();
+    Assert.eq(fields.length, 5);
+    Assert.eq_str(fields[0], "a;b");
+    Assert.eq_str(fields[1], "line\r\nnext");
+    Assert.eq_str(fields[2], "say \"hi\"");
+    Assert.eq_str(fields[3], "こんにちは");
+    Assert.eq_str(fields[4], "");
+    Assert.is_true(reader.read_record().unwrap().is_none());
+    let malformed = CsvReader(MemoryStream(Encoding.utf8_encode("\"unterminated")));
+    Assert.is_true(malformed.read_record().is_err());
+    Assert.is_true(malformed.read_record().is_err());
+    let limited = CsvReader(MemoryStream(Encoding.utf8_encode("abcd")), max_record_bytes: 3);
+    Assert.is_true(limited.read_record().is_err());
+    let final_line = CsvReader(MemoryStream(Encoding.utf8_encode("a,b")));
+    Assert.eq_str(final_line.read_record().unwrap().unwrap()[1], "b");
+
+    let temporary = TempFile.create_in(".").unwrap();
+    let temporary_path = temporary.path;
+    temporary.file.write_all(Encoding.utf8_encode("{\"port\":9000,\"enabled\":true}")).unwrap();
+    temporary.file.flush().unwrap();
+    let config = ConfigBuilder().default_value("port", "8080").json_file(temporary.path).require("enabled").build().unwrap();
+    Assert.eq(config.get_int("port").unwrap(), 9000);
+    Assert.is_true(config.get_bool("enabled").unwrap());
+    Assert.eq_str(config.source("port").unwrap(), temporary.path);
+    System.set_env("DREAM_TEST_CONFIG_PORT", "9100").unwrap();
+    let command = Command("test").int_option("port", default_value: 1111);
+    let parsed = command.parse(["--port", "9200"]).unwrap();
+    let overrides = ConfigBuilder().default_value("port", "8080").cli(parsed).environment("DREAM_TEST_CONFIG_").json_file(temporary.path).build().unwrap();
+    Assert.eq(overrides.get_int("port").unwrap(), 9200);
+    let no_args: string[] = [];
+    let omitted = command.parse(no_args).unwrap();
+    Assert.eq(ConfigBuilder().default_value("port", "8080").cli(omitted).environment("DREAM_TEST_CONFIG_").build().unwrap().get_int("port").unwrap(), 9100);
+    System.unset_env("DREAM_TEST_CONFIG_PORT").unwrap();
+    Assert.is_true(ConfigBuilder().default_value("port", "bad").build().unwrap().get_int("port").is_err());
+    Assert.is_true(ConfigBuilder().default_value("port", "bad").validate("port", (value) => value == "good").build().is_err());
+    Assert.is_true(temporary.persist_replace("missing-phase7-parent/file").is_err());
+    Assert.is_true(File.exists(temporary_path));
+    temporary.close().unwrap();
+    temporary.close().unwrap();
+    Assert.is_false(File.exists(temporary_path));
+
+    let directory = TempDirectory.create_in(".").unwrap();
+    let destination = directory.path + "/settings.json";
+    let replacement = TempFile.create_in(directory.path).unwrap();
+    replacement.file.write_all(Encoding.utf8_encode("new contents")).unwrap();
+    replacement.persist_replace(destination).unwrap();
+    let existing = FileHandle.open(destination, "r").unwrap();
+    Assert.eq_str(Encoding.utf8_decode(existing.read(100).unwrap()), "new contents");
+    existing.close().unwrap();
+    directory.close().unwrap();
+
+    let counter = FixtureCounter();
+    let fixture = TestFixture<FixtureCounter, string>(counter, (resource) => { resource.count = resource.count + 1; return Result.Ok(true); });
+    let failed = Fixtures.run<FixtureCounter, string>(fixture, async (resource) => Result.Err("failure")).await;
+    Assert.is_true(failed.is_err());
+    fixture.close().unwrap();
+    Assert.eq(counter.count, 1);
+    await_value_for_assertion().await;
+}
+
+async fun utility_value(): int { return 42; }
+async fun await_value_for_assertion(): void { Assert.eq_async(utility_value(), 42).await; }

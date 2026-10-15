@@ -2,9 +2,7 @@
 
 **Import:** `import system.collections;`
 
-Read the [usage guide](../stdlib/collections/set.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
-
-## `class Set<T> : Collection<T>`
+## `Set`
 
 A generic open-addressing hash set.
 
@@ -18,6 +16,14 @@ Allocates an empty set with an initial capacity (defaults to 8, rounded up to po
 
 ```dream
 public constructor(capacity: int = 8)
+```
+
+## `reserve`
+
+Reserves additional live entries, accounting for load factor and reclaiming tombstones.
+
+```dream
+public fun reserve(additional: int): Result<bool, CapacityError>
 ```
 
 ## `length`
@@ -70,7 +76,7 @@ public fun add_all(borrow items: T[]): void
 
 ## `from_array`
 
-Builds a set containing exactly the (deduplicated) elements of `items`. The `{e1, e2, ...}` set-literal syntax (e.g.
+Builds a set containing exactly the (deduplicated) elements of `items`. The `{e1, e2, ...}` set-literal syntax (e.g. `let s: Set<int> = {1, 2, 3};`) desugars to this.
 
 ```dream
 public static fun from_array(borrow items: T[]): Set<T>
@@ -85,8 +91,6 @@ public fun remove(borrow value: T): bool
 ```
 
 ## `remove`
-
-Removes `value` if present and returns whether an entry was removed. This overload handles unmanaged keys.
 
 ```dream
 public fun remove(borrow value: T): bool where T : unmanaged

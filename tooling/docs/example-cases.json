@@ -166,5 +166,41 @@
     "page": "docs/reference/language/task-pool.md",
     "block": 0,
     "stdout": "9\n"
+  },
+  {
+    "name": "uuid-values",
+    "page": "docs/reference/stdlib/application-utilities.md",
+    "block": 0,
+    "stdout": "16\ntrue\n550e8400-e29b-41d4-a716-446655440000\n"
+  },
+  {
+    "name": "streaming-csv",
+    "page": "docs/reference/stdlib/application-utilities.md",
+    "block": 1,
+    "stdout": "Ada;Lovelace\nline\nnext\n"
+  },
+  {
+    "name": "temporary-file",
+    "page": "docs/reference/stdlib/application-utilities.md",
+    "block": 2,
+    "stdout": "hello\n"
+  },
+  {
+    "name": "typed-config",
+    "page": "docs/reference/stdlib/application-utilities.md",
+    "block": 3,
+    "stdout": "9000\nCLI\n"
+  },
+  {
+    "name": "tcp-half-close",
+    "page": "docs/reference/stdlib/raw-sockets-compression.md",
+    "block": 0,
+    "stdout": "hello\n"
+  },
+  {
+    "name": "streaming-compression",
+    "page": "docs/reference/stdlib/raw-sockets-compression.md",
+    "block": 1,
+    "stdout": "hello compression\n"
   }
 ]

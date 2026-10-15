@@ -1,0 +1,130 @@
+module system.config;
+
+// Invalid or missing configuration, including the originating source and key.
+public class ConfigError : Error {
+    // Logical setting name associated with the failure.
+    public key: string;
+    // The default, JSON filename, environment variable, or CLI argument that supplied it.
+    public source: string;
+    detail: string;
+    // Creates a diagnostic with setting provenance.
+    public constructor(key: string, source: string, message: string) { this.key = key; this.source = source; this.detail = message; }
+    // Machine-readable configuration failure code.
+    public fun code(): string { return "ECONFIG"; }
+    // Describes the invalid setting without disclosing its value.
+    public fun message(): string { return this.source + ": " + this.key + ": " + this.detail; }
+}
+
+// Validated snapshot with typed lookups and per-setting provenance.
+public class Config {
+    internal values: Map<string, string>;
+    internal sources: Map<string, string>;
+    internal constructor() { this.values = Map<string, string>(); this.sources = Map<string, string>(); }
+    internal fun put(key: string, value: string, source: string): void { this.values.set(key, value); this.sources.set(key, source); }
+    // Returns the source that supplied the setting, or None if absent.
+    public fun source(key: string): Option<string> { return this.sources.get(key); }
+    // Returns a setting or a source-aware missing-setting error.
+    public fun get_string(key: string): Result<string, ConfigError> {
+        let value = this.values.get(key);
+        if value.is_none() { return Result.Err(ConfigError(key, "configuration", "required setting is missing")); }
+        return Result.Ok(value.unwrap());
+    }
+    // Parses a signed 32-bit decimal integer, rejecting invalid or overflowing values.
+    public fun get_int(key: string): Result<int, ConfigError> {
+        let value = int.parse(this.get_string(key)?);
+        if value.is_err() { return Result.Err(ConfigError(key, this.sources.get(key).unwrap_or("configuration"), "expected an integer")); }
+        return Result.Ok(value.unwrap());
+    }
+    // Accepts the exact boolean spellings true and false.
+    public fun get_bool(key: string): Result<bool, ConfigError> {
+        let value = this.get_string(key)?;
+        if value == "true" { return Result.Ok(true); }
+        if value == "false" { return Result.Ok(false); }
+        return Result.Err(ConfigError(key, this.sources.get(key).unwrap_or("configuration"), "expected true or false"));
+    }
+}
+
+// Merges defaults, JSON files, environment variables, and explicit CLI values in that order.
+@allow_cycle
+public class ConfigBuilder {
+    defaults: Map<string, string>;
+    files: List<string>;
+    prefix: Option<string>;
+    arguments: Option<ParsedArguments>;
+    required: List<string>;
+    validators: Map<string, fun(string): bool>;
+    // Creates an empty builder; source precedence is independent of method call order.
+    public constructor() { this.defaults = Map<string, string>(); this.files = List<string>(); this.prefix = Option.None; this.arguments = Option.None; this.required = List<string>(); this.validators = Map<string, fun(string): bool>(); }
+    // Registers a known setting and its lowest-precedence default.
+    public fun default_value(key: string, value: string): ConfigBuilder { this.defaults.set(key, value); return this; }
+    // Adds a required known setting with no default.
+    public fun require(key: string): ConfigBuilder { this.required.push(key); return this; }
+    // Adds a JSON object file; later files override earlier files.
+    public fun json_file(path: string): ConfigBuilder { this.files.push(path); return this; }
+    // Reads known settings from prefix plus the uppercase key, with hyphens replaced by underscores.
+    public fun environment(prefix: string = ""): ConfigBuilder { this.prefix = Option.Some(prefix); return this; }
+    // Uses explicitly supplied command-line arguments, excluding parser defaults.
+    public fun cli(arguments: ParsedArguments): ConfigBuilder { this.arguments = Option.Some(arguments); return this; }
+    // Adds a value predicate; false returns a provenance-aware validation error.
+    public fun validate(key: string, predicate: fun(string): bool): ConfigBuilder { this.validators.set(key, predicate); return this; }
+    // Loads and validates a snapshot; failures never change a previously built configuration.
+    public fun build(): Result<Config, ConfigError> {
+        let config = Config();
+        let keys = Set<string>();
+        for (let entry in this.defaults) { config.put(entry.key, entry.value, "default"); keys.add(entry.key); }
+        for (let key in this.required) { keys.add(key); }
+        for (let entry in this.validators) { keys.add(entry.key); }
+        for (let path in this.files) {
+            let handle = FileHandle.open(path, "r");
+            if handle.is_err() { return Result.Err(ConfigError("", path, handle.unwrap_err().message())); }
+            let file = handle.unwrap();
+            let bytes = List<byte>();
+            let failed = false;
+            while true {
+                let chunk = file.read(8192);
+                if chunk.is_err() { failed = true; break; }
+                if chunk.unwrap().length == 0 { break; }
+                for (let value in chunk.unwrap()) { bytes.push(value); }
+                if bytes.length > 1048576 { failed = true; break; }
+            }
+            let closed = file.close();
+            if failed || closed.is_err() { return Result.Err(ConfigError("", path, "could not read configuration within 1 MiB limit")); }
+            let decoder = Utf8Decoder(InvalidEncoding.Strict);
+            let text = decoder.decode_chunk(bytes.take_array());
+            let trailing = decoder.finish();
+            if text.is_err() || trailing.is_err() { return Result.Err(ConfigError("", path, "invalid UTF-8")); }
+            let parsed = Json.deserialize<JsonValue>(text.unwrap() + trailing.unwrap());
+            if parsed.is_err() { return Result.Err(ConfigError("", path, "invalid JSON")); }
+            let document = parsed.unwrap();
+            if !document.is_object() { return Result.Err(ConfigError("", path, "expected a JSON object")); }
+            for (let key in document.keys()) {
+                let value = document.get(key).unwrap();
+                let text = value.as_string();
+                if text.is_some() { config.put(key, text.unwrap(), path); }
+                else if value.kind() == JsonKind.Number || value.kind() == JsonKind.Bool { config.put(key, Json.serialize(value), path); }
+                else { return Result.Err(ConfigError(key, path, "expected a scalar setting")); }
+                keys.add(key);
+            }
+        }
+        if this.arguments.is_some() { for (let key in this.arguments.unwrap().config_keys()) { keys.add(key); } }
+        for (let key in keys) {
+            if this.prefix.is_some() {
+                let variable = this.prefix.unwrap() + key.to_upper().replace("-", "_");
+                let value = System.env(variable);
+                if value.is_some() { config.put(key, value.unwrap(), variable); }
+            }
+            if this.arguments.is_some() && this.arguments.unwrap().is_present(key) {
+                let value = this.arguments.unwrap().config_value(key);
+                if value.is_err() { return Result.Err(ConfigError(key, "CLI", value.unwrap_err().message())); }
+                config.put(key, value.unwrap(), "CLI");
+            }
+        }
+        for (let key in this.required) { config.get_string(key)?; }
+        for (let entry in this.validators) {
+            let value = config.get_string(entry.key)?;
+            let predicate = entry.value;
+            if !predicate(value) { return Result.Err(ConfigError(entry.key, config.source(entry.key).unwrap_or("configuration"), "validation failed")); }
+        }
+        return Result.Ok(config);
+    }
+}

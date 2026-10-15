@@ -2,9 +2,11 @@
 
 **Import:** `import system.collections;`
 
-Read the [usage guide](../stdlib/collections/map.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+## `values`
 
-[All sections](collections-map.md)
+```dream
+public fun values(): V[]
+```
 
 ## `iterator`
 

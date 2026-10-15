@@ -394,6 +394,20 @@ export function makeFsHost() {
     fileCopy: (from, to) => {
       try { fsBackend().copy(from, to); return true; } catch (_) { return false; }
     },
+    tempSupported: () => !!getNodeFs(),
+    tempDirectoryCreate: directory => {
+      const fs = getNodeFs();
+      if (!fs) return "";
+      try {
+        const base = directory || process.env.TMPDIR || process.env.TEMP || process.env.TMP || "/tmp";
+        return fs.mkdtempSync(base.replace(/[\\/]$/, "") + "/.dream-");
+      } catch (_) { return ""; }
+    },
+    tempReplace: (from, to) => {
+      const fs = getNodeFs();
+      if (!fs) return false;
+      try { fs.renameSync(from, to); return true; } catch (_) { return false; }
+    },
     fileRename: (from, to) => {
       try { fsBackend().rename(from, to); return true; } catch (_) { return false; }
     },

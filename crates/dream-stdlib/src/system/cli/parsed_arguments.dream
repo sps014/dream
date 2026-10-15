@@ -67,6 +67,16 @@ public class ParsedArguments {
         if values.length == 0 { return Result.Err(CliError("ENOENT", "argument has no value: " + name)); }
         return Result.Ok(values[values.length - 1] == "true");
     }
+    // Copies declared names for typed configuration merging; is_present distinguishes explicit values.
+    public fun config_keys(): string[] { return this.field("values").keys().take_array(); }
+    // Returns the final explicit scalar value for configuration merging, including typed options.
+    public fun config_value(name: string): Result<string, CliError> {
+        let entry = this.field("values").get(name);
+        if entry.is_none() { return Result.Err(CliError("ENOENT", "unknown argument: " + name)); }
+        let values = entry.unwrap().at("values");
+        if values.length == 0 { return Result.Err(CliError("ENOENT", "argument has no value: " + name)); }
+        return Result.Ok(values.at(values.length - 1).unwrap().as_string().unwrap_or(""));
+    }
     fun field(name: string): JsonValue { return this.wire.get(name).unwrap_or(JsonValue.none()); }
     fun kind(): string { return this.field("kind").as_string().unwrap_or(""); }
     fun values(name: string, expected: string): Result<string[], CliError> {

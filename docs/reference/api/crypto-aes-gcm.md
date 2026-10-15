@@ -1,10 +1,8 @@
-# AesGcm
+# Aes Gcm
 
 **Import:** `import system.crypto;`
 
-Read the [usage guide](../stdlib/crypto.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
-
-## `static class AesGcm`
+## `AesGcm`
 
 AES-256-GCM authenticated encryption (confidentiality + integrity). Host-backed via the `aes-gcm` crate natively and Web Crypto / `node:crypto` in the browser/Node hosts.
 
@@ -33,7 +31,7 @@ public static get tag_size(): int
 Generates a fresh random 12-byte nonce. Never reuse a nonce with the same key.
 
 ```dream
-public static fun generate_nonce(): byte[]
+public static fun generate_nonce(): Result<byte[], CryptoError>
 ```
 
 ## `encrypt`

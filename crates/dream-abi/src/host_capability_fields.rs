@@ -18,7 +18,6 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "cryptoSha512",
             "cryptoHmacSha256",
             "cryptoSecureRandomBytes",
-            "cryptoSecureRandomFill",
         ],
         HostCapability::Process => &[
             "processStart",
@@ -31,6 +30,14 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
         ],
         HostCapability::Net => &[
             "netUrlParse",
+            "netSocketStart",
+            "netSocketWait",
+            "netSocketResult",
+            "netSocketCancel",
+            "netSocketRelease",
+            "netSocketClaim",
+            "netSocketClose",
+            "netSocketControl",
             "netCapabilities",
             "netClientCreate",
             "netClientClose",
@@ -43,6 +50,8 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "netOperationClaim",
         ],
         HostCapability::Cli => &["cliParse"],
+        HostCapability::Data => &["dataCodec"],
+        HostCapability::Io => &["tempDirectoryCreate", "tempReplace", "tempSupported"],
         HostCapability::Timezone => &["dateZoneOffsetMinutes", "dateLocalZoneName"],
     }
 }

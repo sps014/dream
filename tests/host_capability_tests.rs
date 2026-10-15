@@ -33,7 +33,7 @@ fn unused_capability_imports_and_functions_do_not_link_hosts() {
         import system.cli;
         import system.text;
         fun unused_cli(): Command { return Command("unused"); }
-        fun unused(): byte[] { return SecureRandom.bytes(1); }
+        fun unused(): byte[] { return SecureRandom.bytes(1).unwrap(); }
         fun main(): void { System.println("hello"); }
     "#
         ),

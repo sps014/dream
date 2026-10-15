@@ -1,0 +1,13 @@
+[package]
+name = "dream-host-io"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+name = "dream_host_io"
+crate-type = ["cdylib"]
+
+[dependencies]
+dream-host-core = { path = "../dream-host-core" }
+dream-host-abi = { path = "../dream-host-abi" }
+tempfile = "3"

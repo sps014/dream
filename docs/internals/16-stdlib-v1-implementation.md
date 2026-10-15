@@ -148,14 +148,64 @@ owner substitutions, generic calls support contextual lambdas/named arguments,
 and monomorphization bounds use semantic nesting rather than rendered symbol length.
 A runnable bounded pipeline and concurrency benchmark accompany the APIs.
 
-## Remaining implementation
+## Phase 7 implementation
 
-1. Phase 7: CSV, UUID, temporary resources, atomic replacement, typed configuration,
-   testing fixtures, async assertions, and the HTTP-to-CSV acceptance application.
-2. Phase 8: cross-platform native and browser qualification, sanitizer/failure
-   injection coverage, executable documentation, packaging, and release gates.
-3. Phase 9: post-v1 TCP/UDP, streaming compression, application-driven cryptography,
-   and collection refinements.
+`system.csv` provides strict UTF-8 streaming records with quoted fields, embedded
+newlines, configurable ASCII delimiters, record limits, and byte-oriented errors.
+A shared Rust `csv` adapter supplies field decoding and writer escaping on native
+and WASM hosts. `system.uuid` stores 128 bits inline as two `ulong`s, with value
+equality, hashing, ordering, secure v4 generation, and canonical formatting.
+Secure random APIs now return errors and discard partial entropy on host failure;
+AES key/nonce factories and callers use the fallible APIs directly.
+
+`TempFile` and `TempDirectory` use private OS directories through `tempfile` on
+native and `mkdtemp` on Node. Explicit cleanup reports errors; destructor cleanup
+is best-effort. Atomic replacement flushes and closes output first, preserves the old
+destination on rename failure, and exposes unsupported browser capabilities.
+The optional `io` host owns temporary OS services, leaving core binding state lean.
+
+Typed configuration merges defaults, JSON, environment, and explicit CLI values
+with validation and source-aware diagnostics. Async assertions and typed fixture
+owners extend the existing async runner. The HTTP-to-CSV example spools downloads
+with bounded memory, adds UUIDs, and atomically publishes validated output.
+
+## Phase 8 qualification infrastructure
+
+`scripts/qualify-stdlib-v1.py` runs release gates sequentially and records the
+revision, dirty state, platform, step results, and logs. Its native/Node gate
+includes workspace builds and tests, strict Clippy, both guest profiles, executable
+docs, full-corpus determinism, packaging, and sanitizer checks. The separate
+browser harness checks debug/release fixtures and unsupported capabilities.
+`.github/workflows/stdlib-v1.yml` runs native qualification on Linux, macOS, and
+Windows and browser qualification on Linux, preserving evidence as artifacts.
+A gate is not qualified until its corresponding report passes.
+
+The application example exposed excessive Wasm locals in large debug async polls.
+Debug Wasm program code generation now enables llc stackification/coalescing;
+higher-level debug MIR/LLVM optimization policy is unchanged. Invalid WAT
+rendering returns a toolchain diagnostic, and quiet panic output is confined to
+the codegen catch region.
+
+## Phase 9 implementation
+
+Raw TCP and UDP use Tokio native services and asynchronous Node adapters. TCP
+implements async streams, partial writes, deadlines, cancellation, half-close,
+TCP_NODELAY, and independent accepted-stream ownership. UDP preserves datagram
+boundaries, empty messages, explicit truncation, broadcast and TTL options.
+Close wakes pending operations. Browsers expose unsupported raw-socket capability.
+
+Streaming gzip/zlib wrappers share `flate2`/`zlib-rs` on native and WASM adapters,
+with chunk/output limits, checksum/truncation errors, explicit finish, and strict
+single-stream termination. List, Queue, Map, and Set share additional-element
+reserve semantics and seeded operation-sequence tests. Additional cryptography
+remains conditional on concrete application requirements; no speculative
+algorithms are introduced.
+
+## Remaining qualification
+
+Complete the Phase 8 native platform matrix, browser matrix, packaging,
+determinism, and sanitizer gates before declaring a stable v1. Record actual
+reports separately from implementation status.
 
 Keep guest runtime code in C, native capability services in host crates, and JS
 adapters in the existing runtime source and bundling system. Follow the runtime

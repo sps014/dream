@@ -61,7 +61,7 @@ jobs:
         shell: bash
         env:
           DREAM_WORKER_SANITIZER: address,undefined
-        run: cargo test --test integration runtime_cancellation::
+        run: "cargo test --test integration runtime_cancellation::"
       - name: Preserve qualification reports and logs
         if: always()
         uses: actions/upload-artifact@v7

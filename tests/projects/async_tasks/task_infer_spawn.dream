@@ -14,7 +14,7 @@ async fun c24e_body(): void {
     c24e_verify_observation(((Task.spawn(() => n * n).await).to_string()).to_string());
 
     let items = ["1", "2"];
-    let results = Task.map(items, c24e_shout).await;
+    let results = TaskPool(4).map(items, c24e_shout).await.unwrap();
     for (let r in results) {
         c24e_verify_observation((r).to_string());
     }

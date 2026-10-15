@@ -18,3 +18,8 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [SortedMap](collections-sorted-map.md)
 - [SortedMapIterator](collections-sorted-map-iterator.md)
 - [Stack](collections-stack.md)
+- [Capacity Error](collections-capacity-error.md)
+- [List](collections-list-1.md)
+- [List](collections-list-2.md)
+- [Map](collections-map-1.md)
+- [Map](collections-map-2.md)

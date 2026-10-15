@@ -243,7 +243,8 @@ mod abi_h_lockstep {
         assert_eq!(w.next, 44);
         assert_eq!(w.queued, 48);
         assert_eq!(w.wide, 56);
-        assert_eq!(w.slots, 64);
+        assert_eq!(w.context, 64);
+        assert_eq!(w.slots, 72);
         assert_eq!(w.esize, 0);
         assert_ne!(w.wide, w.remaining);
         for (name, want) in [

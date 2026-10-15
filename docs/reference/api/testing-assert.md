@@ -2,9 +2,7 @@
 
 **Import:** `import system.testing;`
 
-Read the [usage guide](../stdlib/testing.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
-
-## `static class Assert`
+## `Assert`
 
 Assertion helpers for `system.testing`. On failure, prints a message and exits the process with a non-zero status (no exceptions/panics — assertions are meant to run in ordinary scripts). Exit-based failures require a real process model (`@native` / `@node`); not available on `@web`.
 
@@ -18,6 +16,22 @@ Fails the current test run with `message`: prints it and terminates the process 
 
 ```dream
 public static fun fail(message: string): void
+```
+
+## `eq_async`
+
+Awaits actual and compares its value using the normal assertion diagnostics.
+
+```dream
+public static async fun eq_async<T>(actual: Future<T>, expected: T): void
+```
+
+## `ok_async`
+
+Awaits a fallible operation and returns its success value, reporting the error on failure.
+
+```dream
+public static async fun ok_async<T, E>(actual: Future<Result<T, E>>): T
 ```
 
 ## `eq`

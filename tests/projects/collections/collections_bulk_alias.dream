@@ -7,7 +7,7 @@ fun c8d_body(): void {
     for (let i = 0; i < 8; i = i + 1) { xs.push(i); }
     let view = xs.as_span();
     xs.push_all(view.to_array());
-    xs.reserve(4096);
+    xs.reserve(4096).unwrap();
     c8d_verify_observation((xs.length).to_string());
     c8d_verify_observation((xs.capacity >= 4096).to_string());
     c8d_verify_observation((xs[15]).to_string());

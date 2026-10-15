@@ -1,20 +1,22 @@
 module system.crypto;
 
-// Cryptographically secure random bytes from the OS CSPRNG.
+// Cryptographically secure bytes with explicit entropy-source failures.
 public static class SecureRandom {
     @runtime("cryptoSecureRandomBytes")
     static extern fun bytes_host(n: int): byte[];
 
-    @runtime("cryptoSecureRandomFill")
-    static extern fun fill_host(borrow dest: byte[]): void;
-
-    // Allocates `n` random bytes (`n <= 0` yields an empty array).
-    public static fun bytes(n: int): byte[] {
-        return SecureRandom.bytes_host(n);
+    // Returns exactly n secure bytes, or EINVAL/EENTROPY without exposing partial output.
+    public static fun bytes(n: int): Result<byte[], CryptoError> {
+        if n < 0 || n > 16777216 { return Result.Err(CryptoError("EINVAL", "random byte count must be between zero and 16 MiB")); }
+        let bytes = SecureRandom.bytes_host(n);
+        if bytes.length != n { return Result.Err(CryptoError("EENTROPY", "secure random source failed")); }
+        return Result.Ok(bytes);
     }
 
-    // Fills `dest` in place with random bytes (length unchanged).
-    public static fun fill(dest: byte[]): void {
-        SecureRandom.fill_host(dest);
+    // Fills the destination only after obtaining all requested entropy; failure preserves it.
+    public static fun fill(dest: byte[]): Result<bool, CryptoError> {
+        let bytes = SecureRandom.bytes(dest.length)?;
+        for (let i = 0; i < bytes.length; i = i + 1) { dest[i] = bytes[i]; }
+        return Result.Ok(true);
     }
 }

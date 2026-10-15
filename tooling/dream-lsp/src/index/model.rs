@@ -346,7 +346,9 @@ pub(crate) fn substitute_method_type_args(detail: &str, type_args: &[String]) ->
             .replace(&format!(", {param},"), &format!(", {arg},"))
             .replace(&format!(", {param})"), &format!(", {arg})"))
             .replace(&format!("fun({param}):"), &format!("fun({arg}):"))
-            .replace(&format!("fun({param})"), &format!("fun({arg})"));
+            .replace(&format!("fun({param})"), &format!("fun({arg})"))
+            .replace(&format!("<{param},"), &format!("<{arg},"))
+            .replace(&format!(", {param}>"), &format!(", {arg}>"));
         // Trailing bare return type `…: TOut` when TOut is the whole return.
         if out.ends_with(&format!(": {param}")) {
             out = format!("{}: {arg}", &out[..out.len() - param.len() - 2]);

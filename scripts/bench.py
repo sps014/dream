@@ -47,6 +47,7 @@ SUITES = {
     "scheduler": (ROOT / "tests/bench/scheduler.dream", None),
     "timers": (ROOT / "tests/bench/timers.dream", None),
     "workers": (ROOT / "tests/bench/workers.dream", None),
+    "concurrency": (ROOT / "tests/bench/concurrency.dream", None),
 }
 # Rows below this are timer noise or a deleted loop and cannot substantiate a claim.
 MIN_NS_PER_OP = 0.25

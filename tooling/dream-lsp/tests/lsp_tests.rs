@@ -670,7 +670,9 @@ async fun main(): void {
     assert!(
         hover.contents.contains("TaskPool.dispatch")
             && hover.contents.contains("fun(): int")
-            && hover.contents.contains(": int"),
+            && hover
+                .contents
+                .contains("Future<Result<int, TaskPoolError>>"),
         "expected TOut substituted, got {}",
         hover.contents
     );

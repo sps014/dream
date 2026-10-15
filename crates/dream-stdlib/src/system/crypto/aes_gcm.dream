@@ -14,7 +14,7 @@ public static class AesGcm {
     }
 
     // Generates a fresh random 12-byte nonce. Never reuse a nonce with the same key.
-    public static fun generate_nonce(): byte[] {
+    public static fun generate_nonce(): Result<byte[], CryptoError> {
         return SecureRandom.bytes(AesGcm.nonce_size);
     }
 

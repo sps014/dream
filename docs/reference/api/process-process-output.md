@@ -1,10 +1,10 @@
-# ProcessOutput
+# Process Output
 
 **Import:** `import system.process;`
 
-Read the [usage guide](../stdlib/process.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+Read the [process guide](../stdlib/process.md) for launch settings, cancellation, and streaming ownership.
 
-## `class ProcessOutput`
+## `ProcessOutput`
 
 The captured result of `Process.run`: exit code plus fully buffered stdout/stderr text.
 
@@ -14,11 +14,15 @@ public class ProcessOutput
 
 ## `exit_code`
 
+Process exit status; negative values represent signal termination.
+
 ```dream
 public get exit_code(): int
 ```
 
 ## `stdout`
+
+Captured standard output decoded as UTF-8 text.
 
 ```dream
 public get stdout(): string
@@ -26,11 +30,15 @@ public get stdout(): string
 
 ## `stderr`
 
+Captured standard error decoded as UTF-8 text.
+
 ```dream
 public get stderr(): string
 ```
 
 ## `success`
+
+True when the process exited with status zero.
 
 ```dream
 public get success(): bool

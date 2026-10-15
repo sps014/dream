@@ -115,6 +115,7 @@ nav:
       - Interfaces: reference/language/interfaces.md
       - Async/Await: reference/language/async.md
       - Tasks: reference/language/tasks.md
+      - Structured concurrency: reference/language/structured-concurrency.md
       - Memory Management: reference/language/memory.md
       - Memory Safety Guide: reference/language/memory-safety.md
       - Reference cycles: reference/language/memory-cycles.md
@@ -166,6 +167,8 @@ nav:
       - Debug: reference/stdlib/debug.md
       - Process: reference/stdlib/process.md
       - CLI arguments: reference/stdlib/cli.md
+      - Application utilities: reference/stdlib/application-utilities.md
+      - Raw sockets and compression: reference/stdlib/raw-sockets-compression.md
     - I/O:
       - File I/O: reference/stdlib/file.md
       - Streams: reference/stdlib/file-streams.md

@@ -31,7 +31,13 @@ fn project_and_ancestor_target_directories_cannot_supply_the_compiler() {
     std::fs::create_dir_all(&home).unwrap();
     std::fs::create_dir_all(&tools).unwrap();
     std::fs::create_dir_all(&project).unwrap();
-    dreamer::commands::init::run(&project, Some("lookup-test".into()), None, dreamer::commands::init::Scaffold::Bin).unwrap();
+    dreamer::commands::init::run(
+        &project,
+        Some("lookup-test".into()),
+        None,
+        dreamer::commands::init::Scaffold::Bin,
+    )
+    .unwrap();
     let executable = tools.join(binary_name("dreamer"));
     std::fs::copy(env!("CARGO_BIN_EXE_dreamer"), &executable).unwrap();
     for directory in [&project, root.path()] {

@@ -2,49 +2,27 @@
 
 **Import:** `import system.task;`
 
-Read the [usage guide](../language/tasks.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+Read the [structured concurrency guide](../language/structured-concurrency.md) for lifetimes, cancellation, backpressure, and worker execution.
 
-## `class Task`
+## `Task`
 
-Run a function on another thread. Await the result like any other Future.  async fun main(): void { let square = Task.spawn(() => 6 * 6).await; System.println(square.to_string()); }  `spawn` is itself `async`, so awaiting it *is* the join. Hold the Future to overlap work. What a body may capture is covered in `docs/reference/language/tasks.md`.
+Structured local async scopes and bounded maps, with explicit low-level worker spawning.
 
 ```dream
 public class Task
 ```
 
-## `funcidx`
+## `scope`
 
-Returns the worker invocation selector for a synchronous wire callback. Prefer `Task` APIs.
-
-```dream
-public static extern fun funcidx(borrow body: fun(string): string): int
-```
-
-## `funcidx_async`
-
-Returns the worker invocation selector for an async wire callback. Prefer `Task` APIs.
+Runs a structured async region and joins all children on success, failure, or cancellation.
 
 ```dream
-public static extern fun funcidx_async(borrow body: fun(string): Future<string>): int
-```
-
-## `env`
-
-Returns the closure-environment transport word for a synchronous worker callback. Prefer `Task` APIs.
-
-```dream
-public static extern fun env(borrow body: fun(string): string): long
-```
-
-## `env_async`
-
-Returns the closure-environment transport word for an async worker callback. Prefer `Task` APIs.
-
-```dream
-public static extern fun env_async(borrow body: fun(string): Future<string>): long
+public static async fun scope<T, E>(body: fun(TaskScope<E>): Future<Result<T, TaskFailure<E>>>, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<T, TaskFailure<E>>
 ```
 
 ## `spawn`
+
+Runs one synchronous function on a separate worker; use scope.spawn_on for structured CPU jobs.
 
 ```dream
 public static async fun spawn<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): TOut
@@ -52,18 +30,24 @@ public static async fun spawn<TOut : shared>(body: fun(): TOut, token: Option<Ca
 
 ## `spawn_async`
 
+Runs an async function on a separate worker; local async scope children need no worker.
+
 ```dream
 public static async fun spawn_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut
 ```
 
 ## `map`
 
+Maps with bounded local async concurrency and returns values in input order.
+
 ```dream
-public static async fun map<T : shared, TOut : shared>(borrow items: T[], body: fun(T): TOut, token: Option<CancellationToken> = Option.None): TOut[]
+public static async fun map<T, U, E>(items: T[], body: fun(T): Future<Result<U, E>>, concurrency: int, token: Option<CancellationToken> = Option.None): Result<U[], TaskFailure<E>>
 ```
 
-## `map_async`
+## `for_each`
+
+Applies an async operation with bounded concurrency; successful child values are discarded.
 
 ```dream
-public static async fun map_async<T : shared, TOut : shared>(borrow items: T[], body: fun(T): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut[]
+public static async fun for_each<T, U, E>(items: T[], body: fun(T): Future<Result<U, E>>, concurrency: int, token: Option<CancellationToken> = Option.None): Result<bool, TaskFailure<E>>
 ```

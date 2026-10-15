@@ -10,8 +10,8 @@ public class AesGcmKey {
     }
 
     // Generates a fresh random 256-bit key from the OS CSPRNG.
-    public static fun generate(): AesGcmKey {
-        return AesGcmKey(SecureRandom.bytes(32));
+    public static fun generate(): Result<AesGcmKey, CryptoError> {
+        return Result.Ok(AesGcmKey(SecureRandom.bytes(32)?));
     }
 
     // Wraps exactly 32 raw key bytes, or an error when the length is wrong.

@@ -2,6 +2,7 @@
 #undef NDEBUG
 #include "../crates/dream-mir/src/runtime/c/sys/native/include/dream_thread.h"
 #include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,6 +12,13 @@ typedef unsigned(__stdcall *thread_body)(void *);
 #else
 typedef void *(*thread_body)(void *);
 #endif
+
+typedef struct TestCompletion {
+    dream_mutex mu;
+    dream_cond cv;
+    int done;
+    uintptr_t reply;
+} TestCompletion;
 
 static int fail_start;
 static int start_worker(dream_thread *thread, thread_body body, void *arg) {
@@ -22,6 +30,46 @@ static void pause_acquired(void *worker);
 #define dream_thread_start start_worker
 #include "../crates/dream-mir/src/runtime/c/sys/native/worker.c"
 #undef dream_thread_start
+
+void dream_complete_foreign_owned(dream_ptr future, dream_ptr reply) {
+    TestCompletion *completion = (TestCompletion *)future;
+    dream_mutex_lock(&completion->mu);
+    assert(!completion->done);
+    completion->reply = (uintptr_t)reply;
+    completion->done = 1;
+    dream_cond_signal(&completion->cv);
+    dream_mutex_unlock(&completion->mu);
+}
+
+static dream_ptr completion_wait(TestCompletion *completion) {
+    dream_mutex_lock(&completion->mu);
+    while (!completion->done) { dream_cond_wait(&completion->cv, &completion->mu); }
+    dream_ptr reply = (dream_ptr)completion->reply;
+    dream_mutex_unlock(&completion->mu);
+    dream_cond_destroy(&completion->cv);
+    dream_mutex_destroy(&completion->mu);
+    return reply;
+}
+
+static void completion_init(TestCompletion *completion) {
+    memset(completion, 0, sizeof(*completion));
+    dream_mutex_init(&completion->mu);
+    dream_cond_init(&completion->cv);
+}
+
+static dream_ptr receive_reply(int32_t id) {
+    TestCompletion completion;
+    completion_init(&completion);
+    assert(workerRecvAsync((dream_ptr)&completion, id) == 1);
+    return completion_wait(&completion);
+}
+
+static dream_ptr dispatch_reply(int32_t id, int32_t fn, dream_ptr env, dream_ptr message) {
+    TestCompletion completion;
+    completion_init(&completion);
+    assert(workerPoolDispatchAsync((dream_ptr)&completion, id, fn, env, message) == 1);
+    return completion_wait(&completion);
+}
 
 void dream_future_fini(dream_ptr ptr) { (void)ptr; }
 void dream_thread_attach(void) {}
@@ -90,7 +138,7 @@ typedef struct {
 
 static DREAM_THREAD_PROC(receive_until_cancelled) {
     Operation *op = arg;
-    assert(workerRecv(op->id) == 0);
+    assert(receive_reply(op->id) == 0);
     return 0;
 }
 
@@ -99,7 +147,7 @@ static DREAM_THREAD_PROC(dispatch_message) {
     char text[32];
     int len = snprintf(text, sizeof(text), "dispatch-%d", op->number);
     dream_ptr msg = dream_utf8_to_string(text);
-    dream_ptr r = workerPoolDispatch(op->id, 7, 0, msg);
+    dream_ptr r = dispatch_reply(op->id, 7, 0, msg);
     assert(r == msg);
     assert(dream_str_len(r) == len);
     dream_release(msg);
@@ -125,15 +173,18 @@ static void concurrent_operations(void) {
 
     id = workerPoolSpawn();
     pin = acquire_worker(id);
-    for (int i = 0; i < 8; ++i) {
-        ops[i].id = id;
-        assert(dream_thread_start(&threads[i], receive_until_cancelled, &ops[i]) == 0);
+    ops[0].id = id;
+    assert(dream_thread_start(&threads[0], receive_until_cancelled, &ops[0]) == 0);
+    /* A deferred receiver releases its session reference after installing the completion. */
+    for (;;) {
+        dream_mutex_lock(&pin->mu);
+        int pending = pin->receiver != 0;
+        dream_mutex_unlock(&pin->mu);
+        if (pending) { break; }
+        dream_thread_yield();
     }
-    /* Each receiver acquires its reference before waiting; no timing-based race trigger. The
-     * session never had work, so no thread holds a reference beside the registry and pin. */
-    while (__atomic_load_n(&pin->refs, __ATOMIC_ACQUIRE) != 10) { dream_thread_yield(); }
     workerTerminate(id);
-    for (int i = 0; i < 8; ++i) { dream_thread_join(threads[i]); }
+    dream_thread_join(threads[0]);
     release_worker(pin);
     assert(debug_get_live_objects() == 0);
 }
@@ -211,7 +262,7 @@ static void termination_boundaries(void) {
         dream_release(msg);
     }
     for (int i = 0; i < 20; ++i) {
-        dream_ptr reply = workerRecv(id);
+        dream_ptr reply = receive_reply(id);
         assert(*((char *)dream_p(reply) + 4) == i);
         dream_release(reply);
     }
@@ -239,9 +290,9 @@ typedef struct {
 static DREAM_THREAD_PROC(reuse_jobs) {
     ReuseOperation *operation = arg;
     for (int i = 0; i < 10000; i++) {
-        Job *j = new_job(operation->worker, operation->slot, 0, 0, 0);
-        assert(j->fn == operation->slot && j->refs == 1);
-        assert(!j->env && !j->msg && !j->reply && !j->done && !j->next);
+        Job *j = new_job(operation->worker, operation->slot, 0, 0);
+        assert(j->fn == operation->slot);
+        assert(!j->env && !j->msg && !j->reply && !j->future && !j->next);
         if ((i & 7) == 0) { dream_thread_yield(); }
         assert(j->fn == operation->slot);
         release_job(operation->worker, j);
@@ -254,17 +305,14 @@ static void session_job_reuse(void) {
     dream_ptr payload = dream_utf8_to_string("reuse");
     Job *original = NULL;
     for (int i = 0; i < 1000; i++) {
-        Job *j = new_job(w, 7, payload, payload, 1);
+        Job *j = new_job(w, 7, payload, payload);
         if (!original) { original = j; }
-        assert(j == original && j->refs == 2 && !w->spare && !j->done && !j->next && !j->reply);
-        j->done = 1;
+        assert(j == original && !w->spare && !j->future && !j->next && !j->reply);
         j->next = j;
         j->reply = payload;
         dream_retain(payload);
         release_job(w, j);
-        assert(j->refs == 1 && !w->spare);
-        release_job(w, j);
-        assert(w->spare == original && !j->refs && !j->msg && !j->env && !j->reply);
+        assert(w->spare == original && !j->future && !j->msg && !j->env && !j->reply);
     }
     dream_release(payload);
     assert(debug_get_live_objects() == 0);
@@ -275,7 +323,7 @@ static void session_job_reuse(void) {
         assert(dream_thread_start(&threads[i], reuse_jobs, &operations[i]) == 0);
     }
     for (int i = 0; i < 8; i++) { dream_thread_join(threads[i]); }
-    assert(w->spare && !w->spare->refs && !w->spare->msg && !w->spare->env);
+    assert(w->spare && !w->spare->future && !w->spare->msg && !w->spare->env);
     workerTerminate(id);
     release_worker(w);
 }
@@ -314,7 +362,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 100; ++i) {
             char text[16];
             int len = snprintf(text, sizeof(text), "job-%d", i);
-            dream_ptr reply = workerRecv(ids[i]);
+            dream_ptr reply = receive_reply(ids[i]);
             assert(dream_str_len(reply) == len);
             for (int j = 0; j < len; ++j) {
                 assert(dream_char_at_u(reply, j) == text[j]);
@@ -338,7 +386,7 @@ int main(int argc, char **argv) {
     }
     for (int i = 0; i < 100; ++i) {
         dream_ptr msg = dream_utf8_to_string("pool");
-        dream_ptr reply = workerPoolDispatch(pool[i], 7, 0, msg);
+        dream_ptr reply = dispatch_reply(pool[i], 7, 0, msg);
         assert(reply == msg);
         dream_release(msg);
         dream_release(reply);

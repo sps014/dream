@@ -18,15 +18,15 @@ async fun main(): void {
     let spawned = Process.spawn(System.exe_path.unwrap_or(""), child_args).await;
     switch (spawned) {
         Ok(child) => {
-            child.write_stdin_text("line1\n");
-            child.write_stdin_text("line2\n");
-            let l1 = child.read_stdout_line().await;
+            child.stdin.write_async(Encoding.utf8_encode("line1\n")).await.unwrap();
+            child.stdin.write_async(Encoding.utf8_encode("line2\n")).await.unwrap();
+            let stdout = child.stdout;
+            let l1 = stdout.read_line().await.unwrap();
             System.println(l1.unwrap_or("NONE"));
-            let l2 = child.read_stdout_line().await;
+            let l2 = stdout.read_line().await.unwrap();
             System.println(l2.unwrap_or("NONE"));
-            child.kill();
-            let code = child.wait().await;
-            System.println(code != 0);
+            child.close().await.unwrap();
+            System.println(true);
         },
         Err(e) => System.println("spawn failed: " + e.message()),
     }

@@ -1,8 +1,30 @@
 # Cancellation Token
 
-No import is needed.
+**Import:** `import system.core;`
 
-Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+## `CancellationToken`
+
+Read-only view of a `CancellationSource` for cooperative checks at await boundaries. `@shared` (closed-graph over `@shared` `CancellationSource`) so tokens can cross into workers.
+
+```dream
+shared public class CancellationToken
+```
+
+## `current`
+
+Returns the cancellation token inherited from the current structured task.
+
+```dream
+public static get current(): Option<CancellationToken>
+```
+
+## `resolve`
+
+Explicit tokens override the current structured task; None inherits its token.
+
+```dream
+public static fun resolve(token: Option<CancellationToken>): Option<CancellationToken>
+```
 
 ## `is_cancelled`
 
@@ -22,8 +44,7 @@ public fun wait_cancelled(): Future<bool>
 
 ## `wait`
 
-Awaits a future or cancellation using scheduler notifications. Cancellation cancels the
-supplied future; completed side effects remain observable.
+Awaits a future or cancellation using scheduler notifications. Cancellation cancels the supplied future; already performed side effects are preserved.
 
 ```dream
 public fun wait<T>(future: Future<T>): Future<Result<T, CancelledError>>
@@ -71,7 +92,7 @@ public static fun throw_if_opt(token: Option<CancellationToken>): void
 
 ## `rejected`
 
-`Err(err)` when `token` is cancelled; otherwise `Ok(true)`.
+Returns err when the explicit or inherited token is cancelled; otherwise Ok(true).
 
 ```dream
 public static fun rejected<E>(token: Option<CancellationToken>, err: E): Result<bool, E>

@@ -1,0 +1,50 @@
+import system;
+import system.process;
+import system.testing;
+
+fun process_fixture_args(mode: string): string[] {
+    if System.platform != Platform.Node { return [mode]; }
+    if mode == "flood" { return ["-e", "process.stdout.write('a'.repeat(200000));process.stderr.write('b'.repeat(200000));process.stdin.resume();"]; }
+    if mode == "env" { return ["-e", "console.log(process.env.DREAM_PHASE6)"]; }
+    return ["-e", "setInterval(()=>{},1000)"];
+}
+
+async fun main(): void {
+    let args = System.args;
+    if args.length > 0 {
+        if args[0] == "flood" {
+            System.print("a".repeat(200000));
+            System.stderr.write_text("b".repeat(200000));
+            let consumed = 0;
+            while consumed < 200000 { consumed = consumed + System.read_line().length; }
+            return;
+        }
+        if args[0] == "env" { System.println(System.env("DREAM_PHASE6").unwrap()); return; }
+        if args[0] == "sleep" { Time.delay(10000).await; return; }
+    }
+    let executable = System.exe_path.unwrap();
+    let options = ProcessOptions();
+    options.env.set("DREAM_PHASE6", "custom 日本語");
+    options.timeout_ms = 5000;
+    options.input = Encoding.utf8_encode("x".repeat(200000) + "\n");
+    let flooded = Process.run(executable, process_fixture_args("flood"), options: options).await.unwrap();
+    Assert.eq(flooded.stdout.length, 200000);
+    Assert.is_true(flooded.stderr.starts_with("b".repeat(200000)));
+    options.input = Buffer.alloc<byte>(0);
+    let environment = Process.run(executable, process_fixture_args("env"), options: options).await.unwrap();
+    Assert.eq_str(environment.stdout.trim(), "custom 日本語");
+    options.timeout_ms = 20;
+    let timeout = Process.run(executable, process_fixture_args("sleep"), options: options).await;
+    Assert.eq_str(timeout.unwrap_err().code(), "ETIMEOUT");
+    options.timeout_ms = 0;
+    let source = CancellationSource();
+    let pending = Process.run(executable, process_fixture_args("sleep"), options: options, token: Option.Some(source.token));
+    Promise.start(pending);
+    Time.delay(30).await;
+    source.cancel();
+    Assert.eq_str(pending.await.unwrap_err().code(), "ECANCELLED");
+    options.max_output_bytes = 1000;
+    let limited = Process.run(executable, process_fixture_args("flood"), options: options).await;
+    Assert.eq_str(limited.unwrap_err().code(), "ELIMIT");
+    System.println("process options ok");
+}

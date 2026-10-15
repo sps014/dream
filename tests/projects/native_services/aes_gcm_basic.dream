@@ -4,10 +4,10 @@ import system.crypto;
 import system.encoding;
 
 fun c3_body(): void {
-    let key = AesGcmKey.generate();
+    let key = AesGcmKey.generate().unwrap();
     c3_verify_observation((key.to_bytes().length).to_string());
 
-    let nonce = AesGcm.generate_nonce();
+    let nonce = AesGcm.generate_nonce().unwrap();
     c3_verify_observation((nonce.length).to_string());
 
     let aad = Encoding.utf8_encode("header");
@@ -29,7 +29,7 @@ fun c3_body(): void {
     }
 
     // Wrong key must fail authentication.
-    let other_key = AesGcmKey.generate();
+    let other_key = AesGcmKey.generate().unwrap();
     switch (AesGcm.decrypt(other_key, nonce, ciphertext, aad)) {
         Ok(recovered) => c3_verify_observation(("should not decrypt: " + Encoding.utf8_decode(recovered)).to_string()),
         Err(e) => c3_verify_observation(("auth failed as expected: " + e.code()).to_string()),

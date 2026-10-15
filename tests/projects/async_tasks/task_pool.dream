@@ -14,9 +14,9 @@ async fun task_pool(): void {
     let b = pool.dispatch(() => c252_square("4"));
     let c = pool.dispatch(() => c252_square("5"));
     let d = pool.dispatch(() => c252_square("6"));
-    Assert.eq_str((a.await).to_string(), "9");
-    Assert.eq_str((b.await).to_string(), "16");
-    Assert.eq_str((c.await).to_string(), "25");
-    Assert.eq_str((d.await).to_string(), "36");
-    pool.shutdown();
+    Assert.eq_str((a.await.unwrap()).to_string(), "9");
+    Assert.eq_str((b.await.unwrap()).to_string(), "16");
+    Assert.eq_str((c.await.unwrap()).to_string(), "25");
+    Assert.eq_str((d.await.unwrap()).to_string(), "36");
+    pool.close().await.unwrap();
 }

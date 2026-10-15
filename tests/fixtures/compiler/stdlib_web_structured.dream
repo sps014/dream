@@ -1,0 +1,44 @@
+import system;
+import system.task;
+import system.process;
+
+async fun structured_browser_value(value: int): Result<int, string> {
+    Time.delay(1).await;
+    return Result.Ok(value * value);
+}
+
+async fun main(): void {
+    let total = Task.scope<int, string>(async (scope) => {
+        let channel = Channel.bounded<int>(2).unwrap();
+        let sender = channel.sender;
+        let receiver = channel.receiver;
+        scope.spawn<bool>(async () => {
+            sender.send(20).await.unwrap();
+            sender.send(22).await.unwrap();
+            sender.close();
+            return Result.Ok(true);
+        });
+        let sum = 0;
+        while true {
+            let item = receiver.receive().await.unwrap();
+            if item.is_none() { break; }
+            sum = sum + item.unwrap();
+        }
+        return Result.Ok(sum);
+    }).await.unwrap();
+    if total != 42 { System.panic("structured result mismatch"); }
+    let values = Task.map<int, int, string>([1, 2, 3], structured_browser_value, concurrency: 2).await.unwrap();
+    if values[2] != 9 { System.panic("bounded map mismatch"); }
+    let timeout = Task.scope<int, string>(async (scope) => {
+        let token = scope.token;
+        let child = scope.spawn<int>(async () => {
+            token.wait_cancelled().await;
+            return Result.Ok(1);
+        });
+        return child.join().await;
+    }, timeout_ms: 10).await;
+    if timeout.is_ok() { System.panic("missing scope deadline"); }
+    let arguments: string[] = [];
+    let process = Process.run("unavailable", arguments).await;
+    if process.is_ok() || process.unwrap_err().code() != "EUNSUPPORTED" { System.panic("browser process restriction mismatch"); }
+}

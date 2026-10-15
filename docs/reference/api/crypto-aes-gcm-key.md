@@ -1,10 +1,8 @@
-# AesGcmKey
+# Aes Gcm Key
 
 **Import:** `import system.crypto;`
 
-Read the [usage guide](../stdlib/crypto.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
-
-## `class AesGcmKey`
+## `AesGcmKey`
 
 A 256-bit `AesGcm` key. Wraps raw bytes so callers can't accidentally pass the wrong-sized buffer where a key is expected.
 
@@ -17,7 +15,7 @@ public class AesGcmKey
 Generates a fresh random 256-bit key from the OS CSPRNG.
 
 ```dream
-public static fun generate(): AesGcmKey
+public static fun generate(): Result<AesGcmKey, CryptoError>
 ```
 
 ## `from_bytes`

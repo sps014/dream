@@ -3,13 +3,11 @@ import { DreamInstance } from "./instance.js";
 import {
   wrapImport,
   wrapAsyncImport,
-  wrapInPlaceByteArrayFill,
   resolveGlobal,
 } from "./marshal.js";
 import { isNode, setNodeFs, setNodeCrypto, setNodeChildProcess, setNodeNet } from "./platform.js";
 import { defaultEnv } from "./hosts/env.js";
 import { defaultDreamModule } from "./hosts.js";
-import { csprngBytes } from "./hosts/crypto.js";
 import { makeWorkerModule } from "./workers.js";
 import { readEmbeddedAbi, replaceArtifactExt } from "./urls.js";
 
@@ -210,13 +208,6 @@ export async function load(source, options = {}) {
       : {}),
   };
   const wrapFor = (fn, sig) => {
-    if (
-      sig &&
-      sig.field === "cryptoSecureRandomFill" &&
-      typeof csprngBytes === "function"
-    ) {
-      return wrapInPlaceByteArrayFill(getInstance, (count) => csprngBytes(count));
-    }
     return sig && sig.async ? wrapAsyncImport(getInstance, fn, sig) : wrapImport(getInstance, fn, sig);
   };
 
@@ -231,16 +222,10 @@ export async function load(source, options = {}) {
     for (const e of abi.externs) {
       const bucket = (importObject[e.module] ||= {});
       if (bucket[e.field]) continue;
-      // `cryptoSecureRandomFill` has no direct host function: wrapFor routes it through
-      // wrapInPlaceByteArrayFill + csprngBytes, so it is "implemented" despite resolving
-      // to null here.
-      const isCsprngFill =
-        e.module === "Dream" && e.field === "cryptoSecureRandomFill" &&
-        typeof csprngBytes === "function";
       const resolved = (e.module === "Dream" && builtinDream[e.field])
         ? builtinDream[e.field]
         : resolveGlobal(e.module, e.field);
-      bucket[e.field] = (resolved || isCsprngFill)
+      bucket[e.field] = resolved
         ? wrapFor(resolved, e)
         : () => {
             throw new Error(`no JS implementation for extern '${e.name}' (${e.module}.${e.field})`);

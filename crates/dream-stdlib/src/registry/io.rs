@@ -12,6 +12,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/io/temporary.dream",
+            include_str!("../system/io/temporary.dream"),
+        ),
+        (
             "<std>/system/io/streams.dream",
             include_str!("../system/io/streams.dream"),
         ),

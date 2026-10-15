@@ -1,155 +1,76 @@
 module system.process;
 
-// Handle to a spawned child process with piped stdin/stdout/stderr (`Process.spawn`).
+// Owns a child and its pipes; explicit close terminates and reaps unfinished work.
 public class ChildProcess {
-    _handle: int;
+    id: int;
+    closing: bool;
+    closed: Option<Result<bool, ProcessError>>;
+    completed: CancellationSource;
 
-    internal constructor(handle: int) {
-        this._handle = handle;
+    internal constructor(id: int) {
+        this.id = id;
+        this.closing = false;
+        this.closed = Option.None;
+        this.completed = CancellationSource();
+    }
+    internal get handle(): int { return this.id; }
+
+    // Borrows stdout through an AsyncReader; retain this reader when using read_line buffering.
+    public get stdout(): ProcessReader { return ProcessReader(this, 0); }
+    // Borrows stderr through an AsyncReader; drain it concurrently with stdout.
+    public get stderr(): ProcessReader { return ProcessReader(this, 1); }
+    // Borrows stdin through an AsyncWriter; call close_stdin to deliver EOF to the child.
+    public get stdin(): ProcessWriter { return ProcessWriter(this); }
+
+    // Closes stdin after pending writes, allowing commands waiting for input EOF to finish.
+    public fun close_stdin(token: Option<CancellationToken> = Option.None): Future<Result<bool, ProcessError>> {
+        return ChildProcess.close_stdin_owned(this, CancellationToken.resolve(token));
+    }
+    static async fun close_stdin_owned(child: ChildProcess, token: Option<CancellationToken>): Result<bool, ProcessError> {
+        CancellationToken.rejected(token, ProcessError.cancelled())?;
+        let operation = ProcessOperation(ProcessOperation.request("close_stdin", child.id), Buffer.alloc<byte>(0));
+        let result = operation.wait(token).await;
+        operation.close();
+        if result.is_err() { return Result.Err(result.unwrap_err()); }
+        return Result.Ok(true);
     }
 
-    @native @node
-    @runtime("processWriteStdin")
-    static extern fun host_write_stdin(handle: int, borrow data: byte[]): bool;
-
-    // `stream`: 0 = stdout, 1 = stderr.
-    @native @node
-    @runtime("processReadStream")
-    static extern async fun host_read_stream(handle: int, stream: int, max_bytes: int): byte[];
-
-    @native @node
-    @runtime("processReadStreamLine")
-    static extern async fun host_read_stream_line(handle: int, stream: int): byte[];
-
-    @native @node
-    @runtime("processWait")
-    static extern async fun host_wait(handle: int): byte[];
-
-    @native @node
-    @runtime("processKill")
-    static extern fun host_kill(handle: int): bool;
-
-    // Copies `data[start..]` into a fresh `byte[]` without Unicode conversion.
-    static fun slice_to_bytes(data: byte[], start: int): byte[] {
-        let n = data.length - start;
-        let out = Buffer.alloc<byte>(n);
-        let src = Span<byte>(data, start, n);
-        let i = 0;
-        while i < n {
-            out[i] = src.get(i);
-            i = i + 1;
-        }
-        return out;
+    // Waits for process exit without discarding unread output or closing the child handle.
+    public fun wait(token: Option<CancellationToken> = Option.None): Future<Result<int, ProcessError>> {
+        return ChildProcess.wait_owned(this, CancellationToken.resolve(token));
+    }
+    static async fun wait_owned(child: ChildProcess, token: Option<CancellationToken>): Result<int, ProcessError> {
+        CancellationToken.rejected(token, ProcessError.cancelled())?;
+        let operation = ProcessOperation(ProcessOperation.request("wait", child.id), Buffer.alloc<byte>(0));
+        let result = operation.wait(token).await;
+        operation.close();
+        if result.is_err() { return Result.Err(result.unwrap_err()); }
+        return Result.Ok(int.parse(Encoding.utf8_decode(result.unwrap())).unwrap_or(-2));
     }
 
-    @native @node
-    async fun read_line(stream: int, token: Option<CancellationToken> = Option.None): Option<string> {
-        CancellationToken.throw_if_opt(token);
-        let raw = ChildProcess.host_read_stream_line(this._handle, stream).await;
-        if raw.length == 0 {
-            return Option.None;
-        }
-        if raw[0] == (byte)48 {
-            return Option.None;
-        }
-        return Option.Some(Encoding.utf8_decode(ChildProcess.slice_to_bytes(raw, 1)));
+    // Terminates and reaps the owned child; repeated or concurrent closes share the outcome.
+    public fun close(): Future<Result<bool, ProcessError>> { return ChildProcess.close_owned(this); }
+    static async fun close_owned(child: ChildProcess): Result<bool, ProcessError> {
+        if child.closed.is_some() { return child.closed.unwrap(); }
+        if child.closing { child.completed.token.wait_cancelled().await; return child.closed.unwrap(); }
+        child.closing = true;
+        let shield = CancellationSource();
+        ChildProcess.protect_host(shield);
+        let operation = ProcessOperation(ProcessOperation.request("close", child.id), Buffer.alloc<byte>(0));
+        let result = operation.wait(Option.Some(shield.token)).await;
+        operation.close();
+        let outcome: Result<bool, ProcessError> = Result.Ok(true);
+        if result.is_err() { outcome = Result.Err(result.unwrap_err()); }
+        child.closed = Option.Some(outcome);
+        // Submission failure must still release the child registry entry and request reaping.
+        ChildProcess.close_host(child.id);
+        child.id = 0;
+        child.completed.cancel();
+        return outcome;
     }
-
-    // Writes `data` to the child's stdin. Returns `false` if the pipe is closed or the write fails.
-    @native @node
-    public fun write_stdin(data: byte[]): bool {
-        return ChildProcess.host_write_stdin(this._handle, data);
-    }
-
-    // Writes UTF-8 text to the child's stdin.
-    @native @node
-    public fun write_stdin_text(text: string): bool {
-        return this.write_stdin(Encoding.utf8_encode(text));
-    }
-
-    // Reads up to `max_bytes` currently buffered from stdout, blocking until at least one byte
-    // has arrived or the stream has reached end-of-file (in which case the result is empty).
-    @native @node
-    public async fun read_stdout(max_bytes: int, token: Option<CancellationToken> = Option.None): byte[] {
-        CancellationToken.throw_if_opt(token);
-        let raw = ChildProcess.host_read_stream(this._handle, 0, max_bytes).await;
-        return ChildProcess.slice_to_bytes(raw, 0);
-    }
-
-    @native @node
-    public async fun read_stdout_all(token: Option<CancellationToken> = Option.None): byte[] {
-        return this.read_stream_all(0, token).await;
-    }
-
-    // Reads one line from stdout (without the trailing newline), or `None` at end-of-file.
-    @native @node
-    public async fun read_stdout_line(token: Option<CancellationToken> = Option.None): Option<string> {
-        return this.read_line(0, token).await;
-    }
-
-    // Reads up to `max_bytes` currently buffered from stderr.
-    @native @node
-    public async fun read_stderr(max_bytes: int, token: Option<CancellationToken> = Option.None): byte[] {
-        CancellationToken.throw_if_opt(token);
-        let raw = ChildProcess.host_read_stream(this._handle, 1, max_bytes).await;
-        return ChildProcess.slice_to_bytes(raw, 0);
-    }
-
-    @native @node
-    public async fun read_stderr_all(token: Option<CancellationToken> = Option.None): byte[] {
-        return this.read_stream_all(1, token).await;
-    }
-
-    // Reads one line from stderr (without the trailing newline), or `None` at end-of-file.
-    @native @node
-    public async fun read_stderr_line(token: Option<CancellationToken> = Option.None): Option<string> {
-        return this.read_line(1, token).await;
-    }
-
-    // Waits for the process to exit, returning its exit code (or a negative sentinel: `-1` if it
-    // could not be waited on, `-2` if it was terminated by a signal with no exit code).
-    @native @node
-    public async fun wait(token: Option<CancellationToken> = Option.None): int {
-        CancellationToken.throw_if_opt(token);
-        let raw = ChildProcess.host_wait(this._handle).await;
-        return int.parse(Encoding.utf8_decode(ChildProcess.slice_to_bytes(raw, 0))).unwrap_or(0 - 1);
-    }
-
-    // Forcibly terminates the process. Returns `false` if it had already exited or could not be
-    // killed.
-    @native @node
-    public fun kill(): bool {
-        return ChildProcess.host_kill(this._handle);
-    }
-
-    @native @node
-    async fun read_stream_all(stream: int, token: Option<CancellationToken> = Option.None): byte[] {
-        let acc = Buffer.alloc<byte>(0);
-        let n = 0;
-        while true {
-            CancellationToken.throw_if_opt(token);
-            let raw = ChildProcess.host_read_stream(this._handle, stream, 65536).await;
-            let chunk = ChildProcess.slice_to_bytes(raw, 0);
-            if chunk.length == 0 {
-                break;
-            }
-            let need = n + chunk.length;
-            if need > acc.length {
-                acc = Buffer.realloc<byte>(acc, grow_capacity(acc.length, need));
-            }
-            let i = 0;
-            while i < chunk.length {
-                acc[n] = chunk[i];
-                n = n + 1;
-                i = i + 1;
-            }
-        }
-        let out = Buffer.alloc<byte>(n);
-        let j = 0;
-        while j < n {
-            out[j] = acc[j];
-            j = j + 1;
-        }
-        return out;
-    }
+    del() { if this.id > 0 { ChildProcess.close_host(this.id); } }
+    @runtime("processClose")
+    static extern fun close_host(id: int): void;
+    @intrinsic("dream_task_protect")
+    static extern fun protect_host(borrow source: CancellationSource): void;
 }

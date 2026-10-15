@@ -106,7 +106,8 @@ impl<'a> Analyzer<'a> {
                 .iter()
                 .zip(generics.iter())
                 .map(|(param, arg)| {
-                    let id = self.type_ctx.lower(arg);
+                    let concrete = Self::monomorphize_type(arg, &self.current_generic_bindings);
+                    let id = self.type_ctx.lower(&concrete);
                     (param.text.clone(), self.type_ctx.syntax_type(id))
                 })
                 .collect();

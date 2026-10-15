@@ -10,6 +10,25 @@ shared public class CancellationToken {
         this._source = source;
     }
 
+    @intrinsic("dream_task_is_protected")
+    static extern fun protected_host(borrow future: object): bool;
+    @intrinsic("dream_task_has_context")
+    static extern fun has_context_host(): bool;
+    @intrinsic("dream_task_context")
+    static extern fun context_host(): CancellationToken;
+
+    // Returns the cancellation token inherited from the current structured task.
+    public static get current(): Option<CancellationToken> {
+        if !CancellationToken.has_context_host() { return Option.None; }
+        return Option.Some(CancellationToken.context_host());
+    }
+
+    // Explicit tokens override the current structured task; None inherits its token.
+    public static fun resolve(token: Option<CancellationToken>): Option<CancellationToken> {
+        if token.is_some() { return token; }
+        return CancellationToken.current;
+    }
+
     // True when the owning source has been cancelled.
     public get is_cancelled(): bool {
         return this._source.is_cancelled;
@@ -50,7 +69,11 @@ shared public class CancellationToken {
     }
 
     static async fun wait_completion<T>(token: CancellationToken, future: Future<T>): bool {
-        if token.is_cancelled { Promise.cancel(future); return false; }
+        if token.is_cancelled {
+            Promise.cancel(future);
+            if CancellationToken.protected_host(future) { future.await; }
+            return false;
+        }
         let registration = CancellationRegistration(token._source.register());
         let signal = registration.signal();
         let completed = CancellationToken.completed(future);
@@ -59,7 +82,10 @@ shared public class CancellationToken {
         registration.close();
         Promise.cancel(completed);
         Promise.cancel(cancelled);
-        if result != 0 { Promise.cancel(future); }
+        if result != 0 {
+            Promise.cancel(future);
+            if CancellationToken.protected_host(future) { future.await; }
+        }
         return result == 0;
     }
 
@@ -90,7 +116,8 @@ shared public class CancellationToken {
 
     // True when `token` is `Some` and already cancelled.
     public static fun is_cancelled_opt(token: Option<CancellationToken>): bool {
-        return switch (token) {
+        let effective_token = CancellationToken.resolve(token);
+        return switch (effective_token) {
             Some(t) => t.is_cancelled,
             None => false,
         };
@@ -104,9 +131,10 @@ shared public class CancellationToken {
         }
     }
 
-    // `Err(err)` when `token` is cancelled; otherwise `Ok(true)`.
+    // Returns err when the explicit or inherited token is cancelled; otherwise Ok(true).
     public static fun rejected<E>(token: Option<CancellationToken>, err: E): Result<bool, E> {
-        if CancellationToken.is_cancelled_opt(token) {
+        let effective_token = CancellationToken.resolve(token);
+        if CancellationToken.is_cancelled_opt(effective_token) {
             return Result.Err(err);
         }
         return Result.Ok(true);

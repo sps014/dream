@@ -80,7 +80,7 @@ fn capabilities_share_core_binding_and_allocation() {
         let crypto: Symbol<unsafe extern "C" fn(i32) -> *mut u8> =
             libraries[2].get(b"cryptoSecureRandomBytes").unwrap();
         let process: Symbol<unsafe extern "C" fn(i32) -> *mut u8> =
-            libraries[3].get(b"processWait").unwrap();
+            libraries[3].get(b"processOperationResult").unwrap();
         let timezone: Symbol<unsafe extern "C" fn() -> *mut u8> =
             libraries[4].get(b"dateLocalZoneName").unwrap();
         let before_strings = STRINGS.load(Ordering::Relaxed);

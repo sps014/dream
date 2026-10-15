@@ -2,55 +2,73 @@
 
 **Import:** `import system.process;`
 
-## `public static class Process`
+Read the [process guide](../stdlib/process.md) for launch settings, cancellation, and streaming ownership.
 
-Runs and controls child processes (native only — the browser host reports `ProcessError.unsupported` for every operation; Node supports both `run` and `spawn`).
+## `Process`
+
+Launches processes asynchronously on native and Node; browser operations return EUNSUPPORTED.
 
 ```dream
 public static class Process
 ```
 
-## `public static async fun run`
+## `run`
 
-Runs `cmd` with `args` in the current working directory, waits for it to exit, and captures stdout/stderr in full.
-
-```dream
-public static async fun run(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Result<ProcessOutput, ProcessError>
-```
-
-## `public static async fun run_in`
-
-Same as `run`, but launches the process with `cwd` as its working directory (an empty string keeps the caller's current working directory).
+Runs a command, concurrently drains both outputs, and closes stdin after sending input.
 
 ```dream
-public static async fun run_in(cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None): Result<ProcessOutput, ProcessError>
+public static fun run(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Future<Result<ProcessOutput, ProcessError>>
 ```
 
-## `public static async fun spawn`
+## `run`
 
-Spawns `cmd` with `args` in the current working directory, returning a handle for interactive stdin/stdout/stderr access and lifecycle control.
+Runs with explicit environment, input, output limits, and an optional deadline.
 
 ```dream
-public static async fun spawn(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Result<ChildProcess, ProcessError>
+public static fun run(cmd: string, args: string[], options: ProcessOptions, token: Option<CancellationToken> = Option.None): Future<Result<ProcessOutput, ProcessError>>
 ```
 
-## `public static async fun spawn_in`
+## `run_in`
 
-Same as `spawn`, but launches the process with `cwd` as its working directory.
+Runs a command in a specific working directory with otherwise default options.
 
 ```dream
-public static async fun spawn_in(cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None): Result<ChildProcess, ProcessError>
+public static fun run_in(cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None): Future<Result<ProcessOutput, ProcessError>>
 ```
 
-## `public static async fun run_checked`
+## `spawn`
 
-Captures output like `run`, returning an error for a nonzero exit status.
+Spawns an owned child exposing streaming stdin, stdout, and stderr pipes.
+
+```dream
+public static fun spawn(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Future<Result<ChildProcess, ProcessError>>
+```
+
+## `spawn`
+
+Spawns with explicit launch settings; child closure terminates and reaps unfinished work.
+
+```dream
+public static fun spawn(cmd: string, args: string[], options: ProcessOptions, token: Option<CancellationToken> = Option.None): Future<Result<ChildProcess, ProcessError>>
+```
+
+## `spawn_in`
+
+Spawns a child in a specific directory with otherwise default options.
+
+```dream
+public static fun spawn_in(cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None): Future<Result<ChildProcess, ProcessError>>
+```
+
+## `run_checked`
+
+Captures output and additionally treats nonzero exit statuses as EEXIT errors.
 
 ```dream
 public static async fun run_checked(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Result<ProcessOutput, ProcessError>
 ```
 
-## `public static fun which`
+## `which`
 
 Finds an existing nondirectory command path, directly or by searching `PATH`. This does not validate execute permissions or expand platform-specific extensions.
 

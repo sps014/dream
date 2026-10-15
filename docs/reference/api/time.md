@@ -2,9 +2,7 @@
 
 **Import:** `import system;`
 
-Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
-
-## `static class Time`
+## `Time`
 
 Timing utilities.
 
@@ -14,24 +12,22 @@ public static class Time
 
 ## `sleep_host`
 
-Schedules a cooperative timer. Prefer `Time.sleep` for cancellation-token handling.
-
 ```dream
 public static extern async fun sleep_host(ms: int): void
 ```
 
 ## `sleep`
 
-Cooperative / virtual-clock sleep (scheduler timer queue). Prefer `Time.delay` for wall-clock animation pacing in the browser.
+Suspends on the scheduler timer and returns cancellation instead of panicking.
 
 ```dream
-public static async fun sleep(ms: int, token: Option<CancellationToken> = Option.None): void
+public static fun sleep(ms: int, token: Option<CancellationToken> = Option.None): Future<Result<bool, CancelledError>>
 ```
 
 ## `delay`
 
-Wall-clock delay (`setTimeout` in the browser; real sleep natively).
+Suspends until the wall-clock timer expires or inherited cancellation is requested.
 
 ```dream
-public static async fun delay(ms: int, token: Option<CancellationToken> = Option.None): void
+public static fun delay(ms: int, token: Option<CancellationToken> = Option.None): Future<Result<bool, CancelledError>>
 ```

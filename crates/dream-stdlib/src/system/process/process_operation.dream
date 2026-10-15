@@ -1,0 +1,53 @@
+module system.process;
+
+internal class ProcessOperation {
+    id: int;
+    internal constructor(request: JsonValue, bytes: byte[]) { this.id = ProcessOperation.start_host(Json.serialize(request), bytes); }
+    del() { this.close(); }
+    internal fun close(): void { if this.id > 0 { ProcessOperation.release_host(this.id); this.id = 0; } }
+    internal fun claim(): void { ProcessOperation.claim_host(this.id); }
+
+    @runtime("processStart")
+    static extern fun start_host(request: string, bytes: byte[]): int;
+    @async_host
+    @runtime("processOperationWait")
+    static extern async fun wait_host(id: int): int;
+    @runtime("processOperationResult")
+    static extern fun result_host(id: int): byte[];
+    @runtime("processOperationCancel")
+    static extern fun cancel_host(id: int): void;
+    @runtime("processOperationRelease")
+    static extern fun release_host(id: int): void;
+    @runtime("processOperationClaim")
+    static extern fun claim_host(id: int): void;
+
+    internal static fun request(action: string, handle: int): JsonValue {
+        let request = JsonValue.dict();
+        request.set("action", JsonValue.from_string(action));
+        request.set("handle", JsonValue.number((double)handle));
+        return request;
+    }
+
+    internal async fun wait(token: Option<CancellationToken>): Result<byte[], ProcessError> {
+        let effective_token = CancellationToken.resolve(token);
+        let lifetime = [this];
+        if lifetime[0].id <= 0 { return Result.Err(ProcessError("ELIMIT", "process operation capacity exhausted")); }
+        let pending = ProcessOperation.wait_host(lifetime[0].id);
+        if effective_token.is_some() {
+            if effective_token.unwrap().wait(pending).await.is_err() {
+                ProcessOperation.cancel_host(lifetime[0].id);
+                // Cancellation completion acknowledges termination/reaping for owned run operations.
+                ProcessOperation.wait_host(lifetime[0].id).await;
+            }
+        } else { pending.await; }
+        let wire = ProcessOperation.result_host(lifetime[0].id);
+        if wire.length < 1 { return Result.Err(ProcessError.io("invalid process completion")); }
+        let payload = Buffer.alloc<byte>(wire.length - 1);
+        for (let i = 0; i < payload.length; i = i + 1) { payload[i] = wire[i + 1]; }
+        if wire[0] == (byte)1 { return Result.Ok(payload); }
+        let parsed = Json.deserialize<JsonValue>(Encoding.utf8_decode(payload));
+        if parsed.is_err() { return Result.Err(ProcessError.io("invalid process error completion")); }
+        let error = parsed.unwrap();
+        return Result.Err(ProcessError(error.at("code").as_string().unwrap_or("EIO"), error.at("message").as_string().unwrap_or("process operation failed")));
+    }
+}

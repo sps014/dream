@@ -37,12 +37,7 @@ impl<'a> Analyzer<'a> {
         let mut processed_generics: indexmap::IndexSet<crate::function_table::FunctionIdentity> =
             indexmap::IndexSet::new();
         let mut method_index = 0;
-        // A generic whose field types amplify under substitution (e.g. a `List<fun(T): bool>`
-        // field on `class C<T>` combined with something returning `C<fun(T): bool>`) expands
-        // without bound, and each expansion round makes the mangled monomorphized name strictly
-        // longer. Healthy mangled names stay well under a few hundred characters, so watching
-        // for runaway name growth turns an infinite loop into an immediate diagnostic.
-        let mut max_mangled_len: usize = 0;
+        // Semantic type depth bounds recursive expansion without penalizing qualified callback names.
         let mut items_processed: usize = 0;
         loop {
             let mut progressed = false;
@@ -61,14 +56,14 @@ impl<'a> Analyzer<'a> {
                     None => continue,
                 };
                 diagnostics.file_path = file_path_string(&template.file_path);
-                self.with_generic_bindings(bindings, |s| {
+                self.with_generic_bindings(bindings.clone(), |s| {
                     s.analyze_function(template, diagnostics)
                 })?;
                 progressed = true;
                 items_processed += 1;
                 check_instantiation_bounds(
-                    &mut max_mangled_len,
-                    &mut items_processed,
+                    items_processed,
+                    &bindings,
                     &self
                         .function_table
                         .emitted_name(&self.type_ctx, &mangled_name),
@@ -89,18 +84,18 @@ impl<'a> Analyzer<'a> {
             for name in pending_lambdas {
                 processed_generics.insert((name, Vec::new()));
                 items_processed += 1;
-                check_instantiation_bounds(
-                    &mut max_mangled_len,
-                    &mut items_processed,
-                    self.type_ctx.defs.name(name),
-                    diagnostics,
-                )?;
                 let (template, bindings) = match self.pending_lambdas.get(&name) {
                     Some((t, b)) => (*t, b.clone()),
                     None => continue,
                 };
+                check_instantiation_bounds(
+                    items_processed,
+                    &bindings,
+                    self.type_ctx.defs.name(name),
+                    diagnostics,
+                )?;
                 diagnostics.file_path = file_path_string(&template.file_path);
-                self.with_generic_bindings(bindings, |s| {
+                self.with_generic_bindings(bindings.clone(), |s| {
                     s.analyze_function(template, diagnostics)
                 })?;
                 progressed = true;
@@ -111,18 +106,15 @@ impl<'a> Analyzer<'a> {
                 let (method, bindings) = self.struct_methods[method_index].clone();
                 method_index += 1;
                 diagnostics.file_path = file_path_string(&method.file_path);
-                self.with_generic_bindings(bindings, |s| s.analyze_function(method, diagnostics))?;
+                self.with_generic_bindings(bindings.clone(), |s| {
+                    s.analyze_function(method, diagnostics)
+                })?;
                 let Some(identity) = self.function_declaration(method) else {
                     continue;
                 };
                 let key = self.function_table.emitted_name(&self.type_ctx, &identity);
                 items_processed += 1;
-                check_instantiation_bounds(
-                    &mut max_mangled_len,
-                    &mut items_processed,
-                    &key,
-                    diagnostics,
-                )?;
+                check_instantiation_bounds(items_processed, &bindings, &key, diagnostics)?;
                 progressed = true;
             }
 

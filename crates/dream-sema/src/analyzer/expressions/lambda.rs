@@ -197,12 +197,24 @@ impl<'a> Analyzer<'a> {
                             Some(lambda.open_paren_position),
                         );
                     }
-                    parameters.push(param.clone());
+                    let mut concrete_param = param.clone();
+                    concrete_param.type_ = declared_type;
+                    parameters.push(concrete_param);
                 }
             }
         }
         let param_types: Vec<Type> = parameters.iter().map(|p| p.type_.clone()).collect();
-        let unknown_ty = |t: &Type| t.is_unknown() || t.get_type() == "unknown";
+        fn unknown_ty(ty: &Type) -> bool {
+            match ty {
+                Type::Unknown => true,
+                Type::Array(inner) => unknown_ty(inner),
+                Type::Struct(_, Some(args)) | Type::Tuple(args) => args.iter().any(unknown_ty),
+                Type::Function(params, result) => {
+                    params.iter().any(unknown_ty) || unknown_ty(result)
+                }
+                _ => false,
+            }
+        }
         let (body_ret, box_ret) = if lambda.is_async {
             match Self::future_inner_type(&exp_ret) {
                 Some(inner) if !unknown_ty(&inner) => (inner, exp_ret.clone()),

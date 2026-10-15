@@ -423,7 +423,13 @@ pub fn link_wasm(
             }
             let mut command = tools.command("llc");
             command
-                .arg(llc_level(opt))
+                // O0 assigns a distinct Wasm local to every virtual register. Large async
+                // polls exceed engine local limits without stackification/register coalescing.
+                .arg(if opt == OptLevel::O0 {
+                    "-O1"
+                } else {
+                    llc_level(opt)
+                })
                 .arg("-mattr=+simd128")
                 .arg("-filetype=obj")
                 .arg(source)

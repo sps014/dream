@@ -4,3 +4,4 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 
 - [Assert](testing-assert.md)
 - [Test](testing-test.md)
+- [Fixture](testing-fixture.md)

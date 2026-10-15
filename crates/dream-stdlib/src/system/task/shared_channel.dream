@@ -1,0 +1,134 @@
+module system.task;
+
+// A shared queue's native state outlives every endpoint on every worker.
+shared internal class SharedChannelState {
+    internal handle: usize;
+    internal constructor(capacity: int) { this.handle = SharedChannelState.create_host(capacity); }
+    del() { SharedChannelState.free_host(this.handle); }
+    @intrinsic("dream_channel_new")
+    static extern fun create_host(capacity: int): usize;
+    @intrinsic("dream_channel_free")
+    static extern fun free_host(handle: usize): void;
+}
+
+// Endpoint factories for a queue that can transfer shared values across workers.
+public class SharedChannelEndpoints<T : shared> {
+    state: SharedChannelState;
+    internal constructor(capacity: int) { this.state = SharedChannelState(capacity); }
+    // Creates an independently closable shared producer endpoint.
+    public get sender(): SharedSender<T> { return SharedSender<T>(this.state); }
+    // Creates an independently closable shared consumer endpoint.
+    public get receiver(): SharedReceiver<T> { return SharedReceiver<T>(this.state); }
+}
+
+internal static class SharedChannelHost {
+    @intrinsic("dream_channel_endpoint")
+    internal static extern fun endpoint(state: usize, sending: int): usize;
+    @intrinsic("dream_channel_close")
+    internal static extern fun close(endpoint: usize): void;
+    @intrinsic("dream_channel_endpoint_free")
+    internal static extern fun free(endpoint: usize): void;
+    @intrinsic("dream_channel_send")
+    internal static extern fun send<T : shared>(endpoint: usize, borrow value: T[]): int;
+    @intrinsic("dream_channel_receive")
+    internal static extern fun receive<T : shared>(endpoint: usize): T[];
+    @intrinsic("dream_channel_status")
+    internal static extern fun status(endpoint: usize): int;
+}
+
+class SharedChannelWait {
+    registration: usize;
+    internal constructor(endpoint: usize) { this.registration = SharedChannelWait.register_host(endpoint); }
+    internal fun signal(): Future<int> { return SharedChannelWait.signal_host(this.registration); }
+    internal fun close(): void {
+        if this.registration != (usize)0 { SharedChannelWait.unregister_host(this.registration); this.registration = (usize)0; }
+    }
+    del() { this.close(); }
+    @intrinsic("dream_channel_wait")
+    static extern fun register_host(endpoint: usize): usize;
+    @intrinsic("dream_cancellation_signal")
+    static extern fun signal_host(registration: usize): Future<int>;
+    @intrinsic("dream_cancellation_unregister")
+    static extern fun unregister_host(registration: usize): void;
+}
+
+// A shared producer; clone creates an independent endpoint and ordinary aliases share closure.
+shared public class SharedSender<T : shared> {
+    owner: SharedChannelState;
+    endpoint: usize;
+    internal constructor(owner: SharedChannelState) {
+        this.owner = owner;
+        this.endpoint = SharedChannelHost.endpoint(this.owner.handle, 1);
+    }
+    // Creates another producer; the queue closes after the last producer closes or drops.
+    public fun clone(): SharedSender<T> { return SharedSender<T>(this.owner); }
+    // Attempts one send atomically without blocking the scheduler.
+    public fun try_send(value: T): Result<bool, ChannelError> {
+        let carrier = [value];
+        let status = SharedChannelHost.send<T>(this.endpoint, carrier);
+        if status == 1 { return Result.Err(ChannelError.Full); }
+        if status == 2 { return Result.Err(ChannelError.Closed); }
+        return Result.Ok(true);
+    }
+    // Waits for capacity using cross-worker notifications and inherited cancellation.
+    public fun send(value: T, token: Option<CancellationToken> = Option.None): Future<Result<bool, ChannelError>> {
+        return SharedSender<T>.send_owned(this, value, CancellationToken.resolve(token));
+    }
+    static async fun send_owned(sender: SharedSender<T>, value: T, token: Option<CancellationToken>): Result<bool, ChannelError> {
+        while true {
+            if CancellationToken.is_cancelled_opt(token) { return Result.Err(ChannelError.Cancelled); }
+            let result = sender.try_send(value);
+            if result.is_ok() || result.unwrap_err() != ChannelError.Full { return result; }
+            let waiting = SharedChannelWait(sender.endpoint);
+            if token.is_some() {
+                let result = token.unwrap().wait(waiting.signal()).await;
+                waiting.close();
+                if result.is_err() { return Result.Err(ChannelError.Cancelled); }
+            } else { waiting.signal().await; waiting.close(); }
+        }
+    }
+    // Closes this endpoint atomically and wakes affected producers and consumers.
+    public fun close(): void { SharedChannelHost.close(this.endpoint); }
+    del() { SharedChannelHost.free(this.endpoint); }
+}
+
+// A shared consumer; queued values remain available after the last producer closes.
+shared public class SharedReceiver<T : shared> {
+    owner: SharedChannelState;
+    endpoint: usize;
+    internal constructor(owner: SharedChannelState) {
+        this.owner = owner;
+        this.endpoint = SharedChannelHost.endpoint(this.owner.handle, 0);
+    }
+    // Creates an independently closable consumer on the same queue.
+    public fun clone(): SharedReceiver<T> { return SharedReceiver<T>(this.owner); }
+    // Attempts one receive, distinguishing Empty, closed endpoints, and drained EOF.
+    public fun try_receive(): Result<Option<T>, ChannelError> {
+        let carrier = SharedChannelHost.receive<T>(this.endpoint);
+        if carrier.length > 0 { return Result.Ok(Option.Some(carrier[0])); }
+        let status = SharedChannelHost.status(this.endpoint);
+        if status == 2 { return Result.Err(ChannelError.Closed); }
+        if status == 1 { let end: Option<T> = Option.None; return Result.Ok(end); }
+        return Result.Err(ChannelError.Empty);
+    }
+    // Waits for a value or drained EOF using cross-worker notifications.
+    public fun receive(token: Option<CancellationToken> = Option.None): Future<Result<Option<T>, ChannelError>> {
+        return SharedReceiver<T>.receive_owned(this, CancellationToken.resolve(token));
+    }
+    static async fun receive_owned(receiver: SharedReceiver<T>, token: Option<CancellationToken>): Result<Option<T>, ChannelError> {
+        while true {
+            if CancellationToken.is_cancelled_opt(token) { return Result.Err(ChannelError.Cancelled); }
+            let result = receiver.try_receive();
+            if result.is_ok() || result.unwrap_err() != ChannelError.Empty { return result; }
+            let waiting = SharedChannelWait(receiver.endpoint);
+            if token.is_some() {
+                let result = token.unwrap().wait(waiting.signal()).await;
+                waiting.close();
+                if result.is_err() { return Result.Err(ChannelError.Cancelled); }
+            } else { waiting.signal().await; waiting.close(); }
+        }
+    }
+    // Closes this endpoint; the last consumer releases queued values and wakes blocked sends.
+    public fun close(): void { SharedChannelHost.close(this.endpoint); }
+    del() { SharedChannelHost.free(this.endpoint); }
+}

@@ -113,16 +113,99 @@ streams HTTP responses to files, reports exit statuses, and explicitly closes it
 resources. Native/Node integration checks downloads, help/version, bad arguments,
 timeouts, and preserving destinations on HTTP error statuses.
 
-## Remaining implementation
+## Phase 6 implementation
 
-1. Phase 6: bounded/unbounded channels, worker transfer, structured concurrency,
-   process options, asynchronous pipes, deadlines, termination, and reaping.
-2. Phase 7: CSV, UUID, temporary resources, atomic replacement, typed configuration,
-   testing fixtures, async assertions, and the HTTP-to-CSV acceptance application.
-3. Phase 8: cross-platform native and browser qualification, sanitizer/failure
-   injection coverage, executable documentation, packaging, and release gates.
-4. Phase 9: post-v1 TCP/UDP, streaming compression, application-driven cryptography,
-   and collection refinements.
+`Task.scope` owns eager local async children, joins discarded handles, propagates
+cancellation, and retains typed application errors. Deadlines request cancellation;
+CPU work remains cooperative. Scope futures stay schedulable through cleanup even
+when explicitly cancelled. Child completion signals support independent joiners.
+Async I/O, timers, channels, processes, and pool jobs inherit the current scope token.
+Explicit low-level promise/worker operations retain their explicit token contracts.
+
+`Task.map` and `Task.for_each` use bounded local worker loops, preserve input order,
+and stop taking inputs on failure. Reusable `TaskPool` jobs provide explicit CPU
+parallelism, and `scope.spawn_on` joins pool work inside a region. Native worker
+receives and pooled replies now use foreign completion wakeups instead of blocking
+an async poll. Submitted callback environments stay retained through completion.
+
+Local and shared channels provide bounded/unbounded factories, separate endpoints,
+partial closure, drained EOF, and cancellation of blocked operations. Readiness
+wakes one FIFO waiter; closure wakes all. Shared channels enforce shared payload
+constraints, publish typed carriers, and synchronize their C queues across workers.
+Cancellation state reads and reference counts use atomics where threads are enabled.
+
+Process options snapshot environment overrides, working directories, input bytes,
+output limits, and deadlines. Native services use a bounded Tokio runtime; Node
+uses asynchronous child-process streams. Both drain stdout/stderr concurrently,
+propagate pipe failures, and terminate/reap owned run children before returning
+cancellation or timeout. Borrowed process pipes implement the async stream APIs.
+Browser launch requests return EUNSUPPORTED. Unix process I/O workers block SIGPIPE
+to report broken pipes as errors; child exec resets that mask.
+
+Public fields and methods have source comments and API reference coverage. The
+source inventory now recognizes shared public classes. Generic method bodies keep
+owner substitutions, generic calls support contextual lambdas/named arguments,
+and monomorphization bounds use semantic nesting rather than rendered symbol length.
+A runnable bounded pipeline and concurrency benchmark accompany the APIs.
+
+## Phase 7 implementation
+
+`system.csv` provides strict UTF-8 streaming records with quoted fields, embedded
+newlines, configurable ASCII delimiters, record limits, and byte-oriented errors.
+A shared Rust `csv` adapter supplies field decoding and writer escaping on native
+and WASM hosts. `system.uuid` stores 128 bits inline as two `ulong`s, with value
+equality, hashing, ordering, secure v4 generation, and canonical formatting.
+Secure random APIs now return errors and discard partial entropy on host failure;
+AES key/nonce factories and callers use the fallible APIs directly.
+
+`TempFile` and `TempDirectory` use private OS directories through `tempfile` on
+native and `mkdtemp` on Node. Explicit cleanup reports errors; destructor cleanup
+is best-effort. Atomic replacement flushes and closes output first, preserves the old
+destination on rename failure, and exposes unsupported browser capabilities.
+The optional `io` host owns temporary OS services, leaving core binding state lean.
+
+Typed configuration merges defaults, JSON, environment, and explicit CLI values
+with validation and source-aware diagnostics. Async assertions and typed fixture
+owners extend the existing async runner. The HTTP-to-CSV example spools downloads
+with bounded memory, adds UUIDs, and atomically publishes validated output.
+
+## Phase 8 qualification infrastructure
+
+`scripts/qualify-stdlib-v1.py` runs release gates sequentially and records the
+revision, dirty state, platform, step results, and logs. Its native/Node gate
+includes workspace builds and tests, strict Clippy, both guest profiles, executable
+docs, full-corpus determinism, packaging, and sanitizer checks. The separate
+browser harness checks debug/release fixtures and unsupported capabilities.
+`.github/workflows/stdlib-v1.yml` runs native qualification on Linux, macOS, and
+Windows and browser qualification on Linux, preserving evidence as artifacts.
+A gate is not qualified until its corresponding report passes.
+
+The application example exposed excessive Wasm locals in large debug async polls.
+Debug Wasm program code generation now enables llc stackification/coalescing;
+higher-level debug MIR/LLVM optimization policy is unchanged. Invalid WAT
+rendering returns a toolchain diagnostic, and quiet panic output is confined to
+the codegen catch region.
+
+## Phase 9 implementation
+
+Raw TCP and UDP use Tokio native services and asynchronous Node adapters. TCP
+implements async streams, partial writes, deadlines, cancellation, half-close,
+TCP_NODELAY, and independent accepted-stream ownership. UDP preserves datagram
+boundaries, empty messages, explicit truncation, broadcast and TTL options.
+Close wakes pending operations. Browsers expose unsupported raw-socket capability.
+
+Streaming gzip/zlib wrappers share `flate2`/`zlib-rs` on native and WASM adapters,
+with chunk/output limits, checksum/truncation errors, explicit finish, and strict
+single-stream termination. List, Queue, Map, and Set share additional-element
+reserve semantics and seeded operation-sequence tests. Additional cryptography
+remains conditional on concrete application requirements; no speculative
+algorithms are introduced.
+
+## Remaining qualification
+
+Complete the Phase 8 native platform matrix, browser matrix, packaging,
+determinism, and sanitizer gates before declaring a stable v1. Record actual
+reports separately from implementation status.
 
 Keep guest runtime code in C, native capability services in host crates, and JS
 adapters in the existing runtime source and bundling system. Follow the runtime
@@ -173,3 +256,15 @@ Unicode values, short clusters, negative integers, `--`, help/version, and inval
 definitions. Run `python scripts/serve-phase34-browser.py --case cli` to repeat it.
 The full native platform matrix for Phase 3–4 remains separately recorded above;
 Phase 8 still qualifies the completed v1 across platforms and packaging modes.
+
+Phase 6 passes the full native and Node assertion corpus, plus optimized native
+and Node checks for structured scopes, channels, and process operations. Browser
+automation passes structured concurrency and shared-worker channels in debug and
+release builds, checking that no guest resources remain live after completion.
+The bounded pipeline sample returns 5050 without guest leaks on native and Node.
+
+The phase also passes strict workspace Clippy, 44 JavaScript adapter/bundler tests,
+seven documentation extractor tests, all 28 executable documentation examples,
+and the strict documentation build. Cancellation registration stress passes
+address/undefined and thread sanitizers on macOS. These Phase 6 results qualify
+the local macOS host; Linux and Windows qualification remains part of Phase 8.

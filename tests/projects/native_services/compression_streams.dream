@@ -1,0 +1,46 @@
+import system;
+import system.io;
+import system.compress;
+import system.testing;
+
+@test
+fun compression_streams(): void {
+    let input = Buffer.alloc<byte>(100000);
+    for (let i = 0; i < input.length; i = i + 1) { input[i] = (byte)(i % 251); }
+    for (let format in [CompressionFormat.Gzip, CompressionFormat.Zlib]) {
+        let encoded = MemoryStream();
+        let writer = Compression.writer(encoded, format).unwrap();
+        writer.write_all(input).unwrap();
+        writer.flush().unwrap();
+        writer.finish().unwrap();
+        Assert.is_true(writer.write(input).is_err());
+        encoded.seek(0L).unwrap();
+        let reader = Compression.reader(encoded, format).unwrap();
+        Assert.eq(reader.read(0).unwrap().length, 0);
+        let decoded = MemoryStream();
+        Assert.eq(Streams.copy(reader, decoded).unwrap(), 100000L);
+        decoded.seek(0L).unwrap();
+        let actual = decoded.read_exact(input.length).unwrap();
+        for (let i = 0; i < input.length; i = i + 1) { Assert.eq(actual[i], input[i]); }
+        reader.close();
+        Assert.is_true(reader.read(1).is_err());
+
+        encoded.seek(0L).unwrap();
+        let limited = Compression.reader(encoded, format, max_output_bytes: 100L).unwrap();
+        Assert.is_true(Streams.copy(limited, MemoryStream()).is_err());
+        limited.close();
+
+        encoded.seek(0L).unwrap();
+        let compressed = encoded.read(100000).unwrap();
+        let truncated = Compression.reader(MemoryStream(Span<byte>(compressed, 0, compressed.length - 1).to_array()), format).unwrap();
+        Assert.is_true(Streams.copy(truncated, MemoryStream()).is_err());
+        truncated.close();
+        let trailing = MemoryStream(compressed);
+        trailing.seek((long)compressed.length).unwrap();
+        trailing.write_all([(byte)99]).unwrap();
+        trailing.seek(0L).unwrap();
+        let extra = Compression.reader(trailing, format).unwrap();
+        Assert.is_true(Streams.copy(extra, MemoryStream()).is_err());
+        extra.close();
+    }
+}

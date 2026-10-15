@@ -1,0 +1,48 @@
+import system;
+import system.collections;
+import system.testing;
+
+@test
+fun reserve_properties(): void {
+    let list = List<int>();
+    let queue = Queue<int>();
+    let map = Map<int, int>();
+    let set = Set<int>();
+    let random = Random(314159);
+    let expected = List<int>();
+    for (let round = 0; round < 200; round = round + 1) {
+        let count = random.next_int(20);
+        list.reserve(count).unwrap();
+        queue.reserve(count).unwrap();
+        map.reserve(count).unwrap();
+        set.reserve(count).unwrap();
+        let list_capacity = list.capacity;
+        let queue_capacity = queue.capacity;
+        let map_capacity = map.capacity;
+        let set_capacity = set.capacity;
+        for (let i = 0; i < count; i = i + 1) {
+            let value = round * 20 + i;
+            list.push(value); queue.enqueue(value); map.set(value, value); set.add(value); expected.push(value);
+        }
+        Assert.eq(list.capacity, list_capacity);
+        Assert.eq(queue.capacity, queue_capacity);
+        Assert.eq(map.capacity, map_capacity);
+        Assert.eq(set.capacity, set_capacity);
+        Assert.eq(list.length, expected.length);
+        Assert.eq(queue.length, expected.length);
+        if round % 3 == 0 && expected.length > 0 {
+            let value = expected.get(0);
+            expected.remove_at(0);
+            Assert.eq(queue.dequeue().unwrap(), value);
+            Assert.eq(list.get(0), value);
+            list.remove_at(0);
+            Assert.is_true(map.remove(value));
+            Assert.is_true(set.remove(value));
+        }
+    }
+    for (let value in expected) { Assert.eq(queue.dequeue().unwrap(), value); Assert.eq(map.get(value).unwrap(), value); Assert.is_true(set.contains(value)); }
+    Assert.is_true(list.reserve(0 - 1).is_err());
+    Assert.is_true(queue.reserve(0 - 1).is_err());
+    Assert.is_true(map.reserve(2147483647).is_err());
+    Assert.is_true(set.reserve(2147483647).is_err());
+}

@@ -1,0 +1,7 @@
+[package]
+name = "concurrent_pipeline"
+version = "1.0.0"
+type = "bin"
+entry = "main.dream"
+targets = ["native", "node", "web"]
+description = "A structured producer-consumer pipeline with bounded backpressure"

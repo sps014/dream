@@ -2,11 +2,9 @@
 
 **Import:** `import system.collections;`
 
-Read the [usage guide](../stdlib/collections/queue.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+## `Queue`
 
-## `class Queue<T> : Collection<T>`
-
-FIFO queue backed by a ring buffer (`T[]` + head/count). Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any `(head + k) % items.length` with `k >= 0` is a valid slot for `Buffer.get_unchecked`.
+FIFO queue backed by a ring buffer (`T[]` + head/count).  Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any `(head + k) % items.length` with `k >= 0` is a valid slot for `Buffer.get_unchecked`.
 
 ```dream
 public class Queue<T> : Collection<T>
@@ -26,6 +24,22 @@ Number of elements currently stored.
 
 ```dream
 public get length(): int
+```
+
+## `capacity`
+
+Current element capacity of the ring buffer.
+
+```dream
+public get capacity(): int
+```
+
+## `reserve`
+
+Reserves room for additional elements while preserving FIFO order and length.
+
+```dream
+public fun reserve(additional: int): Result<bool, CapacityError>
 ```
 
 ## `enqueue`
@@ -61,6 +75,8 @@ public fun clear(): void
 ```
 
 ## `clear`
+
+Unmanaged: no RC to release — rewind only.
 
 ```dream
 public fun clear(): void where T : unmanaged

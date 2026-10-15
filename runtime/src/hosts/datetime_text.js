@@ -49,6 +49,14 @@ function localZoneName() {
   }
 }
 
+const cancellableDelay = Object.assign(ms => {
+      let resolve;
+      const pending = new Promise(done => { resolve = done; });
+      const timer = setTimeout(resolve, Math.max(0, ms | 0));
+      pending.cancel = () => { clearTimeout(timer); resolve(); };
+      return pending;
+    }, { cancelSynchronously: true });
+
 export function makeDatetimeTextHost() {
   return {
     unicodeNormalize: (text, form) => {
@@ -77,6 +85,6 @@ export function makeDatetimeTextHost() {
         return BigInt(Math.floor(performance.now() * 1000000));
       }
     },
-    delayMs: (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms | 0))),
+    delayMs: cancellableDelay,
   };
 }

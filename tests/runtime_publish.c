@@ -5,6 +5,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include "dream_thread.h"
+typedef struct { dream_mutex mu; dream_cond cv; int done; dream_ptr reply; } TestCompletion;
+void dream_complete_foreign_owned(dream_ptr future, dream_ptr reply) {
+    TestCompletion *c = (TestCompletion *)future;
+    dream_mutex_lock(&c->mu);
+    assert(!c->done); c->reply = reply; c->done = 1;
+    dream_cond_signal(&c->cv); dream_mutex_unlock(&c->mu);
+}
+static dream_ptr receive_reply(int32_t worker) {
+    TestCompletion c = {0}; dream_mutex_init(&c.mu); dream_cond_init(&c.cv);
+    assert(workerRecvAsync((dream_ptr)&c, worker) == 1);
+    dream_mutex_lock(&c.mu);
+    while (!c.done) { dream_cond_wait(&c.cv, &c.mu); }
+    dream_mutex_unlock(&c.mu); dream_cond_destroy(&c.cv); dream_mutex_destroy(&c.mu);
+    return c.reply;
+}
 
 /* Generated-program hooks: these graphs are explicitly recycled after their worker exits. */
 void dream_release_object(dream_ptr ptr) { dream_release(ptr); }
@@ -114,7 +130,7 @@ static void make_nodes(size_t count) { make_sized_nodes(count, sizeof(Node)); }
 static void handoff_and_free(void) {
     int32_t worker = workerSpawn(0, 0);
     workerPost(worker, nodes[0]);
-    assert(workerRecv(worker) == 0);
+    assert(receive_reply(worker) == 0);
     workerTerminate(worker);
     for (size_t i = 0; i < node_count; ++i) {
         assert((*dream_rc_word(nodes[i]) & INT32_MAX) == 1);
@@ -162,7 +178,7 @@ int main(void) {
         dream_retain(nodes[1]);
         dream_release(nodes[1]);
     }
-    assert(workerRecv(observer) == 0);
+    assert(receive_reply(observer) == 0);
     workerTerminate(observer);
     for (size_t i = 0; i < node_count; ++i) {
         assert((*dream_rc_word(nodes[i]) & INT32_MAX) == 1);

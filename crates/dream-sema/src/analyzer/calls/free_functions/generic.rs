@@ -47,8 +47,16 @@ impl<'a> Analyzer<'a> {
                 &mut self.type_ctx,
             );
             info.declaring_module = self.module_of(template.file_path.as_ref());
+            // Method bodies can mention owner parameters absent from the method signature.
+            // Retain those substitutions alongside the method's own concrete arguments.
+            let mut body_bindings = self
+                .generic_method_bindings
+                .get(&def)
+                .cloned()
+                .unwrap_or_default();
+            body_bindings.extend(bindings.clone());
             self.instantiated_generics
-                .insert(identity.clone(), (bindings.clone(), specialized_ref));
+                .insert(identity.clone(), (body_bindings, specialized_ref));
             self.function_table
                 .record_declaration(specialized_ref, identity.clone());
             self.function_table

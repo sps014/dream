@@ -15,8 +15,12 @@ dream-host-net = { path = "../dream-host-net", optional = true }
 
 dream-host-cli = { path = "../dream-host-cli", optional = true }
 
+dream-host-data = { path = "../dream-host-data", optional = true }
+
+dream-host-io = { path = "../dream-host-io", optional = true }
+
 [features]
-default = ["core", "unicode", "crypto", "process", "timezone", "net", "cli"]
+default = ["core", "unicode", "crypto", "process", "timezone", "net", "cli", "data", "io"]
 core = ["dep:dream-host-core"]
 unicode = ["core", "dep:dream-host-unicode"]
 crypto = ["core", "dep:dream-host-crypto"]
@@ -24,3 +28,5 @@ process = ["core", "dep:dream-host-process"]
 timezone = ["core", "dep:dream-host-timezone"]
 net = ["core", "dep:dream-host-net"]
 cli = ["core", "dep:dream-host-cli"]
+data = ["core", "dep:dream-host-data"]
+io = ["core", "dep:dream-host-io"]

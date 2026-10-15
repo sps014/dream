@@ -2,13 +2,9 @@
 
 **Import:** `import system.collections;`
 
-Read the [usage guide](../stdlib/collections/list.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+## `List`
 
-[All sections](collections-list.md)
-
-## `class List<T> : IndexedCollection<T>`
-
-Growable random-access sequence backed by a resizable buffer. Invariant: `0 <= count <= items.length`. Every mutation of `items`/`count` preserves it, which is what makes the `Buffer.get_unchecked`/`set_unchecked` accesses on `[0, count)` sound.
+Growable random-access sequence backed by a resizable buffer.  Invariant: `0 <= count <= items.length`. Every mutation of `items`/`count` preserves it, which is what makes the `Buffer.get_unchecked`/`set_unchecked` accesses on `[0, count)` sound.
 
 ```dream
 public class List<T> : IndexedCollection<T>
@@ -54,6 +50,14 @@ Current capacity of the backing buffer.
 public get capacity(): int
 ```
 
+## `reserve`
+
+Reserves room for additional elements without changing length or existing values.
+
+```dream
+public fun reserve(additional: int): Result<bool, CapacityError>
+```
+
 ## `push`
 
 Appends a value to the end, growing if necessary.
@@ -72,7 +76,7 @@ public fun push_all(borrow items: T[]): void
 
 ## `from_array`
 
-Builds a list containing exactly the elements of `items`, in order. The `[e1, e2, ...]` list-literal syntax (e.g.
+Builds a list containing exactly the elements of `items`, in order. The `[e1, e2, ...]` list-literal syntax (e.g. `let xs: List<int> = [1, 2, 3];`) desugars to this.
 
 ```dream
 public static fun from_array(borrow items: T[]): List<T>
@@ -138,14 +142,6 @@ Index of the last matching element (by value equality), or `None` if absent.
 
 ```dream
 public fun last_index_of(borrow value: T): Option<int>
-```
-
-## `reserve`
-
-Grows the backing buffer until `capacity()` is at least `n`.
-
-```dream
-public fun reserve(n: int): void
 ```
 
 ## `reverse`

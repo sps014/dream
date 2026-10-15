@@ -496,7 +496,11 @@ impl Manifest {
 
     /// Hosts a test package's suite runs on, in declaration order (native when none are listed).
     pub fn test_targets(&self) -> Result<Vec<RunTarget>> {
-        let listed = self.test.as_ref().map(|t| t.targets.as_slice()).unwrap_or(&[]);
+        let listed = self
+            .test
+            .as_ref()
+            .map(|t| t.targets.as_slice())
+            .unwrap_or(&[]);
         if listed.is_empty() {
             return Ok(vec![RunTarget::Native]);
         }
@@ -660,7 +664,9 @@ impl Manifest {
             for t in &test.targets {
                 let parsed = RunTarget::parse(t)?;
                 if parsed == RunTarget::Web {
-                    bail!("[test].targets supports native and node (web has no process to run tests in)");
+                    bail!(
+                        "[test].targets supports native and node (web has no process to run tests in)"
+                    );
                 }
                 if seen.contains(&parsed) {
                     bail!("[test].targets lists '{}' more than once", parsed.as_str());
@@ -674,7 +680,9 @@ impl Manifest {
                 .components()
                 .all(|c| matches!(c, std::path::Component::CurDir))
             {
-                bail!("package.assets entry '{asset}' must name a file or directory, not the package root");
+                bail!(
+                    "package.assets entry '{asset}' must name a file or directory, not the package root"
+                );
             }
         }
         if self.lib.is_some() {

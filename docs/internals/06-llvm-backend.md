@@ -44,11 +44,11 @@ version suffix is accepted without weakening architecture, OS, environment, widt
 checks. A mismatch, malformed table, or missing runtime symbol reports `CompileError::Toolchain`
 with the exact `dream_rt.sigs` cache path, so stale artifacts are actionable rather than ICEs.
 
-Native Rust hosts live in `crates/dream-host-{core,unicode,crypto,process,timezone,net}`, not in the compiler.
+Native Rust hosts live in `crates/dream-host-{core,unicode,crypto,process,timezone,net,cli,data,io}`, not in the compiler.
 The root `dream` library is an rlib only and has no GUI/network host dependencies.
-`cargo build --workspace` builds the compiler and all six native capability libraries:
+`cargo build --workspace` builds the compiler and all nine native capability libraries:
 `dream_host_core`,
-`dream_host_unicode`, `dream_host_crypto`, `dream_host_process`, `dream_host_timezone`, and `dream_host_net` (with the
+`dream_host_unicode`, `dream_host_crypto`, `dream_host_process`, `dream_host_timezone`, `dream_host_net`, `dream_host_cli`, `dream_host_data`, and `dream_host_io` (with the
 platform's shared-library prefix/suffix). `dream-host` is a distribution feature set, not
 another host implementation: its independent capability features
 select these packages. The workspace contains only retained core services.
@@ -464,3 +464,9 @@ Threaded C++ exception handling uses WASI clock adapters backed by Dream's exist
 Selective JS runtime chunks come from the final WASM import section, including imports added
 by C/C++ libraries after MIR pruning. Release runtime packaging includes both WASI sysroots.
 Dream Task workers provide the threads; this does not add a WASI `pthread_create` host service.
+
+Debug WebAssembly program objects use llc O1 for stackification and local-register
+coalescing while retaining the debug MIR/LLVM pipeline. llc O0 otherwise assigns
+one Wasm local per virtual register, which can exceed engine limits in a large
+async poll. Native debug code generation remains O0. WAT rendering returns errors
+to the driver, and panic-output suppression is limited to the codegen catch region.

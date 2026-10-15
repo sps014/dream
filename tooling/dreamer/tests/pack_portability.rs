@@ -169,7 +169,13 @@ fn inspect_loader(binary: &Path, executable: bool) {
 fn packed_application_has_no_builder_runtime_dependency() {
     let temporary = tempfile::tempdir().unwrap();
     let project = temporary.path().join("source project");
-    dreamer::commands::init::run(&project, Some("portable".into()), None, dreamer::commands::init::Scaffold::Bin).unwrap();
+    dreamer::commands::init::run(
+        &project,
+        Some("portable".into()),
+        None,
+        dreamer::commands::init::Scaffold::Bin,
+    )
+    .unwrap();
     std::fs::write(
         project.join("src/main.dream"),
         format!("import system;\nimport system.text;\nfun main(): void {{ System.println(Unicode.normalize(\"{MESSAGE}\", UnicodeNormForm.Nfc)); }}\n"),

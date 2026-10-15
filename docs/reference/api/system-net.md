@@ -7,3 +7,5 @@ For usage and target behavior, read the [URL guide](../stdlib/url.md) and
 - [HTTP request types, options, headers, and errors](net-http-types-1.md)
 - [HTTP helpers and capability queries](net-http-types-2.md)
 - [HTTP clients, responses, and body streams](net-http-client.md)
+- [Tcp](net-tcp.md)
+- [Udp](net-udp.md)

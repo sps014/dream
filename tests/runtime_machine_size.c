@@ -15,6 +15,7 @@ static void *sparse_memset(void *ptr, int value, size_t size) {
 #define memset sparse_memset
 #include "../crates/dream-mir/src/runtime/c/core/strings.c"
 #include "../crates/dream-mir/src/runtime/c/sys/shared/async.c"
+#include "../crates/dream-mir/src/runtime/c/sys/shared/cancellation.c"
 #undef memset
 
 void *dream_ft_get(int32_t index) { (void)index; return NULL; }

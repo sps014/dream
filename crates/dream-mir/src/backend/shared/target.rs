@@ -37,9 +37,9 @@ mod tests {
         let wide = Target::Llvm(TargetSpec::parse("x86_64-unknown-linux-gnu").unwrap());
         assert_eq!(
             (narrow.abi().future.waker, narrow.abi().future.slots),
-            (16, 64)
+            (16, 72)
         );
-        assert_eq!((wide.abi().future.waker, wide.abi().future.slots), (24, 96));
+        assert_eq!((wide.abi().future.waker, wide.abi().future.slots), (24, 104));
         assert_eq!(Target::wasm32().abi(), TargetAbi::WASM32);
     }
 }

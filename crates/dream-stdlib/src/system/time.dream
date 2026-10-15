@@ -9,46 +9,43 @@ public static class Time {
     @runtime("delayMs")
     static extern async fun delay_host(ms: int): void;
 
-    // Cooperative / virtual-clock sleep (scheduler timer queue). Prefer `Time.delay` for
-    // wall-clock animation pacing in the browser.
-    public static async fun sleep(ms: int, token: Option<CancellationToken> = Option.None): void {
-        Time.wait_ms(ms, token, true).await;
+    // Suspends on the scheduler timer and returns cancellation instead of panicking.
+    public static fun sleep(ms: int, token: Option<CancellationToken> = Option.None): Future<Result<bool, CancelledError>> {
+        return Time.wait_ms(ms, CancellationToken.resolve(token), true);
     }
 
-    // Wall-clock delay (`setTimeout` in the browser; real sleep natively).
-    public static async fun delay(ms: int, token: Option<CancellationToken> = Option.None): void {
-        Time.wait_ms(ms, token, false).await;
+    // Suspends until the wall-clock timer expires or inherited cancellation is requested.
+    public static fun delay(ms: int, token: Option<CancellationToken> = Option.None): Future<Result<bool, CancelledError>> {
+        return Time.wait_ms(ms, CancellationToken.resolve(token), false);
     }
 
-    static async fun wait_ms(ms: int, token: Option<CancellationToken>, virtual_clock: bool): void {
-        CancellationToken.throw_if_opt(token);
-        if token.is_none() {
-            if virtual_clock {
-                Time.sleep_host(ms).await;
-            } else {
-                Time.delay_host(ms).await;
-            }
-            return;
+    static async fun wait_ms(ms: int, token: Option<CancellationToken>, virtual_clock: bool): Result<bool, CancelledError> {
+        if CancellationToken.is_cancelled_opt(token) { return Result.Err(CancelledError.cancelled()); }
+        let pending = Time.delay_host(ms);
+        if virtual_clock { pending = Time.sleep_host(ms); }
+        let guard = TimerGuard(pending);
+        if token.is_some() {
+            let result = token.unwrap().wait_void(pending).await;
+            guard.close();
+            return result;
         }
-        let remaining = ms;
-        while remaining > 0 {
-            CancellationToken.throw_if_opt(token);
-            let slice = remaining;
-            if slice > 16 {
-                slice = 16;
-            }
-            if virtual_clock {
-                Time.sleep_host(slice).await;
-            } else {
-                Time.delay_host(slice).await;
-            }
-            remaining = remaining - slice;
-        }
-        CancellationToken.throw_if_opt(token);
+        pending.await;
+        guard.close();
+        return Result.Ok(true);
     }
 
     // Returns a high-resolution, monotonically increasing timestamp in nanoseconds.
     // Useful for benchmarking and measuring elapsed time.
     @runtime("timeNowNanos")
     static extern fun nano_time(): long;
+}
+
+// Cancelling a timer frame must also release the scheduler/host timer that owns its wakeup.
+// The guarded host/timer future cannot capture its owner.
+@allow_cycle
+class TimerGuard {
+    pending: Future<void>;
+    internal constructor(pending: Future<void>) { this.pending = pending; }
+    internal fun close(): void { Promise.cancel(this.pending); }
+    del() { this.close(); }
 }

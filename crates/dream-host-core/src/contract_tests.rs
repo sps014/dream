@@ -10,6 +10,8 @@ const HOST_SOURCES: &[&str] = &[
     include_str!("../../dream-host-timezone/src/exports.rs"),
     include_str!("../../dream-host-net/src/exports.rs"),
     include_str!("../../dream-host-cli/src/exports.rs"),
+    include_str!("../../dream-host-data/src/exports.rs"),
+    include_str!("../../dream-host-io/src/exports.rs"),
 ];
 
 fn names_after_module(src: &str, module: &str) -> Vec<String> {
@@ -108,6 +110,8 @@ fn capability_inventory_matches_each_library_exports() {
         (HostCapability::Timezone, vec![HOST_SOURCES[3]]),
         (HostCapability::Net, vec![HOST_SOURCES[4]]),
         (HostCapability::Cli, vec![HOST_SOURCES[5]]),
+        (HostCapability::Data, vec![HOST_SOURCES[6]]),
+        (HostCapability::Io, vec![HOST_SOURCES[7]]),
     ] {
         let exported: HashSet<_> = sources.iter().flat_map(|s| c_abi_fn_names(s)).collect();
         let registered: HashSet<_> = capability.fields().iter().map(|s| s.to_string()).collect();
@@ -132,10 +136,13 @@ const JS_HOST_SOURCES: &[&str] = &[
     include_str!("../../../runtime/src/hosts/file_operations.js"),
     include_str!("../../../runtime/src/hosts/cancellation.js"),
     include_str!("../../../runtime/src/hosts/net.js"),
+    include_str!("../../../runtime/src/hosts/sockets.js"),
     include_str!("../../../runtime/src/hosts/cli.js"),
+    include_str!("../../../runtime/src/hosts/data.js"),
     include_str!("../../../runtime/src/hosts/http.js"),
     include_str!("../../../runtime/src/hosts/crypto.js"),
     include_str!("../../../runtime/src/hosts/console_process.js"),
+    include_str!("../../../runtime/src/hosts/process_service.js"),
     include_str!("../../../runtime/src/hosts/datetime_text.js"),
     include_str!("../../../runtime/src/workers.js"),
 ];
@@ -143,8 +150,12 @@ const JS_HOST_SOURCES: &[&str] = &[
 // Satisfied by the runtime C archive (runtime/c/core/weak.c), not by any
 // JS host or capability ABI table — so they are exempt from the prelude/host parity check.
 const RUNTIME_ARCHIVE_KEYS: &[&str] = &["weakBind", "weakDead", "weakLoad", "weakReleaseRaw"];
-// These bridges are imported by shared/cancellation.c rather than a stdlib extern.
-const RUNTIME_C_JS_IMPORTS: &[&str] = &["cancellationSubscribe", "cancellationNotify"];
+// Shared scheduling imports these bridges directly rather than through a stdlib extern.
+const RUNTIME_C_JS_IMPORTS: &[&str] = &[
+    "cancellationSubscribe",
+    "cancellationNotify",
+    "asyncHostCancel",
+];
 const COMPILER_EMITTED_JS_RC: &[&str] = &["jsRetain", "jsRelease"];
 // The loader invokes this after guest execution to await worker shutdown; it is not a
 // guest import and therefore has no stdlib declaration.
@@ -238,11 +249,11 @@ fn js_dream_host_keys_match_prelude_js_declarations() {
 
 #[test]
 fn runtime_c_imports_have_matching_javascript_bridges() {
-    let source = include_str!("../../dream-mir/src/runtime/c/sys/shared/cancellation.c");
+    let source = include_str!("../../dream-mir/src/runtime/c/core/include/dream_core.h");
     let javascript =
         js_host_export_keys(include_str!("../../../runtime/src/hosts/cancellation.js"));
     for name in RUNTIME_C_JS_IMPORTS {
-        assert!(source.contains(&format!("import_name(\"{name}\")")));
+        assert!(source.contains(&format!("DREAM_WASM_IMPORT(DREAM_MODULE_HOST, \"{name}\")")));
         assert!(javascript.contains(*name));
     }
 }

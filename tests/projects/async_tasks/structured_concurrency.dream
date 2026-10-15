@@ -1,0 +1,119 @@
+import system;
+import system.task;
+import system.testing;
+
+class StructuredCounter {
+    public count: int;
+    public active: int;
+    public maximum: int;
+    public constructor() { this.count = 0; this.active = 0; this.maximum = 0; }
+}
+
+async fun structured_value(value: int): Result<int, string> {
+    Time.delay(1).await;
+    return Result.Ok(value);
+}
+
+async fun structured_cleanup(counter: StructuredCounter): Result<bool, string> {
+    CancellationToken.current.unwrap().wait_cancelled().await;
+    counter.count = counter.count + 1;
+    return Result.Ok(true);
+}
+
+async fun structured_fail(): Result<bool, string> {
+    Time.delay(1).await;
+    return Result.Err("first failure");
+}
+
+async fun structured_wait(scope: TaskScope<string>, counter: StructuredCounter): Result<int, TaskFailure<string>> {
+    let child = scope.spawn<bool>(async () => structured_cleanup(counter).await);
+    child.join().await?;
+    return Result.Ok(1);
+}
+
+@test
+async fun structured_concurrency(): void {
+    let success = Task.scope<int, string>(async (scope) => {
+        let first = scope.spawn<int>(async () => structured_value(20).await);
+        let second = scope.spawn<int>(async () => structured_value(22).await);
+        return Result.Ok(first.join().await? + second.join().await?);
+    }).await;
+    Assert.eq(success.unwrap(), 42);
+
+    for (let index = 0; index < 20; index = index + 1) {
+        Assert.eq(Task.scope<int, string>(async (scope) => Result.Ok(index), timeout_ms: 60000).await.unwrap(), index);
+    }
+
+    let parent = CancellationSource();
+    Assert.eq(Task.scope<int, string>(async (scope) => Result.Ok(7), token: Option.Some(parent.token)).await.unwrap(), 7);
+    Assert.is_false(parent.is_cancelled);
+
+    let discarded = StructuredCounter();
+    let observed_discarded = discarded;
+    Task.scope<int, string>(async (scope) => {
+        scope.spawn<bool>(async () => {
+            Time.delay(1).await;
+            discarded.count = discarded.count + 1;
+            return Result.Ok(true);
+        });
+        return Result.Ok(0);
+    }).await.unwrap();
+    Assert.eq(observed_discarded.count, 1);
+
+    let cleaned = StructuredCounter();
+    let observed_cleaned = cleaned;
+    let failure = Task.scope<int, string>(async (scope) => {
+        scope.spawn<bool>(async () => structured_cleanup(cleaned).await);
+        scope.spawn<bool>(structured_fail);
+        return Result.Ok(0);
+    }).await;
+    Assert.is_true(failure.is_err());
+    Assert.eq(observed_cleaned.count, 1);
+    switch (failure.unwrap_err()) {
+        Failed(message) => Assert.eq_str(message, "first failure"),
+        _ => Assert.is_true(false),
+    }
+
+    let timeout_cleaned = StructuredCounter();
+    let observed_timeout = timeout_cleaned;
+    let timed = Task.scope<int, string>(async (scope) => structured_wait(scope, timeout_cleaned).await, timeout_ms: 5).await;
+    Assert.is_true(timed.is_err());
+    switch (timed.unwrap_err()) { TimedOut => Assert.is_true(true), _ => Assert.is_true(false), }
+    Assert.eq(observed_timeout.count, 1);
+
+    let external_cleaned = StructuredCounter();
+    let observed_external = external_cleaned;
+    let pending = Task.scope<int, string>(async (scope) => structured_wait(scope, external_cleaned).await);
+    Promise.start(pending);
+    Time.delay(2).await;
+    Promise.cancel(pending);
+    Assert.is_true(pending.await.is_err());
+    Assert.eq(observed_external.count, 1);
+
+    let counter = StructuredCounter();
+    let observed = counter;
+    let results = Task.map<int, int, string>([0,1,2,3,4,5,6,7], async (value) => {
+        counter.active = counter.active + 1;
+        if counter.active > counter.maximum { counter.maximum = counter.active; }
+        Time.delay(1).await;
+        counter.active = counter.active - 1;
+        return Result.Ok(value * value);
+    }, concurrency: 3).await.unwrap();
+    Assert.eq(results.length, 8);
+    Assert.eq(results[7], 49);
+    Assert.eq(observed.maximum, 3);
+    Assert.eq(observed.active, 0);
+    Assert.is_true(Task.map<int, int, string>([1], structured_value, concurrency: 0).await.is_err());
+    Assert.eq(Task.map<int, int, string>([], structured_value, concurrency: 2).await.unwrap().length, 0);
+
+    let pool = TaskPool(2);
+    let worker_pool = pool;
+    let pooled = Task.scope<int, string>(async (scope) => {
+        let first = scope.spawn_on<int>(worker_pool, () => 6 * 7);
+        return first.join().await;
+    }).await;
+    Assert.eq(pooled.unwrap(), 42);
+    pool.close().await.unwrap();
+    pool.close().await.unwrap();
+    Assert.is_true(pool.dispatch(() => 1).await.is_err());
+}

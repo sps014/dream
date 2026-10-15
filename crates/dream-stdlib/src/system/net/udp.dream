@@ -1,0 +1,48 @@
+module system.net;
+
+// One UDP datagram; empty data is a valid message and never denotes EOF.
+public class UdpDatagram {
+    // Received bytes, limited to the requested receive size.
+    public data: byte[];
+    // Numeric address of the sender.
+    public host: string;
+    // UDP port of the sender.
+    public port: int;
+    // True when the message contained more bytes than the receive buffer could retain.
+    public truncated: bool;
+    internal constructor(data: byte[], host: string, port: int, truncated: bool) { this.data = data; this.host = host; this.port = port; this.truncated = truncated; }
+}
+
+// An owned UDP socket with explicit message boundaries and bounded receive buffers.
+public class UdpSocket {
+    state: SocketState;
+    internal constructor(state: SocketState) { this.state = state; }
+    // Binds an endpoint; port zero selects an ephemeral port.
+    public static async fun bind(host: string, port: int, token: Option<CancellationToken> = Option.None): Result<UdpSocket, IoError> { return Result.Ok(UdpSocket(SocketState.open("udp_bind", host, port, 0, token).await?)); }
+    // Numeric bound interface address.
+    public get local_host(): string { return this.state.metadata.at("local_host").as_string().unwrap_or(""); }
+    // Actual bound UDP port.
+    public get local_port(): int { return this.state.metadata.at("local_port").as_int().unwrap_or(0); }
+    // Sends one datagram of at most 65507 bytes with optional deadline and cancellation.
+    public async fun send(host: string, port: int, data: byte[], timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<int, IoError> {
+        let request = SocketState.request("udp_send", this.state.id, timeout_ms); request.set("host", JsonValue.from_string(host)); request.set("port", JsonValue.from_int(port));
+        let bytes = this.state.submit(request, data, token).await?;
+        let count = int.parse(Encoding.utf8_decode(bytes));
+        if count.is_err() { return Result.Err(IoError.other("", "invalid datagram send progress")); }
+        return Result.Ok(count.unwrap());
+    }
+    // Receives one message, reporting truncation explicitly; a concurrent receive returns EBUSY.
+    public async fun receive(max_bytes: int = 65535, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<UdpDatagram, IoError> {
+        let request = SocketState.request("udp_receive", this.state.id, timeout_ms); request.set("count", JsonValue.from_int(max_bytes));
+        let metadata = SocketState.parse(this.state.submit(request, [], token).await?)?;
+        let data = Encoding.hex_decode(metadata.at("bytes").as_string().unwrap_or("!"));
+        if data.is_err() { return Result.Err(IoError.other("", "invalid datagram payload")); }
+        return Result.Ok(UdpDatagram(data.unwrap(), metadata.at("host").as_string().unwrap_or(""), metadata.at("port").as_int().unwrap_or(0), metadata.at("truncated").as_bool().unwrap_or(false)));
+    }
+    // Enables or disables sending to broadcast endpoints.
+    public fun set_broadcast(enabled: bool): Result<bool, IoError> { return this.state.control("broadcast", JsonValue.boolean(enabled)); }
+    // Sets outgoing IP time-to-live to a value between 1 and 255.
+    public fun set_ttl(ttl: int): Result<bool, IoError> { return this.state.control("ttl", JsonValue.from_int(ttl)); }
+    // Closes the owned socket and wakes pending receives; repeated closure succeeds.
+    public fun close(): Result<bool, IoError> { this.state.close(); return Result.Ok(true); }
+}

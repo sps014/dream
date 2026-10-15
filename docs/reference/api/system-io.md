@@ -13,3 +13,4 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [MemoryStream](io-memory-stream.md)
 - [BufferedReader](io-buffered-reader.md)
 - [BufferedWriter](io-buffered-writer.md)
+- [Temporary](io-temporary.md)

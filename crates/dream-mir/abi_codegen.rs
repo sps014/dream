@@ -55,6 +55,7 @@ const FIELDS: &[&str] = &[
     "QUEUED",
     "ESIZE",
     "WIDE",
+    "CONTEXT",
     "SLOTS",
 ];
 
@@ -77,6 +78,7 @@ fn write_layout(out: &mut String, suffix: &str, f: registry::FutureLayout) {
         f.queued,
         esize,
         f.wide,
+        f.context,
         f.slots,
     ];
     for (name, value) in FIELDS.iter().zip(values) {
@@ -122,8 +124,8 @@ mod tests {
         let h = header();
         assert!(h.contains("#if UINTPTR_MAX == UINT64_MAX"));
         assert!(h.contains("#elif UINTPTR_MAX == UINT32_MAX"));
-        assert!(h.contains("#define F_SLOTS_NATIVE 96"));
-        assert!(h.contains("#define F_SLOTS_NATIVE 64"));
-        assert!(h.contains("#define F_SLOTS_WASM 64"));
+        assert!(h.contains("#define F_SLOTS_NATIVE 104"));
+        assert!(h.contains("#define F_SLOTS_NATIVE 72"));
+        assert!(h.contains("#define F_SLOTS_WASM 72"));
     }
 }

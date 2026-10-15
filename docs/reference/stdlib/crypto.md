@@ -32,8 +32,8 @@ fun main() {
 | `AesGcm` / `AesGcmKey` | authenticated encryption (native/Node) |
 
 ```dream
-let key = AesGcmKey.generate();
-let nonce = AesGcm.generate_nonce();
+let key = AesGcmKey.generate().unwrap();
+let nonce = AesGcm.generate_nonce().unwrap();
 let plain = Encoding.utf8_encode("secret");
 let aad = Encoding.utf8_encode("");
 let cipher = (AesGcm.encrypt(key, nonce, plain, aad)).unwrap();

@@ -477,7 +477,7 @@ async fun bench_task_parallel(iters: int): void {
             seeds[k] = i * 16 + k + seed_bit();
             k = k + 1;
         }
-        let parts = Task.map(seeds, (s) => chunk_work(s)).await;
+        let parts = TaskPool(4).map(seeds, (s) => chunk_work(s)).await.unwrap();
         k = 0;
         while k < parts.length {
             acc = acc + parts[k];

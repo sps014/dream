@@ -47,7 +47,7 @@ fun reserve(n: int, iters: int): int {
     let total = 0;
     for (let r = 0; r < iters; r = r + 1) {
         let xs = List<int>(8);
-        xs.reserve(n);
+        xs.reserve(n).unwrap();
         xs.push(r);
         total = total + xs[0];
     }

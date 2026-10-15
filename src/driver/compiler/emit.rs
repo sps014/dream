@@ -205,7 +205,9 @@ impl Compiler {
         crate::driver::abi::embed_abi_in_wasm(out_path)?;
 
         let wasm_bytes = fs::read(&wasm_path)?;
-        let text = dream_mir::backend::print_wasm(&wasm_bytes);
+        let text = dream_mir::backend::print_wasm(&wasm_bytes).map_err(|message| {
+            CompileError::Toolchain(format!("could not render emitted WebAssembly: {message}"))
+        })?;
         fs::write(out_path, &text)?;
         self.reporter.artifact(Path::new(out_path));
 

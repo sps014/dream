@@ -1,8 +1,11 @@
 mod cli;
 mod codegen;
 mod collections;
+mod config;
+mod compress;
 mod core;
 mod crypto;
+mod csv;
 mod encoding;
 mod io;
 mod json;
@@ -16,6 +19,7 @@ mod system;
 mod task;
 mod testing;
 mod text;
+mod uuid;
 
 /// One embedded stdlib package: dotted import name, ordered source files, and package deps.
 pub struct StdPackage {
@@ -46,7 +50,11 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     io::PACKAGE,
     net::PACKAGE,
     cli::PACKAGE,
+    config::PACKAGE,
+    csv::PACKAGE,
+    compress::PACKAGE,
     crypto::PACKAGE,
+    uuid::PACKAGE,
     process::PACKAGE,
     system::PACKAGE,
     testing::PACKAGE,

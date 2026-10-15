@@ -1,0 +1,20 @@
+import system;
+import system.task;
+
+async fun main(): void {
+    let channel = Channel.shared_bounded<string>(2).unwrap();
+    let sender = channel.sender;
+    let receiver = channel.receiver;
+    let worker = Task.spawn_async(async () => {
+        for (let i = 0; i < 32; i = i + 1) { sender.send("item " + i.to_string()).await.unwrap(); }
+        sender.close();
+        return 32;
+    });
+    Promise.start(worker);
+    for (let i = 0; i < 32; i = i + 1) {
+        let item = receiver.receive().await.unwrap().unwrap();
+        if item != "item " + i.to_string() { System.panic("cross-worker channel order mismatch"); }
+    }
+    if receiver.receive().await.unwrap().is_some() { System.panic("missing channel EOF"); }
+    if worker.await != 32 { System.panic("worker result mismatch"); }
+}

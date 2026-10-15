@@ -1,12 +1,16 @@
 # Lock
 
-No import is needed.
+**Import:** `import system.core;`
 
-Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+## `Lock`
+
+Reentrant mutual-exclusion lock for `@shared` critical sections.
+
+```dream
+shared public class Lock
+```
 
 ## `host_acquire`
-
-Acquires the supplied synchronization object. Prefer its instance `acquire()` method.
 
 ```dream
 public static extern fun host_acquire(borrow target: Lock): void
@@ -14,23 +18,17 @@ public static extern fun host_acquire(borrow target: Lock): void
 
 ## `host_release`
 
-Releases the supplied synchronization object. Prefer its instance `release()` method.
-
 ```dream
 public static extern fun host_release(borrow target: Lock): void
 ```
 
 ## `host_try_acquire`
 
-Attempts acquisition once and returns whether it succeeded.
-
 ```dream
 public static extern fun host_try_acquire(borrow target: Lock): bool
 ```
 
 ## `host_try_acquire_for`
-
-Attempts acquisition for up to `timeout_ms` milliseconds; non-positive limits perform a single attempt.
 
 ```dream
 public static extern fun host_try_acquire_for(borrow target: Lock, timeout_ms: int): bool

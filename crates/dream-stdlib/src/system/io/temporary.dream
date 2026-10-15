@@ -1,0 +1,77 @@
+module system.io;
+
+// Availability of secure OS temporary resources on this target.
+public static class TempCapabilities {
+    @runtime("tempSupported")
+    static extern fun supported_host(): bool;
+    // True on native and Node; browser virtual filesystems do not provide OS-private resources.
+    public static get supported(): bool { return TempCapabilities.supported_host(); }
+}
+
+// Owns a securely created private directory; destruction performs best-effort recursive cleanup.
+public class TempDirectory {
+    location: string;
+    closed: bool;
+    internal constructor(path: string) { this.location = path; this.closed = false; }
+    // Host path of this resource; remains available after cleanup.
+    public get path(): string { return this.location; }
+    @runtime("tempDirectoryCreate")
+    static extern fun create_host(directory: string): string;
+    @runtime("dirRemoveAll")
+    static extern fun remove_host(path: string): bool;
+    // Creates a private directory under the OS temporary directory; unsupported browser hosts return an error.
+    public static fun create(): Result<TempDirectory, IoError> { return TempDirectory.create_in(""); }
+    // Creates a private directory on the parent's filesystem for safe same-filesystem replacement.
+    public static fun create_in(directory: string): Result<TempDirectory, IoError> {
+        if !TempCapabilities.supported { return Result.Err(IoError(directory, "EUNSUPPORTED", "secure temporary resources are unavailable on this target")); }
+        let path = TempDirectory.create_host(directory);
+        if path.length == 0 { return Result.Err(IoError(directory, "ETEMP", "secure temporary creation failed or is unsupported")); }
+        return Result.Ok(TempDirectory(path));
+    }
+    // Removes the directory and its contents; repeated successful cleanup is a no-op.
+    public fun close(): Result<bool, IoError> {
+        if this.closed { return Result.Ok(true); }
+        if !TempDirectory.remove_host(this.location) { return Result.Err(IoError.other(this.location, "temporary directory cleanup failed")); }
+        this.closed = true;
+        return Result.Ok(true);
+    }
+    del() { this.close(); }
+}
+
+// Owns a read/write file inside a private temporary directory and cleans both deterministically.
+public class TempFile {
+    // File access remains owned by this temporary resource; close or persist before releasing it.
+    handle: FileHandle;
+    // Borrowed access to the owned temporary file.
+    public get file(): FileHandle { return this.handle; }
+    directory: TempDirectory;
+    internal constructor(file: FileHandle, directory: TempDirectory) { this.handle = file; this.directory = directory; }
+    // Path of the temporary file before persistence; its containing directory is private.
+    public get path(): string { return this.file.path; }
+    // Creates a temporary read/write file under the OS temporary directory.
+    public static fun create(): Result<TempFile, IoError> { return TempFile.create_in(""); }
+    // Creates a private file on the selected directory's filesystem.
+    public static fun create_in(directory: string): Result<TempFile, IoError> {
+        let temporary = TempDirectory.create_in(directory)?;
+        let opened = FileHandle.open(temporary.path + "/contents", "w+");
+        if opened.is_err() { temporary.close(); return Result.Err(opened.unwrap_err()); }
+        return Result.Ok(TempFile(opened.unwrap(), temporary));
+    }
+    @runtime("tempReplace")
+    static extern fun replace_host(source: string, destination: string): bool;
+    // Flushes and closes the file, then atomically replaces a destination on the same filesystem.
+    // Failed replacement leaves the destination and temporary file intact; durability is not implied.
+    public fun persist_replace(destination: string): Result<bool, IoError> {
+        if !this.file.is_closed { this.file.flush()?; this.file.close()?; }
+        if !TempFile.replace_host(this.file.path, destination) { return Result.Err(IoError.other(destination, "atomic replacement failed")); }
+        return this.directory.close();
+    }
+    // Closes the file and removes its private directory, reporting either cleanup failure.
+    public fun close(): Result<bool, IoError> {
+        let file = this.file.close();
+        let directory = this.directory.close();
+        file?;
+        return directory;
+    }
+    del() { this.close(); }
+}

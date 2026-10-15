@@ -16,10 +16,10 @@ fun main(): void {
     System.println(Encoding.hex_encode(Sha512.hash(Buffer.alloc<byte>(0))));
     System.println(Encoding.hex_encode(Sha512.hash(abc)));
 
-    let rnd = SecureRandom.bytes(8);
+    let rnd = SecureRandom.bytes(8).unwrap();
     System.println(rnd.length);
 
     let buf = Buffer.alloc<byte>(16);
-    SecureRandom.fill(buf);
+    SecureRandom.fill(buf).unwrap();
     System.println(buf.length);
 }

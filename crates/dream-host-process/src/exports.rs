@@ -1,59 +1,36 @@
-// Guest pointers come from the validated runtime C ABI, not arbitrary Rust callers.
-#![allow(clippy::missing_safety_doc)]
+use dream_host_abi::{DreamPtr, alloc_bytes, read_bytes, read_string};
 
-use dream_host_abi::*;
-
+/// # Safety
+/// Request and bytes must be readable guest string and byte-array payloads.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn processRun(command: DreamPtr, args: DreamPtr, cwd: DreamPtr) -> DreamPtr {
-    unsafe {
-        alloc_bytes(&crate::process_host::process_run(
-            &read_string(command),
-            &read_bytes(args),
-            &read_string(cwd),
-        ))
+pub unsafe extern "C" fn processStart(request: DreamPtr, bytes: DreamPtr) -> i32 {
+    let (request, bytes) = unsafe { (read_string(request), read_bytes(bytes)) };
+    crate::service::start(request, bytes)
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn processOperationResult(id: i32) -> DreamPtr {
+    alloc_bytes(&crate::operations::result(id))
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn processOperationCancel(id: i32) {
+    crate::operations::cancel(id);
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn processOperationRelease(id: i32) {
+    crate::operations::release(id);
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn processOperationClaim(id: i32) {
+    crate::operations::claim(id);
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn processClose(id: i32) {
+    crate::service::close(id);
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn processOperationWaitAsync(future: DreamPtr, id: i32) -> i32 {
+    if !crate::operations::wait(id, dream_host_abi::ForeignFuture::new(future)) {
+        dream_host_abi::complete_foreign_future(dream_host_abi::ForeignFuture::new(future), 0);
     }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn processSpawn(
-    command: DreamPtr,
-    args: DreamPtr,
-    cwd: DreamPtr,
-) -> DreamPtr {
-    unsafe {
-        alloc_bytes(&crate::process_host::process_spawn(
-            &read_string(command),
-            &read_bytes(args),
-            &read_string(cwd),
-        ))
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn processWriteStdin(handle: i32, data: DreamPtr) -> i32 {
-    unsafe { crate::process_host::process_write_stdin(handle, &read_bytes(data)) }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn processReadStream(handle: i32, stream: i32, max_bytes: i32) -> DreamPtr {
-    alloc_bytes(&crate::process_host::process_read_stream(
-        handle, stream, max_bytes,
-    ))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn processReadStreamLine(handle: i32, stream: i32) -> DreamPtr {
-    alloc_bytes(&crate::process_host::process_read_stream_line(
-        handle, stream,
-    ))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn processWait(handle: i32) -> DreamPtr {
-    alloc_bytes(&crate::process_host::process_wait(handle))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn processKill(handle: i32) -> i32 {
-    crate::process_host::process_kill(handle)
+    1
 }

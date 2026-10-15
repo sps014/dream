@@ -72,12 +72,7 @@ impl TestProject {
                 .clone()
                 .unwrap_or_else(|| file_stem(&path));
             let files = collect_dream_files(&scan)?;
-            return Ok(Self::new(
-                path.clone(),
-                name,
-                files,
-                Some((path, manifest)),
-            ));
+            return Ok(Self::new(path.clone(), name, files, Some((path, manifest))));
         }
         let owner = owning_package(&path)?;
         let files = collect_dream_files(&path)?;

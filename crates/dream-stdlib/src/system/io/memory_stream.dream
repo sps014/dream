@@ -91,19 +91,22 @@ public class MemoryStream : Reader, Writer, AsyncReader, AsyncWriter {
 
     // Checks cancellation, then performs an immediately ready in-memory read.
     public async fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError> {
-        CancellationToken.rejected(token, IoError.cancelled())?;
+        let effective_token = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective_token, IoError.cancelled())?;
         return this.read(max_bytes);
     }
 
     // Checks cancellation, then performs an immediately ready in-memory write.
     public async fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError> {
-        CancellationToken.rejected(token, IoError.cancelled())?;
+        let effective_token = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective_token, IoError.cancelled())?;
         return this.write(data);
     }
 
     // Checks cancellation and validates that the stream is open.
     public async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
-        CancellationToken.rejected(token, IoError.cancelled())?;
+        let effective_token = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective_token, IoError.cancelled())?;
         return this.flush();
     }
 }

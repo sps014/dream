@@ -37,7 +37,7 @@ function httpRestricted(name) {
 }
 export function makeHttpHost() {
   return {
-    netCapabilities: () => isNode ? 6 : 0,
+    netCapabilities: () => isNode ? 14 : 0,
     netClientCreate: () => {
       if (httpClients.size >= 1024 || nextHttpHandle >= 2147483647) return 0;
       const id = nextHttpHandle++;

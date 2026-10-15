@@ -1,0 +1,85 @@
+name: Stdlib v1 release qualification
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["feat/stdlib-v1-*"]
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    name: Native and Node (${{ matrix.os }})
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO_PROFILE_DEV_OPT_LEVEL: "1"
+      CARGO_INCREMENTAL: "0"
+      DREAM_VERIFY_MIR: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Linux native dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/cache@v6
+        with:
+          path: ~/.dream/toolchains/llvm-22.1.8
+          key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
+      - name: Install pinned LLVM and WASI support
+        shell: bash
+        run: scripts/fetch-dev-llvm.sh
+      - name: Select Windows C driver
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "DREAM_CC=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang.exe" >> $env:GITHUB_ENV
+          "DREAM_CXX=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang++.exe" >> $env:GITHUB_ENV
+      - run: python -m pip install -r docs/requirements-docs.txt
+      - run: python scripts/qualify-stdlib-v1.py
+      - name: Preserve release evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stdlib-v1-${{ runner.os }}-${{ runner.arch }}
+          path: target/stdlib-v1-qualification/
+          retention-days: 30
+  browser:
+    name: Browser debug and release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils
+      - run: scripts/fetch-dev-llvm.sh
+      - run: cargo build --workspace
+      - run: npm ci --prefix tooling/qualification
+      - run: npx playwright install --with-deps chromium
+        working-directory: tooling/qualification
+      - run: node tooling/qualification/browser.mjs
+      - name: Preserve browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stdlib-v1-browser
+          path: target/stdlib-v1-browser/
+          retention-days: 30

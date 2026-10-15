@@ -93,21 +93,6 @@ export function wrapImport(getInstance, fn, signature) {
   };
 }
 
-/**
- * In-place `byte[]` fill imports receive a data pointer, not a marshaled copy. Writes random bytes
- * directly into linear memory at `destPtr` (layout: `[count:i32][bytes...]`).
- */
-export function wrapInPlaceByteArrayFill(getInstance, fillBytes) {
-  return (destPtr) => {
-    const inst = getInstance();
-    const count = inst.i32(destPtr);
-    if (count > 0) {
-      inst.bytes.set(fillBytes(count), destPtr + 4);
-    }
-    return 0;
-  };
-}
-
 const runLoopPumps = new WeakMap();
 
 /**
@@ -167,8 +152,21 @@ export function wrapAsyncImport(getInstance, fn, signature) {
     const exports = inst.exports;
     const args = marshalArgs(inst, params, rawArgs);
     exports.__dream_host_pin(future);
+    const cancellation = { requested: false, cancel: null };
+    inst._hostCancellations ??= new Map();
+    inst._hostCancellations.set(future, () => {
+      cancellation.requested = true;
+      cancellation.cancel?.();
+      // Only built-ins that synchronously stop their work may release the frame immediately.
+      if (fn.cancelSynchronously === true) settle(null);
+    });
+    let settled = false;
     const settle = (rawResult) => {
+      if (settled) return;
+      settled = true;
+      inst._hostCompletions?.delete(future);
       inst._hostPending--;
+      inst._hostCancellations.delete(future);
       try {
         if (exports.__dream_host_status(future) === 0) {
           const marshaled = boxTag != null
@@ -181,8 +179,18 @@ export function wrapAsyncImport(getInstance, fn, signature) {
         exports.__dream_host_unpin(future);
       }
     };
+    inst._hostCompletions ??= new Map();
+    inst._hostCompletions.set(future, settle);
     inst._hostPending++;
-    const pending = Promise.resolve().then(() => fn(...args)).then(
+    const pending = Promise.resolve().then(() => {
+      if (settled) return null;
+      const work = fn(...args);
+      if (typeof work?.cancel === "function") {
+        cancellation.cancel = () => work.cancel();
+        if (cancellation.requested) cancellation.cancel();
+      }
+      return work;
+    }).then(
       (value) => settle(value),
       (err) => {
         // A rejected Promise has no Dream-level error channel yet; settle the future with a

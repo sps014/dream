@@ -22,6 +22,8 @@ export class DreamInstance {
     // Unsettled `extern async` host calls; a worker that still has one cannot be reused.
     this._hostPending = 0;
     this._hostSettlements = new Set();
+    this._hostCancellations = new Map();
+    this._hostCompletions = new Map();
     this._drainWorkers = async () => {};
     this.workerStack = 0;
   }

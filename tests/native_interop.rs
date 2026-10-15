@@ -411,10 +411,7 @@ async fun main(): void {
 }
 "#;
     let out = run_c("async_host", c, dream, OptLevel::O0).unwrap();
-    assert_eq!(
-        out.trim(),
-        "1\n42\n12\ntask 3 -> 12\ntask 4 -> 16\n7\n100"
-    );
+    assert_eq!(out.trim(), "1\n42\n12\ntask 3 -> 12\ntask 4 -> 16\n7\n100");
 }
 
 #[test]
@@ -438,9 +435,9 @@ async fun main(): void {
     System.println(Task.spawn(() => value()).await);
     System.println(value());
     let pool = TaskPool(1);
-    System.println(pool.dispatch(() => value().to_string()).await);
-    System.println(pool.dispatch(() => value().to_string()).await);
-    pool.shutdown();
+    System.println(pool.dispatch(() => value().to_string()).await.unwrap());
+    System.println(pool.dispatch(() => value().to_string()).await.unwrap());
+    pool.close().await.unwrap();
     set_error(1234);
     System.println(Task.spawn(() => get_error()).await);
     System.println(get_error());

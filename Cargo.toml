@@ -105,7 +105,8 @@ overflow-checks = true
 edition = "2024"
 
 [workspace]
-default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-unicode", "crates/dream-host-crypto", "crates/dream-host-process", "crates/dream-host-timezone", "crates/dream-host-net", "crates/dream-host-cli"]
+default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-unicode", "crates/dream-host-crypto", "crates/dream-host-process", "crates/dream-host-timezone", "crates/dream-host-net", "crates/dream-host-cli",
+    "crates/dream-host-data", "crates/dream-host-io"]
 members = [
     ".",
     "crates/dream-text",
@@ -126,6 +127,8 @@ members = [
     "crates/dream-host-timezone",
     "crates/dream-host-net",
     "crates/dream-host-cli",
+    "crates/dream-host-data",
+    "crates/dream-host-io",
     "crates/dream-host-abi",
     "tooling/dream-lsp",
     "tooling/dreamer",
@@ -135,7 +138,7 @@ members = [
 # crate's default `native` feature.
 resolver = "3"
 
-# The optional JavaScript CLI host embeds this parser, separately from the C guest runtime.
+# Portable JavaScript hosts embed Rust CLI/data adapters separately from the C guest runtime.
 [profile.cli-wasm]
 inherits = "release"
 opt-level = "z"

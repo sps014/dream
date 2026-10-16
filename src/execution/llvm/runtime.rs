@@ -347,8 +347,13 @@ pub(super) fn build_native_runtime(
         return snapshot_runtime(dir, bc, sigs, archive);
     }
 
-    let mut bc_flags = vec!["-emit-llvm"];
-    if opt != OptLevel::O0 {
+    // Cross units go through `zig cc`, which writes nothing for `-emit-llvm` combined with the
+    // cache's `-MD`; `-c -flto=full` yields the same bitcode from Zig and clang alike.
+    let mut bc_flags = Vec::new();
+    if spec.can_link_on_host() {
+        bc_flags.push("-emit-llvm");
+    }
+    if opt != OptLevel::O0 || !spec.can_link_on_host() {
         bc_flags.push("-flto=full");
     }
     bc_flags.extend(&level);

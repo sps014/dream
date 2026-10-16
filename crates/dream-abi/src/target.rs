@@ -170,6 +170,10 @@ impl TargetSpec {
         self.os == OperatingSystem::Windows
     }
 
+    pub fn is_elf(&self) -> bool {
+        self.triple.binary_format == target_lexicon::BinaryFormat::Elf
+    }
+
     pub fn is_apple(&self) -> bool {
         matches!(
             self.os,

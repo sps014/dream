@@ -160,6 +160,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
     Mir {
         profile: Default::default(),
         perf_symbols: false,
+        executable: false,
         exports: hir.exports.clone(),
         functions,
         polls,

@@ -4,6 +4,6 @@ fun main(): void {
     let a = 10;
     let b = 0;
     System.println("before");
-    let q = a / b;
+    let _q = a / b;
     System.println("after");
 }

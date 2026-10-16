@@ -28,7 +28,7 @@ fun do_allocations() {
     let no_next: Option<Node> = Option.None;
     let n1 = Node(1, no_next);
     let n2 = Node(2, Option.Some(n1));
-    let n3 = Node(3, Option.Some(n2));
+    let _n3 = Node(3, Option.Some(n2));
     // n3 goes out of scope, releasing n2, releasing n1
 }
 
@@ -70,9 +70,9 @@ fun sum_tree(borrow t: Tree): int {
 // reclaim every node so the heap returns to its baseline.
 fun do_enum_allocations() {
     let list = build_list(16);
-    let s = sum_list(list);
+    let _s = sum_list(list);
     let tree = build_tree(4);
-    let t = sum_tree(tree);
+    let _t = sum_tree(tree);
 }
 
 fun main() {

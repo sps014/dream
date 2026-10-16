@@ -15,7 +15,7 @@ class Tracked {
 }
 
 async fun work(): void {
-    let t = Tracked(1);
+    let _t = Tracked(1);
     Time.sleep(0).await;
 }
 

@@ -9,6 +9,7 @@ impl Compiler {
     ) -> dream_mir::Mir {
         mir.profile = self.profile();
         mir.perf_symbols = self.perf_symbols;
+        mir.executable = matches!(self.output_kind, crate::driver::output::OutputKind::Executable);
         {
             let _phase = tracing::info_span!("compile_phase", phase = "module_passes").entered();
             if self.profile().is_debug() {

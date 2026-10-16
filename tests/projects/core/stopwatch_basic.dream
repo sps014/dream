@@ -14,7 +14,7 @@ async fun stopwatch_basic() {
     Assert.eq_str((sw.is_running).to_string(), "false");
 
     let e1 = sw.elapsed_nanos;
-    let e2 = sw.elapsed_ms;
+    let _e2 = sw.elapsed_ms;
 
     // Since it's stopped, these should be stable across multiple reads
     let e3 = sw.elapsed_nanos;

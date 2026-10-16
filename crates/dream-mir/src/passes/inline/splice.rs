@@ -138,13 +138,23 @@ pub(super) fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, intern
     // caller's frame the locals persist across executions (e.g. loop iterations), so without this
     // reset a scope-exit release on a not-yet-assigned path would free a stale pointer left by a
     // previous execution (double-free / use-after-free). Emitting the reset in the site block runs it
-    // once per entry into the inlined region, matching the callee's once-at-entry zeroing.
+    // once per entry into the inlined region, matching the callee's once-at-entry zeroing. Owning
+    // value locals are cleared for the same reason: a store that adopts a fresh value drops the
+    // previous contents first.
     for (i, decl) in g_locals.iter().enumerate() {
-        if !params.contains(&(i as u32)) && interner.is_rc_tracked(decl.ty) {
+        if params.contains(&(i as u32)) {
+            continue;
+        }
+        let local = Local(local_base + i as u32);
+        if interner.is_rc_tracked(decl.ty) {
             f.blocks[site.block].stmts.push(Statement::Assign(
-                Place::Local(Local(local_base + i as u32)),
+                Place::Local(local),
                 Rvalue::Use(Operand::Const(Const::Null)),
             ));
+        } else if interner.is_value_type(decl.ty) && f.locals[local.0 as usize].manual_drop {
+            f.blocks[site.block]
+                .stmts
+                .push(Statement::ValueKill(local));
         }
     }
     f.blocks[site.block].terminator = Terminator::Goto(BlockId(block_base + g_entry.0));

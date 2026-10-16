@@ -384,7 +384,7 @@ fn llvm_ir_shapes() {
     assert!(
         total.contains("call i32 @s0_2_Sq_0_area(") && total.contains("call i32 @s0_3_Tri_0_area(")
     );
-    assert!(total.contains("@__iface_dispatch_"));
+    assert!(!total.contains("@__iface_dispatch_") && total.contains("@dream_platform_abort("));
     assert!(total.contains("call i32 @dream_rc_last(") && total.contains("_into("));
 
     assert!(function_body(&ll, "poll_later").contains("switch i32"));

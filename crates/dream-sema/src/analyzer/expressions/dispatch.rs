@@ -253,7 +253,12 @@ impl<'a> Analyzer<'a> {
             }
             ExpressionNode::SizeOf(_, ty) => self.analyze_layout_query(ty, false, diagnostics),
             ExpressionNode::AlignOf(_, ty) => self.analyze_layout_query(ty, true, diagnostics),
-            ExpressionNode::NameOf(_, parts) => self.analyze_nameof(parts, diagnostics),
+            ExpressionNode::NameOf(_, parts) => {
+                if let Some(root) = parts.first() {
+                    (*symbol_table).as_ref().borrow_mut().mark_used(&root.text);
+                }
+                self.analyze_nameof(parts, diagnostics)
+            }
             ExpressionNode::DeclOf(_, parts) => self.analyze_declof(parts, diagnostics),
             ExpressionNode::TypeOf(_, operand) => {
                 self.analyze_typeof(operand, parent_function, symbol_table, diagnostics)

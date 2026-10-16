@@ -111,12 +111,14 @@ public class PriorityQueue<T> : Collection<T> {
             }
         }
         // All callbacks finish before opening a hole; the live prefix is always initialized.
+        // Swapping the vacated hole with its parent moves the parent down without releasing the
+        // empty slot or republishing an element that already lives in this buffer.
         if target != tail {
             let saved = CollectionStorage.take<T>(this.items, tail);
             let hole = tail;
             while hole > target {
                 let parent = (hole - 1) / 4;
-                this.items[hole] = CollectionStorage.take<T>(this.items, parent);
+                CollectionStorage.exchange<T>(this.items, hole, this.items, parent);
                 hole = parent;
             }
             this.items[target] = saved;
@@ -164,7 +166,7 @@ public class PriorityQueue<T> : Collection<T> {
         while depth > 0 {
             depth = depth - 1;
             let child = hole * 4 + 1 + ((path >> (depth * 2)) & 3);
-            this.items[hole] = CollectionStorage.take<T>(this.items, child);
+            CollectionStorage.exchange<T>(this.items, hole, this.items, child);
             hole = child;
         }
         this.items[hole] = saved;

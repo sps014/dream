@@ -121,7 +121,8 @@ pub(crate) fn is_value_copy_local(f: &MirFunction, local: Local) -> bool {
 }
 
 /// `local = src` immediately followed by `ValueKill(src)` (a last-use move) or `ValueRetain(local)`
-/// (a retained copy): either way `local` owns nested refs of its own, unlike a plain copy local.
+/// (a retained copy), or moved out of an owning temporary: either way `local` owns nested refs of
+/// its own, unlike a plain copy local.
 fn owns_copied_value(f: &MirFunction, local: Local) -> bool {
     f.blocks.iter().any(|block| {
         block.stmts.windows(2).any(|pair| match pair {
@@ -139,7 +140,28 @@ fn owns_copied_value(f: &MirFunction, local: Local) -> bool {
             }
             _ => false,
         })
+    }) || f.blocks.iter().flat_map(|block| &block.stmts).any(|stmt| {
+        matches!(stmt, Statement::Assign(Place::Local(dest), rv)
+            if *dest == local && is_owned_temp_move(f, rv))
     })
+}
+
+/// `dest = tmp` out of an owning inliner temporary that nothing ever drops: the shallow copy is
+/// the only holder of `tmp`'s references, so `dest` adopts them exactly as it would a call result.
+pub(crate) fn is_owned_temp_move(f: &MirFunction, rv: &Rvalue) -> bool {
+    let Rvalue::Use(Operand::Copy(Place::Local(src))) = rv else {
+        return false;
+    };
+    let decl = &f.locals[src.0 as usize];
+    decl.manual_drop && !decl.is_ref && !decl.borrows_refs && !is_value_dropped(f, *src)
+}
+
+/// Some `ValueDrop` releases `local`'s references: it owns its value rather than passing it on.
+pub(crate) fn is_value_dropped(f: &MirFunction, local: Local) -> bool {
+    f.blocks
+        .iter()
+        .flat_map(|block| &block.stmts)
+        .any(|stmt| matches!(stmt, Statement::ValueDrop(l) if *l == local))
 }
 
 pub(crate) fn is_moved_into_union(f: &MirFunction, local: Local) -> bool {

@@ -27,6 +27,6 @@ async fun async_lambda_capture(): void {
     Assert.eq_str((pending7.await).to_string(), "47");
     let offset: fun(int): Future<int> = c36_make_async_offset(5, 7);
     let pending = offset(50);
-    let abandoned = offset(60);
+    let _abandoned = offset(60);
     Assert.eq_str((pending.await).to_string(), "62");
 }

@@ -100,6 +100,12 @@ fn emit_llvm_module_unchecked(
 ) -> LlvmModule {
     let mut l = Lcx::new(mir, interner, sigs, leak_checks, target);
     l.std_sources = std_sources.map(std::path::Path::to_path_buf);
+    // Objects are built `-relocation-model=pic`; without a PIE level LLVM assumes a shared
+    // object and routes every runtime thread-local through `__tls_get_addr`/TLSDESC.
+    // Mach-O always uses the TLV thunk and COFF ignores the flag.
+    if mir.executable && l.cx.target.spec().is_elf() {
+        l.m.md.module_flag(7, "PIE Level", "i32 2");
+    }
     for f in &mir.functions {
         let name = l.user_fn(f);
         let sig = types::fn_ll_sig(interner, f, &l.h(), &l.word());

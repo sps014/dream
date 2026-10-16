@@ -186,6 +186,67 @@ fn rc_golden_field_walk_near_zero_retains() {
     );
 }
 
+/// The `linked_walk` benchmark shape: a loop-carried `Option` cursor re-seeded from an owned
+/// local that stays live across the outer loop. Walking `node.next` must not count anything.
+#[test]
+fn rc_golden_owner_rooted_list_walk_is_rc_free() {
+    let code = r#"
+        enum Option<T> { Some(T), None }
+        @allow_cycle
+        class Node {
+            public value: int;
+            public next: Option<Node>;
+            public constructor(v: int, n: Option<Node>) { this.value = v; this.next = n; }
+        }
+        @noinline
+        fun chain(n: int): Option<Node> {
+            let none: Option<Node> = Option.None;
+            let head = none;
+            let i = 0;
+            while i < n { head = Option.Some(Node(i, head)); i = i + 1; }
+            return head;
+        }
+        @noinline
+        fun walk_all(iters: int): int {
+            let head = chain(64);
+            let acc = 0;
+            let i = 0;
+            while i < iters {
+                let curr = head;
+                let done = false;
+                while done == false {
+                    switch (curr) {
+                        Some(node) => { acc = acc + node.value; curr = node.next; }
+                        None => { done = true; }
+                    }
+                }
+                i = i + 1;
+            }
+            return acc;
+        }
+        fun main(): void {
+            System.println(walk_all(3));
+        }
+    "#;
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
+    let walk = ir_func_defs(&c)
+        .into_iter()
+        .find(|f| f.name == "walk_all")
+        .expect("walk_all should be emitted");
+    assert_eq!(
+        count_in(&walk.body, "@dream_retain("),
+        0,
+        "list walk retains:\n{}",
+        walk.body
+    );
+    assert_eq!(
+        count_in(&walk.body, "@dream_rc_last("),
+        1,
+        "only the owner's scope exit checks its count:\n{}",
+        walk.body
+    );
+}
+
 #[test]
 fn rc_golden_transparent_loop_bounded() {
     let code = r#"

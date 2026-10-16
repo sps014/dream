@@ -3530,19 +3530,19 @@
       {
         "signature": "public fun pop(): Option<T>",
         "description": "",
-        "line": 126,
+        "line": 128,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun peek(): Option<T>",
         "description": "Returns the smallest element without removing it, or `None` when empty. O(1).",
-        "line": 175,
+        "line": 177,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun iterator(): PriorityQueueIterator<T>",
         "description": "Iterates elements in ascending order under the active comparator, over a snapshot taken now, so later pushes/pops do not affect the cursor.",
-        "line": 184,
+        "line": 186,
         "page": "reference/api/collections-priority-queue.md"
       }
     ]

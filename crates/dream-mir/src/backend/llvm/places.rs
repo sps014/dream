@@ -9,7 +9,8 @@ use crate::backend::shared::abi_types::{MemTy, array_elem_ty, elem_size, mem_ty}
 use crate::backend::shared::glue::{release_sym, retain_sym};
 use crate::backend::shared::panic_msgs;
 use crate::backend::shared::place_policy::{
-    borrowed_ref_store, is_value_place_alias, realloc_self_store, unique_move_src,
+    borrowed_ref_store, is_owned_temp_move, is_value_dropped, is_value_place_alias,
+    realloc_self_store, unique_move_src,
 };
 use crate::rc_store::rvalue_owns_result;
 use crate::{Const, Global, Local, Operand, Place, Rvalue};
@@ -400,7 +401,10 @@ impl<'l, 'a> Fx<'l, 'a> {
                     && (!self.f.params.contains(l) || decl.is_take);
                 // Producer results already own their references and are evaluated in separate
                 // storage, so rebinding can release the previous value before adopting them.
-                let drop_old = owns && crate::rc_store::rvalue_owns_result(rv);
+                let drop_old = owns
+                    && (rvalue_owns_result(rv)
+                        || (is_owned_temp_move(self.f, rv)
+                            && (!decl.manual_drop || is_value_dropped(self.f, *l))));
                 self.memcpy_value(
                     rv,
                     &rhs,

@@ -319,7 +319,7 @@ pub(super) fn compile(
         fingerprint: rt_stamp::content_fingerprint(dependencies.clone()),
         dependencies: dependencies.clone(),
         object: rt_stamp::content_hash(&partial)
-            .ok_or("missing runtime unit")?
+            .ok_or_else(|| format!("runtime compiler wrote no output: {command:?}"))?
             .to_hex()
             .to_string(),
     };

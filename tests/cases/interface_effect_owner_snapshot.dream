@@ -41,7 +41,7 @@ class OnDrop {
 @noinline
 fun destructor_snapshot(borrow op: Mutator, borrow holder: Holder): int {
     let previous = holder.value;
-    if true { let cleanup = OnDrop(op, holder); }
+    if true { let _cleanup = OnDrop(op, holder); }
     return previous.length;
 }
 fun main(): void {

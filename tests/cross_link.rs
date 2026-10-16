@@ -13,9 +13,7 @@ fn checked(command: &mut Command) {
     );
 }
 
-#[test]
-#[ignore = "requires installed Zig cross compiler and LLVM"]
-fn zig_links_foreign_executable_and_rejects_stale_capability_abi() {
+fn zig() -> std::path::PathBuf {
     let tools = std::env::var_os("DREAM_ZIG")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
@@ -29,11 +27,44 @@ fn zig_links_foreign_executable_and_rejects_stale_capability_abi() {
         tools.is_file(),
         "set DREAM_ZIG to the installed Zig executable"
     );
-    let triple = if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+    tools
+}
+
+fn foreign_triple() -> &'static str {
+    if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
         "aarch64-unknown-linux-gnu"
     } else {
         "x86_64-unknown-linux-gnu"
-    };
+    }
+}
+
+#[test]
+#[ignore = "requires installed Zig cross compiler and LLVM"]
+fn zig_links_foreign_release_executable_with_local_exec_runtime_tls() {
+    let tools = zig();
+    let triple = foreign_triple();
+    let root = tempfile::tempdir().unwrap();
+    let ir = root.path().join("classes.ll");
+    checked(
+        Command::new(env!("CARGO_BIN_EXE_dream"))
+            .args(["--release", "--emit-opt-ir", "--target", triple, "-o"])
+            .arg(&ir)
+            .arg("tests/fixtures/compiler/classes.dream")
+            .env("DREAM_CC", &tools),
+    );
+    let bytes = std::fs::read(ir.with_extension("bin")).unwrap();
+    let binary = object::File::parse(bytes.as_slice()).unwrap();
+    assert_eq!(binary.format(), object::BinaryFormat::Elf);
+    let optimized = std::fs::read_to_string(ir.with_extension("opt.ll")).unwrap();
+    assert!(optimized.contains("internal thread_local"));
+    assert!(optimized.contains(r#"!{i32 7, !"PIE Level", i32 2}"#));
+}
+
+#[test]
+#[ignore = "requires installed Zig cross compiler and LLVM"]
+fn zig_links_foreign_executable_and_rejects_stale_capability_abi() {
+    let tools = zig();
+    let triple = foreign_triple();
     let spec = TargetSpec::parse(triple).unwrap();
     assert!(!spec.can_link_on_host());
     let root = tempfile::tempdir().unwrap();

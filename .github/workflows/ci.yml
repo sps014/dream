@@ -282,6 +282,14 @@ jobs:
         run: |
           mkdir -p target
           python3 scripts/test_corpus.py --both 2>&1 | tee target/corpus.log
+      # Debug guest builds skip inlining, the release function pipeline and every late module
+      # pass; only release builds exercise the ARC elision that ships.
+      - name: Full native and Node assertion corpus (release guest builds)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          mkdir -p target
+          python3 scripts/test_corpus.py --both --release 2>&1 | tee target/corpus-release.log
       - name: Preserve corpus results and compilation timings
         if: always()
         uses: actions/upload-artifact@v7
@@ -289,6 +297,7 @@ jobs:
           name: corpus-Linux
           path: |
             target/corpus.log
+            target/corpus-release.log
             target/cargo-timings/*.html
           retention-days: 7
           if-no-files-found: ignore
@@ -334,6 +343,12 @@ jobs:
         run: |
           mkdir -p target
           python3 scripts/test_corpus.py 2>&1 | tee target/probe-sanitize.log
+      - name: Full native corpus, release guest builds (runtime instrumented)
+        if: ${{ !cancelled() && matrix.sanitizer != 'thread' }}
+        shell: bash
+        run: |
+          mkdir -p target
+          python3 scripts/test_corpus.py --release 2>&1 | tee target/probe-sanitize-release.log
       - name: Concurrency cases (runtime instrumented)
         if: matrix.sanitizer == 'thread'
         shell: bash
@@ -348,7 +363,7 @@ jobs:
         if: always()
         with:
           name: corpus-sanitize-${{ strategy.job-index }}
-          path: target/probe-sanitize.log
+          path: target/probe-sanitize*.log
           retention-days: 7
           if-no-files-found: ignore
 

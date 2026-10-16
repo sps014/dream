@@ -129,7 +129,8 @@ impl SymbolTable {
     /// Emits unused-local warnings for this scope and all child scopes.
     pub fn report_unused_locals(&self, diagnostics: &mut dream_diagnostics::DiagnosticBag) {
         for (name, span) in &self.tracked_locals {
-            if !self.used_locals.contains(name) {
+            // `_name` keeps its binding (and the value's lifetime to scope end) without a warning.
+            if !name.starts_with('_') && !self.used_locals.contains(name) {
                 diagnostics.report_warning(format!("unused variable '{}'", name), Some(*span));
             }
         }

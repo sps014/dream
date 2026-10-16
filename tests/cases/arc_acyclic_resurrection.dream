@@ -12,7 +12,7 @@ class Revive {
 
 @noinline
 fun destroy(): void {
-    let value = Revive();
+    let _value = Revive();
 }
 
 fun main(): void {

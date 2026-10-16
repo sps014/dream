@@ -2,7 +2,8 @@
 //! dispatches as a tag test into a direct call. Two arms are a ternary; three or four are a
 //! `switch` on the tag so clang can emit a jump table and inline the callees. The direct arms
 //! call through the same function-pointer type the itable uses, so the ABI matches the dynamic
-//! path. The itable fallback stays for a tag that is not a registered implementor.
+//! path. A guarded slot covers every implementor the itable knows, so a tag outside the arms
+//! (including a null receiver) aborts exactly as the itable's missing entry would.
 
 use super::abi_types::c_ident;
 use super::cx::Cx;

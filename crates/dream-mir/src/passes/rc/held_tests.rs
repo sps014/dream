@@ -223,6 +223,42 @@ fn snapshot_moved_into_the_loop_binding_drops_every_pair() {
     assert_eq!(rc_ops(&s.func, x) + rc_ops(&s.func, n), 0);
 }
 
+/// `n = x; x = null; Retain(n)` gives `x`'s count to `n`; the later retain is a second count
+/// for a sink, so `n` still owes the release that `x`'s retain paid for.
+#[test]
+fn snapshot_count_copied_out_then_retained_again_keeps_the_pair() {
+    let t = types();
+    let mut b = FunctionBuilder::new("f", t.i.void());
+    let base = b.new_param(t.boxed, Some("base".into()));
+    let x = b.new_local(t.i.string(), None);
+    let n = b.new_local(t.i.string(), Some("path".into()));
+    b.assign(
+        Place::Local(x),
+        Rvalue::Use(Operand::Copy(Place::Field { base, field: 0 })),
+    );
+    b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+    b.assign(Place::Local(n), Rvalue::Use(Operand::Copy(Place::Local(x))));
+    b.assign(Place::Local(x), Rvalue::Use(Operand::Const(Const::Null)));
+    b.push(Statement::Retain(Operand::Copy(Place::Local(n))));
+    b.push(Statement::Call {
+        callee: Callee {
+            def: PEEK,
+            args: vec![],
+            ret: t.i.void(),
+            take_params: vec![true],
+        },
+        args: vec![Operand::Copy(Place::Local(n))],
+    });
+    b.push(Statement::Release(Operand::Copy(Place::Local(n))));
+    b.terminate(Terminator::Return(None));
+    let mut s = Snap {
+        func: b.finish(),
+        x,
+    };
+    run(&t, &mut s, false);
+    assert_eq!(rc_ops(&s.func, x), 1);
+}
+
 /// `fun g(p: borrow string) { c = p; Retain(c); peek(c); <tail> }`.
 fn param_copy(t: &Types, return_param: bool) -> Snap {
     let ret = if return_param {

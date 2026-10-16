@@ -36,7 +36,9 @@ void dream_future_fini(dream_ptr f) {
     }
     dream_ptr context = ptr_at(f, F_CONTEXT)[0];
     ptr_at(f, F_CONTEXT)[0] = 0;
-    dream_release(context);
+    /* The context is a CancellationToken: its last owner must run the typed glue that
+     * releases the token's source, which a bare free skips. */
+    dream_release_object(context);
     if (i32_at(f, F_KIND)[0] == 0 && ptr_at(f, F_CHILDREN)[0]) {
         dream_cancellation_release((uintptr_t)ptr_at(f, F_CHILDREN)[0]);
         ptr_at(f, F_CHILDREN)[0] = 0;
@@ -155,7 +157,7 @@ dream_ptr dream_task_context(void) {
 
 void dream_task_attach(dream_ptr future, dream_ptr token) {
     dream_retain(token);
-    dream_release(ptr_at(future, F_CONTEXT)[0]);
+    dream_release_object(ptr_at(future, F_CONTEXT)[0]);
     ptr_at(future, F_CONTEXT)[0] = token;
 }
 
@@ -183,9 +185,9 @@ dream_ptr dream_event_new(void) {
 
 void dream_event_complete(dream_ptr f) {
 #ifndef DREAM_WASM32
-    dream_mutex_lock(&foreign_claim_mu);
-    int local = *scheduler_at(f) == &sched;
-    dream_mutex_unlock(&foreign_claim_mu);
+    /* Only the owner stores its own scheduler and claimers only clear it, so a lock-free read
+     * decides locality; dream_foreign_work_end still claims under the lock. */
+    int local = __atomic_load_n(scheduler_at(f), __ATOMIC_RELAXED) == &sched;
     if (!local) { dream_complete_foreign(f, 0); return; }
     dream_foreign_work_end(f);
     if (status_of(f) == 2) { scheduler_drop_start_retain(f); return; }

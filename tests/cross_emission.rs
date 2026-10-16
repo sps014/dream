@@ -27,6 +27,7 @@ fn emits_verified_linux_aarch64_object_without_linking() {
     assert!(!output.with_extension("bin").exists());
     let ir = std::fs::read_to_string(output).unwrap();
     assert!(ir.contains("aarch64-unknown-linux-gnu"));
+    assert!(ir.contains(r#"!{i32 7, !"PIE Level", i32 2}"#));
 }
 
 #[test]

@@ -6,6 +6,7 @@ use super::places::ELEM_ALIGN;
 use crate::Rvalue;
 use crate::backend::shared::abi_types::elem_size;
 use crate::backend::shared::glue::{release_sym, retain_sym};
+use crate::backend::shared::place_policy::is_owned_temp_move;
 use crate::rc_store::rvalue_owns_result;
 use dream_types::TypeId;
 
@@ -61,7 +62,7 @@ impl Fx<'_, '_> {
     }
 
     /// Copies a value struct into `dest`, dropping the old contents when asked and taking the
-    /// nested references (a fresh heap box is freed instead: its references move with the bytes).
+    /// nested references (a fresh heap box or an owning temporary moves them with the bytes).
     pub fn memcpy_value(
         &mut self,
         rv: &Rvalue,
@@ -81,7 +82,7 @@ impl Fx<'_, '_> {
             if !self.is_buffer_result(rv) {
                 self.call("dream_free", std::slice::from_ref(rhs));
             }
-        } else if retain_copy {
+        } else if retain_copy && !is_owned_temp_move(self.f, rv) {
             self.value_refs(ty, dest, true);
         }
     }

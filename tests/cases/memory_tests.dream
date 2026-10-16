@@ -29,6 +29,6 @@ fun create_list(n: int): Option<Node> {
 
 fun main(): void {
     // Allocate a large linked list to test allocator and ARC performance
-    let list = create_list(10000);
+    let _list = create_list(10000);
     System.print("Memory was allocated and freed successfully!\n");
 }

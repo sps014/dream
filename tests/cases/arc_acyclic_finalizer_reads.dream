@@ -11,7 +11,7 @@ class ReadSelf {
 
 @noinline
 fun destroy(): void {
-    let value = ReadSelf(7);
+    let _value = ReadSelf(7);
 }
 
 fun main(): void {

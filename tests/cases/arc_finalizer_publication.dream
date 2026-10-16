@@ -11,5 +11,5 @@ class Dying {
     }
 }
 @noinline
-fun destroy(): void { let value = Dying(); }
+fun destroy(): void { let _value = Dying(); }
 fun main(): void { destroy(); System.println("unreachable"); }

@@ -34,19 +34,19 @@ void dream_foreign_work_begin(dream_ptr f) {
      * the owner while its private ARC obligations are still exclusive. */
     __atomic_store_n(&dream_rt_mt, 1, __ATOMIC_RELEASE);
     dream_publish(f);
-    dream_mutex_lock(&foreign_claim_mu);
+    /* No other thread can name f until the host handoff, which orders this store before any
+     * claim; taking the claim lock here only made the owner queue behind completing workers. */
     dream_mutex_lock(&sched.mu);
     sched.foreign_pending += 1;
-    *scheduler_at(f) = &sched;
+    __atomic_store_n(scheduler_at(f), &sched, __ATOMIC_RELAXED);
     dream_mutex_unlock(&sched.mu);
-    dream_mutex_unlock(&foreign_claim_mu);
 }
 
 void dream_foreign_work_end(dream_ptr f) {
     dream_mutex_lock(&foreign_claim_mu);
     Scheduler *s = *scheduler_at(f);
     if (s) {
-        *scheduler_at(f) = NULL;
+        __atomic_store_n(scheduler_at(f), NULL, __ATOMIC_RELAXED);
         dream_mutex_lock(&s->mu);
         s->foreign_pending -= 1;
         dream_mutex_unlock(&s->mu);
@@ -73,13 +73,16 @@ static void complete_foreign(dream_ptr f, dream_result res, int owned) {
         if (owned) { dream_release((dream_ptr)res); }
         return;
     }
-    *scheduler_at(f) = NULL;
+    __atomic_store_n(scheduler_at(f), NULL, __ATOMIC_RELAXED);
     int discarded = __atomic_load_n(i32_at(f, F_STATUS), __ATOMIC_ACQUIRE) != 0;
     if (!discarded) {
         *result_at(f) = res;
         dream_publish(f);
         __atomic_store_n(i32_at(f, F_STATUS), 1, __ATOMIC_RELEASE);
     }
+    /* The claimed credit keeps s alive until it is returned under s->mu, so queueing and the
+     * wake syscall stay outside the global claim section. */
+    dream_mutex_unlock(&foreign_claim_mu);
     dream_mutex_lock(&s->mu);
     s->foreign_pending -= 1;
     int wake = s->fq_head == NULL;
@@ -92,7 +95,6 @@ static void complete_foreign(dream_ptr f, dream_result res, int owned) {
     /* A nonempty queue already has a wake in flight or an owner draining it. */
     if (wake) { dream_cond_signal(&s->cv); }
     dream_mutex_unlock(&s->mu);
-    dream_mutex_unlock(&foreign_claim_mu);
     if (owned && discarded) { dream_release((dream_ptr)res); }
 }
 

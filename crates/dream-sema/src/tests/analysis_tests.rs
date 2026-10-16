@@ -1760,20 +1760,17 @@ fn test_no_false_positive_for_distinct_parent_child_types() {
 
 #[test]
 fn test_unused_local_warns_but_discard_does_not() {
-    let code = "fun main(): void { let x = 1; let _ = 2; let _ = 3; }";
+    let code = "fun main(): void { let x = 1; let _ = 2; let _ = 3; let _held = 4; \
+        let named = 5; let n = nameof(named); n.length; }";
     let diagnostics = analyze_code(code);
     assert!(!diagnostics.has_errors());
-    assert!(diagnostics.has_warnings());
-    assert!(diagnostics.diagnostics.iter().any(|d| {
-        d.severity == dream_diagnostics::Severity::Warning
-            && d.message.contains("unused variable 'x'")
-    }));
-    assert!(
-        !diagnostics
-            .diagnostics
-            .iter()
-            .any(|d| d.message.contains("unused variable '_'"))
-    );
+    let unused: Vec<&str> = diagnostics
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == dream_diagnostics::Severity::Warning)
+        .filter_map(|d| d.message.strip_prefix("unused variable "))
+        .collect();
+    assert_eq!(unused, vec!["'x'"]);
 }
 
 #[test]

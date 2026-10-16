@@ -175,6 +175,15 @@ fn candidates(
                 {
                     nonnull_defs.insert(d.0);
                     let retained = retained_after(&block.stmts[si + 1..], d.0);
+                    // `d = s; ... s = null` with no release of `s` hands `s`'s count to `d`
+                    // even when `d` later retains again for some other use.
+                    if let Rvalue::Use(op) | Rvalue::Cast(op, _, _) = rv
+                        && let Some(s) = local_of(op).filter(|&s| s != d.0)
+                        && retained
+                        && nulled_after(&block.stmts[si + 1..], s)
+                    {
+                        local_moves.push((d.0, s));
+                    }
                     match rv {
                         Rvalue::Use(op) | Rvalue::Cast(op, _, _)
                             if local_of(op).is_some_and(|s| s != d.0) && !retained =>
@@ -399,6 +408,21 @@ fn load_of_inner(
 fn retained_after(rest: &[Statement], x: u32) -> bool {
     for s in rest {
         if matches!(s, Statement::Retain(_)) && rc_target(s) == Some(x) {
+            return true;
+        }
+        if super::stmt_reads_local(s, x) || assigns_local(s, x) {
+            return false;
+        }
+    }
+    false
+}
+
+/// `x` is overwritten with null before anything else reads, releases or redefines it.
+fn nulled_after(rest: &[Statement], x: u32) -> bool {
+    for s in rest {
+        if let Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Const(Const::Null))) = s
+            && d.0 == x
+        {
             return true;
         }
         if super::stmt_reads_local(s, x) || assigns_local(s, x) {

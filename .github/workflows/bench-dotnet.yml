@@ -65,6 +65,40 @@ jobs:
       - name: Build this revision's release compiler and host libraries
         id: build
         run: cargo build --locked --release -p dream -p dream-host
+      - name: Build the base revision's release compiler
+        id: baseline
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        shell: bash
+        run: |
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            echo "no base revision to compare against"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          git worktree add --detach target/bench-baseline "$BASE_SHA"
+          (cd target/bench-baseline && CARGO_TARGET_DIR="$PWD/target" \
+            cargo build --locked --release -p dream -p dream-host)
+          echo "available=true" >> "$GITHUB_OUTPUT"
+      # Paired Dream-only rounds on one runner: the C# comparison stays informational, but a
+      # non-overlapping slowdown past the 10% budget against the base revision fails the job.
+      - name: Gate micro and macro against the base revision
+        if: ${{ !cancelled() && steps.baseline.outputs.available == 'true' }}
+        shell: bash
+        run: |
+          failed=0
+          for suite in micro macro; do
+            output="target/bench-gate/$suite"
+            mkdir -p "$output"
+            python3 scripts/bench.py --target native --suite "$suite" \
+              --arms baseline current --current-dream target/release/dream \
+              --baseline-dream target/bench-baseline/target/release/dream \
+              --warmup 2 --rounds 12 --passes 5 --fail-on-regression --out "$output" \
+              2>&1 | tee "$output/comparison.txt" || failed=1
+          done
+          exit "$failed"
       - name: Compare micro Dream and .NET 10
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:
@@ -114,6 +148,14 @@ jobs:
                                     "are recorded in summary.json.\n\n```text\n")
                       summary.write(report.read_text())
                       summary.write("\n```\n")
+              gate = Path("target/bench-gate") / suite / "comparison.txt"
+              if gate.exists():
+                  with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
+                      summary.write(f"## Dream regression gate vs base revision: {suite}\n\n"
+                                    "`cur/base` above the 10% budget with a non-overlapping interval "
+                                    "fails the job.\n\n```text\n")
+                      summary.write(gate.read_text())
+                      summary.write("\n```\n")
           PY
       - name: Preserve measurements and build identities
         if: always()
@@ -125,5 +167,7 @@ jobs:
             target/bench-dotnet/*/*.json*
             target/bench-dotnet/*/*/build.json
             target/bench-dotnet/*/csharp/publish.txt
+            target/bench-gate/*/*.txt
+            target/bench-gate/*/*.json*
           retention-days: 30
           if-no-files-found: warn

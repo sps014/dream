@@ -10,7 +10,7 @@ fun churn(): void {
     buf[1] = "beta";
     buf[2] = "gamma";
     Buffer.truncate(buf, 2);
-    let before = Debug.live_objects;
+    let _before = Debug.live_objects;
     Buffer.clear(buf);
     System.println("cleared");
 }

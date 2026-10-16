@@ -1,2 +1,2 @@
 @unsafe
-fun main(): void { let p = RawPtr<long>.alloc((usize)(-1)); }
+fun main(): void { let _p = RawPtr<long>.alloc((usize)(-1)); }

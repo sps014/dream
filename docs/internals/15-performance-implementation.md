@@ -123,6 +123,10 @@ scheduler-owned mutex. Draining and callback wake-up do not take the global comp
 Pending credit stays held through publication and enqueue, protecting the TLS scheduler lifetime.
 Only claim-to-scheduler nested locking is permitted; guest cleanup runs after queue unlock.
 Claiming, cancellation/status coordination and result publication still use the global claim lock.
+Recording the owner scheduler at work start does not: no other thread can name the frame before
+the host handoff. A completer returns its claimed pending credit, queues the frame and signals
+the owner after leaving the claim section; the credit keeps the scheduler alive until then. Local
+event completion decides locality with an atomic read, then claims under the lock.
 
 Foreign work publishes its future and owned graph on the owner before host handoff. Publishing
 only during completion permitted private ARC updates to overlap the shared transition. The
@@ -175,6 +179,72 @@ Copied/relocated inline weak and unowned fields own stable observer boxes; class
 existing semantics. Cleanup, arrays, DWARF and LLDB views use that representation. Runtime cache
 identities include embedded header declarations to prevent stale signatures across revisions.
 
+### Speed and stability round
+
+Starting point: a Dream-vs-C# CI run reported `iface_dispatch` 1.95x, `task_parallel` 1.52x,
+`graph_paths_class` 1.15x, `linked_walk` 1.09x and `async_fanout` 1.04x slower than C#. Local
+numbers below are Apple arm64 (4 performance + 4 efficiency cores), paired against the
+pre-round compiler with `scripts/bench.py --arms baseline current`, 12 rounds of 5 passes.
+
+Accepted:
+
+- **Release-only ARC fix.** `rc-held-by-owner` treated `d = s; ... s = null` as an independent
+  retained copy whenever an unrelated `Retain d` followed, deleting the retain of a loop element
+  and underflowing its count in Release builds only. A copy out of a local that is nulled before
+  any other read now hands that local's count to `d`. CI runs the full native and Node corpus
+  with Release guest builds, and the sanitizer job adds an instrumented Release native corpus,
+  so Release-only ownership bugs no longer hide behind Debug coverage.
+- **Benchmark gate.** `bench.py --fail-on-regression` fails a paired baseline/current run on any
+  `regression` decision. The .NET bench workflow builds the PR's base revision and gates micro
+  and macro against it before the C# comparison.
+- **Closed interface fallback.** A guarded interface call covers every implementor in the itable,
+  so its fallback now aborts instead of calling the itable dispatcher. LLVM can then hoist list
+  buffer and length loads out of a dispatch loop. Locally `iface_dispatch` is neutral (1.78 ns vs
+  1.81 ns, overlapping intervals); the CI gap is a C# comparison on other hardware.
+- **Priority-queue hole moves.** `push`/`pop` sift through `CollectionStorage.exchange`, so each
+  step is two loads and two stores with no release of the vacated slot or republication. Neutral:
+  `graph_paths_class` 0.98 [0.91, 1.02], interleaved medians 241 vs 242 ns per operation.
+- **ELF executable TLS.** Executable outputs on ELF targets carry the `PIE Level` module flag.
+  Objects are built PIC, and without the flag LLVM assumes a shared object and reaches every
+  runtime thread-local through `__tls_get_addr` (x86-64) or a TLSDESC call (aarch64). With it,
+  internalized runtime TLS in Release builds is local-exec (`%fs:x@TPOFF`, `mrs TPIDR_EL0`).
+  Libraries and staticlibs keep the default model. Mach-O always uses the `_tlv_get_addr` thunk
+  whatever the model, so macOS is unaffected. Debug builds link separate runtime objects and keep
+  general-dynamic access to them.
+- **Claim-lock scope.** Profiling 16 empty `spawn_parallel` children per batch showed the owner
+  waiting on the global claim lock (347 of 2,018 main-thread samples) and signalling pool threads
+  (346). With the narrowed sections above, mutex waits fall to 156 of 2,201 samples. Wall time
+  stays within noise: `task_parallel` 1.01 [0.88, 1.18], `async_fanout` 0.95 [0.89, 1.06].
+- **Poll pipeline.** `async_poll_pipeline` runs `CopyConstProp` and `SimplifyCfg`. Propagation
+  resets at every block and `Await` is a terminator, so no value crosses a suspension.
+  `SimplifyCfg` no longer threads `Await` resume edges: the poll binds the awaited result on entry
+  to every resume block, so a resume target shared with ordinary edges (or the entry block) would
+  run that binding on a null or stale child.
+
+Measured and rejected:
+
+- **Interface dispatch shape.** In a C model on Apple arm64, a compare tree costs 2.0 ns per call,
+  a lookup table 2.14 ns, a select chain 16 ns and an indirect call 25 ns. Switch lowering and
+  `MAX_GUARDED = 4` stay.
+- **`linked_walk`.** The loop is already RC-free (a golden test pins zero retains and one
+  `dream_rc_last` per walk) and compiles to load, add, load, branch. The workload is memory-latency
+  bound: 1,024 nodes of 32 bytes sit at the L1 limit. Ratio 1.00 [0.97, 1.08].
+- **Help-on-join.** Every `spawn_parallel` child binds a pool thread at spawn, so a joiner never
+  finds an undispatched child to run. Running queued `spawn_on` jobs inline would break the
+  worker capture and thread-isolation contracts.
+- **Batched submission.** Each child owns a thread and its own condition variable, so batching
+  saves only uncontended pool-lock operations, which never appeared in profiles. The remaining
+  cost is one wake syscall per child. A single empty child round-trips in about 23 µs; 16 empty
+  children take about 133 µs per batch. Fewer wakes need a bounded shared queue, which conflicts
+  with the per-session thread contract, or spinning, which stays forbidden by default.
+
+Suspension-aware `RcElision` stays a design, not an implementation. Each owning local live across
+an `Await` is a frame slot the scheduler may drop through the future's drop function on
+cancellation. Elision may pair a retain and release only within one suspension-free region (no
+`Await` on any path between them), and a slot live across a suspension keeps its token until the
+resume block or the drop function discharges it exactly once. The facts are per-region liveness
+of owning slots, computed from the same block graph the poll backend spills from.
+
 ## Validation status
 
 The heap-effects/worklist checkpoint passes workspace build, strict workspace Clippy, workspace
@@ -217,7 +287,8 @@ at the user's request. No local result establishes native x86-64 or other-platfo
 - Replace the linear timer list with an indexed deadline heap with stable equal-deadline ordering,
   efficient cancellation, correct raw-frame lifetime and protected small-timer overhead.
 - Prove completion/cancellation lifetime so result publication can leave the global claim critical
-  section safely. Measure multiple schedulers and keep exactly-once claiming and owner resumption.
+  section safely. Queueing and the owner wake already run outside it. Measure multiple schedulers
+  and keep exactly-once claiming and owner resumption.
 - Extend publication scratch reuse to remaining hash bookkeeping, preserving reentrancy and bounded
   retention. Remove heap validation only where provenance is actually proven.
 - Improve larger recurring worker bursts and batching within current APIs. Preserve callback/TLS

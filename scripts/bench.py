@@ -76,6 +76,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--out", default=str(ROOT / "tests/bench/out/compare"))
     p.add_argument("--counters", action="store_true", help="set DREAM_BENCH_COUNTERS=1 for Dream arms")
     p.add_argument("--regression-threshold", type=float, default=0.10)
+    p.add_argument("--fail-on-regression", action="store_true",
+                   help="exit 1 when a paired current/baseline row regresses past the threshold")
     p.add_argument("--save-baseline", help="save a validated immutable reference and complete samples")
     p.add_argument("--gate", help="compare current against the saved reference in paired rounds")
     p.add_argument("--runner-id", default=os.environ.get("DREAM_BENCH_RUNNER_ID"), help="controlled runner identity (required for gating)")
@@ -324,6 +326,8 @@ def main() -> int:
         raise ValueError("counter runs require --arms current and cannot establish latency comparisons")
     if args.gate and args.save_baseline:
         raise ValueError("choose either reference creation or gating")
+    if args.fail_on_regression and not {"baseline", "current"} <= set(args.arms):
+        raise ValueError("--fail-on-regression compares paired baseline and current arms")
     if args.warmup < 1 or args.rounds < 1 or args.passes < 1 or not 0 <= args.input_seed <= 2147483647:
         raise ValueError("invalid warmup, round, pass count or input seed")
     reference = None
@@ -424,6 +428,12 @@ def main() -> int:
                    and (s.get("ns_total") == 0 or s["ns_per_op"] < MIN_NS_PER_OP)})
     if tiny:
         print("SUB-TIMER rows cannot substantiate a speed claim: " + ", ".join(tiny))
+    if args.fail_on_regression:
+        regressed = sorted(name for name, row in summary.items()
+                           if row["comparisons"].get("baseline", {}).get("decision") == "regression")
+        if regressed:
+            print("REGRESSION vs baseline: " + ", ".join(regressed))
+            status = 1
     if args.save_baseline:
         if tiny:
             raise ValueError("invalid timing rows cannot form a reference")

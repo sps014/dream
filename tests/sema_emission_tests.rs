@@ -1945,6 +1945,28 @@ fn test_interface_call_emits_dynamic_dispatch() {
 }
 
 #[test]
+fn closed_interface_call_aborts_instead_of_calling_the_itable() {
+    let code = "
+        interface Animal { fun speak(): int; }
+        class Cat : Animal { public fun speak(): int { return 1; } }
+        class Dog : Animal { public fun speak(): int { return 2; } }
+        @noinline
+        fun describe(a: Animal): int { return a.speak(); }
+        fun run(): int { return describe(Cat()) + describe(Dog()); }
+    ";
+    let (c, _) = emit_hir_to_ir(code);
+    let body = c
+        .split("define ")
+        .find(|f| f.contains("@describe("))
+        .expect("describe is emitted");
+    assert!(body.contains("switch i32"), "guarded tag switch:\n{body}");
+    assert!(
+        !body.contains("__iface_dispatch_") && body.contains("@dream_platform_abort("),
+        "a guarded slot covers every implementor:\n{body}"
+    );
+}
+
+#[test]
 fn test_js_desugars_to_host_bridges() {
     // Dynamic js operations desugar to the declared host bridge symbols (`jsGlobal`, ...) and fused
     // slot/method marshalling goes through `dream_js_call`. (The WAT backend's `$js_set_slot` /

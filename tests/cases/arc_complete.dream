@@ -66,12 +66,12 @@ fun struct_array() {
 
 fun string_array() {
     let names = ["alpha", "beta", "gamma"];
-    let joined = names[0] + "-" + names[1] + "-" + names[2];
+    let _joined = names[0] + "-" + names[1] + "-" + names[2];
 }
 
 fun nested_array() {
     let grid = [[1, 2], [3, 4], [5, 6]];
-    let sum = grid[0][0] + grid[2][1];
+    let _sum = grid[0][0] + grid[2][1];
 }
 
 fun string_builder() {
@@ -92,19 +92,19 @@ fun field_reassign() {
 
 fun local_reassign() {
     let no_next: Option<Node> = Option.None;
-    let n = Node(0, no_next);
+    let _n = Node(0, no_next);
     let i = 1;
     while i <= 4 {
-        n = Node(i, no_next);
+        _n = Node(i, no_next);
         i = i + 1;
     }
 }
 
 fun nullable_paths() {
     let no_next: Option<Node> = Option.None;
-    let a: Option<Node> = Option.None;
+    let _a: Option<Node> = Option.None;
     let b: Option<Node> = Option.Some(Node(7, no_next));
-    a = b;
+    _a = b;
     b = Option.None;
 }
 
@@ -115,22 +115,22 @@ fun pass_borrow(borrow n: Node): int {
 fun branchy(flag: bool) {
     let no_next: Option<Node> = Option.None;
     if flag {
-        let x = Node(1, no_next);
+        let _x = Node(1, no_next);
     } else {
-        let y = Holder(Option.Some(Node(2, no_next)), "branch");
+        let _y = Holder(Option.Some(Node(2, no_next)), "branch");
     }
 }
 
 // A single tracked object per scope so its `del()` runs (and prints) in a deterministic order
 // driven by the call sequence rather than by intra-scope local-release order.
 fun drop_one(id: int) {
-    let t = Tracked(id);
+    let _t = Tracked(id);
 }
 
 // Every pattern in one unit of work; nothing escapes.
 fun stress() {
     let chain = build_chain();
-    let borrowed = pass_borrow(chain);
+    let _borrowed = pass_borrow(chain);
     struct_array();
     string_array();
     nested_array();

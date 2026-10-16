@@ -164,7 +164,7 @@ let (_, y) = pair;
 let _ = fetch().await;
 ```
 
-Unread `let`/`const` locals produce a warning (compile still succeeds). Use `_` when the value is intentionally ignored.
+Unread `let`/`const` locals produce a warning (compile still succeeds). Use `_` when the value is intentionally ignored. A name starting with `_` (such as `_guard`) is still an ordinary binding that keeps its value alive until the end of the scope, but it is never reported as unused. Naming a local in `nameof(local)` counts as a use.
 
 Any expression can be used as a statement (`expr;`); the result is evaluated and dropped.
 

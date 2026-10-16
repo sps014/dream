@@ -185,9 +185,9 @@ impl<'l, 'a> Fx<'l, 'a> {
             }
         }
         let ret_ty = s.fty.ret.clone();
-        let mut dispatch_args = vec![itable];
-        dispatch_args.extend(call_args.iter().cloned());
         if arms.is_empty() {
+            let mut dispatch_args = vec![itable];
+            dispatch_args.extend(call_args.iter().cloned());
             return self.call(&dispatch, &dispatch_args);
         }
         let result = (!ret_ty.is_void()).then(|| self.w.alloca(ret_ty.clone(), 8));
@@ -210,13 +210,14 @@ impl<'l, 'a> Fx<'l, 'a> {
             }
             self.w.br(join);
         }
+        // Guards exist only when every implementor of the slot resolved, and the itable holds
+        // exactly those entries, so any other tag (or a null receiver) would find a null entry
+        // and abort inside the dispatcher. Aborting here keeps an opaque call out of the loop.
         self.w.switch_to(fallback);
-        let r = self.call(&dispatch, &dispatch_args);
-        if let (Some(slot), Some(r)) = (&result, r) {
-            let r = self.conv(&r, &ret_ty);
-            self.w.store(&r, slot, 8, &[]);
+        self.call("dream_platform_abort", &[]);
+        if !self.w.is_terminated() {
+            self.w.unreachable();
         }
-        self.w.br(join);
         self.w.switch_to(join);
         result.map(|slot| V::s(self.w.load(ret_ty, &slot, 8, &[])))
     }

@@ -83,10 +83,13 @@ impl PassManager {
     }
 
     /// A pipeline safe for `mir.polls` (async coroutine bodies).
-    /// Omits `RcElision` (which is unsafe across `Await` suspend points), `Tco` (tail calls are invalid
-    /// in coroutines), and `SimplifyCfg` (which can mangle the `$__pc` dispatch block).
+    /// Omits `RcElision` (its ownership facts do not model a suspension handing the frame to the
+    /// scheduler between `Await` and its resume block) and `Tco` (tail calls are invalid in
+    /// coroutines). `SimplifyCfg` never retargets `Await` resume edges, and `CopyConstProp`
+    /// resets at every block, so neither moves a value or a binding across a suspension.
     pub fn async_poll_pipeline() -> Self {
         let mut pm = PassManager::new();
+        pm.add(CopyConstProp);
         pm.add(GlobalProp);
         pm.add(Sccp);
         pm.add(ConstFold);
@@ -98,6 +101,7 @@ impl PassManager {
         pm.add(LoopUnroll);
         pm.add(Sroa);
         pm.add(Dse);
+        pm.add(SimplifyCfg);
         pm.add(Dce);
         pm.add(HopElision);
         pm.add(StrCursor);

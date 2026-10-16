@@ -38,7 +38,11 @@ impl MirPass for SimplifyCfg {
 
 /// Jump threading: redirects every edge that targets an empty forwarding block (`{ } goto Z`)
 /// straight to `Z`, following chains. Unlike `thread_empty_jumps` (which only rewrites `Goto`
-/// terminators), this threads the targets of `If`/`Switch`/`Await` too.
+/// terminators), this threads the targets of `If`/`Switch` too.
+///
+/// `Await` resume edges stay put: a poll binds the awaited result on entry to every resume
+/// block, so a resume target must be reached only by resumption, never shared with ordinary
+/// edges into `Z` (or the entry block, whose state is the first poll).
 fn thread_branch_targets(func: &mut MirFunction) -> bool {
     // One-hop forwarding target of each block (empty block ending in a non-self `Goto`).
     let forward: Vec<Option<BlockId>> = (0..func.blocks.len())
@@ -88,8 +92,8 @@ fn thread_branch_targets(func: &mut MirFunction) -> bool {
                 }
                 edit(default);
             }
-            Terminator::Await { resume, .. } => edit(resume),
-            Terminator::Return(_)
+            Terminator::Await { .. }
+            | Terminator::Return(_)
             | Terminator::AsyncComplete(_)
             | Terminator::TailCall { .. }
             | Terminator::Unreachable => {}
@@ -323,5 +327,42 @@ mod tests {
             Terminator::Return(Some(Operand::Const(Const::Int(1)))) => {}
             other => panic!("expected then-branch path, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn await_keeps_its_resume_block_even_when_it_only_forwards() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("poll", i.int());
+        let future = b.new_local(i.int(), None);
+        let header = b.new_block();
+        let suspend = b.new_block();
+        let resume = b.new_block();
+        b.terminate(Terminator::Goto(header));
+        b.switch_to(header);
+        b.terminate(Terminator::If {
+            cond: Operand::Copy(Place::Local(future)),
+            then_blk: suspend,
+            else_blk: header,
+        });
+        b.switch_to(suspend);
+        b.terminate(Terminator::Await {
+            future: Operand::Copy(Place::Local(future)),
+            dest: None,
+            resume,
+        });
+        b.switch_to(resume);
+        b.terminate(Terminator::Goto(header));
+        let mut func = b.finish();
+        SimplifyCfg.run(&mut func, &i);
+        let awaits: Vec<BlockId> = func
+            .blocks
+            .iter()
+            .filter_map(|blk| match blk.terminator {
+                Terminator::Await { resume, .. } => Some(resume),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(awaits, vec![resume]);
+        assert!(!matches!(func.block(resume).terminator, Terminator::Unreachable));
     }
 }

@@ -67,6 +67,9 @@ pub struct Mir {
     /// Emit source/function metadata from ordinary source markers, without preserving locals
     /// or disabling production frame packing and optimization.
     pub perf_symbols: bool,
+    /// The module links into the main executable, never into a shared object, so
+    /// internalized thread-locals may use the executable-only TLS models.
+    pub executable: bool,
     pub exports: Vec<(DefId, String)>,
     pub functions: Vec<MirFunction>,
     /// Pre-lowered async poll bodies corresponding to the async functions in `functions`

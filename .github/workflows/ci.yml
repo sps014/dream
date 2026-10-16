@@ -117,6 +117,7 @@ jobs:
           node-version: "22"
       - name: Check shared CLI parser and adapter
         run: |
+          python scripts/test_cli_parser.py
           python scripts/build-cli-parser.py --check
           node --test scripts/test-cli-host.mjs
           python scripts/test_corpus.py --both --release cli_arguments

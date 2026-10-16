@@ -16,7 +16,7 @@ OUTPUT = ROOT / "runtime/src/hosts/cli_parser.js"
 def build_inputs():
     """Only what the wasm build consumes, so unrelated workspace dependency edits stay fresh."""
     tree = subprocess.check_output(
-        ["cargo", "tree", "-p", "dream-host-cli", "--target", "wasm32-unknown-unknown", "-e", "normal,build",
+        ["cargo", "--color", "never", "tree", "-p", "dream-host-cli", "--target", "wasm32-unknown-unknown", "-e", "normal,build",
          "--prefix", "none", "--locked", "-f", "{p}"], cwd=ROOT, text=True)
     # Local paths differ per checkout; registry names and versions identify the resolved graph.
     packages = sorted({re.sub(r" \(.*\)$", "", line.strip()) for line in tree.splitlines() if line.strip()})
